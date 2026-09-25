@@ -61,6 +61,8 @@ export interface ChatMessage {
   reply_preview: { id?: number; sender_name: string; snippet: string } | null;
   edited: boolean;
   deleted: boolean;
+  /** Sent as urgent: it reaches people who only want priority notifications. */
+  urgent?: boolean;
   can?: MessageCan;
   receipt: { status: 'sent' | 'delivered' | 'read'; read: number; total: number } | null;
   client_message_id: string | null;

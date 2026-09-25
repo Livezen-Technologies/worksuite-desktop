@@ -28,7 +28,7 @@ export default tseslint.config(
   {
     files: ['tests/e2e/**/*.mjs'],
     languageOptions: {
-      globals: { process: 'readonly', console: 'readonly', setTimeout: 'readonly', fetch: 'readonly', Buffer: 'readonly', WebSocket: 'readonly' },
+      globals: { process: 'readonly', console: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly', fetch: 'readonly', Buffer: 'readonly', WebSocket: 'readonly' },
     },
   },
   {

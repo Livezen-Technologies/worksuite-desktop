@@ -219,7 +219,7 @@ export class TransferManager {
     const l: Live = { t, meta, abort: null, samples: [] };
     this.live.set(t.id, l);
     this.persist(l);
-    this.deps.audit('file.download', fileId ? { file_id: fileId } : { kind: apiPath.startsWith('/api/meet/') ? 'meet-recording' : 'mail-attachment' });
+    this.deps.audit('file.download', fileId ? { file_id: fileId } : { kind: apiPath.startsWith('/api/meet/') ? 'meet-recording' : apiPath.startsWith('/api/calendar/') || apiPath.startsWith('/api/contacts/') ? 'export' : 'mail-attachment' });
     void this.runDownload(l);
     return { ...t };
   }
@@ -377,6 +377,8 @@ export class TransferManager {
           room_id: meta.target.roomId,
           upload_id: meta.uploadId,
           client_message_id: `desktop-${l.t.id}`,
+          ...(meta.target.caption ? { caption: meta.target.caption } : {}),
+          ...(meta.target.replyTo ? { reply_to: meta.target.replyTo } : {}),
         });
       }
       this.finish(l, 'done');

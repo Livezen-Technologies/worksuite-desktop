@@ -14,7 +14,7 @@ import { describeCard } from '../calls/log';
 import { answerCall, startCall } from '../calls/start';
 import { openMeeting } from '../meet/api';
 import { startMeetingFromChat } from '../meet/start';
-import { Composer } from './Composer';
+import { Composer, type ComposerHandle } from './Composer';
 import { PRESENCE } from './Details';
 import { ForwardDialog, type RoomDetail } from './NewChat';
 import { EmojiPicker, QUICK_REACTIONS, VoicePlayer } from './parts';
@@ -40,7 +40,8 @@ export function Thread({ roomId, room, mini, bare, rooms, detailsOpen, onToggleD
   const me = useStore(app, (s) => s.auth?.user?.id);
   const meetAllowed = useStore(app, (s) => s.apps.some((a) => a.id === 'meet'));
   const scroller = useRef<HTMLDivElement>(null);
-  const [typing, setTyping] = useState<string | null>(null);
+  const [typing, setTyping] = useState<Record<string, string>>({});
+  const composer = useRef<ComposerHandle>(null);
   const [drag, setDrag] = useState(false);
   const [reply, setReply] = useState<ReplyTarget | null>(null);
   const [forwarding, setForwarding] = useState<ChatMessage | null>(null);
@@ -78,32 +79,40 @@ export function Thread({ roomId, room, mini, bare, rooms, detailsOpen, onToggleD
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
   }, [messages.length, mine.length]);
 
+  // Who is typing here, each until they stop, send, or go quiet.
   useEffect(() => {
-    let clear: ReturnType<typeof setTimeout> | null = null;
+    const clear = new Map<string, ReturnType<typeof setTimeout>>();
+    const drop = (who: string) => {
+      clearTimeout(clear.get(who));
+      clear.delete(who);
+      setTyping((t) => {
+        if (!(who in t)) return t;
+        const next = { ...t };
+        delete next[who];
+        return next;
+      });
+    };
     const off = on<{ type: string; room_id?: number; name?: string; user_name?: string; by?: number }>('realtime:event', (e) => {
       if (String(e.room_id) !== roomId || String(e.by) === me) return;
-      if (e.type === 'chat.typing.started') {
-        setTyping(e.name ?? e.user_name ?? 'Someone');
-        if (clear) clearTimeout(clear);
-        clear = setTimeout(() => setTyping(null), TYPING_TIMEOUT);
+      const who = String(e.by ?? e.name ?? e.user_name ?? '');
+      if (e.type === 'chat.typing.started' && who) {
+        setTyping((t) => ({ ...t, [who]: e.name ?? e.user_name ?? 'Someone' }));
+        clearTimeout(clear.get(who));
+        clear.set(who, setTimeout(() => drop(who), TYPING_TIMEOUT));
       }
-      if (e.type === 'chat.typing.stopped' || e.type === 'chat.message') setTyping(null);
+      if ((e.type === 'chat.typing.stopped' || e.type === 'chat.message') && who) drop(who);
       if (e.type === 'chat.message.pinned') void qc.invalidateQueries({ queryKey: ['chat', 'pins', roomId] });
     });
     return () => {
       off();
-      if (clear) clearTimeout(clear);
+      clear.forEach((t) => clearTimeout(t));
     };
   }, [roomId, me, qc]);
 
   const onDrop = async (files: File[]) => {
     setDrag(false);
     try {
-      const handles = await registerDropped(files);
-      if (handles.length) {
-        await call('transfers:upload', { handles: handles.map((h) => h.handle), target: { kind: 'chat', roomId } });
-        toast('info', `Sending ${handles.length} file${handles.length === 1 ? '' : 's'}…`);
-      }
+      composer.current?.stage(await registerDropped(files));
     } catch (e) {
       toast('error', errorMessage(e));
     }
@@ -113,10 +122,7 @@ export function Thread({ roomId, room, mini, bare, rooms, detailsOpen, onToggleD
   const members = detail.data?.members ?? [];
   const online = members.filter((m) => presence.data?.presence[String(m.id)] === 'online').length;
   const other = room?.other_user_id ? presence.data?.presence[String(room.other_user_id)] : undefined;
-  const subtitle = [
-    group ? `Group · ${members.length || '…'} members${online ? ` · ${online} online` : ''}` : (other ? PRESENCE[other]?.label : null) ?? 'Direct message',
-    typing ? `${typing} is typing…` : null,
-  ].filter(Boolean).join(' · ');
+  const subtitle = group ? `Group · ${members.length || '…'} members${online ? ` · ${online} online` : ''}` : ((other ? PRESENCE[other]?.label : null) ?? 'Direct message');
   const pinned = pins.data?.messages ?? [];
   const days = messages.map((m, i) => {
     const day = dayKey(parseTs(m.created_at));
@@ -217,7 +223,7 @@ export function Thread({ roomId, room, mini, bare, rooms, detailsOpen, onToggleD
           return (
             <div key={m.id} id={`msg-${m.id}`}>
               {header ? <div className="my-3 text-center"><span className="rounded-full bg-subtle px-2.5 py-[3px] text-[11.5px] font-semibold text-ink-3">{dayLabel(header, 'short')}</span></div> : null}
-              <Bubble m={m} own={String(m.sender_id) === me} roomId={roomId} onReply={setReply} onForward={setForwarding} />
+              <Bubble m={m} own={String(m.sender_id) === me} roomId={roomId} onReply={setReply} onForward={setForwarding} onEdit={(x) => composer.current?.edit({ id: x.id, message: x.message ?? '' })} />
             </div>
           );
         })}
@@ -237,10 +243,10 @@ export function Thread({ roomId, room, mini, bare, rooms, detailsOpen, onToggleD
           </div>
         ))}
       </div>
-      <Composer roomId={roomId} roomName={room?.name ?? 'this conversation'} group={group} onFiles={onDrop} reply={reply} onClearReply={() => setReply(null)} />
+      <Composer ref={composer} roomId={roomId} roomName={room?.name ?? 'this conversation'} group={group} reply={reply} onClearReply={() => setReply(null)} typing={Object.values(typing)} compact={mini || bare} />
       {drag ? (
         <div className="pointer-events-none absolute inset-3 flex items-center justify-center rounded-[14px] border-2 border-dashed border-primary bg-selection/80 text-[15px] font-semibold text-primary">
-          Drop to send to {room?.name ?? 'this conversation'}
+          Drop to add to the message for {room?.name ?? 'this conversation'}
         </div>
       ) : null}
       {forwarding ? <ForwardDialog m={forwarding} rooms={rooms} onClose={() => setForwarding(null)} /> : null}
@@ -250,17 +256,18 @@ export function Thread({ roomId, room, mini, bare, rooms, detailsOpen, onToggleD
 
 type Card = { kind: string; available?: boolean; why?: string; heading?: string; name?: string; owner?: string; who?: string; what?: string; link?: string };
 
-function Bubble({ m, own, roomId, onReply, onForward }: { m: ChatMessage & { starred?: boolean; pinned?: unknown; card?: Card | null }; own: boolean; roomId: string; onReply: (r: ReplyTarget) => void; onForward: (m: ChatMessage) => void }) {
+function Bubble({ m, own, roomId, onReply, onForward, onEdit }: { m: ChatMessage & { starred?: boolean; pinned?: unknown; card?: Card | null }; own: boolean; roomId: string; onReply: (r: ReplyTarget) => void; onForward: (m: ChatMessage) => void; onEdit: (m: ChatMessage) => void }) {
   const qc = useQueryClient();
   const { openLink } = useTab();
   const [picker, setPicker] = useState(false);
   const [more, setMore] = useState(false);
-  const [editing, setEditing] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<'everyone' | 'me' | null>(null);
   const can = m.can ?? {};
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ['chat', 'messages', roomId] });
     void qc.invalidateQueries({ queryKey: ['chat', 'pins', roomId] });
+    // The list's preview may be this message (a deleted last message must not linger there).
+    void qc.invalidateQueries({ queryKey: ['chat', 'rooms'] });
   };
   const act = async (fn: () => Promise<unknown>, done?: string) => {
     try {
@@ -275,11 +282,6 @@ function Bubble({ m, own, roomId, onReply, onForward }: { m: ChatMessage & { sta
   const react = (emoji: string) => {
     setPicker(false);
     void act(() => apiPost(`/api/chat/messages/${m.id}/react`, { emoji }));
-  };
-  const saveEdit = () => {
-    const text = (editing ?? '').trim();
-    setEditing(null);
-    if (text && text !== m.message) void act(() => apiPost(`/api/chat/messages/${m.id}/edit`, { message: text }));
   };
 
   if (m.type === 'system') return <div className="my-2 text-center text-[12px] text-ink-3">{m.message}</div>;
@@ -299,28 +301,8 @@ function Bubble({ m, own, roomId, onReply, onForward }: { m: ChatMessage & { sta
           </span>
         ) : null}
         {m.reply_preview ? <div className="rounded-[6px] border-l-[3px] border-[#7FA2FF] bg-selection px-2.5 py-1.5 text-[12px] text-ink-2">Replying to {m.reply_preview.sender_name}: “{m.reply_preview.snippet}”</div> : null}
-        {editing !== null ? (
-          <div className="flex w-[min(460px,60vw)] flex-col gap-1.5">
-            <textarea
-              value={editing}
-              onChange={(e) => setEditing(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  saveEdit();
-                }
-                if (e.key === 'Escape') setEditing(null);
-              }}
-              autoFocus
-              aria-label="Edit message"
-              className="min-h-[60px] rounded-[10px] border border-primary bg-surface px-3 py-2 text-[13.5px] outline-none"
-            />
-            <div className="flex justify-end gap-1.5">
-              <Button size="sm" onClick={() => setEditing(null)}>Cancel</Button>
-              <Button size="sm" variant="primary" onClick={saveEdit}>Save</Button>
-            </div>
-          </div>
-        ) : m.message && !m.deleted ? (
+        {m.urgent && !m.deleted ? <span className="text-[10.5px] font-bold tracking-[0.5px] text-danger uppercase">Urgent</span> : null}
+        {m.message && !m.deleted ? (
           <div className={cx('whitespace-pre-wrap break-words px-[13px] py-[9px] text-[13.5px] leading-[1.55] selectable', bubble)}>{m.message}</div>
         ) : m.deleted ? (
           <div className="rounded-[12px] border border-line px-3 py-2 text-[12.5px] text-ink-3 italic">Message deleted</div>
@@ -387,7 +369,7 @@ function Bubble({ m, own, roomId, onReply, onForward }: { m: ChatMessage & { sta
           <span className="text-[11.5px] text-ink-3">{[m.edited ? 'edited' : null, m.starred ? '★ starred' : null].filter(Boolean).join(' · ')}</span>
         ) : null}
       </div>
-      {!m.deleted && editing === null ? (
+      {!m.deleted ? (
         <div className={cx('invisible absolute -top-3 z-10 flex items-center gap-0.5 rounded-[9px] border border-line bg-surface p-[3px] shadow-[0_6px_18px_rgba(15,27,61,.14)] group-hover:visible group-focus-within:visible', own ? 'right-2' : 'left-10')} role="toolbar" aria-label="Message actions">
           {can.react !== false ? QUICK_REACTIONS.slice(0, 3).map((e) => (
             <button key={e} type="button" aria-label={`React ${e}`} onClick={() => react(e)} className="flex h-6 w-6 items-center justify-center rounded-[6px] text-[14px] hover:bg-subtle">{e}</button>
@@ -403,7 +385,7 @@ function Bubble({ m, own, roomId, onReply, onForward }: { m: ChatMessage & { sta
               <button type="button" className={tool} aria-haspopup="menu" aria-expanded={more} onClick={() => setMore(!more)}>More ⋯</button>
               {more ? (
                 <div role="menu" className="absolute top-8 right-0 z-30 w-44 rounded-[10px] border border-line bg-surface py-1 shadow-xl">
-                  {can.edit ? <button type="button" role="menuitem" className="block w-full px-3 py-1.5 text-left text-[13px] hover:bg-subtle" onClick={() => (setMore(false), setEditing(m.message ?? ''))}>Edit</button> : null}
+                  {can.edit ? <button type="button" role="menuitem" className="block w-full px-3 py-1.5 text-left text-[13px] hover:bg-subtle" onClick={() => (setMore(false), onEdit(m))}>Edit</button> : null}
                   {m.message ? <button type="button" role="menuitem" className="block w-full px-3 py-1.5 text-left text-[13px] hover:bg-subtle" onClick={() => (setMore(false), void navigator.clipboard.writeText(m.message ?? '').then(() => toast('success', 'Copied.')))}>Copy text</button> : null}
                   {can.delete_me || can.delete_everyone ? <button type="button" role="menuitem" className="block w-full px-3 py-1.5 text-left text-[13px] text-danger hover:bg-subtle" onClick={() => (setMore(false), setDeleting(can.delete_everyone ? 'everyone' : 'me'))}>Delete…</button> : null}
                 </div>

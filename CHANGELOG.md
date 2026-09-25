@@ -5,6 +5,66 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-26 — The chat composer, to the "Chat composer — polished" design
+
+**Changed**
+
+- **The message box is icons now:** attach, urgent, emoji and send around
+  the text. Send is disabled until there is something to send. Under the box:
+  "Enter to send · Shift + Enter for a new line · @ to mention".
+- **The paperclip opens eight choices:** Document, Image, Video, Audio (each
+  opens the file dialog on those types), Any file, From Drive, Camera / Photo
+  and Voice message. The separate GIF and Voice buttons are gone. GIFs are
+  under Image, and a voice message is under the paperclip.
+- **Files wait in a tray until Send.** Picking, dropping or pasting a file
+  no longer sends it straight away. Each file shows as a card: Ready to send,
+  Waiting, Sending… with its progress, or Failed with ↻ to try again. × takes
+  it out. While files are waiting, the box asks for a caption, and the words go
+  with the first file (the reply too).
+- **Editing happens in the composer.** Edit, under More, puts the message in
+  the box under an amber "Editing message" bar that shows the original. Attach
+  and urgent step aside, and send becomes ✓ "Save the change". Cancel or Esc
+  leaves it unchanged. Your unsent draft is kept while you edit. Before, the
+  message turned into a small box inside the thread.
+- **The @ list** is headed "People in this chat" and anchored at the "@".
+  Each person has their presence dot and "Department · online / away /
+  offline" (the department needs the server change deployed with this).
+  Teams and departments follow. ↑↓, Enter and Esc work as the list's footer says.
+- **Several people typing** show in a line above the box ("Samali and Chamudi
+  are typing…") instead of in the header. Typing needs the server's realtime.
+- **Reply** shows "Replying to …" with the snippet above the box; × or Esc
+  cancels.
+- **Emoji** has a search ("party" finds 🥳 🎉) and your frequently used ones
+  first. They are counted on this computer only.
+- **A voice message records in place of the box:** delete, the red dot, the
+  time, a live level meter, stop and send. Stop keeps the recording to send
+  or delete; send stops and sends at once.
+- **The drawer, the pop-out and the call and Meet panels** use the same
+  composer in a compact size, without the hints line.
+
+**Added**
+
+- **Urgent.** People allowed to send urgent messages (`chat.message.urgent`)
+  have the ⚠ toggle. It turns the box red. An urgent message reaches people
+  who only want priority notifications and is labelled Urgent in the thread.
+  Urgent turns itself off after sending. An urgent message is never queued
+  offline, so it is never delivered late. With files, the urgent words go as
+  their own message, because a file cannot be urgent.
+- **From Drive:** browse your Drive and send files as cards. If somebody in
+  the conversation cannot open a file, nothing more is sent, and you choose:
+  grant view or edit, send a secure link (1, 7 or 30 days) or cancel. This is
+  the same question the web asks.
+- **Camera / Photo:** take a picture (retake or use it), and it joins the tray.
+- The transfer manager can download your calendar (.ics) and contacts
+  (.csv / .vcf) exports, for the Calendar and Contacts screens to come.
+
+**Fixed**
+
+- Deleting a conversation's last message left its text as the conversation's
+  preview in the list until something else refreshed it.
+
+---
+
 ## 2026-09-26 — Passkey sign-in showed only after a restart
 
 **Fixed**

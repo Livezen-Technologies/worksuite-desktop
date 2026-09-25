@@ -96,7 +96,8 @@ export type MutationInput = z.infer<typeof mutationInputSchema>;
 
 export const uploadTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('files'), folderId: z.string().max(64).nullable() }),
-  z.object({ kind: z.literal('chat'), roomId: z.string().max(64) }),
+  /** A chat attachment; the caption and the reply go with it (the first of several files carries them). */
+  z.object({ kind: z.literal('chat'), roomId: z.string().max(64), caption: z.string().max(4000).optional(), replyTo: z.number().int().positive().optional() }),
 ]);
 export type UploadTarget = z.infer<typeof uploadTargetSchema>;
 
@@ -153,7 +154,7 @@ export const contract = {
   'tabs:save': ch(z.object({ tabs: z.array(tabRecordSchema).max(64), activeId: idString.nullable() }), { session: true, rate: 10 }),
   'tabs:restore': ch(none, { session: true }),
 
-  'files:pickFiles': ch(z.object({ multiple: z.boolean(), title: z.string().max(100).optional(), only: z.enum(['gif']).optional() }), { session: true, rate: 2 }),
+  'files:pickFiles': ch(z.object({ multiple: z.boolean(), title: z.string().max(100).optional(), only: z.enum(['gif', 'document', 'image', 'video', 'audio']).optional() }), { session: true, rate: 2 }),
   // The dialog runs in the main process, which stores the chosen folder itself.
   'files:chooseDownloadFolder': ch(none, { rate: 2 }),
   'files:registerDropped': ch(z.object({ paths: z.array(z.string().min(1).max(4096)).min(1).max(200) }), { session: true, rate: 5 }),
@@ -181,10 +182,12 @@ export const contract = {
           .optional(),
         /** A Meet recording (the owner's own; the server checks). */
         recording: z.number().int().positive().optional(),
+        /** One of the fixed exports: your calendar (.ics) or your contacts (.csv / .vcf). */
+        export: z.enum(['calendar', 'contacts-csv', 'contacts-vcf']).optional(),
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => [v.fileId, v.mail, v.recording].filter((x) => x !== undefined).length === 1, 'give a file id, a mail attachment or a recording'),
+      .refine((v) => [v.fileId, v.mail, v.recording, v.export].filter((x) => x !== undefined).length === 1, 'give a file id, a mail attachment, a recording or an export'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   'transfers:upload': ch(

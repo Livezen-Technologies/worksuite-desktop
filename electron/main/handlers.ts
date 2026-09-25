@@ -15,6 +15,15 @@ import { createZip } from '../services/zip';
 import { openExternalSafely } from '../security/hardening';
 import { broadcast } from './events';
 
+/** The chat attachment menu's kinds of file, as open-dialog filters. */
+const PICK_FILTERS: Record<'gif' | 'document' | 'image' | 'video' | 'audio', Electron.FileFilter> = {
+  gif: { name: 'GIF images', extensions: ['gif'] },
+  document: { name: 'Documents', extensions: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'odt', 'ods', 'odp', 'rtf', 'txt', 'md', 'pages', 'numbers', 'key'] },
+  image: { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'heic', 'heif', 'bmp', 'tif', 'tiff', 'svg'] },
+  video: { name: 'Videos', extensions: ['mp4', 'mov', 'webm', 'm4v', 'mkv', 'avi'] },
+  audio: { name: 'Audio', extensions: ['mp3', 'wav', 'ogg', 'oga', 'm4a', 'aac', 'flac', 'opus'] },
+};
+
 /**
  * The implementation behind every IPC channel. Validation, sender checks,
  * lock, session, permission and rate limits have already been applied by the
@@ -182,7 +191,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     const opts: Electron.OpenDialogOptions = {
       title: input.title ?? 'Choose files',
       properties: input.multiple ? ['openFile', 'multiSelections'] : ['openFile'],
-      ...(input.only === 'gif' ? { filters: [{ name: 'GIF images', extensions: ['gif'] }] } : {}),
+      ...(input.only ? { filters: [PICK_FILTERS[input.only]] } : {}),
     };
     const res = w ? await dialog.showOpenDialog(w, opts) : await dialog.showOpenDialog(opts);
     if (res.canceled) return [];
@@ -203,7 +212,9 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       ? `/api/files/${encodeURIComponent(input.fileId)}/download`
       : input.recording
         ? `/api/meet/recordings/${input.recording}/file`
-        : `/api/mail/messages/${input.mail!.uid}/attachments/${encodeURIComponent(input.mail!.ref)}?${new URLSearchParams({ folder: input.mail!.folder, dl: '1', ...(input.mail!.mailbox ? { mailbox: input.mail!.mailbox } : {}) })}`;
+        : input.export
+          ? { calendar: '/api/calendar/export', 'contacts-csv': '/api/contacts/export?format=csv', 'contacts-vcf': '/api/contacts/export?format=vcf' }[input.export]
+          : `/api/mail/messages/${input.mail!.uid}/attachments/${encodeURIComponent(input.mail!.ref)}?${new URLSearchParams({ folder: input.mail!.folder, dl: '1', ...(input.mail!.mailbox ? { mailbox: input.mail!.mailbox } : {}) })}`;
     return ctx.transfers.download(path, input.name, !!input.open, input.fileId ?? null);
   });
   router.handle('transfers:upload', (input) => ctx.transfers.upload(input.handles, input.target));

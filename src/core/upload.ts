@@ -6,7 +6,7 @@ import { apiPost, request } from './api';
  * main process's transfer manager instead; this is only for data that never
  * had a path.
  */
-export async function uploadBlob(blob: Blob, name: string, target: { kind: 'chat'; roomId: string } | { kind: 'files'; folderId: string | null }): Promise<{ uploadId: string; fileId: number | null }> {
+export async function uploadBlob(blob: Blob, name: string, target: { kind: 'chat'; roomId: string } | { kind: 'files'; folderId: string | null }, onProgress?: (fraction: number) => void): Promise<{ uploadId: string; fileId: number | null }> {
   const chunkSize = 5 * 1024 * 1024;
   const init = await apiPost<{ upload_id: string; chunk_size: number; total_chunks: number }>('/api/uploads/init', {
     filename: name,
@@ -22,6 +22,7 @@ export async function uploadBlob(blob: Blob, name: string, target: { kind: 'chat
     form.set('chunk_index', String(i));
     form.set('chunk', blob.slice(i * size, (i + 1) * size), name);
     await request('POST', `/api/uploads/${init.upload_id}/chunk`, { body: form });
+    onProgress?.((i + 1) / total);
   }
   const done = await apiPost<{ file_id?: number }>(`/api/uploads/${init.upload_id}/complete`, {});
   return { uploadId: init.upload_id, fileId: done.file_id ?? null };

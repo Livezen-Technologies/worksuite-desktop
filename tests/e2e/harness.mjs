@@ -28,6 +28,8 @@ export async function launch({ name, env: extra = {}, args = [] }) {
     if (!ok) failures++;
     console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? ` — ${detail}` : ''}`);
   };
+  /** Something this environment cannot prove: said, and neither passed nor failed. */
+  const skip = (label, why) => console.log(`SKIP  ${label} — ${why}`);
 
   let page = null;
   for (let i = 0; i < 100 && !page; i++) {
@@ -66,10 +68,12 @@ export async function launch({ name, env: extra = {}, args = [] }) {
   const signIn = async (server, email, password) => {
     await waitFor(hasText('Connect to WorkSuite'), 'the server screen');
     await fill('Server address', server);
+    // Choosing a server reloads the window once (its CSP names the server):
+    // wait for that reload, not a guessed delay, or the fields are typed into
+    // the page that is about to go.
+    await evaluate(`(window.__e2eBeforeReload = true)`);
     await clickButton('Continue');
-    // Choosing a server reloads the window once (its CSP names the server).
-    await sleep(1500);
-    await waitFor(hasText('Forgot your password?'), 'the sign-in screen');
+    await waitFor(`!window.__e2eBeforeReload && ${hasText('Forgot your password?')}`, 'the sign-in screen, after the reload', 30_000);
     await fill('Email', email);
     await fill('Password', password);
     await evaluate(`document.querySelector('form').requestSubmit()`);
@@ -99,7 +103,7 @@ export async function launch({ name, env: extra = {}, args = [] }) {
     process.exit(failures ? 1 : 0);
   };
 
-  return { evaluate, waitFor, shot, hasText, clickButton, fill, check, signIn, finish, attach, windowOpen, profile, outDir };
+  return { evaluate, waitFor, shot, hasText, clickButton, fill, check, skip, signIn, finish, attach, windowOpen, profile, outDir };
 }
 
 /** Drive one page over CDP: evaluate, wait, screenshot, click, fill. */
