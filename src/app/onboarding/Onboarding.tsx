@@ -22,6 +22,7 @@ export function Onboarding({ auth }: { auth: AuthState }) {
         {auth.stage === 'no-server' ? <ServerStep /> : null}
         {auth.stage === 'signed-out' || auth.stage === 'expired' ? <SignInStep auth={auth} /> : null}
         {auth.stage === 'mfa' ? <MfaStep /> : null}
+        {auth.stage === 'passkey' ? <PasskeyStep auth={auth} /> : null}
         {auth.stage === 'registering' || auth.stage === 'bootstrapping' ? <Progress stage={auth.stage} /> : null}
         {auth.stage === 'blocked' || auth.stage === 'revoked' ? <Stopped auth={auth} /> : null}
       </div>
@@ -71,7 +72,20 @@ function SignInStep({ auth }: { auth: AuthState }) {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const [passkeyError, setPasskeyError] = useState<string | null>(null);
   const host = auth.server ? new URL(auth.server.origin).host : '';
+  const startPasskey = async () => {
+    setPasskeyBusy(true);
+    setPasskeyError(null);
+    try {
+      await call('auth:passkeyStart');
+    } catch (e) {
+      setPasskeyError(errorMessage(e));
+    } finally {
+      setPasskeyBusy(false);
+    }
+  };
   const submit = async () => {
     setBusy(true);
     setError(null);
@@ -113,7 +127,62 @@ function SignInStep({ auth }: { auth: AuthState }) {
       <button type="button" className="text-left text-[12.5px] font-semibold text-primary hover:underline" onClick={() => void call('app:openInBrowser', { path: '/forgot-password' })}>
         Forgot your password?
       </button>
+      {auth.server?.passkey ? (
+        <>
+          <div className="flex items-center gap-3 text-[11.5px] text-ink-3" aria-hidden>
+            <span className="h-px flex-1 bg-line" />
+            or
+            <span className="h-px flex-1 bg-line" />
+          </div>
+          <Button variant="secondary" size="lg" type="button" icon="fingerprint" loading={passkeyBusy} onClick={() => void startPasskey()}>
+            Sign in with a passkey
+          </Button>
+          {passkeyError ? <p className="text-[12.5px] text-danger">{passkeyError}</p> : null}
+        </>
+      ) : null}
     </form>
+  );
+}
+
+/**
+ * Waiting for the browser. A passkey works only on a page from the server's own
+ * address, so the ceremony happens in the person's browser (Touch ID, Windows
+ * Hello, a phone or a security key) and the result comes back here through
+ * worksuite://auth/callback. Nothing to type, so this screen only says where
+ * to look and offers a way back.
+ */
+function PasskeyStep({ auth }: { auth: AuthState }) {
+  const host = auth.server ? new URL(auth.server.origin).host : '';
+  const [busy, setBusy] = useState(false);
+  const again = async () => {
+    setBusy(true);
+    try {
+      await call('auth:passkeyStart');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <h1 className="text-[22px] font-bold text-ink">Continue in your browser</h1>
+        <p className="mt-1 text-[13.5px] text-ink-3">
+          {host} opened in your browser. Use your passkey there — Touch ID, Windows Hello, your phone or a security key — and WorkSuite will finish signing you in here.
+        </p>
+      </div>
+      <div className="flex items-center gap-2.5 rounded-[10px] bg-subtle px-3.5 py-3 text-[12.5px] text-ink-2">
+        <Icon name="spinner" size={16} className="animate-spin-slow" /> Waiting for your passkey…
+      </div>
+      <div className="flex gap-2">
+        <Button variant="secondary" type="button" icon="external" loading={busy} onClick={() => void again()}>
+          Open the browser again
+        </Button>
+        <Button variant="ghost" type="button" onClick={() => void call('auth:passkeyCancel')}>
+          Use my password instead
+        </Button>
+      </div>
+      <p className="text-[12px] text-ink-3">If your browser asks whether to open WorkSuite, allow it. The sign-in expires after five minutes.</p>
+    </div>
   );
 }
 

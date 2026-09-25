@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, shell } from 'electron';
 import os from 'node:os';
 import { writeFile } from 'node:fs/promises';
 import type { TabRecord } from '@shared/ipc/contract';
@@ -61,6 +61,32 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('auth:signIn', (input) => ctx.session.signIn(input.email, input.password));
   router.handle('auth:verifyMfa', (input) => ctx.session.verifyMfa(input.code));
   router.handle('auth:cancelMfa', () => ctx.session.cancelMfa());
+  router.handle('auth:passkeyStart', async () => {
+    const url = ctx.session.startPasskey(os.hostname());
+    const origin = ctx.auth.getServer()?.origin;
+    // Always a page on the configured server — whose address was vetted when it
+    // was chosen — so it opens without the generic external-link prompt.
+    if (!origin || new URL(url).origin !== origin) {
+      ctx.session.cancelPasskey();
+      throw new DesktopError('UNSUPPORTED', 'Passkey sign-in could not be opened.');
+    }
+    try {
+      // Unpackaged test runs record the page instead of opening a real browser.
+      if (!app.isPackaged && process.env.WS_E2E_EXTERNAL_LOG) await writeFile(process.env.WS_E2E_EXTERNAL_LOG, `${url}\n`, { flag: 'a' });
+      else await shell.openExternal(url);
+    } catch {
+      ctx.session.cancelPasskey();
+      throw new DesktopError('UNSUPPORTED', 'Your browser could not be opened. Sign in with your password instead.');
+    }
+    return ctx.session.get();
+  });
+  router.handle('auth:passkeyCancel', () => ctx.session.cancelPasskey());
+
+  // ── HR ────────────────────────────────────────────────────────────────
+  router.handle('hr:clock', async (input) => {
+    await ctx.clockAttendance(input.direction, input.note);
+    return { ok: true } as const;
+  });
   router.handle('auth:signOut', (input) => ctx.session.signOut(!!input?.wipe));
   router.handle('auth:completeSetup', () => ctx.session.completeSetup());
 

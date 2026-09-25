@@ -22,7 +22,7 @@ blocked by something outside the code.
 | ID | Status | Where / note |
 |---|---|---|
 | FR-AUTH-01 | Done | Server step; enterprise preconfiguration from registry / MDM profile / `/etc/worksuite/policy.json` |
-| FR-AUTH-02 | Done | WorkSuite login + TOTP/backup code; refresh token in OS secure storage |
+| FR-AUTH-02 | Done | WorkSuite login + TOTP/backup code, or a passkey proved in the browser and handed back with PKCE; refresh token in OS secure storage |
 | FR-AUTH-03 | Done | Registration before bootstrap (`session.ts`) |
 | FR-AUTH-04 | Done | `/desktop/v1/bootstrap` or composed from the existing API |
 | FR-AUTH-05 | Done | Organization selector with "All organizations" |
@@ -64,7 +64,7 @@ blocked by something outside the code.
 
 | ID | Status | Where / note |
 |---|---|---|
-| FR-TRAY-01..03, 05..07 | Done | Tray menu incl. Clock In/Out, quick actions, pause notifications; minimize to tray; autostart; background services; state icons with priority; dock/taskbar badge |
+| FR-TRAY-01..03, 05..07 | Done | Tray menu incl. Clock In/Out (also in the title bar, one implementation for both), quick actions, pause notifications; minimize to tray; autostart; background services; state icons with priority; dock/taskbar badge |
 | FR-TRAY-04 | Partial | Required services from policy are applied and shown locked |
 | FR-NTF-01..04, 06 | Done | Native notifications for server notifications, chat, calls and new mail; privacy modes (content hidden while locked); DND and pause |
 | FR-NTF-05 | Partial (P2) | Incoming calls raise a notification; the always-on-top call window arrives with Meet |

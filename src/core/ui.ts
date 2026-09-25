@@ -1,6 +1,6 @@
 import { createStore } from './store';
 
-export type Overlay = 'search' | 'palette' | 'launcher' | 'notifications' | 'transfers' | 'org' | 'profile' | 'network' | null;
+export type Overlay = 'search' | 'palette' | 'launcher' | 'notifications' | 'transfers' | 'org' | 'profile' | 'network' | 'clock' | null;
 export type Dock = 'ai' | 'activity' | null;
 
 export const ui = createStore<{ overlay: Overlay; dock: Dock; sidebarCollapsed: boolean; searchSeed: string }>({

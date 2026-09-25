@@ -15,6 +15,8 @@ export const INVOKE_CHANNELS = [
   'auth:signIn',
   'auth:verifyMfa',
   'auth:cancelMfa',
+  'auth:passkeyStart',
+  'auth:passkeyCancel',
   'auth:signOut',
   'auth:completeSetup',
 
@@ -36,6 +38,7 @@ export const INVOKE_CHANNELS = [
   'files:registerDropped',
   'files:chooseDownloadFolder',
 
+  'hr:clock',
   'transfers:list',
   'transfers:download',
   'transfers:upload',

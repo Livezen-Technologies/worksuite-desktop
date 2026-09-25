@@ -302,6 +302,29 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     } else windows.showMain();
   };
   const handleDeepLink = (url: string): void => {
+    // A passkey sign-in coming back from the browser. Handled before the link
+    // grammar, and never logged: it carries a one-time code.
+    if (/^worksuite:\/\/auth\/callback\?/i.test(url)) {
+      windows.showMain();
+      let code = '';
+      let state = '';
+      try {
+        const q = new URL(url).searchParams;
+        code = q.get('code') ?? '';
+        state = q.get('state') ?? '';
+      } catch {
+        /* treated as not started below */
+      }
+      // Only the attempt waiting now; anything else is ignored and leaves that
+      // attempt running — a stray or replayed link must not cancel it.
+      if (!auth.isPendingPasskey(state)) {
+        log.warn('passkey callback for no sign-in waiting');
+        broadcast('toast', { kind: 'error', text: 'That sign-in was not started from this app.' });
+        return;
+      }
+      void sessionCtl.completePasskey(code, state);
+      return;
+    }
     const parsed = parseDeepLink(url);
     if (!parsed.ok) {
       log.warn('deep link rejected', { reason: parsed.reason, url: redactUrl(url) });
@@ -406,22 +429,37 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     try {
       const a = await http.get<{ linked?: boolean; today?: { check_in?: string | null; check_out?: string | null } | null }>('/api/hr/attendance/me');
       const clockedIn = !!(a.today?.check_in && !a.today?.check_out);
-      const since = clockedIn && a.today?.check_in ? new Date(`${a.today.check_in.replace(' ', 'T')}${a.today.check_in.includes('T') ? '' : 'Z'}`).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null;
+      // Attendance stamps are wall-clock times on the company's clock, not UTC:
+      // shown as the digits they are, never converted.
+      const m = clockedIn && a.today?.check_in ? /[T ](\d{2}):(\d{2})/.exec(a.today.check_in) : null;
+      const since = m ? new Date(Date.UTC(2000, 0, 1, +m[1]!, +m[2]!)).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' }) : null;
       tray.update({ attendance: { linked: !!a.linked, clockedIn, since } });
     } catch {
       tray.update({ attendance: null });
     }
   };
+  /**
+   * Clocking in or out, from anywhere in the app: the tray, the title bar or
+   * the HR page. One implementation, so all three show the same state — the
+   * tray menu, and every screen through the `hr.attendance.changed` event.
+   * Errors are the caller's to show.
+   */
+  const clockAttendance = async (direction: 'in' | 'out', note?: string): Promise<void> => {
+    try {
+      await http.post(`/api/hr/attendance/check-${direction}`, { source: 'desktop', note: note || undefined });
+      broadcast('realtime:event', { type: 'hr.attendance.changed' });
+    } finally {
+      void refreshAttendance();
+    }
+  };
   const clock = async (direction: 'in' | 'out'): Promise<void> => {
     try {
-      await http.post(`/api/hr/attendance/check-${direction}`, { source: 'desktop' });
+      await clockAttendance(direction);
       broadcast('toast', { kind: 'success', text: direction === 'in' ? 'Clocked in. Have a good day.' : 'Clocked out.' });
-      broadcast('realtime:event', { type: 'hr.attendance.changed' });
     } catch (e) {
       broadcast('toast', { kind: 'error', text: (e as Error).message });
       windows.showMain();
     }
-    void refreshAttendance();
   };
 
   // ── the tray ───────────────────────────────────────────────────────────
@@ -668,6 +706,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     flushNavigation,
     relaunch,
     quit,
+    clockAttendance,
   };
   registerHandlers(router, ctx);
   router.install();

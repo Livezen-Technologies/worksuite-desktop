@@ -124,6 +124,9 @@ export const contract = {
   'auth:signIn': ch(z.object({ email: z.string().min(1).max(254), password: z.string().min(1).max(512) }), { rate: 2 }),
   'auth:verifyMfa': ch(z.object({ code: z.string().regex(/^[A-Za-z0-9-]{4,32}$/) }), { rate: 2 }),
   'auth:cancelMfa': ch(none),
+  // Opens the server's passkey page in the browser; the result returns through worksuite://auth/callback.
+  'auth:passkeyStart': ch(none, { rate: 2 }),
+  'auth:passkeyCancel': ch(none),
   'auth:signOut': ch(z.object({ wipe: z.boolean().optional() }).optional(), { whileLocked: true, sensitive: true }),
   'auth:completeSetup': ch(none, { session: true }),
 
@@ -154,6 +157,7 @@ export const contract = {
   'files:chooseDownloadFolder': ch(none, { rate: 2 }),
   'files:registerDropped': ch(z.object({ paths: z.array(z.string().min(1).max(4096)).min(1).max(200) }), { session: true, rate: 5 }),
 
+  'hr:clock': ch(z.object({ direction: z.enum(['in', 'out']), note: z.string().max(500).optional() }), { session: true, rate: 3 }),
   'transfers:list': ch(none, { session: true }),
   'transfers:download': ch(
     z
@@ -312,6 +316,9 @@ export interface Outputs {
   'auth:signIn': AuthState;
   'auth:verifyMfa': AuthState;
   'auth:cancelMfa': AuthState;
+  'auth:passkeyStart': AuthState;
+  'auth:passkeyCancel': AuthState;
+  'hr:clock': { ok: true };
   'auth:signOut': AuthState;
   'auth:completeSetup': AuthState;
   'session:bootstrap': Bootstrap | null;
@@ -396,6 +403,7 @@ export type DesktopErrorCode =
   | 'NOT_WORKSUITE'
   | 'INVALID_CREDENTIALS'
   | 'MFA_INVALID'
+  | 'PASSKEY_FAILED'
   | 'SESSION_EXPIRED'
   | 'DEVICE_REVOKED'
   | 'DEVICE_NOT_REGISTERED'

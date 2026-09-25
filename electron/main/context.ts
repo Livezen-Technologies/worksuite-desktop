@@ -53,4 +53,6 @@ export interface AppContext {
   flushNavigation: () => void;
   relaunch: (safeMode: boolean) => void;
   quit: () => void;
+  /** Clock in or out (FR-TRAY-01): the tray, the title bar and the HR page all go through this. */
+  clockAttendance: (direction: 'in' | 'out', note?: string) => Promise<void>;
 }

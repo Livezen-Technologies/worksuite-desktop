@@ -5,6 +5,66 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-25 — Sign in with a passkey, and clock in from the title bar
+
+**Added**
+
+- **Sign in with a passkey.** On a server that offers it (WorkSuite with
+  `/desktop/v1`), the sign-in screen has **Sign in with a passkey** under the
+  password form.
+  - The app opens the server's passkey page in your browser, where Touch ID,
+    Windows Hello, your phone or a security key work as they do on the web.
+    WorkSuite then finishes signing you in here.
+  - While it waits, the screen says so and offers **Open the browser again**
+    and **Use my password instead**.
+  - How it works: the browser proves the passkey and gets a one-time code; the
+    app exchanges it with a PKCE verifier that never leaves the app. See
+    [docs/BACKEND.md](docs/BACKEND.md).
+- **Clock in and out from the title bar**, beside the connection pill, for
+  anybody linked to an employee record.
+  - **Clock in** is one click.
+  - While clocked in, the pill shows the time worked. Clicking it opens a
+    popover with a note field and **Clock out**, so a stray click cannot end
+    the working day.
+  - A policy that requires a note opens the popover for clocking in too.
+  - The tray, the title bar and the HR page all clock through one
+    main-process action (`hr:clock`). Each updates the other two at once;
+    before, the tray only noticed a clock-in on the HR page within five
+    minutes.
+
+**Fixed**
+
+- **Attendance times were off by the time zone.** Attendance stamps are
+  wall-clock times on the company's clock, but the HR page and the tray read
+  them as UTC. In Colombo a 22:25 clock-in showed as 3:55 AM, and the
+  running time stayed at zero. Times are now shown as the digits the server
+  sent. Time worked counts on from the server's own total, as the web does,
+  and stands still during a break.
+- **Messages from the main process were lost on the sign-in screen.** They
+  were only listened for inside the signed-in shell. The listener now lives
+  at the app's root.
+
+**Checked**
+
+- `tests/e2e/passkey.mjs` passes 15 of 15 against WorkSuite running locally.
+  It plays the browser with a software authenticator signing real WebAuthn
+  assertions, and hands the callback to the app as the OS does. It covers:
+  - an unsolicited callback, a wrong state and a replay, each refused;
+  - the sign-in completing as the passkey's owner;
+  - clocking in with one click, and the server holding the check-in;
+  - clocking out through the popover.
+
+  It found three problems the unit tests could not, all fixed before this
+  commit:
+  - the new channels were missing from the preload bridge;
+  - a stray callback cancelled the attempt it was not for;
+  - toasts were dropped on the sign-in screen.
+- 89 unit tests: 7 for passkey sign-in (the challenge is S256 of the verifier
+  sent at the exchange; a wrong state, a second completion and a refused
+  exchange each fail cleanly; a newer start replaces an older one; discovery
+  accepts only same-server paths) and 4 for the attendance time rules.
+  Typecheck and lint pass.
+
 ## 2026-09-25 — A macOS DMG that opens without an Apple certificate
 
 **Added**

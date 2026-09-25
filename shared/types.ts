@@ -43,6 +43,12 @@ export interface ServerInfo {
   minimumVersion: string | null;
   /** Set by an enterprise build or MDM policy: the user may not change the server. */
   locked: boolean;
+  /**
+   * Passkey sign-in, when the server offers it: the page to open in the
+   * browser and the endpoint that exchanges the code it sends back. Absent on
+   * servers without the desktop API, and on server records saved before it.
+   */
+  passkey?: { url: string; exchange: string } | null;
 }
 
 export interface UserSummary {
@@ -141,6 +147,8 @@ export type AuthStage =
   | 'no-server'
   | 'signed-out'
   | 'mfa'
+  /** Waiting for a passkey sign-in in the browser to come back through worksuite://auth/callback. */
+  | 'passkey'
   | 'registering'
   | 'bootstrapping'
   | 'ready'

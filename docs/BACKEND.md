@@ -33,6 +33,7 @@ sign-in) and, once the laptop is registered, `X-WS-Device: <device id>`.
 | Heartbeat, directives, commands | `POST /desktop/v1/devices/heartbeat` → `{directives, commands:[{id, command, payload}], trust, policy_version, server_time}` |
 | Acknowledge a command | `POST /desktop/v1/devices/commands/{id}/ack` `{status: DONE\|FAILED, result}` |
 | Bootstrap (§8.2) | `GET /desktop/v1/bootstrap?organization_id=` |
+| Passkey sign-in | `/desktop/passkey` in the browser, then `POST /api/auth/passkeys/desktop/exchange` (see below) |
 | Apps | `GET /desktop/v1/apps` → `{apps_gated, apps:[{id: "worksuite.<slug>", slug, name, route, desktop:{native}}]}` |
 | Policy only | `GET /desktop/v1/policies?organization_id=` |
 | Open a `worksuite://` link | `GET /desktop/v1/links/resolve?url=` → `{valid, module, route, window, allowed, organization_id}` |
@@ -56,6 +57,29 @@ only goes up. Error envelopes carry the §8.3 `code` the app acts on:
 `DEVICE_REVOKED`, `DEVICE_NOT_REGISTERED`, `DESKTOP_ACCESS_DISABLED`,
 `DEVICE_LIMIT`, `INVALID_LINK`, `FILE_LOCKED`, `SYNC_CURSOR_EXPIRED`,
 `POLICY_DENIED`.
+
+### Passkey sign-in
+
+A passkey only works on a page served from the server's own address; the
+app's screens are `app://bundle`. So when discovery announces
+`passkey_sign_in`, the sign-in screen offers **Sign in with a passkey**:
+
+1. The app makes a PKCE verifier and a state, keeps both in memory, and opens
+   `<server>/desktop/passkey?challenge=S256(verifier)&state=…&device=…` in the
+   default browser.
+2. The page proves a passkey at `POST /api/auth/passkeys/desktop/handoff`
+   with the challenge (every web passkey gate applies) and receives a
+   one-time code. The browser is not signed in.
+3. The page opens `worksuite://auth/callback?code=…&state=…`. The app
+   ignores any callback whose state is not the attempt it is waiting for,
+   and a replayed one.
+4. The app exchanges `{code, code_verifier}` at
+   `POST /api/auth/passkeys/desktop/exchange` for tokens, then registers and
+   bootstraps as after a password.
+
+The code is good for two minutes and one attempt. Without the verifier,
+which never leaves the app, it is worth nothing to another program that
+registered `worksuite://`.
 
 ### Revocation
 

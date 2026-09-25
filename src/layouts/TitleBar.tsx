@@ -5,11 +5,12 @@ import { useStore } from '../core/store';
 import { openOverlay, toggleDock, ui } from '../core/ui';
 import { prettyAccelerator } from '../core/commands';
 import { Icon } from '../components/Icon';
+import { ClockControl } from '../app/overlays/ClockPopover';
 import { Avatar, CountBadge, cx, initials } from '../components/ui';
 
 /**
  * Title / top bar, 52 px (§4.12 shared shell components): WorkSuite mark,
- * organization selector, global search, network pill, transfers,
+ * organization selector, global search, clock in / out, network pill, transfers,
  * notifications, AI, profile — and the window controls (native traffic
  * lights on macOS, the OS overlay controls elsewhere).
  */
@@ -69,6 +70,8 @@ export function TitleBar() {
       </button>
 
       <div className="flex-1" />
+
+      <ClockControl />
 
       <button type="button" className={cx('no-drag flex h-8 items-center gap-2 rounded-full px-3 text-[12.5px] font-semibold', pill.tone)} onClick={() => openOverlay('network')} aria-label={`Connection: ${pill.text}`}>
         <span className={cx('h-2 w-2 rounded-full', pill.dot)} />

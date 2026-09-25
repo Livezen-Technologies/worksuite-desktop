@@ -49,6 +49,20 @@ diagnostics, the lock screen, sign-out — checks the security boundaries
 locked, no token in the diagnostic bundle) and saves a screenshot of each
 screen to `test-results/e2e/`.
 
+### Passkey sign-in end to end
+
+```bash
+WS_E2E_SERVER=http://localhost:8920 WS_E2E_PASSKEY_KEY=key.pem WS_E2E_PASSKEY_ID=… WS_E2E_USER_ID=… \
+  ELECTRON_RUN_AS_NODE=1 npx electron tests/e2e/passkey.mjs
+```
+
+Needs a user whose passkey is the public half of `key.pem` (an EC P-256 key in
+PKCS#8), filed in the server's `passkeys` table under `WS_E2E_PASSKEY_ID`, and
+linked to an employee with no attendance today. The test plays the browser:
+it signs a real WebAuthn assertion with that key, proves it at the handoff,
+and hands `worksuite://auth/callback` to the app the way the OS does. It then
+clocks in and out from the title bar.
+
 ## How it is built
 
 ```

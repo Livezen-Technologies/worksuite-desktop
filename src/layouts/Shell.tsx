@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { NavigateRequest, ToastMessage } from '@shared/types';
+import type { NavigateRequest } from '@shared/types';
 import { app } from '../core/app-state';
 import { call, on } from '../core/bridge';
 import { accelerator, commandForAccelerator, effectiveShortcuts, getCommand, registerCommand } from '../core/commands';
@@ -11,6 +11,7 @@ import { allowedModules, moduleFor } from '../modules/registry';
 import { AiDock } from '../app/overlays/AiDock';
 import { Launcher } from '../app/overlays/Launcher';
 import { NetworkPopover, NotificationCenter, OrgSwitcher, ProfileMenu, TransferCenter } from '../app/overlays/Popovers';
+import { ClockPopover } from '../app/overlays/ClockPopover';
 import { SearchOverlay } from '../app/overlays/SearchOverlay';
 import { UpdateBanner } from '../app/screens/UpdateScreens';
 import { Sidebar } from './Sidebar';
@@ -136,7 +137,6 @@ export function Shell() {
         }
         navigate(req.route, req.organizationId ?? null);
       }),
-      on<ToastMessage>('toast', (t) => toast(t.kind, t.text)),
     ];
     return () => offs.forEach((off) => off());
   }, []);
@@ -171,6 +171,7 @@ export function Shell() {
       {overlay === 'org' ? <OrgSwitcher /> : null}
       {overlay === 'profile' ? <ProfileMenu /> : null}
       {overlay === 'network' ? <NetworkPopover /> : null}
+      {overlay === 'clock' ? <ClockPopover /> : null}
     </div>
   );
 }

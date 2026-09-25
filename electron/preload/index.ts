@@ -60,6 +60,8 @@ const api = {
     signIn: call('auth:signIn'),
     verifyMfa: call('auth:verifyMfa'),
     cancelMfa: call('auth:cancelMfa'),
+    passkeyStart: call('auth:passkeyStart'),
+    passkeyCancel: call('auth:passkeyCancel'),
     signOut: call('auth:signOut'),
     completeSetup: call('auth:completeSetup'),
   },
@@ -91,6 +93,9 @@ const api = {
       if (paths.length === 0) return Promise.resolve([]);
       return invoke('files:registerDropped', { paths });
     },
+  },
+  hr: {
+    clock: call('hr:clock'),
   },
   transfers: {
     list: call('transfers:list'),

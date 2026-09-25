@@ -155,6 +155,9 @@ export class SessionController {
       await this.resume(last);
     } else {
       this.set({ stage: 'signed-out' });
+      // What the server offers can change between runs (passkey sign-in, a
+      // minimum version); the sign-in screen is where it matters.
+      void this.probeInBackground(server.origin);
     }
   }
 
@@ -234,6 +237,36 @@ export class SessionController {
     this.auth.cancelChallenge();
     this.set({ stage: 'signed-out', message: null });
     return this.get();
+  }
+
+  /**
+   * Passkey sign-in, started here and finished in the browser. Returns the
+   * page to open; the stage waits until worksuite://auth/callback arrives
+   * (`completePasskey`) or the person cancels.
+   */
+  startPasskey(deviceName: string): string {
+    if (!this.state.server) throw new DesktopError('NOT_WORKSUITE', 'Choose a WorkSuite server first.');
+    const url = this.auth.startPasskey(deviceName);
+    this.set({ stage: 'passkey', message: null });
+    return url;
+  }
+
+  cancelPasskey(): AuthState {
+    this.auth.cancelPasskey();
+    if (this.state.stage === 'passkey') this.set({ stage: 'signed-out', message: null });
+    return this.get();
+  }
+
+  /** The browser sent the code back. Anything wrong returns to the sign-in screen, saying what. */
+  async completePasskey(code: string, state: string): Promise<void> {
+    try {
+      const payload = await this.auth.completePasskey(code, state);
+      await this.afterSignIn(payload);
+    } catch (e) {
+      if (this.state.stage === 'passkey' || this.state.stage === 'signed-out') {
+        this.set({ stage: 'signed-out', message: e instanceof Error ? e.message : 'Passkey sign-in did not finish. Try again.' });
+      }
+    }
   }
 
   private async afterSignIn(payload: SignInPayload | null): Promise<void> {

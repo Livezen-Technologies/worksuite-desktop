@@ -1,3 +1,4 @@
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { ServerApi, ServerInfo, UserSummary } from '@shared/types';
 import { DesktopError } from '../main/errors';
 import { logger } from '../main/log';
@@ -49,6 +50,18 @@ export interface SignInPayload {
 export type SignInOutcome = { kind: 'mfa' } | { kind: 'signed-in'; payload: SignInPayload };
 
 const REFRESH_KEY = 'auth:refresh';
+/** How long the app waits for the browser to come back from a passkey sign-in. */
+const PASSKEY_WINDOW_MS = 5 * 60_000;
+
+function b64url(buf: Buffer): string {
+  return buf.toString('base64url');
+}
+
+function sameSecret(a: string, b: string): boolean {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
+}
 
 export function normalizeServerUrl(input: string, allowInsecureLocal: boolean): string {
   let raw = input.trim();
@@ -115,6 +128,12 @@ export async function probeServer(origin: string, fetch: FetchLike): Promise<Omi
   if (wk.ok) {
     const body = await jsonOrNull(wk);
     if (body && (body.api === 'desktop-v1' || body.desktop_api === 'v1')) {
+      const pk = body.passkey_sign_in as { url?: unknown; exchange?: unknown } | null | undefined;
+      // Paths on this same server only: the app never opens, or posts to, an address the server names elsewhere.
+      const passkey =
+        pk && typeof pk.url === 'string' && typeof pk.exchange === 'string' && /^\/[A-Za-z0-9/_-]+$/.test(pk.url) && /^\/api\/[A-Za-z0-9/_-]+$/.test(pk.exchange)
+          ? { url: pk.url, exchange: pk.exchange }
+          : null;
       // Per platform (`minimum_versions`), or one version for all.
       const platform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'macos' : 'linux';
       const perPlatform = body.minimum_versions && typeof body.minimum_versions === 'object' ? (body.minimum_versions as Record<string, unknown>)[platform] : undefined;
@@ -123,6 +142,7 @@ export async function probeServer(origin: string, fetch: FetchLike): Promise<Omi
         name: typeof body.name === 'string' ? body.name : host,
         api: 'desktop-v1',
         minimumVersion: typeof perPlatform === 'string' ? perPlatform : typeof body.minimum_version === 'string' ? body.minimum_version : null,
+        passkey,
       };
     }
   }
@@ -135,7 +155,7 @@ export async function probeServer(origin: string, fetch: FetchLike): Promise<Omi
     const brand = data.brand;
     const branded =
       typeof brand === 'string' ? brand : brand && typeof brand === 'object' && typeof (brand as { name?: unknown }).name === 'string' ? (brand as { name: string }).name : '';
-    return { origin, name: branded.trim() || host, api: 'core' as ServerApi, minimumVersion: null };
+    return { origin, name: branded.trim() || host, api: 'core' as ServerApi, minimumVersion: null, passkey: null };
   }
   if (body && body.status === 'error') {
     // A WorkSuite server that is up but failing: say so, rather than
@@ -149,6 +169,8 @@ export async function probeServer(origin: string, fetch: FetchLike): Promise<Omi
 export class AuthService {
   private access: { token: string; expiresAt: number } | null = null;
   private challenge: { token: string; email: string; expiresAt: number } | null = null;
+  /** A passkey sign-in started in the browser: the PKCE verifier and state, kept only in memory. */
+  private passkeyPending: { verifier: string; state: string; expiresAt: number } | null = null;
   private refreshing: Promise<'ok' | 'offline' | 'lost'> | null = null;
   private refreshTimer: NodeJS.Timeout | null = null;
   private server: ServerInfo | null = null;
@@ -249,6 +271,61 @@ export class AuthService {
       throw errorFromResponse(res.status, json as never, res.headers.get('retry-after'));
     }
     this.challenge = null;
+    return this.accept((json?.data ?? {}) as Record<string, unknown>);
+  }
+
+  /**
+   * Start a passkey sign-in in the browser (see the server's
+   * Auth\Libraries\DesktopHandoff). A passkey only works on a page from the
+   * server's own address, which this app's screens are not, so the browser
+   * proves it and sends back a one-time code through worksuite://auth/callback.
+   *
+   * PKCE (RFC 7636, S256) binds that code to this app: only the challenge
+   * leaves the process; the verifier stays in memory, and the code is useless
+   * without it — so another program registered for worksuite:// that saw the
+   * link could not use it. The state ties the callback to this attempt.
+   *
+   * @returns the page to open in the browser
+   */
+  startPasskey(deviceName: string): string {
+    const pk = this.server?.passkey;
+    if (!this.server || !pk) throw new DesktopError('UNSUPPORTED', 'This WorkSuite server does not offer passkey sign-in to the desktop app.');
+    const verifier = b64url(randomBytes(32));
+    const state = b64url(randomBytes(24));
+    this.passkeyPending = { verifier, state, expiresAt: Date.now() + PASSKEY_WINDOW_MS };
+    const q = new URLSearchParams({ challenge: b64url(createHash('sha256').update(verifier).digest()), state, device: deviceName.slice(0, 80) });
+    return `${this.origin()}${pk.url}?${q.toString()}`;
+  }
+
+  hasPendingPasskey(): boolean {
+    return this.passkeyPending !== null && this.passkeyPending.expiresAt > Date.now();
+  }
+
+  /** Is this callback for the sign-in waiting now? A stray one must not cancel it. */
+  isPendingPasskey(state: string): boolean {
+    return this.passkeyPending !== null && sameSecret(this.passkeyPending.state, state);
+  }
+
+  cancelPasskey(): void {
+    this.passkeyPending = null;
+  }
+
+  /** The browser came back with a code: exchange it, once, for a session. */
+  async completePasskey(code: string, state: string): Promise<SignInPayload> {
+    const pending = this.passkeyPending;
+    const pk = this.server?.passkey;
+    if (!pending || !pk || !sameSecret(pending.state, state)) {
+      throw new DesktopError('PASSKEY_FAILED', 'That sign-in was not started from this app. Choose “Sign in with a passkey” to start again.');
+    }
+    // One attempt per start, right or wrong.
+    this.passkeyPending = null;
+    if (pending.expiresAt < Date.now()) throw new DesktopError('PASSKEY_FAILED', 'That sign-in took too long. Start again.');
+    if (!/^[A-Za-z0-9_-]{43}$/.test(code)) throw new DesktopError('PASSKEY_FAILED', 'That sign-in link is not valid. Start again.');
+    const { res, json } = await this.post(pk.exchange, { code, code_verifier: pending.verifier });
+    if (!res.ok) {
+      if (res.status === 401) throw new DesktopError('PASSKEY_FAILED', typeof json?.message === 'string' ? json.message : 'That sign-in expired. Start again.');
+      throw errorFromResponse(res.status, json as never, res.headers.get('retry-after'));
+    }
     return this.accept((json?.data ?? {}) as Record<string, unknown>);
   }
 

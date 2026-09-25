@@ -3,11 +3,12 @@ import { useEffect, useState } from 'react';
 import { ApiError, apiGet, apiGetMeta, apiPost } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
 import { useTab, useTabTitle } from '../../core/tab-context';
-import { dateLabel, duration, parseTs, timeLabel } from '../../core/time';
+import { dateLabel, duration } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, Card, Chip, Empty, ErrorNote, OfflineNote, Spinner, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
+import { attendanceTime, clockAttendance, clockError, useAttendance, useNow, workedSeconds, type AttendanceMe } from './attendance';
 
 /**
  * HR self-service (READ_CACHE, §14): clock in and out (also from the tray),
@@ -15,24 +16,6 @@ import type { ModuleProps } from '../registry';
  * for me. Screens that need HR permissions answer for themselves; the rest
  * answer for the signed-in person only.
  */
-interface Day {
-  check_in: string | null;
-  check_out: string | null;
-  on_break: boolean;
-  net_seconds: number;
-  late_minutes: number;
-  state: string;
-  work_location: string | null;
-}
-interface AttendanceMe {
-  linked: boolean;
-  employee?: { id: number; employee_no: string };
-  date?: string;
-  timezone?: string;
-  today?: Day | null;
-  month?: { days_present: number; work_days: number; attendance_rate: number; net_seconds: number; late_days: number; overtime_minutes: number; missing_check_outs: number };
-  policy?: { checkin_note_required: boolean; checkout_note_required: boolean };
-}
 interface LeaveRequest {
   id: number | string;
   type_name: string;
@@ -93,29 +76,19 @@ export default function HrPage(_props: ModuleProps) {
 }
 
 function Attendance() {
-  const qc = useQueryClient();
-  const q = useQuery({ queryKey: ['hr', 'attendance'], queryFn: ({ signal }) => apiGetMeta<AttendanceMe>('/api/hr/attendance/me', undefined, signal) });
+  const { q, a, today, clockedIn, needNote, countedAt } = useAttendance();
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const h = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(h);
-  }, []);
-  const a = q.data?.data;
-  const today = a?.today ?? null;
-  const clockedIn = !!(today?.check_in && !today.check_out);
-  const needNote = clockedIn ? a?.policy?.checkout_note_required : a?.policy?.checkin_note_required;
+  const now = useNow();
 
   const clock = async () => {
     setBusy(true);
     try {
-      await apiPost(`/api/hr/attendance/check-${clockedIn ? 'out' : 'in'}`, { source: 'desktop', note: note || undefined });
+      await clockAttendance(clockedIn ? 'out' : 'in', note);
       toast('success', clockedIn ? 'Clocked out.' : 'Clocked in. Have a good day.');
       setNote('');
-      void qc.invalidateQueries({ queryKey: ['hr'] });
     } catch (e) {
-      toast('error', e instanceof ApiError && e.offline ? 'Clocking in needs a connection to WorkSuite.' : errorMessage(e));
+      toast('error', clockError(e));
     } finally {
       setBusy(false);
     }
@@ -124,7 +97,7 @@ function Attendance() {
   if (q.isLoading) return <Spinner />;
   if (q.error) return <ErrorNote error={q.error} onRetry={() => void q.refetch()} />;
   if (!a?.linked) return <Empty icon="id-card" title="You're not set up as an employee" hint="Attendance is available once HR links your account to an employee record." />;
-  const elapsed = clockedIn && today?.check_in ? (now - parseTs(today.check_in).getTime()) / 1000 : (today?.net_seconds ?? 0);
+  const elapsed = workedSeconds(today, clockedIn, now, countedAt);
   return (
     <div className="grid max-w-[1100px] grid-cols-1 gap-5 lg:grid-cols-2">
       <Card title="Today">
@@ -136,8 +109,8 @@ function Attendance() {
           <div>
             <div className="text-[15px] font-semibold text-ink">{clockedIn ? 'Clocked in' : today?.check_out ? 'Clocked out' : 'Not clocked in yet'}</div>
             <div className="text-[13px] text-ink-3">
-              {today?.check_in ? `In at ${timeLabel(today.check_in)}` : 'Your day has not started'}
-              {today?.check_out ? ` · out at ${timeLabel(today.check_out)}` : ''}
+              {today?.check_in ? `In at ${attendanceTime(today.check_in)}` : 'Your day has not started'}
+              {today?.check_out ? ` · out at ${attendanceTime(today.check_out)}` : ''}
             </div>
           </div>
           <div className="flex-1" />
