@@ -201,7 +201,9 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('transfers:download', (input) => {
     const path = input.fileId
       ? `/api/files/${encodeURIComponent(input.fileId)}/download`
-      : `/api/mail/messages/${input.mail!.uid}/attachments/${encodeURIComponent(input.mail!.ref)}?${new URLSearchParams({ folder: input.mail!.folder, dl: '1', ...(input.mail!.mailbox ? { mailbox: input.mail!.mailbox } : {}) })}`;
+      : input.recording
+        ? `/api/meet/recordings/${input.recording}/file`
+        : `/api/mail/messages/${input.mail!.uid}/attachments/${encodeURIComponent(input.mail!.ref)}?${new URLSearchParams({ folder: input.mail!.folder, dl: '1', ...(input.mail!.mailbox ? { mailbox: input.mail!.mailbox } : {}) })}`;
     return ctx.transfers.download(path, input.name, !!input.open, input.fileId ?? null);
   });
   router.handle('transfers:upload', (input) => ctx.transfers.upload(input.handles, input.target));

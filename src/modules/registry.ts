@@ -75,6 +75,24 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
   },
   {
     input: defineDesktopManifest({
+      id: 'meet', name: 'Meet', icon: 'video', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' },
+      native: ['notifications'],
+      windows: [{ id: 'meet', route: '/meet' }],
+      quickActions: [{ id: 'new-meeting', label: 'New meeting', route: '/meet' }],
+      deepLinks: ['meet', 'meet/:id'],
+    }),
+    load: () => import('./meet/MeetPage'),
+  },
+  {
+    input: defineDesktopManifest({
+      id: 'meetings', name: 'Meetings', icon: 'calendar-clock', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' },
+      native: ['notifications'],
+      deepLinks: ['meetings'],
+    }),
+    load: () => import('./meetings/MeetingsPage'),
+  },
+  {
+    input: defineDesktopManifest({
       id: 'calendar', name: 'Calendar', icon: 'calendar', contractVersion: 1, desktop: { enabled: true },
       offline: { mode: 'READ_CACHE', cache: ['/api/calendar/events'] },
       native: ['notifications'],

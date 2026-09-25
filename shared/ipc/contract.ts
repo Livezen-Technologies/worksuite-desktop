@@ -179,10 +179,12 @@ export const contract = {
             mailbox: z.string().regex(/^\d{1,20}$/).nullable(),
           })
           .optional(),
+        /** A Meet recording (the owner's own; the server checks). */
+        recording: z.number().int().positive().optional(),
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => !!v.fileId !== !!v.mail, 'give a file id or a mail attachment'),
+      .refine((v) => [v.fileId, v.mail, v.recording].filter((x) => x !== undefined).length === 1, 'give a file id, a mail attachment or a recording'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   'transfers:upload': ch(

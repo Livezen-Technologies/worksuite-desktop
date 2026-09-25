@@ -11,6 +11,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Avatar, Button, ErrorNote, FileBadge, Modal, Spinner, cx } from '../../components/ui';
 import { startCall } from '../calls/start';
+import { startMeetingFromChat } from '../meet/start';
 import { Composer } from './Composer';
 import { PRESENCE } from './Details';
 import { ForwardDialog, type RoomDetail } from './NewChat';
@@ -35,6 +36,7 @@ const headerBtn = 'flex h-[34px] w-[34px] items-center justify-center rounded-[8
 export function Thread({ roomId, room, mini, bare, rooms, detailsOpen, onToggleDetails }: { roomId: string; room: Room | undefined; mini: boolean; bare?: boolean; rooms: Room[]; detailsOpen?: boolean; onToggleDetails?: () => void }) {
   const qc = useQueryClient();
   const me = useStore(app, (s) => s.auth?.user?.id);
+  const meetAllowed = useStore(app, (s) => s.apps.some((a) => a.id === 'meet'));
   const scroller = useRef<HTMLDivElement>(null);
   const [typing, setTyping] = useState<string | null>(null);
   const [drag, setDrag] = useState(false);
@@ -151,6 +153,11 @@ export function Thread({ roomId, room, mini, bare, rooms, detailsOpen, onToggleD
         <button type="button" aria-label="Start a video call" title="Video call" onClick={() => void startCall(roomId, 'video', room?.name)} className={headerBtn}>
           <Icon name="video" size={16} />
         </button>
+        {!mini && meetAllowed ? (
+          <button type="button" onClick={() => void startMeetingFromChat(roomId, room?.name)} className="flex h-[34px] items-center rounded-[8px] bg-primary px-3 text-[12.5px] font-bold text-white hover:bg-primary-hover">
+            Meet
+          </button>
+        ) : null}
         {!mini && onToggleDetails ? (
           <button type="button" aria-label="Conversation details" title="Conversation details" aria-pressed={detailsOpen} onClick={onToggleDetails} className={cx(headerBtn, detailsOpen && '!border-primary !bg-selection !text-primary')}>
             <Icon name="panel-open" size={15} />

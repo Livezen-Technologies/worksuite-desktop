@@ -72,8 +72,12 @@ export const APP_CATALOGUE: AppDefinition[] = [
   // self-service screens answer for the caller alone (web/src/core/sidebar/apps.ts).
   { id: 'hr', label: 'HR', group: 'people', icon: 'id-card', webPath: '/hr', surface: 'native', sidebar: 'business', order: 140, keywords: 'people leave attendance clock in' },
 
+  { id: 'meet', label: 'Meet', group: 'communication', icon: 'video', app: 'meet', webPath: '/meet', surface: 'native', sidebar: 'work', order: 45, keywords: 'video call meeting join code' },
+  // Agendas, attendance and minutes. Not an application on the server — the
+  // `meeting.view` permission is its only gate (AppGate::CORE notes).
+  { id: 'meetings', label: 'Meetings', group: 'work', icon: 'calendar-clock', perm: 'meeting.view', webPath: '/meetings', surface: 'native', sidebar: 'work', order: 55, keywords: 'agenda minutes attendance rooms schedule' },
+
   // Opened in the browser until their desktop modules ship (§14, §18).
-  { id: 'meet', label: 'Meet', group: 'communication', icon: 'video', app: 'meet', webPath: '/meetings', surface: 'browser', order: 45, keywords: 'video call meeting' },
   { id: 'social', label: 'Social', group: 'communication', icon: 'megaphone', app: 'social', webPath: '/social', surface: 'browser', order: 46 },
   { id: 'whatsapp', label: 'WhatsApp', group: 'communication', icon: 'phone', app: 'whatsapp', webPath: '/whatsapp', surface: 'browser', order: 47 },
   { id: 'projects', label: 'Projects', group: 'work', icon: 'kanban', app: 'projects', webPath: '/projects', surface: 'browser', order: 170 },

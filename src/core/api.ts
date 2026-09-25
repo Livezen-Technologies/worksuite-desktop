@@ -102,6 +102,10 @@ export async function apiPut<T = unknown>(path: string, body?: unknown): Promise
   return (await request<T>('PUT', path, { body })).data;
 }
 
+export async function apiDelete<T = unknown>(path: string, body?: unknown): Promise<T> {
+  return (await request<T>('DELETE', path, { body })).data;
+}
+
 export function withMailbox(query: Query = {}, mailbox?: string | null): Query {
   const m = mailbox ?? mailboxHint;
   return m ? { ...query, mailbox: m } : query;

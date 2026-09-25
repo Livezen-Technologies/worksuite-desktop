@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-09-26 — Chat, website chat and calls, to the new designs
+## 2026-09-26 — Chat, website chat, calls, Meet and Meetings, to the new designs
 
 **Added**
 
@@ -56,6 +56,43 @@ person who has to live with the change — what it does, and where it bites.
   ringtone volume and mute, and **Reply with message…** (a quick reply,
   then decline). A ring shows only while you are signed in and unlocked.
   With realtime down, the app checks for rings every 5 seconds.
+- **Meet is a desktop module** (MeetHome, MeetLobby, MeetRoom, MeetCreated).
+  - The home has **New meeting** (start now, create one for later, or
+    schedule one), **join by code or link**, upcoming meetings, recent
+    ones, and your recordings (rename, download, delete).
+  - A meeting made for later shows its link, ID, passcode and a **QR code**.
+    It can be copied, emailed, sent to a conversation or shared on
+    WhatsApp.
+  - Each meeting opens in its own window. The lobby shows your camera, lets
+    you choose the camera, microphone and speaker, and has a microphone
+    level meter. You then **Join now** as the host, or **Ask to join**.
+  - In the room:
+    - a grid of people, with the screen being shared shown large;
+    - mute, camera and share (the same picker as calls);
+    - for the host, recording, **End for all** and admitting or denying
+      people waiting at the door;
+    - a drawer with People, Chat (the meeting's conversation), a
+      **whiteboard** everyone draws on at once, Files and Info (link, ID,
+      passcode, sharing, and locking the meeting).
+  - **Meet** in a conversation's header starts a meeting for that
+    conversation.
+- **Meetings is a desktop module** (MeetingsDash, MeetingDetail,
+  MeetingSchedule), for people with `meeting.view`.
+  - The dashboard has six figures, upcoming meetings by type, invitations
+    you answer in place (Going, Maybe, Not going), your action items and
+    today's meeting rooms. The tabs are My meetings, Invitations, Meeting
+    rooms and Recurring; reports and setup open on the web.
+  - A meeting's page:
+    - **Agenda** runs the shared agenda timer (start, pause, done, skip)
+      and adds items.
+    - **People** adds people and takes attendance.
+    - **Minutes** saves and finalises decisions, the summary and notes, and
+      turns actions into tasks.
+    - It also has **Summary**, **Files**, the saved **Board** and
+      **Activity**, with Open in Chat, Cancel meeting and Join.
+  - **Schedule a meeting**: type, priority and times on your WorkSuite
+    clock; online on the built-in Meet, Jitsi or a pasted link, a free room,
+    or an address; people, guests and an agenda.
 
 **Needs the server** (WorkSuite, deployed with this update)
 
@@ -66,16 +103,28 @@ person who has to live with the change — what it does, and where it bites.
 - `GET /api/chat/calls/history` is the native call log. `GET /api/chat/calls`
   is taken by an older handler.
 - The website thread reads the conversation's priority.
+- The meetings list says each person's own role and answer (`my_role`,
+  `my_rsvp`), so invitations can be shown.
+- A meeting's detail now sends the agenda timer (`status`, `started_at`,
+  `elapsed_seconds`) and each person's `attendance` and `permissions`. The
+  web's People and Agenda tabs already read these, and until now got
+  nothing.
+- A Meet recording downloads through the transfer manager
+  (`transfers:download` with `recording`).
 
 **Tests**
 
 - End-to-end runs against a local WorkSuite:
   - `tests/e2e/chat.mjs`: 12 checks, now including star, pin and @mention.
   - `tests/e2e/website-chat.mjs`: 11 checks, including priority and star.
+  - `tests/e2e/meet.mjs` (new): 9 checks — the Meet home, a meeting for
+    later with its QR code, the meeting window and lobby, Join reaching the
+    server, scheduling, the agenda timer, attendance and minutes.
   - `tests/e2e/calls.mjs` (new): 13 checks — placing a call, the server
     ringing, hanging up, Decline, Reply with message, and a voice message.
     It runs against a placeholder media server, because no LiveKit runs
-    locally. **Sound and video themselves are not yet tested end to end.**
+    locally. **Sound and video themselves are not yet tested end to end**,
+    for calls or Meet.
 - The harness can now drive the app's other windows (`attach`).
 
 ---

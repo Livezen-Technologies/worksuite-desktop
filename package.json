@@ -29,7 +29,8 @@
     "icons": "electron scripts/render-icons.mjs"
   },
   "dependencies": {
-    "livekit-client": "^2.22.3"
+    "livekit-client": "^2.22.3",
+    "qrcode-generator": "^2.0.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

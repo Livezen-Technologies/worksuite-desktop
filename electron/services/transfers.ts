@@ -219,7 +219,7 @@ export class TransferManager {
     const l: Live = { t, meta, abort: null, samples: [] };
     this.live.set(t.id, l);
     this.persist(l);
-    this.deps.audit('file.download', fileId ? { file_id: fileId } : { kind: 'mail-attachment' });
+    this.deps.audit('file.download', fileId ? { file_id: fileId } : { kind: apiPath.startsWith('/api/meet/') ? 'meet-recording' : 'mail-attachment' });
     void this.runDownload(l);
     return { ...t };
   }
