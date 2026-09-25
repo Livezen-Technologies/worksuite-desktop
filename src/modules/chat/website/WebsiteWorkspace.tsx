@@ -8,6 +8,7 @@ import { useTab, useTabTitle } from '../../../core/tab-context';
 import { listStamp } from '../../../core/time';
 import { Empty, ErrorNote, Spinner, cx } from '../../../components/ui';
 import { sectionRows, useWebsiteInbox, WEBSITE, type Section, type WebsiteRow } from './api';
+import { WebsiteLive, type OnlineVisitor } from './WebsiteLive';
 import { WebsiteThread } from './WebsiteThread';
 
 /**
@@ -28,7 +29,6 @@ const SECTIONS: Array<{ id: Section; label: string }> = [
 ];
 
 const ON_WEB: Array<{ head: string; items: Array<{ label: string; tab: string }> }> = [
-  { head: 'LIVE', items: [{ label: 'Visitors online', tab: 'online' }, { label: 'Live dashboard', tab: 'dashboard' }] },
   { head: 'REPORTS', items: [{ label: 'Insights', tab: 'reports' }] },
   {
     head: 'SETUP',
@@ -70,11 +70,19 @@ export function WebsiteWorkspace() {
   const { query, go } = useTab();
   const me = useStore(app, (s) => (s.auth?.user?.id ? Number(s.auth.user.id) : null));
   const selected = query.get('website');
+  const live = query.get('section') === 'live';
   const section = (SECTIONS.find((s) => s.id === query.get('section'))?.id ?? 'inbox') as Section;
   const [site, setSite] = useState(0);
   useTabTitle(selected ? null : 'Website chats');
   const [q, setQ] = useState('');
   const open = useWebsiteInbox(false);
+  const online = useQuery({
+    queryKey: ['website', 'visitors'],
+    queryFn: ({ signal }) => apiGet<{ visitors: OnlineVisitor[] }>(`${WEBSITE}/visitors`, undefined, signal),
+    refetchInterval: 30_000,
+    retry: false,
+  });
+  const visitorsOnline = online.data?.visitors.length ?? 0;
   const closed = useWebsiteInbox(true, section === 'closed');
   const missed = useQuery({
     queryKey: ['website', 'missed'],
@@ -126,6 +134,16 @@ export function WebsiteWorkspace() {
             </button>
           );
         })}
+        <div className="mx-2 mt-2 mb-0.5 text-[10.5px] font-bold tracking-[0.6px] text-ink-3">LIVE</div>
+        {[
+          ['Visitors online', visitorsOnline],
+          ['Live dashboard', null],
+        ].map(([label, n]) => (
+          <button key={label} type="button" aria-current={live && label === 'Live dashboard' ? 'page' : undefined} onClick={() => go('/chat?view=website&section=live')} className={cx('flex h-[27px] items-center rounded-[7px] px-2 text-left', live ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
+            <span className="flex-1">{label}</span>
+            {n ? <span className="text-[11.5px] font-bold text-ink-2">{n}</span> : null}
+          </button>
+        ))}
         {ON_WEB.map((g) => (
           <div key={g.head} className="flex flex-col gap-px">
             <div className="mx-2 mt-2 mb-0.5 text-[10.5px] font-bold tracking-[0.6px] text-ink-3">{g.head}</div>
@@ -138,7 +156,8 @@ export function WebsiteWorkspace() {
           </div>
         ))}
       </nav>
-      <section aria-label="Conversations" className="flex w-[320px] shrink-0 flex-col border-r border-line bg-surface">
+      {live ? <WebsiteLive onOpenChat={(id) => go(`/chat?view=website&section=inbox&website=${id}`)} /> : null}
+      <section aria-label="Conversations" className={cx('flex w-[320px] shrink-0 flex-col border-r border-line bg-surface', live && 'hidden')}>
         <div className="flex flex-col gap-2 border-b border-line p-3">
           <div className="flex items-center">
             <b className="flex-1 text-[15px] text-ink">{SECTIONS.find((s) => s.id === section)?.label}</b>
@@ -191,7 +210,7 @@ export function WebsiteWorkspace() {
           )}
         </div>
       </section>
-      <div className="flex min-w-0 flex-1">
+      <div className={cx('flex min-w-0 flex-1', live && 'hidden')}>
         {selected ? <WebsiteThread key={selected} id={selected} row={openRows.find((r) => String(r.id) === selected)} /> : <Empty icon="globe" title="Pick a conversation" hint="Visitors waiting for a reply are marked Awaiting reply." />}
       </div>
     </div>

@@ -120,10 +120,23 @@ async function connect(target, outDir, consoleErrors) {
       consoleErrors.push(msg.params.args.map((a) => a.value ?? a.description).join(' '));
     }
   };
+  // A window that closes (or a call that never answers) fails the step
+  // rather than hanging the run.
+  ws.onclose = () => {
+    for (const p of pending.values()) p.reject(new Error('the window closed'));
+    pending.clear();
+  };
   const send = (method, params = {}) => {
     const id = ++seq;
+    if (ws.readyState !== WebSocket.OPEN) return Promise.reject(new Error('the window closed'));
     ws.send(JSON.stringify({ id, method, params }));
-    return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        reject(new Error(`${method} timed out`));
+      }, 30_000);
+      pending.set(id, { resolve: (v) => (clearTimeout(timer), resolve(v)), reject: (e) => (clearTimeout(timer), reject(e)) });
+    });
   };
   const evaluate = async (expression) => {
     const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });

@@ -6,7 +6,7 @@ import { accelerator, commandForAccelerator, effectiveShortcuts, getCommand, reg
 import { useStore } from '../core/store';
 import { activateIndex, activeTab, closeTab, closeTabsForApps, navigate, openTab, resetTabs, restoreClosed, restoreTabs, suspendIdle, tabsStore } from '../core/tabs';
 import { toast } from '../core/toasts';
-import { closeOverlay, openOverlay, toggleDock, ui } from '../core/ui';
+import { closeOverlay, minimiseChatDrawer, openChatDrawer, openOverlay, toggleDock, ui } from '../core/ui';
 import { allowedModules, moduleFor } from '../modules/registry';
 import { AiDock } from '../app/overlays/AiDock';
 import { Launcher } from '../app/overlays/Launcher';
@@ -14,6 +14,8 @@ import { NetworkPopover, NotificationCenter, OrgSwitcher, ProfileMenu, TransferC
 import { ClockPopover } from '../app/overlays/ClockPopover';
 import { SearchOverlay } from '../app/overlays/SearchOverlay';
 import { UpdateBanner } from '../app/screens/UpdateScreens';
+import { ChatDrawer, MinimisedChats } from '../modules/chat/ChatDrawer';
+import { AssignmentAlert } from '../modules/chat/website/AssignmentAlert';
 import { Sidebar } from './Sidebar';
 import { StatusBar } from './StatusBar';
 import { TabStrip } from './TabStrip';
@@ -25,6 +27,7 @@ export function Shell() {
   const overlay = useStore(ui, (s) => s.overlay);
   const dock = useStore(ui, (s) => s.dock);
   const apps = useStore(app, (s) => s.apps);
+  const hasChat = apps.some((a) => a.id === 'chat');
   const info = useStore(app, (s) => s.info);
   const restored = useRef(false);
   const knownApps = useRef<Set<string> | null>(null);
@@ -76,6 +79,7 @@ export function Shell() {
       registerCommand({ id: 'new-task', label: 'Create task', group: 'Create', run: () => navigate('/tasks?new=1'), when: () => app.get().apps.some((a) => a.id === 'tasks') }),
       registerCommand({ id: 'new-email', label: 'New email', group: 'Create', run: () => navigate('/mail?compose=1'), when: () => app.get().apps.some((a) => a.id === 'mail') }),
       registerCommand({ id: 'open-chat', label: 'Open chat', group: 'Navigate', run: () => navigate('/chat'), when: () => app.get().apps.some((a) => a.id === 'chat') }),
+      registerCommand({ id: 'chat-drawer', label: 'Chat over this screen', group: 'Shell', keywords: 'drawer message', run: () => (ui.get().dock === 'chat' ? minimiseChatDrawer() : openChatDrawer(ui.get().chatRoom)), when: () => app.get().apps.some((a) => a.id === 'chat') }),
       registerCommand({ id: 'upload', label: 'Upload file', group: 'Create', run: () => navigate('/files?upload=1'), when: () => app.get().apps.some((a) => a.id === 'files') }),
       registerCommand({ id: 'clock-in', label: 'Clock in / out', group: 'Create', run: () => navigate('/hr'), when: () => app.get().apps.some((a) => a.id === 'hr') }),
       registerCommand({ id: 'new-lead', label: 'New lead', group: 'Create', run: () => navigate('/crm?new=1'), when: () => app.get().apps.some((a) => a.id === 'crm') }),
@@ -156,9 +160,11 @@ export function Shell() {
         <div className="flex min-w-0 flex-1 flex-col">
           <UpdateBanner />
           <TabStrip />
-          <div className="flex min-h-0 flex-1">
+          <div className="relative flex min-h-0 flex-1">
             <Workspace />
             {dock === 'ai' ? <AiDock /> : null}
+            {dock === 'chat' && hasChat ? <ChatDrawer /> : null}
+            {hasChat ? <MinimisedChats /> : null}
           </div>
           <StatusBar />
         </div>
@@ -172,6 +178,7 @@ export function Shell() {
       {overlay === 'profile' ? <ProfileMenu /> : null}
       {overlay === 'network' ? <NetworkPopover /> : null}
       {overlay === 'clock' ? <ClockPopover /> : null}
+      {hasChat ? <AssignmentAlert /> : null}
     </div>
   );
 }

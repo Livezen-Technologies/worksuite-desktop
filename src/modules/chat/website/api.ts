@@ -223,3 +223,9 @@ export async function websiteAttach(id: number | string, file: File, caption?: s
   if (caption) form.append('caption', caption);
   await request('POST', `${WEBSITE}/conversations/${id}/attach`, { body: form });
 }
+
+/** What a visitor is doing, in the list's one word. */
+export function visitorStatus(v: { conversation_status: string | null; idle_seconds: number }): ['Chatting' | 'Active' | 'Inactive', string] {
+  if (v.conversation_status === 'open' || v.conversation_status === 'pending') return ['Chatting', 'text-primary'];
+  return v.idle_seconds < 120 ? ['Active', 'text-success'] : ['Inactive', 'text-ink-3'];
+}

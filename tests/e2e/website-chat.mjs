@@ -87,6 +87,16 @@ try {
   await t.shot('w3-replied');
   t.check('the reply appears in the thread', true);
 
+  // The live dashboard: the visitor is on the site, reading /pricing.
+  await t.evaluate(`[...document.querySelectorAll('nav[aria-label="Website chats"] button')].find(b => b.textContent.startsWith('Live dashboard')).click()`);
+  await t.waitFor(`${t.hasText('Visitors online')} && ${t.hasText('Median first reply')} && ${t.hasText(visitorName)}`, 'the live dashboard', 20_000);
+  await t.evaluate(`[...document.querySelectorAll('main button')].find(b => b.textContent.includes(${JSON.stringify(visitorName)})).click()`);
+  await t.waitFor(`${t.hasText('Pages this visit')} && ${t.hasText('Open the chat')}`, 'the visitor card');
+  await t.shot('w3b-live');
+  t.check('the live dashboard shows the visitor, what they read, and their open chat', true);
+  await t.clickButton('Open the chat');
+  await t.waitFor(`!!document.querySelector('select[aria-label="Priority"]')`, 'back in the thread');
+
   let seen = false;
   for (let i = 0; i < 10 && !seen; i++) {
     const p = await widget('GET', 'poll?after=0');

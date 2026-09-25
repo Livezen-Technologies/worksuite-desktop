@@ -39,7 +39,26 @@ person who has to live with the change — what it does, and where it bites.
   - The visitor panel shows their details, the pages of this visit and
     earlier chats. It can **raise a support ticket** from the chat and
     **block the visitor** (for people who configure widgets).
-  - The live dashboard, reports and widget setup open on the web.
+  - **Live dashboard** (WebChatLive): seven figures for today (on the site
+    now, visitors, chats started, open, waiting on us, at risk, median
+    first reply); who is on your sites and what they are reading; and, for
+    whoever you pick, the pages of this visit and **Start the conversation**
+    (or Open the chat, if they already have one). It also shows where
+    visitors came from and their devices.
+  - **Chat assigned to you**: a website chat given to you waits in the
+    corner of the main window, wherever you are, with the visitor's
+    question, page, device and place. It offers **Accept**, **Later** (two
+    minutes) and **Ignore**.
+  - Reports and widget setup open on the web.
+- **The chat drawer** (ChatDrawer, ChatDrawerCalls): **Chat** in the title
+  bar, or the "Chat over this screen" command, opens chat over whatever you
+  are doing.
+  - The tabs are Chats, Calls and Archived. **Calls** is the call log, with
+    filters (all, missed, incoming, outgoing) and Call back, Call again or
+    Join.
+  - A conversation opens in place, with call buttons. When the screen
+    behind it is a record, **Attach record** posts a link to it.
+  - Minimising leaves the conversation as a pill in the corner.
 - **Voice and video calls from any conversation** (CallVoice, CallVideo).
   - A call opens in its own always-on-top window, one call at a time. A
     voice call is compact; a video call has the conversation beside it.
@@ -109,6 +128,10 @@ person who has to live with the change — what it does, and where it bites.
   `elapsed_seconds`) and each person's `attendance` and `permissions`. The
   web's People and Agenda tabs already read these, and until now got
   nothing.
+- Ending a call that has already ended changes nothing. Before, a second
+  "end" (a retry, a closing window) re-finished a cancelled call as
+  **answered**, so the log said a call nobody took was answered. The
+  desktop also hangs up only once.
 - A Meet recording downloads through the transfer manager
   (`transfers:download` with `recording`).
 
@@ -116,16 +139,21 @@ person who has to live with the change — what it does, and where it bites.
 
 - End-to-end runs against a local WorkSuite:
   - `tests/e2e/chat.mjs`: 12 checks, now including star, pin and @mention.
-  - `tests/e2e/website-chat.mjs`: 11 checks, including priority and star.
+  - `tests/e2e/website-chat.mjs`: 12 checks, including priority, star and
+    the live dashboard.
   - `tests/e2e/meet.mjs` (new): 9 checks — the Meet home, a meeting for
     later with its QR code, the meeting window and lobby, Join reaching the
     server, scheduling, the agenda timer, attendance and minutes.
-  - `tests/e2e/calls.mjs` (new): 13 checks — placing a call, the server
-    ringing, hanging up, Decline, Reply with message, and a voice message.
+  - `tests/e2e/calls.mjs` (new): 17 checks — placing a call, the server
+    ringing, hanging up (once, staying cancelled), Decline, Reply with
+    message, a voice message, and the chat drawer's call log, conversation
+    and minimised pill.
     It runs against a placeholder media server, because no LiveKit runs
     locally. **Sound and video themselves are not yet tested end to end**,
     for calls or Meet.
-- The harness can now drive the app's other windows (`attach`).
+- The harness can now drive the app's other windows (`attach`). A step whose
+  window closes, or that takes over 30 seconds, now fails instead of hanging
+  the run.
 
 ---
 

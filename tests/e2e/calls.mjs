@@ -72,6 +72,8 @@ try {
   await callWin.clickButton('End the call');
   await sleep(800);
   t.check('the call window closes', !(await t.windowOpen((u) => u.includes('/window/call?'))));
+  const still = (await api('GET', `/api/chat/calls/${placed?.uuid}`)).data;
+  t.check('a call nobody answered stays cancelled once its window closes', still?.outcome === 'cancelled', still?.outcome);
 
   // ── An incoming call, declined ────────────────────────────────────────
   const rung = await api('POST', '/api/chat/calls', { room_id: roomId, mode: 'video' });
@@ -127,6 +129,25 @@ try {
   }
   await vm.clickButton('Close');
   await api('POST', '/api/chat/presence', { status: 'available', active: true });
+
+  // ── The chat drawer: its call log, and a conversation over another screen ──
+  await t.evaluate(`[...document.querySelectorAll('nav[aria-label="Apps"] button')].find(b => b.textContent.trim().startsWith('Home')).click()`);
+  await t.evaluate(`document.querySelector('header button[title="Chat"]').click()`);
+  await t.waitFor(`!!document.querySelector('aside[aria-label="Chat drawer"]')`, 'the chat drawer');
+  await t.evaluate(`[...document.querySelectorAll('aside[aria-label="Chat drawer"] [role="tab"]')].find(b => b.textContent.trim() === 'Calls').click()`);
+  await t.waitFor(`(() => { const a = document.querySelector('aside[aria-label="Chat drawer"]'); return a && a.innerText.includes(${JSON.stringify(partnerName)}) && /Declined|Missed|No one joined/.test(a.innerText); })()`, 'the call log', 20_000);
+  await t.shot('k5-drawer-calls');
+  t.check('the drawer lists the calls, with a way to call back', await t.evaluate(`/Call back|Call again/.test(document.querySelector('aside[aria-label="Chat drawer"]').innerText)`));
+  await t.evaluate(`[...document.querySelectorAll('aside[aria-label="Chat drawer"] [role="tab"]')].find(b => b.textContent.trim() === 'Chats').click()`);
+  await t.waitFor(`[...document.querySelectorAll('aside[aria-label="Chat drawer"] button')].some(b => b.textContent.includes(${JSON.stringify(partnerName)}))`, 'the partner in the drawer');
+  await t.evaluate(`[...document.querySelectorAll('aside[aria-label="Chat drawer"] button')].find(b => b.textContent.includes(${JSON.stringify(partnerName)})).click()`);
+  await t.waitFor(`document.querySelector('aside[aria-label="Chat drawer"]').innerText.includes("Can't talk now")`, 'the conversation in the drawer', 20_000);
+  await t.shot('k6-drawer-chat');
+  t.check('a conversation opens in the drawer, over Home', await t.evaluate(t.hasText('Good ')));
+  await t.evaluate(`document.querySelector('aside[aria-label="Chat drawer"] button[aria-label="Minimise"]').click()`);
+  await t.waitFor(`!!document.querySelector('[aria-label="Minimised chats"]')`, 'the minimised chat');
+  t.check('minimising leaves the conversation in the corner', await t.evaluate(`document.querySelector('[aria-label="Minimised chats"]').innerText.includes(${JSON.stringify(partnerName)})`));
+  await t.shot('k7-minimised');
 } catch (e) {
   t.check('calls run', false, e.message);
   try {

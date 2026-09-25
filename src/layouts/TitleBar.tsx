@@ -2,7 +2,7 @@ import { app, organizationName } from '../core/app-state';
 import { isMac } from '../core/bridge';
 import { t } from '../core/i18n';
 import { useStore } from '../core/store';
-import { openOverlay, toggleDock, ui } from '../core/ui';
+import { minimiseChatDrawer, openChatDrawer, openOverlay, toggleDock, ui } from '../core/ui';
 import { prettyAccelerator } from '../core/commands';
 import { Icon } from '../components/Icon';
 import { ClockControl } from '../app/overlays/ClockPopover';
@@ -24,6 +24,7 @@ export function TitleBar() {
   const transfers = useStore(app, (s) => s.transfers);
   const activeTransfers = transfers.filter((x) => x.state === 'running' || x.state === 'queued').length;
   const hasAi = useStore(app, (s) => s.apps.some((a) => a.id === 'ai'));
+  const hasChat = useStore(app, (s) => s.apps.some((a) => a.id === 'chat'));
   const orgName = organizationName(orgId);
   const multiOrg = (bootstrap?.organizations.length ?? 0) > 1;
 
@@ -79,6 +80,7 @@ export function TitleBar() {
       </button>
 
       <TopButton icon="transfers" label={t('shell.transfers')} onClick={() => openOverlay('transfers')} active={overlay === 'transfers'} count={activeTransfers} countTone="indigo" />
+      {hasChat ? <TopButton icon="chat" label="Chat" onClick={() => (dock === 'chat' ? minimiseChatDrawer() : openChatDrawer(null))} active={dock === 'chat'} count={status?.unread.chat ?? 0} /> : null}
       <TopButton icon="bell" label={t('nav.notifications')} onClick={() => openOverlay('notifications')} active={overlay === 'notifications'} count={unread} />
       {hasAi || bootstrap ? (
         <button

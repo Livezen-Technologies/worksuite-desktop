@@ -86,6 +86,8 @@ export class CallSession {
   private cleanups: Array<() => void> = [];
   private tracks: LocalTrack[] = [];
   private busy = false;
+  private left = false;
+  private joined = false;
 
   subscribe = (fn: () => void): (() => void) => {
     this.listeners.add(fn);
@@ -113,6 +115,8 @@ export class CallSession {
     if (this.busy || (this.params && this.phase !== 'error')) return;
     this.busy = true;
     this.params = p;
+    this.left = false;
+    this.joined = false;
     this.problem = null;
     this.set('devices');
     try {
@@ -200,10 +204,12 @@ export class CallSession {
       .on(RoomEvent.LocalTrackUnpublished, refresh)
       .on(RoomEvent.ActiveSpeakersChanged, refresh)
       .on(RoomEvent.Disconnected, () => {
-        if (this.phase !== 'ended' && this.phase !== 'unreachable') void this.finish();
+        // A failed connect disconnects too; that is the connect's error to report, not an ending.
+        if (this.joined && this.phase !== 'ended' && this.phase !== 'unreachable') void this.finish();
       });
     try {
       await room.connect(conn.url, conn.token);
+      this.joined = true;
       for (const t of this.tracks) await room.localParticipant.publishTrack(t);
     } catch (e) {
       this.problem = { message: `Could not connect the call: ${errorMessage(e)}`, pane: null };
@@ -306,7 +312,9 @@ export class CallSession {
 
   /** Leave the call. The server ends it when nobody is left. */
   async hangUp(close = true): Promise<void> {
-    const uuid = this.conn?.uuid;
+    // Once: leaving twice used to re-finish a cancelled call as answered.
+    const uuid = this.left ? null : this.conn?.uuid;
+    this.left = true;
     this.teardown();
     if (uuid) await apiPost(`/api/chat/calls/${uuid}/end`).catch(() => undefined);
     void call('calls:active', { uuid: null });
@@ -320,6 +328,10 @@ export class CallSession {
   /** Ended from elsewhere: the other side, another device, or the server. */
   private async finish(): Promise<void> {
     if (this.phase === 'ended') return;
+    // Leave on the server too (a no-op when the call is already over there).
+    const uuid = this.left ? null : this.conn?.uuid;
+    this.left = true;
+    if (uuid) void apiPost(`/api/chat/calls/${uuid}/end`).catch(() => undefined);
     this.endedAfter = this.connectedAt ? Date.now() - this.connectedAt : null;
     this.teardown();
     void call('calls:active', { uuid: null });
