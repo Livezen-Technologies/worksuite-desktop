@@ -5,6 +5,21 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-26 — Passkey sign-in showed only after a restart
+
+**Fixed**
+
+- **"Sign in with a passkey" was missing after signing out.** The sign-in
+  screen offers a passkey only when the server says it takes them. The app
+  keeps the server's description from when the address was first entered,
+  and re-read it only when it started up signed out. A server set up before
+  passkey sign-in existed kept a description without it. The button then
+  stayed hidden after signing out, or after a session ended, until the app
+  was quit and reopened. The app now re-reads the server every time it
+  arrives at the sign-in screen, at most every 30 seconds.
+
+---
+
 ## 2026-09-26 — 0.2.0: chat, website chat, calls, Meet and Meetings, to the new designs
 
 **Added**

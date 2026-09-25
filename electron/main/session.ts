@@ -119,9 +119,20 @@ export class SessionController {
     return this.orgScope;
   }
 
+  private lastProbe = 0;
+
   private set(patch: Partial<AuthState>): void {
+    const was = this.state.stage;
     this.state = { ...this.state, ...patch };
     this.hooks.changed(this.get());
+    // Arriving at the sign-in screen — at start, after signing out, when a
+    // session ends — is when what the server offers matters (passkey sign-in,
+    // a minimum version). A description saved before the server offered
+    // passkeys used to stay that way until the next start signed out.
+    if (patch.stage === 'signed-out' && was !== 'signed-out' && this.state.server && Date.now() - this.lastProbe > 30_000) {
+      this.lastProbe = Date.now();
+      void this.probeInBackground(this.state.server.origin);
+    }
   }
 
   private allowInsecure(): boolean {
@@ -154,10 +165,8 @@ export class SessionController {
     if (last && this.auth.hasRefreshToken()) {
       await this.resume(last);
     } else {
+      // What the server offers can change between runs; set() re-reads it.
       this.set({ stage: 'signed-out' });
-      // What the server offers can change between runs (passkey sign-in, a
-      // minimum version); the sign-in screen is where it matters.
-      void this.probeInBackground(server.origin);
     }
   }
 
@@ -204,6 +213,7 @@ export class SessionController {
     const info = await probeServer(origin, this.rawFetch);
     const server: ServerInfo = { ...info, locked: false };
     this.auth.setServer(server);
+    this.lastProbe = Date.now();
     this.set({ stage: 'signed-out', server, message: null });
     if (info.minimumVersion) this.hooks.minimumVersion(info.minimumVersion);
     return this.get();
