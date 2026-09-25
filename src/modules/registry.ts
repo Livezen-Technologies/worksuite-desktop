@@ -1,0 +1,163 @@
+import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
+import { APP_CATALOGUE } from '@shared/apps';
+import { defineDesktopManifest, validateManifest, type DesktopManifest, type DesktopManifestInput } from '@shared/manifest';
+
+/**
+ * DesktopAppRegistry, renderer half (FR-REG-01..07, §15).
+ *
+ * Each desktop module declares a manifest and a lazily-loaded screen. The
+ * manifest is validated against the module contract before anything from it
+ * is registered; an invalid one is dropped and logged, never shown. The
+ * server decides which apps the user may see (shared/apps.ts); this decides
+ * which of them the desktop can render natively.
+ */
+export interface ModuleProps {
+  tabId: string;
+  route: string;
+  active: boolean;
+}
+
+export interface DesktopModule {
+  id: string;
+  manifest: DesktopManifest;
+  component: LazyExoticComponent<ComponentType<ModuleProps>>;
+  /** Available to everyone signed in, regardless of app access. */
+  always?: boolean;
+}
+
+const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: ComponentType<ModuleProps> }>; always?: boolean }> = [
+  {
+    input: defineDesktopManifest({
+      id: 'home', name: 'Home', icon: 'home', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'READ_CACHE', cache: ['/api/dashboard/home'] },
+      native: ['notifications'],
+      widgets: [{ id: 'todays-work', size: 'md' }, { id: 'calendar', size: 'md' }, { id: 'waiting-for-me', size: 'md' }, { id: 'activity', size: 'md' }, { id: 'files', size: 'md' }, { id: 'summary', size: 'md' }],
+    }),
+    load: () => import('./home/HomePage'),
+    always: true,
+  },
+  {
+    input: defineDesktopManifest({ id: 'activity', name: 'Activity', icon: 'activity', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' } }),
+    load: () => import('./activity/ActivityPage'),
+  },
+  {
+    input: defineDesktopManifest({
+      id: 'mail', name: 'Mail', icon: 'mail', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'DRAFTS', entities: ['draft'], cache: ['/api/mail/folders', '/api/mail/messages', '/api/mail/mailboxes'] },
+      native: ['notifications', 'file-drop', 'printing'],
+      quickActions: [{ id: 'compose', label: 'New Email', route: '/mail?compose=1' }],
+      deepLinks: ['mail', 'mail/:id'],
+    }),
+    load: () => import('./mail/MailPage'),
+  },
+  {
+    input: defineDesktopManifest({
+      id: 'chat', name: 'Chat', icon: 'chat', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'PARTIAL_WRITE', entities: ['message'], cache: ['/api/chat/rooms', '/api/chat/messages'] },
+      native: ['notifications', 'file-drop'],
+      windows: [{ id: 'chat-mini', route: '/chat', alwaysOnTop: true }],
+      quickActions: [{ id: 'open-chat', label: 'Open Chat', route: '/chat' }],
+      deepLinks: ['chat', 'chat/:id'],
+    }),
+    load: () => import('./chat/ChatPage'),
+  },
+  {
+    input: defineDesktopManifest({
+      id: 'calendar', name: 'Calendar', icon: 'calendar', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'READ_CACHE', cache: ['/api/calendar/events'] },
+      native: ['notifications'],
+    }),
+    load: () => import('./calendar/CalendarPage'),
+  },
+  {
+    input: defineDesktopManifest({
+      id: 'tasks', name: 'Tasks', icon: 'tasks', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'PARTIAL_WRITE', entities: ['task'], cache: ['/api/tasks', '/api/task-lists'] },
+      native: ['notifications'],
+      quickActions: [{ id: 'new-task', label: 'New Task', route: '/tasks?new=1' }],
+    }),
+    load: () => import('./tasks/TasksPage'),
+  },
+  {
+    input: defineDesktopManifest({
+      id: 'files', name: 'Files', icon: 'folder', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'READ_CACHE', cache: ['/api/files/browse'] },
+      native: ['file-drop', 'printing'],
+      quickActions: [{ id: 'upload', label: 'Upload File', route: '/files?upload=1' }],
+    }),
+    load: () => import('./files/FilesPage'),
+  },
+  {
+    input: defineDesktopManifest({
+      id: 'crm', name: 'CRM', icon: 'users', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'READ_CACHE', entities: ['lead'], cache: ['/api/crm/leads'] },
+      native: ['file-drop'],
+      quickActions: [{ id: 'new-lead', label: 'New Lead', route: '/crm?new=1' }],
+      deepLinks: ['crm/leads/:id'],
+    }),
+    load: () => import('./crm/CrmPage'),
+  },
+  {
+    input: defineDesktopManifest({
+      id: 'hr', name: 'HR', icon: 'id-card', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'READ_CACHE', cache: ['/api/hr/attendance/me', '/api/hr/leave', '/api/hr/approvals/pending'] },
+      native: ['notifications'],
+      quickActions: [{ id: 'clock-in', label: 'Clock In', route: '/hr' }],
+    }),
+    load: () => import('./hr/HrPage'),
+  },
+  {
+    input: defineDesktopManifest({ id: 'notifications', name: 'Notifications', icon: 'bell', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'READ_CACHE', cache: ['/api/notifications'] } }),
+    load: () => import('./notifications/NotificationsPage'),
+    always: true,
+  },
+  {
+    input: defineDesktopManifest({ id: 'settings', name: 'Settings', icon: 'settings', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' } }),
+    load: () => import('./settings/SettingsPage'),
+    always: true,
+  },
+  {
+    input: defineDesktopManifest({ id: 'diagnostics', name: 'Diagnostics', icon: 'stethoscope', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' } }),
+    load: () => import('./diagnostics/DiagnosticsPage'),
+    always: true,
+  },
+];
+
+export const MODULES: DesktopModule[] = [];
+export const REJECTED: Array<{ id: string; error: string }> = [];
+
+for (const def of DEFS) {
+  const check = validateManifest(def.input);
+  if (!check.ok || !check.manifest) {
+    REJECTED.push({ id: String((def.input as { id?: unknown }).id ?? '?'), error: check.error ?? 'invalid' });
+    console.warn('[registry] module rejected', def.input.id, check.error);
+    continue;
+  }
+  MODULES.push({ id: check.manifest.id, manifest: check.manifest, component: lazy(def.load), always: def.always });
+}
+
+export function moduleFor(id: string): DesktopModule | undefined {
+  return MODULES.find((m) => m.id === id);
+}
+
+export function appForRoute(route: string): string {
+  const seg = route.replace(/^\/+/, '').split(/[/?#]/)[0] || 'home';
+  return MODULES.some((m) => m.id === seg) ? seg : 'home';
+}
+
+export function titleForRoute(route: string): string {
+  const id = appForRoute(route);
+  return moduleFor(id)?.manifest.name ?? APP_CATALOGUE.find((a) => a.id === id)?.label ?? 'WorkSuite';
+}
+
+/** Modules the current user may open: visible apps with a desktop module, plus the always-on screens. */
+export function allowedModules(visibleAppIds: Set<string>): Set<string> {
+  const out = new Set<string>();
+  for (const m of MODULES) if (m.always || visibleAppIds.has(m.id)) out.add(m.id);
+  return out;
+}
+
+export function parseRoute(route: string): { path: string[]; query: URLSearchParams } {
+  const [p, q] = route.split('?');
+  return { path: (p ?? '').split('/').filter(Boolean), query: new URLSearchParams(q ?? '') };
+}

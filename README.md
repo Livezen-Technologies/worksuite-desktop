@@ -1,0 +1,88 @@
+# WorkSuite Desktop
+
+The native desktop client for WorkSuite — Windows, macOS and Linux — built to
+**WS-DESKTOP-SRS-001 v1.1**. The desktop owns the experience; WorkSuite Core
+stays authoritative for organizations, permissions, business logic and data.
+
+This repository delivers **Phase 1 — Foundation** (SRS §18): the desktop shell,
+sign-in with two-step verification, device registration and heartbeat,
+multi-organization, the app registry, the Home dashboard, Mail, Chat,
+Calendar, Tasks, Files (online), CRM, HR, native notifications, the system
+tray, `worksuite://` deep links, the signed auto-updater, basic offline (read
+cache + drafts + queued changes), diagnostics and the app lock.
+
+It works against the **existing WorkSuite API today** and switches to the
+`/desktop/v1` API (SRS §8.1) automatically when a server offers it — see
+[docs/BACKEND.md](docs/BACKEND.md).
+
+## Run it
+
+```bash
+npm install
+npm run dev          # Electron + Vite with hot reload
+```
+
+Point it at your WorkSuite server on the first screen. Development builds also
+accept `http://localhost:<port>`; packaged builds accept HTTPS only.
+
+| Command | What it does |
+|---|---|
+| `npm run typecheck` | TypeScript (strict) for the main process and the renderer |
+| `npm run lint` | ESLint, including React Compiler rules |
+| `npm test` | Unit tests (Vitest, run under Electron's own Node 24) |
+| `npm run e2e` | End-to-end smoke test against a real server (see below) |
+| `npm run build` | Production bundles in `out/` |
+| `npm run dist:dir` | An unpacked app for this machine in `release/` |
+| `npm run dist:mac` / `dist:win` / `dist:linux` | Installers (see [docs/RELEASING.md](docs/RELEASING.md)) |
+
+### End-to-end smoke test
+
+```bash
+WS_E2E_SERVER=http://localhost:8920 WS_E2E_EMAIL=… WS_E2E_PASSWORD=… npm run e2e
+```
+
+Launches the built app with a throwaway profile, drives it over the Chrome
+DevTools Protocol — server, sign-in, setup, every module, search, settings,
+diagnostics, the lock screen, sign-out — checks the security boundaries
+(no Node in the renderer, forged IPC refused, CSP enforced, IPC refused while
+locked, no token in the diagnostic bundle) and saves a screenshot of each
+screen to `test-results/e2e/`.
+
+## How it is built
+
+```
+electron/            main process (Node, no web content)
+  main/              lifecycle, session controller, IPC handlers, menu, boot/crash state
+  ipc/               the IPC router: allow-list → schema → sender → lock → session → permission → rate → audit
+  preload/           the only bridge: window.worksuite (typed, namespaced, no raw ipcRenderer)
+  protocols/         app:// — the signed bundle, and /__api/ proxied to the server with the session's credentials
+  security/          sandbox, CSP, permission handler, navigation and window-open lockdown
+  services/          auth, device, bootstrap, policy, realtime, notifications, offline cache/queue/drafts,
+                     transfers, lock, diagnostics, audit, supervisor, SQLite + column encryption, secure storage
+  updater/           signed-manifest updater (Ed25519 + SHA-256 + OS code signature)
+  windows/ tray/ workers/
+shared/              code both sides use: IPC contract (zod), app catalogue + visibility gates,
+                     module manifest contract, deep-link grammar, redaction, versions, release manifest
+src/                 React 19 renderer (sandboxed): shell, onboarding, overlays, modules
+tests/               unit (Vitest) and e2e (CDP smoke)
+build/               electron-builder config, entitlements, app icon
+```
+
+More: [architecture](docs/ARCHITECTURE.md) · [security](docs/SECURITY.md) ·
+[backend contract](docs/BACKEND.md) · [releasing](docs/RELEASING.md) ·
+[requirement traceability](docs/TRACEABILITY.md) · [changelog](CHANGELOG.md)
+
+## What is deliberately not here yet
+
+Phases 2–4 of the SRS: WorkSuite Drive folder sync, multi-window docking,
+calls and Meet, the desktop AI assistant, the workforce-monitoring agent,
+POS hardware, the Admin Center fleet screens, kiosk mode, file-manager
+extensions and cloud placeholders. Where Phase 1 touches them, the app says
+so plainly instead of pretending (Files shows every item as online; the AI
+dock explains what is coming; Settings → Monitoring states that nothing is
+recorded). Apps without a desktop module yet open in the browser and are
+labelled that way. See [docs/TRACEABILITY.md](docs/TRACEABILITY.md).
+
+---
+
+Proprietary — © Livezen Technologies. See [LICENSE](LICENSE).

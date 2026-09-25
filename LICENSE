@@ -1,0 +1,18 @@
+WorkSuite Desktop — Proprietary Software Licence
+Copyright © Livezen Technologies. All Rights Reserved.
+
+WorkSuite Desktop is proprietary software. It is licensed, not sold.
+
+No permission is granted to copy, modify, distribute, sublicense, reverse
+engineer, resell or otherwise use this software or its source code, in whole or
+in part, except where expressly authorised in writing by Livezen Technologies
+or under the terms of a separate written agreement with Livezen Technologies.
+
+WorkSuite Desktop includes open-source components (Electron, React, Tailwind
+CSS, TanStack Query and Virtual, Zod, Lucide icons, and the Plus Jakarta Sans,
+JetBrains Mono and Noto Sans fonts), each under its own licence. Those
+licences are shipped with the application and are not changed by this one.
+
+THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.

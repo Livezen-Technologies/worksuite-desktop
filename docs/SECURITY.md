@@ -1,0 +1,68 @@
+# Security
+
+## Electron hardening (SRS §3.3, §13.2, NFR-SEC-01)
+
+| Control | Where |
+|---|---|
+| `nodeIntegration: false`, `contextIsolation: true`, `sandbox: true`, `webSecurity: true` on every window; `app.enableSandbox()` | `electron/windows/manager.ts`, `electron/main/index.ts` |
+| No `<webview>`, no remote module; `setWindowOpenHandler` denies everything and hands https/mailto to the OS after an allow-list or a confirmation | `electron/security/hardening.ts` |
+| `will-navigate` / `will-redirect` / subframe navigation limited to `app://bundle` | `hardening.ts` |
+| The UI loads only from `app://bundle` (the asar); remote origins never host shell UI | `electron/protocols/app-protocol.ts` |
+| CSP: `default-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'none'` | `hardening.ts` |
+| Permission handler: only clipboard write and fullscreen for the shell; camera, microphone, screen capture, geolocation, devices denied | `hardening.ts` |
+| Fuses: RunAsNode off, NODE_OPTIONS off, `--inspect` off, only load from asar, asar integrity on, cookie encryption on | `build/electron-builder.config.cjs` |
+| DevTools off in packaged builds | `manager.ts` |
+
+## IPC (§3.4, WF-05)
+
+Only channels in `shared/ipc/channels.ts` exist. Every call passes, in order:
+schema (zod, unknown keys stripped, 1 MB cap) → sender is our window's main
+frame on `app://bundle` → refused while locked unless marked otherwise →
+signed-in session → desktop permission (from bootstrap and device trust) →
+per-window rate limit → handler → audit for sensitive channels. More than 20
+violations a minute from one window reloads it. Failures return typed codes.
+
+File operations never take a path from web content: files are chosen in a
+main-process dialog or dropped (converted to paths in the preload from real
+`File` objects), and the renderer holds opaque handles. Downloads land in the
+download folder; "open" and "show in folder" only act on canonical paths
+inside it.
+
+## Credentials (FR-AUTH-02, FR-SEC-03, AC-21)
+
+- Access token: main-process memory only.
+- Refresh token, device token, database key: OS credential store through
+  `safeStorage` (Keychain, DPAPI, Secret Service/KWallet). On Linux without a
+  keyring, Electron's fallback is a fixed key — so nothing is written, the
+  session lives in memory, and the app says so.
+- Refresh tokens rotate on use; refresh is single-flight so two refreshes never
+  revoke each other.
+
+## Updates (FR-UPD-01, WF-25)
+
+1. Manifest signature: Ed25519 over canonical JSON, public key pinned in
+   `electron/updater/keys.ts`. An unverifiable manifest is ignored.
+2. Artifact SHA-256 and size must match the signed manifest.
+3. OS code signature of the new build must be valid and from the same
+   publisher as the running one (macOS Team ID, Windows Authenticode subject).
+   An unsigned running build cannot establish a publisher and therefore
+   does not install updates itself.
+
+The private release key is never in this repository.
+
+## Privacy
+
+- Logs and the diagnostic bundle are redacted (tokens, JWTs, secret query
+  parameters, email addresses, bodies); the user previews the bundle and
+  chooses where to save it. Nothing is uploaded.
+- Notification content follows the privacy mode and is always hidden while
+  WorkSuite is locked.
+- Mail bodies render in a sandboxed frame with scripts, forms and remote
+  images removed; links open in the browser.
+- The clipboard is read only in response to the user's paste; there is no
+  clipboard monitoring (FR-XFR-06).
+- The device is identified by a random install id and the host name, never by
+  hardware serials or MAC addresses (NFR-PRV-03).
+- No activity monitoring exists in this version. The Phase 3 agent must meet
+  §13.3: assigned policy, acknowledgement, always visible, never keystrokes,
+  passwords, clipboard, continuous camera or microphone.

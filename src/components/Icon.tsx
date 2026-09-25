@@ -1,0 +1,37 @@
+import {
+  Activity, Archive, ArrowLeft, ArrowUpDown, Banknote, Bell, Box, Briefcase, Building2, Calendar, CalendarClock, Check, ChevronDown, ChevronLeft,
+  ChevronRight, CircleAlert, CircleCheck, Clock, Cloud, CloudOff, Coffee, Contact, Copy, Download, Ellipsis, ExternalLink, Eye, File, FileImage,
+  FileSpreadsheet, FileText, Filter, Fingerprint, Flag, Folder, FolderOpen, FolderUp, Globe, HardDrive, Hash, History, House, IdCard, Inbox, Info,
+  Kanban, Keyboard, Landmark, Laptop, LayoutGrid, LifeBuoy, Link, ListTodo, LoaderCircle, Lock, LogOut, Mail, Megaphone, MessageSquare, Minus,
+  Monitor, Moon, Notebook, Package, Paperclip, Pause, Phone, Pin, PinOff, Play, Plus, Printer, Receipt, RefreshCw, Repeat, Reply, ReplyAll,
+  RotateCcw, Search, Send, Server, Settings, Settings2, ShieldAlert, ShieldCheck, ShoppingCart, Smile, Sparkles, SquareCheck, SquarePen, Star,
+  Stethoscope, Store, Sun, Timer, Trash2, TrendingUp, TriangleAlert, Upload, UserRound, Users, Video, Wallet, Wifi, WifiOff, Wrench, X, Zap,
+  Forward, PanelLeftClose, PanelLeftOpen, type LucideIcon,
+} from 'lucide-react';
+
+/**
+ * Icons (§4.12): 24 px stroke icons at a 1.8 px stroke in currentColor. No
+ * emoji as icons; icon-only buttons carry an aria-label.
+ */
+const ICONS: Record<string, LucideIcon> = {
+  home: House, activity: Activity, mail: Mail, chat: MessageSquare, calendar: Calendar, 'calendar-clock': CalendarClock, tasks: SquareCheck,
+  folder: Folder, 'folder-open': FolderOpen, 'folder-up': FolderUp, users: Users, 'id-card': IdCard, contact: Contact, video: Video, megaphone: Megaphone,
+  phone: Phone, kanban: Kanban, 'file-text': FileText, notebook: Notebook, 'trending-up': TrendingUp, receipt: Receipt, landmark: Landmark,
+  wallet: Wallet, package: Package, cart: ShoppingCart, repeat: Repeat, banknote: Banknote, 'life-buoy': LifeBuoy, box: Box, wrench: Wrench,
+  store: Store, settings: Settings, 'settings-2': Settings2, sparkles: Sparkles, bell: Bell, search: Search, transfers: ArrowUpDown, x: X,
+  minus: Minus, plus: Plus, 'chevron-down': ChevronDown, 'chevron-right': ChevronRight, 'chevron-left': ChevronLeft, check: Check,
+  'check-circle': CircleCheck, upload: Upload, download: Download, cloud: Cloud, 'cloud-off': CloudOff, lock: Lock, fingerprint: Fingerprint,
+  printer: Printer, external: ExternalLink, archive: Archive, reply: Reply, 'reply-all': ReplyAll, forward: Forward, paperclip: Paperclip,
+  send: Send, star: Star, flag: Flag, inbox: Inbox, trash: Trash2, refresh: RefreshCw, pin: Pin, 'pin-off': PinOff, copy: Copy,
+  grid: LayoutGrid, stethoscope: Stethoscope, 'shield-check': ShieldCheck, 'shield-alert': ShieldAlert, wifi: Wifi, 'wifi-off': WifiOff,
+  warning: TriangleAlert, info: Info, alert: CircleAlert, clock: Clock, logout: LogOut, moon: Moon, sun: Sun, monitor: Monitor,
+  keyboard: Keyboard, globe: Globe, disk: HardDrive, pause: Pause, play: Play, undo: RotateCcw, file: File, 'file-image': FileImage,
+  'file-sheet': FileSpreadsheet, filter: Filter, more: Ellipsis, smile: Smile, timer: Timer, coffee: Coffee, eye: Eye, laptop: Laptop,
+  server: Server, link: Link, history: History, zap: Zap, hash: Hash, compose: SquarePen, user: UserRound, building: Building2,
+  briefcase: Briefcase, 'list-todo': ListTodo, spinner: LoaderCircle, back: ArrowLeft, 'panel-close': PanelLeftClose, 'panel-open': PanelLeftOpen,
+};
+
+export function Icon({ name, size = 18, className, strokeWidth = 1.8, label }: { name: string; size?: number; className?: string; strokeWidth?: number; label?: string }) {
+  const C = ICONS[name] ?? Box;
+  return <C size={size} strokeWidth={strokeWidth} className={className} aria-hidden={label ? undefined : true} aria-label={label} role={label ? 'img' : undefined} />;
+}

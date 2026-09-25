@@ -1,0 +1,321 @@
+/**
+ * Types shared by the main process and the renderer. Everything crossing the
+ * IPC boundary is described here and validated by the zod schemas in
+ * shared/ipc/contract.ts.
+ */
+
+export type Platform = 'windows' | 'macos' | 'linux';
+export type Arch = 'x64' | 'arm64';
+
+export type NetworkStatus = 'ONLINE' | 'LIMITED' | 'RECONNECTING' | 'OFFLINE';
+export type RealtimeState = 'connected' | 'connecting' | 'disabled' | 'down' | 'idle';
+
+export type ServiceHealth = 'STARTING' | 'HEALTHY' | 'DEGRADED' | 'RESTARTING' | 'FAILED' | 'STOPPED';
+
+export type DeviceTrust = 'TRUSTED' | 'STANDARD' | 'RESTRICTED' | 'REVOKED';
+export type DeviceClassification = 'MANAGED' | 'PERSONAL' | 'UNKNOWN';
+
+export type NotificationPrivacy = 'FULL' | 'SENDER_ONLY' | 'GENERIC';
+export type UpdateChannel = 'stable' | 'beta' | 'dev' | 'org';
+export type Theme = 'system' | 'light' | 'dark';
+export type Density = 'comfortable' | 'compact';
+
+export type UpdateState =
+  | 'IDLE'
+  | 'CHECKING'
+  | 'AVAILABLE'
+  | 'DOWNLOADING'
+  | 'VERIFIED'
+  | 'STAGED'
+  | 'INSTALLING'
+  | 'DONE'
+  | 'FAILED';
+
+export type MutationState = 'PENDING' | 'SYNCING' | 'DONE' | 'CONFLICT' | 'FAILED';
+
+/** Which server API family this server speaks (§8.1 vs the existing WorkSuite API). */
+export type ServerApi = 'desktop-v1' | 'core';
+
+export interface ServerInfo {
+  origin: string;
+  name: string;
+  api: ServerApi;
+  minimumVersion: string | null;
+  /** Set by an enterprise build or MDM policy: the user may not change the server. */
+  locked: boolean;
+}
+
+export interface UserSummary {
+  id: string;
+  name: string;
+  email: string;
+  avatar: string | null;
+  timezone: string | null;
+  locale: string | null;
+  organizationId: string | null;
+  organizationName: string | null;
+  timeFormat: string | null;
+  weekStart: number | null;
+}
+
+export interface Organization {
+  id: string;
+  name: string;
+}
+
+/** §11.2 desktop policy keys, with the defaults applied. */
+export interface DesktopPolicy {
+  version: number;
+  signed: boolean;
+  desktop_access: 'allowed' | 'disabled' | 'managed_only';
+  minimum_version: Partial<Record<Platform, string>>;
+  update_channel: UpdateChannel;
+  auto_update: 'enforced' | 'user_choice';
+  forced_update_deadline_hours: number;
+  file_sync: 'allowed' | 'managed_only' | 'disabled';
+  offline_files: 'allowed' | 'managed_only' | 'disabled';
+  sync_folder_policy: string;
+  removable_media_sync: boolean;
+  offline_storage: boolean;
+  offline_storage_max_mb: number;
+  clipboard_paste: boolean;
+  external_file_open: 'allowed' | 'managed_only' | 'disabled';
+  downloads: 'allowed' | 'managed_only' | 'disabled';
+  screen_capture_share: 'allowed' | 'disabled';
+  app_lock_max_minutes: number;
+  notification_min_privacy: NotificationPrivacy;
+  required_background_services: string[];
+  personal_device_mode: 'full' | 'online_only' | 'blocked';
+  wipe_on_revoke: 'tokens' | 'cache' | 'cache+offline_files';
+  proxy: 'system' | 'manual' | 'pac';
+  allow_offline: boolean;
+}
+
+export interface MonitoringPolicySummary {
+  id: string;
+  name: string;
+  version: number;
+}
+
+export interface Bootstrap {
+  source: ServerApi;
+  user: UserSummary;
+  organizations: Organization[];
+  defaultOrganizationId: string | null;
+  apps: string[] | '*' | null;
+  serverApps: string[] | null;
+  permissions: string[];
+  entitlements: Record<string, boolean>;
+  featureFlags: Record<string, boolean>;
+  policy: DesktopPolicy;
+  monitoringPolicy: MonitoringPolicySummary | null;
+  minimumVersion: string | null;
+  realtimeEndpoint: string | null;
+  cachedAt: string;
+  /** True when the app started from the cached copy and has not revalidated yet. */
+  offline: boolean;
+}
+
+export interface DeviceInfo {
+  id: string | null;
+  name: string;
+  platform: Platform;
+  arch: Arch;
+  osVersion: string;
+  appVersion: string;
+  trust: DeviceTrust;
+  classification: DeviceClassification;
+  registeredAt: string | null;
+  lastHeartbeatAt: string | null;
+  secureStorage: SecureStorageStatus;
+}
+
+export interface SecureStorageStatus {
+  available: boolean;
+  backend: string;
+  /** False when secrets live in memory only (no OS keyring). */
+  persistent: boolean;
+}
+
+export type AuthStage =
+  | 'no-server'
+  | 'signed-out'
+  | 'mfa'
+  | 'registering'
+  | 'bootstrapping'
+  | 'ready'
+  | 'expired'
+  | 'blocked'
+  | 'revoked';
+
+export interface AuthState {
+  stage: AuthStage;
+  server: ServerInfo | null;
+  user: UserSummary | null;
+  /** Human message for blocked / revoked / expired stages. */
+  message: string | null;
+  /** First-run wizard still to be completed for this user on this device. */
+  setupPending: boolean;
+}
+
+export interface Preferences {
+  startWithOs: boolean;
+  startMinimized: boolean;
+  minimizeToTray: boolean;
+  restoreTabs: boolean;
+  theme: Theme;
+  density: Density;
+  hardwareAcceleration: boolean;
+  notificationSounds: boolean;
+  notificationPrivacy: NotificationPrivacy;
+  notificationsEnabled: boolean;
+  /** Per-module notification toggles; a missing key means enabled. */
+  moduleNotifications: Record<string, boolean>;
+  dndEnabled: boolean;
+  dndFrom: string;
+  dndTo: string;
+  /** Minutes of inactivity before the app locks; 0 = never. */
+  appLockMinutes: number;
+  lockOnSystemLock: boolean;
+  openFilesLocally: 'ask' | 'always' | 'never';
+  downloadFolder: string;
+  mailCacheDays: 7 | 30 | 90 | 0;
+  tabSuspendMinutes: number;
+  language: string;
+  updateChannel: UpdateChannel;
+  sidebarMode: 'expanded' | 'collapsed' | 'auto-hide';
+  pinnedApps: string[];
+  shortcuts: Record<string, string>;
+  backgroundServices: { notifications: boolean; realtime: boolean };
+}
+
+export interface PreferenceLock {
+  key: keyof Preferences;
+  reason: string;
+}
+
+export interface NotificationItem {
+  id: string;
+  module: string;
+  title: string;
+  body: string;
+  link: string | null;
+  read: boolean;
+  createdAt: string;
+  actor: string | null;
+}
+
+export interface StatusSnapshot {
+  network: NetworkStatus;
+  realtime: RealtimeState;
+  pendingChanges: number;
+  unread: { mail: number; chat: number; notifications: number; tasks: number };
+  notificationsPausedUntil: string | null;
+  services: Record<string, ServiceHealth>;
+  locked: boolean;
+  safeMode: boolean;
+}
+
+export type TransferDirection = 'upload' | 'download';
+export type TransferState = 'queued' | 'running' | 'paused' | 'done' | 'failed' | 'cancelled';
+
+export interface Transfer {
+  id: string;
+  direction: TransferDirection;
+  name: string;
+  source: string;
+  destination: string;
+  bytes: number;
+  total: number;
+  state: TransferState;
+  speed: number;
+  error: string | null;
+  createdAt: string;
+}
+
+export interface OfflineMutation {
+  id: string;
+  idempotencyKey: string;
+  module: string;
+  entity: string;
+  entityId: string | null;
+  label: string;
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  path: string;
+  state: MutationState;
+  attempts: number;
+  error: string | null;
+  createdAt: string;
+}
+
+export interface Draft {
+  id: string;
+  module: string;
+  context: string;
+  content: unknown;
+  updatedAt: string;
+}
+
+export interface UpdateStatus {
+  state: UpdateState;
+  channel: UpdateChannel;
+  currentVersion: string;
+  availableVersion: string | null;
+  minimumVersion: string | null;
+  required: boolean;
+  critical: boolean;
+  progress: number;
+  error: string | null;
+  lastCheckedAt: string | null;
+  deadline: string | null;
+  signatureVerified: boolean;
+  notesUrl: string | null;
+  installSupported: boolean;
+  /** Why the build cannot install updates itself, when it cannot. */
+  installBlockedReason: string | null;
+}
+
+export interface BusyReport {
+  uploads: number;
+  downloads: number;
+  pendingMutations: number;
+  drafts: number;
+  activeCall: boolean;
+}
+
+export interface DiagnosticCheck {
+  id: string;
+  label: string;
+  status: 'pass' | 'warn' | 'fail' | 'skip';
+  detail: string;
+  ms?: number;
+}
+
+export interface AppInfo {
+  version: string;
+  platform: Platform;
+  arch: Arch;
+  osVersion: string;
+  electron: string;
+  chrome: string;
+  node: string;
+  channel: UpdateChannel;
+  safeMode: boolean;
+  isPackaged: boolean;
+  locale: string;
+  restoredFromCrash: boolean;
+}
+
+export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record';
+
+export interface NavigateRequest {
+  route: string;
+  newWindow?: boolean;
+  organizationId?: string | null;
+  source: 'deep-link' | 'notification' | 'tray' | 'menu' | 'shortcut';
+}
+
+export interface ToastMessage {
+  kind: 'info' | 'success' | 'warning' | 'error';
+  text: string;
+}

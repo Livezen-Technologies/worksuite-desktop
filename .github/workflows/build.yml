@@ -1,0 +1,124 @@
+# CI and release builds (§16.1): check → build per OS → package → sign →
+# signed manifest. Signing steps run only when their secrets are configured;
+# without them the job still proves the code builds and packages.
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Release channel for the manifest
+        default: dev
+        type: choice
+        options: [dev, beta, stable]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: xvfb-run -a npm test
+      - run: npm audit --omit=dev --audit-level=high
+
+  package:
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: --mac
+          - os: windows-latest
+            target: --win
+          - os: ubuntu-latest
+            target: --linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Linux packaging tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm libarchive-tools
+      - run: npm run build
+        env:
+          MAIN_VITE_POLICY_PUBLIC_KEY: ${{ secrets.WS_POLICY_PUBLIC_KEY }}
+      - name: Package
+        shell: bash
+        run: npx electron-builder --config build/electron-builder.config.cjs ${{ matrix.target }} --publish never
+        env:
+          # macOS signing + notarization (Developer ID). Unset → unsigned build.
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          # Windows: Authenticode certificate, or Azure Trusted Signing.
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+          AZURE_TRUSTED_SIGNING_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_PROFILE }}
+          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CSC_LINK != '' }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: worksuite-${{ runner.os }}
+          path: |
+            release/*/*.exe
+            release/*/*.msi
+            release/*/*.dmg
+            release/*/*.pkg
+            release/*/*.zip
+            release/*/*.AppImage
+            release/*/*.deb
+            release/*/*.rpm
+          if-no-files-found: error
+
+  manifest:
+    # A signed manifest for tagged releases and manual runs. Needs the
+    # offline release key as the WS_RELEASE_PRIVATE_KEY secret.
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      WS_RELEASE_PRIVATE_KEY: ${{ secrets.WS_RELEASE_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Sign release manifest
+        if: env.WS_RELEASE_PRIVATE_KEY != ''
+        run: node scripts/release-manifest.mjs --dir dist --channel ${{ inputs.channel || 'stable' }} --base-url ./
+      - uses: actions/upload-artifact@v4
+        with:
+          name: worksuite-release
+          path: dist

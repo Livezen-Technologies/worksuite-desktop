@@ -1,0 +1,14 @@
+node_modules/
+out/
+dist/
+release/
+*.log
+.DS_Store
+.env
+.env.*
+# Release signing keys never enter the repository.
+*.pem
+keys/
+coverage/
+test-results/
+playwright-report/

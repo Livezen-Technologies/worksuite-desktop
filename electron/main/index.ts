@@ -1,0 +1,727 @@
+import { app, crashReporter, ipcMain, powerMonitor, screen, session, BrowserWindow, type WebContents } from 'electron';
+import { join, resolve } from 'node:path';
+import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
+import { resolveWebLink } from '@shared/links';
+import { networkStatus } from '@shared/network';
+import { redactUrl } from '@shared/redact';
+import type { Bootstrap, NavigateRequest, RealtimeState, ServiceHealth, StatusSnapshot } from '@shared/types';
+import { applyAutostart, startedHidden } from './autostart';
+import { evaluateBoot, markCleanExit, markRunning, clearCrashes, writeBootConfig } from './boot';
+import type { AppContext } from './context';
+import { broadcast } from './events';
+import { registerHandlers } from './handlers';
+import { initLog, logger } from './log';
+import { buildMenu } from './menu';
+import { paths } from './paths';
+import { SessionController } from './session';
+import { IpcRouter } from '../ipc/router';
+import { registerAppProtocol } from '../protocols/app-protocol';
+import { devOrigin, hardenSession, isTrustedShellUrl, openExternalSafely, registerPrivilegedSchemes, hardenWebContents, setExternalAllowList } from '../security/hardening';
+import { createApiProxy } from '../services/api-proxy';
+import { AuditService } from '../services/audit';
+import { AuthService } from '../services/auth';
+import { BootstrapService } from '../services/bootstrap';
+import { Database } from '../services/db';
+import { archName, DeviceService, platformName } from '../services/device';
+import { DiagnosticsService } from '../services/diagnostics';
+import { readEnterpriseConfig } from '../services/enterprise';
+import { HttpClient, type FetchLike } from '../services/http';
+import { LockService } from '../services/lock';
+import { NotificationService } from '../services/notifications';
+import { OfflineCache } from '../services/offline-cache';
+import { OfflineQueue } from '../services/offline-queue';
+import { RealtimeService } from '../services/realtime';
+import { SecureStore } from '../services/secure-store';
+import { SettingsService } from '../services/settings';
+import { ServiceSupervisor } from '../services/supervisor';
+import { TransferManager } from '../services/transfers';
+import { Vault } from '../services/vault';
+import { TrayService } from '../tray/tray';
+import { POLICY_PUBLIC_KEY, RELEASE_PUBLIC_KEY } from '../updater/keys';
+import { UpdaterService } from '../updater/updater';
+import { WindowManager } from '../windows/manager';
+
+/**
+ * WorkSuite Desktop — main process.
+ *
+ * Owns the app lifecycle, windows, IPC, tray, protocols, notifications and
+ * the secure-storage broker (§3.2). Business logic stays on the server; this
+ * process caches, queues, routes and enforces device policy.
+ */
+
+// ── before ready ─────────────────────────────────────────────────────────
+
+// Development and tests only: an isolated profile, so a test run never
+// touches a real installation's data. Packaged builds ignore it.
+if (!app.isPackaged && process.env.WS_USER_DATA_DIR) app.setPath('userData', process.env.WS_USER_DATA_DIR);
+
+if (!app.requestSingleInstanceLock()) {
+  // FR-DL-04: a second launch hands its arguments (and deep link) to the first.
+  app.quit();
+} else {
+  main();
+}
+
+function main(): void {
+  const p = paths();
+  initLog(p.logs);
+  const log = logger('main');
+  const boot = evaluateBoot(p, process.argv);
+  if (!boot.hardwareAcceleration) app.disableHardwareAcceleration();
+  markRunning(p.runningMarker);
+  log.info('starting', { version: app.getVersion(), platform: process.platform, arch: process.arch, safeMode: boot.safeMode, uncleanExit: boot.uncleanExit });
+
+  app.enableSandbox();
+  registerPrivilegedSchemes();
+  app.on('web-contents-created', (_e, contents) => hardenWebContents(contents));
+  if (process.platform === 'win32') app.setAppUserModelId('lk.worksuite.desktop');
+  // Crash dumps stay on this machine; they are shared only through a diagnostic bundle (WF-27, Q4).
+  crashReporter.start({ uploadToServer: false });
+
+  // FR-DL-01: worksuite:// on every platform. A development build registers
+  // itself only when asked, so running tests never takes over the system's
+  // handler from an installed copy.
+  if (app.isPackaged) {
+    app.setAsDefaultProtocolClient('worksuite');
+  } else if (process.env.WS_REGISTER_PROTOCOL === '1' && process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient('worksuite', process.execPath, [resolve(process.argv[1]!)]);
+  }
+
+  const pendingLinks: string[] = [];
+  let handleLink: (url: string) => void = (url) => pendingLinks.push(url);
+  app.on('open-url', (e, url) => {
+    e.preventDefault();
+    handleLink(url);
+  });
+  const argvLink = findDeepLinkInArgv(process.argv);
+  if (argvLink) pendingLinks.push(argvLink);
+
+  app.whenReady().then(() => start(boot, pendingLinks, (fn) => (handleLink = fn)));
+}
+
+// ── ready ────────────────────────────────────────────────────────────────
+
+function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], setLinkHandler: (fn: (url: string) => void) => void): void {
+  const p = paths();
+  const log = logger('main');
+  const allowInsecure = !app.isPackaged;
+  hardenSession(session.defaultSession);
+
+  const enterprise = readEnterpriseConfig();
+  const db = new Database(p.database);
+  const secrets = new SecureStore(p.secrets);
+  secrets.init();
+
+  // The database key lives in the OS credential store; without one it lives
+  // in memory, and nothing encrypted outlives the session.
+  let dbKey = secrets.get('db-key');
+  if (!dbKey) {
+    dbKey = Vault.generateKey().toString('base64');
+    secrets.set('db-key', dbKey);
+  }
+  const vault = new Vault(Buffer.from(dbKey, 'base64'));
+  const getVault = () => vault;
+
+  // A dedicated network session for API traffic: its own cookie jar and proxy.
+  const net = session.fromPartition('persist:ws-net');
+  if (enterprise.proxy && enterprise.proxy.mode !== 'system') {
+    const cfg = enterprise.proxy.mode === 'pac' ? { pacScript: enterprise.proxy.url ?? '' } : { proxyRules: enterprise.proxy.rules ?? enterprise.proxy.url ?? '', proxyBypassRules: enterprise.proxy.bypass ?? '' };
+    void net.setProxy(cfg);
+    void session.defaultSession.setProxy(cfg);
+  }
+  const fetchImpl: FetchLike = (url, init) => net.fetch(url, init as RequestInit);
+
+  const settings = new SettingsService(db);
+  const clientHeaders = (): Record<string, string> => {
+    const h: Record<string, string> = { 'X-WS-Client': `worksuite-desktop/${app.getVersion()} (${platformName()}; ${archName()})` };
+    const dev = device?.current();
+    if (dev) h['X-WS-Device'] = dev.id;
+    return h;
+  };
+
+  const auth = new AuthService(db, secrets, fetchImpl, clientHeaders);
+
+  let apiReachable = true;
+  let reachabilityProbe: NodeJS.Timeout | null = null;
+  const onReachability = (ok: boolean): void => {
+    if (ok === apiReachable) return;
+    apiReachable = ok;
+    log.info(ok ? 'server reachable again' : 'server unreachable');
+    emitStatus();
+    if (ok) {
+      if (reachabilityProbe) clearInterval(reachabilityProbe);
+      reachabilityProbe = null;
+      onReconnect();
+    } else if (!reachabilityProbe) {
+      reachabilityProbe = setInterval(() => {
+        const origin = auth.getServer()?.origin;
+        if (!origin) return;
+        fetchImpl(`${origin}/api/auth/config`, { method: 'GET', signal: AbortSignal.timeout(10_000) })
+          .then(() => onReachability(true))
+          .catch(() => undefined);
+      }, 15_000);
+      reachabilityProbe.unref?.();
+    }
+  };
+
+  // Forward-declared so the HTTP client's callbacks can reach the session.
+  // eslint-disable-next-line prefer-const
+  let sessionCtl: SessionController;
+  const http = new HttpClient({
+    fetch: fetchImpl,
+    origin: () => auth.getServer()?.origin ?? null,
+    tokens: { accessToken: () => auth.accessToken(), refresh: () => auth.refresh() },
+    clientHeaders,
+    onReachability,
+    onAuthLost: (reason) => sessionCtl?.expired(reason === 'Session ended' ? 'Your session has ended. Sign in again to continue.' : reason),
+    onDeviceDirective: (code, message) => {
+      if (code === 'DEVICE_REVOKED') void sessionCtl?.wipe(message);
+      else if (code === 'DESKTOP_ACCESS_DISABLED') sessionCtl?.handleDirective({ kind: 'block', reason: message });
+      else if (code === 'VERSION_UNSUPPORTED') updater.requireUpdate(null);
+    },
+  });
+
+  const device: DeviceService = new DeviceService(db, secrets, http);
+  const bootstrap = new BootstrapService(db, getVault, http, POLICY_PUBLIC_KEY);
+  const cache = new OfflineCache(db, getVault);
+  const audit = new AuditService(db, getVault, http, () => auth.getServer()?.api === 'desktop-v1');
+  const supervisor = new ServiceSupervisor();
+  const lock = new LockService();
+  const windows = new WindowManager(db, join(__dirname, '../preload/index.js'));
+  windows.minimizeToTray = () => settings.effective().minimizeToTray;
+
+  const realtime = new RealtimeService(http, () => auth.getServer()?.origin ?? null, allowInsecure);
+  let realtimeDownSince: number | null = null;
+
+  const notifications = new NotificationService(db, getVault, http, () => settings.effective());
+  const queue = new OfflineQueue(db, getVault, http, () => sessionCtl.capabilities().offlineQueue);
+
+  // Hashing runs in a supervised utility process (FR-DIAG-07).
+  const hashWaiters = new Map<string, { resolve: (v: { sha256: string; bytes: number }) => void; reject: (e: Error) => void }>();
+  supervisor.onHealth = () => emitStatus();
+  supervisor.start({
+    name: 'hash-worker',
+    entry: join(__dirname, 'hash-worker.js'),
+    onMessage: (msg) => {
+      const m = msg as { type?: string; id?: string; ok?: boolean; sha256?: string; bytes?: number; error?: string };
+      if (m.type !== 'hash' || !m.id) return;
+      const w = hashWaiters.get(m.id);
+      if (!w) return;
+      hashWaiters.delete(m.id);
+      if (m.ok && m.sha256) w.resolve({ sha256: m.sha256, bytes: m.bytes ?? 0 });
+      else w.reject(new Error(m.error ?? 'hashing failed'));
+    },
+  });
+  const hash = (path: string) =>
+    new Promise<{ sha256: string; bytes: number }>((resolveHash, reject) => {
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      hashWaiters.set(id, { resolve: resolveHash, reject });
+      if (!supervisor.post('hash-worker', { type: 'hash', id, path })) {
+        hashWaiters.delete(id);
+        reject(new Error('The hashing helper is not running.'));
+      }
+    });
+
+  const transfers = new TransferManager({
+    db,
+    vault: getVault,
+    http,
+    userId: () => sessionCtl.userId(),
+    downloadFolder: () => settings.effective().downloadFolder,
+    hash,
+    canOpenFiles: () => sessionCtl.hasPermission('desktop.files.open_external'),
+    audit: (action, details) => audit.record(sessionCtl.userId(), action, details),
+  });
+
+  let activeCall = false;
+  const busy = () => {
+    const id = sessionCtl.userId();
+    const c = transfers.activeCounts();
+    return { uploads: c.uploads, downloads: c.downloads, pendingMutations: id ? queue.pendingCount(id) : 0, drafts: id ? queue.draftCount(id) : 0, activeCall };
+  };
+
+  const updater = new UpdaterService({
+    fetch: fetchImpl,
+    platform: platformName(),
+    arch: archName(),
+    publicKeyPem: RELEASE_PUBLIC_KEY,
+    feedUrl: (channel) => {
+      if (allowInsecure && process.env.WS_UPDATE_FEED) return process.env.WS_UPDATE_FEED;
+      const server = auth.getServer();
+      if (!server) return null;
+      if (server.api === 'desktop-v1') {
+        return `${server.origin}/desktop/v1/releases/manifest?platform=${platformName()}&arch=${archName()}&channel=${channel}`;
+      }
+      // The existing API has no release endpoint: the server hosts the signed
+      // manifest as a static file beside the installers.
+      return `${server.origin}/desktop/releases/${channel}/manifest.json`;
+    },
+    channel: () => settings.effective().updateChannel,
+    busy,
+    deadlineHours: () => sessionCtl.current()?.policy.forced_update_deadline_hours ?? 24,
+    allowInsecure,
+    updatesDir: p.updates,
+    onStatus: (s) => {
+      broadcast('update:changed', s);
+      tray.update({ updateReady: s.state === 'STAGED' });
+    },
+    onWarning: (text) => broadcast('toast', { kind: 'warning', text }),
+    beforeQuit: async () => {
+      // WF-26 step 6: queues and drafts are already durable; pause transfers cleanly.
+      transfers.stopAll();
+    },
+  });
+
+  // ── navigation (deep links, notifications, tray) ──────────────────────
+  const pendingNav: NavigateRequest[] = [];
+  const navigate = (req: NavigateRequest): void => {
+    if (!sessionCtl.isReady() || !windows.getMain()) {
+      pendingNav.push(req);
+      if (!sessionCtl.isReady()) windows.showMain();
+      return;
+    }
+    if (req.newWindow) {
+      windows.open('record', req.route);
+      return;
+    }
+    const w = windows.showMain();
+    w.webContents.send('navigate', req);
+  };
+  const flushNavigation = (): void => {
+    if (!sessionCtl.isReady()) return;
+    const w = windows.getMain();
+    if (!w) return;
+    while (pendingNav.length) w.webContents.send('navigate', pendingNav.shift());
+  };
+  const openLink = (link: string | null): void => {
+    const target = resolveWebLink(link);
+    if (target.kind === 'tab') navigate({ route: target.route, source: 'notification' });
+    else if (target.kind === 'browser') {
+      const origin = auth.getServer()?.origin;
+      if (origin) void openExternalSafely(`${origin}${target.path}`);
+    } else windows.showMain();
+  };
+  const handleDeepLink = (url: string): void => {
+    const parsed = parseDeepLink(url);
+    if (!parsed.ok) {
+      log.warn('deep link rejected', { reason: parsed.reason, url: redactUrl(url) });
+      navigate({ route: '/home', source: 'deep-link' });
+      broadcast('toast', { kind: 'error', text: 'That WorkSuite link could not be opened.' });
+      return;
+    }
+    log.info('deep link', { module: parsed.link.module, pattern: parsed.link.pattern });
+    navigate({ route: parsed.link.route, newWindow: parsed.link.newWindow, organizationId: parsed.link.organizationId, source: 'deep-link' });
+  };
+  setLinkHandler(handleDeepLink);
+
+  // ── status ─────────────────────────────────────────────────────────────
+  let statusTimer: NodeJS.Timeout | null = null;
+  const snapshot = (): StatusSnapshot => {
+    const uid = sessionCtl?.userId();
+    const counts = notifications.counts();
+    const services: Record<string, ServiceHealth> = { ...supervisor.health() };
+    return {
+      network: networkStatus(apiReachable, realtime.getState(), realtimeDownSince),
+      realtime: realtime.getState(),
+      pendingChanges: uid ? queue.pendingCount(uid) : 0,
+      unread: counts,
+      notificationsPausedUntil: notifications.pausedUntilIso(),
+      services,
+      locked: lock.isLocked(),
+      safeMode: boot.safeMode,
+    };
+  };
+  function emitStatus(): void {
+    if (statusTimer) return;
+    statusTimer = setTimeout(() => {
+      statusTimer = null;
+      const s = snapshot();
+      broadcast('status:changed', s);
+      const st = sessionCtl?.get();
+      const failed = Object.entries(s.services).find(([, h]) => h === 'FAILED');
+      tray.update({
+        signedIn: st?.stage === 'ready',
+        userName: st?.user?.name ?? null,
+        organization: st?.user?.organizationName ?? null,
+        offline: s.network === 'OFFLINE',
+        pending: s.pendingChanges,
+        error: failed ? `${failed[0]} stopped — open Diagnostics` : null,
+        unreadChat: s.unread.chat,
+        unreadMail: s.unread.mail,
+        unreadOther: s.unread.notifications,
+        notificationsPausedUntil: s.notificationsPausedUntil,
+      });
+    }, 300);
+  }
+
+  realtime.onState = (s: RealtimeState) => {
+    realtimeDownSince = s === 'down' ? (realtimeDownSince ?? Date.now()) : null;
+    emitStatus();
+  };
+  realtime.onEvent = (e) => {
+    notifications.handleRealtime(e);
+    broadcast('realtime:event', e);
+    if (e.type === 'profile.updated') void sessionCtl.refreshBootstrap().catch(() => undefined);
+  };
+  realtime.onResync = () => {
+    broadcast('realtime:resync');
+    void notifications.refreshList();
+    void notifications.refreshCounts();
+  };
+  notifications.onChanged = () => {
+    emitStatus();
+    broadcast('notifications:changed');
+  };
+  notifications.onClick = (link) => openLink(link);
+  notifications.isLocked = () => lock.isLocked();
+  queue.onChanged = () => {
+    emitStatus();
+    broadcast('offline:changed');
+  };
+  transfers.onChanged = (list) => broadcast('transfers:changed', list);
+
+  // ── attendance for the tray (FR-TRAY-01 Clock In) ─────────────────────
+  let attendanceTimer: NodeJS.Timeout | null = null;
+  const refreshAttendance = async (): Promise<void> => {
+    try {
+      const a = await http.get<{ linked?: boolean; today?: { check_in?: string | null; check_out?: string | null } | null }>('/api/hr/attendance/me');
+      const clockedIn = !!(a.today?.check_in && !a.today?.check_out);
+      const since = clockedIn && a.today?.check_in ? new Date(`${a.today.check_in.replace(' ', 'T')}${a.today.check_in.includes('T') ? '' : 'Z'}`).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null;
+      tray.update({ attendance: { linked: !!a.linked, clockedIn, since } });
+    } catch {
+      tray.update({ attendance: null });
+    }
+  };
+  const clock = async (direction: 'in' | 'out'): Promise<void> => {
+    try {
+      await http.post(`/api/hr/attendance/check-${direction}`, { source: 'desktop' });
+      broadcast('toast', { kind: 'success', text: direction === 'in' ? 'Clocked in. Have a good day.' : 'Clocked out.' });
+      broadcast('realtime:event', { type: 'hr.attendance.changed' });
+    } catch (e) {
+      broadcast('toast', { kind: 'error', text: (e as Error).message });
+      windows.showMain();
+    }
+    void refreshAttendance();
+  };
+
+  // ── the tray ───────────────────────────────────────────────────────────
+  const quit = (): void => {
+    windows.quitting = true;
+    app.quit();
+  };
+  const tray = new TrayService({
+    open: () => windows.showMain(),
+    openRoute: (route) => navigate({ route, source: 'tray' }),
+    clockIn: () => void clock('in'),
+    clockOut: () => void clock('out'),
+    pauseNotifications: (m) => {
+      notifications.pause(m);
+      emitStatus();
+    },
+    openSettings: () => navigate({ route: '/settings', source: 'tray' }),
+    checkUpdates: () => {
+      if (updater.get().state === 'STAGED') void updater.install(false).then((r) => !r.started && navigate({ route: '/settings/about', source: 'tray' }));
+      else void updater.check().then(() => navigate({ route: '/settings/about', source: 'tray' }));
+    },
+    quit,
+    lock: () => lock.lock('manual'),
+  });
+
+  // ── the session ────────────────────────────────────────────────────────
+  const startServices = (b: Bootstrap): void => {
+    const uid = b.user.id;
+    setExternalAllowList([new URL(auth.getServer()!.origin).hostname]);
+    if (settings.effective().backgroundServices.realtime) realtime.start();
+    notifications.start(uid);
+    device.start();
+    device.extras = () => {
+      const c = transfers.activeCounts();
+      return { pendingUp: queue.pendingCount(uid) + c.uploads, pendingDown: c.downloads, lastError: null };
+    };
+    transfers.recover();
+    void queue.replay(uid);
+    void audit.flush();
+    void refreshAttendance();
+    attendanceTimer = setInterval(() => void refreshAttendance(), 5 * 60_000);
+    attendanceTimer.unref?.();
+    // FR-OFF-06: prune mail bodies beyond the cache window.
+    const days = settings.effective().mailCacheDays;
+    if (days > 0) cache.pruneModuleOlderThan('mail', days);
+    emitStatus();
+  };
+  const stopServices = (): void => {
+    realtime.stop();
+    notifications.stop();
+    device.stop();
+    transfers.stopAll();
+    if (attendanceTimer) clearInterval(attendanceTimer);
+    attendanceTimer = null;
+    tray.update({ attendance: null });
+    lock.reset();
+    emitStatus();
+  };
+
+  sessionCtl = new SessionController(db, auth, device, bootstrap, fetchImpl, enterprise, {
+    started: (b) => startServices(b),
+    stopped: () => stopServices(),
+    wiped: (uid, scope, includeDrafts) => {
+      // WF-24 / FR-SEC-08: WorkSuite's own data only. Nothing outside the
+      // profile is touched; downloaded files the user saved are theirs.
+      cache.clearUser(uid);
+      notifications.clearUser(uid);
+      db.run('DELETE FROM tab_sessions WHERE user_id = ?', uid);
+      if (scope !== 'tokens') {
+        queue.wipeUser(uid, includeDrafts);
+        transfers.wipe(uid);
+      }
+      log.info('local data removed', { scope });
+    },
+    changed: (s) => {
+      broadcast('auth:changed', s);
+      emitStatus();
+      if (s.stage === 'ready') flushNavigation();
+    },
+    bootstrapChanged: (b) => {
+      if (b) settings.setPolicy(b.policy);
+      broadcast('session:changed', b);
+    },
+    minimumVersion: (v) => updater.setMinimum(v),
+    requireUpdate: (v) => updater.requireUpdate(v),
+    toast: (kind, text) => broadcast('toast', { kind, text }),
+    audit: (uid, action, details) => audit.record(uid, action, details),
+  });
+
+  lock.enabled = () => sessionCtl.isReady();
+  lock.minutes = () => settings.effective().appLockMinutes;
+  lock.lockOnSystemLock = () => settings.effective().lockOnSystemLock;
+  lock.user = () => ({ name: sessionCtl.get().user?.name ?? null, email: sessionCtl.get().user?.email ?? null });
+  lock.onChanged = (s) => {
+    broadcast('lock:changed', s);
+    emitStatus();
+  };
+
+  function onReconnect(): void {
+    const uid = sessionCtl.userId();
+    realtime.kick();
+    if (!uid) return;
+    void sessionCtl.revalidate();
+    void queue.replay(uid);
+    void notifications.refreshCounts();
+    void audit.flush();
+    device.poke();
+    broadcast('realtime:resync');
+  }
+
+  const diagnostics = new DiagnosticsService({
+    serverOrigin: () => auth.getServer()?.origin ?? null,
+    timedFetch: async (path) => {
+      const origin = auth.getServer()?.origin;
+      const t0 = Date.now();
+      const res = await fetchImpl(`${origin}${path}`, { method: 'GET', signal: AbortSignal.timeout(15_000) });
+      return { ok: res.ok, status: res.status, ms: Date.now() - t0 };
+    },
+    signedIn: () => sessionCtl.isReady(),
+    realtimeState: () => realtime.getState(),
+    updaterState: () => {
+      const u = updater.get();
+      return { state: u.state, error: u.error, lastCheckedAt: u.lastCheckedAt, channel: u.channel };
+    },
+    services: () => supervisor.health(),
+    dbCheck: () => db.integrityCheck(),
+    secureStorage: () => secrets.getStatus(),
+    policy: () => sessionCtl.current()?.policy ?? null,
+    deviceInfo: () => device.info(secrets.getStatus()),
+    settings: () => settings.effective(),
+    offline: () => {
+      const uid = sessionCtl.userId();
+      return uid ? queue.status(uid, { bytes: cache.totalBytes(), entries: cache.count() }) : null;
+    },
+    crashes: () => ({ recent: boot.recentCrashes, uncleanExit: boot.uncleanExit, safeMode: boot.safeMode, reason: boot.safeModeReason }),
+    safeMode: () => boot.safeMode,
+    userDataPath: p.userData,
+  });
+
+  // ── protocol + IPC ─────────────────────────────────────────────────────
+  const CACHE_PREFIXES: Array<[string, string]> = [
+    ['/api/mail/folders', 'mail'],
+    ['/api/mail/mailboxes', 'mail'],
+    ['/api/mail/messages', 'mail'],
+    ['/api/chat/rooms', 'chat'],
+    ['/api/chat/messages', 'chat'],
+    ['/api/calendar/events', 'calendar'],
+    ['/api/tasks', 'tasks'],
+    ['/api/task-lists', 'tasks'],
+    ['/api/crm/leads', 'crm'],
+    ['/api/hr/attendance/me', 'hr'],
+    ['/api/hr/leave', 'hr'],
+    ['/api/hr/approvals/pending', 'hr'],
+    ['/api/files/browse', 'files'],
+    ['/api/dashboard/home', 'home'],
+    ['/api/notifications', 'notifications'],
+  ];
+  registerAppProtocol(
+    createApiProxy({
+      http,
+      cache,
+      userId: () => sessionCtl.userId(),
+      cacheModuleFor: (path) => {
+        const clean = path.split('?')[0]!;
+        return CACHE_PREFIXES.find(([prefix]) => clean === prefix || clean.startsWith(`${prefix}/`))?.[1] ?? null;
+      },
+      cacheLimits: () => {
+        const caps = sessionCtl.capabilities();
+        const pol = sessionCtl.current()?.policy;
+        return { enabled: caps.offlineCache, maxBytes: (pol?.offline_storage_max_mb ?? 2048) * 1024 * 1024 };
+      },
+      mailBodiesCached: () => settings.effective().mailCacheDays !== 0,
+    }),
+  );
+
+  const pasteGestures = new Map<number, number>();
+  app.on('web-contents-created', (_e, contents: WebContents) => {
+    contents.on('before-input-event', (_ev, input) => {
+      if (input.type === 'keyDown' && (input.control || input.meta) && input.key.toLowerCase() === 'v') pasteGestures.set(contents.id, Date.now());
+    });
+  });
+
+  const router = new IpcRouter(ipcMain, {
+    isTrustedSender: (event) => {
+      const frame = event.senderFrame;
+      if (!frame || frame.parent !== null) return false; // main frame only; no iframes
+      if (!windows.isOurs(BrowserWindow.fromWebContents(event.sender)?.id ?? -1)) return false;
+      return isTrustedShellUrl(frame.url);
+    },
+    isLocked: () => lock.isLocked(),
+    isSignedIn: () => sessionCtl.isReady(),
+    hasPermission: (key) => sessionCtl.hasPermission(key),
+    audit: (action, details) => {
+      if (['auth:signOut', 'session:switchOrganization', 'transfers:download'].includes(action)) return; // audited by the service itself
+      audit.record(sessionCtl.userId(), action, details);
+    },
+    onAbuse: (sender, reason) => {
+      log.error('renderer IPC abuse; reloading window', { reason });
+      if (!sender.isDestroyed()) sender.reload();
+    },
+  });
+
+  const relaunch = (safe: boolean): void => {
+    const args = process.argv.slice(1).filter((a) => a !== '--safe-mode' && a !== '--updated' && a !== '--hidden');
+    if (safe) args.push('--safe-mode');
+    else clearCrashes(p.crashState);
+    markCleanExit(p.runningMarker);
+    app.relaunch({ args });
+    windows.quitting = true;
+    app.exit(0);
+  };
+
+  const ctx: AppContext = {
+    boot,
+    db,
+    vault: getVault,
+    secrets,
+    settings,
+    http,
+    auth,
+    device,
+    bootstrap,
+    session: sessionCtl,
+    realtime,
+    notifications,
+    cache,
+    queue,
+    transfers,
+    supervisor,
+    lock,
+    updater,
+    diagnostics,
+    audit,
+    windows,
+    tray,
+    status: snapshot,
+    setActiveCall: (a) => {
+      activeCall = a;
+    },
+    activeCall: () => activeCall,
+    lastPasteGesture: (id) => pasteGestures.get(id) ?? 0,
+    flushNavigation,
+    relaunch,
+    quit,
+  };
+  registerHandlers(router, ctx);
+  router.install();
+  const missing = router.missingHandlers();
+  if (missing.length) log.warn('IPC channels without handlers', { missing });
+
+  buildMenu((id, arg) => {
+    windows.showMain();
+    broadcast('command', { id, arg });
+  }, {
+    checkUpdates: () => void updater.check().then(() => navigate({ route: '/settings/about', source: 'menu' })),
+    diagnostics: () => navigate({ route: '/diagnostics', source: 'menu' }),
+    quit,
+  });
+
+  settings.onChange((prefs) => {
+    broadcast('settings:changed', prefs);
+    if (prefs.backgroundServices.realtime && sessionCtl.isReady()) realtime.start();
+    if (!prefs.backgroundServices.realtime) realtime.stop();
+  });
+  writeBootConfig(p.bootConfig, { hardwareAcceleration: settings.effective().hardwareAcceleration });
+
+  // ── lifecycle ──────────────────────────────────────────────────────────
+  app.on('second-instance', (_e, argv) => {
+    const link = findDeepLinkInArgv(argv);
+    if (link) handleDeepLink(link);
+    else windows.showMain();
+  });
+  app.on('activate', () => windows.showMain());
+  app.on('window-all-closed', () => {
+    // With minimize-to-tray the main window hides rather than closes, so this
+    // runs only when the user chose Exit on close (FR-TRAY-02).
+    if (process.platform !== 'darwin') quit();
+  });
+  app.on('before-quit', () => {
+    windows.quitting = true;
+    transfers.stopAll();
+    supervisor.stopAll();
+    realtime.stop();
+    updater.stop();
+    lock.stop();
+    tray.destroy();
+    db.close();
+    markCleanExit(p.runningMarker);
+  });
+  powerMonitor.on('resume', () => {
+    device.poke();
+    realtime.kick();
+    const uid = sessionCtl.userId();
+    if (uid) void queue.replay(uid);
+  });
+  screen.on('display-removed', () => windows.refit());
+  screen.on('display-metrics-changed', () => windows.refit());
+
+  tray.start();
+  lock.start();
+  updater.start();
+  applyAutostartOnce(settings);
+
+  const hidden = startedHidden() || settings.effective().startMinimized;
+  windows.createMain(!hidden);
+  if (devOrigin()) log.info('development renderer', { url: process.env.ELECTRON_RENDERER_URL });
+
+  void sessionCtl.init().then(() => {
+    for (const link of pendingLinks.splice(0)) handleDeepLink(link);
+    emitStatus();
+  });
+
+  if (boot.safeMode) log.warn('running in safe mode', { reason: boot.safeModeReason });
+}
+
+function applyAutostartOnce(settings: SettingsService): void {
+  const prefs = settings.effective();
+  try {
+    applyAutostart(prefs.startWithOs, prefs.startMinimized);
+  } catch {
+    /* unsupported desktop */
+  }
+}

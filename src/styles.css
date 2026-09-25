@@ -1,0 +1,181 @@
+@import 'tailwindcss';
+
+/*
+ * WorkSuite Desktop visual language (§4.12).
+ * The shell (title bar, sidebar, lock screen) stays navy in both themes; the
+ * workspace follows Light / Dark / System (FR-SHL-06).
+ */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+:root {
+  --ws-navy: #0f1b3d;
+  --ws-navy-2: #17264f;
+  --ws-navy-3: #22335f;
+  --ws-navy-ink: #c9d1ea;
+  --ws-indigo: #23349e;
+  --ws-indigo-hover: #16236e;
+  --ws-brand: #3b5bdb;
+  --ws-teal: #0e7c86;
+  --ws-teal-light: #7fd8df;
+  --ws-ground: #f4f5f9;
+  --ws-surface: #ffffff;
+  --ws-line: #e3e6ee;
+  --ws-subtle: #eef0f6;
+  --ws-selection: #eef1fd;
+  --ws-ink: #151a2d;
+  --ws-ink-2: #4a5168;
+  --ws-ink-3: #5b6275;
+  --ws-success: #1f7a4d;
+  --ws-success-bg: #e7f4ed;
+  --ws-warning: #b45309;
+  --ws-warning-bg: #fdf1e3;
+  --ws-danger: #b42318;
+  --ws-danger-bg: #fdecea;
+  --ws-badge: #e0522f;
+  --ws-focus: #3b5bdb;
+  --ws-row: 36px;
+  --ws-pad: 16px;
+}
+
+[data-theme='dark'] {
+  --ws-indigo: #5c7cfa;
+  --ws-indigo-hover: #748ffc;
+  --ws-teal: #2aa6b0;
+  --ws-ground: #0b1124;
+  --ws-surface: #121a34;
+  --ws-line: #253052;
+  --ws-subtle: #192343;
+  --ws-selection: #1c2a5e;
+  --ws-ink: #e8ebf5;
+  --ws-ink-2: #b6bdd4;
+  --ws-ink-3: #9aa3bd;
+  --ws-success: #43b581;
+  --ws-success-bg: #12301f;
+  --ws-warning: #f0a04b;
+  --ws-warning-bg: #36240f;
+  --ws-danger: #f07167;
+  --ws-danger-bg: #3a1614;
+  --ws-focus: #8da2fb;
+}
+
+[data-density='compact'] {
+  --ws-row: 30px;
+  --ws-pad: 12px;
+}
+
+@theme inline {
+  --color-navy: var(--ws-navy);
+  --color-navy-2: var(--ws-navy-2);
+  --color-navy-3: var(--ws-navy-3);
+  --color-navy-ink: var(--ws-navy-ink);
+  --color-primary: var(--ws-indigo);
+  --color-primary-hover: var(--ws-indigo-hover);
+  --color-brand: var(--ws-brand);
+  --color-teal: var(--ws-teal);
+  --color-teal-light: var(--ws-teal-light);
+  --color-ground: var(--ws-ground);
+  --color-surface: var(--ws-surface);
+  --color-line: var(--ws-line);
+  --color-subtle: var(--ws-subtle);
+  --color-selection: var(--ws-selection);
+  --color-ink: var(--ws-ink);
+  --color-ink-2: var(--ws-ink-2);
+  --color-ink-3: var(--ws-ink-3);
+  --color-success: var(--ws-success);
+  --color-success-bg: var(--ws-success-bg);
+  --color-warning: var(--ws-warning);
+  --color-warning-bg: var(--ws-warning-bg);
+  --color-danger: var(--ws-danger);
+  --color-danger-bg: var(--ws-danger-bg);
+  --color-badge: var(--ws-badge);
+  --font-sans: 'Plus Jakarta Sans Variable', 'Noto Sans Sinhala', 'Noto Sans Tamil', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --radius-control: 8px;
+  --radius-card: 12px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ws-ink);
+  background: var(--ws-ground);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Text the user may want to copy stays selectable. */
+input,
+textarea,
+[contenteditable],
+.selectable {
+  user-select: text;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ws-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --ws-line: #9aa1b5;
+    --ws-ink-3: #3e4458;
+  }
+}
+
+.drag {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ws-line) transparent;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes ws-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-in {
+  animation: ws-fade-in 140ms ease-out;
+}
+
+@keyframes ws-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.animate-spin-slow {
+  animation: ws-spin 1.4s linear infinite;
+}
