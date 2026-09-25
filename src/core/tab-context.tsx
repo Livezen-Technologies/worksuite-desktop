@@ -39,7 +39,7 @@ export function openWebLink(link: string | null | undefined): void {
   }
 }
 
-export function TabProvider({ tabId, route, active, children, onGo }: { tabId: string; route: string; active: boolean; children: ReactNode; onGo?: (route: string) => void }) {
+export function TabProvider({ tabId, route, active, children, onGo, onTitle }: { tabId: string; route: string; active: boolean; children: ReactNode; onGo?: (route: string) => void; onTitle?: (title: string) => void }) {
   const go = useCallback((r: string) => (onGo ? onGo(r) : setRoute(tabId, r)), [tabId, onGo]);
   const api = useMemo<TabApi>(() => {
     const { path, query } = parseRoute(route);
@@ -53,10 +53,14 @@ export function TabProvider({ tabId, route, active, children, onGo }: { tabId: s
       navigate: (r) => navigateGlobal(r),
       openInNewTab: (r, title) => openTab(r, { title }),
       openInWindow: (r, title) => void call('windows:open', { kind: 'record', route: r, title }),
-      setTitle: (t) => (onGo ? (document.title = t) : setTitle(tabId, t)),
+      setTitle: (t) => {
+        if (!onGo) return setTitle(tabId, t);
+        document.title = t;
+        onTitle?.(t);
+      },
       openLink: openWebLink,
     };
-  }, [tabId, route, active, go, onGo]);
+  }, [tabId, route, active, go, onGo, onTitle]);
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
 }
 

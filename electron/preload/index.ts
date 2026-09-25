@@ -99,6 +99,12 @@ const api = {
   },
   media: {
     access: call('media:access'),
+    screenSources: call('media:screenSources'),
+    screenPick: call('media:screenPick'),
+    privacySettings: call('media:privacySettings'),
+  },
+  calls: {
+    active: call('calls:active'),
   },
   transfers: {
     list: call('transfers:list'),

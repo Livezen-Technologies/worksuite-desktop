@@ -2,8 +2,9 @@
 //
 // A visitor opens the website widget and writes (through the public widget
 // API, as the site's own script does); the app, signed in as a member of staff,
-// finds them under Chat → Website → Waiting, accepts the chat, replies, and
-// closes it. The visitor's poll must then carry the reply.
+// finds them in the Website chats workspace (Chat → Website), accepts the
+// chat, sets its priority, stars it, replies, and closes it. The visitor's
+// poll must then carry the reply.
 //
 //   npm run build
 //   WS_E2E_SERVER=http://localhost:8920 WS_E2E_EMAIL=… WS_E2E_PASSWORD=… \
@@ -53,25 +54,35 @@ try {
   await t.waitFor(`!![...document.querySelectorAll('[role="tab"]')].find(b => b.textContent.trim().startsWith('Website'))`, 'the Website tab in Chat');
   t.check('Chat offers a Website tab to website staff', true);
   await t.evaluate(`[...document.querySelectorAll('[role="tab"]')].find(b => b.textContent.trim().startsWith('Website')).click()`);
-  await t.waitFor(t.hasText(visitorName), 'the visitor under Waiting', 30_000);
-  await t.shot('w1-waiting');
-  t.check('the visitor is listed under Waiting', true);
+  await t.waitFor(`${t.hasText('Website Chats')} && ${t.hasText(visitorName)}`, 'the visitor in the Website chats inbox', 30_000);
+  await t.clickButton('Awaiting reply');
+  await t.waitFor(t.hasText(visitorName), 'the visitor under Awaiting reply');
+  await t.shot('w1-inbox');
+  t.check('the workspace lists the visitor, awaiting a reply', true);
 
-  await t.evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent.includes(${JSON.stringify(visitorName)})).click()`);
+  await t.evaluate(`[...document.querySelectorAll('section[aria-label="Conversations"] button')].find(b => b.textContent.includes(${JSON.stringify(visitorName)})).click()`);
   await t.waitFor(t.hasText(question), 'the visitor\'s message in the thread');
-  // innerText follows CSS text-transform, and the panel's headings are uppercase.
-  t.check('opening the chat shows the visitor\'s message and details', await t.evaluate(`/pages visited/i.test(document.body.innerText) && document.body.innerText.includes('ada@example.com')`));
-  t.check('the "joined the chat" notice is a notice, not an agent\'s message', await t.evaluate(`[...document.querySelectorAll('div')].some(d => d.className.includes('text-center') && d.textContent.trim().endsWith('joined the chat'))`));
+  t.check('opening the chat shows the visitor\'s message and details', await t.evaluate(`${t.hasText('Visitor details')} && ${t.hasText('ada@example.com')} && ${t.hasText('Pages this visit')}`));
+  t.check('the "joined the chat" notice is a notice, not an agent\'s message', await t.evaluate(`[...document.querySelectorAll('div')].some(d => d.className.includes('text-center') && d.textContent.includes('joined the chat'))`));
   await t.shot('w2-thread');
 
+  const assignee = `document.querySelector('select[aria-label="Assignee"]').selectedOptions[0]?.textContent`;
   if (await t.evaluate(`!![...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Accept')`)) {
     await t.clickButton('Accept');
-    await t.waitFor(t.hasText('Yours'), 'the chat to become mine');
+    await t.waitFor(`${assignee} === 'Assigned to me'`, 'the chat to become mine');
   }
-  t.check('Accept makes the chat mine', await t.evaluate(t.hasText('Yours')));
+  t.check('Accept makes the chat mine', (await t.evaluate(assignee)) === 'Assigned to me');
 
-  await t.fill('Reply', answer);
-  await t.clickButton('Send');
+  await t.evaluate(`(() => { const s = document.querySelector('select[aria-label="Priority"]'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, 'high'); s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  // The header's controls are disabled while a change saves.
+  await t.waitFor(`document.querySelector('select[aria-label="Priority"]').value === 'high' && !document.querySelector('select[aria-label="Priority"]').disabled`, 'the priority saved');
+  await t.clickButton('Star');
+  await t.waitFor(t.hasText('★ Starred'), 'the star');
+  await t.shot('w2b-priority-star');
+  t.check('priority and star are set from the thread header', true);
+
+  await t.fill('Message', answer);
+  await t.clickButton('Send message');
   await t.waitFor(t.hasText(answer), 'the reply in the thread');
   await t.shot('w3-replied');
   t.check('the reply appears in the thread', true);

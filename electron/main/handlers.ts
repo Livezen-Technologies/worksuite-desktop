@@ -69,6 +69,19 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     if (systemPreferences.getMediaAccessStatus(kind) === 'granted') return { granted: true };
     return { granted: await systemPreferences.askForMediaAccess(kind) };
   });
+  router.handle('media:screenSources', () => ctx.screenShare.sources());
+  router.handle('media:screenPick', (input, c) => ctx.screenShare.pick(c.sender.id, input.id));
+  router.handle('media:privacySettings', async (input) => {
+    // Fixed addresses of the OS's own privacy panes; nothing from the page.
+    const mac = { microphone: 'Privacy_Microphone', camera: 'Privacy_Camera', screen: 'Privacy_ScreenCapture' } as const;
+    const win = { microphone: 'privacy-microphone', camera: 'privacy-webcam', screen: 'privacy' } as const;
+    if (process.platform === 'darwin') await shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${mac[input.pane]}`);
+    else if (process.platform === 'win32') await shell.openExternal(`ms-settings:${win[input.pane]}`);
+  });
+  router.handle('calls:active', (input, c) => {
+    const w = winOf(c.sender);
+    if (w) ctx.calls.setActive(w, input.uuid);
+  });
   router.handle('auth:signIn', (input) => ctx.session.signIn(input.email, input.password));
   router.handle('auth:verifyMfa', (input) => ctx.session.verifyMfa(input.code));
   router.handle('auth:cancelMfa', () => ctx.session.cancelMfa());
@@ -166,7 +179,11 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   // ── files & transfers ──────────────────────────────────────────────────
   router.handle('files:pickFiles', async (input, c) => {
     const w = winOf(c.sender);
-    const opts: Electron.OpenDialogOptions = { title: input.title ?? 'Choose files', properties: input.multiple ? ['openFile', 'multiSelections'] : ['openFile'] };
+    const opts: Electron.OpenDialogOptions = {
+      title: input.title ?? 'Choose files',
+      properties: input.multiple ? ['openFile', 'multiSelections'] : ['openFile'],
+      ...(input.only === 'gif' ? { filters: [{ name: 'GIF images', extensions: ['gif'] }] } : {}),
+    };
     const res = w ? await dialog.showOpenDialog(w, opts) : await dialog.showOpenDialog(opts);
     if (res.canceled) return [];
     return ctx.transfers.register(res.filePaths);

@@ -23,9 +23,11 @@ export interface DesktopModule {
   component: LazyExoticComponent<ComponentType<ModuleProps>>;
   /** Available to everyone signed in, regardless of app access. */
   always?: boolean;
+  /** Available to whoever may open this app (a part of another app, in its own windows). */
+  requires?: string;
 }
 
-const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: ComponentType<ModuleProps> }>; always?: boolean }> = [
+const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: ComponentType<ModuleProps> }>; always?: boolean; requires?: string }> = [
   {
     input: defineDesktopManifest({
       id: 'home', name: 'Home', icon: 'home', contractVersion: 1, desktop: { enabled: true },
@@ -60,6 +62,16 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
       deepLinks: ['chat', 'chat/:id'],
     }),
     load: () => import('./chat/ChatPage'),
+  },
+  {
+    // Chat calls: the ring and the call each open in a window of their own.
+    input: defineDesktopManifest({
+      id: 'calls', name: 'Calls', icon: 'phone', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' },
+      native: ['notifications'],
+      windows: [{ id: 'call', route: '/calls/call', alwaysOnTop: true }, { id: 'ring', route: '/calls/ring', alwaysOnTop: true }],
+    }),
+    load: () => import('./calls/CallsPage'),
+    requires: 'chat',
   },
   {
     input: defineDesktopManifest({
@@ -133,7 +145,7 @@ for (const def of DEFS) {
     console.warn('[registry] module rejected', def.input.id, check.error);
     continue;
   }
-  MODULES.push({ id: check.manifest.id, manifest: check.manifest, component: lazy(def.load), always: def.always });
+  MODULES.push({ id: check.manifest.id, manifest: check.manifest, component: lazy(def.load), always: def.always, requires: def.requires });
 }
 
 export function moduleFor(id: string): DesktopModule | undefined {

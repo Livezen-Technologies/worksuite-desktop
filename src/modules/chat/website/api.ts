@@ -103,11 +103,44 @@ export interface WebsiteConversation {
     rating_comment: string | null;
     tags: string[] | null;
     is_starred: boolean;
+    priority?: string;
   };
   visitor: WebsiteVisitor | null;
   messages: WebsiteMessage[];
   journey?: Array<{ url: string | null; title: string | null; at: string }>;
+  history?: Array<{ id: number; status: string; started_at: string | null; rating: number | null; other_device: boolean }>;
   can?: WebsiteCan;
+}
+
+export const PRIORITIES: Array<{ id: string; label: string }> = [
+  { id: 'low', label: 'Low' },
+  { id: 'normal', label: 'Normal' },
+  { id: 'high', label: 'High' },
+  { id: 'urgent', label: 'Urgent' },
+  { id: 'vip', label: 'VIP' },
+];
+
+/** The workspace's sections (WebChatInbox, left). */
+export type Section = 'inbox' | 'live' | 'offline' | 'missed' | 'mine' | 'unassigned' | 'awaiting' | 'starred' | 'closed';
+
+/** Which open rows a section shows. */
+export function sectionRows(rows: WebsiteRow[], section: Section, me: number | null): WebsiteRow[] {
+  switch (section) {
+    case 'live':
+      return rows.filter((r) => r.online && !r.is_offline);
+    case 'offline':
+      return rows.filter((r) => r.is_offline);
+    case 'mine':
+      return rows.filter((r) => me !== null && r.assigned_to === me);
+    case 'unassigned':
+      return rows.filter((r) => r.assigned_to === null);
+    case 'awaiting':
+      return rows.filter((r) => r.awaiting_reply);
+    case 'starred':
+      return rows.filter((r) => r.is_starred);
+    default:
+      return rows;
+  }
 }
 
 export type WebsiteFilter = 'waiting' | 'mine' | 'open' | 'closed';

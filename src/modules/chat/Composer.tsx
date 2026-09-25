@@ -1,12 +1,13 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
-import { apiPost } from '../../core/api';
+import { apiGet, apiPost } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
 import { useDraft } from '../../core/drafts';
 import { toast } from '../../core/toasts';
 import { uploadBlob } from '../../core/upload';
 import { Icon } from '../../components/Icon';
-import { IconButton } from '../../components/ui';
+import { IconButton, cx } from '../../components/ui';
+import { mentionQuery } from './mentions';
 import { EmojiPicker, VoiceRecorder } from './parts';
 import type { ReplyTarget } from './Thread';
 
@@ -14,15 +15,30 @@ import type { ReplyTarget } from './Thread';
 const TYPING_EVERY = 4_000;
 const TYPING_IDLE = 5_000;
 
-export function Composer({ roomId, roomName, onFiles, reply, onClearReply }: { roomId: string; roomName: string; onFiles: (files: File[]) => void; reply: ReplyTarget | null; onClearReply: () => void }) {
+type Target = { type: string; id: number; name: string; detail?: string | null };
+type Mentionable = Record<'people' | 'teams' | 'departments' | 'everyone', Target[]>;
+
+const tool = 'h-[30px] shrink-0 px-1.5 text-[12.5px] text-ink-2 hover:text-ink';
+
+export function Composer({ roomId, roomName, group, onFiles, reply, onClearReply }: { roomId: string; roomName: string; group: boolean; onFiles: (files: File[]) => void; reply: ReplyTarget | null; onClearReply: () => void }) {
   const qc = useQueryClient();
   const draft = useDraft<string>('chat', `room:${roomId}`, '');
   const [sending, setSending] = useState(false);
   const [emoji, setEmoji] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [asking, setAsking] = useState<{ start: number; word: string } | null>(null);
+  const [pick, setPick] = useState(0);
+  const picked = useRef<Target[]>([]);
   const input = useRef<HTMLTextAreaElement>(null);
   const typingAt = useRef(0);
   const idle = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suggestions = useQuery({
+    queryKey: ['chat', 'mentionable', roomId, asking?.word ?? ''],
+    queryFn: ({ signal }) => apiGet<Mentionable>(`/api/chat/rooms/${roomId}/mentionable`, { q: asking?.word ?? '' }, signal),
+    enabled: group && asking !== null,
+    staleTime: 30_000,
+  });
+  const options = asking && suggestions.data ? [...suggestions.data.everyone, ...suggestions.data.people, ...suggestions.data.teams, ...suggestions.data.departments].slice(0, 8) : [];
 
   const typing = (state: 'start' | 'stop') => void apiPost('/api/chat/typing', { room_id: Number(roomId), state }).catch(() => undefined);
   const stopTyping = () => {
@@ -45,12 +61,29 @@ export function Composer({ roomId, roomName, onFiles, reply, onClearReply }: { r
   // Leaving the conversation ends "typing" there.
   useEffect(() => stopTyping, [roomId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const choose = (t: Target) => {
+    if (!asking) return;
+    const el = input.current;
+    const caret = el?.selectionStart ?? draft.value.length;
+    const text = `${draft.value.slice(0, asking.start)}@${t.name} ${draft.value.slice(caret)}`;
+    draft.setValue(text);
+    picked.current = [...picked.current.filter((p) => !(p.type === t.type && p.id === t.id)), t];
+    setAsking(null);
+    const at = asking.start + t.name.length + 2;
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(at, at);
+    });
+  };
+
   const send = async () => {
     const text = draft.value.trim();
     if (!text) return;
     setSending(true);
     stopTyping();
     const clientId = `desktop-${crypto.randomUUID()}`;
+    // Only who is still written in the text is mentioned.
+    const mentions = picked.current.filter((t) => text.includes(`@${t.name}`)).map((t) => (t.type === 'everyone' ? { type: 'everyone' } : { type: t.type, id: t.id, name: t.name }));
     try {
       const r = await call('offline:submit', {
         module: 'chat',
@@ -59,7 +92,7 @@ export function Composer({ roomId, roomName, onFiles, reply, onClearReply }: { r
         label: `Message: ${text.slice(0, 180)}`,
         method: 'POST',
         path: '/api/chat/messages',
-        body: { room_id: Number(roomId), message: text, client_message_id: clientId, ...(reply ? { reply_to: reply.id } : {}) },
+        body: { room_id: Number(roomId), message: text, client_message_id: clientId, ...(reply ? { reply_to: reply.id } : {}), ...(mentions.length ? { mentions } : {}) },
         queueIfOffline: true,
       });
       if (!r.delivered && !r.queued) {
@@ -68,6 +101,7 @@ export function Composer({ roomId, roomName, onFiles, reply, onClearReply }: { r
       }
       draft.setValue('');
       await draft.clear();
+      picked.current = [];
       onClearReply();
       void qc.invalidateQueries({ queryKey: r.queued ? ['offline'] : ['chat', 'messages', roomId] });
       void qc.invalidateQueries({ queryKey: ['chat', 'rooms'] });
@@ -98,10 +132,10 @@ export function Composer({ roomId, roomName, onFiles, reply, onClearReply }: { r
     }
   };
 
-  const attach = async () => {
+  const attach = async (only?: 'gif') => {
     try {
-      const picked = await call('files:pickFiles', { multiple: true, title: `Send files to ${roomName}` });
-      if (picked.length) await call('transfers:upload', { handles: picked.map((p) => p.handle), target: { kind: 'chat', roomId } });
+      const files = await call('files:pickFiles', { multiple: true, title: only ? `Send a GIF to ${roomName}` : `Send files to ${roomName}`, ...(only ? { only } : {}) });
+      if (files.length) await call('transfers:upload', { handles: files.map((p) => p.handle), target: { kind: 'chat', roomId } });
     } catch (e) {
       toast('error', errorMessage(e));
     }
@@ -116,33 +150,74 @@ export function Composer({ roomId, roomName, onFiles, reply, onClearReply }: { r
   };
 
   return (
-    <div className="relative border-t border-line bg-surface px-5 py-3">
+    <div className="relative flex flex-col gap-2 border-t border-line bg-surface px-4 pt-2.5 pb-3.5">
       {reply ? (
-        <div className="mb-2 flex items-center gap-2 rounded-[8px] border-l-2 border-primary bg-subtle px-3 py-1.5 text-[12.5px] text-ink-2">
+        <div className="flex items-center gap-2 rounded-[6px] border-l-[3px] border-[#7FA2FF] bg-selection px-2.5 py-1.5 text-[12px] text-ink-2">
           <Icon name="reply" size={13} />
           <span className="min-w-0 flex-1 truncate">
-            Replying to <span className="font-semibold">{reply.sender_name}</span>: {reply.snippet}
+            Replying to <span className="font-semibold">{reply.sender_name}</span>: “{reply.snippet}”
           </span>
           <IconButton icon="x" label="Cancel the reply" size={14} onClick={onClearReply} />
         </div>
       ) : null}
-      {emoji ? <EmojiPicker className="absolute bottom-full left-5 mb-2" onPick={insert} onClose={() => setEmoji(false)} /> : null}
-      <div className="flex items-end gap-2 rounded-[12px] border border-line bg-surface px-3 py-2 focus-within:border-primary">
+      {options.length ? (
+        <div role="listbox" aria-label="Mention someone" className="absolute bottom-full left-14 mb-1 w-[260px] rounded-[10px] border border-line bg-surface p-1 text-[12.5px] shadow-[0_10px_28px_rgba(15,27,61,.18)]">
+          {options.map((t, i) => (
+            <button
+              key={`${t.type}:${t.id}`}
+              type="button"
+              role="option"
+              aria-selected={i === pick}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => choose(t)}
+              className={cx('block w-full truncate rounded-[6px] px-2.5 py-1.5 text-left', i === pick ? 'bg-selection font-bold text-ink' : 'text-ink hover:bg-subtle')}
+            >
+              @{t.name}
+              {t.detail ? <span className="font-normal text-ink-3"> · {t.detail}</span> : t.type !== 'user' && t.type !== 'everyone' ? <span className="font-normal text-ink-3"> · {t.type}</span> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {emoji ? <EmojiPicker className="absolute right-24 bottom-full mb-2" onPick={insert} onClose={() => setEmoji(false)} /> : null}
+      <div className="flex items-end gap-1.5 rounded-[10px] border border-line px-2.5 py-[7px] focus-within:border-primary">
         {recording ? (
           <VoiceRecorder onDone={(b, ms) => void sendVoice(b, ms)} onCancel={() => setRecording(false)} />
         ) : (
           <>
-            <IconButton icon="paperclip" label="Attach files" onClick={() => void attach()} />
-            <IconButton icon="smile" label="Emoji" active={emoji} onClick={() => setEmoji(!emoji)} />
+            <button type="button" aria-label="Attach" onClick={() => void attach()} className={tool}>Attach</button>
             <textarea
               ref={input}
               value={draft.value}
               onChange={(e) => {
                 draft.setValue(e.target.value);
                 onTyped();
+                if (group) {
+                  const q = mentionQuery(e.target.value, e.target.selectionStart ?? e.target.value.length);
+                  setAsking(q);
+                  setPick(0);
+                }
               }}
-              onBlur={stopTyping}
+              onBlur={() => {
+                stopTyping();
+                setAsking(null);
+              }}
               onKeyDown={(e) => {
+                if (options.length) {
+                  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setPick((pick + (e.key === 'ArrowDown' ? 1 : options.length - 1)) % options.length);
+                    return;
+                  }
+                  if (e.key === 'Enter' || e.key === 'Tab') {
+                    e.preventDefault();
+                    choose(options[pick]!);
+                    return;
+                  }
+                  if (e.key === 'Escape') {
+                    setAsking(null);
+                    return;
+                  }
+                }
                 if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
                   void send();
@@ -165,15 +240,16 @@ export function Composer({ roomId, roomName, onFiles, reply, onClearReply }: { r
                 }
               }}
               rows={1}
-              placeholder={`Message ${roomName} (drop files or GIFs to send)`}
+              placeholder={`Message ${roomName}`}
               aria-label="Message"
-              className="max-h-40 min-h-[36px] flex-1 resize-none bg-transparent py-2 text-[13.5px] outline-none"
+              className="bare-focus max-h-40 min-h-[30px] flex-1 resize-none bg-transparent py-[5px] text-[13.5px] outline-none"
             />
-            {draft.value.trim() ? (
-              <IconButton icon="send" label="Send" onClick={() => void send()} disabled={sending} className="!text-primary" />
-            ) : (
-              <IconButton icon="mic" label="Record a voice note" onClick={() => setRecording(true)} />
-            )}
+            <button type="button" aria-label="Emoji" aria-pressed={emoji} onClick={() => setEmoji(!emoji)} className={tool}>Emoji</button>
+            <button type="button" aria-label="GIF" title="Send a GIF from your computer" onClick={() => void attach('gif')} className="mb-0.5 h-[26px] shrink-0 rounded-[5px] border border-line px-1.5 text-[10.5px] font-bold text-ink-2 hover:text-ink">GIF</button>
+            <button type="button" aria-label="Record a voice message" onClick={() => setRecording(true)} className={tool}>Voice</button>
+            <button type="button" disabled={sending || !draft.value.trim()} onClick={() => void send()} className="h-8 shrink-0 rounded-[8px] bg-primary px-3.5 text-[13px] font-bold text-white hover:bg-primary-hover disabled:opacity-50">
+              Send
+            </button>
           </>
         )}
       </div>

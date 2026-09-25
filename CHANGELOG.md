@@ -5,6 +5,81 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-26 — Chat, website chat and calls, to the new designs
+
+**Added**
+
+- **Chat, redone to the ChatMain design.**
+  - The rail has your status (Available, Busy, Do not disturb, Away), starred
+    messages, **+ New conversation** and a search that also looks inside
+    messages from three letters.
+  - Filters are All, Unread, Mentions, Website and Archived. Conversations
+    are grouped into Pinned, Direct and Groups & channels.
+  - Each conversation has a header with search in the conversation, voice
+    and video call buttons, and a details panel: members with presence,
+    shared media, files, links, audio, pins, and notification settings.
+  - Hovering a message offers React, Reply, Forward…, Star, Pin, Copy link
+    and More (Edit, Copy text, Delete…). Delete asks whether to delete for
+    everyone or only for you.
+  - Pinned messages sit in a banner above the thread. Shared records (a
+    Drive file, a leave request) show as cards.
+  - The composer has Attach, Emoji, **GIF** (sends a .gif from your
+    computer; there is no GIF search), Voice and Send. Typing **@** in a
+    group offers people, teams, departments and @everyone. Only the names
+    still in the text when you send are mentioned.
+  - New conversations, forwarding, group details (rename, roles, remove,
+    leave) and per-conversation notifications follow ChatExtras.
+- **Website chats get their own workspace** (WebChatInbox), from **Website**
+  in the Chat rail or any website-chat notification.
+  - The sections are Inbox, Live chats, Offline enquiries, Missed chats,
+    Assigned to me, Unassigned, Awaiting reply, Starred and Closed, each with
+    its count. The list can be filtered by site.
+  - The thread header sets the assignee and priority, stars and closes the
+    chat. Saved replies are one click above the composer.
+  - The visitor panel shows their details, the pages of this visit and
+    earlier chats. It can **raise a support ticket** from the chat and
+    **block the visitor** (for people who configure widgets).
+  - The live dashboard, reports and widget setup open on the web.
+- **Voice and video calls from any conversation** (CallVoice, CallVideo).
+  - A call opens in its own always-on-top window, one call at a time. A
+    voice call is compact; a video call has the conversation beside it.
+  - Controls: mute, speaker or sound, add video or camera, **share a screen
+    or a window** (picked in our own picker, FR-COM-05), noise cancellation
+    and chat.
+  - If nobody picks up in 30 seconds, or the person is busy or away, you
+    can **leave a voice message**. It lands in the conversation.
+  - Closing the window, or quitting the app, hangs up on the server.
+  - Updates wait while a call is on.
+- **Incoming calls ring in a small window** at the top right of the screen
+  you are on, over everything, without taking the keyboard. It offers
+  Decline, Accept, **Answer with voice only** (for video calls), a
+  ringtone volume and mute, and **Reply with message…** (a quick reply,
+  then decline). A ring shows only while you are signed in and unlocked.
+  With realtime down, the app checks for rings every 5 seconds.
+
+**Needs the server** (WorkSuite, deployed with this update)
+
+- `GET /desktop/v1/bootstrap` announces the media server (`media.livekit_url`).
+  The page's security policy is fixed when a window opens, so the app must
+  know the media server before the first call. Without it, calls cannot
+  connect.
+- `GET /api/chat/calls/history` is the native call log. `GET /api/chat/calls`
+  is taken by an older handler.
+- The website thread reads the conversation's priority.
+
+**Tests**
+
+- End-to-end runs against a local WorkSuite:
+  - `tests/e2e/chat.mjs`: 12 checks, now including star, pin and @mention.
+  - `tests/e2e/website-chat.mjs`: 11 checks, including priority and star.
+  - `tests/e2e/calls.mjs` (new): 13 checks — placing a call, the server
+    ringing, hanging up, Decline, Reply with message, and a voice message.
+    It runs against a placeholder media server, because no LiveKit runs
+    locally. **Sound and video themselves are not yet tested end to end.**
+- The harness can now drive the app's other windows (`attach`).
+
+---
+
 ## 2026-09-25 — Sign in with a passkey, and clock in from the title bar
 
 **Added**

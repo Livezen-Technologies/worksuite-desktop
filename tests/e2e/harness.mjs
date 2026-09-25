@@ -41,14 +41,72 @@ export async function launch({ name, env: extra = {}, args = [] }) {
   }
   if (!page) throw new Error('the app window never appeared');
 
-  const ws = new WebSocket(page.webSocketDebuggerUrl);
+  const consoleErrors = [];
+  const main = await connect(page, outDir, consoleErrors);
+  const { evaluate, waitFor, shot, hasText, clickButton, fill } = main;
+
+  /** Another app window (a call, a ring, a pop-out), once it has opened. */
+  const attach = async (match, label, timeout = 20_000) => {
+    const t0 = Date.now();
+    while (Date.now() - t0 < timeout) {
+      const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json().catch(() => []);
+      const target = list.find((t) => t.type === 'page' && t.url.startsWith('app://bundle') && match(decodeURIComponent(t.url)));
+      if (target) return connect(target, outDir, consoleErrors);
+      await sleep(200);
+    }
+    throw new Error(`timed out waiting for ${label}`);
+  };
+  /** Whether a window whose address matches is open. */
+  const windowOpen = async (match) => {
+    const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json().catch(() => []);
+    return list.some((t) => t.type === 'page' && match(decodeURIComponent(t.url)));
+  };
+
+  /** Server, password sign-in and setup, to the home dashboard. */
+  const signIn = async (server, email, password) => {
+    await waitFor(hasText('Connect to WorkSuite'), 'the server screen');
+    await fill('Server address', server);
+    await clickButton('Continue');
+    // Choosing a server reloads the window once (its CSP names the server).
+    await sleep(1500);
+    await waitFor(hasText('Forgot your password?'), 'the sign-in screen');
+    await fill('Email', email);
+    await fill('Password', password);
+    await evaluate(`document.querySelector('form').requestSubmit()`);
+    await waitFor(`${hasText('Set up WorkSuite')} || ${hasText('Good ')}`, 'the setup wizard or the shell', 40_000);
+    if (await evaluate(hasText('Set up WorkSuite'))) {
+      for (let i = 0; i < 6 && (await evaluate(hasText('Continue'))); i++) {
+        await clickButton('Continue');
+        await sleep(200);
+      }
+      await clickButton('Open WorkSuite');
+    }
+    await waitFor(hasText('Good '), 'the home dashboard', 30_000);
+  };
+
+  const finish = async () => {
+    const relevant = consoleErrors.filter((e) => !/Autofill|DevTools|favicon/i.test(e));
+    check('no renderer errors', relevant.length === 0, relevant.slice(0, 3).join(' | '));
+    child.kill();
+    await sleep(500);
+    rmSync(profile, { recursive: true, force: true });
+    if (failures) console.log(mainLog.join('').slice(-3000));
+    console.log(`\n${failures ? `${failures} failed` : 'all passed'} — screenshots in ${outDir}`);
+    process.exit(failures ? 1 : 0);
+  };
+
+  return { evaluate, waitFor, shot, hasText, clickButton, fill, check, signIn, finish, attach, windowOpen, profile, outDir };
+}
+
+/** Drive one page over CDP: evaluate, wait, screenshot, click, fill. */
+async function connect(target, outDir, consoleErrors) {
+  const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((r, j) => {
     ws.onopen = r;
     ws.onerror = j;
   });
   let seq = 0;
   const pending = new Map();
-  const consoleErrors = [];
   ws.onmessage = (m) => {
     const msg = JSON.parse(m.data);
     if (msg.id && pending.has(msg.id)) {
@@ -102,42 +160,7 @@ export async function launch({ name, env: extra = {}, args = [] }) {
       el.dispatchEvent(new Event('input', { bubbles: true }));
       return true;
     })()`);
-
   await send('Runtime.enable');
   await send('Page.enable');
-
-  /** Server, password sign-in and setup, to the home dashboard. */
-  const signIn = async (server, email, password) => {
-    await waitFor(hasText('Connect to WorkSuite'), 'the server screen');
-    await fill('Server address', server);
-    await clickButton('Continue');
-    // Choosing a server reloads the window once (its CSP names the server).
-    await sleep(1500);
-    await waitFor(hasText('Forgot your password?'), 'the sign-in screen');
-    await fill('Email', email);
-    await fill('Password', password);
-    await evaluate(`document.querySelector('form').requestSubmit()`);
-    await waitFor(`${hasText('Set up WorkSuite')} || ${hasText('Good ')}`, 'the setup wizard or the shell', 40_000);
-    if (await evaluate(hasText('Set up WorkSuite'))) {
-      for (let i = 0; i < 6 && (await evaluate(hasText('Continue'))); i++) {
-        await clickButton('Continue');
-        await sleep(200);
-      }
-      await clickButton('Open WorkSuite');
-    }
-    await waitFor(hasText('Good '), 'the home dashboard', 30_000);
-  };
-
-  const finish = async () => {
-    const relevant = consoleErrors.filter((e) => !/Autofill|DevTools|favicon/i.test(e));
-    check('no renderer errors', relevant.length === 0, relevant.slice(0, 3).join(' | '));
-    child.kill();
-    await sleep(500);
-    rmSync(profile, { recursive: true, force: true });
-    if (failures) console.log(mainLog.join('').slice(-3000));
-    console.log(`\n${failures ? `${failures} failed` : 'all passed'} — screenshots in ${outDir}`);
-    process.exit(failures ? 1 : 0);
-  };
-
-  return { evaluate, waitFor, shot, hasText, clickButton, fill, check, signIn, finish, profile, outDir };
+  return { send, evaluate, waitFor, shot, hasText, clickButton, fill, close: () => ws.close() };
 }

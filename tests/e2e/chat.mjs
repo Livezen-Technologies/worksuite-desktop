@@ -36,9 +36,9 @@ async function api(method, path, body) {
   return { status: res.status, data: json.data ?? json };
 }
 
-/** A bubble's action button, found by the message text it belongs to. */
+/** A bubble's action button (by label or text), found by the message text it belongs to. */
 const inBubble = (text, label) =>
-  `(() => { const g = [...document.querySelectorAll('div.group')].find(d => d.textContent.includes(${JSON.stringify(text)})); const b = g && g.querySelector(${JSON.stringify(`[aria-label="${label}"]`)}); if (!b) return false; b.click(); return true; })()`;
+  `(() => { const g = [...document.querySelectorAll('div.group')].find(d => d.textContent.includes(${JSON.stringify(text)})); const b = g && [...g.querySelectorAll('button')].find(b => b.getAttribute('aria-label') === ${JSON.stringify(label)} || b.textContent.trim() === ${JSON.stringify(label)}); if (!b) return false; b.click(); return true; })()`;
 
 const t = await launch({ name: 'chat', env: { WS_E2E_FAKE_MEDIA: '1' } });
 try {
@@ -82,8 +82,18 @@ try {
   const mine = after.data.messages.find((m) => m.message === answer);
   t.check('the reply is sent as a reply to the partner\'s message', mine?.reply_to === helloMsg?.id || mine?.reply_preview?.id === helloMsg?.id, JSON.stringify(mine?.reply_preview ?? null));
 
-  // Edit.
-  await t.evaluate(inBubble(answer, 'Edit'));
+  // Star and pin, from the message's toolbar.
+  await t.evaluate(inBubble(hello, 'Star'));
+  await t.waitFor(t.hasText('★ starred'), 'the starred mark');
+  await t.evaluate(inBubble(hello, 'Pin'));
+  await t.waitFor(`[...document.querySelectorAll('b')].some(b => b.textContent.trim() === 'Pinned')`, 'the pinned banner');
+  const pins = await api('GET', `/api/chat/rooms/${roomId}/pins`);
+  t.check('starring marks the message; pinning shows it above the thread for both', (pins.data.messages ?? []).some((m) => m.id === helloMsg?.id));
+  await t.shot('c1b-pinned');
+
+  // Edit, from More.
+  await t.evaluate(inBubble(answer, 'More ⋯'));
+  await t.clickButton('Edit');
   await t.waitFor(`!!document.querySelector('[aria-label="Edit message"]')`, 'the edit box');
   const edited = `${answer} — see you there`;
   await t.fill('Edit message', edited);
@@ -91,10 +101,12 @@ try {
   await t.waitFor(`${t.hasText(edited)} && ${t.hasText('edited')}`, 'the edited message');
   t.check('editing a message changes it, marked edited', true);
 
-  // Delete for everyone.
-  await t.evaluate(inBubble(edited, 'Delete'));
+  // Delete for everyone (the dialog's default choice).
+  await t.evaluate(inBubble(edited, 'More ⋯'));
+  await t.clickButton('Delete…');
   await t.waitFor(t.hasText('Delete for everyone'), 'the delete dialog');
-  await t.clickButton('Delete for everyone');
+  await t.shot('c1c-delete');
+  await t.clickButton('Delete');
   await t.waitFor(`${t.hasText('Message deleted')} && !${t.hasText(edited)}`, 'the deleted message');
   const gone = await api('GET', `/api/chat/messages?room_id=${roomId}`);
   t.check('deleting for everyone deletes it for the partner too', gone.data.messages.some((m) => m.id === mine?.id && m.deleted));
@@ -107,9 +119,9 @@ try {
   await t.waitFor(`[...document.querySelectorAll('div')].some(d => d.textContent.trim() === '🎉')`, 'the emoji message');
   t.check('an emoji from the picker is sent', true);
 
-  // Voice note. The microphone button replaces Send once the draft is empty.
-  await t.waitFor(`!!document.querySelector('[aria-label="Record a voice note"]')`, 'the record button');
-  await t.clickButton('Record a voice note');
+  // Voice note.
+  await t.waitFor(`!!document.querySelector('[aria-label="Record a voice message"]')`, 'the record button');
+  await t.clickButton('Record a voice message');
   await t.waitFor(`${t.hasText('Recording — send')} || ${t.hasText('not allowed to use the microphone')}`, 'recording, or a refusal', 15_000);
   if (!(await t.evaluate(t.hasText('Recording — send')))) throw new Error('the microphone was refused');
   await sleep(2200);
@@ -124,17 +136,33 @@ try {
   // A new group.
   await t.clickButton('New conversation');
   await t.waitFor(t.hasText('New conversation'), 'the new conversation dialog');
+  await t.evaluate(`[...document.querySelectorAll('[role="radio"]')].find(b => b.textContent.trim() === 'Group').click()`);
+  await t.waitFor(`!!document.querySelector('[aria-label="Group name"]')`, 'the group form');
   for (const name of [partnerName, thirdName]) {
     await t.fill('Search people', name);
-    await t.waitFor(`[...document.querySelectorAll('[role="option"]')].some(o => o.textContent.includes(${JSON.stringify(name)}))`, `${name} in the directory`);
-    await t.evaluate(`[...document.querySelectorAll('[role="option"]')].find(o => o.textContent.includes(${JSON.stringify(name)})).click()`);
+    await t.waitFor(`!!document.querySelector(${JSON.stringify(`input[type="checkbox"][aria-label="${name}"]`)})`, `${name} in the directory`);
+    await t.evaluate(`document.querySelector(${JSON.stringify(`input[type="checkbox"][aria-label="${name}"]`)}).click()`);
   }
+  await t.shot('c3b-new-group');
   const groupName = `E2E team ${Math.floor(Math.random() * 1000)}`;
   await t.fill('Group name', groupName);
   await t.clickButton('Create group');
   await t.waitFor(`[...document.querySelectorAll('.font-bold')].some(e => e.textContent.trim() === ${JSON.stringify(groupName)})`, 'the new group open', 20_000);
   await t.shot('c4-group');
   t.check('a new group is created and opened', true);
+
+  // An @mention, picked from the list, is sent as a mention.
+  await t.fill('Message', `Hi @${partnerName.split(' ')[0].slice(0, 3)}`);
+  await t.waitFor(`!!document.querySelector('[role="listbox"][aria-label="Mention someone"] [role="option"]')`, 'the mention list');
+  await t.evaluate(`[...document.querySelectorAll('[role="listbox"] [role="option"]')].find(o => o.textContent.includes(${JSON.stringify(partnerName)})).click()`);
+  await t.clickButton('Send');
+  await t.waitFor(t.hasText(`Hi @${partnerName}`), 'the mention in the thread');
+  const groups = await api('GET', '/api/chat/rooms');
+  const g = (groups.data.rooms ?? []).find((r) => r.name === groupName);
+  const said = g ? await api('GET', `/api/chat/messages?room_id=${g.id}`) : { data: { messages: [] } };
+  const withMention = (said.data.messages ?? []).find((m) => (m.message ?? '').startsWith('Hi @'));
+  t.check('the mention is stored with the message', !!withMention?.mentions?.some((x) => x.type === 'user' && x.name === partnerName), JSON.stringify(withMention?.mentions ?? null));
+  await t.shot('c5-mention');
 } catch (e) {
   t.check('chat run', false, e.message);
   try {

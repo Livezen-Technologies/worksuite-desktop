@@ -7,30 +7,33 @@ import { app } from '../core/app-state';
 import { useStore } from '../core/store';
 
 /**
- * Secondary windows (FR-NAV-05/09): a record or a mini chat in its own
- * window, with a slim title bar. Always-on-top is offered only for the kinds
- * the shell allows (chat, timer).
+ * Secondary windows (FR-NAV-05/09): a record, a mini chat, a call or a
+ * meeting in its own window, with a slim title bar. Always-on-top is offered
+ * only for the kinds the shell allows (chat, timer, calls). A ring has no
+ * title bar: it is answered or declined, not managed.
  */
+const PINNABLE = new Set(['chat-mini', 'timer', 'call', 'video-call']);
 export function WindowRoot({ hash }: { hash: string }) {
   const [kind, qs] = hash.replace('#/window/', '').split('?') as [string, string | undefined];
   const initial = new URLSearchParams(qs ?? '').get('route') ?? '/home';
   const [route, setRoute] = useState(initial);
   const [pinned, setPinned] = useState(kind === 'chat-mini');
+  const [named, setNamed] = useState<string | null>(null);
   const apps = useStore(app, (s) => s.apps);
   const id = appForRoute(route);
   const mod = moduleFor(id);
-  const allowed = mod && (mod.always || apps.some((a) => a.id === id));
+  const allowed = mod && (mod.always || apps.some((a) => a.id === (mod.requires ?? id)));
 
   useEffect(() => {
     void call('windows:state').then((s) => setPinned(s.alwaysOnTop), () => undefined);
   }, []);
 
-  const title = mod?.manifest.name ?? 'WorkSuite';
+  const title = named ?? mod?.manifest.name ?? 'WorkSuite';
   return (
     <div className="flex h-full flex-col">
-      <div className={cx('drag flex h-10 shrink-0 items-center gap-2 bg-navy text-[13px] font-semibold text-white')} style={{ paddingLeft: isMac ? 78 : 12, paddingRight: isMac ? 8 : 140 }}>
+      <div className={cx('drag flex h-10 shrink-0 items-center gap-2 bg-navy text-[13px] font-semibold text-white', kind === 'ring' && 'hidden')} style={{ paddingLeft: isMac ? 78 : 12, paddingRight: isMac ? 8 : 140 }}>
         <span className="flex-1 truncate">{title}</span>
-        {kind === 'chat-mini' || kind === 'timer' ? (
+        {PINNABLE.has(kind) ? (
           <IconButton
             icon={pinned ? 'pin-off' : 'pin'}
             label={pinned ? 'Stop keeping on top' : 'Keep on top'}
@@ -46,7 +49,7 @@ export function WindowRoot({ hash }: { hash: string }) {
         ) : (
           <ModuleBoundary name={mod.manifest.name} onDiagnostics={() => setRoute('/diagnostics')} resetKey={route}>
             <Suspense fallback={<Spinner />}>
-              <TabProvider tabId={`window-${kind}`} route={route} active onGo={setRoute}>
+              <TabProvider tabId={`window-${kind}`} route={route} active onGo={setRoute} onTitle={setNamed}>
                 <mod.component tabId={`window-${kind}`} route={route} active />
               </TabProvider>
             </Suspense>

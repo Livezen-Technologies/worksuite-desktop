@@ -26,6 +26,7 @@ import type {
   OfflineMutation,
   Preferences,
   PreferenceLock,
+  ScreenSources,
   ServiceHealth,
   StatusSnapshot,
   Transfer,
@@ -136,7 +137,7 @@ export const contract = {
 
   'windows:open': ch(
     z.object({
-      kind: z.enum(['chat-mini', 'timer', 'record']),
+      kind: z.enum(['chat-mini', 'timer', 'record', 'call', 'video-call', 'ring', 'meet']),
       route,
       title: z.string().max(200).optional(),
       alwaysOnTop: z.boolean().optional(),
@@ -152,12 +153,16 @@ export const contract = {
   'tabs:save': ch(z.object({ tabs: z.array(tabRecordSchema).max(64), activeId: idString.nullable() }), { session: true, rate: 10 }),
   'tabs:restore': ch(none, { session: true }),
 
-  'files:pickFiles': ch(z.object({ multiple: z.boolean(), title: z.string().max(100).optional() }), { session: true, rate: 2 }),
+  'files:pickFiles': ch(z.object({ multiple: z.boolean(), title: z.string().max(100).optional(), only: z.enum(['gif']).optional() }), { session: true, rate: 2 }),
   // The dialog runs in the main process, which stores the chosen folder itself.
   'files:chooseDownloadFolder': ch(none, { rate: 2 }),
   'files:registerDropped': ch(z.object({ paths: z.array(z.string().min(1).max(4096)).min(1).max(200) }), { session: true, rate: 5 }),
 
   'media:access': ch(z.object({ kind: z.enum(['microphone', 'camera']) }), { session: true, rate: 5 }),
+  'media:screenSources': ch(none, { session: true, rate: 3 }),
+  'media:screenPick': ch(z.object({ id: z.string().min(1).max(200) }), { session: true, rate: 3 }),
+  'media:privacySettings': ch(z.object({ pane: z.enum(['microphone', 'camera', 'screen']) }), { session: true, rate: 2 }),
+  'calls:active': ch(z.object({ uuid: z.string().regex(/^[A-Za-z0-9-]{8,64}$/).nullable() }), { session: true, rate: 10 }),
   'hr:clock': ch(z.object({ direction: z.enum(['in', 'out']), note: z.string().max(500).optional() }), { session: true, rate: 3 }),
   'transfers:list': ch(none, { session: true }),
   'transfers:download': ch(
@@ -321,6 +326,10 @@ export interface Outputs {
   'auth:passkeyCancel': AuthState;
   'hr:clock': { ok: true };
   'media:access': { granted: boolean };
+  'media:screenSources': ScreenSources;
+  'media:screenPick': void;
+  'media:privacySettings': void;
+  'calls:active': void;
   'auth:signOut': AuthState;
   'auth:completeSetup': AuthState;
   'session:bootstrap': Bootstrap | null;

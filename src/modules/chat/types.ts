@@ -14,6 +14,9 @@ export interface Room {
   pinned: boolean;
   muted: boolean;
   mentions: number;
+  favorite?: boolean;
+  archived?: boolean;
+  notify_level?: string;
 }
 
 export interface ChatFile {

@@ -40,6 +40,10 @@ export const INVOKE_CHANNELS = [
 
   'hr:clock',
   'media:access',
+  'media:screenSources',
+  'media:screenPick',
+  'media:privacySettings',
+  'calls:active',
   'transfers:list',
   'transfers:download',
   'transfers:upload',

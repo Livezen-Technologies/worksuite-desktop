@@ -1,0 +1,67 @@
+import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { call } from '../../core/bridge';
+import { Button, ErrorNote, Modal, Spinner, cx } from '../../components/ui';
+
+/**
+ * Choose what to share (FR-COM-05): a screen or one window, shown as they
+ * look now. Nothing is captured until the person presses Share.
+ */
+export function ScreenPicker({ onPick, onClose }: { onPick: (id: string) => void; onClose: () => void }) {
+  const [tab, setTab] = useState<'screen' | 'window'>('screen');
+  const [picked, setPicked] = useState<string | null>(null);
+  const q = useQuery({ queryKey: ['screen-sources'], queryFn: () => call('media:screenSources'), gcTime: 0, staleTime: 0 });
+  const list = (q.data?.sources ?? []).filter((s) => s.kind === tab);
+  const blocked = q.data && q.data.permission !== 'granted' && q.data.permission !== 'not-determined';
+  return (
+    <Modal
+      title="Share your screen"
+      onClose={onClose}
+      width={640}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={!picked} onClick={() => picked && onPick(picked)}>
+            Share
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        <div role="tablist" aria-label="What to share" className="flex gap-1 text-[12.5px] font-semibold">
+          {(['screen', 'window'] as const).map((t) => (
+            <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={cx('rounded-full px-3 py-1', tab === t ? 'bg-ink text-surface' : 'border border-line text-ink')}>
+              {t === 'screen' ? 'Entire screen' : 'A window'}
+            </button>
+          ))}
+        </div>
+        {blocked ? (
+          <div className="rounded-[10px] border border-[#F1D9B5] bg-[#FFF9EC] px-3 py-2.5 text-[12.5px] text-[#7A3B05] dark:bg-warning-bg dark:text-warning">
+            WorkSuite is not allowed to record the screen. Allow it under Screen Recording in your system privacy settings, then reopen this.{' '}
+            <button type="button" className="font-bold underline" onClick={() => void call('media:privacySettings', { pane: 'screen' })}>
+              Open privacy settings
+            </button>
+          </div>
+        ) : null}
+        {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
+        <div className="grid max-h-[360px] grid-cols-3 gap-2.5 overflow-y-auto scroll-thin" role="listbox" aria-label={tab === 'screen' ? 'Screens' : 'Windows'}>
+          {list.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              role="option"
+              aria-selected={picked === s.id}
+              onClick={() => setPicked(s.id)}
+              onDoubleClick={() => onPick(s.id)}
+              className={cx('flex flex-col gap-1.5 rounded-[10px] border p-1.5 text-left', picked === s.id ? 'border-primary bg-selection' : 'border-line hover:bg-subtle')}
+            >
+              {s.thumbnail ? <img src={s.thumbnail} alt="" className="aspect-[16/10] w-full rounded-[6px] bg-subtle object-contain" /> : <span className="aspect-[16/10] w-full rounded-[6px] bg-subtle" />}
+              <span className="truncate text-[12px] font-semibold text-ink">{s.name}</span>
+            </button>
+          ))}
+          {!q.isLoading && list.length === 0 ? <p className="col-span-3 py-6 text-center text-[12.5px] text-ink-3">Nothing to share here.</p> : null}
+        </div>
+      </div>
+    </Modal>
+  );
+}

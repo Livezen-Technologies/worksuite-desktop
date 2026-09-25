@@ -15,13 +15,19 @@ const log = logger('windows');
  * remembered per window kind; a window whose display is gone comes back
  * fully visible on the primary display.
  */
-const ALWAYS_ON_TOP_ALLOWED = new Set<WindowKind>(['chat-mini', 'timer']);
+const ALWAYS_ON_TOP_ALLOWED = new Set<WindowKind>(['chat-mini', 'timer', 'call', 'video-call', 'ring']);
+/** One call at a time: a second "call" window focuses the one already open. */
+const CALL_KINDS = new Set<WindowKind>(['call', 'video-call']);
 
 const SIZES: Record<WindowKind, { width: number; height: number; minWidth: number; minHeight: number }> = {
   main: { width: 1440, height: 900, minWidth: 1024, minHeight: 640 },
   'chat-mini': { width: 380, height: 560, minWidth: 320, minHeight: 360 },
   timer: { width: 340, height: 150, minWidth: 300, minHeight: 130 },
   record: { width: 1100, height: 800, minWidth: 720, minHeight: 520 },
+  call: { width: 340, height: 600, minWidth: 320, minHeight: 520 },
+  'video-call': { width: 1180, height: 760, minWidth: 720, minHeight: 480 },
+  ring: { width: 360, height: 268, minWidth: 360, minHeight: 268 },
+  meet: { width: 1280, height: 800, minWidth: 960, minHeight: 600 },
 };
 
 interface SavedLayout {
@@ -110,11 +116,14 @@ export class WindowManager {
 
   private create(kind: WindowKind, opts: { hash: string; title?: string; alwaysOnTop?: boolean; show?: boolean }): BrowserWindow {
     const size = SIZES[kind];
-    const saved = this.loadLayout(kind);
-    const primary = screen.getPrimaryDisplay();
+    // An incoming call always appears in the same place: top right of the
+    // screen the pointer is on, clear of the menu bar.
+    const ring = kind === 'ring';
+    const saved = ring ? null : this.loadLayout(kind);
+    const primary = ring ? screen.getDisplayNearestPoint(screen.getCursorScreenPoint()) : screen.getPrimaryDisplay();
     const initial: Rectangle = saved?.bounds ?? {
-      x: primary.workArea.x + Math.round((primary.workArea.width - size.width) / 2),
-      y: primary.workArea.y + Math.round((primary.workArea.height - size.height) / 2),
+      x: ring ? primary.workArea.x + primary.workArea.width - size.width - 20 : primary.workArea.x + Math.round((primary.workArea.width - size.width) / 2),
+      y: ring ? primary.workArea.y + 16 : primary.workArea.y + Math.round((primary.workArea.height - size.height) / 2),
       width: size.width,
       height: size.height,
     };
@@ -130,8 +139,10 @@ export class WindowManager {
       // FR-SHL-05: native traffic lights on macOS; our own title bar elsewhere,
       // with the OS window controls drawn over it (snap layouts keep working).
       titleBarStyle: 'hidden',
-      ...(mac ? { trafficLightPosition: { x: 18, y: 18 } } : { titleBarOverlay: { color: '#0F1B3D', symbolColor: '#FFFFFF', height: kind === 'main' ? 52 : 40 } }),
+      // A ring has no window controls at all: it is answered or declined.
+      ...(mac ? { trafficLightPosition: { x: 18, y: 18 } } : { titleBarOverlay: ring ? false : { color: '#0F1B3D', symbolColor: '#FFFFFF', height: kind === 'main' ? 52 : 40 } }),
       alwaysOnTop: !!opts.alwaysOnTop && ALWAYS_ON_TOP_ALLOWED.has(kind),
+      ...(ring ? { resizable: false, maximizable: false, minimizable: false, fullscreenable: false, skipTaskbar: true } : {}),
       icon: mac ? undefined : join(app.isPackaged ? process.resourcesPath : join(__dirname, '../../resources'), 'icons', '256x256.png'),
       webPreferences: {
         preload: this.preload,
@@ -146,6 +157,7 @@ export class WindowManager {
         devTools: !app.isPackaged || process.argv.includes('--diagnostics-devtools'),
       },
     });
+    if (ring && mac) win.setWindowButtonVisibility(false);
     this.kinds.set(win.id, kind);
     const id = win.id;
     win.on('closed', () => {
@@ -154,11 +166,18 @@ export class WindowManager {
       if (t) clearTimeout(t);
       this.saveTimers.delete(id);
     });
-    win.on('resize', () => this.scheduleSave(win, kind));
-    win.on('move', () => this.scheduleSave(win, kind));
+    if (!ring) {
+      win.on('resize', () => this.scheduleSave(win, kind));
+      win.on('move', () => this.scheduleSave(win, kind));
+    }
     if (saved?.maximized && kind === 'main') win.maximize();
     win.once('ready-to-show', () => {
-      if (opts.show !== false) win.show();
+      if (opts.show === false) return;
+      // A ring must not take the keyboard from whatever the person is typing in.
+      if (ring) {
+        win.setAlwaysOnTop(true, 'pop-up-menu');
+        win.showInactive();
+      } else win.show();
     });
     win.webContents.on('render-process-gone', (_e, details) => {
       log.error('renderer gone', { kind, reason: details.reason, exitCode: details.exitCode });
@@ -204,15 +223,19 @@ export class WindowManager {
 
   open(kind: Exclude<WindowKind, 'main'>, route: string, title?: string, alwaysOnTop?: boolean): BrowserWindow {
     const hash = `/window/${kind}?route=${encodeURIComponent(route)}`;
-    // One mini chat per conversation; focus it if it is already open.
     for (const w of BrowserWindow.getAllWindows()) {
-      if (this.kinds.get(w.id) === kind && w.webContents.getURL().endsWith(hash)) {
+      const k = this.kinds.get(w.id);
+      // One mini chat per conversation, one Meet per meeting, one call at a
+      // time: focus the one already open.
+      if ((k === kind && w.webContents.getURL().endsWith(hash)) || (k && CALL_KINDS.has(k) && CALL_KINDS.has(kind))) {
         w.show();
         w.focus();
         return w;
       }
+      // A newer ring replaces an older one.
+      if (k === 'ring' && kind === 'ring') w.close();
     }
-    return this.create(kind, { hash, title, alwaysOnTop: alwaysOnTop ?? kind !== 'record' });
+    return this.create(kind, { hash, title, alwaysOnTop: alwaysOnTop ?? (kind !== 'record' && kind !== 'meet') });
   }
 
   setAlwaysOnTop(win: BrowserWindow, value: boolean): boolean {

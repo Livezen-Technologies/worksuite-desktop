@@ -22,6 +22,8 @@ import { createApiProxy } from '../services/api-proxy';
 import { AuditService } from '../services/audit';
 import { AuthService } from '../services/auth';
 import { BootstrapService } from '../services/bootstrap';
+import { CallService } from '../services/calls';
+import { ScreenShare } from '../services/screen-share';
 import { Database } from '../services/db';
 import { archName, DeviceService, platformName } from '../services/device';
 import { DiagnosticsService } from '../services/diagnostics';
@@ -197,6 +199,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const lock = new LockService();
   const windows = new WindowManager(db, join(__dirname, '../preload/index.js'));
   windows.minimizeToTray = () => settings.effective().minimizeToTray;
+  const calls = new CallService(windows, http, () => sessionCtl.isReady() && !lock.isLocked());
+  const screenShare = new ScreenShare(isTrustedShellUrl);
+  screenShare.install(session.defaultSession);
+  calls.poll(() => realtime.getState() === 'connected');
 
   const realtime = new RealtimeService(http, () => auth.getServer()?.origin ?? null, allowInsecure);
   let realtimeDownSince: number | null = null;
@@ -242,6 +248,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   });
 
   let activeCall = false;
+  // Updates wait while a call is on (FR-UPD); the call windows say when.
+  calls.onActiveChanged = (a) => {
+    activeCall = a;
+  };
   const busy = () => {
     const id = sessionCtl.userId();
     const c = transfers.activeCounts();
@@ -411,6 +421,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   };
   realtime.onEvent = (e) => {
     notifications.handleRealtime(e);
+    calls.handle(e);
     broadcast('realtime:event', e);
     if (e.type === 'profile.updated') void sessionCtl.refreshBootstrap().catch(() => undefined);
   };
@@ -490,7 +501,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // ── the tray ───────────────────────────────────────────────────────────
   const quit = (): void => {
     windows.quitting = true;
-    app.quit();
+    // Leave any call first, so the other side is not left talking to nobody.
+    void Promise.race([calls.endAll(), new Promise((r) => setTimeout(r, 2_000))]).finally(() => app.quit());
   };
   const tray = new TrayService({
     open: () => windows.showMain(),
@@ -567,10 +579,19 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     changed: (s) => {
       broadcast('auth:changed', s);
       emitStatus();
-      if (s.stage === 'ready') flushNavigation();
+      if (s.stage === 'ready') {
+        flushNavigation();
+        void calls.check();
+      }
     },
     bootstrapChanged: (b) => {
       if (b) settings.setPolicy(b.policy);
+      // Windows opened from now on allow the announced media server (calls
+      // and Meet each open their own window, so none needs reloading).
+      if (b?.source === 'desktop-v1' && b.mediaServers && JSON.stringify(b.mediaServers) !== JSON.stringify(mediaServers())) {
+        db.setConfig('media_servers', b.mediaServers);
+        log.info('media servers', { count: b.mediaServers.length });
+      }
       broadcast('session:changed', b);
     },
     minimumVersion: (v) => updater.setMinimum(v),
@@ -598,6 +619,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void queue.replay(uid);
     void notifications.refreshCounts();
     void audit.flush();
+    void calls.check();
     device.poke();
     broadcast('realtime:resync');
   }
@@ -728,6 +750,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     diagnostics,
     audit,
     windows,
+    calls,
+    screenShare,
     tray,
     status: snapshot,
     setActiveCall: (a) => {
@@ -775,6 +799,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   });
   app.on('before-quit', () => {
     windows.quitting = true;
+    calls.stop();
     transfers.stopAll();
     supervisor.stopAll();
     realtime.stop();

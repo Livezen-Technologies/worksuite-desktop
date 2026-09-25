@@ -37,6 +37,18 @@ function toOrg(o: unknown): Organization | null {
   return { id: String(x.id), name: x.name };
 }
 
+/** The media servers a bootstrap announces: absolute wss/https URLs only. */
+export function mediaServersOf(media: unknown): string[] {
+  const url = media && typeof media === 'object' ? (media as { livekit_url?: unknown }).livekit_url : null;
+  if (typeof url !== 'string') return [];
+  try {
+    const u = new URL(url);
+    return ['wss:', 'https:'].includes(u.protocol) ? [`${u.protocol}//${u.host}`] : [];
+  } catch {
+    return [];
+  }
+}
+
 export class BootstrapService {
   private current: Bootstrap | null = null;
   private lastValidPolicy: DesktopPolicy | null = null;
@@ -96,6 +108,7 @@ export class BootstrapService {
       monitoringPolicy: mp && typeof mp === 'object' && 'id' in mp ? mp : null,
       minimumVersion: typeof mv[platformKey] === 'string' ? mv[platformKey]! : null,
       realtimeEndpoint: typeof d.realtime_endpoint === 'string' ? d.realtime_endpoint : null,
+      mediaServers: mediaServersOf(d.media),
       cachedAt: new Date().toISOString(),
       offline: false,
     };

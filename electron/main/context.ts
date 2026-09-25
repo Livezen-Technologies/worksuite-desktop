@@ -1,5 +1,7 @@
 import type { AuditService } from '../services/audit';
 import type { AuthService } from '../services/auth';
+import type { CallService } from '../services/calls';
+import type { ScreenShare } from '../services/screen-share';
 import type { BootstrapService } from '../services/bootstrap';
 import type { Database } from '../services/db';
 import type { DeviceService } from '../services/device';
@@ -45,6 +47,8 @@ export interface AppContext {
   diagnostics: DiagnosticsService;
   audit: AuditService;
   windows: WindowManager;
+  calls: CallService;
+  screenShare: ScreenShare;
   tray: TrayService;
   status: () => StatusSnapshot;
   setActiveCall: (active: boolean) => void;

@@ -117,6 +117,8 @@ export interface Bootstrap {
   monitoringPolicy: MonitoringPolicySummary | null;
   minimumVersion: string | null;
   realtimeEndpoint: string | null;
+  /** Media servers (LiveKit) calls and Meet connect to, as the server announced them. */
+  mediaServers?: string[];
   cachedAt: string;
   /** True when the app started from the cached copy and has not revalidated yet. */
   offline: boolean;
@@ -314,7 +316,13 @@ export interface AppInfo {
   restoredFromCrash: boolean;
 }
 
-export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record';
+export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'video-call' | 'ring' | 'meet';
+
+/** Screens and windows offered for sharing (FR-COM-05), and whether the OS lets us capture them. */
+export interface ScreenSources {
+  permission: string;
+  sources: Array<{ id: string; name: string; kind: 'screen' | 'window'; thumbnail: string | null }>;
+}
 
 export interface NavigateRequest {
   route: string;

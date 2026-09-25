@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { filterRows, sortRows, type WebsiteRow } from '../../../src/modules/chat/website/api';
+import { filterRows, sectionRows, sortRows, type Section, type WebsiteRow } from '../../../src/modules/chat/website/api';
 import { roomFromRoute } from '../../../src/modules/chat/routes';
 
 /**
@@ -42,5 +42,28 @@ describe('chat routes', () => {
     expect(roomFromRoute(new URLSearchParams(''), ['chat', '42'])).toBe('42');
     expect(roomFromRoute(new URLSearchParams('room=9'), ['chat'])).toBe('9');
     expect(roomFromRoute(new URLSearchParams('room=../x'), ['chat', 'abc'])).toBeNull();
+  });
+});
+
+describe('website chats workspace sections', () => {
+  const rows = [
+    row({ id: 1, online: true, awaiting_reply: true }),
+    row({ id: 2, online: false, is_offline: true }),
+    row({ id: 3, online: true, assigned_to: 7, is_starred: true }),
+  ];
+  const ids = (s: Section, me: number | null = 7) => sectionRows(rows, s, me).map((r) => r.id);
+
+  it('Live chats are visitors on the site now, not offline enquiries', () => {
+    expect(ids('live')).toEqual([1, 3]);
+    expect(ids('offline')).toEqual([2]);
+  });
+
+  it('Assigned to me, Unassigned, Awaiting reply and Starred each ask one thing', () => {
+    expect(ids('mine')).toEqual([3]);
+    expect(ids('mine', null)).toEqual([]);
+    expect(ids('unassigned')).toEqual([1, 2]);
+    expect(ids('awaiting')).toEqual([1]);
+    expect(ids('starred')).toEqual([3]);
+    expect(ids('inbox')).toEqual([1, 2, 3]);
   });
 });

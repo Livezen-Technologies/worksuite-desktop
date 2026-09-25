@@ -125,6 +125,11 @@ textarea,
   outline-offset: 2px;
 }
 
+/* A field inside a box that shows focus itself (a composer) draws no second ring. */
+.bare-focus:focus-visible {
+  outline: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

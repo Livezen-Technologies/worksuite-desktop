@@ -1,0 +1,137 @@
+import type { BrowserWindow } from 'electron';
+import { logger } from '../main/log';
+import type { WindowManager } from '../windows/manager';
+import type { HttpClient } from './http';
+import type { RealtimeEvent } from './realtime';
+
+const log = logger('calls');
+
+/** What `chat.call.ringing` and `GET /api/chat/calls/ringing` carry. */
+export interface Ringing {
+  uuid: string;
+  room_id: number;
+  room_name?: string | null;
+  caller_name?: string | null;
+  mode?: string;
+  silent?: boolean;
+  expires_in?: number;
+}
+
+const UUID = /^[A-Za-z0-9-]{8,64}$/;
+
+/** The ring window's route for an incoming call; null when the payload is not one. */
+export function ringRoute(r: Partial<Ringing> | null | undefined): string | null {
+  if (!r || typeof r.uuid !== 'string' || !UUID.test(r.uuid) || !Number.isInteger(Number(r.room_id))) return null;
+  const q: Record<string, string> = {
+    uuid: r.uuid,
+    room_id: String(r.room_id),
+    name: String(r.caller_name ?? 'Someone').slice(0, 120),
+    mode: r.mode === 'video' ? 'video' : 'audio',
+    silent: r.silent ? '1' : '0',
+    expires: String(Math.max(1, Math.min(60, Number(r.expires_in ?? 45) || 45))),
+  };
+  if (r.room_name) q.room = String(r.room_name).slice(0, 120);
+  // Percent-encoded throughout (a route never carries "+").
+  return `/calls/ring?${Object.entries(q).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')}`;
+}
+
+/**
+ * Chat calls in the shell (FR-COM): an incoming call opens its own small
+ * always-on-top window wherever the person is, and a call window that closes
+ * — by its close button, a crash or quitting — hangs up on the server, which
+ * a page cannot do reliably for itself (a beacon carries no credentials).
+ */
+export class CallService {
+  private rung = new Map<string, number>();
+  private active = new Map<number, string>();
+  onActiveChanged: (active: boolean) => void = () => undefined;
+
+  constructor(
+    private readonly windows: WindowManager,
+    private readonly http: HttpClient,
+    /** Signed in, not locked: a ring may show who is calling. */
+    private readonly canRing: () => boolean,
+  ) {}
+
+  handle(e: RealtimeEvent): void {
+    if (e.type === 'chat.call.ringing') this.ring(e as unknown as Ringing);
+  }
+
+  private pollTimer: NodeJS.Timeout | null = null;
+
+  /**
+   * Without the realtime connection nothing announces a ring, so ask — every
+   * 5 s while it is down, as the web does, and now and then while it is up
+   * in case an event was lost.
+   */
+  poll(realtimeUp: () => boolean): void {
+    if (this.pollTimer) return;
+    let tick = 0;
+    this.pollTimer = setInterval(() => {
+      tick++;
+      if (!realtimeUp() || tick % 6 === 0) void this.check();
+    }, 5_000);
+    this.pollTimer.unref?.();
+  }
+
+  stop(): void {
+    if (this.pollTimer) clearInterval(this.pollTimer);
+    this.pollTimer = null;
+  }
+
+  /** On start and after a reconnect: a call that rang while we were away. */
+  async check(): Promise<void> {
+    if (!this.canRing()) return;
+    try {
+      const r = await this.http.get<Ringing | null>('/api/chat/calls/ringing');
+      if (r) this.ring(r);
+    } catch (e) {
+      log.debug('ringing check failed', { error: String(e) });
+    }
+  }
+
+  ring(r: Ringing): void {
+    const route = ringRoute(r);
+    if (!route || !this.canRing()) return;
+    // One ring per call, however many devices or events announce it; none
+    // for a call this device is already in.
+    const now = Date.now();
+    for (const [u, at] of this.rung) if (now - at > 120_000) this.rung.delete(u);
+    if (this.rung.has(r.uuid) || [...this.active.values()].includes(r.uuid)) return;
+    this.rung.set(r.uuid, now);
+    this.windows.open('ring', route, 'Incoming WorkSuite call', true);
+  }
+
+  /** The call a window is in (null when it has left). */
+  setActive(win: BrowserWindow, uuid: string | null): void {
+    const id = win.id;
+    const had = this.active.has(id);
+    if (uuid && UUID.test(uuid)) this.active.set(id, uuid);
+    else this.active.delete(id);
+    if (!had && this.active.has(id)) {
+      win.once('closed', () => {
+        const left = this.active.get(id);
+        this.active.delete(id);
+        this.onActiveChanged(this.active.size > 0);
+        if (left) void this.hangUp(left);
+      });
+    }
+    this.onActiveChanged(this.active.size > 0);
+  }
+
+  /** Quitting: leave every call this device is in. */
+  async endAll(): Promise<void> {
+    const calls = [...this.active.values()];
+    this.active.clear();
+    await Promise.all(calls.map((u) => this.hangUp(u)));
+  }
+
+  private async hangUp(uuid: string): Promise<void> {
+    try {
+      await this.http.post(`/api/chat/calls/${uuid}/end`);
+      log.info('left the call on close', { uuid });
+    } catch (e) {
+      log.warn('could not leave the call', { uuid, error: String(e) });
+    }
+  }
+}

@@ -2,7 +2,7 @@
   "name": "worksuite-desktop",
   "productName": "WorkSuite",
   "version": "0.1.0",
-  "description": "WorkSuite Desktop \u2014 the native desktop client for the WorkSuite platform (Windows, macOS, Linux).",
+  "description": "WorkSuite Desktop — the native desktop client for the WorkSuite platform (Windows, macOS, Linux).",
   "author": "Livezen Technologies",
   "license": "UNLICENSED",
   "private": true,
@@ -28,7 +28,9 @@
     "e2e": "npm run build && node scripts/run-e2e.mjs",
     "icons": "electron scripts/render-icons.mjs"
   },
-  "dependencies": {},
+  "dependencies": {
+    "livekit-client": "^2.22.3"
+  },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
     "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
