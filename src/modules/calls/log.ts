@@ -31,3 +31,22 @@ export function describeCall(c: CallRow): { kind: Kind; line: string; action: st
   if (c.outcome === 'answered') return { kind: 'out', line: `Outgoing ${how}${mins}`, action: 'Call again' };
   return { kind: 'out', line: c.outcome === 'declined' ? 'Declined' : 'No one joined', action: 'Call again' };
 }
+
+/** A call card as the thread draws it: what it says, how it looks, and what Join or Call back does. */
+export function describeCard(
+  m: { sender_name: string; call_state?: string | null; call_kind?: string | null; call_mode?: string | null; call_outcome?: string | null; call_duration?: number | null },
+  own: boolean,
+): { title: string; detail: string | null; tone: 'live' | 'missed' | 'plain'; action: 'Join' | 'Call back' | 'Call again' | null } {
+  const how = m.call_mode === 'video' ? 'video' : 'voice';
+  if (m.call_kind === 'meeting') {
+    if (m.call_state === 'gone') return { title: 'Meeting removed', detail: null, tone: 'plain', action: null };
+    return { title: own ? 'You started a meeting' : `${m.sender_name} started a meeting`, detail: m.call_state === 'live' ? 'Live' : 'Ended', tone: m.call_state === 'live' ? 'live' : 'plain', action: m.call_state === 'live' ? 'Join' : null };
+  }
+  if (m.call_state === 'live') return { title: own ? `You started a ${how} call` : `${m.sender_name} is calling`, detail: 'Live', tone: 'live', action: own ? null : 'Join' };
+  const talked = m.call_duration ? `${Math.max(1, Math.round(m.call_duration / 60))} min` : null;
+  if (m.call_outcome === 'answered' && talked) return { title: `${how === 'video' ? 'Video' : 'Voice'} call`, detail: talked, tone: 'plain', action: own ? 'Call again' : 'Call back' };
+  if (own) return { title: m.call_outcome === 'declined' ? 'Call declined' : 'No answer', detail: `${how} call`, tone: 'plain', action: 'Call again' };
+  // Declined is a choice somebody made, not a call that went unseen.
+  if (m.call_outcome === 'declined') return { title: `Declined ${how} call`, detail: null, tone: 'plain', action: 'Call back' };
+  return { title: `Missed ${how} call`, detail: null, tone: 'missed', action: 'Call back' };
+}

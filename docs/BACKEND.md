@@ -109,6 +109,41 @@ The server never signs releases. Livezen signs each manifest offline (see
 `PUT /desktop/v1/admin/releases {manifest}`. The server refuses a manifest that
 does not verify against the release key the app pins.
 
+### Chat, calls and meetings
+
+The communications screens use the web's endpoints. Three details are
+specific to the desktop:
+
+- **The media server comes from the bootstrap** (`media.livekit_url`). The
+  page policy names every origin a window may reach, and it is fixed when
+  the window loads. Call and meeting windows open after the bootstrap, so
+  they allow the media server (as `wss:` and `https:`). A server whose
+  bootstrap does not announce one cannot carry calls to the desktop.
+- **Calls:**
+  - `POST /api/chat/calls` places a call, or joins the live one;
+  - `POST /api/chat/calls/{uuid}/answer|decline|end` answers, declines and
+    ends it; ending twice is a no-op;
+  - `GET /api/chat/calls/ringing` is polled while realtime is down;
+    otherwise the `chat.call.ringing` and `chat.call.stopped` events drive
+    it;
+  - `GET /api/chat/calls/history` is the call log;
+  - `POST /api/chat/voicemail` leaves a voice message.
+  The main process ends a call whose window closes, because a page's beacon
+  carries no credentials.
+- **Meet:**
+  - `/api/meet/*` covers create, schedule, resolve, history, upcoming and
+    recordings;
+  - `/{uuid}/sfu?pass=` returns the token;
+  - the host controls are admit, remove, mute, lock, end-all and
+    record/start|stop;
+  - the whiteboard is saved with `PUT /{uuid}/whiteboard` and travels live
+    on the data channel, topic `wb`.
+  The waiting room is LiveKit metadata (`{waiting: true}`, no publish
+  grant), not a server list.
+- **Meetings:** `/api/meetings/*`, behind the `meeting.*` permissions. The
+  list carries `my_role` and `my_rsvp`. The detail carries the agenda timer
+  and each person's attendance and permissions.
+
 ## The existing API (servers without `/desktop/v1`)
 
 | Need | Endpoint |

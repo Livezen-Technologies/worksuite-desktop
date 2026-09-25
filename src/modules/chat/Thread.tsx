@@ -10,7 +10,9 @@ import { dayKey, dayLabel, parseTs, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Avatar, Button, ErrorNote, FileBadge, Modal, Spinner, cx } from '../../components/ui';
-import { startCall } from '../calls/start';
+import { describeCard } from '../calls/log';
+import { answerCall, startCall } from '../calls/start';
+import { openMeeting } from '../meet/api';
 import { startMeetingFromChat } from '../meet/start';
 import { Composer } from './Composer';
 import { PRESENCE } from './Details';
@@ -281,6 +283,7 @@ function Bubble({ m, own, roomId, onReply, onForward }: { m: ChatMessage & { sta
   };
 
   if (m.type === 'system') return <div className="my-2 text-center text-[12px] text-ink-3">{m.message}</div>;
+  if (m.type === 'call' && m.call_uuid && !m.deleted) return <CallCard m={m} own={own} roomId={roomId} />;
   const f = m.file;
   const src = mediaUrl(f?.mime === 'image/gif' ? f.url : (f?.thumb_url ?? f?.url));
   const voice = !!f && (m.type === 'voice' || f.preview === 'audio');
@@ -445,6 +448,39 @@ function Bubble({ m, own, roomId, onReply, onForward }: { m: ChatMessage & { sta
           </div>
         </Modal>
       ) : null}
+    </div>
+  );
+}
+
+/** A call's card in the thread (ChatDrawer: "Missed voice call · Call back"). */
+function CallCard({ m, own, roomId }: { m: ChatMessage; own: boolean; roomId: string }) {
+  const d = describeCard(m, own);
+  const video = m.call_mode === 'video' || m.call_kind === 'meeting';
+  const act = () => {
+    if (d.action === 'Join') {
+      if (m.call_kind === 'meeting') void openMeeting(m.call_uuid!);
+      else void answerCall(m.call_uuid!, roomId, false, m.sender_name);
+    } else if (d.action) void startCall(roomId, video ? 'video' : 'audio', m.sender_name);
+  };
+  return (
+    <div className={cx('mt-3 flex', own ? 'justify-end' : 'justify-start')}>
+      <div className={cx('flex items-center gap-2.5 rounded-[12px] border px-3 py-2.5', d.tone === 'missed' ? 'border-[#F1B8A8] bg-surface' : d.tone === 'live' ? 'border-[#9EE6C3] bg-surface' : 'border-line bg-surface')}>
+        <span className={cx('flex h-8 w-8 shrink-0 items-center justify-center rounded-full', d.tone === 'missed' ? 'bg-danger-bg text-danger' : d.tone === 'live' ? 'bg-success-bg text-success' : 'bg-selection text-primary')}>
+          <Icon name={video ? 'video' : 'phone'} size={15} />
+        </span>
+        <span className="flex min-w-0 flex-col">
+          <b className={cx('text-[13px]', d.tone === 'missed' ? 'text-danger' : 'text-ink')}>{d.title}</b>
+          <span className="text-[12px] text-ink-3">
+            {timeLabel(m.created_at)}
+            {d.detail ? ` · ${d.detail}` : ''}
+          </span>
+        </span>
+        {d.action ? (
+          <button type="button" onClick={act} className={cx('ml-1 h-7 shrink-0 rounded-full px-3 text-[12px] font-bold', d.action === 'Join' ? 'bg-success text-white' : 'border border-line text-primary hover:bg-subtle')}>
+            {d.action}
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

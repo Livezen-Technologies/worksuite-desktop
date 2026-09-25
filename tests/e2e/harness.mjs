@@ -82,6 +82,10 @@ export async function launch({ name, env: extra = {}, args = [] }) {
       await clickButton('Open WorkSuite');
     }
     await waitFor(hasText('Good '), 'the home dashboard', 30_000);
+    // The test machine's screen may lock while a run is going; the app would
+    // lock with it (and a locked app rightly never rings). Tests are about the
+    // app, not the screen saver.
+    await evaluate(`window.worksuite.settings.set({ lockOnSystemLock: false, appLockMinutes: 0 })`).catch(() => undefined);
   };
 
   const finish = async () => {

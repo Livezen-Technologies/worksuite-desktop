@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-09-26 — Chat, website chat, calls, Meet and Meetings, to the new designs
+## 2026-09-26 — 0.2.0: chat, website chat, calls, Meet and Meetings, to the new designs
 
 **Added**
 
@@ -69,6 +69,14 @@ person who has to live with the change — what it does, and where it bites.
     can **leave a voice message**. It lands in the conversation.
   - Closing the window, or quitting the app, hangs up on the server.
   - Updates wait while a call is on.
+- **Calls leave a card in the thread** (ChatDrawer): **Samali is calling ·
+  Join** while it is on. Afterwards the card reads, depending on how it went:
+  **Missed voice call · Call back**, **Declined**, **No answer · Call
+  again** (your own calls), or **Video call · 4 min**. A Meet card says
+  **started a meeting** and opens the meeting.
+  - The card's state comes from the call itself on every fetch.
+  - This needs WorkSuite from 2026-09-25 20:16 UTC, which writes the card
+    and says whether it is a call or a meeting.
 - **Incoming calls ring in a small window** at the top right of the screen
   you are on, over everything, without taking the keyboard. It offers
   Decline, Accept, **Answer with voice only** (for video calls), a
@@ -113,6 +121,9 @@ person who has to live with the change — what it does, and where it bites.
     clock; online on the built-in Meet, Jitsi or a pasted link, a free room,
     or an address; people, guests and an agenda.
 
+The version is now **0.2.0**. The camera usage text in the macOS
+permission prompt now mentions meetings.
+
 **Needs the server** (WorkSuite, deployed with this update)
 
 - `GET /desktop/v1/bootstrap` announces the media server (`media.livekit_url`).
@@ -151,6 +162,9 @@ person who has to live with the change — what it does, and where it bites.
     It runs against a placeholder media server, because no LiveKit runs
     locally. **Sound and video themselves are not yet tested end to end**,
     for calls or Meet.
+- The harness turns off lock-with-computer and the idle lock in the test
+  profile. A run on a Mac whose screen locked mid-test had the app lock too,
+  and a locked app, rightly, never rings.
 - The harness can now drive the app's other windows (`attach`). A step whose
   window closes, or that takes over 30 seconds, now fails instead of hanging
   the run.

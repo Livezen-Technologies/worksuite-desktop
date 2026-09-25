@@ -69,7 +69,7 @@ module.exports = {
     notarize,
     minimumSystemVersion: '12.0',
     extendInfo: {
-      NSCameraUsageDescription: 'WorkSuite uses the camera only when you join a video call.',
+      NSCameraUsageDescription: 'WorkSuite uses the camera only in video calls and meetings you join.',
       NSMicrophoneUsageDescription: 'WorkSuite uses the microphone only during calls and voice notes you record.',
       LSMultipleInstancesProhibited: true,
     },

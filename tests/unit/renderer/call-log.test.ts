@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeCall, type CallRow } from '../../../src/modules/calls/log';
+import { describeCall, describeCard, type CallRow } from '../../../src/modules/calls/log';
 import { visitorStatus } from '../../../src/modules/chat/website/api';
 
 const call = (over: Partial<CallRow>): CallRow => ({
@@ -30,5 +30,32 @@ describe('visitors online', () => {
     expect(visitorStatus({ conversation_status: 'open', idle_seconds: 600 })[0]).toBe('Chatting');
     expect(visitorStatus({ conversation_status: 'closed', idle_seconds: 30 })[0]).toBe('Active');
     expect(visitorStatus({ conversation_status: null, idle_seconds: 300 })[0]).toBe('Inactive');
+  });
+});
+
+describe('a call card in the thread', () => {
+  const card = (over: Record<string, unknown>) => ({ sender_name: 'Samali', call_kind: 'call', call_mode: 'audio', call_state: 'ended', call_outcome: null, call_duration: null, ...over });
+
+  it('a live call can be joined by the others, not by whoever started it', () => {
+    expect(describeCard(card({ call_state: 'live' }), false)).toMatchObject({ title: 'Samali is calling', action: 'Join', tone: 'live' });
+    expect(describeCard(card({ call_state: 'live' }), true).action).toBeNull();
+  });
+
+  it('a call nobody took is missed for them, and "No answer" for the caller', () => {
+    expect(describeCard(card({ call_outcome: 'cancelled' }), false)).toMatchObject({ title: 'Missed voice call', action: 'Call back', tone: 'missed' });
+    expect(describeCard(card({ call_outcome: 'cancelled' }), true)).toMatchObject({ title: 'No answer', action: 'Call again' });
+  });
+
+  it('a declined call is not a missed one', () => {
+    expect(describeCard(card({ call_outcome: 'declined', call_mode: 'video' }), false)).toMatchObject({ title: 'Declined video call', tone: 'plain', action: 'Call back' });
+  });
+
+  it('an answered call says how long it lasted', () => {
+    expect(describeCard(card({ call_outcome: 'answered', call_duration: 250, call_mode: 'video' }), false)).toMatchObject({ title: 'Video call', detail: '4 min', action: 'Call back' });
+  });
+
+  it('a Meet card is a meeting, joined while live, and says when it is gone', () => {
+    expect(describeCard(card({ call_kind: 'meeting', call_state: 'live' }), false)).toMatchObject({ title: 'Samali started a meeting', action: 'Join' });
+    expect(describeCard(card({ call_kind: 'meeting', call_state: 'gone' }), false)).toMatchObject({ title: 'Meeting removed', action: null });
   });
 });

@@ -64,6 +64,13 @@ export interface ChatMessage {
   can?: MessageCan;
   receipt: { status: 'sent' | 'delivered' | 'read'; read: number; total: number } | null;
   client_message_id: string | null;
+  /** A call's card: the call or Meet meeting it stands for, and how it stands now. */
+  call_uuid?: string | null;
+  call_state?: 'live' | 'ended' | 'gone' | null;
+  call_kind?: 'call' | 'meeting' | null;
+  call_mode?: string | null;
+  call_outcome?: string | null;
+  call_duration?: number | null;
   created_at: string;
 }
 
