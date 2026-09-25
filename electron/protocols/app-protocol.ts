@@ -1,7 +1,7 @@
 import { app, protocol } from 'electron';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve, sep } from 'node:path';
-import { APP_HOST, contentSecurityPolicy, devOrigin } from '../security/hardening';
+import { APP_HOST, contentSecurityPolicy, devOrigin, type CspSources } from '../security/hardening';
 import { logger } from '../main/log';
 
 const log = logger('app-protocol');
@@ -70,7 +70,7 @@ function corsHeaders(request: Request): Record<string, string> {
  *                         adds the session's credentials. The renderer never
  *                         holds a token and never talks to the network itself.
  */
-export function registerAppProtocol(apiProxy: ApiProxyHandler): void {
+export function registerAppProtocol(apiProxy: ApiProxyHandler, cspSources: () => CspSources = () => ({})): void {
   const root = rendererRoot();
   protocol.handle('app', async (request) => {
     const url = new URL(request.url);
@@ -101,7 +101,7 @@ export function registerAppProtocol(apiProxy: ApiProxyHandler): void {
         'Cache-Control': 'no-cache',
       };
       if (type.startsWith('text/html')) {
-        headers['Content-Security-Policy'] = contentSecurityPolicy();
+        headers['Content-Security-Policy'] = contentSecurityPolicy(cspSources());
         headers['Cross-Origin-Opener-Policy'] = 'same-origin';
         headers['Referrer-Policy'] = 'no-referrer';
       }

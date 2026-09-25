@@ -97,6 +97,9 @@ const api = {
   hr: {
     clock: call('hr:clock'),
   },
+  media: {
+    access: call('media:access'),
+  },
   transfers: {
     list: call('transfers:list'),
     download: call('transfers:download'),

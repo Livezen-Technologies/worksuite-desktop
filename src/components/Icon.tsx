@@ -6,7 +6,7 @@ import {
   Monitor, Moon, Notebook, Package, Paperclip, Pause, Phone, Pin, PinOff, Play, Plus, Printer, Receipt, RefreshCw, Repeat, Reply, ReplyAll,
   RotateCcw, Search, Send, Server, Settings, Settings2, ShieldAlert, ShieldCheck, ShoppingCart, Smile, Sparkles, SquareCheck, SquarePen, Star,
   Stethoscope, Store, Sun, Timer, Trash2, TrendingUp, TriangleAlert, Upload, UserRound, Users, Video, Wallet, Wifi, WifiOff, Wrench, X, Zap,
-  Forward, PanelLeftClose, PanelLeftOpen, type LucideIcon,
+  Forward, PanelLeftClose, PanelLeftOpen, Mic, MicOff, VideoOff, PhoneOff, PhoneIncoming, MonitorUp, Maximize2, type LucideIcon,
 } from 'lucide-react';
 
 /**
@@ -29,6 +29,7 @@ const ICONS: Record<string, LucideIcon> = {
   'file-sheet': FileSpreadsheet, filter: Filter, more: Ellipsis, smile: Smile, timer: Timer, coffee: Coffee, eye: Eye, laptop: Laptop,
   server: Server, link: Link, history: History, zap: Zap, hash: Hash, compose: SquarePen, user: UserRound, building: Building2,
   briefcase: Briefcase, 'list-todo': ListTodo, spinner: LoaderCircle, back: ArrowLeft, 'panel-close': PanelLeftClose, 'panel-open': PanelLeftOpen,
+  mic: Mic, 'mic-off': MicOff, 'video-off': VideoOff, 'phone-off': PhoneOff, 'phone-incoming': PhoneIncoming, 'screen-share': MonitorUp, maximize: Maximize2,
 };
 
 export function Icon({ name, size = 18, className, strokeWidth = 1.8, label }: { name: string; size?: number; className?: string; strokeWidth?: number; label?: string }) {

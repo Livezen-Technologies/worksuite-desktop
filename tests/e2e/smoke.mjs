@@ -137,6 +137,8 @@ try {
   await shot('01-server');
   await fill('Server address', server);
   await clickButton('Continue');
+  // Choosing a server reloads the window once (its CSP names the server).
+  await sleep(1500);
   await waitFor(hasText('Forgot your password?'), 'the sign-in screen');
   await shot('02-sign-in');
   await fill('Email', email);

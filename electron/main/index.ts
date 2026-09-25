@@ -11,6 +11,7 @@ import type { AppContext } from './context';
 import { broadcast } from './events';
 import { registerHandlers } from './handlers';
 import { initLog, logger } from './log';
+import { isDesktopError } from './errors';
 import { buildMenu } from './menu';
 import { paths } from './paths';
 import { SessionController } from './session';
@@ -54,6 +55,11 @@ import { WindowManager } from '../windows/manager';
 // Development and tests only: an isolated profile, so a test run never
 // touches a real installation's data. Packaged builds ignore it.
 if (!app.isPackaged && process.env.WS_USER_DATA_DIR) app.setPath('userData', process.env.WS_USER_DATA_DIR);
+// Unpackaged test runs: a fake microphone and camera, and no permission prompt.
+if (!app.isPackaged && process.env.WS_E2E_FAKE_MEDIA) {
+  app.commandLine.appendSwitch('use-fake-device-for-media-stream');
+  app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
+}
 
 if (!app.requestSingleInstanceLock()) {
   // FR-DL-04: a second launch hands its arguments (and deep link) to the first.
@@ -132,6 +138,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const fetchImpl: FetchLike = (url, init) => net.fetch(url, init as RequestInit);
 
   const settings = new SettingsService(db);
+  /** Media servers (LiveKit) the WorkSuite server announced; allowed in the page's CSP. */
+  const mediaServers = (): string[] => db.getConfig<string[]>('media_servers') ?? [];
   const clientHeaders = (): Record<string, string> => {
     const h: Record<string, string> = { 'X-WS-Client': `worksuite-desktop/${app.getVersion()} (${platformName()}; ${archName()})` };
     const dev = device?.current();
@@ -425,6 +433,23 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   // ── attendance for the tray (FR-TRAY-01 Clock In) ─────────────────────
   let attendanceTimer: NodeJS.Timeout | null = null;
+  // ── chat presence (FR-COM-02) ─────────────────────────────────────────
+  // The server shows somebody offline 150 s after their last heartbeat, and
+  // away after five minutes without input; the web sends one every 30 s.
+  let presenceTimer: NodeJS.Timeout | null = null;
+  const heartbeatPresence = async (): Promise<void> => {
+    if (!sessionCtl.isReady() || lock.isLocked()) return;
+    try {
+      await http.post('/api/chat/presence', { active: powerMonitor.getSystemIdleTime() < 300 });
+    } catch (e) {
+      // No chat for this person (or no such endpoint): stop asking.
+      if (isDesktopError(e) && (e.code === 'PERMISSION_DENIED' || e.code === 'APP_ACCESS_DENIED' || e.code === 'NOT_FOUND')) stopPresence();
+    }
+  };
+  const stopPresence = (): void => {
+    if (presenceTimer) clearInterval(presenceTimer);
+    presenceTimer = null;
+  };
   const refreshAttendance = async (): Promise<void> => {
     try {
       const a = await http.get<{ linked?: boolean; today?: { check_in?: string | null; check_out?: string | null } | null }>('/api/hr/attendance/me');
@@ -502,6 +527,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void refreshAttendance();
     attendanceTimer = setInterval(() => void refreshAttendance(), 5 * 60_000);
     attendanceTimer.unref?.();
+    stopPresence();
+    void heartbeatPresence();
+    presenceTimer = setInterval(() => void heartbeatPresence(), 30_000);
+    presenceTimer.unref?.();
     // FR-OFF-06: prune mail bodies beyond the cache window.
     const days = settings.effective().mailCacheDays;
     if (days > 0) cache.pruneModuleOlderThan('mail', days);
@@ -514,6 +543,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     transfers.stopAll();
     if (attendanceTimer) clearInterval(attendanceTimer);
     attendanceTimer = null;
+    stopPresence();
     tray.update({ attendance: null });
     lock.reset();
     emitStatus();
@@ -635,6 +665,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       },
       mailBodiesCached: () => settings.effective().mailCacheDays !== 0,
     }),
+    // Read on each page load: the server chosen, and the media servers it announced.
+    () => ({ server: auth.getServer()?.origin ?? null, media: mediaServers() }),
   );
 
   const pasteGestures = new Map<number, number>();

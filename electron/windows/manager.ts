@@ -237,4 +237,15 @@ export class WindowManager {
       if (fitted.x !== b.x || fitted.y !== b.y || fitted.width !== b.width || fitted.height !== b.height) w.setBounds(fitted);
     }
   }
+
+  /**
+   * Reload every app window. The page's security policy is fixed when it
+   * loads, so a newly chosen server's media links (images, voice notes) are
+   * only allowed after a reload.
+   */
+  reloadAll(): void {
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (this.kinds.has(w.id) && !w.isDestroyed()) w.webContents.reload();
+    }
+  }
 }

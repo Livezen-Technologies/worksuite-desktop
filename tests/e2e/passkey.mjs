@@ -178,6 +178,8 @@ try {
   await waitFor(hasText('Connect to WorkSuite'), 'the server screen');
   await fill('Server address', server);
   await clickButton('Continue');
+  // Choosing a server reloads the window once (its CSP names the server).
+  await sleep(1500);
   await waitFor(hasText('Sign in with a passkey'), 'the passkey button on the sign-in screen');
   await shot('p1-sign-in');
   check('the sign-in screen offers a passkey on a server that announces it', true);

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, shell, systemPreferences } from 'electron';
 import os from 'node:os';
 import { writeFile } from 'node:fs/promises';
 import type { TabRecord } from '@shared/ipc/contract';
@@ -56,7 +56,18 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('auth:state', () => ctx.session.get());
   router.handle('auth:setServer', async (input) => {
     if (input.url === '') return ctx.session.forgetServer();
-    return ctx.session.setServer(input.url);
+    const before = ctx.auth.getServer()?.origin ?? null;
+    const state = await ctx.session.setServer(input.url);
+    // The CSP names the server (its media links); a new one takes a reload.
+    if ((ctx.auth.getServer()?.origin ?? null) !== before) setTimeout(() => ctx.windows.reloadAll(), 50);
+    return state;
+  });
+  router.handle('media:access', async (input) => {
+    // macOS asks the person once per app; elsewhere the OS has no such gate.
+    if (process.platform !== 'darwin' || (!app.isPackaged && process.env.WS_E2E_FAKE_MEDIA)) return { granted: true };
+    const kind = input.kind === 'camera' ? 'camera' : 'microphone';
+    if (systemPreferences.getMediaAccessStatus(kind) === 'granted') return { granted: true };
+    return { granted: await systemPreferences.askForMediaAccess(kind) };
   });
   router.handle('auth:signIn', (input) => ctx.session.signIn(input.email, input.password));
   router.handle('auth:verifyMfa', (input) => ctx.session.verifyMfa(input.code));

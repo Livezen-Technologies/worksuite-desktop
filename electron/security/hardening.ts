@@ -44,16 +44,24 @@ export function isTrustedShellUrl(raw: string): boolean {
 }
 
 /**
- * Permission requests from renderer content (§13.2). Phase 1 has no camera,
- * microphone or screen capture: Meet arrives in Phase 2 with its own window
- * and an explicit user action. Geolocation is always denied.
+ * Permission requests from renderer content (§13.2). Only the app's own
+ * signed pages may ask for anything. The microphone and camera are for voice
+ * notes, calls and meetings, which the person starts themselves; screen
+ * capture never goes through here (it has its own picker, FR-COM-05).
+ * Geolocation, notifications-from-web and every device API stay denied.
  */
-const ALLOWED_PERMISSIONS = new Set(['clipboard-sanitized-write', 'fullscreen']);
+const ALLOWED_PERMISSIONS = new Set(['clipboard-sanitized-write', 'fullscreen', 'media']);
+
+/** `media` only for the microphone and camera — never `display` capture. */
+export function mediaTypesAllowed(types: readonly string[] | undefined): boolean {
+  return (types ?? []).every((t) => t === 'audio' || t === 'video');
+}
 
 export function hardenSession(ses: Session): void {
   ses.setPermissionRequestHandler((wc, permission, callback, details) => {
     const trusted = isTrustedShellUrl(details.requestingUrl ?? wc?.getURL() ?? '');
-    const allow = trusted && ALLOWED_PERMISSIONS.has(permission);
+    const media = permission === 'media' ? mediaTypesAllowed((details as { mediaTypes?: string[] }).mediaTypes) : true;
+    const allow = trusted && ALLOWED_PERMISSIONS.has(permission) && media;
     if (!allow) log.info('permission denied', { permission, url: details.requestingUrl });
     callback(allow);
   });
@@ -146,16 +154,49 @@ export function installGlobalHardening(): void {
   hardenSession(session.defaultSession);
 }
 
-/** Content-Security-Policy for the shell (§3.3). */
-export function contentSecurityPolicy(): string {
+/** An origin fit for a CSP source list: scheme and host (and port) only, nothing else. */
+export function cspOrigin(raw: string | null | undefined, schemes: readonly string[]): string | null {
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    if (!schemes.includes(u.protocol) || u.username || u.password) return null;
+    if (u.pathname !== '/' && u.pathname !== '') return null;
+    return u.origin === 'null' ? `${u.protocol}//${u.host}` : u.origin;
+  } catch {
+    return null;
+  }
+}
+
+export interface CspSources {
+  /** The configured WorkSuite server: its signed /media links (images, voice notes, video). */
+  server?: string | null;
+  /** Media servers the server announced (LiveKit), for calls and meetings. */
+  media?: string[];
+}
+
+/**
+ * Content-Security-Policy for the shell (§3.3). Everything the renderer
+ * fetches goes through app://bundle/__api; the only other addresses are the
+ * configured server's own media links and the media servers it names.
+ */
+export function contentSecurityPolicy(sources: CspSources = {}): string {
+  const server = cspOrigin(sources.server, ['https:', 'http:']);
+  const media = (sources.media ?? []).flatMap((m) => {
+    const o = cspOrigin(m, ['wss:', 'https:', 'ws:', 'http:']);
+    if (!o) return [];
+    // The client signals over wss:// and validates over https:// on the same host.
+    const host = o.replace(/^[a-z]+:/, '');
+    return o.startsWith('ws') ? [o, `${o.startsWith('wss') ? 'https' : 'http'}:${host}`] : [o, `${o.startsWith('https') ? 'wss' : 'ws'}:${host}`];
+  });
+  const extra = (list: Array<string | null>) => list.filter(Boolean).join(' ');
   return [
     "default-src 'self'",
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    `img-src 'self' data: blob: ${extra([server])}`.trim(),
     "font-src 'self' data:",
-    "media-src 'self' blob:",
-    "connect-src 'self'",
+    `media-src 'self' blob: ${extra([server])}`.trim(),
+    `connect-src 'self' ${extra([...new Set(media)])}`.trim(),
     "frame-src 'self' blob: about:",
     "worker-src 'self' blob:",
     "object-src 'none'",

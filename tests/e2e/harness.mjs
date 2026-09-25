@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 export const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function launch({ name, env: extra = {} }) {
+export async function launch({ name, env: extra = {}, args = [] }) {
   const outDir = process.env.WS_E2E_OUT ?? join(root, 'test-results', `e2e-${name}`);
   mkdirSync(outDir, { recursive: true });
   const profile = mkdtempSync(join(tmpdir(), `ws-e2e-${name}-`));
@@ -18,7 +18,7 @@ export async function launch({ name, env: extra = {} }) {
   const env = { ...process.env, WS_USER_DATA_DIR: profile, ...extra };
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.ELECTRON_RENDERER_URL;
-  const child = spawn(process.execPath, [root, `--remote-debugging-port=${port}`], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [root, `--remote-debugging-port=${port}`, ...args], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   const mainLog = [];
   child.stdout.on('data', (d) => mainLog.push(String(d)));
   child.stderr.on('data', (d) => mainLog.push(String(d)));
@@ -111,6 +111,8 @@ export async function launch({ name, env: extra = {} }) {
     await waitFor(hasText('Connect to WorkSuite'), 'the server screen');
     await fill('Server address', server);
     await clickButton('Continue');
+    // Choosing a server reloads the window once (its CSP names the server).
+    await sleep(1500);
     await waitFor(hasText('Forgot your password?'), 'the sign-in screen');
     await fill('Email', email);
     await fill('Password', password);

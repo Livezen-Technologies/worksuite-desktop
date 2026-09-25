@@ -157,6 +157,7 @@ export const contract = {
   'files:chooseDownloadFolder': ch(none, { rate: 2 }),
   'files:registerDropped': ch(z.object({ paths: z.array(z.string().min(1).max(4096)).min(1).max(200) }), { session: true, rate: 5 }),
 
+  'media:access': ch(z.object({ kind: z.enum(['microphone', 'camera']) }), { session: true, rate: 5 }),
   'hr:clock': ch(z.object({ direction: z.enum(['in', 'out']), note: z.string().max(500).optional() }), { session: true, rate: 3 }),
   'transfers:list': ch(none, { session: true }),
   'transfers:download': ch(
@@ -319,6 +320,7 @@ export interface Outputs {
   'auth:passkeyStart': AuthState;
   'auth:passkeyCancel': AuthState;
   'hr:clock': { ok: true };
+  'media:access': { granted: boolean };
   'auth:signOut': AuthState;
   'auth:completeSetup': AuthState;
   'session:bootstrap': Bootstrap | null;

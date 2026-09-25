@@ -39,6 +39,7 @@ export const INVOKE_CHANNELS = [
   'files:chooseDownloadFolder',
 
   'hr:clock',
+  'media:access',
   'transfers:list',
   'transfers:download',
   'transfers:upload',

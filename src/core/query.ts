@@ -33,6 +33,8 @@ export function wireQueryInvalidation(): void {
     if (WEBSITE_EVENTS.has(e.type)) {
       void queryClient.invalidateQueries({ queryKey: ['website', 'inbox'] });
       if (e.conversation_id !== undefined) void queryClient.invalidateQueries({ queryKey: ['website', 'conversation', String(e.conversation_id)] });
+    } else if (e.type === 'chat.presence') {
+      void queryClient.invalidateQueries({ queryKey: ['chat', 'presence'] });
     } else if (e.type.startsWith('chat.') && !QUIET_CHAT_EVENTS.test(e.type)) {
       void queryClient.invalidateQueries({ queryKey: ['chat', 'rooms'] });
       if (e.room_id !== undefined) void queryClient.invalidateQueries({ queryKey: ['chat', 'messages', String(e.room_id)] });
