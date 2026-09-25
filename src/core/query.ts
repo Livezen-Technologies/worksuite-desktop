@@ -20,11 +20,20 @@ export const queryClient = new QueryClient({
   },
 });
 
+/** Website chat (the visitor widget): refresh its inbox and the conversation named. */
+const WEBSITE_EVENTS = new Set(['chat.widget.message', 'chat.widget.activity', 'chat.incoming', 'chat.taken', 'chat.assigned', 'chat.at_risk']);
+
+/** Events that change nothing a list or thread shows; refetching every message on each keystroke was waste. */
+const QUIET_CHAT_EVENTS = /^chat\.(typing\.|presence$|call\.)/;
+
 export function wireQueryInvalidation(): void {
   on('realtime:resync', () => void queryClient.invalidateQueries());
   on('organization:changed', () => void queryClient.invalidateQueries());
-  on<{ type: string; room_id?: number }>('realtime:event', (e) => {
-    if (e.type.startsWith('chat.')) {
+  on<{ type: string; room_id?: number; conversation_id?: number }>('realtime:event', (e) => {
+    if (WEBSITE_EVENTS.has(e.type)) {
+      void queryClient.invalidateQueries({ queryKey: ['website', 'inbox'] });
+      if (e.conversation_id !== undefined) void queryClient.invalidateQueries({ queryKey: ['website', 'conversation', String(e.conversation_id)] });
+    } else if (e.type.startsWith('chat.') && !QUIET_CHAT_EVENTS.test(e.type)) {
       void queryClient.invalidateQueries({ queryKey: ['chat', 'rooms'] });
       if (e.room_id !== undefined) void queryClient.invalidateQueries({ queryKey: ['chat', 'messages', String(e.room_id)] });
     }

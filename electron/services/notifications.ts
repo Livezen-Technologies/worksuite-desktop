@@ -364,6 +364,62 @@ export class NotificationService {
         });
         break;
       }
+      // Website chat (the visitor widget). A chat ringing for somebody to
+      // take it is persistent, like a call; the others are ordinary.
+      case 'chat.incoming':
+      case 'chat.at_risk': {
+        const conv = String(e.conversation_id ?? '');
+        const visitor = String(e.visitor_label ?? e.visitor ?? 'A visitor');
+        const site = e.site ? String(e.site) : 'your website';
+        this.notify({
+          id: `webchat:${conv}:${String(e.event_id ?? Date.now())}`,
+          module: 'chat',
+          title: e.type === 'chat.at_risk' ? `${visitor} is still waiting · ${site}` : `Website chat · ${site}`,
+          body: e.type === 'chat.at_risk' ? 'Nobody has replied yet.' : `${visitor}${e.preview ? `: ${String(e.preview)}` : ' started a chat'}`,
+          sender: visitor,
+          link: `/chat?website=${conv}`,
+          critical: true,
+        });
+        break;
+      }
+      case 'chat.widget.message': {
+        const conv = String(e.conversation_id ?? '');
+        const visitor = String(e.visitor ?? 'Visitor');
+        this.notify({
+          id: `webchat:${conv}:${String(e.message_id ?? e.event_id ?? Date.now())}`,
+          module: 'chat',
+          title: `${visitor} · website chat`,
+          body: String(e.preview ?? ''),
+          sender: visitor,
+          link: `/chat?website=${conv}`,
+          critical: false,
+        });
+        break;
+      }
+      case 'chat.assigned': {
+        const conv = String(e.conversation_id ?? '');
+        this.notify({
+          id: `webchat-assigned:${conv}:${String(e.at ?? Date.now())}`,
+          module: 'chat',
+          title: 'A website chat was assigned to you',
+          body: `${String(e.visitor ?? 'A visitor')}${e.site ? ` · ${String(e.site)}` : ''}`,
+          sender: null,
+          link: `/chat?website=${conv}`,
+          critical: false,
+        });
+        break;
+      }
+      case 'chat.taken': {
+        // Somebody took it: every ringing alert for that chat goes, on every screen.
+        const prefix = `webchat:${String(e.conversation_id ?? '')}:`;
+        for (const [key, note] of this.live) {
+          if (key.startsWith(prefix)) {
+            note.close();
+            this.live.delete(key);
+          }
+        }
+        break;
+      }
       case 'chat.call.stopped': {
         // Answered elsewhere or ended: dismiss the ringing notification everywhere.
         const key = `call:${String(e.uuid ?? '')}`;

@@ -13,6 +13,10 @@ import { uploadBlob } from '../../core/upload';
 import { Icon } from '../../components/Icon';
 import { Avatar, CountBadge, Empty, ErrorNote, FileBadge, IconButton, OfflineNote, Spinner, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
+import { roomFromRoute } from './routes';
+import { useWebsiteAccess, useWebsiteInbox } from './website/api';
+import { WebsiteInbox } from './website/WebsiteInbox';
+import { WebsiteThread } from './website/WebsiteThread';
 
 /**
  * Chat (UI-08, FR-COM-02/03, §4.15): the main app, the same thread in a
@@ -51,14 +55,19 @@ interface ChatMessage {
 }
 
 export default function ChatPage({ tabId }: ModuleProps) {
-  const { query, go } = useTab();
+  const { query, go, path } = useTab();
   const mini = tabId.startsWith('window-chat-mini');
-  const room = query.get('room');
+  const room = roomFromRoute(query, path);
+  const website = query.get('website');
+  const mode: 'team' | 'website' = website || query.get('view') === 'website' ? 'website' : 'team';
+  const websiteAccess = useWebsiteAccess();
+  const websiteOpen = useWebsiteInbox(false, websiteAccess);
+  const waiting = (websiteOpen.data?.conversations ?? []).filter((c) => c.awaiting_reply).length;
   const [q, setQ] = useState('');
   const rooms = useQuery({ queryKey: ['chat', 'rooms'], queryFn: ({ signal }) => apiGetMeta<{ rooms: Room[] }>('/api/chat/rooms', undefined, signal) });
   const list = (rooms.data?.data.rooms ?? []).filter((r) => !q || r.name.toLowerCase().includes(q.toLowerCase()));
   const current = rooms.data?.data.rooms.find((r) => String(r.id) === room);
-  useTabTitle(current ? `Chat · ${current.name}` : 'Chat');
+  useTabTitle(mode === 'website' ? (website ? null : 'Website chats') : current ? `Chat · ${current.name}` : 'Chat');
 
   return (
     <div className="flex h-full">
@@ -68,11 +77,22 @@ export default function ChatPage({ tabId }: ModuleProps) {
             <h1 className="text-[20px] font-bold text-ink">Chat</h1>
             <div className="mt-3 flex h-9 items-center gap-2 rounded-[9px] bg-ground px-3">
               <Icon name="search" size={15} className="text-ink-3" />
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search chats" aria-label="Search chats" className="flex-1 bg-transparent text-[13px] outline-none" />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={mode === 'website' ? 'Search visitors' : 'Search chats'} aria-label={mode === 'website' ? 'Search visitors' : 'Search chats'} className="flex-1 bg-transparent text-[13px] outline-none" />
             </div>
-            {rooms.data?.offline ? <div className="mt-2"><OfflineNote cachedAt={rooms.data.cachedAt} /></div> : null}
+            {websiteAccess ? (
+              <div className="mt-3 grid grid-cols-2 gap-0.5 rounded-[9px] bg-ground p-0.5" role="tablist" aria-label="Conversations">
+                <button type="button" role="tab" aria-selected={mode === 'team'} onClick={() => go('/chat')} className={cx('rounded-[7px] py-1.5 text-[12.5px] font-semibold', mode === 'team' ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink')}>
+                  Team
+                </button>
+                <button type="button" role="tab" aria-selected={mode === 'website'} onClick={() => go('/chat?view=website')} className={cx('flex items-center justify-center gap-1.5 rounded-[7px] py-1.5 text-[12.5px] font-semibold', mode === 'website' ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink')}>
+                  Website {waiting ? <span className="rounded-full bg-danger px-1.5 text-[11px] text-white">{waiting}</span> : null}
+                </button>
+              </div>
+            ) : null}
+            {mode === 'team' && rooms.data?.offline ? <div className="mt-2"><OfflineNote cachedAt={rooms.data.cachedAt} /></div> : null}
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto scroll-thin">
+          {mode === 'website' ? <WebsiteInbox selected={website} q={q} /> : null}
+          <div className={cx('min-h-0 flex-1 overflow-y-auto scroll-thin', mode === 'website' && 'hidden')}>
             {rooms.isLoading ? <Spinner /> : rooms.error ? <div className="p-4"><ErrorNote error={rooms.error} onRetry={() => void rooms.refetch()} /></div> : list.length === 0 ? <Empty icon="chat" title="No conversations" /> : null}
             {list.map((r) => (
               <button key={r.id} type="button" onClick={() => go(`/chat?room=${r.id}`)} className={cx('flex w-full items-center gap-3 px-4 py-3 text-left', String(r.id) === room ? 'bg-selection' : 'hover:bg-subtle')}>
@@ -94,7 +114,13 @@ export default function ChatPage({ tabId }: ModuleProps) {
         </div>
       ) : null}
       <div className="flex min-w-0 flex-1 flex-col bg-ground">
-        {room ? <Thread roomId={room} room={current} mini={mini} /> : <Empty icon="chat" title="Pick a conversation" hint="Messages from your team and website visitors appear here." />}
+        {mode === 'website' ? (
+          website ? <WebsiteThread key={website} id={website} /> : <Empty icon="globe" title="Pick a website chat" hint="Visitors waiting for a reply are listed first." />
+        ) : room ? (
+          <Thread roomId={room} room={current} mini={mini} />
+        ) : (
+          <Empty icon="chat" title="Pick a conversation" hint={websiteAccess ? 'Messages from your team appear here; website visitors are under Website.' : 'Messages from your team appear here.'} />
+        )}
       </div>
     </div>
   );
