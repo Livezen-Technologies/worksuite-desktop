@@ -5,6 +5,52 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-25 — The desktop API arrives on the server
+
+WorkSuite now serves `/desktop/v1` (in the WorkSuite repository,
+`app/Modules/Desktop`). A server that has it announces it at
+`/.well-known/worksuite-desktop`, and the app uses it from the next sign-in;
+older servers carry on through the existing API. See
+[docs/BACKEND.md](docs/BACKEND.md).
+
+**Changed**
+
+- **Commands from the fleet view.** Revoke, sign out, turn sync off, require
+  an update and refresh policy reach the laptop on its next heartbeat. The app
+  carries each one out and reports back (`commands/{id}/ack`), once.
+- **Revocation also arrives on the token refresh.** A refused refresh with
+  `DEVICE_REVOKED` wipes WorkSuite's data from the laptop, as the heartbeat
+  directive does, instead of leaving a sign-in screen for whoever has it.
+- **`worksuite://` links are checked by the server.** On a desktop-v1 server
+  the app asks `/desktop/v1/links/resolve` whether the person may open the
+  record and in which company. A record they cannot open says so, and names
+  nothing about it.
+- **Apps come from the server's list by slug** (`worksuite.<slug>`), so an
+  app the server has switched off is not shown in the sidebar.
+- **Discovery reads the per-platform minimum version** (`minimum_versions`),
+  as well as a single `minimum_version`.
+
+**Where it bites**
+
+- **Unsigned policies are applied when the build has no policy key.** Before,
+  a build with no `MAIN_VITE_POLICY_PUBLIC_KEY` refused every desktop-v1
+  policy, because there was nothing to verify it against. Now it applies the
+  policy as unsigned, the same trust as the rest of the API. A build with a
+  pinned key still refuses anything unsigned or wrongly signed and keeps the
+  last policy it accepted.
+- **Policies are signed only if the server has a key.** Run
+  `php spark desktop:keys` on the server, put the secret in its `.env`, and
+  build the app with the printed public key.
+
+**Checked**
+
+- 78 unit tests (one new: discovery of a desktop-v1 server and its
+  per-platform minimum), typecheck and lint.
+- The end-to-end smoke test against a local WorkSuite with `/desktop/v1`,
+  28 of 28, registering through `/desktop/v1/devices/register`.
+- A policy signed by the server's PHP signer verifies with the app's own
+  verification code, and a changed field fails it.
+
 ## 2026-09-25 — WorkSuite Desktop 0.1.0: Phase 1 foundation
 
 **Added**

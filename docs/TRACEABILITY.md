@@ -26,7 +26,7 @@ blocked by something outside the code.
 | FR-AUTH-03 | Done | Registration before bootstrap (`session.ts`) |
 | FR-AUTH-04 | Done | `/desktop/v1/bootstrap` or composed from the existing API |
 | FR-AUTH-05 | Done | Organization selector with "All organizations" |
-| FR-AUTH-06 | Partial | Queries, widgets and navigation refresh without restart; the existing API has no org-scoped permissions, so permissions are re-resolved only on a desktop-v1 server |
+| FR-AUTH-06 | Partial | Queries, widgets and navigation refresh without restart; permissions are reloaded on a desktop-v1 server, but WorkSuite grants them installation-wide, so they do not differ per organization |
 | FR-AUTH-07 | Done | Tabs opened in another organization close with a toast |
 | FR-AUTH-08 | Done | Single-flight rotating refresh; re-login keeps drafts and queued changes |
 
@@ -56,7 +56,7 @@ blocked by something outside the code.
 
 | ID | Status | Where / note |
 |---|---|---|
-| FR-DL-01..04 | Done | `worksuite://` registered by installers; allow-listed grammar; permission/org check with switch offer; single-instance forwarding |
+| FR-DL-01..04 | Done | `worksuite://` registered by installers; allow-listed grammar; permission/org check with switch offer (`/desktop/v1/links/resolve` on a desktop-v1 server); single-instance forwarding |
 | FR-DL-05 | Later | P3 |
 | FR-DL-06 | Done | `.worksuite` associated; common formats never claimed |
 
@@ -95,10 +95,10 @@ blocked by something outside the code.
 
 | ID | Status | Where / note |
 |---|---|---|
-| FR-SEC-01/02 | Done | Registration and 5-minute heartbeat with directives |
+| FR-SEC-01/02 | Done | Registration and 5-minute heartbeat with directives and acknowledged commands |
 | FR-SEC-03 | Done | DPAPI / Keychain / libsecret via safeStorage; no plaintext fallback |
 | FR-SEC-04/05 | Done | App lock (timeout, manual, OS lock/sleep); password or Touch ID. Windows Hello needs a native module (later) |
-| FR-SEC-07/08 | Done | Revoke → wipe of WorkSuite's own data only |
+| FR-SEC-07/08 | Done | Revoke → wipe of WorkSuite's own data only; on a desktop-v1 server the refused refresh (`DEVICE_REVOKED`) triggers it too |
 | FR-SEC-11 | Done | "Cannot reach WorkSuite server…" |
 | FR-UPD-01..05 | Done | Signed manifest, channels, minimum version screen, busy check, critical deadline with warnings; install requires signed builds |
 | FR-UPD-06 | Partial | Per-user NSIS and machine-wide MSI; PKG for MDM; Linux repositories later |
@@ -117,7 +117,7 @@ blocked by something outside the code.
 
 - Code signing, notarization and the Windows certificate are credentials this
   repository cannot hold; unsigned builds run but cannot self-update.
-- `/desktop/v1` is not yet on the server; see [BACKEND.md](BACKEND.md) for
-  what the client already supports when it arrives.
+- Policies are signed only where the server has `desktop.policySigningKey`
+  and the build pins its public key; see [BACKEND.md](BACKEND.md).
 - Translations other than English need review by native speakers.
 - The deb/rpm maintainer address is a placeholder until a support mailbox is chosen.

@@ -310,7 +310,27 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       return;
     }
     log.info('deep link', { module: parsed.link.module, pattern: parsed.link.pattern });
-    navigate({ route: parsed.link.route, newWindow: parsed.link.newWindow, organizationId: parsed.link.organizationId, source: 'deep-link' });
+    const go = (organizationId: string | null) =>
+      navigate({ route: parsed.link.route, newWindow: parsed.link.newWindow, organizationId, source: 'deep-link' });
+    // WF-04 step 3: a desktop-API server resolves the record — its module,
+    // its organization, and whether this user may see it — before anything
+    // opens. A refusal says only that, never what the record is.
+    if (auth.getServer()?.api === 'desktop-v1' && sessionCtl.isReady()) {
+      http
+        .get<{ allowed?: boolean; organization_id?: string | number | null }>('/desktop/v1/links/resolve', { query: { url } })
+        .then((r) => {
+          if (r.allowed === false) {
+            broadcast('toast', { kind: 'error', text: "You don't have access to this record." });
+            windows.showMain();
+            return;
+          }
+          const org = r.organization_id === null || r.organization_id === undefined ? parsed.link.organizationId : String(r.organization_id);
+          go(org);
+        })
+        .catch(() => go(parsed.link.organizationId));
+      return;
+    }
+    go(parsed.link.organizationId);
   };
   setLinkHandler(handleDeepLink);
 
@@ -490,6 +510,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     toast: (kind, text) => broadcast('toast', { kind, text }),
     audit: (uid, action, details) => audit.record(uid, action, details),
   });
+
+  auth.onDeviceRevoked = (message) => void sessionCtl.wipe(message);
 
   lock.enabled = () => sessionCtl.isReady();
   lock.minutes = () => settings.effective().appLockMinutes;

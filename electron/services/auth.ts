@@ -115,11 +115,14 @@ export async function probeServer(origin: string, fetch: FetchLike): Promise<Omi
   if (wk.ok) {
     const body = await jsonOrNull(wk);
     if (body && (body.api === 'desktop-v1' || body.desktop_api === 'v1')) {
+      // Per platform (`minimum_versions`), or one version for all.
+      const platform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'macos' : 'linux';
+      const perPlatform = body.minimum_versions && typeof body.minimum_versions === 'object' ? (body.minimum_versions as Record<string, unknown>)[platform] : undefined;
       return {
         origin,
         name: typeof body.name === 'string' ? body.name : host,
         api: 'desktop-v1',
-        minimumVersion: typeof body.minimum_version === 'string' ? body.minimum_version : null,
+        minimumVersion: typeof perPlatform === 'string' ? perPlatform : typeof body.minimum_version === 'string' ? body.minimum_version : null,
       };
     }
   }
@@ -150,6 +153,8 @@ export class AuthService {
   private refreshTimer: NodeJS.Timeout | null = null;
   private server: ServerInfo | null = null;
   onTokens: (() => void) | null = null;
+  /** The server refused a refresh because this device was revoked (WF-24). */
+  onDeviceRevoked: ((message: string) => void) | null = null;
 
   constructor(
     private readonly db: Database,
@@ -278,6 +283,12 @@ export class AuthService {
       try {
         const { res, json } = await this.post('/api/auth/refresh', { refresh_token: token });
         if (res.status === 401 || res.status === 403) {
+          if (json?.code === 'DEVICE_REVOKED') {
+            this.secrets.delete(REFRESH_KEY);
+            this.access = null;
+            this.onDeviceRevoked?.(typeof json.message === 'string' ? json.message : 'This computer was removed from WorkSuite.');
+            return 'lost' as const;
+          }
           log.info('refresh refused; session ended');
           this.secrets.delete(REFRESH_KEY);
           this.access = null;

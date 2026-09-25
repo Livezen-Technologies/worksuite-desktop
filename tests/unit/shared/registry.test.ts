@@ -18,8 +18,11 @@ describe('app visibility gates (FR-REG-01/05, WF-02)', () => {
   it('keeps HR visible without an app row (self-service)', () => {
     expect(isAppVisible(def('hr'), { apps: ['mail'], permissions: [] })).toBe(true);
   });
-  it('lets a desktop-API server decide the first gates', () => {
+  it('lets a desktop-API server decide the first gates, by app slug', () => {
     expect(isAppVisible(def('mail'), { apps: '*', permissions: ['*'], serverApps: ['chat'] })).toBe(false);
+    expect(isAppVisible(def('files'), { apps: ['drive'], permissions: ['*'], serverApps: ['drive'] })).toBe(true);
+    // Apps with no slug (HR self-service) are not app-gated by the server list.
+    expect(isAppVisible(def('hr'), { apps: ['mail'], permissions: [], serverApps: ['mail'] })).toBe(true);
   });
   it('never returns unavailable apps', () => {
     const list = visibleApps({ apps: ['mail'], permissions: [] });

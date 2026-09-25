@@ -192,14 +192,16 @@ describe('desktop policy (§11.2, FR-SEC-09)', () => {
     expect(p.notification_min_privacy).toBe('GENERIC');
     expect('evil' in p).toBe(false);
   });
-  it('applies a signed policy only when the signature verifies', () => {
+  it('requires a valid signature when a key is pinned, and marks unpinned policies unsigned', () => {
     const { publicKey, privateKey } = generateKeyPairSync('ed25519');
     const pem = publicKey.export({ type: 'spki', format: 'pem' }).toString();
     const doc = { version: 14, file_sync: 'disabled' };
     const signature = sign(null, Buffer.from(canonicalJson(doc)), privateKey).toString('base64');
     expect(acceptSignedPolicy({ ...doc, signature }, pem)?.file_sync).toBe('disabled');
     expect(acceptSignedPolicy({ ...doc, file_sync: 'allowed', signature }, pem)).toBeNull();
-    expect(acceptSignedPolicy({ ...doc, signature }, null)).toBeNull();
+    expect(acceptSignedPolicy({ ...doc }, pem)).toBeNull();
+    // No key pinned in the build: applied, and recorded as unsigned.
+    expect(acceptSignedPolicy({ ...doc, signature: null }, null)).toMatchObject({ file_sync: 'disabled', signed: false });
   });
   it('takes the stricter notification privacy', () => {
     expect(stricterPrivacy('FULL', 'SENDER_ONLY')).toBe('SENDER_ONLY');
@@ -232,6 +234,16 @@ describe('sign-in helpers', () => {
     expect(ok).toMatchObject({ api: 'core', name: 'ws.example' });
     await expect(probeServer('https://ws.example', async () => new Response(JSON.stringify({ status: 'error', message: 'db down' }), { status: 500, headers: { 'Content-Type': 'application/json' } }))).rejects.toMatchObject({ code: 'SERVER_ERROR' });
     await expect(probeServer('https://ws.example', async () => new Response('nope', { status: 200 }))).rejects.toMatchObject({ code: 'NOT_WORKSUITE' });
+  });
+  it('recognises a desktop-v1 server and reads its own platform\'s minimum version', async () => {
+    const platform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'macos' : 'linux';
+    const wk = { api: 'desktop-v1', api_version: 1, name: 'Livezen WorkSuite', minimum_versions: { [platform]: '1.2.0', other: '9.9.9' } };
+    const info = await probeServer('https://ws.example', async (url) =>
+      url.endsWith('/.well-known/worksuite-desktop')
+        ? new Response(JSON.stringify(wk), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        : new Response('<html>', { status: 404, headers: { 'Content-Type': 'text/html' } }),
+    );
+    expect(info).toMatchObject({ api: 'desktop-v1', name: 'Livezen WorkSuite', minimumVersion: '1.2.0' });
   });
   it('summarises the WorkSuite user', () => {
     expect(toUserSummary({ id: 7, name: '', email: 'a@b.c', organization: 'Livezen' })).toMatchObject({ id: '7', name: 'a@b.c', organizationName: 'Livezen' });

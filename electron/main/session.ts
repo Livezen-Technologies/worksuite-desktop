@@ -6,7 +6,7 @@ import type { AuthService, SignInPayload } from '../services/auth';
 import { normalizeServerUrl, probeServer } from '../services/auth';
 import type { BootstrapService } from '../services/bootstrap';
 import type { Database } from '../services/db';
-import type { DeviceService, Directive } from '../services/device';
+import type { CommandOutcome, DeviceCommand, DeviceService, Directive } from '../services/device';
 import type { EnterpriseConfig } from '../services/enterprise';
 import type { FetchLike } from '../services/http';
 import { capabilitiesFor, type DeviceCapabilities } from '../services/policy';
@@ -70,6 +70,33 @@ export class SessionController {
   ) {
     this.device.onDirective = (d) => this.handleDirective(d);
     this.device.onTrustChanged = (t) => this.onTrust(t);
+    this.device.onCommand = (c) => this.handleCommand(c);
+  }
+
+  /** Administrator commands queued for this device (§7.1 desktop_device_commands). */
+  async handleCommand(c: DeviceCommand): Promise<CommandOutcome> {
+    const reason = typeof c.payload.reason === 'string' ? c.payload.reason : null;
+    switch (c.command) {
+      case 'WIPE':
+      case 'REVOKE': {
+        const scope = this.boot?.policy.wipe_on_revoke ?? 'cache+offline_files';
+        return { ok: true, result: { scope }, after: () => this.wipe(reason ?? 'Your administrator removed WorkSuite from this computer.') };
+      }
+      case 'SIGN_OUT':
+        return { ok: true, result: {}, after: async () => void (await this.signOut(false)) };
+      case 'REQUIRE_UPDATE':
+        this.hooks.requireUpdate(typeof c.payload.version === 'string' ? c.payload.version : null, reason ?? 'An update is required.');
+        return { ok: true, result: {} };
+      case 'REFRESH_POLICY': {
+        const b = await this.refreshBootstrap();
+        return { ok: true, result: { policy_version: b?.policy.version ?? null } };
+      }
+      case 'DISABLE_SYNC':
+        // Drive sync is not part of this version; nothing is syncing.
+        return { ok: true, result: { sync: 'not_running' } };
+      default:
+        return { ok: false, result: { error: `unsupported command ${c.command}` } };
+    }
   }
 
   get(): AuthState {

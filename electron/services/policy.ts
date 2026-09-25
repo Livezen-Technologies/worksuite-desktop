@@ -113,13 +113,18 @@ export function verifySignature(payload: unknown, signatureB64: string, publicKe
 }
 
 /**
- * Applies a signed policy document `{ ...policy, signature }`. Returns null
- * when the signature is missing or wrong, so the caller keeps the last valid
- * policy.
+ * Applies a policy document `{ ...policy, signature }`.
+ *
+ * With a policy key pinned in this build, the signature is required: a
+ * missing or wrong one returns null and the caller keeps the last valid
+ * policy (POLICY_SIGNATURE_INVALID). Without a pinned key there is nothing to
+ * check a signature against, so the policy is applied as unsigned — the same
+ * trust as the core API's policy: the authenticated TLS session.
  */
 export function acceptSignedPolicy(doc: Record<string, unknown>, publicKeyPem: string | null): DesktopPolicy | null {
   const { signature, ...rest } = doc;
-  if (typeof signature !== 'string' || !publicKeyPem) return null;
+  if (!publicKeyPem) return normalizePolicy(rest, false);
+  if (typeof signature !== 'string') return null;
   if (!verifySignature(rest, signature, publicKeyPem)) return null;
   return normalizePolicy(rest, true);
 }

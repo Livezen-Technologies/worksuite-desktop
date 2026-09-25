@@ -36,6 +36,24 @@ export type Directive =
   | { kind: 'wipe'; reason: string }
   | { kind: 'require-update'; version: string | null; reason: string };
 
+/** A queued administrator command (desktop_device_commands, §7.1). */
+export interface DeviceCommand {
+  id: string;
+  command: 'REVOKE' | 'SIGN_OUT' | 'DISABLE_SYNC' | 'REQUIRE_UPDATE' | 'REFRESH_POLICY' | 'WIPE' | string;
+  payload: Record<string, unknown>;
+}
+
+/**
+ * How the session answers a command: a result to acknowledge, and — for the
+ * commands that end the session — work to do only after the acknowledgement
+ * has reached the server, because afterwards there are no credentials left.
+ */
+export interface CommandOutcome {
+  ok: boolean;
+  result: Record<string, unknown>;
+  after?: () => Promise<void>;
+}
+
 export interface HeartbeatExtras {
   pendingUp: number;
   pendingDown: number;
@@ -93,6 +111,8 @@ export class DeviceService {
   private api: ServerApi = 'core';
   onDirective: ((d: Directive) => void) | null = null;
   onTrustChanged: ((t: DeviceTrust) => void) | null = null;
+  onCommand: ((c: DeviceCommand) => Promise<CommandOutcome>) | null = null;
+  private handled = new Set<string>();
   extras: () => HeartbeatExtras = () => ({ pendingUp: 0, pendingDown: 0, lastError: null });
 
   constructor(
@@ -237,13 +257,38 @@ export class DeviceService {
       this.api === 'desktop-v1'
         ? '/desktop/v1/devices/heartbeat'
         : `/api/sync/devices/${encodeURIComponent(this.record.id)}/health`;
-    const data = await this.http.post<{ directives?: unknown; trust?: string }>(path, { ...body, device_id: this.record.id });
+    const data = await this.http.post<{ directives?: unknown; trust?: string; commands?: unknown }>(path, { ...body, device_id: this.record.id });
     this.lastHeartbeatAt = new Date().toISOString();
     if (typeof data.trust === 'string') this.setTrust(data.trust as DeviceTrust);
+    await this.runCommands(Array.isArray(data.commands) ? data.commands : []);
     const directive = parseDirectives(data.directives);
     this.onDirective?.(directive);
     void this.refreshTrust();
     return directive;
+  }
+
+  /** WF-23 step 3: run each queued command once, and acknowledge it. */
+  private async runCommands(raw: unknown[]): Promise<void> {
+    for (const r of raw) {
+      const c = r as Partial<DeviceCommand>;
+      if (c === null || typeof c !== 'object' || (typeof c.id !== 'string' && typeof c.id !== 'number') || typeof c.command !== 'string') continue;
+      const cmd: DeviceCommand = { id: String(c.id), command: c.command, payload: (c.payload && typeof c.payload === 'object' ? c.payload : {}) as Record<string, unknown> };
+      if (this.handled.has(cmd.id)) continue;
+      this.handled.add(cmd.id);
+      let outcome: CommandOutcome;
+      try {
+        outcome = this.onCommand ? await this.onCommand(cmd) : { ok: false, result: { error: 'no handler' } };
+      } catch (e) {
+        outcome = { ok: false, result: { error: String((e as Error).message ?? e) } };
+      }
+      try {
+        await this.http.post(`/desktop/v1/devices/commands/${encodeURIComponent(cmd.id)}/ack`, { status: outcome.ok ? 'DONE' : 'FAILED', result: outcome.result });
+      } catch (e) {
+        log.warn('command acknowledgement failed', { command: cmd.command, error: String(e) });
+      }
+      log.info('device command', { command: cmd.command, ok: outcome.ok });
+      if (outcome.after) await outcome.after();
+    }
   }
 
   /** Trust as the organization set it in the fleet view (§11.3). */

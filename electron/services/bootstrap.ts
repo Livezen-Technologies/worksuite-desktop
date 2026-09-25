@@ -70,11 +70,15 @@ export class BootstrapService {
       policy = this.lastValidPolicy ?? { ...DEFAULT_POLICY };
     }
     this.lastValidPolicy = policy;
+    // The server has already applied its gates (installed, enabled, enabled
+    // for the organization, licensed, user access); what arrives is the slugs
+    // the user may open. An installation that does not gate apps says so.
     const apps = Array.isArray(d.apps) ? d.apps : [];
-    const appIds = apps
-      .map((a) => (typeof a === 'string' ? a : a && typeof a === 'object' ? (a as { id?: unknown }).id : null))
+    const slugs = apps
+      .map((a) => (typeof a === 'string' ? a : a && typeof a === 'object' ? ((a as { slug?: unknown }).slug ?? (a as { id?: unknown }).id) : null))
       .filter((a): a is string => typeof a === 'string')
       .map((id) => id.replace(/^worksuite\./, ''));
+    const gated = d.apps_gated !== false;
     const mv = (d.minimum_version ?? {}) as Record<string, string>;
     const platformKey = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'macos' : 'linux';
     const mp = d.monitoring_policy as MonitoringPolicySummary | null;
@@ -83,8 +87,8 @@ export class BootstrapService {
       user,
       organizations: orgs,
       defaultOrganizationId: typeof d.default_organization_id === 'string' ? d.default_organization_id : (orgs[0]?.id ?? null),
-      apps: '*',
-      serverApps: appIds,
+      apps: gated ? slugs : null,
+      serverApps: gated ? slugs : null,
       permissions: Array.isArray(d.permissions) ? (d.permissions as string[]) : [],
       entitlements: (d.entitlements ?? {}) as Record<string, boolean>,
       featureFlags: (d.feature_flags ?? {}) as Record<string, boolean>,

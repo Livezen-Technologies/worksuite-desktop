@@ -104,7 +104,7 @@ export interface AccessGrant {
   apps: string[] | '*' | null;
   /** Permission keys; `'*'` inside means super-admin. */
   permissions: string[];
-  /** Server-resolved app ids from /desktop/v1/apps, when the server provides them. */
+  /** App slugs the server resolved through all its gates (/desktop/v1), when it provides them. */
   serverApps?: string[] | null;
 }
 
@@ -123,7 +123,7 @@ export function isAppVisible(def: AppDefinition, grant: AccessGrant): boolean {
   // When the server resolves the gates itself (/desktop/v1/apps), its answer
   // is authoritative for gates 1–4 and 6: an app it did not return is not
   // shown, whatever the local catalogue says.
-  if (grant.serverApps && !grant.serverApps.includes(def.id)) return false;
+  if (grant.serverApps && def.app && !grant.serverApps.includes(def.app)) return false;
   return hasAppAccess(grant, def.app) && hasPermission(grant, def.perm);
 }
 
