@@ -21,6 +21,16 @@ Without the platform secrets the builds are unsigned. Unsigned macOS builds
 are refused by Gatekeeper on other machines; unsigned Windows builds trigger
 SmartScreen; and no unsigned build can update itself.
 
+**A test DMG without an Apple certificate:** `npm run dist:mac:unsigned`
+writes `release/<version>/WorkSuite-<version>-universal.dmg`. It is signed
+ad hoc and built **without the hardened runtime**. With hardened runtime and an
+ad-hoc signature, macOS refuses to load the Electron framework — the app dies
+at launch with `Library not loaded: … Electron Framework` — because library
+validation needs a Team ID that an ad-hoc signature does not have. A Developer
+ID build keeps the hardened runtime (`npm run dist:mac` with the secrets
+above). On another Mac, the first open of an unsigned DMG's app needs
+right-click → Open, or `xattr -dr com.apple.quarantine /Applications/WorkSuite.app`.
+
 ## 3. The release key
 
 Generated once with `npm run release:keygen`: the private key goes to

@@ -34,6 +34,7 @@ accept `http://localhost:<port>`; packaged builds accept HTTPS only.
 | `npm run build` | Production bundles in `out/` |
 | `npm run dist:dir` | An unpacked app for this machine in `release/` |
 | `npm run dist:mac` / `dist:win` / `dist:linux` | Installers (see [docs/RELEASING.md](docs/RELEASING.md)) |
+| `npm run dist:mac:unsigned` | A DMG for testing, with no Apple certificate (see [docs/RELEASING.md](docs/RELEASING.md)) |
 
 ### End-to-end smoke test
 

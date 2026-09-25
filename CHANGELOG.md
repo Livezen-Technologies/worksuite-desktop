@@ -5,6 +5,34 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-25 — A macOS DMG that opens without an Apple certificate
+
+**Added**
+
+- `npm run dist:mac:unsigned` builds a universal (Apple silicon + Intel) DMG
+  signed ad hoc, for testing before the Developer ID certificate exists.
+
+**Found**
+
+- **An ad-hoc-signed build with the hardened runtime does not start.** The
+  first test DMG died at launch with `Library not loaded: … Electron
+  Framework`: library validation needs a Team ID, and an ad-hoc signature has
+  none. The unsigned script turns the hardened runtime off. `dist:mac` with a
+  Developer ID keeps it on.
+
+**Checked**
+
+- `WorkSuite-0.1.0-universal.dmg` (219 MB) mounts, and the app inside is
+  universal (x86_64 + arm64) and verifies with `codesign --verify --deep --strict`.
+- It launches from the DMG: the GPU, network and renderer processes start and
+  its profile is written.
+
+**Where it bites**
+
+- On any Mac but the one that built it, Gatekeeper refuses the unsigned app
+  on first open. Right-click → Open, or run `xattr -dr com.apple.quarantine`
+  on it after copying it to Applications. It cannot update itself.
+
 ## 2026-09-25 — The desktop API arrives on the server
 
 WorkSuite now serves `/desktop/v1` (in the WorkSuite repository,
