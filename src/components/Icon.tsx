@@ -1,4 +1,10 @@
 import {
+  Weight,
+  FolderPlus,
+  FileCode,
+  LockOpen,
+  ZoomIn,
+  ZoomOut,
   Activity, Archive, ArrowLeft, ArrowUpDown, Banknote, Bell, Box, Briefcase, Building2, Calendar, CalendarClock, Check, ChevronDown, ChevronLeft,
   ChevronRight, CircleAlert, CircleCheck, Clock, Cloud, CloudOff, Coffee, Contact, Copy, Download, Ellipsis, ExternalLink, Eye, File, FileImage,
   FileSpreadsheet, FileText, Filter, Fingerprint, Flag, Folder, FolderOpen, FolderUp, Globe, HardDrive, Hash, History, House, IdCard, Inbox, Info,
@@ -32,6 +38,7 @@ const ICONS: Record<string, LucideIcon> = {
   mic: Mic, 'mic-off': MicOff, 'video-off': VideoOff, 'phone-off': PhoneOff, 'phone-incoming': PhoneIncoming, 'screen-share': MonitorUp, maximize: Maximize2,
   camera: Camera, film: Film, music: Music, stop: Square, at: AtSign,
   cake: Cake, mobile: Smartphone, 'map-pin': MapPin, tag: Tag, list: List,
+  weight: Weight, 'folder-plus': FolderPlus, 'file-code': FileCode, unlock: LockOpen, 'zoom-in': ZoomIn, 'zoom-out': ZoomOut,
 };
 
 export function Icon({ name, size = 18, className, strokeWidth = 1.8, label }: { name: string; size?: number; className?: string; strokeWidth?: number; label?: string }) {

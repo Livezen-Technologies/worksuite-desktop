@@ -136,8 +136,10 @@ export class HttpClient {
 
   /**
    * Sends a request with the session's bearer token and returns the raw
-   * Response. On a 401 it refreshes once and retries once; a second 401 means
-   * the session is gone (FR-AUTH-08).
+   * Response. On a 401 it refreshes once and retries once (FR-AUTH-08). A
+   * refresh refused means the session is gone. A 401 that comes back after a
+   * refresh that worked is this request's own answer — a locked folder's
+   * wrong password answers 401 — so it is returned, not taken as a sign-out.
    */
   async raw(method: string, url: string, init: RequestInit & { auth?: boolean; timeoutMs?: number } = {}): Promise<Response> {
     const auth = init.auth !== false;
@@ -177,7 +179,6 @@ export class HttpClient {
         return res;
       }
       res = await attempt();
-      if (res.status === 401) this.deps.onAuthLost('Session ended');
     }
     if (res.status === 403 || res.status === 426) {
       const body = await readEnvelope(res.clone());

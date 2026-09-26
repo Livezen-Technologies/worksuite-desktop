@@ -127,7 +127,7 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
   {
     input: defineDesktopManifest({
       id: 'files', name: 'Files', icon: 'folder', contractVersion: 1, desktop: { enabled: true },
-      offline: { mode: 'READ_CACHE', cache: ['/api/files/browse'] },
+      offline: { mode: 'READ_CACHE', cache: ['/api/files/browse', '/api/drive/list', '/api/drive/tree', '/api/drive/home'] },
       native: ['file-drop', 'printing'],
       quickActions: [{ id: 'upload', label: 'Upload File', route: '/files?upload=1' }],
     }),

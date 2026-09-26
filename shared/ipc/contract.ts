@@ -188,10 +188,12 @@ export const contract = {
         export: z.enum(['calendar', 'contacts-csv', 'contacts-vcf', 'contacts-template']).optional(),
         /** The rows an import could not take, as a CSV (a data job's errors). */
         importErrors: z.number().int().positive().optional(),
+        /** An earlier version of a Drive file. */
+        version: z.object({ fileId: z.number().int().positive(), versionId: z.number().int().positive() }).optional(),
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors].filter((x) => x !== undefined).length === 1, 'give a file id, a mail attachment, a recording, an export or an import job'),
+      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version].filter((x) => x !== undefined).length === 1, 'give a file id, a file version, a mail attachment, a recording, an export or an import job'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   'transfers:upload': ch(

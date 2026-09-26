@@ -1,241 +1,381 @@
-import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { app } from '../../core/app-state';
-import { ApiError, apiGetMeta } from '../../core/api';
+import { apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
 import { call, errorMessage, registerDropped } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
-import { bytes, dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
-import { openOverlay } from '../../core/ui';
-import { Icon } from '../../components/Icon';
-import { Button, Chip, Empty, ErrorNote, FileBadge, IconButton, OfflineNote, Spinner, cx } from '../../components/ui';
-import { VirtualList } from '../../components/VirtualList';
+import { useNow } from '../calls/parts';
 import type { ModuleProps } from '../registry';
+import { ALL_VIEWS, TITLES, TONE, can, openWay, pathTo, splitKeys, tree as loadTree, type DriveFile, type DriveFolder, type Key, type TreeNode, type View } from './api';
+import { DriveCtx, type Drive, type Item } from './ctx';
+import { ArchiveDialog, ConfirmDialog, FolderPicker, LinkDialog, LockDialog, NameDialog, SecureLinkDialog, SendToChatDialog } from './Dialogs';
+import { Explorer } from './Explorer';
+import { Home } from './Home';
+import { lockPassword } from './locks';
+import type { MenuItem } from './Menu';
+import { Preview } from './Preview';
+import { Rail, type Place } from './Rail';
+import { ShareDialog } from './Share';
+import { Shared } from './Shared';
+import { Companies, Duplicates, Links, Notifications, Storage, Trash } from './Views';
+
+type Dialog =
+  | { kind: 'name'; title: string; initial: string; action: string; save: (name: string) => Promise<void> }
+  | { kind: 'confirm'; title: string; body: string; action: string; run: () => void }
+  | { kind: 'pick'; items: Item[]; mode: 'move' | 'copy' }
+  | { kind: 'lock'; folder: DriveFolder; on: boolean }
+  | { kind: 'archive'; file: DriveFile }
+  | { kind: 'share'; item: Item }
+  | { kind: 'secure'; file: DriveFile }
+  | { kind: 'link'; item: Item }
+  | { kind: 'chat'; item: Item; discuss?: boolean };
+
+const DOCS: Array<[string, string, string, string]> = [
+  ['docx', 'DOC', 'Document', 'Untitled document'],
+  ['xlsx', 'XLS', 'Spreadsheet', 'Untitled spreadsheet'],
+  ['pptx', 'PPT', 'Presentation', 'Untitled presentation'],
+  ['txt', 'TXT', 'Text file', 'Untitled'],
+  ['md', 'MD', 'Markdown note', 'Untitled'],
+];
+const DOC_TONE: Record<string, string> = { docx: TONE.document!, xlsx: TONE.spreadsheet!, pptx: TONE.presentation!, txt: TONE.other!, md: TONE.other! };
+/** Views that are pages of their own rather than a list of files. */
+const PAGES: View[] = ['home', 'shared', 'trash', 'storage', 'duplicates', 'links', 'notifications', 'companies'];
+
+function placeFrom(q: URLSearchParams): Place {
+  const f = q.get('folder');
+  if (f && /^\d+$/.test(f)) return { view: 'folder', folder: Number(f) };
+  const v = q.get('view') as View | null;
+  return { view: v && ALL_VIEWS.includes(v) ? v : 'home', folder: null };
+}
+
+function nameIn(nodes: TreeNode[], id: number): string | null {
+  for (const n of nodes) {
+    if (n.id === id) return n.name;
+    const hit = nameIn(n.children, id);
+    if (hit) return hit;
+  }
+  return null;
+}
 
 /**
- * Files, online (Phase 1, §18; UI-11): browse WorkSuite Drive, upload by
- * button or by dropping files anywhere on the view (WF-31), download and
- * open locally. Keeping files on this computer and folder sync arrive with
- * the Drive sync engine (Phase 2), so every item shows as online.
+ * Files (the Drive designs): Home, My Drive and its folders, the lists across
+ * the Drive, Shared, the recycle bin, storage and settings — with sharing,
+ * links, versions, comments, previews and uploads. Everything is online;
+ * keeping files on this Mac arrives with Drive sync.
  */
-interface Access {
-  can_download: boolean;
-  capabilities: string[];
-}
-interface DriveFile {
-  id: number;
-  name: string;
-  extension: string | null;
-  size: number;
-  version: number;
-  created_at: string;
-  is_favorite: boolean;
-  access: Access | null;
-}
-interface DriveFolder {
-  id: number | string;
-  name: string;
-  file_count: number | string | null;
-  total_size: number | string | null;
-  updated_at: string | null;
-  is_locked?: boolean;
-}
-interface Browse {
-  folder_id: number | null;
-  breadcrumb: Array<{ id: number; name: string }>;
-  locked: boolean;
-  folders: DriveFolder[];
-  files: DriveFile[];
-}
-
-type Row = { kind: 'folder'; f: DriveFolder } | { kind: 'file'; f: DriveFile };
-
 export default function FilesPage(_props: ModuleProps) {
-  useTabTitle('Files');
-  const { query, go } = useTab();
-  const folder = query.get('folder');
-  const transfers = useStore(app, (s) => s.transfers.filter((t) => t.state === 'running' || t.state === 'queued').length);
-  const [selected, setSelected] = useState<number | null>(query.get('file') ? Number(query.get('file')) : null);
-  const [drag, setDrag] = useState(false);
-  const q = useQuery({ queryKey: ['files', 'browse', folder], queryFn: ({ signal }) => apiGetMeta<Browse>('/api/files/browse', { folder_id: folder }, signal) });
-  const data = q.data?.data;
-  const rows: Row[] = [...(data?.folders ?? []).map((f) => ({ kind: 'folder' as const, f })), ...(data?.files ?? []).map((f) => ({ kind: 'file' as const, f }))];
-  const file = data?.files.find((f) => f.id === selected) ?? null;
+  const qc = useQueryClient();
+  const { query, go, navigate, active } = useTab();
+  const place = placeFrom(query);
+  useTabTitle(place.view === 'home' ? 'Files' : `Files · ${TITLES[place.view]}`);
+  const [dialog, setDialog] = useState<Dialog | null>(null);
+  const [preview, setPreview] = useState<{ files: DriveFile[]; index: number } | null>(null);
+  const [detailsAsk, setDetailsAsk] = useState<{ key: Key; tab?: string; n: number } | null>(null);
+  const now = useNow(60_000);
+  const perms = useStore(app, (s) => s.bootstrap?.permissions ?? []);
+  const uploadsDone = useStore(app, (s) => s.transfers.filter((t) => t.direction === 'upload' && t.state === 'done').length);
 
-  useEffect(() => {
-    if (query.get('upload') === '1') void upload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query]);
+  const treeQ = useQuery({ queryKey: ['files', 'tree'], queryFn: ({ signal }) => loadTree(signal), refetchInterval: 120_000 });
+  const storage = useQuery({ queryKey: ['files', 'quota'], queryFn: ({ signal }) => apiGet<{ quota: number; used: number; unlimited: boolean }>('/api/users/me/storage', undefined, signal), staleTime: 60_000 });
+  const tree = treeQ.data?.tree ?? [];
+  const ancestors = place.folder ? (pathTo(tree, place.folder) ?? []) : [];
+  const folderId = place.view === 'folder' ? place.folder : null;
 
-  async function upload(files?: File[]) {
+  const refresh = () => void qc.invalidateQueries({ queryKey: ['files'] });
+  const askDetails = (key: Key, tab?: string) => setDetailsAsk((prev) => ({ key, tab, n: (prev?.n ?? 0) + 1 }));
+
+  // A finished upload shows up at once.
+  const [seenUploads, setSeenUploads] = useState(uploadsDone);
+  if (seenUploads !== uploadsDone) {
+    setSeenUploads(uploadsDone);
+    if (uploadsDone > seenUploads) void qc.invalidateQueries({ queryKey: ['files'] });
+  }
+
+  const onPlace = (p: Place, q?: string) => {
+    const s = new URLSearchParams();
+    if (p.view === 'folder' && p.folder) s.set('folder', String(p.folder));
+    else if (p.view !== 'home') s.set('view', p.view);
+    if (q) s.set('q', q);
+    setPreview(null);
+    go(`/files${s.toString() ? `?${s}` : ''}`);
+  };
+
+  const run = async (fn: () => Promise<unknown>, done?: string) => {
     try {
-      const picked = files ? await registerDropped(files) : await call('files:pickFiles', { multiple: true, title: 'Upload to WorkSuite Files' });
-      if (picked.length === 0) return;
-      await call('transfers:upload', { handles: picked.map((p) => p.handle), target: { kind: 'files', folderId: folder } });
-      toast('info', `Uploading ${picked.length} file${picked.length === 1 ? '' : 's'} — see Transfers.`);
+      await fn();
+      if (done) toast('success', done);
     } catch (e) {
       toast('error', errorMessage(e));
+    } finally {
+      refresh();
     }
-  }
-  const download = async (f: DriveFile, open: boolean) => {
+  };
+
+  const upload = async (files?: File[], folder: number | null = folderId) => {
     try {
-      await call('transfers:download', { fileId: String(f.id), name: f.name, open });
-      toast('info', open ? `Opening ${f.name}…` : `Downloading ${f.name}…`);
+      const picked = files ? await registerDropped(files) : await call('files:pickFiles', { multiple: true, title: 'Upload to WorkSuite Files' });
+      if (!picked.length) return;
+      await call('transfers:upload', { handles: picked.map((p) => p.handle), target: { kind: 'files', folderId: folder === null ? null : String(folder) } });
+      toast('info', `Uploading ${picked.length} ${picked.length === 1 ? 'file' : 'files'} — see Transfers.`);
     } catch (e) {
       toast('error', errorMessage(e));
     }
   };
 
-  return (
-    <div
-      className="relative flex h-full"
-      onDragOver={(e) => {
-        if (e.dataTransfer.types.includes('Files')) {
-          e.preventDefault();
-          setDrag(true);
+  const moveTo = (items: Item[], folder: number | null, name: string, mode: 'move' | 'copy') =>
+    void run(async () => {
+      let done = 0;
+      const failed: string[] = [];
+      for (const i of items) {
+        try {
+          if (mode === 'copy' && i.type === 'file') await apiPost(`/api/files/${i.f.id}/copy`, { folder_id: folder });
+          else if (i.type === 'file') await apiPut(`/api/files/${i.f.id}`, { folder_id: folder });
+          else await apiPost(`/api/drive/folders/${i.f.id}/move`, { parent_id: folder });
+          done++;
+        } catch (e) {
+          failed.push(`${i.f.name}: ${errorMessage(e)}`);
         }
-      }}
-      onDragLeave={(e) => e.currentTarget === e.target && setDrag(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setDrag(false);
-        void upload(Array.from(e.dataTransfer.files));
-      }}
-    >
-      <div className="flex w-[230px] shrink-0 flex-col gap-0.5 border-r border-line bg-surface p-3">
-        <RailItem icon="folder" label="My Drive" active={!folder} onClick={() => go('/files')} />
-        <RailItem icon="users" label="Shared with me" onClick={() => void call('app:openInBrowser', { path: '/files?view=shared' })} external />
-        <RailItem icon="star" label="Favourites" onClick={() => void call('app:openInBrowser', { path: '/files?view=favorites' })} external />
-        <div className="mt-auto rounded-[10px] bg-subtle p-3 text-[12px] leading-snug text-ink-2">
-          <div className="mb-1 flex items-center gap-1.5 font-semibold text-ink">
-            <Icon name="cloud" size={14} /> Online files
-          </div>
-          A synced WorkSuite folder on this computer, offline files and conflict handling arrive with Drive sync.
-        </div>
-      </div>
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center gap-2 border-b border-line bg-surface px-5 py-3">
-          <nav aria-label="Folder path" className="flex min-w-0 flex-1 items-center gap-1 text-[15px]">
-            <button type="button" className="font-bold text-ink hover:underline" onClick={() => go('/files')}>
-              My Drive
-            </button>
-            {(data?.breadcrumb ?? []).map((b) => (
-              <span key={b.id} className="flex min-w-0 items-center gap-1">
-                <Icon name="chevron-right" size={14} className="text-ink-3" />
-                <button type="button" className="truncate font-semibold text-ink hover:underline" onClick={() => go(`/files?folder=${b.id}`)}>
-                  {b.name}
-                </button>
-              </span>
-            ))}
-          </nav>
-          {q.data?.offline ? <OfflineNote cachedAt={q.data.cachedAt} /> : null}
-          <Button icon="upload" variant="primary" onClick={() => void upload()}>
-            Upload
-          </Button>
-          <Button icon="transfers" onClick={() => openOverlay('transfers')}>
-            Transfers{transfers ? ` (${transfers})` : ''}
-          </Button>
-        </div>
-        <div className="grid grid-cols-[1fr_120px_140px_100px] gap-3 border-b border-line bg-subtle px-5 py-2 text-[12px] font-bold uppercase tracking-wide text-ink-3">
-          <span>Name</span>
-          <span>Status</span>
-          <span>Added</span>
-          <span className="text-right">Size</span>
-        </div>
-        <div className="min-h-0 flex-1">
-          {q.isLoading ? <Spinner /> : q.error ? (
-            <div className="p-5">
-              <ErrorNote error={q.error instanceof ApiError && q.error.status === 403 ? 'This folder is locked or not shared with you. Open it in WorkSuite on the web.' : q.error} onRetry={() => void q.refetch()} />
-            </div>
-          ) : data?.locked ? (
-            <Empty icon="lock" title="This folder is password-protected" hint="Open it in WorkSuite on the web to enter the password." action={<Button icon="external" onClick={() => void call('app:openInBrowser', { path: `/files?folder=${folder}` })}>Open in browser</Button>} />
-          ) : rows.length === 0 ? (
-            <Empty icon="folder-open" title="This folder is empty" hint="Drop files here to upload them." />
-          ) : null}
-          {rows.length > 0 && !data?.locked ? (
-            <VirtualList
-              items={rows}
-              estimate={48}
-              getKey={(r) => `${r.kind}:${r.f.id}`}
-              render={(r) =>
-                r.kind === 'folder' ? (
-                  <button type="button" onDoubleClick={() => go(`/files?folder=${r.f.id}`)} onClick={() => go(`/files?folder=${r.f.id}`)} className="grid w-full grid-cols-[1fr_120px_140px_100px] items-center gap-3 border-b border-line bg-surface px-5 py-2.5 text-left hover:bg-subtle">
-                    <span className="flex min-w-0 items-center gap-3">
-                      <Icon name="folder" size={20} className="text-warning" />
-                      <span className="truncate text-[13.5px] font-semibold text-ink">{r.f.name}</span>
-                      {r.f.is_locked ? <Icon name="lock" size={13} className="text-ink-3" /> : null}
-                    </span>
-                    <span />
-                    <span className="text-[12.5px] text-ink-3">{dateLabel(r.f.updated_at)}</span>
-                    <span className="text-right text-[12.5px] text-ink-3">{r.f.file_count ? `${r.f.file_count} items` : ''}</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setSelected(r.f.id)}
-                    onDoubleClick={() => void download(r.f, true)}
-                    className={cx('grid w-full grid-cols-[1fr_120px_140px_100px] items-center gap-3 border-b border-line px-5 py-2.5 text-left', selected === r.f.id ? 'bg-selection' : 'bg-surface hover:bg-subtle')}
-                  >
-                    <span className="flex min-w-0 items-center gap-3">
-                      <FileBadge name={r.f.name} size={30} />
-                      <span className="truncate text-[13.5px] font-semibold text-ink">{r.f.name}</span>
-                    </span>
-                    <span>
-                      <Chip tone="muted">
-                        <Icon name="cloud" size={12} /> Online
-                      </Chip>
-                    </span>
-                    <span className="text-[12.5px] text-ink-3">{dateLabel(r.f.created_at)}</span>
-                    <span className="text-right font-mono text-[12px] text-ink-3">{bytes(r.f.size)}</span>
-                  </button>
-                )
-              }
-            />
-          ) : null}
-        </div>
-      </div>
-      {file ? (
-        <aside className="flex w-[300px] shrink-0 flex-col border-l border-line bg-surface p-5">
-          <div className="flex justify-end">
-            <IconButton icon="x" label="Close details" onClick={() => setSelected(null)} />
-          </div>
-          <div className="flex flex-col items-center gap-3 text-center">
-            <FileBadge name={file.name} size={64} />
-            <div className="break-all text-[15px] font-bold text-ink selectable">{file.name}</div>
-            <div className="text-[12.5px] text-ink-3">
-              {bytes(file.size)} · version {file.version} · added {dateLabel(file.created_at)}
-            </div>
-          </div>
-          <div className="mt-6 flex flex-col gap-2">
-            <Button variant="primary" icon="external" disabled={file.access?.can_download === false} onClick={() => void download(file, true)}>
-              Open locally
-            </Button>
-            <Button icon="download" disabled={file.access?.can_download === false} onClick={() => void download(file, false)}>
-              Download
-            </Button>
-            <Button icon="link" onClick={() => void call('app:openInBrowser', { path: `/files?file=${file.id}` })}>
-              Share or preview on the web
-            </Button>
-            {file.access?.can_download === false ? <p className="text-[12px] text-ink-3">You can view this file but not download it.</p> : null}
-          </div>
-        </aside>
-      ) : null}
-      {drag ? (
-        <div className="pointer-events-none absolute inset-3 flex items-center justify-center rounded-[14px] border-2 border-dashed border-primary bg-selection/80 text-[16px] font-semibold text-primary">
-          Drop to upload to {data?.breadcrumb.length ? data.breadcrumb[data.breadcrumb.length - 1]!.name : 'My Drive'}
-        </div>
-      ) : null}
-    </div>
-  );
-}
+      }
+      if (done) toast('success', `${mode === 'move' ? 'Moved' : 'Copied'} ${done} ${done === 1 ? 'item' : 'items'} to ${name}`);
+      if (failed.length) toast('error', failed.slice(0, 2).join(' · ') + (failed.length > 2 ? ` · and ${failed.length - 2} more` : ''));
+    });
 
-function RailItem({ icon, label, active, onClick, external }: { icon: string; label: string; active?: boolean; onClick: () => void; external?: boolean }) {
+  const trashNow = (items: Item[]) =>
+    void run(async () => {
+      const files = items.filter((i) => i.type === 'file').map((i) => i.f.id);
+      const folders = items.filter((i) => i.type === 'folder').map((i) => i.f.id);
+      for (const id of files) await apiDelete(`/api/files/${id}`);
+      for (const id of folders) await apiDelete(`/api/folders/${id}`);
+      if (files.length && !folders.length) {
+        toast('success', `${files.length === 1 ? `“${items[0]!.f.name}”` : `${files.length} files`} moved to the recycle bin`, {
+          label: 'Undo',
+          run: () =>
+            void run(async () => {
+              for (const id of files) await apiPost(`/api/files/${id}/restore`);
+            }, 'Restored'),
+        });
+      } else toast('success', `${items.length} ${items.length === 1 ? 'item' : 'items'} deleted`);
+    });
+
+  const d: Drive = {
+    folderId,
+    openFolder: (id) => onPlace({ view: 'folder', folder: id }),
+    open: (item, list) => {
+      if (item.type === 'folder') return onPlace({ view: 'folder', folder: item.f.id });
+      const f = item.f;
+      const way = openWay(f);
+      if (way === 'preview') {
+        const all = (list ?? [f]).filter((x) => openWay(x) === 'preview');
+        return setPreview({ files: all.length ? all : [f], index: Math.max(0, all.findIndex((x) => x.id === f.id)) });
+      }
+      void apiPost(`/api/drive/opened/${f.id}`, { action: 'opened' }).catch(() => undefined);
+      if (way === 'pdf') void call('app:openInBrowser', { path: `/pdf?file=${f.id}&mode=read` });
+      else if (way === 'office') d.office(f);
+      else if (way === 'archive') setDialog({ kind: 'archive', file: f });
+      else if (can(f.access, 'download')) d.download([f], true);
+      else d.inBrowser(f);
+    },
+    preview: (files, index) => setPreview({ files, index: Math.max(0, index) }),
+    download: (files, open) =>
+      void (async () => {
+        let ok = 0;
+        for (const f of files) {
+          try {
+            await call('transfers:download', { fileId: String(f.id), name: f.name, open: !!open });
+            ok++;
+          } catch (e) {
+            toast('error', `${f.name}: ${errorMessage(e)}`);
+          }
+        }
+        if (ok) toast('info', open ? `Opening ${files[0]!.name}…` : `Downloading ${ok === 1 ? files[0]!.name : `${ok} files`} — see Transfers.`);
+      })(),
+    downloadFolder: (f) =>
+      void run(async () => {
+        const pw = lockPassword(f.id);
+        const r = await apiPost<{ url: string }>(`/api/folders/${f.id}/download`, pw ? { password: pw } : {});
+        await call('app:openExternal', { url: r.url });
+      }, `Your browser is downloading “${f.name}” as a zip`),
+    trash: (items) => {
+      if (!items.length) return;
+      const folders = items.filter((i) => i.type === 'folder');
+      if (folders.length || items.length > 1) {
+        setDialog({
+          kind: 'confirm',
+          title: items.length === 1 ? `Delete “${items[0]!.f.name}”?` : `Delete ${items.length} items?`,
+          body: folders.length ? 'Files go to the recycle bin for 30 days. A deleted folder can’t be brought back from there.' : 'They go to the recycle bin for 30 days.',
+          action: folders.length ? 'Delete' : 'Move to trash',
+          run: () => trashNow(items),
+        });
+      } else trashNow(items);
+    },
+    rename: (item) =>
+      setDialog({
+        kind: 'name',
+        title: item.type === 'file' ? 'Rename file' : 'Rename folder',
+        initial: item.f.name,
+        action: 'Rename',
+        save: async (name) => {
+          if (name === item.f.name) return;
+          if (item.type === 'file') await apiPut(`/api/files/${item.f.id}`, { name });
+          else await apiPut(`/api/drive/folders/${item.f.id}`, { name });
+          toast('success', 'Renamed');
+          refresh();
+        },
+      }),
+    move: (items, mode) => setDialog({ kind: 'pick', items, mode }),
+    duplicate: (f) => void run(() => apiPost(`/api/files/${f.id}/copy`, { folder_id: f.folder_id }), `Made a copy of “${f.name}”`),
+    zip: (files) =>
+      setDialog({
+        kind: 'name',
+        title: files.length === 1 ? `Zip “${files[0]!.name}”` : `Zip ${files.length} files`,
+        initial: files.length === 1 ? `${files[0]!.name.replace(/\.[^.]+$/, '')}.zip` : 'Archive.zip',
+        action: 'Make zip',
+        save: async (name) => {
+          const r = await apiPost<{ name: string; files: number }>('/api/drive/compress', { file_ids: files.map((f) => f.id), folder_id: files[0]!.folder_id, name: name.replace(/\.zip$/i, '') });
+          toast('success', `Made “${r.name}” with ${r.files} ${r.files === 1 ? 'file' : 'files'}`);
+          refresh();
+        },
+      }),
+    archive: (file) => setDialog({ kind: 'archive', file }),
+    share: (item) => setDialog({ kind: 'share', item }),
+    secureLink: (file) => setDialog({ kind: 'secure', file }),
+    publicLink: (item) => setDialog({ kind: 'link', item }),
+    sendToChat: (item, discuss) => setDialog({ kind: 'chat', item, discuss }),
+    lock: (folder, on) => setDialog({ kind: 'lock', folder, on }),
+    star: (item, on) => void run(() => apiPost('/api/drive/star', { type: item.type, id: item.f.id, on }), on ? `Starred “${item.f.name}”` : `Star removed from “${item.f.name}”`),
+    details: (item, tab) => {
+      const key: Key = item.type === 'file' ? `f:${item.f.id}` : `d:${item.f.id}`;
+      const parent = item.type === 'file' ? item.f.folder_id : item.f.parent_id;
+      askDetails(key, tab);
+      // Lists show the item where it is; a page (Home, Shared…) goes to its folder.
+      if (!PAGES.includes(place.view) && (place.view !== 'folder' || place.folder === parent)) return;
+      const s = new URLSearchParams();
+      if (parent) s.set('folder', String(parent));
+      else s.set('view', 'folder');
+      if (item.type === 'file') s.set('file', String(item.f.id));
+      go(`/files?${s}`);
+    },
+    office: (f) => void call('app:openInBrowser', { path: `/editor/${f.id}` }),
+    inBrowser: (f) => void call('app:openInBrowser', { path: `/files?file=${f.id}` }),
+    newFolder: () =>
+      setDialog({
+        kind: 'name',
+        title: 'New folder',
+        initial: 'Untitled folder',
+        action: 'Create',
+        save: async (name) => {
+          const r = await apiPost<{ id: number | string }>('/api/folders', { name, parent_id: folderId });
+          toast('success', `Folder “${name}” created`);
+          refresh();
+          askDetails(`d:${Number(r.id)}`);
+        },
+      }),
+    upload: () => void upload(),
+    drop: (e: DragEvent, folder) => {
+      const internal = e.dataTransfer.getData('application/x-ws-drive');
+      if (internal) {
+        try {
+          const keys = (JSON.parse(internal) as Key[]).filter((k) => k !== `d:${folder}`);
+          const { files, folders } = splitKeys(keys);
+          const items: Item[] = [...files.map((id) => ({ type: 'file' as const, f: { id, name: `file ${id}` } as DriveFile })), ...folders.map((id) => ({ type: 'folder' as const, f: { id, name: `folder ${id}` } as DriveFolder }))];
+          if (items.length) moveTo(items, folder, folder === null ? 'My Drive' : (nameIn(tree, folder) ?? 'the folder'), 'move');
+        } catch {
+          /* not ours */
+        }
+        return;
+      }
+      const dropped = Array.from(e.dataTransfer.files);
+      if (dropped.length) void upload(dropped, folder);
+    },
+    refresh,
+  };
+
+  const newItems: MenuItem[] = [
+    { label: 'New folder', hint: '⇧⌘N', tag: { text: 'DIR', tone: TONE.folder! }, run: d.newFolder },
+    { sep: true },
+    { label: 'Upload files…', tag: { text: 'UP', tone: TONE.code! }, run: d.upload },
+    { sep: true },
+    ...DOCS.map(([ext, tag, label, base]) => ({
+      label,
+      hint: ['docx', 'xlsx', 'pptx'].includes(ext) ? 'Office' : '',
+      tag: { text: tag, tone: DOC_TONE[ext]! },
+      run: () =>
+        setDialog({
+          kind: 'name',
+          title: `New ${label.toLowerCase()}`,
+          initial: `${base}.${ext}`,
+          action: 'Create',
+          save: async (name) => {
+            const f = await apiPost<DriveFile>('/api/files/create', { type: ext, name, folder_id: folderId });
+            toast('success', `“${f.name}” created`);
+            refresh();
+            if (['docx', 'xlsx', 'pptx'].includes(ext)) d.office(f);
+            else askDetails(`f:${f.id}`);
+          },
+        }),
+    })),
+  ];
+
+  // Quick actions and links: /files?upload=1, ?new=folder.
+  const ask = query.get('upload') === '1' ? 'upload' : query.get('new') === 'folder' ? 'folder' : null;
+  const handled = useRef<string | null>(null);
+  useEffect(() => {
+    if (!ask || handled.current === ask) return;
+    handled.current = ask;
+    if (ask === 'upload') void upload();
+    else d.newFolder();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ask]);
+
+  const view = place.view;
+  const listView = !PAGES.includes(view);
+
   return (
-    <button type="button" onClick={onClick} className={cx('flex h-9 items-center gap-2.5 rounded-[8px] px-3 text-[13.5px]', active ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
-      <Icon name={icon} size={16} />
-      <span className="flex-1 text-left">{label}</span>
-      {external ? <Icon name="external" size={12} className="text-ink-3" /> : null}
-    </button>
+    <DriveCtx.Provider value={d}>
+      <div className="flex h-full bg-ground text-[13px]">
+        <Rail
+          place={place}
+          counts={treeQ.data?.counts}
+          tree={tree}
+          used={storage.data?.used ?? treeQ.data?.counts.used ?? 0}
+          quota={storage.data && !storage.data.unlimited ? storage.data.quota : null}
+          ancestors={ancestors}
+          onPlace={(p) => onPlace(p)}
+          newItems={newItems}
+          onUpload={d.upload}
+          onDrop={(e, folder) => d.drop(e, folder)}
+          canPartners={perms.includes('files.permissions.manage')}
+        />
+        {view === 'home' ? <Home onPlace={onPlace} now={now} /> : null}
+        {listView ? <Explorer key={`${view}:${place.folder}:${query.get('q') ?? ''}`} place={place} active={active && !dialog && !preview} onPlace={(p) => onPlace(p)} ask={detailsAsk} initialQ={query.get('q') ?? ''} /> : null}
+        {view === 'shared' ? <Shared onPlace={(p) => onPlace(p)} /> : null}
+        {view === 'trash' ? <Trash /> : null}
+        {view === 'storage' ? <Storage onPlace={(p) => onPlace(p)} /> : null}
+        {view === 'duplicates' ? <Duplicates /> : null}
+        {view === 'links' ? <Links /> : null}
+        {view === 'notifications' ? <Notifications /> : null}
+        {view === 'companies' ? <Companies /> : null}
+      </div>
+      {preview ? <Preview files={preview.files} start={preview.index} onClose={() => setPreview(null)} /> : null}
+      {dialog?.kind === 'name' ? <NameDialog title={dialog.title} initial={dialog.initial} action={dialog.action} onClose={() => setDialog(null)} onSave={dialog.save} /> : null}
+      {dialog?.kind === 'confirm' ? <ConfirmDialog title={dialog.title} body={dialog.body} action={dialog.action} danger onClose={() => setDialog(null)} onYes={dialog.run} /> : null}
+      {dialog?.kind === 'pick' ? <FolderPicker items={dialog.items} mode={dialog.mode} onClose={() => setDialog(null)} onPick={(folder, name) => moveTo(dialog.items, folder, name, dialog.mode)} /> : null}
+      {dialog?.kind === 'lock' ? <LockDialog folder={dialog.folder} on={dialog.on} onClose={() => setDialog(null)} onDone={refresh} /> : null}
+      {dialog?.kind === 'archive' ? <ArchiveDialog file={dialog.file} onClose={() => setDialog(null)} onExtracted={(id) => onPlace({ view: 'folder', folder: id })} onDownload={() => d.download([dialog.file])} /> : null}
+      {dialog?.kind === 'share' ? (
+        <ShareDialog
+          item={dialog.item}
+          onClose={() => setDialog(null)}
+          onSecureLink={() => dialog.item.type === 'file' && setDialog({ kind: 'secure', file: dialog.item.f })}
+          onPublicLink={() => setDialog({ kind: 'link', item: dialog.item })}
+          onSendToChat={() => setDialog({ kind: 'chat', item: dialog.item })}
+        />
+      ) : null}
+      {dialog?.kind === 'secure' ? <SecureLinkDialog file={dialog.file} onClose={() => setDialog(null)} onAll={() => onPlace({ view: 'links', folder: null })} /> : null}
+      {dialog?.kind === 'link' ? <LinkDialog item={dialog.item} onClose={() => (setDialog(null), refresh())} /> : null}
+      {dialog?.kind === 'chat' ? <SendToChatDialog item={dialog.item} discuss={dialog.discuss} onClose={() => setDialog(null)} onOpenChat={(room) => navigate(`/chat?room=${room}`)} /> : null}
+    </DriveCtx.Provider>
   );
 }

@@ -86,6 +86,15 @@ describe('HTTP client', () => {
     expect(seen).toEqual(['Bearer stale', 'Bearer fresh']);
     expect(t.refresh).toHaveBeenCalledTimes(1);
   });
+  it('keeps the session when a request is refused after a refresh that worked (a wrong folder password)', async () => {
+    const lost = vi.fn();
+    const t = tokens('stale');
+    const http = new HttpClient({ fetch: async () => json(401, { status: 'error', message: 'Incorrect password' }), origin: () => 'https://ws.example', tokens: t, clientHeaders: () => ({}), onReachability: () => undefined, onAuthLost: lost });
+    const res = await http.raw('POST', 'https://ws.example/api/folders/7/verify');
+    expect(res.status).toBe(401);
+    expect(t.refresh).toHaveBeenCalledTimes(1);
+    expect(lost).not.toHaveBeenCalled();
+  });
   it('reports the session lost when refresh is refused', async () => {
     const lost = vi.fn();
     const http = new HttpClient({ fetch: async () => json(401, { status: 'error', message: 'Session ended' }), origin: () => 'https://ws.example', tokens: tokens('x', 'lost'), clientHeaders: () => ({}), onReachability: () => undefined, onAuthLost: lost });

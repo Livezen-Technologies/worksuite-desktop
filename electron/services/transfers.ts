@@ -7,6 +7,7 @@ import type { PickedFile, UploadTarget } from '@shared/ipc/contract';
 import type { Transfer, TransferState } from '@shared/types';
 import { backoffDelay } from '@shared/backoff';
 import { numberedName, safeFileName } from '@shared/filename';
+import { mimeFor } from '@shared/mime';
 import { DesktopError, isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { Database } from './db';
@@ -219,7 +220,7 @@ export class TransferManager {
     const l: Live = { t, meta, abort: null, samples: [] };
     this.live.set(t.id, l);
     this.persist(l);
-    this.deps.audit('file.download', fileId ? { file_id: fileId } : { kind: apiPath.startsWith('/api/meet/') ? 'meet-recording' : apiPath.startsWith('/api/calendar/') || apiPath.startsWith('/api/contacts/') || apiPath.startsWith('/api/data/') ? 'export' : 'mail-attachment' });
+    this.deps.audit('file.download', fileId ? { file_id: fileId } : { kind: apiPath.startsWith('/api/meet/') ? 'meet-recording' : apiPath.startsWith('/api/files/') ? 'file-version' : apiPath.startsWith('/api/calendar/') || apiPath.startsWith('/api/contacts/') || apiPath.startsWith('/api/data/') ? 'export' : 'mail-attachment' });
     void this.runDownload(l);
     return { ...t };
   }
@@ -343,6 +344,7 @@ export class TransferManager {
           total_size: st.size,
           chunk_size: CHUNK,
           sha256: meta.sha256,
+          mime_type: mimeFor(l.t.name) ?? undefined,
           // A task's files are Drive files (in the top folder, as the web's are), linked to the task once they are in.
           ...(meta.target.kind === 'files' ? { purpose: 'drive', folder_id: meta.target.folderId } : meta.target.kind === 'task' ? { purpose: 'drive', folder_id: null } : { purpose: 'chat', room_id: meta.target.roomId }),
         });

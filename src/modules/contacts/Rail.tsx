@@ -119,7 +119,7 @@ export function Rail({ place, stats, groups, onPlace, onNew, onImport, onExport,
               }}
               aria-label="Group name"
               placeholder="Group name"
-              className="min-w-0 flex-1 bg-transparent text-[12.5px] text-ink outline-none"
+              className="min-w-0 flex-1 bg-transparent text-[12.5px] text-ink outline-none bare-focus"
             />
             <button type="button" onClick={() => void add()} className="h-[22px] rounded-[6px] bg-primary px-2 text-[11px] font-bold text-white">Add</button>
           </div>

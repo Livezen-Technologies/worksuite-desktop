@@ -5,6 +5,127 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-26 — 0.2.7: Files, native, to the Drive designs (part 1: the Drive)
+
+**Added**
+
+- **Files is rebuilt to the Drive designs.** The old online-only page is gone.
+- **The rail** (DriveRail):
+  - **New ▾** makes a folder, a Document, Spreadsheet or Presentation (they
+    open in Office on the web), a text file or a Markdown note. **⬆** uploads.
+  - Home, My Drive, Recent, Starred, Shared with me and Shared by me, with
+    counts.
+  - Your folders as a tree, in their colours, with locks and stars. Drop
+    files or rows onto a folder to put them there.
+  - Find by type or date: Images; PDFs, documents, sheets and slides; video,
+    audio, archives and code; today, yesterday, this week and this month.
+  - Tidy up (Duplicates, Large files, Storage, Recycle bin) and Settings
+    (Secure links, Drive notifications, Sharing between companies for those
+    allowed).
+  - How much space is used, and of how much.
+- **Home** (DriveHome): search the whole Drive, Continue working, Recently
+  opened, starred folders and what is out on a public link.
+- **A folder** (DriveFolder):
+  - The breadcrumb, whose last part opens the folder's menu. New folder and
+    Upload sit beside it.
+  - Search, a type filter, eight sorts, and list or grid (remembered).
+  - The list shows name (with a thumbnail, star and lock), owner, modified
+    and size. The grid shows pictures as tiles.
+  - Choose with a click, ⌘/Ctrl and Shift. The dark selection bar can Share,
+    Move, Copy to, Download, Zip, Send to Chat and Move to trash.
+  - Right-click or ⋯ for the menu; right-click empty space for New folder,
+    Upload, Select all and Refresh. Drop files from Finder to upload.
+  - Keys: Enter opens, Space previews, F2 renames, Del trashes, ⌘A selects
+    all, ⇧⌘N makes a folder, ↑↓ move, Backspace goes up, / searches, Esc
+    clears.
+- **The file menu** shows only what the server allows:
+  - Open, Preview, Edit in Office, Open locally, Open in the browser.
+  - Share…, Secure link…, Copy public link, Send to Chat…, Discuss in Chat….
+  - Rename, Move…, Copy to…, Duplicate, Zip, View contents, Versions,
+    Download, Star, Move to trash.
+- **The folder menu**: Open, Details, Share…, Get link…, Send to Chat,
+  Download (zip), Password lock (for the owner), Rename, Move…, Star, Delete.
+- **The details panel** (DriveGrid, right) has a picture, the star, Open,
+  Share and Open locally, and five tabs:
+  - **Details:** type, size, place, owner, dates, version and your access; an
+    editable description; linked records (find and link one, or unlink); and
+    which changes you are told about.
+  - **Activity:** filtered by changes, comments, sharing, records and views.
+  - **Comments:** reply, resolve, 👍, and edit or remove your own.
+  - **Versions:** restore, download or upload a new one.
+  - **Access:** who can open it and how.
+- **The viewer** (DriveMedia) shows pictures (Fit or 100%), video, audio and
+  text, with ‹ › and ← → through the files around it, a strip of them and
+  their details. PDFs open in WorkSuite's PDF reader in the browser.
+- **Share** (DriveShare):
+  - Find people, teams, departments, roles or companies, and give a level
+    (can view, can edit, full access), optionally without download.
+  - Change or remove what is there, see what comes from the folders above,
+    stop or restart inheriting, and lift a refusal.
+  - Effective access shows who can open it and why.
+  - Public and secure links, Copy WorkSuite link and Send to Chat.
+- **Secure link** (DriveSecureLink): a label, 1 hour to never, a download
+  limit, a password and an IP lock. It is copied as soon as it is made.
+- **Send to Chat** (DriveDialogs): a person, a conversation or a team. When
+  they can't open the file it offers Grant view, Grant edit or Send secure
+  link.
+- **Password-locked folders:** lock with a password and confirmation, and
+  unlock with the current one. A locked folder asks for its password before
+  it shows anything, from its owner too; the password is kept until you quit.
+- **Archives:** see inside a zip, and extract it into the Drive. Zip several
+  files into one.
+- **Shared with me** (DriveShared): filter by type, your access, when it was
+  shared, company, location and module. Shared folders are listed first; the
+  table shows owner, company, location, related record, module, your access
+  and when. Shared by me lists what you have put on a link.
+- **Recycle bin:** restore, delete forever, restore all, empty. Trashing a
+  file offers Undo.
+- **Storage:** used against your quota, what could be freed, where the space
+  went, and the largest files.
+- **Duplicates:** keep the newest copy and trash the rest.
+- **Secure links:** every link with its rules, uses, expiry and status; Copy,
+  the downloads log and Revoke. Public links are listed too.
+- **Drive notifications:** your defaults.
+- **Sharing between companies:** add or remove partners.
+
+**Fixed**
+
+- **Uploads from the app now say what they are.** The app never sent a
+  file's media type, and the server stores what the upload says, so every
+  file uploaded from the app since 0.1.0 has none: the server shows no
+  preview for them, here or on the web. New uploads carry it. Older ones
+  still preview here (from the file itself), but the web won't preview them
+  until the server fills the type in.
+- **A wrong folder password no longer signs you out.** The server answers a
+  wrong folder password with 401. The app took any 401 that survived a token
+  refresh as the end of the session. It now signs out only when the refresh
+  itself is refused.
+- Search boxes drew a second focus ring inside their own border (Files and
+  Contacts).
+
+**Not built yet (part 2)**
+
+- The code editor with version compare, the image editor, the full media
+  player (streaming, subtitles, markers, playlists), uploading a folder with
+  its structure, and downloads from a URL or magnet.
+- Anything that needs Drive sync on this Mac: "on this PC" states, Show in
+  Finder, Keep offline, Free up space.
+- Tags are not shown: the server returns them only from its media and image
+  editors.
+
+**Found on the server, not changed**
+
+- A folder's password is checked only when listing it with `files/browse`
+  and downloading it as a zip. `drive/list`, search and the per-file routes
+  ignore it. This app reads locked folders through `files/browse`.
+- A deleted folder can't be restored: there is no folder recycle bin, and the
+  files inside it stay counted but can't be browsed.
+- `PUT /api/folders/{id}` and `POST /api/folders` answer with the folder's
+  `password_hash`.
+- Renaming `a.txt` to `a.md` keeps the extension `txt`.
+
+---
+
 ## 2026-09-26 — 0.2.6: Contacts, native, to the Contacts designs
 
 **Added**

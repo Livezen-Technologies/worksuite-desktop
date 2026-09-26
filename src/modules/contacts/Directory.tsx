@@ -57,7 +57,7 @@ export function Directory({ onNewGroup, onNew }: { onNewGroup: () => void; onNew
       <div className="flex items-center gap-2.5 px-6 pt-4 pb-3.5">
         <label className="flex h-[38px] max-w-[420px] flex-1 items-center gap-2 rounded-[10px] border border-line bg-surface px-3 text-ink-3 focus-within:border-primary">
           <Icon name="search" size={15} />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search directory…" aria-label="Search directory" className="flex-1 bg-transparent text-[13px] text-ink outline-none" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search directory…" aria-label="Search directory" className="flex-1 bg-transparent text-[13px] text-ink outline-none bare-focus" />
         </label>
         <div role="group" aria-label="Show" className="ml-auto flex rounded-[10px] bg-subtle p-[3px]">
           {(
