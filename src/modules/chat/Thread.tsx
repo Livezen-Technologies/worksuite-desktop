@@ -15,6 +15,7 @@ import { describeCard } from '../calls/log';
 import { answerCall, startCall } from '../calls/start';
 import { openMeeting } from '../meet/api';
 import { startMeetingFromChat } from '../meet/start';
+import { LinkedText } from '../../components/LinkedText';
 import { Composer, type ComposerHandle } from './Composer';
 import { PRESENCE } from './Details';
 import { ForwardDialog, type RoomDetail } from './NewChat';
@@ -417,7 +418,9 @@ function Bubble({ m, own, roomId, onReply, onForward, onEdit }: { m: ChatMessage
         {m.reply_preview ? <div className="rounded-[6px] border-l-[3px] border-[#7FA2FF] bg-selection px-2.5 py-1.5 text-[12px] text-ink-2">Replying to {m.reply_preview.sender_name}: “{m.reply_preview.snippet}”</div> : null}
         {m.urgent && !m.deleted ? <span className="text-[10.5px] font-bold tracking-[0.5px] text-danger uppercase">Urgent</span> : null}
         {m.message && !m.deleted ? (
-          <div className={cx('whitespace-pre-wrap break-words px-[13px] py-[9px] text-[13.5px] leading-[1.55] selectable', bubble)}>{m.message}</div>
+          <div className={cx('whitespace-pre-wrap break-words px-[13px] py-[9px] text-[13.5px] leading-[1.55] selectable', bubble)}>
+            <LinkedText text={m.message} className={own ? 'text-white' : 'text-primary'} />
+          </div>
         ) : m.deleted ? (
           <div className="rounded-[12px] border border-line px-3 py-2 text-[12.5px] text-ink-3 italic">Message deleted</div>
         ) : null}
@@ -761,7 +764,11 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
                 )
               ) : null}
               <div className={cx('flex flex-wrap items-end gap-x-2', (media || m.card) && 'px-1.5 pb-0.5')}>
-                {m.message ? <span className={cx('min-w-0 whitespace-pre-wrap break-words selectable', (media || m.card) && 'pt-1')}>{m.message}</span> : null}
+                {m.message ? (
+                  <span className={cx('min-w-0 whitespace-pre-wrap break-words selectable', (media || m.card) && 'pt-1')}>
+                    <LinkedText text={m.message} className={accent} />
+                  </span>
+                ) : null}
                 {m.card?.link && m.card.available !== false ? (
                   <button type="button" onClick={() => openLink(m.card!.link!)} className={cx('pt-1 text-[12.5px] font-bold hover:underline', accent)}>
                     Open {m.card.kind.split('.').pop()}

@@ -5,10 +5,20 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## Unreleased
+## 2026-09-26 — 0.2.20: links in chat open, and the HR pickers leave out leavers
 
 **Fixed**
 
+- **Addresses in chat messages are links now.** A meeting invitation's
+  "Join: https://…/meet/<id>" was plain text that could only be copied.
+  - A meeting link opens that meeting's window here. That covers this
+    server, and app.worksuite.lk, where the server's own invitations point.
+  - Any other address on this server opens in its tab, or in the browser
+    for an app the desktop does not draw yet.
+  - Anything else goes to the browser; a site the app doesn't know asks
+    first.
+  - Full stops and brackets at the end of a sentence stay outside the link.
+  - This covers the chat drawer, the Chat page and the meeting's own chat.
 - **People who have left are no longer offered in the HR pickers.** This
   covers leave on someone's behalf, Reports to, schedule assignment and
   onboarding. The desktop used to count a leaver with no exit date as still
