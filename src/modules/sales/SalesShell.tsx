@@ -6,12 +6,13 @@ import { useTab, useTabTitle } from '../../core/tab-context';
 import { Spinner } from '../../components/ui';
 import type { ModuleProps } from '../registry';
 import { fetchFulfilment, fetchReturns, K, useOrgs, useOverview, type Status } from './api';
-import { NATIVE, SalesRail, type SalesView } from './Rail';
+import { NATIVE, NEEDS, SalesRail, type SalesView } from './Rail';
 
 /**
  * Sales & Orders (the "12 · Orders (OMS)" designs): the rail, and the screen
  * it points at. Addressed as `/sales?tab=…` (`&status=` narrows the order
- * list); an order as `?order=<id>` — what the server's notifications and
+ * list, `&section=channels` opens Settings on the sales channels); an order
+ * as `?order=<id>` — what the server's notifications and
  * shares link to (`/oms?order=`, which the desktop reads as this) — and
  * `?new=1` starts a new one.
  */
@@ -19,8 +20,25 @@ const Dashboard = lazy(() => import('./Dashboard'));
 const Orders = lazy(() => import('./Orders'));
 const Fulfilment = lazy(() => import('./Fulfilment'));
 const Returns = lazy(() => import('./Returns'));
+const Activity = lazy(() => import('./Activity'));
+const Reports = lazy(() => import('./Reports'));
+const Coupons = lazy(() => import('./Coupons'));
+const ApprovalRules = lazy(() => import('./ApprovalRules'));
+const Settings = lazy(() => import('./Settings'));
+const MyAccess = lazy(() => import('./MyAccess'));
 
-const TITLES: Partial<Record<SalesView, string>> = { dash: 'Dashboard', orders: 'Orders', ful: 'Fulfilment', ret: 'Returns' };
+const TITLES: Record<SalesView, string> = {
+  dash: 'Dashboard',
+  orders: 'Orders',
+  ful: 'Fulfilment',
+  ret: 'Returns',
+  act: 'Activity',
+  rep: 'Reports',
+  cou: 'Coupons',
+  rules: 'Approval rules',
+  set: 'Settings',
+  acc: 'My access',
+};
 const ORG_KEY = 'sales.org';
 const num = (v: string | null | undefined) => (v && /^\d+$/.test(v) ? Number(v) : null);
 const has = (perms: readonly string[] | undefined, p: string) => !!perms && (perms.includes('*') || perms.includes(p));
@@ -41,8 +59,9 @@ export default function SalesShell(_props: ModuleProps) {
   const creating = query.get('new') === '1';
   const asked = (query.get('tab') ?? '') as SalesView;
   const status = query.get('status');
-  const view: SalesView = asked && NATIVE.has(asked) ? asked : order || creating || status ? 'orders' : 'dash';
-  useTabTitle(`Orders · ${TITLES[view] ?? 'Orders'}`);
+  const allowed = (v: SalesView) => !NEEDS[v] || has(perms, NEEDS[v]!);
+  const view: SalesView = asked && NATIVE.has(asked) && allowed(asked) ? asked : order || creating || status ? 'orders' : 'dash';
+  useTabTitle(`Orders · ${TITLES[view]}`);
 
   const orgs = useOrgs();
   const overview = useOverview(org);
@@ -88,8 +107,9 @@ export default function SalesShell(_props: ModuleProps) {
         orgs={orgs.data ?? []}
         onOrg={chooseOrg}
         canCreate={canCreate}
+        allowed={allowed}
       />
-      <main className="min-w-0 flex-1 overflow-y-auto bg-ground scroll-thin" aria-label={`Orders · ${TITLES[view] ?? ''}`}>
+      <main className="min-w-0 flex-1 overflow-y-auto bg-ground scroll-thin" aria-label={`Orders · ${TITLES[view]}`}>
         <Suspense fallback={<Spinner />}>
           {view === 'dash' ? <Dashboard org={org} overview={overview} onOpen={(id) => go(`/sales?tab=orders&order=${id}`)} onList={(s) => pick('orders', s)} onPick={pick} /> : null}
           {view === 'orders' ? (
@@ -106,6 +126,12 @@ export default function SalesShell(_props: ModuleProps) {
           ) : null}
           {view === 'ful' ? <Fulfilment org={org} board={ful} onOpen={(id) => go(`/sales?tab=orders&order=${id}`)} /> : null}
           {view === 'ret' ? <Returns org={org} board={ret} /> : null}
+          {view === 'act' ? <Activity org={org} onOpen={(id) => go(`/sales?tab=orders&order=${id}`)} /> : null}
+          {view === 'rep' ? <Reports org={org} /> : null}
+          {view === 'cou' ? <Coupons org={org} /> : null}
+          {view === 'rules' ? <ApprovalRules org={org} /> : null}
+          {view === 'set' ? <Settings org={org} section={query.get('section')} /> : null}
+          {view === 'acc' ? <MyAccess /> : null}
         </Suspense>
       </main>
     </div>

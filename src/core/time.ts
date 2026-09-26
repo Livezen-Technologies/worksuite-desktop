@@ -101,6 +101,19 @@ export function dayLabel(ymd: string, style: 'long' | 'short' = 'long'): string 
   return d.toLocaleDateString(locale, style === 'long' ? { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' } : { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
 }
 
+/** A plain date in words, on no clock: "24 Sep", "Thursday 24 September 2026". */
+export function dayWords(ymd: string, o: { weekday?: boolean; long?: boolean; year?: boolean } = {}): string {
+  const d = new Date(`${ymd}T12:00:00Z`);
+  if (Number.isNaN(d.getTime())) return ymd;
+  return d.toLocaleDateString(locale, { ...(o.weekday ? { weekday: 'long' as const } : {}), day: 'numeric', month: o.long ? 'long' : 'short', ...(o.year ? { year: 'numeric' as const } : {}), timeZone: 'UTC' });
+}
+
+/** "2026-09" as "September 2026". */
+export function monthWords(ym: string): string {
+  const d = new Date(`${ym}-15T12:00:00Z`);
+  return Number.isNaN(d.getTime()) ? ym : d.toLocaleDateString(locale, { month: 'long', year: 'numeric', timeZone: 'UTC' });
+}
+
 /** A bare date stays a day; a stamp is shown on the reader's calendar. */
 export function dateLabel(value: string | null | undefined): string {
   if (!value) return '';

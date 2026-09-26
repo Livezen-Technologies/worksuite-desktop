@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { app } from '../../core/app-state';
-import { ApiError, apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
+import { apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
@@ -10,6 +10,7 @@ import type { LeaveType } from './api';
 import { dayLong } from './dates';
 import { btn, btnPrimary, Empty, Field, input, PageHead, Panel, Seg, Sheet } from './parts';
 import { can } from './Rail';
+import { ModuleSettingsForm } from '../../components/ModuleSettingsForm';
 import { Select } from '../../components/Select';
 
 /**
@@ -22,26 +23,6 @@ import { Select } from '../../components/Select';
  * the browser for now.
  */
 type Tab = 'general' | 'types' | 'holidays' | 'advanced';
-
-interface FieldDef {
-  key: string;
-  label: string;
-  type: 'string' | 'int' | 'bool' | 'select' | 'multiselect' | 'time' | 'text';
-  default: string | null;
-  help: string | null;
-  section: string;
-  options: Array<{ value: string; label: string }> | null;
-  min: number | null;
-  max: number | null;
-  placeholder: string | null;
-}
-
-interface ModuleSettings {
-  spec: { general: FieldDef[]; advanced?: FieldDef[] };
-  general: Record<string, { value: unknown; stored: boolean; inherited: boolean }>;
-  advanced: Record<string, { value: unknown; stored: boolean; inherited: boolean }>;
-  can_edit: boolean;
-}
 
 export default function Settings({ section }: { section?: string | null }) {
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
@@ -59,7 +40,9 @@ export default function Settings({ section }: { section?: string | null }) {
       <PageHead title="Settings" sub="People — installation-wide rules">
         <Seg label="Settings" value={tab} onChange={setTab} options={tabs} />
       </PageHead>
-      {tab === 'general' || tab === 'advanced' ? <SettingsForm section={tab} /> : null}
+      {tab === 'general' || tab === 'advanced' ? (
+        <ModuleSettingsForm slug="hr" section={tab} queryKey={['hr', 'module-settings']} note="Changes apply to every company." readOnly="You can read these settings; changing them needs hr.manage." />
+      ) : null}
       {tab === 'types' ? <LeaveTypes editable={manage} /> : null}
       {tab === 'holidays' ? <Holidays editable={manage} /> : null}
       {can(perms, 'hr.resignation.settings.manage') ? (
@@ -71,150 +54,6 @@ export default function Settings({ section }: { section?: string | null }) {
         </div>
       ) : null}
     </div>
-  );
-}
-
-/** A value as the form holds it: booleans as '1'/'0', lists comma-joined, the rest as text. */
-function asText(f: FieldDef, v: unknown): string {
-  if (f.type === 'bool') return v === true || v === 1 || v === '1' || v === 'true' ? '1' : '0';
-  if (f.type === 'multiselect') return Array.isArray(v) ? v.map(String).join(',') : v == null ? '' : String(v);
-  return v == null ? '' : String(v);
-}
-
-function SettingsForm({ section }: { section: 'general' | 'advanced' }) {
-  const qc = useQueryClient();
-  const q = useQuery({ queryKey: ['hr', 'module-settings'], queryFn: ({ signal }) => apiGet<ModuleSettings>('/api/module-settings/hr', undefined, signal) });
-  const [draft, setDraft] = useState<Record<string, string>>({});
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
-  const fields = useMemo(() => (section === 'general' ? q.data?.spec.general : q.data?.spec.advanced) ?? [], [q.data, section]);
-  const values = useMemo(() => (section === 'general' ? q.data?.general : q.data?.advanced) ?? {}, [q.data, section]);
-  const initial = useMemo(() => Object.fromEntries(fields.map((f) => [f.key, asText(f, values[f.key]?.value)])), [fields, values]);
-  const groups = useMemo(() => {
-    const m = new Map<string, FieldDef[]>();
-    for (const f of fields) m.set(f.section, [...(m.get(f.section) ?? []), f]);
-    return [...m.entries()];
-  }, [fields]);
-  if (q.isLoading) return <Spinner />;
-  if (q.error) return <ErrorNote error={q.error} onRetry={() => void q.refetch()} />;
-  const editable = !!q.data?.can_edit;
-  const cur = (k: string) => (k in draft ? draft[k]! : (initial[k] ?? ''));
-  const changed = fields.filter((f) => f.key in draft && draft[f.key] !== initial[f.key]);
-  const set = (k: string, v: string) => setDraft((d) => ({ ...d, [k]: v }));
-
-  const save = async () => {
-    setBusy(true);
-    setErrors({});
-    try {
-      await apiPut(`/api/module-settings/hr/${section}`, Object.fromEntries(changed.map((f) => [f.key, draft[f.key]])));
-      toast('success', changed.length === 1 ? 'Setting saved.' : `${changed.length} settings saved.`);
-      setDraft({});
-      void qc.invalidateQueries({ queryKey: ['hr', 'module-settings'] });
-    } catch (e) {
-      const errs = e instanceof ApiError ? ((e.data as { errors?: unknown } | null)?.errors ?? e.data) : null;
-      if (errs && typeof errs === 'object') setErrors(errs as Record<string, string>);
-      toast('error', errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="flex flex-col gap-3">
-      {groups.map(([title, list]) => (
-        <Panel key={title} title={title} bodyClassName="grid grid-cols-2 gap-x-5 gap-y-3 px-4 py-3">
-          {list.map((f) => (
-            <SettingField key={f.key} f={f} value={cur(f.key)} error={errors[f.key]} disabled={!editable} onChange={(v) => set(f.key, v)} changed={f.key in draft && draft[f.key] !== initial[f.key]} />
-          ))}
-        </Panel>
-      ))}
-      {editable ? (
-        <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-line bg-ground py-2.5">
-          <span className="mr-auto text-[12px] text-ink-3">{changed.length ? `${changed.length} unsaved ${changed.length === 1 ? 'change' : 'changes'}` : 'Changes apply to every company.'}</span>
-          {changed.length ? (
-            <button type="button" className={btn} onClick={() => setDraft({})}>
-              Discard
-            </button>
-          ) : null}
-          <button type="button" disabled={busy || !changed.length} className={btnPrimary} onClick={() => void save()}>
-            Save
-          </button>
-        </div>
-      ) : (
-        <span className="text-[12px] text-ink-3">You can read these settings; changing them needs hr.manage.</span>
-      )}
-    </div>
-  );
-}
-
-function SettingField({ f, value, error, disabled, changed, onChange }: { f: FieldDef; value: string; error?: string; disabled: boolean; changed: boolean; onChange: (v: string) => void }) {
-  const label = (
-    <span className="flex items-center gap-1.5">
-      {f.label}
-      {changed ? <span className="h-1.5 w-1.5 rounded-full bg-primary" title="Changed" /> : null}
-    </span>
-  );
-  const hint = error ? <span className="text-danger">{error}</span> : (f.help ?? undefined);
-  if (f.type === 'bool') {
-    return (
-      <div className="flex flex-col gap-1 text-[12.5px]">
-        <label className="flex items-center gap-2 font-semibold text-ink">
-          <input type="checkbox" aria-label={f.label} checked={value === '1'} disabled={disabled} onChange={(e) => onChange(e.target.checked ? '1' : '0')} className="accent-primary" />
-          {label}
-        </label>
-        {hint ? <span className="text-[11.5px] text-ink-3">{hint}</span> : null}
-      </div>
-    );
-  }
-  if (f.type === 'multiselect') {
-    const chosen = value === '' ? [] : value.split(',');
-    return (
-      <Field label={label} hint={hint}>
-        <div className="flex flex-wrap gap-x-3 gap-y-1 rounded-[8px] border border-line px-2.5 py-2 font-medium">
-          {(f.options ?? []).map((o) => (
-            <label key={o.value} className="flex items-center gap-1.5">
-              <input type="checkbox" checked={chosen.includes(o.value)} disabled={disabled} onChange={(e) => onChange((e.target.checked ? [...chosen, o.value] : chosen.filter((c) => c !== o.value)).join(','))} className="accent-primary" />
-              {o.label}
-            </label>
-          ))}
-        </div>
-      </Field>
-    );
-  }
-  if (f.type === 'select') {
-    return (
-      <Field label={label} hint={hint}>
-        <Select aria-label={f.label} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={input}>
-          {(f.options ?? []).map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </Select>
-      </Field>
-    );
-  }
-  if (f.type === 'text') {
-    return (
-      <Field label={label} hint={hint} className="col-span-2">
-        <textarea aria-label={f.label} value={value} disabled={disabled} placeholder={f.placeholder ?? undefined} onChange={(e) => onChange(e.target.value)} className={input + ' !h-[64px] resize-none py-2'} />
-      </Field>
-    );
-  }
-  return (
-    <Field label={label} hint={hint}>
-      <input
-        aria-label={f.label}
-        type={f.type === 'int' ? 'number' : f.type === 'time' ? 'time' : 'text'}
-        min={f.min ?? undefined}
-        max={f.max ?? undefined}
-        value={value}
-        disabled={disabled}
-        placeholder={f.placeholder ?? f.default ?? undefined}
-        onChange={(e) => onChange(e.target.value)}
-        className={input}
-      />
-    </Field>
   );
 }
 

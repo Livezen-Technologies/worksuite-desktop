@@ -8,7 +8,7 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { cx } from '../../components/ui';
 import { btn, btnPrimary, Field, input, Sheet } from '../hr/parts';
-import { bulk, createOrder, customers, K, lookupProducts, PRIORITIES, scanUnit, useOrgs, warehouses, ymd, type ProductHit } from './api';
+import { bulk, createOrder, customers, K, lookupProducts, orderDefaults, PRIORITIES, scanUnit, useOrgs, warehouses, ymd, type ProductHit } from './api';
 import { moneyFull } from './parts';
 
 /**
@@ -45,15 +45,20 @@ export default function NewOrder({ org, onClose }: { org: string; onClose: (crea
   const [house, setHouse] = useState<number | null>(null);
   const [date, setDate] = useState(ymd());
   const [expected, setExpected] = useState('');
-  const [currency, setCurrency] = useState('');
-  const [priority, setPriority] = useState('normal');
+  // Orders' own defaults (Settings → General) until somebody chooses otherwise.
+  const defaults = useQuery({ queryKey: ['sales', 'order-defaults', org], queryFn: ({ signal }) => orderDefaults(org, signal), staleTime: 300_000 });
+  const [currencyTyped, setCurrency] = useState<string | null>(null);
+  const [priorityChosen, setPriority] = useState<string | null>(null);
+  const currency = currencyTyped ?? defaults.data?.oms_default_currency ?? '';
+  const priority = priorityChosen ?? defaults.data?.oms_default_priority ?? 'normal';
+  const defaultHouse = Number(defaults.data?.oms_default_warehouse) || null;
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<Line[]>([]);
   const [scanning, setScanning] = useState(false);
   const [busy, setBusy] = useState(false);
   const several = (orgs.data?.length ?? 0) > 1;
   const houseList = (houses.data ?? []).filter((h) => !company || h.org_id == null || String(h.org_id) === company);
-  const chosenHouse = house ?? (houseList.find((h) => h.is_default) ?? houseList[0])?.id ?? null;
+  const chosenHouse = house ?? (houseList.find((h) => h.id === defaultHouse) ?? houseList.find((h) => h.is_default) ?? houseList[0])?.id ?? null;
 
   const addProduct = (p: ProductHit, serial: string | null = null) =>
     setLines((ls) => {

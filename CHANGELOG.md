@@ -5,6 +5,119 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-27 — 0.2.27: Sales & Orders, part 2
+
+From the "12 · Orders (OMS)" designs. The rest of Sales & Orders now opens
+here instead of in the browser: Activity, Reports, Coupons, Approval rules,
+Settings and My access. The rail leaves out a screen you lack the permission
+for: Reports needs `oms.reports.view`, Coupons `oms.coupons.view`, and
+Settings `oms.settings`.
+
+**Added**
+
+- **Activity:**
+  - every change to every order, newest first;
+  - a section per day on your own clock (the stamps are UTC, so an evening
+    event stays on that evening);
+  - search, and filters by kind and by person, each with its count;
+  - pages of older events;
+  - an order number opens the order;
+  - it refreshes itself every minute.
+- **Reports:** Summary, Sales performance, Order status, Payment, Order
+  ageing, Returns and Coupon usage.
+  - The window is a preset (this month, last week, this quarter, …) or your
+    own dates, and is remembered on this computer.
+  - The Summary has its eight figures, order value by currency, and the
+    status and ageing bars, as the design draws it.
+  - Sales performance groups by month, day, customer, salesperson,
+    assignee, company, source, product, category, status, type or priority,
+    with bars and the detail table. Months and days are written as words
+    ("September 2026").
+  - Money is never added across currencies: there is a row per currency, as
+    the server gives it.
+  - Each report ends with the server's own note on what its figures rest on.
+  - **Export** downloads the server's CSV of the report (needs
+    `oms.orders.export`). It goes through Transfers, as the order list's
+    export does.
+- **Coupons:**
+  - the list shows code, name, what it takes off, minimum order, when it
+    runs, how often it has been used, and its state;
+  - the state is the server's, so an Active coupon whose end date has
+    passed says Expired;
+  - with `oms.coupons.manage`, you can add, edit and remove coupons;
+  - a coupon that has been used keeps its code;
+  - somebody in several companies says which company a new coupon is for.
+    Only an administrator may make one for every company.
+- **Approval rules:**
+  - the rules in step order, each read as the server writes it ("Order
+    total is more than 250,000 → needs oms.orders.approve · every
+    company"), with "off" on a rule that is switched off;
+  - with `oms.settings`, you can add, edit, switch off and remove rules;
+  - what a rule can ask about, and how it compares, come from the server;
+  - a rule can apply to one company;
+  - removing a rule does not change orders already waiting on it.
+- **Settings:**
+  - General: the defaults a new order starts with, drawn from the server's
+    own list of settings. The default warehouse is chosen from the
+    warehouses by name.
+  - Advanced, for those who may see it.
+  - Sales Channels:
+    - every kind of channel, set up or not, with its status;
+    - add a channel, open it, Test it, and see its connection, mapping, sync
+      and logs;
+    - switch the shop's webhook orders on and off;
+    - remove a channel;
+    - a shop's **Sync now** runs here page by page, with the steps and
+      progress, **Cancel**, and **Carry on** for a run that was cut off.
+  - User Access, Screens & components, Organization, Notifications, History
+    and Change log are the installation's settings screens, and open in the
+    browser (marked).
+- **My access:**
+  - which companies you work in;
+  - what the company picker narrows and what it does not, with the server's
+    warning that a company is a filter, not a boundary;
+  - Orders' permissions, granted or not.
+
+**Changed**
+
+- **New order starts from Orders' defaults:** the default priority, the
+  default warehouse and the default currency. Anything you choose on the form
+  still wins.
+- **People → Settings** uses the same settings form as Orders (now shared).
+  Nothing about it changes.
+
+**Server fixes this needed** (LHCP, committed, **not deployed**)
+
+- 624d7307: a channel added as "Not tied to one company" (the form's
+  default) was saved, then missing from the list. Opening it said "There is
+  no such channel."
+- e7a9e9d0: the in-app CRM channel always showed "Error", and its Test was a
+  server error. It counted customers by a `deleted_at` column that the
+  `clients` table does not have.
+
+Until those are deployed, both show on production as described.
+
+**Tests**
+
+- Unit: report windows (weeks from Monday, month lengths, leap years,
+  quarters), activity grouped by the reader's day and never twice, event
+  names, report periods in words, coupon worth, runs and uses, rule lines,
+  channel tones and sync times.
+- End-to-end, against a local server (`tests/e2e/sales-2.mjs`, 22 checks,
+  all passing):
+  - every screen opens from the rail;
+  - Activity filters;
+  - both reports draw, and Export answers;
+  - a coupon and a rule are added, edited and removed;
+  - settings save and New order starts from them;
+  - a channel is added, tested (the log shows it) and removed;
+  - My access lists the permissions.
+  - Everything it makes is removed at the end.
+- Also rerun and passing: the part 1 Orders run (12 checks), and the People
+  admin run that saves an HR setting.
+
+---
+
 ## 2026-09-27 — 0.2.26: Orders' dropdowns search
 
 Every dropdown in Sales & Orders is now the app's own list, not the system

@@ -356,4 +356,6 @@ export const customers = (q: string, signal?: AbortSignal) =>
 export const createOrder = (body: Record<string, unknown>) => apiPost<{ order: { id: number; so_number?: string } }>('/api/inventory/sales-orders', body);
 
 /** The day's date as the server reads a date: YYYY-MM-DD, local. */
+/** Orders' general defaults (`oms_default_priority`, `…_warehouse` as an id, `…_currency`, …), as the New order form starts from them. */
+export const orderDefaults = (org: string, signal?: AbortSignal) => apiGet<{ settings: Record<string, string> }>('/api/oms/settings', withOrg(org), signal).then((r) => r.settings ?? {});
 export const ymd = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

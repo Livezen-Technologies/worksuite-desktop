@@ -30,6 +30,8 @@ export interface ApiResult<T> {
   data: T;
   offline: boolean;
   cachedAt: string | null;
+  /** The server's own sentence about what it did, when it sent one. */
+  message?: string | null;
 }
 
 type Query = Record<string, string | number | boolean | null | undefined>;
@@ -79,6 +81,7 @@ export async function request<T = unknown>(method: string, path: string, opts: {
     data: (json && 'data' in json ? json.data : json) as T,
     offline: res.headers.get('x-ws-offline') === '1',
     cachedAt: res.headers.get('x-ws-cached-at'),
+    message: typeof json?.message === 'string' ? json.message : null,
   };
 }
 

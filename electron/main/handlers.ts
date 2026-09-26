@@ -297,8 +297,11 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     }
     const r = input.hrReport;
     const oc = input.ordersCsv;
+    const rep = input.omsReport;
     const path = input.orderPdf
       ? `/api/share/oms/${input.orderPdf}/pdf`
+      : rep
+      ? `/api/oms/reports/${rep.report}?${new URLSearchParams({ from: rep.from, to: rep.to, format: 'csv', ...(rep.org ? { org: rep.org } : {}), ...(rep.report === 'sales' && rep.group ? { group: rep.group } : {}) })}`
       : oc
       ? `/api/oms/orders/export?${new URLSearchParams(Object.entries({ org: oc.org, status: oc.status, source: oc.source, priority: oc.priority, q: oc.q, mine: oc.mine ? '1' : undefined }).filter((e): e is [string, string] => !!e[1]))}`
       : input.picture
