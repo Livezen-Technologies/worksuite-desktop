@@ -103,9 +103,11 @@ export class TrayService {
     const m = this.model;
     const unread = m.unreadChat + m.unreadMail + m.unreadOther;
     const state = trayState({ error: !!m.error, offline: m.offline && m.signedIn, monitoring: false, syncing: false, unread });
-    // Badge: unread chat + mail + important notifications (FR-TRAY-07).
+    // Badge: unread chat + mail + important notifications (FR-TRAY-07). On macOS the
+    // renderer paints it onto the Dock icon (core/dock-badge): an unsigned build is
+    // never registered for notifications, and macOS will not draw its badge.
     try {
-      app.setBadgeCount(m.signedIn ? unread : 0);
+      app.setBadgeCount(m.signedIn && process.platform !== 'darwin' ? unread : 0);
     } catch {
       /* not supported on this desktop */
     }

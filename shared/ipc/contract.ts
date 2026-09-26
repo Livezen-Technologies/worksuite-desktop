@@ -122,6 +122,8 @@ export const contract = {
   'app:relaunch': ch(none, { whileLocked: true }),
   'app:openExternal': ch(z.object({ url: z.string().url().max(2048) }), { rate: 5 }),
   'app:openInBrowser': ch(z.object({ path: z.string().regex(/^\/[A-Za-z0-9/_\-.?=&]*$/).max(512) }), { session: true, rate: 5 }),
+  /** macOS: the Dock icon with the unread count painted on (the renderer draws it; see core/dock-badge). */
+  'app:setDockIcon': ch(z.object({ png: z.string().regex(/^data:image\/png;base64,[A-Za-z0-9+/=]+$/).max(4_000_000) }), { whileLocked: true, rate: 30 }),
 
   'auth:state': ch(none, { whileLocked: true }),
   'auth:setServer': ch(z.object({ url: z.string().min(3).max(512) }), { rate: 2 }),
@@ -363,6 +365,7 @@ export interface Outputs {
   'app:relaunch': void;
   'app:openExternal': boolean;
   'app:openInBrowser': boolean;
+  'app:setDockIcon': boolean;
   'auth:state': AuthState;
   'auth:setServer': AuthState;
   'auth:signIn': AuthState;

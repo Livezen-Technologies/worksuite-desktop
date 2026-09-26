@@ -9,6 +9,7 @@ export const INVOKE_CHANNELS = [
   'app:relaunch',
   'app:openExternal',
   'app:openInBrowser',
+  'app:setDockIcon',
 
   'auth:state',
   'auth:setServer',

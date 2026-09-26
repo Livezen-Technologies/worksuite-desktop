@@ -5,6 +5,7 @@ import { call, hasDesktop, on } from './bridge';
 import { createStore } from './store';
 import { setRegional } from './time';
 import { setLanguage } from './i18n';
+import { updateDockBadge } from './dock-badge';
 
 /**
  * Renderer-side mirror of the desktop's state, kept current by main-process
@@ -93,6 +94,15 @@ export async function initAppState(): Promise<void> {
   });
   on<Bootstrap | null>('session:changed', (b) => applyBootstrap(b));
   on<StatusSnapshot>('status:changed', (s) => app.set({ status: s }));
+  if (info.platform === 'macos') {
+    // The Dock badge is painted onto the icon on macOS (see dock-badge); it only repaints when the count changes.
+    const sync = () => {
+      const s = app.get();
+      void updateDockBadge(s.status, s.auth?.stage === 'ready');
+    };
+    sync();
+    app.subscribe(sync);
+  }
   on<Preferences>('settings:changed', (p) => {
     app.set({ prefs: p });
     applyTheme(p);

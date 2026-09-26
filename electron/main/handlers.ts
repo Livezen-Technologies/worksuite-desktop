@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, shell, systemPreferences } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, nativeImage, shell, systemPreferences } from 'electron';
 import os from 'node:os';
 import { writeFile } from 'node:fs/promises';
 import type { TabRecord } from '@shared/ipc/contract';
@@ -55,6 +55,15 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('app:quit', () => ctx.quit());
   router.handle('app:relaunch', () => ctx.relaunch(false));
   router.handle('app:openExternal', (input, c) => openExternalSafely(input.url, winOf(c.sender)));
+  router.handle('app:setDockIcon', (input) => {
+    // An unsigned build is never registered for notifications, so macOS will not draw
+    // its Dock badge; the count is painted onto the icon instead (FR-TRAY-07).
+    if (process.platform !== 'darwin' || !app.dock) return false;
+    const img = nativeImage.createFromDataURL(input.png);
+    if (img.isEmpty()) return false;
+    app.dock.setIcon(img);
+    return true;
+  });
   router.handle('app:openInBrowser', async (input, c) => {
     const origin = ctx.auth.getServer()?.origin;
     if (!origin) throw new DesktopError('NOT_SIGNED_IN', 'No WorkSuite server is configured.');

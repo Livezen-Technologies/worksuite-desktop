@@ -141,3 +141,15 @@ describe('HR part 2b helpers', () => {
     expect(stepChip({ ...s, required: false }, 'profile')).toBe('Optional');
   });
 });
+
+describe('the Dock badge', () => {
+  it('writes the count as the Dock does', async () => {
+    vi.mock('../../../resources/icons/512x512.png', () => ({ default: 'icon.png' }));
+    const { badgeLabel } = await import('../../../src/core/dock-badge');
+    expect(badgeLabel(0)).toBe('');
+    expect(badgeLabel(-3)).toBe('');
+    expect(badgeLabel(7)).toBe('7');
+    expect(badgeLabel(99)).toBe('99');
+    expect(badgeLabel(100)).toBe('99+');
+  });
+});

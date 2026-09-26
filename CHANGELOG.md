@@ -5,6 +5,30 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-26 — 0.2.14: the unread count shows on the Dock icon
+
+**Fixed**
+
+- **The Dock icon now shows the unread count** (unread chat, mail and
+  notifications, the same count as the menu-bar icon). The app has always
+  set it: macOS reported the Dock label as "99+". But macOS draws an app's
+  Dock badge only when the app is registered for notifications, and an
+  unsigned (ad-hoc) build never is — WorkSuite had no entry in System
+  Settings → Notifications at all. So on macOS the count is now painted onto
+  the icon itself, in the system badge's red pill ("7", "42", "99+"), and
+  the plain icon comes back when nothing is unread.
+- The same cause very likely stops native notification banners on macOS.
+  Both come back properly once the app is signed with a Developer ID
+  certificate, which is still to be set up.
+
+**Notes**
+
+- New IPC `app:setDockIcon` (a PNG data URL, macOS only). The renderer
+  paints the badge (`src/core/dock-badge.ts`) and repaints only when the
+  count changes. `app.setBadgeCount()` is still used on Windows and Linux.
+
+---
+
 ## 2026-09-26 — 0.2.13: HR, part 2b — onboarding, leaving, schedules and settings; one searchable dropdown everywhere; dark mode fixed
 
 **Added**

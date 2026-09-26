@@ -53,6 +53,7 @@ const api = {
     relaunch: call('app:relaunch'),
     openExternal: call('app:openExternal'),
     openInBrowser: call('app:openInBrowser'),
+    setDockIcon: call('app:setDockIcon'),
   },
   auth: {
     state: call('auth:state'),
