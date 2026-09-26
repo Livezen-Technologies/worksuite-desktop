@@ -208,12 +208,23 @@ export const contract = {
         version: z.object({ fileId: z.number().int().positive(), versionId: z.number().int().positive() }).optional(),
         /** My payslip as a PDF, by its reference. */
         payslip: z.string().regex(/^[A-Za-z0-9._-]{1,64}$/).optional(),
-        /** One of my HR documents (the main process asks for its one-time link). */
+        /** An HR document (the main process asks for its one-time link) — mine, or with `hrEmployee` that employee's. */
         hrDocument: z.number().int().positive().optional(),
+        hrEmployee: z.number().int().positive().optional(),
+        /** An HR attendance report as a CSV, as the Reports screen filtered it. */
+        hrReport: z
+          .object({
+            type: z.enum(['summary', 'late', 'early', 'overtime', 'absence', 'missing', 'remote']),
+            from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+            to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+            department_id: z.number().int().positive().optional(),
+            employee_id: z.number().int().positive().optional(),
+          })
+          .optional(),
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument].filter((x) => x !== undefined).length === 1, 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip or an HR document'),
+      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document or an HR report'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   'transfers:upload': ch(

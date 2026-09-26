@@ -8,6 +8,8 @@ import { cx } from '../../components/ui';
  * control, page headings, table headings and the form controls.
  */
 const TONES: Array<[RegExp, string]> = [
+  // Neutral first: "Non-working day" must not read as "working".
+  [/^(non-working|off\b|n\/a|not yet|not scored|nothing to measure)/, 'bg-subtle text-ink-2'],
   [/^(active|approved|present|complete|completed|accepted|done|verified|live|in force|good|outstanding|strong|saved|sent|returned ok|signed off|cover accepted|on time|paid|submitted ok)/, 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success'],
   [/(pending|probation|notice|late|waiting|awaiting|draft|review|early|half|needs|missing|no check|on break|fair|attention|cover pending|changes|being corrected|resubmission|submitted)/, 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning'],
   [/(reject|declin|terminated|absent|suspended|expired|critical|poor|damaged|overdue|cover declined|holds pay|insecure|no key|refused|failed)/, 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger'],
@@ -169,4 +171,54 @@ export function Sheet({ title, children, footer, onClose, width = 460, side }: {
 
 export function Empty({ text }: { text: ReactNode }) {
   return <div className="px-3.5 py-6 text-center text-[12.5px] text-ink-3">{text}</div>;
+}
+
+/** Label-and-value rows (an employment card). */
+export function Facts({ rows }: { rows: Array<[string, ReactNode]> }) {
+  return (
+    <>
+      {rows.map(([k, v]) => (
+        <div key={k} className="flex gap-2.5 py-[5px]">
+          <span className="w-[128px] shrink-0 text-ink-3">{k}</span>
+          <span className="min-w-0 font-semibold text-ink">{v ?? '—'}</span>
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** Label-over-value pairs, two to a row (the personal cards). */
+export function Grid({ rows }: { rows: Array<[string, ReactNode]> }) {
+  return (
+    <div className="grid grid-cols-2 gap-x-4">
+      {rows.map(([k, v]) => (
+        <div key={k} className="flex min-w-0 flex-col border-b border-line/70 py-1.5">
+          <span className="text-[11.5px] text-ink-3">{k}</span>
+          <span className="truncate font-semibold text-ink">{v === null || v === undefined || v === '' ? '—' : v}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** A panel sliding in from the right over a dimmed page (the designs' record drawers). */
+export function SidePanel({ label, width = 440, onClose, head, children }: { label: string; width?: number; onClose: () => void; head: ReactNode; children: ReactNode }) {
+  return (
+    <div className="no-drag fixed inset-0 z-40 bg-[rgba(15,27,61,.32)]" onMouseDown={(e) => e.target === e.currentTarget && onClose()} onKeyDown={(e) => e.key === 'Escape' && onClose()}>
+      <aside aria-label={label} className="absolute top-0 right-0 bottom-0 flex flex-col overflow-hidden bg-surface shadow-[-10px_0_30px_rgba(15,27,61,.18)]" style={{ width }}>
+        <div className="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-3.5">
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">{head}</div>
+          <button type="button" aria-label="Close" onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-full text-ink-3 hover:bg-subtle hover:text-ink">
+            <Icon name="x" size={15} />
+          </button>
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-4 py-3 scroll-thin">{children}</div>
+      </aside>
+    </div>
+  );
+}
+
+/** The small uppercase heading the drawers use between blocks. */
+export function Caps({ children }: { children: ReactNode }) {
+  return <div className="mb-1 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase">{children}</div>;
 }

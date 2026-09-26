@@ -84,6 +84,12 @@ export interface Profile {
   can: Record<string, boolean>;
   is_self: boolean;
   editable: boolean;
+  can_decide?: boolean;
+  leaving?: { status: string; former: boolean; exit_at: string | null; reason: string | null; offboarding?: { id: number; status: string; status_label: string; percent: number }; login?: { off_at: string | null; due_at: string | null; held: boolean } } | null;
+  timesheet?: { linked: boolean; minutes_this_month: number; sheets: Array<{ id: number; starts_on: string; ends_on: string; status: string; submitted_at: string | null }> };
+  notes?: Array<{ id: number; body: string; visibility: string; author: string | null; created_at: string }>;
+  activity?: Array<{ id: number; section: string; field: string; old_value: string | null; new_value: string | null; reason: string | null; actor: string | null; created_at: string }>;
+  security?: { linked: false } | { linked: true; user_id: number; status: string; last_login_at: string | null; two_factor: boolean; failed_attempts: number; locked_until: string | null; password_set_at: string | null };
   unavailable: Record<string, string>;
   employment?: Employment;
   personal?: Record<string, string | boolean | null | undefined>;
@@ -96,12 +102,89 @@ export interface Profile {
     late_days: number;
     missing_check_outs: number;
     recent: Array<{ on_date: string; check_in: string | null; check_out: string | null; net_seconds: number | null; state: string; late_minutes: number; work_location: string | null }>;
+    schedule?: { name: string | null; source: 'employee' | 'department' | 'company' | 'default'; day_start: string; day_end: string; flexible: boolean; grace_minutes: number; work_days: number[]; effective_from: string | null; breaks: unknown[]; timezone: string };
   };
   leave?: {
     balances: Array<{ type: string; type_id: number; entitled?: number; used?: number; available?: number; pending?: number }>;
     recent: Array<{ id: number; starts_on: string; ends_on: string; days: string; status: string; reason: string | null; type_name: string | null }>;
   };
   requests: EmpRequest[];
+}
+
+// ── the directory (hr.view) ──────────────────────────────────────────────
+export const EMPLOYMENT_TYPES = ['permanent', 'contract', 'temporary', 'intern', 'freelancer', 'consultant', 'part_time'] as const;
+/** What a general writer may set; `active` is set only by activating an onboarding. */
+export const SETTABLE_STATUSES = ['pending_onboarding', 'probation', 'notice', 'suspended', 'resigned', 'terminated', 'retired', 'archived'] as const;
+
+export interface EmployeeRow {
+  id: number;
+  employee_no: string;
+  user_id: number | null;
+  name: string | null;
+  email: string | null;
+  department: string | null;
+  designation: string | null;
+  type: string;
+  status: string;
+  joined_at: string | null;
+  exit_at: string | null;
+}
+
+export interface EmployeeDetail extends EmployeeRow {
+  phone: string | null;
+  manager_name: string | null;
+  confirmed_at: string | null;
+  balances: Array<{ type: string; type_id: number; entitled: number; carried_in: number; taken: number; available: number }>;
+  leave: Array<{ id: string | number; starts_on: string; ends_on: string; days: string; status: string; type_name: string | null }>;
+}
+
+/** Left: resigned, terminated or retired, with the exit day behind us. */
+export function hasLeft(e: { status: string; exit_at: string | null }, today: string): boolean {
+  return ['resigned', 'terminated', 'retired'].includes(e.status) && !!e.exit_at && e.exit_at < today;
+}
+
+export interface Membership {
+  id: number;
+  org_id: number;
+  org_name: string;
+  is_default: boolean;
+  employee_no: string | null;
+  type: string;
+  status: string;
+  joined_at: string | null;
+  exit_at: string | null;
+  department: string | null;
+  designation: string | null;
+  manager: string | null;
+}
+
+export interface EmployeeLeave {
+  employee_id: number;
+  year: number;
+  editable: boolean;
+  balances: Array<{ type_id: number; type: string; paid: boolean; type_default: number; entitled: number; carried_in: number; taken: number; available: number; taken_from_requests: number }>;
+}
+
+export interface BankInfo {
+  account: null | {
+    id: number;
+    bank_name: string;
+    branch: string | null;
+    account_holder: string;
+    account_masked: string;
+    account_type: string | null;
+    bank_code: string | null;
+    branch_code: string | null;
+    verified_at: string | null;
+    verified_by: string | null;
+    updated_at: string;
+    payable: { ok: boolean; code: string | null; reason: string | null };
+    account_number?: string;
+  };
+  revealed: boolean;
+  error: string | null;
+  can: { view_number: boolean; edit: boolean; verify: boolean };
+  note: string | null;
 }
 
 // ── attendance ───────────────────────────────────────────────────────────
@@ -136,6 +219,58 @@ export interface AttTotals {
   late_days: number;
   early_days: number;
   missing_check_outs: number;
+}
+
+/** A team attendance row: a day of one employee, named. */
+export interface RosterDay extends AttDay {
+  employee_id: number;
+  name: string | null;
+  employee_no: string | null;
+  department: string | null;
+  on_break?: boolean;
+  location?: { check_in: { lat: number | null; lng: number | null; accuracy: number | null; note: string | null }; check_out: { lat: number | null; lng: number | null; accuracy: number | null; note: string | null } };
+  resolved_by_name?: string | null;
+  holds_pay?: boolean;
+  waiting_days?: number;
+}
+
+export interface RosterResponse {
+  date: string;
+  counts: Record<string, number>;
+  records: RosterDay[];
+  departments: Array<{ id: string | number; name: string }>;
+}
+
+export interface OpenResponse {
+  from: string;
+  to: string;
+  mode: 'incomplete' | 'shift_end' | 'max_hours';
+  states: Record<string, string>;
+  counts: Record<string, number>;
+  holding_pay: number;
+  records: RosterDay[];
+  departments: Array<{ id: string | number; name: string }>;
+}
+
+export interface Correction {
+  id: number;
+  field: string;
+  old_value: string | null;
+  new_value: string | null;
+  reason: string | null;
+  changed_by: string | null;
+  created_at: string;
+}
+
+export interface AttendanceReport {
+  type: string;
+  from: string;
+  to: string;
+  employees: Array<{ id: number; name: string; employee_no: string | null; department: string | null }>;
+  rows: Array<{ employee_id: number; employee: string; department: string | null; on_date: string; check_in: string | null; check_out: string | null; work_location: string | null; shift: string | null; state: string; is_work_day: boolean; net_seconds: number | null; late_minutes: number; early_minutes: number; overtime_minutes: number; holiday: string | null; leave_type: string | null }>;
+  totals: { days: number; present: number; absent: number; leave: number; holiday: number; late: number; early: number; missing_check_outs: number; net_seconds: number; overtime_minutes: number; work_days: number; attendance_rate: number | null };
+  by_employee: Array<{ label: string; present: number; absent: number; leave: number; late: number; net_seconds: number; overtime_minutes: number; work_days: number; attendance_rate: number | null }>;
+  by_department: AttendanceReport['by_employee'];
 }
 
 export const STATE_LABEL: Record<string, string> = {
@@ -407,11 +542,11 @@ export const PAYMENT_LABEL: Record<Payslip['payment']['state'], string> = {
  */
 export function useHrCounts(): { requests: number; waiting: number; reviewsTimesheets: boolean } {
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
-  const staff = can(perms, 'hr.view');
   const team = useQuery({ queryKey: ['hr', 'requests', 'team', 'pending'], queryFn: ({ signal }) => apiGet<RequestsResponse>('/api/hr/requests', { scope: 'team', status: 'pending' }, signal), retry: false, staleTime: 30_000 });
   const cover = useQuery({ queryKey: ['hr', 'cover', 'mine'], queryFn: ({ signal }) => apiGet<{ requests: CoverAsk[] }>('/api/hr/leave/cover/mine', undefined, signal), retry: false, staleTime: 30_000 });
   const approvals = useQuery({ queryKey: ['hr', 'leave-approvals'], queryFn: ({ signal }) => apiGet<ApprovalsResponse>('/api/hr/leave/approvals', undefined, signal), retry: false, staleTime: 30_000 });
-  const access = useQuery({ queryKey: ['hr', 'access'], queryFn: ({ signal }) => apiGet<{ timesheets?: { review?: boolean } }>('/api/hr/access', undefined, signal), enabled: staff, retry: false, staleTime: 300_000 });
+  // Everyone: a line manager with no HR permission still reviews their reports' timesheets.
+  const access = useQuery({ queryKey: ['hr', 'access'], queryFn: ({ signal }) => apiGet<{ timesheets?: { review?: boolean } }>('/api/hr/access', undefined, signal), retry: false, staleTime: 300_000 });
   const c = approvals.data?.cards;
   return {
     requests: (team.data?.pending ?? 0) + (cover.data?.requests.length ?? 0),

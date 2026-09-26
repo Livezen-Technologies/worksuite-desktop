@@ -5,6 +5,89 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-26 — 0.2.12: HR, part 2a — the Directory, profiles and the time screens
+
+**Added**
+
+- **Directory** (HR staff, `hr.view`): everyone whose record you may open,
+  searchable by name or number, with Current, Left and Everyone.
+  - A row opens a drawer: employment facts, the login behind the record
+    (link a login that has no record yet, or unlink), this year's leave
+    balance and leave history.
+  - **Add employee** (`hr.manage`) creates a bare record: a number (blank
+    takes the next one), a login, the kind of employment, a status and a
+    manager. It opens the new profile.
+- **An employee's profile**, with the design's thirteen tabs, each shown
+  only when the server says you may see that section:
+  - Overview, Personal, Employment (with their working hours and who reports
+    to them), Organizations (set a staff number, make a company the
+    default), Attendance (month by month, with Correct on a day), Timesheet
+    (their weeks, and what each logged), Leave (balances by year),
+    Documents (their file; HR also chooses who may see what it adds), Bank,
+    Requests (approve, decline or withdraw where allowed), Notes (HR only,
+    manager and HR, or shared), Security and Activity.
+  - **Edit** changes employment, personal, emergency-contact and address
+    details in one form, with a reason recorded against each field. Only
+    fields you changed are sent, so an untouched date is never cleared.
+  - **Manage** a leave balance: entitled, carried in and used — or set what
+    is available and the entitlement follows. "Count used days again"
+    recounts from the approved requests.
+  - **Bank**: the account is masked. "Show the full number" needs
+    `hr.bank.view` and is logged (the list of who looked is shown).
+    "Change" clears the verification, and somebody other than whoever typed
+    the number has to verify it.
+  - Email, Chat, User account (opens in the browser) and New request sit in
+    the header.
+- **Team attendance** (`hr.manage`): one day for everyone you may see —
+  in, out, break, net, where it was worked and the status — with the day's
+  counts (click one to filter), the web's fifteen filters, and **Correct**
+  on every row. It refreshes every minute.
+- **Missing check-outs** (`hr.manage`): days somebody checked in and never
+  checked out, how long each has waited, its review state and whether it
+  holds pay, with "Record the time".
+- **Timesheet approvals** (anyone who reviews timesheets): the weeks people
+  submitted — View what was logged, Approve, or Send back with what needs
+  changing.
+- **Reports**: attendance over any period — the totals, a line per
+  employee and the days the chosen kind keeps (late, early, overtime,
+  absence, missing check-outs, remote). **Export CSV** saves it to
+  Downloads.
+- **Work pattern**: your own attendance, leave and expense score with how it
+  was worked out, and your team's for `hr.kpi.view`. A score the server
+  withholds says why instead of showing a number.
+- **My access**: whose records you can open and why, and every HR
+  permission — held, held only through `hr.manage`, or not held.
+- A web link to a profile (`/hr/employees/12`) opens that profile here.
+
+**Changed**
+
+- Only Onboarding, Resignations, Offboarding, Work schedules, Settings,
+  Devices, Announcements, My onboarding and My resignation still open in
+  the browser. Departments stays there too (it belongs to Organization).
+- The rail now shows **Timesheet approvals** to line managers who review
+  their reports' weeks even without `hr.view`; before, it asked the server
+  only for HR staff.
+
+**Fixed**
+
+- "Non-working day" and similar neutral states no longer show in the
+  "working" blue.
+
+**Notes**
+
+- `transfers:download` gained an employee's HR document (`hrEmployee`) and
+  the attendance report CSV (`hrReport`, with the type, dates and
+  department validated).
+- `tests/e2e/hr-admin.mjs` (32 checks) runs as HR against the local server.
+  The e2e user gets a local HR-admin role for the run only. What the run
+  makes is taken away: the added employee, the partner's corrected day, the
+  submitted week, notes, the job-level change and the balance.
+- Found on the way, not changed here: the server's work-pattern score
+  counts the days before someone joined as unapproved absences. It is
+  flagged as its own task.
+
+---
+
 ## 2026-09-26 — 0.2.11: HR, part 1 — the People rail and your own HR on the desktop
 
 **Added**

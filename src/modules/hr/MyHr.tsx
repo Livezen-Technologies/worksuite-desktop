@@ -1,11 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { apiGet } from '../../core/api';
 import { attendanceTime } from './attendance';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { STATE_LABEL, type Profile } from './api';
 import { dayLong, dayShort, minutesLabel } from './dates';
-import { btn, btnPrimary, Cell, Empty, humanise, Kpi, Panel, row, StatusChip, THead } from './parts';
+import { btn, btnPrimary, Cell, Empty, Facts, Grid, humanise, Kpi, Panel, row, StatusChip, THead } from './parts';
 import type { HrView } from './Rail';
 import { NewRequestSheet } from './Requests';
 
@@ -226,32 +226,6 @@ export default function MyHr({ onPick }: { onPick: (v: HrView) => void }) {
         </div>
       )}
       {asking ? <NewRequestSheet employeeId={e.id} initial={{ kind: tab === 'personal' ? 'profile' : undefined }} onClose={() => setAsking(false)} onDone={() => (setAsking(false), void qc.invalidateQueries({ queryKey: ['hr'] }))} /> : null}
-    </div>
-  );
-}
-
-function Facts({ rows }: { rows: Array<[string, ReactNode]> }) {
-  return (
-    <>
-      {rows.map(([k, v]) => (
-        <div key={k} className="flex gap-2.5 py-[5px]">
-          <span className="w-[110px] shrink-0 text-ink-3">{k}</span>
-          <span className="min-w-0 font-semibold text-ink">{v ?? '—'}</span>
-        </div>
-      ))}
-    </>
-  );
-}
-
-function Grid({ rows }: { rows: Array<[string, ReactNode]> }) {
-  return (
-    <div className="grid grid-cols-2 gap-x-4">
-      {rows.map(([k, v]) => (
-        <div key={k} className="flex min-w-0 flex-col border-b border-line/70 py-1.5">
-          <span className="text-[11.5px] text-ink-3">{k}</span>
-          <span className="truncate font-semibold text-ink">{v === null || v === undefined || v === '' ? '—' : v}</span>
-        </div>
-      ))}
     </div>
   );
 }

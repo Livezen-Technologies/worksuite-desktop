@@ -79,7 +79,7 @@ try {
   await t.shot('h1-dashboard');
   const kpis = await t.evaluate(`[...document.querySelectorAll('main span')].filter(s => ['Employees', 'Out today', 'Pending leave', 'Missing check-outs'].includes(s.textContent.trim())).length`);
   t.check('HR staff open on the dashboard: headcount, out today, pending leave, missing check-outs', kpis >= 4, String(kpis));
-  const railInfo = await t.evaluate(`(() => { const n = document.querySelector('nav[aria-label="People"]'); const heads = [...n.querySelectorAll('button[aria-expanded]')].map(b => b.textContent.trim()); const dir = [...n.querySelectorAll('button')].find(b => b.textContent.trim() === 'Directory'); return { heads, webMark: !!dir && (dir.getAttribute('title') ?? '').includes('browser') }; })()`);
+  const railInfo = await t.evaluate(`(() => { const n = document.querySelector('nav[aria-label="People"]'); const heads = [...n.querySelectorAll('button[aria-expanded]')].map(b => b.textContent.trim()); n.querySelectorAll('button[aria-expanded="false"]').forEach(h => h.click()); return new Promise(r => setTimeout(() => { const dept = [...n.querySelectorAll('button')].find(b => b.textContent.trim() === 'Departments'); r({ heads, webMark: !!dept && (dept.getAttribute('title') ?? '').includes('browser') }); }, 50)); })()`);
   t.check('the rail groups the screens, and marks the ones that open in the browser', railInfo.heads.some((h) => h.startsWith('For me')) && railInfo.heads.some((h) => h.startsWith('Leave')) && railInfo.webMark, JSON.stringify(railInfo));
 
   // ── My HR ──────────────────────────────────────────────────────────────

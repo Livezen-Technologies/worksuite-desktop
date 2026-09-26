@@ -16,6 +16,8 @@ import { btn, btnPrimary, Cell, Empty, Field, input, PageHead, row, Seg, Sheet, 
  * see, and what I add to it (visible to me and to HR). Files go up as they
  * are dropped or chosen, with a title, category and expiry; each can be
  * viewed, downloaded, edited, archived or deleted as the server allows.
+ * Given an employee, the same screen is that employee's file (the profile's
+ * Documents tab), where HR also chooses who may see what it adds.
  */
 const SORTS: Array<[string, string]> = [
   ['created_at', 'Date added'],
@@ -25,7 +27,8 @@ const SORTS: Array<[string, string]> = [
   ['expires_on', 'Expiry'],
 ];
 
-export default function MyDocuments() {
+export default function MyDocuments({ employeeId }: { employeeId?: number } = {}) {
+  const base = employeeId ? `/api/hr/employees/${employeeId}/documents` : '/api/hr/me/documents';
   const qc = useQueryClient();
   const [q, setQ] = useState('');
   const [category, setCategory] = useState('');
@@ -38,15 +41,15 @@ export default function MyDocuments() {
   const [drag, setDrag] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
   const list = useQuery({
-    queryKey: ['hr', 'docs', q, category, status, sort],
-    queryFn: ({ signal }) => apiGet<DocList>('/api/hr/me/documents', { q: q.trim() || undefined, category: category || undefined, status, sort, dir: sort === 'created_at' ? 'desc' : 'asc', per_page: 100 }, signal),
+    queryKey: ['hr', 'docs', employeeId ?? 'me', q, category, status, sort],
+    queryFn: ({ signal }) => apiGet<DocList>(base, { q: q.trim() || undefined, category: category || undefined, status, sort, dir: sort === 'created_at' ? 'desc' : 'asc', per_page: 100 }, signal),
   });
   const d = list.data;
   const refresh = () => void qc.invalidateQueries({ queryKey: ['hr', 'docs'] });
 
   const view_ = async (doc: EmployeeDoc) => {
     try {
-      const r = await apiPost<{ url: string }>(`/api/hr/me/documents/${doc.id}/link`, { disposition: 'inline' });
+      const r = await apiPost<{ url: string }>(`${base}/${doc.id}/link`, { disposition: 'inline' });
       await call('app:openInBrowser', { path: `/${r.url.replace(/^\/+/, '')}` });
     } catch (e) {
       toast('error', errorMessage(e));
@@ -54,7 +57,7 @@ export default function MyDocuments() {
   };
   const download = async (doc: EmployeeDoc) => {
     try {
-      await call('transfers:download', { hrDocument: doc.id, name: doc.filename, open: false });
+      await call('transfers:download', { hrDocument: doc.id, ...(employeeId ? { hrEmployee: employeeId } : {}), name: doc.filename, open: false });
       toast('success', `Downloading ${doc.filename}.`);
     } catch (e) {
       toast('error', errorMessage(e));
@@ -62,8 +65,8 @@ export default function MyDocuments() {
   };
   const act = async (doc: EmployeeDoc, what: 'archive' | 'restore' | 'delete') => {
     try {
-      if (what === 'delete') await apiDelete(`/api/hr/me/documents/${doc.id}`);
-      else await apiPost(`/api/hr/me/documents/${doc.id}/${what}`);
+      if (what === 'delete') await apiDelete(`${base}/${doc.id}`);
+      else await apiPost(`${base}/${doc.id}/${what}`);
       toast('success', what === 'delete' ? 'Deleted.' : what === 'archive' ? 'Archived.' : 'Restored.');
       refresh();
     } catch (e) {
@@ -84,7 +87,10 @@ export default function MyDocuments() {
 
   return (
     <div className="flex flex-col gap-3.5">
-      <PageHead title="My documents" sub="Everything on your employment file that you are permitted to see. Documents you add here are visible to you and to HR.">
+      <PageHead
+        title={employeeId ? 'Documents' : 'My documents'}
+        sub={employeeId ? 'Everything on this employee’s file that you may see.' : 'Everything on your employment file that you are permitted to see. Documents you add here are visible to you and to HR.'}
+      >
         {d?.rights.upload !== false ? (
           <button type="button" className={btnPrimary} onClick={() => picker.current?.click()}>
             Add a document
@@ -147,7 +153,7 @@ export default function MyDocuments() {
         <Seg label="View" value={view} onChange={setView} options={[{ id: 'grid', label: 'Grid' }, { id: 'list', label: 'List' }]} />
       </div>
       {list.isLoading ? <Spinner /> : list.error ? <ErrorNote error={list.error} onRetry={() => void list.refetch()} /> : null}
-      {d && d.linked === false ? <Empty text="Your login is not linked to an employee record, so there is no file to show." /> : null}
+      {d && d.linked === false && !employeeId ? <Empty text="Your login is not linked to an employee record, so there is no file to show." /> : null}
       {d && d.linked !== false ? (
         view === 'list' ? (
           <div className="overflow-hidden rounded-[12px] border border-line bg-surface">
@@ -192,8 +198,8 @@ export default function MyDocuments() {
           </div>
         )
       ) : null}
-      {adding ? <AddDocuments files={adding} categories={d?.categories ?? {}} limits={d?.limits} onClose={() => setAdding(null)} onDone={() => (setAdding(null), refresh())} /> : null}
-      {editing ? <EditDocument doc={editing} categories={d?.categories ?? {}} onClose={() => setEditing(null)} onDone={() => (setEditing(null), refresh())} /> : null}
+      {adding ? <AddDocuments base={base} files={adding} categories={d?.categories ?? {}} visibilities={d?.rights.visibility && !d.rights.is_self ? d.visibilities : null} limits={d?.limits} onClose={() => setAdding(null)} onDone={() => (setAdding(null), refresh())} /> : null}
+      {editing ? <EditDocument base={base} doc={editing} categories={d?.categories ?? {}} onClose={() => setEditing(null)} onDone={() => (setEditing(null), refresh())} /> : null}
       {deleting ? (
         <Sheet
           title="Delete this document?"
@@ -211,14 +217,15 @@ export default function MyDocuments() {
           }
         >
           <div className="rounded-[9px] bg-subtle px-3 py-2.5 text-ink-2">“{deleting.title}”</div>
-          <span className="text-[12.5px] text-ink-3">It is removed from your file and cannot be brought back. Archive it instead to keep it out of the way.</span>
+          <span className="text-[12.5px] text-ink-3">It is removed from the file and cannot be brought back. Archive it instead to keep it out of the way.</span>
         </Sheet>
       ) : null}
     </div>
   );
 }
 
-function AddDocuments({ files, categories, limits, onClose, onDone }: { files: File[]; categories: Record<string, string>; limits?: DocList['limits']; onClose: () => void; onDone: () => void }) {
+function AddDocuments({ base, files, categories, visibilities, limits, onClose, onDone }: { base: string; files: File[]; categories: Record<string, string>; visibilities: Record<string, string> | null; limits?: DocList['limits']; onClose: () => void; onDone: () => void }) {
+  const [visibility, setVisibility] = useState('hr_only');
   const one = files.length === 1;
   const [title, setTitle] = useState(one ? files[0]!.name.replace(/\.[^.]+$/, '') : '');
   const [category, setCategory] = useState(Object.keys(categories).includes('other') ? 'other' : (Object.keys(categories)[0] ?? ''));
@@ -234,7 +241,8 @@ function AddDocuments({ files, categories, limits, onClose, onDone }: { files: F
       if (one && title.trim()) form.append('title', title.trim());
       if (category) form.append('category', category);
       if (expires) form.append('expires_on', expires);
-      const r = await request<{ stored: unknown[]; rejected: Array<{ name: string; reason: string }> }>('POST', '/api/hr/me/documents', { body: form });
+      if (visibilities) form.append('visibility', visibility);
+      const r = await request<{ stored: unknown[]; rejected: Array<{ name: string; reason: string }> }>('POST', base, { body: form });
       const data = r.data;
       if (data.rejected?.length) toast('error', `${data.rejected.map((x) => `${x.name}: ${x.reason}`).join('; ')}`);
       if (data.stored?.length) toast('success', data.stored.length === 1 ? 'Document added.' : `${data.stored.length} documents added.`);
@@ -292,12 +300,24 @@ function AddDocuments({ files, categories, limits, onClose, onDone }: { files: F
           <input type="date" aria-label="Expires on" value={expires} onChange={(e) => setExpires(e.target.value)} className={input} />
         </Field>
       </div>
-      <span className="text-[11.5px] text-ink-3">Documents you add are visible to you and to HR.</span>
+      {visibilities ? (
+        <Field label="Who can see it">
+          <select aria-label="Who can see it" value={visibility} onChange={(e) => setVisibility(e.target.value)} className={input}>
+            {Object.entries(visibilities).map(([k, l]) => (
+              <option key={k} value={k}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : (
+        <span className="text-[11.5px] text-ink-3">Documents you add are visible to you and to HR.</span>
+      )}
     </Sheet>
   );
 }
 
-function EditDocument({ doc, categories, onClose, onDone }: { doc: EmployeeDoc; categories: Record<string, string>; onClose: () => void; onDone: () => void }) {
+function EditDocument({ base, doc, categories, onClose, onDone }: { base: string; doc: EmployeeDoc; categories: Record<string, string>; onClose: () => void; onDone: () => void }) {
   const [title, setTitle] = useState(doc.title);
   const [category, setCategory] = useState(doc.category);
   const [expires, setExpires] = useState(doc.expires_on ?? '');
@@ -307,7 +327,7 @@ function EditDocument({ doc, categories, onClose, onDone }: { doc: EmployeeDoc; 
     if (!title.trim()) return toast('error', 'A document needs a name.');
     setBusy(true);
     try {
-      await request('PATCH', `/api/hr/me/documents/${doc.id}`, { body: { title: title.trim(), category, expires_on: expires || null, note: note.trim() || null } });
+      await request('PATCH', `${base}/${doc.id}`, { body: { title: title.trim(), category, expires_on: expires || null, note: note.trim() || null } });
       toast('success', 'Saved.');
       onDone();
     } catch (e) {

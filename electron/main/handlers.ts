@@ -225,10 +225,14 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('transfers:download', async (input) => {
     if (input.hrDocument) {
       // A one-time link, asked for at the moment of downloading (it expires).
-      const link = await ctx.http.post<{ url: string }>(`/api/hr/me/documents/${input.hrDocument}/link`, { disposition: 'attachment' });
+      const base = input.hrEmployee ? `/api/hr/employees/${input.hrEmployee}/documents` : '/api/hr/me/documents';
+      const link = await ctx.http.post<{ url: string }>(`${base}/${input.hrDocument}/link`, { disposition: 'attachment' });
       return ctx.transfers.download(`/${String(link.url).replace(/^\/+/, '')}`, input.name, !!input.open, null);
     }
-    const path = input.payslip
+    const r = input.hrReport;
+    const path = r
+      ? `/api/hr/reports/attendance?${new URLSearchParams({ type: r.type, from: r.from, to: r.to, format: 'csv', ...(r.department_id ? { department_id: String(r.department_id) } : {}), ...(r.employee_id ? { employee_id: String(r.employee_id) } : {}) })}`
+      : input.payslip
       ? `/api/payroll/me/payslips/${encodeURIComponent(input.payslip)}/pdf`
       : input.fileId
       ? `/api/files/${encodeURIComponent(input.fileId)}/download`

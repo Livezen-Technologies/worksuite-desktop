@@ -68,3 +68,43 @@ describe('the People rail', () => {
     expect(webPathFor('departments')).toBe('/organization');
   });
 });
+
+describe('HR part 2 helpers', () => {
+  it('knows who has left: an exit status and an exit day behind us', async () => {
+    const { hasLeft } = await import('../../../src/modules/hr/api');
+    expect(hasLeft({ status: 'resigned', exit_at: '2026-09-01' }, '2026-09-26')).toBe(true);
+    expect(hasLeft({ status: 'resigned', exit_at: '2026-10-31' }, '2026-09-26')).toBe(false);
+    expect(hasLeft({ status: 'notice', exit_at: '2026-09-01' }, '2026-09-26')).toBe(false);
+    expect(hasLeft({ status: 'terminated', exit_at: null }, '2026-09-26')).toBe(false);
+  });
+
+  it('words a roster row and where it was worked as the design does', async () => {
+    const { rosterStatus, whereLabel } = await import('../../../src/modules/hr/TeamAttendance');
+    const day = { id: 1, employee_id: 7, name: 'Nuwan', employee_no: 'E-1', department: null, on_date: '2026-09-25', check_in: '2026-09-25 09:31:00', check_out: null, work_location: 'Colombo office', corrected: false, shift: null, is_work_day: true, break_seconds: 0, net_seconds: null, late_minutes: 31, early_minutes: 0, overtime_minutes: 0, state: 'working', verdict: 'late' };
+    expect(rosterStatus(day)).toBe('Working · 31m late');
+    expect(rosterStatus({ ...day, state: 'leave', late_minutes: 0, leave_type: 'Casual' })).toBe('On leave · Casual');
+    expect(whereLabel(day)).toEqual({ text: 'Colombo office', warn: false });
+    const at = { lat: 7.290634, lng: 80.635011, accuracy: 25, note: null };
+    expect(whereLabel({ ...day, location: { check_in: at, check_out: { ...at } } }).text).toBe('7.29063, 80.63501 · ±25 m');
+    expect(whereLabel({ ...day, location: { check_in: { lat: null, lng: null, accuracy: null, note: 'VPN from home' }, check_out: at } })).toEqual({ text: 'No location — “VPN from home”', warn: true });
+  });
+
+  it('never prints a withheld work-pattern total, and says why', async () => {
+    const { withheldReason } = await import('../../../src/modules/hr/WorkPattern');
+    expect(withheldReason('low_coverage', 35)).toMatch(/only 35%/);
+    expect(withheldReason('nothing_measurable', 0)).toMatch(/Nothing in this period/);
+    expect(withheldReason(null, 100)).toBeNull();
+  });
+
+  it('keeps a non-working day neutral, not "working" blue', () => {
+    expect(toneOf('Non-working day')).toContain('subtle');
+    expect(toneOf('Working · 31m late')).toContain('9A4A06');
+    expect(toneOf('Working')).toContain('primary');
+  });
+
+  it('draws the Directory, profiles and the time screens here now', async () => {
+    const { NATIVE } = await import('../../../src/modules/hr/Rail');
+    for (const v of ['people', 'roster', 'openatt', 'approvals', 'reports', 'workpattern', 'myaccess'] as const) expect(NATIVE.has(v)).toBe(true);
+    expect(NATIVE.has('departments')).toBe(false);
+  });
+});
