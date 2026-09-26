@@ -485,7 +485,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
         <div
           role="listbox"
           aria-label="Mention someone"
-          className={cx('absolute bottom-full z-40 mb-1 flex max-h-[320px] flex-col rounded-[12px] border border-line bg-surface shadow-[0_12px_32px_rgba(15,27,61,.18)]', compact ? 'w-[250px]' : 'w-[290px]')}
+          className={cx('absolute bottom-full z-40 mb-1 flex max-h-[320px] flex-col rounded-[12px] border border-line bg-surface shadow-[0_12px_32px_rgb(var(--ws-shadow-rgb)/.18)]', compact ? 'w-[250px]' : 'w-[290px]')}
           style={{ left: asking.left }}
         >
           <div className="min-h-0 flex-1 overflow-y-auto p-1 scroll-thin">
@@ -556,7 +556,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
         <div className="flex items-end gap-2">
           <div
             className={cx(
-              'relative flex min-w-0 flex-1 flex-col rounded-[22px] bg-surface px-1.5 py-[5px] shadow-[0_1px_2px_rgba(15,27,61,.12)] ring-1 transition-shadow',
+              'relative flex min-w-0 flex-1 flex-col rounded-[22px] bg-surface px-1.5 py-[5px] shadow-[0_1px_2px_rgb(var(--ws-shadow-rgb)/.12)] ring-1 transition-shadow',
               urgent && !editing ? 'ring-danger' : editing ? 'ring-[#D97706]' : 'ring-line focus-within:ring-primary/50',
             )}
           >

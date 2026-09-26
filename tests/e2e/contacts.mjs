@@ -9,7 +9,7 @@
 //   WS_E2E_SERVER=http://localhost:8920 WS_E2E_EMAIL=… WS_E2E_PASSWORD=… \
 //   WS_E2E_PARTNER_EMAIL=… WS_E2E_PARTNER_PASSWORD=… \
 //   ELECTRON_RUN_AS_NODE=1 npx electron tests/e2e/contacts.mjs
-import { launch, sleep } from './harness.mjs';
+import { launch, sleep, chooseIn } from './harness.mjs';
 
 const server = process.env.WS_E2E_SERVER;
 const email = process.env.WS_E2E_EMAIL;
@@ -47,7 +47,7 @@ const detail = async (id) => (await api('me', 'GET', `/api/contacts/${id}`)).dat
 const activity = async (id) => (await api('me', 'GET', `/api/contacts/${id}/activities`)).data ?? [];
 const railClick = (label) => `[...document.querySelectorAll('nav[aria-label="Contacts"] button')].find(b => b.textContent.trim().startsWith(${js(label)})).click()`;
 const drawer = `document.querySelector('aside[role="dialog"][aria-label^="Contact"]')`;
-const choose = (label, value) => `(() => { const l = [...document.querySelectorAll('label')].find(l => l.textContent.trim().startsWith(${js(label)})); const el = l && l.querySelector('select'); if (!el) return false; Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(el, ${js(value)}); el.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`;
+const choose = (label, value) => chooseIn(`[...document.querySelectorAll('label')].find(l => l.textContent.trim().startsWith(${js(label)}))?.querySelector('[role="combobox"]')`, value);
 const card = (name) => `[...document.querySelectorAll('main [role="list"][aria-label="Contacts"] button, main [role="table"] button')].find(b => b.getAttribute('aria-label') === ${js(name)})`;
 
 const t = await launch({ name: 'contacts' });
@@ -233,7 +233,7 @@ try {
     await t.waitFor(t.hasText('Drop a file here'), 'the import dialog');
     await t.evaluate(`(() => { const dt = new DataTransfer(); dt.items.add(new File([${js(csv)}], 'e2e-contacts.csv', { type: 'text/csv' })); document.querySelector('[role="dialog"] .border-dashed').dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true })); return true; })()`);
     await t.waitFor(t.hasText('These are matched already'), 'the column match', 20_000);
-    const mapped = await t.evaluate(`['Display Name', 'Work Email', 'Company Name'].map(l => document.querySelector('select[aria-label="' + l + '"]')?.selectedOptions[0]?.textContent)`);
+    const mapped = await t.evaluate(`['Display Name', 'Work Email', 'Company Name'].map(l => document.querySelector('[role="combobox"][aria-label="' + l + '"]')?.textContent)`);
     t.check('the columns are matched from the header', js(mapped) === js(['Display Name', 'Work Email', 'Company Name']), js(mapped));
     await t.clickButton('Check the file');
     await t.waitFor(t.hasText('will not import'), 'the check', 20_000);

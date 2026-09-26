@@ -10,6 +10,7 @@ import { toast } from '../../core/toasts';
 import { Avatar, Button, Chip, Modal, Spinner, cx } from '../../components/ui';
 import { createMeeting, openMeeting } from '../meet/api';
 import { categoryOf, CATEGORIES, colourOf, dayOf, destinationOf, REMINDERS, SWATCHES, toInput, type CalendarEvent, type EventDetail } from './api';
+import { Select } from '../../components/Select';
 
 export interface Draft {
   start: string;
@@ -47,7 +48,7 @@ export function EventDrawer({ event, draft, onClose }: { event: CalendarEvent | 
 
 function Shell({ title, colour, extra, onClose, children, footer }: { title: string; colour: string; extra?: React.ReactNode; onClose: () => void; children: React.ReactNode; footer?: React.ReactNode }) {
   return (
-    <aside aria-label={title} className="absolute top-0 right-0 bottom-0 z-30 flex w-[560px] max-w-full flex-col border-l border-line bg-surface text-[13px] shadow-[-12px_0_36px_rgba(15,27,61,.16)]">
+    <aside aria-label={title} className="absolute top-0 right-0 bottom-0 z-30 flex w-[560px] max-w-full flex-col border-l border-line bg-surface text-[13px] shadow-[-12px_0_36px_rgb(var(--ws-shadow-rgb)/.16)]">
       <div className="flex shrink-0 items-center gap-2 border-b border-line px-[18px] py-3.5">
         <span className="h-3 w-3 rounded-[3px]" style={{ background: colour }} />
         <b className="flex-1 text-[15px] text-ink">{title}</b>
@@ -265,13 +266,13 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
         </label>
         <label className={label}>
           Repeat
-          <select value={repeat} onChange={(ev) => setRepeat(ev.target.value)} disabled={!editable} className={field}>
+          <Select value={repeat} onChange={(ev) => setRepeat(ev.target.value)} disabled={!editable} className={field}>
             <option value="">Does not repeat</option>
             <option value="daily">Daily</option>
             <option value="weekly">Weekly</option>
             <option value="monthly">Monthly</option>
             <option value="yearly">Yearly</option>
-          </select>
+          </Select>
         </label>
         {repeat ? (
           <label className={label}>
@@ -281,17 +282,17 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
         ) : (
           <label className={label}>
             Reminder
-            <select value={remind === null ? '' : String(remind)} onChange={(ev) => setRemind(ev.target.value === '' ? null : Number(ev.target.value))} disabled={!editable} className={field}>
+            <Select value={remind === null ? '' : String(remind)} onChange={(ev) => setRemind(ev.target.value === '' ? null : Number(ev.target.value))} disabled={!editable} className={field}>
               {REMINDERS.map(([v, l]) => <option key={l} value={v === null ? '' : String(v)}>{l}</option>)}
-            </select>
+            </Select>
           </label>
         )}
         {repeat ? (
           <label className={label}>
             Reminder
-            <select value={remind === null ? '' : String(remind)} onChange={(ev) => setRemind(ev.target.value === '' ? null : Number(ev.target.value))} disabled={!editable} className={field}>
+            <Select value={remind === null ? '' : String(remind)} onChange={(ev) => setRemind(ev.target.value === '' ? null : Number(ev.target.value))} disabled={!editable} className={field}>
               {REMINDERS.map(([v, l]) => <option key={l} value={v === null ? '' : String(v)}>{l}</option>)}
-            </select>
+            </Select>
           </label>
         ) : null}
         <label className={label}>
@@ -328,10 +329,10 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
         <div className="flex items-center">
           <b className="flex-1 text-ink">Attendees · {participants.length + invite.length}</b>
           {owner && editable ? (
-            <select aria-label="Invite as" value={inviteAs} onChange={(ev) => setInviteAs(ev.target.value as 'viewer' | 'editor')} className="h-7 rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink">
+            <Select aria-label="Invite as" value={inviteAs} onChange={(ev) => setInviteAs(ev.target.value as 'viewer' | 'editor')} className="h-7 rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink">
               <option value="viewer">Invite as Viewer</option>
               <option value="editor">Invite as Editor</option>
-            </select>
+            </Select>
           ) : null}
         </div>
         {participants.map((p) => {
@@ -343,10 +344,10 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
                 <b>{p.is_you ? 'You' : p.name}</b> <span className="text-ink-3">· {p.status === 'organizer' ? 'Organiser' : p.role === 'editor' ? 'Editor' : 'Viewer'}</span>
               </span>
               {owner && id && p.status !== 'organizer' ? (
-                <select aria-label={`Role for ${p.name}`} value={p.role ?? 'viewer'} onChange={(ev) => void act(() => apiPut(`/api/calendar/events/${id}/role`, { user_id: p.user_id, role: ev.target.value }))} className="h-7 rounded-[7px] border border-line bg-surface px-1 text-[12px] text-ink">
+                <Select aria-label={`Role for ${p.name}`} value={p.role ?? 'viewer'} onChange={(ev) => void act(() => apiPut(`/api/calendar/events/${id}/role`, { user_id: p.user_id, role: ev.target.value }))} className="h-7 rounded-[7px] border border-line bg-surface px-1 text-[12px] text-ink">
                   <option value="viewer">Viewer</option>
                   <option value="editor">Editor</option>
-                </select>
+                </Select>
               ) : null}
               <span className={cx('text-[11.5px] font-bold', tone)}>{st}</span>
             </div>

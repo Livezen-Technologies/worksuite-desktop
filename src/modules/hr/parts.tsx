@@ -75,7 +75,7 @@ export function Seg<T extends string | number>({ options, value, onChange, label
           role="tab"
           aria-selected={o.id === value}
           onClick={() => onChange(o.id)}
-          className={cx('h-7 rounded-[7px] px-[11px] text-[12.5px] font-semibold whitespace-nowrap', o.id === value ? 'bg-surface text-primary shadow-[0_1px_2px_rgba(15,27,61,.12)]' : 'text-ink-2 hover:text-ink')}
+          className={cx('h-7 rounded-[7px] px-[11px] text-[12.5px] font-semibold whitespace-nowrap', o.id === value ? 'bg-surface text-primary shadow-[0_1px_2px_rgb(var(--ws-shadow-rgb)/.12)]' : 'text-ink-2 hover:text-ink')}
         >
           {o.label}
         </button>
@@ -99,7 +99,7 @@ export function PageHead({ title, sub, children }: { title: ReactNode; sub?: Rea
 export const btn = 'inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-[8px] border border-line bg-surface px-3 text-[13px] font-semibold whitespace-nowrap text-ink hover:bg-subtle disabled:opacity-50';
 export const btnPrimary = 'inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-[8px] bg-primary px-3.5 text-[13px] font-bold whitespace-nowrap text-white hover:bg-primary-hover disabled:opacity-50';
 export const btnGood = 'inline-flex h-[30px] shrink-0 items-center rounded-[7px] bg-[#1F7A4D] px-2.5 text-[12.5px] font-semibold whitespace-nowrap text-white hover:bg-[#1A6841] disabled:opacity-50';
-export const btnBad = 'inline-flex h-[30px] shrink-0 items-center rounded-[7px] border border-[#F1B8A8] bg-surface px-2.5 text-[12.5px] font-semibold whitespace-nowrap text-danger hover:bg-danger-bg disabled:opacity-50';
+export const btnBad = 'inline-flex h-[30px] shrink-0 items-center rounded-[7px] border border-[#F1B8A8] bg-surface px-2.5 dark:border-danger/40 text-[12.5px] font-semibold whitespace-nowrap text-danger hover:bg-danger-bg disabled:opacity-50';
 export const btnSmall = 'inline-flex h-[30px] shrink-0 items-center rounded-[7px] border border-line bg-surface px-2.5 text-[12.5px] font-semibold whitespace-nowrap text-ink hover:bg-subtle disabled:opacity-50';
 export const input = 'h-[34px] w-full rounded-[8px] border border-line bg-surface px-2.5 text-[13px] font-medium text-ink outline-none focus:border-primary';
 
@@ -155,7 +155,7 @@ export function Initials({ name, size = 30 }: { name: string | null | undefined;
 export function Sheet({ title, children, footer, onClose, width = 460, side }: { title: ReactNode; children: ReactNode; footer: ReactNode; onClose: () => void; width?: number; side?: boolean }) {
   return (
     <div className={cx('no-drag fixed inset-0 z-50 flex items-center bg-[rgba(15,27,61,.32)]', side ? 'justify-end pr-10' : 'justify-center')} onMouseDown={(e) => e.target === e.currentTarget && onClose()} onKeyDown={(e) => e.key === 'Escape' && onClose()}>
-      <div role="dialog" aria-label={typeof title === 'string' ? title : undefined} className="animate-in flex max-h-[calc(100vh-60px)] flex-col rounded-[14px] border border-line bg-surface shadow-[0_24px_60px_rgba(15,27,61,.28)]" style={{ width }}>
+      <div role="dialog" aria-label={typeof title === 'string' ? title : undefined} className="animate-in flex max-h-[calc(100vh-60px)] flex-col rounded-[14px] border border-line bg-surface shadow-[0_24px_60px_rgb(var(--ws-shadow-rgb)/.28)]" style={{ width }}>
         <div className="flex items-center px-5 pt-4 pb-1.5">
           <h2 className="m-0 flex-1 text-[17px] font-bold text-ink">{title}</h2>
           <button type="button" aria-label="Close" onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-full text-ink-3 hover:bg-subtle hover:text-ink">
@@ -205,7 +205,7 @@ export function Grid({ rows }: { rows: Array<[string, ReactNode]> }) {
 export function SidePanel({ label, width = 440, onClose, head, children }: { label: string; width?: number; onClose: () => void; head: ReactNode; children: ReactNode }) {
   return (
     <div className="no-drag fixed inset-0 z-40 bg-[rgba(15,27,61,.32)]" onMouseDown={(e) => e.target === e.currentTarget && onClose()} onKeyDown={(e) => e.key === 'Escape' && onClose()}>
-      <aside aria-label={label} className="absolute top-0 right-0 bottom-0 flex flex-col overflow-hidden bg-surface shadow-[-10px_0_30px_rgba(15,27,61,.18)]" style={{ width }}>
+      <aside aria-label={label} className="absolute top-0 right-0 bottom-0 flex flex-col overflow-hidden bg-surface shadow-[-10px_0_30px_rgb(var(--ws-shadow-rgb)/.18)]" style={{ width }}>
         <div className="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-3.5">
           <div className="flex min-w-0 flex-1 items-center gap-2.5">{head}</div>
           <button type="button" aria-label="Close" onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-full text-ink-3 hover:bg-subtle hover:text-ink">

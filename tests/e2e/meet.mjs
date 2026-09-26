@@ -11,7 +11,7 @@
 //   WS_E2E_PARTNER_NAME=… ELECTRON_RUN_AS_NODE=1 npx electron tests/e2e/meet.mjs
 //
 // The signed-in user needs meeting.view and meeting.schedule.
-import { launch, sleep } from './harness.mjs';
+import { launch, sleep, choose } from './harness.mjs';
 
 const server = process.env.WS_E2E_SERVER;
 const email = process.env.WS_E2E_EMAIL;
@@ -101,8 +101,8 @@ try {
   await t.shot('m7-agenda');
 
   await t.evaluate(`[...document.querySelectorAll('[role="tab"]')].find(b => b.textContent.trim() === 'People').click()`);
-  await t.waitFor(`!!document.querySelector(${JSON.stringify(`select[aria-label="Attendance for ${partnerName}"]`)})`, 'the people tab');
-  await t.evaluate(`(() => { const s = document.querySelector(${JSON.stringify(`select[aria-label="Attendance for ${partnerName}"]`)}); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, 'present'); s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  await t.waitFor(`!!document.querySelector(${JSON.stringify(`[role="combobox"][aria-label="Attendance for ${partnerName}"]`)})`, 'the people tab');
+  await t.evaluate(choose(`[role="combobox"][aria-label="Attendance for ${partnerName}"]`, 'present'));
   let present = null;
   for (let i = 0; i < 20 && present?.attendance !== 'present'; i++) {
     const d = await api('GET', `/api/meetings/${meeting.id}`);

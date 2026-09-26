@@ -13,6 +13,7 @@ import { Avatar, Button, Chip, Empty, ErrorNote, FileBadge, IconButton, Modal, O
 import { VirtualList } from '../../components/VirtualList';
 import type { ModuleProps } from '../registry';
 import { escapeHtml, mailFrameDoc, parseAddresses, sanitizeMailHtml, textToHtml } from './sanitize';
+import { Select } from '../../components/Select';
 
 /**
  * Desktop Mail, three panes (UI-07, FR-COM-01, §4.14): accounts and folders,
@@ -404,13 +405,13 @@ function Compose({ seed, boxes, defaultBox, onClose }: { seed: ComposeSeed; boxe
         {boxes.length > 1 ? (
           <label className="flex items-center gap-3 text-[13px]">
             <span className="w-14 text-ink-3">From</span>
-            <select value={v.from} onChange={(e) => set({ from: e.target.value })} className="h-9 flex-1 rounded-[8px] border border-line bg-surface px-2" aria-label="From">
+            <Select value={v.from} onChange={(e) => set({ from: e.target.value })} className="h-9 flex-1 rounded-[8px] border border-line bg-surface px-2" aria-label="From">
               {boxes.map((b) => (
                 <option key={b.id} value={String(b.id)}>
                   {b.display_name ? `${b.display_name} <${b.email}>` : b.email}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         ) : null}
         <div className="flex items-end gap-2">

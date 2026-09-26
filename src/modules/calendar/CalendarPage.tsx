@@ -8,10 +8,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, OfflineNote, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
-import {
-  addMonths, CATEGORIES, categoryOf, colourOf, dayOf, endOf, minutesOf, monthGrid, monthLabel, monthStart, naive, nowWall, rangeLabel, shifted, step, viewRange,
-  type CalendarEvent, type EventDetail, type View,
-} from './api';
+import { addMonths, CATEGORIES, categoryOf, colourOf, dayOf, endOf, minutesOf, monthGrid, monthLabel, monthStart, naive, nowWall, rangeLabel, shifted, step, viewRange, type CalendarEvent, type EventDetail, type View, EVENT_TEXT } from './api';
 import { ImportResult, SeriesDialog, SubscribeDialog, UndoBar, type IcsReport } from './Dialogs';
 import { EventDrawer, type Draft } from './EventDrawer';
 import { MonthGrid } from './MonthGrid';
@@ -290,7 +287,7 @@ export default function CalendarPage(_props: ModuleProps) {
           {todayList.slice(0, 8).map((e) => (
             <button key={eventKey(e)} type="button" onClick={() => setDrawer({ event: e, draft: null })} className="flex gap-2 rounded-[6px] text-left text-[12px] hover:bg-subtle">
               <span className="w-[66px] shrink-0 font-mono whitespace-nowrap text-ink-3">{e.all_day ? 'All day' : wallTimeLabel(e.start_at)}</span>
-              <span className="min-w-0 truncate font-semibold" style={{ color: colourOf(e) }}>{e.title}</span>
+              <span className={cx('min-w-0 truncate font-semibold', EVENT_TEXT)} style={{ ['--ev' as string]: colourOf(e) }}>{e.title}</span>
             </button>
           ))}
         </div>
@@ -304,7 +301,7 @@ export default function CalendarPage(_props: ModuleProps) {
           {offline ? <OfflineNote cachedAt={q.data?.cachedAt ?? null} /> : null}
           <span role="tablist" aria-label="View" className="flex rounded-[9px] bg-subtle p-[3px] font-semibold">
             {VIEWS.map(([id, label]) => (
-              <button key={id} type="button" role="tab" aria-selected={view === id} title={`${label} (${id[0]!.toUpperCase()})`} onClick={() => set(id, date)} className={cx('rounded-[7px] px-3 py-[5px]', view === id ? 'bg-surface text-ink shadow-[0_1px_2px_rgba(15,27,61,.12)]' : 'text-ink-2 hover:text-ink')}>
+              <button key={id} type="button" role="tab" aria-selected={view === id} title={`${label} (${id[0]!.toUpperCase()})`} onClick={() => set(id, date)} className={cx('rounded-[7px] px-3 py-[5px]', view === id ? 'bg-surface text-ink shadow-[0_1px_2px_rgb(var(--ws-shadow-rgb)/.12)]' : 'text-ink-2 hover:text-ink')}>
                 {label}
               </button>
             ))}

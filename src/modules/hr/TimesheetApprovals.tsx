@@ -7,6 +7,7 @@ import { ErrorNote, Spinner } from '../../components/ui';
 import type { LogsResponse, Sheet as TimeSheet } from './api';
 import { dayShort, minutesLabel, rangeLabel } from './dates';
 import { btn, btnPrimary, Cell, Empty, Field, input, Kpi, PageHead, Panel, row, Sheet, StatusChip, THead } from './parts';
+import { Select } from '../../components/Select';
 
 /**
  * Timesheet approvals (HrAdminSheet; the web's TimesheetApprovals): weeks
@@ -37,12 +38,12 @@ export default function TimesheetApprovals() {
   return (
     <div className="flex flex-col gap-3.5">
       <PageHead title="Timesheet approvals" sub="Weeks your people submitted for review.">
-        <select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)} className={input + ' !w-[180px]'}>
+        <Select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)} className={input + ' !w-[180px]'}>
           <option value="submitted">Awaiting review</option>
           <option value="approved">Approved</option>
           <option value="rejected">Sent back</option>
           <option value="">All</option>
-        </select>
+        </Select>
       </PageHead>
       {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
       {q.data ? (

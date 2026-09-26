@@ -12,7 +12,7 @@
 //   ELECTRON_RUN_AS_NODE=1 npx electron tests/e2e/files.mjs
 import { createHash } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
-import { launch, sleep } from './harness.mjs';
+import { launch, sleep, choose } from './harness.mjs';
 
 const server = process.env.WS_E2E_SERVER;
 const email = process.env.WS_E2E_EMAIL;
@@ -224,15 +224,15 @@ try {
   await t.fill('Search people', partner.name.slice(0, 3));
   await t.waitFor(`[...document.querySelectorAll('[aria-labelledby="shTitle"] button')].some(b => b.textContent.includes(${js(partner.name)}))`, 'the partner found');
   await t.evaluate(`[...document.querySelectorAll('[aria-labelledby="shTitle"] button')].find(b => b.textContent.includes(${js(partner.name)})).click()`);
-  await t.evaluate(`(() => { const s = document.querySelector('[aria-labelledby="shTitle"] select[aria-label="Access level"]'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, 'view'); s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  await t.evaluate(choose('[aria-labelledby="shTitle"] [role="combobox"][aria-label="Access level"]', 'view'));
   await t.evaluate(`[...document.querySelectorAll('[aria-labelledby="shTitle"] button')].find(b => b.textContent.trim() === 'Share').click()`);
-  await t.waitFor(`!!document.querySelector(${js(`[aria-labelledby="shTitle"] select[aria-label="Access for ${partner.name}"]`)})`, 'the partner listed');
+  await t.waitFor(`!!document.querySelector(${js(`[aria-labelledby="shTitle"] [role="combobox"][aria-label="Access for ${partner.name}"]`)})`, 'the partner listed');
   let access = (await api('me', 'GET', `/api/drive/access/file/${p1}`)).data;
   const grant = (access.grants ?? []).find((g) => g.principal.id === partner.id);
   const seen = (await api('partner', 'GET', '/api/drive/list?view=shared&per_page=100&counts=0')).data.files ?? [];
   t.check('Share gives a teammate access; they see it in Shared with me', !!grant && grant.level === 'view' && seen.some((f) => f.id === p1), js(grant && { level: grant.level }));
-  await t.evaluate(`(() => { const s = document.querySelector(${js(`[aria-labelledby="shTitle"] select[aria-label="Access for ${partner.name}"]`)}); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, 'remove'); s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
-  await t.waitFor(`!document.querySelector(${js(`[aria-labelledby="shTitle"] select[aria-label="Access for ${partner.name}"]`)})`, 'the partner removed');
+  await t.evaluate(choose(`[aria-labelledby="shTitle"] [role="combobox"][aria-label="Access for ${partner.name}"]`, 'remove'));
+  await t.waitFor(`!document.querySelector(${js(`[aria-labelledby="shTitle"] [role="combobox"][aria-label="Access for ${partner.name}"]`)})`, 'the partner removed');
   access = (await api('me', 'GET', `/api/drive/access/file/${p1}`)).data;
   t.check('Remove access takes it back', !(access.grants ?? []).some((g) => g.principal.id === partner.id));
 

@@ -74,7 +74,7 @@ export function Rail({ place, stats, groups, onPlace, onNew, onImport, onExport,
   return (
     <nav aria-label="Contacts" className="flex w-[220px] shrink-0 flex-col border-r border-line bg-surface text-[13px]">
       <div className="px-2.5 pt-3 pb-2">
-        <button type="button" onClick={onNew} title="New contact (N)" className="flex h-[38px] w-full items-center justify-center gap-2 rounded-[10px] bg-primary font-bold text-white shadow-[0_1px_2px_rgba(15,27,61,.18),0_4px_12px_rgba(35,52,158,.22)] hover:bg-primary-hover">
+        <button type="button" onClick={onNew} title="New contact (N)" className="flex h-[38px] w-full items-center justify-center gap-2 rounded-[10px] bg-primary font-bold text-white shadow-[0_1px_2px_rgb(var(--ws-shadow-rgb)/.18),0_4px_12px_rgba(35,52,158,.22)] hover:bg-primary-hover">
           <Icon name="plus" size={16} /> New contact
         </button>
       </div>

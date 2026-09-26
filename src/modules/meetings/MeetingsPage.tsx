@@ -10,6 +10,7 @@ import { Empty, ErrorNote, Spinner, cx } from '../../components/ui';
 import { providerLabel, RSVP_LABEL, TYPE_COLOUR, TYPES, typeLabel, type Can, type Meeting, type MeetingRoom, type Rsvp } from './api';
 import { MeetingDetail } from './MeetingDetail';
 import { ScheduleDialog } from './ScheduleDialog';
+import { Select } from '../../components/Select';
 
 type Tab = 'dashboard' | 'mine' | 'invitations' | 'rooms' | 'recurring';
 const TABS: Array<[Tab, string]> = [
@@ -126,10 +127,10 @@ function MeetingList({ scope, q, title, typeFilter, onOpen }: { scope: string; q
       <div className="flex items-center">
         <h2 className="flex-1 text-[15px] font-bold text-ink">{title}</h2>
         {typeFilter ? (
-          <select aria-label="Type" value={type} onChange={(e) => setType(e.target.value)} className="h-8 rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink">
+          <Select aria-label="Type" value={type} onChange={(e) => setType(e.target.value)} className="h-8 rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink">
             <option value="">Any type</option>
             {TYPES.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
+          </Select>
         ) : null}
       </div>
       {list.isLoading ? <Spinner /> : list.error ? <ErrorNote error={list.error} onRetry={() => void list.refetch()} /> : null}

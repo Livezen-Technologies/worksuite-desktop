@@ -10,7 +10,7 @@ import { openOverlay } from '../../core/ui';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 
-const tray = 'no-drag flex w-[360px] flex-col gap-2 rounded-[14px] border border-line bg-surface p-3 text-[12.5px] shadow-[0_18px_44px_rgba(15,27,61,.22)]';
+const tray = 'no-drag flex w-[360px] flex-col gap-2 rounded-[14px] border border-line bg-surface p-3 text-[12.5px] shadow-[0_18px_44px_rgb(var(--ws-shadow-rgb)/.22)]';
 const bar = (pct: number, tone: string) => (
   <div className="h-[5px] overflow-hidden rounded-[3px] bg-subtle">
     <div className={cx('h-[5px] rounded-[3px]', tone)} style={{ width: `${Math.max(2, Math.min(100, pct))}%` }} />

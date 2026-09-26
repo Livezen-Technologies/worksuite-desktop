@@ -10,6 +10,15 @@ import { fileURLToPath } from 'node:url';
 export const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Pick an option in one of the app's dropdowns (components/Select): open the
+ * button `el` evaluates to, then click the option with that value in the
+ * floating list. Page code, for t.evaluate; answers whether it was found.
+ */
+export const chooseIn = (el, value) =>
+  `(async () => { const b = ${el}; if (!b) return false; if (b.getAttribute('aria-expanded') !== 'true') b.click(); for (let i = 0; i < 120; i++) { await new Promise((r) => setTimeout(r, 25)); const o = document.querySelector('[role="listbox"] [role="option"][data-value=' + JSON.stringify(${JSON.stringify(String(value))}) + ']'); if (o) { o.click(); return true; } } return false; })()`;
+export const choose = (selector, value) => chooseIn(`document.querySelector(${JSON.stringify(selector)})`, value);
+
 export async function launch({ name, env: extra = {}, args = [] }) {
   const outDir = process.env.WS_E2E_OUT ?? join(root, 'test-results', `e2e-${name}`);
   mkdirSync(outDir, { recursive: true });

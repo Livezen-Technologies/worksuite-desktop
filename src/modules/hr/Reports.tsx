@@ -11,6 +11,7 @@ import { STATE_LABEL, type AttendanceReport, type RosterResponse } from './api';
 import { dayShort, minutesLabel, ymd } from './dates';
 import { btn, Cell, Empty, input, Kpi, PageHead, Panel, row, StatusChip, THead } from './parts';
 import { can } from './Rail';
+import { Select } from '../../components/Select';
 
 /**
  * Reports (HrReports; the web's AttendanceReports): attendance over a period
@@ -78,25 +79,25 @@ export default function Reports() {
         </button>
       </PageHead>
       <div className="flex flex-wrap items-center gap-2">
-        <select aria-label="Report" value={kind} onChange={(e) => setKind(e.target.value as Kind)} className={input + ' !w-auto'}>
+        <Select aria-label="Report" value={kind} onChange={(e) => setKind(e.target.value as Kind)} className={input + ' !w-auto'}>
           {KINDS.map(([v, l]) => (
             <option key={v} value={v}>
               {l}
             </option>
           ))}
-        </select>
+        </Select>
         <input type="date" aria-label="From" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className={input + ' !w-[150px]'} />
         <span className="text-ink-3">to</span>
         <input type="date" aria-label="To" value={to} min={from} onChange={(e) => setTo(e.target.value)} className={input + ' !w-[150px]'} />
         {manage ? (
-          <select aria-label="Department" value={dept} onChange={(e) => setDept(e.target.value)} className={input + ' !w-auto'}>
+          <Select aria-label="Department" value={dept} onChange={(e) => setDept(e.target.value)} className={input + ' !w-auto'}>
             <option value="">All departments</option>
             {(depts.data?.departments ?? []).map((x) => (
               <option key={String(x.id)} value={String(x.id)}>
                 {x.name}
               </option>
             ))}
-          </select>
+          </Select>
         ) : null}
       </div>
       {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}

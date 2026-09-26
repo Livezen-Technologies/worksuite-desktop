@@ -8,6 +8,7 @@ import { ErrorNote, Spinner } from '../../components/ui';
 import { PROFILE_FIELDS, type CoverAsk, type Profile, type RequestsResponse } from './api';
 import { rangeLabel } from './dates';
 import { btn, btnPrimary, btnSmall, Cell, Empty, Field, input, PageHead, row, Seg, Sheet, StatusChip, THead } from './parts';
+import { Select } from '../../components/Select';
 
 /**
  * Requests (HrRequests): what I have asked HR for and what waits on me —
@@ -78,13 +79,13 @@ export default function Requests() {
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
         <Seg label="Whose requests" value={scope} onChange={setScope} options={[{ id: 'mine', label: 'My requests' }, { id: 'team', label: 'To review' }]} />
-        <select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)} className={input + ' !w-auto'}>
+        <Select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)} className={input + ' !w-auto'}>
           {STATUS.map(([v, l]) => (
             <option key={v} value={v}>
               {l}
             </option>
           ))}
-        </select>
+        </Select>
         {scope === 'team' ? <span className="text-[12px] text-ink-3">You will only see requests from people who report to you.</span> : null}
       </div>
       <div className="overflow-hidden rounded-[12px] border border-line bg-surface">
@@ -250,13 +251,13 @@ export function NewRequestSheet({ employeeId, onClose, onDone, initial }: { empl
       }
     >
       <Field label="What are you asking for?">
-        <select aria-label="What are you asking for?" value={kind} onChange={(e) => setKind(e.target.value)} className={input} disabled={!kinds.data}>
+        <Select aria-label="What are you asking for?" value={kind} onChange={(e) => setKind(e.target.value)} className={input} disabled={!kinds.data}>
           {(kinds.data?.kinds ?? [{ value: kind, label: 'Loading…' }]).map((k) => (
             <option key={k.value} value={k.value}>
               {k.label}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       {corrective ? (
         <>
@@ -287,13 +288,13 @@ export function NewRequestSheet({ employeeId, onClose, onDone, initial }: { empl
       {kind === 'profile' ? (
         <div className="grid grid-cols-2 gap-2.5">
           <Field label="Which detail">
-            <select aria-label="Which detail" value={field} onChange={(e) => setField(e.target.value)} className={input}>
+            <Select aria-label="Which detail" value={field} onChange={(e) => setField(e.target.value)} className={input}>
               {PROFILE_FIELDS.map(([v, l]) => (
                 <option key={v} value={v}>
                   {l}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="New value">
             <input aria-label="New value" value={value} onChange={(e) => setValue(e.target.value)} className={input} />

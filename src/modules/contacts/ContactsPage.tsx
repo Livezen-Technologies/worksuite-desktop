@@ -199,7 +199,7 @@ export default function ContactsPage(_props: ModuleProps) {
                 {exportOpen ? (
                   <>
                     <div className="fixed inset-0 z-10" onMouseDown={() => setExportOpen(false)} />
-                    <div role="menu" aria-label="Export" className="absolute top-[42px] right-0 z-20 w-[190px] rounded-[12px] border border-line bg-surface p-1.5 shadow-[0_12px_32px_rgba(15,27,61,.16)]">
+                    <div role="menu" aria-label="Export" className="absolute top-[42px] right-0 z-20 w-[190px] rounded-[12px] border border-line bg-surface p-1.5 shadow-[0_12px_32px_rgb(var(--ws-shadow-rgb)/.16)]">
                       {(
                         [
                           ['csv', 'CSV (.csv)'],
@@ -248,7 +248,7 @@ export default function ContactsPage(_props: ModuleProps) {
                     ['list', 'List', 'list'],
                   ] as const
                 ).map(([k, l, icon]) => (
-                  <button key={k} type="button" aria-label={l} title={l} aria-pressed={layout === k} onClick={() => setLayout(k)} className={cx('flex h-[30px] w-8 items-center justify-center rounded-[8px]', layout === k ? 'bg-surface text-primary shadow-[0_1px_3px_rgba(15,27,61,.12)]' : 'text-ink-3')}>
+                  <button key={k} type="button" aria-label={l} title={l} aria-pressed={layout === k} onClick={() => setLayout(k)} className={cx('flex h-[30px] w-8 items-center justify-center rounded-[8px]', layout === k ? 'bg-surface text-primary shadow-[0_1px_3px_rgb(var(--ws-shadow-rgb)/.12)]' : 'text-ink-3')}>
                     <Icon name={icon} size={15} />
                   </button>
                 ))}
@@ -352,7 +352,7 @@ function Pill({ type }: { type: string }) {
 
 function Card({ c, selected, onOpen, onStar }: { c: Contact; selected: boolean; onOpen: () => void; onStar: () => void }) {
   return (
-    <div role="listitem" className={cx('relative flex h-[92px] items-center gap-3 rounded-[14px] border bg-surface py-3.5 pr-2.5 pl-3.5', selected ? 'border-primary shadow-[0_0_0_3px_rgba(35,52,158,.12)]' : 'border-line shadow-[0_1px_2px_rgba(15,27,61,.04)] hover:border-[#C9D2F2] dark:hover:border-ink-3')}>
+    <div role="listitem" className={cx('relative flex h-[92px] items-center gap-3 rounded-[14px] border bg-surface py-3.5 pr-2.5 pl-3.5', selected ? 'border-primary shadow-[0_0_0_3px_rgba(35,52,158,.12)]' : 'border-line shadow-[0_1px_2px_rgb(var(--ws-shadow-rgb)/.04)] hover:border-[#C9D2F2] dark:hover:border-ink-3')}>
       <button type="button" aria-label={c.display_name} onClick={onOpen} className="absolute inset-0 rounded-[14px]" />
       <Avatar c={c} size={46} />
       <span className="pointer-events-none flex min-w-0 flex-1 flex-col gap-0.5">

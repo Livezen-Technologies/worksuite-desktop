@@ -18,6 +18,7 @@ import { btn, btnBad, btnGood, btnPrimary, btnSmall, Cell, Empty, Facts, Field, 
 import { can } from './Rail';
 import { NewRequestSheet } from './Requests';
 import { SheetDetail } from './TimesheetApprovals';
+import { Select } from '../../components/Select';
 
 /**
  * An employee's profile (HrProfile, HrProfilePersonal, HrProfileSheet; the
@@ -565,13 +566,13 @@ function LeaveTab({ p }: { p: Profile }) {
       <Panel
         title={`Leave · ${year}`}
         action={
-          <select aria-label="Year" value={year} onChange={(e) => setYear(Number(e.target.value))} className={input + ' !h-[30px] !w-auto'}>
+          <Select aria-label="Year" value={year} onChange={(e) => setYear(Number(e.target.value))} className={input + ' !h-[30px] !w-auto'}>
             {[0, 1, 2].map((n) => (
               <option key={n} value={new Date().getFullYear() - n}>
                 {new Date().getFullYear() - n}
               </option>
             ))}
-          </select>
+          </Select>
         }
       >
         <THead cols={[['Type', null], ['Entitled', 70], ['Carried in', 80], ['Used', 60], ['Available', 80], ['', 70]]} />

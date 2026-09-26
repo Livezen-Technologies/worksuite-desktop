@@ -74,7 +74,7 @@ export function AssignmentAlert() {
     }
   };
   return (
-    <div role="alertdialog" aria-label="Chat assigned to you" className="fixed right-6 bottom-12 z-40 flex w-[360px] flex-col gap-2.5 rounded-[12px] bg-[#0F1B3D] px-4 py-3.5 text-[13px] text-[#E6ECFA] shadow-[0_18px_44px_rgba(15,27,61,.35)]">
+    <div role="alertdialog" aria-label="Chat assigned to you" className="fixed right-6 bottom-12 z-40 flex w-[360px] flex-col gap-2.5 rounded-[12px] bg-[#0F1B3D] px-4 py-3.5 text-[13px] text-[#E6ECFA] shadow-[0_18px_44px_rgb(var(--ws-shadow-rgb)/.35)]">
       <div className="flex items-center gap-2">
         <span className="h-2 w-2 rounded-full bg-[#F0503A]" />
         <b className="flex-1 text-white">Chat assigned to you</b>

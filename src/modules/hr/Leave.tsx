@@ -11,6 +11,7 @@ import type { Balance, LeaveReq, LeaveReview, LeaveTypes, Profile } from './api'
 import { addDays, dayShort, monthGrid, monthLabel, parseYmd, rangeLabel, shiftMonth, ymd } from './dates';
 import { btn, btnBad, btnGood, btnPrimary, btnSmall, Empty, Field, humanise, Initials, input, PageHead, Seg, Sheet, StatusChip } from './parts';
 import { can } from './Rail';
+import { Select } from '../../components/Select';
 
 /**
  * Leave · Requests & calendar (HrLeave, HrLeaveCalendar): my balances, the
@@ -305,24 +306,24 @@ function RequestLeave({ onClose, onDone }: { onClose: () => void; onDone: () => 
     >
       {canPick && employees.data ? (
         <Field label="Employee">
-          <select aria-label="Employee" value={employee} onChange={(e) => setEmployee(e.target.value)} className={input}>
+          <Select aria-label="Employee" value={employee} onChange={(e) => setEmployee(e.target.value)} className={input}>
             <option value="">Me</option>
             {employees.data.map((x) => (
               <option key={x.id} value={x.id}>
                 {x.name} · {x.employee_no}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
       ) : null}
       <Field label="Leave type">
-        <select aria-label="Leave type" value={type ? String(type.id) : ''} onChange={(e) => (setTypeId(e.target.value), setPortion('full'))} className={input} disabled={!active.length}>
+        <Select aria-label="Leave type" value={type ? String(type.id) : ''} onChange={(e) => (setTypeId(e.target.value), setPortion('full'))} className={input} disabled={!active.length}>
           {active.map((t) => (
             <option key={t.id} value={t.id}>
               {t.name} — {Number(t.days_per_year)}d/yr{!t.requires_approval ? ' (no approval needed)' : ''}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       <Field label="How much">
         <div className="flex flex-wrap gap-1.5">
@@ -360,14 +361,14 @@ function RequestLeave({ onClose, onDone }: { onClose: () => void; onDone: () => 
         <input aria-label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. family trip" className={input} />
       </Field>
       <Field label="Responsible person" hint="They are asked to cover the work and must accept before this can be approved.">
-        <select aria-label="Responsible person" value={responsible} onChange={(e) => setResponsible(e.target.value)} className={input}>
+        <Select aria-label="Responsible person" value={responsible} onChange={(e) => setResponsible(e.target.value)} className={input}>
           <option value="">Choose someone…</option>
           {(colleagues.data?.people ?? []).map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       <Field label="Evidence — optional" hint="A medical certificate or similar. Filed against your record and visible to HR only.">
         <input type="file" aria-label="Evidence" onChange={(e) => setEvidence(e.target.files?.[0] ?? null)} className="text-[12.5px] font-medium text-ink-2 file:mr-2 file:h-[30px] file:rounded-[7px] file:border file:border-line file:bg-surface file:px-2.5 file:font-semibold file:text-ink" />
@@ -455,7 +456,7 @@ export function ReviewLeave({ id, onClose, onDone }: { id: number; onClose: () =
   const askedMe = !!v?.responsible && String(v.responsible.user_id) === String(me) && v.responsible.status === 'pending' && v.request.status === 'pending';
   return (
     <div className="no-drag fixed inset-0 z-50 bg-[rgba(15,27,61,.32)]" onMouseDown={(e) => e.target === e.currentTarget && onClose()} onKeyDown={(e) => e.key === 'Escape' && onClose()}>
-      <aside aria-label="Review leave" className="animate-in absolute top-0 right-0 bottom-0 flex w-[460px] flex-col bg-surface shadow-[-10px_0_30px_rgba(15,27,61,.18)]">
+      <aside aria-label="Review leave" className="animate-in absolute top-0 right-0 bottom-0 flex w-[460px] flex-col bg-surface shadow-[-10px_0_30px_rgb(var(--ws-shadow-rgb)/.18)]">
         <div className="flex items-center border-b border-line px-4 py-3.5">
           <b className="flex-1 truncate text-[15px] text-ink">Review leave{v?.employee.name ? ` · ${v.employee.name}` : ''}</b>
           <button type="button" aria-label="Close" onClick={onClose} className="h-7 w-7 rounded-full text-[16px] text-ink-3 hover:bg-subtle">
@@ -528,14 +529,14 @@ export function ReviewLeave({ id, onClose, onDone }: { id: number; onClose: () =
               <button type="button" disabled={busy} className={btn + ' !text-danger'} onClick={() => void cover('declined')}>
                 Decline cover
               </button>
-              <button type="button" disabled={busy} className={btn + ' !border-[#1F7A4D] !text-[#1F7A4D]'} onClick={() => void cover('accepted')}>
+              <button type="button" disabled={busy} className={btn + ' !border-[#1F7A4D] !text-[#1F7A4D] dark:!border-success/50 dark:!text-success'} onClick={() => void cover('accepted')}>
                 Accept cover
               </button>
             </>
           ) : null}
           {v?.request.status === 'pending' ? (
             <>
-              <button type="button" disabled={busy} className={btn + ' !border-[#F1B8A8] !text-danger'} onClick={() => void decide('rejected')}>
+              <button type="button" disabled={busy} className={btn + ' !border-[#F1B8A8] !text-danger dark:!border-danger/40'} onClick={() => void decide('rejected')}>
                 Reject
               </button>
               <button type="button" disabled={busy} className={btnPrimary + ' !bg-[#1F7A4D] hover:!bg-[#1A6841]'} onClick={() => void decide('approved')}>

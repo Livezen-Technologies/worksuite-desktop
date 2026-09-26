@@ -40,7 +40,7 @@ export function PopMenu({ at, items, label, onClose, width = 280, head }: { at: 
   return (
     <>
       <div className="no-drag fixed inset-0 z-40" onMouseDown={onClose} onContextMenu={(e) => (e.preventDefault(), onClose())} />
-      <div ref={ref} role="menu" aria-label={label} className="no-drag fixed z-50 flex max-h-[calc(100vh-16px)] flex-col overflow-y-auto rounded-[12px] border border-line bg-surface p-1.5 text-[13px] shadow-[0_18px_44px_rgba(15,27,61,.25)] scroll-thin" style={{ left: pos.x, top: pos.y, width }}>
+      <div ref={ref} role="menu" aria-label={label} className="no-drag fixed z-50 flex max-h-[calc(100vh-16px)] flex-col overflow-y-auto rounded-[12px] border border-line bg-surface p-1.5 text-[13px] shadow-[0_18px_44px_rgb(var(--ws-shadow-rgb)/.25)] scroll-thin" style={{ left: pos.x, top: pos.y, width }}>
         {head}
         {items.map((m, i) =>
           'sep' in m ? (

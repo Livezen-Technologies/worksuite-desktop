@@ -10,6 +10,7 @@ import { Details } from './Details';
 import { PopMenu, type MenuItem } from './Menu';
 import type { Place } from './Rail';
 import { FileIcon } from './Thumb';
+import { Select } from '../../components/Select';
 
 const LEVEL: Record<string, [string, string]> = { view: ['Can view', 'text-ink-2'], edit: ['Can edit', 'text-primary'], full: ['Full access', 'text-success'] };
 const KINDS: Array<[string, string]> = [['', 'Any type'], ['document', 'Documents'], ['spreadsheet', 'Spreadsheets'], ['presentation', 'Presentations'], ['pdf', 'PDFs'], ['image', 'Images'], ['video', 'Video'], ['audio', 'Audio'], ['archive', 'Archives']];
@@ -67,32 +68,32 @@ export function Shared({ onPlace }: { onPlace: (p: Place) => void }) {
               <Icon name="search" size={15} />
               <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search shared files" placeholder="Search shared files" className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none bare-focus" />
             </label>
-            <select aria-label="Type" value={kind} onChange={(e) => setKind(e.target.value)} className={select(!!kind)}>{KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
-            <select aria-label="Access" value={level} onChange={(e) => setLevel(e.target.value)} className={select(!!level)}>
+            <Select aria-label="Type" value={kind} onChange={(e) => setKind(e.target.value)} className={select(!!kind)}>{KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select>
+            <Select aria-label="Access" value={level} onChange={(e) => setLevel(e.target.value)} className={select(!!level)}>
               <option value="">Any access</option>
               <option value="view">Can view</option>
               <option value="edit">Can edit</option>
               <option value="full">Full access</option>
-            </select>
-            <select aria-label="When shared" value={when} onChange={(e) => setWhen(e.target.value)} className={select(!!when)}>{WHEN.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+            </Select>
+            <Select aria-label="When shared" value={when} onChange={(e) => setWhen(e.target.value)} className={select(!!when)}>{WHEN.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select>
             {facets && (facets.organizations.length || facets.no_company) ? (
-              <select aria-label="Company" value={org} onChange={(e) => setOrg(e.target.value)} className={select(!!org)}>
+              <Select aria-label="Company" value={org} onChange={(e) => setOrg(e.target.value)} className={select(!!org)}>
                 <option value="">Any company</option>
                 {facets.organizations.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
                 {facets.no_company ? <option value="none">No company</option> : null}
-              </select>
+              </Select>
             ) : null}
             {facets?.locations.length ? (
-              <select aria-label="Location" value={within} onChange={(e) => setWithin(e.target.value)} className={select(!!within)}>
+              <Select aria-label="Location" value={within} onChange={(e) => setWithin(e.target.value)} className={select(!!within)}>
                 <option value="">Anywhere</option>
                 {facets.locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select>
+              </Select>
             ) : null}
             {facets?.modules.length ? (
-              <select aria-label="Module" value={module} onChange={(e) => setModule(e.target.value)} className={select(!!module)}>
+              <Select aria-label="Module" value={module} onChange={(e) => setModule(e.target.value)} className={select(!!module)}>
                 <option value="">Any module</option>
                 {facets.modules.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
-              </select>
+              </Select>
             ) : null}
             {filtered ? <button type="button" onClick={() => (setQ(''), setKind(''), setLevel(''), setWhen(''), setOrg(''), setWithin(''), setModule(''))} className="text-[12.5px] font-semibold text-primary hover:underline">Clear filters</button> : null}
             {list.data?.offline ? <OfflineNote cachedAt={list.data.cachedAt} /> : null}

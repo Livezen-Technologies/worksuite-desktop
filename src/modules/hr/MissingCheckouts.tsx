@@ -7,6 +7,7 @@ import type { OpenResponse, RosterDay } from './api';
 import { CorrectAttendance } from './Correct';
 import { dayShort } from './dates';
 import { Cell, Empty, input, PageHead, row, StatusChip, THead } from './parts';
+import { Select } from '../../components/Select';
 
 /**
  * Missing check-outs (HrAdminSheet; the web's OpenAttendanceReview): days
@@ -46,22 +47,22 @@ export default function MissingCheckouts() {
         <input type="date" aria-label="From" value={from || d?.from || ''} onChange={(e) => setFrom(e.target.value)} className={input + ' !w-[150px]'} />
         <span className="text-ink-3">to</span>
         <input type="date" aria-label="To" value={to || d?.to || ''} onChange={(e) => setTo(e.target.value)} className={input + ' !w-[150px]'} />
-        <select aria-label="Department" value={dept} onChange={(e) => setDept(e.target.value)} className={input + ' !w-auto'}>
+        <Select aria-label="Department" value={dept} onChange={(e) => setDept(e.target.value)} className={input + ' !w-auto'}>
           <option value="">All departments</option>
           {(d?.departments ?? []).map((x) => (
             <option key={String(x.id)} value={String(x.id)}>
               {x.name}
             </option>
           ))}
-        </select>
-        <select aria-label="Review state" value={state} onChange={(e) => setState(e.target.value)} className={input + ' !w-auto'}>
+        </Select>
+        <Select aria-label="Review state" value={state} onChange={(e) => setState(e.target.value)} className={input + ' !w-auto'}>
           <option value="">Every state</option>
           {Object.entries(states).map(([k, l]) => (
             <option key={k} value={k}>
               {l}
             </option>
           ))}
-        </select>
+        </Select>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or number" aria-label="Search name or number" className={input + ' !w-[220px]'} />
       </div>
       {d && d.holding_pay > 0 ? (

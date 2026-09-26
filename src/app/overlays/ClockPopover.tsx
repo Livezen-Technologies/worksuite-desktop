@@ -127,7 +127,7 @@ export function Ring({ size, fraction, tone, children }: { size: number; fractio
 
 function Tile({ label, value, sub }: { label: string; value: string; sub?: string | null }) {
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-px rounded-[12px] bg-ground px-2.5 py-[9px]">
+    <div className="flex min-w-0 flex-1 flex-col gap-px rounded-[12px] bg-well px-2.5 py-[9px]">
       <span className="text-[11px] text-ink-3">{label}</span>
       <b className="text-[14px] text-ink tabular-nums">{value}</b>
       {sub !== undefined ? <span className="truncate text-[10.5px] text-ink-3">{sub ?? ''}</span> : null}
@@ -230,7 +230,7 @@ export function ClockPopover() {
   );
 
   return (
-    <Popover label="Today's attendance" width={340} offset={offset} className="rounded-[22px] shadow-[0_24px_60px_rgba(15,27,61,.22),0_0_0_1px_rgba(15,27,61,.06)]">
+    <Popover label="Today's attendance" width={340} offset={offset} className="rounded-[22px] shadow-[0_24px_60px_rgb(var(--ws-shadow-rgb)/.22),0_0_0_1px_var(--ws-edge)]">
       <div className="flex items-center gap-2 px-4 pt-3.5 pb-1.5">
         <b className="flex-1 text-[15px] text-ink">Today's attendance</b>
         <span className={cx('rounded-[10px] px-2.5 py-[3px] text-[11.5px] font-bold', badge[1])}>{badge[0]}</span>
@@ -403,7 +403,7 @@ export function ClockPopover() {
           </>
         ) : null}
       </div>
-      <div className="flex items-center justify-between bg-ground px-4 py-2.5">
+      <div className="flex items-center justify-between border-t border-line bg-well px-4 py-2.5">
         <button type="button" className="text-[12.5px] font-semibold text-primary hover:underline" onClick={() => (closeOverlay(), navigate('/hr'))}>
           Open HR
         </button>
@@ -415,7 +415,7 @@ export function ClockPopover() {
 
 function Location({ required, reason, setReason, skips }: { required: boolean; reason: string; setReason: (v: string) => void; skips: number }) {
   return (
-    <div className="flex flex-col gap-2 rounded-[14px] bg-ground px-3 py-2.5">
+    <div className="flex flex-col gap-2 rounded-[14px] bg-well px-3 py-2.5">
       <div className="flex items-center gap-2.5">
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-success-bg text-success">
           <Icon name="map-pin" size={16} />

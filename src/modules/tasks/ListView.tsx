@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { cx } from '../../components/ui';
 import { dueOf, priorityOf, progressOf, STATUSES, type DueGroup, type Status, type Task, type TaskList } from './api';
+import { Select } from '../../components/Select';
 
 const GROUPS: Array<{ id: DueGroup | 'done'; label: string; tone: string }> = [
   { id: 'overdue', label: 'OVERDUE', tone: 'text-danger' },
@@ -91,9 +92,9 @@ export function ListView({ tasks, lists, me, today, now, completed, selected, ca
                     {list ? <span className="h-2 w-2 shrink-0 rounded-[3px]" style={{ background: list.color }} /> : null}
                     <span className="truncate">{list?.name ?? '—'}</span>
                   </span>
-                  <select value={t.status} disabled={!canChangeStatus} onChange={(e) => onStatus(t, e.target.value as Status)} aria-label={`Status of ${t.title}`} className="h-7 min-w-0 rounded-[7px] border border-line bg-surface px-1 text-[12px] text-ink disabled:opacity-70">
+                  <Select value={t.status} disabled={!canChangeStatus} onChange={(e) => onStatus(t, e.target.value as Status)} aria-label={`Status of ${t.title}`} className="h-7 min-w-0 rounded-[7px] border border-line bg-surface px-1 text-[12px] text-ink disabled:opacity-70">
                     {STATUSES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-                  </select>
+                  </Select>
                   <span>{t.priority !== 'none' ? <span className={cx('rounded-[5px] px-[7px] py-[2px] text-[10.5px] font-bold', pr.tone)}>{pr.label}</span> : null}</span>
                   <span className="truncate text-ink-2">{t.assignee_id === me ? 'You' : (t.assignee_name ?? '—')}</span>
                   <span className={cx('truncate font-semibold', due.tone === 'overdue' ? 'text-danger' : due.tone === 'soon' ? 'text-[#B45309] dark:text-warning' : due.tone === 'done' ? 'text-success' : 'text-ink-2')}>{due.label || '—'}</span>

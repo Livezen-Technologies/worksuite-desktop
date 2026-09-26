@@ -5,6 +5,7 @@ import { toast } from '../../core/toasts';
 import { uploadBlob } from '../../core/upload';
 import { cx } from '../../components/ui';
 import { saveBody, showBody } from './api';
+import { Select } from '../../components/Select';
 
 const PICTURES = 'image/png,image/jpeg,image/gif,image/webp';
 const TOOLS: Array<[string, React.ReactNode]> = [
@@ -124,14 +125,14 @@ export function NoteBody({ html, noteId, onChange, autoFocus, bar, top }: { html
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div role="toolbar" aria-label="Formatting" className="flex shrink-0 flex-wrap items-center gap-0.5 border-b border-line px-[18px] py-1.5 text-[12.5px] text-ink-2">
-        <select aria-label="Text style" value={block} onChange={(e) => heading(e.target.value)} onMouseDown={() => box.current?.focus()} className="mr-1 h-7 rounded-[6px] border border-line bg-surface px-1 text-[12.5px] text-ink">
+        <Select aria-label="Text style" value={block} onChange={(e) => heading(e.target.value)} onMouseDown={() => box.current?.focus()} className="mr-1 h-7 rounded-[6px] border border-line bg-surface px-1 text-[12.5px] text-ink">
           <option value="p">Normal text</option>
           <option value="h1">Heading 1</option>
           <option value="h2">Heading 2</option>
           <option value="h3">Heading 3</option>
           <option value="blockquote">Quote</option>
           <option value="pre">Code</option>
-        </select>
+        </Select>
         {TOOLS.map(([label, show]) => (
           <button key={label} type="button" aria-label={label} title={label} onMouseDown={(e) => e.preventDefault()} onClick={() => onTool(label)} className={tool}>
             {label === 'Picture' && uploading ? 'Adding…' : show}

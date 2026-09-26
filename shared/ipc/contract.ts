@@ -211,6 +211,8 @@ export const contract = {
         /** An HR document (the main process asks for its one-time link) — mine, or with `hrEmployee` that employee's. */
         hrDocument: z.number().int().positive().optional(),
         hrEmployee: z.number().int().positive().optional(),
+        /** A resignation letter: one being reviewed, by its resignation id, or my own. */
+        hrLetter: z.union([z.number().int().positive(), z.literal('mine')]).optional(),
         /** An HR attendance report as a CSV, as the Reports screen filtered it. */
         hrReport: z
           .object({
@@ -224,7 +226,7 @@ export const contract = {
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document or an HR report'),
+      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report or a resignation letter'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   'transfers:upload': ch(

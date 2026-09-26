@@ -73,6 +73,18 @@ export function categoryOf(source: string): string {
 }
 
 /** The event's colour: its own for events, the category's for everything else. */
+/**
+ * An event drawn in its own colour, readable in both themes: the colour
+ * itself on a 10% tint in light, and in dark a lightened mix of it on a
+ * stronger tint (a deep indigo title on the dark grid could not be read).
+ * Set `--ev` to the colour in the element's style.
+ */
+export const EVENT_TONE =
+  'text-[color:var(--ev)] bg-[color:color-mix(in_srgb,var(--ev)_10%,transparent)] dark:text-[color:color-mix(in_srgb,var(--ev)_42%,white)] dark:bg-[color:color-mix(in_srgb,var(--ev)_24%,transparent)]';
+
+/** The colour only as text (the day's list): lightened in dark, as above. */
+export const EVENT_TEXT = 'text-[color:var(--ev)] dark:text-[color:color-mix(in_srgb,var(--ev)_42%,white)]';
+
 export function colourOf(e: CalendarEvent): string {
   if (e.source === 'event' && e.color && /^#[0-9a-f]{6}$/i.test(e.color)) return e.color;
   return CATEGORIES.find((c) => c.sources(e.source))?.color ?? '#23349E';

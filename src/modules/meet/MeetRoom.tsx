@@ -13,6 +13,7 @@ import type { ChatFile } from '../chat/types';
 import { formatCode, invitation } from './api';
 import { ShareInChat, ShareRow } from './MeetHome';
 import { isGuest, meet, metaOf, type Stroke } from './session';
+import { Select } from '../../components/Select';
 
 type Tab = 'People' | 'Chat' | 'Board' | 'Files' | 'Info';
 
@@ -379,10 +380,10 @@ function InfoPanel() {
       {meet.isHost ? (
         <label className="flex flex-col gap-1">
           <b className="text-ink">Access</b>
-          <select value={meet.locked ? 'locked' : 'ask'} onChange={(e) => void meet.lock(e.target.value === 'locked')} className="h-9 rounded-[8px] border border-line bg-surface px-2 text-ink">
+          <Select value={meet.locked ? 'locked' : 'ask'} onChange={(e) => void meet.lock(e.target.value === 'locked')} className="h-9 rounded-[8px] border border-line bg-surface px-2 text-ink">
             <option value="ask">Ask to join (host admits)</option>
             <option value="locked">Locked — no new participants</option>
-          </select>
+          </Select>
         </label>
       ) : null}
       {chat ? <ShareInChat text={text} onClose={() => setChat(false)} /> : null}

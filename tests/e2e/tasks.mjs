@@ -8,7 +8,7 @@
 //   WS_E2E_SERVER=http://localhost:8920 WS_E2E_EMAIL=… WS_E2E_PASSWORD=… \
 //   WS_E2E_PARTNER_EMAIL=… WS_E2E_PARTNER_PASSWORD=… \
 //   ELECTRON_RUN_AS_NODE=1 npx electron tests/e2e/tasks.mjs
-import { launch, sleep } from './harness.mjs';
+import { launch, sleep, choose, chooseIn } from './harness.mjs';
 
 const server = process.env.WS_E2E_SERVER;
 const email = process.env.WS_E2E_EMAIL;
@@ -109,7 +109,7 @@ try {
   await sleep(1200);
   const completed = (await byTitle(boardTitle))?.status;
   await t.evaluate(`[...document.querySelectorAll('[role="tablist"][aria-label="View"] [role="tab"]')].find(b => b.textContent.trim() === 'List').click()`);
-  await t.evaluate(`(() => { const s = document.querySelector('select[aria-label="Status"]'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, 'all'); s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
+  await t.evaluate(choose('[role="combobox"][aria-label="Status"]', 'all'));
   await t.waitFor(`!!document.querySelector('input[aria-label=${JSON.stringify(`Reopen ${boardTitle}`)}]')`, 'the completed row');
   await t.evaluate(`document.querySelector('input[aria-label=${JSON.stringify(`Reopen ${boardTitle}`)}]').click()`);
   await sleep(1200);
@@ -125,7 +125,7 @@ try {
   await t.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'n' });
   await t.waitFor(t.hasText('Create task'), 'the new task dialog');
   await t.fill('Title', detailTitle);
-  await t.evaluate(`(() => { const s = [...document.querySelectorAll('[role="dialog"] label')].find(l => l.textContent.trim().startsWith('Priority')).querySelector('select'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, 'high'); s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
+  await t.evaluate(chooseIn(`[...document.querySelectorAll('[role="dialog"] label')].find(l => l.textContent.trim().startsWith('Priority'))?.querySelector('[role="combobox"]')`, 'high'));
   await t.shot('t4-new');
   await t.clickButton('Create task');
   await t.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Task details"] input[aria-label="Task name"]')`, 'the new task opened', 20_000);
@@ -160,7 +160,8 @@ try {
   // The partner as reviewer, then sent for review.
   await t.clickButton('Manage');
   await t.waitFor(t.hasText('Add somebody'), 'the people dialog');
-  await t.evaluate(`(() => { const s = document.querySelector('select[aria-label="Person"]'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, ${JSON.stringify(String(partner.id))}); s.dispatchEvent(new Event('change', { bubbles: true })); const r = document.querySelector('select[aria-label="As"]'); set.call(r, 'reviewer'); r.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
+  await t.evaluate(choose('[role="combobox"][aria-label="Person"]', String(partner.id)));
+  await t.evaluate(choose('[role="combobox"][aria-label="As"]', 'reviewer'));
   await t.clickButton('Add');
   await t.waitFor(`[...document.querySelectorAll('[role="dialog"]')].some(d => d.textContent.includes('REVIEWERS'))`, 'the reviewer in the dialog');
   await t.clickButton('Done');
@@ -199,7 +200,7 @@ try {
   await t.evaluate(`document.querySelector('[role="dialog"][aria-label="Task details"] button[aria-label="Close"]').click()`);
   await t.fill('Search tasks', `renamed`);
   await sleep(300);
-  const hits = await t.evaluate(`[...document.querySelectorAll('[role="row"] button')].map(b => b.textContent.trim()).filter(Boolean)`);
+  const hits = await t.evaluate(`[...document.querySelectorAll('[role="row"] button:not([role="combobox"])')].map(b => b.textContent.trim()).filter(Boolean)`);
   t.check('search narrows the list to what matches', hits.length >= 1 && hits.every((h) => h.toLowerCase().includes('renamed')), JSON.stringify(hits));
 } catch (e) {
   t.check('tasks run', false, e.message);

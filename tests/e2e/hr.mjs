@@ -12,7 +12,7 @@
 //   npm run build
 //   WS_E2E_SERVER=… WS_E2E_EMAIL=… WS_E2E_PASSWORD=… WS_E2E_PARTNER_EMAIL=… WS_E2E_PARTNER_PASSWORD=… \
 //   ELECTRON_RUN_AS_NODE=1 npx electron tests/e2e/hr.mjs
-import { launch, sleep } from './harness.mjs';
+import { launch, sleep, choose } from './harness.mjs';
 
 const server = process.env.WS_E2E_SERVER;
 const email = process.env.WS_E2E_EMAIL;
@@ -92,7 +92,7 @@ try {
   await t.evaluate(clickIn('document.querySelector("main")', 'Ask to change a detail'));
   await t.waitFor(`!!${dialog('New HR request')}`, 'the request form');
   await sleep(500);
-  await t.evaluate(setValue('[role="dialog"] select[aria-label="Which detail"]', 'mobile'));
+  await t.evaluate(choose('[role="dialog"] [role="combobox"][aria-label="Which detail"]', 'mobile'));
   await t.evaluate(setValue('[role="dialog"] input[aria-label="New value"]', `+94 70 000 ${tag}`));
   await t.evaluate(setValue('[role="dialog"] textarea[aria-label="Reason"]', `E2E ${tag}: new number`));
   await t.shot('h3-change-a-detail');
@@ -140,7 +140,7 @@ try {
     await t.evaluate(`[...document.querySelectorAll('main button')].find(b => b.textContent.trim() === 'Ask to correct').click()`);
     await t.waitFor(`!!${dialog('New HR request')}`, 'the correction form');
     await sleep(400);
-    const pre = await t.evaluate(`({ kind: document.querySelector('[role="dialog"] select').value, day: document.querySelector('[role="dialog"] input[aria-label="Which day"]').value })`);
+    const pre = await t.evaluate(`({ kind: document.querySelector('[role="dialog"] [role="combobox"]').dataset.value, day: document.querySelector('[role="dialog"] input[aria-label="Which day"]').value })`);
     if (!(await t.evaluate(`document.querySelector('[role="dialog"] input[aria-label="Corrected check-out"]').value`))) await t.evaluate(setValue('[role="dialog"] input[aria-label="Corrected check-out"]', '17:30'));
     await t.evaluate(setValue('[role="dialog"] textarea[aria-label="Reason"]', `E2E ${tag}: forgot to clock out`));
     await t.evaluate(clickIn(dialog('New HR request'), 'Submit request'));
@@ -181,12 +181,12 @@ try {
   await sleep(600);
   const leaveDay = futureWeekday(25);
   const why = `E2E trip ${tag}`;
-  if (casual) await t.evaluate(setValue('[role="dialog"] select[aria-label="Leave type"]', String(casual.id)));
+  if (casual) await t.evaluate(choose('[role="dialog"] [role="combobox"][aria-label="Leave type"]', String(casual.id)));
   await t.evaluate(setValue('[role="dialog"] input[aria-label="First day"]', leaveDay));
   await t.evaluate(setValue('[role="dialog"] input[aria-label="Last day"]', leaveDay));
   await t.evaluate(setValue('[role="dialog"] input[aria-label="Reason"]', why));
   const partnerId = partner.id;
-  await t.evaluate(setValue('[role="dialog"] select[aria-label="Responsible person"]', String(partnerId ?? '')));
+  await t.evaluate(choose('[role="dialog"] [role="combobox"][aria-label="Responsible person"]', String(partnerId ?? '')));
   await sleep(300);
   const cost = await t.evaluate(`${inDialog('Request leave', 'comes off the balance as')}`);
   await t.shot('h9-request-leave');

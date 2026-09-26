@@ -73,7 +73,21 @@ export function Chip({ children, tone = 'muted', className }: { children: ReactN
   return <span className={cx('inline-flex items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-[11.5px] font-semibold', tones[tone], className)}>{children}</span>;
 }
 
-const AVATAR_TONES = ['bg-[#E6F4F1] text-[#0E7C86]', 'bg-[#EEF1FD] text-[#23349E]', 'bg-[#FDF1E3] text-[#B45309]', 'bg-[#F3E8FF] text-[#6B21A8]', 'bg-[#FDECEA] text-[#B42318]', 'bg-[#E7F4ED] text-[#1F7A4D]'];
+/**
+ * Text in a colour that comes with the data (an app, a calendar, a person's
+ * name colour), readable in both themes: set `--c` in the style; on dark it
+ * is mixed towards white, since a deep indigo cannot be read on the dark ground.
+ */
+export const DATA_TEXT = 'text-[color:var(--c)] dark:text-[color:color-mix(in_srgb,var(--c)_45%,white)]';
+
+const AVATAR_TONES = [
+  'bg-[#E6F4F1] text-[#0E7C86] dark:bg-[#10343A] dark:text-[#7FD8DF]',
+  'bg-[#EEF1FD] text-[#23349E] dark:bg-[#1C2A5E] dark:text-[#AFC0FF]',
+  'bg-[#FDF1E3] text-[#B45309] dark:bg-[#3A2810] dark:text-[#F5C27A]',
+  'bg-[#F3E8FF] text-[#6B21A8] dark:bg-[#2E1D4A] dark:text-[#D2B4FE]',
+  'bg-[#FDECEA] text-[#B42318] dark:bg-[#3A1614] dark:text-[#F7A39B]',
+  'bg-[#E7F4ED] text-[#1F7A4D] dark:bg-[#12301F] dark:text-[#86D8AE]',
+];
 
 export function initials(name: string | null | undefined): string {
   const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
@@ -163,26 +177,6 @@ export function Switch({ checked, onChange, disabled, label }: { checked: boolea
   );
 }
 
-export function Select<T extends string | number>({ value, onChange, options, disabled, label }: { value: T; onChange: (v: T) => void; options: Array<{ value: T; label: string }>; disabled?: boolean; label: string }) {
-  return (
-    <select
-      aria-label={label}
-      disabled={disabled}
-      value={String(value)}
-      onChange={(e) => {
-        const o = options.find((x) => String(x.value) === e.target.value);
-        if (o) onChange(o.value);
-      }}
-      className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[13px] text-ink outline-none focus:border-primary disabled:opacity-50"
-    >
-      {options.map((o) => (
-        <option key={String(o.value)} value={String(o.value)}>
-          {o.label}
-        </option>
-      ))}
-    </select>
-  );
-}
 
 export function Kbd({ children }: { children: ReactNode }) {
   return <kbd className="rounded-[5px] border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[11px] font-medium">{children}</kbd>;
@@ -293,9 +287,9 @@ export function FileBadge({ name, size = 36 }: { name: string; size?: number }) 
     csv: ['CSV', 'bg-success-bg text-success'],
     ppt: ['PPT', 'bg-warning-bg text-warning'],
     pptx: ['PPT', 'bg-warning-bg text-warning'],
-    png: ['IMG', 'bg-[#F3E8FF] text-[#6B21A8]'],
-    jpg: ['IMG', 'bg-[#F3E8FF] text-[#6B21A8]'],
-    jpeg: ['IMG', 'bg-[#F3E8FF] text-[#6B21A8]'],
+    png: ['IMG', 'bg-[#F3E8FF] text-[#6B21A8] dark:bg-[#2E1D4A] dark:text-[#D2B4FE]'],
+    jpg: ['IMG', 'bg-[#F3E8FF] text-[#6B21A8] dark:bg-[#2E1D4A] dark:text-[#D2B4FE]'],
+    jpeg: ['IMG', 'bg-[#F3E8FF] text-[#6B21A8] dark:bg-[#2E1D4A] dark:text-[#D2B4FE]'],
     zip: ['ZIP', 'bg-subtle text-ink-2'],
   };
   const [label, tone] = map[ext] ?? [ext.slice(0, 3).toUpperCase() || 'FILE', 'bg-subtle text-ink-2'];

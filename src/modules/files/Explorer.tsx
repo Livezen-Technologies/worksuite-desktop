@@ -15,6 +15,7 @@ import { PopMenu, below, type MenuItem } from './Menu';
 import type { Place } from './Rail';
 import { FileIcon, FolderIcon, Tile } from './Thumb';
 import { UnlockPrompt } from './Dialogs';
+import { Select } from '../../components/Select';
 
 type Layout = 'list' | 'grid';
 const LAYOUT_KEY = 'files.layout';
@@ -353,13 +354,13 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
               <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search files and folders" placeholder={folderView ? (place.folder ? 'Search in this folder' : 'Search your Drive') : `Search ${TITLES[view].toLowerCase()}`} className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none bare-focus" />
             </label>
             {folderView || view === 'recent' || view === 'starred' || view === 'my_shares' || view === 'large' || ['today', 'yesterday', 'week', 'month'].includes(view) ? (
-              <select aria-label="Filter by file type" value={kind} onChange={(e) => setKind(e.target.value)} className="h-9 rounded-[8px] border border-line bg-surface px-2 text-ink">
+              <Select aria-label="Filter by file type" value={kind} onChange={(e) => setKind(e.target.value)} className="h-9 rounded-[8px] border border-line bg-surface px-2 text-ink">
                 {TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
+              </Select>
             ) : null}
-            <select aria-label="Sort by" value={sort} onChange={(e) => setSort(e.target.value)} className="h-9 rounded-[8px] border border-line bg-surface px-2 text-ink">
+            <Select aria-label="Sort by" value={sort} onChange={(e) => setSort(e.target.value)} className="h-9 rounded-[8px] border border-line bg-surface px-2 text-ink">
               {SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
+            </Select>
             <span className="flex overflow-hidden rounded-[8px] border border-line">
               {(
                 [

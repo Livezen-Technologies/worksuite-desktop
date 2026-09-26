@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { wallTimeLabel } from '../../core/time';
 import { cx } from '../../components/ui';
-import { colourOf, dayOf, layoutDay, minutesOf, movable, nowWall, type CalendarEvent } from './api';
+import { colourOf, dayOf, layoutDay, minutesOf, movable, nowWall, type CalendarEvent, EVENT_TONE } from './api';
 
 const HOUR = 52;
 const SNAP = 15;
@@ -155,14 +155,13 @@ export function WeekGrid({ days, events, today, readOnly, onOpen, onCreate, onMo
                           }
                           onOpen(e);
                         }}
-                        className={cx('group/ev absolute flex flex-col overflow-hidden rounded-[6px] px-1.5 py-1 text-left', can ? 'cursor-grab' : 'cursor-pointer', dragging && 'z-10 opacity-80 shadow-lg')}
+                        className={cx('group/ev absolute flex flex-col overflow-hidden rounded-[6px] px-1.5 py-1 text-left', EVENT_TONE, can ? 'cursor-grab' : 'cursor-pointer', dragging && 'z-10 opacity-80 shadow-lg')}
                         style={{
                           top: top + 1,
                           height: (length / 60) * HOUR - 3,
                           left: `calc(${(col / cols) * 100}% + 2px)`,
                           width: `calc(${100 / cols}% - 5px)`,
-                          color: c,
-                          background: `${c}1A`,
+                          ['--ev' as string]: c,
                           borderLeft: `3px solid ${c}`,
                           transform: dragging?.dDays ? `translateX(${dragging.dDays * dragging.colW}px)` : undefined,
                         }}

@@ -6,12 +6,15 @@ import { Button, Modal } from '../../components/ui';
 import { createTask } from './actions';
 import { PRIORITIES, STATUSES, type Priority, type Status, type TaskList } from './api';
 import { RichEditor } from './RichText';
+import { Select } from '../../components/Select';
 
 export interface Directory {
   users: Array<{ id: number; name: string; email?: string | null }>;
 }
 
 const field = 'h-[34px] w-full rounded-[8px] border border-line bg-surface px-2 text-[13px] font-normal text-ink outline-none focus:border-primary';
+/** A date beside its time: `field` without the full width that crushed the date. */
+const pair = field.replace('w-full ', '');
 const label = 'flex min-w-0 flex-col gap-1 text-[12.5px] font-semibold text-ink';
 
 /** A day, or a day and a time: the server reads a time without a zone on your WorkSuite clock. */
@@ -91,54 +94,57 @@ export function NewTask({ lists, defaults, onClose, onCreated }: { lists: TaskLi
         <div className="grid grid-cols-3 gap-2.5">
           <label className={label}>
             List
-            <select value={list} onChange={(e) => setList(e.target.value)} className={field}>
+            <Select value={list} onChange={(e) => setList(e.target.value)} className={field}>
               <option value="">No list</option>
               {lists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </select>
+            </Select>
           </label>
           <label className={label}>
             Status
-            <select value={status} onChange={(e) => setStatus(e.target.value as Status)} className={field}>
+            <Select value={status} onChange={(e) => setStatus(e.target.value as Status)} className={field}>
               {STATUSES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-            </select>
+            </Select>
           </label>
           <label className={label}>
             Priority
-            <select value={priority} onChange={(e) => setPriority(e.target.value as Priority)} className={field}>
+            <Select value={priority} onChange={(e) => setPriority(e.target.value as Priority)} className={field}>
               {PRIORITIES.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-            </select>
+            </Select>
           </label>
           <label className={label}>
             Assignee
-            <select value={assignee} onChange={(e) => setAssignee(e.target.value)} className={field}>
+            <Select value={assignee} onChange={(e) => setAssignee(e.target.value)} className={field}>
               <option value="">Me</option>
               {(directory.data?.users ?? []).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
-          </label>
-          <label className={label}>
-            Start date
-            <span className="flex gap-1">
-              <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={field} aria-label="Start date" />
-              {start ? <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={`${field} w-[92px] shrink-0`} aria-label="Start time" /> : null}
-            </span>
-          </label>
-          <label className={label}>
-            Due date
-            <span className="flex gap-1">
-              <input type="date" value={due} min={start || undefined} onChange={(e) => setDue(e.target.value)} className={field} aria-label="Due date" />
-              {due ? <input type="time" value={dueTime} onChange={(e) => setDueTime(e.target.value)} className={`${field} w-[92px] shrink-0`} aria-label="Due time" /> : null}
-            </span>
+            </Select>
           </label>
           <label className={label}>
             Estimated hours
             <input type="number" min={0} step={0.25} value={hours} onChange={(e) => setHours(e.target.value)} placeholder="—" className={field} />
           </label>
-          <label className={`${label} col-span-2`}>
+          <label className={label}>
             Company
-            <select value={org} onChange={(e) => setOrg(e.target.value)} className={field}>
+            <Select value={org} onChange={(e) => setOrg(e.target.value)} className={field}>
               <option value="">None</option>
               {(orgs.data?.organizations ?? []).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-            </select>
+            </Select>
+          </label>
+        </div>
+        {/* A date beside its time needs more than a third of the form, so the dates share a row of their own. */}
+        <div className="grid grid-cols-2 gap-2.5">
+          <label className={label}>
+            Start date
+            <span className="flex gap-1">
+              <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={`${pair} min-w-0 flex-1`} aria-label="Start date" />
+              {start ? <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={`${pair} w-[96px] shrink-0`} aria-label="Start time" /> : null}
+            </span>
+          </label>
+          <label className={label}>
+            Due date
+            <span className="flex gap-1">
+              <input type="date" value={due} min={start || undefined} onChange={(e) => setDue(e.target.value)} className={`${pair} min-w-0 flex-1`} aria-label="Due date" />
+              {due ? <input type="time" value={dueTime} onChange={(e) => setDueTime(e.target.value)} className={`${pair} w-[96px] shrink-0`} aria-label="Due time" /> : null}
+            </span>
           </label>
         </div>
         <label className={label}>

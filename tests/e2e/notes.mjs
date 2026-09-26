@@ -8,7 +8,7 @@
 //   WS_E2E_SERVER=http://localhost:8920 WS_E2E_EMAIL=… WS_E2E_PASSWORD=… \
 //   WS_E2E_PARTNER_EMAIL=… WS_E2E_PARTNER_PASSWORD=… \
 //   ELECTRON_RUN_AS_NODE=1 npx electron tests/e2e/notes.mjs
-import { launch, sleep } from './harness.mjs';
+import { launch, sleep, choose } from './harness.mjs';
 
 const server = process.env.WS_E2E_SERVER;
 const email = process.env.WS_E2E_EMAIL;
@@ -121,9 +121,9 @@ try {
   await t.fill('Search teammates', (partner.name ?? '').split(' ')[0]);
   await t.waitFor(`[...document.querySelectorAll('[role="dialog"] button')].some(b => b.textContent.includes(${JSON.stringify(partner.name ?? '')}))`, 'the teammate');
   await t.evaluate(`[...document.querySelectorAll('[role="dialog"] button')].find(b => b.textContent.includes(${JSON.stringify(partner.name ?? '')})).click()`);
-  await t.evaluate(`(() => { const s = document.querySelector('select[aria-label="Role"]'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, 'viewer'); s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
+  await t.evaluate(choose('[role="combobox"][aria-label="Role"]', 'viewer'));
   await t.evaluate(`[...document.querySelectorAll('[role="dialog"] button')].find(b => b.textContent.trim() === 'Share').click()`);
-  await t.waitFor(`[...document.querySelectorAll('[role="dialog"] select')].some(s => s.getAttribute('aria-label') === ${JSON.stringify(`Role of ${partner.name}`)})`, 'the share');
+  await t.waitFor(`[...document.querySelectorAll('[role="dialog"] [role="combobox"]')].some(s => s.getAttribute('aria-label') === ${JSON.stringify(`Role of ${partner.name}`)})`, 'the share');
   await t.shot('n3-share');
   await t.clickButton('Done');
   const seen = await api('partner', 'GET', `/api/notes/${id}`);

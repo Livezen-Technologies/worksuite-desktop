@@ -84,7 +84,7 @@ export function ChatDrawer() {
     window.addEventListener('mouseup', up);
   };
   return (
-    <aside aria-label="Chat drawer" className="absolute top-0 right-0 bottom-0 z-30 flex flex-col bg-surface shadow-[-14px_0_36px_rgba(15,27,61,.16)]" style={{ width }}>
+    <aside aria-label="Chat drawer" className="absolute top-0 right-0 bottom-0 z-30 flex flex-col bg-surface shadow-[-14px_0_36px_rgb(var(--ws-shadow-rgb)/.16)]" style={{ width }}>
       <div aria-hidden onMouseDown={resize} onDoubleClick={() => setWidth(408)} title="Drag to resize" className="absolute top-0 bottom-0 -left-1.5 z-10 w-1.5 cursor-ew-resize bg-transparent hover:bg-line" />
       <TabProvider tabId="chat-drawer" route={room ? `/chat?room=${room}` : '/chat'} active onGo={(r) => navigate(r)}>
         {room ? <Conversation roomId={room} /> : <Lists />}
@@ -344,7 +344,7 @@ function Conversation({ roomId }: { roomId: string }) {
   const recordApp = tab ? APP_CATALOGUE.find((x) => x.id === tab.app) : undefined;
   const banner =
     link && tab && hiddenFor !== tab.id ? (
-      <div className="relative z-10 mx-2.5 mt-2.5 flex shrink-0 items-center gap-2.5 rounded-[12px] bg-surface py-2 pr-2 pl-2.5 shadow-[0_1px_3px_rgba(15,27,61,.12)]">
+      <div className="relative z-10 mx-2.5 mt-2.5 flex shrink-0 items-center gap-2.5 rounded-[12px] bg-surface py-2 pr-2 pl-2.5 shadow-[0_1px_3px_rgb(var(--ws-shadow-rgb)/.12)]">
         <AppTile icon={recordApp?.icon ?? 'link'} colour={appColour(recordApp?.id ?? 'crm')} size={30} radius={8} iconSize={15} />
         <span className="min-w-0 flex-1 text-[12px] leading-snug text-ink-2">
           <b className="text-ink">{tab.title}</b> is open — messages can link to it
@@ -384,7 +384,7 @@ function Conversation({ roomId }: { roomId: string }) {
             <Icon name="more-vertical" size={17} />
           </button>
           {menu ? (
-            <div role="menu" className="absolute top-9 right-0 z-30 w-48 rounded-[12px] bg-surface p-1.5 shadow-[0_16px_40px_rgba(15,27,61,.2),0_0_0_1px_rgba(15,27,61,.06)]">
+            <div role="menu" className="absolute top-9 right-0 z-30 w-48 rounded-[12px] bg-surface p-1.5 shadow-[0_16px_40px_rgb(var(--ws-shadow-rgb)/.2),0_0_0_1px_var(--ws-edge)]">
               <button type="button" role="menuitem" className="flex h-8 w-full items-center gap-2.5 rounded-[8px] px-2.5 text-left text-[13px] text-ink hover:bg-subtle" onClick={() => (minimiseChatDrawer(), navigate(`/chat?room=${roomId}`))}>
                 <Icon name="maximize" size={14} className="text-ink-2" />
                 Open in Chat
@@ -422,7 +422,7 @@ export function MinimisedChats() {
       {ids.map((id) => {
         const r = (rooms.data?.data.rooms ?? []).find((x) => String(x.id) === id);
         return (
-          <span key={id} className="group flex h-[38px] items-center gap-2 rounded-full bg-navy pr-2 pl-2 text-[12.5px] font-semibold text-white shadow-[0_8px_20px_rgba(15,27,61,.25)]">
+          <span key={id} className="group flex h-[38px] items-center gap-2 rounded-full bg-navy pr-2 pl-2 text-[12.5px] font-semibold text-white shadow-[0_8px_20px_rgb(var(--ws-shadow-rgb)/.25)]">
             <button type="button" onClick={() => openChatDrawer(id)} className="flex items-center gap-2">
               <Avatar name={r?.avatar_name || r?.name} size={22} className={r && r.type !== 'direct' ? '!rounded-[6px]' : ''} />
               <span className="max-w-[140px] truncate">{r?.name ?? 'Conversation'}</span>

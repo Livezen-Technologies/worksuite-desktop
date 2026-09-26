@@ -10,6 +10,7 @@ import { ErrorNote, FileBadge, Spinner, cx } from '../../components/ui';
 import type { DocList, EmployeeDoc } from './api';
 import { dayLong } from './dates';
 import { btn, btnPrimary, Cell, Empty, Field, input, PageHead, row, Seg, Sheet, StatusChip, THead } from './parts';
+import { Select } from '../../components/Select';
 
 /**
  * My documents (HrDocuments): everything on my employment file that I may
@@ -133,23 +134,23 @@ export default function MyDocuments({ employeeId }: { employeeId?: number } = {}
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search documents…" aria-label="Search documents" className={input + ' !w-[260px]'} />
-        <select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value)} className={input + ' !w-auto'}>
+        <Select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value)} className={input + ' !w-auto'}>
           <option value="">All categories{d ? ` (${d.counts.active ?? d.total})` : ''}</option>
           {Object.entries(d?.categories ?? {}).map(([k, l]) => (
             <option key={k} value={k}>
               {l}
             </option>
           ))}
-        </select>
+        </Select>
         <Seg label="Status" value={status} onChange={setStatus} options={[{ id: 'active', label: 'Active' }, { id: 'archived', label: `Archived${d?.counts.archived ? ` (${d.counts.archived})` : ''}` }]} />
         <span className="flex-1" />
-        <select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value)} className={input + ' !w-auto'}>
+        <Select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value)} className={input + ' !w-auto'}>
           {SORTS.map(([v, l]) => (
             <option key={v} value={v}>
               Sort: {l}
             </option>
           ))}
-        </select>
+        </Select>
         <Seg label="View" value={view} onChange={setView} options={[{ id: 'grid', label: 'Grid' }, { id: 'list', label: 'List' }]} />
       </div>
       {list.isLoading ? <Spinner /> : list.error ? <ErrorNote error={list.error} onRetry={() => void list.refetch()} /> : null}
@@ -288,13 +289,13 @@ function AddDocuments({ base, files, categories, visibilities, limits, onClose, 
       ) : null}
       <div className="grid grid-cols-2 gap-2.5">
         <Field label="Category">
-          <select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value)} className={input}>
+          <Select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value)} className={input}>
             {Object.entries(categories).map(([k, l]) => (
               <option key={k} value={k}>
                 {l}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label="Expires on">
           <input type="date" aria-label="Expires on" value={expires} onChange={(e) => setExpires(e.target.value)} className={input} />
@@ -302,13 +303,13 @@ function AddDocuments({ base, files, categories, visibilities, limits, onClose, 
       </div>
       {visibilities ? (
         <Field label="Who can see it">
-          <select aria-label="Who can see it" value={visibility} onChange={(e) => setVisibility(e.target.value)} className={input}>
+          <Select aria-label="Who can see it" value={visibility} onChange={(e) => setVisibility(e.target.value)} className={input}>
             {Object.entries(visibilities).map(([k, l]) => (
               <option key={k} value={k}>
                 {l}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
       ) : (
         <span className="text-[11.5px] text-ink-3">Documents you add are visible to you and to HR.</span>
@@ -356,13 +357,13 @@ function EditDocument({ base, doc, categories, onClose, onDone }: { base: string
       </Field>
       <div className="grid grid-cols-2 gap-2.5">
         <Field label="Category">
-          <select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value)} className={input}>
+          <Select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value)} className={input}>
             {Object.entries(categories).map(([k, l]) => (
               <option key={k} value={k}>
                 {l}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label="Expires on">
           <input type="date" aria-label="Expires on" value={expires} onChange={(e) => setExpires(e.target.value)} className={input} />

@@ -48,7 +48,7 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
     return (
       <>
         <div className="no-drag absolute inset-0 z-20 bg-[#0F1B3D]/[.18]" onMouseDown={onClose} />
-        <aside role="dialog" aria-label="Contact" className="no-drag absolute top-0 right-0 bottom-0 z-30 flex w-[460px] max-w-full flex-col border-l border-line bg-surface shadow-[-20px_0_50px_rgba(15,27,61,.14)]">
+        <aside role="dialog" aria-label="Contact" className="no-drag absolute top-0 right-0 bottom-0 z-30 flex w-[460px] max-w-full flex-col border-l border-line bg-surface shadow-[-20px_0_50px_rgb(var(--ws-shadow-rgb)/.14)]">
           <div className="flex h-14 shrink-0 items-center border-b border-line pr-2.5 pl-5">
             <b className="flex-1 text-[15px] text-ink">Contact</b>
             <HeadButton label="Close" onClick={onClose}>
@@ -154,7 +154,7 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
   return (
     <>
       <div className="no-drag absolute inset-0 z-20 bg-[#0F1B3D]/[.18]" onMouseDown={onClose} />
-      <aside role="dialog" aria-label={`Contact ${c.display_name}`} className="no-drag absolute top-0 right-0 bottom-0 z-30 flex w-[460px] max-w-full flex-col border-l border-line bg-surface shadow-[-20px_0_50px_rgba(15,27,61,.14)]">
+      <aside role="dialog" aria-label={`Contact ${c.display_name}`} className="no-drag absolute top-0 right-0 bottom-0 z-30 flex w-[460px] max-w-full flex-col border-l border-line bg-surface shadow-[-20px_0_50px_rgb(var(--ws-shadow-rgb)/.14)]">
         <div className="flex h-14 shrink-0 items-center gap-0.5 border-b border-line pr-2.5 pl-5">
           <b className="flex-1 text-[15px] text-ink">Contact</b>
           <HeadButton label={c.is_favorite ? 'Remove from favorites' : 'Add to favorites'} pressed={c.is_favorite} onClick={() => void toggle('favorite')} className="text-[#D97706]">
@@ -183,7 +183,7 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
             </div>
           ) : null}
           <div className="flex shrink-0 flex-col items-center gap-1 px-5 pt-5 pb-4" style={{ background: `linear-gradient(180deg, ${color}14 0%, transparent 100%)` }}>
-            <span className={cx('flex h-[76px] w-[76px] items-center justify-center rounded-full text-[26px] font-bold text-white shadow-[0_0_0_4px_var(--color-surface),0_6px_18px_rgba(15,27,61,.15)]', c.is_archived && 'opacity-55')} style={{ background: color }}>
+            <span className={cx('flex h-[76px] w-[76px] items-center justify-center rounded-full text-[26px] font-bold text-white shadow-[0_0_0_4px_var(--color-surface),0_6px_18px_rgb(var(--ws-shadow-rgb)/.15)]', c.is_archived && 'opacity-55')} style={{ background: color }}>
               {initials(c.display_name)}
             </span>
             <b className="mt-2.5 text-center text-[19px] tracking-[-0.2px] text-ink">{c.display_name}</b>
@@ -386,7 +386,7 @@ function PhoneMenu({ phone, onClose, onWhatsapp, onCall }: { phone: string; onCl
   return (
     <>
       <div className="fixed inset-0 z-10" onMouseDown={onClose} />
-      <div role="menu" aria-label="Phone" className="absolute top-10 left-12 z-20 flex w-[230px] flex-col rounded-[12px] border border-line bg-surface p-1.5 shadow-[0_12px_32px_rgba(15,27,61,.16)]">
+      <div role="menu" aria-label="Phone" className="absolute top-10 left-12 z-20 flex w-[230px] flex-col rounded-[12px] border border-line bg-surface p-1.5 shadow-[0_12px_32px_rgb(var(--ws-shadow-rgb)/.16)]">
         {d.length >= 7 ? (
           <>
             <button type="button" role="menuitem" autoFocus onClick={onWhatsapp} className={item}>

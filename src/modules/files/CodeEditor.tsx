@@ -8,6 +8,7 @@ import { Icon } from '../../components/Icon';
 import { Spinner, cx } from '../../components/ui';
 import { changedLines, diffLines, hunks } from './diff';
 import type { DriveFile } from './api';
+import { Select } from '../../components/Select';
 
 interface Opened {
   id: number;
@@ -212,13 +213,13 @@ export function CodeEditor({ file, onClose }: { file: DriveFile; onClose: () => 
         <span className="flex-1" />
         <label className="flex items-center gap-1.5 text-[12.5px] text-[#C3CEEA]">
           Compare with
-          <select aria-label="Compare with" value={chosen} onChange={(e) => setAgainst(e.target.value)} className="h-8 max-w-[260px] rounded-[7px] border border-[#2A3A66] bg-[#16254F] px-2 text-white">
+          <Select aria-label="Compare with" value={chosen} onChange={(e) => setAgainst(e.target.value)} className="h-8 max-w-[260px] rounded-[7px] border border-[#2A3A66] bg-[#16254F] px-2 text-white">
             <option value="none">Nothing</option>
             {dirty ? <option value="saved">The last save (version {saved?.version})</option> : null}
             {history.map((v) => (
               <option key={v.id} value={v.id}>Version {v.version} · {v.author ?? 'someone'} · {listStamp(v.created_at)}</option>
             ))}
-          </select>
+          </Select>
         </label>
         <button type="button" disabled={locked} onClick={() => setText(formatText(current, ext, indent))} className="h-[34px] rounded-[8px] border border-[#2A3A66] px-3 font-semibold hover:bg-white/10 disabled:opacity-40">Format</button>
         {o?.editable ? (

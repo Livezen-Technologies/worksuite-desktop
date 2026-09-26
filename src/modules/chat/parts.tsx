@@ -40,7 +40,7 @@ export function EmojiPicker({ onPick, onClose, className }: { onPick: (e: string
     </div>
   );
   return (
-    <div ref={ref} role="dialog" aria-label="Emoji" className={cx('z-40 flex w-[300px] flex-col gap-2 rounded-[12px] border border-line bg-surface p-2.5 shadow-[0_12px_32px_rgba(15,27,61,.18)]', className)}>
+    <div ref={ref} role="dialog" aria-label="Emoji" className={cx('z-40 flex w-[300px] flex-col gap-2 rounded-[12px] border border-line bg-surface p-2.5 shadow-[0_12px_32px_rgb(var(--ws-shadow-rgb)/.18)]', className)}>
       <label className="flex h-8 items-center gap-2 rounded-[8px] border border-line px-2.5 focus-within:border-primary">
         <Icon name="search" size={14} className="text-ink-3" />
         <input

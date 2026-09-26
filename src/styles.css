@@ -35,6 +35,14 @@
   --ws-focus: #3b5bdb;
   --ws-row: 36px;
   --ws-pad: 16px;
+  /* Native controls (date and time pickers, scrollbars) follow the theme. */
+  color-scheme: light;
+  /* Drop shadows are navy on light; on dark they are black, since navy on navy disappears. */
+  --ws-shadow-rgb: 15 27 61;
+  /* The hairline round anything that floats: a faint navy ring on light, a pale one on dark. */
+  --ws-edge: rgba(15, 27, 61, 0.07);
+  /* A card set into a surface: a shade below it on light, a shade above it on dark. */
+  --ws-well: #f4f5f9;
 }
 
 [data-theme='dark'] {
@@ -56,6 +64,10 @@
   --ws-danger: #f07167;
   --ws-danger-bg: #3a1614;
   --ws-focus: #8da2fb;
+  color-scheme: dark;
+  --ws-shadow-rgb: 0 0 0;
+  --ws-edge: rgba(160, 176, 225, 0.16);
+  --ws-well: #1a2447;
 }
 
 [data-density='compact'] {
@@ -88,6 +100,8 @@
   --color-danger: var(--ws-danger);
   --color-danger-bg: var(--ws-danger-bg);
   --color-badge: var(--ws-badge);
+  --color-well: var(--ws-well);
+  --color-edge: var(--ws-edge);
   --font-sans: 'Plus Jakarta Sans Variable', 'Noto Sans Sinhala', 'Noto Sans Tamil', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   --radius-control: 8px;

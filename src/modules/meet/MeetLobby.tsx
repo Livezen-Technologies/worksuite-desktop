@@ -8,6 +8,7 @@ import { Avatar, cx } from '../../components/ui';
 import { VideoView } from '../calls/parts';
 import { CLEAN_AUDIO, deviceProblem } from '../calls/session';
 import { meet } from './session';
+import { Select } from '../../components/Select';
 
 type Devices = Record<'audioinput' | 'videoinput' | 'audiooutput', MediaDeviceInfo[]>;
 
@@ -119,24 +120,24 @@ export function MeetLobby() {
         <div className="grid grid-cols-3 gap-2.5">
           <label className="flex flex-col gap-1 font-semibold text-ink">
             Camera
-            <select value={camId} onChange={(e) => setCamId(e.target.value)} className={select}>
+            <Select value={camId} onChange={(e) => setCamId(e.target.value)} className={select}>
               <option value="">System default</option>
               {devices.videoinput.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || 'Camera'}</option>)}
-            </select>
+            </Select>
           </label>
           <label className="flex flex-col gap-1 font-semibold text-ink">
             Microphone
-            <select value={micId} onChange={(e) => setMicId(e.target.value)} className={select}>
+            <Select value={micId} onChange={(e) => setMicId(e.target.value)} className={select}>
               <option value="">System default</option>
               {devices.audioinput.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || 'Microphone'}</option>)}
-            </select>
+            </Select>
           </label>
           <label className="flex flex-col gap-1 font-semibold text-ink">
             Speaker
-            <select value={speakerId} onChange={(e) => setSpeakerId(e.target.value)} className={select}>
+            <Select value={speakerId} onChange={(e) => setSpeakerId(e.target.value)} className={select}>
               <option value="">System default</option>
               {devices.audiooutput.filter((d) => d.deviceId !== 'default').map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || 'Speaker'}</option>)}
-            </select>
+            </Select>
           </label>
         </div>
         <div className="flex items-center gap-2 text-ink-2">

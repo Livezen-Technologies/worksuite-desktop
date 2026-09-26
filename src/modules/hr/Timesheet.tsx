@@ -8,6 +8,7 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import type { LogsResponse, Sheet as TimesheetRow, TimeLog } from './api';
 import { addDays, dayShort, hoursLabel, monthLabel, parseYmd, rangeLabel, weekDays, weekStart, ymd } from './dates';
 import { btn, btnPrimary, Cell, Empty, Field, input, Kpi, PageHead, Panel, row, Seg, Sheet, StatusChip, THead } from './parts';
+import { Select } from '../../components/Select';
 
 /**
  * Timesheet (HrTimesheet): what I worked on — day, week or month — as work
@@ -241,18 +242,18 @@ function WorkLog({ log, onDate, onClose, onDone }: { log: TimeLog | null; onDate
           <input type="date" aria-label="Date" max={ymd(new Date())} value={date} onChange={(e) => setDate(e.target.value)} className={input} />
         </Field>
         <Field label="Project">
-          <select aria-label="Project" value={project} onChange={(e) => (setProject(e.target.value), setTask(''))} className={input}>
+          <Select aria-label="Project" value={project} onChange={(e) => (setProject(e.target.value), setTask(''))} className={input}>
             <option value="">No project</option>
             {(targets.data?.projects ?? []).map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
       </div>
       <Field label="Task" hint="Your open tasks in the chosen project.">
-        <select aria-label="Task" value={task} onChange={(e) => setTask(e.target.value)} className={input}>
+        <Select aria-label="Task" value={task} onChange={(e) => setTask(e.target.value)} className={input}>
           <option value="">No task</option>
           {tasks.map((t) => (
             <option key={t.id} value={t.id}>
@@ -260,7 +261,7 @@ function WorkLog({ log, onDate, onClose, onDone }: { log: TimeLog | null; onDate
               {t.title}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       <Field label="Description">
         <input aria-label="Description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Fix login redirect bug" className={input} />

@@ -11,6 +11,7 @@ import { Button, Spinner, cx } from '../../components/ui';
 import { can, kindOf, mediaUrl, opened, tagOf, type DriveFile } from './api';
 import { useDrive } from './ctx';
 import { FileIcon } from './Thumb';
+import { Select } from '../../components/Select';
 
 interface Probe {
   kind: 'video' | 'audio' | 'image' | 'other';
@@ -320,14 +321,14 @@ export function MediaViewer({ files, start, onClose }: { files: DriveFile[]; sta
                     <input type="range" aria-label="Volume" min={0} max={1} step={0.05} value={muted ? 0 : volume} onChange={(e) => media.current && ((media.current.volume = Number(e.target.value)), setMuted(false))} className="w-24 accent-[#7FA2FF]" />
                     <span className="flex-1" />
                     {isVideo && (o.tracks ?? []).length ? (
-                      <select aria-label="Subtitles" value={subs} onChange={(e) => setSubs(e.target.value)} className="h-8 rounded-[7px] border border-[#2A3A66] bg-[#16254F] px-2 text-white">
+                      <Select aria-label="Subtitles" value={subs} onChange={(e) => setSubs(e.target.value)} className="h-8 rounded-[7px] border border-[#2A3A66] bg-[#16254F] px-2 text-white">
                         <option value="off">Subtitles: off</option>
                         {(o.tracks ?? []).map((t) => <option key={t.id} value={t.id}>Subtitles: {t.label}</option>)}
-                      </select>
+                      </Select>
                     ) : null}
-                    <select aria-label="Speed" value={speed} onChange={(e) => (setSpeed(Number(e.target.value)), media.current && (media.current.playbackRate = Number(e.target.value)))} className="h-8 rounded-[7px] border border-[#2A3A66] bg-[#16254F] px-2 text-white">
+                    <Select aria-label="Speed" value={speed} onChange={(e) => (setSpeed(Number(e.target.value)), media.current && (media.current.playbackRate = Number(e.target.value)))} className="h-8 rounded-[7px] border border-[#2A3A66] bg-[#16254F] px-2 text-white">
                       {SPEEDS.map((s) => <option key={s} value={s}>Speed: {s === 1 ? 'Normal' : `${s}×`}</option>)}
-                    </select>
+                    </Select>
                     {isVideo ? (
                       <>
                         <button type="button" onClick={() => void (media.current as HTMLVideoElement | null)?.requestPictureInPicture?.().catch(() => undefined)} className="h-8 rounded-[7px] border border-[#2A3A66] px-2.5 hover:bg-white/10">Picture in picture</button>

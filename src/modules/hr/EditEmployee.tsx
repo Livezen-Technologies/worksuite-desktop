@@ -6,6 +6,7 @@ import { toast } from '../../core/toasts';
 import { EMPLOYMENT_TYPES, hasLeft, SETTABLE_STATUSES, type EmployeeRow, type Profile } from './api';
 import { ymd } from './dates';
 import { btn, btnPrimary, Field, humanise, input, Sheet } from './parts';
+import { Select } from '../../components/Select';
 
 /**
  * Edit an employee (HrProfileSheet "Edit …"): employment, personal, and
@@ -119,27 +120,27 @@ export function EditEmployee({ profile, onClose, onDone }: { profile: Profile; o
       <div className="grid grid-cols-3 gap-2.5">
         {text('employee_no', 'Employee number')}
         <Field label="Employment type">
-          <select aria-label="Employment type" value={f.type} onChange={set('type')} className={input}>
+          <Select aria-label="Employment type" value={f.type} onChange={set('type')} className={input}>
             {EMPLOYMENT_TYPES.map((t) => (
               <option key={t} value={t}>
                 {humanise(t)}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label="Status" hint={was.status === 'active' ? 'Active is set by completing an onboarding.' : undefined}>
-          <select aria-label="Status" value={f.status} onChange={set('status')} className={input}>
+          <Select aria-label="Status" value={f.status} onChange={set('status')} className={input}>
             {statuses.map((t) => (
               <option key={t} value={t}>
                 {humanise(t)}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         {text('job_level', 'Job level')}
         {text('work_location', 'Work location')}
         <Field label="Reports to">
-          <select aria-label="Reports to" value={f.manager_id} onChange={set('manager_id')} className={input}>
+          <Select aria-label="Reports to" value={f.manager_id} onChange={set('manager_id')} className={input}>
             <option value="">Nobody</option>
             {(people.data ?? [])
               .filter((p) => p.id !== profile.employee.id && (!hasLeft(p, today) || String(p.id) === was.manager_id))
@@ -148,7 +149,7 @@ export function EditEmployee({ profile, onClose, onDone }: { profile: Profile; o
                   {p.name ?? p.employee_no}
                 </option>
               ))}
-          </select>
+          </Select>
         </Field>
         {text('joined_at', 'Joined')}
         {text('confirmed_at', 'Confirmed')}

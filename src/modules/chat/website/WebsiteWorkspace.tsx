@@ -10,6 +10,7 @@ import { Empty, ErrorNote, Spinner, cx } from '../../../components/ui';
 import { sectionRows, useWebsiteInbox, WEBSITE, type Section, type WebsiteRow } from './api';
 import { WebsiteLive, type OnlineVisitor } from './WebsiteLive';
 import { WebsiteThread } from './WebsiteThread';
+import { Select } from '../../../components/Select';
 
 /**
  * Website chats as their own workspace (WebChatInbox): the sections down the
@@ -161,10 +162,10 @@ export function WebsiteWorkspace() {
         <div className="flex flex-col gap-2 border-b border-line p-3">
           <div className="flex items-center">
             <b className="flex-1 text-[15px] text-ink">{SECTIONS.find((s) => s.id === section)?.label}</b>
-            <select aria-label="Site" value={site} onChange={(e) => setSite(Number(e.target.value))} className="h-7 rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink">
+            <Select aria-label="Site" value={site} onChange={(e) => setSite(Number(e.target.value))} className="h-7 rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink">
               <option value={0}>All sites</option>
               {sites.map((s) => <option key={s.widget_id} value={s.widget_id}>{s.site}</option>)}
-            </select>
+            </Select>
           </div>
           <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search visitors" placeholder="Search visitors…" className="h-8 rounded-[8px] border border-line bg-surface px-2.5 text-[13px] outline-none focus:border-primary" />
           <div className="flex gap-1 text-[11.5px] font-semibold">

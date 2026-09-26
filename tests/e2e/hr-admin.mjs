@@ -12,7 +12,7 @@
 //   npm run build
 //   WS_E2E_SERVER=… WS_E2E_EMAIL=… WS_E2E_PASSWORD=… WS_E2E_PARTNER_EMAIL=… WS_E2E_PARTNER_PASSWORD=… \
 //   ELECTRON_RUN_AS_NODE=1 npx electron tests/e2e/hr-admin.mjs
-import { launch, sleep } from './harness.mjs';
+import { launch, sleep, choose } from './harness.mjs';
 
 const server = process.env.WS_E2E_SERVER;
 const email = process.env.WS_E2E_EMAIL;
@@ -219,7 +219,7 @@ try {
   await sleep(400);
   await t.shot('a8-team-attendance');
   t.check('Team attendance shows the day’s counts and everyone', true);
-  await t.evaluate(setValue('main select[aria-label="Status"]', 'absent'));
+  await t.evaluate(choose('main [role="combobox"][aria-label="Status"]', 'absent'));
   await t.waitFor(`${main}.includes('Absent —')`, 'the absent filter', 20_000);
   t.check('the status filter narrows the roster', true);
   if (await t.evaluate(rowAct(partnerEmp.name, 'Correct'))) {
@@ -263,8 +263,8 @@ try {
   await sleep(400);
   await t.shot('a11-reports');
   t.check('Reports shows the totals, a line per employee and the days', await t.evaluate(`['Present', 'Absent', 'No check-out'].every(s => ${main}.includes(s))`));
-  await t.evaluate(setValue('main select[aria-label="Report"]', 'absence'));
-  await t.waitFor(`document.querySelector('main select[aria-label="Report"]').value === 'absence'`, 'the absence report');
+  await t.evaluate(choose('main [role="combobox"][aria-label="Report"]', 'absence'));
+  await t.waitFor(`document.querySelector('main [role="combobox"][aria-label="Report"]').dataset.value === 'absence'`, 'the absence report');
   await t.evaluate(clickIn('document.querySelector("main")', 'Export CSV'));
   const csv = await t.waitFor(`window.worksuite.transfers.list().then(l => Array.isArray(l) && l.some(x => /^attendance-absence-.*\\.csv$/.test(x.name ?? '') && x.state === 'done'))`, 'the CSV download', 30_000).then(() => true, () => false);
   t.check('Export CSV saves the report to Downloads', csv, String(await t.evaluate(`window.worksuite.transfers.list().then(l => l.map(x => x.name + ':' + x.state).join(', '))`)));

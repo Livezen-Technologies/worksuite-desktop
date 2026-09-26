@@ -17,6 +17,7 @@ import { PRIORITIES, progressOf, STATUSES, type Activity, type Attachment, type 
 import { when, type Directory } from './NewTask';
 import { PeoplePanel, ReviewPanel, usePeople } from './People';
 import { RichEditor, RichView } from './RichText';
+import { Select } from '../../components/Select';
 
 const aside = 'h-8 w-full min-w-0 rounded-[7px] border border-line bg-surface px-1.5 text-[13px] text-ink outline-none focus:border-primary disabled:bg-transparent disabled:text-ink-2';
 
@@ -135,14 +136,14 @@ export function TaskDetail({ id, lists, onClose, onOpen }: { id: number; lists: 
             </div>
             <aside className="flex min-h-0 flex-col gap-3 overflow-y-auto border-l border-line bg-ground px-[18px] py-[18px] scroll-thin" aria-label="Task settings">
               <Row label="Status">
-                <select aria-label="Status" disabled={!canEdit('status')} value={t.status} onChange={(e) => void save('status', e.target.value, `Status of “${t.title}”`)} className={aside}>
+                <Select aria-label="Status" disabled={!canEdit('status')} value={t.status} onChange={(e) => void save('status', e.target.value, `Status of “${t.title}”`)} className={aside}>
                   {STATUSES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-                </select>
+                </Select>
               </Row>
               <Row label="Priority">
-                <select aria-label="Priority" disabled={!canEdit('priority')} value={t.priority} onChange={(e) => void save('priority', e.target.value, `Priority of “${t.title}”`)} className={aside}>
+                <Select aria-label="Priority" disabled={!canEdit('priority')} value={t.priority} onChange={(e) => void save('priority', e.target.value, `Priority of “${t.title}”`)} className={aside}>
                   {PRIORITIES.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-                </select>
+                </Select>
               </Row>
               <Row label="Assignee">
                 <Assignee value={t.assignee_id} name={t.assignee_name} me={me} disabled={!canEdit('assignee_id')} onChange={(v) => void save('assignee_id', v, `Assign “${t.title}”`)} />
@@ -154,11 +155,11 @@ export function TaskDetail({ id, lists, onClose, onOpen }: { id: number; lists: 
                 <When key={`u${t.due_at}${t.due_date}`} value={inputsOf(t.due_date, t.due_at)} disabled={!canEdit('due_date')} label="Due" onChange={(v) => void save('due_date', v, `Due date of “${t.title}”`)} />
               </Row>
               <Row label="List">
-                <select aria-label="List" disabled={!canEdit('list_id')} value={t.list_id ?? ''} onChange={(e) => void save('list_id', e.target.value ? Number(e.target.value) : '', `List of “${t.title}”`)} className={aside}>
+                <Select aria-label="List" disabled={!canEdit('list_id')} value={t.list_id ?? ''} onChange={(e) => void save('list_id', e.target.value ? Number(e.target.value) : '', `List of “${t.title}”`)} className={aside}>
                   <option value="">No list</option>
                   {lists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                   {t.list_id && !list ? <option value={t.list_id}>Someone else's list</option> : null}
-                </select>
+                </Select>
               </Row>
               <Row label="Organisation">
                 <Organisation value={t.org_id} name={t.org_name} disabled={!canEdit('org_id')} onChange={(v) => void save('org_id', v, `Company of “${t.title}”`)} />
@@ -605,12 +606,12 @@ function Assignee({ value, name, me, disabled, onChange }: { value: number | nul
   const directory = useQuery({ queryKey: ['chat', 'directory'], queryFn: ({ signal }) => apiGet<Directory>('/api/chat/directory', undefined, signal), staleTime: 5 * 60_000, enabled: !disabled });
   const users = directory.data?.users ?? [];
   return (
-    <select aria-label="Assignee" disabled={disabled} value={value ?? ''} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : '')} className={aside}>
+    <Select aria-label="Assignee" disabled={disabled} value={value ?? ''} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : '')} className={aside}>
       <option value="">Nobody</option>
       <option value={me}>Me</option>
       {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
       {value && value !== me && !users.some((u) => u.id === value) ? <option value={value}>{name ?? 'Someone'}</option> : null}
-    </select>
+    </Select>
   );
 }
 
@@ -618,11 +619,11 @@ function Organisation({ value, name, disabled, onChange }: { value: number | nul
   const orgs = useQuery({ queryKey: ['tasks', 'organizations'], queryFn: ({ signal }) => apiGet<{ organizations: Array<{ id: number; name: string }> }>('/api/tasks/organizations', undefined, signal), staleTime: 5 * 60_000, enabled: !disabled });
   const list = orgs.data?.organizations ?? [];
   return (
-    <select aria-label="Organisation" disabled={disabled} value={value ?? ''} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : '')} className={aside}>
+    <Select aria-label="Organisation" disabled={disabled} value={value ?? ''} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : '')} className={aside}>
       <option value="">None</option>
       {list.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
       {value && !list.some((o) => o.id === value) ? <option value={value}>{name ?? 'A company'}</option> : null}
-    </select>
+    </Select>
   );
 }
 
@@ -635,9 +636,10 @@ function When({ value, disabled, label, onChange }: { value: { date: string; tim
     if (next !== (when(value.date, value.time) ?? '')) onChange(next);
   };
   return (
-    <span className="flex min-w-0 gap-1">
-      <input type="date" aria-label={`${label} date`} disabled={disabled} value={date} onChange={(e) => (setDate(e.target.value), e.target.value === '' ? (setTime(''), commit('', '')) : undefined)} onBlur={() => commit(date, time)} className={cx(aside, 'min-w-0 flex-1')} />
-      {date ? <input type="time" aria-label={`${label} time`} disabled={disabled} value={time} onChange={(e) => setTime(e.target.value)} onBlur={() => commit(date, time)} className={cx(aside, 'w-[88px] shrink-0')} /> : null}
+    // Stacked: the side panel's value column is too narrow for a whole date beside a time.
+    <span className="flex min-w-0 flex-col gap-1">
+      <input type="date" aria-label={`${label} date`} disabled={disabled} value={date} onChange={(e) => (setDate(e.target.value), e.target.value === '' ? (setTime(''), commit('', '')) : undefined)} onBlur={() => commit(date, time)} className={aside} />
+      {date ? <input type="time" aria-label={`${label} time`} disabled={disabled} value={time} onChange={(e) => setTime(e.target.value)} onBlur={() => commit(date, time)} className={aside} /> : null}
     </span>
   );
 }

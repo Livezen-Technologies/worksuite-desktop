@@ -14,7 +14,7 @@
 // Needs a widget whose allowed domains include the origin's host, with
 // "require an agent online" off, and a user holding chat.widget.reply (or
 // manage) with the chat app.
-import { launch, sleep } from './harness.mjs';
+import { launch, sleep, choose } from './harness.mjs';
 
 const server = process.env.WS_E2E_SERVER;
 const email = process.env.WS_E2E_EMAIL;
@@ -66,16 +66,16 @@ try {
   t.check('the "joined the chat" notice is a notice, not an agent\'s message', await t.evaluate(`[...document.querySelectorAll('div')].some(d => d.className.includes('text-center') && d.textContent.includes('joined the chat'))`));
   await t.shot('w2-thread');
 
-  const assignee = `document.querySelector('select[aria-label="Assignee"]').selectedOptions[0]?.textContent`;
+  const assignee = `document.querySelector('[role="combobox"][aria-label="Assignee"]').textContent`;
   if (await t.evaluate(`!![...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Accept')`)) {
     await t.clickButton('Accept');
     await t.waitFor(`${assignee} === 'Assigned to me'`, 'the chat to become mine');
   }
   t.check('Accept makes the chat mine', (await t.evaluate(assignee)) === 'Assigned to me');
 
-  await t.evaluate(`(() => { const s = document.querySelector('select[aria-label="Priority"]'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, 'high'); s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  await t.evaluate(choose('[role="combobox"][aria-label="Priority"]', 'high'));
   // The header's controls are disabled while a change saves.
-  await t.waitFor(`document.querySelector('select[aria-label="Priority"]').value === 'high' && !document.querySelector('select[aria-label="Priority"]').disabled`, 'the priority saved');
+  await t.waitFor(`document.querySelector('[role="combobox"][aria-label="Priority"]').dataset.value === 'high' && !document.querySelector('[role="combobox"][aria-label="Priority"]').disabled`, 'the priority saved');
   await t.clickButton('Star');
   await t.waitFor(t.hasText('★ Starred'), 'the star');
   await t.shot('w2b-priority-star');
@@ -95,7 +95,7 @@ try {
   await t.shot('w3b-live');
   t.check('the live dashboard shows the visitor, what they read, and their open chat', true);
   await t.clickButton('Open the chat');
-  await t.waitFor(`!!document.querySelector('select[aria-label="Priority"]')`, 'back in the thread');
+  await t.waitFor(`!!document.querySelector('[role="combobox"][aria-label="Priority"]')`, 'back in the thread');
 
   let seen = false;
   for (let i = 0; i < 10 && !seen; i++) {

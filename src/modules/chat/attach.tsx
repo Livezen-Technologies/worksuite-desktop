@@ -8,12 +8,13 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { DriveFilePicker, type DriveFileRow } from '../../components/DriveFilePicker';
 import { Button, FileBadge, Modal, cx } from '../../components/ui';
+import { Select } from '../../components/Select';
 
 /** What the paperclip offers (ChatComposer, "Attach"). */
 export type AttachChoice = 'document' | 'image' | 'video' | 'audio' | 'any' | 'drive' | 'camera' | 'voice';
 
 const CHOICES: Array<{ id: AttachChoice; icon: string; label: string; hint: string; tone: string }> = [
-  { id: 'document', icon: 'file-text', label: 'Document', hint: 'PDF, Word, Excel…', tone: 'bg-[#E6ECFF] text-[#23349E]' },
+  { id: 'document', icon: 'file-text', label: 'Document', hint: 'PDF, Word, Excel…', tone: 'bg-[#E6ECFF] text-[#23349E] dark:bg-selection dark:text-primary' },
   { id: 'image', icon: 'file-image', label: 'Image', hint: 'PNG, JPG, GIF…', tone: 'bg-[#E3F4EC] text-[#1F7A4D]' },
   { id: 'video', icon: 'film', label: 'Video', hint: 'MP4, MOV, WEBM', tone: 'bg-[#F1E8FB] text-[#6B3FB5]' },
   { id: 'audio', icon: 'music', label: 'Audio', hint: 'MP3, WAV, OGG', tone: 'bg-[#FDEEDC] text-[#9A4A06]' },
@@ -54,7 +55,7 @@ export function AttachMenu({ onPick, onClose, compact, align = 'left' }: { onPic
         if (e.key === 'Escape') onClose();
         else move(e.key === 'ArrowDown' ? 1 : -1);
       }}
-      className={cx('absolute bottom-full z-40 mb-2 rounded-[12px] border border-line bg-surface p-1.5 shadow-[0_12px_32px_rgba(15,27,61,.18)]', align === 'right' ? 'right-0' : 'left-0', compact ? 'w-[230px]' : 'w-[264px]')}
+      className={cx('absolute bottom-full z-40 mb-2 rounded-[12px] border border-line bg-surface p-1.5 shadow-[0_12px_32px_rgb(var(--ws-shadow-rgb)/.18)]', align === 'right' ? 'right-0' : 'left-0', compact ? 'w-[230px]' : 'w-[264px]')}
     >
       {CHOICES.map((c, i) => (
         <button
@@ -225,9 +226,9 @@ export function DrivePicker({ roomId, onClose, onSent }: { roomId: string; onClo
           {canLink ? (
             <label className="flex items-center gap-2 rounded-[9px] bg-subtle px-3 py-2 text-[12.5px] text-ink-2">
               A secure link lasts
-              <select value={lifetime} onChange={(e) => setLifetime(Number(e.target.value))} disabled={busy} className="rounded-[6px] border border-line bg-surface px-1.5 py-0.5 text-[12.5px] text-ink">
+              <Select value={lifetime} onChange={(e) => setLifetime(Number(e.target.value))} disabled={busy} className="rounded-[6px] border border-line bg-surface px-1.5 py-0.5 text-[12.5px] text-ink">
                 {lifetimes.map((s) => <option key={s} value={s}>{LIFETIME_LABEL[s] ?? `${Math.round(s / 86400)} days`}</option>)}
-              </select>
+              </Select>
             </label>
           ) : null}
         </div>

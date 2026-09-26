@@ -6,6 +6,7 @@ import { timeLabel } from '../../../core/time';
 import { toast } from '../../../core/toasts';
 import { Empty, ErrorNote, Spinner, cx } from '../../../components/ui';
 import { visitorStatus, WEBSITE } from './api';
+import { Select } from '../../../components/Select';
 
 interface Dashboard {
   now: { visitors_online: number; open: number; pending: number; waiting_on_us: number; at_risk: number; window_seconds: number };
@@ -84,10 +85,10 @@ export function WebsiteLive({ onOpenChat }: { onOpenChat: (conversationId: numbe
       <div className="flex items-baseline gap-3">
         <h1 className="text-[20px] font-bold text-ink">Live dashboard</h1>
         <span className="flex-1 text-[12px] text-ink-3">Today. Median, not mean.</span>
-        <select aria-label="Site" value={site} onChange={(e) => setSite(Number(e.target.value))} className="h-8 rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink">
+        <Select aria-label="Site" value={site} onChange={(e) => setSite(Number(e.target.value))} className="h-8 rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink">
           <option value={0}>All sites</option>
           {(d?.widgets ?? []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-        </select>
+        </Select>
       </div>
       {dash.error ? <ErrorNote error={dash.error} onRetry={() => void dash.refetch()} /> : null}
       <div className="grid grid-cols-7 gap-2">

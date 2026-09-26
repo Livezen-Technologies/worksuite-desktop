@@ -41,8 +41,8 @@ export type HrView =
   | 'devices'
   | 'departments';
 
-/** Drawn by the desktop; everything else opens in the browser for now. */
-export const NATIVE = new Set<HrView>(['overview', 'myhr', 'mypay', 'mydocs', 'requests', 'attendance', 'timesheet', 'leave', 'waiting', 'workpattern', 'myaccess', 'people', 'roster', 'openatt', 'approvals', 'reports']);
+/** Drawn by the desktop; the rest (Departments, which is Organization's) opens in the browser. */
+export const NATIVE = new Set<HrView>(['overview', 'myhr', 'mypay', 'mydocs', 'myonboarding', 'resignation', 'requests', 'announcements', 'myaccess', 'people', 'onboarding', 'resignations', 'offboarding', 'attendance', 'timesheet', 'roster', 'approvals', 'openatt', 'reports', 'workpattern', 'schedules', 'leave', 'waiting', 'settings', 'devices']);
 
 interface Item {
   id: HrView;

@@ -5,6 +5,163 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-26 — 0.2.13: HR, part 2b — onboarding, leaving, schedules and settings; one searchable dropdown everywhere; dark mode fixed
+
+**Added**
+
+- **Every HR screen is now drawn on the desktop.** Only Departments still
+  opens in the browser, because it belongs to Organization.
+- **Onboarding** (`hr.onboarding.manage`): new hires with how far each has
+  got and what is next, and one hire's steps, required documents and bank
+  details.
+  - **New employee** starts an onboarding: the person, the job, the manager,
+    the schedule, and a login now or later.
+  - Record the two steps HR ticks by hand ("Mark as done"). "Mark…" marks
+    any step as blocked, as not applicable, or clears the mark, with a
+    reason.
+  - Approve or reject a required document (rejecting says why), or upload
+    it on their behalf.
+  - **Activate** once nothing is left; if something is, the reasons are
+    shown in full. Edit details and Cancel onboarding sit beside it.
+- **My onboarding**: where I am, the documents HR needs from me, my own
+  details (saved field by field, as the server takes them), my documents
+  and my bank details.
+- **Resignations** (`hr.resignation.view`, or anyone the approval chain
+  asks):
+  - The requests, filtered by where they stand.
+  - One request in full: the reason, the letter (opens it), the terms
+    accepted, the approval chain with who is being waited on, the notice
+    rule, the offboarding it started, and its events.
+  - Whoever the chain is waiting on can approve (perhaps on a different
+    last day), return it for changes, or decline. HR can move an approved
+    last working day.
+- **My resignation**:
+  - Start one as a draft. Nothing is sent until you submit, having read and
+    accepted the current terms.
+  - Attach a letter, or have one written from your answers. Ask for early
+    release where the rule allows it.
+  - Once sent, follow the approval chain and withdraw it (after approval,
+    withdrawing becomes a request of its own).
+- **Offboarding** (`hr.offboarding.view`): everyone leaving, and one case.
+  - Each department's progress and sign-off (or reopen).
+  - The checklist: attach evidence, record an asset's return and its
+    condition, mark done, waive with a reason, undo, add an item.
+  - Their login: hold it on, release the hold, or switch it off now.
+  - The exit interview's answers, and HR's private notes.
+  - **Handover**: write items to colleagues, send them, and move the
+    leaver's open work to someone in one go.
+  - **Complete offboarding** says what is still in the way if it cannot.
+  - Every action follows the case's own flags, so department sign-offs work
+    for the people each department names.
+- **Work schedules** (`hr.schedule.manage`):
+  - Create and edit patterns: working days and hours (a night shift is shown
+    as running past midnight), breaks, the grace rules, and the day the
+    hours start.
+  - A start day already passed asks before changing days already worked.
+  - Assign a schedule to employees or departments, end an assignment, and
+    read a schedule's history.
+  - Duplicate, set as default, deactivate, reactivate or delete.
+- **Settings**:
+  - **General** is drawn from the server's own list of fields, so a new
+    setting appears here without a desktop release. Unsaved changes are
+    marked, and field errors show under their field.
+  - **Leave types**: add, edit, archive and restore.
+  - **Public holidays**: by year, add and remove.
+  - **Devices** (the device settings) for `hr.device.manage`.
+  - Resignation rules and offboarding checklists stay in the browser for
+    now. There is a link to them.
+- **Announcements** (`hr.announcement.view`):
+  - Write a draft for a company. Your line breaks are kept and your text is
+    escaped.
+  - Sending says in words who it goes to.
+  - See who has read and acknowledged it, and delete it.
+- **Devices** (`hr.device.manage`):
+  - Terminals with online, offline, punches-today and unidentified counts.
+  - Add one and see its key once. Approve a waiting one.
+  - Setup: the address to type into it, and its location, punch rule,
+    allowed addresses, clock and HTTPS.
+  - People: map enrolment ids to people. Also Punches, Commands (send one)
+    and the Raw log.
+- Notification links to a resignation or an offboarding case open it here,
+  even for someone without the list (an approver, a department's clearer).
+  Waiting on me opens them here too.
+
+**Changed**
+
+- **One dropdown for the whole app.** Every native select is gone —
+  124 across 49 screens (Mail, Chat, Calendar, Tasks, Notes, Files,
+  Meetings, Meet, Contacts, Settings and HR) — and so is the old `Select`
+  wrapper. They are all the same component now (`components/Select`):
+  - It looks the same everywhere: a rounded field with a chevron, and a
+    floating list with a check mark on the choice, grouped options, and
+    the placeholder dimmed.
+  - A list longer than six options has a **search box**. It narrows as you
+    type, ignoring case and accents, and says when nothing matches.
+  - Shorter lists answer to type-ahead: press a letter to pick.
+  - Arrow keys, Home/End, Enter and Escape work. Escape closes only the
+    list, not the dialog around it.
+  - The list never gets cut off by a panel or a dialog. It opens upward
+    when there is no room below, and follows the field on scroll.
+  - A dropdown in a toolbar keeps the compact size, one on the file
+    viewers keeps the dark look, and a filter that is set stays
+    highlighted.
+
+**Fixed — dark mode**
+
+- **Native pickers follow the theme.** Date and time pickers and native
+  scrollbars opened light grey in dark mode, because the theme never set
+  CSS `color-scheme`. They are dark now, and so are the calendar and clock
+  icons inside date and time fields.
+- **Floating panels have an edge.** The app launcher, search, the
+  attendance popover, dialogs, drawers and dropdown lists had only a navy
+  shadow and a navy hairline, both invisible on the dark ground. Panels
+  blended into the page, and rounded corners looked square. Shadows are now
+  black in dark mode, and every floating panel has a pale hairline
+  (`--ws-edge`). 57 shadows across 25 files use the themed colour.
+- **Cards inside a panel are no longer black holes.** Cards set into a
+  panel used the page colour, which in dark mode is darker than the panel:
+  the launcher's selected tile was a black box, and search's Create cards
+  and tip, the attendance tiles and the popover footer looked cut out. They
+  use a new "well" colour (`--ws-well`): a shade below the panel in light,
+  a shade above it in dark. The launcher's selected tile is a soft blue.
+- **Colours that come with the data stay readable.**
+  - Calendar events, their titles in the Today list, the app name in the
+    search preview and chat sender names were drawn in their own colour. A
+    deep indigo could not be read on the dark grid.
+  - In dark mode they are mixed towards white, and an event's tint is
+    stronger.
+  - Avatar initials, file badges and the search highlight have dark
+    colours of their own.
+  - Danger and success boxes (calendar, chat, HR, the Decline button,
+    notes) no longer have pale pink or green borders on dark.
+
+**Fixed**
+
+- **Task dates.**
+  - The date field shrank to a sliver whenever a time was shown beside it:
+    the time field's width lost to a shared `w-full`, so it took the whole
+    row.
+  - In the task's details the date and time now stack, date on top.
+  - In New task the start and due dates have a row of their own, half each,
+    so a whole date fits beside its time.
+
+**Notes**
+
+- `transfers:download` gained resignation letters (`hrLetter`, by id, or
+  `mine`).
+- New e2e `tests/e2e/hr-admin-2.mjs` (29 checks) covers onboarding,
+  resignations, offboarding, schedules, settings, leave types, holidays,
+  announcements and devices. It also checks the dropdown's search and
+  keyboard on a live screen. It removes what it makes.
+- Every suite that drove a native select now picks through the dropdown
+  (`choose` / `chooseIn` in the harness).
+- Found on the way, not changed here: the server names people only from
+  their login, so a new hire started without one shows as "Employee
+  EMP-…" in lists even though HR typed their name. It is flagged as its
+  own task.
+
+---
+
 ## 2026-09-26 — 0.2.12: HR, part 2a — the Directory, profiles and the time screens
 
 **Added**

@@ -7,6 +7,7 @@ import { toast } from '../../core/toasts';
 import { Avatar, Button, Modal, Spinner, cx } from '../../components/ui';
 import { diffWords, readableText, TEMPLATES, type Notebook, type NoteDetail, type Section, type Share, type Version } from './api';
 import { NoteView } from './NoteBody';
+import { Select } from '../../components/Select';
 
 type Directory = { users: Array<{ id: number; name: string; email?: string | null }> };
 
@@ -66,9 +67,9 @@ export function NewNote({ notebooks, sections, place, onClose, onCreated }: { no
         </label>
         <label className="flex flex-col gap-1 font-semibold text-ink">
           Notebook
-          <select value={where} onChange={(e) => setWhere(e.target.value)} className="h-[34px] rounded-[8px] border border-line bg-surface px-2 font-normal text-ink">
+          <Select value={where} onChange={(e) => setWhere(e.target.value)} className="h-[34px] rounded-[8px] border border-line bg-surface px-2 font-normal text-ink">
             {placeOptions(notebooks, sections).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
+          </Select>
         </label>
         <b className="text-ink">Start from template</b>
         <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Template">
@@ -117,10 +118,10 @@ export function ShareDialog({ note, onClose, onChanged }: { note: NoteDetail; on
       <div className="flex flex-col gap-2.5 text-[13px]">
         <div className="relative flex gap-1.5">
           <input value={pick ? pick.name : q} onChange={(e) => (setPick(null), setQ(e.target.value))} aria-label="Search teammates" placeholder="Search teammates…" className="h-[34px] min-w-0 flex-1 rounded-[8px] border border-line bg-surface px-2.5 text-ink outline-none focus:border-primary" />
-          <select aria-label="Role" value={role} onChange={(e) => setRole(e.target.value as 'editor' | 'viewer')} className="h-[34px] rounded-[8px] border border-line bg-surface px-1.5 text-ink">
+          <Select aria-label="Role" value={role} onChange={(e) => setRole(e.target.value as 'editor' | 'viewer')} className="h-[34px] rounded-[8px] border border-line bg-surface px-1.5 text-ink">
             <option value="editor">Editor</option>
             <option value="viewer">Viewer</option>
-          </select>
+          </Select>
           <Button variant="primary" disabled={!pick || busy} onClick={() => void act(() => apiPost(`/api/notes/${note.id}/shares`, { user_id: pick!.id, role })).then(() => (setPick(null), setQ('')))}>Share</Button>
           {matches.length ? (
             <div className="absolute top-full right-0 left-0 z-10 mt-1 rounded-[10px] border border-line bg-surface py-1 shadow-xl">
@@ -143,10 +144,10 @@ export function ShareDialog({ note, onClose, onChanged }: { note: NoteDetail; on
           <div key={s.id} className="flex items-center gap-2 py-1">
             <Avatar name={s.name} size={30} />
             <span className="flex min-w-0 flex-1 flex-col"><b className="truncate text-ink">{s.name}</b><span className="truncate text-[11.5px] text-ink-3">{s.email}</span></span>
-            <select aria-label={`Role of ${s.name}`} value={s.role} onChange={(e) => void act(() => apiPut(`/api/note-shares/${s.id}`, { role: e.target.value }))} className="h-7 rounded-[6px] border border-line bg-surface px-1 text-[12px] text-ink">
+            <Select aria-label={`Role of ${s.name}`} value={s.role} onChange={(e) => void act(() => apiPut(`/api/note-shares/${s.id}`, { role: e.target.value }))} className="h-7 rounded-[6px] border border-line bg-surface px-1 text-[12px] text-ink">
               <option value="editor">Editor</option>
               <option value="viewer">Viewer</option>
-            </select>
+            </Select>
             <button type="button" onClick={() => void act(() => apiDelete(`/api/note-shares/${s.id}`))} className="text-[12px] font-semibold text-danger hover:underline">Remove</button>
           </div>
         ))}
@@ -181,7 +182,7 @@ export function VersionHistory({ note, current, onClose, onRestored }: { note: N
     }
   };
   return (
-    <aside aria-label="Version history" className="absolute top-0 right-0 bottom-0 z-30 flex w-[440px] max-w-full flex-col border-l border-line bg-surface text-[13px] shadow-[-12px_0_36px_rgba(15,27,61,.16)]">
+    <aside aria-label="Version history" className="absolute top-0 right-0 bottom-0 z-30 flex w-[440px] max-w-full flex-col border-l border-line bg-surface text-[13px] shadow-[-12px_0_36px_rgb(var(--ws-shadow-rgb)/.16)]">
       <div className="flex shrink-0 items-center border-b border-line px-4 py-3.5">
         <b className="flex-1 text-[15px] text-ink">Version history</b>
         <button type="button" aria-label="Close" onClick={onClose} className="px-1 text-[16px] text-ink-2 hover:text-ink">×</button>
@@ -267,9 +268,9 @@ export function MoveNote({ note, notebooks, sections, onClose, onMoved }: { note
     >
       <label className="flex flex-col gap-1 text-[13px] font-semibold text-ink">
         To
-        <select autoFocus value={where} onChange={(e) => setWhere(e.target.value)} className="h-[34px] rounded-[8px] border border-line bg-surface px-2 font-normal text-ink">
+        <Select autoFocus value={where} onChange={(e) => setWhere(e.target.value)} className="h-[34px] rounded-[8px] border border-line bg-surface px-2 font-normal text-ink">
           {placeOptions(notebooks, sections).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
+        </Select>
       </label>
     </Modal>
   );

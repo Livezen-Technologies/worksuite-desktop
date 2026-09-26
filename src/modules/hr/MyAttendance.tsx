@@ -9,6 +9,7 @@ import { dayShort, minutesLabel, monthLabel, shiftMonth, ymd } from './dates';
 import { btn, btnPrimary, Cell, Empty, Kpi, PageHead, row, StatusChip, THead } from './parts';
 import type { HrView } from './Rail';
 import { NewRequestSheet } from './Requests';
+import { Select } from '../../components/Select';
 
 /**
  * My attendance (HrMyAttendance): today — clocked in when and where, still
@@ -69,13 +70,13 @@ export default function MyAttendance({ onPick }: { onPick: (v: HrView) => void }
         <button type="button" className={btn + ' !h-[30px] !px-2'} aria-label="Previous month" onClick={() => setMonth(shiftMonth(month, -1))}>
           ←
         </button>
-        <select aria-label="Month" value={month} onChange={(e) => setMonth(e.target.value)} className="h-[34px] rounded-[8px] border border-line bg-surface px-2.5 text-[13px] text-ink">
+        <Select aria-label="Month" value={month} onChange={(e) => setMonth(e.target.value)} className="h-[34px] rounded-[8px] border border-line bg-surface px-2.5 text-[13px] text-ink">
           {Array.from({ length: 12 }, (_, i) => shiftMonth(ymd(new Date()).slice(0, 7), -i)).map((m) => (
             <option key={m} value={m}>
               {monthLabel(m)}
             </option>
           ))}
-        </select>
+        </Select>
         <button type="button" className={btn + ' !h-[30px] !px-2'} aria-label="Next month" disabled={month >= ymd(new Date()).slice(0, 7)} onClick={() => setMonth(shiftMonth(month, 1))}>
           →
         </button>

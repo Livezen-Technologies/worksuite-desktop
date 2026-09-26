@@ -6,6 +6,7 @@ import { currentZone } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Avatar, Button, Modal, cx } from '../../components/ui';
 import { TYPES } from './api';
+import { Select } from '../../components/Select';
 
 const WHERE: Array<[string, string]> = [
   ['online', 'Online'],
@@ -134,18 +135,18 @@ export function ScheduleDialog({ onClose, online, onCreated }: { onClose: () => 
         <div className="grid grid-cols-4 gap-2.5">
           <label className={label}>
             Type
-            <select value={type} onChange={(e) => setType(e.target.value)} className={field}>
+            <Select value={type} onChange={(e) => setType(e.target.value)} className={field}>
               {TYPES.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </select>
+            </Select>
           </label>
           <label className={label}>
             Priority
-            <select value={priority} onChange={(e) => setPriority(e.target.value)} className={field}>
+            <Select value={priority} onChange={(e) => setPriority(e.target.value)} className={field}>
               <option value="normal">Normal</option>
               <option value="high">High</option>
               <option value="urgent">Urgent</option>
               <option value="low">Low</option>
-            </select>
+            </Select>
           </label>
           <label className={label}>
             Starts
@@ -158,12 +159,12 @@ export function ScheduleDialog({ onClose, online, onCreated }: { onClose: () => 
         </div>
         <label className={label}>
           Repeats
-          <select value={repeat} onChange={(e) => setRepeat(e.target.value)} className={field}>
+          <Select value={repeat} onChange={(e) => setRepeat(e.target.value)} className={field}>
             <option value="none">Does not repeat</option>
             <option value="daily">Daily</option>
             <option value="weekly">Weekly</option>
             <option value="monthly">Monthly</option>
-          </select>
+          </Select>
         </label>
         <div className="flex flex-col gap-1.5">
           <b className="text-[12.5px] text-ink">Where</b>
@@ -179,9 +180,9 @@ export function ScheduleDialog({ onClose, online, onCreated }: { onClose: () => 
           <div className="grid grid-cols-2 gap-2.5">
             <label className={label}>
               Provider
-              <select value={provider} onChange={(e) => setProvider(e.target.value)} className={field}>
+              <Select value={provider} onChange={(e) => setProvider(e.target.value)} className={field}>
                 {PROVIDERS.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
+              </Select>
             </label>
             {paste ? (
               <label className={label}>
@@ -194,10 +195,10 @@ export function ScheduleDialog({ onClose, online, onCreated }: { onClose: () => 
         {needsRoom ? (
           <label className={label}>
             Meeting room
-            <select value={roomId} onChange={(e) => setRoomId(e.target.value ? Number(e.target.value) : '')} className={field}>
+            <Select value={roomId} onChange={(e) => setRoomId(e.target.value ? Number(e.target.value) : '')} className={field}>
               <option value="">{rooms.isLoading ? 'Finding free rooms…' : rooms.data?.rooms.length ? 'Choose a free room' : 'No room is free then'}</option>
               {(rooms.data?.rooms ?? []).map((r) => <option key={r.id} value={r.id}>{[r.name, r.floor ? `Floor ${r.floor}` : null, r.capacity ? `${r.capacity} seats` : null, 'free'].filter(Boolean).join(' · ')}</option>)}
-            </select>
+            </Select>
           </label>
         ) : null}
         {where === 'customer' || where === 'external' ? (

@@ -12,6 +12,7 @@ import { useNow } from '../calls/parts';
 import { openMeeting } from '../meet/api';
 import type { Stroke } from '../meet/session';
 import { providerLabel, RSVP_LABEL, typeLabel, type AgendaItem, type Detail, type Person, type Rsvp } from './api';
+import { Select } from '../../components/Select';
 
 const TABS = ['Summary', 'Agenda', 'People', 'Minutes', 'Files', 'Board', 'Activity'] as const;
 type Tab = (typeof TABS)[number];
@@ -324,7 +325,7 @@ function PeopleTab({ d, canEdit, act }: { d: Detail; canEdit: boolean; act: Act 
           </span>
           <span className="text-ink">{ROLE[p.role] ?? p.role}</span>
           <span className="text-[12px] text-ink-2">{may(p)}</span>
-          <select
+          <Select
             aria-label={`Attendance for ${p.name || p.email}`}
             disabled={!canEdit}
             value={p.attendance ?? ''}
@@ -336,7 +337,7 @@ function PeopleTab({ d, canEdit, act }: { d: Detail; canEdit: boolean; act: Act 
             <option value="late">Late</option>
             <option value="absent">Absent</option>
             <option value="excused">Excused</option>
-          </select>
+          </Select>
         </div>
       ))}
     </>

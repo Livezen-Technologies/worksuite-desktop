@@ -230,7 +230,11 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       return ctx.transfers.download(`/${String(link.url).replace(/^\/+/, '')}`, input.name, !!input.open, null);
     }
     const r = input.hrReport;
-    const path = r
+    const path = input.hrLetter
+      ? input.hrLetter === 'mine'
+        ? '/api/hr/me/resignation/letter'
+        : `/api/hr/resignations/${input.hrLetter}/letter`
+      : r
       ? `/api/hr/reports/attendance?${new URLSearchParams({ type: r.type, from: r.from, to: r.to, format: 'csv', ...(r.department_id ? { department_id: String(r.department_id) } : {}), ...(r.employee_id ? { employee_id: String(r.employee_id) } : {}) })}`
       : input.payslip
       ? `/api/payroll/me/payslips/${encodeURIComponent(input.payslip)}/pdf`

@@ -83,7 +83,7 @@ export function MeetHome() {
               </button>
             </form>
             {menu ? (
-              <div role="menu" aria-label="New meeting" className="absolute top-12 left-0 z-20 flex w-[360px] flex-col rounded-[12px] border border-line bg-surface p-1.5 shadow-[0_14px_36px_rgba(15,27,61,.18)]">
+              <div role="menu" aria-label="New meeting" className="absolute top-12 left-0 z-20 flex w-[360px] flex-col rounded-[12px] border border-line bg-surface p-1.5 shadow-[0_14px_36px_rgb(var(--ws-shadow-rgb)/.18)]">
                 <MenuItem title="Start an instant meeting" hint="Join now and invite people from inside" onClick={() => void instant()} />
                 <MenuItem title="Create a meeting for later" hint="Get a link and code to share" onClick={() => void later()} />
                 <MenuItem title="Schedule a meeting" hint={canSchedule ? 'Invite people; it shows in Calendar' : 'Needs the "Schedule meetings" permission'} disabled={!canSchedule} onClick={() => (setMenu(false), setScheduling(true))} />

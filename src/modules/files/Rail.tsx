@@ -131,7 +131,7 @@ export function Rail({
           aria-label="New file, folder or document"
           aria-haspopup="menu"
           onClick={(e) => setMenu(below(e.currentTarget, 'left', 300))}
-          className="flex h-[38px] flex-1 items-center gap-2 rounded-[10px] bg-primary pr-2.5 pl-3.5 font-bold text-white shadow-[0_1px_2px_rgba(15,27,61,.18),0_4px_12px_rgba(35,52,158,.22)] hover:bg-primary-hover"
+          className="flex h-[38px] flex-1 items-center gap-2 rounded-[10px] bg-primary pr-2.5 pl-3.5 font-bold text-white shadow-[0_1px_2px_rgb(var(--ws-shadow-rgb)/.18),0_4px_12px_rgba(35,52,158,.22)] hover:bg-primary-hover"
         >
           <Icon name="plus" size={16} />
           <span className="flex-1 text-left">New</span>

@@ -12,6 +12,7 @@ import { ConfirmDialog } from './Dialogs';
 import { PopMenu, below, type MenuItem } from './Menu';
 import type { Place } from './Rail';
 import { FileIcon } from './Thumb';
+import { Select } from '../../components/Select';
 
 const page = 'flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto bg-surface px-7 py-5 scroll-thin';
 const th = 'text-[11px] font-bold tracking-[0.4px] text-ink-2';
@@ -415,10 +416,10 @@ export function Companies() {
           ))}
           {!c.partners.length ? <span className="text-ink-3">No partners yet.</span> : null}
           <div className="flex gap-2">
-            <select aria-label={`Choose a partner for ${c.name}`} value={adding[c.id] ?? ''} onChange={(e) => setAdding({ ...adding, [c.id]: e.target.value })} className="h-9 flex-1 rounded-[8px] border border-line bg-surface px-2 text-ink">
+            <Select aria-label={`Choose a partner for ${c.name}`} value={adding[c.id] ?? ''} onChange={(e) => setAdding({ ...adding, [c.id]: e.target.value })} className="h-9 flex-1 rounded-[8px] border border-line bg-surface px-2 text-ink">
               <option value="">Choose a company…</option>
               {(q.data?.choices ?? []).filter((x) => x.id !== c.id && !c.partners.some((p) => p.company.id === x.id)).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-            </select>
+            </Select>
             <Button variant="primary" disabled={!adding[c.id]} onClick={() => void add(c.id)}>Add partner</Button>
           </div>
         </section>

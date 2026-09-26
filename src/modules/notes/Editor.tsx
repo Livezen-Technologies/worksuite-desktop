@@ -172,7 +172,7 @@ export function NoteEditor({ id, notebooks, sections, ownerName, onGone, onOpen 
       )}
       {owner ? (
         <>
-          <Button size="sm" aria-pressed={n.is_favorite} onClick={() => void toggle('favorite')} className={n.is_favorite ? '!border-[#E9B949] !bg-warning-bg !text-[#9A4A06]' : ''}>{n.is_favorite ? '★ Favorite' : '☆ Favorite'}</Button>
+          <Button size="sm" aria-pressed={n.is_favorite} onClick={() => void toggle('favorite')} className={n.is_favorite ? '!border-[#E9B949] !bg-warning-bg !text-[#9A4A06] dark:!border-warning/40 dark:!text-warning' : ''}>{n.is_favorite ? '★ Favorite' : '☆ Favorite'}</Button>
           <Button size="sm" onClick={() => setDialog('history')}>Version history</Button>
           <Button size="sm" variant="primary" onClick={() => setDialog('share')}>Share{n.shares?.length ? ` · ${n.shares.length}` : ''}</Button>
           <span className="relative">

@@ -16,7 +16,7 @@ import { toast } from '../../core/toasts';
 import { closeOverlay, ui } from '../../core/ui';
 import { AppTile } from '../../components/AppTile';
 import { Icon } from '../../components/Icon';
-import { cx } from '../../components/ui';
+import { cx, DATA_TEXT } from '../../components/ui';
 
 /**
  * Global search (GlobalSearch; Ctrl/Cmd+K, FR-SRCH-01/02) and the command
@@ -284,7 +284,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
       <div
         role="dialog"
         aria-label={commandMode ? 'Command palette' : 'Search'}
-        className="animate-in absolute top-[96px] left-1/2 flex h-[640px] max-h-[calc(100vh-120px)] w-[980px] max-w-[calc(100vw-32px)] -translate-x-1/2 flex-col overflow-hidden rounded-[18px] bg-surface shadow-[0_40px_100px_rgba(11,21,48,.35),0_0_0_1px_rgba(15,27,61,.06)]"
+        className="animate-in absolute top-[96px] left-1/2 flex h-[640px] max-h-[calc(100vh-120px)] w-[980px] max-w-[calc(100vw-32px)] -translate-x-1/2 flex-col overflow-hidden rounded-[18px] bg-surface shadow-[0_40px_100px_rgb(var(--ws-shadow-rgb)/.35),0_0_0_1px_var(--ws-edge)]"
       >
         <div className="flex h-16 shrink-0 items-center gap-3 border-b border-line pr-4 pl-5">
           <span className={cx('flex', q ? 'text-primary' : 'text-ink-3')}>
@@ -391,7 +391,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
                     <Heading className="pt-3.5">Create</Heading>
                     <div className="grid grid-cols-3 gap-1.5">
                       {create.slice(0, 6).map((c) => (
-                        <button key={c.id} type="button" onClick={() => (closeOverlay(), navigate(c.route))} className="flex h-10 items-center gap-[9px] rounded-[10px] border border-line bg-ground px-3 text-[12.5px] font-semibold text-ink-2 hover:border-primary/40 hover:text-ink">
+                        <button key={c.id} type="button" onClick={() => (closeOverlay(), navigate(c.route))} className="flex h-10 items-center gap-[9px] rounded-[10px] border border-line bg-well px-3 text-[12.5px] font-semibold text-ink-2 hover:border-primary/40 hover:text-ink">
                           <AppTile icon={c.icon} colour={appColour(c.app)} size={26} radius={8} iconSize={14} />
                           {c.label}
                         </button>
@@ -399,7 +399,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
                     </div>
                   </>
                 ) : null}
-                <div className="mx-1.5 mt-3.5 flex items-center gap-2 rounded-[10px] bg-ground px-3 py-2.5 text-[12px] text-ink-3">
+                <div className="mx-1.5 mt-3.5 flex items-center gap-2 rounded-[10px] bg-well px-3 py-2.5 text-[12px] text-ink-3">
                   <Icon name="info" size={15} className="text-primary" />
                   <span>
                     Tip: type <b className="text-primary">&gt;</b> to run a command, or press <b className="text-primary">Tab</b> to filter by app.
@@ -433,7 +433,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span className="truncate text-[13.5px] font-semibold text-ink">
                         {sp.a}
-                        {sp.m ? <mark className="rounded-[3px] bg-[#FFF1B8] px-px text-[#151A2D]">{sp.m}</mark> : null}
+                        {sp.m ? <mark className="rounded-[3px] bg-[#FFF1B8] px-px text-[#151A2D] dark:bg-[#5A4712] dark:text-[#FFE9A8]">{sp.m}</mark> : null}
                         {sp.b}
                       </span>
                       {it.subtitle ? <span className="truncate text-[12px] text-ink-3">{it.subtitle}</span> : null}
@@ -486,11 +486,11 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
             ) : null}
           </div>
           {cur ? (
-            <aside aria-label="Preview" className="flex w-[340px] shrink-0 flex-col gap-3.5 overflow-hidden border-l border-line bg-ground p-5">
+            <aside aria-label="Preview" className="flex w-[340px] shrink-0 flex-col gap-3.5 overflow-hidden border-l border-line bg-well p-5">
               <div className="flex items-center gap-2.5">
                 <AppTile icon={cur.icon} colour={cur.colour} size={40} iconSize={19} />
                 <span className="flex flex-col">
-                  <span className="text-[11px] font-bold tracking-[.5px] uppercase" style={{ color: cur.colour }}>
+                  <span className={cx('text-[11px] font-bold tracking-[.5px] uppercase', DATA_TEXT)} style={{ ['--c' as string]: cur.colour }}>
                     {cur.group}
                   </span>
                   {cur.at ? <span className="text-[11.5px] text-ink-3">{cur.at}</span> : null}

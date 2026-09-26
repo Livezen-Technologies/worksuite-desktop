@@ -10,7 +10,8 @@ import { useTab, useTabTitle } from '../../core/tab-context';
 import { bytes, currentZone, relative } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
-import { Button, Chip, Select, Switch, cx } from '../../components/ui';
+import { Button, Chip, Switch, cx } from '../../components/ui';
+import { Select } from '../../components/Select';
 import type { ModuleProps } from '../registry';
 
 /** Settings / profile tree (§4.9). Anything the organization's policy decides is shown locked, with the reason. */
@@ -109,7 +110,7 @@ function General() {
     <>
       <H title="General" />
       <Row label="Language" hint="Sinhala, Tamil, Arabic and Hindi cover the main screens; the rest appears in English.">
-        <Select label="Language" value={prefs.language} options={LANGUAGES.map((l) => ({ value: l.id, label: l.label }))} onChange={(v) => void updatePrefs({ language: v })} />
+        <Select label="Language" value={prefs.language} options={LANGUAGES.map((l) => ({ value: l.id, label: l.label }))} onValueChange={(v) => void updatePrefs({ language: v })} />
       </Row>
       <Row label="Time zone" hint="From your WorkSuite profile, then your organization, then this computer.">
         <span className="font-mono text-[13px] text-ink-2">{currentZone()}</span>
@@ -133,16 +134,16 @@ function PreferencesSection({ prefs }: { prefs: Preferences }) {
       <Toggle k="minimizeToTray" prefs={prefs} label="Closing the window keeps WorkSuite in the tray" hint="Off: closing the window quits WorkSuite." />
       <Toggle k="restoreTabs" prefs={prefs} label="Reopen my tabs when WorkSuite starts" />
       <Row label="Theme">
-        <Select label="Theme" value={prefs.theme} options={[{ value: 'system', label: 'System' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} onChange={(v) => void updatePrefs({ theme: v })} />
+        <Select label="Theme" value={prefs.theme} options={[{ value: 'system', label: 'System' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} onValueChange={(v) => void updatePrefs({ theme: v })} />
       </Row>
       <Row label="Density">
-        <Select label="Density" value={prefs.density} options={[{ value: 'comfortable', label: 'Comfortable' }, { value: 'compact', label: 'Compact' }]} onChange={(v) => void updatePrefs({ density: v })} />
+        <Select label="Density" value={prefs.density} options={[{ value: 'comfortable', label: 'Comfortable' }, { value: 'compact', label: 'Compact' }]} onValueChange={(v) => void updatePrefs({ density: v })} />
       </Row>
       <Row label="Sidebar">
-        <Select label="Sidebar" value={prefs.sidebarMode} options={[{ value: 'expanded', label: 'Expanded' }, { value: 'collapsed', label: 'Collapsed' }, { value: 'auto-hide', label: 'Auto-hide' }]} onChange={(v) => void updatePrefs({ sidebarMode: v })} />
+        <Select label="Sidebar" value={prefs.sidebarMode} options={[{ value: 'expanded', label: 'Expanded' }, { value: 'collapsed', label: 'Collapsed' }, { value: 'auto-hide', label: 'Auto-hide' }]} onValueChange={(v) => void updatePrefs({ sidebarMode: v })} />
       </Row>
       <Row label="Open downloaded files" hint="When a file is double-clicked in Files.">
-        <Select label="Open downloaded files" value={prefs.openFilesLocally} options={[{ value: 'ask', label: 'Ask' }, { value: 'always', label: 'Open locally' }, { value: 'never', label: 'Download only' }]} onChange={(v) => void updatePrefs({ openFilesLocally: v })} />
+        <Select label="Open downloaded files" value={prefs.openFilesLocally} options={[{ value: 'ask', label: 'Ask' }, { value: 'always', label: 'Open locally' }, { value: 'never', label: 'Download only' }]} onValueChange={(v) => void updatePrefs({ openFilesLocally: v })} />
       </Row>
       <Row label="Download folder" hint={<span className="font-mono">{prefs.downloadFolder}</span>}>
         <Button onClick={() => void call('files:chooseDownloadFolder').then((p) => p && toast('success', 'Download folder changed.'))}>Change…</Button>
@@ -245,7 +246,7 @@ function NotificationsSection({ prefs }: { prefs: Preferences }) {
           disabled={!!lock && prefs.notificationPrivacy === 'GENERIC'}
           value={prefs.notificationPrivacy}
           options={[{ value: 'FULL', label: 'Full content' }, { value: 'SENDER_ONLY', label: 'Sender only' }, { value: 'GENERIC', label: '"New WorkSuite notification"' }]}
-          onChange={(v) => void updatePrefs({ notificationPrivacy: v })}
+          onValueChange={(v) => void updatePrefs({ notificationPrivacy: v })}
         />
       </Row>
       <Row label="Pause notifications" hint={paused ? `Paused until ${new Date(paused).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}` : 'Urgent notifications and calls still come through.'}>
@@ -294,7 +295,7 @@ function SecuritySection({ prefs }: { prefs: Preferences }) {
     <>
       <H title="Security" />
       <Row label="Lock WorkSuite" hint="When nobody has used WorkSuite for this long." lock={lock}>
-        <Select label="App lock" value={prefs.appLockMinutes} options={options} onChange={(v) => void updatePrefs({ appLockMinutes: v as Preferences['appLockMinutes'] })} />
+        <Select label="App lock" value={prefs.appLockMinutes} options={options} onValueChange={(v) => void updatePrefs({ appLockMinutes: v as Preferences['appLockMinutes'] })} />
       </Row>
       <Toggle k="lockOnSystemLock" prefs={prefs} label="Lock when this computer locks or sleeps" />
       <Row label="Unlock with" hint={lockState?.biometric === 'touch-id' ? 'Your WorkSuite password or Touch ID.' : 'Your WorkSuite password. Windows Hello support is planned.'}>
@@ -376,11 +377,11 @@ function DesktopSection({ prefs }: { prefs: Preferences }) {
           disabled={!!lock}
           value={prefs.updateChannel}
           options={[{ value: 'stable', label: 'Stable' }, { value: 'beta', label: 'Beta' }, { value: 'dev', label: 'Development' }]}
-          onChange={(v) => void call('updates:setChannel', { channel: v }).catch((e) => toast('error', errorMessage(e)))}
+          onValueChange={(v) => void call('updates:setChannel', { channel: v }).catch((e) => toast('error', errorMessage(e)))}
         />
       </Row>
       <Row label="Tab suspension" hint="Tabs you haven't looked at for this long are unloaded to save memory, and reload when you return.">
-        <Select label="Tab suspension" value={prefs.tabSuspendMinutes} options={[15, 30, 60, 120, 480].map((m) => ({ value: m, label: m < 60 ? `${m} minutes` : `${m / 60} hour${m === 60 ? '' : 's'}` }))} onChange={(v) => void updatePrefs({ tabSuspendMinutes: v })} />
+        <Select label="Tab suspension" value={prefs.tabSuspendMinutes} options={[15, 30, 60, 120, 480].map((m) => ({ value: m, label: m < 60 ? `${m} minutes` : `${m / 60} hour${m === 60 ? '' : 's'}` }))} onValueChange={(v) => void updatePrefs({ tabSuspendMinutes: v })} />
       </Row>
       <Row label="Always on top" hint="Pop-out chat windows can stay above other windows — use the pin in their title bar.">
         <span className="text-[13px] text-ink-3">Per window</span>
@@ -415,7 +416,7 @@ function OfflineSection({ prefs }: { prefs: Preferences }) {
         <span className="font-mono text-[13px] text-ink-2">{st.data ? bytes(st.data.cacheBytes) : '—'}</span>
       </Row>
       <Row label="Mail kept offline">
-        <Select label="Mail cache" value={prefs.mailCacheDays} options={[{ value: 7, label: 'Last 7 days' }, { value: 30, label: 'Last 30 days' }, { value: 90, label: 'Last 90 days' }, { value: 0, label: 'Headers only' }]} onChange={(v) => void updatePrefs({ mailCacheDays: v as Preferences['mailCacheDays'] })} />
+        <Select label="Mail cache" value={prefs.mailCacheDays} options={[{ value: 7, label: 'Last 7 days' }, { value: 30, label: 'Last 30 days' }, { value: 90, label: 'Last 90 days' }, { value: 0, label: 'Headers only' }]} onValueChange={(v) => void updatePrefs({ mailCacheDays: v as Preferences['mailCacheDays'] })} />
       </Row>
       <Row label="Changes waiting to sync" hint={st.data?.reason ?? 'Offline changes are sent in order when you reconnect.'}>
         <span className="font-mono text-[13px] text-ink-2">

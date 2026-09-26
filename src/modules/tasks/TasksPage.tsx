@@ -16,6 +16,7 @@ import { ListView } from './ListView';
 import { NewTask } from './NewTask';
 import { Rail } from './Rail';
 import { TaskDetail } from './TaskDetail';
+import { Select } from '../../components/Select';
 
 /** The old `?filter=` links (notifications, the dashboard) in the new scopes. */
 const LEGACY: Record<string, Scope> = { mine: 'mine', today: 'today', overdue: 'overdue', active: 'all', completed: 'done', created: 'all', shared: 'shared' };
@@ -164,21 +165,21 @@ export default function TasksPage(_props: ModuleProps) {
           {offline ? <OfflineNote cachedAt={all.data?.cachedAt ?? null} /> : null}
           <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search tasks" placeholder="Search tasks…" className={cx(field, 'w-[200px] px-2.5')} />
           {view === 'list' && scope !== 'done' ? (
-            <select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value as typeof status)} className={field}>
+            <Select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value as typeof status)} className={field}>
               <option value="open">Status: open</option>
               <option value="all">Status: any</option>
               {STATUSES.map((s) => <option key={s.id} value={s.id}>Status: {s.label}</option>)}
-            </select>
+            </Select>
           ) : null}
-          <select aria-label="Assignee" value={assignee} onChange={(e) => setAssignee(e.target.value)} className={field}>
+          <Select aria-label="Assignee" value={assignee} onChange={(e) => setAssignee(e.target.value)} className={field}>
             <option value="any">Assignee: anyone</option>
             <option value="me">Assignee: me</option>
             {people.map(([id, name]) => <option key={id} value={id}>Assignee: {name}</option>)}
-          </select>
-          <select aria-label="Priority" value={priority} onChange={(e) => setPriority(e.target.value as typeof priority)} className={field}>
+          </Select>
+          <Select aria-label="Priority" value={priority} onChange={(e) => setPriority(e.target.value as typeof priority)} className={field}>
             <option value="any">Priority: any</option>
             {PRIORITIES.map((p) => <option key={p.id} value={p.id}>Priority: {p.label}</option>)}
-          </select>
+          </Select>
           <span role="tablist" aria-label="View" className="flex overflow-hidden rounded-[8px] border border-line font-semibold">
             {(['board', 'list'] as const).map((v) => (
               <button key={v} type="button" role="tab" aria-selected={view === v} title={`${v === 'board' ? 'Board' : 'List'} (${v[0]!.toUpperCase()})`} onClick={() => set({ view: v })} className={cx('px-3 py-[7px]', view === v ? 'bg-selection text-primary' : 'text-ink hover:bg-subtle')}>

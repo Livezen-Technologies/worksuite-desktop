@@ -5,6 +5,7 @@ import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Button, cx } from '../../components/ui';
 import { COUNTRIES, SOCIAL, TYPES, bodyOf, formOf, type ContactDetail, type ContactForm, type Group } from './api';
+import { Select } from '../../components/Select';
 
 type Text = Exclude<keyof ContactForm, 'social' | 'group_ids' | 'type'>;
 
@@ -52,7 +53,7 @@ export function EditDrawer({ contact, defaults, groups, onClose, onSaved }: { co
           if (e.key === 'Escape') onClose();
           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void save();
         }}
-        className="no-drag absolute top-0 right-0 bottom-0 z-30 flex w-[448px] max-w-full flex-col border-l border-line bg-surface text-[13px] shadow-[-20px_0_50px_rgba(15,27,61,.14)]"
+        className="no-drag absolute top-0 right-0 bottom-0 z-30 flex w-[448px] max-w-full flex-col border-l border-line bg-surface text-[13px] shadow-[-20px_0_50px_rgb(var(--ws-shadow-rgb)/.14)]"
       >
         <div className="flex items-center border-b border-line px-4 py-3.5">
           <b className="flex-1 text-[15px] text-ink">{contact ? 'Edit contact' : 'New contact'}</b>
@@ -65,11 +66,11 @@ export function EditDrawer({ contact, defaults, groups, onClose, onSaved }: { co
           {text('last_name', 'Last name')}
           {text('display_name', 'Display name', { wide: true, placeholder: 'Auto from first + last' })}
           <Field label="Type">
-            <select value={f.type} onChange={(e) => set('type', e.target.value as ContactForm['type'])} className={input}>
+            <Select value={f.type} onChange={(e) => set('type', e.target.value as ContactForm['type'])} className={input}>
               {TYPES.filter((t) => t.id !== 'shared' || f.type === 'shared').map((t) => (
                 <option key={t.id} value={t.id}>{t.label}</option>
               ))}
-            </select>
+            </Select>
           </Field>
           {text('birthday', 'Birthday', { type: 'date' })}
           {text('job_title', 'Job title')}
@@ -88,12 +89,12 @@ export function EditDrawer({ contact, defaults, groups, onClose, onSaved }: { co
           {text('state', 'State')}
           {text('zip', 'ZIP')}
           <Field label="Country">
-            <select value={f.country} onChange={(e) => set('country', e.target.value)} className={input}>
+            <Select value={f.country} onChange={(e) => set('country', e.target.value)} className={input}>
               <option value="">—</option>
               {(f.country && !COUNTRIES.includes(f.country) ? [f.country, ...COUNTRIES] : COUNTRIES).map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Heading>BUSINESS</Heading>
           {text('customer_id', 'Customer ID')}

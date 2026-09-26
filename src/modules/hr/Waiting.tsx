@@ -1,7 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { apiGet, apiPost } from '../../core/api';
-import { call, errorMessage } from '../../core/bridge';
+import { errorMessage } from '../../core/bridge';
+import { useTab } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import type { ApprovalsResponse } from './api';
@@ -14,8 +15,7 @@ import type { HrView } from './Rail';
  * Waiting on me (HrApprovals): everything that needs my decision — leave,
  * HR requests, resignations and offboarding — behind tiles that also say
  * what I approved and declined today. Leave and requests are decided here;
- * resignations and offboarding open where they are handled (the web, until
- * the desktop draws them).
+ * resignations and offboarding open on their own screens.
  */
 type Focus = '' | 'pending_leave' | 'pending_requests' | 'pending_resignations' | 'pending_offboarding' | 'changes_requested' | 'overdue';
 
@@ -32,6 +32,7 @@ const TILES: Array<{ key: keyof ApprovalsResponse['cards']; label: string; focus
 
 export default function Waiting({ onPick }: { onPick: (v: HrView) => void }) {
   const qc = useQueryClient();
+  const { go } = useTab();
   const [focus, setFocus] = useState<Focus>('');
   const [reviewing, setReviewing] = useState<number | null>(null);
   const q = useQuery({ queryKey: ['hr', 'leave-approvals'], queryFn: ({ signal }) => apiGet<ApprovalsResponse>('/api/hr/leave/approvals', undefined, signal) });
@@ -139,7 +140,7 @@ export default function Waiting({ onPick }: { onPick: (v: HrView) => void }) {
                 <Cell w={null} className="font-semibold">{r.employee} · {humanise(r.type)}</Cell>
                 <Cell w={130}>{dayLong(r.last_working_date)}</Cell>
                 <span className="w-[110px] shrink-0 text-right">
-                  <button type="button" className="text-[12.5px] font-bold text-primary hover:underline" onClick={() => void call('app:openInBrowser', { path: `/hr?resignation=${r.id}` })}>
+                  <button type="button" className="text-[12.5px] font-bold text-primary hover:underline" onClick={() => go(`/hr?tab=resignations&resignation=${r.id}`)}>
                     Open
                   </button>
                 </span>
@@ -155,7 +156,7 @@ export default function Waiting({ onPick }: { onPick: (v: HrView) => void }) {
                 <Cell w={null} className="font-semibold">{o.employee}</Cell>
                 <Cell w={170}>{o.title}</Cell>
                 <span className="w-[80px] shrink-0 text-right">
-                  <button type="button" className="text-[12.5px] font-bold text-primary hover:underline" onClick={() => void call('app:openInBrowser', { path: `/hr?offboarding=${o.case_id}` })}>
+                  <button type="button" className="text-[12.5px] font-bold text-primary hover:underline" onClick={() => go(`/hr?tab=offboarding&offboarding=${o.case_id}`)}>
                     Open
                   </button>
                 </span>

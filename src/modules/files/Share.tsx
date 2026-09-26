@@ -8,6 +8,7 @@ import { Icon } from '../../components/Icon';
 import { Button, ErrorNote, Spinner, cx } from '../../components/ui';
 import type { ItemAccess, Level } from './api';
 import type { Item } from './ctx';
+import { Select } from '../../components/Select';
 
 type PType = 'user' | 'group' | 'department' | 'role' | 'organization';
 interface Principal {
@@ -193,9 +194,9 @@ export function ShareDialog({ item, onClose, onSecureLink, onPublicLink, onSendT
                 <Icon name="search" size={15} />
                 <input autoFocus value={term} onChange={(e) => (setTerm(e.target.value), setPicked(null))} aria-label={`Search ${TABS[tab]![0].toLowerCase()}`} placeholder={`Search ${TABS[tab]![0].toLowerCase()}`} className="min-w-0 flex-1 bg-transparent text-ink outline-none bare-focus" />
               </label>
-              <select aria-label="Access level" value={level} onChange={(e) => setLevel(e.target.value as Level)} className="h-9 rounded-[8px] border border-line bg-surface px-2 text-ink">
+              <Select aria-label="Access level" value={level} onChange={(e) => setLevel(e.target.value as Level)} className="h-9 rounded-[8px] border border-line bg-surface px-2 text-ink">
                 {LEVELS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
+              </Select>
               <Button variant="primary" disabled={!picked || busy} onClick={share}>Share</Button>
             </div>
             {term.trim().length >= 2 ? (
@@ -238,7 +239,7 @@ export function ShareDialog({ item, onClose, onSecureLink, onPublicLink, onSendT
                       <b className="truncate text-ink">{g.principal.name}</b>
                       <span className="truncate text-[11.5px] text-ink-3">{g.principal.type === 'user' ? 'Shared directly' : `${WORD[g.principal.type]}${g.principal.detail ? ` · ${g.principal.detail}` : ''}`}{g.can_download ? '' : ' · No download'}</span>
                     </span>
-                    <select
+                    <Select
                       aria-label={`Access for ${g.principal.name}`}
                       value={g.level}
                       disabled={!g.editable || busy}
@@ -251,7 +252,7 @@ export function ShareDialog({ item, onClose, onSecureLink, onPublicLink, onSendT
                     >
                       {LEVELS.map(([v]) => <option key={v} value={v}>{SHORT[v]}</option>)}
                       <option value="remove">Remove access</option>
-                    </select>
+                    </Select>
                   </div>
                 ))}
                 {!allowed.length ? <span className="text-ink-3">Nobody else has been given it directly.</span> : null}

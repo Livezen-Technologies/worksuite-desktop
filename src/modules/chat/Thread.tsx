@@ -10,7 +10,7 @@ import { useTab } from '../../core/tab-context';
 import { dayKey, dayLabel, parseTs, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
-import { Avatar, Button, ErrorNote, FileBadge, Modal, Spinner, cx } from '../../components/ui';
+import { Avatar, Button, ErrorNote, FileBadge, Modal, Spinner, cx, DATA_TEXT } from '../../components/ui';
 import { describeCard } from '../calls/log';
 import { answerCall, startCall } from '../calls/start';
 import { openMeeting } from '../meet/api';
@@ -279,7 +279,7 @@ export function Thread({
               {header ? (
                 drawer ? (
                   <div className="my-2.5 text-center">
-                    <span className="rounded-[8px] bg-surface px-2 py-[3px] text-[11px] font-bold text-ink-2 shadow-[0_1px_1px_rgba(15,27,61,.08)]">{relativeDay(header)}</span>
+                    <span className="rounded-[8px] bg-surface px-2 py-[3px] text-[11px] font-bold text-ink-2 shadow-[0_1px_1px_rgb(var(--ws-shadow-rgb)/.08)]">{relativeDay(header)}</span>
                   </div>
                 ) : (
                   <div className="my-3 text-center"><span className="rounded-full bg-subtle px-2.5 py-[3px] text-[11.5px] font-semibold text-ink-3">{dayLabel(header, 'short')}</span></div>
@@ -465,7 +465,7 @@ function Bubble({ m, own, roomId, onReply, onForward, onEdit }: { m: ChatMessage
                 onClick={() => react(r.emoji)}
                 title={r.names?.join(', ')}
                 aria-label={`${r.emoji} ${r.count}${r.mine ? ', yours — remove' : ''}`}
-                className={cx('rounded-full border px-2 py-px text-[11.5px]', r.mine ? 'border-[#C7D0F0] bg-selection' : 'border-line bg-surface hover:bg-subtle')}
+                className={cx('rounded-full border px-2 py-px text-[11.5px]', r.mine ? 'border-[#C7D0F0] bg-selection dark:border-primary/40' : 'border-line bg-surface hover:bg-subtle')}
               >
                 {r.emoji} {r.count}
               </button>
@@ -676,7 +676,7 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
             role="toolbar"
             aria-label="Message actions"
             className={cx(
-              'absolute -top-[15px] z-20 flex items-center gap-0.5 rounded-[10px] bg-surface p-[3px] shadow-[0_4px_14px_rgba(15,27,61,.16),0_0_0_1px_rgba(15,27,61,.06)]',
+              'absolute -top-[15px] z-20 flex items-center gap-0.5 rounded-[10px] bg-surface p-[3px] shadow-[0_4px_14px_rgb(var(--ws-shadow-rgb)/.16),0_0_0_1px_var(--ws-edge)]',
               own ? 'right-1.5' : 'left-1.5',
               pop ? 'visible' : 'invisible group-hover:visible group-focus-within:visible',
             )}
@@ -699,9 +699,9 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
             </button>
           </div>
         ) : null}
-        <div className={cx('min-w-[64px] rounded-[10px] text-[13px] leading-[1.45] text-ink shadow-[0_1px_1px_rgba(15,27,61,.1)]', tone, media || m.card ? 'p-1' : 'px-2.5 py-1.5')}>
+        <div className={cx('min-w-[64px] rounded-[10px] text-[13px] leading-[1.45] text-ink shadow-[0_1px_1px_rgb(var(--ws-shadow-rgb)/.1)]', tone, media || m.card ? 'p-1' : 'px-2.5 py-1.5')}>
           {group && !own && first ? (
-            <b className={cx('block text-[11.5px]', (media || m.card) && 'px-1.5 pt-0.5')} style={{ color: nameColour(m.sender_name) }}>
+            <b className={cx('block text-[11.5px]', DATA_TEXT, (media || m.card) && 'px-1.5 pt-0.5')} style={{ ['--c' as string]: nameColour(m.sender_name) }}>
               {m.sender_name}
             </b>
           ) : null}
@@ -779,7 +779,7 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
                 onClick={() => react(r.emoji)}
                 title={r.names?.join(', ')}
                 aria-label={`${r.emoji} ${r.count}${r.mine ? ', yours — remove' : ''}`}
-                className={cx('rounded-full bg-surface px-1.5 py-px text-[11.5px] font-semibold text-ink shadow-[0_1px_3px_rgba(15,27,61,.18)]', r.mine && 'ring-1 ring-primary/40')}
+                className={cx('rounded-full bg-surface px-1.5 py-px text-[11.5px] font-semibold text-ink shadow-[0_1px_3px_rgb(var(--ws-shadow-rgb)/.18)]', r.mine && 'ring-1 ring-primary/40')}
               >
                 {r.emoji} {r.count}
               </button>
@@ -787,7 +787,7 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
           </div>
         ) : null}
         {pop?.kind === 'react' ? (
-          <div role="toolbar" aria-label="React" className="fixed z-40 flex items-center gap-0.5 rounded-full bg-surface p-1 shadow-[0_8px_24px_rgba(15,27,61,.18),0_0_0_1px_rgba(15,27,61,.06)]" style={{ left: pop.left, top: pop.top }}>
+          <div role="toolbar" aria-label="React" className="fixed z-40 flex items-center gap-0.5 rounded-full bg-surface p-1 shadow-[0_8px_24px_rgb(var(--ws-shadow-rgb)/.18),0_0_0_1px_var(--ws-edge)]" style={{ left: pop.left, top: pop.top }}>
             {DRAWER_REACTIONS.map((e) => (
               <button key={e} type="button" aria-label={`React ${e}`} onClick={() => react(e)} className="flex h-[34px] w-[34px] items-center justify-center rounded-full text-[21px] leading-none transition-transform hover:scale-110 hover:bg-selection">
                 {e}
@@ -799,7 +799,7 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
           </div>
         ) : null}
         {pop?.kind === 'more' ? (
-          <div role="menu" aria-label="Message actions" className="fixed z-40 w-[214px] rounded-[12px] bg-surface p-1.5 shadow-[0_16px_40px_rgba(15,27,61,.2),0_0_0_1px_rgba(15,27,61,.06)]" style={{ left: pop.left, top: pop.top }}>
+          <div role="menu" aria-label="Message actions" className="fixed z-40 w-[214px] rounded-[12px] bg-surface p-1.5 shadow-[0_16px_40px_rgb(var(--ws-shadow-rgb)/.2),0_0_0_1px_var(--ws-edge)]" style={{ left: pop.left, top: pop.top }}>
             {items.map((it, i) => (
               <div key={it.label}>
                 {it.danger && i > 0 ? <span className="mx-1.5 my-1 block h-px bg-line" /> : null}
@@ -882,7 +882,7 @@ function MessageMenu({ own, named, open, setOpen, reactions, onReact, onMoreReac
           setOpen(!open);
         }}
         className={cx(
-          'pointer-events-auto absolute flex h-[22px] w-[22px] items-center justify-center rounded-full bg-selection text-primary shadow-[0_1px_3px_rgba(15,27,61,.12)]',
+          'pointer-events-auto absolute flex h-[22px] w-[22px] items-center justify-center rounded-full bg-selection text-primary shadow-[0_1px_3px_rgb(var(--ws-shadow-rgb)/.12)]',
           named ? 'top-[24px]' : 'top-[2px]',
           own ? '-left-7' : '-right-7',
           open ? 'visible' : 'invisible group-hover:visible group-focus-within:visible',
@@ -893,7 +893,7 @@ function MessageMenu({ own, named, open, setOpen, reactions, onReact, onMoreReac
       {open && at ? (
         <>
           {reactions.length ? (
-            <div role="toolbar" aria-label="React" className="pointer-events-auto fixed z-40 flex items-center gap-0.5 rounded-[22px] bg-surface px-1.5 py-1 shadow-[0_8px_24px_rgba(15,27,61,.16),0_0_0_1px_rgba(15,27,61,.06)]" style={at.bar}>
+            <div role="toolbar" aria-label="React" className="pointer-events-auto fixed z-40 flex items-center gap-0.5 rounded-[22px] bg-surface px-1.5 py-1 shadow-[0_8px_24px_rgb(var(--ws-shadow-rgb)/.16),0_0_0_1px_var(--ws-edge)]" style={at.bar}>
               {reactions.map((e) => (
                 <button key={e} type="button" aria-label={`React ${e}`} onClick={() => (setOpen(false), onReact(e))} className="flex h-8 w-8 items-center justify-center rounded-full text-[19px] leading-none hover:bg-selection">
                   {e}
@@ -905,7 +905,7 @@ function MessageMenu({ own, named, open, setOpen, reactions, onReact, onMoreReac
               </button>
             </div>
           ) : null}
-          <div role="menu" aria-label="Message actions" className="pointer-events-auto fixed z-40 w-[200px] rounded-[12px] bg-surface p-1.5 shadow-[0_16px_40px_rgba(15,27,61,.2),0_0_0_1px_rgba(15,27,61,.06)]" style={at.menu}>
+          <div role="menu" aria-label="Message actions" className="pointer-events-auto fixed z-40 w-[200px] rounded-[12px] bg-surface p-1.5 shadow-[0_16px_40px_rgb(var(--ws-shadow-rgb)/.2),0_0_0_1px_var(--ws-edge)]" style={at.menu}>
             {shown.map((it, i) => (
               <div key={it.label}>
                 {it.danger && i > 0 ? <span className="mx-1.5 my-1 block h-px bg-line" /> : null}
@@ -940,7 +940,7 @@ function CallCard({ m, own, roomId, compact }: { m: ChatMessage; own: boolean; r
   if (compact) {
     return (
       <div className={cx('mt-2.5 flex', own ? 'justify-end' : 'justify-start')}>
-        <div className="flex items-center gap-2 rounded-full bg-surface py-1.5 pr-1.5 pl-1.5 shadow-[0_1px_2px_rgba(15,27,61,.12)]">
+        <div className="flex items-center gap-2 rounded-full bg-surface py-1.5 pr-1.5 pl-1.5 shadow-[0_1px_2px_rgb(var(--ws-shadow-rgb)/.12)]">
           <span className={cx('flex h-7 w-7 shrink-0 items-center justify-center rounded-full', d.tone === 'missed' ? 'bg-danger-bg text-danger' : d.tone === 'live' ? 'bg-success-bg text-success' : 'bg-selection text-primary')}>
             <Icon name={video ? 'video' : 'phone'} size={14} />
           </span>
@@ -960,7 +960,7 @@ function CallCard({ m, own, roomId, compact }: { m: ChatMessage; own: boolean; r
   }
   return (
     <div className={cx('mt-3 flex', own ? 'justify-end' : 'justify-start')}>
-      <div className={cx('flex items-center gap-2.5 rounded-[12px] border px-3 py-2.5', d.tone === 'missed' ? 'border-[#F1B8A8] bg-surface' : d.tone === 'live' ? 'border-[#9EE6C3] bg-surface' : 'border-line bg-surface')}>
+      <div className={cx('flex items-center gap-2.5 rounded-[12px] border px-3 py-2.5', d.tone === 'missed' ? 'border-[#F1B8A8] bg-surface dark:border-danger/40' : d.tone === 'live' ? 'border-[#9EE6C3] bg-surface' : 'border-line bg-surface')}>
         <span className={cx('flex h-8 w-8 shrink-0 items-center justify-center rounded-full', d.tone === 'missed' ? 'bg-danger-bg text-danger' : d.tone === 'live' ? 'bg-success-bg text-success' : 'bg-selection text-primary')}>
           <Icon name={video ? 'video' : 'phone'} size={15} />
         </span>

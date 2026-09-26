@@ -30,6 +30,15 @@ const TeamAttendance = lazy(() => import('./TeamAttendance'));
 const MissingCheckouts = lazy(() => import('./MissingCheckouts'));
 const TimesheetApprovals = lazy(() => import('./TimesheetApprovals'));
 const Reports = lazy(() => import('./Reports'));
+const Onboarding = lazy(() => import('./Onboarding'));
+const MyOnboarding = lazy(() => import('./MyOnboarding'));
+const Resignations = lazy(() => import('./Resignations'));
+const MyResignation = lazy(() => import('./MyResignation'));
+const Offboarding = lazy(() => import('./Offboarding'));
+const Schedules = lazy(() => import('./Schedules'));
+const Settings = lazy(() => import('./Settings'));
+const Announcements = lazy(() => import('./Announcements'));
+const Devices = lazy(() => import('./Devices'));
 
 const TITLES: Partial<Record<HrView, string>> = {
   overview: 'Dashboard',
@@ -48,7 +57,18 @@ const TITLES: Partial<Record<HrView, string>> = {
   openatt: 'Missing check-outs',
   approvals: 'Timesheet approvals',
   reports: 'Reports',
+  onboarding: 'Onboarding',
+  myonboarding: 'My onboarding',
+  resignation: 'My resignation',
+  resignations: 'Resignations',
+  offboarding: 'Offboarding',
+  schedules: 'Work schedules',
+  settings: 'Settings',
+  announcements: 'Announcements',
+  devices: 'Devices',
 };
+
+const num = (v: string | null) => (v && /^\d+$/.test(v) ? Number(v) : null);
 
 export default function HrShell(_props: ModuleProps) {
   const { query, go, path } = useTab();
@@ -58,10 +78,17 @@ export default function HrShell(_props: ModuleProps) {
   // The web's profile address (/hr/employees/12) is the Directory with that profile open.
   const fromPath = path[1] === 'employees' && /^\d+$/.test(path[2] ?? '') ? Number(path[2]) : null;
   const employee = fromPath ?? (/^\d+$/.test(query.get('employee') ?? '') ? Number(query.get('employee')) : null);
-  const asked = (fromPath ? 'people' : (query.get('tab') ?? '')) as HrView;
+  // A notification's link to one resignation or offboarding case opens it even
+  // for somebody without the list (an approver in the chain, a department's clearer).
+  const resignation = num(query.get('resignation'));
+  const offboarding = num(query.get('offboarding'));
+  const onboarding = num(query.get('onboarding'));
+  const asked = (fromPath ? 'people' : (query.get('tab') ?? (resignation ? 'resignations' : offboarding ? 'offboarding' : ''))) as HrView;
   // Old desktop addresses: "approvals" was the queue now called "Waiting on me".
   const wanted: HrView = (asked as string) === 'approvals' && !counts.reviewsTimesheets ? 'waiting' : asked;
-  const allowed = hrSections(perms, counts).flatMap((s) => s.items.map((i) => i.id));
+  const allowed: HrView[] = hrSections(perms, counts).flatMap((s) => s.items.map((i) => i.id));
+  if (resignation) allowed.push('resignations');
+  if (offboarding) allowed.push('offboarding');
   const view: HrView = wanted && NATIVE.has(wanted) && allowed.includes(wanted) ? wanted : staff ? 'overview' : 'myhr';
   useTabTitle(view === 'people' && employee ? 'HR · Profile' : `HR · ${TITLES[view] ?? 'People'}`);
 
@@ -96,6 +123,15 @@ export default function HrShell(_props: ModuleProps) {
           {view === 'openatt' ? <MissingCheckouts /> : null}
           {view === 'approvals' ? <TimesheetApprovals /> : null}
           {view === 'reports' ? <Reports /> : null}
+          {view === 'onboarding' ? <Onboarding openId={onboarding} onOpen={(id) => go(id ? `/hr?tab=onboarding&onboarding=${id}` : '/hr?tab=onboarding')} /> : null}
+          {view === 'myonboarding' ? <MyOnboarding /> : null}
+          {view === 'resignation' ? <MyResignation /> : null}
+          {view === 'resignations' ? <Resignations openId={resignation} onOpen={(id) => go(id ? `/hr?tab=resignations&resignation=${id}` : '/hr?tab=resignations')} onOffboarding={(id) => go(`/hr?tab=offboarding&offboarding=${id}`)} /> : null}
+          {view === 'offboarding' ? <Offboarding openId={offboarding} onOpen={(id) => go(id ? `/hr?tab=offboarding&offboarding=${id}` : '/hr?tab=offboarding')} /> : null}
+          {view === 'schedules' ? <Schedules /> : null}
+          {view === 'settings' ? <Settings /> : null}
+          {view === 'announcements' ? <Announcements /> : null}
+          {view === 'devices' ? <Devices /> : null}
         </Suspense>
       </main>
     </div>

@@ -9,6 +9,7 @@ import { Button, Modal, Spinner, cx } from '../../components/ui';
 import { flatten, tree as loadTree, type DriveFile, type DriveFolder } from './api';
 import { forgetPassword, rememberPassword } from './locks';
 import type { Item } from './ctx';
+import { Select } from '../../components/Select';
 
 const input = 'h-9 w-full rounded-[8px] border border-line bg-surface px-2.5 text-[13px] text-ink outline-none focus:border-primary';
 const label = 'flex flex-col gap-[5px] text-[13px] font-semibold text-ink';
@@ -297,13 +298,13 @@ export function SecureLinkDialog({ file, onClose, onAll }: { file: DriveFile; on
         <div className="grid grid-cols-2 gap-2.5">
           <label className={label}>
             Download limit
-            <select value={limit} disabled={!!url} onChange={(e) => setLimit(e.target.value)} className={input}>
+            <Select value={limit} disabled={!!url} onChange={(e) => setLimit(e.target.value)} className={input}>
               <option value="0">Unlimited</option>
               <option value="1">1 download</option>
               <option value="5">5 downloads</option>
               <option value="10">10 downloads</option>
               <option value="50">50 downloads</option>
-            </select>
+            </Select>
           </label>
           <label className={label}>
             Password
@@ -378,12 +379,12 @@ export function LinkDialog({ item, onClose }: { item: Item; onClose: () => void 
         {visibility === 'password' ? <input type="password" value={pw} disabled={!!url} onChange={(e) => setPw(e.target.value)} aria-label="Link password" placeholder="Password" className={input} /> : null}
         <label className={label}>
           Lasts
-          <select value={expiry} disabled={!!url} onChange={(e) => setExpiry(Number(e.target.value))} className={input}>
+          <Select value={expiry} disabled={!!url} onChange={(e) => setExpiry(Number(e.target.value))} className={input}>
             <option value={86_400}>1 day</option>
             <option value={604_800}>7 days</option>
             <option value={2_592_000}>30 days</option>
             <option value={0}>Until revoked</option>
-          </select>
+          </Select>
         </label>
         {url ? (
           <div className="flex items-center gap-2 rounded-[9px] border border-line bg-ground px-2.5 py-2">

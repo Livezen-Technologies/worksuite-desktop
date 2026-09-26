@@ -5,6 +5,7 @@ import { call, errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Button, Modal } from '../../components/ui';
 import { digits } from './api';
+import { Select } from '../../components/Select';
 
 interface Account {
   id: number;
@@ -80,7 +81,7 @@ export function WhatsappSend({ phone, name, contactId, onClose }: { phone: strin
         {accounts.length > 1 ? (
           <label className="flex flex-col gap-1 font-semibold text-ink">
             Send from
-            <select value={accountId ?? ''} onChange={(e) => setPicked(Number(e.target.value))} className={field}>
+            <Select value={accountId ?? ''} onChange={(e) => setPicked(Number(e.target.value))} className={field}>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
@@ -88,7 +89,7 @@ export function WhatsappSend({ phone, name, contactId, onClose }: { phone: strin
                   {a.ready ? '' : ' (not connected)'}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         ) : null}
         {chosen && !chosen.ready ? <p className="rounded-[8px] bg-warning-bg p-2 text-[11.5px] text-warning">{chosen.name} is not connected right now, so this will probably fail.</p> : null}

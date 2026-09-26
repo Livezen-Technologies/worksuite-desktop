@@ -11,6 +11,7 @@ import { toast } from '../../../core/toasts';
 import { Avatar, Button, Chip, Empty, ErrorNote, Modal, Spinner, cx } from '../../../components/ui';
 import { EmojiPicker } from '../parts';
 import { PRIORITIES, useAgents, useCanned, useWebsiteConversation, websiteAction, websiteAttach, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
+import { Select } from '../../../components/Select';
 
 const control = 'h-[30px] rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink disabled:opacity-60';
 
@@ -124,7 +125,7 @@ function Controls({ data, row, me, canReply, onDone }: { data: WebsiteConversati
           Accept
         </Button>
       ) : null}
-      <select
+      <Select
         aria-label="Assignee"
         disabled={busy || closed}
         value={c.assigned_to === null ? '' : String(c.assigned_to)}
@@ -139,10 +140,10 @@ function Controls({ data, row, me, canReply, onDone }: { data: WebsiteConversati
         <option value="">Unassigned</option>
         {others.map((a) => <option key={a.id} value={String(a.id)}>{a.name}</option>)}
         {c.assigned_to !== null && c.assigned_to !== me && !others.some((a) => a.id === c.assigned_to) ? <option value={String(c.assigned_to)}>{row?.agent ?? 'Someone else'}</option> : null}
-      </select>
-      <select aria-label="Priority" disabled={busy || closed} value={priority} onChange={(e) => void run(() => websiteAction(c.id, 'priority', { priority: e.target.value }))} className={control}>
+      </Select>
+      <Select aria-label="Priority" disabled={busy || closed} value={priority} onChange={(e) => void run(() => websiteAction(c.id, 'priority', { priority: e.target.value }))} className={control}>
         {PRIORITIES.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-      </select>
+      </Select>
       <button type="button" aria-pressed={c.is_starred} disabled={busy} onClick={() => void run(() => websiteAction(c.id, 'star', { on: !c.is_starred }))} className={cx('h-[30px] rounded-[7px] border px-2 text-[12px]', c.is_starred ? 'border-warning bg-warning-bg font-semibold text-[#9A4A06] dark:text-warning' : 'border-line bg-surface text-ink hover:bg-subtle')}>
         {c.is_starred ? '★ Starred' : 'Star'}
       </button>

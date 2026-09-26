@@ -7,6 +7,7 @@ import { dayStatus, type RosterDay, type RosterResponse } from './api';
 import { CorrectAttendance } from './Correct';
 import { minutesLabel, parseYmd } from './dates';
 import { Cell, Empty, input, PageHead, row, StatusChip, THead } from './parts';
+import { Select } from '../../components/Select';
 
 /**
  * Team attendance (HrTeamAttendance; the web's roster): one day for everyone
@@ -82,21 +83,21 @@ export default function TeamAttendance() {
       <PageHead title="Team attendance" sub={shown ? parseYmd(shown).toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : undefined} />
       <div className="flex flex-wrap items-center gap-2">
         <input type="date" aria-label="Day" value={shown} onChange={(e) => setDate(e.target.value)} className={input + ' !w-[150px]'} />
-        <select aria-label="Department" value={dept} onChange={(e) => setDept(e.target.value)} className={input + ' !w-auto'}>
+        <Select aria-label="Department" value={dept} onChange={(e) => setDept(e.target.value)} className={input + ' !w-auto'}>
           <option value="">All departments</option>
           {(r?.departments ?? []).map((d) => (
             <option key={String(d.id)} value={String(d.id)}>
               {d.name}
             </option>
           ))}
-        </select>
-        <select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)} className={input + ' !w-auto'}>
+        </Select>
+        <Select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)} className={input + ' !w-auto'}>
           {ROSTER_FILTERS.map(([v, l]) => (
             <option key={v} value={v}>
               {l}
             </option>
           ))}
-        </select>
+        </Select>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or number" aria-label="Search name or number" className={input + ' !w-[240px]'} />
       </div>
       {r ? (

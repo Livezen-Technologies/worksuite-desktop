@@ -7,6 +7,7 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { PAYMENT_LABEL, type PayLine, type Payslip } from './api';
 import { dayLong } from './dates';
 import { Empty, PageHead, Panel, StatusChip, THead, row } from './parts';
+import { Select } from '../../components/Select';
 
 /**
  * My pay (HrSelfService · My pay): my payslips by year, what has been paid,
@@ -52,13 +53,13 @@ export default function MyPay() {
         <Panel
           title="Payslips"
           action={
-            <select aria-label="Year" value={year} onChange={(e) => (setYear(Number(e.target.value)), setOpen(null))} className="h-[30px] rounded-[8px] border border-line bg-surface px-2 text-[12.5px] text-ink">
+            <Select aria-label="Year" value={year} onChange={(e) => (setYear(Number(e.target.value)), setOpen(null))} className="h-[30px] rounded-[8px] border border-line bg-surface px-2 text-[12.5px] text-ink">
               {Array.from({ length: 6 }, (_, i) => thisYear - i).map((y) => (
                 <option key={y} value={y}>
                   Year {y}
                 </option>
               ))}
-            </select>
+            </Select>
           }
         >
           <THead cols={[['Period', null], ['Net', 130], ['Paid', 150]]} />

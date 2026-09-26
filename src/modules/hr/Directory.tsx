@@ -10,6 +10,7 @@ import { EMPLOYMENT_TYPES, hasLeft, SETTABLE_STATUSES, type EmployeeDetail, type
 import { dayLong, rangeLabel, ymd } from './dates';
 import { btn, btnPrimary, Caps, Cell, Empty, Field, Facts, humanise, Initials, input, PageHead, row, Seg, Sheet, SidePanel, StatusChip, THead } from './parts';
 import { can } from './Rail';
+import { Select } from '../../components/Select';
 
 /**
  * Directory (HrDirectory): everyone on file whose record I may open — the
@@ -221,14 +222,14 @@ function LoginLink({ employee, manage, canLink, onDone }: { employee: EmployeeDe
       ) : (
         <>
           <div className="flex gap-1.5">
-            <select aria-label="Choose a login" value={user} onChange={(e) => setUser(e.target.value)} className={input}>
+            <Select aria-label="Choose a login" value={user} onChange={(e) => setUser(e.target.value)} className={input}>
               <option value="">{logins.isLoading ? 'Loading logins…' : 'Choose a login…'}</option>
               {(logins.data ?? []).map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name ? `${u.name} · ${u.email}` : u.email}
                 </option>
               ))}
-            </select>
+            </Select>
             <button type="button" disabled={!user || busy || !manage} className={btnPrimary} onClick={() => void save(Number(user))}>
               Link
             </button>
@@ -296,36 +297,36 @@ function AddEmployee({ people, onClose, onDone }: { people: EmployeeRow[]; onClo
           <input type="date" aria-label="Joined" value={joined} onChange={(e) => setJoined(e.target.value)} className={input} />
         </Field>
         <Field label="Employment type">
-          <select aria-label="Employment type" value={type} onChange={(e) => setType(e.target.value)} className={input}>
+          <Select aria-label="Employment type" value={type} onChange={(e) => setType(e.target.value)} className={input}>
             {EMPLOYMENT_TYPES.map((t) => (
               <option key={t} value={t}>
                 {humanise(t)}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label="Status">
-          <select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)} className={input}>
+          <Select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)} className={input}>
             {SETTABLE_STATUSES.map((t) => (
               <option key={t} value={t}>
                 {humanise(t)}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
       </div>
       <Field label="Login" hint="Optional. Only logins with no employee record are listed.">
-        <select aria-label="Login" value={user} onChange={(e) => setUser(e.target.value)} className={input}>
+        <Select aria-label="Login" value={user} onChange={(e) => setUser(e.target.value)} className={input}>
           <option value="">No login yet</option>
           {(logins.data ?? []).map((u) => (
             <option key={u.id} value={u.id}>
               {u.name ? `${u.name} · ${u.email}` : u.email}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       <Field label="Reports to">
-        <select aria-label="Reports to" value={manager} onChange={(e) => setManager(e.target.value)} className={input}>
+        <Select aria-label="Reports to" value={manager} onChange={(e) => setManager(e.target.value)} className={input}>
           <option value="">Nobody</option>
           {people
             .filter((p) => !hasLeft(p, today))
@@ -334,7 +335,7 @@ function AddEmployee({ people, onClose, onDone }: { people: EmployeeRow[]; onClo
                 {p.name ?? p.employee_no} · {p.employee_no}
               </option>
             ))}
-        </select>
+        </Select>
       </Field>
       <span className="text-[11.5px] text-ink-3">A record becomes Active when an onboarding is completed; until then it stays in the status chosen here.</span>
     </Sheet>

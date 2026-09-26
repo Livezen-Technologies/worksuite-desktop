@@ -5,6 +5,7 @@ import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Avatar, Button, Modal, Spinner, cx } from '../../components/ui';
 import type { ChatMessage, Room } from './types';
+import { Select } from '../../components/Select';
 
 interface Person {
   id: number;
@@ -229,11 +230,11 @@ export function NotifySettings({ room, onClose }: { room: Room | undefined; onCl
         {room ? (
           <label className="flex flex-col gap-1.5">
             <b className="text-[13px] text-ink">This conversation</b>
-            <select value={room.muted ? 'muted' : ((room as Room & { notify_level?: string }).notify_level ?? 'all')} onChange={(e) => void level(e.target.value)} className={field}>
+            <Select value={room.muted ? 'muted' : ((room as Room & { notify_level?: string }).notify_level ?? 'all')} onChange={(e) => void level(e.target.value)} className={field}>
               <option value="all">All messages</option>
               <option value="mentions">Only mentions</option>
               <option value="muted">Muted</option>
-            </select>
+            </Select>
           </label>
         ) : null}
       </div>
@@ -292,7 +293,7 @@ export function GroupDetails({ roomId, onClose, onLeft }: { roomId: number; onCl
                 <b className="flex-1 truncate text-[13px] text-ink">{m.name}</b>
                 <span className="text-[11px] font-bold text-ink-2 capitalize">{m.role === 'member' ? '' : m.role}</span>
                 {m.can && (m.can.make_admin || m.can.remove_admin || m.can.make_owner || m.can.remove) ? (
-                  <select
+                  <Select
                     aria-label={`Actions for ${m.name}`}
                     value=""
                     onChange={(e) => {
@@ -308,7 +309,7 @@ export function GroupDetails({ roomId, onClose, onLeft }: { roomId: number; onCl
                     {m.can.remove_admin ? <option value="member">Remove as admin</option> : null}
                     {m.can.make_owner ? <option value="owner">Make owner</option> : null}
                     {m.can.remove ? <option value="remove">Remove from group</option> : null}
-                  </select>
+                  </Select>
                 ) : null}
               </div>
             ))}

@@ -112,7 +112,7 @@ export function Launcher() {
       <div
         role="dialog"
         aria-label="Apps"
-        className="animate-in absolute top-[84px] left-1/2 flex max-h-[calc(100vh-110px)] w-[900px] max-w-[calc(100vw-32px)] -translate-x-1/2 flex-col overflow-hidden rounded-[24px] bg-[rgba(250,251,253,.97)] shadow-[0_40px_100px_rgba(11,21,48,.35),0_0_0_1px_rgba(15,27,61,.06)] dark:bg-surface"
+        className="animate-in absolute top-[84px] left-1/2 flex max-h-[calc(100vh-110px)] w-[900px] max-w-[calc(100vw-32px)] -translate-x-1/2 flex-col overflow-hidden rounded-[24px] bg-[rgba(250,251,253,.97)] shadow-[0_40px_100px_rgb(var(--ws-shadow-rgb)/.35),0_0_0_1px_var(--ws-edge)] dark:bg-surface"
         onMouseDown={() => menu && setMenu(null)}
       >
         <div className="flex flex-col gap-3.5 px-[22px] pt-5 pb-3">
@@ -189,7 +189,7 @@ export function Launcher() {
                     setSel(i);
                     setMenu({ id: a.id, x: e.clientX, y: e.clientY });
                   }}
-                  className={cx('flex w-full flex-col items-center gap-2 rounded-[18px] px-1.5 pt-3.5 pb-3', i === selected && 'bg-surface shadow-[0_0_0_2px_var(--color-primary),0_8px_20px_rgba(15,27,61,.08)] dark:bg-ground')}
+                  className={cx('flex w-full flex-col items-center gap-2 rounded-[18px] px-1.5 pt-3.5 pb-3', i === selected && 'bg-surface shadow-[0_0_0_2px_var(--color-primary),0_8px_20px_rgb(var(--ws-shadow-rgb)/.08)] dark:bg-selection')}
                 >
                   <span className="relative">
                     <AppTile icon={a.icon} colour={appColour(a.id)} size={58} radius={17} iconSize={26} />
@@ -197,7 +197,7 @@ export function Launcher() {
                       <span className="absolute -top-1.5 -right-[7px] flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-[#FAFBFD] bg-badge px-[5px] text-[10.5px] font-bold text-white dark:border-surface">{n > 99 ? '99+' : n}</span>
                     ) : null}
                     {web ? (
-                      <span title="Opens in your browser" className="absolute -right-[5px] -bottom-[5px] flex h-5 w-5 items-center justify-center rounded-full bg-surface text-ink-2 shadow-[0_2px_6px_rgba(15,27,61,.22)]">
+                      <span title="Opens in your browser" className="absolute -right-[5px] -bottom-[5px] flex h-5 w-5 items-center justify-center rounded-full bg-surface text-ink-2 shadow-[0_2px_6px_rgb(var(--ws-shadow-rgb)/.22)]">
                         <Icon name="external" size={11} />
                       </span>
                     ) : null}
@@ -229,7 +229,7 @@ export function Launcher() {
             </div>
           ) : null}
         </div>
-        <div className="flex shrink-0 items-center gap-[18px] border-t border-line bg-ground px-[22px] py-2.5 text-[11.5px] text-ink-3">
+        <div className="flex shrink-0 items-center gap-[18px] border-t border-line bg-well px-[22px] py-2.5 text-[11.5px] text-ink-3">
           <span>
             <b className="font-mono text-ink-2">↑ ↓ ← →</b> move
           </span>
@@ -251,7 +251,7 @@ export function Launcher() {
         </div>
       </div>
       {menu && menuApp ? (
-        <div role="menu" aria-label={`${appLabel(menuApp)} options`} className="fixed z-[60] w-56 rounded-[12px] border border-line bg-surface p-1.5 shadow-[0_16px_40px_rgba(15,27,61,.2)]" style={{ left: Math.min(menu.x, window.innerWidth - 236), top: Math.min(menu.y, window.innerHeight - 170) }}>
+        <div role="menu" aria-label={`${appLabel(menuApp)} options`} className="fixed z-[60] w-56 rounded-[12px] border border-line bg-surface p-1.5 shadow-[0_16px_40px_rgb(var(--ws-shadow-rgb)/.2)]" style={{ left: Math.min(menu.x, window.innerWidth - 236), top: Math.min(menu.y, window.innerHeight - 170) }}>
           <MenuItem icon="chevron-right" label="Open" onClick={() => open(menuApp)} />
           {menuApp.surface === 'native' ? (
             <>

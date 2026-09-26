@@ -6,6 +6,7 @@ import { toast } from '../../core/toasts';
 import { Avatar, Button, Modal, cx } from '../../components/ui';
 import type { People, Person, Role, TaskDetail } from './api';
 import type { Directory } from './NewTask';
+import { Select } from '../../components/Select';
 
 const ROLES: Array<{ id: Role; label: string; many: string }> = [
   { id: 'assignee', label: 'Assignee', many: 'Assignees' },
@@ -115,18 +116,18 @@ function ManagePeople({ taskId, me, people, onClose, onChanged }: { taskId: numb
         <div className="flex flex-col gap-2 rounded-[10px] bg-subtle p-2.5">
           <b className="text-ink">Add somebody</b>
           <div className="flex gap-2">
-            <select aria-label="Person" value={who} onChange={(e) => setWho(e.target.value)} className="h-8 min-w-0 flex-1 rounded-[7px] border border-line bg-surface px-1.5 text-ink">
+            <Select aria-label="Person" value={who} onChange={(e) => setWho(e.target.value)} className="h-8 min-w-0 flex-1 rounded-[7px] border border-line bg-surface px-1.5 text-ink">
               <option value="">Choose a person…</option>
               {choices.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
-            <select aria-label="As" value={role} onChange={(e) => setRole(e.target.value as Role)} className="h-8 rounded-[7px] border border-line bg-surface px-1.5 text-ink">
+            </Select>
+            <Select aria-label="As" value={role} onChange={(e) => setRole(e.target.value as Role)} className="h-8 rounded-[7px] border border-line bg-surface px-1.5 text-ink">
               {ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
-            </select>
+            </Select>
           </div>
           {role === 'shared' ? (
-            <select aria-label="They may" value={permission} onChange={(e) => setPermission(e.target.value)} className="h-8 rounded-[7px] border border-line bg-surface px-1.5 text-ink">
+            <Select aria-label="They may" value={permission} onChange={(e) => setPermission(e.target.value)} className="h-8 rounded-[7px] border border-line bg-surface px-1.5 text-ink">
               {['view', 'comment', 'edit'].map((p) => <option key={p} value={p}>{PERMISSION[p]}</option>)}
-            </select>
+            </Select>
           ) : null}
           <Button variant="primary" size="sm" className="self-end" loading={busy} disabled={!who} onClick={() => void add()}>Add</Button>
         </div>

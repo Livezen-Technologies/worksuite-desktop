@@ -67,7 +67,7 @@ export function Directory({ onNewGroup, onNew }: { onNewGroup: () => void; onNew
               ['saved', 'Saved'],
             ] as const
           ).map(([k, l]) => (
-            <button key={k} type="button" aria-pressed={seg === k} onClick={() => setSeg(k)} className={cx('h-[30px] rounded-[8px] px-3 text-[12.5px] font-semibold', seg === k ? 'bg-surface text-primary shadow-[0_1px_3px_rgba(15,27,61,.12)]' : 'text-ink-2')}>
+            <button key={k} type="button" aria-pressed={seg === k} onClick={() => setSeg(k)} className={cx('h-[30px] rounded-[8px] px-3 text-[12.5px] font-semibold', seg === k ? 'bg-surface text-primary shadow-[0_1px_3px_rgb(var(--ws-shadow-rgb)/.12)]' : 'text-ink-2')}>
               {l}
             </button>
           ))}

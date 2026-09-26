@@ -103,7 +103,7 @@ export function SubscribeDialog({ onClose }: { onClose: () => void }) {
             </div>
             <div className="rounded-[9px] bg-ground px-3 py-2.5 leading-[1.55] text-ink-2">{APPS[app]!.how}</div>
             {confirm ? (
-              <div role="alertdialog" aria-label={confirm === 'stop' ? 'Stop the link?' : 'Replace the link?'} className="flex flex-col gap-2 rounded-[9px] border border-[#F1B8A8] bg-danger-bg px-3 py-2.5">
+              <div role="alertdialog" aria-label={confirm === 'stop' ? 'Stop the link?' : 'Replace the link?'} className="flex flex-col gap-2 rounded-[9px] border border-[#F1B8A8] bg-danger-bg dark:border-danger/40 px-3 py-2.5">
                 <span className="text-ink">
                   {confirm === 'stop' ? 'Any calendar subscribed to it stops updating. You can make a new link later.' : 'The link you have now stops working, and calendars subscribed to it stop updating until you paste the new one.'}
                 </span>
@@ -213,7 +213,7 @@ export function UndoBar({ label, onUndo, onGone }: { label: string; onUndo: () =
     return () => clearTimeout(t);
   }, [label, onGone]);
   return (
-    <div role="status" className="absolute bottom-5 left-1/2 z-40 flex w-[420px] max-w-[calc(100%-32px)] -translate-x-1/2 items-center gap-2.5 rounded-[10px] bg-[#0F1B3D] px-3.5 py-3 text-[13px] text-white shadow-[0_12px_30px_rgba(15,27,61,.3)]">
+    <div role="status" className="absolute bottom-5 left-1/2 z-40 flex w-[420px] max-w-[calc(100%-32px)] -translate-x-1/2 items-center gap-2.5 rounded-[10px] bg-[#0F1B3D] px-3.5 py-3 text-[13px] text-white shadow-[0_12px_30px_rgb(var(--ws-shadow-rgb)/.3)]">
       <span className="min-w-0 flex-1 truncate">{label}</span>
       <button type="button" onClick={onUndo} className="font-bold text-[#AFC6FF] hover:underline">Undo</button>
       <button type="button" aria-label="Dismiss" onClick={onGone} className="px-1 text-white/60 hover:text-white">×</button>

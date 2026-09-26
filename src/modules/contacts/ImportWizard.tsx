@@ -4,6 +4,7 @@ import { request } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Button, Modal, cx } from '../../components/ui';
+import { Select } from '../../components/Select';
 
 interface Column {
   index: number;
@@ -203,7 +204,7 @@ export function ImportWizard({ onClose }: { onClose: () => void }) {
                       {f.help ? <span className="text-[11px] text-ink-3">{f.help}</span> : null}
                     </span>
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <select
+                      <Select
                         aria-label={f.label}
                         value={col === undefined ? '' : String(col)}
                         onChange={(e) => {
@@ -218,7 +219,7 @@ export function ImportWizard({ onClose }: { onClose: () => void }) {
                         {sheet.columns.map((c) => (
                           <option key={c.index} value={c.index}>{c.name}</option>
                         ))}
-                      </select>
+                      </Select>
                       {sample ? <span className="truncate text-[11px] text-ink-2">e.g. {sample}</span> : null}
                     </span>
                   </div>
