@@ -206,10 +206,14 @@ export const contract = {
         importErrors: z.number().int().positive().optional(),
         /** An earlier version of a Drive file. */
         version: z.object({ fileId: z.number().int().positive(), versionId: z.number().int().positive() }).optional(),
+        /** My payslip as a PDF, by its reference. */
+        payslip: z.string().regex(/^[A-Za-z0-9._-]{1,64}$/).optional(),
+        /** One of my HR documents (the main process asks for its one-time link). */
+        hrDocument: z.number().int().positive().optional(),
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version].filter((x) => x !== undefined).length === 1, 'give a file id, a file version, a mail attachment, a recording, an export or an import job'),
+      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument].filter((x) => x !== undefined).length === 1, 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip or an HR document'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   'transfers:upload': ch(

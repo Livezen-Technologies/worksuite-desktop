@@ -146,11 +146,11 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
   {
     input: defineDesktopManifest({
       id: 'hr', name: 'HR', icon: 'id-card', contractVersion: 1, desktop: { enabled: true },
-      offline: { mode: 'READ_CACHE', cache: ['/api/hr/attendance/me', '/api/hr/leave', '/api/hr/approvals/pending'] },
+      offline: { mode: 'READ_CACHE', cache: ['/api/hr/attendance/me', '/api/hr/me/profile', '/api/hr/leave/balance', '/api/hr/leave/requests', '/api/hr/leave/approvals'] },
       native: ['notifications'],
       quickActions: [{ id: 'clock-in', label: 'Clock In', route: '/hr' }],
     }),
-    load: () => import('./hr/HrPage'),
+    load: () => import('./hr/HrShell'),
   },
   {
     input: defineDesktopManifest({ id: 'notifications', name: 'Notifications', icon: 'bell', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'READ_CACHE', cache: ['/api/notifications'] } }),

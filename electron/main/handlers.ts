@@ -222,8 +222,15 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   });
   router.handle('files:registerDropped', (input) => ctx.transfers.register(input.paths));
   router.handle('transfers:list', () => ctx.transfers.list());
-  router.handle('transfers:download', (input) => {
-    const path = input.fileId
+  router.handle('transfers:download', async (input) => {
+    if (input.hrDocument) {
+      // A one-time link, asked for at the moment of downloading (it expires).
+      const link = await ctx.http.post<{ url: string }>(`/api/hr/me/documents/${input.hrDocument}/link`, { disposition: 'attachment' });
+      return ctx.transfers.download(`/${String(link.url).replace(/^\/+/, '')}`, input.name, !!input.open, null);
+    }
+    const path = input.payslip
+      ? `/api/payroll/me/payslips/${encodeURIComponent(input.payslip)}/pdf`
+      : input.fileId
       ? `/api/files/${encodeURIComponent(input.fileId)}/download`
       : input.recording
         ? `/api/meet/recordings/${input.recording}/file`

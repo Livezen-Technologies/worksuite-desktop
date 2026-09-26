@@ -5,6 +5,79 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-26 — 0.2.11: HR, part 1 — the People rail and your own HR on the desktop
+
+**Added**
+
+- **HR has its own rail** ("People"), like the web's, with a company-scope
+  button at the top. It is gated on the same permissions as the web, so
+  people see only what they may open. The Time and Administration sections
+  fold away unless you are in one of them.
+- **Nine HR screens are now drawn on the desktop:**
+  - **Dashboard** (staff with `hr.view`): headcount, who is out today,
+    onboarding, recent joiners, employment types and the coming holidays.
+  - **My HR**: your employment facts, recent attendance, leave balance and
+    personal details. "Ask to change a detail" sends a profile request —
+    your own record is not edited directly, the same as on the web.
+  - **My pay**: payslips by year, each with its lines; "PDF" saves the
+    payslip to Downloads.
+  - **My documents**: add documents (drop them or choose them, with a
+    title, category and expiry), filter, list or grid, view in the browser
+    and download. Renaming, archiving and deleting appear only where the
+    server allows them.
+  - **Requests**: your HR requests and, for reviewers, the team's, with
+    Approve, Decline and Withdraw. Cover asks ("Can you cover this?") sit
+    at the top when someone has named you.
+  - **My attendance**: today's card and the month's history. Clock in and
+    out open the header clock; "Ask to correct" on a day sends an
+    attendance request, already filled in.
+  - **Timesheet**: day, week and month views, by project or by task. Log,
+    edit and delete work, and "Submit week" sends the week for review. A
+    week that was sent back says so at the top.
+  - **Leave**: request leave (full day, half day or short leave, with the
+    person responsible, evidence and what it will cost from your balance),
+    withdraw it, and a month calendar of who is away. Those who decide
+    leave can Review, Approve, Reject or Send back from the list.
+  - **Waiting on me**: everything that needs your decision, behind eight
+    tiles you can filter by. Leave rows say why it is yours ("you were
+    asked" or "HR approval") and can be reviewed, approved or declined in
+    place; HR requests too.
+- **Review leave** opens a drawer with the request, overlapping leave, the
+  cover answer, evidence, balances and recent attendance. When you are the
+  person named as responsible, it also offers Accept or Decline cover.
+
+**Changed**
+
+- **The rest of HR still opens in the browser** — Directory, Team
+  attendance, Onboarding, Resignations, Offboarding, Schedules, Reports and
+  Settings. Those rail items carry an arrow mark. A link to one of them
+  (`/hr?tab=…`) also opens in the browser. Resignation and offboarding rows
+  in Waiting on me open their case there.
+- **Reports** shows only for people with `hr.view`. The web shows it to
+  everyone, but the report endpoints refuse anyone without it.
+
+**Fixed**
+
+- **Home no longer crashes** after opening HR. HR's approvals query shared
+  a cache key with Home's "Waiting for me", whose data has a different
+  shape; HR's now has its own key.
+- Opening one folded rail section no longer folds the other one back.
+- Leave ids come back from the server as text; they are now numbers, so
+  "is this mine" and "can I decide it" compare correctly.
+
+**Notes**
+
+- Payslips and HR documents download through the same download queue as
+  mail attachments, and land in Downloads.
+- `tests/e2e/hr.mjs` walks the whole of part 1 against the local server
+  with two e2e employees, one of whom asks the other for cover. It cleans
+  up what it creates. Renaming, archiving and deleting your own document
+  are skipped there: the server does not allow them for employees.
+- Part 2 — the manager and HR-admin screens that still open in the browser
+  — comes next.
+
+---
+
 ## 2026-09-26 — 0.2.10: The chat drawer's messages, to the new drawer design
 
 **Changed**
