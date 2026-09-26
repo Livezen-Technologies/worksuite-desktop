@@ -35,6 +35,7 @@ export const INVOKE_CHANNELS = [
   'tabs:restore',
 
   'files:pickFiles',
+  'files:pickFolder',
   'files:registerDropped',
   'files:chooseDownloadFolder',
 

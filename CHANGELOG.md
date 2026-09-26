@@ -5,6 +5,70 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-26 — 0.2.8: Files part 2 — the editors, the player, folder uploads and downloads into the Drive
+
+**Added**
+
+- **The code editor** (DriveCode). Text and code files open in it; a
+  read-only view is one click away.
+  - The file on the right, and an earlier version on the left, with the
+    lines taken out and put in marked. Compare it with any version, with
+    your last save, or with nothing.
+  - ⌘S saves a new version. The status bar shows the changes (+/−), the
+    line and column, the indent, the encoding and the line endings.
+  - Format lays out JSON again, and tidies trailing spaces in anything else.
+  - Tab indents the way the file does.
+  - It holds the file's edit lock while it is open. If someone else is
+    editing, it opens read-only and says who.
+  - If somebody saves a newer version first, yours is refused rather than
+    written over it. "Load theirs" brings theirs in and copies yours to paste
+    back; "Save mine over it" keeps theirs in Versions.
+- **The image editor** (DriveImage):
+  - Crop (free, 1:1, 4:3, 3:2, 16:9), turn and flip, eleven adjustments
+    (exposure, brightness, contrast, highlights, shadows, saturation,
+    vibrance, temperature, tint, hue, gamma), looks (mono, sepia, warm, cool,
+    vivid, fade), a text watermark (nine positions, opacity, size; shrunk to
+    fit), resize, and Info (camera details and versions to restore).
+  - Undo (⌘Z), and Compare (hold) for the original.
+  - "Save as version N" makes the next version of the file; "Save as copy"
+    puts the result beside the original.
+- **The media player** (DriveMedia):
+  - Video and sound with their own controls: play, seek, volume, speed,
+    subtitles, picture in picture, full screen.
+  - It carries on from where you stopped.
+  - Keys: space plays, ← → move 5 seconds, ⇧← ⇧→ go to the file before or
+    after, M mutes, F goes full screen.
+  - Comments pinned to a moment, marked on the seek bar (click to jump).
+  - Description and tags are saved as you go.
+  - When the server can't prepare media, the original still plays, with a
+    note saying so.
+- **Upload a folder** (New ▾ → Upload folder…, or drop a folder from
+  Finder). Everything in it goes up into folders of the same names. Hidden
+  files and links are left out; up to 2,000 files at a time.
+- **Downloads into Drive** (New ▾ → Download from URL or magnet…): the
+  server fetches a web address or magnet link straight into the folder.
+  Pause, resume, retry, cancel. Offered to those allowed (urls.manage).
+- **The uploads tray** (bottom right) shows what is going up, a folder's
+  files by their place in it, with a link to Transfers.
+- Pictures show "Edit image" in the viewer, the details panel and the menu.
+  Text files show "Edit".
+
+**Fixed**
+
+- **The app could show "A JavaScript error occurred in the main process —
+  database is not open" when quitting.** A window saving its place, or the
+  status timer, ran after the local database had closed. Window places are
+  now saved first, the timers stop, and a late question to the closed
+  database gets nothing back instead of an error.
+
+**Changed**
+
+- The app now reads the server's signed media addresses (`/media/…`)
+  through its own connection. It needs this so the image editor can save
+  what it draws; the addresses are read only.
+
+---
+
 ## 2026-09-26 — 0.2.7: Files, native, to the Drive designs (part 1: the Drive)
 
 **Added**

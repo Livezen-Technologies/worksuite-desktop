@@ -27,7 +27,20 @@ const FORWARD_HEADERS = ['content-type', 'accept', 'if-match', 'if-none-match', 
 const RETURN_HEADERS = ['content-type', 'content-disposition', 'content-length', 'etag', 'last-modified', 'accept-ranges', 'content-range', 'retry-after'];
 const MAX_BODY = 25 * 1024 * 1024;
 
+/**
+ * A signed media address (`/media/{token}`), which the server serves without
+ * credentials and without CORS headers. Reading one through here puts it on
+ * the app's own origin, so a canvas can use the pixels (the image editor
+ * saves what it draws). Read only.
+ */
+const MEDIA = /^\/media\/[A-Za-z0-9_\-~.]{8,512}(\?download=1)?$/;
+
+export function isMediaPath(apiPath: string): boolean {
+  return MEDIA.test(apiPath);
+}
+
 export function isProxyPathAllowed(apiPath: string): boolean {
+  if (MEDIA.test(apiPath)) return true;
   if (!PATH_OK.test(apiPath)) return false;
   const pathOnly = apiPath.split('?')[0]!;
   if (pathOnly.includes('..') || pathOnly.includes('//')) return false;
@@ -63,6 +76,7 @@ export function createApiProxy(deps: ProxyDeps) {
 
     const method = request.method.toUpperCase();
     if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'].includes(method)) return envelope(405, 'Method not allowed.', 'INTERNAL');
+    if (isMediaPath(apiPath) && method !== 'GET' && method !== 'HEAD') return envelope(405, 'Media is read only.', 'INTERNAL');
 
     const headers = new Headers();
     for (const h of FORWARD_HEADERS) {

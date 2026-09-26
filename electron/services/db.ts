@@ -133,6 +133,7 @@ export type Row = Record<string, unknown>;
 
 export class Database {
   readonly raw: DatabaseSync;
+  private closed = false;
 
   constructor(path: string) {
     this.raw = new DatabaseSync(path);
@@ -163,17 +164,29 @@ export class Database {
     return (this.raw.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
   }
 
+  /*
+   * After close (the app is quitting) a late timer or window event may still
+   * ask: it gets nothing back rather than an exception, which the main process
+   * would otherwise show as an error dialog on the way out.
+   */
   run(sql: string, ...params: Array<string | number | null>): { changes: number } {
+    if (this.closed) return { changes: 0 };
     const r = this.raw.prepare(sql).run(...params);
     return { changes: Number(r.changes) };
   }
 
   get<T = Row>(sql: string, ...params: Array<string | number | null>): T | undefined {
+    if (this.closed) return undefined;
     return this.raw.prepare(sql).get(...params) as T | undefined;
   }
 
   all<T = Row>(sql: string, ...params: Array<string | number | null>): T[] {
+    if (this.closed) return [];
     return this.raw.prepare(sql).all(...params) as T[];
+  }
+
+  get isClosed(): boolean {
+    return this.closed;
   }
 
   tx<T>(fn: () => T): T {
@@ -194,6 +207,7 @@ export class Database {
   }
 
   close(): void {
+    this.closed = true;
     try {
       this.raw.close();
     } catch {

@@ -197,6 +197,13 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     if (res.canceled) return [];
     return ctx.transfers.register(res.filePaths);
   });
+  router.handle('files:pickFolder', async (input, c) => {
+    const w = winOf(c.sender);
+    const opts: Electron.OpenDialogOptions = { title: input.title ?? 'Choose a folder to upload', properties: ['openDirectory'] };
+    const res = w ? await dialog.showOpenDialog(w, opts) : await dialog.showOpenDialog(opts);
+    if (res.canceled || !res.filePaths[0]) return [];
+    return ctx.transfers.register(res.filePaths);
+  });
   router.handle('files:chooseDownloadFolder', async (_i, c) => {
     const w = winOf(c.sender);
     const opts: Electron.OpenDialogOptions = { title: 'Choose where downloads are saved', defaultPath: ctx.settings.effective().downloadFolder, properties: ['openDirectory', 'createDirectory'] };

@@ -799,6 +799,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   });
   app.on('before-quit', () => {
     windows.quitting = true;
+    // Windows' places are saved while the database is open; timers that read it stop first.
+    windows.saveAllAndStop();
+    if (statusTimer) clearTimeout(statusTimer);
+    statusTimer = null;
     calls.stop();
     transfers.stopAll();
     supervisor.stopAll();

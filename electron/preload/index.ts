@@ -84,6 +84,7 @@ const api = {
   },
   files: {
     pickFiles: call('files:pickFiles'),
+    pickFolder: call('files:pickFolder'),
     chooseDownloadFolder: call('files:chooseDownloadFolder'),
     /** Files from a real drag & drop or <input type=file>: converted to handles in main. */
     registerDropped: (files: File[]): Promise<unknown> => {

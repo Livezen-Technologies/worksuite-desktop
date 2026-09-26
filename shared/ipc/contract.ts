@@ -160,6 +160,8 @@ export const contract = {
   // The dialog runs in the main process, which stores the chosen folder itself.
   'files:chooseDownloadFolder': ch(none, { rate: 2 }),
   'files:registerDropped': ch(z.object({ paths: z.array(z.string().min(1).max(4096)).min(1).max(200) }), { session: true, rate: 5 }),
+  /** A folder, with everything in it: each file carries its path inside the folder. */
+  'files:pickFolder': ch(z.object({ title: z.string().max(100).optional() }), { session: true, rate: 2 }),
 
   'media:access': ch(z.object({ kind: z.enum(['microphone', 'camera']) }), { session: true, rate: 5 }),
   'media:screenSources': ch(none, { session: true, rate: 3 }),
@@ -269,6 +271,8 @@ export interface PickedFile {
   handle: string;
   name: string;
   size: number;
+  /** For a file inside a chosen or dropped folder: "Photos/2026/IMG_1.jpg", the folder's own name first. */
+  relativePath?: string;
 }
 
 export interface BundlePreview {
@@ -356,6 +360,7 @@ export interface Outputs {
   'tabs:restore': { tabs: TabRecord[]; activeId: string | null; restored: boolean };
   'files:pickFiles': PickedFile[];
   'files:registerDropped': PickedFile[];
+  'files:pickFolder': PickedFile[];
   'files:chooseDownloadFolder': string | null;
   'transfers:list': Transfer[];
   'transfers:download': Transfer;

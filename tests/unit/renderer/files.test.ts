@@ -5,6 +5,9 @@ vi.mock('../../../src/core/app-state', () => ({ app: { get: () => ({ auth: { ser
 import { mimeFor } from '../../../shared/mime';
 import { can, extOf, flatten, kindOf, openWay, pathTo, splitKeys, subtree, tagOf, type TreeNode } from '../../../src/modules/files/api';
 import { fileMenu, folderMenu, type Drive } from '../../../src/modules/files/ctx';
+import { ADJUSTMENTS, BLANK, adjustPixels, outputSize, outputType, summary, turned } from '../../../src/modules/files/imaging';
+import { formatText, indentOf } from '../../../src/modules/files/CodeEditor';
+import { clock } from '../../../src/modules/files/MediaViewer';
 
 const node = (id: number, name: string, children: TreeNode[] = []): TreeNode => ({ id, parent_id: null, name, description: null, path: name, color: null, is_archived: false, is_locked: false, file_count: 0, total_size: 0, starred: false, children });
 const tree = [node(1, 'Projects', [node(2, 'Desktop', [node(3, 'Design')]), node(4, 'Garage')]), node(5, 'HR')];
@@ -21,10 +24,12 @@ describe('what a file is', () => {
     expect(extOf('photo', 'PNG')).toBe('png');
   });
 
-  it('opens each kind the right way: previews here, PDFs and Office on the web, archives inside', () => {
+  it('opens each kind the right way: pictures preview, sound and video play, text edits, PDFs and Office on the web, archives inside', () => {
     expect(openWay({ name: 'a.png', extension: 'png' })).toBe('preview');
-    expect(openWay({ name: 'a.mp4', extension: 'mp4' })).toBe('preview');
-    expect(openWay({ name: 'BLOCKERS.md', extension: 'md' })).toBe('preview');
+    expect(openWay({ name: 'a.mp4', extension: 'mp4' })).toBe('media');
+    expect(openWay({ name: 'a.mp3', extension: 'mp3' })).toBe('media');
+    expect(openWay({ name: 'BLOCKERS.md', extension: 'md' })).toBe('code');
+    expect(openWay({ name: 'ipc.ts', extension: 'ts' })).toBe('code');
     expect(openWay({ name: 'a.pdf', extension: 'pdf' })).toBe('pdf');
     expect(openWay({ name: 'a.docx', extension: 'docx' })).toBe('office');
     expect(openWay({ name: 'a.csv', extension: 'csv' })).toBe('office');
@@ -90,5 +95,64 @@ describe('uploads say what they are', () => {
     expect(mimeFor('Report.docx')).toBe('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     expect(mimeFor('README')).toBeNull();
     expect(mimeFor('weird.xyz')).toBeNull();
+  });
+});
+
+
+describe('the image editor', () => {
+  it('knows the size a recipe makes: turned, cropped, resized', () => {
+    expect(turned(1920, 1200, 90)).toEqual({ w: 1200, h: 1920 });
+    expect(outputSize(1920, 1200, BLANK)).toEqual({ w: 1920, h: 1200 });
+    expect(outputSize(1920, 1200, { ...BLANK, crop: { x: 0.25, y: 0, w: 0.5, h: 0.5 } })).toEqual({ w: 960, h: 600 });
+    expect(outputSize(1920, 1200, { ...BLANK, rotate: 90, crop: { x: 0, y: 0, w: 1, h: 0.5 } })).toEqual({ w: 1200, h: 960 });
+    expect(outputSize(1920, 1200, { ...BLANK, resize: { w: 640, h: 400 } })).toEqual({ w: 640, h: 400 });
+  });
+
+  it('leaves pixels alone with nothing set, and changes them as asked', () => {
+    const px = () => new Uint8ClampedArray([200, 100, 50, 255, 30, 60, 90, 255]);
+    const same = px();
+    adjustPixels(same, BLANK.adjust, 'none');
+    expect([...same]).toEqual([...px()]);
+    const mono = px();
+    adjustPixels(mono, BLANK.adjust, 'mono');
+    expect(mono[0]).toBe(mono[1]);
+    expect(mono[1]).toBe(mono[2]);
+    const bright = px();
+    adjustPixels(bright, { ...BLANK.adjust, brightness: 50 }, 'none');
+    expect(bright[4]!).toBeGreaterThan(30);
+    const warm = px();
+    adjustPixels(warm, { ...BLANK.adjust, temperature: 50 }, 'none');
+    expect(warm[0]!).toBeGreaterThan(200);
+    expect(warm[2]!).toBeLessThan(50);
+    expect(warm[3]).toBe(255);
+    expect(ADJUSTMENTS).toHaveLength(11);
+  });
+
+  it('says what was done, and keeps the file type where it can', () => {
+    expect(summary({ ...BLANK, rotate: 90, adjust: { ...BLANK.adjust, contrast: 10 }, look: 'warm' })).toBe('Edited: turned 90°; adjusted contrast; warm look');
+    expect(outputType('jpg').mime).toBe('image/jpeg');
+    expect(outputType('gif')).toEqual({ mime: 'image/png', ext: 'png' });
+  });
+});
+
+describe('the code editor', () => {
+  it('reads how a file indents', () => {
+    expect(indentOf('a\n    b\n        c')).toEqual({ tabs: false, size: 4 });
+    expect(indentOf('a\n\tb\n\t\tc')).toEqual({ tabs: true, size: 1 });
+    expect(indentOf('flat\ntext')).toEqual({ tabs: false, size: 2 });
+  });
+
+  it('formats JSON again, and tidies other text', () => {
+    expect(formatText('{"a":1,"b":[1,2]}', 'json', { tabs: false, size: 2 })).toBe('{\n  "a": 1,\n  "b": [\n    1,\n    2\n  ]\n}\n');
+    expect(formatText('one  \ntwo\t\n\n\n', 'md', { tabs: false, size: 2 })).toBe('one\ntwo\n');
+    expect(formatText('{broken', 'json', { tabs: false, size: 2 })).toBe('{broken\n');
+  });
+});
+
+describe('the media player', () => {
+  it('shows times as minutes and seconds, and hours past an hour', () => {
+    expect(clock(0)).toBe('00:00');
+    expect(clock(134_000)).toBe('02:14');
+    expect(clock(3_723_000)).toBe('1:02:03');
   });
 });

@@ -1,7 +1,7 @@
 import { shell } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { createWriteStream, existsSync } from 'node:fs';
-import { lstat, mkdir, open, realpath, rename, stat, unlink } from 'node:fs/promises';
+import { lstat, mkdir, open, readdir, realpath, rename, stat, unlink } from 'node:fs/promises';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import type { PickedFile, UploadTarget } from '@shared/ipc/contract';
 import type { Transfer, TransferState } from '@shared/types';
@@ -34,6 +34,7 @@ interface Handle {
   path: string;
   name: string;
   size: number;
+  relativePath?: string;
 }
 
 interface Meta {
@@ -49,6 +50,8 @@ interface Meta {
   tempPath: string | null;
   finalPath: string | null;
   openWhenDone: boolean;
+  /** Inside an uploaded folder: where the server puts it, folders made as needed. */
+  relativePath?: string | null;
 }
 
 interface Live {
@@ -70,6 +73,30 @@ export interface TransferDeps {
 }
 
 const MAX_UPLOAD = 5 * 1024 * 1024 * 1024;
+const MAX_FOLDER_FILES = 2000;
+
+/**
+ * Every file under a folder, depth first, with its path inside the folder
+ * (the folder's own name first). Hidden files, symbolic links and anything
+ * past 20 levels are left out.
+ */
+export async function walkFolder(root: string): Promise<Array<{ path: string; size: number; relativePath: string }>> {
+  const out: Array<{ path: string; size: number; relativePath: string }> = [];
+  const top = basename(root);
+  const visit = async (dir: string, rel: string, depth: number): Promise<void> => {
+    if (depth > 20 || out.length > MAX_FOLDER_FILES) return;
+    const entries = await readdir(dir, { withFileTypes: true });
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    for (const e of entries) {
+      if (e.name.startsWith('.') || e.isSymbolicLink()) continue;
+      const full = join(dir, e.name);
+      if (e.isDirectory()) await visit(full, `${rel}/${e.name}`, depth + 1);
+      else if (e.isFile()) out.push({ path: full, size: (await stat(full)).size, relativePath: `${rel}/${e.name}` });
+    }
+  };
+  await visit(root, top, 0);
+  return out;
+}
 const CHUNK = 8 * 1024 * 1024;
 
 export class TransferManager {
@@ -82,18 +109,30 @@ export class TransferManager {
 
   // ── handles ────────────────────────────────────────────────────────────
 
-  /** Validates user-chosen paths and returns opaque handles for them. */
+  /**
+   * Validates user-chosen paths and returns opaque handles for them. A folder
+   * is opened up: every file in it (not hidden ones, not through links) gets
+   * a handle carrying its path inside the folder, the folder's name first.
+   */
   async register(paths: string[]): Promise<PickedFile[]> {
     const out: PickedFile[] = [];
+    const add = (real: string, size: number, relativePath?: string) => {
+      if (size > MAX_UPLOAD) throw new DesktopError('IPC_VALIDATION_FAILED', `${basename(real)} is larger than 5 GB.`);
+      const handle = randomUUID();
+      this.handles.set(handle, { path: real, name: basename(real), size, ...(relativePath ? { relativePath } : {}) });
+      out.push({ handle, name: basename(real), size, ...(relativePath ? { relativePath } : {}) });
+    };
     for (const p of paths) {
       try {
         const real = await realpath(p);
         const st = await lstat(real);
-        if (!st.isFile()) continue; // folders are Phase 2 (Drive sync)
-        if (st.size > MAX_UPLOAD) throw new DesktopError('IPC_VALIDATION_FAILED', `${basename(real)} is larger than 5 GB.`);
-        const handle = randomUUID();
-        this.handles.set(handle, { path: real, name: basename(real), size: st.size });
-        out.push({ handle, name: basename(real), size: st.size });
+        if (st.isFile()) add(real, st.size);
+        else if (st.isDirectory()) {
+          for (const f of await walkFolder(real)) {
+            if (out.length >= MAX_FOLDER_FILES) throw new DesktopError('IPC_VALIDATION_FAILED', `That folder has more than ${MAX_FOLDER_FILES.toLocaleString()} files. Upload it in parts.`);
+            add(f.path, f.size, f.relativePath);
+          }
+        }
       } catch (e) {
         if (isDesktopError(e)) throw e;
         log.info('dropped path rejected', { error: String(e) });
@@ -299,7 +338,7 @@ export class TransferManager {
       const t: Transfer = {
         id: randomUUID(),
         direction: 'upload',
-        name: file.name,
+        name: file.relativePath ?? file.name,
         source: file.path,
         destination: target.kind === 'chat' ? 'Chat' : target.kind === 'task' ? 'Task' : 'WorkSuite Files',
         bytes: 0,
@@ -309,7 +348,7 @@ export class TransferManager {
         error: null,
         createdAt: new Date().toISOString(),
       };
-      const meta: Meta = { path: file.path, fileId: null, uploadId: null, target, chunkSize: null, totalChunks: null, sha256: null, tempPath: null, finalPath: null, openWhenDone: false };
+      const meta: Meta = { path: file.path, fileId: null, uploadId: null, target, chunkSize: null, totalChunks: null, sha256: null, tempPath: null, finalPath: null, openWhenDone: false, relativePath: target.kind === 'files' ? (file.relativePath ?? null) : null };
       const l: Live = { t, meta, abort: null, samples: [] };
       this.live.set(t.id, l);
       this.persist(l);
@@ -340,11 +379,12 @@ export class TransferManager {
       }
       if (!meta.uploadId) {
         const init = await this.deps.http.post<{ upload_id: string; chunk_size: number; total_chunks: number }>('/api/uploads/init', {
-          filename: l.t.name,
+          filename: basename(meta.path),
           total_size: st.size,
           chunk_size: CHUNK,
           sha256: meta.sha256,
-          mime_type: mimeFor(l.t.name) ?? undefined,
+          mime_type: mimeFor(basename(meta.path)) ?? undefined,
+          ...(meta.relativePath ? { relative_path: meta.relativePath } : {}),
           // A task's files are Drive files (in the top folder, as the web's are), linked to the task once they are in.
           ...(meta.target.kind === 'files' ? { purpose: 'drive', folder_id: meta.target.folderId } : meta.target.kind === 'task' ? { purpose: 'drive', folder_id: null } : { purpose: 'chat', room_id: meta.target.roomId }),
         });

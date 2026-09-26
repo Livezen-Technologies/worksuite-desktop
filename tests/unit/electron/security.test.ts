@@ -123,6 +123,11 @@ describe('IPC pipeline (§3.4, WF-05)', () => {
 describe('API proxy (renderer never sees credentials)', () => {
   it('forwards module APIs and refuses credential-bearing ones', () => {
     expect(isProxyPathAllowed('/api/tasks?filter=mine')).toBe(true);
+    expect(isProxyPathAllowed('/media/NzkwNy5vcmlnaW5hbA~180geGJ5Vzlmi1I93nu2bYLNujC65W_ZzUpw0xred4w')).toBe(true);
+    expect(isProxyPathAllowed('/media/NzkwNy5vcmlnaW5hbA~180geGJ5Vzl?download=1')).toBe(true);
+    expect(isProxyPathAllowed('/media/../api/auth/login')).toBe(false);
+    expect(isProxyPathAllowed('/media/hls/abc/master.m3u8')).toBe(false);
+    expect(isProxyPathAllowed('/fd/token')).toBe(false);
     expect(isProxyPathAllowed('/api/auth/me')).toBe(true);
     for (const p of ['/api/auth/login', '/api/auth/refresh', '/api/auth/mfa', '/api/notifications/realtime-ticket', '/api/sync/hello', '/api/../admin', '/admin', '/api//x']) {
       expect(isProxyPathAllowed(p), p).toBe(false);

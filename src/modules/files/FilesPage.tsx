@@ -17,7 +17,11 @@ import { lockPassword } from './locks';
 import type { MenuItem } from './Menu';
 import { Preview } from './Preview';
 import { Rail, type Place } from './Rail';
+import { CodeEditor } from './CodeEditor';
+import { ImageEditor } from './ImageEditor';
+import { MediaViewer } from './MediaViewer';
 import { ShareDialog } from './Share';
+import { UploadTray, UrlDownloads } from './Trays';
 import { Shared } from './Shared';
 import { Companies, Duplicates, Links, Notifications, Storage, Trash } from './Views';
 
@@ -72,6 +76,8 @@ export default function FilesPage(_props: ModuleProps) {
   useTabTitle(place.view === 'home' ? 'Files' : `Files · ${TITLES[place.view]}`);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [preview, setPreview] = useState<{ files: DriveFile[]; index: number } | null>(null);
+  const [editor, setEditor] = useState<{ kind: 'code' | 'image'; file: DriveFile } | { kind: 'media'; files: DriveFile[]; index: number } | null>(null);
+  const [urlTray, setUrlTray] = useState(false);
   const [detailsAsk, setDetailsAsk] = useState<{ key: Key; tab?: string; n: number } | null>(null);
   const now = useNow(60_000);
   const perms = useStore(app, (s) => s.bootstrap?.permissions ?? []);
@@ -110,6 +116,18 @@ export default function FilesPage(_props: ModuleProps) {
       toast('error', errorMessage(e));
     } finally {
       refresh();
+    }
+  };
+
+  const uploadFolder = async () => {
+    try {
+      const picked = await call('files:pickFolder', { title: 'Upload a folder to WorkSuite Files' });
+      if (!picked.length) return;
+      await call('transfers:upload', { handles: picked.map((p) => p.handle), target: { kind: 'files', folderId: folderId === null ? null : String(folderId) } });
+      const top = picked[0]?.relativePath?.split('/')[0] ?? 'the folder';
+      toast('info', `Uploading “${top}” — ${picked.length} ${picked.length === 1 ? 'file' : 'files'}, in their folders.`);
+    } catch (e) {
+      toast('error', errorMessage(e));
     }
   };
 
@@ -170,6 +188,11 @@ export default function FilesPage(_props: ModuleProps) {
         const all = (list ?? [f]).filter((x) => openWay(x) === 'preview');
         return setPreview({ files: all.length ? all : [f], index: Math.max(0, all.findIndex((x) => x.id === f.id)) });
       }
+      if (way === 'media') {
+        const all = (list ?? [f]).filter((x) => openWay(x) === 'media');
+        return setEditor({ kind: 'media', files: all.length ? all : [f], index: Math.max(0, all.findIndex((x) => x.id === f.id)) });
+      }
+      if (way === 'code') return setEditor({ kind: 'code', file: f });
       void apiPost(`/api/drive/opened/${f.id}`, { action: 'opened' }).catch(() => undefined);
       if (way === 'pdf') void call('app:openInBrowser', { path: `/pdf?file=${f.id}&mode=read` });
       else if (way === 'office') d.office(f);
@@ -258,6 +281,9 @@ export default function FilesPage(_props: ModuleProps) {
       go(`/files?${s}`);
     },
     office: (f) => void call('app:openInBrowser', { path: `/editor/${f.id}` }),
+    editText: (f) => setEditor({ kind: 'code', file: f }),
+    editImage: (f) => (setPreview(null), setEditor({ kind: 'image', file: f })),
+    play: (files, index) => setEditor({ kind: 'media', files, index }),
     inBrowser: (f) => void call('app:openInBrowser', { path: `/files?file=${f.id}` }),
     newFolder: () =>
       setDialog({
@@ -296,6 +322,8 @@ export default function FilesPage(_props: ModuleProps) {
     { label: 'New folder', hint: '⇧⌘N', tag: { text: 'DIR', tone: TONE.folder! }, run: d.newFolder },
     { sep: true },
     { label: 'Upload files…', tag: { text: 'UP', tone: TONE.code! }, run: d.upload },
+    { label: 'Upload folder…', tag: { text: 'UP', tone: TONE.code! }, run: () => void uploadFolder() },
+    ...(perms.includes('urls.manage') ? [{ label: 'Download from URL or magnet…', tag: { text: 'URL', tone: TONE.image! }, run: () => setUrlTray(true) }] : []),
     { sep: true },
     ...DOCS.map(([ext, tag, label, base]) => ({
       label,
@@ -349,7 +377,7 @@ export default function FilesPage(_props: ModuleProps) {
           canPartners={perms.includes('files.permissions.manage')}
         />
         {view === 'home' ? <Home onPlace={onPlace} now={now} /> : null}
-        {listView ? <Explorer key={`${view}:${place.folder}:${query.get('q') ?? ''}`} place={place} active={active && !dialog && !preview} onPlace={(p) => onPlace(p)} ask={detailsAsk} initialQ={query.get('q') ?? ''} /> : null}
+        {listView ? <Explorer key={`${view}:${place.folder}:${query.get('q') ?? ''}`} place={place} active={active && !dialog && !preview && !editor} onPlace={(p) => onPlace(p)} ask={detailsAsk} initialQ={query.get('q') ?? ''} /> : null}
         {view === 'shared' ? <Shared onPlace={(p) => onPlace(p)} /> : null}
         {view === 'trash' ? <Trash /> : null}
         {view === 'storage' ? <Storage onPlace={(p) => onPlace(p)} /> : null}
@@ -359,6 +387,13 @@ export default function FilesPage(_props: ModuleProps) {
         {view === 'companies' ? <Companies /> : null}
       </div>
       {preview ? <Preview files={preview.files} start={preview.index} onClose={() => setPreview(null)} /> : null}
+      {editor?.kind === 'code' ? <CodeEditor key={editor.file.id} file={editor.file} onClose={() => (setEditor(null), refresh())} /> : null}
+      {editor?.kind === 'image' ? <ImageEditor key={editor.file.id} file={editor.file} onClose={() => (setEditor(null), refresh())} /> : null}
+      {editor?.kind === 'media' ? <MediaViewer files={editor.files} start={editor.index} onClose={() => (setEditor(null), refresh())} /> : null}
+      <div className="pointer-events-none fixed right-5 bottom-10 z-40 flex flex-col items-end gap-2.5 [&>*]:pointer-events-auto">
+        {urlTray ? <UrlDownloads folderId={folderId} folderName={folderId ? (nameIn(tree, folderId) ?? 'this folder') : 'My Drive'} onClose={() => setUrlTray(false)} onOpenFolder={(id) => onPlace({ view: 'folder', folder: id })} /> : null}
+        {!editor && !preview ? <UploadTray /> : null}
+      </div>
       {dialog?.kind === 'name' ? <NameDialog title={dialog.title} initial={dialog.initial} action={dialog.action} onClose={() => setDialog(null)} onSave={dialog.save} /> : null}
       {dialog?.kind === 'confirm' ? <ConfirmDialog title={dialog.title} body={dialog.body} action={dialog.action} danger onClose={() => setDialog(null)} onYes={dialog.run} /> : null}
       {dialog?.kind === 'pick' ? <FolderPicker items={dialog.items} mode={dialog.mode} onClose={() => setDialog(null)} onPick={(folder, name) => moveTo(dialog.items, folder, name, dialog.mode)} /> : null}

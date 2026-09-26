@@ -6,7 +6,7 @@ import { bytes, dateLabel, listStamp, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, ErrorNote, Spinner, cx } from '../../components/ui';
-import { can, openWay, type DriveFile, type DriveFolder, type ItemAccess } from './api';
+import { IMAGE_EDIT_EXTS, can, extOf, openWay, type DriveFile, type DriveFolder, type ItemAccess } from './api';
 import { fileMenu, folderMenu, useDrive, type Item } from './ctx';
 import { PopMenu, below, type MenuItem } from './Menu';
 import { FolderIcon, Tile } from './Thumb';
@@ -56,11 +56,12 @@ export function Details({ item, list, onClose, tab: firstTab }: { item: Item; li
         <div className="flex flex-wrap gap-1.5">
           {isFile ? (
             <button type="button" onClick={() => d.open(item, list)} className="flex h-[30px] items-center rounded-[7px] bg-primary px-2.5 text-[12px] font-bold text-white hover:bg-primary-hover">
-              {way === 'office' ? 'Edit in Office' : way === 'archive' ? 'View contents' : way === 'pdf' ? 'Read PDF' : way === 'preview' ? 'Open' : 'Download'}
+              {way === 'office' ? 'Edit in Office' : way === 'archive' ? 'View contents' : way === 'pdf' ? 'Read PDF' : way === 'code' ? (can(item.f.access, 'edit') ? 'Edit' : 'Open') : way === 'media' ? 'Play' : way === 'preview' ? 'Open' : 'Download'}
             </button>
           ) : (
             <button type="button" onClick={() => d.openFolder(item.f.id)} className="flex h-[30px] items-center rounded-[7px] bg-primary px-2.5 text-[12px] font-bold text-white hover:bg-primary-hover">Open</button>
           )}
+          {isFile && IMAGE_EDIT_EXTS.includes(extOf(item.f.name, item.f.extension)) && can(f.access, 'upload_version') ? <button type="button" onClick={() => d.editImage(item.f)} className="h-[30px] rounded-[7px] border border-line px-2.5 text-[12px] font-semibold text-ink hover:bg-subtle">Edit image</button> : null}
           {can(f.access, 'share') ? <button type="button" onClick={() => d.share(item)} className="h-[30px] rounded-[7px] border border-line px-2.5 text-[12px] font-semibold text-ink hover:bg-subtle">Share…</button> : null}
           {isFile && can(f.access, 'download') ? <button type="button" onClick={() => d.download([item.f], true)} className="h-[30px] rounded-[7px] border border-line px-2.5 text-[12px] font-semibold text-ink hover:bg-subtle">Open locally</button> : null}
           <button type="button" aria-label="More actions" onClick={(e) => setMenu(below(e.currentTarget, 'right'))} className="h-[30px] w-[30px] rounded-[7px] border border-line text-[15px] font-bold text-ink-2 hover:bg-subtle">⋯</button>

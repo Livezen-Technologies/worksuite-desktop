@@ -249,20 +249,26 @@ export const OFFICE_EXTS = ['doc', 'docx', 'odt', 'rtf', 'xls', 'xlsx', 'ods', '
 export const TEXT_EXTS = ['txt', 'md', 'log', 'csv', ...KINDS.code!];
 export const PREVIEW_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'avif', 'mp4', 'm4v', 'webm', 'ogv', 'mov', 'mp3', 'm4a', 'aac', 'wav', 'ogg', 'oga', 'flac', 'opus', ...TEXT_EXTS];
 export const ZIP_EXTS = ['zip', 'rar', '7z', 'tar', 'gz', 'tgz'];
+export const MEDIA_EXTS = ['mp4', 'm4v', 'webm', 'ogv', 'mov', 'mkv', 'avi', 'mp3', 'm4a', 'aac', 'wav', 'ogg', 'oga', 'flac', 'opus'];
 
 /**
  * What opening a file does: preview it here, read a PDF or edit an Office
  * file on the web, look inside an archive, or save it.
  */
-export function openWay(f: Pick<DriveFile, 'name' | 'extension'>): 'preview' | 'pdf' | 'office' | 'archive' | 'download' {
+export function openWay(f: Pick<DriveFile, 'name' | 'extension'>): 'preview' | 'code' | 'media' | 'pdf' | 'office' | 'archive' | 'download' {
   const e = extOf(f.name, f.extension);
   if (e === 'svg') return 'download';
   if (e === 'pdf') return 'pdf';
-  if (PREVIEW_EXTS.includes(e) && !OFFICE_EXTS.includes(e)) return 'preview';
   if (OFFICE_EXTS.includes(e)) return 'office';
+  if (MEDIA_EXTS.includes(e)) return 'media';
+  if (TEXT_EXTS.includes(e)) return 'code';
+  if (PREVIEW_EXTS.includes(e)) return 'preview';
   if (ZIP_EXTS.includes(e)) return 'archive';
   return 'download';
 }
+
+/** Pictures the image editor saves back in their own type. */
+export const IMAGE_EDIT_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'];
 
 /* ---- Tree helpers ---- */
 

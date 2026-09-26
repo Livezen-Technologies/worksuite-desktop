@@ -36,6 +36,15 @@ describe('database', () => {
     expect(db.getConfig<{ origin: string }>('server')?.origin).toBe('https://x');
     expect(db.integrityCheck()).toBe('ok');
   });
+  it('answers nothing, rather than throwing, once closed (a late timer while quitting)', () => {
+    const db = new Database(':memory:');
+    db.close();
+    expect(db.isClosed).toBe(true);
+    expect(db.run('INSERT INTO config (key, value) VALUES (?, ?)', 'a', 'b')).toEqual({ changes: 0 });
+    expect(db.get('SELECT * FROM config')).toBeUndefined();
+    expect(db.all('SELECT * FROM config')).toEqual([]);
+    expect(() => db.close()).not.toThrow();
+  });
 });
 
 describe('offline cache (FR-OFF-01)', () => {

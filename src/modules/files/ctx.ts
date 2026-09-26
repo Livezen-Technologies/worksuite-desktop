@@ -1,6 +1,6 @@
 import { createContext, useContext, type DragEvent } from 'react';
 import type { MenuItem } from './Menu';
-import { OFFICE_EXTS, PREVIEW_EXTS, TONE, ZIP_EXTS, can, extOf, openWay, type DriveFile, type DriveFolder, type Key } from './api';
+import { IMAGE_EDIT_EXTS, OFFICE_EXTS, PREVIEW_EXTS, TONE, ZIP_EXTS, can, extOf, openWay, type DriveFile, type DriveFolder, type Key } from './api';
 
 /** A thing in the Drive: a file or a folder, as a row carries it. */
 export type Item = { type: 'file'; f: DriveFile } | { type: 'folder'; f: DriveFolder };
@@ -30,6 +30,10 @@ export interface Drive {
   star: (item: Item, on: boolean) => void;
   details: (item: Item, tab?: string) => void;
   office: (f: DriveFile) => void;
+  /** The code editor, the image editor and the media player (Files part 2). */
+  editText: (f: DriveFile) => void;
+  editImage: (f: DriveFile) => void;
+  play: (files: DriveFile[], index: number) => void;
   inBrowser: (f: DriveFile) => void;
   newFolder: () => void;
   upload: () => void;
@@ -57,6 +61,7 @@ export function fileMenu(f: DriveFile, d: Drive, list?: DriveFile[]): MenuItem[]
   const out: Array<MenuItem | null> = [
     { label: 'Open', hint: 'Enter', strong: true, run: () => d.open(item, list) },
     way === 'preview' ? null : PREVIEWABLE(e) ? { label: 'Preview', hint: 'Space', run: () => d.preview(list ?? [f], Math.max(0, (list ?? [f]).indexOf(f))) } : null,
+    IMAGE_EDIT_EXTS.includes(e) && (can(a, 'upload_version') || can(a, 'download')) ? { label: 'Edit image', icon: 'compose', run: () => d.editImage(f) } : null,
     OFFICE_EXTS.includes(e) && can(a, 'edit') ? { label: 'Edit in Office', icon: 'external', run: () => d.office(f) } : null,
     can(a, 'download') ? { label: 'Open locally', icon: 'laptop', run: () => d.download([f], true) } : null,
     { label: 'Open in the browser', icon: 'globe', run: () => d.inBrowser(f) },

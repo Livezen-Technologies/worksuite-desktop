@@ -4,7 +4,7 @@ import { apiGet } from '../../core/api';
 import { bytes, duration } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { Button, Spinner, cx } from '../../components/ui';
-import { TEXT_EXTS, can, extOf, kindOf, mediaUrl, opened, tagOf, type DriveFile, type Preview as PreviewInfo } from './api';
+import { IMAGE_EDIT_EXTS, TEXT_EXTS, can, extOf, kindOf, mediaUrl, opened, tagOf, type DriveFile, type Preview as PreviewInfo } from './api';
 import { useDrive } from './ctx';
 import { FileIcon } from './Thumb';
 
@@ -76,6 +76,10 @@ export function Preview({ files, start, onClose }: { files: DriveFile[]; start: 
         <span className="flex-1" />
         <button type="button" aria-label="Previous file" disabled={i === 0} onClick={() => setI(i - 1)} className="h-[34px] w-[34px] rounded-[8px] border border-[#2A3A66] text-[18px] hover:bg-white/10 disabled:opacity-30">‹</button>
         <button type="button" aria-label="Next file" disabled={i >= files.length - 1} onClick={() => setI(i + 1)} className="h-[34px] w-[34px] rounded-[8px] border border-[#2A3A66] text-[18px] hover:bg-white/10 disabled:opacity-30">›</button>
+        {how === 'image' && IMAGE_EDIT_EXTS.includes(extOf(f.name, f.extension)) && (can(f.access, 'upload_version') || can(f.access, 'download')) ? (
+          <button type="button" onClick={() => (onClose(), d.editImage(f))} className="h-[34px] rounded-[8px] bg-[#3B5BDB] px-3 font-bold text-white hover:brightness-110">Edit image</button>
+        ) : null}
+        {how === 'text' ? <button type="button" onClick={() => (onClose(), d.editText(f))} className="h-[34px] rounded-[8px] border border-[#2A3A66] px-3 font-semibold hover:bg-white/10">{can(f.access, 'edit') ? 'Edit' : 'Open in the editor'}</button> : null}
         {can(f.access, 'share') ? <button type="button" onClick={() => d.share({ type: 'file', f })} className="h-[34px] rounded-[8px] border border-[#2A3A66] px-3 font-semibold hover:bg-white/10">Share…</button> : null}
         {can(f.access, 'download') ? (
           <>

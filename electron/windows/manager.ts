@@ -54,6 +54,7 @@ export class WindowManager {
   private main: BrowserWindow | null = null;
   private kinds = new Map<number, WindowKind>();
   private saveTimers = new Map<number, NodeJS.Timeout>();
+  private stopped = false;
   quitting = false;
   minimizeToTray: () => boolean = () => true;
   onMainShown: () => void = () => undefined;
@@ -85,8 +86,29 @@ export class WindowManager {
     }
   }
 
+  /**
+   * On the way out: every open window's place is saved now, while the local
+   * database is still open, and nothing is saved after (a window closing
+   * during quit would otherwise write to a closed database).
+   */
+  saveAllAndStop(): void {
+    for (const t of this.saveTimers.values()) clearTimeout(t);
+    this.saveTimers.clear();
+    for (const win of BrowserWindow.getAllWindows()) {
+      const kind = this.kinds.get(win.id);
+      if (kind && kind !== 'ring') {
+        try {
+          this.saveLayout(win, kind);
+        } catch {
+          /* a window's place is a convenience */
+        }
+      }
+    }
+    this.stopped = true;
+  }
+
   private saveLayout(win: BrowserWindow, kind: WindowKind): void {
-    if (win.isDestroyed() || win.isMinimized() || win.isFullScreen()) return;
+    if (this.stopped || win.isDestroyed() || win.isMinimized() || win.isFullScreen()) return;
     const bounds = win.isMaximized() ? win.getNormalBounds() : win.getBounds();
     const display = screen.getDisplayMatching(bounds);
     this.db.run(
@@ -100,6 +122,7 @@ export class WindowManager {
   }
 
   private scheduleSave(win: BrowserWindow, kind: WindowKind): void {
+    if (this.stopped) return;
     const prev = this.saveTimers.get(win.id);
     if (prev) clearTimeout(prev);
     this.saveTimers.set(
