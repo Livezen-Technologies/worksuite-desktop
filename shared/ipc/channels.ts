@@ -32,6 +32,7 @@ export const INVOKE_CHANNELS = [
   'windows:open',
   'windows:setAlwaysOnTop',
   'windows:setCompact',
+  'windows:fitVideo',
   'windows:minimize',
   'windows:toggleMaximize',
   'windows:close',
@@ -53,6 +54,8 @@ export const INVOKE_CHANNELS = [
   'media:screenPick',
   'media:privacySettings',
   'calls:active',
+  'calls:list',
+  'calls:focus',
   'transfers:list',
   'transfers:download',
   'transfers:upload',
@@ -136,6 +139,7 @@ export const EVENT_CHANNELS = [
   'settings:changed',
   'organization:changed',
   'windows:changed',
+  'calls:changed',
 ] as const;
 
 export type EventChannel = (typeof EVENT_CHANNELS)[number];

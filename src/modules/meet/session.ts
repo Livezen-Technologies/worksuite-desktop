@@ -1,7 +1,8 @@
 import { DisconnectReason, Room, RoomEvent, Track, VideoPresets, type Participant, type RemoteParticipant } from 'livekit-client';
 import { ApiError, apiGet, apiPost, apiPut } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
-import { CLEAN_AUDIO } from '../calls/session';
+import { CLEAN_AUDIO, pauseOn, shareOn } from '../calls/session';
+import type { SharePick } from '../calls/ScreenPicker';
 import type { MeetInfo, Sfu } from './api';
 
 /**
@@ -48,6 +49,10 @@ export class MeetSession {
   room: Room | null = null;
   joinedAt: number | null = null;
   strokes: Stroke[] = [];
+  /** Who spoke last (not you), so the big picture stays on them in a pause. */
+  lastSpeaker: string | null = null;
+  /** What is being shared, in words. */
+  shareLabel: string | null = null;
   private version = 0;
   private listeners = new Set<() => void>();
   private audio = new Set<HTMLMediaElement>();
@@ -134,7 +139,10 @@ export class MeetSession {
       .on(RoomEvent.ParticipantConnected, refresh)
       .on(RoomEvent.ParticipantDisconnected, refresh)
       .on(RoomEvent.ParticipantMetadataChanged, refresh)
-      .on(RoomEvent.ActiveSpeakersChanged, refresh)
+      .on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
+        this.lastSpeaker = speakers.find((p) => !p.isLocal)?.identity ?? this.lastSpeaker;
+        refresh();
+      })
       .on(RoomEvent.TrackMuted, refresh)
       .on(RoomEvent.TrackUnmuted, refresh)
       .on(RoomEvent.LocalTrackPublished, refresh)
@@ -209,6 +217,8 @@ export class MeetSession {
     if (!lp) return;
     this.joinedAt = this.joinedAt ?? Date.now();
     this.phase = 'in';
+    // The main window shows "in a meeting" and brings this window back.
+    void call('calls:active', { uuid: this.uuid, kind: 'meet', title: this.info?.title || 'Meeting' }).catch(() => undefined);
     this.changed();
     if (this.wants.mic) await lp.setMicrophoneEnabled(true).catch((e) => this.note(`The microphone could not start: ${errorMessage(e)}`));
     if (this.wants.cam) await lp.setCameraEnabled(true).catch((e) => this.note(`The camera could not start: ${errorMessage(e)}`));
@@ -237,18 +247,25 @@ export class MeetSession {
     this.changed();
   }
 
-  async share(sourceId: string | null): Promise<void> {
+  /** Share what was picked, switch to something else, or stop (the meeting and cameras go on). */
+  async share(pick: SharePick | null): Promise<void> {
     const lp = this.room?.localParticipant;
     if (!lp) return;
     try {
-      if (sourceId === null) await lp.setScreenShareEnabled(false);
-      else {
-        await call('media:screenPick', { id: sourceId });
-        await lp.setScreenShareEnabled(true, { audio: false });
-      }
+      await shareOn(lp, pick);
+      this.shareLabel = pick ? pick.name : null;
     } catch (e) {
       this.note(errorMessage(e));
     }
+    this.changed();
+  }
+
+  get sharePaused(): boolean {
+    return !!this.room?.localParticipant.getTrackPublication(Track.Source.ScreenShare)?.isMuted;
+  }
+
+  async pauseShare(paused: boolean): Promise<void> {
+    await pauseOn(this.room?.localParticipant, paused).catch((e) => this.note(errorMessage(e)));
     this.changed();
   }
 
@@ -310,6 +327,8 @@ export class MeetSession {
   }
 
   private teardown(): void {
+    void call('calls:active', { uuid: null, kind: 'meet' }).catch(() => undefined);
+    this.shareLabel = null;
     for (const el of this.audio) el.remove();
     this.audio.clear();
     const room = this.room;

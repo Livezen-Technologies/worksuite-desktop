@@ -47,6 +47,8 @@ for (const type of ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const) {
 
 const api = {
   platform: process.platform,
+  // Set only for unpackaged test runs (the window manager passes it).
+  e2e: process.argv.includes('--ws-e2e'),
   app: {
     info: call('app:info'),
     quit: call('app:quit'),
@@ -79,6 +81,7 @@ const api = {
     open: call('windows:open'),
     setAlwaysOnTop: call('windows:setAlwaysOnTop'),
     setCompact: call('windows:setCompact'),
+    fitVideo: call('windows:fitVideo'),
     minimize: call('windows:minimize'),
     toggleMaximize: call('windows:toggleMaximize'),
     close: call('windows:close'),
@@ -114,6 +117,8 @@ const api = {
   },
   calls: {
     active: call('calls:active'),
+    list: call('calls:list'),
+    focus: call('calls:focus'),
   },
   transfers: {
     list: call('transfers:list'),

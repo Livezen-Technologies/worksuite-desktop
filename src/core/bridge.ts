@@ -21,6 +21,8 @@ type Fn = (payload?: unknown) => Promise<unknown>;
 
 interface Bridge {
   platform: string;
+  /** An unpackaged test run (WS_E2E_FAKE_MEDIA): test-only surfaces may show. */
+  e2e?: boolean;
   files: { registerDropped: (files: File[]) => Promise<unknown> };
   events: { on: (channel: EventChannel, cb: (payload: unknown) => void) => () => void };
   [ns: string]: unknown;
@@ -38,6 +40,7 @@ export function hasDesktop(): boolean {
 
 export const platform: string = typeof window !== 'undefined' ? (window.worksuite?.platform ?? 'browser') : 'node';
 export const isMac = platform === 'darwin';
+export const isE2E: boolean = typeof window !== 'undefined' && window.worksuite?.e2e === true;
 
 export async function call<C extends InvokeChannel>(channel: C, ...args: InputOf<C> extends undefined | null ? [input?: InputOf<C>] : [input: InputOf<C>]): Promise<Outputs[C]> {
   const [ns, method] = channel.split(':') as [string, string];

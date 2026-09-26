@@ -14,7 +14,7 @@ const PICK_TTL = 60_000;
  * receive exactly that source — once.
  */
 export class ScreenShare {
-  private picks = new Map<number, { id: string; at: number }>();
+  private picks = new Map<number, { id: string; at: number; audio: boolean }>();
 
   constructor(private readonly trusted: (url: string) => boolean) {}
 
@@ -29,8 +29,13 @@ export class ScreenShare {
     };
   }
 
-  pick(webContentsId: number, id: string): void {
-    this.picks.set(webContentsId, { id, at: Date.now() });
+  /**
+   * `audio`: the computer's sound goes with the picture. Only Windows can
+   * capture it (Chromium's "loopback"); elsewhere it is ignored, and the
+   * picker does not offer it.
+   */
+  pick(webContentsId: number, id: string, audio = false): void {
+    this.picks.set(webContentsId, { id, at: Date.now(), audio });
   }
 
   install(ses: Session): void {
@@ -48,7 +53,7 @@ export class ScreenShare {
         (all) => {
           const source = all.find((s) => s.id === pick.id);
           if (!source) log.info('picked source is gone', { id: pick.id });
-          callback(source ? { video: source } : {});
+          callback(source ? { video: source, ...(pick.audio && process.platform === 'win32' ? { audio: 'loopback' as const } : {}) } : {});
         },
         () => callback({}),
       );

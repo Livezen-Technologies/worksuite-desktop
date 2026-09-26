@@ -5,6 +5,86 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-26 — 0.2.21: calls and meetings, redrawn around the shared screen
+
+**Changed**
+
+- **One call surface for video calls and meetings** (CallWorkspace), laid out
+  by a single set of rules (`calls/ui/layout.ts`) instead of each screen
+  deciding for itself.
+  - **A shared screen is the main view, and the camera stays.** Before, a
+    screen share replaced the other person's video. Now their camera sits
+    in a picture-in-picture box, with your own small view inside it.
+    - Drag the box anywhere; it settles in the nearest corner.
+    - Resize it from its inner corner; the size and corner are remembered.
+    - It keeps clear of the controls.
+    - Hide it, and a chip brings it back.
+  - **The screen is never cropped.** It uses object-fit: contain, centred
+    on a dark stage. Cameras fill their tiles, with a Fit/Fill choice under
+    More.
+  - **Layouts** (the grid button): Auto, Focus, Side by side and Grid.
+    - While something is shared: Focus puts people in the corner, Side by
+      side puts them in a column, and Grid puts them in a strip under the
+      screen.
+    - Otherwise: the speaker large with you in the corner for two people, a
+      grid for three to nine, and the speaker with a strip for more.
+    - The strip scrolls sideways and folds away.
+  - **One compact control bar** floats over the stage: mic, sound, camera,
+    share, chat, layout, more, and hang up. It fades when the mouse is still
+    and stays while you use it.
+  - **Sharing has its own menu:**
+    - Share something else (switch without stopping);
+    - Pause sharing (the others see "Screen sharing paused");
+    - Stop sharing.
+
+    A line above the bar says what you are sharing. On Windows you can share
+    the computer's sound too.
+  - **The panel sits beside the stage, not over it:** Conversation for a
+    call; People, Chat, Board, Files and Info for a meeting.
+    - Drag its edge to resize it (320–600 px, remembered).
+    - In a narrow window it lies over the call instead.
+    - Opening it only resizes the stage; the call is not touched.
+  - **Full screen** (header button, F11) takes the whole call surface, panel
+    and controls included. Esc or the button leaves it, and the panel,
+    layout and corner video are as they were.
+  - **The header** has Keep on top, Shrink to a floating window, Maximise
+    and Full screen.
+  - **The floating window is a card** (380 × 250) that stays on top of other
+    apps. It shows the shared screen with the speaker in its corner, or the
+    speaker, with mute, camera, chat, back to the call and hang up.
+  - **View options** under More: show or hide your own video, mirror it,
+    Fit or Fill, and the corner video.
+- **A voice call becomes the call surface when a picture appears.** That
+  means a camera or a shared screen on either side. Its narrow window grows
+  to a video call's size. Before, it stayed the voice design, with a small
+  picture on top and six big buttons under it.
+- **The meeting's whiteboard can go on the main stage.** Use On stage in
+  the Board panel, or More → Whiteboard on stage. People stay in the
+  corner, and Full screen makes the board fill the screen. The board now
+  redraws whenever it is resized.
+
+**Added**
+
+- **"In a meeting · Design review · 12:04" in the main window's title
+  bar**, for any call or meeting going on in another window. One click
+  brings that window back: out of the floating card, out of the Dock or
+  taskbar, and in front. Meetings now report themselves to the app the way
+  calls did. Closing a meeting's window does not post a call hang-up for
+  it.
+- `tests/e2e/call-layout.mjs` checks the layout in a real window without a
+  media server. It uses a test-only preview (`/calls/preview`) that shows
+  only in unpackaged runs started with `WS_E2E_FAKE_MEDIA`, with made-up
+  people and a canvas for the shared screen. It covers: the shared screen
+  with the corner video and chat, the layouts, full screen with the panel
+  inside it, the floating card and back, a grid, the speaker, the board on
+  stage, a paused share, and the main window's pill. The layout rules have
+  unit tests.
+
+Not yet: the AI tab in the panel, and remote control. The layout keeps room
+for remote control (Meet ENH-01), but it has no controls yet.
+
+---
+
 ## 2026-09-26 — 0.2.20: links in chat open, and the HR pickers leave out leavers
 
 **Fixed**

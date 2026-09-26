@@ -1,4 +1,5 @@
 import type { BrowserWindow } from 'electron';
+import type { ActiveCall } from '@shared/types';
 import { logger } from '../main/log';
 import type { WindowManager } from '../windows/manager';
 import type { HttpClient } from './http';
@@ -43,8 +44,10 @@ export function ringRoute(r: Partial<Ringing> | null | undefined): string | null
  */
 export class CallService {
   private rung = new Map<string, number>();
-  private active = new Map<number, string>();
+  private active = new Map<number, { uuid: string; kind: 'call' | 'meet'; title: string; since: number }>();
   onActiveChanged: (active: boolean) => void = () => undefined;
+  /** The list changed: main broadcasts it to every window (`calls:changed`). */
+  onListChanged: (list: ActiveCall[]) => void = () => undefined;
 
   constructor(
     private readonly windows: WindowManager,
@@ -97,33 +100,52 @@ export class CallService {
     // for a call this device is already in.
     const now = Date.now();
     for (const [u, at] of this.rung) if (now - at > 120_000) this.rung.delete(u);
-    if (this.rung.has(r.uuid) || [...this.active.values()].includes(r.uuid)) return;
+    if (this.rung.has(r.uuid) || [...this.active.values()].some((a) => a.uuid === r.uuid)) return;
     this.rung.set(r.uuid, now);
     this.windows.open('ring', route, 'Incoming WorkSuite call', true);
   }
 
-  /** The call a window is in (null when it has left). */
-  setActive(win: BrowserWindow, uuid: string | null): void {
+  /**
+   * The call or meeting a window is in (null when it has left). A chat call
+   * is hung up on the server when its window closes; a meeting is left by
+   * its media connection closing with the window, so there is nothing to
+   * post.
+   */
+  setActive(win: BrowserWindow, uuid: string | null, meta: { kind: 'call' | 'meet'; title: string } = { kind: 'call', title: '' }): void {
     const id = win.id;
-    const had = this.active.has(id);
-    if (uuid && UUID.test(uuid)) this.active.set(id, uuid);
+    const had = this.active.get(id);
+    if (uuid && UUID.test(uuid)) this.active.set(id, { uuid, kind: meta.kind, title: meta.title.slice(0, 200), since: had?.uuid === uuid ? had.since : Date.now() });
     else this.active.delete(id);
     if (!had && this.active.has(id)) {
       win.once('closed', () => {
         const left = this.active.get(id);
         this.active.delete(id);
-        this.onActiveChanged(this.active.size > 0);
-        if (left) void this.hangUp(left);
+        this.changed();
+        if (left?.kind === 'call') void this.hangUp(left.uuid);
       });
     }
+    this.changed();
+  }
+
+  has(windowId: number): boolean {
+    return this.active.has(windowId);
+  }
+
+  /** What this device is in, for the main window's "in a call" pill. */
+  list(): ActiveCall[] {
+    return [...this.active.entries()].map(([windowId, a]) => ({ windowId, kind: a.kind, title: a.title, since: a.since }));
+  }
+
+  private changed(): void {
     this.onActiveChanged(this.active.size > 0);
+    this.onListChanged(this.list());
   }
 
   /** Quitting: leave every call this device is in. */
   async endAll(): Promise<void> {
-    const calls = [...this.active.values()];
+    const calls = [...this.active.values()].filter((a) => a.kind === 'call');
     this.active.clear();
-    await Promise.all(calls.map((u) => this.hangUp(u)));
+    await Promise.all(calls.map((a) => this.hangUp(a.uuid)));
   }
 
   private async hangUp(uuid: string): Promise<void> {

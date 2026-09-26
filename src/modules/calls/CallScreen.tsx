@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Track, type Participant } from 'livekit-client';
+import { Track } from 'livekit-client';
 import { call, errorMessage } from '../../core/bridge';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
 import { cx } from '../../components/ui';
 import { formatClock, VoiceRecorder } from '../chat/parts';
 import { Thread } from '../chat/Thread';
-import { CallAvatar, Pill, useNow, VideoView } from './parts';
+import { CallAvatar, Pill, useNow } from './parts';
 import { ScreenPicker } from './ScreenPicker';
 import { session, type CallParams } from './session';
+import { CallWorkspace } from './ui/CallWorkspace';
+import type { ControlButton, MenuEntry } from './ui/CoreCallControls';
+import { personOf } from './ui/people';
+import { callUi } from './ui/state';
 import { playTone, ringVolume, saveRingVolume } from './tones';
 import { VoiceWindow } from './VoiceWindow';
 
@@ -16,8 +20,8 @@ import { VoiceWindow } from './VoiceWindow';
 export function CallScreen() {
   const { query } = useTab();
   useSyncExternalStore(session.subscribe, session.snapshot);
-  const [picking, setPicking] = useState(false);
-  const [chat, setChat] = useState(true);
+  const ui = useSyncExternalStore(callUi.subscribe, callUi.get);
+  const [picking, setPicking] = useState<'start' | 'change' | null>(null);
   const [recording, setRecording] = useState(false);
   const [sent, setSent] = useState(false);
   const now = useNow();
@@ -128,48 +132,22 @@ export function CallScreen() {
       </div>
     ) : null;
 
-  const controls = (
-    <>
-      {live ? <Pill warn={muted && video} on={muted && !video} onClick={() => void s.toggleMic()}>{muted ? 'Unmute' : 'Mute'}</Pill> : null}
-      {live ? <Pill on={!s.sound} onClick={() => s.toggleSound()}>{video ? (s.sound ? 'Sound' : 'Sound off') : s.sound ? 'Speaker' : 'Speaker off'}</Pill> : null}
-      {s.phase === 'connected' ? (
-        <>
-          <Pill warn={video && !camera} onClick={() => void s.toggleCamera()}>{video ? (camera ? 'Camera on' : 'Camera off') : camera ? 'Stop video' : 'Add video'}</Pill>
-          <Pill on={sharing} onClick={() => (sharing ? void s.share(null) : setPicking(true))}>{sharing ? 'Stop sharing' : 'Share screen'}</Pill>
-          <Pill onClick={() => void s.toggleNoise()}>{s.noise ? 'Noise off' : 'Noise on'}</Pill>
-        </>
-      ) : null}
-      {s.phase === 'error' ? <Pill on onClick={() => s.params && void s.start(s.params)}>Retry</Pill> : null}
-      {video && s.phase === 'connected' ? <Pill onClick={() => setChat(!chat)}>{chat ? 'Hide chat' : 'Chat'}</Pill> : <Pill onClick={openChat}>Chat</Pill>}
-    </>
-  );
-
-  const end =
-    s.phase === 'ended' || s.phase === 'unreachable' ? (
-      <button type="button" onClick={() => void call('windows:close')} className="no-drag h-[46px] self-stretch rounded-[23px] bg-[#2A3A66] font-bold text-white">
-        Close
-      </button>
-    ) : s.phase === 'error' ? (
-      <button type="button" onClick={() => void s.hangUp(false).then(() => call('windows:close'))} className="no-drag h-[46px] self-stretch rounded-[23px] bg-[#C4321C] font-bold text-white">
-        End the call
-      </button>
-    ) : (
-      <button type="button" onClick={() => void s.hangUp()} className={cx('no-drag h-[46px] rounded-[23px] bg-[#C4321C] font-bold text-white hover:bg-[#A8291A]', video ? 'px-[22px]' : 'self-stretch')}>
-        {s.phase === 'ringing' && s.conn?.i_started ? 'Cancel call' : 'Hang up'}
-      </button>
-    );
-
   const picker = picking ? (
     <ScreenPicker
-      onClose={() => setPicking(false)}
-      onPick={(id) => {
-        setPicking(false);
-        void s.share(id);
+      changing={picking === 'change'}
+      onClose={() => setPicking(null)}
+      onPick={(pick) => {
+        setPicking(null);
+        void s.share(pick);
       }}
     />
   ) : null;
 
-  if (!video) {
+  // A voice call stays a voice call until somebody shows a picture: a camera
+  // or a shared screen, on either side. Then it is the call surface, and the
+  // shared screen gets the room it needs.
+  const anyVideo = !!lp?.isCameraEnabled || sharing || remotes.some((p) => !!p.getTrackPublication(Track.Source.Camera)?.track || !!p.getTrackPublication(Track.Source.ScreenShare)?.track);
+  if (!video && !anyVideo) {
     return (
       <VoiceWindow
         name={name}
@@ -178,7 +156,7 @@ export function CallScreen() {
         clock={clock}
         ringing={ringing}
         onChat={openChat}
-        onShare={() => (sharing ? void s.share(null) : setPicking(true))}
+        onShare={() => (sharing ? void s.share(null) : setPicking('start'))}
         problem={problem}
         unreachable={unreachable}
         picker={picker}
@@ -187,84 +165,90 @@ export function CallScreen() {
     );
   }
 
-  // Video: the stage shows a screen being shared first, else the people.
-  const shared = remotes.map((p) => ({ p, t: p.getTrackPublication(Track.Source.ScreenShare)?.track })).find((x) => x.t);
-  const cams = remotes.map((p) => ({ p, t: p.getTrackPublication(Track.Source.Camera)?.track }));
-  const self = lp?.getTrackPublication(Track.Source.Camera)?.track;
-  return (
-    <div className="flex h-full bg-[#0B1226] text-[13px] text-[#E6ECFA]">
-      <div className="flex min-w-0 flex-1 flex-col gap-3.5 p-4">
-        <div className="relative min-h-0 flex-1 overflow-hidden rounded-[14px] bg-[#24365F]">
-          {shared?.t ? (
-            <VideoView track={shared.t} className="h-full w-full object-contain" />
-          ) : cams.length > 1 ? (
-            <div className="grid h-full gap-2 p-2" style={{ gridTemplateColumns: `repeat(${cams.length > 4 ? 3 : 2}, minmax(0, 1fr))` }}>
-              {cams.map(({ p, t }) => <Tile key={p.identity} p={p} track={t} />)}
-            </div>
-          ) : cams[0]?.t && !cams[0].t.isMuted ? (
-            <VideoView track={cams[0].t} className="h-full w-full object-cover" />
-          ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-3">
-              <CallAvatar name={name} size={160} glow={ringing ? 'ring' : cams[0]?.p.isSpeaking ? 'speaking' : null} />
-              {s.phase !== 'connected' ? <span className={cx('font-mono', status[1])}>{status[0]}</span> : <span className="text-[#AFC0E8]">Camera off</span>}
-            </div>
-          )}
-          <div className="absolute top-4 left-4 flex flex-wrap gap-2">
-            <span className="rounded-[8px] bg-[rgba(11,18,38,.7)] px-2.5 py-[5px] font-bold">{name}</span>
-            <span className={cx('rounded-[8px] bg-[rgba(11,18,38,.7)] px-2.5 py-[5px] font-mono', status[1])}>{status[0]}</span>
-            {s.phase === 'connected' && s.noise ? <span className="rounded-[8px] bg-[rgba(18,61,51,.85)] px-2.5 py-[5px] font-semibold text-[#9EE6C3]">Noise cancellation is on</span> : null}
-          </div>
-          {self && camera ? (
-            <div className="absolute right-4 bottom-4 h-[136px] w-[220px] overflow-hidden rounded-[10px] border-2 border-[#7FA2FF] bg-[#3A4B7A]">
-              <VideoView track={self} mirror className="h-full w-full object-cover" />
-              <span className="absolute bottom-2 left-2 rounded-[6px] bg-[rgba(11,18,38,.7)] px-2 py-[3px] text-[12px] font-semibold">You</span>
-            </div>
-          ) : null}
-          {shared ? (
-            <div className="absolute bottom-4 left-4 rounded-[8px] bg-[rgba(11,18,38,.8)] px-3 py-2 text-[12px]">
-              {shared.p.name || 'Someone'} is sharing their screen
-            </div>
-          ) : sharing ? (
-            <div className="absolute bottom-4 left-4 rounded-[8px] bg-[rgba(11,18,38,.8)] px-3 py-2 text-[12px]">You are sharing your screen</div>
-          ) : null}
-          {s.problem || s.phase === 'unreachable' ? (
-            <div className="absolute inset-x-4 top-16 mx-auto flex max-w-[420px] flex-col gap-3">
-              {problem}
-              {unreachable}
-            </div>
-          ) : null}
-        </div>
-        <div role="toolbar" aria-label="Call controls" className="flex flex-wrap items-center justify-center gap-2.5 self-center rounded-2xl bg-[#16254F] px-3.5 py-2.5">
-          {controls}
-          {end}
-        </div>
-      </div>
-      {chat && roomId > 0 && s.phase === 'connected' ? (
-        <aside aria-label="Conversation" className="flex w-[330px] shrink-0 flex-col bg-surface text-ink">
-          <div className="flex h-12 items-center border-b border-line px-3.5">
-            <b className="flex-1">Conversation</b>
-            <button type="button" aria-label="Hide the conversation" onClick={() => setChat(false)} className="text-[16px] text-ink-2 hover:text-ink">
-              ×
-            </button>
-          </div>
-          <div className="min-h-0 flex-1">
-            <Thread roomId={String(roomId)} room={undefined} mini bare rooms={[]} />
-          </div>
-        </aside>
-      ) : null}
-      {picker}
-    </div>
-  );
-}
+  const people = [...(lp ? [personOf(lp, true)] : []), ...remotes.map((p) => personOf(p, false))];
+  const paused = s.sharePaused;
+  const panelOn = (tab: string) => ui.panelOpen && ui.panelTab === tab;
+  const buttons: ControlButton[] = live
+    ? [
+        { id: 'mic', icon: muted ? 'mic-off' : 'mic', label: muted ? 'Unmute' : 'Mute', tone: muted ? 'warn' : undefined, onClick: () => void s.toggleMic() },
+        { id: 'sound', icon: s.sound ? 'volume' : 'volume-off', label: s.sound ? 'Turn sound off' : 'Turn sound on', tone: s.sound ? undefined : 'warn', onClick: () => s.toggleSound() },
+        ...(s.phase === 'connected'
+          ? ([
+              { id: 'camera', icon: camera ? 'video' : 'video-off', label: camera ? 'Turn camera off' : 'Turn camera on', tone: camera ? undefined : 'warn', onClick: () => void s.toggleCamera() },
+              sharing
+                ? {
+                    id: 'share',
+                    icon: 'screen-share',
+                    label: 'Sharing — options',
+                    tone: 'active',
+                    menu: [
+                      { heading: `Sharing ${s.shareLabel ?? 'your screen'}` },
+                      { label: 'Share something else', hint: 'Another screen or window, without stopping', icon: 'monitor', onClick: () => setPicking('change') },
+                      { label: paused ? 'Resume sharing' : 'Pause sharing', hint: paused ? undefined : 'The other side sees "Screen sharing paused"', icon: paused ? 'play' : 'pause', onClick: () => void s.pauseShare(!paused) },
+                      { label: 'Stop sharing', icon: 'stop', danger: true, onClick: () => void s.share(null) },
+                    ],
+                  }
+                : { id: 'share', icon: 'screen-share', label: 'Share your screen', onClick: () => setPicking('start') },
+            ] as ControlButton[])
+          : []),
+        ...(roomId > 0 ? [{ id: 'chat', icon: 'chat', label: panelOn('Chat') ? 'Hide chat' : 'Chat', tone: panelOn('Chat') ? ('active' as const) : undefined, onClick: () => callUi.togglePanel('Chat') }] : []),
+      ]
+    : [];
+  const more: MenuEntry[] = s.phase === 'connected' ? [{ label: s.noise ? 'Noise suppression: on' : 'Noise suppression: off', icon: 'audio-lines', checked: s.noise, onClick: () => void s.toggleNoise() }] : [];
 
-function Tile({ p, track }: { p: Participant; track: Track | undefined }) {
+  const overlay =
+    s.phase !== 'connected' ? (
+      <div className="flex max-w-[420px] flex-col items-center gap-3 text-center">
+        <CallAvatar name={name} size={130} glow={ringing ? 'ring' : null} />
+        <b className="text-[18px]">{name}</b>
+        <span className={cx('font-mono', status[1])}>{status[0]}</span>
+        {problem}
+        {unreachable}
+        {s.phase === 'ended' || s.phase === 'unreachable' ? (
+          <button type="button" onClick={() => void call('windows:close')} className="no-drag h-10 rounded-full bg-[#2A3A66] px-6 font-bold text-white hover:bg-[#344777]">
+            Close
+          </button>
+        ) : s.phase === 'error' ? (
+          <div className="flex gap-2">
+            <button type="button" onClick={() => s.params && void s.start(s.params)} className="no-drag h-10 rounded-full bg-white px-5 font-bold text-[#0F1B3D]">Retry</button>
+            <button type="button" onClick={() => void s.hangUp(false).then(() => call('windows:close'))} className="no-drag h-10 rounded-full bg-[#C4321C] px-5 font-bold text-white">End the call</button>
+          </div>
+        ) : null}
+      </div>
+    ) : s.problem ? (
+      <div className="max-w-[420px]">{problem}</div>
+    ) : null;
+
   return (
-    <div className={cx('relative flex items-center justify-center overflow-hidden rounded-[12px] bg-[#2F4A7A]', p.isSpeaking && 'shadow-[inset_0_0_0_3px_#3DD68C]')}>
-      {track && !track.isMuted ? <VideoView track={track} className="h-full w-full object-cover" /> : <CallAvatar name={p.name || p.identity} size={84} />}
-      <span className="absolute bottom-2 left-2 rounded-[6px] bg-[rgba(11,18,38,.7)] px-2 py-[3px] text-[12px] font-semibold">
-        {p.name || 'Guest'}
-        {!p.isMicrophoneEnabled ? ' · Muted' : ''}
-      </span>
-    </div>
+    <>
+      <CallWorkspace
+        title={s.phase === 'connected' ? `Call in progress · ${name}` : video ? 'Video call' : 'Voice call'}
+        clock={clock}
+        badges={s.phase === 'connected' && s.noise ? <span className="hidden rounded-full bg-[rgba(18,61,51,.85)] px-2 py-0.5 text-[11.5px] font-semibold text-[#9EE6C3] md:inline">Noise suppression on</span> : null}
+        people={people}
+        lastSpeaker={s.lastSpeaker}
+        overlay={overlay}
+        tabs={
+          roomId > 0 && s.phase === 'connected'
+            ? [
+                {
+                  id: 'Chat',
+                  label: 'Conversation',
+                  content: (
+                    <div className="h-full">
+                      <Thread roomId={String(roomId)} room={undefined} mini bare rooms={[]} />
+                    </div>
+                  ),
+                },
+              ]
+            : []
+        }
+        buttons={buttons}
+        more={more}
+        end={{ label: s.phase === 'ringing' && s.conn?.i_started ? 'Cancel the call' : 'Hang up', onClick: () => void s.hangUp() }}
+        status={sharing ? (paused ? `Sharing ${s.shareLabel ?? 'your screen'} — paused` : `You are sharing ${s.shareLabel ?? 'your screen'}`) : null}
+      />
+      {picker}
+    </>
   );
 }

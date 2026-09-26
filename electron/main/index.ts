@@ -252,6 +252,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   calls.onActiveChanged = (a) => {
     activeCall = a;
   };
+  calls.onListChanged = (list) => broadcast('calls:changed', list);
   const busy = () => {
     const id = sessionCtl.userId();
     const c = transfers.activeCounts();

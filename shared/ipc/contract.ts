@@ -15,6 +15,7 @@
 import { z } from 'zod';
 import type { InvokeChannel } from './channels';
 import type {
+  ActiveCall,
   AppInfo,
   AuthState,
   Bootstrap,
@@ -155,7 +156,8 @@ export const contract = {
     { session: true, rate: 4 },
   ),
   'windows:setAlwaysOnTop': ch(z.object({ value: z.boolean() }), { session: true }),
-  'windows:setCompact': ch(z.object({ value: z.boolean() }), { session: true }),
+  'windows:setCompact': ch(z.object({ value: z.boolean(), shape: z.enum(['bar', 'card']).optional() }), { session: true }),
+  'windows:fitVideo': ch(none, { session: true }),
   'windows:minimize': ch(none, { whileLocked: true }),
   'windows:toggleMaximize': ch(none, { whileLocked: true }),
   'windows:close': ch(none, { whileLocked: true }),
@@ -175,9 +177,19 @@ export const contract = {
 
   'media:access': ch(z.object({ kind: z.enum(['microphone', 'camera']) }), { session: true, rate: 5 }),
   'media:screenSources': ch(none, { session: true, rate: 3 }),
-  'media:screenPick': ch(z.object({ id: z.string().min(1).max(200) }), { session: true, rate: 3 }),
+  'media:screenPick': ch(z.object({ id: z.string().min(1).max(200), audio: z.boolean().optional() }), { session: true, rate: 6 }),
   'media:privacySettings': ch(z.object({ pane: z.enum(['microphone', 'camera', 'screen']) }), { session: true, rate: 2 }),
-  'calls:active': ch(z.object({ uuid: z.string().regex(/^[A-Za-z0-9-]{8,64}$/).nullable() }), { session: true, rate: 10 }),
+  'calls:active': ch(
+    z.object({
+      uuid: z.string().regex(/^[A-Za-z0-9-]{8,64}$/).nullable(),
+      /** A chat call (hung up on the server when its window closes) or a meeting. */
+      kind: z.enum(['call', 'meet']).optional(),
+      title: z.string().max(200).optional(),
+    }),
+    { session: true, rate: 10 },
+  ),
+  'calls:list': ch(none, { session: true }),
+  'calls:focus': ch(z.object({ windowId: z.number().int().positive() }), { session: true }),
   'hr:clock': ch(
     z.object({
       direction: z.enum(['in', 'out']),
@@ -366,6 +378,9 @@ export interface WindowState {
   maximized: boolean;
   alwaysOnTop: boolean;
   platform: string;
+  /** Shrunk to a floating bar or card (call and meeting windows). */
+  compact?: boolean;
+  fullScreen?: boolean;
 }
 
 export interface Outputs {
@@ -389,6 +404,8 @@ export interface Outputs {
   'media:screenPick': void;
   'media:privacySettings': void;
   'calls:active': void;
+  'calls:list': ActiveCall[];
+  'calls:focus': boolean;
   'auth:signOut': AuthState;
   'auth:completeSetup': AuthState;
   'auth:sessionId': { sid: number | null };
@@ -401,6 +418,7 @@ export interface Outputs {
   'windows:open': { id: number };
   'windows:setAlwaysOnTop': boolean;
   'windows:setCompact': boolean;
+  'windows:fitVideo': boolean;
   'windows:minimize': void;
   'windows:toggleMaximize': boolean;
   'windows:close': void;

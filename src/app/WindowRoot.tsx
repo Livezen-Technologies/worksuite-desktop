@@ -5,6 +5,7 @@ import { appForRoute, moduleFor } from '../modules/registry';
 import { ModuleBoundary, Spinner, IconButton, cx } from '../components/ui';
 import { app } from '../core/app-state';
 import { useStore } from '../core/store';
+import { useWindowBarHidden } from './windowChrome';
 
 /**
  * Secondary windows (FR-NAV-05/09): a record, a mini chat, a call or a
@@ -24,6 +25,7 @@ export function WindowRoot({ hash }: { hash: string }) {
   const id = appForRoute(route);
   const mod = moduleFor(id);
   const allowed = mod && (mod.always || apps.some((a) => a.id === (mod.requires ?? id)));
+  const barHidden = useWindowBarHidden();
 
   useEffect(() => {
     void call('windows:state').then((s) => setPinned(s.alwaysOnTop), () => undefined);
@@ -32,7 +34,7 @@ export function WindowRoot({ hash }: { hash: string }) {
   const title = named ?? mod?.manifest.name ?? 'WorkSuite';
   return (
     <div className="flex h-full flex-col">
-      <div className={cx('drag flex h-10 shrink-0 items-center gap-2 bg-navy text-[13px] font-semibold text-white', (kind === 'ring' || kind === 'call') && 'hidden')} style={{ paddingLeft: isMac ? 78 : 12, paddingRight: isMac ? 8 : 140 }}>
+      <div className={cx('drag flex h-10 shrink-0 items-center gap-2 bg-navy text-[13px] font-semibold text-white', (kind === 'ring' || kind === 'call' || barHidden) && 'hidden')} style={{ paddingLeft: isMac ? 78 : 12, paddingRight: isMac ? 8 : 140 }}>
         <span className="flex-1 truncate">{title}</span>
         {PINNABLE.has(kind) ? (
           <IconButton

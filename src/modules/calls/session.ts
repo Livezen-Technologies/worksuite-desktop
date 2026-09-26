@@ -1,6 +1,7 @@
-import { createLocalTracks, Room, RoomEvent, Track, VideoPresets, type LocalTrack, type RemoteTrack } from 'livekit-client';
+import { createLocalTracks, Room, RoomEvent, Track, VideoPresets, type LocalParticipant, type LocalTrack, type Participant, type RemoteTrack } from 'livekit-client';
 import { ApiError, apiGet, apiPost, request } from '../../core/api';
 import { call, errorMessage, on } from '../../core/bridge';
+import type { SharePick } from './ScreenPicker';
 
 /**
  * One chat call, in its own window (CallVoice / CallVideo). Kept outside
@@ -80,6 +81,10 @@ export class CallSession {
   endedAfter: number | null = null;
   noise = true;
   sound = true;
+  /** Who spoke last (not you), so the big picture stays on them in a pause. */
+  lastSpeaker: string | null = null;
+  /** What is being shared, in words: "Screen 1", "Visual Studio Code". */
+  shareLabel: string | null = null;
   private version = 0;
   private listeners = new Set<() => void>();
   private audio = new Set<HTMLMediaElement>();
@@ -163,7 +168,7 @@ export class CallSession {
       return;
     }
     this.conn = conn;
-    void call('calls:active', { uuid: conn.uuid });
+    void call('calls:active', { uuid: conn.uuid, kind: 'call', title: p.name ? `Call · ${p.name}` : 'Call' });
     await this.connect(conn);
   }
 
@@ -203,7 +208,10 @@ export class CallSession {
       .on(RoomEvent.TrackUnmuted, refresh)
       .on(RoomEvent.LocalTrackPublished, refresh)
       .on(RoomEvent.LocalTrackUnpublished, refresh)
-      .on(RoomEvent.ActiveSpeakersChanged, refresh)
+      .on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
+        this.lastSpeaker = speakers.find((p) => !p.isLocal)?.identity ?? this.lastSpeaker;
+        refresh();
+      })
       .on(RoomEvent.Disconnected, () => {
         // A failed connect disconnects too; that is the connect's error to report, not an ending.
         if (this.joined && this.phase !== 'ended' && this.phase !== 'unreachable') void this.finish();
@@ -282,19 +290,26 @@ export class CallSession {
     this.changed();
   }
 
-  /** Share the screen or window picked in our picker (the page never picks for itself). */
-  async share(sourceId: string | null): Promise<void> {
+  /** Share the screen or window picked in our picker (the page never picks for itself), or stop. */
+  async share(pick: SharePick | null): Promise<void> {
     const lp = this.room?.localParticipant;
     if (!lp) return;
     try {
-      if (sourceId === null) await lp.setScreenShareEnabled(false);
-      else {
-        await call('media:screenPick', { id: sourceId });
-        await lp.setScreenShareEnabled(true, { audio: false });
-      }
+      await shareOn(lp, pick);
+      this.shareLabel = pick ? pick.name : null;
     } catch (e) {
       this.fail(e);
     }
+    this.changed();
+  }
+
+  get sharePaused(): boolean {
+    return !!this.room?.localParticipant.getTrackPublication(Track.Source.ScreenShare)?.isMuted;
+  }
+
+  /** Pause or resume the share: the others see "Screen sharing paused"; the call and cameras go on. */
+  async pauseShare(paused: boolean): Promise<void> {
+    await pauseOn(this.room?.localParticipant, paused).catch((e) => this.fail(e));
     this.changed();
   }
 
@@ -395,3 +410,22 @@ export class CallSession {
 
 /** The one call this window is for. */
 export const session = new CallSession();
+
+/**
+ * Start, switch or stop a screen share. Switching stops the old share first
+ * and starts the new one: the call, the camera and the microphone are not
+ * touched, and the others see the new screen a moment later.
+ */
+export async function shareOn(lp: LocalParticipant, pick: SharePick | null): Promise<void> {
+  if (lp.isScreenShareEnabled) await lp.setScreenShareEnabled(false);
+  if (!pick) return;
+  await call('media:screenPick', { id: pick.id, audio: pick.audio });
+  await lp.setScreenShareEnabled(true, { audio: pick.audio });
+}
+
+export async function pauseOn(lp: LocalParticipant | undefined, paused: boolean): Promise<void> {
+  const pub = lp?.getTrackPublication(Track.Source.ScreenShare);
+  if (!pub?.track) return;
+  if (paused) await pub.mute();
+  else await pub.unmute();
+}

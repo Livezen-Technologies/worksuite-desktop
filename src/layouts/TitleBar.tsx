@@ -6,6 +6,7 @@ import { minimiseChatDrawer, openChatDrawer, openOverlay, toggleDock, ui } from 
 import { prettyAccelerator } from '../core/commands';
 import { Icon } from '../components/Icon';
 import { ClockControl } from '../app/overlays/ClockPopover';
+import { ActiveCalls } from '../app/ActiveCalls';
 import { CountBadge, cx } from '../components/ui';
 import { UserPicture, useMe } from '../components/UserPicture';
 
@@ -60,6 +61,7 @@ export function TitleBar() {
 
       <div className="flex-1" />
 
+      <ActiveCalls />
       <ClockControl />
 
       <button type="button" className={cx('no-drag flex h-8 items-center gap-2 rounded-full px-3 text-[12.5px] font-semibold', pill.tone)} onClick={() => openOverlay('network')} aria-label={`Connection: ${pill.text}`}>

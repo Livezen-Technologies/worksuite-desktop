@@ -89,7 +89,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     return { granted: await systemPreferences.askForMediaAccess(kind) };
   });
   router.handle('media:screenSources', () => ctx.screenShare.sources());
-  router.handle('media:screenPick', (input, c) => ctx.screenShare.pick(c.sender.id, input.id));
+  router.handle('media:screenPick', (input, c) => ctx.screenShare.pick(c.sender.id, input.id, !!input.audio));
   router.handle('media:privacySettings', async (input) => {
     // Fixed addresses of the OS's own privacy panes; nothing from the page.
     const mac = { microphone: 'Privacy_Microphone', camera: 'Privacy_Camera', screen: 'Privacy_ScreenCapture' } as const;
@@ -99,7 +99,18 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   });
   router.handle('calls:active', (input, c) => {
     const w = winOf(c.sender);
-    if (w) ctx.calls.setActive(w, input.uuid);
+    if (w) ctx.calls.setActive(w, input.uuid, { kind: input.kind ?? 'call', title: input.title ?? '' });
+  });
+  router.handle('calls:list', () => ctx.calls.list());
+  router.handle('calls:focus', (input) => {
+    const w = ctx.windows.all().find((x) => x.id === input.windowId);
+    if (!w || !ctx.calls.has(w.id)) return false;
+    // Back from the floating card to the full window, and in front.
+    if (ctx.windows.isCompact(w)) ctx.windows.setCompact(w, false);
+    if (w.isMinimized()) w.restore();
+    w.show();
+    w.focus();
+    return true;
   });
   router.handle('auth:signIn', (input) => ctx.session.signIn(input.email, input.password));
   router.handle('auth:verifyMfa', (input) => ctx.session.verifyMfa(input.code));
@@ -190,7 +201,11 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   });
   router.handle('windows:setCompact', (input, c) => {
     const w = winOf(c.sender);
-    return w ? ctx.windows.setCompact(w, input.value) : false;
+    return w ? ctx.windows.setCompact(w, input.value, input.shape ?? 'bar') : false;
+  });
+  router.handle('windows:fitVideo', (_i, c) => {
+    const w = winOf(c.sender);
+    return w ? ctx.windows.fitVideo(w) : false;
   });
   router.handle('windows:minimize', (_i, c) => {
     winOf(c.sender)?.minimize();
@@ -213,6 +228,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       maximized: !!w?.isMaximized(),
       alwaysOnTop: !!w?.isAlwaysOnTop(),
       platform: process.platform,
+      compact: w ? ctx.windows.isCompact(w) : false,
+      fullScreen: !!w?.isFullScreen(),
     };
   });
 

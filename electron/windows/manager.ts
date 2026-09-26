@@ -15,7 +15,9 @@ const log = logger('windows');
  * remembered per window kind; a window whose display is gone comes back
  * fully visible on the primary display.
  */
-const ALWAYS_ON_TOP_ALLOWED = new Set<WindowKind>(['chat-mini', 'timer', 'call', 'video-call', 'ring']);
+const ALWAYS_ON_TOP_ALLOWED = new Set<WindowKind>(['chat-mini', 'timer', 'call', 'video-call', 'ring', 'meet']);
+/** Windows that can shrink to float over other apps while a call or meeting goes on. */
+const COMPACTABLE = new Set<WindowKind>(['call', 'video-call', 'meet']);
 /** One call at a time: a second "call" window focuses the one already open. */
 const CALL_KINDS = new Set<WindowKind>(['call', 'video-call']);
 
@@ -55,7 +57,7 @@ export class WindowManager {
   private kinds = new Map<number, WindowKind>();
   private saveTimers = new Map<number, NodeJS.Timeout>();
   private stopped = false;
-  private compactFrom = new Map<number, Rectangle>();
+  private compactFrom = new Map<number, { bounds: Rectangle; maximized: boolean; onTop: boolean }>();
   quitting = false;
   minimizeToTray: () => boolean = () => true;
   onMainShown: () => void = () => undefined;
@@ -179,6 +181,8 @@ export class WindowManager {
         webviewTag: false,
         navigateOnDragDrop: false,
         devTools: !app.isPackaged || process.argv.includes('--diagnostics-devtools'),
+        // Unpackaged test runs only: lets test-only surfaces (the call layout preview) show.
+        additionalArguments: !app.isPackaged && process.env.WS_E2E_FAKE_MEDIA ? ['--ws-e2e'] : [],
       },
     });
     if (ring && mac) win.setWindowButtonVisibility(false);
@@ -268,28 +272,66 @@ export class WindowManager {
    * "Minimised"), and back. Its place while shrunk is never saved as the call
    * window's place.
    */
-  setCompact(win: BrowserWindow, value: boolean): boolean {
-    if (this.kinds.get(win.id) !== 'call') return false;
+  /**
+   * Shrink a call or meeting window so it floats over other apps, or bring
+   * it back. A voice call shrinks to a bar; a video call or a meeting to a
+   * card that keeps the picture (a shared screen, or whoever is speaking).
+   * Leaving full screen or maximised first, so the card is a card.
+   */
+  setCompact(win: BrowserWindow, value: boolean, shape: 'bar' | 'card' = 'bar'): boolean {
+    const kind = this.kinds.get(win.id);
+    if (!kind || !COMPACTABLE.has(kind)) return false;
     const mac = process.platform === 'darwin';
     if (value) {
       if (this.compactFrom.has(win.id)) return true;
+      if (win.isFullScreen()) win.setFullScreen(false);
+      const maximized = win.isMaximized();
+      if (maximized) win.unmaximize();
       const b = win.getBounds();
-      this.compactFrom.set(win.id, b);
+      this.compactFrom.set(win.id, { bounds: b, maximized, onTop: win.isAlwaysOnTop() });
+      const card = shape === 'card';
       // Elsewhere the window controls sit over the right of the bar.
-      const width = mac ? 330 : 470;
-      win.setMinimumSize(300, 58);
+      const width = card ? 380 : mac ? 330 : 470;
+      const height = card ? 250 : 60;
+      win.setMinimumSize(card ? 300 : 300, card ? 200 : 58);
       if (mac) win.setWindowButtonVisibility(false);
-      win.setBounds(fitToDisplays({ x: b.x + b.width - width, y: b.y, width, height: 60 }, screen.getAllDisplays(), screen.getPrimaryDisplay()));
+      win.setBounds(fitToDisplays({ x: b.x + b.width - width, y: b.y, width, height }, screen.getAllDisplays(), screen.getPrimaryDisplay()));
       win.setAlwaysOnTop(true, 'floating');
       return true;
     }
     const prev = this.compactFrom.get(win.id);
     this.compactFrom.delete(win.id);
-    const size = SIZES.call;
+    const size = SIZES[kind];
     win.setMinimumSize(size.minWidth, size.minHeight);
     if (mac) win.setWindowButtonVisibility(true);
-    if (prev) win.setBounds(fitToDisplays(prev, screen.getAllDisplays(), screen.getPrimaryDisplay()));
+    if (prev) {
+      win.setBounds(fitToDisplays(prev.bounds, screen.getAllDisplays(), screen.getPrimaryDisplay()));
+      if (prev.maximized) win.maximize();
+      if (!prev.onTop && kind === 'meet') win.setAlwaysOnTop(false);
+    }
     return false;
+  }
+
+  /**
+   * A voice call's window is a narrow column. When a camera or a shared
+   * screen appears it becomes the call surface, and grows to a video call's
+   * size around where it was — unless it is already big enough, maximised,
+   * full screen or floating.
+   */
+  fitVideo(win: BrowserWindow): boolean {
+    if (this.kinds.get(win.id) !== 'call' || this.compactFrom.has(win.id) || win.isMaximized() || win.isFullScreen()) return false;
+    const b = win.getBounds();
+    const want = SIZES['video-call'];
+    if (b.width >= 900) return false;
+    win.setMinimumSize(want.minWidth, want.minHeight);
+    const x = Math.round(b.x + b.width / 2 - want.width / 2);
+    const y = Math.round(b.y + b.height / 2 - want.height / 2);
+    win.setBounds(fitToDisplays({ x, y, width: want.width, height: want.height }, screen.getAllDisplays(), screen.getPrimaryDisplay()));
+    return true;
+  }
+
+  isCompact(win: BrowserWindow): boolean {
+    return this.compactFrom.has(win.id);
   }
 
   setAlwaysOnTop(win: BrowserWindow, value: boolean): boolean {

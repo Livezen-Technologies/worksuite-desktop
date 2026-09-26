@@ -337,3 +337,12 @@ export interface ToastMessage {
   kind: 'info' | 'success' | 'warning' | 'error';
   text: string;
 }
+
+/** A call or meeting this device is in, and the window it is in (the main window's "in a call" pill). */
+export interface ActiveCall {
+  windowId: number;
+  kind: 'call' | 'meet';
+  title: string;
+  /** Epoch ms the window said it joined. */
+  since: number;
+}
