@@ -1,3 +1,4 @@
+import { plainText, sanitizeHtml } from '../../core/rich';
 import { addDays, currentZone } from '../../core/time';
 
 /**
@@ -210,51 +211,9 @@ export function counts(tasks: Task[], shared: Task[], lists: TaskList[], me: num
   return out;
 }
 
-const ALLOWED = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'DEL', 'P', 'BR', 'DIV', 'SPAN', 'UL', 'OL', 'LI', 'A', 'CODE', 'PRE', 'BLOCKQUOTE', 'H3', 'H4', 'IMG']);
-
-/**
- * Rich text to show, reduced to the tags the server allows and no attributes
- * but a link's address (http, https or mailto) and an inline image's file id.
- * The server cleans what it stores; this is cleaned again because it is put
- * into the page, and the page can reach the app.
- */
+/** Rich text to show in a task: the strict profile (see core/rich). */
 export function sanitizeRich(html: string | null | undefined, imageUrl?: (fileId: string) => string): string {
-  if (!html) return '';
-  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
-  const walk = (el: Element) => {
-    for (const child of [...el.children]) {
-      if (!ALLOWED.has(child.tagName)) {
-        if (['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'TEMPLATE', 'SVG', 'MATH'].includes(child.tagName)) child.remove();
-        else {
-          walk(child);
-          child.replaceWith(...child.childNodes);
-        }
-        continue;
-      }
-      const keep: Array<[string, string]> = [];
-      if (child.tagName === 'A') {
-        const href = child.getAttribute('href') ?? '';
-        if (/^(https?:|mailto:)/i.test(href)) keep.push(['href', href], ['target', '_blank'], ['rel', 'noopener noreferrer']);
-      }
-      if (child.tagName === 'IMG') {
-        const id = child.getAttribute('data-file-id') ?? '';
-        if (/^\d+$/.test(id) && imageUrl) keep.push(['src', imageUrl(id)], ['alt', child.getAttribute('alt') ?? ''], ['data-file-id', id]);
-        else {
-          child.remove();
-          continue;
-        }
-      }
-      for (const a of [...child.attributes]) child.removeAttribute(a.name);
-      for (const [k, v] of keep) child.setAttribute(k, v);
-      walk(child);
-    }
-  };
-  const root = doc.body.firstElementChild!;
-  walk(root);
-  return root.innerHTML;
+  return sanitizeHtml(html, { profile: 'strict', imageUrl });
 }
 
-export function plainText(html: string | null | undefined): string {
-  if (!html) return '';
-  return (new DOMParser().parseFromString(html, 'text/html').body.textContent ?? '').replace(/\s+/g, ' ').trim();
-}
+export { plainText };

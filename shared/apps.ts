@@ -82,7 +82,7 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'whatsapp', label: 'WhatsApp', group: 'communication', icon: 'phone', app: 'whatsapp', webPath: '/whatsapp', surface: 'browser', order: 47 },
   { id: 'projects', label: 'Projects', group: 'work', icon: 'kanban', app: 'projects', webPath: '/projects', surface: 'browser', order: 170 },
   { id: 'tenders', label: 'Tenders', group: 'work', icon: 'file-text', app: 'tender', perm: 'tender.view', webPath: '/tenders', surface: 'browser', order: 180 },
-  { id: 'notes', label: 'Notes', group: 'work', icon: 'notebook', app: 'notes', webPath: '/notes', surface: 'browser', order: 190 },
+  { id: 'notes', label: 'Notes', group: 'work', icon: 'notebook', app: 'notes', webPath: '/notes', surface: 'native', order: 190, keywords: 'notebook journal meeting notes' },
   { id: 'contacts', label: 'Contacts', group: 'work', icon: 'contact', app: 'contacts', webPath: '/contacts', surface: 'browser', order: 80 },
   { id: 'sales', label: 'Sales & Orders', group: 'business', icon: 'trending-up', app: 'oms', webPath: '/oms', surface: 'browser', order: 120 },
   { id: 'billing', label: 'Invoices', group: 'business', icon: 'receipt', app: 'billing', webPath: '/billing', surface: 'browser', order: 125 },

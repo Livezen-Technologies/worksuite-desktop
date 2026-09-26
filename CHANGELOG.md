@@ -5,6 +5,63 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-26 — 0.2.5: Notes, native, to the NotesMain and NotesExtras designs
+
+**Added**
+
+- **Notes opens in the app** instead of the browser. It's in More apps, can be
+  pinned to the sidebar, and has a "New Note" quick action.
+- **The rail:** + New note; All notes, Favorites, Pinned, Shared with me and
+  Archived, with counts. Then your notebooks, each with a colour, its count
+  and its sections (fold them away). Notebooks and sections can be created
+  (a notebook with its first section), renamed and deleted; their notes stay.
+- **The list:** each note's title, favourite and pinned marks, the first lines,
+  when it was edited and its tags. Search looks in titles, text and tags.
+  Notes opens on the first note.
+- **The note:**
+  - The header says where the note lives and whether it's saved, with
+    ★ Favorite, Version history, Share, and ⋯: Pin, Favorite, Duplicate,
+    Share, Version history, Move to…, Convert to task, Archive and Delete.
+  - The toolbar has the text style, bold, italic, underline, headings,
+    bulleted and numbered lists, ☐ to-dos (click the box to tick it), quote,
+    code, link, pictures and tables.
+  - The Linked bar shows its contacts, events and tasks, with Link to a
+    contact…, Link to an event… and Convert to task ("Converted to task ·
+    Open").
+  - Under the title: who has it ("Editors: you, Samali · Viewer: Nuwan"),
+    and its tags.
+  - **It saves itself** a moment after you stop typing, and at once when you
+    open another note, so nothing typed just before switching is lost. A
+    save that fails says so and tries again when the connection is back.
+    ⌘S saves now.
+  - Pictures (pasted, dropped or chosen) go into your Drive and into the note.
+    They show for everybody who can read the note; this needs the server
+    change deployed with it.
+  - Someone a note is shared with to view reads it; an editor edits the
+    title, tags and text.
+- **New note** has a title, the notebook or section, and a template: Blank,
+  Meeting notes, Project documentation, Standard operating procedure, Daily
+  journal or To-do list.
+- **Share** finds teammates and adds them as editors or viewers; roles can be
+  changed and access removed.
+- **Version history** lists the saved versions. Preview one, or compare it
+  with the note now (words taken out in red, put in in green), and restore
+  it. What the note says now is kept as a version first.
+- **Keys:** N new note, / search.
+
+**Changed**
+
+- Tasks and Notes clean rich text with the same code (`core/rich`). Notes
+  allow what the server's rich profile does: headings, tables, rules and a
+  few safe styles.
+
+**Not built (no server support yet)**
+
+- The design's third level (a section inside a section), and its "What is
+  this note about?" field.
+
+---
+
 ## 2026-09-26 — 0.2.4: Tasks, to the TaskRail, TasksList, TasksBoard, TaskDetail and TaskNew designs
 
 **Added**

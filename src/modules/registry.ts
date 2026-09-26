@@ -110,6 +110,14 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
   },
   {
     input: defineDesktopManifest({
+      id: 'notes', name: 'Notes', icon: 'notebook', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'READ_CACHE', cache: ['/api/notes', '/api/notebooks', '/api/note-sections'] },
+      quickActions: [{ id: 'new-note', label: 'New Note', route: '/notes?new=1' }],
+    }),
+    load: () => import('./notes/NotesPage'),
+  },
+  {
+    input: defineDesktopManifest({
       id: 'files', name: 'Files', icon: 'folder', contractVersion: 1, desktop: { enabled: true },
       offline: { mode: 'READ_CACHE', cache: ['/api/files/browse'] },
       native: ['file-drop', 'printing'],
