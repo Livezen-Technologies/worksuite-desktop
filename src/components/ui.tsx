@@ -1,4 +1,4 @@
-import { Component, useEffect, useRef, type ButtonHTMLAttributes, type ErrorInfo, type InputHTMLAttributes, type ReactNode } from 'react';
+import { Component, useEffect, useRef, useState, type ButtonHTMLAttributes, type ErrorInfo, type InputHTMLAttributes, type ReactNode } from 'react';
 import { Icon } from './Icon';
 
 export function cx(...parts: Array<string | false | null | undefined>): string {
@@ -184,21 +184,30 @@ export function Kbd({ children }: { children: ReactNode }) {
 
 export function Modal({ title, children, onClose, width = 520, footer, labelledBy }: { title?: ReactNode; children: ReactNode; onClose?: () => void; width?: number; footer?: ReactNode; labelledBy?: string }) {
   const ref = useRef<HTMLDivElement>(null);
+  // What had focus before the dialog, read while rendering — by the time an
+  // effect runs, a field inside with autoFocus already has it.
+  const [prev] = useState(() => document.activeElement as HTMLElement | null);
+  const close = useRef(onClose);
   useEffect(() => {
-    const prev = document.activeElement as HTMLElement | null;
-    ref.current?.focus();
+    close.current = onClose;
+  });
+  // Once, on opening. It used to run again whenever `onClose` was a new
+  // function — every render of the screen behind — and each run pulled focus
+  // off the field being typed in, so Enter reached the dialog, not the field.
+  useEffect(() => {
+    if (!ref.current?.contains(document.activeElement)) ref.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && onClose) {
+      if (e.key === 'Escape' && close.current) {
         e.stopPropagation();
-        onClose();
+        close.current();
       }
     };
     window.addEventListener('keydown', onKey, true);
     return () => {
       window.removeEventListener('keydown', onKey, true);
-      prev?.focus?.();
+      if (prev?.isConnected) prev.focus?.();
     };
-  }, [onClose]);
+  }, [prev]);
   return (
     <div className="no-drag fixed inset-0 z-50 flex items-center justify-center bg-[#0B1020]/50 p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
       <div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={labelledBy} className="animate-in bare-focus flex max-h-full w-full flex-col rounded-[14px] border border-line bg-surface shadow-2xl outline-none" style={{ maxWidth: width }}>

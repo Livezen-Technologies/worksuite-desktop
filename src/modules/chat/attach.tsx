@@ -15,12 +15,12 @@ export type AttachChoice = 'document' | 'image' | 'video' | 'audio' | 'any' | 'd
 
 const CHOICES: Array<{ id: AttachChoice; icon: string; label: string; hint: string; tone: string }> = [
   { id: 'document', icon: 'file-text', label: 'Document', hint: 'PDF, Word, Excel…', tone: 'bg-[#E6ECFF] text-[#23349E] dark:bg-selection dark:text-primary' },
-  { id: 'image', icon: 'file-image', label: 'Image', hint: 'PNG, JPG, GIF…', tone: 'bg-[#E3F4EC] text-[#1F7A4D]' },
-  { id: 'video', icon: 'film', label: 'Video', hint: 'MP4, MOV, WEBM', tone: 'bg-[#F1E8FB] text-[#6B3FB5]' },
-  { id: 'audio', icon: 'music', label: 'Audio', hint: 'MP3, WAV, OGG', tone: 'bg-[#FDEEDC] text-[#9A4A06]' },
+  { id: 'image', icon: 'file-image', label: 'Image', hint: 'PNG, JPG, GIF…', tone: 'bg-[#E3F4EC] text-[#1F7A4D] dark:bg-success-bg dark:text-success' },
+  { id: 'video', icon: 'film', label: 'Video', hint: 'MP4, MOV, WEBM', tone: 'bg-[#F1E8FB] text-[#6B3FB5] dark:bg-[#2A1F4A] dark:text-[#B69CF0]' },
+  { id: 'audio', icon: 'music', label: 'Audio', hint: 'MP3, WAV, OGG', tone: 'bg-[#FDEEDC] text-[#9A4A06] dark:bg-warning-bg dark:text-warning' },
   { id: 'any', icon: 'paperclip', label: 'Any file', hint: 'Browse everything', tone: 'bg-subtle text-ink-2' },
-  { id: 'drive', icon: 'disk', label: 'From Drive', hint: 'Share from Drive', tone: 'bg-[#E1F2F4] text-[#0E7C86]' },
-  { id: 'camera', icon: 'camera', label: 'Camera / Photo', hint: 'Take a picture', tone: 'bg-[#FCE7EF] text-[#B83280]' },
+  { id: 'drive', icon: 'disk', label: 'From Drive', hint: 'Share from Drive', tone: 'bg-[#E1F2F4] text-[#0E7C86] dark:bg-teal/15 dark:text-[#5CC6CF]' },
+  { id: 'camera', icon: 'camera', label: 'Camera / Photo', hint: 'Take a picture', tone: 'bg-[#FCE7EF] text-[#B83280] dark:bg-[#3A1830] dark:text-[#F08CC0]' },
   { id: 'voice', icon: 'mic', label: 'Voice message', hint: 'Record and send', tone: 'bg-danger-bg text-danger' },
 ];
 

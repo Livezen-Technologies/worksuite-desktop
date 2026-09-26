@@ -5,6 +5,31 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-26 — 0.2.19: Enter in dialogs, and the chat drawer on dark
+
+**Fixed**
+
+- **Enter creates the folder.** A dialog took focus back from its own field
+  every time the screen behind it redrew. After that, typing went nowhere and
+  Enter reached the dialog, not the name box. Dialogs now take focus only
+  once, when they open, and leave it with a field that already has it. The
+  New folder name is focused as soon as the dialog opens, and Enter creates
+  it. This holds for every dialog, not only Files.
+- **The chat drawer on dark:**
+  - The wallpaper sits a step below the surface colour, so bubbles, the day
+    chip, the call pill and the record banner stand off it.
+  - The other person's bubbles are a shade lighter than the wallpaper.
+  - Inside your own bubbles the accents go pale, so they stay readable on
+    indigo: the record link ("Open folder"), the reply quote, the file's
+    Open, and the waveform of a voice note.
+  - A record card in your own bubble is set into it, not a dark hole in it.
+  - "Shared a folder from Drive" and "Open folder" no longer run together.
+  - The read ticks are a lighter blue on dark.
+  - A voice note that has not been played no longer shows its first bar lit.
+  - The attach menu's coloured tiles have dark versions.
+
+---
+
 ## 2026-09-26 — 0.2.18: CRM, part 1 — dashboard, leads, follow-ups and the pipeline
 
 **Added**

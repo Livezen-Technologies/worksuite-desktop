@@ -232,7 +232,7 @@ export function VoicePlayer({ src, ms, seed, own, bare }: { src: string; ms: num
       </button>
       <div className="flex h-7 flex-1 items-center gap-[2px]" aria-hidden>
         {bars.map((h, i) => (
-          <span key={i} className={cx('w-[3px] rounded-full', i / bars.length <= done ? (own && !bare ? 'bg-white' : 'bg-primary') : own && !bare ? 'bg-white/40' : 'bg-[#9AA6D6] dark:bg-line')} style={{ height: `${h}%` }} />
+          <span key={i} className={cx('w-[3px] rounded-full', done > 0 && i / bars.length < done ? (own && !bare ? 'bg-white' : cx('bg-primary', own && 'dark:bg-[#B4C3FF]')) : own && !bare ? 'bg-white/40' : 'bg-[#9AA6D6] dark:bg-white/25')} style={{ height: `${h}%` }} />
         ))}
       </div>
       <span className="font-mono text-[11.5px] tabular opacity-80">{formatClock(playing || pos ? pos : total)}</span>

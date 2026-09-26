@@ -236,7 +236,8 @@ textarea,
   background-image: radial-gradient(rgba(15, 27, 61, 0.07) 1px, transparent 1px);
   background-size: 14px 14px;
 }
+/* On dark it sits below the surface colour, so bubbles, pills and cards read as raised off it. */
 [data-theme='dark'] .chat-wallpaper {
-  background-color: #0e1530;
-  background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-color: #0a0f22;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px);
 }

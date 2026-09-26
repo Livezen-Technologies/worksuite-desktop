@@ -555,7 +555,7 @@ export function nameColour(name: string): string {
 function Meta({ m, own }: { m: ChatMessage & { starred?: boolean }; own: boolean }) {
   const r = own ? m.receipt : null;
   return (
-    <span className="ml-auto inline-flex shrink-0 items-center gap-1 self-end pt-1 pl-2 text-[10.5px] leading-none whitespace-nowrap text-ink-3">
+    <span className="ml-auto inline-flex shrink-0 items-center gap-1 self-end pt-1 pl-1 text-[10.5px] leading-none whitespace-nowrap text-ink-3">
       {m.starred ? <Icon name="star" size={10} className="text-[#CA8A04]" label="Starred" /> : null}
       {m.edited ? 'edited · ' : ''}
       {timeLabel(m.created_at)}
@@ -563,7 +563,7 @@ function Meta({ m, own }: { m: ChatMessage & { starred?: boolean }; own: boolean
         <Icon
           name={r.status === 'sent' ? 'check' : 'check-check'}
           size={13}
-          className={r.status === 'read' ? 'text-[#3B6FE0]' : 'text-ink-3'}
+          className={r.status === 'read' ? 'text-[#3B6FE0] dark:text-[#8FB0FF]' : 'text-ink-3'}
           label={r.status === 'read' ? `Read by ${r.read}` : r.status === 'delivered' ? 'Delivered' : 'Sent'}
         />
       ) : null}
@@ -665,7 +665,10 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
   const src = mediaUrl(f?.mime === 'image/gif' ? f.url : (f?.thumb_url ?? f?.url));
   const voice = !!f && (m.type === 'voice' || f.preview === 'audio');
   const media = !!f && !m.deleted;
-  const tone = own ? 'bg-[#DCE3FB] dark:bg-[#26366E]' : 'bg-surface';
+  // On dark the other side's bubbles sit a shade above the wallpaper, and inside
+  // your own the accents go pale: indigo on indigo is not readable.
+  const tone = own ? 'bg-[#DCE3FB] dark:bg-[#26366E]' : 'bg-surface dark:bg-well';
+  const accent = own ? 'text-primary dark:text-[#B4C3FF]' : 'text-primary';
   const toolBtn = 'flex h-7 w-7 items-center justify-center rounded-[7px] text-ink-2 hover:bg-subtle hover:text-ink';
 
   return (
@@ -706,8 +709,8 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
             </b>
           ) : null}
           {m.reply_preview ? (
-            <div className={cx('mb-1 rounded-[6px] border-l-[3px] border-primary bg-black/[.04] px-2 py-1 text-[11.5px] dark:bg-white/5', (media || m.card) && 'mx-0.5')}>
-              <b className="block text-primary">{m.reply_preview.sender_name}</b>
+            <div className={cx('mb-1 rounded-[6px] border-l-[3px] border-primary bg-black/[.04] px-2 py-1 text-[11.5px] dark:bg-white/5', own && 'dark:border-[#B4C3FF]', (media || m.card) && 'mx-0.5')}>
+              <b className={cx('block', accent)}>{m.reply_preview.sender_name}</b>
               <span className="line-clamp-2 text-ink-2">{m.reply_preview.snippet}</span>
             </div>
           ) : null}
@@ -720,12 +723,12 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
           ) : (
             <>
               {m.card ? (
-                <div className="flex w-[270px] max-w-full flex-col gap-0.5 rounded-[8px] border-l-[3px] border-[#E0522F] bg-surface px-2.5 py-2">
+                <div className={cx('flex w-[270px] max-w-full flex-col gap-0.5 rounded-[8px] border-l-[3px] border-[#E0522F] bg-surface px-2.5 py-2', own && 'dark:bg-black/25')}>
                   {m.card.available === false ? (
                     <span className="text-[12.5px] text-ink-3">{m.card.why}</span>
                   ) : (
                     <>
-                      <span className="text-[10.5px] font-bold tracking-[0.5px] text-[#E0522F] uppercase">{(m.card.heading ?? m.card.kind.split('.')[0])?.replace('.', ' · ')}</span>
+                      <span className="text-[10.5px] font-bold tracking-[0.5px] text-[#E0522F] uppercase dark:text-[#FF8A6B]">{(m.card.heading ?? m.card.kind.split('.')[0])?.replace('.', ' · ')}</span>
                       <b className="text-[13px] text-ink">
                         {m.card.name ?? m.card.what ?? ''}
                         {m.card.who ? ` · ${m.card.who}` : ''}
@@ -751,16 +754,16 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
                       <b className="block truncate text-[12px] text-ink">{f.filename}</b>
                       <span className="block text-[11.5px] text-ink-3">{Math.max(1, Math.round(f.size / 1024))} KB{f.status !== 'ready' ? ` · ${f.status}` : ''}</span>
                     </span>
-                    <button type="button" onClick={() => f.download_url && openLink(f.download_url)} className="text-[12px] font-semibold text-primary hover:underline">
+                    <button type="button" onClick={() => f.download_url && openLink(f.download_url)} className={cx('text-[12px] font-semibold hover:underline', accent)}>
                       Open
                     </button>
                   </div>
                 )
               ) : null}
-              <div className={cx('flex flex-wrap items-end', (media || m.card) && 'px-1.5 pb-0.5')}>
+              <div className={cx('flex flex-wrap items-end gap-x-2', (media || m.card) && 'px-1.5 pb-0.5')}>
                 {m.message ? <span className={cx('min-w-0 whitespace-pre-wrap break-words selectable', (media || m.card) && 'pt-1')}>{m.message}</span> : null}
                 {m.card?.link && m.card.available !== false ? (
-                  <button type="button" onClick={() => openLink(m.card!.link!)} className="pt-1 text-[12.5px] font-bold text-primary hover:underline">
+                  <button type="button" onClick={() => openLink(m.card!.link!)} className={cx('pt-1 text-[12.5px] font-bold hover:underline', accent)}>
                     Open {m.card.kind.split('.').pop()}
                   </button>
                 ) : null}

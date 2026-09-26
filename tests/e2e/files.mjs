@@ -136,6 +136,23 @@ try {
   if (folder) made.folders.push(folder.id);
   t.check('New folder makes a folder, shown in the tree', !!folder);
 
+  // The keyboard alone: the name is focused on opening, typing goes into it,
+  // and Enter creates — even after the screen behind has re-rendered.
+  await t.evaluate(`document.querySelector('button[aria-label="New file, folder or document"]').click()`);
+  await t.waitFor(`!!document.querySelector('[role="menu"][aria-label="New"]')`, 'the New menu');
+  await t.evaluate(menuItem('New folder'));
+  await t.waitFor(`!!document.querySelector('[aria-modal="true"] input[aria-label="Name"]')`, 'the name dialog');
+  await sleep(2500);
+  t.check('the new folder name has focus when the dialog opens', await t.evaluate(`document.activeElement?.getAttribute('aria-label') === 'Name'`));
+  const byKey = `E2E Drive Enter ${tag}`;
+  await t.send('Input.insertText', { text: byKey });
+  await t.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' });
+  await t.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+  await t.waitFor(`!document.querySelector('[aria-modal="true"] input[aria-label="Name"]')`, 'the dialog closed on Enter');
+  const entered = ((await api('me', 'GET', '/api/drive/tree')).data.tree ?? []).find((f) => f.name === byKey);
+  if (entered) made.folders.push(entered.id);
+  t.check('typing a name and pressing Enter creates the folder', !!entered);
+
   // Into it, and a text file from the New menu there.
   await t.evaluate(`${rowSel(top)}.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`);
   await t.waitFor(`!!document.querySelector(${js(`main[aria-label="${top}"]`)})`, 'the folder open');
