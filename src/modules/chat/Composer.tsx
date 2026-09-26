@@ -41,7 +41,7 @@ export interface ComposerHandle {
  * an edit shown above it; files wait in a tray until Send; a voice message
  * records in its place. `compact` is the drawer's and the call panel's size.
  */
-export function Composer({ roomId, roomName, group, reply, onClearReply, typing = [], compact, extras, ref }: {
+export function Composer({ roomId, roomName, group, reply, onClearReply, typing = [], compact, look = 'box', extras, ref }: {
   roomId: string;
   roomName: string;
   group: boolean;
@@ -49,6 +49,8 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   onClearReply: () => void;
   typing?: string[];
   compact?: boolean;
+  /** `pill`: the chat drawer's message box — a rounded field with the voice/send button beside it. */
+  look?: 'box' | 'pill';
   /** Actions above the box (the chat drawer's quick actions). */
   extras?: ReactNode;
   ref?: Ref<ComposerHandle>;
@@ -337,127 +339,24 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   };
 
   const line = typingLine(typing);
-  const size = compact ? 'h-[30px] w-[30px]' : 'h-[34px] w-[34px]';
-  const tool = cx('flex shrink-0 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle hover:text-ink', size);
+  const size = look === 'pill' ? 'h-8 w-8' : compact ? 'h-[30px] w-[30px]' : 'h-[34px] w-[34px]';
+  const tool = cx('flex shrink-0 items-center justify-center text-ink-2 hover:bg-subtle hover:text-ink', look === 'pill' ? 'rounded-full' : 'rounded-[8px]', size);
   const hint = editing
     ? 'Enter to save · Esc to cancel'
     : urgent
       ? 'Urgent: reaches people who only want priority notifications'
       : `Enter to send · Shift + Enter for a new line${group ? ' · @ to mention' : ''}`;
 
-  return (
-    <div ref={root} className={cx('relative flex shrink-0 flex-col border-t border-line bg-surface', compact ? 'gap-1.5 px-2.5 pt-2 pb-2.5' : 'gap-2 px-4 pt-2.5 pb-3')}>
-      {extras}
-      {line ? (
-        <div className="absolute bottom-full left-4 mb-1 flex items-center gap-1.5 rounded-full bg-surface/95 px-2 py-0.5 text-[11.5px] text-ink-3" aria-live="polite">
-          <span className="flex gap-[3px]" aria-hidden>
-            {[0, 1, 2].map((i) => <span key={i} className="h-[5px] w-[5px] animate-bounce rounded-full bg-ink-3" style={{ animationDelay: `${i * 150}ms` }} />)}
-          </span>
-          {line}
-        </div>
-      ) : null}
-      {editing ? (
-        <div className="flex items-center gap-2 rounded-[8px] border-l-[3px] border-[#D97706] bg-[#FFF6E5] px-2.5 py-1.5 text-[12px] dark:bg-warning-bg">
-          <Icon name="compose" size={13} className="shrink-0 text-[#9A4A06] dark:text-warning" />
-          <span className="flex min-w-0 flex-1 flex-col">
-            <b className="text-[#7A3B05] dark:text-warning">Editing message</b>
-            <span className="truncate text-ink-2">{editing.original}</span>
-          </span>
-          <button type="button" onClick={cancelEdit} className="shrink-0 rounded-[6px] px-2 py-0.5 font-semibold text-[#7A3B05] hover:bg-[#FDEBC8] dark:text-warning dark:hover:bg-transparent">Cancel</button>
-        </div>
-      ) : reply ? (
-        <div className="flex items-center gap-2 rounded-[8px] border-l-[3px] border-primary bg-selection px-2.5 py-1.5 text-[12px]">
-          <Icon name="reply" size={13} className="shrink-0 text-primary" />
-          <span className="flex min-w-0 flex-1 flex-col">
-            <b className="text-ink">Replying to {reply.sender_name}</b>
-            <span className="truncate text-ink-2">{reply.snippet}</span>
-          </span>
-          <button type="button" aria-label="Cancel the reply" title="Cancel the reply (Esc)" onClick={onClearReply} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-ink-3 hover:bg-surface hover:text-ink">
-            <Icon name="x" size={13} />
-          </button>
-        </div>
-      ) : null}
-      {asking && options.length ? (
-        <div
-          role="listbox"
-          aria-label="Mention someone"
-          className={cx('absolute bottom-full z-40 mb-1 flex max-h-[320px] flex-col rounded-[12px] border border-line bg-surface shadow-[0_12px_32px_rgba(15,27,61,.18)]', compact ? 'w-[250px]' : 'w-[290px]')}
-          style={{ left: asking.left }}
-        >
-          <div className="min-h-0 flex-1 overflow-y-auto p-1 scroll-thin">
-            {options.map((t, i) => {
-              const heading =
-                t.type === 'user' && options.findIndex((o) => o.type === 'user') === i ? 'PEOPLE IN THIS CHAT'
-                  : t.type !== 'user' && t.type !== 'everyone' && options.findIndex((o) => o.type !== 'user' && o.type !== 'everyone') === i ? 'TEAMS AND DEPARTMENTS'
-                    : null;
-              const state = t.type === 'user' ? (presence.data?.presence[String(t.id)] ?? 'offline') : '';
-              const sub = t.type === 'user'
-                ? [t.detail, (PRESENCE[state]?.label ?? state).toLowerCase()].filter(Boolean).join(' · ')
-                : (t.detail ?? (t.type === 'department' ? 'Department' : 'Team'));
-              return (
-                <div key={`${t.type}:${t.id}`}>
-                  {heading ? <div className="px-2 pt-1.5 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-ink-3">{heading}</div> : null}
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={i === pick}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onMouseEnter={() => setPick(i)}
-                    onClick={() => choose(t)}
-                    className={cx('flex w-full items-center gap-2.5 rounded-[8px] px-2 py-1.5 text-left', i === pick ? 'bg-selection' : 'hover:bg-subtle')}
-                  >
-                    {t.type === 'user' ? (
-                      <span className="relative shrink-0">
-                        <Avatar name={t.name} size={28} />
-                        <span className={cx('absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-surface', PRESENCE[state]?.dot ?? 'bg-line')} />
-                      </span>
-                    ) : (
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-subtle text-ink-2">
-                        <Icon name={t.type === 'everyone' ? 'megaphone' : t.type === 'department' ? 'building' : 'users'} size={14} />
-                      </span>
-                    )}
-                    <span className="flex min-w-0 flex-col">
-                      <b className="truncate text-[12.5px] text-ink">{t.type === 'everyone' ? '@everyone' : t.name}</b>
-                      {sub ? <span className="truncate text-[11.5px] text-ink-3">{sub}</span> : null}
-                    </span>
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-          <div className="border-t border-line px-2.5 py-1.5 text-[11px] text-ink-3">↑↓ to move · Enter to pick · Esc to close</div>
-        </div>
-      ) : null}
-      {menu === 'emoji' ? <EmojiPicker className="absolute right-3 bottom-full mb-2" onPick={insert} onClose={() => setMenu(null)} /> : null}
-      <div
-        className={cx(
-          'relative flex flex-col gap-1.5 rounded-[12px] border transition-colors',
-          compact ? 'px-1.5 py-1' : 'px-2 py-1.5',
-          urgent && !editing
-            ? 'border-danger bg-danger-bg/40 focus-within:ring-2 focus-within:ring-danger/20'
-            : editing
-              ? 'border-[#D97706] focus-within:ring-2 focus-within:ring-[#D97706]/20'
-              : 'border-line focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15',
-        )}
-      >
-        {tray.length && !editing && !recording ? (
-          <div className="px-1 pt-1">
-            <Tray items={tray} transfers={transfers} onRemove={remove} onRetry={retry} compact={compact} />
-          </div>
-        ) : null}
-        <div className="flex items-end gap-1">
-          {recording ? (
-            <VoiceRecorder compact={compact} onDone={(b, ms) => void sendVoice(b, ms)} onCancel={() => setRecording(false)} />
-          ) : (
-            <>
-              {!editing ? (
+
+  const attachBtn = !editing ? (
                 <span className="relative">
                   <button type="button" aria-label="Attach" title="Attach" aria-haspopup="menu" aria-expanded={menu === 'attach'} onClick={() => setMenu(menu === 'attach' ? null : 'attach')} className={cx(tool, menu === 'attach' && '!bg-selection !text-primary')}>
                     <Icon name="paperclip" size={compact ? 16 : 18} />
                   </button>
-                  {menu === 'attach' ? <AttachMenu compact={compact} onPick={(c) => void attach(c)} onClose={() => setMenu(null)} /> : null}
+                  {menu === 'attach' ? <AttachMenu compact={compact} align={look === 'pill' ? 'right' : 'left'} onPick={(c) => void attach(c)} onClose={() => setMenu(null)} /> : null}
                 </span>
-              ) : null}
+              ) : null;
+  const field = (
               <textarea
                 ref={input}
                 value={text}
@@ -514,11 +413,12 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                   if (onDisk.length) void registerDropped(onDisk).then(stageDisk, (err: unknown) => toast('error', errorMessage(err)));
                 }}
                 rows={1}
-                placeholder={editing ? 'Edit your message' : tray.length ? 'Add a caption…' : 'Type a message…'}
+                placeholder={editing ? 'Edit your message' : tray.length ? 'Add a caption…' : look === 'pill' ? 'Message' : 'Type a message…'}
                 aria-label="Message"
                 className={cx('bare-focus field-sizing-content max-h-40 min-w-0 flex-1 resize-none bg-transparent px-1 outline-none', compact ? 'min-h-[30px] py-[5px] text-[13px]' : 'min-h-[34px] py-[7px] text-[13.5px]')}
               />
-              {canUrgent && !editing ? (
+  );
+  const urgentBtn = canUrgent && !editing ? (
                 <button
                   type="button"
                   aria-label="Urgent"
@@ -529,10 +429,13 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                 >
                   <Icon name="warning" size={compact ? 15 : 17} />
                 </button>
-              ) : null}
+              ) : null;
+  const emojiBtn = (
               <button type="button" aria-label="Emoji" title="Emoji" aria-pressed={menu === 'emoji'} onClick={() => setMenu(menu === 'emoji' ? null : 'emoji')} className={cx(tool, menu === 'emoji' && '!bg-selection !text-primary')}>
                 <Icon name="smile" size={compact ? 16 : 18} />
               </button>
+  );
+  const sendBtn = (
               <button
                 type="button"
                 aria-label={editing ? 'Save the change' : 'Send'}
@@ -547,13 +450,187 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
               >
                 <Icon name={editing ? 'check' : 'send'} size={compact ? 14 : 16} />
               </button>
+  );
+
+  const lineEl = line ? (
+        <div className="absolute bottom-full left-4 mb-1 flex items-center gap-1.5 rounded-full bg-surface/95 px-2 py-0.5 text-[11.5px] text-ink-3" aria-live="polite">
+          <span className="flex gap-[3px]" aria-hidden>
+            {[0, 1, 2].map((i) => <span key={i} className="h-[5px] w-[5px] animate-bounce rounded-full bg-ink-3" style={{ animationDelay: `${i * 150}ms` }} />)}
+          </span>
+          {line}
+        </div>
+      ) : null;
+  const barEl = editing ? (
+        <div className="flex items-center gap-2 rounded-[8px] border-l-[3px] border-[#D97706] bg-[#FFF6E5] px-2.5 py-1.5 text-[12px] dark:bg-warning-bg">
+          <Icon name="compose" size={13} className="shrink-0 text-[#9A4A06] dark:text-warning" />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <b className="text-[#7A3B05] dark:text-warning">Editing message</b>
+            <span className="truncate text-ink-2">{editing.original}</span>
+          </span>
+          <button type="button" onClick={cancelEdit} className="shrink-0 rounded-[6px] px-2 py-0.5 font-semibold text-[#7A3B05] hover:bg-[#FDEBC8] dark:text-warning dark:hover:bg-transparent">Cancel</button>
+        </div>
+      ) : reply ? (
+        <div className="flex items-center gap-2 rounded-[8px] border-l-[3px] border-primary bg-selection px-2.5 py-1.5 text-[12px]">
+          <Icon name="reply" size={13} className="shrink-0 text-primary" />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <b className="text-ink">Replying to {reply.sender_name}</b>
+            <span className="truncate text-ink-2">{reply.snippet}</span>
+          </span>
+          <button type="button" aria-label="Cancel the reply" title="Cancel the reply (Esc)" onClick={onClearReply} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-ink-3 hover:bg-surface hover:text-ink">
+            <Icon name="x" size={13} />
+          </button>
+        </div>
+      ) : null;
+  const mentionsEl = asking && options.length ? (
+        <div
+          role="listbox"
+          aria-label="Mention someone"
+          className={cx('absolute bottom-full z-40 mb-1 flex max-h-[320px] flex-col rounded-[12px] border border-line bg-surface shadow-[0_12px_32px_rgba(15,27,61,.18)]', compact ? 'w-[250px]' : 'w-[290px]')}
+          style={{ left: asking.left }}
+        >
+          <div className="min-h-0 flex-1 overflow-y-auto p-1 scroll-thin">
+            {options.map((t, i) => {
+              const heading =
+                t.type === 'user' && options.findIndex((o) => o.type === 'user') === i ? 'PEOPLE IN THIS CHAT'
+                  : t.type !== 'user' && t.type !== 'everyone' && options.findIndex((o) => o.type !== 'user' && o.type !== 'everyone') === i ? 'TEAMS AND DEPARTMENTS'
+                    : null;
+              const state = t.type === 'user' ? (presence.data?.presence[String(t.id)] ?? 'offline') : '';
+              const sub = t.type === 'user'
+                ? [t.detail, (PRESENCE[state]?.label ?? state).toLowerCase()].filter(Boolean).join(' · ')
+                : (t.detail ?? (t.type === 'department' ? 'Department' : 'Team'));
+              return (
+                <div key={`${t.type}:${t.id}`}>
+                  {heading ? <div className="px-2 pt-1.5 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-ink-3">{heading}</div> : null}
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={i === pick}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onMouseEnter={() => setPick(i)}
+                    onClick={() => choose(t)}
+                    className={cx('flex w-full items-center gap-2.5 rounded-[8px] px-2 py-1.5 text-left', i === pick ? 'bg-selection' : 'hover:bg-subtle')}
+                  >
+                    {t.type === 'user' ? (
+                      <span className="relative shrink-0">
+                        <Avatar name={t.name} size={28} />
+                        <span className={cx('absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-surface', PRESENCE[state]?.dot ?? 'bg-line')} />
+                      </span>
+                    ) : (
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-subtle text-ink-2">
+                        <Icon name={t.type === 'everyone' ? 'megaphone' : t.type === 'department' ? 'building' : 'users'} size={14} />
+                      </span>
+                    )}
+                    <span className="flex min-w-0 flex-col">
+                      <b className="truncate text-[12.5px] text-ink">{t.type === 'everyone' ? '@everyone' : t.name}</b>
+                      {sub ? <span className="truncate text-[11.5px] text-ink-3">{sub}</span> : null}
+                    </span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <div className="border-t border-line px-2.5 py-1.5 text-[11px] text-ink-3">↑↓ to move · Enter to pick · Esc to close</div>
+        </div>
+      ) : null;
+  const trayEl = tray.length && !editing && !recording ? (
+          <div className="px-1 pt-1">
+            <Tray items={tray} transfers={transfers} onRemove={remove} onRetry={retry} compact={compact} />
+          </div>
+        ) : null;
+  const modalsEl = (
+    <>
+      {modal === 'drive' ? <DrivePicker roomId={roomId} onClose={() => setModal(null)} onSent={refresh} /> : null}
+      {modal === 'camera' ? <CameraCapture onTaken={stageBlob} onClose={() => setModal(null)} /> : null}
+    </>
+  );
+
+  if (look === 'pill') {
+    const empty = !canSend && !editing;
+    return (
+      <div ref={root} className="relative flex shrink-0 flex-col gap-1.5 px-2.5 pt-1 pb-2.5">
+        {extras}
+        {lineEl}
+        {barEl}
+        {mentionsEl}
+        {menu === 'emoji' ? <EmojiPicker className="absolute bottom-full left-2.5 mb-2" onPick={insert} onClose={() => setMenu(null)} /> : null}
+        <div className="flex items-end gap-2">
+          <div
+            className={cx(
+              'relative flex min-w-0 flex-1 flex-col rounded-[22px] bg-surface px-1.5 py-[5px] shadow-[0_1px_2px_rgba(15,27,61,.12)] ring-1 transition-shadow',
+              urgent && !editing ? 'ring-danger' : editing ? 'ring-[#D97706]' : 'ring-line focus-within:ring-primary/50',
+            )}
+          >
+            {trayEl}
+            <div className="flex items-end gap-0.5">
+              {recording ? (
+                <VoiceRecorder compact onDone={(b, ms) => void sendVoice(b, ms)} onCancel={() => setRecording(false)} />
+              ) : (
+                <>
+                  {emojiBtn}
+                  {field}
+                  {urgentBtn}
+                  {attachBtn}
+                </>
+              )}
+            </div>
+          </div>
+          {recording ? null : empty ? (
+            <button type="button" aria-label="Record a voice message" title="Record a voice message" onClick={() => setRecording(true)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-white shadow-[0_4px_10px_rgba(35,52,158,.3)] hover:bg-primary-hover">
+              <Icon name="mic" size={19} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              aria-label={editing ? 'Save the change' : 'Send'}
+              title={editing ? 'Save the change' : 'Send (Enter)'}
+              disabled={!canSend || sending}
+              onClick={() => void send()}
+              className={cx('flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white shadow-[0_4px_10px_rgba(35,52,158,.3)] disabled:opacity-60', editing ? 'bg-[#D97706] hover:bg-[#B45309]' : urgent ? 'bg-danger hover:opacity-90' : 'bg-primary hover:bg-primary-hover')}
+            >
+              <Icon name={editing ? 'check' : 'send'} size={18} />
+            </button>
+          )}
+        </div>
+        {modalsEl}
+      </div>
+    );
+  }
+
+  return (
+    <div ref={root} className={cx('relative flex shrink-0 flex-col border-t border-line bg-surface', compact ? 'gap-1.5 px-2.5 pt-2 pb-2.5' : 'gap-2 px-4 pt-2.5 pb-3')}>
+      {extras}
+      {lineEl}
+      {barEl}
+      {mentionsEl}
+      {menu === 'emoji' ? <EmojiPicker className="absolute right-3 bottom-full mb-2" onPick={insert} onClose={() => setMenu(null)} /> : null}
+      <div
+        className={cx(
+          'relative flex flex-col gap-1.5 rounded-[12px] border transition-colors',
+          compact ? 'px-1.5 py-1' : 'px-2 py-1.5',
+          urgent && !editing
+            ? 'border-danger bg-danger-bg/40 focus-within:ring-2 focus-within:ring-danger/20'
+            : editing
+              ? 'border-[#D97706] focus-within:ring-2 focus-within:ring-[#D97706]/20'
+              : 'border-line focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15',
+        )}
+      >
+        {trayEl}
+        <div className="flex items-end gap-1">
+          {recording ? (
+            <VoiceRecorder compact={compact} onDone={(b, ms) => void sendVoice(b, ms)} onCancel={() => setRecording(false)} />
+          ) : (
+            <>
+              {attachBtn}
+              {field}
+              {urgentBtn}
+              {emojiBtn}
+              {sendBtn}
             </>
           )}
         </div>
       </div>
       {!compact && !recording ? <div className={cx('px-1 text-[11px]', urgent && !editing ? 'font-semibold text-danger' : 'text-ink-3')}>{hint}</div> : null}
-      {modal === 'drive' ? <DrivePicker roomId={roomId} onClose={() => setModal(null)} onSent={refresh} /> : null}
-      {modal === 'camera' ? <CameraCapture onTaken={stageBlob} onClose={() => setModal(null)} /> : null}
+      {modalsEl}
     </div>
   );
 }

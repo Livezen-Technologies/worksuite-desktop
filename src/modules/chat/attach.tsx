@@ -23,7 +23,7 @@ const CHOICES: Array<{ id: AttachChoice; icon: string; label: string; hint: stri
   { id: 'voice', icon: 'mic', label: 'Voice message', hint: 'Record and send', tone: 'bg-danger-bg text-danger' },
 ];
 
-export function AttachMenu({ onPick, onClose, compact }: { onPick: (c: AttachChoice) => void; onClose: () => void; compact?: boolean }) {
+export function AttachMenu({ onPick, onClose, compact, align = 'left' }: { onPick: (c: AttachChoice) => void; onClose: () => void; compact?: boolean; align?: 'left' | 'right' }) {
   const ref = useRef<HTMLDivElement>(null);
   const [at, setAt] = useState(0);
   useEffect(() => {
@@ -54,7 +54,7 @@ export function AttachMenu({ onPick, onClose, compact }: { onPick: (c: AttachCho
         if (e.key === 'Escape') onClose();
         else move(e.key === 'ArrowDown' ? 1 : -1);
       }}
-      className={cx('absolute bottom-full left-0 z-40 mb-2 rounded-[12px] border border-line bg-surface p-1.5 shadow-[0_12px_32px_rgba(15,27,61,.18)]', compact ? 'w-[230px]' : 'w-[264px]')}
+      className={cx('absolute bottom-full z-40 mb-2 rounded-[12px] border border-line bg-surface p-1.5 shadow-[0_12px_32px_rgba(15,27,61,.18)]', align === 'right' ? 'right-0' : 'left-0', compact ? 'w-[230px]' : 'w-[264px]')}
     >
       {CHOICES.map((c, i) => (
         <button

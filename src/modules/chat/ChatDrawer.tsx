@@ -13,6 +13,8 @@ import { Icon } from '../../components/Icon';
 import { Avatar, Empty, ErrorNote, Spinner, cx } from '../../components/ui';
 import { resolveWebLink } from '@shared/links';
 import { APP_CATALOGUE } from '@shared/apps';
+import { appColour } from '../../core/app-look';
+import { AppTile } from '../../components/AppTile';
 import { describeCall, type CallRow, type Kind } from '../calls/log';
 import { useNow } from '../calls/parts';
 import { answerCall, startCall } from '../calls/start';
@@ -95,11 +97,7 @@ function useRooms() {
   return useQuery({ queryKey: ['chat', 'rooms'], queryFn: ({ signal }) => apiGetMeta<{ rooms: Room[] }>('/api/chat/rooms', undefined, signal) });
 }
 
-function Header({ children }: { children: React.ReactNode }) {
-  return <div className="flex h-[50px] shrink-0 items-center gap-1.5 border-b border-line pr-2 pl-2.5">{children}</div>;
-}
-
-const hbtn = 'flex h-[30px] min-w-[30px] items-center justify-center rounded-[7px] px-1 text-[13px] text-ink-2 hover:bg-subtle hover:text-ink';
+const hbtn = 'flex h-8 min-w-8 items-center justify-center rounded-full px-1 text-[13px] text-ink-2 hover:bg-subtle hover:text-ink';
 const round = 'flex h-[34px] w-[34px] items-center justify-center rounded-full text-ink-2 hover:bg-subtle hover:text-ink';
 const pill = (on: boolean) => cx('flex h-[30px] shrink-0 items-center rounded-full border px-3 text-[12.5px] font-semibold', on ? 'border-primary bg-primary text-white' : 'border-line bg-surface text-ink-2 hover:text-ink');
 
@@ -323,6 +321,8 @@ function Conversation({ roomId }: { roomId: string }) {
   const rooms = useRooms();
   const room = (rooms.data?.data.rooms ?? []).find((r) => String(r.id) === roomId);
   const [menu, setMenu] = useState(false);
+  const [typing, setTyping] = useState<string[]>([]);
+  const [hiddenFor, setHiddenFor] = useState<string | null>(null);
   const presence = useQuery({
     queryKey: ['chat', 'presence', String(room?.other_user_id ?? '')],
     queryFn: ({ signal }) => apiGet<{ presence: Record<string, string> }>('/api/chat/presence', { ids: String(room!.other_user_id) }, signal),
@@ -341,57 +341,71 @@ function Conversation({ roomId }: { roomId: string }) {
       toast('error', errorMessage(e));
     }
   };
+  const recordApp = tab ? APP_CATALOGUE.find((x) => x.id === tab.app) : undefined;
+  const banner =
+    link && tab && hiddenFor !== tab.id ? (
+      <div className="relative z-10 mx-2.5 mt-2.5 flex shrink-0 items-center gap-2.5 rounded-[12px] bg-surface py-2 pr-2 pl-2.5 shadow-[0_1px_3px_rgba(15,27,61,.12)]">
+        <AppTile icon={recordApp?.icon ?? 'link'} colour={appColour(recordApp?.id ?? 'crm')} size={30} radius={8} iconSize={15} />
+        <span className="min-w-0 flex-1 text-[12px] leading-snug text-ink-2">
+          <b className="text-ink">{tab.title}</b> is open — messages can link to it
+        </span>
+        <button type="button" onClick={() => void attach()} className="flex h-[30px] shrink-0 items-center gap-1.5 rounded-full bg-selection px-3 text-[12px] font-bold text-primary hover:brightness-95">
+          <Icon name="link" size={13} />
+          Attach record
+        </button>
+        <button type="button" aria-label="Hide" title="Hide" onClick={() => setHiddenFor(tab.id)} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-ink-3 hover:bg-subtle hover:text-ink">
+          <Icon name="x" size={13} />
+        </button>
+      </div>
+    ) : null;
+  const status = typing.length ? (typing.length === 1 ? 'typing…' : `${typing.length} people typing…`) : (st?.label ?? (room && room.type !== 'direct' ? 'Group' : ''));
   return (
     <>
-      <Header>
+      <div className="flex h-[58px] shrink-0 items-center gap-1 border-b border-line pr-2 pl-2">
         <button type="button" aria-label="Back to chats" onClick={() => openChatDrawer(null)} className={hbtn}>
-          <Icon name="chevron-left" size={17} />
+          <Icon name="chevron-left" size={18} />
         </button>
-        <span className="relative shrink-0">
-          <Avatar name={room?.avatar_name || room?.name} size={30} className={room && room.type !== 'direct' ? '!rounded-[8px]' : ''} />
-          {st ? <span className={cx('absolute -right-px -bottom-px h-[9px] w-[9px] rounded-full border-2 border-surface', st.dot)} /> : null}
+        <span className="relative ml-0.5 shrink-0">
+          <Avatar name={room?.avatar_name || room?.name} size={36} className={room && room.type !== 'direct' ? '!rounded-[10px]' : ''} />
+          {st ? <span className={cx('absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-surface', st.dot)} /> : null}
         </span>
-        <span className="flex min-w-0 flex-1 flex-col">
-          <b className="truncate text-[13px] text-ink">{room?.name ?? 'Conversation'}</b>
-          <span className="truncate text-[11.5px] text-ink-3">{st?.label ?? (room && room.type !== 'direct' ? 'Group' : '')}</span>
+        <span className="ml-1.5 flex min-w-0 flex-1 flex-col">
+          <b className="truncate text-[14px] text-ink">{room?.name ?? 'Conversation'}</b>
+          <span className={cx('truncate text-[12px]', typing.length ? 'font-semibold text-success' : 'text-ink-3')}>{status}</span>
         </span>
-        <button type="button" aria-label="Voice call" title="Voice call" onClick={() => void startCall(roomId, 'audio', room?.name)} className={hbtn}>
-          <Icon name="phone" size={15} />
+        <button type="button" aria-label="Voice call" title="Voice call" onClick={() => void startCall(roomId, 'audio', room?.name)} className={cx(hbtn, '!text-primary')}>
+          <Icon name="phone" size={17} />
         </button>
-        <button type="button" aria-label="Video call" title="Video call" onClick={() => void startCall(roomId, 'video', room?.name)} className={hbtn}>
-          <Icon name="video" size={15} />
+        <button type="button" aria-label="Video call" title="Video call" onClick={() => void startCall(roomId, 'video', room?.name)} className={cx(hbtn, '!text-primary')}>
+          <Icon name="video" size={17} />
         </button>
         <span className="relative">
           <button type="button" aria-label="More" aria-expanded={menu} onClick={() => setMenu(!menu)} className={hbtn}>
-            <Icon name="more" size={16} />
+            <Icon name="more-vertical" size={17} />
           </button>
           {menu ? (
-            <div role="menu" className="absolute top-9 right-0 z-10 w-48 rounded-[10px] border border-line bg-surface py-1 shadow-xl">
-              <button type="button" role="menuitem" className="block w-full px-3 py-1.5 text-left text-[13px] hover:bg-subtle" onClick={() => (minimiseChatDrawer(), navigate(`/chat?room=${roomId}`))}>Open in Chat</button>
-              <button type="button" role="menuitem" className="block w-full px-3 py-1.5 text-left text-[13px] hover:bg-subtle" onClick={() => (setMenu(false), void apiPost(`/api/chat/rooms/${roomId}/flags`, { muted: !room?.muted }).catch((e) => toast('error', errorMessage(e))))}>{room?.muted ? 'Unmute' : 'Mute'}</button>
+            <div role="menu" className="absolute top-9 right-0 z-30 w-48 rounded-[12px] bg-surface p-1.5 shadow-[0_16px_40px_rgba(15,27,61,.2),0_0_0_1px_rgba(15,27,61,.06)]">
+              <button type="button" role="menuitem" className="flex h-8 w-full items-center gap-2.5 rounded-[8px] px-2.5 text-left text-[13px] text-ink hover:bg-subtle" onClick={() => (minimiseChatDrawer(), navigate(`/chat?room=${roomId}`))}>
+                <Icon name="maximize" size={14} className="text-ink-2" />
+                Open in Chat
+              </button>
+              <button type="button" role="menuitem" className="flex h-8 w-full items-center gap-2.5 rounded-[8px] px-2.5 text-left text-[13px] text-ink hover:bg-subtle" onClick={() => (setMenu(false), void apiPost(`/api/chat/rooms/${roomId}/flags`, { muted: !room?.muted }).catch((e) => toast('error', errorMessage(e))))}>
+                <Icon name={room?.muted ? 'volume' : 'volume-off'} size={14} className="text-ink-2" />
+                {room?.muted ? 'Unmute' : 'Mute'}
+              </button>
             </div>
           ) : null}
         </span>
+        <span className="mx-1 h-5 w-px bg-line" aria-hidden />
         <button type="button" aria-label="Minimise" title="Minimise to the corner" onClick={minimiseChatDrawer} className={hbtn}>
-          <Icon name="minus" size={15} />
-        </button>
-        <button type="button" aria-label="Maximise" title="Open in Chat" onClick={() => (minimiseChatDrawer(), navigate(`/chat?room=${roomId}`))} className={hbtn}>
-          <Icon name="stop" size={13} />
+          <Icon name="minus" size={16} />
         </button>
         <button type="button" aria-label="Close" title="Close" onClick={() => ui.set({ dock: null, chatRoom: null })} className={hbtn}>
-          <Icon name="x" size={15} />
+          <Icon name="x" size={16} />
         </button>
-      </Header>
-      {link && tab ? (
-        <div className="flex shrink-0 items-center gap-2 bg-selection px-3 py-2 text-[12px] text-ink">
-          <span className="min-w-0 flex-1 truncate">
-            Context: <b className="text-ink">{tab.title}</b> is open — messages can link to it
-          </span>
-          <button type="button" onClick={() => void attach()} className="shrink-0 font-semibold text-primary hover:underline">Attach record</button>
-        </div>
-      ) : null}
+      </div>
       <div className="min-h-0 flex-1">
-        <Thread roomId={roomId} room={room} mini bare tools rooms={rooms.data?.data.rooms ?? []} />
+        <Thread roomId={roomId} room={room} mini bare drawer banner={banner} onTyping={setTyping} rooms={rooms.data?.data.rooms ?? []} />
       </div>
     </>
   );

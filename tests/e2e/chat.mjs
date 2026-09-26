@@ -277,15 +277,36 @@ try {
   const drawer = await t.evaluate(`(() => {
     const a = document.querySelector('aside[aria-label="Chat drawer"]');
     const has = (l) => !!a.querySelector('button[aria-label="' + l + '"]');
-    return { attach: has('Attach'), emoji: has('Emoji'), send: has('Send'), urgent: has('Urgent'), hint: a.innerText.includes('Enter to send'), height: a.querySelector('button[aria-label="Send"]').getBoundingClientRect().height };
+    return { attach: has('Attach'), emoji: has('Emoji'), mic: has('Record a voice message'), sendWhileEmpty: has('Send'), urgent: has('Urgent'), hint: a.innerText.includes('Enter to send'), quick: ['Create task', 'Save as note'].every((l) => [...a.querySelectorAll('button')].some((b) => b.textContent.trim() === l)) };
   })()`);
   const fromDrawer = `From the drawer ${Math.floor(Math.random() * 1000)}`;
   await t.evaluate(`(() => { const el = document.querySelector('aside[aria-label="Chat drawer"] textarea[aria-label="Message"]'); const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; set.call(el, ${JSON.stringify(fromDrawer)}); el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
+  await t.waitFor(`!!document.querySelector('aside[aria-label="Chat drawer"] button[aria-label="Send"]')`, 'Send in place of the microphone');
   await t.shot('c6-drawer-composer');
   await t.evaluate(`document.querySelector('aside[aria-label="Chat drawer"] button[aria-label="Send"]').click()`);
   await t.waitFor(`document.querySelector('aside[aria-label="Chat drawer"]').innerText.includes(${JSON.stringify(fromDrawer)})`, 'the drawer message', 20_000);
   const drawnSent = await api('GET', `/api/chat/messages?room_id=${roomId}`);
-  t.check('the drawer has the same composer, compact (no hints), and sends', drawer.attach && drawer.emoji && drawer.send && drawer.urgent && !drawer.hint && drawer.height <= 30 && drawnSent.data.messages.some((m) => m.message === fromDrawer), JSON.stringify(drawer));
+  t.check('the drawer has the pill message box (emoji, urgent, attach; the microphone until there is something to send), and sends', drawer.attach && drawer.emoji && drawer.mic && !drawer.sendWhileEmpty && drawer.urgent && !drawer.hint && drawer.quick && drawnSent.data.messages.some((m) => m.message === fromDrawer), JSON.stringify(drawer));
+
+  // The drawer's message actions (ChatDrawer · message actions): a compact bar on the message,
+  // the reactions pill inside the drawer, and the menu opening upward by the message box.
+  const drawerAct = (label) =>
+    `(() => { const g = [...document.querySelectorAll('aside[aria-label="Chat drawer"] div.group')].filter(d => d.textContent.includes(${JSON.stringify(fromDrawer)})).pop(); const b = g && [...g.querySelectorAll('button')].find(b => b.getAttribute('aria-label') === ${JSON.stringify(label)}); if (!b) return false; b.click(); return true; })()`;
+  t.check('a message in the drawer has the compact bar: react, reply, star, more', await t.evaluate(`(() => { const g = [...document.querySelectorAll('aside[aria-label="Chat drawer"] div.group')].filter(d => d.textContent.includes(${JSON.stringify(fromDrawer)})).pop(); const bar = g && g.querySelector('[role="toolbar"][aria-label="Message actions"]'); return !!bar && ['React', 'Reply', 'Star message', 'More actions'].every(l => !!bar.querySelector('button[aria-label="' + l + '"]')); })()`));
+  await t.evaluate(drawerAct('React'));
+  await t.waitFor(`!!document.querySelector('aside[aria-label="Chat drawer"] [role="toolbar"][aria-label="React"]')`, 'the reactions pill');
+  await t.shot('c7-drawer-react');
+  const inside = await t.evaluate(`(() => { const a = document.querySelector('aside[aria-label="Chat drawer"]').getBoundingClientRect(); const p = document.querySelector('aside[aria-label="Chat drawer"] [role="toolbar"][aria-label="React"]').getBoundingClientRect(); return p.left >= a.left && p.right <= a.right && p.top >= a.top; })()`);
+  await t.evaluate(`document.querySelector('aside[aria-label="Chat drawer"] [role="toolbar"][aria-label="React"] button[aria-label="React 🙏"]').click()`);
+  await t.waitFor(`[...document.querySelectorAll('aside[aria-label="Chat drawer"] div.group')].filter(d => d.textContent.includes(${JSON.stringify(fromDrawer)})).pop()?.querySelector('button[aria-label^="🙏 1"]') != null`, 'the 🙏 reaction');
+  const reactedHere = await api('GET', `/api/chat/messages?room_id=${roomId}`);
+  t.check('the reactions pill stays inside the drawer, and the pick is stored', inside && reactedHere.data.messages.some((m) => m.message === fromDrawer && m.reactions?.some((r) => r.emoji === '🙏')));
+  await t.evaluate(drawerAct('More actions'));
+  await t.waitFor(`!!document.querySelector('aside[aria-label="Chat drawer"] [role="menu"][aria-label="Message actions"]')`, 'the message menu');
+  await t.shot('c8-drawer-menu');
+  const menu = await t.evaluate(`(() => { const m = document.querySelector('aside[aria-label="Chat drawer"] [role="menu"][aria-label="Message actions"]'); const g = [...document.querySelectorAll('aside[aria-label="Chat drawer"] div.group')].filter(d => d.textContent.includes(${JSON.stringify(fromDrawer)})).pop(); const b = g.querySelector('button[aria-label="More actions"]').getBoundingClientRect(); const r = m.getBoundingClientRect(); const a = document.querySelector('aside[aria-label="Chat drawer"]').getBoundingClientRect(); return { items: [...m.querySelectorAll('[role="menuitem"]')].map(x => x.textContent.trim()), up: r.bottom <= b.top + 1, inside: r.left >= a.left && r.right <= a.right }; })()`);
+  t.check('the menu opens upward by the message box, inside the drawer, with the design\'s actions', menu.up && menu.inside && ['Reply', 'Copy message', 'Copy link', 'Pin message', 'Create task', 'Delete…'].every((l) => menu.items.includes(l)), JSON.stringify(menu));
+  await t.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
 } catch (e) {
   t.check('chat run', false, e.message);
   try {

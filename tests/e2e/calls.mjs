@@ -99,14 +99,17 @@ try {
   await ring2.clickButton('Reply with message…');
   await ring2.waitFor(ring2.hasText("Can't talk now"), 'the quick replies');
   await ring2.shot('k3-reply');
+  // Earlier runs left replies of their own: count this one in, and wait for the decline behind it.
+  const replies = async () => ((await api('GET', `/api/chat/messages?room_id=${roomId}`)).data.messages ?? []).filter((m) => (m.message ?? '').startsWith("Can't talk now")).length;
+  const before = await replies();
   await ring2.evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent.startsWith("Can't talk now")).click()`);
   let said = false;
-  for (let i = 0; i < 20 && !said; i++) {
-    const msgs = await api('GET', `/api/chat/messages?room_id=${roomId}`);
-    said = (msgs.data.messages ?? []).some((m) => (m.message ?? '').startsWith("Can't talk now"));
-    if (!said) await sleep(250);
+  let after = null;
+  for (let i = 0; i < 40 && !(said && after?.status === 'ended'); i++) {
+    said = (await replies()) > before;
+    after = (await api('GET', `/api/chat/calls/${again.data.uuid}`)).data;
+    if (!(said && after?.status === 'ended')) await sleep(250);
   }
-  const after = (await api('GET', `/api/chat/calls/${again.data.uuid}`)).data;
   t.check('Reply with message sends it to the conversation and declines', said && after?.status === 'ended', `${said}/${after?.status}`);
 
   // ── Nobody to answer: a voice message ─────────────────────────────────
@@ -144,7 +147,7 @@ try {
   await t.waitFor(`document.querySelector('aside[aria-label="Chat drawer"]').innerText.includes("Can't talk now")`, 'the conversation in the drawer', 20_000);
   await t.shot('k6-drawer-chat');
   t.check('a conversation opens in the drawer, over Home', await t.evaluate(t.hasText('Good ')));
-  const drawerBtn = (label) => `[...document.querySelectorAll('aside[aria-label="Chat drawer"] button')].find(b => b.textContent.trim() === ${JSON.stringify(label)})`;
+  const drawerBtn = (label) => `[...document.querySelectorAll('aside[aria-label="Chat drawer"] button')].find(b => b.textContent.trim() === ${JSON.stringify(label)} || b.getAttribute('aria-label') === ${JSON.stringify(label)})`;
   t.check('the drawer offers Create task, Save as note and Search in conversation', await t.evaluate(`!!${drawerBtn('Create task')} && !!${drawerBtn('Save as note')} && !!${drawerBtn('Search in conversation')}`));
   await t.evaluate(`${drawerBtn('Search in conversation')}.click()`);
   await t.waitFor(`!!document.querySelector('aside[aria-label="Chat drawer"] input[aria-label="Search in this conversation"]')`, 'the search in the drawer');

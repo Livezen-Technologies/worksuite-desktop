@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { OfflineMutation } from '@shared/types';
 import { app } from '../../core/app-state';
 import { apiGet, apiPost, apiPut } from '../../core/api';
@@ -36,7 +36,32 @@ const headerBtn = 'flex h-[34px] w-[34px] items-center justify-center rounded-[8
  * One conversation. `mini` is the pop-out window; `bare` drops the header
  * altogether, for a conversation shown beside something else (a call).
  */
-export function Thread({ roomId, room, mini, bare, tools, rooms, detailsOpen, onToggleDetails }: { roomId: string; room: Room | undefined; mini: boolean; bare?: boolean; tools?: boolean; rooms: Room[]; detailsOpen?: boolean; onToggleDetails?: () => void }) {
+export function Thread({
+  roomId,
+  room,
+  mini,
+  bare,
+  drawer,
+  banner,
+  onTyping,
+  rooms,
+  detailsOpen,
+  onToggleDetails,
+}: {
+  roomId: string;
+  room: Room | undefined;
+  mini: boolean;
+  bare?: boolean;
+  /** The chat drawer's conversation: its bubbles, action bar, quick actions and message box. */
+  drawer?: boolean;
+  /** Shown over the top of the messages (the drawer's "record is open" card). */
+  banner?: ReactNode;
+  /** Who is typing, for a header drawn outside the thread. */
+  onTyping?: (names: string[]) => void;
+  rooms: Room[];
+  detailsOpen?: boolean;
+  onToggleDetails?: () => void;
+}) {
   const qc = useQueryClient();
   const me = useStore(app, (s) => s.auth?.user?.id);
   const meetAllowed = useStore(app, (s) => s.apps.some((a) => a.id === 'meet'));
@@ -111,6 +136,11 @@ export function Thread({ roomId, room, mini, bare, tools, rooms, detailsOpen, on
     };
   }, [roomId, me, qc]);
 
+  // The drawer draws "typing…" in its own header.
+  useEffect(() => {
+    onTyping?.(Object.values(typing));
+  }, [typing, onTyping]);
+
   const onDrop = async (files: File[]) => {
     setDrag(false);
     try {
@@ -131,7 +161,7 @@ export function Thread({ roomId, room, mini, bare, tools, rooms, detailsOpen, on
     return i === 0 || dayKey(parseTs(messages[i - 1]!.created_at)) !== day ? day : null;
   });
 
-  const chip = 'rounded-full border border-line px-2 py-[3px] text-ink-2 hover:bg-subtle hover:text-ink disabled:opacity-60';
+  const chip = 'flex h-[30px] items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-ink hover:bg-subtle disabled:opacity-60';
   /** The conversation so far (what is loaded), as a note of its own. */
   const saveAsNote = async () => {
     const said = messages.filter((m) => !m.deleted && (m.message || m.file)).slice(-40);
@@ -151,7 +181,8 @@ export function Thread({ roomId, room, mini, bare, tools, rooms, detailsOpen, on
 
   return (
     <div
-      className="relative flex h-full flex-col bg-ground"
+      data-thread
+      className={cx('relative flex h-full flex-col', drawer ? 'chat-wallpaper' : 'bg-ground')}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes('Files')) {
           e.preventDefault();
@@ -229,7 +260,8 @@ export function Thread({ roomId, room, mini, bare, tools, rooms, detailsOpen, on
           ) : null}
         </div>
       ) : null}
-      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-5 py-3.5 scroll-thin">
+      {banner}
+      <div ref={scroller} className={cx('min-h-0 flex-1 overflow-y-auto scroll-thin', drawer ? 'px-3 pt-1 pb-3' : 'px-5 py-3.5')}>
         {msgs.hasNextPage ? (
           <div className="mb-3 text-center">
             <button type="button" className="text-[12.5px] font-semibold text-primary hover:underline" onClick={() => void msgs.fetchNextPage()}>
@@ -240,16 +272,30 @@ export function Thread({ roomId, room, mini, bare, tools, rooms, detailsOpen, on
         {msgs.isLoading ? <Spinner /> : msgs.error ? <ErrorNote error={msgs.error} onRetry={() => void msgs.refetch()} /> : null}
         {messages.map((m, i) => {
           const header = days[i];
+          const prev = messages[i - 1];
+          const first = !!header || !prev || prev.sender_id !== m.sender_id || prev.type === 'system' || prev.type === 'call';
           return (
             <div key={m.id} id={`msg-${m.id}`}>
-              {header ? <div className="my-3 text-center"><span className="rounded-full bg-subtle px-2.5 py-[3px] text-[11.5px] font-semibold text-ink-3">{dayLabel(header, 'short')}</span></div> : null}
-              <Bubble m={m} own={String(m.sender_id) === me} roomId={roomId} onReply={setReply} onForward={setForwarding} onEdit={(x) => composer.current?.edit({ id: x.id, message: x.message ?? '' })} />
+              {header ? (
+                drawer ? (
+                  <div className="my-2.5 text-center">
+                    <span className="rounded-[8px] bg-surface px-2 py-[3px] text-[11px] font-bold text-ink-2 shadow-[0_1px_1px_rgba(15,27,61,.08)]">{relativeDay(header)}</span>
+                  </div>
+                ) : (
+                  <div className="my-3 text-center"><span className="rounded-full bg-subtle px-2.5 py-[3px] text-[11.5px] font-semibold text-ink-3">{dayLabel(header, 'short')}</span></div>
+                )
+              ) : null}
+              {drawer ? (
+                <DrawerBubble m={m} own={String(m.sender_id) === me} group={group} first={first} roomId={roomId} roomName={room?.name ?? 'conversation'} onReply={setReply} onForward={setForwarding} onEdit={(x) => composer.current?.edit({ id: x.id, message: x.message ?? '' })} />
+              ) : (
+                <Bubble m={m} own={String(m.sender_id) === me} roomId={roomId} onReply={setReply} onForward={setForwarding} onEdit={(x) => composer.current?.edit({ id: x.id, message: x.message ?? '' })} />
+              )}
             </div>
           );
         })}
         {mine.map((p) => (
           <div key={p.id} className="mt-3 flex flex-col items-end gap-1">
-            <div className="max-w-[520px] rounded-[12px_4px_12px_12px] border border-dashed border-[#8C9AD3] bg-[#DDE3F7] px-[13px] py-[9px] text-[13.5px] text-ink dark:bg-selection">{p.label.replace(/^Message: /, '')}</div>
+            <div className={cx('max-w-[520px] border border-dashed border-[#8C9AD3] bg-[#DDE3F7] text-ink dark:bg-selection', drawer ? 'max-w-[84%] rounded-[10px] px-2.5 py-1.5 text-[13px]' : 'rounded-[12px_4px_12px_12px] px-[13px] py-[9px] text-[13.5px]')}>{p.label.replace(/^Message: /, '')}</div>
             <span className="text-[11.5px] font-semibold text-[#9A4A06] dark:text-warning">
               {p.state === 'FAILED' || p.state === 'CONFLICT' ? (
                 <>
@@ -272,17 +318,21 @@ export function Thread({ roomId, room, mini, bare, tools, rooms, detailsOpen, on
         onClearReply={() => setReply(null)}
         typing={Object.values(typing)}
         compact={mini || bare}
+        look={drawer ? 'pill' : 'box'}
         extras={
-          tools ? (
-            <div className="flex flex-wrap gap-1.5 text-[11.5px] font-semibold">
+          drawer ? (
+            <div className="flex flex-wrap gap-1.5 text-[12px] font-bold">
               <button type="button" onClick={() => navigate(`/tasks?new=1&title=${encodeURIComponent(`Follow up: ${room?.name ?? 'conversation'}`.slice(0, 200))}`)} className={chip}>
+                <Icon name="tasks" size={14} className="text-primary" />
                 Create task
               </button>
               <button type="button" disabled={saving} onClick={() => void saveAsNote()} className={chip}>
+                <Icon name="notebook" size={14} className="text-[#CA8A04]" />
                 {saving ? 'Saving…' : 'Save as note'}
               </button>
-              <button type="button" aria-pressed={searching} onClick={() => setSearching(!searching)} className={cx(chip, searching && '!border-primary !bg-selection !text-primary')}>
-                Search in conversation
+              <button type="button" aria-label="Search in conversation" aria-pressed={searching} onClick={() => setSearching(!searching)} className={cx(chip, searching && '!border-primary !bg-selection !text-primary')}>
+                <Icon name="search" size={14} className="text-ink-2" />
+                Search
               </button>
             </div>
           ) : null
@@ -434,41 +484,336 @@ function Bubble({ m, own, roomId, onReply, onForward, onEdit }: { m: ChatMessage
         ) : null}
       </div>
       {picker ? <EmojiPicker className={cx('absolute top-8 z-30', own ? 'right-2' : 'left-10')} onPick={react} onClose={() => setPicker(false)} /> : null}
-      {deleting ? (
-        <Modal
-          title="Delete message?"
-          onClose={() => setDeleting(null)}
-          width={420}
-          footer={
-            <>
-              <Button onClick={() => setDeleting(null)}>Cancel</Button>
-              <Button variant="danger" onClick={() => {
-                const scope = deleting;
-                setDeleting(null);
-                void act(() => apiPost(`/api/chat/messages/${m.id}/delete`, { scope }));
-              }}>
-                Delete
-              </Button>
-            </>
-          }
-        >
-          <div className="flex flex-col gap-3 text-[13px]">
-            <div className="rounded-[9px] bg-subtle px-3 py-2.5 text-ink-2">“{(m.message ?? m.file?.filename ?? '').slice(0, 120)}”</div>
-            {can.delete_everyone ? (
-              <label className="flex items-start gap-2.5">
-                <input type="radio" name={`del-${m.id}`} checked={deleting === 'everyone'} onChange={() => setDeleting('everyone')} className="mt-0.5 accent-[var(--color-primary)]" />
-                <span className="flex flex-col"><b className="text-ink">Delete for everyone</b><span className="text-[12px] text-ink-3">Shows “Message deleted” in the conversation</span></span>
-              </label>
-            ) : null}
-            {can.delete_me ? (
-              <label className="flex items-start gap-2.5">
-                <input type="radio" name={`del-${m.id}`} checked={deleting === 'me'} onChange={() => setDeleting('me')} className="mt-0.5 accent-[var(--color-primary)]" />
-                <span className="flex flex-col"><b className="text-ink">Delete for me</b><span className="text-[12px] text-ink-3">Others still see it</span></span>
-              </label>
-            ) : null}
-          </div>
-        </Modal>
+      {deleting ? <DeleteDialog m={m} scope={deleting} setScope={setDeleting} onDelete={(scope) => void act(() => apiPost(`/api/chat/messages/${m.id}/delete`, { scope }))} /> : null}
+    </div>
+  );
+}
+
+
+/** "Delete message?" — for everyone or for me, as the server allows. */
+function DeleteDialog({ m, scope, setScope, onDelete }: { m: ChatMessage; scope: 'everyone' | 'me'; setScope: (v: 'everyone' | 'me' | null) => void; onDelete: (scope: 'everyone' | 'me') => void }) {
+  const can = m.can ?? {};
+  return (
+    <Modal
+      title="Delete message?"
+      onClose={() => setScope(null)}
+      width={420}
+      footer={
+        <>
+          <Button onClick={() => setScope(null)}>Cancel</Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              setScope(null);
+              onDelete(scope);
+            }}
+          >
+            Delete
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3 text-[13px]">
+        <div className="rounded-[9px] bg-subtle px-3 py-2.5 text-ink-2">“{(m.message ?? m.file?.filename ?? '').slice(0, 120)}”</div>
+        {can.delete_everyone ? (
+          <label className="flex items-start gap-2.5">
+            <input type="radio" name={`del-${m.id}`} checked={scope === 'everyone'} onChange={() => setScope('everyone')} className="mt-0.5 accent-[var(--color-primary)]" />
+            <span className="flex flex-col"><b className="text-ink">Delete for everyone</b><span className="text-[12px] text-ink-3">Shows “Message deleted” in the conversation</span></span>
+          </label>
+        ) : null}
+        {can.delete_me ? (
+          <label className="flex items-start gap-2.5">
+            <input type="radio" name={`del-${m.id}`} checked={scope === 'me'} onChange={() => setScope('me')} className="mt-0.5 accent-[var(--color-primary)]" />
+            <span className="flex flex-col"><b className="text-ink">Delete for me</b><span className="text-[12px] text-ink-3">Others still see it</span></span>
+          </label>
+        ) : null}
+      </div>
+    </Modal>
+  );
+}
+
+/** "Today", "Yesterday", or the date — the drawer's day pills. */
+function relativeDay(key: string): string {
+  const today = dayKey(new Date());
+  const d = new Date(`${key}T12:00:00`);
+  const y = new Date(d);
+  y.setDate(y.getDate() + 1);
+  if (key === today) return 'Today';
+  if (dayKey(y) === today) return 'Yesterday';
+  return dayLabel(key, 'short');
+}
+
+const NAME_COLOURS = ['#0B6770', '#23349E', '#9A4A06', '#6B3FB5', '#B42318', '#1F7A4D'];
+/** A sender's colour in a group, the same every time. */
+export function nameColour(name: string): string {
+  let h = 0;
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) | 0;
+  return NAME_COLOURS[Math.abs(h) % NAME_COLOURS.length]!;
+}
+
+/** Time, edited, starred and the ticks, inside a drawer bubble. */
+function Meta({ m, own }: { m: ChatMessage & { starred?: boolean }; own: boolean }) {
+  const r = own ? m.receipt : null;
+  return (
+    <span className="ml-auto inline-flex shrink-0 items-center gap-1 self-end pt-1 pl-2 text-[10.5px] leading-none whitespace-nowrap text-ink-3">
+      {m.starred ? <Icon name="star" size={10} className="text-[#CA8A04]" label="Starred" /> : null}
+      {m.edited ? 'edited · ' : ''}
+      {timeLabel(m.created_at)}
+      {r ? (
+        <Icon
+          name={r.status === 'sent' ? 'check' : 'check-check'}
+          size={13}
+          className={r.status === 'read' ? 'text-[#3B6FE0]' : 'text-ink-3'}
+          label={r.status === 'read' ? `Read by ${r.read}` : r.status === 'delivered' ? 'Delivered' : 'Sent'}
+        />
       ) : null}
+    </span>
+  );
+}
+
+const DRAWER_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
+/** Closes a floating panel on a click elsewhere, Escape, or a scroll behind it. */
+function useDismiss(open: boolean, box: React.RefObject<HTMLElement | null>, close: () => void) {
+  useEffect(() => {
+    if (!open) return;
+    const inside = (t: EventTarget | null) => !!box.current && box.current.contains(t as Node);
+    const down = (e: MouseEvent) => !inside(e.target) && close();
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && close();
+    const scroll = (e: Event) => !inside(e.target) && close();
+    window.addEventListener('mousedown', down);
+    window.addEventListener('keydown', key);
+    window.addEventListener('scroll', scroll, true);
+    return () => {
+      window.removeEventListener('mousedown', down);
+      window.removeEventListener('keydown', key);
+      window.removeEventListener('scroll', scroll, true);
+    };
+  }, [open, box, close]);
+}
+
+/**
+ * A message in the chat drawer (ChatDrawer · message actions): a bubble with
+ * its time and ticks inside, reactions hanging off the bottom, and — on hover
+ * or click — a compact action bar on its top edge: react, reply, star, more.
+ * The reactions pill and the menu float, stay inside the drawer, and the menu
+ * opens upward when the message is down by the message box.
+ */
+function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForward, onEdit }: { m: ChatMessage & { starred?: boolean; pinned?: unknown; card?: Card | null }; own: boolean; group: boolean; first: boolean; roomId: string; roomName: string; onReply: (r: ReplyTarget) => void; onForward: (m: ChatMessage) => void; onEdit: (m: ChatMessage) => void }) {
+  const qc = useQueryClient();
+  const { openLink } = useTab();
+  const [pop, setPop] = useState<{ kind: 'react' | 'more'; left: number; top: number } | null>(null);
+  const [picker, setPicker] = useState(false);
+  const [deleting, setDeleting] = useState<'everyone' | 'me' | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const close = useMemo(() => () => setPop(null), []);
+  useDismiss(!!pop, box, close);
+  const can = m.can ?? {};
+  const act = async (fn: () => Promise<unknown>, done?: string) => {
+    try {
+      await fn();
+      if (done) toast('success', done);
+    } catch (e) {
+      toast('error', errorMessage(e));
+    } finally {
+      void qc.invalidateQueries({ queryKey: ['chat', 'messages', roomId] });
+      void qc.invalidateQueries({ queryKey: ['chat', 'pins', roomId] });
+      void qc.invalidateQueries({ queryKey: ['chat', 'rooms'] });
+    }
+  };
+  const react = (emoji: string) => {
+    setPop(null);
+    setPicker(false);
+    void act(() => apiPost(`/api/chat/messages/${m.id}/react`, { emoji }));
+  };
+  const snippet = (m.message ?? m.file?.filename ?? '').slice(0, 120);
+  const items: MenuItem[] = [
+    ...(can.reply !== false ? [{ icon: 'reply', label: 'Reply', run: () => onReply({ id: m.id, sender_name: m.sender_name, snippet }) }] : []),
+    ...(m.message ? [{ icon: 'copy', label: 'Copy message', run: () => void navigator.clipboard.writeText(m.message ?? '').then(() => toast('success', 'Copied.')) }] : []),
+    { icon: 'link', label: 'Copy link', run: () => void navigator.clipboard.writeText(`worksuite://chat/${roomId}`).then(() => toast('success', 'Link copied.')) },
+    { icon: m.pinned ? 'pin-off' : 'pin', label: m.pinned ? 'Unpin message' : 'Pin message', run: () => void act(() => apiPut(`/api/chat/messages/${m.id}/pin`, { pinned: !m.pinned }), m.pinned ? 'Unpinned.' : 'Pinned for everyone.') },
+    ...(can.forward ? [{ icon: 'forward', label: 'Forward…', run: () => onForward(m) }] : []),
+    { icon: 'tasks', label: 'Create task', run: () => navigate(`/tasks?new=1&title=${encodeURIComponent((m.message ?? `Follow up: ${roomName}`).replace(/\s+/g, ' ').slice(0, 200))}`) },
+    ...(can.edit ? [{ icon: 'compose', label: 'Edit', run: () => onEdit(m) }] : []),
+    ...(can.delete_me || can.delete_everyone ? [{ icon: 'trash', label: 'Delete…', danger: true, run: () => setDeleting(can.delete_everyone ? 'everyone' : 'me') }] : []),
+  ];
+
+  // Placed when opened: inside the drawer, above the bar for the reactions,
+  // under the ⋯ for the menu unless that would run into the message box.
+  const open = (kind: 'react' | 'more', button: HTMLElement) => {
+    if (pop?.kind === kind) return setPop(null);
+    const area = (button.closest('[data-thread]') ?? document.body).getBoundingClientRect();
+    const b = button.getBoundingClientRect();
+    const bar = (button.closest('[role="toolbar"]') ?? button).getBoundingClientRect();
+    const w = kind === 'react' ? 44 + DRAWER_REACTIONS.length * 36 : 214;
+    const h = kind === 'react' ? 46 : items.length * 32 + 12 + (items.some((x) => x.danger) ? 9 : 0);
+    const left = Math.max(area.left + 8, Math.min(area.right - w - 8, kind === 'react' ? (own ? bar.right - w : bar.left) : own ? b.right - w : b.left));
+    const top =
+      kind === 'react'
+        ? bar.top - h - 6 >= area.top + 8
+          ? bar.top - h - 6
+          : bar.bottom + 6
+        : b.bottom + 4 + h <= area.bottom - 8
+          ? b.bottom + 4
+          : Math.max(area.top + 8, b.top - h - 4);
+    setPop({ kind, left, top });
+  };
+
+  if (m.type === 'system') return <div className="my-2 text-center"><span className="rounded-[8px] bg-surface/80 px-2 py-0.5 text-[11.5px] text-ink-3">{m.message}</span></div>;
+  if (m.type === 'call' && m.call_uuid && !m.deleted) return <CallCard m={m} own={own} roomId={roomId} compact />;
+  const f = m.file;
+  const src = mediaUrl(f?.mime === 'image/gif' ? f.url : (f?.thumb_url ?? f?.url));
+  const voice = !!f && (m.type === 'voice' || f.preview === 'audio');
+  const media = !!f && !m.deleted;
+  const tone = own ? 'bg-[#DCE3FB] dark:bg-[#26366E]' : 'bg-surface';
+  const toolBtn = 'flex h-7 w-7 items-center justify-center rounded-[7px] text-ink-2 hover:bg-subtle hover:text-ink';
+
+  return (
+    <div className={cx('group relative flex', own ? 'justify-end' : 'justify-start', first ? 'mt-2.5' : 'mt-1')}>
+      <div ref={box} data-bubble className={cx('relative flex max-w-[84%] flex-col', own ? 'items-end' : 'items-start')}>
+        {!m.deleted ? (
+          <div
+            role="toolbar"
+            aria-label="Message actions"
+            className={cx(
+              'absolute -top-[15px] z-20 flex items-center gap-0.5 rounded-[10px] bg-surface p-[3px] shadow-[0_4px_14px_rgba(15,27,61,.16),0_0_0_1px_rgba(15,27,61,.06)]',
+              own ? 'right-1.5' : 'left-1.5',
+              pop ? 'visible' : 'invisible group-hover:visible group-focus-within:visible',
+            )}
+          >
+            {can.react !== false ? (
+              <button type="button" aria-label="React" title="React" aria-expanded={pop?.kind === 'react'} onClick={(e) => open('react', e.currentTarget)} className={cx(toolBtn, pop?.kind === 'react' && '!bg-selection !text-primary')}>
+                <Icon name="smile" size={15} />
+              </button>
+            ) : null}
+            {can.reply !== false ? (
+              <button type="button" aria-label="Reply" title="Reply" onClick={() => onReply({ id: m.id, sender_name: m.sender_name, snippet })} className={toolBtn}>
+                <Icon name="reply" size={15} />
+              </button>
+            ) : null}
+            <button type="button" aria-label={m.starred ? 'Unstar message' : 'Star message'} title={m.starred ? 'Unstar' : 'Star'} aria-pressed={!!m.starred} onClick={() => void act(() => apiPut(`/api/chat/messages/${m.id}/star`, { starred: !m.starred }), m.starred ? 'Unstarred.' : 'Starred.')} className={cx(toolBtn, m.starred && '!text-[#CA8A04]')}>
+              <Icon name="star" size={15} />
+            </button>
+            <button type="button" aria-label="More actions" title="More" aria-haspopup="menu" aria-expanded={pop?.kind === 'more'} onClick={(e) => open('more', e.currentTarget)} className={cx(toolBtn, pop?.kind === 'more' && '!bg-selection !text-primary')}>
+              <Icon name="more" size={15} />
+            </button>
+          </div>
+        ) : null}
+        <div className={cx('min-w-[64px] rounded-[10px] text-[13px] leading-[1.45] text-ink shadow-[0_1px_1px_rgba(15,27,61,.1)]', tone, media || m.card ? 'p-1' : 'px-2.5 py-1.5')}>
+          {group && !own && first ? (
+            <b className={cx('block text-[11.5px]', (media || m.card) && 'px-1.5 pt-0.5')} style={{ color: nameColour(m.sender_name) }}>
+              {m.sender_name}
+            </b>
+          ) : null}
+          {m.reply_preview ? (
+            <div className={cx('mb-1 rounded-[6px] border-l-[3px] border-primary bg-black/[.04] px-2 py-1 text-[11.5px] dark:bg-white/5', (media || m.card) && 'mx-0.5')}>
+              <b className="block text-primary">{m.reply_preview.sender_name}</b>
+              <span className="line-clamp-2 text-ink-2">{m.reply_preview.snippet}</span>
+            </div>
+          ) : null}
+          {m.urgent && !m.deleted ? <span className={cx('block text-[10px] font-bold tracking-[0.5px] text-danger uppercase', (media || m.card) && 'px-1.5')}>Urgent</span> : null}
+          {m.deleted ? (
+            <div className="flex flex-wrap items-end">
+              <span className="text-ink-3 italic">Message deleted</span>
+              <Meta m={m} own={own} />
+            </div>
+          ) : (
+            <>
+              {m.card ? (
+                <div className="flex w-[270px] max-w-full flex-col gap-0.5 rounded-[8px] border-l-[3px] border-[#E0522F] bg-surface px-2.5 py-2">
+                  {m.card.available === false ? (
+                    <span className="text-[12.5px] text-ink-3">{m.card.why}</span>
+                  ) : (
+                    <>
+                      <span className="text-[10.5px] font-bold tracking-[0.5px] text-[#E0522F] uppercase">{(m.card.heading ?? m.card.kind.split('.')[0])?.replace('.', ' · ')}</span>
+                      <b className="text-[13px] text-ink">
+                        {m.card.name ?? m.card.what ?? ''}
+                        {m.card.who ? ` · ${m.card.who}` : ''}
+                      </b>
+                      {m.card.owner ? <span className="text-[12px] text-ink-3">{m.card.owner}</span> : null}
+                    </>
+                  )}
+                </div>
+              ) : null}
+              {f ? (
+                voice && mediaUrl(f.url) ? (
+                  <VoicePlayer src={mediaUrl(f.url)!} ms={f.duration_ms} seed={m.id} own={own} bare />
+                ) : f.preview === 'image' && src ? (
+                  <button type="button" className="block overflow-hidden rounded-[8px]" onClick={() => f.download_url && openLink(f.download_url)} aria-label={`Open ${f.filename}`}>
+                    <img src={src} alt={f.filename} loading="lazy" className="max-h-[220px] max-w-[260px] object-cover" />
+                  </button>
+                ) : f.preview === 'video' && mediaUrl(f.url) ? (
+                  <video src={mediaUrl(f.url)!} poster={mediaUrl(f.poster_url) ?? undefined} controls preload="metadata" className="max-h-[220px] max-w-[280px] rounded-[8px]" />
+                ) : (
+                  <div className="flex w-[250px] max-w-full items-center gap-2.5 rounded-[8px] bg-surface/70 px-2 py-2 dark:bg-white/5">
+                    <FileBadge name={f.filename} size={32} />
+                    <span className="min-w-0 flex-1">
+                      <b className="block truncate text-[12px] text-ink">{f.filename}</b>
+                      <span className="block text-[11.5px] text-ink-3">{Math.max(1, Math.round(f.size / 1024))} KB{f.status !== 'ready' ? ` · ${f.status}` : ''}</span>
+                    </span>
+                    <button type="button" onClick={() => f.download_url && openLink(f.download_url)} className="text-[12px] font-semibold text-primary hover:underline">
+                      Open
+                    </button>
+                  </div>
+                )
+              ) : null}
+              <div className={cx('flex flex-wrap items-end', (media || m.card) && 'px-1.5 pb-0.5')}>
+                {m.message ? <span className={cx('min-w-0 whitespace-pre-wrap break-words selectable', (media || m.card) && 'pt-1')}>{m.message}</span> : null}
+                {m.card?.link && m.card.available !== false ? (
+                  <button type="button" onClick={() => openLink(m.card!.link!)} className="pt-1 text-[12.5px] font-bold text-primary hover:underline">
+                    Open {m.card.kind.split('.').pop()}
+                  </button>
+                ) : null}
+                <Meta m={m} own={own} />
+              </div>
+            </>
+          )}
+        </div>
+        {m.reactions.length ? (
+          <div className={cx('relative z-10 -mt-1.5 flex flex-wrap gap-1', own ? 'mr-2' : 'ml-2')}>
+            {m.reactions.map((r) => (
+              <button
+                key={r.emoji}
+                type="button"
+                disabled={can.react === false}
+                onClick={() => react(r.emoji)}
+                title={r.names?.join(', ')}
+                aria-label={`${r.emoji} ${r.count}${r.mine ? ', yours — remove' : ''}`}
+                className={cx('rounded-full bg-surface px-1.5 py-px text-[11.5px] font-semibold text-ink shadow-[0_1px_3px_rgba(15,27,61,.18)]', r.mine && 'ring-1 ring-primary/40')}
+              >
+                {r.emoji} {r.count}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {pop?.kind === 'react' ? (
+          <div role="toolbar" aria-label="React" className="fixed z-40 flex items-center gap-0.5 rounded-full bg-surface p-1 shadow-[0_8px_24px_rgba(15,27,61,.18),0_0_0_1px_rgba(15,27,61,.06)]" style={{ left: pop.left, top: pop.top }}>
+            {DRAWER_REACTIONS.map((e) => (
+              <button key={e} type="button" aria-label={`React ${e}`} onClick={() => react(e)} className="flex h-[34px] w-[34px] items-center justify-center rounded-full text-[21px] leading-none transition-transform hover:scale-110 hover:bg-selection">
+                {e}
+              </button>
+            ))}
+            <button type="button" aria-label="More reactions" title="More reactions" onClick={() => (setPop(null), setPicker(true))} className="ml-0.5 flex h-[34px] w-[34px] items-center justify-center rounded-full bg-subtle text-ink-2 hover:text-ink">
+              <Icon name="plus" size={16} />
+            </button>
+          </div>
+        ) : null}
+        {pop?.kind === 'more' ? (
+          <div role="menu" aria-label="Message actions" className="fixed z-40 w-[214px] rounded-[12px] bg-surface p-1.5 shadow-[0_16px_40px_rgba(15,27,61,.2),0_0_0_1px_rgba(15,27,61,.06)]" style={{ left: pop.left, top: pop.top }}>
+            {items.map((it, i) => (
+              <div key={it.label}>
+                {it.danger && i > 0 ? <span className="mx-1.5 my-1 block h-px bg-line" /> : null}
+                <button type="button" role="menuitem" onClick={() => (setPop(null), it.run())} className={cx('flex h-8 w-full items-center gap-2.5 rounded-[8px] px-2.5 text-left text-[13px] hover:bg-subtle', it.danger ? 'text-danger' : 'text-ink')}>
+                  <Icon name={it.icon} size={15} className={it.danger ? '' : 'text-ink-2'} />
+                  {it.label}
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {picker ? <EmojiPicker className={cx('absolute top-6 z-30', own ? 'right-0' : 'left-0')} onPick={react} onClose={() => setPicker(false)} /> : null}
+      </div>
+      {deleting ? <DeleteDialog m={m} scope={deleting} setScope={setDeleting} onDelete={(scope) => void act(() => apiPost(`/api/chat/messages/${m.id}/delete`, { scope }))} /> : null}
     </div>
   );
 }
@@ -583,7 +928,7 @@ function MessageMenu({ own, named, open, setOpen, reactions, onReact, onMoreReac
 }
 
 /** A call's card in the thread (ChatDrawer: "Missed voice call · Call back"). */
-function CallCard({ m, own, roomId }: { m: ChatMessage; own: boolean; roomId: string }) {
+function CallCard({ m, own, roomId, compact }: { m: ChatMessage; own: boolean; roomId: string; compact?: boolean }) {
   const d = describeCard(m, own);
   const video = m.call_mode === 'video' || m.call_kind === 'meeting';
   const act = () => {
@@ -592,6 +937,27 @@ function CallCard({ m, own, roomId }: { m: ChatMessage; own: boolean; roomId: st
       else void answerCall(m.call_uuid!, roomId, false, m.sender_name);
     } else if (d.action) void startCall(roomId, video ? 'video' : 'audio', m.sender_name);
   };
+  if (compact) {
+    return (
+      <div className={cx('mt-2.5 flex', own ? 'justify-end' : 'justify-start')}>
+        <div className="flex items-center gap-2 rounded-full bg-surface py-1.5 pr-1.5 pl-1.5 shadow-[0_1px_2px_rgba(15,27,61,.12)]">
+          <span className={cx('flex h-7 w-7 shrink-0 items-center justify-center rounded-full', d.tone === 'missed' ? 'bg-danger-bg text-danger' : d.tone === 'live' ? 'bg-success-bg text-success' : 'bg-selection text-primary')}>
+            <Icon name={video ? 'video' : 'phone'} size={14} />
+          </span>
+          <b className={cx('text-[12.5px]', d.tone === 'missed' ? 'text-danger' : 'text-ink')}>{d.title}</b>
+          <span className="text-[12px] text-ink-3">
+            {timeLabel(m.created_at)}
+            {d.detail ? ` · ${d.detail}` : ''}
+          </span>
+          {d.action ? (
+            <button type="button" onClick={act} className={cx('h-7 shrink-0 rounded-full px-3 text-[12px] font-bold', d.action === 'Join' ? 'bg-success text-white' : 'bg-success-bg text-success hover:brightness-95')}>
+              {d.action}
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
   return (
     <div className={cx('mt-3 flex', own ? 'justify-end' : 'justify-start')}>
       <div className={cx('flex items-center gap-2.5 rounded-[12px] border px-3 py-2.5', d.tone === 'missed' ? 'border-[#F1B8A8] bg-surface' : d.tone === 'live' ? 'border-[#9EE6C3] bg-surface' : 'border-line bg-surface')}>

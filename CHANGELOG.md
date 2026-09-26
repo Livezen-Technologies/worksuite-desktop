@@ -5,6 +5,65 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-26 — 0.2.10: The chat drawer's messages, to the new drawer design
+
+**Changed**
+
+- **Messages in the chat drawer** now look like the owner's drawer design:
+  - The chat sits on a light dotted background.
+  - Your messages are in light indigo bubbles and theirs in white. The time
+    and the ticks sit inside the bubble: one grey tick for sent, two grey for
+    delivered, two blue for read.
+  - "Today" and "Yesterday" pills separate the days.
+  - In a group, the sender's name appears in a colour of its own.
+  - A reply shows the message it answers, quoted in the bubble.
+  - Reactions hang off the bottom of the bubble as small pills.
+  - Voice messages have a round play button inside the bubble.
+  - A record card (a CRM lead, for example) has a red edge and its own
+    "Open" link.
+  - Missed and declined calls show as a pill with Call back.
+- **Acting on a message in the drawer:**
+  - Hovering (or clicking) a message shows a compact bar on its top edge:
+    react, reply, star and more.
+  - React opens a pill of six emoji, plus a + for the full picker. The pill
+    always stays inside the drawer.
+  - More opens a menu: Reply, Copy message, Copy link, Pin message,
+    Forward…, Create task (named after the message), Edit (your own
+    messages) and Delete…. It opens upward when the message is down by the
+    message box, and it also stays inside the drawer.
+- **The drawer's header:**
+  - A larger picture with a presence dot.
+  - "typing…" in green while the other person types.
+  - Call and video buttons, and a ⋮ menu with Open in Chat and Mute.
+  - Minimise and close. The separate "open in Chat" button went into the
+    ⋮ menu.
+- **The record you have open** now shows as a card at the top of the
+  conversation. It has the app's icon, an "Attach record" button, and a ×
+  to hide it.
+- **The quick actions** (Create task, Save as note, Search) are chips with
+  icons.
+- **The drawer's message box is a rounded field.** It has emoji, urgent and
+  attach buttons inside, and a round microphone button beside it. The
+  microphone turns into Send as soon as there is something to send.
+
+**Fixed**
+
+- The calls end-to-end test checked "reply with a message and decline"
+  before the decline had landed. It now waits for its own reply and the
+  ended call.
+
+**Notes**
+
+- Only the drawer changes. The full Chat page keeps its ChatMain look and
+  the round-button menu from 0.2.9.
+- The chat e2e now also checks, in the drawer:
+  - the pill message box;
+  - the compact bar;
+  - that the reactions pill stays inside the drawer, and the pick is stored;
+  - that the menu opens upward by the message box, with the design's items.
+
+---
+
 ## 2026-09-26 — 0.2.9: Search, the app launcher, the clock, calls, chat and the chat drawer, to the new designs
 
 **Changed**

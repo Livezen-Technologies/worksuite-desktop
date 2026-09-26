@@ -208,7 +208,7 @@ export function VoiceRecorder({ onDone, onCancel, compact }: { onDone: (blob: Bl
  * levels: reading the audio would mean fetching it outside the page's media
  * rules. They are the same for a note every time it is shown.
  */
-export function VoicePlayer({ src, ms, seed, own }: { src: string; ms: number | null; seed: number; own: boolean }) {
+export function VoicePlayer({ src, ms, seed, own, bare }: { src: string; ms: number | null; seed: number; own: boolean; /** Inside a bubble (the chat drawer): no box of its own, a solid play button. */ bare?: boolean }) {
   const audio = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [pos, setPos] = useState(0);
@@ -216,7 +216,7 @@ export function VoicePlayer({ src, ms, seed, own }: { src: string; ms: number | 
   const bars = Array.from({ length: 28 }, (_, i) => 30 + (((seed * 9301 + i * 49297) % 233280) / 233280) * 70);
   const done = total > 0 ? pos / total : 0;
   return (
-    <div className={cx('flex w-[260px] items-center gap-2.5 rounded-[14px] px-3 py-2', own ? 'bg-primary text-white' : 'border border-line bg-surface text-ink')}>
+    <div className={cx('flex items-center gap-2.5', bare ? 'w-[230px] px-1 py-0.5 text-ink' : cx('w-[260px] rounded-[14px] px-3 py-2', own ? 'bg-primary text-white' : 'border border-line bg-surface text-ink'))}>
       <button
         type="button"
         aria-label={playing ? 'Pause the voice note' : 'Play the voice note'}
@@ -226,13 +226,13 @@ export function VoicePlayer({ src, ms, seed, own }: { src: string; ms: number | 
           if (a.paused) void a.play();
           else a.pause();
         }}
-        className={cx('flex h-8 w-8 shrink-0 items-center justify-center rounded-full', own ? 'bg-white/20' : 'bg-subtle')}
+        className={cx('flex shrink-0 items-center justify-center rounded-full', bare ? 'h-[34px] w-[34px] bg-primary text-white' : cx('h-8 w-8', own ? 'bg-white/20' : 'bg-subtle'))}
       >
         <Icon name={playing ? 'pause' : 'play'} size={15} />
       </button>
       <div className="flex h-7 flex-1 items-center gap-[2px]" aria-hidden>
         {bars.map((h, i) => (
-          <span key={i} className={cx('w-[3px] rounded-full', i / bars.length <= done ? (own ? 'bg-white' : 'bg-primary') : own ? 'bg-white/40' : 'bg-line')} style={{ height: `${h}%` }} />
+          <span key={i} className={cx('w-[3px] rounded-full', i / bars.length <= done ? (own && !bare ? 'bg-white' : 'bg-primary') : own && !bare ? 'bg-white/40' : 'bg-[#9AA6D6] dark:bg-line')} style={{ height: `${h}%` }} />
         ))}
       </div>
       <span className="font-mono text-[11.5px] tabular opacity-80">{formatClock(playing || pos ? pos : total)}</span>

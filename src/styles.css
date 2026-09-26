@@ -215,3 +215,14 @@ textarea,
   animation-fill-mode: forwards;
   transform-origin: left;
 }
+
+/* The chat drawer's wallpaper (ChatDrawer): a warm grey with a faint dot grid. */
+.chat-wallpaper {
+  background-color: #efeee9;
+  background-image: radial-gradient(rgba(15, 27, 61, 0.07) 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+[data-theme='dark'] .chat-wallpaper {
+  background-color: #0e1530;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+}
