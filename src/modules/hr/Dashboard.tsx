@@ -1,13 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { app, organizationName } from '../../core/app-state';
 import { apiGet } from '../../core/api';
-import { call } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { ErrorNote, Spinner } from '../../components/ui';
 import { type HrOverview } from './api';
 import { dayShort, parseYmd, ymd } from './dates';
 import { btn, btnPrimary, Empty, humanise, Initials, Kpi, PageHead, Panel, StatusChip } from './parts';
-import type { HrView } from './Rail';
+import { can, type HrView } from './Rail';
 
 /**
  * The HR dashboard (HrDashboard; hr.view): headcount, who is out today,
@@ -16,8 +15,9 @@ import type { HrView } from './Rail';
  */
 const TYPE_COLOURS = ['#23349E', '#0E7C86', '#6B3FB5', '#B45309', '#1F7A4D', '#B42318', '#4A5168'];
 
-export default function Dashboard({ onPick }: { onPick: (v: HrView) => void }) {
+export default function Dashboard({ onPick, onGo }: { onPick: (v: HrView) => void; onGo: (route: string) => void }) {
   const orgId = useStore(app, (s) => s.organizationId);
+  const perms = useStore(app, (s) => s.bootstrap?.permissions);
   const q = useQuery({ queryKey: ['hr', 'overview'], queryFn: ({ signal }) => apiGet<HrOverview>('/api/hr/overview', undefined, signal) });
   const today = ymd(new Date());
   if (q.isLoading) return <Spinner />;
@@ -33,7 +33,7 @@ export default function Dashboard({ onPick }: { onPick: (v: HrView) => void }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3.5">
       <PageHead title="Dashboard" sub={`${organizationName(orgId)} · ${parseYmd(today).toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}`}>
-        <button type="button" className={btnPrimary} onClick={() => void call('app:openInBrowser', { path: '/hr?tab=people' })}>
+        <button type="button" className={btnPrimary} onClick={() => onGo('/hr?tab=people&new=1')}>
           Add employee
         </button>
         <button type="button" className={btn} onClick={() => onPick('leave')}>
@@ -42,15 +42,17 @@ export default function Dashboard({ onPick }: { onPick: (v: HrView) => void }) {
         <button type="button" className={btn} onClick={() => onPick('waiting')}>
           Approvals
         </button>
-        <button type="button" className={btn} onClick={() => void call('app:openInBrowser', { path: '/organization' })}>
-          Departments
-        </button>
+        {can(perms, 'directory.view') ? (
+          <button type="button" className={btn} onClick={() => onPick('departments')}>
+            Departments
+          </button>
+        ) : null}
       </PageHead>
       <div className="grid grid-cols-4 gap-2.5">
         <Kpi label="Employees" value={o.total} sub={[statuses, o.unlinked ? `${o.unlinked} without a login` : null].filter(Boolean).join(' · ')} />
         <Kpi label="Out today" value={o.out_today.length} sub={o.out_today.length ? `${onLeave} on leave · ${o.out_today.length - onLeave} away` : 'Everyone is in'} />
         <Kpi label="Pending leave" value={o.pending_leave} sub="Click to review" tone={o.pending_leave ? 'amber' : undefined} onClick={() => onPick('waiting')} />
-        <Kpi label="Missing check-outs" value={o.open_attendance ?? 0} sub="Waiting to be settled" tone={o.open_attendance ? 'red' : undefined} onClick={() => void call('app:openInBrowser', { path: '/hr?tab=openatt' })} />
+        <Kpi label="Missing check-outs" value={o.open_attendance ?? 0} sub="Waiting to be settled" tone={o.open_attendance ? 'red' : undefined} onClick={() => onPick('openatt')} />
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-3 gap-3">
         <Panel title="Out today">
@@ -72,7 +74,7 @@ export default function Dashboard({ onPick }: { onPick: (v: HrView) => void }) {
         <Panel title={`Onboarding in progress${o.onboarding?.total ? ` (${o.onboarding.total})` : ''}`}>
           {o.onboarding?.items.length ? (
             o.onboarding.items.map((x) => (
-              <button key={x.employee_id} type="button" onClick={() => void call('app:openInBrowser', { path: '/hr?tab=onboarding' })} className="flex w-full flex-col gap-[5px] border-b border-line/70 px-3.5 py-[11px] text-left hover:bg-subtle">
+              <button key={x.employee_id} type="button" onClick={() => onGo(`/hr?tab=onboarding&onboarding=${x.employee_id}`)} className="flex w-full flex-col gap-[5px] border-b border-line/70 px-3.5 py-[11px] text-left hover:bg-subtle">
                 <span className="flex">
                   <b className="flex-1 truncate text-ink">{x.name}</b>
                   <b className="text-primary">{x.percent}%</b>
@@ -119,7 +121,7 @@ export default function Dashboard({ onPick }: { onPick: (v: HrView) => void }) {
             <span className="text-ink-3">No employees yet.</span>
           )}
         </Panel>
-        <Panel title="Upcoming holidays" className="col-span-2" action={<button type="button" className="font-semibold text-primary hover:underline" onClick={() => void call('app:openInBrowser', { path: '/hr?tab=settings' })}>Manage</button>}>
+        <Panel title="Upcoming holidays" className="col-span-2" action={<button type="button" className="font-semibold text-primary hover:underline" onClick={() => onGo('/hr?tab=settings&section=holidays')}>Manage</button>}>
           {o.upcoming_holidays.length ? (
             o.upcoming_holidays.map((h) => {
               const n = daysTo(h.on_date);

@@ -108,10 +108,10 @@ describe('HR part 2 helpers', () => {
     expect(toneOf('Working')).toContain('primary');
   });
 
-  it('draws the Directory, profiles and the time screens here now', async () => {
+  it('draws the Directory, profiles, the time screens and Departments here now', async () => {
     const { NATIVE } = await import('../../../src/modules/hr/Rail');
     for (const v of ['people', 'roster', 'openatt', 'approvals', 'reports', 'workpattern', 'myaccess'] as const) expect(NATIVE.has(v)).toBe(true);
-    expect(NATIVE.has('departments')).toBe(false);
+    expect(NATIVE.has('departments')).toBe(true);
   });
 });
 

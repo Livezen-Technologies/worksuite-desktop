@@ -67,7 +67,65 @@ try {
   await t.evaluate(`[...document.querySelectorAll('nav[aria-label="Apps"] button')].find(b => b.textContent.trim().startsWith('HR')).click()`);
   await t.waitFor(`!!document.querySelector('nav[aria-label="People"]')`, 'the People rail', 30_000);
   const web = await t.evaluate(`(() => { const n = document.querySelector('nav[aria-label="People"]'); n.querySelectorAll('button[aria-expanded="false"]').forEach(h => h.click()); return new Promise(r => setTimeout(() => r([...n.querySelectorAll('button[title$="opens in your browser"]')].map(b => b.textContent.trim())), 50)); })()`);
-  t.check('every HR screen is drawn here now; only Departments opens in the browser', web.length === 1 && web[0] === 'Departments', JSON.stringify(web));
+  t.check('every HR screen is drawn here now, Departments too', web.length === 0, JSON.stringify(web));
+
+  // ── The dashboard's links stay in the app ─────────────────────────────
+  const dashboard = async () => {
+    await t.evaluate(rail('Dashboard'));
+    await t.waitFor(heading('Dashboard'), 'the dashboard', 20_000);
+  };
+  const route = () => t.evaluate(`document.querySelector('[role="tab"][aria-selected="true"]')?.textContent ?? ''`);
+  await dashboard();
+  await t.evaluate(`[...document.querySelectorAll('main button')].find(b => b.textContent.trim() === 'Add employee').click()`);
+  await t.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Add employee"]')`, 'the Add employee form', 20_000);
+  t.check('Add employee on the dashboard opens the form here', await t.evaluate(heading('Directory')));
+  await t.evaluate(`document.querySelector('[role="dialog"][aria-label="Add employee"] button[aria-label="Close"]').click()`);
+  await t.waitFor(`!document.querySelector('[role="dialog"][aria-label="Add employee"]')`, 'the form closes');
+  await dashboard();
+  await t.evaluate(`[...document.querySelectorAll('main button')].find(b => b.textContent.includes('Missing check-outs')).click()`);
+  await t.waitFor(heading('Missing check-outs'), 'Missing check-outs', 20_000);
+  t.check('Missing check-outs on the dashboard opens its screen here', true);
+  await dashboard();
+  await t.evaluate(`[...document.querySelectorAll('main button')].find(b => b.textContent.trim() === 'Manage').click()`);
+  await t.waitFor(`${heading('Settings')} && [...document.querySelectorAll('main [role="tab"][aria-selected="true"], main button[aria-pressed="true"]')].some(b => b.textContent.trim() === 'Public holidays')`, 'Settings on Public holidays', 20_000);
+  t.check('Manage beside the holidays opens Settings on Public holidays', true);
+  await dashboard();
+  await t.evaluate(`[...document.querySelectorAll('main button')].find(b => b.textContent.trim() === 'Departments').click()`);
+  await t.waitFor(`${heading('Departments')} && !!document.querySelector('main [data-department], main')`, 'Departments', 20_000);
+  await t.waitFor(`document.querySelector('main').innerText.includes('ALL DEPARTMENTS') || document.querySelector('main').innerText.includes('All departments')`, 'the department list', 20_000);
+  await t.shot('h2d-departments');
+  const listed = ((await api('me', 'GET', '/api/directory/departments')).data ?? []).length;
+  const drawn = await t.evaluate(`document.querySelectorAll('main [data-department]').length`);
+  t.check('every department the server lists is drawn', drawn === listed, `${drawn} of ${listed}`);
+  t.check('Departments on the dashboard opens its screen here', true, await route());
+
+  // A department added, renamed with a code, and removed.
+  const deptName = `E2E Dept ${Date.now() % 100000}`;
+  const press = async (scope, test, what) => {
+    const ok = await t.evaluate(`(() => { const b = [...document.querySelectorAll(${js(scope + ' button')})].find(b => ${test}); if (b) b.click(); return !!b; })()`);
+    if (!ok) throw new Error(`no ${what} button to press`);
+  };
+  await press('main', `b.textContent.trim() === 'Add department'`, 'Add department');
+  await t.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Add department"]')`, 'the Add department form');
+  await t.fill('Name', deptName);
+  await press('[role="dialog"]', `b.textContent.trim() === 'Add department'`, "the form's Add department");
+  await t.waitFor(`[...document.querySelectorAll('main [data-department]')].some(r => r.textContent.includes(${js(deptName)}))`, 'the new department', 20_000);
+  const made = ((await api('me', 'GET', '/api/directory/departments')).data ?? []).find((x) => x.name === deptName);
+  t.check('the department is on the server', !!made, JSON.stringify(made ?? null));
+  await press('main', `b.getAttribute('aria-label') === ${js(`Edit ${deptName}`)}`, 'Edit');
+  await t.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Edit department"]')`, 'the Edit department form');
+  await t.fill('Code', 'E2E');
+  await t.shot('h2e-department-edit');
+  await press('[role="dialog"]', `b.textContent.trim() === 'Save'`, 'Save');
+  await t.waitFor(`!document.querySelector('[role="dialog"]') && [...document.querySelectorAll('main [data-department]')].some(r => r.textContent.includes(${js(deptName)}) && r.children[1]?.textContent.trim() === 'E2E')`, 'the code saved', 20_000);
+  const coded = ((await api('me', 'GET', '/api/directory/departments')).data ?? []).find((x) => x.name === deptName);
+  t.check('its code is saved', coded?.code === 'E2E', JSON.stringify(coded ?? null));
+  await press('main', `b.getAttribute('aria-label') === ${js(`Delete ${deptName}`)}`, 'Delete (row)');
+  await t.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Delete department"]')`, 'the delete question');
+  await press('[role="dialog"]', `b.textContent.trim() === 'Delete'`, "the question's Delete");
+  await t.waitFor(`![...document.querySelectorAll('main [data-department]')].some(r => r.textContent.includes(${js(deptName)}))`, 'the department gone', 20_000);
+  const gone = !((await api('me', 'GET', '/api/directory/departments')).data ?? []).some((x) => x.name === deptName);
+  t.check('deleting it removes it from the server', gone);
 
   // ── Onboarding ────────────────────────────────────────────────────────
   await t.evaluate(rail('Onboarding'));
@@ -282,5 +340,7 @@ try {
   await t.shot('bz-failure').catch(() => undefined);
 } finally {
   if (made.digits != null) await api('me', 'PUT', '/api/module-settings/hr/general', { hr_employee_no_digits: made.digits }).catch(() => undefined);
+  // A department this run made and did not get to delete.
+  for (const d of ((await api('me', 'GET', '/api/directory/departments').catch(() => ({ data: [] }))).data ?? []).filter((x) => /^E2E Dept \d+$/.test(x.name ?? ''))) await api('me', 'DELETE', `/api/directory/departments/${d.id}`).catch(() => undefined);
   await t.finish();
 }

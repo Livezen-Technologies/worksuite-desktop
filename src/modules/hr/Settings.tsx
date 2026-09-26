@@ -43,11 +43,11 @@ interface ModuleSettings {
   can_edit: boolean;
 }
 
-export default function Settings() {
+export default function Settings({ section }: { section?: string | null }) {
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
   const manage = can(perms, 'hr.manage');
   const devices = can(perms, 'hr.device.manage');
-  const [tab, setTab] = useState<Tab>(manage ? 'general' : 'types');
+  const [tab, setTab] = useState<Tab>(section === 'holidays' || section === 'types' ? section : manage ? 'general' : 'types');
   const tabs: Array<{ id: Tab; label: string }> = [
     ...(manage ? [{ id: 'general' as const, label: 'General' }] : []),
     { id: 'types', label: 'Leave types' },

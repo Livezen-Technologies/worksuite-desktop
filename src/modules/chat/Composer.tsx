@@ -11,6 +11,9 @@ import { uploadBlob } from '../../core/upload';
 import { Icon } from '../../components/Icon';
 import { Avatar, cx } from '../../components/ui';
 import { AttachMenu, CameraCapture, DrivePicker, Tray, type AttachChoice, type Staged } from './attach';
+import { KIND, type CardKind } from './cards/CardFrame';
+import { recordsIn } from './cards/recordLinks';
+import { SharePicker, ShareMenu, type ShareKind } from './cards/SharePicker';
 import { caretPoint } from './caret';
 import { PRESENCE } from './Details';
 import { mentionQuery } from './mentions';
@@ -62,8 +65,10 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const [sending, setSending] = useState(false);
   const [editing, setEditing] = useState<{ id: number; original: string; text: string } | null>(null);
   const [urgent, setUrgent] = useState(false);
-  const [menu, setMenu] = useState<'attach' | 'emoji' | null>(null);
+  const [menu, setMenu] = useState<'attach' | 'emoji' | 'share' | null>(null);
   const [modal, setModal] = useState<'drive' | 'camera' | null>(null);
+  const [sharing, setSharing] = useState<Exclude<ShareKind, 'drive'> | null>(null);
+  const origin = useStore(app, (s) => s.auth?.server?.origin);
   const [recording, setRecording] = useState(false);
   const [staged, setStaged] = useState<Staged[]>([]);
   const [asking, setAsking] = useState<{ start: number; word: string; left: number } | null>(null);
@@ -309,6 +314,19 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
     }
   };
 
+  /** A record from Share from WorkSuite goes as its address; each reader's app shows it as a card. */
+  const shareRecord = async (path: string): Promise<boolean> => {
+    const base = (origin ?? 'https://app.worksuite.lk').replace(/\/+$/, '');
+    const ok = await sendWords(`${base}${path}`, false);
+    if (ok) onClearReply();
+    return ok;
+  };
+  const pickShare = (k: ShareKind) => {
+    setMenu(null);
+    if (k === 'drive') setModal('drive');
+    else setSharing(k);
+  };
+
   const retry = (s: Staged) => {
     if (s.kind === 'blob') return void sendBlob(s, s.extra);
     if (s.transfer) void call('transfers:retry', { id: s.transfer }).catch((e) => toast('error', errorMessage(e)));
@@ -345,7 +363,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
     ? 'Enter to save · Esc to cancel'
     : urgent
       ? 'Urgent: reaches people who only want priority notifications'
-      : `Enter to send · Shift + Enter for a new line${group ? ' · @ to mention' : ''}`;
+      : `Enter to send · Shift + Enter for a new line${group ? ' · @ to mention' : ''} · Paste a WorkSuite link to share it as a card`;
 
 
   const attachBtn = !editing ? (
@@ -354,6 +372,14 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                     <Icon name="paperclip" size={compact ? 16 : 18} />
                   </button>
                   {menu === 'attach' ? <AttachMenu compact={compact} align={look === 'pill' ? 'right' : 'left'} onPick={(c) => void attach(c)} onClose={() => setMenu(null)} /> : null}
+                </span>
+              ) : null;
+  const shareBtn = !editing ? (
+                <span className="relative">
+                  <button type="button" aria-label="Share from WorkSuite" title="Share from WorkSuite" aria-haspopup="menu" aria-expanded={menu === 'share'} onClick={() => setMenu(menu === 'share' ? null : 'share')} className={cx(tool, menu === 'share' && '!bg-selection !text-primary')}>
+                    <Icon name="plus" size={compact ? 16 : 18} />
+                  </button>
+                  {menu === 'share' ? <ShareMenu align={look === 'pill' ? 'right' : 'left'} onPick={pickShare} onUpload={() => void attach('any')} onClose={() => setMenu(null)} /> : null}
                 </span>
               ) : null;
   const field = (
@@ -481,6 +507,16 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
           </button>
         </div>
       ) : null;
+  const detected = !editing ? recordsIn(text, origin) : [];
+  const detectedEl = detected.length ? (
+        <div className="flex items-center gap-2 rounded-[8px] border-l-[3px] border-primary bg-selection px-2.5 py-1.5 text-[12px]" aria-live="polite" data-detected>
+          <Icon name="link" size={13} className="shrink-0 text-primary" />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <b className="text-ink">{detected.length === 1 ? 'Link detected · will show as a card' : `${detected.length} links detected · each will show as a card`}</b>
+            <span className="truncate text-ink-2">{detected.map((r) => KIND[r.kind as CardKind].label).join(' · ')}</span>
+          </span>
+        </div>
+      ) : null;
   const mentionsEl = asking && options.length ? (
         <div
           role="listbox"
@@ -541,6 +577,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
     <>
       {modal === 'drive' ? <DrivePicker roomId={roomId} onClose={() => setModal(null)} onSent={refresh} /> : null}
       {modal === 'camera' ? <CameraCapture onTaken={stageBlob} onClose={() => setModal(null)} /> : null}
+      {sharing ? <SharePicker kind={sharing} roomName={roomName} onClose={() => setSharing(null)} onDrive={() => (setSharing(null), setModal('drive'))} onShare={shareRecord} /> : null}
     </>
   );
 
@@ -551,6 +588,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
         {extras}
         {lineEl}
         {barEl}
+        {detectedEl}
         {mentionsEl}
         {menu === 'emoji' ? <EmojiPicker className="absolute bottom-full left-2.5 mb-2" onPick={insert} onClose={() => setMenu(null)} /> : null}
         <div className="flex items-end gap-2">
@@ -569,6 +607,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                   {emojiBtn}
                   {field}
                   {urgentBtn}
+                  {shareBtn}
                   {attachBtn}
                 </>
               )}
@@ -601,6 +640,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       {extras}
       {lineEl}
       {barEl}
+      {detectedEl}
       {mentionsEl}
       {menu === 'emoji' ? <EmojiPicker className="absolute right-3 bottom-full mb-2" onPick={insert} onClose={() => setMenu(null)} /> : null}
       <div
@@ -620,6 +660,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
             <VoiceRecorder compact={compact} onDone={(b, ms) => void sendVoice(b, ms)} onCancel={() => setRecording(false)} />
           ) : (
             <>
+              {shareBtn}
               {attachBtn}
               {field}
               {urgentBtn}

@@ -16,6 +16,9 @@ import { answerCall, startCall } from '../calls/start';
 import { openMeeting } from '../meet/api';
 import { startMeetingFromChat } from '../meet/start';
 import { LinkedText } from '../../components/LinkedText';
+import { DriveShareCard, type DriveCard } from './cards/DriveMeetCards';
+import { RecordCards } from './cards/RecordCards';
+import { recordsIn, withoutRecordLines } from './cards/recordLinks';
 import { Composer, type ComposerHandle } from './Composer';
 import { PRESENCE } from './Details';
 import { ForwardDialog, type RoomDetail } from './NewChat';
@@ -357,6 +360,11 @@ function Bubble({ m, own, roomId, onReply, onForward, onEdit }: { m: ChatMessage
   const [picker, setPicker] = useState(false);
   const [more, setMore] = useState(false);
   const [deleting, setDeleting] = useState<'everyone' | 'me' | null>(null);
+  const origin = useStore(app, (x) => x.auth?.server?.origin);
+  const named = !m.deleted && !m.card && recordsIn(m.message, origin).length > 0;
+  const shownText = named && m.message ? withoutRecordLines(m.message, origin) : m.message;
+  // A card is 440 wide; the bubble takes that width and gives it up in a narrow column.
+  const carded = named || (!!m.card && !m.deleted);
   const can = m.can ?? {};
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ['chat', 'messages', roomId] });
@@ -388,7 +396,7 @@ function Bubble({ m, own, roomId, onReply, onForward, onEdit }: { m: ChatMessage
   return (
     <div className={cx('group relative mt-3 flex gap-2.5', own && 'flex-row-reverse')}>
       {!own ? <Avatar name={m.sender_name} size={30} /> : null}
-      <div data-bubble className={cx('relative flex max-w-[560px] flex-col gap-1', own && 'items-end')}>
+      <div data-bubble className={cx('relative flex min-w-0 max-w-[560px] flex-col gap-1', own && 'items-end', carded && 'w-[440px]')}>
         {!m.deleted ? (
           <MessageMenu
             own={own}
@@ -417,14 +425,16 @@ function Bubble({ m, own, roomId, onReply, onForward, onEdit }: { m: ChatMessage
         ) : null}
         {m.reply_preview ? <div className="rounded-[6px] border-l-[3px] border-[#7FA2FF] bg-selection px-2.5 py-1.5 text-[12px] text-ink-2">Replying to {m.reply_preview.sender_name}: “{m.reply_preview.snippet}”</div> : null}
         {m.urgent && !m.deleted ? <span className="text-[10.5px] font-bold tracking-[0.5px] text-danger uppercase">Urgent</span> : null}
-        {m.message && !m.deleted ? (
+        {shownText && !m.deleted ? (
           <div className={cx('whitespace-pre-wrap break-words px-[13px] py-[9px] text-[13.5px] leading-[1.55] selectable', bubble)}>
-            <LinkedText text={m.message} className={own ? 'text-white' : 'text-primary'} />
+            <LinkedText text={shownText} className={own ? 'text-white' : 'text-primary'} />
           </div>
         ) : m.deleted ? (
           <div className="rounded-[12px] border border-line px-3 py-2 text-[12.5px] text-ink-3 italic">Message deleted</div>
         ) : null}
-        {m.card && !m.deleted ? (
+        {named ? <RecordCards text={m.message} /> : null}
+        {m.card && !m.deleted && m.card.kind.startsWith('drive.') ? <DriveShareCard card={m.card as DriveCard} onOpen={openLink} /> : null}
+        {m.card && !m.deleted && !m.card.kind.startsWith('drive.') ? (
           <div className="flex w-[380px] flex-col gap-1.5 rounded-[12px] border border-line bg-surface px-3.5 py-3">
             {m.card.available === false ? (
               <span className="text-[12.5px] text-ink-3">{m.card.why}</span>
@@ -641,6 +651,8 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
     ...(can.delete_me || can.delete_everyone ? [{ icon: 'trash', label: 'Delete…', danger: true, run: () => setDeleting(can.delete_everyone ? 'everyone' : 'me') }] : []),
   ];
 
+  const origin = useStore(app, (x) => x.auth?.server?.origin);
+
   // Placed when opened: inside the drawer, above the bar for the reactions,
   // under the ⋯ for the menu unless that would run into the message box.
   const open = (kind: 'react' | 'more', button: HTMLElement) => {
@@ -670,13 +682,15 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
   const media = !!f && !m.deleted;
   // On dark the other side's bubbles sit a shade above the wallpaper, and inside
   // your own the accents go pale: indigo on indigo is not readable.
+  const cards = !m.deleted && !m.card && recordsIn(m.message, origin).length > 0;
+  const shownText = cards && m.message ? withoutRecordLines(m.message, origin) : m.message;
   const tone = own ? 'bg-[#DCE3FB] dark:bg-[#26366E]' : 'bg-surface dark:bg-well';
   const accent = own ? 'text-primary dark:text-[#B4C3FF]' : 'text-primary';
   const toolBtn = 'flex h-7 w-7 items-center justify-center rounded-[7px] text-ink-2 hover:bg-subtle hover:text-ink';
 
   return (
     <div className={cx('group relative flex', own ? 'justify-end' : 'justify-start', first ? 'mt-2.5' : 'mt-1')}>
-      <div ref={box} data-bubble className={cx('relative flex max-w-[84%] flex-col', own ? 'items-end' : 'items-start')}>
+      <div ref={box} data-bubble className={cx('relative flex min-w-0 max-w-[84%] flex-col', own ? 'items-end' : 'items-start', (cards || (m.card && !m.deleted)) && 'w-[456px]')}>
         {!m.deleted ? (
           <div
             role="toolbar"
@@ -705,7 +719,7 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
             </button>
           </div>
         ) : null}
-        <div className={cx('min-w-[64px] rounded-[10px] text-[13px] leading-[1.45] text-ink shadow-[0_1px_1px_rgb(var(--ws-shadow-rgb)/.1)]', tone, media || m.card ? 'p-1' : 'px-2.5 py-1.5')}>
+        <div className={cx('min-w-[64px] rounded-[10px] text-[13px] leading-[1.45] text-ink shadow-[0_1px_1px_rgb(var(--ws-shadow-rgb)/.1)]', tone, media || m.card || cards ? 'p-1' : 'px-2.5 py-1.5', (cards || (m.card && !m.deleted)) && 'w-full')}>
           {group && !own && first ? (
             <b className={cx('block text-[11.5px]', DATA_TEXT, (media || m.card) && 'px-1.5 pt-0.5')} style={{ ['--c' as string]: nameColour(m.sender_name) }}>
               {m.sender_name}
@@ -725,7 +739,8 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
             </div>
           ) : (
             <>
-              {m.card ? (
+              {m.card && m.card.kind.startsWith('drive.') ? <DriveShareCard card={m.card as DriveCard} onOpen={openLink} /> : null}
+              {m.card && !m.card.kind.startsWith('drive.') ? (
                 <div className={cx('flex w-[270px] max-w-full flex-col gap-0.5 rounded-[8px] border-l-[3px] border-[#E0522F] bg-surface px-2.5 py-2', own && 'dark:bg-black/25')}>
                   {m.card.available === false ? (
                     <span className="text-[12.5px] text-ink-3">{m.card.why}</span>
@@ -763,13 +778,18 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
                   </div>
                 )
               ) : null}
-              <div className={cx('flex flex-wrap items-end gap-x-2', (media || m.card) && 'px-1.5 pb-0.5')}>
-                {m.message ? (
-                  <span className={cx('min-w-0 whitespace-pre-wrap break-words selectable', (media || m.card) && 'pt-1')}>
-                    <LinkedText text={m.message} className={accent} />
+              {cards ? (
+                <div className="p-0.5">
+                  <RecordCards text={m.message} />
+                </div>
+              ) : null}
+              <div className={cx('flex flex-wrap items-end gap-x-2', (media || m.card || cards) && 'px-1.5 pb-0.5')}>
+                {shownText ? (
+                  <span className={cx('min-w-0 whitespace-pre-wrap break-words selectable', (media || m.card || cards) && 'pt-1')}>
+                    <LinkedText text={shownText} className={accent} />
                   </span>
                 ) : null}
-                {m.card?.link && m.card.available !== false ? (
+                {m.card?.link && m.card.available !== false && !m.card.kind.startsWith('drive.') ? (
                   <button type="button" onClick={() => openLink(m.card!.link!)} className={cx('pt-1 text-[12.5px] font-bold hover:underline', accent)}>
                     Open {m.card.kind.split('.').pop()}
                   </button>

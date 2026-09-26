@@ -38,9 +38,11 @@ const Offboarding = lazy(() => import('./Offboarding'));
 const Schedules = lazy(() => import('./Schedules'));
 const Settings = lazy(() => import('./Settings'));
 const Announcements = lazy(() => import('./Announcements'));
+const Departments = lazy(() => import('./Departments'));
 const Devices = lazy(() => import('./Devices'));
 
 const TITLES: Partial<Record<HrView, string>> = {
+  departments: 'Departments',
   overview: 'Dashboard',
   myhr: 'My HR',
   mypay: 'My pay',
@@ -106,7 +108,7 @@ export default function HrShell(_props: ModuleProps) {
       <HrRail view={view} onPick={pick} counts={counts} />
       <main className="relative flex min-w-0 flex-1 flex-col overflow-y-auto bg-ground px-[22px] py-[18px] scroll-thin">
         <Suspense fallback={<Spinner />}>
-          {view === 'overview' ? <Dashboard onPick={pick} /> : null}
+          {view === 'overview' ? <Dashboard onPick={pick} onGo={go} /> : null}
           {view === 'myhr' ? <MyHr onPick={pick} /> : null}
           {view === 'mypay' ? <MyPay /> : null}
           {view === 'mydocs' ? <MyDocuments /> : null}
@@ -118,7 +120,7 @@ export default function HrShell(_props: ModuleProps) {
           {view === 'workpattern' ? <WorkPattern /> : null}
           {view === 'myaccess' ? <MyAccess /> : null}
           {view === 'people' && employee ? <EmployeeProfile key={employee} id={employee} onBack={() => go('/hr?tab=people')} /> : null}
-          {view === 'people' && !employee ? <Directory onOpen={(id) => go(`/hr?tab=people&employee=${id}`)} /> : null}
+          {view === 'people' && !employee ? <Directory creating={query.get('new') === '1'} onCloseNew={() => go('/hr?tab=people')} onOpen={(id) => go(`/hr?tab=people&employee=${id}`)} /> : null}
           {view === 'roster' ? <TeamAttendance /> : null}
           {view === 'openatt' ? <MissingCheckouts /> : null}
           {view === 'approvals' ? <TimesheetApprovals /> : null}
@@ -129,7 +131,8 @@ export default function HrShell(_props: ModuleProps) {
           {view === 'resignations' ? <Resignations openId={resignation} onOpen={(id) => go(id ? `/hr?tab=resignations&resignation=${id}` : '/hr?tab=resignations')} onOffboarding={(id) => go(`/hr?tab=offboarding&offboarding=${id}`)} /> : null}
           {view === 'offboarding' ? <Offboarding openId={offboarding} onOpen={(id) => go(id ? `/hr?tab=offboarding&offboarding=${id}` : '/hr?tab=offboarding')} /> : null}
           {view === 'schedules' ? <Schedules /> : null}
-          {view === 'settings' ? <Settings /> : null}
+          {view === 'settings' ? <Settings section={query.get('section')} /> : null}
+          {view === 'departments' ? <Departments /> : null}
           {view === 'announcements' ? <Announcements /> : null}
           {view === 'devices' ? <Devices /> : null}
         </Suspense>

@@ -41,8 +41,8 @@ export type HrView =
   | 'devices'
   | 'departments';
 
-/** Drawn by the desktop; the rest (Departments, which is Organization's) opens in the browser. */
-export const NATIVE = new Set<HrView>(['overview', 'myhr', 'mypay', 'mydocs', 'myonboarding', 'resignation', 'requests', 'announcements', 'myaccess', 'people', 'onboarding', 'resignations', 'offboarding', 'attendance', 'timesheet', 'roster', 'approvals', 'openatt', 'reports', 'workpattern', 'schedules', 'leave', 'waiting', 'settings', 'devices']);
+/** Drawn by the desktop; anything else opens in the browser. */
+export const NATIVE = new Set<HrView>(['overview', 'myhr', 'mypay', 'mydocs', 'myonboarding', 'resignation', 'requests', 'announcements', 'myaccess', 'people', 'onboarding', 'resignations', 'offboarding', 'attendance', 'timesheet', 'roster', 'approvals', 'openatt', 'reports', 'workpattern', 'schedules', 'leave', 'waiting', 'settings', 'devices', 'departments']);
 
 interface Item {
   id: HrView;
@@ -116,7 +116,7 @@ export function hrSections(perms: readonly string[] | undefined, counts: { reque
       items: [
         { id: 'settings', label: 'Settings', icon: 'settings', show: manage || c('hr.schedule.manage') },
         { id: 'devices', label: 'Devices', icon: 'fingerprint', show: c('hr.device.manage') },
-        { id: 'departments', label: 'Departments', icon: 'building', show: staff },
+        { id: 'departments', label: 'Departments', icon: 'building', show: staff && c('directory.view') },
       ],
     },
   ]

@@ -20,13 +20,16 @@ import { Select } from '../../components/Select';
  */
 type Show = 'current' | 'left' | 'all';
 
-export default function Directory({ onOpen }: { onOpen: (id: number) => void }) {
+export default function Directory({ onOpen, creating, onCloseNew }: { onOpen: (id: number) => void; creating?: boolean; onCloseNew?: () => void }) {
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
   const manage = can(perms, 'hr.manage');
   const [q, setQ] = useState('');
   const [show, setShow] = useState<Show>('current');
   const [picked, setPicked] = useState<number | null>(null);
-  const [adding, setAdding] = useState(false);
+  const [asked, setAdding] = useState(false);
+  // `?new=1` (the dashboard's Add employee) opens the form; closing it clears the address.
+  const adding = asked || !!creating;
+  const stopAdding = () => (setAdding(false), creating && onCloseNew?.());
   const list = useQuery({ queryKey: ['hr', 'employees'], queryFn: ({ signal }) => apiGet<EmployeeRow[]>('/api/hr/employees', undefined, signal) });
   const today = ymd(new Date());
   const rows = useMemo(() => {
@@ -104,7 +107,7 @@ export default function Directory({ onOpen }: { onOpen: (id: number) => void }) 
         </div>
       ) : null}
       {picked ? <EmployeeDrawer id={picked} manage={manage} canLink={manage || can(perms, 'hr.onboarding.manage')} onClose={() => setPicked(null)} onOpen={() => onOpen(picked)} /> : null}
-      {adding ? <AddEmployee people={all} onClose={() => setAdding(false)} onDone={(id) => (setAdding(false), onOpen(id))} /> : null}
+      {adding ? <AddEmployee people={all} onClose={stopAdding} onDone={(id) => (setAdding(false), onOpen(id))} /> : null}
     </div>
   );
 }

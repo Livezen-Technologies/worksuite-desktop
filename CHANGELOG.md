@@ -5,6 +5,77 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-27 — 0.2.23: records shared in chat show as cards; the HR dashboard stays in the app
+
+**Added**
+
+- **A WorkSuite record named in a message shows as a card**, in the chat
+  drawer and on the Chat page. This covers a task, note, calendar event,
+  contact, meeting, Meet link, CRM deal, lead or account, invoice, or Drive
+  file or folder, from the design "Chat — shared items as cards".
+  - Each card is read with the reader's own access, from the endpoint that
+    record's own screen uses. So one person can see what another cannot:
+    - a record you cannot see, or one deleted since, says "You can't open
+      this" instead of its title;
+    - a missing module permission says "You don't have access".
+  - The line that was only the record's address is hidden under its card.
+    An address inside a sentence is left in the sentence.
+  - At most four cards per message.
+- **Meet cards** read the meeting's public facts (`/api/meet/{uuid}/public`):
+  title, host, locked, needs a passcode, ended. They never read
+  `/api/meet/{uuid}`, which creates a chat room and mints a join token for
+  whoever asks. That endpoint cannot tell who is in the call right now, so a
+  card never says "Live now".
+- **Share from WorkSuite**: a **+** beside the paperclip in every message
+  box.
+  - It lists Drive, meetings, notes, tasks, calendar events, the CRM,
+    invoices and contacts, plus "Upload from computer".
+  - The picker searches each kind with that module's own list, shows the
+    card as it will look, and sends the record's address. Each reader's app
+    draws the card.
+  - Drive still goes through its own picker, which first checks that
+    everybody in the conversation can open the file.
+- **A WorkSuite link typed or pasted into the message box** shows "Link
+  detected · will show as a card" above it.
+- **HR › Departments is drawn here**, instead of opening Organization in the
+  browser.
+  - The tree of departments with code, manager and headcount, for this
+    company and those no company was ever set on.
+  - `directory.manage` adds, edits (name, code, parent, manager) and deletes
+    them. The server refuses to delete one that still has people or
+    sub-departments, and its reason is shown.
+  - A department is never offered as its own parent, or as the parent of
+    anything above it.
+  - Shown only to people with `directory.view`.
+
+**Fixed**
+
+- **The HR dashboard's links opened the browser.** Each now opens here:
+  - **Add employee** opens the Directory with the form open;
+  - **Departments** opens the new screen;
+  - **Missing check-outs** opens its screen;
+  - an **onboarding row** opens that person's onboarding;
+  - **Manage** beside the holidays opens Settings on Public holidays.
+- **Cards and other wide content no longer overflow the chat drawer.** A
+  bubble holding a card takes the card's width and gives it up in a narrow
+  column, instead of being pushed off the left edge.
+- **Departments whose parents loop, or that name themselves as parent, are
+  listed** at the top level. The server's data can hold such a loop. Rows
+  are indented by where they are drawn, not by the server's depth, which
+  counts up the loop.
+
+**Tests**
+
+- `record-links.test.ts`: which addresses name which records, and that
+  every address the picker sends reads back as the same record.
+- `hr-departments.test.ts`: the department tree.
+- `hr-admin-2.mjs`: the dashboard's links, and a department added, coded
+  and deleted. The run removes any department it leaves behind.
+- A local check of the cards in the drawer, light and dark, and of sharing
+  a task through the picker.
+
+---
+
 ## 2026-09-27 — Packaging: a Linux .deb
 
 **Added**
