@@ -296,7 +296,12 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       return ctx.transfers.download(`/${String(link.url).replace(/^\/+/, '')}`, input.name, !!input.open, null);
     }
     const r = input.hrReport;
-    const path = input.picture
+    const oc = input.ordersCsv;
+    const path = input.orderPdf
+      ? `/api/share/oms/${input.orderPdf}/pdf`
+      : oc
+      ? `/api/oms/orders/export?${new URLSearchParams(Object.entries({ org: oc.org, status: oc.status, source: oc.source, priority: oc.priority, q: oc.q, mine: oc.mine ? '1' : undefined }).filter((e): e is [string, string] => !!e[1]))}`
+      : input.picture
       ? `/api/users/me/pictures/${input.picture}/original`
       : input.hrLetter
       ? input.hrLetter === 'mine'

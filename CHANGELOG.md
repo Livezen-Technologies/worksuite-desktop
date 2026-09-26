@@ -5,6 +5,105 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-27 — 0.2.25: Sales & Orders, part 1
+
+From the "12 · Orders (OMS)" designs. Sales & Orders now opens here, in the
+sidebar under Business, instead of in the browser. The server's order links
+(`/oms?order=…`, in notifications and shares) open the order here too.
+
+An order is Inventory's sales order. Inventory creates it, confirms it
+(reserving the stock), delivers, invoices and cancels it. Orders adds
+approval, the statuses in between, assignment, the timeline and the boards.
+Each button here goes to whichever of the two does that thing properly.
+
+**Added**
+
+- **The rail**, as the design groups it:
+  - Pending approval.
+  - All orders, with each status still moving and those finished.
+  - Fulfilment and Returns, each with its count.
+  - A company picker when you work in several.
+  - Activity, Reports, Coupons, Approval rules, Settings and My access open
+    in the browser for now, marked. That is part 2.
+- **Dashboard:**
+  - Orders, still moving, open value and delivered or completed.
+  - Open value is per currency; the server's single figure adds rupees to
+    dollars.
+  - Where the moving orders stand, what needs a person, the latest orders,
+    and where orders come from.
+- **All orders:**
+  - Search, source, priority and "mine", with Load more.
+  - Export: a CSV of exactly what the list shows.
+  - Select orders to assign, move on, reprioritise or delete together. Each
+    one that cannot be changed is named.
+- **The order drawer:**
+  - Overview: dates, type, salesperson, the assignee (changeable), the money
+    and the payment as recorded.
+  - Items: ordered, reserved, delivered and invoiced.
+  - Approval: each step and who decided it.
+  - Activity (the timeline) and Linked (deliveries and invoices).
+  - Buttons for what you may do next: Submit for approval, Approve, Reject
+    (with a reason), Confirm, Cancel order, and the later moves.
+  - Copy, PDF, and Share by email, WhatsApp, a chat or a shareable link
+    (live links can be withdrawn).
+- **New order:**
+  - A customer, the warehouse it ships from, dates, currency and priority.
+  - A company, when you work in several.
+  - Lines found by product name, code or barcode (a scanner's Enter adds
+    the exact match), or **Scan units** one serial, QR or tag at a time. A
+    unit that may not be sold says why.
+  - A price left empty is the price list's. Totals are worked out by the
+    server.
+  - It makes a draft and reserves nothing.
+- **Fulfilment:**
+  - Waiting to be picked: raise a delivery note for everything still to go.
+  - Ready to send: dispatch it, which cannot be undone, or cancel the note.
+  - Out with the customer: confirm it was delivered.
+- **Returns:** asked for, waiting for the goods, owed a credit, and settled.
+  Approve, receive back and raise the credit note, each asked about first.
+  Orders marked returned with no return document are flagged.
+
+**Guarded**
+
+- **Approval only through its own endpoints.** An approval state is never
+  set by a plain status change, since the server's status endpoint let
+  approval be skipped.
+  - Only submit, approve and reject make those moves.
+  - The bulk "move to…" offers only processing, ready, shipped, out for
+    delivery and completed.
+- **Confirming goes through Inventory**, which reserves the stock. It
+  follows the order's own `confirm` from a server with the 2026-09-27 Orders
+  fixes (LHCP 3c0f3881), and is disabled with the reason when an approval
+  rule still applies.
+- **Cancelling releases the reservation.** It goes through Orders on a
+  fixed server, so the timeline says so, and through Inventory before that.
+
+**Tests**
+
+- `sales.test.ts`:
+  - no approval move offered as a status change;
+  - confirm and cancel sent where they belong, on an old server and a fixed
+    one;
+  - bulk statuses;
+  - status names;
+  - the server's order links.
+- `tests/e2e/sales.mjs` (12 checks) makes its own warehouse, products,
+  opening stock, customer and approval rule, then through the UI:
+  - creates an order;
+  - submits it, approved at once with no rule;
+  - confirms it (stock reserved);
+  - raises, dispatches and delivers it from Fulfilment;
+  - approves a large order an approval rule holds, and rejects another with
+    a reason;
+  - sets priority on both;
+  - downloads the PDF, and cancels one (reservation released).
+  - It needs a user holding oms.*, inventory.* and crm.*; locally, the "E2E
+    Orders" role. It leaves a delivered order and its fixtures behind.
+- It found a server gap: the order drawer said "No customer" (LHCP
+  19263308). `shell.mjs` still passes.
+
+---
+
 ## 2026-09-27 — 0.2.24: notifications redrawn — the drawer, the center, the settings; uploads ask before replacing
 
 From the design "WorkSuite Desktop — Notifications". Also in this release:

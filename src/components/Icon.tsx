@@ -1,4 +1,6 @@
 import {
+  ScanLine,
+  Truck,
   BellOff,
   AlarmClock,
   MailOpen,
@@ -58,7 +60,7 @@ const ICONS: Record<string, LucideIcon> = {
   printer: Printer, external: ExternalLink, archive: Archive, reply: Reply, 'reply-all': ReplyAll, forward: Forward, paperclip: Paperclip,
   send: Send, star: Star, flag: Flag, inbox: Inbox, trash: Trash2, refresh: RefreshCw, pin: Pin, 'pin-off': PinOff, copy: Copy,
   grid: LayoutGrid, stethoscope: Stethoscope, 'shield-check': ShieldCheck, 'shield-alert': ShieldAlert, wifi: Wifi, 'wifi-off': WifiOff,
-  warning: TriangleAlert, info: Info, alert: CircleAlert, clock: Clock, 'bell-off': BellOff, snooze: AlarmClock, 'mail-open': MailOpen, logout: LogOut, moon: Moon, sun: Sun, monitor: Monitor,
+  warning: TriangleAlert, info: Info, alert: CircleAlert, clock: Clock, 'bell-off': BellOff, snooze: AlarmClock, scan: ScanLine, truck: Truck, 'mail-open': MailOpen, logout: LogOut, moon: Moon, sun: Sun, monitor: Monitor,
   keyboard: Keyboard, globe: Globe, disk: HardDrive, pause: Pause, play: Play, undo: RotateCcw, file: File, 'file-image': FileImage,
   'file-sheet': FileSpreadsheet, filter: Filter, more: Ellipsis, smile: Smile, timer: Timer, coffee: Coffee, eye: Eye, laptop: Laptop,
   server: Server, link: Link, history: History, zap: Zap, hash: Hash, compose: SquarePen, user: UserRound, building: Building2,

@@ -256,10 +256,23 @@ export const contract = {
           .optional(),
         /** One of my profile pictures, as it was kept (My account › Profile pictures). */
         picture: z.number().int().positive().optional(),
+        /** A sales order as its PDF (the server's share of it). */
+        orderPdf: z.number().int().positive().optional(),
+        /** The order list as a CSV, as the Orders screen filtered it. */
+        ordersCsv: z
+          .object({
+            org: z.string().regex(/^(\d+(,\d+)*)?$/).optional(),
+            status: z.string().regex(/^[a-z_,]{1,200}$/).optional(),
+            source: z.string().regex(/^[a-z_,]{1,100}$/).optional(),
+            priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
+            q: z.string().max(100).optional(),
+            mine: z.boolean().optional(),
+          })
+          .optional(),
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter or a profile picture'),
+      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.ordersCsv].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order PDF or an order list'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   'transfers:upload': ch(

@@ -145,6 +145,14 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
   },
   {
     input: defineDesktopManifest({
+      id: 'sales', name: 'Sales & Orders', icon: 'trending-up', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'READ_CACHE', entities: ['order'], cache: ['/api/oms/orders'] },
+      quickActions: [{ id: 'new-order', label: 'New Order', route: '/sales?tab=orders&new=1' }],
+    }),
+    load: () => import('./sales/SalesShell'),
+  },
+  {
+    input: defineDesktopManifest({
       id: 'hr', name: 'HR', icon: 'id-card', contractVersion: 1, desktop: { enabled: true },
       offline: { mode: 'READ_CACHE', cache: ['/api/hr/attendance/me', '/api/hr/me/profile', '/api/hr/leave/balance', '/api/hr/leave/requests', '/api/hr/leave/approvals'] },
       native: ['notifications'],
