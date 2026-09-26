@@ -5,6 +5,7 @@ import { errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
+import { Select } from '../../components/Select';
 import { cx } from '../../components/ui';
 import { btn, btnPrimary, Field, input, Sheet } from '../hr/parts';
 import { bulk, createOrder, customers, K, lookupProducts, PRIORITIES, scanUnit, useOrgs, warehouses, ymd, type ProductHit } from './api';
@@ -117,28 +118,29 @@ export default function NewOrder({ org, onClose }: { org: string; onClose: (crea
       <div className="grid grid-cols-2 gap-3" data-new-order>
         {several ? (
           <Field label="Company">
-            <select className={input} value={company} onChange={(e) => (setCompany(e.target.value), setHouse(null))}>
-              <option value="">Choose a company</option>
-              {(orgs.data ?? []).map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
+            <Select<string>
+              label="Company"
+              value={company}
+              placeholder="Choose a company"
+              searchable
+              options={(orgs.data ?? []).map((o) => ({ value: String(o.id), label: o.name }))}
+              onValueChange={(v) => (setCompany(v), setHouse(null))}
+            />
           </Field>
         ) : null}
         <Field label="Customer">
           <CustomerPicker value={client} onChange={setClient} />
         </Field>
         <Field label="Warehouse" hint={houses.error ? errorMessage(houses.error) : undefined}>
-          <select className={input} value={chosenHouse ?? ''} onChange={(e) => setHouse(Number(e.target.value) || null)}>
-            {!houseList.length ? <option value="">No warehouse you may sell from</option> : null}
-            {houseList.map((h) => (
-              <option key={h.id} value={h.id}>
-                {h.name}
-              </option>
-            ))}
-          </select>
+          <Select<string>
+            label="Warehouse"
+            value={chosenHouse ? String(chosenHouse) : ''}
+            placeholder={houses.isLoading ? 'Loading…' : houseList.length ? 'Choose a warehouse' : 'No warehouse you may sell from'}
+            searchable
+            empty="No warehouse you may sell from"
+            options={houseList.map((h) => ({ value: String(h.id), label: h.name, hint: h.code ?? undefined }))}
+            onValueChange={(v) => setHouse(Number(v) || null)}
+          />
         </Field>
         <Field label="Order date">
           <input type="date" className={input} value={date} onChange={(e) => setDate(e.target.value)} />
@@ -150,20 +152,19 @@ export default function NewOrder({ org, onClose }: { org: string; onClose: (crea
           <input className={input} value={currency} onChange={(e) => setCurrency(e.target.value)} placeholder="LKR" maxLength={3} />
         </Field>
         <Field label="Priority">
-          <select className={input} value={priority} onChange={(e) => setPriority(e.target.value)}>
-            {PRIORITIES.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
+          <Select<string>
+            label="Priority"
+            value={priority}
+            options={PRIORITIES.map((p) => ({ value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }))}
+            onValueChange={setPriority}
+          />
         </Field>
       </div>
 
       <div className="flex flex-col gap-2 pt-1">
         <div className="flex items-center gap-2">
           <b className="flex-1 text-[13px] text-ink">Items</b>
-          <button type="button" aria-pressed={scanning} onClick={() => setScanning(!scanning)} className={cx('h-[30px] rounded-[8px] px-3 text-[12.5px] font-semibold', scanning ? 'bg-primary text-white' : 'border border-line bg-surface text-ink hover:bg-subtle')}>
+          <button type="button" aria-pressed={scanning} onClick={() => setScanning(!scanning)} className={cx('inline-flex h-[30px] shrink-0 items-center gap-1.5 rounded-[8px] px-3 text-[12.5px] font-semibold whitespace-nowrap', scanning ? 'bg-primary text-white' : 'border border-line bg-surface text-ink hover:bg-subtle')}>
             <Icon name="scan" size={13} /> {scanning ? 'Typing' : 'Scan units'}
           </button>
         </div>
@@ -196,35 +197,34 @@ export default function NewOrder({ org, onClose }: { org: string; onClose: (crea
   );
 }
 
+/** The customer: the app's dropdown, searched on the server as it is typed (CRM accounts). */
 function CustomerPicker({ value, onChange }: { value: { id: number; name: string } | null; onChange: (v: { id: number; name: string } | null) => void }) {
   const [q, setQ] = useState('');
-  const [open, setOpen] = useState(false);
-  const res = useQuery({ queryKey: ['sales', 'customers', q.trim()], queryFn: ({ signal }) => customers(q.trim(), signal), enabled: open, staleTime: 30_000 });
-  if (value)
-    return (
-      <span className="flex h-[34px] items-center gap-2 rounded-[8px] border border-line bg-surface px-2.5 text-[13px]">
-        <b className="min-w-0 flex-1 truncate text-ink">{value.name}</b>
-        <button type="button" aria-label="Choose another customer" onClick={() => onChange(null)} className="text-ink-3 hover:text-ink">
-          <Icon name="x" size={13} />
-        </button>
-      </span>
-    );
+  const [needle, setNeedle] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setNeedle(q.trim()), 250);
+    return () => clearTimeout(t);
+  }, [q]);
+  const res = useQuery({ queryKey: ['sales', 'customers', needle], queryFn: ({ signal }) => customers(needle, signal), staleTime: 30_000 });
+  const found = res.data ?? [];
+  const options = [
+    ...(value && !found.some((c) => c.id === value.id) ? [{ value: String(value.id), label: value.name }] : []),
+    ...found.map((c) => ({ value: String(c.id), label: c.name, hint: [c.email, c.phone].filter(Boolean).join(' · ') || undefined })),
+  ];
   return (
-    <span className="relative">
-      <input className={input} value={q} onChange={(e) => (setQ(e.target.value), setOpen(true))} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)} placeholder="Choose a customer" aria-label="Customer" />
-      {open ? (
-        <span role="listbox" aria-label="Customers" className="absolute top-full right-0 left-0 z-30 mt-1 flex max-h-60 flex-col overflow-y-auto rounded-[10px] border border-line bg-surface py-1 shadow-[0_12px_32px_rgb(var(--ws-shadow-rgb)/.18)] scroll-thin">
-          {res.error ? <span className="px-3 py-2 text-[12px] text-ink-3">{errorMessage(res.error)}</span> : null}
-          {(res.data ?? []).map((c) => (
-            <button key={c.id} type="button" role="option" aria-selected={false} onMouseDown={(e) => e.preventDefault()} onClick={() => (onChange({ id: c.id, name: c.name }), setQ(''), setOpen(false))} className="flex flex-col px-3 py-1.5 text-left hover:bg-subtle">
-              <b className="text-[12.5px] text-ink">{c.name}</b>
-              {c.email || c.phone ? <span className="text-[11.5px] text-ink-3">{[c.email, c.phone].filter(Boolean).join(' · ')}</span> : null}
-            </button>
-          ))}
-          {res.data && !res.data.length ? <span className="px-3 py-2 text-[12px] text-ink-3">No customer matches.</span> : null}
-        </span>
-      ) : null}
-    </span>
+    <Select<string>
+      label="Customer"
+      value={value ? String(value.id) : ''}
+      placeholder="Choose a customer"
+      options={options}
+      onSearch={setQ}
+      loading={res.isFetching && !found.length}
+      empty={res.error ? errorMessage(res.error) : needle ? 'No customer matches.' : 'No customers yet.'}
+      onValueChange={(v) => {
+        const c = options.find((o) => o.value === v);
+        onChange(c ? { id: Number(c.value), name: c.label } : null);
+      }}
+    />
   );
 }
 

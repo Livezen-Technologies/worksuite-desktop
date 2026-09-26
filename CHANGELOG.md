@@ -5,6 +5,43 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-27 — 0.2.26: Orders' dropdowns search
+
+Every dropdown in Sales & Orders is now the app's own list, not the system
+menu. The long ones (customer, company, warehouse, assignee, send to) have a
+search box.
+
+**Changed**
+
+- **New order → Customer** searches as you type, by name, email or phone. The
+  search runs on the server, so customers beyond the first page are found too.
+  Each row shows the email and phone under the name. The one you picked stays
+  shown even when a later search would not find it.
+- **Company, Warehouse and Priority** on the New order form use the same list.
+  Each warehouse shows its code beside its name.
+- **The rest of Sales & Orders** uses the same list:
+  - the order list's Source and Priority filters;
+  - the bulk bar's Assign to, Move to and Priority to;
+  - the order drawer's Assigned to and Send to;
+  - the rail's company picker.
+
+  The lists of people and companies can be searched.
+- The dropdown (`Select`) can take its search from the caller (`onSearch`).
+  When it does, it shows the caller's answers as given, "Searching…" while
+  they load, and your own text when nothing matches.
+
+**Fixed**
+
+- **Scan units** on the New order form: the icon sat above the label. It now
+  sits beside it, and the button keeps its height.
+
+**Not changed**
+
+- The date fields (delivery date, order date) are still the system's date
+  picker. The app has no date picker of its own yet.
+
+---
+
 ## 2026-09-27 — 0.2.25: Sales & Orders, part 1
 
 From the "12 · Orders (OMS)" designs. Sales & Orders now opens here, in the

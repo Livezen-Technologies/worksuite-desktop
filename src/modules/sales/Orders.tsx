@@ -6,6 +6,7 @@ import { useStore } from '../../core/store';
 import { dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
+import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, Empty, input, PageHead, Sheet } from '../hr/parts';
 import { assignees, BULK_STATUSES, bulk, bulkAssign, fetchOrders, K, PRIORITIES, SOURCE, statusOf, type ListFilters, type Order } from './api';
@@ -99,22 +100,22 @@ export default function Orders({ org, status, openId, creating, canCreate, onOpe
       </PageHead>
       <div className="flex flex-wrap items-center gap-2">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Order number or customer" aria-label="Search orders" className={input + ' !w-[240px]'} />
-        <select aria-label="Source" value={source} onChange={(e) => setSource(e.target.value)} className={input + ' !w-auto'}>
+        <Select aria-label="Source" value={source} onChange={(e) => setSource(e.target.value)} className={input + ' !w-auto'}>
           <option value="">Any source</option>
           {Object.entries(SOURCE).map(([k, v]) => (
             <option key={k} value={k}>
               {v}
             </option>
           ))}
-        </select>
-        <select aria-label="Priority" value={priority} onChange={(e) => setPriority(e.target.value)} className={input + ' !w-auto'}>
+        </Select>
+        <Select aria-label="Priority" value={priority} onChange={(e) => setPriority(e.target.value)} className={input + ' !w-auto'}>
           <option value="">Any priority</option>
           {PRIORITIES.map((p) => (
             <option key={p} value={p}>
               {p}
             </option>
           ))}
-        </select>
+        </Select>
         <label className="flex items-center gap-1.5 text-[12.5px] font-semibold text-ink">
           <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} className="h-3.5 w-3.5 accent-primary" />
           Mine
@@ -131,34 +132,34 @@ export default function Orders({ org, status, openId, creating, canCreate, onOpe
         <div className="flex flex-wrap items-center gap-1.5 self-start rounded-[9px] border border-[#C7D0F5] bg-[#EEF1FC] px-2 py-1 dark:border-[#2D3A66] dark:bg-[#16203E]" aria-label="Selected orders">
           <b className="px-1 text-[12.5px] text-primary">{chosen.length} selected ·</b>
           {has(perms, 'oms.orders.assign') ? (
-            <select aria-label="Assign to" disabled={busy} value="" onChange={(e) => e.target.value && void run(async () => { const r = await bulkAssign(ids, Number(e.target.value)); after(r.assigned, r.failed, 'assigned'); })} className="h-7 rounded-[7px] border border-line bg-surface px-1.5 text-[12px]">
+            <Select aria-label="Assign to" searchable disabled={busy} value="" onChange={(e) => e.target.value && void run(async () => { const r = await bulkAssign(ids, Number(e.target.value)); after(r.assigned, r.failed, 'assigned'); })} className="h-7 rounded-[7px] border border-line bg-surface px-1.5 text-[12px]">
               <option value="">assign to…</option>
               {(people.data ?? []).map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
               ))}
-            </select>
+            </Select>
           ) : null}
           {has(perms, 'oms.fulfilment.manage') ? (
-            <select aria-label="Move to" disabled={busy} value="" onChange={(e) => e.target.value && void run(async () => { const r = await bulk(ids, 'status', e.target.value); after(r.done, r.failed, `moved to ${statusOf(e.target.value).label.toLowerCase()}`); })} className="h-7 rounded-[7px] border border-line bg-surface px-1.5 text-[12px]">
+            <Select aria-label="Move to" disabled={busy} value="" onChange={(e) => e.target.value && void run(async () => { const r = await bulk(ids, 'status', e.target.value); after(r.done, r.failed, `moved to ${statusOf(e.target.value).label.toLowerCase()}`); })} className="h-7 rounded-[7px] border border-line bg-surface px-1.5 text-[12px]">
               <option value="">move to…</option>
               {BULK_STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {statusOf(s).label}
                 </option>
               ))}
-            </select>
+            </Select>
           ) : null}
           {has(perms, 'oms.orders.edit') ? (
-            <select aria-label="Priority to" disabled={busy} value="" onChange={(e) => e.target.value && void run(async () => { const r = await bulk(ids, 'priority', e.target.value); after(r.done, r.failed, `set to ${e.target.value}`); })} className="h-7 rounded-[7px] border border-line bg-surface px-1.5 text-[12px]">
+            <Select aria-label="Priority to" disabled={busy} value="" onChange={(e) => e.target.value && void run(async () => { const r = await bulk(ids, 'priority', e.target.value); after(r.done, r.failed, `set to ${e.target.value}`); })} className="h-7 rounded-[7px] border border-line bg-surface px-1.5 text-[12px]">
               <option value="">priority…</option>
               {PRIORITIES.map((p) => (
                 <option key={p} value={p}>
                   {p}
                 </option>
               ))}
-            </select>
+            </Select>
           ) : null}
           {has(perms, 'oms.orders.delete') ? (
             <button type="button" disabled={busy} onClick={() => setDeleting(true)} className="h-7 rounded-[7px] px-2 text-[12px] font-bold text-danger hover:bg-danger-bg">

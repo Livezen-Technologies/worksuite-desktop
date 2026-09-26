@@ -8,6 +8,7 @@ import { openWebLink } from '../../core/tab-context';
 import { dateLabel, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
+import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Caps, Empty, Field, Grid, input, Seg, Sheet, SidePanel } from '../hr/parts';
 import { approve, assign, assignees, cancel, confirm, fetchOrder, fetchTimeline, K, movesFor, reject, submit, transition, type Move, type OrderDetail } from './api';
@@ -239,8 +240,9 @@ function Overview({ o, canAssign, onAssigned }: { o: OrderDetail; canAssign: boo
       <div className="flex items-center gap-2 text-[13px]">
         <span className="w-[110px] shrink-0 text-ink-3">Assigned to</span>
         {canAssign ? (
-          <select
+          <Select
             aria-label="Assigned to"
+            searchable
             value={o.assigned_to ?? ''}
             onChange={(e) =>
               e.target.value &&
@@ -258,7 +260,7 @@ function Overview({ o, canAssign, onAssigned }: { o: OrderDetail; canAssign: boo
               </option>
             ))}
             {o.assigned_to && !(people.data ?? []).some((p) => p.id === o.assigned_to) ? <option value={o.assigned_to}>{o.assigned_name}</option> : null}
-          </select>
+          </Select>
         ) : (
           <b className="text-ink">{o.assigned_name ?? 'Nobody'}</b>
         )}
@@ -557,14 +559,14 @@ function ShareSheet({ o, how, onClose }: { o: OrderDetail; how: 'email' | 'whats
       {s && allowed && how === 'chat'
         ? field(
             'Send to',
-            <select className={input} value={v('user')} onChange={set('user')}>
+            <Select aria-label="Send to" searchable className={input} value={v('user')} onChange={set('user')}>
               <option value="">Choose somebody</option>
               {(people.data?.users ?? []).map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
               ))}
-            </select>,
+            </Select>,
           )
         : null}
       {s && allowed && how === 'link' ? (

@@ -45,6 +45,17 @@ export interface SelectProps<T = string> {
   autoFocus?: boolean;
   /** Before the list opens (the notes toolbar keeps the editor's selection with it). */
   onMouseDown?: () => void;
+  /**
+   * A list the caller searches — customers across the installation, say,
+   * where the options are a page of answers from the server: what is typed is
+   * handed over, and the options are shown as given rather than filtered
+   * here. The chosen option has to stay among them for its label to show.
+   */
+  onSearch?: (term: string) => void;
+  /** The caller is fetching the options (a search in flight). */
+  loading?: boolean;
+  /** What the list says when there is nothing in it: "No customer matches", not "Nothing to choose". */
+  empty?: string;
 }
 
 /** Plain text of an option's children (text, numbers, nested fragments). */
@@ -116,9 +127,15 @@ export function Select<T = string>(props: SelectProps<T>) {
   const pop = useRef<HTMLDivElement>(null);
   const typed = useRef({ text: '', at: 0 });
   const listId = useId();
-  const searchable = props.searchable ?? options.length >= SEARCH_FROM;
+  const remote = !!props.onSearch;
+  const searchable = remote || (props.searchable ?? options.length >= SEARCH_FROM);
   const current = options.find((o) => String(o.value) === String(value ?? ''));
-  const shown = useMemo(() => (searchable ? options.filter((o) => matches(o, query)) : options), [options, query, searchable]);
+  const shown = useMemo(() => (searchable && !remote ? options.filter((o) => matches(o, query)) : options), [options, query, searchable, remote]);
+  const onSearch = props.onSearch;
+  const search = useCallback((q: string) => {
+    setQuery(q);
+    onSearch?.(q);
+  }, [onSearch]);
 
   const place = useCallback(() => {
     const r = trigger.current?.getBoundingClientRect();
@@ -136,13 +153,13 @@ export function Select<T = string>(props: SelectProps<T>) {
 
   const close = useCallback((refocus = true) => {
     setOpen(false);
-    setQuery('');
+    search('');
     if (refocus) trigger.current?.focus();
-  }, []);
+  }, [search]);
 
   /** Where the highlight starts for a search: the chosen option if it is listed, else the first that can be chosen. */
   const startAt = (q: string) => {
-    const list = searchable ? options.filter((o) => matches(o, q)) : options;
+    const list = searchable && !remote ? options.filter((o) => matches(o, q)) : options;
     const i = q ? -1 : list.findIndex((o) => String(o.value) === String(value ?? ''));
     return i >= 0 ? i : list.findIndex((o) => !o.disabled);
   };
@@ -150,7 +167,7 @@ export function Select<T = string>(props: SelectProps<T>) {
   const openList = (initial = '') => {
     if (disabled) return;
     const q = searchable ? initial : '';
-    setQuery(q);
+    search(q);
     setActive(startAt(q));
     place();
     setOpen(true);
@@ -292,12 +309,12 @@ export function Select<T = string>(props: SelectProps<T>) {
                     aria-label={`Search ${ariaLabel ?? 'options'}`}
                     aria-controls={listId}
                     value={query}
-                    onChange={(e) => (setQuery(e.target.value), setActive(startAt(e.target.value)))}
+                    onChange={(e) => (search(e.target.value), setActive(startAt(e.target.value)))}
                     placeholder="Search…"
                     className="bare-focus h-[38px] min-w-0 flex-1 border-0 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-3"
                   />
                   {query ? (
-                    <button type="button" aria-label="Clear the search" onClick={() => (setQuery(''), setActive(startAt('')))} className="flex h-5 w-5 items-center justify-center rounded-full text-ink-3 hover:bg-subtle hover:text-ink">
+                    <button type="button" aria-label="Clear the search" onClick={() => (search(''), setActive(startAt('')))} className="flex h-5 w-5 items-center justify-center rounded-full text-ink-3 hover:bg-subtle hover:text-ink">
                       <Icon name="x" size={12} />
                     </button>
                   ) : null}
@@ -335,7 +352,7 @@ export function Select<T = string>(props: SelectProps<T>) {
                     </Fragment>
                   );
                 })}
-                {!shown.length ? <div className="px-3 py-3 text-center text-[12.5px] text-ink-3">{query ? `Nothing matches “${query}”.` : 'Nothing to choose.'}</div> : null}
+                {!shown.length ? <div className="px-3 py-3 text-center text-[12.5px] text-ink-3">{props.loading ? 'Searching…' : (props.empty ?? (query ? `Nothing matches “${query}”.` : 'Nothing to choose.'))}</div> : null}
               </div>
             </div>,
             document.body,

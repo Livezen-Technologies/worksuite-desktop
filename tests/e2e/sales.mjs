@@ -38,8 +38,14 @@ const press = async (scope, text, what = text) => {
   if (!ok) throw new Error(`no ${what} button to press`);
 };
 const typeInto = (selector, value) => t.evaluate(`(() => { const el = document.querySelector(${js(selector)}); if (!el) return false; el.focus(); const set = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value').set; set.call(el, ${js(value)}); el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
-const choose = (labelText, value) =>
-  t.evaluate(`(() => { const l = [...document.querySelectorAll('[data-new-order] label')].find(l => l.textContent.trim().startsWith(${js(labelText)})); const el = l && l.querySelector('select'); if (!el) return false; const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(el, ${js(String(value))}); el.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
+/** The app's dropdown: open it, search when it has a search box, and pick the option by its words. */
+const pickFrom = async (label, text, search) => {
+  await t.evaluate(`document.querySelector('button[role="combobox"][aria-label=${js(label)}]').click()`);
+  await t.waitFor(`!!document.querySelector('[role="listbox"][aria-label=${js(label)}]')`, `the ${label} list`);
+  if (search) await typeInto(`input[aria-label=${js(`Search ${label}`)}]`, search);
+  await t.waitFor(`[...document.querySelectorAll('[role="listbox"][aria-label=${js(label)}] [role="option"]')].some(o => o.textContent.includes(${js(text)}))`, `${text} in ${label}`, 15_000);
+  await t.evaluate(`[...document.querySelectorAll('[role="listbox"][aria-label=${js(label)}] [role="option"]')].find(o => o.textContent.includes(${js(text)})).click()`);
+};
 const order = async (id) => (await api('GET', `/api/oms/orders/${id}`)).data?.order;
 const waitStatus = async (id, want, label) => {
   let s = null;
@@ -80,11 +86,8 @@ try {
   await t.shot('o1-dashboard');
   await press('nav[aria-label="Orders"]', 'New order');
   await t.waitFor(`!!document.querySelector('[data-new-order]')`, 'the new order form', 20_000);
-  await typeInto('[data-new-order] input[aria-label="Customer"]', `E2E Customer ${tag}`);
-  await t.waitFor(`[...document.querySelectorAll('[role="listbox"][aria-label="Customers"] button')].some(b => b.textContent.includes(${js(`E2E Customer ${tag}`)}))`, 'the customer', 15_000);
-  await t.evaluate(`[...document.querySelectorAll('[role="listbox"][aria-label="Customers"] button')].find(b => b.textContent.includes(${js(`E2E Customer ${tag}`)})).click()`);
-  await t.waitFor(`[...document.querySelectorAll('[data-new-order] label')].find(l => l.textContent.trim().startsWith('Warehouse'))?.querySelector('option[value="${whId}"]') != null`, 'the warehouse', 15_000);
-  await choose('Warehouse', whId);
+  await pickFrom('Customer', `E2E Customer ${tag}`, `E2E Customer ${tag}`);
+  await pickFrom('Warehouse', `E2E Store ${tag}`, `E2E Store ${tag}`);
   for (const [name, n] of [[`E2E Widget ${tag}`, 3], [`E2E Setup ${tag}`, 1]]) {
     await typeInto('input[aria-label="Add a product"]', name);
     await t.waitFor(`[...document.querySelectorAll('[role="listbox"][aria-label="Products"] button')].some(b => b.textContent.includes(${js(name)}))`, `the product ${name}`, 15_000);
@@ -174,7 +177,7 @@ try {
   await t.evaluate(`[${b1}, ${b2}].forEach(id => document.querySelector('[data-order="' + id + '"] input[type="checkbox"]').click())`);
   await t.waitFor(`!!document.querySelector('[aria-label="Selected orders"]')`, 'the bulk bar');
   await t.shot('o7-bulk');
-  await t.evaluate(`(() => { const el = document.querySelector('[aria-label="Selected orders"] select[aria-label="Priority to"]'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(el, 'high'); el.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  await pickFrom('Priority to', 'high');
   let pr = [];
   for (let i = 0; i < 30; i++) {
     pr = [(await order(b1)).priority, (await order(b2)).priority];

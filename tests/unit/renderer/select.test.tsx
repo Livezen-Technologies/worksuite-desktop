@@ -129,3 +129,27 @@ describe('the one dropdown: using it', () => {
     expect(got).toBe(30);
   });
 });
+
+describe('the one dropdown: searched by the caller', () => {
+  it('hands the search to the caller and shows its answers as given', () => {
+    const asked: string[] = [];
+    function Remote() {
+      const [q, setQ] = useState('');
+      const [v, setV] = useState('');
+      // What a server would answer: already narrowed, and not by the label alone.
+      const answers = q ? [{ value: '7', label: 'Harbour Hotels', hint: 'accounts@harbour.lk' }] : [];
+      return (
+        <Select<string> label="Customer" value={v} onSearch={(t) => (asked.push(t), setQ(t))} empty={q ? 'No customer matches.' : 'Type to search.'} options={answers} onValueChange={setV} />
+      );
+    }
+    render(<Remote />);
+    fireEvent.click(screen.getByRole('combobox', { name: 'Customer' }));
+    expect(screen.getByText('Type to search.')).toBeTruthy();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search Customer' }), { target: { value: 'accounts@' } });
+    expect(asked.at(-1)).toBe('accounts@');
+    // Not filtered here: "accounts@" is not in the label, and the answer still shows.
+    fireEvent.click(screen.getByRole('option', { name: /Harbour Hotels/ }));
+    expect(screen.getByRole('combobox', { name: 'Customer' }).getAttribute('data-value')).toBe('7');
+    expect(asked.at(-1)).toBe(''); // closing clears the caller's search too
+  });
+});

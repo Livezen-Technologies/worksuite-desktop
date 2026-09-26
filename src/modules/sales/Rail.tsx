@@ -1,5 +1,6 @@
 import { call } from '../../core/bridge';
 import { Icon } from '../../components/Icon';
+import { Select } from '../../components/Select';
 import { cx } from '../../components/ui';
 import { FINISHED, MOVING, statusOf, type Status } from './api';
 
@@ -84,14 +85,14 @@ export function SalesRail({ view, status, onPick, onNew, counts, org, orgs, onOr
           </button>
         ) : null}
         {orgs.length > 1 ? (
-          <select aria-label="Companies" value={org} onChange={(e) => onOrg(e.target.value)} className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink">
+          <Select aria-label="Companies" searchable value={org} onChange={(e) => onOrg(e.target.value)} className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink">
             <option value="">Every company</option>
             {orgs.map((o) => (
               <option key={o.id} value={String(o.id)}>
                 {o.name}
               </option>
             ))}
-          </select>
+          </Select>
         ) : null}
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2.5 pb-2.5 scroll-thin">
