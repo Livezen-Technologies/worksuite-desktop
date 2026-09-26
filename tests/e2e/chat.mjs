@@ -66,6 +66,15 @@ try {
   await t.waitFor(t.hasText(hello), 'the partner\'s message');
   await t.shot('c1-thread');
 
+  // Leaving Chat and coming back opens the conversation you had open, not an empty pane.
+  await t.evaluate(`[...document.querySelectorAll('nav[aria-label="Apps"] button')].find(b => b.textContent.trim().startsWith('Home')).click()`);
+  await t.waitFor(t.hasText('Good '), 'the home dashboard');
+  await t.evaluate(`[...document.querySelectorAll('nav[aria-label="Apps"] button')].find(b => b.textContent.trim().startsWith('Chat')).click()`);
+  const reopened = await t.waitFor(`${t.hasText(hello)} && !!document.querySelector('textarea[aria-label="Message"]')`, 'the last conversation, reopened', 15_000).then(() => true, () => false);
+  const filters = await t.evaluate(`(() => { const l = document.querySelector('aside[aria-label="Conversations"] [role="tablist"]'); return { height: Math.round(l.getBoundingClientRect().height), tabs: [...l.querySelectorAll('[role="tab"]')].map(b => b.textContent.trim()) }; })()`);
+  await t.shot('c1a-reopened');
+  t.check('Chat reopens the last conversation, with the filters on one line', reopened && filters.height <= 32 && !filters.tabs.includes('Archived'), JSON.stringify(filters));
+
   // React.
   await t.evaluate(inBubble(hello, 'React 👍'));
   await t.waitFor(`[...document.querySelectorAll('button')].some(b => (b.getAttribute('aria-label') ?? '').startsWith('👍 1'))`, 'the 👍 reaction');

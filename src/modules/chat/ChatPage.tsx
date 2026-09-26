@@ -12,7 +12,7 @@ import { Avatar, Empty, ErrorNote, OfflineNote, Spinner, cx } from '../../compon
 import type { ModuleProps } from '../registry';
 import { Details, PRESENCE } from './Details';
 import { NewChat, StarredDialog } from './NewChat';
-import { roomFromRoute } from './routes';
+import { lastOrRecent, roomFromRoute } from './routes';
 import { Thread } from './Thread';
 import type { Room } from './types';
 import { useWebsiteAccess, useWebsiteInbox, type WebsiteRow } from './website/api';
@@ -52,6 +52,25 @@ export default function ChatPage({ tabId }: ModuleProps) {
   const all = (rooms.data?.data.rooms ?? []).filter((r) => r.type !== 'widget');
   const current = all.find((r) => String(r.id) === room);
   useTabTitle(workspace || website ? null : current ? `Chat · ${current.name}` : 'Chat');
+  const me = useStore(app, (s) => s.auth?.user?.id);
+  const lastKey = me ? `ws.chat.lastRoom.${me}` : null;
+
+  // The conversation open now is the one Chat comes back to.
+  useEffect(() => {
+    if (!room || !current || !lastKey) return;
+    try {
+      localStorage.setItem(lastKey, room);
+    } catch {
+      // Remembering is a convenience; without it Chat opens the most recent conversation.
+    }
+  }, [room, current, lastKey]);
+
+  // Chat opens on a conversation, never on an empty pane: the last one you had
+  // open, or else the most recent.
+  const reopen = !mini && !room && !workspace && !website && rooms.isSuccess ? lastOrRecent(all, lastKey) : null;
+  useEffect(() => {
+    if (reopen) go(`/chat?room=${reopen}`);
+  }, [reopen, go]);
 
   // Every website chat opens in its workspace, wherever the link came from.
   if (workspace || website) return <WebsiteWorkspace />;
@@ -69,8 +88,10 @@ export default function ChatPage({ tabId }: ModuleProps) {
             </div>
             {details && current && !mini ? <Details room={current} onClose={() => setDetails(false)} /> : null}
           </>
+        ) : rooms.isLoading || reopen ? (
+          <Spinner />
         ) : (
-          <Empty icon="chat" title="Pick a conversation" hint="Or start a new one with +." />
+          <Empty icon="chat" title="No conversations yet" hint="Start one with +." />
         )}
       </div>
       {starting ? (
@@ -137,6 +158,7 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
     if (filter === 'mentions') return r.mentions > 0;
     return true;
   });
+  const archived = rooms.filter((r) => r.archived).length;
   const sections: Array<[string, Room[]]> = [
     ['Pinned', visible.filter((r) => r.pinned)],
     ['Direct', visible.filter((r) => !r.pinned && r.type === 'direct')],
@@ -160,7 +182,7 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
           <Icon name="search" size={14} />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search messages, files and people…" aria-label="Search chat" className="flex-1 bg-transparent text-[13px] text-ink outline-none" />
         </label>
-        <div role="tablist" className="flex flex-wrap gap-1 text-[12px] font-semibold">
+        <div role="tablist" className="flex gap-1 text-[12px] font-semibold">
           {(
             [
               ['all', 'All'],
@@ -168,22 +190,30 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
               ['mentions', 'Mentions'],
             ] as Array<[Filter, string]>
           ).map(([f, l]) => (
-            <button key={f} type="button" role="tab" aria-selected={filter === f} onClick={() => setFilter(f)} className={cx('rounded-full px-2.5 py-1', filter === f ? 'bg-ink text-surface' : 'border border-line text-ink hover:bg-subtle')}>
+            <button key={f} type="button" role="tab" aria-selected={filter === f} onClick={() => setFilter(f)} className={cx('shrink-0 rounded-full px-2.5 py-1', filter === f ? 'bg-ink text-surface' : 'border border-line text-ink hover:bg-subtle')}>
               {l}
             </button>
           ))}
           {websiteAccess ? (
-            <button type="button" role="tab" aria-selected={false} onClick={() => go('/chat?view=website')} className="rounded-full border border-line px-2.5 py-1 text-ink hover:bg-subtle">
+            <button type="button" role="tab" aria-selected={false} onClick={() => go('/chat?view=website')} className="shrink-0 rounded-full border border-line px-2.5 py-1 text-ink hover:bg-subtle">
               Website
             </button>
           ) : null}
-          <button type="button" role="tab" aria-selected={filter === 'archived'} onClick={() => setFilter('archived')} className={cx('rounded-full px-2.5 py-1', filter === 'archived' ? 'bg-ink text-surface' : 'border border-line text-ink hover:bg-subtle')}>
-            Archived
-          </button>
         </div>
         {offline ? <OfflineNote cachedAt={offline} /> : null}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto pb-2 scroll-thin">
+        {filter === 'archived' ? (
+          <button type="button" onClick={() => setFilter('all')} className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[12.5px] font-bold text-ink hover:bg-subtle">
+            <Icon name="chevron-left" size={15} className="text-ink-3" /> Archived conversations
+          </button>
+        ) : archived && !needle ? (
+          <button type="button" onClick={() => setFilter('archived')} className="flex w-full items-center gap-2.5 px-3.5 py-[7px] text-left hover:bg-subtle">
+            <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] bg-subtle text-ink-2"><Icon name="archive" size={16} /></span>
+            <b className="flex-1 text-[13px] font-semibold text-ink">Archived</b>
+            <span className="text-[11.5px] font-semibold text-ink-3">{archived}</span>
+          </button>
+        ) : null}
         {loading ? <Spinner /> : error ? <div className="p-4"><ErrorNote error={error} onRetry={retry} /></div> : null}
         {!loading && !error && visible.length === 0 && visitors.length === 0 ? <Empty icon="chat" title={filter === 'archived' ? 'No archived conversations' : 'No conversations'} /> : null}
         {sections.map(([title, list]) =>

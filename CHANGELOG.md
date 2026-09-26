@@ -5,6 +5,23 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-26 — 0.2.2: Chat opens on your last conversation
+
+**Changed**
+
+- **Chat opens on a conversation, not on "Pick a conversation".** Opening
+  Chat with no conversation named shows the one you had open last. If that
+  one is gone or archived, it shows the most recent. The choice is remembered
+  on this computer, per person. The empty pane is only for somebody with no
+  conversations at all ("No conversations yet").
+- **The filters fit on one line.** All, Unread, Mentions and Website stay as
+  pills. Archived moved into the list as its own row at the top ("Archived · 3"),
+  shown when something is archived. It opens the archived conversations,
+  with a way back. The five pills needed more room than the list has, so
+  Archived wrapped onto a second line under the others.
+
+---
+
 ## 2026-09-26 — 0.2.1
 
 The polished chat composer and the passkey sign-in fix below, as version

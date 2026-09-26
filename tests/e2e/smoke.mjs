@@ -168,7 +168,7 @@ try {
 
   for (const [label, name, marker] of [
     ['Mail', '06-mail', 'Compose'],
-    ['Chat', '07-chat', 'Pick a conversation'],
+    ['Chat', '07-chat', 'Mentions'],
     ['Calendar', '08-calendar', 'Today'],
     ['Tasks', '09-tasks', 'My tasks'],
     ['Files', '10-files', 'My Drive'],
