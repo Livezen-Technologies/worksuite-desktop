@@ -185,11 +185,13 @@ export const contract = {
         /** A Meet recording (the owner's own; the server checks). */
         recording: z.number().int().positive().optional(),
         /** One of the fixed exports: your calendar (.ics) or your contacts (.csv / .vcf). */
-        export: z.enum(['calendar', 'contacts-csv', 'contacts-vcf']).optional(),
+        export: z.enum(['calendar', 'contacts-csv', 'contacts-vcf', 'contacts-template']).optional(),
+        /** The rows an import could not take, as a CSV (a data job's errors). */
+        importErrors: z.number().int().positive().optional(),
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => [v.fileId, v.mail, v.recording, v.export].filter((x) => x !== undefined).length === 1, 'give a file id, a mail attachment, a recording or an export'),
+      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors].filter((x) => x !== undefined).length === 1, 'give a file id, a mail attachment, a recording, an export or an import job'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   'transfers:upload': ch(

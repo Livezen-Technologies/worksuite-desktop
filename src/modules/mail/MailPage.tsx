@@ -79,7 +79,9 @@ export default function MailPage({ active }: ModuleProps) {
   const [composeRoute, setComposeRoute] = useState<string | null>(null);
   if (query.get('compose') === '1' && composeRoute !== route) {
     setComposeRoute(route);
-    setCompose({ mode: 'new' });
+    // `?compose=1&to=a@b` — a new message to somebody (Contacts' Email).
+    const to = query.get('to');
+    setCompose({ mode: 'new', ...(to && /^[^\s@<>]+@[^\s@<>]+$/.test(to) ? { to } : {}) });
   }
   const cacheDays = useStore(app, (s) => s.prefs?.mailCacheDays ?? 30);
   useTabTitle(msg ? 'Mail · Message' : 'Mail');

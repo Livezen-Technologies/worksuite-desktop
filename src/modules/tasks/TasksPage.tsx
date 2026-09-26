@@ -218,7 +218,7 @@ export default function TasksPage(_props: ModuleProps) {
       {creating ? (
         <NewTask
           lists={lists}
-          defaults={{ list_id: listScope, ...(scope === 'today' ? { due: today } : {}) }}
+          defaults={{ list_id: listScope, ...(scope === 'today' ? { due: today } : {}), ...(query.get('title') ? { title: query.get('title')!.slice(0, 200) } : {}) }}
           onClose={() => (setCreating(false), query.get('new') ? set({}) : undefined)}
           onCreated={(id) => {
             setCreating(false);

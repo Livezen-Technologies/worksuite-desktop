@@ -87,8 +87,10 @@ function hostAllowed(host: string): boolean {
 }
 
 /**
- * shell.openExternal is only ever called here (§13.2): https or mailto, and a
- * host outside the allow-list is opened only after the user confirms it.
+ * shell.openExternal is only ever called here (§13.2): https, mailto, or a
+ * phone number to call (tel: with nothing but digits and a leading +, which
+ * macOS hands to FaceTime to confirm); a host outside the allow-list is
+ * opened only after the user confirms it.
  */
 export async function openExternalSafely(raw: string, parent?: Electron.BrowserWindow | null): Promise<boolean> {
   let u: URL;
@@ -99,6 +101,11 @@ export async function openExternalSafely(raw: string, parent?: Electron.BrowserW
   }
   if (u.protocol === 'mailto:') {
     await shell.openExternal(u.toString());
+    return true;
+  }
+  if (u.protocol === 'tel:') {
+    if (!/^\+?\d{3,20}$/.test(u.pathname) || u.search || u.hash) return false;
+    await shell.openExternal(`tel:${u.pathname}`);
     return true;
   }
   if (u.protocol !== 'https:' || u.username || u.password) {

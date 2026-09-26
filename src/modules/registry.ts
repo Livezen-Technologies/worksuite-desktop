@@ -118,6 +118,14 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
   },
   {
     input: defineDesktopManifest({
+      id: 'contacts', name: 'Contacts', icon: 'contact', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'READ_CACHE', cache: ['/api/contacts', '/api/contact-groups'] },
+      quickActions: [{ id: 'new-contact', label: 'New Contact', route: '/contacts?new=1' }],
+    }),
+    load: () => import('./contacts/ContactsPage'),
+  },
+  {
+    input: defineDesktopManifest({
       id: 'files', name: 'Files', icon: 'folder', contractVersion: 1, desktop: { enabled: true },
       offline: { mode: 'READ_CACHE', cache: ['/api/files/browse'] },
       native: ['file-drop', 'printing'],

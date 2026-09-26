@@ -112,7 +112,7 @@ export default function CalendarPage(_props: ModuleProps) {
   const want = linked ? `event:${linked}` : wantNew ? 'new' : null;
   if (want && handled !== want && (want === 'new' || linkedEvent.data)) {
     setHandled(want);
-    setDrawer(want === 'new' ? { event: null, draft: nextDraft() } : { event: { ...linkedEvent.data!, source: 'event' }, draft: null });
+    setDrawer(want === 'new' ? { event: null, draft: { ...nextDraft(), title: (query.get('title') ?? '').slice(0, 200) || undefined } } : { event: { ...linkedEvent.data!, source: 'event' }, draft: null });
   }
 
   const newEvent = () => {

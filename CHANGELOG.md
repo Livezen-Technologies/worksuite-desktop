@@ -5,6 +5,70 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-26 — 0.2.6: Contacts, native, to the Contacts designs
+
+**Added**
+
+- **Contacts opens in the app** instead of the browser. It's in More apps, can
+  be pinned, and has a "New Contact" quick action.
+- **The rail:** + New contact; All contacts, Favorites, Employees, Customers
+  and Vendors, with counts; Archived; the Company directory. Then your
+  groups, each with its colour and count: + makes one in place, and the one
+  open can be deleted (its contacts are kept). Import and Export sit at the
+  bottom.
+- **The page:** the six counts (total, employees, customers, vendors,
+  favourites, birthdays in the next 30 days), a search over names, emails,
+  company, job, phones and labels, and the people as cards or a list (the
+  choice is remembered). Each card has the colour avatar, what they do and
+  where, the type and first label, and a star.
+- **A contact** opens beside the list:
+  - the header stars, edits, archives or restores, and deletes (after
+    asking);
+  - one click to **Email** (a new mail to them), **Chat** (for a contact
+    linked to a teammate), **Meet** (a meeting starts in its window),
+    **Schedule** (a new event already titled "Meeting with …") or **Task**
+    (a new task, "Follow up with …"). Each goes on their timeline, as on the
+    web;
+  - **Details:** Communication, Business and More (address, birthday,
+    groups), social links and the notes field. An email or website opens;
+    anything can be copied. A phone number offers **Send a WhatsApp
+    message** (the web's send dialog: the number, which of your WhatsApp
+    numbers, and the words, all seen before it goes), **Open the
+    conversation** and **Call**;
+  - **Notes:** add with Ctrl+Enter, pin (pinned ones first), edit and delete;
+  - **Activity:** everything done with them, newest first.
+- **New and edit contact** has every field the web keeps: name, type,
+  birthday, job, department and company; the emails, phones and website; the
+  address; the customer, employee and vendor IDs and tax number; nine social
+  handles; groups as toggles; labels; notes. A contact made inside a group or
+  a type's view starts in it.
+- **Company directory:** everybody here, with Everyone / Not saved / Saved.
+  Add saves a colleague as a contact linked to them, so Chat works.
+- **Import** walks the four steps of the design: choose a file (CSV or JSON;
+  drop it or choose it; the template can be downloaded), match the columns
+  (matched already from the header), check (ready, warnings, and what will
+  not import and why), import. Choose what happens to a record that already
+  exists. The rows that did not import download as a file. The list shows
+  the new contacts at once. Import is only offered to those the server lets
+  import contacts (contacts.manage), as on the web.
+- **Export** as CSV or vCard, to your downloads.
+- **Keys:** N new contact, / search, Esc closes the contact.
+
+**Changed**
+
+- A new event (`/calendar?new=1&title=…`) and a new task
+  (`/tasks?new=1&title=…`) can start with a title.
+- Mail's `?compose=1&to=…` starts a message to that address.
+- The app can hand a phone number to the system to call (`tel:`, digits and a
+  leading + only; anything else is refused). On a Mac, FaceTime asks first.
+
+**Not built (not in the web either)**
+
+- An archived contact is only reachable from the Archived view added here;
+  the web has none.
+
+---
+
 ## 2026-09-26 — 0.2.5: Notes, native, to the NotesMain and NotesExtras designs
 
 **Added**

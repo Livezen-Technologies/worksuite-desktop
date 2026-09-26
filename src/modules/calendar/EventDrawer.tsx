@@ -15,6 +15,8 @@ export interface Draft {
   start: string;
   end: string;
   allDay: boolean;
+  /** A title to start from (a contact's "Schedule"). */
+  title?: string;
 }
 
 const RSVP: Array<[string, string]> = [
@@ -101,7 +103,7 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
   const e = detail.data ?? event;
   const editable = !e || e.editable;
   const owner = !e || !!e.can_manage;
-  const [title, setTitle] = useState(e?.title ?? '');
+  const [title, setTitle] = useState(e?.title ?? draft?.title ?? '');
   const [allDay, setAllDay] = useState(e ? e.all_day : (draft?.allDay ?? false));
   const [start, setStart] = useState(e ? (e.all_day ? dayOf(e.start_at) : toInput(e.start_at)) : (draft?.start ?? ''));
   const [end, setEnd] = useState(e ? (e.all_day ? dayOf(e.end_at ?? e.start_at) : toInput(e.end_at)) : (draft?.end ?? ''));

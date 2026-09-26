@@ -213,7 +213,9 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       : input.recording
         ? `/api/meet/recordings/${input.recording}/file`
         : input.export
-          ? { calendar: '/api/calendar/export', 'contacts-csv': '/api/contacts/export?format=csv', 'contacts-vcf': '/api/contacts/export?format=vcf' }[input.export]
+          ? { calendar: '/api/calendar/export', 'contacts-csv': '/api/contacts/export?format=csv', 'contacts-vcf': '/api/contacts/export?format=vcf', 'contacts-template': '/api/data/contacts/template' }[input.export]
+          : input.importErrors
+            ? `/api/data/jobs/${input.importErrors}/errors`
           : `/api/mail/messages/${input.mail!.uid}/attachments/${encodeURIComponent(input.mail!.ref)}?${new URLSearchParams({ folder: input.mail!.folder, dl: '1', ...(input.mail!.mailbox ? { mailbox: input.mail!.mailbox } : {}) })}`;
     return ctx.transfers.download(path, input.name, !!input.open, input.fileId ?? null);
   });
