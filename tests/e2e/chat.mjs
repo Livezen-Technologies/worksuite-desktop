@@ -39,6 +39,8 @@ async function api(method, path, body) {
 }
 
 /** A bubble's action button (by label or text), found by the message text it belongs to. */
+// A message's actions: its round button, then the menu item (Chat · message actions).
+const menuItem = (label) => `(() => { const b = [...document.querySelectorAll('[role="menu"][aria-label="Message actions"] [role="menuitem"]')].find(b => b.textContent.trim() === ${JSON.stringify(label)}); if (!b) return false; b.click(); return true; })()`;
 const inBubble = (text, label) =>
   `(() => { const g = [...document.querySelectorAll('div.group')].find(d => d.textContent.includes(${JSON.stringify(text)})); const b = g && [...g.querySelectorAll('button')].find(b => b.getAttribute('aria-label') === ${JSON.stringify(label)} || b.textContent.trim() === ${JSON.stringify(label)}); if (!b) return false; b.click(); return true; })()`;
 
@@ -75,7 +77,9 @@ try {
   await t.shot('c1a-reopened');
   t.check('Chat reopens the last conversation, with the filters on one line', reopened && filters.height <= 32 && !filters.tabs.includes('Archived'), JSON.stringify(filters));
 
-  // React.
+  // React, from the reactions above the message's menu.
+  await t.evaluate(inBubble(hello, 'Message actions'));
+  await t.waitFor(`!!document.querySelector('[role="toolbar"][aria-label="React"]')`, 'the reactions');
   await t.evaluate(inBubble(hello, 'React 👍'));
   // On this message's own bubble: earlier runs' messages carry reactions too.
   await t.waitFor(`(() => { const g = [...document.querySelectorAll('div.group')].find(d => d.textContent.includes(${JSON.stringify(hello)})); return !!g && [...g.querySelectorAll('button')].some(b => (b.getAttribute('aria-label') ?? '').startsWith('👍 1')); })()`, 'the 👍 reaction');
@@ -84,7 +88,11 @@ try {
   t.check('a reaction is shown and stored', !!helloMsg?.reactions?.some((r) => r.emoji === '👍' && r.count === 1));
 
   // Reply.
-  await t.evaluate(inBubble(hello, 'Reply'));
+  await t.evaluate(inBubble(hello, 'Message actions'));
+  await t.waitFor(`!!document.querySelector('[role="menu"][aria-label="Message actions"]')`, 'the message menu');
+  await t.shot('c1a-message-menu');
+  t.check('a message opens its reactions and its menu from one button', await t.evaluate(`!!document.querySelector('[role="toolbar"][aria-label="React"]') && [...document.querySelectorAll('[role="menuitem"]')].some(b => b.textContent.trim() === 'Forward…')`));
+  await t.evaluate(menuItem('Reply'));
   await t.waitFor(t.hasText('Replying to'), 'the reply bar');
   const answer = 'Yes, 1 works';
   await t.fill('Message', answer);
@@ -94,19 +102,21 @@ try {
   const mine = after.data.messages.find((m) => m.message === answer);
   t.check('the reply is sent as a reply to the partner\'s message', mine?.reply_to === helloMsg?.id || mine?.reply_preview?.id === helloMsg?.id, JSON.stringify(mine?.reply_preview ?? null));
 
-  // Star and pin, from the message's toolbar.
-  await t.evaluate(inBubble(hello, 'Star'));
+  // Star and pin, from the message's menu.
+  await t.evaluate(inBubble(hello, 'Message actions'));
+  await t.evaluate(menuItem('Star message'));
   await t.waitFor(t.hasText('★ starred'), 'the starred mark');
-  await t.evaluate(inBubble(hello, 'Pin'));
+  await t.evaluate(inBubble(hello, 'Message actions'));
+  await t.evaluate(menuItem('Pin message'));
   // The newest pin heads the banner (earlier runs may have left pins of their own).
   await t.waitFor(`[...document.querySelectorAll('b')].some(b => b.textContent.trim() === 'Pinned' && b.parentElement.textContent.includes(${JSON.stringify(hello)}))`, 'the pinned banner');
   const pins = await api('GET', `/api/chat/rooms/${roomId}/pins`);
   t.check('starring marks the message; pinning shows it above the thread for both', (pins.data.messages ?? []).some((m) => m.id === helloMsg?.id));
   await t.shot('c1b-pinned');
 
-  // Edit, from More: the message opens in the composer.
-  await t.evaluate(inBubble(answer, 'More ⋯'));
-  await t.clickButton('Edit');
+  // Edit, from the menu: the message opens in the composer.
+  await t.evaluate(inBubble(answer, 'Message actions'));
+  await t.evaluate(menuItem('Edit'));
   await t.waitFor(t.hasText('Editing message'), 'the editing bar');
   const inComposer = await t.evaluate(`document.querySelector('textarea[aria-label="Message"]').value`);
   const attachHidden = await t.evaluate(`!document.querySelector('[aria-label="Attach"]')`);
@@ -118,8 +128,8 @@ try {
   t.check('Edit opens the message in the composer (attach steps aside); saving changes it, marked edited', inComposer === answer && attachHidden, JSON.stringify(inComposer));
 
   // Delete for everyone (the dialog's default choice).
-  await t.evaluate(inBubble(edited, 'More ⋯'));
-  await t.clickButton('Delete…');
+  await t.evaluate(inBubble(edited, 'Message actions'));
+  await t.evaluate(menuItem('Delete…'));
   await t.waitFor(t.hasText('Delete for everyone'), 'the delete dialog');
   await t.shot('c1c-delete');
   await t.clickButton('Delete');

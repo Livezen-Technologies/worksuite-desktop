@@ -3,6 +3,7 @@ import type { NavigateRequest } from '@shared/types';
 import { app } from '../core/app-state';
 import { call, on } from '../core/bridge';
 import { accelerator, commandForAccelerator, effectiveShortcuts, getCommand, registerCommand } from '../core/commands';
+import { noteRecentApp } from '../core/recent-apps';
 import { useStore } from '../core/store';
 import { activateIndex, activeTab, closeTab, closeTabsForApps, navigate, openTab, resetTabs, restoreClosed, restoreTabs, suspendIdle, tabsStore } from '../core/tabs';
 import { toast } from '../core/toasts';
@@ -144,6 +145,21 @@ export function Shell() {
     ];
     return () => offs.forEach((off) => off());
   }, []);
+
+  // The launcher's Recent row: the app of whichever tab comes to the front.
+  const userId = useStore(app, (s) => s.auth?.user?.id ?? null);
+  useEffect(() => {
+    let last: string | null = null;
+    const note = () => {
+      const t = activeTab();
+      if (t && t.app !== last) {
+        last = t.app;
+        if (t.app !== 'home') noteRecentApp(userId, t.app);
+      }
+    };
+    note();
+    return tabsStore.subscribe(note);
+  }, [userId]);
 
   // FR-NAV-08: suspend idle tabs.
   const suspendAfter = useStore(app, (s) => s.prefs?.tabSuspendMinutes ?? 30);

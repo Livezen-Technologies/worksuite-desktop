@@ -148,6 +148,7 @@ export const contract = {
     { session: true, rate: 4 },
   ),
   'windows:setAlwaysOnTop': ch(z.object({ value: z.boolean() }), { session: true }),
+  'windows:setCompact': ch(z.object({ value: z.boolean() }), { session: true }),
   'windows:minimize': ch(none, { whileLocked: true }),
   'windows:toggleMaximize': ch(none, { whileLocked: true }),
   'windows:close': ch(none, { whileLocked: true }),
@@ -168,7 +169,20 @@ export const contract = {
   'media:screenPick': ch(z.object({ id: z.string().min(1).max(200) }), { session: true, rate: 3 }),
   'media:privacySettings': ch(z.object({ pane: z.enum(['microphone', 'camera', 'screen']) }), { session: true, rate: 2 }),
   'calls:active': ch(z.object({ uuid: z.string().regex(/^[A-Za-z0-9-]{8,64}$/).nullable() }), { session: true, rate: 10 }),
-  'hr:clock': ch(z.object({ direction: z.enum(['in', 'out']), note: z.string().max(500).optional() }), { session: true, rate: 3 }),
+  'hr:clock': ch(
+    z.object({
+      direction: z.enum(['in', 'out']),
+      note: z.string().max(500).optional(),
+      /** Where the day is being worked (the company's list of work locations). */
+      workLocation: z.string().min(1).max(60).optional(),
+      /** What kind of day it was, on clocking out. */
+      /** Why no location comes with it, where the company asks for one. */
+      geoNote: z.string().min(1).max(200).optional(),
+      noteType: z.enum(['normal', 'overtime', 'customer_visit', 'off_site', 'wfh', 'early_departure', 'missed_break', 'technical_issue', 'other']).optional(),
+    }),
+    { session: true, rate: 3 },
+  ),
+  'hr:break': ch(z.object({ action: z.enum(['start', 'end']) }), { session: true, rate: 3 }),
   'transfers:list': ch(none, { session: true }),
   'transfers:download': ch(
     z
@@ -340,6 +354,7 @@ export interface Outputs {
   'auth:passkeyStart': AuthState;
   'auth:passkeyCancel': AuthState;
   'hr:clock': { ok: true };
+  'hr:break': { ok: true };
   'media:access': { granted: boolean };
   'media:screenSources': ScreenSources;
   'media:screenPick': void;
@@ -352,6 +367,7 @@ export interface Outputs {
   'session:switchOrganization': { organizationId: string | null; closedTabs: number };
   'windows:open': { id: number };
   'windows:setAlwaysOnTop': boolean;
+  'windows:setCompact': boolean;
   'windows:minimize': void;
   'windows:toggleMaximize': boolean;
   'windows:close': void;

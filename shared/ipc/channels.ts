@@ -26,6 +26,7 @@ export const INVOKE_CHANNELS = [
 
   'windows:open',
   'windows:setAlwaysOnTop',
+  'windows:setCompact',
   'windows:minimize',
   'windows:toggleMaximize',
   'windows:close',
@@ -40,6 +41,7 @@ export const INVOKE_CHANNELS = [
   'files:chooseDownloadFolder',
 
   'hr:clock',
+  'hr:break',
   'media:access',
   'media:screenSources',
   'media:screenPick',

@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Track, type Participant } from 'livekit-client';
 import { call, errorMessage } from '../../core/bridge';
 import { useTab, useTabTitle } from '../../core/tab-context';
@@ -9,7 +9,8 @@ import { Thread } from '../chat/Thread';
 import { CallAvatar, Pill, useNow, VideoView } from './parts';
 import { ScreenPicker } from './ScreenPicker';
 import { session, type CallParams } from './session';
-import { playTone } from './tones';
+import { playTone, ringVolume, saveRingVolume } from './tones';
+import { VoiceWindow } from './VoiceWindow';
 
 /** The call window (CallVoice for a voice call, CallVideo for video). */
 export function CallScreen() {
@@ -35,13 +36,29 @@ export function CallScreen() {
     if (Number.isInteger(roomId) && roomId > 0) void session.start(p);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The caller hears it ring.
+  // The caller hears it ring, as loud as they choose.
   const ringing = s.phase === 'ringing' && !!s.conn?.i_started;
+  const [ringbackVolume, setRingbackVolume] = useState(ringVolume);
+  const [ringbackMuted, setRingbackMuted] = useState(false);
+  const tone = useRef<ReturnType<typeof playTone> | null>(null);
   useEffect(() => {
-    if (!ringing) return;
-    const tone = playTone('ringback');
-    return () => tone.stop();
-  }, [ringing]);
+    if (!ringing || ringbackMuted) return;
+    tone.current = playTone('ringback', ringVolume());
+    return () => {
+      tone.current?.stop();
+      tone.current = null;
+    };
+  }, [ringing, ringbackMuted]);
+  const ringback = {
+    volume: ringbackMuted ? 0 : ringbackVolume,
+    muted: ringbackMuted,
+    setVolume: (v: number) => {
+      setRingbackVolume(v);
+      saveRingVolume(v);
+      tone.current?.setVolume(v);
+    },
+    toggle: () => setRingbackMuted(!ringbackMuted),
+  };
 
   const status = (() => {
     switch (s.phase) {
@@ -69,12 +86,12 @@ export function CallScreen() {
   const live = s.phase === 'connected' || s.phase === 'ringing';
 
   const problem = s.problem ? (
-    <div className="no-drag self-stretch rounded-[10px] bg-[#3A1A14] px-3 py-2.5 text-[12px] leading-normal text-[#FFD2C4]" role="alert">
+    <div className="no-drag self-stretch rounded-[12px] border border-[rgba(229,72,77,.35)] bg-[rgba(229,72,77,.16)] px-3 py-2.5 text-[12px] leading-normal text-[#FFD2C4]" role="alert">
       {s.problem.message}
       {s.problem.pane ? (
         <>
           <br />
-          <button type="button" className="font-bold text-[#AFC6FF] hover:text-white" onClick={() => void call('media:privacySettings', { pane: s.problem!.pane! })}>
+          <button type="button" className="font-bold text-white hover:underline" onClick={() => void call('media:privacySettings', { pane: s.problem!.pane! })}>
             Open system {s.problem.pane === 'camera' ? 'camera' : 'sound'} settings
           </button>
         </>
@@ -153,27 +170,20 @@ export function CallScreen() {
   ) : null;
 
   if (!video) {
-    const remoteVideo = remotes.map((p) => p.getTrackPublication(Track.Source.ScreenShare)?.track ?? p.getTrackPublication(Track.Source.Camera)?.track).find((t) => t && !t.isMuted);
-    const speaking = remotes.some((p) => p.isSpeaking);
     return (
-      <div className="flex h-full flex-col items-center gap-3 overflow-y-auto bg-[#0F1B3D] p-[18px] text-[13px] text-[#E6ECFA] scroll-thin">
-        {remoteVideo ? (
-          <VideoView track={remoteVideo} className="mt-2 aspect-video w-full rounded-[12px] bg-[#24365F] object-contain" />
-        ) : (
-          <span className="mt-[26px]">
-            <CallAvatar name={name} size={104} glow={ringing ? 'ring' : speaking ? 'speaking' : null} />
-          </span>
-        )}
-        <b className="text-center text-[19px] text-white">{name}</b>
-        <span className={cx('font-mono', status[1])}>{status[0]}</span>
-        {remotes.length > 1 ? <span className="text-[12px] text-[#AFC0E8]">{remotes.length + 1} in the call</span> : null}
-        {problem}
-        {unreachable}
-        <span className="flex-1" />
-        <div className="flex flex-wrap justify-center gap-2.5">{controls}</div>
-        {end}
-        {picker}
-      </div>
+      <VoiceWindow
+        name={name}
+        where={query.get('room')}
+        status={status}
+        clock={clock}
+        ringing={ringing}
+        onChat={openChat}
+        onShare={() => (sharing ? void s.share(null) : setPicking(true))}
+        problem={problem}
+        unreachable={unreachable}
+        picker={picker}
+        ringback={ringback}
+      />
     );
   }
 

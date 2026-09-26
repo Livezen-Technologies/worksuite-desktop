@@ -117,7 +117,11 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
 
   // ── HR ────────────────────────────────────────────────────────────────
   router.handle('hr:clock', async (input) => {
-    await ctx.clockAttendance(input.direction, input.note);
+    await ctx.clockAttendance(input.direction, { note: input.note, workLocation: input.workLocation, geoNote: input.geoNote, noteType: input.noteType });
+    return { ok: true } as const;
+  });
+  router.handle('hr:break', async (input) => {
+    await ctx.attendanceBreak(input.action);
     return { ok: true } as const;
   });
   router.handle('auth:signOut', (input) => ctx.session.signOut(!!input?.wipe));
@@ -142,6 +146,10 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('windows:setAlwaysOnTop', (input, c) => {
     const w = winOf(c.sender);
     return w ? ctx.windows.setAlwaysOnTop(w, input.value) : false;
+  });
+  router.handle('windows:setCompact', (input, c) => {
+    const w = winOf(c.sender);
+    return w ? ctx.windows.setCompact(w, input.value) : false;
   });
   router.handle('windows:minimize', (_i, c) => {
     winOf(c.sender)?.minimize();

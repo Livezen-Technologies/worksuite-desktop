@@ -5,6 +5,7 @@ import { app } from '../../core/app-state';
 import { apiGet, apiPost, apiPut } from '../../core/api';
 import { call, errorMessage, on, registerDropped } from '../../core/bridge';
 import { useStore } from '../../core/store';
+import { navigate } from '../../core/tabs';
 import { useTab } from '../../core/tab-context';
 import { dayKey, dayLabel, parseTs, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
@@ -17,7 +18,7 @@ import { startMeetingFromChat } from '../meet/start';
 import { Composer, type ComposerHandle } from './Composer';
 import { PRESENCE } from './Details';
 import { ForwardDialog, type RoomDetail } from './NewChat';
-import { EmojiPicker, QUICK_REACTIONS, VoicePlayer } from './parts';
+import { EmojiPicker, VoicePlayer } from './parts';
 import { mediaUrl, type ChatMessage, type Room } from './types';
 
 export interface ReplyTarget {
@@ -35,7 +36,7 @@ const headerBtn = 'flex h-[34px] w-[34px] items-center justify-center rounded-[8
  * One conversation. `mini` is the pop-out window; `bare` drops the header
  * altogether, for a conversation shown beside something else (a call).
  */
-export function Thread({ roomId, room, mini, bare, rooms, detailsOpen, onToggleDetails }: { roomId: string; room: Room | undefined; mini: boolean; bare?: boolean; rooms: Room[]; detailsOpen?: boolean; onToggleDetails?: () => void }) {
+export function Thread({ roomId, room, mini, bare, tools, rooms, detailsOpen, onToggleDetails }: { roomId: string; room: Room | undefined; mini: boolean; bare?: boolean; tools?: boolean; rooms: Room[]; detailsOpen?: boolean; onToggleDetails?: () => void }) {
   const qc = useQueryClient();
   const me = useStore(app, (s) => s.auth?.user?.id);
   const meetAllowed = useStore(app, (s) => s.apps.some((a) => a.id === 'meet'));
@@ -46,6 +47,7 @@ export function Thread({ roomId, room, mini, bare, rooms, detailsOpen, onToggleD
   const [reply, setReply] = useState<ReplyTarget | null>(null);
   const [forwarding, setForwarding] = useState<ChatMessage | null>(null);
   const [searching, setSearching] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [find, setFind] = useState('');
   const [pinsOpen, setPinsOpen] = useState(false);
   const msgs = useInfiniteQuery({
@@ -128,6 +130,24 @@ export function Thread({ roomId, room, mini, bare, rooms, detailsOpen, onToggleD
     const day = dayKey(parseTs(m.created_at));
     return i === 0 || dayKey(parseTs(messages[i - 1]!.created_at)) !== day ? day : null;
   });
+
+  const chip = 'rounded-full border border-line px-2 py-[3px] text-ink-2 hover:bg-subtle hover:text-ink disabled:opacity-60';
+  /** The conversation so far (what is loaded), as a note of its own. */
+  const saveAsNote = async () => {
+    const said = messages.filter((m) => !m.deleted && (m.message || m.file)).slice(-40);
+    if (!said.length) return toast('info', 'Nothing to save yet.');
+    setSaving(true);
+    try {
+      const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const body = said.map((m) => `<p><b>${esc(m.sender_name)}</b> · ${esc(timeLabel(m.created_at))}<br>${esc(m.message ?? m.file?.filename ?? '').replace(/\n/g, '<br>')}</p>`).join('');
+      const r = await apiPost<{ id: number }>('/api/notes', { title: `Chat · ${room?.name ?? 'conversation'} · ${dayLabel(dayKey(parseTs(said[said.length - 1]!.created_at)), 'short')}`.slice(0, 190), body });
+      toast('success', 'Saved as a note.', { label: 'Open', run: () => navigate(`/notes?note=${r.id}`) });
+    } catch (e) {
+      toast('error', errorMessage(e));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div
@@ -243,7 +263,31 @@ export function Thread({ roomId, room, mini, bare, rooms, detailsOpen, onToggleD
           </div>
         ))}
       </div>
-      <Composer ref={composer} roomId={roomId} roomName={room?.name ?? 'this conversation'} group={group} reply={reply} onClearReply={() => setReply(null)} typing={Object.values(typing)} compact={mini || bare} />
+      <Composer
+        ref={composer}
+        roomId={roomId}
+        roomName={room?.name ?? 'this conversation'}
+        group={group}
+        reply={reply}
+        onClearReply={() => setReply(null)}
+        typing={Object.values(typing)}
+        compact={mini || bare}
+        extras={
+          tools ? (
+            <div className="flex flex-wrap gap-1.5 text-[11.5px] font-semibold">
+              <button type="button" onClick={() => navigate(`/tasks?new=1&title=${encodeURIComponent(`Follow up: ${room?.name ?? 'conversation'}`.slice(0, 200))}`)} className={chip}>
+                Create task
+              </button>
+              <button type="button" disabled={saving} onClick={() => void saveAsNote()} className={chip}>
+                {saving ? 'Saving…' : 'Save as note'}
+              </button>
+              <button type="button" aria-pressed={searching} onClick={() => setSearching(!searching)} className={cx(chip, searching && '!border-primary !bg-selection !text-primary')}>
+                Search in conversation
+              </button>
+            </div>
+          ) : null
+        }
+      />
       {drag ? (
         <div className="pointer-events-none absolute inset-3 flex items-center justify-center rounded-[14px] border-2 border-dashed border-primary bg-selection/80 text-[15px] font-semibold text-primary">
           Drop to add to the message for {room?.name ?? 'this conversation'}
@@ -290,11 +334,31 @@ function Bubble({ m, own, roomId, onReply, onForward, onEdit }: { m: ChatMessage
   const src = mediaUrl(f?.mime === 'image/gif' ? f.url : (f?.thumb_url ?? f?.url));
   const voice = !!f && (m.type === 'voice' || f.preview === 'audio');
   const bubble = own ? 'rounded-[12px_4px_12px_12px] bg-primary text-white' : 'rounded-[4px_12px_12px_12px] border border-line bg-surface text-ink';
-  const tool = 'rounded-[6px] px-[7px] py-1 text-[11.5px] font-semibold text-ink hover:bg-subtle';
   return (
     <div className={cx('group relative mt-3 flex gap-2.5', own && 'flex-row-reverse')}>
       {!own ? <Avatar name={m.sender_name} size={30} /> : null}
-      <div className={cx('flex max-w-[560px] flex-col gap-1', own && 'items-end')}>
+      <div data-bubble className={cx('relative flex max-w-[560px] flex-col gap-1', own && 'items-end')}>
+        {!m.deleted ? (
+          <MessageMenu
+            own={own}
+            named={!own}
+            open={more}
+            setOpen={setMore}
+            reactions={can.react !== false ? REACTION_BAR : []}
+            onReact={react}
+            onMoreReactions={() => (setMore(false), setPicker(true))}
+            items={[
+              can.reply !== false ? { icon: 'reply', label: 'Reply', run: () => onReply({ id: m.id, sender_name: m.sender_name, snippet: (m.message ?? m.file?.filename ?? '').slice(0, 120) }) } : null,
+              can.forward ? { icon: 'forward', label: 'Forward…', run: () => onForward(m) } : null,
+              { icon: 'link', label: 'Copy link', run: () => void navigator.clipboard.writeText(`worksuite://chat/${roomId}`).then(() => toast('success', 'Link copied.')) },
+              { icon: 'star', label: m.starred ? 'Unstar message' : 'Star message', run: () => void act(() => apiPut(`/api/chat/messages/${m.id}/star`, { starred: !m.starred }), m.starred ? 'Unstarred.' : 'Starred.') },
+              { icon: m.pinned ? 'pin-off' : 'pin', label: m.pinned ? 'Unpin message' : 'Pin message', run: () => void act(() => apiPut(`/api/chat/messages/${m.id}/pin`, { pinned: !m.pinned }), m.pinned ? 'Unpinned.' : 'Pinned for everyone.') },
+              can.edit ? { icon: 'compose', label: 'Edit', run: () => onEdit(m) } : null,
+              m.message ? { icon: 'copy', label: 'Copy text', run: () => void navigator.clipboard.writeText(m.message ?? '').then(() => toast('success', 'Copied.')) } : null,
+              can.delete_me || can.delete_everyone ? { icon: 'trash', label: 'Delete…', danger: true, run: () => setDeleting(can.delete_everyone ? 'everyone' : 'me') } : null,
+            ]}
+          />
+        ) : null}
         {!own ? (
           <span className="text-[12px]">
             <b className="text-ink">{m.sender_name}</b> <span className="text-ink-3">{timeLabel(m.created_at)}</span>
@@ -369,32 +433,7 @@ function Bubble({ m, own, roomId, onReply, onForward, onEdit }: { m: ChatMessage
           <span className="text-[11.5px] text-ink-3">{[m.edited ? 'edited' : null, m.starred ? '★ starred' : null].filter(Boolean).join(' · ')}</span>
         ) : null}
       </div>
-      {!m.deleted ? (
-        <div className={cx('invisible absolute -top-3 z-10 flex items-center gap-0.5 rounded-[9px] border border-line bg-surface p-[3px] shadow-[0_6px_18px_rgba(15,27,61,.14)] group-hover:visible group-focus-within:visible', own ? 'right-2' : 'left-10')} role="toolbar" aria-label="Message actions">
-          {can.react !== false ? QUICK_REACTIONS.slice(0, 3).map((e) => (
-            <button key={e} type="button" aria-label={`React ${e}`} onClick={() => react(e)} className="flex h-6 w-6 items-center justify-center rounded-[6px] text-[14px] hover:bg-subtle">{e}</button>
-          )) : null}
-          {can.react !== false ? <button type="button" className={tool} onClick={() => setPicker(!picker)}>React</button> : null}
-          {can.reply !== false ? <button type="button" className={tool} onClick={() => onReply({ id: m.id, sender_name: m.sender_name, snippet: (m.message ?? m.file?.filename ?? '').slice(0, 120) })}>Reply</button> : null}
-          {can.forward ? <button type="button" className={tool} onClick={() => onForward(m)}>Forward…</button> : null}
-          <button type="button" className={tool} onClick={() => void act(() => apiPut(`/api/chat/messages/${m.id}/star`, { starred: !m.starred }), m.starred ? 'Unstarred.' : 'Starred.')}>{m.starred ? 'Unstar' : 'Star'}</button>
-          <button type="button" className={tool} onClick={() => void act(() => apiPut(`/api/chat/messages/${m.id}/pin`, { pinned: !m.pinned }), m.pinned ? 'Unpinned.' : 'Pinned for everyone.')}>{m.pinned ? 'Unpin' : 'Pin'}</button>
-          <button type="button" className={tool} onClick={() => void navigator.clipboard.writeText(`worksuite://chat/${roomId}`).then(() => toast('success', 'Link copied.'))}>Copy link</button>
-          {can.edit || can.copy || can.delete_me || can.delete_everyone ? (
-            <span className="relative">
-              <button type="button" className={tool} aria-haspopup="menu" aria-expanded={more} onClick={() => setMore(!more)}>More ⋯</button>
-              {more ? (
-                <div role="menu" className="absolute top-8 right-0 z-30 w-44 rounded-[10px] border border-line bg-surface py-1 shadow-xl">
-                  {can.edit ? <button type="button" role="menuitem" className="block w-full px-3 py-1.5 text-left text-[13px] hover:bg-subtle" onClick={() => (setMore(false), onEdit(m))}>Edit</button> : null}
-                  {m.message ? <button type="button" role="menuitem" className="block w-full px-3 py-1.5 text-left text-[13px] hover:bg-subtle" onClick={() => (setMore(false), void navigator.clipboard.writeText(m.message ?? '').then(() => toast('success', 'Copied.')))}>Copy text</button> : null}
-                  {can.delete_me || can.delete_everyone ? <button type="button" role="menuitem" className="block w-full px-3 py-1.5 text-left text-[13px] text-danger hover:bg-subtle" onClick={() => (setMore(false), setDeleting(can.delete_everyone ? 'everyone' : 'me'))}>Delete…</button> : null}
-                </div>
-              ) : null}
-            </span>
-          ) : null}
-        </div>
-      ) : null}
-      {picker ? <EmojiPicker className={cx('absolute top-6', own ? 'right-2' : 'left-10')} onPick={react} onClose={() => setPicker(false)} /> : null}
+      {picker ? <EmojiPicker className={cx('absolute top-8 z-30', own ? 'right-2' : 'left-10')} onPick={react} onClose={() => setPicker(false)} /> : null}
       {deleting ? (
         <Modal
           title="Delete message?"
@@ -429,6 +468,115 @@ function Bubble({ m, own, roomId, onReply, onForward, onEdit }: { m: ChatMessage
             ) : null}
           </div>
         </Modal>
+      ) : null}
+    </div>
+  );
+}
+
+const REACTION_BAR = ['👍', '❤️', '😂', '😮', '😢', '🎉', '👏'];
+
+interface MenuItem {
+  icon: string;
+  label: string;
+  danger?: boolean;
+  run: () => void;
+}
+
+/**
+ * A message's actions (Chat · message actions): a small round button on the
+ * message, shown on hover, that opens the reactions above and the menu below.
+ */
+function MessageMenu({ own, named, open, setOpen, reactions, onReact, onMoreReactions, items }: { own: boolean; named: boolean; open: boolean; setOpen: (v: boolean) => void; reactions: string[]; onReact: (e: string) => void; onMoreReactions: () => void; items: Array<MenuItem | null> }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [at, setAt] = useState<{ bar: { left: number; top: number }; menu: { left: number; top: number } } | null>(null);
+  const shown = items.filter((x): x is MenuItem => !!x);
+  useEffect(() => {
+    if (!open) return;
+    const off = (e: MouseEvent) => box.current && !box.current.contains(e.target as Node) && setOpen(false);
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    // The menu floats over the thread; a scroll leaves it behind, so it closes.
+    const scroll = (e: Event) => box.current && !box.current.contains(e.target as Node) && setOpen(false);
+    window.addEventListener('mousedown', off);
+    window.addEventListener('keydown', key);
+    window.addEventListener('scroll', scroll, true);
+    return () => {
+      window.removeEventListener('mousedown', off);
+      window.removeEventListener('keydown', key);
+      window.removeEventListener('scroll', scroll, true);
+    };
+  }, [open, setOpen]);
+
+  // Placed when opened, from where the button and the message are: the
+  // reactions above the message, the menu under the button — or above it when
+  // the message sits at the bottom of the thread.
+  const place = (button: HTMLElement) => {
+    const r = button.getBoundingClientRect();
+    const col = (button.closest('[data-bubble]') ?? button).getBoundingClientRect();
+    const barW = 44 + reactions.length * 34 + 40;
+    const menuH = shown.length * 34 + 12 + (shown.some((x) => x.danger) ? 9 : 0);
+    const clampX = (x: number, w: number) => Math.max(8, Math.min(window.innerWidth - w - 8, x));
+    const below = r.bottom + 4 + menuH <= window.innerHeight - 8;
+    const menuTop = below ? r.bottom + 4 : Math.max(8, r.top - menuH - 4);
+    // Flipped, the reactions sit on top of the menu rather than under it.
+    const barTop = below ? col.top - 48 : menuTop - 48;
+    setAt({
+      bar: { left: clampX(own ? col.right - barW : col.left, barW), top: barTop >= 8 ? barTop : col.bottom + 6 },
+      menu: { left: clampX(own ? r.right - 200 : r.left, 200), top: menuTop },
+    });
+  };
+
+  return (
+    <div ref={box} className="pointer-events-none absolute inset-0 z-20">
+      <button
+        type="button"
+        aria-label="Message actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={(e) => {
+          if (!open) place(e.currentTarget);
+          setOpen(!open);
+        }}
+        className={cx(
+          'pointer-events-auto absolute flex h-[22px] w-[22px] items-center justify-center rounded-full bg-selection text-primary shadow-[0_1px_3px_rgba(15,27,61,.12)]',
+          named ? 'top-[24px]' : 'top-[2px]',
+          own ? '-left-7' : '-right-7',
+          open ? 'visible' : 'invisible group-hover:visible group-focus-within:visible',
+        )}
+      >
+        <Icon name="chevron-down" size={14} />
+      </button>
+      {open && at ? (
+        <>
+          {reactions.length ? (
+            <div role="toolbar" aria-label="React" className="pointer-events-auto fixed z-40 flex items-center gap-0.5 rounded-[22px] bg-surface px-1.5 py-1 shadow-[0_8px_24px_rgba(15,27,61,.16),0_0_0_1px_rgba(15,27,61,.06)]" style={at.bar}>
+              {reactions.map((e) => (
+                <button key={e} type="button" aria-label={`React ${e}`} onClick={() => (setOpen(false), onReact(e))} className="flex h-8 w-8 items-center justify-center rounded-full text-[19px] leading-none hover:bg-selection">
+                  {e}
+                </button>
+              ))}
+              <span className="mx-0.5 h-5 w-px bg-line" />
+              <button type="button" aria-label="More reactions" title="More reactions" onClick={onMoreReactions} className="flex h-8 w-8 items-center justify-center rounded-full bg-subtle text-ink-2 hover:text-ink">
+                <Icon name="smile" size={16} />
+              </button>
+            </div>
+          ) : null}
+          <div role="menu" aria-label="Message actions" className="pointer-events-auto fixed z-40 w-[200px] rounded-[12px] bg-surface p-1.5 shadow-[0_16px_40px_rgba(15,27,61,.2),0_0_0_1px_rgba(15,27,61,.06)]" style={at.menu}>
+            {shown.map((it, i) => (
+              <div key={it.label}>
+                {it.danger && i > 0 ? <span className="mx-1.5 my-1 block h-px bg-line" /> : null}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => (setOpen(false), it.run())}
+                  className={cx('flex h-[34px] w-full items-center gap-2.5 rounded-[8px] px-2.5 text-left text-[13px] font-medium hover:bg-subtle', it.danger ? 'text-danger' : 'text-ink')}
+                >
+                  <Icon name={it.icon} size={15} className={it.danger ? '' : 'text-ink-3'} />
+                  {it.label}
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
       ) : null}
     </div>
   );

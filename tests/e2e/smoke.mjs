@@ -195,11 +195,11 @@ try {
 
   // Global search overlay (Ctrl/Cmd+K).
   await evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', metaKey: navigator.platform.startsWith('Mac'), ctrlKey: !navigator.platform.startsWith('Mac'), bubbles: true }))`);
-  await waitFor(`!!document.querySelector('[aria-label="Search"][role="combobox"]')`, 'the search overlay');
+  await waitFor(`!!document.querySelector('[role="dialog"] [role="combobox"]')`, 'the search overlay');
   await shot('13-search');
   check('search opens with the keyboard shortcut', true);
   await evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
-  await evaluate(`document.querySelector('[aria-label="Search"][role="combobox"]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+  await evaluate(`document.querySelector('[role="dialog"] [role="combobox"]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
 
   await evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Settings').click()`);
   await waitFor(hasText('Language'), 'settings');

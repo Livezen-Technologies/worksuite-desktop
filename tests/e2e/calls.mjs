@@ -117,9 +117,9 @@ try {
   if (await vm.evaluate(vm.hasText('Leave a voice message'))) {
     await vm.shot('k4-unreachable');
     await vm.clickButton('Leave a voice message');
-    await vm.waitFor(vm.hasText('Recording — send'), 'recording', 15_000);
+    await vm.waitFor(`!!document.querySelector('[aria-label="Recording a voice message"]') && !document.querySelector('[aria-label="Send the voice message"]').disabled`, 'recording', 15_000);
     await sleep(2200);
-    await vm.clickButton('Send the voice note');
+    await vm.clickButton('Send the voice message');
     await vm.waitFor(vm.hasText('Your voice message was sent'), 'the voice message sent', 20_000);
     const msgs = await api('GET', `/api/chat/messages?room_id=${roomId}`);
     const voice = (msgs.data.messages ?? []).filter((m) => m.type === 'voice').pop();
@@ -144,6 +144,16 @@ try {
   await t.waitFor(`document.querySelector('aside[aria-label="Chat drawer"]').innerText.includes("Can't talk now")`, 'the conversation in the drawer', 20_000);
   await t.shot('k6-drawer-chat');
   t.check('a conversation opens in the drawer, over Home', await t.evaluate(t.hasText('Good ')));
+  const drawerBtn = (label) => `[...document.querySelectorAll('aside[aria-label="Chat drawer"] button')].find(b => b.textContent.trim() === ${JSON.stringify(label)})`;
+  t.check('the drawer offers Create task, Save as note and Search in conversation', await t.evaluate(`!!${drawerBtn('Create task')} && !!${drawerBtn('Save as note')} && !!${drawerBtn('Search in conversation')}`));
+  await t.evaluate(`${drawerBtn('Search in conversation')}.click()`);
+  await t.waitFor(`!!document.querySelector('aside[aria-label="Chat drawer"] input[aria-label="Search in this conversation"]')`, 'the search in the drawer');
+  await t.evaluate(`${drawerBtn('Search in conversation')}.click()`);
+  await t.evaluate(`${drawerBtn('Save as note')}.click()`);
+  await t.waitFor(t.hasText('Saved as a note.'), 'the note saved', 20_000);
+  const note = await t.evaluate(`fetch('app://bundle/__api/api/notes?q=' + encodeURIComponent(${JSON.stringify(`Chat · ${partnerName}`)})).then(r => r.json()).then(j => { const n = (j.data ?? []).find(x => (x.title || '').startsWith(${JSON.stringify(`Chat · ${partnerName}`)})); return n ? { id: n.id, title: n.title } : null; })`);
+  t.check('Save as note keeps the conversation as a note', !!note, JSON.stringify(note));
+  if (note) await t.evaluate(`fetch('app://bundle/__api/api/notes/${note.id}', { method: 'DELETE' }).then(r => r.status)`);
   await t.evaluate(`document.querySelector('aside[aria-label="Chat drawer"] button[aria-label="Minimise"]').click()`);
   await t.waitFor(`!!document.querySelector('[aria-label="Minimised chats"]')`, 'the minimised chat');
   t.check('minimising leaves the conversation in the corner', await t.evaluate(`document.querySelector('[aria-label="Minimised chats"]').innerText.includes(${JSON.stringify(partnerName)})`));

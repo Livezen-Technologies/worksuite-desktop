@@ -101,8 +101,6 @@ async function shot(name) {
 const hasText = (t) => `document.body.innerText.includes(${JSON.stringify(t)})`;
 const clickButton = (label) =>
   evaluate(`(() => { const b = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(label)} || b.getAttribute('aria-label') === ${JSON.stringify(label)}); if (!b) return false; b.click(); return true; })()`);
-const clickButtonStarting = (label) =>
-  evaluate(`(() => { const b = [...document.querySelectorAll('button')].find(b => (b.getAttribute('aria-label') ?? b.textContent.trim()).startsWith(${JSON.stringify(label)})); if (!b) return false; b.click(); return true; })()`);
 const fill = (labelText, value) =>
   evaluate(`(() => {
     const l = [...document.querySelectorAll('label')].find(l => l.textContent.trim().startsWith(${JSON.stringify(labelText)}));
@@ -231,25 +229,30 @@ try {
   check('replaying the callback is refused', true);
 
   // ── the title-bar clock ──────────────────────────────────────────────
-  await waitFor(`!![...document.querySelectorAll('header button')].find(b => /^Clock in/.test(b.getAttribute('aria-label') ?? ''))`, 'the clock-in button in the title bar', 20_000);
+  const pill = `document.querySelector('header [data-clock-pill]')`;
+  const inPopover = (text) => `[...document.querySelectorAll('[role="dialog"][aria-label="Today\\'s attendance"] button')].find(b => b.textContent.trim() === ${JSON.stringify(text)})`;
+  await waitFor(`!!${pill} && ${pill}.getAttribute('aria-label') === 'Clock in'`, 'Clock In in the title bar', 20_000);
   await shot('p4-clock-in');
-  check('the title bar offers Clock in to a person linked to an employee', true);
-  await clickButtonStarting('Clock in');
-  await waitFor(`!![...document.querySelectorAll('header button')].find(b => (b.getAttribute('aria-label') ?? '').startsWith('Clocked in for'))`, 'the running clock', 20_000);
+  check('the title bar offers Clock In to a person linked to an employee', true);
+  await evaluate(`${pill}.click()`);
+  await waitFor(`!!${inPopover('Clock In')}`, 'the attendance popover');
+  await evaluate(`${inPopover('Clock In')}.click()`);
+  await waitFor(`(${pill}.getAttribute('aria-label') ?? '').startsWith('Working')`, 'the running clock', 20_000);
   await sleep(600);
   await shot('p5-clocked-in');
-  check('one click clocks in, and the title bar shows the time running', true);
+  check('Clock In from the popover starts the day, and the title bar shows the time running', true);
   const hr = await evaluate(`fetch('app://bundle/__api/api/hr/attendance/me').then(r => r.json()).then(j => !!(j.data.today && j.data.today.check_in && !j.data.today.check_out))`);
   check('the server has the check-in', hr === true);
 
-  await clickButtonStarting('Clocked in for');
-  await waitFor(`!!document.querySelector('[role="dialog"][aria-label="Attendance"]')`, 'the attendance popover');
+  await waitFor(`!!${inPopover('Clock Out')}`, 'Clock Out');
+  await evaluate(`${inPopover('Clock Out')}.click()`);
+  await waitFor(`!!document.querySelector('[role="dialog"] input[type="checkbox"]')`, 'the clock-out step');
   await shot('p6-clock-popover');
-  check('clocking out asks first, in a popover', await evaluate(`!![...document.querySelectorAll('[role="dialog"] button')].find(b => b.textContent.trim() === 'Clock out')`));
-  await evaluate(`[...document.querySelectorAll('[role="dialog"] button')].find(b => b.textContent.trim() === 'Clock out').click()`);
-  await waitFor(`!![...document.querySelectorAll('header button')].find(b => b.textContent.includes('Clock in again'))`, 'clocked out', 20_000);
+  await evaluate(`document.querySelector('[role="dialog"] input[type="checkbox"]').click()`);
+  await evaluate(`[...document.querySelectorAll('[role="dialog"] button')].find(b => b.textContent.trim() === 'Clock Out' && !b.disabled).click()`);
+  await waitFor(`(${pill}.getAttribute('aria-label') ?? '').startsWith('Clocked out')`, 'clocked out', 20_000);
   await shot('p7-clocked-out');
-  check('clocking out from the popover ends the day, and the title bar offers Clock in again', true);
+  check('clocking out is confirmed in the popover, and ends the day', true);
 
   await evaluate(`window.worksuite.auth.signOut({ wipe: true })`);
   await waitFor(hasText('Sign in with a passkey'), 'the sign-in screen after sign-out');

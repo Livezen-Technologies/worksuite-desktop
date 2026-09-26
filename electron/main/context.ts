@@ -18,6 +18,14 @@ import type { TransferManager } from '../services/transfers';
 import type { RealtimeService } from '../services/realtime';
 import type { TrayService } from '../tray/tray';
 import type { UpdaterService } from '../updater/updater';
+
+/** What else a clock-in or clock-out may carry. */
+export interface ClockExtra {
+  note?: string;
+  workLocation?: string;
+  geoNote?: string;
+  noteType?: 'normal' | 'overtime' | 'customer_visit' | 'off_site' | 'wfh' | 'early_departure' | 'missed_break' | 'technical_issue' | 'other';
+}
 import type { WindowManager } from '../windows/manager';
 import type { BootState } from './boot';
 import type { SessionController } from './session';
@@ -58,5 +66,7 @@ export interface AppContext {
   relaunch: (safeMode: boolean) => void;
   quit: () => void;
   /** Clock in or out (FR-TRAY-01): the tray, the title bar and the HR page all go through this. */
-  clockAttendance: (direction: 'in' | 'out', note?: string) => Promise<void>;
+  clockAttendance: (direction: 'in' | 'out', extra?: ClockExtra) => Promise<void>;
+  /** Start or end a break, the same way. */
+  attendanceBreak: (action: 'start' | 'end') => Promise<void>;
 }

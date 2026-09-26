@@ -5,6 +5,122 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-26 — 0.2.9: Search, the app launcher, the clock, calls, chat and the chat drawer, to the new designs
+
+**Changed**
+
+- **Global search** (⌘K; GlobalSearch) is a bigger box with a preview.
+  - Before you type, it shows your recent searches, eight apps to jump to,
+    and things to create (new mail, task, event, note, contact, upload).
+  - Results come grouped, with one filter per group and a count on each.
+    Tab steps through the filters; Backspace in an empty box clears one.
+  - The part that matched is highlighted.
+  - The selected result is previewed on the right, with Open (↵),
+    New window (⌘↵) and Copy link.
+  - A single click selects a result; a double click or Enter opens it.
+  - `>` switches to commands: apps to go to, things to create, and every
+    shell command with its shortcut.
+  - Offline, it still searches what is saved on this computer, and says so.
+- **The app launcher** (AppLauncher) shows apps as tiles.
+  - A big search box at the top.
+  - A Recent row: the last four apps you opened. It is kept on this
+    computer only, per person.
+  - Category filters with counts.
+  - Each tile shows its unread count. Apps that open in the browser carry a
+    corner mark.
+  - Arrow keys move over the grid, Enter opens, ⌘Enter opens in a new
+    window, and Tab changes category.
+  - Right-click (or a tile's ⋯) opens the app in a new tab or window, or
+    pins it to the sidebar.
+  - An app name that doesn't match anything offers to search WorkSuite
+    for it.
+- **Clock in / out in the title bar** (ClockIn). The pill shows where the
+  day is: "Clock In", the time worked, "On break · 14m", or ✓ with the
+  day's total.
+  - It opens "Today's attendance" with a ring, the shift, and the time still
+    to go.
+  - **Clocking in now takes two clicks**, where it used to take one. The
+    popover asks where you are working first, from the company's own list
+    of work locations, and that place is stored on the day.
+  - Break and Resume start and end a break, and the break is timed.
+  - Clocking out asks what kind of day it was (optional; kept for reports),
+    takes a note, and waits for "I confirm that I am clocking out".
+  - When the day is done, the popover shows the total, the clock-in and
+    clock-out times, and any overtime. Where the company allows it, it also
+    offers "Clock in again…".
+  - Where the company requires a location to clock in, the popover asks
+    why there is none. The desktop cannot share a location yet.
+- **The voice call window** (CallWindow, CallVoice): the dark gradient
+  window.
+  - A large picture of the person, with a green glow while they talk and a
+    mark when you are muted.
+  - Moving voice bars, and labels for "You are muted" and "Noise suppression
+    on".
+  - Round controls: mute, speaker, video, share screen, noise, chat, and a
+    red hang-up button.
+  - Its own title bar, with a Keep on top pin.
+  - While it rings out, a ringtone volume slider and "Mute the ringtone".
+  - If it can't connect, it offers Retry, Chat and End the call.
+  - When the call ends, the window stays for a few seconds with Call again,
+    Message and Close. It used to close after a second and a half.
+- **The incoming call** is a notification card with a countdown bar showing
+  how long it will keep ringing.
+  - Dismiss (×) stops it ringing on this computer, without declining.
+  - The quick replies are chips above a reply box.
+- **Chat.**
+  - A message's actions are now behind a small round button on the message.
+    It opens the reactions above the message and a menu with Reply, Forward,
+    Copy link, Star, Pin, Edit, Copy text and Delete.
+  - The menu opens upward when the message is at the bottom of the thread.
+  - The chat drawer is laid out like ChatDrawerCalls:
+    - Chats / Calls / Archived tabs with counts: unread chats, and calls
+      missed today.
+    - All / Unread / Mentions filters.
+    - Larger rows showing "You:", muted, pinned and @mention marks.
+    - Pinned chats come first, and an Archived row sits at the top.
+    - The call log calls back or joins in one click.
+  - A conversation in the drawer (ChatDrawer):
+    - A slimmer header: back, the person and whether they are online, call,
+      video, more, minimise, open in Chat, close.
+    - The "Context: … is open" bar is tinted, as designed.
+    - Three quick actions above the message box:
+      - **Create task** opens a new task named after the conversation.
+      - **Save as note** keeps the loaded messages as a note, with Open on
+        the toast.
+      - **Search in conversation** opens the search.
+  - The page behind the drawer is no longer dimmed and stays usable. The
+    drawer closes from its own buttons, and clicking the page no longer
+    closes it.
+  - Drag the drawer's left edge to resize it (360–900 px). The width is
+    remembered; a double click puts it back.
+  - Minimised conversations wait as dark pills at the bottom left, with
+    their unread count.
+
+**Added**
+
+- **A floating call bar.** Minimise shrinks a voice call to a small bar that
+  stays on top of other apps. It has mute, open and hang up. Its size and
+  place are never saved as the call window's.
+
+**Fixed**
+
+- The calls end-to-end test followed the old voice recorder. It was out of
+  date since the composer redesign.
+
+**Notes**
+
+- New tests:
+  - `tests/e2e/shell.mjs`: 21 checks — the launcher, search, and a whole
+    working day from the clock.
+  - Unit tests for the launcher grid, recent apps, the search highlight and
+    filters, and the attendance helpers. 206 unit tests in total.
+- The chat, calls (now also the drawer's quick actions) and contacts
+  end-to-end suites pass on the new screens.
+- The shell suite needs the signed-in person linked to an employee. On the
+  local server, the probe user now has one, `E2E-47671`.
+
+---
+
 ## 2026-09-26 — 0.2.8: Files part 2 — the editors, the player, folder uploads and downloads into the Drive
 
 **Added**

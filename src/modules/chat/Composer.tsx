@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState, type Ref, type ReactNode } from 'react';
 import type { PickedFile } from '@shared/ipc/contract';
 import { app } from '../../core/app-state';
 import { apiGet, apiPost } from '../../core/api';
@@ -41,7 +41,7 @@ export interface ComposerHandle {
  * an edit shown above it; files wait in a tray until Send; a voice message
  * records in its place. `compact` is the drawer's and the call panel's size.
  */
-export function Composer({ roomId, roomName, group, reply, onClearReply, typing = [], compact, ref }: {
+export function Composer({ roomId, roomName, group, reply, onClearReply, typing = [], compact, extras, ref }: {
   roomId: string;
   roomName: string;
   group: boolean;
@@ -49,6 +49,8 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   onClearReply: () => void;
   typing?: string[];
   compact?: boolean;
+  /** Actions above the box (the chat drawer's quick actions). */
+  extras?: ReactNode;
   ref?: Ref<ComposerHandle>;
 }) {
   const qc = useQueryClient();
@@ -345,6 +347,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
 
   return (
     <div ref={root} className={cx('relative flex shrink-0 flex-col border-t border-line bg-surface', compact ? 'gap-1.5 px-2.5 pt-2 pb-2.5' : 'gap-2 px-4 pt-2.5 pb-3')}>
+      {extras}
       {line ? (
         <div className="absolute bottom-full left-4 mb-1 flex items-center gap-1.5 rounded-full bg-surface/95 px-2 py-0.5 text-[11.5px] text-ink-3" aria-live="polite">
           <span className="flex gap-[3px]" aria-hidden>

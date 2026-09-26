@@ -26,7 +26,7 @@ const SIZES: Record<WindowKind, { width: number; height: number; minWidth: numbe
   record: { width: 1100, height: 800, minWidth: 720, minHeight: 520 },
   call: { width: 340, height: 600, minWidth: 320, minHeight: 520 },
   'video-call': { width: 1180, height: 760, minWidth: 720, minHeight: 480 },
-  ring: { width: 360, height: 268, minWidth: 360, minHeight: 268 },
+  ring: { width: 360, height: 292, minWidth: 360, minHeight: 292 },
   meet: { width: 1280, height: 800, minWidth: 960, minHeight: 600 },
 };
 
@@ -55,6 +55,7 @@ export class WindowManager {
   private kinds = new Map<number, WindowKind>();
   private saveTimers = new Map<number, NodeJS.Timeout>();
   private stopped = false;
+  private compactFrom = new Map<number, Rectangle>();
   quitting = false;
   minimizeToTray: () => boolean = () => true;
   onMainShown: () => void = () => undefined;
@@ -108,7 +109,7 @@ export class WindowManager {
   }
 
   private saveLayout(win: BrowserWindow, kind: WindowKind): void {
-    if (this.stopped || win.isDestroyed() || win.isMinimized() || win.isFullScreen()) return;
+    if (this.stopped || win.isDestroyed() || win.isMinimized() || win.isFullScreen() || this.compactFrom.has(win.id)) return;
     const bounds = win.isMaximized() ? win.getNormalBounds() : win.getBounds();
     const display = screen.getDisplayMatching(bounds);
     this.db.run(
@@ -185,6 +186,7 @@ export class WindowManager {
     const id = win.id;
     win.on('closed', () => {
       this.kinds.delete(id);
+      this.compactFrom.delete(id);
       const t = this.saveTimers.get(id);
       if (t) clearTimeout(t);
       this.saveTimers.delete(id);
@@ -259,6 +261,35 @@ export class WindowManager {
       if (k === 'ring' && kind === 'ring') w.close();
     }
     return this.create(kind, { hash, title, alwaysOnTop: alwaysOnTop ?? (kind !== 'record' && kind !== 'meet') });
+  }
+
+  /**
+   * A voice call shrunk to a bar that floats over other apps (CallVoice,
+   * "Minimised"), and back. Its place while shrunk is never saved as the call
+   * window's place.
+   */
+  setCompact(win: BrowserWindow, value: boolean): boolean {
+    if (this.kinds.get(win.id) !== 'call') return false;
+    const mac = process.platform === 'darwin';
+    if (value) {
+      if (this.compactFrom.has(win.id)) return true;
+      const b = win.getBounds();
+      this.compactFrom.set(win.id, b);
+      // Elsewhere the window controls sit over the right of the bar.
+      const width = mac ? 330 : 470;
+      win.setMinimumSize(300, 58);
+      if (mac) win.setWindowButtonVisibility(false);
+      win.setBounds(fitToDisplays({ x: b.x + b.width - width, y: b.y, width, height: 60 }, screen.getAllDisplays(), screen.getPrimaryDisplay()));
+      win.setAlwaysOnTop(true, 'floating');
+      return true;
+    }
+    const prev = this.compactFrom.get(win.id);
+    this.compactFrom.delete(win.id);
+    const size = SIZES.call;
+    win.setMinimumSize(size.minWidth, size.minHeight);
+    if (mac) win.setWindowButtonVisibility(true);
+    if (prev) win.setBounds(fitToDisplays(prev, screen.getAllDisplays(), screen.getPrimaryDisplay()));
+    return false;
   }
 
   setAlwaysOnTop(win: BrowserWindow, value: boolean): boolean {

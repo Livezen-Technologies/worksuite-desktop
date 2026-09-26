@@ -7,7 +7,7 @@ import { redactUrl } from '@shared/redact';
 import type { Bootstrap, NavigateRequest, RealtimeState, ServiceHealth, StatusSnapshot } from '@shared/types';
 import { applyAutostart, startedHidden } from './autostart';
 import { evaluateBoot, markCleanExit, markRunning, clearCrashes, writeBootConfig } from './boot';
-import type { AppContext } from './context';
+import type { AppContext, ClockExtra } from './context';
 import { broadcast } from './events';
 import { registerHandlers } from './handlers';
 import { initLog, logger } from './log';
@@ -480,9 +480,23 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
    * tray menu, and every screen through the `hr.attendance.changed` event.
    * Errors are the caller's to show.
    */
-  const clockAttendance = async (direction: 'in' | 'out', note?: string): Promise<void> => {
+  const clockAttendance = async (direction: 'in' | 'out', extra: ClockExtra = {}): Promise<void> => {
     try {
-      await http.post(`/api/hr/attendance/check-${direction}`, { source: 'desktop', note: note || undefined });
+      await http.post(`/api/hr/attendance/check-${direction}`, {
+        source: 'desktop',
+        note: extra.note || undefined,
+        work_location: direction === 'in' ? extra.workLocation || undefined : undefined,
+        note_type: direction === 'out' ? extra.noteType || undefined : undefined,
+        geo_note: extra.geoNote || undefined,
+      });
+      broadcast('realtime:event', { type: 'hr.attendance.changed' });
+    } finally {
+      void refreshAttendance();
+    }
+  };
+  const attendanceBreak = async (action: 'start' | 'end'): Promise<void> => {
+    try {
+      await http.post('/api/hr/attendance/break', { action });
       broadcast('realtime:event', { type: 'hr.attendance.changed' });
     } finally {
       void refreshAttendance();
@@ -763,6 +777,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     relaunch,
     quit,
     clockAttendance,
+    attendanceBreak,
   };
   registerHandlers(router, ctx);
   router.install();

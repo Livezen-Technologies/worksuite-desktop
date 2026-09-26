@@ -88,6 +88,7 @@ export class CallSession {
   private busy = false;
   private left = false;
   private joined = false;
+  private closing: ReturnType<typeof setTimeout> | null = null;
 
   subscribe = (fn: () => void): (() => void) => {
     this.listeners.add(fn);
@@ -321,7 +322,7 @@ export class CallSession {
     if (close) {
       this.endedAfter = this.connectedAt ? Date.now() - this.connectedAt : null;
       this.set('ended');
-      setTimeout(() => void call('windows:close'), 1_500);
+      this.closeSoon(8_000);
     }
   }
 
@@ -336,7 +337,32 @@ export class CallSession {
     this.teardown();
     void call('calls:active', { uuid: null });
     this.set('ended');
-    setTimeout(() => void call('windows:close'), 2_000);
+    this.closeSoon(8_000);
+  }
+
+  /** "Call again" from the ended screen: a new call to the same conversation. */
+  async again(): Promise<void> {
+    if (!this.params || (this.phase !== 'ended' && this.phase !== 'unreachable')) return;
+    if (this.closing) clearTimeout(this.closing);
+    this.closing = null;
+    const p: CallParams = { roomId: this.params.roomId, mode: this.params.mode, name: this.params.name };
+    this.params = null;
+    this.conn = null;
+    this.unreachable = null;
+    this.connectedAt = null;
+    this.endedAfter = null;
+    await this.start(p);
+  }
+
+  /** Keep the ended screen up: somebody is reaching for Call again or Message. */
+  stay(): void {
+    if (this.closing) clearTimeout(this.closing);
+    this.closing = null;
+  }
+
+  private closeSoon(ms: number): void {
+    if (this.closing) clearTimeout(this.closing);
+    this.closing = setTimeout(() => void call('windows:close'), ms);
   }
 
   async voicemail(blob: Blob, ms: number): Promise<void> {

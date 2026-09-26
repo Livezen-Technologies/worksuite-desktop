@@ -10,7 +10,8 @@ import { useStore } from '../core/store';
  * Secondary windows (FR-NAV-05/09): a record, a mini chat, a call or a
  * meeting in its own window, with a slim title bar. Always-on-top is offered
  * only for the kinds the shell allows (chat, timer, calls). A ring has no
- * title bar: it is answered or declined, not managed.
+ * title bar: it is answered or declined, not managed; a voice call draws its
+ * own, on its gradient (CallWindow).
  */
 const PINNABLE = new Set(['chat-mini', 'timer', 'call', 'video-call']);
 export function WindowRoot({ hash }: { hash: string }) {
@@ -31,7 +32,7 @@ export function WindowRoot({ hash }: { hash: string }) {
   const title = named ?? mod?.manifest.name ?? 'WorkSuite';
   return (
     <div className="flex h-full flex-col">
-      <div className={cx('drag flex h-10 shrink-0 items-center gap-2 bg-navy text-[13px] font-semibold text-white', kind === 'ring' && 'hidden')} style={{ paddingLeft: isMac ? 78 : 12, paddingRight: isMac ? 8 : 140 }}>
+      <div className={cx('drag flex h-10 shrink-0 items-center gap-2 bg-navy text-[13px] font-semibold text-white', (kind === 'ring' || kind === 'call') && 'hidden')} style={{ paddingLeft: isMac ? 78 : 12, paddingRight: isMac ? 8 : 140 }}>
         <span className="flex-1 truncate">{title}</span>
         {PINNABLE.has(kind) ? (
           <IconButton

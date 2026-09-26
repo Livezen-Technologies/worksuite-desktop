@@ -184,3 +184,34 @@ textarea,
 .animate-spin-slow {
   animation: ws-spin 1.4s linear infinite;
 }
+
+/* A call's voice bars, moving while someone speaks. */
+@keyframes ws-wave {
+  0%,
+  100% {
+    transform: scaleY(0.45);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+.animate-wave {
+  animation: ws-wave 0.9s ease-in-out infinite;
+  transform-origin: center;
+}
+
+/* How long a notification has left before it tucks away. */
+@keyframes ws-drain {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+.animate-drain {
+  animation-name: ws-drain;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+  transform-origin: left;
+}

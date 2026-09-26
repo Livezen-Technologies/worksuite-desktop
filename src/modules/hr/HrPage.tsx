@@ -84,7 +84,7 @@ function Attendance() {
   const clock = async () => {
     setBusy(true);
     try {
-      await clockAttendance(clockedIn ? 'out' : 'in', note);
+      await clockAttendance(clockedIn ? 'out' : 'in', { note });
       toast('success', clockedIn ? 'Clocked out.' : 'Clocked in. Have a good day.');
       setNote('');
     } catch (e) {

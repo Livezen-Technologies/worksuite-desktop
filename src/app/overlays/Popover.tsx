@@ -3,7 +3,7 @@ import { closeOverlay } from '../../core/ui';
 import { cx } from '../../components/ui';
 
 /** A title-bar popover: anchored under the bar, closes on Escape or outside click. */
-export function Popover({ children, align = 'right', width = 380, offset = 16, label }: { children: ReactNode; align?: 'left' | 'right'; width?: number; offset?: number; label: string }) {
+export function Popover({ children, align = 'right', width = 380, offset = 16, label, className }: { children: ReactNode; align?: 'left' | 'right'; width?: number; offset?: number; label: string; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && closeOverlay();
@@ -23,7 +23,7 @@ export function Popover({ children, align = 'right', width = 380, offset = 16, l
       ref={ref}
       role="dialog"
       aria-label={label}
-      className={cx('animate-in fixed top-[58px] z-40 flex max-h-[calc(100vh-90px)] flex-col overflow-hidden rounded-[12px] border border-line bg-surface shadow-2xl')}
+      className={cx('animate-in fixed top-[58px] z-40 flex max-h-[calc(100vh-90px)] flex-col overflow-hidden bg-surface', className ?? 'rounded-[12px] border border-line shadow-2xl')}
       style={{ width, [align]: offset }}
     >
       {children}

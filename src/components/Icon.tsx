@@ -1,5 +1,9 @@
 import {
   Weight,
+  Volume2,
+  VolumeX,
+  AudioLines,
+  Minimize2,
   FolderPlus,
   FileCode,
   LockOpen,
@@ -38,7 +42,7 @@ const ICONS: Record<string, LucideIcon> = {
   mic: Mic, 'mic-off': MicOff, 'video-off': VideoOff, 'phone-off': PhoneOff, 'phone-incoming': PhoneIncoming, 'screen-share': MonitorUp, maximize: Maximize2,
   camera: Camera, film: Film, music: Music, stop: Square, at: AtSign,
   cake: Cake, mobile: Smartphone, 'map-pin': MapPin, tag: Tag, list: List,
-  weight: Weight, 'folder-plus': FolderPlus, 'file-code': FileCode, unlock: LockOpen, 'zoom-in': ZoomIn, 'zoom-out': ZoomOut,
+  weight: Weight, volume: Volume2, 'volume-off': VolumeX, 'audio-lines': AudioLines, minimize: Minimize2, 'folder-plus': FolderPlus, 'file-code': FileCode, unlock: LockOpen, 'zoom-in': ZoomIn, 'zoom-out': ZoomOut,
 };
 
 export function Icon({ name, size = 18, className, strokeWidth = 1.8, label }: { name: string; size?: number; className?: string; strokeWidth?: number; label?: string }) {

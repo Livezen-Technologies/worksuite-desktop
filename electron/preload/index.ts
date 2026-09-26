@@ -73,6 +73,7 @@ const api = {
   windows: {
     open: call('windows:open'),
     setAlwaysOnTop: call('windows:setAlwaysOnTop'),
+    setCompact: call('windows:setCompact'),
     minimize: call('windows:minimize'),
     toggleMaximize: call('windows:toggleMaximize'),
     close: call('windows:close'),
@@ -97,6 +98,7 @@ const api = {
   },
   hr: {
     clock: call('hr:clock'),
+    break: call('hr:break'),
   },
   media: {
     access: call('media:access'),
