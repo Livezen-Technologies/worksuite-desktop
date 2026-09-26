@@ -22,6 +22,8 @@ export interface TrayModel {
   unreadChat: number;
   unreadMail: number;
   unreadOther: number;
+  /** Off: no count on the app's icon (Settings › Notifications). */
+  badge: boolean;
   notificationsPausedUntil: string | null;
   attendance: { linked: boolean; clockedIn: boolean; since: string | null } | null;
   updateReady: boolean;
@@ -73,6 +75,7 @@ export class TrayService {
     unreadChat: 0,
     unreadMail: 0,
     unreadOther: 0,
+    badge: true,
     notificationsPausedUntil: null,
     attendance: null,
     updateReady: false,
@@ -112,7 +115,7 @@ export class TrayService {
     const unread = attentionCount(m.unreadChat, m.unreadOther);
     const state = trayState({ error: !!m.error, offline: m.offline && m.signedIn, monitoring: false, syncing: false, unread });
     try {
-      app.setBadgeCount(m.signedIn && process.platform !== 'darwin' ? unread : 0);
+      app.setBadgeCount(m.signedIn && m.badge && process.platform !== 'darwin' ? unread : 0);
     } catch {
       /* not supported on this desktop */
     }

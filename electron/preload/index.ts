@@ -138,6 +138,7 @@ const api = {
     markAllRead: call('notifications:markAllRead'),
     pause: call('notifications:pause'),
     test: call('notifications:test'),
+    refresh: call('notifications:refresh'),
   },
   clipboard: {
     readForPaste: call('clipboard:readForPaste'),

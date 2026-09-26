@@ -411,6 +411,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         unreadChat: s.unread.chat,
         unreadMail: s.unread.mail,
         unreadOther: s.unread.notifications,
+        badge: settings.effective().badgeCount !== false,
         notificationsPausedUntil: s.notificationsPausedUntil,
       });
     }, 300);

@@ -5,6 +5,95 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-27 — 0.2.24: notifications redrawn — the drawer, the center, the settings; uploads ask before replacing
+
+From the design "WorkSuite Desktop — Notifications". Also in this release:
+uploads ask before a file of the same name (the entry below).
+
+**Added**
+
+- **The bell opens a drawer.**
+  - It shows what is new, in three sections: **Needs you**, **Today**,
+    **Earlier**.
+    - **Needs you** is unread and either a decision for you (a leave
+      request, an expense or payroll approval, a review, a signature) or
+      sent as urgent.
+  - **All / Unread / Mentions / Approvals**, and an **Apps** menu with each
+    app's count.
+  - Each row shows its app, what happened, how long ago, and one button from
+    its own link: **Join** a meeting, **Reply** in a conversation,
+    **Review** a decision, **Open** anything else.
+  - On hover: **mark read or unread**, **snooze** (1 hour, 3 hours,
+    tomorrow 9:00, Monday 9:00), **dismiss** (to Done). Snooze and dismiss
+    can be undone from the toast.
+  - "N alike" when the server folded repeats into one.
+  - **Do not disturb** in the footer stops this computer's banners and
+    sounds until 8:00 tomorrow.
+- **The notification center** (`/notifications`):
+  - Views: **Inbox, Mentions, Approvals, Assigned to me, Snoozed, Done**.
+    Each app has its unread count.
+  - Search; **Mark all read**.
+  - Select rows for **Mark read / unread, Snooze, Done** (or **Back to the
+    inbox**). With one app selected, also **Mute on this computer**.
+  - A **preview** of the one selected: all its text, and the record it is
+    about as its live card (a task, deal, invoice…, read with your access).
+    Its buttons, and where else it was sent ("also sent by email").
+- **Notification settings** (`/notifications/settings`), the drawer's gear:
+  - **A grid of every kind of notification by channel:**
+    - **In app**, **This computer**, **Email**, **Browser push** and
+      **System conversation**, where the server offers each.
+    - Each column has a switch for the whole channel.
+    - **This computer** mutes one kind's banners here only. The server's
+      categories (Projects, Expenses, Security…) can now each be muted, not
+      just the nine old app switches.
+  - **Quiet hours:**
+    - From, to and time zone.
+    - What email and pushes do meanwhile (wait, stay in the bell only, or
+      not be sent).
+    - Whether urgent ones come through.
+    - **Silence this computer too**, for the same hours.
+  - **This computer:** banners, sound, what banners show, a **badge count
+    on the app icon** (new; off clears the Dock and taskbar count), and a
+    test notification.
+  - Settings › Notifications now opens this screen.
+
+**Not offered, because the server does not do it yet**
+
+- **Actions the server can't take:** approving or rejecting from the
+  notification itself, or marking a task done from it. No notification
+  carries an action the server can run, so rows open the record instead.
+- **Things notifications don't carry:** the sender's picture and the
+  company a notification came from. These aren't on a notification.
+- **Settings the server doesn't act on:** per-app daily or weekly digests,
+  quiet hours by weekday, "group similar" and "hide duplicates" switches,
+  mobile push and WhatsApp.
+
+**Fixed**
+
+- **Project and task alerts could not be muted.** The server calls them
+  `projects` and the switch was `tasks`.
+- The bell's count now leaves out snoozed notifications. This is the
+  server's fix, live since 20:12 UTC 2026-09-26.
+
+**Changed**
+
+- The drawer and the center read the server's notification center
+  (`/api/notifications/centre`), not the old list. The old list showed
+  snoozed and archived notifications as if they were new.
+
+**Tests**
+
+- `notifications.test.ts`: sections, mentions, approvals and assignments,
+  the row's button, snooze times.
+- `tests/e2e/notifications.mjs`:
+  - the drawer: sections, the count, snooze and Undo, dismiss and Undo, an
+    app filter, Do not disturb;
+  - the center: every view, the preview, selection;
+  - settings: a category muted on this computer.
+- `tests/e2e/upload-conflict.mjs`: Replace, Keep both, Skip.
+
+---
+
 ## 2026-09-27 — Uploads ask before a file of the same name (ships in 0.2.24)
 
 **Added**

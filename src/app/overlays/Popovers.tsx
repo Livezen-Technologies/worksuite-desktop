@@ -1,88 +1,23 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
-import type { NotificationItem, Transfer } from '@shared/types';
+import type { Transfer } from '@shared/types';
 import { app, organizationName } from '../../core/app-state';
 import { call, errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { navigate } from '../../core/tabs';
-import { openWebLink } from '../../core/tab-context';
 import { closeOverlay, openOverlay } from '../../core/ui';
 import { bytes, duration, relative } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
-import { Button, Chip, Empty, IconButton, Spinner, cx } from '../../components/ui';
+import { Button, Empty, IconButton, cx } from '../../components/ui';
 import { UserPicture, useMe } from '../../components/UserPicture';
 import { apiGet, apiPost } from '../../core/api';
 import { useMfa } from '../../modules/account/api';
 import { attendanceTime, useAttendance } from '../../modules/hr/attendance';
 import { Popover, PopoverHeader } from './Popover';
 
-/** In-app notification centre mirroring the OS notifications (§4.2). */
-export function NotificationCenter() {
-  const qc = useQueryClient();
-  const [filter, setFilter] = useState<string>('all');
-  const q = useQuery({ queryKey: ['notifications', 'list'], queryFn: () => call('notifications:list') });
-  const items = (q.data?.items ?? []).filter((n) => filter === 'all' || (filter === 'unread' ? !n.read : n.module === filter));
-  const modules = [...new Set((q.data?.items ?? []).map((n) => n.module))].slice(0, 5);
-  const paused = useStore(app, (s) => s.status?.notificationsPausedUntil);
-
-  const open = (n: NotificationItem) => {
-    closeOverlay();
-    if (!n.read) void call('notifications:markRead', { ids: [n.id] }).then(() => qc.invalidateQueries({ queryKey: ['notifications'] }));
-    openWebLink(n.link);
-  };
-
-  return (
-    <Popover label="Notifications" width={420} offset={70}>
-      <PopoverHeader
-        title="Notifications"
-        action={
-          <div className="flex items-center gap-1">
-            <Button size="sm" variant="ghost" onClick={() => void call('notifications:markAllRead').then(() => qc.invalidateQueries({ queryKey: ['notifications'] }))}>
-              Mark all read
-            </Button>
-            <IconButton icon="settings" label="Notification settings" onClick={() => (closeOverlay(), navigate('/settings/notifications'))} size={16} />
-          </div>
-        }
-      />
-      {paused ? (
-        <div className="flex items-center justify-between bg-warning-bg px-4 py-2 text-[12px] font-semibold text-warning">
-          Paused until {new Date(paused).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-          <button type="button" className="underline" onClick={() => void call('notifications:pause', { minutes: null })}>
-            Resume
-          </button>
-        </div>
-      ) : null}
-      <div className="flex gap-1 border-b border-line px-3 py-2">
-        {['all', 'unread', ...modules].map((f) => (
-          <button key={f} type="button" onClick={() => setFilter(f)} className={cx('rounded-full px-2.5 py-1 text-[12px] font-semibold capitalize', filter === f ? 'bg-ink text-surface' : 'text-ink-2 hover:bg-subtle')}>
-            {f}
-          </button>
-        ))}
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto scroll-thin">
-        {q.isLoading ? <Spinner /> : items.length === 0 ? <Empty icon="bell" title="You're all caught up" /> : null}
-        {items.map((n) => (
-          <button key={n.id} type="button" onClick={() => open(n)} className="flex w-full gap-3 border-b border-line px-4 py-3 text-left hover:bg-subtle">
-            <span className={cx('mt-1.5 h-2 w-2 shrink-0 rounded-full', n.read ? 'bg-transparent' : 'bg-primary')} />
-            <span className="min-w-0 flex-1">
-              <span className="block text-[13px] font-semibold text-ink">{n.title}</span>
-              {n.body ? <span className="line-clamp-2 block text-[12.5px] text-ink-2">{n.body}</span> : null}
-              <span className="mt-0.5 flex items-center gap-2 text-[11.5px] text-ink-3">
-                <Chip>{n.module}</Chip> {relative(n.createdAt)}
-              </span>
-            </span>
-          </button>
-        ))}
-      </div>
-      <div className="border-t border-line p-2">
-        <Button variant="ghost" className="w-full" onClick={() => (closeOverlay(), navigate('/notifications'))}>
-          Open all notifications
-        </Button>
-      </div>
-    </Popover>
-  );
-}
+/** The bell's drawer is the Notifications module's (NotifDrawer). */
+export { NotifDrawer as NotificationCenter } from '../../modules/notifications/Drawer';
 
 /** Transfer Center (FR-XFR-03, UI-12): uploads and downloads with progress, speed, ETA and controls. */
 export function TransferCenter() {

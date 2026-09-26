@@ -63,6 +63,7 @@ export const preferencesPatchSchema = z
     notificationSounds: z.boolean(),
     notificationPrivacy: z.enum(['FULL', 'SENDER_ONLY', 'GENERIC']),
     notificationsEnabled: z.boolean(),
+    badgeCount: z.boolean(),
     moduleNotifications: z.record(z.string().max(64), z.boolean()),
     dndEnabled: z.boolean(),
     dndFrom: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
@@ -278,6 +279,8 @@ export const contract = {
   'notifications:markAllRead': ch(none, { session: true }),
   'notifications:pause': ch(z.object({ minutes: z.number().int().min(0).max(60 * 24 * 7).nullable() }), { session: true }),
   'notifications:test': ch(none, { session: true, rate: 1 }),
+  /** The bell's count again, now: after the notification centre read, snoozed or archived something. */
+  'notifications:refresh': ch(none, { session: true, rate: 10 }),
 
   'clipboard:readForPaste': ch(none, { session: true, rate: 5 }),
 
@@ -454,6 +457,7 @@ export interface Outputs {
   'notifications:markAllRead': void;
   'notifications:pause': { pausedUntil: string | null };
   'notifications:test': boolean;
+  'notifications:refresh': void;
   'clipboard:readForPaste': { text: string | null; image: string | null; files: PickedFile[] };
   'print:print': boolean;
   'print:printers': Array<{ name: string; displayName: string; isDefault: boolean }>;

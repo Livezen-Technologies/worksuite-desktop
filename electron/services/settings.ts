@@ -23,6 +23,7 @@ export function defaultPreferences(): Preferences {
     notificationSounds: true,
     notificationPrivacy: 'SENDER_ONLY',
     notificationsEnabled: true,
+    badgeCount: true,
     moduleNotifications: {},
     dndEnabled: false,
     dndFrom: '22:00',

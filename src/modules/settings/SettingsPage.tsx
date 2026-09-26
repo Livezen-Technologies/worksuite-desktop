@@ -243,9 +243,9 @@ function NotificationsSection({ prefs }: { prefs: Preferences }) {
   return (
     <>
       <H title="Notifications" hint="How this computer shows notifications — even when WorkSuite's window is closed, from the tray." />
-      <Row label="What reaches you, and when" hint="Email and in-app channels, quiet hours and kinds of notification are your account's, on every device.">
-        <Button icon="bell" onClick={() => navigate('/account/notifications')}>
-          Open My account › Notifications
+      <Row label="What reaches you, and when" hint="Each app by channel, quiet hours, and how this computer shows them.">
+        <Button icon="bell" onClick={() => navigate('/notifications/settings')}>
+          Open notification settings
         </Button>
       </Row>
       <Toggle k="notificationsEnabled" prefs={prefs} label="Show notifications" />

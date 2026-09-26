@@ -98,7 +98,7 @@ export async function initAppState(): Promise<void> {
     // The Dock badge is painted onto the icon on macOS (see dock-badge); it only repaints when the count changes.
     const sync = () => {
       const s = app.get();
-      void updateDockBadge(s.status, s.auth?.stage === 'ready');
+      void updateDockBadge(s.status, s.auth?.stage === 'ready', s.prefs?.badgeCount !== false);
     };
     sync();
     app.subscribe(sync);

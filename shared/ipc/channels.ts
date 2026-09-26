@@ -72,6 +72,7 @@ export const INVOKE_CHANNELS = [
   'notifications:markAllRead',
   'notifications:pause',
   'notifications:test',
+  'notifications:refresh',
 
   'clipboard:readForPaste',
 

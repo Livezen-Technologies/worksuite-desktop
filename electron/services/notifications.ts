@@ -37,6 +37,8 @@ interface ServerNotification {
 export interface Incoming {
   id: string;
   module: string;
+  /** The server's category (`projects`, `expenses`…): muted per category from the notification settings' Desktop column. */
+  category?: string | null;
   title: string;
   body: string;
   sender: string | null;
@@ -61,7 +63,8 @@ function moduleOf(n: { category?: string | null; type?: string | null; entity_ty
   const link = n.link ?? '';
   const fromLink = /^\/([a-z-]+)/.exec(link)?.[1];
   const raw = (n.category || n.entity_type || fromLink || n.type || 'system').toLowerCase();
-  const map: Record<string, string> = { hrm: 'hr', leave: 'hr', attendance: 'hr', task: 'tasks', calendar: 'calendar', event: 'calendar', lead: 'crm', drive: 'files', file: 'files', message: 'chat' };
+  // `projects` is the server's category for tasks: without it, task alerts could not be muted by the Tasks switch.
+  const map: Record<string, string> = { hrm: 'hr', leave: 'hr', attendance: 'hr', task: 'tasks', projects: 'tasks', calendar: 'calendar', event: 'calendar', lead: 'crm', drive: 'files', file: 'files', message: 'chat' };
   return map[raw] ?? raw.split(/[._:]/)[0] ?? 'system';
 }
 
@@ -321,6 +324,7 @@ export class NotificationService {
         this.notify({
           id,
           module: moduleOf({ category: e.category as string, link }),
+          category: typeof e.category === 'string' ? e.category : null,
           title: String(e.title ?? 'Notification'),
           body: String(e.body ?? ''),
           sender: null,
@@ -437,6 +441,7 @@ export class NotificationService {
     if (!p.notificationsEnabled || !p.backgroundServices.notifications) return 'disabled';
     if (!this.moduleEnabled(n.module)) return 'module-off';
     if (p.moduleNotifications[n.module] === false) return 'module-muted';
+    if (n.category && p.moduleNotifications[`cat:${n.category}`] === false) return 'category-muted';
     if (n.critical) return null;
     if (this.pausedUntil && this.pausedUntil > Date.now()) return 'paused';
     if (p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) return 'dnd';

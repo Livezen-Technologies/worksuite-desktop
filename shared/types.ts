@@ -181,6 +181,8 @@ export interface Preferences {
   notificationSounds: boolean;
   notificationPrivacy: NotificationPrivacy;
   notificationsEnabled: boolean;
+  /** The count of what needs you (chat + notifications) on the app's icon: the Dock, the taskbar. */
+  badgeCount: boolean;
   /** Per-module notification toggles; a missing key means enabled. */
   moduleNotifications: Record<string, boolean>;
   dndEnabled: boolean;
