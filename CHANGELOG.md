@@ -5,6 +5,14 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-26 — 0.2.1
+
+The polished chat composer and the passkey sign-in fix below, as version
+0.2.1. The server side (the department in the @ list) was deployed at 21:07
+UTC on 2026-09-25.
+
+---
+
 ## 2026-09-26 — The chat composer, to the "Chat composer — polished" design
 
 **Changed**
