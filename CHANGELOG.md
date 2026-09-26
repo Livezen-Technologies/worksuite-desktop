@@ -5,6 +5,29 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-27 — Packaging: a Linux .deb
+
+**Added**
+
+- **`worksuite_<version>_amd64.deb`** for Ubuntu and Debian, from 0.2.22 on.
+  electron-builder's deb target runs fpm, which needs GNU tar, and this Mac
+  has only bsdtar. So `build/make-deb.py` packs the same Linux build the
+  AppImage uses, laid out as electron-builder's deb would lay it out:
+  - the app in `/opt/WorkSuite`, and a `worksuite` command (through
+    update-alternatives where there is one);
+  - a menu entry that also handles `worksuite://` links and `.worksuite`
+    references, and icons at every size;
+  - `chrome-sandbox` made SUID only where user namespaces don't work;
+  - the AppArmor profile Ubuntu 24.04 needs before Electron's sandbox will
+    start.
+
+  Its dependencies accept both the old library names and 24.04's `t64`
+  ones. Removing the package takes the command and the AppArmor profile
+  with it. It is built from a clean checkout of the release commit, not
+  from the working tree.
+
+---
+
 ## 2026-09-27 — 0.2.22: CRM, part 2 — accounts, quotes, the price list, lead intake, settings
 
 **Added**
