@@ -13,8 +13,26 @@ const log = logger('api-proxy');
  * tickets and the device-sync API are for the main process alone. Cookies and
  * Authorization headers from the renderer are dropped; the main process adds
  * its own.
+ *
+ * My account manages the person's own sign-in methods, so under /api/auth a
+ * few calls pass, by method: reading and setting up two-factor (the setup's
+ * key and the backup codes are the person's to see — no token is in them),
+ * listing, renaming and revoking passkeys, and listing and ending ONE
+ * session. Answering a sign-in (`POST /auth/mfa`), exchanging a passkey
+ * code, ending every session at once and changing the password stay out:
+ * the last goes through the main process, which keeps this app signed in
+ * across it (`auth:changePassword`).
  */
 const PATH_OK = /^\/api\/[A-Za-z0-9/_\-.,:@~]*(\?.*)?$/;
+
+const ACCOUNT: Array<[RegExp, string[]]> = [
+  [/^\/api\/auth\/mfa$/, ['GET', 'DELETE']],
+  [/^\/api\/auth\/mfa\/(setup|confirm|backup-codes)$/, ['POST']],
+  [/^\/api\/auth\/passkeys$/, ['GET']],
+  [/^\/api\/auth\/passkeys\/\d+$/, ['PATCH', 'DELETE']],
+  [/^\/api\/auth\/sessions$/, ['GET']],
+  [/^\/api\/auth\/sessions\/\d+$/, ['DELETE']],
+];
 
 const DENY: RegExp[] = [
   /^\/api\/auth\/(login|refresh|mfa|logout|register|passkeys|password|sessions)(\/|\?|$)/,
@@ -39,11 +57,13 @@ export function isMediaPath(apiPath: string): boolean {
   return MEDIA.test(apiPath);
 }
 
-export function isProxyPathAllowed(apiPath: string): boolean {
-  if (MEDIA.test(apiPath)) return true;
+export function isProxyPathAllowed(apiPath: string, method = 'GET'): boolean {
+  if (MEDIA.test(apiPath)) return ['GET', 'HEAD'].includes(method.toUpperCase());
   if (!PATH_OK.test(apiPath)) return false;
   const pathOnly = apiPath.split('?')[0]!;
   if (pathOnly.includes('..') || pathOnly.includes('//')) return false;
+  const m = method.toUpperCase();
+  if (ACCOUNT.some(([re, methods]) => re.test(pathOnly) && methods.includes(m))) return true;
   return !DENY.some((re) => re.test(pathOnly));
 }
 
@@ -67,7 +87,7 @@ function envelope(status: number, message: string, code: string): Response {
 
 export function createApiProxy(deps: ProxyDeps) {
   return async function proxy(request: Request, apiPath: string): Promise<Response> {
-    if (!isProxyPathAllowed(apiPath)) {
+    if (!isProxyPathAllowed(apiPath, request.method)) {
       log.warn('proxy refused path', { path: apiPath.split('?')[0] });
       return envelope(403, 'This request is not available to the desktop shell.', 'IPC_FORBIDDEN_SENDER');
     }

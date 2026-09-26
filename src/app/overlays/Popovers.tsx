@@ -1,16 +1,20 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { NotificationItem, Transfer } from '@shared/types';
 import { app, organizationName } from '../../core/app-state';
 import { call, errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { closeTabsOutside, navigate } from '../../core/tabs';
 import { openWebLink } from '../../core/tab-context';
-import { closeOverlay } from '../../core/ui';
+import { closeOverlay, openOverlay } from '../../core/ui';
 import { bytes, duration, relative } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Avatar, Button, Chip, Empty, IconButton, Spinner, cx } from '../../components/ui';
+import { UserPicture, useMe } from '../../components/UserPicture';
+import { apiGet, apiPost } from '../../core/api';
+import { useMfa } from '../../modules/account/api';
+import { attendanceTime, useAttendance } from '../../modules/hr/attendance';
 import { Popover, PopoverHeader } from './Popover';
 
 /** In-app notification centre mirroring the OS notifications (§4.2). */
@@ -212,28 +216,116 @@ function OrgRow({ name, hint, active, onClick, disabled }: { name: string; hint?
   );
 }
 
+/**
+ * The account menu (AcctMenu), from your picture in the title bar: who you
+ * are and how you show to others, My account's sections, this computer's
+ * settings, and Sign out. The status line is chat presence (Chat app) and
+ * today's clock-in (People app); either is left out without its app.
+ */
+const PRESENCE: Array<{ id: 'available' | 'busy' | 'dnd' | 'away' | 'offline'; label: string; dot: string }> = [
+  { id: 'available', label: 'Online', dot: '#22A861' },
+  { id: 'busy', label: 'Busy', dot: '#D92D20' },
+  { id: 'dnd', label: 'Do not disturb', dot: '#D92D20' },
+  { id: 'away', label: 'Away', dot: '#F79009' },
+  { id: 'offline', label: 'Appear offline', dot: '#8A91A5' },
+];
+const SHOWN: Record<string, { label: string; dot: string }> = {
+  online: { label: 'Online', dot: '#22A861' },
+  busy: { label: 'Busy', dot: '#D92D20' },
+  dnd: { label: 'Do not disturb', dot: '#D92D20' },
+  away: { label: 'Away', dot: '#F79009' },
+  offline: { label: 'Offline', dot: '#8A91A5' },
+};
+
 export function ProfileMenu() {
-  const user = useStore(app, (s) => s.auth?.user);
-  const server = useStore(app, (s) => s.auth?.server);
+  const qc = useQueryClient();
+  const me = useMe();
+  const hasChat = useStore(app, (s) => s.apps.some((a) => a.id === 'chat'));
+  const hasHr = useStore(app, (s) => s.apps.some((a) => a.id === 'hr'));
+  const orgs = useStore(app, (s) => s.bootstrap?.organizations.length ?? 0);
+  const orgId = useStore(app, (s) => s.organizationId);
+  const presence = useQuery({ queryKey: ['account', 'presence'], queryFn: ({ signal }) => apiGet<{ status: string; choice: string }>('/api/chat/presence/me', undefined, signal), enabled: hasChat });
+  const mfa = useMfa();
+  const { today, clockedIn } = useAttendance(hasHr);
   const [confirm, setConfirm] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const go = (route: string) => (closeOverlay(), navigate(route));
+  const shown = SHOWN[presence.data?.status ?? ''] ?? null;
+  const working = hasHr && clockedIn && today?.check_in ? `${today.on_break ? 'On a break' : 'Working'} since ${attendanceTime(today.check_in)}` : null;
+  const choose = async (status: string) => {
+    setPicking(false);
+    try {
+      await apiPost('/api/chat/presence', { status, active: true });
+      await qc.invalidateQueries({ queryKey: ['account', 'presence'] });
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
+
   return (
-    <Popover label="Account" width={300}>
-      <div className="flex items-center gap-3 border-b border-line p-4">
-        <Avatar name={user?.name} size={40} />
-        <div className="min-w-0">
-          <div className="truncate text-[14px] font-bold text-ink">{user?.name}</div>
-          <div className="truncate text-[12px] text-ink-3">{user?.email}</div>
-          <div className="truncate text-[11.5px] text-ink-3">{server ? new URL(server.origin).host : ''}</div>
-        </div>
+    <Popover label="Account" width={320} className="rounded-[18px] border border-line shadow-[0_24px_60px_rgb(var(--ws-shadow-rgb)/.22)]">
+      <div className="flex items-center gap-3 bg-[linear-gradient(180deg,#F3F5FE,var(--color-surface))] p-4 dark:bg-[linear-gradient(180deg,var(--color-selection),var(--color-surface))]">
+        <span className="relative">
+          <UserPicture name={me?.name} src={me?.avatar} size={52} className="!bg-primary text-[17px] !text-white" />
+          {shown ? <span className="absolute right-0 bottom-0 h-3.5 w-3.5 rounded-full border-[2.5px] border-surface" style={{ background: shown.dot }} /> : null}
+        </span>
+        <span className="flex min-w-0 flex-col">
+          <b className="truncate text-[14.5px] text-ink">{me?.name}</b>
+          <span className="truncate text-[12px] text-ink-3">{me?.email}</span>
+        </span>
       </div>
-      <div className="flex flex-col p-1.5">
-        <MenuRow icon="settings" label="Settings" onClick={() => (closeOverlay(), navigate('/settings'))} />
-        <MenuRow icon="laptop" label="This device" onClick={() => (closeOverlay(), navigate('/settings/devices'))} />
-        <MenuRow icon="external" label="My account on the web" onClick={() => (closeOverlay(), void call('app:openInBrowser', { path: '/account/settings' }))} />
-        <MenuRow icon="stethoscope" label="Help & Diagnostics" onClick={() => (closeOverlay(), navigate('/diagnostics'))} />
+      {shown || working ? (
+        <div className="px-3 pb-2.5">
+          <button
+            type="button"
+            aria-expanded={hasChat ? picking : undefined}
+            onClick={() => (hasChat ? setPicking(!picking) : (closeOverlay(), openOverlay('clock')))}
+            className="flex h-[38px] w-full items-center gap-2.5 rounded-[10px] border border-line bg-surface px-3 text-[13px] font-semibold text-ink hover:bg-subtle"
+          >
+            <span className="h-[9px] w-[9px] shrink-0 rounded-full" style={{ background: shown?.dot ?? '#22A861' }} />
+            <span className="min-w-0 flex-1 truncate text-left">{[shown?.label, working].filter(Boolean).join(' · ')}</span>
+            <Icon name="chevron-right" size={14} className={cx('shrink-0 text-ink-3 transition-transform', picking && 'rotate-90')} />
+          </button>
+          {picking ? (
+            <div role="menu" aria-label="Show me as" className="mt-1 flex flex-col rounded-[10px] border border-line p-1">
+              {PRESENCE.map((p) => (
+                <button key={p.id} type="button" role="menuitemradio" aria-checked={(presence.data?.choice ?? 'available') === p.id} onClick={() => void choose(p.id)} className="flex h-8 items-center gap-2.5 rounded-[7px] px-2.5 text-[13px] text-ink hover:bg-subtle">
+                  <span className="h-2 w-2 rounded-full" style={{ background: p.dot }} />
+                  <span className="flex-1 text-left">{p.label}</span>
+                  {(presence.data?.choice ?? 'available') === p.id ? <Icon name="check" size={14} className="text-primary" /> : null}
+                </button>
+              ))}
+              {hasHr ? (
+                <button type="button" onClick={() => (closeOverlay(), openOverlay('clock'))} className="flex h-8 items-center gap-2.5 rounded-[7px] border-t border-line px-2.5 text-[13px] text-ink hover:bg-subtle">
+                  <Icon name="clock" size={14} className="text-ink-3" />
+                  <span className="flex-1 text-left">{clockedIn ? 'Clock out or take a break' : 'Clock in'}</span>
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      <div className="flex flex-col border-t border-line px-2 py-1">
+        <MenuRow icon="user" label="My profile" onClick={() => go('/account/profile')} />
+        <MenuRow icon="id-card" label="Profile settings" onClick={() => go('/account/general')} />
+        <MenuRow
+          icon="lock"
+          label="Security"
+          onClick={() => go('/account/security')}
+          extra={mfa.data ? <span className={cx('flex h-6 items-center rounded-full px-2.5 text-[12px] font-semibold', mfa.data.enabled ? 'bg-[#E6F6EE] text-[#1F7A4D] dark:bg-success-bg dark:text-success' : 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning')}>{mfa.data.enabled ? '2FA on' : '2FA off'}</span> : null}
+        />
+        <MenuRow icon="image" label="Profile pictures" onClick={() => go('/account/pictures')} />
+        <MenuRow icon="key" label="My access" onClick={() => go('/account/access')} />
+      </div>
+      <div className="flex flex-col border-t border-line px-2 py-1">
+        {orgs > 1 ? <MenuRow icon="building" label="Switch organisation" onClick={() => openOverlay('org')} extra={<span className="max-w-[110px] truncate text-[12px] text-ink-3">{organizationName(orgId)}</span>} /> : null}
+        <MenuRow icon="settings" label="Settings for this computer" onClick={() => go('/settings')} />
+        <MenuRow icon="help" label="Help & diagnostics" onClick={() => go('/diagnostics')} />
         <MenuRow icon="lock" label="Lock WorkSuite" onClick={() => (closeOverlay(), void call('security:lock'))} />
+      </div>
+      <div className="border-t border-line px-2 pt-1 pb-2">
         {confirm ? (
-          <div className="m-1.5 rounded-[8px] bg-subtle p-2.5 text-[12.5px] text-ink-2">
+          <div className="m-1 rounded-[10px] bg-subtle p-2.5 text-[12.5px] text-ink-2">
             Sign out of WorkSuite on this computer? Drafts stay saved for when you come back.
             <div className="mt-2 flex gap-2">
               <Button size="sm" variant="danger" onClick={() => void call('auth:signOut', { wipe: false })}>
@@ -245,17 +337,21 @@ export function ProfileMenu() {
             </div>
           </div>
         ) : (
-          <MenuRow icon="logout" label="Sign out" onClick={() => setConfirm(true)} />
+          <button type="button" onClick={() => setConfirm(true)} className="flex h-9 w-full items-center gap-[11px] rounded-[9px] px-2.5 text-[13px] font-medium text-[#B42318] hover:bg-danger-bg dark:text-danger">
+            <Icon name="logout" size={17} /> Sign out
+          </button>
         )}
       </div>
     </Popover>
   );
 }
 
-function MenuRow({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) {
+function MenuRow({ icon, label, onClick, extra }: { icon: string; label: string; onClick: () => void; extra?: ReactNode }) {
   return (
-    <button type="button" onClick={onClick} className="flex h-9 items-center gap-3 rounded-[8px] px-2.5 text-[13px] text-ink hover:bg-subtle">
-      <Icon name={icon} size={16} className="text-ink-2" /> {label}
+    <button type="button" onClick={onClick} className="flex h-9 items-center gap-[11px] rounded-[9px] px-2.5 text-left text-[13px] font-medium text-ink hover:bg-subtle">
+      <Icon name={icon} size={17} className="shrink-0 text-ink-2" />
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {extra}
     </button>
   );
 }

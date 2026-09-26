@@ -20,6 +20,10 @@ export const INVOKE_CHANNELS = [
   'auth:passkeyCancel',
   'auth:signOut',
   'auth:completeSetup',
+  'auth:sessionId',
+  'auth:changePassword',
+  'auth:renewMfa',
+  'auth:renewCancel',
 
   'session:bootstrap',
   'session:refresh',
@@ -40,6 +44,7 @@ export const INVOKE_CHANNELS = [
   'files:pickFolder',
   'files:registerDropped',
   'files:chooseDownloadFolder',
+  'files:saveText',
 
   'hr:clock',
   'hr:break',

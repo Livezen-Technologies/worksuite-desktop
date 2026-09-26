@@ -103,6 +103,7 @@ function Toggle({ k, prefs, label, hint }: { k: keyof Preferences; prefs: Prefer
 }
 
 function General() {
+  const { navigate } = useTab();
   const b = useStore(app, (s) => s.bootstrap);
   const server = useStore(app, (s) => s.auth?.server);
   const prefs = useStore(app, (s) => s.prefs)!;
@@ -112,8 +113,10 @@ function General() {
       <Row label="Language" hint="Sinhala, Tamil, Arabic and Hindi cover the main screens; the rest appears in English.">
         <Select label="Language" value={prefs.language} options={LANGUAGES.map((l) => ({ value: l.id, label: l.label }))} onValueChange={(v) => void updatePrefs({ language: v })} />
       </Row>
-      <Row label="Time zone" hint="From your WorkSuite profile, then your organization, then this computer.">
-        <span className="font-mono text-[13px] text-ink-2">{currentZone()}</span>
+      <Row label="Time zone" hint="From your WorkSuite profile, then your organization, then this computer. Changed in My account › Preferences.">
+        <button type="button" className="font-mono text-[13px] text-primary hover:underline" onClick={() => navigate('/account/preferences')}>
+          {currentZone()}
+        </button>
       </Row>
       <Row label="WorkSuite server" hint={server?.api === 'desktop-v1' ? 'Desktop API' : 'WorkSuite API'}>
         <span className="font-mono text-[13px] text-ink-2">{server ? new URL(server.origin).host : '—'}</span>
@@ -234,11 +237,17 @@ const MODULE_TOGGLES = [
 ] as const;
 
 function NotificationsSection({ prefs }: { prefs: Preferences }) {
+  const { navigate } = useTab();
   const lock = isLocked('notificationPrivacy');
   const paused = useStore(app, (s) => s.status?.notificationsPausedUntil);
   return (
     <>
-      <H title="Notifications" hint="WorkSuite shows notifications even when its window is closed, from the tray." />
+      <H title="Notifications" hint="How this computer shows notifications — even when WorkSuite's window is closed, from the tray." />
+      <Row label="What reaches you, and when" hint="Email and in-app channels, quiet hours and kinds of notification are your account's, on every device.">
+        <Button icon="bell" onClick={() => navigate('/account/notifications')}>
+          Open My account › Notifications
+        </Button>
+      </Row>
       <Toggle k="notificationsEnabled" prefs={prefs} label="Show notifications" />
       <Row label="What notifications show" lock={lock} hint="On the lock screen and while WorkSuite is locked, content is always hidden.">
         <Select
@@ -287,6 +296,7 @@ function NotificationsSection({ prefs }: { prefs: Preferences }) {
 }
 
 function SecuritySection({ prefs }: { prefs: Preferences }) {
+  const { navigate } = useTab();
   const lock = isLocked('appLockMinutes');
   const lockState = useStore(app, (s) => s.lock);
   const max = useStore(app, (s) => s.bootstrap?.policy.app_lock_max_minutes ?? 0);
@@ -303,9 +313,9 @@ function SecuritySection({ prefs }: { prefs: Preferences }) {
           Lock now
         </Button>
       </Row>
-      <Row label="Where you're signed in" hint="Sessions on other devices and browsers.">
-        <Button icon="external" onClick={() => void call('app:openInBrowser', { path: '/account/security' })}>
-          Manage sessions
+      <Row label="Your account's security" hint="Password, two-factor, passkeys, and where you're signed in.">
+        <Button icon="lock" onClick={() => navigate('/account/security')}>
+          Open My account › Security
         </Button>
       </Row>
     </>

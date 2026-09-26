@@ -6,7 +6,8 @@ import { minimiseChatDrawer, openChatDrawer, openOverlay, toggleDock, ui } from 
 import { prettyAccelerator } from '../core/commands';
 import { Icon } from '../components/Icon';
 import { ClockControl } from '../app/overlays/ClockPopover';
-import { Avatar, CountBadge, cx, initials } from '../components/ui';
+import { CountBadge, cx, initials } from '../components/ui';
+import { UserPicture, useMe } from '../components/UserPicture';
 
 /**
  * Title / top bar, 52 px (§4.12 shared shell components): WorkSuite mark,
@@ -17,6 +18,7 @@ import { Avatar, CountBadge, cx, initials } from '../components/ui';
 export function TitleBar() {
   const status = useStore(app, (s) => s.status);
   const user = useStore(app, (s) => s.auth?.user);
+  const me = useMe();
   const bootstrap = useStore(app, (s) => s.bootstrap);
   const orgId = useStore(app, (s) => s.organizationId);
   const overlay = useStore(ui, (s) => s.overlay);
@@ -92,8 +94,8 @@ export function TitleBar() {
           <Icon name="sparkles" size={15} /> {t('shell.ai')}
         </button>
       ) : null}
-      <button type="button" className="no-drag rounded-full ring-2 ring-white/20 hover:ring-white/40" onClick={() => openOverlay('profile')} aria-label={`Account: ${user?.name ?? ''}`}>
-        <Avatar name={user?.name} size={32} className="!bg-[#EEF1FD] !text-[#23349E]" />
+      <button type="button" className="no-drag rounded-full ring-2 ring-white/20 hover:ring-white/40" onClick={() => openOverlay('profile')} aria-label={`Account: ${me?.name ?? user?.name ?? ''}`}>
+        <UserPicture name={me?.name ?? user?.name} src={me?.avatar} size={32} className="!bg-[#EEF1FD] !text-[#23349E]" />
       </button>
     </header>
   );

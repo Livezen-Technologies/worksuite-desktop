@@ -163,6 +163,11 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     always: true,
   },
   {
+    input: defineDesktopManifest({ id: 'account', name: 'My account', icon: 'user', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' }, deepLinks: ['account'] }),
+    load: () => import('./account/AccountPage'),
+    always: true,
+  },
+  {
     input: defineDesktopManifest({ id: 'diagnostics', name: 'Diagnostics', icon: 'stethoscope', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' } }),
     load: () => import('./diagnostics/DiagnosticsPage'),
     always: true,

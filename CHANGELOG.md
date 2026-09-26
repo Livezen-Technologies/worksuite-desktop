@@ -5,6 +5,97 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-26 — 0.2.15: My account, and your real picture in the title bar
+
+**Added**
+
+- **My account** — open it from your picture in the title bar, or "My
+  account" in the command palette. Every screen works against the same
+  server endpoints as the web, so the two always agree.
+  - **Your picture instead of your initials**, in the title bar, the account
+    menu and every account screen. It follows changes made on the web.
+  - **The account menu** shows how you appear to others (Online, Busy, Do
+    not disturb, Away, Appear offline — with the Chat app) and when you
+    clocked in (with HR). It has My account's sections, this computer's
+    Settings, Help, Lock and Sign out. The Security row says whether
+    two-factor is on.
+  - **My profile**: your picture, name, job and company, local time, how to
+    reach you, and what your organisation set. With HR you also see your
+    working hours and who you report to. A checklist shows what is still
+    missing (picture, phone, two-factor, passkey), and a security summary.
+  - **Profile settings**:
+    - your name and phone, which you can change;
+    - your time zone;
+    - who sees your picture;
+    - email, company, department and job title, shown read-only with who
+      changes them.
+  - **Profile pictures**:
+    - upload a photo, then move, zoom or rotate it in a round frame before
+      it is saved;
+    - or make an avatar (initials, abstract or illustrated, ten
+      backgrounds, skin tones, a border);
+    - earlier photos and avatars can be used again, saved as a copy,
+      changed (avatars) or deleted;
+    - choose who sees your picture;
+    - a picture waiting for an administrator's approval says so, and can
+      be withdrawn.
+  - **Security**:
+    - **Two-factor**: turn it on by scanning a QR code or typing the key,
+      entering the code, and saving the ten backup codes (as a file or by
+      copying); make new codes; turn it off with your password.
+    - **Passkeys**: rename or revoke them. A passkey is still *added* in
+      the browser (the button opens it), because it belongs to WorkSuite's
+      web address.
+    - **Where you're signed in**, with this computer marked. Sign one
+      device out, or all the others.
+    - **Recent sign-ins**, including failed attempts on your address. The
+      rail shows a count when there were failed attempts this week.
+  - **Changing your password keeps this computer signed in.** The server
+    signs out every session, this one included, so the app signs straight
+    back in with the new password. With two-factor on, it asks for the code
+    first.
+  - **Preferences**: time zone, whether it is detected automatically,
+    language, date and time format, first day of the week (the company's
+    or your own), plus theme, density and read receipts.
+  - **Notifications**: the account's own settings, which apply on every
+    device — on/off, sound, email and in-app, quiet hours with their time
+    zone, which kinds reach you by which channel, and chat alerts and Do
+    not disturb. The whole set is saved on every change, because the
+    server replaces it.
+  - **My access**: which modules you can open and why, and which
+    permissions you hold.
+- Web links to `/account/settings?tab=…`, `/account/security` and
+  `/account/access` open here. Settings' Security, Notifications and time
+  zone rows point to My account.
+
+**Changed**
+
+- **The API proxy now filters `/api/auth` by method**, so the renderer can
+  manage your own two-factor, passkeys and sessions:
+  - still refused: answering a sign-in (`POST /auth/mfa`), exchanging a
+    passkey code, ending every session at once, and changing the password;
+  - password changes go through the main process (`auth:changePassword`).
+  - The tests list every allowed and refused call.
+
+**Notes**
+
+- **Needs the server's `GET /api/auth/sign-ins`** (LHCP 36660ea1, not yet
+  deployed) for Recent sign-ins and "password changed … ago". Until it is
+  deployed, those two parts are simply not shown.
+- New IPC channels:
+  - `auth:sessionId` — this app's session, from the token's `sid`;
+  - `auth:changePassword`, `auth:renewMfa` and `auth:renewCancel`;
+  - `files:saveText` — save a short text file through a save dialog.
+  - `transfers:download` also takes `picture`, one of your profile
+    pictures.
+- **Session revocation is immediate** on the server. Between a password
+  change and the new session, the app holds token refreshes, so a request
+  made in that gap waits instead of signing the app out.
+- **Fixed before release**: pasting a whole six-digit code submitted
+  before the code had registered.
+
+---
+
 ## 2026-09-26 — 0.2.14: the unread count shows on the Dock icon
 
 **Fixed**

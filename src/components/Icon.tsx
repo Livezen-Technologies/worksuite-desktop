@@ -26,6 +26,7 @@ import {
   Monitor, Moon, Notebook, Package, Paperclip, Pause, Phone, Pin, PinOff, Play, Plus, Printer, Receipt, RefreshCw, Repeat, Reply, ReplyAll,
   RotateCcw, Search, Send, Server, Settings, Settings2, ShieldAlert, ShieldCheck, ShoppingCart, Smile, Sparkles, SquareCheck, SquarePen, Star,
   Stethoscope, Store, Sun, Timer, Trash2, TrendingUp, TriangleAlert, Upload, UserRound, Users, Video, Wallet, Wifi, WifiOff, Wrench, X, Zap,
+  SlidersHorizontal, Image, RotateCw, CircleHelp, Shield, Dices, Crop,
   Forward, PanelLeftClose, PanelLeftOpen, Mic, MicOff, VideoOff, PhoneOff, PhoneIncoming, MonitorUp, Maximize2, Camera, Film, Music, Square, AtSign, Cake, Smartphone, MapPin, Tag, List, type LucideIcon,
 } from 'lucide-react';
 
@@ -53,6 +54,7 @@ const ICONS: Record<string, LucideIcon> = {
   camera: Camera, film: Film, music: Music, stop: Square, at: AtSign,
   cake: Cake, mobile: Smartphone, 'map-pin': MapPin, tag: Tag, list: List,
   weight: Weight, key: Key, 'user-plus': UserPlus, door: DoorOpen, chart: ChartColumn, 'calendar-check': CalendarCheck, hourglass: Hourglass, 'chevrons-up-down': ChevronsUpDown, 'check-check': CheckCheck, 'more-vertical': EllipsisVertical, handshake: Handshake, volume: Volume2, 'volume-off': VolumeX, 'audio-lines': AudioLines, minimize: Minimize2, 'folder-plus': FolderPlus, 'file-code': FileCode, unlock: LockOpen, 'zoom-in': ZoomIn, 'zoom-out': ZoomOut,
+  sliders: SlidersHorizontal, image: Image, 'rotate-cw': RotateCw, help: CircleHelp, shield: Shield, dice: Dices, crop: Crop,
 };
 
 export function Icon({ name, size = 18, className, strokeWidth = 1.8, label }: { name: string; size?: number; className?: string; strokeWidth?: number; label?: string }) {

@@ -3,7 +3,7 @@ import os from 'node:os';
 import { writeFile } from 'node:fs/promises';
 import type { TabRecord } from '@shared/ipc/contract';
 import type { AppInfo, BusyReport } from '@shared/types';
-import { DesktopError } from './errors';
+import { DesktopError, isDesktopError } from './errors';
 import type { AppContext } from './context';
 import type { IpcRouter } from '../ipc/router';
 import { applyAutostart } from './autostart';
@@ -14,6 +14,7 @@ import { listPrinters, printHtml, printToPdf } from '../services/print';
 import { createZip } from '../services/zip';
 import { openExternalSafely } from '../security/hardening';
 import { broadcast } from './events';
+import { logger } from './log';
 
 /** The chat attachment menu's kinds of file, as open-dialog filters. */
 const PICK_FILTERS: Record<'gif' | 'document' | 'image' | 'video' | 'audio', Electron.FileFilter> = {
@@ -135,6 +136,37 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   });
   router.handle('auth:signOut', (input) => ctx.session.signOut(!!input?.wipe));
   router.handle('auth:completeSetup', () => ctx.session.completeSetup());
+  router.handle('auth:sessionId', () => ({ sid: ctx.auth.sessionId() }));
+  router.handle('auth:changePassword', async (input) => {
+    const email = ctx.bootstrap.get()?.user.email;
+    if (!email) throw new DesktopError('NOT_SIGNED_IN', 'Sign in first.');
+    // A token about to expire is renewed first: once refreshes are held, nothing could renew it.
+    if (!ctx.auth.accessToken() && (await ctx.auth.refresh()) !== 'ok') throw new DesktopError('SESSION_EXPIRED', 'Sign in again first.');
+    ctx.auth.hold();
+    try {
+      await ctx.http.post('/api/auth/password', { current_password: input.current, new_password: input.next });
+    } catch (e) {
+      // Refused (wrong current password, a rule not met): nothing changed, the session with it.
+      ctx.auth.release('ok');
+      throw e;
+    }
+    try {
+      return { outcome: await ctx.auth.renew(email, input.next) };
+    } catch (e) {
+      // Changed, but not signed in again: the old session is gone, so the app asks for the new password.
+      logger('auth').info('could not sign in again after the password change', { code: isDesktopError(e) ? e.code : 'INTERNAL' });
+      ctx.auth.release('lost');
+      return { outcome: 'later' as const };
+    }
+  });
+  router.handle('auth:renewMfa', async (input) => {
+    if (!ctx.auth.isHeld()) throw new DesktopError('MFA_INVALID', 'That sign-in expired. Sign in again with your new password.');
+    await ctx.auth.renewMfa(input.code);
+    return { renewed: true as const };
+  });
+  router.handle('auth:renewCancel', () => {
+    ctx.auth.release('lost');
+  });
 
   router.handle('session:bootstrap', (_i, c) => {
     if (winOf(c.sender) === ctx.windows.getMain()) setTimeout(() => ctx.flushNavigation(), 300);
@@ -229,6 +261,14 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     ctx.settings.update({ downloadFolder: res.filePaths[0] });
     return res.filePaths[0];
   });
+  router.handle('files:saveText', async (input, c) => {
+    const w = winOf(c.sender);
+    const opts: Electron.SaveDialogOptions = { title: 'Save', defaultPath: `${ctx.settings.effective().downloadFolder}/${input.name}`, filters: [{ name: 'Text', extensions: ['txt'] }] };
+    const res = w ? await dialog.showSaveDialog(w, opts) : await dialog.showSaveDialog(opts);
+    if (res.canceled || !res.filePath) return null;
+    await writeFile(res.filePath, input.text, { encoding: 'utf8', mode: 0o600 });
+    return res.filePath;
+  });
   router.handle('files:registerDropped', (input) => ctx.transfers.register(input.paths));
   router.handle('transfers:list', () => ctx.transfers.list());
   router.handle('transfers:download', async (input) => {
@@ -239,7 +279,9 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       return ctx.transfers.download(`/${String(link.url).replace(/^\/+/, '')}`, input.name, !!input.open, null);
     }
     const r = input.hrReport;
-    const path = input.hrLetter
+    const path = input.picture
+      ? `/api/users/me/pictures/${input.picture}/original`
+      : input.hrLetter
       ? input.hrLetter === 'mine'
         ? '/api/hr/me/resignation/letter'
         : `/api/hr/resignations/${input.hrLetter}/letter`

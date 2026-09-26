@@ -407,6 +407,94 @@ export class AuthService {
     return true;
   }
 
+  /**
+   * Which of the account's sessions is this app's: the `sid` claim of the
+   * access token, which is the id of the refresh token behind it (the rows
+   * `GET /api/auth/sessions` lists). It changes whenever the session is
+   * refreshed. Read without verifying — it is our own token, and the id is
+   * only used to label "This device" and to leave it out of "Sign out others".
+   */
+  sessionId(): number | null {
+    const token = this.access?.token;
+    const payload = token?.split('.')[1];
+    if (!payload) return null;
+    try {
+      const sid = (JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { sid?: unknown }).sid;
+      const n = typeof sid === 'string' ? Number(sid) : sid;
+      return typeof n === 'number' && Number.isInteger(n) && n > 0 ? n : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Stay signed in after a password change. The server ends every session of
+   * the account when the password changes — this one too, at once (the auth
+   * filter checks the token's session) — so the app signs in again with the
+   * new password and carries on.
+   *
+   * Between the change and the new session, anything this app sends is
+   * refused, and a refusal would normally spend the refresh token — which is
+   * revoked — and end the session. So refreshes are HELD first: a request
+   * refused meanwhile waits for the new session and is sent again with it.
+   * `hold()` before the change; the change's outcome releases it.
+   */
+  private held: ((r: 'ok' | 'lost') => void) | null = null;
+
+  hold(): void {
+    if (this.held) return;
+    let done!: (r: 'ok' | 'lost') => void;
+    const waiting = new Promise<'ok' | 'offline' | 'lost'>((resolve) => {
+      done = resolve;
+    });
+    // Nobody finishes it (a code never typed): the session is gone, as the server says.
+    const timer = setTimeout(() => this.release('lost'), 5 * 60_000);
+    timer.unref?.();
+    this.held = (r) => {
+      clearTimeout(timer);
+      this.held = null;
+      this.refreshing = null;
+      if (r === 'lost') {
+        this.secrets.delete(REFRESH_KEY);
+        this.access = null;
+      }
+      done(r);
+    };
+    this.refreshing = waiting;
+  }
+
+  /** Ends a hold: 'ok' with a new session (or nothing changed), 'lost' when there is none. */
+  release(r: 'ok' | 'lost'): void {
+    this.held?.(r);
+  }
+
+  isHeld(): boolean {
+    return this.held !== null;
+  }
+
+  /**
+   * Sign in again with the new password. An account with two-factor gets the
+   * code challenge back instead ('mfa') and stays held; `renewMfa` finishes.
+   */
+  async renew(email: string, password: string): Promise<'renewed' | 'mfa'> {
+    const { res, json } = await this.post('/api/auth/login', { email, password });
+    if (!res.ok) throw errorFromResponse(res.status, json as never, res.headers.get('retry-after'));
+    const data = (json?.data ?? {}) as Record<string, unknown>;
+    if (data.mfa_required === true && typeof data.challenge === 'string') {
+      this.challenge = { token: data.challenge, email, expiresAt: Date.now() + 5 * 60_000 };
+      return 'mfa';
+    }
+    this.accept(data);
+    this.release('ok');
+    return 'renewed';
+  }
+
+  /** The code for a renewal; a wrong one keeps the hold, so it can be typed again. */
+  async renewMfa(code: string): Promise<void> {
+    await this.verifyMfa(code);
+    this.release('ok');
+  }
+
   async signOut(): Promise<void> {
     const token = this.secrets.get(REFRESH_KEY);
     const bearer = this.access?.token;

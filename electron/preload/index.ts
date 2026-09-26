@@ -65,6 +65,10 @@ const api = {
     passkeyCancel: call('auth:passkeyCancel'),
     signOut: call('auth:signOut'),
     completeSetup: call('auth:completeSetup'),
+    sessionId: call('auth:sessionId'),
+    changePassword: call('auth:changePassword'),
+    renewMfa: call('auth:renewMfa'),
+    renewCancel: call('auth:renewCancel'),
   },
   session: {
     bootstrap: call('session:bootstrap'),
@@ -88,6 +92,7 @@ const api = {
     pickFiles: call('files:pickFiles'),
     pickFolder: call('files:pickFolder'),
     chooseDownloadFolder: call('files:chooseDownloadFolder'),
+    saveText: call('files:saveText'),
     /** Files from a real drag & drop or <input type=file>: converted to handles in main. */
     registerDropped: (files: File[]): Promise<unknown> => {
       const paths = Array.from(files)

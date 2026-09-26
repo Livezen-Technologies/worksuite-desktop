@@ -129,9 +129,24 @@ describe('API proxy (renderer never sees credentials)', () => {
     expect(isProxyPathAllowed('/media/hls/abc/master.m3u8')).toBe(false);
     expect(isProxyPathAllowed('/fd/token')).toBe(false);
     expect(isProxyPathAllowed('/api/auth/me')).toBe(true);
-    for (const p of ['/api/auth/login', '/api/auth/refresh', '/api/auth/mfa', '/api/notifications/realtime-ticket', '/api/sync/hello', '/api/../admin', '/admin', '/api//x']) {
+    for (const p of ['/api/auth/login', '/api/auth/refresh', '/api/notifications/realtime-ticket', '/api/sync/hello', '/api/../admin', '/admin', '/api//x']) {
       expect(isProxyPathAllowed(p), p).toBe(false);
     }
+  });
+
+  it('lets My account manage its own sign-in methods, and nothing that answers a sign-in', () => {
+    const ok: Array<[string, string]> = [
+      ['GET', '/api/auth/mfa'], ['DELETE', '/api/auth/mfa'], ['POST', '/api/auth/mfa/setup'], ['POST', '/api/auth/mfa/confirm'], ['POST', '/api/auth/mfa/backup-codes'],
+      ['GET', '/api/auth/passkeys'], ['PATCH', '/api/auth/passkeys/4'], ['DELETE', '/api/auth/passkeys/4'],
+      ['GET', '/api/auth/sessions'], ['DELETE', '/api/auth/sessions/645'], ['GET', '/api/auth/sign-ins'], ['GET', '/api/auth/password-policy'],
+    ];
+    for (const [m, p] of ok) expect(isProxyPathAllowed(p, m), `${m} ${p}`).toBe(true);
+    const refused: Array<[string, string]> = [
+      ['POST', '/api/auth/mfa'], ['POST', '/api/auth/login'], ['POST', '/api/auth/refresh'], ['POST', '/api/auth/password'],
+      ['POST', '/api/auth/passkeys/desktop/exchange'], ['POST', '/api/auth/passkeys/revoke-all'], ['POST', '/api/auth/passkeys/4'],
+      ['DELETE', '/api/auth/sessions'], ['GET', '/api/auth/sessions/645'], ['POST', '/api/auth/mfa/setup/../../login'], ['POST', '/media/abcdefgh12'],
+    ];
+    for (const [m, p] of refused) expect(isProxyPathAllowed(p, m), `${m} ${p}`).toBe(false);
   });
   it('serves the cached answer, marked offline, when the server is unreachable', async () => {
     const db = new Database(':memory:');
