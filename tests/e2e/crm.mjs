@@ -125,7 +125,12 @@ try {
   await t.evaluate(rail('Follow-ups'));
   await t.waitFor(heading('Follow-ups'), 'Follow-ups');
   // Due within a day counts as due today (the server's rolling 24 hours), which is the view it opens on.
-  await t.waitFor(`!!document.querySelector('[data-followup="${fu.id}"]')`, 'the follow-up card', 20_000);
+  // Scheduled for tomorrow shortly after midnight, it is more than a day off and To come instead.
+  const inToday = await t.waitFor(`!!document.querySelector('[data-followup="${fu.id}"]')`, 'the follow-up card', 6_000).then(() => true, () => false);
+  if (!inToday) {
+    await t.evaluate(`[...document.querySelectorAll('main [role="tab"]')].find(b => b.textContent.startsWith('To come')).click()`);
+    await t.waitFor(`!!document.querySelector('[data-followup="${fu.id}"]')`, 'the follow-up card', 20_000);
+  }
   await t.shot('crm-followups');
   await t.evaluate(clickIn(`document.querySelector('[data-followup="${fu.id}"]')`, 'Move'));
   await t.waitFor(`!!${dialog('Move the follow-up')}`, 'the move form');
@@ -230,6 +235,118 @@ try {
   t.check('two leads are reassigned together', both[0] === null && both[1] === null, js(both));
   await t.evaluate(`document.documentElement.dataset.theme = 'dark'`);
   await t.shot('crm-leads-dark');
+  await t.evaluate(`document.documentElement.dataset.theme = 'light'`);
+
+  // ── part 2: accounts, the 360, a contact and a note ───────────────────
+  await t.evaluate(rail('Accounts'));
+  await t.waitFor(heading('Accounts'), 'Accounts');
+  await t.evaluate(clickIn(`document.querySelector('main')`, 'New account'));
+  await t.waitFor(`!!${dialog('New account')}`, 'the new account form');
+  await t.evaluate(setValue('[role="dialog"][aria-label="New account"] input[aria-label="Name"]', `${co} Holdings`));
+  await t.evaluate(setValue('[role="dialog"][aria-label="New account"] input[aria-label="Industry"]', 'Hospitality'));
+  await t.evaluate(clickIn(dialog('New account'), 'Create account'));
+  const acc = await poll(() => api('GET', `/api/crm/accounts?q=${encodeURIComponent(`${co} Holdings`)}`), (r) => (r.data?.accounts ?? []).length === 1);
+  const accountId = acc.data?.accounts?.[0]?.id;
+  t.check('New account makes one, and opens its 360', !!accountId);
+  await t.waitFor(`!!${inAside('Account')} && ${inAside('Account')}.textContent.includes(${js(`${co} Holdings`)})`, 'the account drawer', 20_000);
+  await t.evaluate(choose(`aside[aria-label="Account"] [role="combobox"][aria-label="Health"]`, 'watch'));
+  const health = await poll(() => api('GET', `/api/crm/accounts/${accountId}`), (r) => r.data?.account?.health === 'watch');
+  t.check('health is set by a person', health.data?.account?.health === 'watch');
+  await t.evaluate(clickIn(inAside('Account'), 'Add contact'));
+  await t.waitFor(`!!${dialog('Add a contact')}`, 'the add contact form');
+  await t.evaluate(setValue('[role="dialog"][aria-label="Add a contact"] input[aria-label="Contact name"]', 'Kamal Buyer'));
+  await t.evaluate(clickIn(dialog('Add a contact'), 'Add contact'));
+  const withContact = await poll(() => api('GET', `/api/crm/accounts/${accountId}`), (r) => (r.data?.contacts ?? []).some((c) => c.name === 'Kamal Buyer'));
+  t.check('a contact is added under the account', (withContact.data?.contacts ?? []).some((c) => c.name === 'Kamal Buyer'));
+  await t.evaluate(`[...${inAside('Account')}.querySelectorAll('[role="tab"]')].find(b => b.textContent.trim() === 'timeline').click()`);
+  await t.waitFor(`!!document.querySelector('aside[aria-label="Account"] input[aria-label="Note"]')`, 'the note box');
+  await t.evaluate(setValue('aside[aria-label="Account"] input[aria-label="Note"]', 'Asked for a site visit in October'));
+  await t.evaluate(clickIn(inAside('Account'), 'Add'));
+  const noted = await poll(() => api('GET', `/api/crm/accounts/${accountId}`), (r) => (r.data?.timeline ?? []).some((e) => (e.title ?? '').includes('site visit')));
+  t.check("a note goes on the customer's file", (noted.data?.timeline ?? []).some((e) => (e.title ?? '').includes('site visit')));
+  // The drawer reads itself again after each change; wait for the last of them before looking.
+  await t.waitFor(`${inAside('Account')}.textContent.includes('site visit') && ${inAside('Account')}.textContent.includes('Watch')`, 'the drawer showing the note and the health', 20_000);
+  await t.shot('crm-account-360');
+  await t.evaluate(clickIn(inAside('Account'), 'Close'));
+
+  // ── the price list ────────────────────────────────────────────────────
+  await t.evaluate(rail('Price list'));
+  await t.waitFor(heading('Price list'), 'Price list');
+  await t.evaluate(clickIn(`document.querySelector('main')`, 'New product'));
+  await t.waitFor(`!!${dialog('New product')}`, 'the product editor');
+  await t.evaluate(setValue('[role="dialog"][aria-label="New product"] input[aria-label="Name"]', `${co} Seat`));
+  await t.evaluate(setValue('[role="dialog"][aria-label="New product"] input[aria-label="Code"]', `E2E-${tag}`));
+  await t.evaluate(setValue('[role="dialog"][aria-label="New product"] input[aria-label="Unit price"]', '1000'));
+  await t.evaluate(setValue('[role="dialog"][aria-label="New product"] input[aria-label="Tax rate"]', '18'));
+  await t.evaluate(clickIn(dialog('New product'), 'Add'));
+  const prod = await poll(() => api('GET', `/api/crm/products?q=${encodeURIComponent(`${co} Seat`)}`), (r) => (r.data?.products ?? []).length === 1);
+  const product = prod.data?.products?.[0];
+  t.check('a product is added to the price list', !!product && product.unit_price === 1000 && product.tax_rate === 18, js(product ?? {}));
+
+  // ── a quote: lines, totals, sent, revised ─────────────────────────────
+  await t.evaluate(rail('Quotes'));
+  await t.waitFor(heading('Quotes'), 'Quotes');
+  await t.evaluate(clickIn(`document.querySelector('main')`, 'New quote'));
+  await t.waitFor(`!!${inAside('Quote')} && !!document.querySelector('aside[aria-label="Quote"] [role="combobox"][aria-label="Account"]')`, 'the quote editor', 20_000);
+  await t.evaluate(choose('aside[aria-label="Quote"] [role="combobox"][aria-label="Account"]', String(accountId)));
+  await t.evaluate(choose('aside[aria-label="Quote"] [role="combobox"][aria-label="Line 1 from the price list"]', String(product?.id)));
+  await t.evaluate(setValue('aside[aria-label="Quote"] input[aria-label="Line 1 quantity"]', '2'));
+  await sleep(300);
+  const shown = await t.evaluate(`${inAside('Quote')}.textContent`);
+  t.check('the editor adds it up as the server will (2 × 1,000 + 18% tax)', shown.includes('2,360.00'), shown.slice(0, 200));
+  await t.evaluate(clickIn(inAside('Quote'), 'Create quote'));
+  const qs = await poll(() => api('GET', `/api/crm/quotes?q=${encodeURIComponent(`${co} Holdings`)}`), (r) => (r.data?.quotes ?? []).length >= 1);
+  const quote = qs.data?.quotes?.[0];
+  t.check('the quote is created as a draft with the server\'s totals', !!quote && quote.status === 'draft' && quote.total === 2360, js(quote ?? {}));
+  await t.waitFor(`!!${inAside('Quote')} && ${inAside('Quote')}.textContent.includes(${js(quote?.quote_no ?? '?')})`, 'the new quote open', 20_000);
+  await t.evaluate(clickIn(inAside('Quote'), 'Mark as sent'));
+  await t.waitFor(`!!${dialog('Mark as sent')}`, 'the mark-as-sent dialog');
+  await t.evaluate(setValue('[role="dialog"][aria-label="Mark as sent"] input[aria-label="How it was sent"]', 'emailed'));
+  await t.evaluate(clickIn(dialog('Mark as sent'), 'Mark as sent'));
+  const sent = await poll(() => api('GET', `/api/crm/quotes/${quote?.id}`), (r) => r.data?.quote?.status === 'sent');
+  t.check('Mark as sent freezes it', sent.data?.quote?.status === 'sent' && !!sent.data?.quote?.sent_at);
+  await t.waitFor(`${inAside('Quote')}.textContent.includes('The figures are fixed')`, 'the read-only quote');
+  await t.shot('crm-quote-sent');
+  await t.evaluate(clickIn(inAside('Quote'), 'Revise'));
+  await t.waitFor(`!!${dialog('Create a revision?')}`, 'the revision dialog');
+  await t.evaluate(clickIn(dialog('Create a revision?'), 'Create revision'));
+  const revised = await poll(() => api('GET', `/api/crm/quotes?q=${encodeURIComponent(`${co} Holdings`)}`), (r) => (r.data?.quotes ?? []).length >= 2);
+  const newest = (revised.data?.quotes ?? [])[0];
+  const old = (await api('GET', `/api/crm/quotes/${quote?.id}`)).data?.quote;
+  t.check('Revise makes a new draft and expires the old one', newest?.status === 'draft' && newest.id !== quote?.id && old?.status === 'expired', js({ newest: newest?.status, old: old?.status }));
+
+  // Retiring the product now leaves the quote's lines alone.
+  await t.evaluate(rail('Price list'));
+  await t.waitFor(`!!document.querySelector('[data-product="${product?.id}"]')`, 'the product row', 20_000);
+  await t.evaluate(clickIn(`document.querySelector('[data-product="${product?.id}"]')`, 'Retire'));
+  await t.waitFor(`!!${dialog(`Retire ${co} Seat?`)}`, 'the retire confirmation');
+  await t.evaluate(clickIn(dialog(`Retire ${co} Seat?`), 'Retire'));
+  const retired = await poll(() => api('GET', `/api/crm/products?include_inactive=1&q=${encodeURIComponent(`${co} Seat`)}`), (r) => r.data?.products?.[0]?.active === false);
+  t.check('a product is retired, not deleted', retired.data?.products?.[0]?.active === false);
+
+  // ── lead intake: a source, a delivery ─────────────────────────────────
+  await t.evaluate(rail('Lead intake'));
+  await t.waitFor(heading('Lead intake'), 'Lead intake');
+  await t.evaluate(clickIn(`document.querySelector('main')`, 'New source'));
+  await t.waitFor(`!!${dialog('New intake source')}`, 'the source form');
+  await t.evaluate(setValue('[role="dialog"][aria-label="New intake source"] input[aria-label="Source name"]', `${co} web form`));
+  await t.evaluate(clickIn(dialog('New intake source'), 'Save'));
+  const src = await poll(() => api('GET', '/api/crm/intake-sources'), (r) => (r.data?.sources ?? []).some((x) => x.name === `${co} web form`));
+  const source = (src.data?.sources ?? []).find((x) => x.name === `${co} web form`);
+  t.check('a web-form source is made, with its own address', !!source && /\/api\/crm\/intake\/[a-f0-9]{40}$/.test(source.url ?? ''), source?.url);
+  const posted = await fetch(`${server}/api/crm/intake/${(source?.url ?? '').split('/').pop()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Webform Lead', email: `webform-${tag}@probe.invalid`, company: `${co} Web` }) }).then((r) => r.json()).catch(() => ({}));
+  const ev = await poll(() => api('GET', `/api/crm/intake-sources/${source?.id}/events`), (r) => (r.data?.events ?? []).length >= 1);
+  t.check('a form posting to it makes a lead, and the delivery is logged', posted.ok === true && ev.data?.events?.[0]?.outcome === 'created', js({ posted, outcome: ev.data?.events?.[0]?.outcome }));
+  await t.waitFor(`!!document.querySelector('[data-source="${source?.id}"]')`, 'the source card', 20_000);
+  await t.evaluate(clickIn(`document.querySelector('[data-source="${source?.id}"]')`, 'Deliveries'));
+  await t.waitFor(`!!${inAside('Deliveries')} && ${inAside('Deliveries')}.textContent.includes('New lead')`, 'the deliveries log', 20_000);
+  await t.shot('crm-intake-deliveries');
+  await t.evaluate(clickIn(inAside('Deliveries'), 'Close'));
+
+  // ── settings and my access (looked at, not changed: they are the installation's) ──
+  await t.evaluate(rail('Settings'));
+  await t.waitFor(`${heading('CRM settings')} && !!document.querySelector('main input[aria-label="Quote prefix"]')`, 'CRM settings');
+  t.check('CRM settings open with their values', (await t.evaluate(`document.querySelector('main input[aria-label="Quote prefix"]').value`)) !== '');
 } catch (e) {
   t.check('the run finished', false, String(e?.stack ?? e));
 } finally {

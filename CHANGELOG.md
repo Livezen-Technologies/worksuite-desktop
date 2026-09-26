@@ -5,6 +5,67 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-27 — 0.2.22: CRM, part 2 — accounts, quotes, the price list, lead intake, settings
+
+**Added**
+
+- **CRM is now fully drawn by the desktop.** Accounts, Quotes, Price list,
+  Lead intake, Settings and My access open here instead of in the browser.
+  Searching the CRM for an account opens it here too.
+  - **Accounts:**
+    - the list, filtered by type or to your own, with health, owner,
+      contacts, open deals, open value and last activity;
+    - an account opens as a customer overview. It has tiles for open
+      deals, won, projects and meetings, its details and contacts, and
+      its deals, quotes, projects and meetings, each opening where it
+      lives;
+    - a timeline with a box for a note on the customer's file;
+    - type, health and owner are set from the drawer. Health is "set by a
+      person, not guessed".
+    - New account (names must be unique), and Add a contact, optionally
+      as the main contact.
+  - **Quotes:**
+    - the list with what is out in each status;
+    - a draft opens in the editor: lines from the price list or typed,
+      quantity, rate, discount and tax per line, a discount on the whole,
+      and notes and terms;
+    - totals are worked out as the server works them out, while typing;
+    - PDF saves to your downloads (and to your Drive, as the server does);
+    - Mark as sent records how it went and fixes the figures;
+    - a sent quote is read-only, with Accepted, Declined and Revise.
+      Revise makes a new draft and marks the old quote expired, which the
+      dialog says, "even though it was accepted" where it was.
+    - A draft can be deleted.
+  - **Price list:** products with code, kind, price, tax and unit. New,
+    Edit, Retire ("it comes out of the picker; quotes that already use it
+    keep their lines") and Bring back.
+  - **Lead intake:**
+    - web-form sources, each with its own address to copy;
+    - Change gives a source a new address (the old one stops at once);
+    - Remove stops it taking anything new;
+    - field mappings for forms that use other names;
+    - who gets its leads, and whether it is accepting;
+    - Deliveries shows what each post was judged to be, with what arrived;
+    - Import a spreadsheet: a CSV previewed first (new, already here,
+      refused, line by line), then imported.
+  - **Settings:** quote prefix and padding, default currency, how long a
+    quote is valid, when a deal counts as stalled, and the company details
+    and terms printed on quotes. They are the installation's; read-only
+    without CRM settings.
+  - **My access:** each CRM right, and whether it is granted directly or
+    through Manage CRM.
+- `tests/e2e/crm.mjs` covers all of it (30 checks):
+  - accounts: new, health, a contact, a note;
+  - a quote: a price-list line, the totals the server makes, sent, revised;
+  - the price list: a product added and retired;
+  - lead intake: a source that a form posts a lead to, and its delivery log;
+  - settings.
+
+  The follow-up step no longer depends on the time of day: a follow-up for
+  tomorrow is "To come" just after midnight.
+
+---
+
 ## 2026-09-26 — 0.2.21: calls and meetings, redrawn around the shared screen
 
 **Changed**

@@ -14,7 +14,7 @@ import { cx } from '../../components/ui';
 export type CrmView = 'dash' | 'pipe' | 'leads' | 'fu' | 'acc' | 'quotes' | 'price' | 'intake' | 'set' | 'access';
 
 /** Drawn here; the rest opens WorkSuite CRM in the browser for now. */
-export const NATIVE = new Set<CrmView>(['dash', 'pipe', 'leads', 'fu']);
+export const NATIVE = new Set<CrmView>(['dash', 'pipe', 'leads', 'fu', 'acc', 'quotes', 'price', 'intake', 'set', 'access']);
 
 interface Item {
   id: CrmView;

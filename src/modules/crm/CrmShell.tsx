@@ -1,5 +1,4 @@
 import { lazy, Suspense } from 'react';
-import { call } from '../../core/bridge';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { Spinner } from '../../components/ui';
 import type { ModuleProps } from '../registry';
@@ -9,12 +8,20 @@ import { CrmRail, NATIVE, type CrmView } from './Rail';
 /**
  * CRM (the "11 · CRM" designs): the rail, and the screen it points at.
  * Addressed as `/crm?tab=…`; a lead as `/crm/leads/<id>` (what notifications
- * and search link to), a deal as `?deal=<id>`, and `?new=1` opens New lead.
+ * and search link to), a deal as `?deal=<id>`, an account as `?account=<id>`
+ * (the web's address for one), a quote as `?quote=<id>`, and `?new=1` opens
+ * the New form of the screen it is on.
  */
 const Dashboard = lazy(() => import('./Dashboard'));
 const Leads = lazy(() => import('./Leads'));
 const FollowUps = lazy(() => import('./FollowUps'));
 const Pipeline = lazy(() => import('./Pipeline'));
+const Accounts = lazy(() => import('./Accounts'));
+const Quotes = lazy(() => import('./Quotes'));
+const PriceList = lazy(() => import('./PriceList'));
+const Intake = lazy(() => import('./Intake'));
+const CrmSettings = lazy(() => import('./Settings'));
+const CrmAccess = lazy(() => import('./Settings').then((m) => ({ default: m.Access })));
 
 const TITLES: Record<CrmView, string> = {
   dash: 'Dashboard',
@@ -35,9 +42,11 @@ export default function CrmShell(_props: ModuleProps) {
   const { path, query, go } = useTab();
   const lead = path[1] === 'leads' ? num(path[2]) : num(query.get('lead'));
   const deal = num(query.get('deal'));
+  const account = num(query.get('account'));
+  const quote = num(query.get('quote'));
   const creating = query.get('new') === '1';
   const asked = (query.get('tab') ?? '') as CrmView;
-  const view: CrmView = lead || creating ? 'leads' : deal ? 'pipe' : asked && NATIVE.has(asked) ? asked : 'dash';
+  const view: CrmView = asked && NATIVE.has(asked) ? asked : lead || creating ? 'leads' : deal ? 'pipe' : account ? 'acc' : quote ? 'quotes' : 'dash';
   useTabTitle(`CRM · ${TITLES[view]}`);
 
   const dash = useDashboard(false);
@@ -62,7 +71,7 @@ export default function CrmShell(_props: ModuleProps) {
         onOpenHit={(h) => {
           if (h.type === 'lead') go(`/crm/leads/${h.id}`);
           else if (h.type === 'deal') go(`/crm?tab=pipe&deal=${h.id}`);
-          else if (h.type === 'account') void call('app:openInBrowser', { path: `/crm?account=${h.id}` });
+          else if (h.type === 'account') go(`/crm?tab=acc&account=${h.id}`);
           else go('/crm?tab=leads');
         }}
       />
@@ -72,6 +81,22 @@ export default function CrmShell(_props: ModuleProps) {
           {view === 'leads' ? <Leads openId={lead} creating={creating} onNew={() => go('/crm?tab=leads&new=1')} onOpen={(id) => go(id ? `/crm/leads/${id}` : '/crm?tab=leads')} onCreated={(id) => go(`/crm/leads/${id}`)} onCloseNew={() => go('/crm?tab=leads')} onOpenDeal={(id) => go(`/crm?tab=pipe&deal=${id}`)} /> : null}
           {view === 'fu' ? <FollowUps onOpenLead={(id) => go(`/crm/leads/${id}`)} /> : null}
           {view === 'pipe' ? <Pipeline openId={deal} onOpen={(id) => go(id ? `/crm?tab=pipe&deal=${id}` : '/crm?tab=pipe')} /> : null}
+          {view === 'acc' ? (
+            <Accounts
+              openId={account}
+              creating={creating}
+              onOpen={(id) => go(id ? `/crm?tab=acc&account=${id}` : '/crm?tab=acc')}
+              onNew={() => go('/crm?tab=acc&new=1')}
+              onCloseNew={() => go('/crm?tab=acc')}
+              onOpenDeal={(id) => go(`/crm?tab=pipe&deal=${id}`)}
+              onOpenQuote={(id) => go(`/crm?tab=quotes&quote=${id}`)}
+            />
+          ) : null}
+          {view === 'quotes' ? <Quotes openId={quote} creating={creating} onOpen={(id) => go(id ? `/crm?tab=quotes&quote=${id}` : '/crm?tab=quotes')} onNew={() => go('/crm?tab=quotes&new=1')} onCloseNew={() => go('/crm?tab=quotes')} /> : null}
+          {view === 'price' ? <PriceList /> : null}
+          {view === 'intake' ? <Intake /> : null}
+          {view === 'set' ? <CrmSettings /> : null}
+          {view === 'access' ? <CrmAccess /> : null}
         </Suspense>
       </main>
     </div>
