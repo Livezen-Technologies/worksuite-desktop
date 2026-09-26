@@ -141,7 +141,7 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
       quickActions: [{ id: 'new-lead', label: 'New Lead', route: '/crm?new=1' }],
       deepLinks: ['crm/leads/:id'],
     }),
-    load: () => import('./crm/CrmPage'),
+    load: () => import('./crm/CrmShell'),
   },
   {
     input: defineDesktopManifest({

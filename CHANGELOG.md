@@ -5,6 +5,68 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-26 — 0.2.18: CRM, part 1 — dashboard, leads, follow-ups and the pipeline
+
+**Added**
+
+- **CRM is drawn by the desktop now**, replacing the read-only lead list.
+  - **The rail** has New lead, Search the CRM (leads, accounts, contacts,
+    deals), and the sections with their counts: open deals, new leads, and
+    late follow-ups in red. It also shows today's tasks and meetings, and My
+    access. Accounts, Quotes, Price list, Lead intake, Settings and My access
+    still open in the browser (part 2).
+  - **Dashboard:** my pipeline or the team's.
+    - Eight figures: open deals, weighted forecast, won this month, win
+      rate, new leads, tasks and meetings today, stalled deals.
+    - Panels: pipeline by stage, leads by status, follow-ups, stalled deals,
+      quotes out, who is carrying the pipeline, lead sources, where leads
+      arrive, and recent activity.
+  - **Leads:**
+    - The working views (Late, Due today, Nothing scheduled, Unassigned)
+      with counts.
+    - Filters by status, rating and owner (mine or nobody's — the server
+      cannot filter by one named person); sorting; bulk reassign.
+    - A lead opens in a drawer, always read afresh:
+      - contact and qualification;
+      - why it scored what it did;
+      - possible duplicates, with Merge;
+      - status (unqualified asks why) and owner;
+      - notes;
+      - the next follow-up, and **Schedule a follow-up** (kind, day, time,
+        what for, priority, reminder);
+      - the timeline, with a call, note, email, meeting or WhatsApp
+        recorded on it.
+    - **Convert** makes an account, a contact and, if wanted, a deal. The
+      converted lead is read-only and links to its deal.
+    - **New lead** asks which company files it when you work in several and
+      "All organizations" is showing.
+  - **Follow-ups:**
+    - Due today, Late, To come, Done and Called off; mine, or everybody's
+      for whoever may see them.
+    - **How did it go?** records the outcome and can set the next one.
+    - **Move**, and **Call it off** with a reason.
+    - Times are on the clock the follow-up was agreed in.
+  - **Pipeline board:**
+    - Deals in stage columns, with value, owner, expected close and "Nd in
+      stage".
+    - **Drag a card** to move it. Into Lost asks why, which is recorded on
+      the deal and the customer's timeline.
+    - A deal opens in a drawer: value, stage and weighted figures, a stage
+      control, details, its quotes, and the timeline with a note recorded.
+    - **New deal.**
+- **Buttons follow CRM permissions:** `crm.lead`, `crm.deal`, `crm.manage`
+  (merge and bulk reassign), and the follow-up permissions, including
+  `crm.manage` covering everything but `crm.view`.
+
+**Notes**
+
+- Moving a follow-up rebuilds its reminders from what is sent, so the app
+  sends a 30-minute one; the web sends none and loses them.
+- e2e: `tests/e2e/crm.mjs` (18 checks). It needs a CRM role on the test
+  user and cleans up everything it names "E2E CRM …".
+
+---
+
 ## 2026-09-26 — 0.2.17: Completed shows the completed hire
 
 **Fixed**
