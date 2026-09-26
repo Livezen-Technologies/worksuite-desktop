@@ -6,7 +6,7 @@ import { errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner } from '../../components/ui';
-import { EMPLOYMENT_TYPES, hasLeft, SETTABLE_STATUSES, type EmployeeDetail, type EmployeeRow } from './api';
+import { EMPLOYMENT_TYPES, hasLeft, pickable, SETTABLE_STATUSES, type EmployeeDetail, type EmployeeRow } from './api';
 import { dayLong, rangeLabel, ymd } from './dates';
 import { btn, btnPrimary, Caps, Cell, Empty, Field, Facts, humanise, Initials, input, PageHead, row, Seg, Sheet, SidePanel, StatusChip, THead } from './parts';
 import { can } from './Rail';
@@ -329,7 +329,7 @@ function AddEmployee({ people, onClose, onDone }: { people: EmployeeRow[]; onClo
         <Select aria-label="Reports to" value={manager} onChange={(e) => setManager(e.target.value)} className={input}>
           <option value="">Nobody</option>
           {people
-            .filter((p) => !hasLeft(p, today))
+            .filter((p) => pickable(p, today))
             .map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name ?? p.employee_no} · {p.employee_no}

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { apiGet, apiPut } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
-import { EMPLOYMENT_TYPES, hasLeft, SETTABLE_STATUSES, type EmployeeRow, type Profile } from './api';
+import { EMPLOYMENT_TYPES, pickable, SETTABLE_STATUSES, type EmployeeRow, type Profile } from './api';
 import { ymd } from './dates';
 import { btn, btnPrimary, Field, humanise, input, Sheet } from './parts';
 import { Select } from '../../components/Select';
@@ -143,7 +143,7 @@ export function EditEmployee({ profile, onClose, onDone }: { profile: Profile; o
           <Select aria-label="Reports to" value={f.manager_id} onChange={set('manager_id')} className={input}>
             <option value="">Nobody</option>
             {(people.data ?? [])
-              .filter((p) => p.id !== profile.employee.id && (!hasLeft(p, today) || String(p.id) === was.manager_id))
+              .filter((p) => p.id !== profile.employee.id && (pickable(p, today) || String(p.id) === was.manager_id))
               .map((p) => (
                 <option key={p.id} value={String(p.id)}>
                   {p.name ?? p.employee_no}

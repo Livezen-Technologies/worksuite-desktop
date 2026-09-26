@@ -5,6 +5,21 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## Unreleased
+
+**Fixed**
+
+- **People who have left are no longer offered in the HR pickers.** This
+  covers leave on someone's behalf, Reports to, schedule assignment and
+  onboarding. The desktop used to count a leaver with no exit date as still
+  here, unlike the server, which counts them as gone from every day. It now
+  uses the server's rule, and pickers also leave out archived records. The
+  other pickers (chat, tasks, calendar, notes, Drive sharing, meetings, CRM
+  owners) get the same rule from the server. It takes effect once that is
+  deployed.
+
+---
+
 ## 2026-09-26 — 0.2.19: Enter in dialogs, and the chat drawer on dark
 
 **Fixed**

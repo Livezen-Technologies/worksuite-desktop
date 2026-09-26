@@ -4,7 +4,7 @@ import { ApiError, apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import type { EmployeeRow } from './api';
+import { pickable, type EmployeeRow } from './api';
 import { dayLong, ymd } from './dates';
 import { btn, btnPrimary, Empty, Field, input, PageHead, Panel, Seg, Sheet, SidePanel, StatusChip } from './parts';
 
@@ -403,7 +403,7 @@ function Assign({ s, departments, onClose, onDone }: { s: Summary; departments: 
   });
   const live = (current.data?.assignments ?? []).filter((a) => !a.effective_to || a.effective_to >= ymd(new Date()));
   const t = q.trim().toLowerCase();
-  const options = scope === 'employee' ? (people.data ?? []).filter((p) => !p.exit_at || p.exit_at >= ymd(new Date())).map((p) => ({ id: p.id, name: p.name ?? p.employee_no })) : departments.map((d) => ({ id: Number(d.id), name: d.name }));
+  const options = scope === 'employee' ? (people.data ?? []).filter((p) => pickable(p, ymd(new Date()))).map((p) => ({ id: p.id, name: p.name ?? p.employee_no })) : departments.map((d) => ({ id: Number(d.id), name: d.name }));
   const shown = options.filter((o) => !t || o.name.toLowerCase().includes(t));
   const assign = async (confirm = false) => {
     try {

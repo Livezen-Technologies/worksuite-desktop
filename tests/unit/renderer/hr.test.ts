@@ -70,12 +70,18 @@ describe('the People rail', () => {
 });
 
 describe('HR part 2 helpers', () => {
-  it('knows who has left: an exit status and an exit day behind us', async () => {
-    const { hasLeft } = await import('../../../src/modules/hr/api');
+  it('knows who has left: an exit status, from the day after the exit date — or with none recorded', async () => {
+    const { hasLeft, pickable } = await import('../../../src/modules/hr/api');
     expect(hasLeft({ status: 'resigned', exit_at: '2026-09-01' }, '2026-09-26')).toBe(true);
     expect(hasLeft({ status: 'resigned', exit_at: '2026-10-31' }, '2026-09-26')).toBe(false);
+    expect(hasLeft({ status: 'resigned', exit_at: '2026-09-26' }, '2026-09-26')).toBe(false);
     expect(hasLeft({ status: 'notice', exit_at: '2026-09-01' }, '2026-09-26')).toBe(false);
-    expect(hasLeft({ status: 'terminated', exit_at: null }, '2026-09-26')).toBe(false);
+    // The server's rule (Leavers::goneBy): no exit date recorded means gone.
+    expect(hasLeft({ status: 'terminated', exit_at: null }, '2026-09-26')).toBe(true);
+    // Pickers also leave archived records out.
+    expect(pickable({ status: 'archived', exit_at: null }, '2026-09-26')).toBe(false);
+    expect(pickable({ status: 'active', exit_at: null }, '2026-09-26')).toBe(true);
+    expect(pickable({ status: 'resigned', exit_at: '2026-10-31' }, '2026-09-26')).toBe(true);
   });
 
   it('words a roster row and where it was worked as the design does', async () => {

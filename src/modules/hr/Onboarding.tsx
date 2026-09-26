@@ -6,7 +6,7 @@ import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { Icon } from '../../components/Icon';
 import { useTab } from '../../core/tab-context';
-import { EMPLOYMENT_TYPES, hasLeft, type EmployeeRow } from './api';
+import { EMPLOYMENT_TYPES, pickable, type EmployeeRow } from './api';
 import { BankCard } from './Bank';
 import { dayLong, ymd } from './dates';
 import MyDocuments from './MyDocuments';
@@ -488,7 +488,7 @@ function StartOnboarding({ onClose, onDone }: { onClose: () => void; onDone: (em
           <Select aria-label="Reports to" value={f.manager_id} onChange={set('manager_id')} className={input}>
             <option value="">Nobody yet</option>
             {l.people
-              .filter((p) => !hasLeft(p, today) && p.status !== 'pending_onboarding')
+              .filter((p) => pickable(p, today) && p.status !== 'pending_onboarding')
               .map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name ?? p.employee_no}
@@ -667,7 +667,7 @@ function EditOnboarding({ state, onClose, onDone }: { state: ObState; onClose: (
           <Select aria-label="Reports to" value={f.manager_id} onChange={set('manager_id')} className={input}>
             <option value="">Unchanged</option>
             {l.people
-              .filter((p) => p.id !== e.id && !hasLeft(p, today) && p.status !== 'pending_onboarding')
+              .filter((p) => p.id !== e.id && pickable(p, today) && p.status !== 'pending_onboarding')
               .map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name ?? p.employee_no}

@@ -138,9 +138,18 @@ export interface EmployeeDetail extends EmployeeRow {
   leave: Array<{ id: string | number; starts_on: string; ends_on: string; days: string; status: string; type_name: string | null }>;
 }
 
-/** Left: resigned, terminated or retired, with the exit day behind us. */
+/**
+ * Left: resigned, terminated or retired, from the day after the exit date —
+ * or entirely when no exit date was recorded. The server's rule
+ * (`Leavers::goneBy`); this used to keep a leaver with no exit date.
+ */
 export function hasLeft(e: { status: string; exit_at: string | null }, today: string): boolean {
-  return ['resigned', 'terminated', 'retired'].includes(e.status) && !!e.exit_at && e.exit_at < today;
+  return ['resigned', 'terminated', 'retired'].includes(e.status) && (!e.exit_at || e.exit_at < today);
+}
+
+/** Whether a picker may offer this employee: not somebody who has left, and not an archived record (`Pickable`). */
+export function pickable(e: { status: string; exit_at: string | null }, today: string): boolean {
+  return !hasLeft(e, today) && e.status !== 'archived';
 }
 
 export interface Membership {

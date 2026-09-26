@@ -7,7 +7,7 @@ import { useStore } from '../../core/store';
 import { useTab } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import type { Balance, LeaveReq, LeaveReview, LeaveTypes, Profile } from './api';
+import { pickable, type Balance, type LeaveReq, type LeaveReview, type LeaveTypes, type Profile } from './api';
 import { addDays, dayShort, monthGrid, monthLabel, parseYmd, rangeLabel, shiftMonth, ymd } from './dates';
 import { btn, btnBad, btnGood, btnPrimary, btnSmall, Empty, Field, humanise, Initials, input, PageHead, Seg, Sheet, StatusChip } from './parts';
 import { can } from './Rail';
@@ -233,7 +233,7 @@ function RequestLeave({ onClose, onDone }: { onClose: () => void; onDone: () => 
   const canPick = can(perms, 'hr.manage') || can(perms, 'hr.leave.manage');
   const types = useQuery({ queryKey: ['hr', 'leave-types'], queryFn: ({ signal }) => apiGet<LeaveTypes>('/api/hr/leave/types', undefined, signal) });
   const colleagues = useQuery({ queryKey: ['hr', 'colleagues'], queryFn: ({ signal }) => apiGet<{ people: Array<{ id: number; name: string }> }>('/api/hr/leave/colleagues', undefined, signal) });
-  const employees = useQuery({ queryKey: ['hr', 'employees'], queryFn: ({ signal }) => apiGet<Array<{ id: number; name: string; employee_no: string }>>('/api/hr/employees', undefined, signal), enabled: canPick && can(perms, 'hr.view'), retry: false });
+  const employees = useQuery({ queryKey: ['hr', 'employees'], queryFn: ({ signal }) => apiGet<Array<{ id: number; name: string; employee_no: string; status: string; exit_at: string | null }>>('/api/hr/employees', undefined, signal), enabled: canPick && can(perms, 'hr.view'), retry: false });
   const active = (types.data?.types ?? []).filter((t) => t.status === 'active');
   const [employee, setEmployee] = useState('');
   const [typeId, setTypeId] = useState('');
@@ -308,7 +308,7 @@ function RequestLeave({ onClose, onDone }: { onClose: () => void; onDone: () => 
         <Field label="Employee">
           <Select aria-label="Employee" value={employee} onChange={(e) => setEmployee(e.target.value)} className={input}>
             <option value="">Me</option>
-            {employees.data.map((x) => (
+            {employees.data.filter((x) => pickable(x, ymd(new Date()))).map((x) => (
               <option key={x.id} value={x.id}>
                 {x.name} · {x.employee_no}
               </option>
