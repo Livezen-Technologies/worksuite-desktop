@@ -5,6 +5,66 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-26 — 0.2.4: Tasks, to the TaskRail, TasksList, TasksBoard, TaskDetail and TaskNew designs
+
+**Added**
+
+- **The rail:** + New task, then All active, Assigned to me, Due today,
+  Overdue, Completed and Shared with me, each with what is still open there.
+  Your lists follow, each with its colour and open count. A list can be
+  favourited, renamed, recoloured or deleted; deleting it keeps its tasks.
+  "+ New list" makes one.
+- **The list:** open tasks grouped Overdue, Today, This week, Later and No due
+  date. Each row has a tick to complete, the list, the status (changed in
+  place), priority, assignee, due ("Today 6 PM", "Fri", "12 Oct"; red when
+  late) and progress. Completed tasks come newest first. There is quick add
+  ("Enter to add to My tasks", or to the list shown), a search, and filters
+  for status, assignee and priority.
+- **The board:** a column per status (Backlog when anything is in it). Cards
+  show priority, a tag, the title, progress, the due date, the checklist and
+  the assignee. Drag a card to another column, or add straight into one.
+  Lists open as a board and the views as a list; B and L switch.
+- **A task opens over the page:**
+  - The header has Copy link, Duplicate, Archive, Delete…, and Complete
+    (or Reopen). Changes save as you make them.
+  - The left side has the title, a description with formatting, the
+    checklist (tick, rename by double-click, remove), and attachments. Drop
+    files on it, attach files, or choose from Drive. Files preview and
+    download.
+  - Comments have bold, italic, underline, lists, links, emoji, @ to mention
+    somebody, and files from the computer or Drive. Activity is the other tab.
+  - The right side has status, priority, assignee, start and due (a day, with
+    a time if wanted), list, organisation, tags and progress. Progress
+    follows the checklist when there is one. Then who is on the task
+    (Manage adds assignees, reviewers, followers and shares, with what a
+    share may do), Follow, and the review: Submit for review; for the
+    reviewer, Approve or Request changes.
+  - Only what you may change is offered.
+- **New task** has a title, description, list, status, priority, assignee,
+  start, due, estimated hours, company and tags. It warns when the due date
+  is before the start, and opens the task once it is made.
+- **Offline:** completing, changing a field and creating a task are queued
+  and sent when the connection is back.
+- **Keys:** N new task, B/L board or list, / search; Esc closes a task.
+- **Needs the server change deployed with this:** reviewers, followers and
+  shares can open a task, and "Shared with me" lists them.
+
+**Changed**
+
+- Reopening a finished task sets its progress back to 0 (unless a checklist
+  decides it). Completing had set it to 100, and a reopened task showed as
+  finished.
+- The chat composer's From Drive uses the same Drive picker as Tasks.
+
+**Fixed**
+
+- Dialogs that reach the top of the window (the task view, any dialog, the
+  launcher and the search) now take clicks there. On macOS the top bar moves
+  the window, and a click on a dialog's button over it could move the window
+  instead.
+
+---
+
 ## 2026-09-26 — 0.2.3: Calendar, to the CalendarWeek design
 
 **Added**

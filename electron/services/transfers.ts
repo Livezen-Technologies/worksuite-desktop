@@ -300,7 +300,7 @@ export class TransferManager {
         direction: 'upload',
         name: file.name,
         source: file.path,
-        destination: target.kind === 'chat' ? 'Chat' : 'WorkSuite Files',
+        destination: target.kind === 'chat' ? 'Chat' : target.kind === 'task' ? 'Task' : 'WorkSuite Files',
         bytes: 0,
         total: file.size,
         state: 'queued',
@@ -343,7 +343,8 @@ export class TransferManager {
           total_size: st.size,
           chunk_size: CHUNK,
           sha256: meta.sha256,
-          ...(meta.target.kind === 'files' ? { purpose: 'drive', folder_id: meta.target.folderId } : { purpose: 'chat', room_id: meta.target.roomId }),
+          // A task's files are Drive files (in the top folder, as the web's are), linked to the task once they are in.
+          ...(meta.target.kind === 'files' ? { purpose: 'drive', folder_id: meta.target.folderId } : meta.target.kind === 'task' ? { purpose: 'drive', folder_id: null } : { purpose: 'chat', room_id: meta.target.roomId }),
         });
         meta.uploadId = init.upload_id;
         meta.chunkSize = Number(init.chunk_size) || CHUNK;
@@ -372,6 +373,13 @@ export class TransferManager {
       }
       const done = await this.deps.http.post<{ file_id?: number | string }>(`/api/uploads/${meta.uploadId}/complete`, {});
       meta.fileId = done.file_id !== undefined ? String(done.file_id) : null;
+      if (meta.target.kind === 'task') {
+        if (!meta.fileId) throw new DesktopError('SERVER_ERROR', 'The file was stored but WorkSuite did not say where.');
+        await this.deps.http.post(`/api/tasks/${meta.target.taskId}/attachments/drive`, {
+          file_ids: [Number(meta.fileId)],
+          ...(meta.target.commentId ? { comment_id: meta.target.commentId } : {}),
+        });
+      }
       if (meta.target.kind === 'chat') {
         await this.deps.http.post('/api/chat/messages/attachments', {
           room_id: meta.target.roomId,

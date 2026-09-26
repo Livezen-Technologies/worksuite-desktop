@@ -98,6 +98,8 @@ export const uploadTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('files'), folderId: z.string().max(64).nullable() }),
   /** A chat attachment; the caption and the reply go with it (the first of several files carries them). */
   z.object({ kind: z.literal('chat'), roomId: z.string().max(64), caption: z.string().max(4000).optional(), replyTo: z.number().int().positive().optional() }),
+  /** A task's attachment (or a comment's, with its id): stored in Drive, then linked to the task. */
+  z.object({ kind: z.literal('task'), taskId: z.number().int().positive(), commentId: z.number().int().positive().optional() }),
 ]);
 export type UploadTarget = z.infer<typeof uploadTargetSchema>;
 

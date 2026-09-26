@@ -206,7 +206,7 @@ export function Modal({ title, children, onClose, width = 520, footer, labelledB
     };
   }, [onClose]);
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B1020]/50 p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
+    <div className="no-drag fixed inset-0 z-50 flex items-center justify-center bg-[#0B1020]/50 p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
       <div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={labelledBy} className="animate-in bare-focus flex max-h-full w-full flex-col rounded-[14px] border border-line bg-surface shadow-2xl outline-none" style={{ maxWidth: width }}>
         {title ? (
           <div className="flex items-center justify-between border-b border-line px-5 py-3.5">

@@ -37,7 +37,7 @@ export function Launcher() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-[#0B1020]/40 pt-[70px]" onMouseDown={(e) => e.target === e.currentTarget && closeOverlay()} onKeyDown={(e) => e.key === 'Escape' && closeOverlay()}>
+    <div className="no-drag fixed inset-0 z-50 flex items-start justify-center bg-[#0B1020]/40 pt-[70px]" onMouseDown={(e) => e.target === e.currentTarget && closeOverlay()} onKeyDown={(e) => e.key === 'Escape' && closeOverlay()}>
       <div className="animate-in flex max-h-[80vh] w-[860px] flex-col overflow-hidden rounded-[14px] border border-line bg-surface shadow-2xl" role="dialog" aria-label="Apps">
         <div className="flex items-center gap-3 border-b border-line px-5 py-3">
           <h2 className="text-[17px] font-bold text-ink">Apps</h2>

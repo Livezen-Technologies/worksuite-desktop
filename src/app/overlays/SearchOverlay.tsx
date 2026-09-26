@@ -104,7 +104,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
 
   const headed = rows.map((r, i) => ({ r, header: i === 0 || rows[i - 1]!.group !== r.group ? r.group : null }));
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-[#0B1020]/40 pt-[90px]" onMouseDown={(e) => e.target === e.currentTarget && closeOverlay()}>
+    <div className="no-drag fixed inset-0 z-50 flex items-start justify-center bg-[#0B1020]/40 pt-[90px]" onMouseDown={(e) => e.target === e.currentTarget && closeOverlay()}>
       <div className="animate-in flex max-h-[70vh] w-[640px] flex-col overflow-hidden rounded-[14px] border border-line bg-surface shadow-2xl" role="dialog" aria-label={palette ? 'Command palette' : 'Search'}>
         <div className="flex items-center gap-3 border-b border-line px-4">
           <Icon name={palette ? 'zap' : 'search'} size={18} className="text-ink-3" />

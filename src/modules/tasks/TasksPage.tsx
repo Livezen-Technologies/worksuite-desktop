@@ -1,275 +1,233 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
 import { app } from '../../core/app-state';
-import { apiGet, apiGetMeta } from '../../core/api';
-import { call, errorMessage } from '../../core/bridge';
-import { useDraft } from '../../core/drafts';
+import { apiGetMeta, apiPost } from '../../core/api';
+import { errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
-import { dateLabel, relative, todayInZone } from '../../core/time';
+import { todayInZone } from '../../core/time';
 import { toast } from '../../core/toasts';
-import { Icon } from '../../components/Icon';
-import { Button, Chip, Empty, ErrorNote, IconButton, OfflineNote, Select, Spinner, cx } from '../../components/ui';
-import { VirtualList } from '../../components/VirtualList';
+import { ErrorNote, OfflineNote, Spinner, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
+import { createTask, patchTask } from './actions';
+import { counts as countOf, inScope, isOpen, plainText, PRIORITIES, SCOPES, STATUSES, type Priority, type Scope, type Status, type Task, type TaskList } from './api';
+import { BoardView } from './BoardView';
+import { ListView } from './ListView';
+import { NewTask } from './NewTask';
+import { Rail } from './Rail';
+import { TaskDetail } from './TaskDetail';
 
-/** Tasks (PARTIAL_WRITE, §14): completing and creating tasks work offline, queued in order. */
-export interface Task {
-  id: number;
-  task_key: string | null;
-  list_id: number | null;
-  org_id: number | null;
-  org_name: string | null;
-  assignee_name: string | null;
-  title: string;
-  description: string | null;
-  status: 'backlog' | 'todo' | 'in_progress' | 'on_hold' | 'review' | 'changes_requested' | 'done' | 'cancelled';
-  priority: 'urgent' | 'high' | 'medium' | 'low' | 'none';
-  tags: string[];
-  due_date: string | null;
-  due_at: string | null;
-  progress: number;
-  updated_at: string | null;
-  checklist_done?: number;
-  checklist_total?: number;
+/** The old `?filter=` links (notifications, the dashboard) in the new scopes. */
+const LEGACY: Record<string, Scope> = { mine: 'mine', today: 'today', overdue: 'overdue', active: 'all', completed: 'done', created: 'all', shared: 'shared' };
+const field = 'h-[34px] rounded-[8px] border border-line bg-surface px-2 text-[13px] text-ink outline-none focus:border-primary';
+
+/** The time, a minute at a time: what is overdue changes while the page is open. */
+function useMinute(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  return now;
 }
 
-const FILTERS = [
-  { id: 'mine', label: 'My tasks' },
-  { id: 'today', label: 'Today' },
-  { id: 'overdue', label: 'Overdue' },
-  { id: 'active', label: 'All open' },
-  { id: 'completed', label: 'Completed' },
-] as const;
-
-const STATUS: Array<{ value: Task['status']; label: string }> = [
-  { value: 'backlog', label: 'Backlog' },
-  { value: 'todo', label: 'To do' },
-  { value: 'in_progress', label: 'In progress' },
-  { value: 'on_hold', label: 'On hold' },
-  { value: 'review', label: 'In review' },
-  { value: 'done', label: 'Done' },
-  { value: 'cancelled', label: 'Cancelled' },
-];
-
-const PRIORITY_TONE: Record<Task['priority'], 'danger' | 'warning' | 'indigo' | 'muted'> = { urgent: 'danger', high: 'warning', medium: 'indigo', low: 'muted', none: 'muted' };
-
-function stripHtml(html: string | null): string {
-  if (!html) return '';
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  return (doc.body.textContent ?? '').trim();
+function scopeFrom(q: URLSearchParams): Scope {
+  const list = q.get('list');
+  if (list && /^\d+$/.test(list)) return `list:${Number(list)}`;
+  const s = q.get('scope') ?? LEGACY[q.get('filter') ?? ''] ?? 'all';
+  return (SCOPES.some((x) => x.id === s) ? s : 'all') as Scope;
 }
 
-export async function submitTaskChange(task: Pick<Task, 'id' | 'title'>, field: string, value: unknown, label: string) {
-  const r = await call('offline:submit', {
-    module: 'tasks',
-    entity: 'task',
-    entityId: String(task.id),
-    label,
-    method: 'PATCH',
-    path: `/api/tasks/${task.id}`,
-    body: { field, value },
-    queueIfOffline: true,
-  });
-  if (!r.delivered && !r.queued) throw new Error(r.error ?? 'Could not update the task.');
-  if (r.queued) toast('info', 'Offline — the change will sync when you reconnect.');
-  return r;
-}
-
+/**
+ * Tasks (TaskRail, TasksList, TasksBoard): your views and lists on the left,
+ * a list grouped by when things are due or a board by status, and a task
+ * opened over it. Completing and creating work offline (PARTIAL_WRITE).
+ */
 export default function TasksPage(_props: ModuleProps) {
   useTabTitle('Tasks');
-  const { query, go } = useTab();
-  const orgId = useStore(app, (s) => s.organizationId);
-  const filter = (query.get('filter') as (typeof FILTERS)[number]['id']) ?? 'mine';
-  const selected = query.get('task');
-  const [q, setQ] = useState('');
   const qc = useQueryClient();
+  const { query, path, go, active } = useTab();
+  const me = Number(useStore(app, (s) => s.auth?.user?.id) ?? 0);
   const today = todayInZone();
+  const now = useMinute();
+  const scope = scopeFrom(query);
+  const listScope = scope.startsWith('list:') ? Number(scope.slice(5)) : null;
+  const view = (query.get('view') ?? (listScope ? 'board' : 'list')) === 'board' ? 'board' : 'list';
+  const pathTask = path[0] === 'tasks' && /^\d+$/.test(path[1] ?? '') ? path[1] : null;
+  const opened = Number(query.get('task') ?? pathTask ?? 0) || null;
+  const [creating, setCreating] = useState(query.get('new') === '1');
+  const [q, setQ] = useState('');
+  const [status, setStatus] = useState<'open' | 'all' | Status>('open');
+  const [assignee, setAssignee] = useState<'any' | 'me' | string>('any');
+  const [priority, setPriority] = useState<'any' | Priority>('any');
 
-  const list = useQuery({
-    queryKey: ['tasks', 'list', filter, q, orgId],
-    queryFn: ({ signal }) => apiGetMeta<{ tasks: Task[] }>('/api/tasks', { filter, q: q || undefined, org: orgId }, signal),
-  });
-  const tasks = list.data?.data.tasks ?? [];
+  const all = useQuery({ queryKey: ['tasks', 'all'], queryFn: ({ signal }) => apiGetMeta<{ tasks: Task[] }>('/api/tasks', undefined, signal), refetchInterval: 20_000 });
+  const shared = useQuery({ queryKey: ['tasks', 'shared'], queryFn: ({ signal }) => apiGetMeta<{ tasks: Task[] }>('/api/tasks', { filter: 'shared' }, signal), refetchInterval: 60_000 });
+  const listsQ = useQuery({ queryKey: ['tasks', 'lists'], queryFn: ({ signal }) => apiGetMeta<{ lists: TaskList[] }>('/api/task-lists', undefined, signal) });
+  const tasks = useMemo(() => all.data?.data.tasks ?? [], [all.data]);
+  const sharedTasks = useMemo(() => shared.data?.data.tasks ?? [], [shared.data]);
+  const lists = useMemo(() => listsQ.data?.data.lists ?? [], [listsQ.data]);
+  const listMap = useMemo(() => new Map(lists.map((l) => [l.id, l])), [lists]);
+  const offline = !!all.data?.offline;
+  const counts = countOf(tasks, sharedTasks, lists, me, today, now);
 
-  const toggle = useMutation({
-    mutationFn: (t: Task) => submitTaskChange(t, 'status', t.status === 'done' ? 'todo' : 'done', `${t.status === 'done' ? 'Reopen' : 'Complete'} “${t.title}”`),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['tasks'] }),
-    onError: (e) => toast('error', errorMessage(e)),
-  });
-
-  const setParam = (k: string, v: string | null) => {
+  const set = (patch: Record<string, string | null>) => {
     const p = new URLSearchParams(query);
-    if (v === null) p.delete(k);
-    else p.set(k, v);
+    p.delete('filter');
     p.delete('new');
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === null) p.delete(k);
+      else p.set(k, v);
+    }
     go(`/tasks${p.toString() ? `?${p}` : ''}`);
   };
+  const setScope = (s: Scope) => set(s.startsWith('list:') ? { list: s.slice(5), scope: null, view: null } : { scope: s === 'all' ? null : s, list: null, view: null });
+  const open = (id: number | null) => set({ task: id ? String(id) : null });
 
-  return (
-    <div className="flex h-full">
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center gap-3 border-b border-line bg-surface px-6 py-3">
-          <h1 className="text-[20px] font-bold text-ink">Tasks</h1>
-          <div className="ml-3 flex gap-1">
-            {FILTERS.map((f) => (
-              <button key={f.id} type="button" onClick={() => setParam('filter', f.id)} className={cx('rounded-full px-3 py-1.5 text-[12.5px] font-semibold', filter === f.id ? 'bg-ink text-surface' : 'text-ink-2 hover:bg-subtle')}>
-                {f.label}
-              </button>
-            ))}
-          </div>
-          <div className="flex-1" />
-          {list.data?.offline ? <OfflineNote cachedAt={list.data.cachedAt} /> : null}
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search tasks" aria-label="Search tasks" className="h-8 w-[220px] rounded-[8px] border border-line bg-ground px-3 text-[13px] outline-none focus:border-primary" />
-        </div>
-        <QuickAdd autoFocus={query.get('new') === '1'} orgId={orgId} />
-        <div className="min-h-0 flex-1">
-          {list.isLoading ? <Spinner /> : list.error ? <div className="p-6"><ErrorNote error={list.error} onRetry={() => void list.refetch()} /></div> : tasks.length === 0 ? <Empty icon="check-circle" title="No tasks here" hint="Tasks assigned to you and that you create appear here." /> : null}
-          {tasks.length > 0 ? (
-            <VirtualList
-              items={tasks}
-              estimate={56}
-              getKey={(t) => t.id}
-              render={(t) => {
-                const done = t.status === 'done';
-                const overdue = !done && t.due_date !== null && t.due_date < today;
-                return (
-                  <div className={cx('flex items-center gap-3 border-b border-line px-6 py-2.5', String(t.id) === selected ? 'bg-selection' : 'bg-surface hover:bg-subtle')}>
-                    <input type="checkbox" checked={done} onChange={() => toggle.mutate(t)} aria-label={`Mark “${t.title}” ${done ? 'not done' : 'done'}`} className="h-[17px] w-[17px] shrink-0 accent-[var(--ws-indigo)]" />
-                    <button type="button" onClick={() => setParam('task', String(t.id))} className="min-w-0 flex-1 text-left">
-                      <div className={cx('truncate text-[13.5px] font-semibold', done ? 'text-ink-3 line-through' : 'text-ink')}>{t.title}</div>
-                      <div className="flex items-center gap-2 truncate text-[12px] text-ink-3">
-                        {t.task_key ? <span className="font-mono">{t.task_key}</span> : null}
-                        {t.org_name ? <span>{t.org_name}</span> : null}
-                        {t.assignee_name ? <span>· {t.assignee_name}</span> : null}
-                        {t.checklist_total ? <span>· {t.checklist_done}/{t.checklist_total} checklist</span> : null}
-                      </div>
-                    </button>
-                    {t.priority !== 'none' ? <Chip tone={PRIORITY_TONE[t.priority]}>{t.priority}</Chip> : null}
-                    <span className={cx('w-[92px] shrink-0 text-right text-[12.5px]', overdue ? 'font-semibold text-danger' : 'text-ink-3')}>{t.due_date ? dateLabel(t.due_date) : ''}</span>
-                  </div>
-                );
-              }}
-            />
-          ) : null}
-        </div>
-      </div>
-      {selected ? <TaskDetail id={selected} onClose={() => setParam('task', null)} /> : null}
-    </div>
-  );
-}
+  const needle = q.trim().toLowerCase();
+  const shown = (scope === 'shared' ? sharedTasks : tasks).filter((t) => {
+    if (!inScope(t, scope, me, today, now)) return false;
+    if (needle && !`${t.title} ${plainText(t.description)} ${t.tags.join(' ')}`.toLowerCase().includes(needle)) return false;
+    if (assignee === 'me' ? t.assignee_id !== me : assignee !== 'any' && String(t.assignee_id) !== assignee) return false;
+    if (priority !== 'any' && t.priority !== priority) return false;
+    if (view === 'list' && scope !== 'done') {
+      if (status === 'open' && !isOpen(t)) return false;
+      if (status !== 'open' && status !== 'all' && t.status !== status) return false;
+    }
+    return true;
+  });
+  const people = [...new Map((scope === 'shared' ? sharedTasks : tasks).filter((t) => t.assignee_id && t.assignee_id !== me).map((t) => [String(t.assignee_id), t.assignee_name ?? 'Someone'])).entries()];
+  const title = listScope ? (listMap.get(listScope)?.name ?? 'List') : (SCOPES.find((s) => s.id === scope)?.label ?? 'Tasks');
+  const openCount = shown.filter(isOpen).length;
+  const refresh = () => void qc.invalidateQueries({ queryKey: ['tasks'] });
 
-function QuickAdd({ autoFocus, orgId }: { autoFocus: boolean; orgId: string | null }) {
-  const draft = useDraft<string>('tasks', 'quick-add', '');
-  const [due, setDue] = useState('');
-  const [busy, setBusy] = useState(false);
-  const ref = useRef<HTMLInputElement>(null);
-  const qc = useQueryClient();
-  useEffect(() => {
-    if (autoFocus) ref.current?.focus();
-  }, [autoFocus]);
-  const add = async () => {
-    const title = draft.value.trim();
-    if (!title) return;
-    setBusy(true);
+  const quickAdd = async (text: string, st?: Status) => {
     try {
-      const r = await call('offline:submit', {
-        module: 'tasks',
-        entity: 'task',
-        entityId: null,
-        label: `Create task “${title}”`,
-        method: 'POST',
-        path: '/api/tasks',
-        body: { title, due_date: due || undefined, org_id: orgId ?? undefined },
-        queueIfOffline: true,
-      });
-      if (!r.delivered && !r.queued) throw new Error(r.error ?? 'Could not create the task.');
-      toast(r.queued ? 'info' : 'success', r.queued ? 'Offline — the task will be created when you reconnect.' : 'Task created.');
-      draft.setValue('');
-      setDue('');
-      await draft.clear();
-      void qc.invalidateQueries({ queryKey: ['tasks'] });
+      const r = await createTask({ title: text, ...(listScope ? { list_id: listScope } : {}), ...(st ? { status: st } : {}), ...(scope === 'today' ? { due_date: today } : {}) });
+      if (r.queued) toast('info', 'Offline — the task is created when you reconnect.');
+      refresh();
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
+  const change = async (t: Task, s: Status) => {
+    try {
+      await patchTask(t, 'status', s, `${STATUSES.find((x) => x.id === s)?.label}: “${t.title}”`);
+      // Completing sets progress to 100 and reopening leaves it there; a reopened task is not finished.
+      if (t.status === 'done' && s !== 'done' && !t.checklist_total && t.progress === 100) await patchTask(t, 'progress', 0, `Progress of “${t.title}”`);
     } catch (e) {
       toast('error', errorMessage(e));
     } finally {
-      setBusy(false);
+      refresh();
     }
   };
-  return (
-    <form
-      className="flex items-center gap-2 border-b border-line bg-surface px-6 py-2"
-      onSubmit={(e) => {
-        e.preventDefault();
-        void add();
-      }}
-    >
-      <Icon name="plus" size={16} className="text-ink-3" />
-      <input ref={ref} value={draft.value} onChange={(e) => draft.setValue(e.target.value)} placeholder="Add a task and press Enter" aria-label="New task title" className="h-8 flex-1 bg-transparent text-[13.5px] outline-none placeholder:text-ink-3" />
-      {draft.restored && draft.value ? <Chip tone="teal">Draft restored</Chip> : null}
-      <input type="date" value={due} onChange={(e) => setDue(e.target.value)} aria-label="Due date" className="h-8 rounded-[8px] border border-line bg-ground px-2 text-[12.5px] text-ink-2" />
-      <Button type="submit" variant="primary" size="sm" loading={busy} disabled={!draft.value.trim()}>
-        Add
-      </Button>
-    </form>
-  );
-}
-
-function TaskDetail({ id, onClose }: { id: string; onClose: () => void }) {
-  const qc = useQueryClient();
-  const { openLink } = useTab();
-  const q = useQuery({ queryKey: ['tasks', 'detail', id], queryFn: () => apiGet<{ task: Task } | Task>(`/api/tasks/${id}`) });
-  const task = useMemo(() => (q.data && 'task' in q.data ? q.data.task : (q.data as Task | undefined)), [q.data]);
-  const change = async (field: string, value: unknown) => {
-    if (!task) return;
+  const move = async (t: Task, s: Status) => {
+    // Shown in its new column straight away; the server has the last word.
+    qc.setQueryData<{ data: { tasks: Task[] } }>(['tasks', 'all'], (old) => (old ? { ...old, data: { tasks: old.data.tasks.map((x) => (x.id === t.id ? { ...x, status: s } : x)) } } : old));
     try {
-      await submitTaskChange(task, field, value, `Update “${task.title}”`);
-      void qc.invalidateQueries({ queryKey: ['tasks'] });
+      await apiPost(`/api/tasks/${t.id}/move`, { status: s });
     } catch (e) {
       toast('error', errorMessage(e));
+    } finally {
+      refresh();
     }
   };
+
+  // Keys while this tab is in front and nothing is being typed or asked: N new, B/L the view, / search.
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (e.metaKey || e.ctrlKey || e.altKey || creating || opened || document.querySelector('[role="dialog"]')) return;
+      if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
+      if (e.key === 'n') setCreating(true);
+      else if (e.key === 'b' || e.key === 'l') set({ view: e.key === 'b' ? 'board' : 'list' });
+      else if (e.key === '/') document.querySelector<HTMLInputElement>('input[aria-label="Search tasks"]')?.focus();
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   return (
-    <aside className="flex w-[400px] shrink-0 flex-col border-l border-line bg-surface">
-      <div className="flex items-center justify-between border-b border-line px-5 py-3">
-        <span className="font-mono text-[12px] text-ink-3">{task?.task_key ?? `#${id}`}</span>
-        <div className="flex gap-1">
-          <IconButton icon="external" label="Open in browser" onClick={() => openLink(`/tasks?task=${id}`)} />
-          <IconButton icon="x" label="Close" onClick={onClose} />
-        </div>
-      </div>
-      {q.isLoading ? <Spinner /> : q.error ? <div className="p-5"><ErrorNote error={q.error} /></div> : task ? (
-        <div className="flex-1 overflow-y-auto p-5 scroll-thin">
-          <h2 className="text-[18px] font-bold text-ink selectable">{task.title}</h2>
-          <dl className="mt-4 grid grid-cols-[110px_1fr] items-center gap-y-3 text-[13px]">
-            <dt className="text-ink-3">Status</dt>
-            <dd>
-              <Select label="Status" value={task.status} options={STATUS} onChange={(v) => void change('status', v)} />
-            </dd>
-            <dt className="text-ink-3">Priority</dt>
-            <dd>
-              <Select label="Priority" value={task.priority} options={(['urgent', 'high', 'medium', 'low', 'none'] as const).map((p) => ({ value: p, label: p[0]!.toUpperCase() + p.slice(1) }))} onChange={(v) => void change('priority', v)} />
-            </dd>
-            <dt className="text-ink-3">Due</dt>
-            <dd>
-              <input type="date" defaultValue={task.due_date ?? ''} onBlur={(e) => e.target.value !== (task.due_date ?? '') && void change('due_date', e.target.value || null)} aria-label="Due date" className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[13px]" />
-            </dd>
-            <dt className="text-ink-3">Assignee</dt>
-            <dd className="text-ink">{task.assignee_name ?? 'Unassigned'}</dd>
-            <dt className="text-ink-3">Company</dt>
-            <dd className="text-ink">{task.org_name ?? '—'}</dd>
-            <dt className="text-ink-3">Updated</dt>
-            <dd className="text-ink-2">{relative(task.updated_at)}</dd>
-          </dl>
-          {task.description ? <p className="mt-5 whitespace-pre-wrap text-[13.5px] leading-relaxed text-ink-2 selectable">{stripHtml(task.description)}</p> : null}
-          {task.tags.length ? (
-            <div className="mt-4 flex flex-wrap gap-1.5">
-              {task.tags.map((t) => (
-                <Chip key={t}>{t}</Chip>
-              ))}
-            </div>
+    <div className="flex h-full bg-surface text-[13px]">
+      <Rail scope={scope} counts={counts} lists={lists} onScope={setScope} onNew={() => setCreating(true)} />
+      <main className="flex min-w-0 flex-1 flex-col">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 px-5 pt-4 pb-2.5">
+          <div className="flex min-w-0 flex-1 flex-col">
+            <h1 className="truncate text-[20px] font-bold text-ink">{title}</h1>
+            <span className="text-[12px] text-ink-3">
+              {listScope ? `List · ${openCount} open` : scope === 'shared' ? 'Tasks you review, follow or were shared' : scope === 'done' ? `${shown.length} completed` : `${openCount} open`}
+            </span>
+          </div>
+          {offline ? <OfflineNote cachedAt={all.data?.cachedAt ?? null} /> : null}
+          <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search tasks" placeholder="Search tasks…" className={cx(field, 'w-[200px] px-2.5')} />
+          {view === 'list' && scope !== 'done' ? (
+            <select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value as typeof status)} className={field}>
+              <option value="open">Status: open</option>
+              <option value="all">Status: any</option>
+              {STATUSES.map((s) => <option key={s.id} value={s.id}>Status: {s.label}</option>)}
+            </select>
+          ) : null}
+          <select aria-label="Assignee" value={assignee} onChange={(e) => setAssignee(e.target.value)} className={field}>
+            <option value="any">Assignee: anyone</option>
+            <option value="me">Assignee: me</option>
+            {people.map(([id, name]) => <option key={id} value={id}>Assignee: {name}</option>)}
+          </select>
+          <select aria-label="Priority" value={priority} onChange={(e) => setPriority(e.target.value as typeof priority)} className={field}>
+            <option value="any">Priority: any</option>
+            {PRIORITIES.map((p) => <option key={p.id} value={p.id}>Priority: {p.label}</option>)}
+          </select>
+          <span role="tablist" aria-label="View" className="flex overflow-hidden rounded-[8px] border border-line font-semibold">
+            {(['board', 'list'] as const).map((v) => (
+              <button key={v} type="button" role="tab" aria-selected={view === v} title={`${v === 'board' ? 'Board' : 'List'} (${v[0]!.toUpperCase()})`} onClick={() => set({ view: v })} className={cx('px-3 py-[7px]', view === v ? 'bg-selection text-primary' : 'text-ink hover:bg-subtle')}>
+                {v === 'board' ? 'Board' : 'List'}
+              </button>
+            ))}
+          </span>
+          {view === 'board' ? (
+            <button type="button" onClick={() => setCreating(true)} className="flex h-[34px] items-center rounded-[8px] bg-primary px-3.5 font-bold text-white hover:bg-primary-hover">+ New task</button>
           ) : null}
         </div>
+        {all.isLoading ? <Spinner /> : null}
+        {all.error && !all.data ? <div className="p-5"><ErrorNote error={all.error} onRetry={() => void all.refetch()} /></div> : null}
+        {!all.isLoading && (all.data || !all.error) ? (
+          view === 'board' ? (
+            <BoardView tasks={shown} me={me} today={today} now={now} selected={opened} canMove={scope !== 'shared' && !offline} onOpen={(t) => open(t.id)} onMove={(t, s) => void move(t, s)} onQuickAdd={(text, st) => quickAdd(text, st)} />
+          ) : (
+            <ListView
+              tasks={shown}
+              lists={listMap}
+              me={me}
+              today={today}
+              now={now}
+              completed={scope === 'done'}
+              selected={opened}
+              canChangeStatus={scope !== 'shared'}
+              quickAdd={scope === 'shared' || scope === 'done' ? null : listScope ? (listMap.get(listScope)?.name ?? 'this list') : 'My tasks'}
+              onOpen={(t) => open(t.id)}
+              onToggle={(t) => void change(t, t.status === 'done' ? 'todo' : 'done')}
+              onStatus={(t, s) => void change(t, s)}
+              onQuickAdd={(text) => quickAdd(text)}
+            />
+          )
+        ) : null}
+      </main>
+      {opened ? <TaskDetail key={opened} id={opened} lists={lists} onClose={() => open(null)} onOpen={(id) => open(id)} /> : null}
+      {creating ? (
+        <NewTask
+          lists={lists}
+          defaults={{ list_id: listScope, ...(scope === 'today' ? { due: today } : {}) }}
+          onClose={() => (setCreating(false), query.get('new') ? set({}) : undefined)}
+          onCreated={(id) => {
+            setCreating(false);
+            toast('success', 'Task created.');
+            refresh();
+            if (id) open(id);
+          }}
+        />
       ) : null}
-    </aside>
+    </div>
   );
 }
