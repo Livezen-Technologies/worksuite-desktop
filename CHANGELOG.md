@@ -5,6 +5,18 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-26 — 0.2.17: Completed shows the completed hire
+
+**Fixed**
+
+- **HR › Onboarding › Completed showed the wrong person.** The case you
+  last had open under In progress stayed on screen beside the Completed
+  list — an in-progress hire with no documents, next to a list of finished
+  ones. Changing the filter now opens that filter's first hire. A link to
+  one hire (from a notification) still opens that hire.
+
+---
+
 ## 2026-09-26 — 0.2.16: the organisation switcher in the sidebar, onboarding redrawn, the Dock count fixed
 
 **Changed**

@@ -37,6 +37,12 @@ export default function Onboarding({ openId, onOpen }: { openId: number | null; 
   const list = useQuery({ queryKey: ['hr', 'onboarding', filter], queryFn: ({ signal }) => apiGet<{ onboardings: ObRow[]; steps: Record<string, string> }>('/api/hr/onboarding', { status: filter }, signal) });
   const rows = list.data?.onboardings ?? [];
   const shown = openId ?? rows[0]?.employee_id ?? null;
+  // A new filter shows its own first hire: the case opened under the last one (an in-progress hire
+  // still missing documents) must not stay on screen beside a list of completed ones.
+  const pickFilter = (f: Filter) => {
+    setFilter(f);
+    if (openId !== null) onOpen(null);
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3.5">
@@ -44,7 +50,7 @@ export default function Onboarding({ openId, onOpen }: { openId: number | null; 
         <Seg
           label="Onboardings"
           value={filter}
-          onChange={setFilter}
+          onChange={pickFilter}
           options={[
             { id: 'in_progress', label: 'In progress' },
             { id: 'completed', label: 'Completed' },
