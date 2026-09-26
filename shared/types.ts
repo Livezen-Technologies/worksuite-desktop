@@ -67,6 +67,8 @@ export interface UserSummary {
 export interface Organization {
   id: string;
   name: string;
+  /** The person's role in it ("owner", "asset_manager", "super-admin"), when the server says. */
+  role?: string | null;
 }
 
 /** §11.2 desktop policy keys, with the defaults applied. */

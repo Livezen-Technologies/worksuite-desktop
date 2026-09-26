@@ -6,7 +6,9 @@ import { apiGet } from '../core/api';
 import { appLabel, t } from '../core/i18n';
 import { useStore } from '../core/store';
 import { navigate, tabsStore } from '../core/tabs';
-import { openOverlay } from '../core/ui';
+import { closeOverlay, openOverlay, ui } from '../core/ui';
+import { roleLabel } from '../core/orgs';
+import { OrgTile } from '../app/overlays/OrgSwitcher';
 import { Icon } from '../components/Icon';
 import { CountBadge, cx } from '../components/ui';
 import { bytes } from '../core/time';
@@ -48,6 +50,7 @@ export function Sidebar() {
       onMouseLeave={() => setHover(false)}
       className={cx('flex shrink-0 flex-col bg-navy pb-3 text-navy-ink transition-[width] duration-150', collapsed ? 'w-[64px]' : 'w-[220px]')}
     >
+      <OrgCard collapsed={collapsed} />
       <div className="flex-1 overflow-y-auto overflow-x-hidden px-2.5 pt-2 scroll-thin">
         <ul className="flex flex-col gap-0.5">
           {work.map((a) => (
@@ -92,6 +95,56 @@ export function Sidebar() {
         </button>
       </div>
     </nav>
+  );
+}
+
+/**
+ * The organisation you are working in, at the top of the sidebar (sidebar
+ * designs 1–3): the title bar keeps search. Opens the switcher under it — or
+ * beside it, collapsed to its tile.
+ */
+function OrgCard({ collapsed }: { collapsed: boolean }) {
+  const b = useStore(app, (s) => s.bootstrap);
+  const current = useStore(app, (s) => s.organizationId);
+  const overlay = useStore(ui, (s) => s.overlay);
+  const orgs = b?.organizations ?? [];
+  if (!b || orgs.length === 0) return null;
+  const single = orgs.length === 1;
+  const org = current ? orgs.find((o) => o.id === current) : single ? orgs[0] : undefined;
+  const index = org ? orgs.indexOf(org) + 1 : 0;
+  const name = org?.name ?? 'All organizations';
+  const sub = !org ? `${orgs.length} organizations` : single ? (roleLabel(org.role) ?? 'Organization') : `Organization · ${index} of ${orgs.length}`;
+  const open = overlay === 'org';
+  const toggle = () => (open ? closeOverlay() : openOverlay('org'));
+  return (
+    <div className="px-2.5 pt-2.5 pb-1">
+      <button
+        type="button"
+        data-org-card
+        onClick={toggle}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label={`Organization: ${name}. Change organization`}
+        title={collapsed ? `${name} — ${sub}` : undefined}
+        className={cx(
+          'relative flex w-full items-center gap-2.5 rounded-[12px] text-left transition-colors',
+          collapsed ? 'h-11 justify-center' : 'h-[54px] border px-2.5',
+          !collapsed && (open ? 'border-[#5B79F0] bg-white/10 shadow-[0_0_0_1px_#5B79F0]' : 'border-white/10 bg-white/6 hover:bg-white/10'),
+        )}
+      >
+        <OrgTile id={org?.id ?? 'all'} name={name} all={!org} size={collapsed ? 36 : 32} />
+        {collapsed && orgs.length > 1 ? <span className="absolute -right-0.5 -bottom-0.5 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-navy bg-[#5B79F0] px-0.5 text-[9.5px] font-bold text-white">{orgs.length}</span> : null}
+        {!collapsed ? (
+          <>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <b className="truncate text-[13.5px] text-white">{name}</b>
+              <span className="truncate text-[11.5px] text-navy-ink/80">{sub}</span>
+            </span>
+            {!single ? <Icon name="chevrons-up-down" size={15} className="shrink-0 text-navy-ink/70" /> : null}
+          </>
+        ) : null}
+      </button>
+    </div>
   );
 }
 

@@ -4,13 +4,13 @@ import type { NotificationItem, Transfer } from '@shared/types';
 import { app, organizationName } from '../../core/app-state';
 import { call, errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
-import { closeTabsOutside, navigate } from '../../core/tabs';
+import { navigate } from '../../core/tabs';
 import { openWebLink } from '../../core/tab-context';
 import { closeOverlay, openOverlay } from '../../core/ui';
 import { bytes, duration, relative } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
-import { Avatar, Button, Chip, Empty, IconButton, Spinner, cx } from '../../components/ui';
+import { Button, Chip, Empty, IconButton, Spinner, cx } from '../../components/ui';
 import { UserPicture, useMe } from '../../components/UserPicture';
 import { apiGet, apiPost } from '../../core/api';
 import { useMfa } from '../../modules/account/api';
@@ -158,61 +158,6 @@ function TransferRow({ t }: { t: Transfer }) {
         {t.state === 'running' || t.state === 'paused' || t.state === 'queued' ? <IconButton icon="x" label="Cancel" size={15} onClick={() => void act('transfers:cancel')} /> : null}
       </div>
     </div>
-  );
-}
-
-/** Organization selector (FR-AUTH-05/06, WF-03). */
-export function OrgSwitcher() {
-  const b = useStore(app, (s) => s.bootstrap);
-  const current = useStore(app, (s) => s.organizationId);
-  const [busy, setBusy] = useState(false);
-  if (!b) return null;
-  const choose = async (id: string | null) => {
-    setBusy(true);
-    try {
-      const r = await call('session:switchOrganization', { organizationId: id });
-      app.set({ organizationId: r.organizationId });
-      const closed = closeTabsOutside(id);
-      if (closed) toast('info', `${closed} tab${closed === 1 ? '' : 's'} from another organization closed.`);
-      toast('success', `Showing ${organizationName(id)}.`);
-      closeOverlay();
-    } catch (e) {
-      toast('error', errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-  const orgs = b.organizations;
-  return (
-    <Popover label="Organizations" align="left" offset={220} width={320}>
-      <PopoverHeader title="Organization" />
-      <ul className="max-h-[420px] overflow-y-auto p-1.5 scroll-thin">
-        {orgs.length > 1 ? (
-          <li>
-            <OrgRow name="All organizations" hint="Where the app supports it" active={current === null} onClick={() => void choose(null)} disabled={busy} />
-          </li>
-        ) : null}
-        {orgs.map((o) => (
-          <li key={o.id}>
-            <OrgRow name={o.name} active={current === o.id || (orgs.length === 1 && current === null)} onClick={() => void choose(o.id)} disabled={busy || orgs.length === 1} />
-          </li>
-        ))}
-        {orgs.length === 0 ? <li className="p-4 text-[12.5px] text-ink-3">No organizations are shared with you.</li> : null}
-      </ul>
-    </Popover>
-  );
-}
-
-function OrgRow({ name, hint, active, onClick, disabled }: { name: string; hint?: string; active: boolean; onClick: () => void; disabled?: boolean }) {
-  return (
-    <button type="button" onClick={onClick} disabled={disabled && !active} className={cx('flex w-full items-center gap-3 rounded-[8px] px-2.5 py-2 text-left', active ? 'bg-selection' : 'hover:bg-subtle')}>
-      <Avatar name={name} size={28} />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13.5px] font-semibold text-ink">{name}</span>
-        {hint ? <span className="block text-[11.5px] text-ink-3">{hint}</span> : null}
-      </span>
-      {active ? <Icon name="check" size={16} className="text-primary" /> : null}
-    </button>
   );
 }
 

@@ -7,7 +7,10 @@ import { ErrorNote, Spinner } from '../../components/ui';
 import { BankCard } from './Bank';
 import MyDocuments from './MyDocuments';
 import { ProgressBar, RequiredDocs, StepList, type ObState } from './onboardingParts';
-import { btn, btnPrimary, Empty, Field, input, PageHead, Panel, SidePanel } from './parts';
+import { btn, btnPrimary, Field, input, PageHead, Panel, SidePanel } from './parts';
+import { dayLong } from './dates';
+import { Icon } from '../../components/Icon';
+import { useTab } from '../../core/tab-context';
 
 /**
  * My onboarding (HrSelfService "My onboarding"; the web's MyOnboarding):
@@ -24,21 +27,38 @@ const GROUPS: Array<[string, Array<[string, string, string?]>]> = [
 
 export default function MyOnboarding() {
   const qc = useQueryClient();
+  const { go } = useTab();
   const [docs, setDocs] = useState(false);
   const q = useQuery({ queryKey: ['hr', 'my-onboarding'], queryFn: ({ signal }) => apiGet<ObState>('/api/hr/me/onboarding', undefined, signal), retry: false });
   const refresh = () => void qc.invalidateQueries({ queryKey: ['hr'] });
   if (q.isLoading) return <Spinner />;
   if (q.error) return <ErrorNote error={q.error} onRetry={() => void q.refetch()} />;
   const s = q.data!;
-  if (s.linked === false) return <Empty text="Your login is not linked to an employee record yet, so there is nothing to complete." />;
-  if (!s.onboarding) return <Empty text="You are not going through onboarding — your employment record is already set up." />;
-  if (s.onboarding.status === 'cancelled') return <Empty text="Your onboarding is not currently active. Please speak to HR." />;
+  if (s.linked === false) return <Nothing icon="link" title="Not linked to an employee record" text="Your login is not linked to an employee record yet, so there is nothing to complete. HR can link it." />;
+  if (!s.onboarding) return <Nothing icon="check-circle" title="You’re all set up" text="You are not going through onboarding — your employment record is already set up." action={{ label: 'Open My HR', run: () => go('/hr?tab=myhr') }} />;
+  if (s.onboarding.status === 'cancelled') return <Nothing icon="info" title="Onboarding is paused" text="Your onboarding is not currently active. Please speak to HR." />;
   const done = s.onboarding.status === 'completed';
+  const first = (s.profile?.preferred_name || s.profile?.first_name || s.employee.name.split(/\s+/)[0]) ?? '';
+  const when = s.onboarding.target_start_date ?? s.employee.joined_at;
 
   return (
-    <div className="flex flex-col gap-3.5">
+    <div className="@container flex flex-col gap-3.5">
       <PageHead title="My onboarding" sub={done ? 'Everything is done. Welcome aboard.' : 'A few things to complete before your first day. Anything you enter here goes straight onto your HR record.'} />
-      <div className="grid grid-cols-[320px_1fr] gap-3.5">
+      <section className="flex flex-wrap items-center gap-4 rounded-[14px] border border-line bg-[linear-gradient(120deg,#F3F5FE,var(--color-surface))] px-5 py-4 dark:bg-[linear-gradient(120deg,var(--color-selection),var(--color-surface))]">
+        <span className="flex min-w-[220px] flex-1 flex-col">
+          <b className="text-[18px] text-ink">{done ? `Welcome aboard, ${first}` : `Welcome, ${first}`}</b>
+          <span className="text-[12.5px] text-ink-3">
+            {s.employee.employee_no}
+            {when ? ` · ${done ? 'joined' : 'joining'} ${dayLong(when)}` : ''}
+            {!done && s.next ? ` · next: ${s.steps.find((x) => x.step === s.next)?.label ?? ''}` : ''}
+          </span>
+        </span>
+        <span className="flex w-[220px] items-center gap-2.5">
+          <ProgressBar percent={done ? 100 : s.percent} className="flex-1" />
+          <b className="text-[15px] text-ink tabular-nums">{done ? 100 : s.percent}%</b>
+        </span>
+      </section>
+      <div className="grid items-start gap-3.5 @min-[900px]:grid-cols-[340px_minmax(0,1fr)]">
         <div className="flex flex-col gap-3">
           <Panel title="Where you are" bodyClassName="">
             <div className="flex items-center gap-2.5 border-b border-line/70 px-3.5 py-2.5">
@@ -88,6 +108,26 @@ export default function MyOnboarding() {
   );
 }
 
+function Nothing({ icon, title, text, action }: { icon: string; title: string; text: string; action?: { label: string; run: () => void } }) {
+  return (
+    <div className="flex flex-col gap-3.5">
+      <PageHead title="My onboarding" />
+      <div className="flex flex-col items-center gap-2 rounded-[14px] border border-line bg-surface px-6 py-12 text-center">
+        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-selection text-primary">
+          <Icon name={icon} size={20} />
+        </span>
+        <b className="text-[14.5px] text-ink">{title}</b>
+        <span className="max-w-[420px] text-[12.5px] text-ink-3">{text}</span>
+        {action ? (
+          <button type="button" className={`${btn} mt-1`} onClick={action.run}>
+            {action.label}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 /** My details, saved field by field (the server takes one field per call and refuses the rest). */
 function Details({ employeeId, profile, allowed, onSaved }: { employeeId: number; profile: Record<string, string | null>; allowed: string[]; onSaved: () => void }) {
   const was = Object.fromEntries(allowed.map((k) => [k, profile[k] ?? '']));
@@ -125,7 +165,7 @@ function Details({ employeeId, profile, allowed, onSaved }: { employeeId: number
         return (
           <div key={title} className="flex flex-col gap-1.5">
             <div className="text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase">{title}</div>
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-2 gap-2.5 @min-[1100px]:grid-cols-3">
               {shown.map(([k, label, type]) => (
                 <Field key={k} label={label}>
                   <input aria-label={label} type={type ?? 'text'} value={f[k] ?? ''} onChange={(e) => (setSaved(false), setF((p) => ({ ...p, [k]: e.target.value })))} className={input} />

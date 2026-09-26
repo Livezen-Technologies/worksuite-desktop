@@ -4,12 +4,14 @@ import { ApiError, apiGet, apiPost, apiPut } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
+import { Icon } from '../../components/Icon';
+import { useTab } from '../../core/tab-context';
 import { EMPLOYMENT_TYPES, hasLeft, type EmployeeRow } from './api';
 import { BankCard } from './Bank';
 import { dayLong, ymd } from './dates';
 import MyDocuments from './MyDocuments';
 import { HAND_TICKED, ProgressBar, RequiredDocs, StepList, type ObRow, type ObState, type ObStep, type ReqDoc } from './onboardingParts';
-import { btn, btnPrimary, Empty, Field, humanise, input, PageHead, Panel, Seg, Sheet, SidePanel } from './parts';
+import { btn, btnPrimary, Field, humanise, Initials, input, PageHead, Panel, Seg, Sheet, SidePanel, StatusChip } from './parts';
 import { Select } from '../../components/Select';
 
 /**
@@ -22,11 +24,19 @@ import { Select } from '../../components/Select';
  */
 type Filter = 'in_progress' | 'completed' | 'all';
 
+/**
+ * The list and one case side by side. The case lays itself out by the room
+ * it has (a container query), not the window's: beside the list on a laptop
+ * its steps take the full width and the documents and bank go under them,
+ * and on a wide screen they sit side by side as in the design. With nobody
+ * chosen, the first hire in the list is shown.
+ */
 export default function Onboarding({ openId, onOpen }: { openId: number | null; onOpen: (employeeId: number | null) => void }) {
   const [filter, setFilter] = useState<Filter>('in_progress');
   const [starting, setStarting] = useState(false);
   const list = useQuery({ queryKey: ['hr', 'onboarding', filter], queryFn: ({ signal }) => apiGet<{ onboardings: ObRow[]; steps: Record<string, string> }>('/api/hr/onboarding', { status: filter }, signal) });
   const rows = list.data?.onboardings ?? [];
+  const shown = openId ?? rows[0]?.employee_id ?? null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3.5">
@@ -42,43 +52,69 @@ export default function Onboarding({ openId, onOpen }: { openId: number | null; 
           ]}
         />
         <button type="button" className={btnPrimary} onClick={() => setStarting(true)}>
-          New employee
+          <Icon name="user-plus" size={15} /> New employee
         </button>
       </PageHead>
       {list.isLoading ? <Spinner /> : list.error ? <ErrorNote error={list.error} onRetry={() => void list.refetch()} /> : null}
-      <div className="grid min-h-0 flex-1 grid-cols-[300px_1fr] gap-3.5">
-        <div className="flex min-h-0 flex-col gap-2 overflow-y-auto pr-0.5 scroll-thin">
-          {rows.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              aria-current={openId === c.employee_id ? 'true' : undefined}
-              onClick={() => onOpen(c.employee_id)}
-              className={cx('flex flex-col gap-[5px] rounded-[12px] bg-surface px-3.5 py-3 text-left', openId === c.employee_id ? 'border-2 border-primary' : 'border border-line hover:border-primary/40')}
-            >
-              <b className="truncate text-ink">{c.name}</b>
-              <span className="truncate text-[12px] text-ink-3">
-                {c.employee_no}
-                {c.target_start_date || c.joined_at ? ` · joins ${dayLong(c.target_start_date ?? c.joined_at)}` : ''}
-              </span>
-              <span className="flex items-center gap-2">
-                <ProgressBar percent={c.percent} className="flex-1" />
-                <b className="text-[12px] text-ink tabular-nums">{c.percent}%</b>
-              </span>
-              <span className="truncate text-[12px] text-ink-2">{c.status === 'completed' ? 'Completed' : c.status === 'cancelled' ? 'Cancelled' : `Next: ${c.next_label ?? 'ready to activate'}`}</span>
-            </button>
-          ))}
-          {list.data && !rows.length ? <Empty text={filter === 'in_progress' ? 'Nobody is being onboarded.' : 'Nothing here.'} /> : null}
+      {list.data && !rows.length ? (
+        <div className="flex flex-col items-center gap-2 rounded-[14px] border border-dashed border-line bg-surface px-6 py-12 text-center">
+          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-selection text-primary">
+            <Icon name="user-plus" size={20} />
+          </span>
+          <b className="text-[14.5px] text-ink">{filter === 'in_progress' ? 'Nobody is being onboarded' : filter === 'completed' ? 'No finished onboardings yet' : 'No onboardings yet'}</b>
+          <span className="max-w-[380px] text-[12.5px] text-ink-3">Start one when somebody is joining: their record, their login, the documents you need from them and the steps before their first day.</span>
+          <button type="button" className={cx(btnPrimary, 'mt-1')} onClick={() => setStarting(true)}>
+            New employee
+          </button>
         </div>
-        <div className="min-w-0">{openId ? <Case key={openId} employeeId={openId} onBack={() => onOpen(null)} /> : <Empty text="Choose somebody on the left to see their steps." />}</div>
-      </div>
+      ) : null}
+      {rows.length ? (
+        <div className="grid min-h-0 flex-1 grid-cols-[272px_minmax(0,1fr)] gap-3.5">
+          <div className="flex min-h-0 flex-col gap-2 overflow-y-auto pr-0.5 pb-2 scroll-thin" role="list" aria-label="New hires">
+            {rows.map((c) => {
+              const on = shown === c.employee_id;
+              const when = c.target_start_date ?? c.joined_at;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  role="listitem"
+                  aria-current={on ? 'true' : undefined}
+                  onClick={() => onOpen(c.employee_id)}
+                  className={cx('flex shrink-0 flex-col gap-1.5 rounded-[12px] px-3.5 py-3 text-left', on ? 'border-2 border-primary bg-surface shadow-[0_2px_8px_rgb(var(--ws-shadow-rgb)/.08)]' : 'border border-line bg-surface hover:border-primary/40')}
+                >
+                  <span className="flex items-center gap-2">
+                    <b className="min-w-0 flex-1 truncate text-ink">{c.name}</b>
+                    {c.status === 'completed' ? <StatusChip>Completed</StatusChip> : c.status === 'cancelled' ? <StatusChip>Cancelled</StatusChip> : null}
+                  </span>
+                  <span className="truncate text-[12px] text-ink-3">
+                    {c.employee_no}
+                    {when ? ` · joins ${dayLong(when)}` : ' · no joining date'}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <ProgressBar percent={c.percent} className="flex-1" />
+                    <b className="text-[12px] text-ink tabular-nums">{c.percent}%</b>
+                  </span>
+                  {c.status === 'in_progress' ? (
+                    <span className="truncate text-[12px] text-ink-2">
+                      Next: <span className="font-semibold text-ink">{c.next_label ?? 'ready to activate'}</span>
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+          <div className="@container min-w-0 overflow-y-auto pb-2 scroll-thin">{shown ? <Case key={shown} employeeId={shown} /> : null}</div>
+        </div>
+      ) : null}
       {starting ? <StartOnboarding onClose={() => setStarting(false)} onDone={(id) => (setStarting(false), setFilter('in_progress'), onOpen(id))} /> : null}
     </div>
   );
 }
 
-function Case({ employeeId, onBack }: { employeeId: number; onBack: () => void }) {
+function Case({ employeeId }: { employeeId: number }) {
   const qc = useQueryClient();
+  const { go } = useTab();
   const [marking, setMarking] = useState<ObStep | null>(null);
   const [editing, setEditing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -92,6 +128,7 @@ function Case({ employeeId, onBack }: { employeeId: number; onBack: () => void }
   const s = q.data!;
   const e = s.employee;
   const open = s.onboarding?.status === 'in_progress';
+  const when = s.onboarding?.target_start_date ?? e.joined_at;
 
   const step = async (st: string, body: { status: string; note?: string | null }) => {
     try {
@@ -127,66 +164,74 @@ function Case({ employeeId, onBack }: { employeeId: number; onBack: () => void }
       return false;
     }
   };
+  const toBank = () => document.getElementById(`ob-bank-${employeeId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  /** What fixes each step, first; "Mark…" last. The first is what Continue onboarding does. */
   const actions = (st: ObStep) => {
     if (!open || st.step === 'start_working') return [];
     const out: Array<{ label: string; run: () => void }> = [];
     const done = st.status === 'done' || st.status === 'skipped';
-    if (!done && (st.step === 'required_documents' || st.step === 'hr_verification')) out.push({ label: 'Open', run: () => setDocs(true) });
-    if (!done && HAND_TICKED.has(st.step)) out.push({ label: 'Mark as done', run: () => void step(st.step, { status: 'done' }) });
+    if (!done) {
+      if (st.step === 'registration') out.push({ label: 'Edit details', run: () => setEditing(true) });
+      if (st.step === 'employee_profile') out.push({ label: 'Open profile', run: () => go(`/hr?tab=people&employee=${employeeId}`) });
+      if (st.step === 'required_documents' || st.step === 'hr_verification') out.push({ label: 'Open', run: () => setDocs(true) });
+      if (st.step === 'bank_details') out.push({ label: 'Add', run: toBank });
+      if (HAND_TICKED.has(st.step)) out.push({ label: 'Mark as done', run: () => void step(st.step, { status: 'done' }) });
+    }
     if (!done || HAND_TICKED.has(st.step) || st.status === 'skipped') out.push({ label: 'Mark…', run: () => setMarking(st) });
     return out;
   };
+  const nextStep = s.steps.find((x) => x.step === s.next);
+  const continueWith = nextStep ? actions(nextStep).find((a) => a.label !== 'Mark…') : undefined;
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className="font-semibold text-primary hover:underline" onClick={onBack}>
-          ← All onboardings
-        </button>
-        <b className="min-w-0 flex-1 truncate text-[15px] text-ink">
-          {e.name} · {e.employee_no}
-          {s.onboarding?.target_start_date || e.joined_at ? ` · joins ${dayLong(s.onboarding?.target_start_date ?? e.joined_at)}` : ''}
-        </b>
+      <section className="flex flex-wrap items-center gap-3 rounded-[12px] border border-line bg-surface px-4 py-3">
+        <Initials name={e.name} size={42} />
+        <span className="flex min-w-[240px] flex-1 flex-col">
+          <b className="truncate text-[16px] text-ink">{e.name}</b>
+          <span className="truncate text-[12.5px] text-ink-3">
+            {[e.employee_no, humanise(e.type), when ? `joins ${dayLong(when)}` : 'no joining date yet'].filter(Boolean).join(' · ')}
+          </span>
+        </span>
         {open ? (
-          <>
+          <span className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            <button type="button" className="px-1 text-[12.5px] font-semibold text-danger hover:underline" onClick={() => setCancelling(true)}>
+              Cancel onboarding
+            </button>
             <button type="button" className={btn} onClick={() => setEditing(true)}>
               Edit details
             </button>
-            <button type="button" className={btn} onClick={() => setCancelling(true)}>
-              Cancel onboarding
-            </button>
-            <button type="button" className={btnPrimary} title={s.can_activate ? undefined : 'Some steps are still outstanding'} onClick={() => void activate()}>
+            {continueWith ? (
+              <button type="button" className={btn} title={`Next: ${nextStep?.label}`} onClick={continueWith.run}>
+                Continue onboarding
+              </button>
+            ) : null}
+            <button type="button" className={btnPrimary} title={s.can_activate ? 'Make them an active employee' : 'Some steps are still outstanding'} onClick={() => void activate()}>
               Activate
             </button>
-          </>
+          </span>
         ) : (
-          <span className="text-[12.5px] font-semibold text-ink-2">{s.onboarding?.status === 'completed' ? `Completed ${dayLong(s.onboarding.completed_at?.slice(0, 10))}` : `Cancelled${s.onboarding?.cancel_reason ? ` — ${s.onboarding.cancel_reason}` : ''}`}</span>
+          <StatusChip>{s.onboarding?.status === 'completed' ? `Completed ${dayLong(s.onboarding.completed_at?.slice(0, 10))}` : `Cancelled${s.onboarding?.cancel_reason ? ` — ${s.onboarding.cancel_reason}` : ''}`}</StatusChip>
         )}
-      </div>
-      <div className="grid grid-cols-[1.25fr_1fr] gap-3">
-        <Panel title="Steps">
+      </section>
+      <div className="grid items-start gap-3 @min-[880px]:grid-cols-[1.25fr_1fr]">
+        <Panel title="Steps" sub={open ? (s.can_activate ? 'Everything is done — ready to activate.' : `${s.blocking.length} still outstanding`) : undefined}>
           <div className="flex items-center gap-2.5 border-b border-line/70 px-3.5 py-2.5">
-            <span className="text-[12.5px] font-semibold text-ink-2">Onboarding progress · {s.percent}%</span>
+            <span className="text-[12.5px] font-semibold text-ink-2">Onboarding progress</span>
             <ProgressBar percent={s.percent} className="flex-1" />
+            <b className="text-[12.5px] text-ink tabular-nums">{s.percent}%</b>
           </div>
           <StepList state={s} actions={actions} />
         </Panel>
-        <div className="flex flex-col gap-3">
-          {open && s.blocking.length ? (
-            <Panel title={`Still outstanding — ${s.blocking.length}`} bodyClassName="px-3.5 py-2">
-              <ul className="m-0 flex list-disc flex-col gap-1 pl-4 text-[12.5px] text-ink-2">
-                {s.blocking.map((b) => (
-                  <li key={b}>{b}</li>
-                ))}
-              </ul>
-            </Panel>
-          ) : null}
+        <div className="grid items-start gap-3 @min-[600px]:@max-[879px]:grid-cols-2">
           {s.required_documents?.length ? (
             <Panel title="Required documents" action={<button type="button" className="font-semibold text-primary hover:underline" onClick={() => setDocs(true)}>All documents</button>}>
               <RequiredDocs docs={s.required_documents} uploadTo={`/api/hr/employees/${employeeId}/documents`} onChanged={refresh} onVerify={(d, v) => (v === 'rejected' ? setRejecting(d) : void verify(d, v))} />
             </Panel>
           ) : null}
-          <BankCard employeeId={employeeId} />
+          <div id={`ob-bank-${employeeId}`}>
+            <BankCard employeeId={employeeId} />
+          </div>
         </div>
       </div>
       {marking ? <MarkStep step={marking} onClose={() => setMarking(null)} onMark={async (status, note) => (await step(marking.step, { status, note })) && setMarking(null)} /> : null}

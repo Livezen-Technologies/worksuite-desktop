@@ -31,6 +31,9 @@ export const DEFAULT_SHORTCUTS: Record<string, string> = {
   lock: 'Mod+L',
   help: 'F1',
   ...Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`tab-${i + 1}`, `Mod+${i + 1}`])),
+  // Organisations: 0 is All organizations, 1–9 the list in order. Control on
+  // macOS, where ⌘1–9 are the tabs; Ctrl+Alt elsewhere, where Ctrl is.
+  ...Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`org-${i}`, isMac ? `Ctrl+${i}` : `Mod+Alt+${i}`])),
 };
 
 const commands = new Map<string, Command>();

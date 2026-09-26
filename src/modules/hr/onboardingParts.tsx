@@ -117,18 +117,26 @@ export function StepList({ state, actions }: { state: ObState; actions?: (s: ObS
         const chip = stepChip(s, state.next);
         const acts = actions?.(s) ?? [];
         return (
-          <div key={s.step} className="flex items-center gap-2.5 border-b border-line/70 px-3.5 py-2.5 last:border-b-0">
-            <Glyph state={done ? 'done' : s.step === state.next ? 'next' : 'todo'} />
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className={cx('font-semibold', done ? 'text-ink-2' : 'text-ink')}>{s.label}</span>
-              {!done && (s.note || s.why) ? <span className="truncate text-[11.5px] text-ink-3" title={s.note ?? s.why ?? undefined}>{s.note ?? s.why}</span> : null}
+          <div key={s.step} data-step={s.step} className={cx('flex items-start gap-2.5 border-b border-line/70 px-3.5 py-2.5 last:border-b-0', s.step === state.next && !done && 'bg-[#F6F7FE] dark:bg-selection/40')}>
+            <span className="pt-px">
+              <Glyph state={done ? 'done' : s.step === state.next ? 'next' : 'todo'} />
             </span>
-            {chip ? <StatusChip>{chip}</StatusChip> : null}
-            {acts.map((a) => (
-              <button key={a.label} type="button" className="shrink-0 text-[12.5px] font-semibold text-primary hover:underline" onClick={a.run}>
-                {a.label}
-              </button>
-            ))}
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className={cx('font-semibold', done ? 'text-ink-2' : 'text-ink')}>{s.label}</span>
+                {chip ? <StatusChip>{chip}</StatusChip> : null}
+              </span>
+              {!done && (s.note || s.why) ? <span className="line-clamp-2 text-[12px] leading-[1.45] text-ink-3" title={s.note ?? s.why ?? undefined}>{s.note ?? s.why}</span> : null}
+            </span>
+            {acts.length ? (
+              <span className="flex shrink-0 items-center gap-3 pt-0.5">
+                {acts.map((a) => (
+                  <button key={a.label} type="button" className="shrink-0 text-[12.5px] font-semibold whitespace-nowrap text-primary hover:underline" onClick={a.run}>
+                    {a.label}
+                  </button>
+                ))}
+              </span>
+            ) : null}
           </div>
         );
       })}

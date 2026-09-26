@@ -1,4 +1,4 @@
-import { app, organizationName } from '../core/app-state';
+import { app } from '../core/app-state';
 import { isMac } from '../core/bridge';
 import { t } from '../core/i18n';
 import { useStore } from '../core/store';
@@ -6,7 +6,7 @@ import { minimiseChatDrawer, openChatDrawer, openOverlay, toggleDock, ui } from 
 import { prettyAccelerator } from '../core/commands';
 import { Icon } from '../components/Icon';
 import { ClockControl } from '../app/overlays/ClockPopover';
-import { CountBadge, cx, initials } from '../components/ui';
+import { CountBadge, cx } from '../components/ui';
 import { UserPicture, useMe } from '../components/UserPicture';
 
 /**
@@ -20,15 +20,12 @@ export function TitleBar() {
   const user = useStore(app, (s) => s.auth?.user);
   const me = useMe();
   const bootstrap = useStore(app, (s) => s.bootstrap);
-  const orgId = useStore(app, (s) => s.organizationId);
   const overlay = useStore(ui, (s) => s.overlay);
   const dock = useStore(ui, (s) => s.dock);
   const transfers = useStore(app, (s) => s.transfers);
   const activeTransfers = transfers.filter((x) => x.state === 'running' || x.state === 'queued').length;
   const hasAi = useStore(app, (s) => s.apps.some((a) => a.id === 'ai'));
   const hasChat = useStore(app, (s) => s.apps.some((a) => a.id === 'chat'));
-  const orgName = organizationName(orgId);
-  const multiOrg = (bootstrap?.organizations.length ?? 0) > 1;
 
   const network = status?.network ?? 'ONLINE';
   const pending = status?.pendingChanges ?? 0;
@@ -50,17 +47,6 @@ export function TitleBar() {
         <span className="text-[16px] font-bold tracking-tight">WorkSuite</span>
       </div>
 
-      <button
-        type="button"
-        className={cx('no-drag flex h-9 max-w-[260px] items-center gap-2 rounded-[9px] border border-white/12 bg-white/5 px-2.5 text-[13.5px] font-semibold hover:bg-white/10', overlay === 'org' && 'bg-white/10')}
-        onClick={() => openOverlay('org')}
-        aria-label={`Organization: ${orgName}. Change organization`}
-        aria-haspopup="menu"
-      >
-        <span className="flex h-6 w-6 items-center justify-center rounded-[6px] bg-teal/30 text-[10.5px] font-bold text-teal-light">{initials(orgName)}</span>
-        <span className="truncate">{orgName}</span>
-        {multiOrg ? <Icon name="chevron-down" size={15} className="opacity-70" /> : null}
-      </button>
 
       <button
         type="button"
@@ -94,8 +80,14 @@ export function TitleBar() {
           <Icon name="sparkles" size={15} /> {t('shell.ai')}
         </button>
       ) : null}
-      <button type="button" className="no-drag rounded-full ring-2 ring-white/20 hover:ring-white/40" onClick={() => openOverlay('profile')} aria-label={`Account: ${me?.name ?? user?.name ?? ''}`}>
-        <UserPicture name={me?.name ?? user?.name} src={me?.avatar} size={32} className="!bg-[#EEF1FD] !text-[#23349E]" />
+      {/* 32 px across, edge included (TopBar design: a 2 px indigo edge, no ring outside it), so it lines up with the buttons beside it. */}
+      <button
+        type="button"
+        className={cx('no-drag flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 bg-[#E8ECFA] transition-colors', overlay === 'profile' ? 'border-[#9DB0F7]' : 'border-[#3B5BDB] hover:border-[#7C93F2]')}
+        onClick={() => openOverlay('profile')}
+        aria-label={`Account: ${me?.name ?? user?.name ?? ''}`}
+      >
+        <UserPicture name={me?.name ?? user?.name} src={me?.avatar} size={28} className="!bg-[#E8ECFA] text-[11px] !text-[#1E2F8A]" />
       </button>
     </header>
   );

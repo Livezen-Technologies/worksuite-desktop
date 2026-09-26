@@ -1,4 +1,5 @@
 import iconUrl from '../../resources/icons/512x512.png';
+import { attentionCount } from '@shared/network';
 import type { StatusSnapshot } from '@shared/types';
 import { call } from './bridge';
 
@@ -10,7 +11,8 @@ import { call } from './bridge';
  * is never registered — the label was set ("99+") and nothing showed. So the
  * count is drawn onto the icon itself, as the system badge would look, and
  * the main process swaps the Dock icon. When the count is 0 the plain icon
- * goes back. Same count as the tray: unread chat + mail + notifications.
+ * goes back. Same count as the tray: unread chat + unread notifications —
+ * not mail, whose count covers every inbox including shared ones (see tray.ts).
  */
 const SIZE = 512;
 
@@ -67,7 +69,7 @@ export async function paint(label: string): Promise<string> {
 /** Called with every status push; repaints only when the label changes. */
 export async function updateDockBadge(status: StatusSnapshot | null, signedIn: boolean): Promise<void> {
   const u = status?.unread;
-  const label = signedIn && u ? badgeLabel(u.chat + u.mail + u.notifications) : '';
+  const label = signedIn && u ? badgeLabel(attentionCount(u.chat, u.notifications)) : '';
   if (label === shown) return;
   shown = label;
   try {

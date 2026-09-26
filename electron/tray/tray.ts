@@ -1,6 +1,6 @@
 import { app, Menu, nativeImage, Tray, type MenuItemConstructorOptions, type NativeImage } from 'electron';
 import { join } from 'node:path';
-import { trayState, trayTooltip, type TrayState } from '@shared/network';
+import { attentionCount, trayState, trayTooltip, type TrayState } from '@shared/network';
 import { logger } from '../main/log';
 
 const log = logger('tray');
@@ -101,11 +101,16 @@ export class TrayService {
 
   private render(): void {
     const m = this.model;
-    const unread = m.unreadChat + m.unreadMail + m.unreadOther;
+    // Badge: what needs you — unread chat and unread notifications, the two counts
+    // on the title bar (FR-TRAY-07). Not mail: its count is every unread message in
+    // every inbox you can open, shared mailboxes included, which the sidebar shows
+    // as information (indigo) and which put "99+" on the icon for anyone with a
+    // busy shared inbox. The tray menu still says how much mail is unread.
+    // On macOS the renderer paints it onto the Dock icon (core/dock-badge): an
+    // unsigned build is never registered for notifications, and macOS will not
+    // draw its badge.
+    const unread = attentionCount(m.unreadChat, m.unreadOther);
     const state = trayState({ error: !!m.error, offline: m.offline && m.signedIn, monitoring: false, syncing: false, unread });
-    // Badge: unread chat + mail + important notifications (FR-TRAY-07). On macOS the
-    // renderer paints it onto the Dock icon (core/dock-badge): an unsigned build is
-    // never registered for notifications, and macOS will not draw its badge.
     try {
       app.setBadgeCount(m.signedIn && process.platform !== 'darwin' ? unread : 0);
     } catch {

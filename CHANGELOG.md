@@ -5,6 +5,66 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-26 — 0.2.16: the organisation switcher in the sidebar, onboarding redrawn, the Dock count fixed
+
+**Changed**
+
+- **The organisation you are working in is now at the top of the
+  sidebar**, as a card with its tile, its name and "Organization · 1 of 2"
+  (or "All organizations · 2 organizations"). The title bar keeps search.
+  Click the card to open the switcher under it. With the sidebar collapsed,
+  the card is the first icon, with a count, and the switcher opens beside
+  it. The switcher has:
+  - "Find an organization";
+  - **All organizations** ("Everything you can see, across both");
+  - each company with **your role in it** and a tick on the current one;
+  - **shortcuts**: ⌃0 for All organizations and ⌃1–⌃9 for the list on
+    macOS; Ctrl+Alt+0–9 on Windows and Linux, where Ctrl+1–9 already switch
+    tabs;
+  - arrow keys and Enter;
+  - for whoever manages the directory: **Manage organizations** (opens the
+    Directory in the browser) and **Create an organization** (a name, and
+    optionally a legal name and country, with your time zone; the app
+    switches to it when you are a member).
+- **HR › Onboarding redrawn:**
+  - With nobody chosen, the first hire is shown.
+  - The case lays itself out by the room it has: beside the list on a
+    laptop the steps take the full width, with documents and bank details
+    below; on a wide screen they sit side by side.
+  - A step's reason ("Still needs date of birth, phone number, …") is no
+    longer cut off.
+  - Every step has the action that fixes it: Edit details, Open profile,
+    Open, Add, Mark as done, Mark….
+  - **Continue onboarding** runs the next step's action.
+  - The header card shows the hire, their employment type and joining date.
+  - "Still outstanding" is gone: the steps already said it.
+- **HR › My onboarding**: a welcome header with your joining date,
+  progress and next step; a layout that fits the window; and proper
+  messages when you are not being onboarded.
+
+**Fixed**
+
+- **The Dock icon showed "99+".** It added every unread email in every
+  inbox you can open, shared mailboxes included. The badge on the Dock,
+  the taskbar and the tray now counts what needs you: unread chat and
+  unread notifications, the two red counts on the title bar. The Mail count
+  stays in the sidebar and the tray menu.
+- **Your picture in the title bar** is now 32 px with a thin indigo edge, as
+  designed, instead of sitting inside a heavy grey ring that made it look
+  bigger than the buttons beside it.
+- A lint error in the 0.2.15 account e2e test (an unused helper).
+
+**Notes**
+
+- **Roles in the switcher need the server's LHCP f0a593a7** (the desktop
+  bootstrap now includes `role`), which is not yet deployed. Until then
+  each company says "Member".
+- The shell e2e's break step fails after about 20:30 Colombo time: the
+  server treats a clock-in after the shift's end plus grace as a missing
+  check-out. That is a server rule and is logged as a separate task.
+
+---
+
 ## 2026-09-26 — 0.2.15: My account, and your real picture in the title bar
 
 **Added**

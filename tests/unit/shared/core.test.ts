@@ -4,7 +4,7 @@ import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
 import { redact, redactString, redactUrl } from '@shared/redact';
 import { backoffDelay, WindowLimiter } from '@shared/backoff';
 import { canonicalJson } from '@shared/canonical-json';
-import { networkStatus, trayState, trayTooltip } from '@shared/network';
+import { attentionCount, networkStatus, trayState, trayTooltip } from '@shared/network';
 import { conflictedCopyName, numberedName, safeFileName } from '@shared/filename';
 import { resolveWebLink } from '@shared/links';
 
@@ -156,5 +156,13 @@ describe('web links', () => {
     expect(resolveWebLink('/finance/invoices/3')).toEqual({ kind: 'browser', path: '/finance/invoices/3', app: 'finance' });
     expect(resolveWebLink('https://evil.example/x').kind).toBe('none');
     expect(resolveWebLink('//evil.example/x').kind).toBe('none');
+  });
+});
+
+describe('the icon badge', () => {
+  it('counts unread chat and notifications, not every unread email in every inbox', () => {
+    expect(attentionCount(3, 5)).toBe(8);
+    expect(attentionCount(0, 0)).toBe(0);
+    expect(attentionCount(-1, Number.NaN)).toBe(0);
   });
 });

@@ -51,3 +51,13 @@ export function trayTooltip(s: {
   if (parts.length === 0) return 'WorkSuite — all up to date';
   return `WorkSuite — ${parts.join(' · ')}`;
 }
+
+/**
+ * The count on the tray, the taskbar and the Dock: unread chat and unread
+ * notifications — the two red counts on the title bar. Mail is not in it: its
+ * count is every unread message in every inbox the person can open, shared
+ * mailboxes included, which the sidebar shows as information.
+ */
+export function attentionCount(chat: number, notifications: number): number {
+  return Math.max(0, chat || 0) + Math.max(0, notifications || 0);
+}

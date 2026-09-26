@@ -95,9 +95,10 @@ try {
   t.check('picking from the dropdown sets the value', chosen === String(partnerEmp.id), chosen);
   await t.shot('b1-new-hire');
   await t.evaluate(clickIn(dialog('New employee'), 'Start onboarding'));
-  await t.waitFor(`${main}.includes('Onboarding progress')`, 'the new case', 20_000);
-  const list = (await api('me', 'GET', '/api/hr/onboarding?status=in_progress')).data?.onboardings ?? [];
+  // The first hire in the list is shown while nobody is chosen, so wait for THIS hire, not any case.
+  const list = (await poll(() => api('me', 'GET', '/api/hr/onboarding?status=in_progress'), (r) => (r.data?.onboardings ?? []).some((o) => !before.has(o.employee_id)))).data?.onboardings ?? [];
   const row = list.find((o) => !before.has(o.employee_id));
+  await t.waitFor(`!${dialog('New employee')} && [...document.querySelectorAll('main section b')].some(b => b.textContent.trim() === ${js(hire)})`, 'the new case', 20_000);
   const eid = row?.employee_id;
   const state = eid ? (await api('me', 'GET', `/api/hr/onboarding/${eid}`)).data : null;
   t.check('New employee starts an onboarding for a contract hire, reporting to the colleague chosen', !!row && state?.employee?.type === 'contract' && state?.employee?.name === hire, JSON.stringify(state?.employee ?? {}));

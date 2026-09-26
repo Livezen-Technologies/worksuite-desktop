@@ -11,7 +11,9 @@ import { closeOverlay, minimiseChatDrawer, openChatDrawer, openOverlay, toggleDo
 import { allowedModules, moduleFor } from '../modules/registry';
 import { AiDock } from '../app/overlays/AiDock';
 import { Launcher } from '../app/overlays/Launcher';
-import { NetworkPopover, NotificationCenter, OrgSwitcher, ProfileMenu, TransferCenter } from '../app/overlays/Popovers';
+import { NetworkPopover, NotificationCenter, ProfileMenu, TransferCenter } from '../app/overlays/Popovers';
+import { OrgSwitcher } from '../app/overlays/OrgSwitcher';
+import { switchOrganization } from '../core/orgs';
 import { ClockPopover } from '../app/overlays/ClockPopover';
 import { SearchOverlay } from '../app/overlays/SearchOverlay';
 import { UpdateBanner } from '../app/screens/UpdateScreens';
@@ -87,6 +89,23 @@ export function Shell() {
       registerCommand({ id: 'clock-in', label: 'Clock in / out', group: 'Create', run: () => navigate('/hr'), when: () => app.get().apps.some((a) => a.id === 'hr') }),
       registerCommand({ id: 'new-lead', label: 'New lead', group: 'Create', run: () => navigate('/crm?new=1'), when: () => app.get().apps.some((a) => a.id === 'crm') }),
       ...Array.from({ length: 9 }, (_, i) => registerCommand({ id: `tab-${i + 1}`, label: `Go to tab ${i + 1}`, group: 'Shell', run: () => activateIndex(i + 1) })),
+      // ⌃0–⌃9 (Ctrl+Alt elsewhere): All organizations, then the switcher's list in order. Shortcuts only, not palette entries.
+      ...Array.from({ length: 10 }, (_, i) =>
+        registerCommand({
+          id: `org-${i}`,
+          label: i === 0 ? 'Show all organizations' : `Switch to organization ${i}`,
+          group: 'Shell',
+          when: () => false,
+          run: () => {
+            const b = app.get().bootstrap;
+            const orgs = b?.organizations ?? [];
+            if (orgs.length < 2) return;
+            const target = i === 0 ? null : (orgs[i - 1]?.id ?? undefined);
+            if (target === undefined || target === app.get().organizationId) return;
+            void switchOrganization(target);
+          },
+        }),
+      ),
     ];
     const onKey = (e: KeyboardEvent) => {
       const acc = accelerator(e);

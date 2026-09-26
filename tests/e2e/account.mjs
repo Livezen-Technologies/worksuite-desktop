@@ -74,7 +74,6 @@ const clickIn = (scope, text) => `(() => { const root = ${scope} ?? document; co
 const setValue = (selector, value) => `(() => { const el = document.querySelector(${js(selector)}); if (!el) return false; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, ${js(value)}); el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`;
 /** A rail item, whose text may carry a count after the label (Security's failed sign-ins). */
 const rail = (label) => `(() => { const b = [...document.querySelectorAll('nav[aria-label="My account"] button')].find(b => b.textContent.trim().replace(/\\d+$/, '') === ${js(label)}); if (!b) return false; b.click(); return true; })()`;
-const toast = (text) => `[...document.querySelectorAll('[role="status"], [role="alert"]')].some(n => n.textContent.includes(${js(text)}))`;
 const dark = (on) => `(() => { document.documentElement.dataset.theme = ${js(on ? 'dark' : 'light')}; return true; })()`;
 async function poll(fn, ok, tries = 20) {
   let v;

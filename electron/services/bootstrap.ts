@@ -32,9 +32,9 @@ interface MeResponse {
 
 function toOrg(o: unknown): Organization | null {
   if (!o || typeof o !== 'object') return null;
-  const x = o as { id?: unknown; name?: unknown };
+  const x = o as { id?: unknown; name?: unknown; role?: unknown };
   if ((typeof x.id !== 'number' && typeof x.id !== 'string') || typeof x.name !== 'string') return null;
-  return { id: String(x.id), name: x.name };
+  return { id: String(x.id), name: x.name, role: typeof x.role === 'string' && x.role ? x.role.slice(0, 64) : null };
 }
 
 /** The media servers a bootstrap announces: absolute wss/https URLs only. */
