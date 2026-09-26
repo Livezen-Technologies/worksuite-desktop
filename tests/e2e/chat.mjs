@@ -77,7 +77,8 @@ try {
 
   // React.
   await t.evaluate(inBubble(hello, 'React 👍'));
-  await t.waitFor(`[...document.querySelectorAll('button')].some(b => (b.getAttribute('aria-label') ?? '').startsWith('👍 1'))`, 'the 👍 reaction');
+  // On this message's own bubble: earlier runs' messages carry reactions too.
+  await t.waitFor(`(() => { const g = [...document.querySelectorAll('div.group')].find(d => d.textContent.includes(${JSON.stringify(hello)})); return !!g && [...g.querySelectorAll('button')].some(b => (b.getAttribute('aria-label') ?? '').startsWith('👍 1')); })()`, 'the 👍 reaction');
   const reacted = await api('GET', `/api/chat/messages?room_id=${roomId}`);
   const helloMsg = reacted.data.messages.find((m) => m.message === hello);
   t.check('a reaction is shown and stored', !!helloMsg?.reactions?.some((r) => r.emoji === '👍' && r.count === 1));
@@ -97,7 +98,8 @@ try {
   await t.evaluate(inBubble(hello, 'Star'));
   await t.waitFor(t.hasText('★ starred'), 'the starred mark');
   await t.evaluate(inBubble(hello, 'Pin'));
-  await t.waitFor(`[...document.querySelectorAll('b')].some(b => b.textContent.trim() === 'Pinned')`, 'the pinned banner');
+  // The newest pin heads the banner (earlier runs may have left pins of their own).
+  await t.waitFor(`[...document.querySelectorAll('b')].some(b => b.textContent.trim() === 'Pinned' && b.parentElement.textContent.includes(${JSON.stringify(hello)}))`, 'the pinned banner');
   const pins = await api('GET', `/api/chat/rooms/${roomId}/pins`);
   t.check('starring marks the message; pinning shows it above the thread for both', (pins.data.messages ?? []).some((m) => m.id === helloMsg?.id));
   await t.shot('c1b-pinned');

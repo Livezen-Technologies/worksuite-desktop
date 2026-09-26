@@ -103,7 +103,17 @@ export async function launch({ name, env: extra = {}, args = [] }) {
     process.exit(failures ? 1 : 0);
   };
 
-  return { evaluate, waitFor, shot, hasText, clickButton, fill, check, skip, signIn, finish, attach, windowOpen, profile, outDir };
+  /** A real mouse drag (DevTools input, so the page can capture the pointer) from one point to another, in steps. */
+  const drag = async (x0, y0, x1, y1, steps = 8) => {
+    await main.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: x0, y: y0 });
+    await main.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: x0, y: y0, button: 'left', buttons: 1, clickCount: 1 });
+    for (let i = 1; i <= steps; i++) {
+      await main.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: x0 + ((x1 - x0) * i) / steps, y: y0 + ((y1 - y0) * i) / steps, button: 'left', buttons: 1 });
+      await sleep(30);
+    }
+    await main.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: x1, y: y1, button: 'left', buttons: 0, clickCount: 1 });
+  };
+  return { evaluate, waitFor, shot, hasText, clickButton, fill, check, skip, signIn, finish, attach, windowOpen, profile, outDir, send: main.send, drag };
 }
 
 /** Drive one page over CDP: evaluate, wait, screenshot, click, fill. */

@@ -5,6 +5,60 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-26 — 0.2.3: Calendar, to the CalendarWeek design
+
+**Added**
+
+- **Calendar is native.** Day, Week and Month over everything the calendar
+  brings: your events, meetings, tasks, leave, holidays, projects and
+  sprints, tender closings, asset dates and subscription renewals.
+  - **The left rail:** + New event, a small month (the days shown are marked;
+    a day opens it), the nine categories to show or hide (remembered on this
+    computer), and today's list.
+  - **The toolbar:** Today, ‹ ›, the range ("21 – 27 September 2026"),
+    Day/Week/Month, Import .ics, Export .ics and Subscribe.
+  - **Keys:** T today, N new event, D/W/M the view, ← → to move.
+- **Drag to reschedule, stretch to change the end, and undo.**
+  - Your own events, and meetings you organise or host, move by dragging in
+    quarter hours, to another time or day. In Month they drop on another day
+    and keep their time. Their bottom edge stretches.
+  - Every change shows "Moved to 10:00 AM · Undo" for twelve seconds.
+  - Moving a meeting reschedules it, and everybody invited is told.
+- **Repeating events ask "Move the whole series?"**
+  - **Only this one** (for the event's owner) makes a one-off at the new time
+    with the same people, video meeting and reminder, and skips that date in
+    the series.
+  - **Move every occurrence** moves the series by the distance dragged, from
+    its own first date.
+  - Both can be undone. Undoing "only this one" needs the server change
+    deployed with this (`unskip`).
+- **The event drawer** creates and edits events. It covers:
+  - title, start and end, all day, repeat and until, reminder, category,
+    colour, location and description;
+  - a video meeting;
+  - attendees invited as viewers or editors, with their roles and replies,
+    and your own reply to an invitation;
+  - meeting notes (a note linked to the event);
+  - Delete, or for a repeating event, skip just this date.
+
+  Anything else opens as a summary, with Open to where it lives.
+- **Subscribe** makes your calendar link for Google Calendar, Apple Calendar
+  (as webcal://) or Outlook, with the steps for each. The link is shown once,
+  when it is made; it can be replaced or stopped. It says when a calendar
+  last read it.
+- **Import .ics** reports how many events arrived, which were skipped and why.
+  **Export .ics** saves your calendar to your downloads.
+
+**Fixed**
+
+- **Opening an occurrence of a repeating event, then saving it, would have
+  moved the whole series to start on that day.** The drawer now shows and
+  saves the series' own times, and says a change applies to every occurrence.
+- **Every dialog's text sat against its left edge.** The dialog body now has
+  its padding, and the dialog box no longer draws a focus ring around itself.
+
+---
+
 ## 2026-09-26 — 0.2.2: Chat opens on your last conversation
 
 **Changed**

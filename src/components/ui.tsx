@@ -207,7 +207,7 @@ export function Modal({ title, children, onClose, width = 520, footer, labelledB
   }, [onClose]);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B1020]/50 p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
-      <div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={labelledBy} className="animate-in flex max-h-full w-full flex-col rounded-[14px] border border-line bg-surface shadow-2xl outline-none" style={{ maxWidth: width }}>
+      <div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={labelledBy} className="animate-in bare-focus flex max-h-full w-full flex-col rounded-[14px] border border-line bg-surface shadow-2xl outline-none" style={{ maxWidth: width }}>
         {title ? (
           <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
             <h2 id={labelledBy} className="text-[16px] font-bold text-ink">
@@ -216,7 +216,7 @@ export function Modal({ title, children, onClose, width = 520, footer, labelledB
             {onClose ? <IconButton icon="x" label="Close" onClick={onClose} /> : null}
           </div>
         ) : null}
-        <div className="min-h-0 flex-1 overflow-auto scroll-thin">{children}</div>
+        <div className="min-h-0 flex-1 overflow-auto px-5 py-4 scroll-thin">{children}</div>
         {footer ? <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3">{footer}</div> : null}
       </div>
     </div>

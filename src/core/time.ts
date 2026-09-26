@@ -28,6 +28,26 @@ export function currentZone(): string {
   return zone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
+/** How far a zone is ahead of UTC, in minutes, at an instant. */
+function offsetAt(at: number, tz: string): number {
+  const p = new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(new Date(at));
+  const g = (k: string) => Number(p.find((x) => x.type === k)?.value ?? 0);
+  return (Date.UTC(g('year'), g('month') - 1, g('day'), g('hour'), g('minute')) - Math.floor(at / 60_000) * 60_000) / 60_000;
+}
+
+/**
+ * Wall-clock digits on the WorkSuite clock ("2026-09-26", 10:30 as 630
+ * minutes) as the UTC instant they name, ISO with a Z — for writes that store
+ * instants (a meeting's time). Read twice so a daylight-saving change between
+ * the guess and the answer is taken into account.
+ */
+export function wallToUtc(ymd: string, minutes: number, tz = currentZone()): string {
+  const [y, m, d] = ymd.split('-').map(Number) as [number, number, number];
+  const wall = Date.UTC(y, m - 1, d, Math.floor(minutes / 60), minutes % 60);
+  const first = wall - offsetAt(wall, tz) * 60_000;
+  return new Date(wall - offsetAt(first, tz) * 60_000).toISOString();
+}
+
 export function parseTs(stamp: string): Date {
   if (/^\d{4}-\d{2}-\d{2}$/.test(stamp)) return new Date(`${stamp}T12:00:00Z`);
   return new Date(stamp.replace(' ', 'T') + (stamp.includes('T') || /[zZ]|[+-]\d{2}:?\d{2}$/.test(stamp) ? '' : 'Z'));

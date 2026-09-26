@@ -12,7 +12,7 @@ import { toggleDock } from '../../core/ui';
 import { Icon } from '../../components/Icon';
 import { Avatar, Button, Card, CountBadge, Empty, ErrorNote, FileBadge, OfflineNote, Spinner, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
-import type { CalendarEvent } from '../calendar/CalendarPage';
+import type { CalendarEvent } from '../calendar/api';
 import type { Task } from '../tasks/TasksPage';
 
 /**
