@@ -96,7 +96,16 @@ export const mutationInputSchema = z.object({
 export type MutationInput = z.infer<typeof mutationInputSchema>;
 
 export const uploadTargetSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('files'), folderId: z.string().max(64).nullable() }),
+  /**
+   * Into Drive. `replaceFileId`: the upload becomes a new version of that file (the answer to "a file with
+   * this name is already here"); `name`: the name to give it instead of the file's own (keeping both).
+   */
+  z.object({
+    kind: z.literal('files'),
+    folderId: z.string().max(64).nullable(),
+    replaceFileId: z.string().regex(/^\d{1,12}$/).optional(),
+    name: z.string().min(1).max(255).regex(/^[^/\\]+$/).optional(),
+  }),
   /** A chat attachment; the caption and the reply go with it (the first of several files carries them). */
   z.object({ kind: z.literal('chat'), roomId: z.string().max(64), caption: z.string().max(4000).optional(), replyTo: z.number().int().positive().optional() }),
   /** A task's attachment (or a comment's, with its id): stored in Drive, then linked to the task. */

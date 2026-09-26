@@ -338,7 +338,7 @@ export class TransferManager {
       const t: Transfer = {
         id: randomUUID(),
         direction: 'upload',
-        name: file.relativePath ?? file.name,
+        name: (target.kind === 'files' && target.name) || (file.relativePath ?? file.name),
         source: file.path,
         destination: target.kind === 'chat' ? 'Chat' : target.kind === 'task' ? 'Task' : 'WorkSuite Files',
         bytes: 0,
@@ -378,16 +378,25 @@ export class TransferManager {
         }
       }
       if (!meta.uploadId) {
-        const init = await this.deps.http.post<{ upload_id: string; chunk_size: number; total_chunks: number }>('/api/uploads/init', {
-          filename: basename(meta.path),
+        const filename = (meta.target.kind === 'files' && meta.target.name) || basename(meta.path);
+        const replacing = meta.target.kind === 'files' && meta.target.replaceFileId ? Number(meta.target.replaceFileId) : null;
+        const init = await this.deps.http.post<{ upload_id: string; chunk_size: number; total_chunks: number; replaces?: number | string }>('/api/uploads/init', {
+          filename,
           total_size: st.size,
           chunk_size: CHUNK,
           sha256: meta.sha256,
-          mime_type: mimeFor(basename(meta.path)) ?? undefined,
+          mime_type: mimeFor(filename) ?? undefined,
+          ...(replacing ? { replace_file_id: replacing } : {}),
           ...(meta.relativePath ? { relative_path: meta.relativePath } : {}),
           // A task's files are Drive files (in the top folder, as the web's are), linked to the task once they are in.
           ...(meta.target.kind === 'files' ? { purpose: 'drive', folder_id: meta.target.folderId } : meta.target.kind === 'task' ? { purpose: 'drive', folder_id: null } : { purpose: 'chat', room_id: meta.target.roomId }),
         });
+        // A server that does not know `replace_file_id` ignores it and would add a second file of the same
+        // name: it says which file it will replace, and without that the upload stops before any bytes go.
+        if (replacing && Number(init.replaces) !== replacing) {
+          await this.deps.http.post(`/api/uploads/${init.upload_id}/abort`, {}).catch(() => undefined);
+          throw new DesktopError('SERVER_ERROR', 'This WorkSuite server cannot replace a file by uploading yet. Upload it again and choose Keep both.');
+        }
         meta.uploadId = init.upload_id;
         meta.chunkSize = Number(init.chunk_size) || CHUNK;
         meta.totalChunks = Number(init.total_chunks) || Math.max(1, Math.ceil(st.size / meta.chunkSize));

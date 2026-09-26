@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
+import type { PickedFile } from '@shared/ipc/contract';
 import { app } from '../../core/app-state';
 import { apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
 import { call, errorMessage, registerDropped } from '../../core/bridge';
@@ -24,6 +25,7 @@ import { ShareDialog } from './Share';
 import { UploadTray, UrlDownloads } from './Trays';
 import { Shared } from './Shared';
 import { Companies, Duplicates, Links, Notifications, Storage, Trash } from './Views';
+import { UploadConflicts, type ConflictChoice, type UploadConflict } from './UploadConflicts';
 
 type Dialog =
   | { kind: 'name'; title: string; initial: string; action: string; save: (name: string) => Promise<void> }
@@ -78,6 +80,7 @@ export default function FilesPage(_props: ModuleProps) {
   const [preview, setPreview] = useState<{ files: DriveFile[]; index: number } | null>(null);
   const [editor, setEditor] = useState<{ kind: 'code' | 'image'; file: DriveFile } | { kind: 'media'; files: DriveFile[]; index: number } | null>(null);
   const [urlTray, setUrlTray] = useState(false);
+  const [clash, setClash] = useState<{ picked: PickedFile[]; conflicts: UploadConflict[]; folder: number | null } | null>(null);
   const [detailsAsk, setDetailsAsk] = useState<{ key: Key; tab?: string; n: number } | null>(null);
   const now = useNow(60_000);
   const perms = useStore(app, (s) => s.bootstrap?.permissions ?? []);
@@ -131,15 +134,46 @@ export default function FilesPage(_props: ModuleProps) {
     }
   };
 
+  /**
+   * Files straight into a folder are checked first for a name already there;
+   * each clash is asked about (replace, keep both, skip) before anything goes.
+   * Files inside a dropped folder land in folders of their own and are not.
+   * A server that cannot answer the question gets the upload unasked.
+   */
   const upload = async (files?: File[], folder: number | null = folderId) => {
     try {
       const picked = files ? await registerDropped(files) : await call('files:pickFiles', { multiple: true, title: 'Upload to WorkSuite Files' });
       if (!picked.length) return;
-      await call('transfers:upload', { handles: picked.map((p) => p.handle), target: { kind: 'files', folderId: folder === null ? null : String(folder) } });
-      toast('info', `Uploading ${picked.length} ${picked.length === 1 ? 'file' : 'files'} — see Transfers.`);
+      const loose = picked.filter((p) => !p.relativePath);
+      let conflicts: UploadConflict[] = [];
+      if (loose.length) {
+        conflicts = await apiPost<{ conflicts: UploadConflict[] }>('/api/uploads/conflicts', { folder_id: folder, names: loose.map((p) => p.name) }).then(
+          (r) => r.conflicts ?? [],
+          () => [],
+        );
+      }
+      if (conflicts.length) return setClash({ picked, conflicts, folder });
+      await sendUploads(picked, [], [], folder);
     } catch (e) {
       toast('error', errorMessage(e));
     }
+  };
+
+  const sendUploads = async (picked: PickedFile[], conflicts: UploadConflict[], choices: ConflictChoice[], folder: number | null) => {
+    const folderKey = folder === null ? null : String(folder);
+    const byName = new Map(conflicts.map((c, i) => [c.name.toLowerCase(), choices[i]!]));
+    const plain: string[] = [];
+    let sent = 0;
+    for (const p of picked) {
+      const choice = p.relativePath ? undefined : byName.get(p.name.toLowerCase());
+      if (!choice) plain.push(p.handle);
+      else if (choice.how === 'replace') await call('transfers:upload', { handles: [p.handle], target: { kind: 'files', folderId: folderKey, replaceFileId: String(choice.fileId) } });
+      else if (choice.how === 'both') await call('transfers:upload', { handles: [p.handle], target: { kind: 'files', folderId: folderKey, name: choice.name } });
+      if (choice?.how !== 'skip') sent++;
+    }
+    if (plain.length) await call('transfers:upload', { handles: plain, target: { kind: 'files', folderId: folderKey } });
+    if (sent) toast('info', `Uploading ${sent} ${sent === 1 ? 'file' : 'files'} — see Transfers.`);
+    else toast('info', 'Nothing was uploaded.');
   };
 
   const moveTo = (items: Item[], folder: number | null, name: string, mode: 'move' | 'copy') =>
@@ -352,7 +386,8 @@ export default function FilesPage(_props: ModuleProps) {
   useEffect(() => {
     if (!ask || handled.current === ask) return;
     handled.current = ask;
-    if (ask === 'upload') void upload();
+    // Deferred: the upload may go on to ask about names already here, which sets state.
+    if (ask === 'upload') void Promise.resolve().then(() => upload());
     else d.newFolder();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ask]);
@@ -391,6 +426,18 @@ export default function FilesPage(_props: ModuleProps) {
       {editor?.kind === 'image' ? <ImageEditor key={editor.file.id} file={editor.file} onClose={() => (setEditor(null), refresh())} /> : null}
       {editor?.kind === 'media' ? <MediaViewer files={editor.files} start={editor.index} onClose={() => (setEditor(null), refresh())} /> : null}
       <div className="pointer-events-none fixed right-5 bottom-10 z-40 flex flex-col items-end gap-2.5 [&>*]:pointer-events-auto">
+        {clash ? (
+          <UploadConflicts
+            conflicts={clash.conflicts}
+            folderName={clash.folder ? (nameIn(tree, clash.folder) ?? 'this folder') : 'My Drive'}
+            onCancel={() => setClash(null)}
+            onDone={(choices) => {
+              const c = clash;
+              setClash(null);
+              void sendUploads(c.picked, c.conflicts, choices, c.folder).catch((e) => toast('error', errorMessage(e)));
+            }}
+          />
+        ) : null}
         {urlTray ? <UrlDownloads folderId={folderId} folderName={folderId ? (nameIn(tree, folderId) ?? 'this folder') : 'My Drive'} onClose={() => setUrlTray(false)} onOpenFolder={(id) => onPlace({ view: 'folder', folder: id })} /> : null}
         {!editor && !preview ? <UploadTray /> : null}
       </div>

@@ -5,6 +5,46 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-27 — Uploads ask before a file of the same name (ships in 0.2.24)
+
+**Added**
+
+- **Uploading a file whose name is already in the folder asks first:**
+  **Replace**, **Keep both** or **Skip**, with **Cancel upload** for the
+  whole lot. This covers the Upload button, files dropped on a folder or the
+  list, and `/files?upload=1`.
+  - **Replace:** the upload becomes the file's new version. The one there
+    now stays in its version history, and the file keeps its shares and
+    comments. It is offered only for a file you may change; otherwise
+    that file can only be kept alongside.
+  - **Keep both:** the upload is saved under the next free name the server
+    gives, `name (1).ext`, `name (2).ext`…
+  - **Skip:** that file is not uploaded.
+  - One question per clash, with "Do the same for the other N files" when
+    more are waiting. Names compare without regard to case.
+  - Files inside a dropped or chosen folder are not asked about: they land
+    in folders of their own.
+- Needs the server's `POST /api/uploads/conflicts` and `replace_file_id`
+  (LHCP 9a7159e1). Against a server without them nothing is asked, and
+  uploads go as before.
+  - A Replace sent to a server that does not confirm it (`init` answers
+    `replaces`) stops before any bytes go. It never quietly adds a second
+    file of the same name.
+
+**Changed**
+
+- The upload target for Files takes an optional `replaceFileId` and `name`.
+  Both are kept with the transfer, so a paused or resumed upload still
+  replaces, or still uses its new name.
+
+**Tests**
+
+- A local check drops a real file on My Drive through the DevTools protocol
+  and answers Replace (version 2 of the same file), Keep both
+  (`name (1).txt`) and Skip (nothing uploaded). `files.mjs` still passes.
+
+---
+
 ## 2026-09-27 — 0.2.23: records shared in chat show as cards; the HR dashboard stays in the app
 
 **Added**
