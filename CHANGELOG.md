@@ -63,7 +63,7 @@ the document library, reports and settings still open in the browser.
 - Opening a tender always reads it afresh, so one someone else has just
   moved doesn't show its old stage and moves.
 
-**Server fixes this needed** (LHCP 69cb5d8f, not deployed yet)
+**Server fixes this needed** (LHCP 69cb5d8f, deployed 11:00 UTC 2026-09-27)
 
 - A checklist line with nothing on it could be approved.
 - An owner, a line's "chased by" or an approver could be someone from a
