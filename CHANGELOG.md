@@ -5,6 +5,86 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-27 — 0.2.38: Tenders, part 1 — the app, the lists, the board, one tender's workspace
+
+Tenders opens here now instead of in the browser, under Business in the
+sidebar. Links to a tender (`/tenders?open=…`, from notifications, search
+and the stream) open it here too. A tender's working tabs (checklist,
+documents, bonds, meetings, budget, costs, approvals), the document library,
+reports and settings still open in the browser.
+
+**Added**
+
+- **The rail.** The company picker; **New tender** for those who may create
+  them; Dashboard, Pipeline and All tenders. Below them: new opportunities
+  and following (coming in), preparing, submitted and evaluation (in hand),
+  won and lost (decided), each with its count. Then the library, reports
+  and settings (in the browser), and My access.
+- **The dashboard.**
+  - Tiles: open, being prepared, awaiting a decision, win rate.
+  - How ready each bid is: mandatory documents done against days left.
+  - What closes this week.
+  - The value in play and awarded, per currency and never added across
+    currencies, and the library's expired documents.
+  - Where there are any: bids that closed and were never moved on,
+    approvals waiting, bonds about to lapse, meetings coming up, and
+    whether each feed still brings anything in.
+- **The lists.**
+  - Each rail item seeds the filters: search, stage, outcome, owner (or
+    nobody), priority, closing within 7/14/30 days or closed-still-open,
+    following, not scored.
+  - A sort in either direction, paging, and a footer counting the whole
+    filtered set by stage, with its published ceilings per currency.
+  - Tick tenders to follow or stop following them. Those who manage
+    tenders can also set the owner or the priority, move them, or remove
+    them. Awarded, won, lost and cancelled are never bulk moves. Each
+    tender that refuses a move is named with its reason.
+- **The pipeline board.** A lane per working stage, closing soonest first.
+  Each card shows its score, priority, time left, owner and budget. Won
+  and lost are counts that open their lists.
+- **A tender's workspace.**
+  - The header: stage, score, priority, following, buyer and number,
+    closing time and time left, published ceiling, our bid, and the award
+    or winning price.
+  - Follow, Edit, and the moves the tender can make from where it is.
+  - A move with things outstanding — mandatory requirements unmet,
+    approvals not given — lists them first. **Move anyway** asks why, and
+    the history keeps both the reason and what was missing.
+  - **Won…** records the awarded value, and the client, deal and project
+    follow. **Lost…** needs a reason and takes the winner, their price and
+    what we would do differently. When the news comes before the paperwork,
+    either can be recorded out of order, and the history says so.
+  - Tabs:
+    - **Overview:** the tender's facts, its description, why it scored
+      what it did, and its approval steps.
+    - **Submission & result:** why it was lost, or what it won;
+      submissions; what the buyer said.
+    - **History:** every stage move.
+    - **Notes & activity:** add a note.
+- **New tender.** Type one in, or paste a CSV. The paste is checked first
+  (what would be imported, what is already here, what cannot be read), and
+  nothing is kept until you import. With every company selected, the form
+  asks which company the tender is for.
+- **Edit** sends only what changed. It won't re-arm the closing reminders
+  unless the closing time actually moved, and it leaves every field you
+  didn't touch as it is on the server — including one somebody else has just
+  changed.
+- **My access.** The companies whose tenders you can see — a hard boundary:
+  a tender in another company does not open, even from a link — what you
+  may do, and every Tenders permission.
+
+**Server fixes this needed** (LHCP 691c7c5c, not deployed yet)
+
+- A search for `RFQ_12` matched `RFQ-12` too, because `_` was a wildcard.
+- A tender could be renamed to a blank title.
+- Moving several tenders to Preparing didn't make their tasks or folders,
+  and moving several to Management approval didn't tell the approvers.
+- Two people moving one tender at once both succeeded.
+- A refused win or loss didn't say whether it could be recorded anyway.
+- Preparation tasks were dated using the wrong time zone.
+
+---
+
 ## 2026-09-27 — 0.2.37: Inventory, part 5 — reports, replenishment, brands & units, settings, My access
 
 Every Inventory screen now opens here: none sends you to the browser.

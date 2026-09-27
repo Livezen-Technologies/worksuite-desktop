@@ -161,6 +161,15 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
   },
   {
     input: defineDesktopManifest({
+      id: 'tenders', name: 'Tenders', icon: 'file-text', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'READ_CACHE', entities: ['tender'], cache: ['/api/tenders', '/api/tenders/dashboard', '/api/tenders/board'] },
+      native: ['notifications'],
+      quickActions: [{ id: 'new-tender', label: 'New Tender', route: '/tenders?make=new' }],
+    }),
+    load: () => import('./tenders/TendersShell'),
+  },
+  {
+    input: defineDesktopManifest({
       id: 'inventory', name: 'Inventory', icon: 'package', contractVersion: 1, desktop: { enabled: true },
       offline: { mode: 'READ_CACHE', entities: ['product'], cache: ['/api/inventory/products', '/api/inventory/stock'] },
       quickActions: [{ id: 'new-product', label: 'New Product', route: '/inventory?tab=prod&new=1' }],
