@@ -16,11 +16,9 @@ person who has to live with the change — what it does, and where it bites.
   approval like any other adjustment before it posts. The confirmation says
   so.
 
-**Server change this needs** (LHCP `30c8fa0e`, committed, **not deployed**):
-the same three rules on the server, with a new `edited_by` column on
-adjustments. Until it is deployed, production still approves a reversal
-automatically, and the server doesn't yet refuse a transfer's raiser or an
-adjustment's last editor.
+**Server change this needs** (LHCP `30c8fa0e`, deployed 05:44 UTC
+2026-09-27): the same three rules on the server, with a new `edited_by`
+column on adjustments.
 
 **Tests**
 
