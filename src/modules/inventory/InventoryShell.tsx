@@ -6,17 +6,23 @@ import { useTab, useTabTitle } from '../../core/tab-context';
 import { Spinner } from '../../components/ui';
 import type { ModuleProps } from '../registry';
 import { can, currencyOf, fetchDashboard, fetchWarehouses, K, useCompanies } from './api';
-import { InvRail, NATIVE, type InvView } from './Rail';
+import { InvRail, NATIVE, type DocHit, type InvView } from './Rail';
+import type { TrackTab } from './Tracked';
 
 /**
  * Inventory (the "Inv*" designs): the rail, and the screen it points at.
- * Addressed as `/inventory?tab=dash|prod|stock|mov`:
+ * Addressed as `/inventory?tab=dash|prod|stock|mov|adj|trf|cnt|trk`:
  * - a product as `?product=<id>` or `/inventory/products/<id>` (what the
  *   server's notifications and the web's links carry), opened as a drawer
  *   over whichever screen is showing, `&ptab=sales|purchase|history` for a
  *   tab of it;
  * - `&new=1` starts a product, `&edit=<id>` edits one, `&cats=1` manages
- *   the categories.
+ *   the categories;
+ * - an adjustment as `?tab=adj&adj=<id>`, a transfer `?tab=trf&trf=<id>`, a
+ *   count `?tab=cnt&cnt=<id>`, a serial unit `?tab=trk&tt=serials&serial=<id>`
+ *   (`tt=batches|serials|expiring`); `&st=` opens a list on one status;
+ * - `&make=adj|trf|cnt|ops` starts an adjustment, a transfer, a count or
+ *   opening stock.
  */
 const Dashboard = lazy(() => import('./Dashboard'));
 const Products = lazy(() => import('./Products'));
@@ -25,13 +31,26 @@ const Movements = lazy(() => import('./Movements'));
 const ProductDrawer = lazy(() => import('./ProductDrawer'));
 const ProductSheet = lazy(() => import('./ProductSheet'));
 const Categories = lazy(() => import('./Categories'));
+const Adjustments = lazy(() => import('./Adjustments'));
+const Transfers = lazy(() => import('./Transfers'));
+const Counts = lazy(() => import('./Counts'));
+const Tracked = lazy(() => import('./Tracked'));
+const Opening = lazy(() => import('./Opening'));
+const AdjustmentSheet = lazy(() => import('./Adjustments').then((m) => ({ default: m.AdjustmentSheet })));
+const TransferSheet = lazy(() => import('./Transfers').then((m) => ({ default: m.TransferSheet })));
+const CountSheet = lazy(() => import('./Counts').then((m) => ({ default: m.CountSheet })));
 
 const TITLES: Record<InvView, string> = {
   dash: 'Dashboard',
   prod: 'Products',
   stock: 'Stock',
   mov: 'Movements',
+  adj: 'Adjustments',
+  trf: 'Transfers',
+  cnt: 'Stock counts',
+  trk: 'Batches & serials',
 };
+const TRACK_TABS = ['batches', 'serials', 'expiring'] as const;
 const ORG_KEY = 'inventory.org';
 const num = (v: string | null | undefined) => (v && /^\d+$/.test(v) ? Number(v) : null);
 
@@ -54,6 +73,13 @@ export default function InventoryShell(_props: ModuleProps) {
   const editing = num(query.get('edit'));
   const creating = query.get('new') === '1';
   const managing = query.get('cats') === '1';
+  const adjId = num(query.get('adj'));
+  const trfId = num(query.get('trf'));
+  const cntId = num(query.get('cnt'));
+  const serialId = num(query.get('serial'));
+  const tt: TrackTab = (TRACK_TABS as readonly string[]).includes(query.get('tt') ?? '') ? (query.get('tt') as TrackTab) : serialId ? 'serials' : 'batches';
+  const make = query.get('make');
+  const st = query.get('st');
   const asked = (query.get('tab') ?? '') as InvView;
   const view: InvView = asked && NATIVE.has(asked) ? asked : product ? 'prod' : 'dash';
   useTabTitle(`Inventory · ${TITLES[view]}`);
@@ -88,6 +114,8 @@ export default function InventoryShell(_props: ModuleProps) {
   // The server's own answer where it has one; the permission list before it arrives.
   const canCost = d?.can.cost ?? has('inventory.cost');
   const canCatalogue = d?.can.catalogue ?? has('inventory.catalogue');
+  const canAdjust = d?.can.adjust ?? has('inventory.adjust');
+  const canTransfer = d?.can.transfer ?? has('inventory.transfer');
 
   const chooseOrg = (v: string) => {
     setOrg(v);
@@ -101,12 +129,25 @@ export default function InventoryShell(_props: ModuleProps) {
   // Where this screen is, without the one-off asks, to come back to.
   const base = (() => {
     const q = new URLSearchParams(query);
-    for (const k of ['product', 'ptab', 'new', 'edit', 'cats']) q.delete(k);
+    for (const k of ['product', 'ptab', 'new', 'edit', 'cats', 'make']) q.delete(k);
     q.set('tab', view);
     return `/inventory?${q.toString()}`;
   })();
   const openProduct = (id: number | null, ptab?: string) => go(id ? `${base}&product=${id}${ptab && ptab !== 'overview' ? `&ptab=${ptab}` : ''}` : base);
   const withProduct = (extra: string) => go(`${base}${product ? `&product=${product}` : ''}${extra}`);
+  // One thing on the address changed, the rest as it was.
+  const nav = (patch: Record<string, string | null>, tab: InvView = view) => {
+    const q = new URLSearchParams(query);
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === null) q.delete(k);
+      else q.set(k, v);
+    }
+    q.set('tab', tab);
+    go(`/inventory?${q.toString()}`);
+  };
+  const start = (what: 'adj' | 'trf' | 'cnt' | 'ops') => nav({ make: what });
+  const openDoc = (hit: DocHit) =>
+    hit.kind === 'adj' ? go(`/inventory?tab=adj&adj=${hit.id}`) : hit.kind === 'trf' ? go(`/inventory?tab=trf&trf=${hit.id}`) : hit.kind === 'serial' ? go(`/inventory?tab=trk&tt=serials&serial=${hit.id}`) : go('/inventory?tab=trk&tt=batches');
   // The categories open over whatever is showing — the product form
   // included — and closing them leaves it as it was.
   const cats = (on: boolean) => {
@@ -119,11 +160,34 @@ export default function InventoryShell(_props: ModuleProps) {
 
   return (
     <div className="flex h-full min-h-0">
-      <InvRail view={view} onPick={(v) => go(`/inventory?tab=${v}`)} onOpenProduct={(id) => openProduct(id)} counts={counts} org={scope} companies={list} onOrg={chooseOrg} warehouse={wh} warehouses={whs} onWarehouse={setWarehouse} allowed={has} />
+      <InvRail
+        view={view}
+        onPick={(v) => go(`/inventory?tab=${v}`)}
+        onOpenProduct={(id) => openProduct(id)}
+        onOpenDoc={openDoc}
+        onOpening={canAdjust ? () => start('ops') : null}
+        counts={counts}
+        org={scope}
+        companies={list}
+        onOrg={chooseOrg}
+        warehouse={wh}
+        warehouses={whs}
+        onWarehouse={setWarehouse}
+        allowed={has}
+      />
       <main className="min-w-0 flex-1 overflow-y-auto bg-ground scroll-thin" aria-label={`Inventory · ${TITLES[view]}`}>
         <Suspense fallback={<Spinner />}>
           {view === 'dash' ? (
-            <Dashboard data={dash} org={scope} warehouse={wh} currency={currency} onGo={(v) => go(`/inventory?tab=${v}`)} onStock={(filter) => go(`/inventory?tab=stock&filter=${filter}`)} onOpenProduct={(id) => openProduct(id)} />
+            <Dashboard
+              data={dash}
+              org={scope}
+              warehouse={wh}
+              currency={currency}
+              onGo={(v, extra = '') => go(`/inventory?tab=${v}${extra}`)}
+              onStock={(filter) => go(`/inventory?tab=stock&filter=${filter}`)}
+              onOpenProduct={(id) => openProduct(id)}
+              onNewAdjustment={canAdjust ? () => start('adj') : null}
+            />
           ) : null}
           {view === 'prod' ? (
             <Products
@@ -141,6 +205,36 @@ export default function InventoryShell(_props: ModuleProps) {
           ) : null}
           {view === 'stock' ? <Stock org={scope} warehouse={wh} warehouses={whs} onWarehouse={setWarehouse} currency={currency} initialFilter={query.get('filter')} onOpenProduct={(id) => openProduct(id)} /> : null}
           {view === 'mov' ? <Movements org={scope} warehouse={wh} warehouses={whs} onWarehouse={setWarehouse} onOpenProduct={(id) => openProduct(id, 'history')} /> : null}
+          {view === 'adj' ? (
+            <Adjustments key={st ?? ''} org={scope} warehouse={wh} warehouses={whs} currency={currency} initialStatus={st} openId={adjId} onOpen={(id) => nav({ adj: id ? String(id) : null })} onNew={canAdjust ? () => start('adj') : null} />
+          ) : null}
+          {view === 'trf' ? <Transfers key={st ?? ''} org={scope} warehouse={wh} initialStatus={st} openId={trfId} onOpen={(id) => nav({ trf: id ? String(id) : null })} onNew={canTransfer ? () => start('trf') : null} /> : null}
+          {view === 'cnt' ? (
+            <Counts
+              key={st ?? ''}
+              org={scope}
+              warehouse={wh}
+              currency={currency}
+              initialStatus={st}
+              openId={cntId}
+              onOpen={(id) => nav({ cnt: id ? String(id) : null })}
+              onNew={canAdjust ? () => start('cnt') : null}
+              onOpenAdjustment={(id) => go(`/inventory?tab=adj&adj=${id}`)}
+            />
+          ) : null}
+          {view === 'trk' ? (
+            <Tracked
+              org={scope}
+              warehouse={wh}
+              currency={currency}
+              tab={tt}
+              onTab={(t) => go(`/inventory?tab=trk&tt=${t}`)}
+              unitId={serialId}
+              onUnit={(id) => nav({ serial: id ? String(id) : null, tt: 'serials' })}
+              onOpenProduct={(id) => openProduct(id)}
+              onWriteOff={canAdjust ? () => start('adj') : null}
+            />
+          ) : null}
         </Suspense>
         <Suspense fallback={null}>
           {product && !creating && !editing ? (
@@ -159,6 +253,10 @@ export default function InventoryShell(_props: ModuleProps) {
             <ProductSheet key={editing ?? 'new'} id={editing} org={scope} companies={list} canCost={canCost} onClose={() => (editing ? openProduct(editing) : go(base))} onSaved={(id) => openProduct(id)} onManageCategories={() => cats(true)} />
           ) : null}
           {managing ? <Categories org={scope} companies={list} onClose={() => cats(false)} /> : null}
+          {make === 'adj' ? <AdjustmentSheet org={scope} warehouses={whs} defaultWarehouse={wh} onClose={() => nav({ make: null })} onSaved={(id) => go(`/inventory?tab=adj&adj=${id}`)} /> : null}
+          {make === 'trf' ? <TransferSheet org={scope} warehouses={whs} defaultFrom={wh} onClose={() => nav({ make: null })} onSaved={(id) => go(`/inventory?tab=trf&trf=${id}`)} /> : null}
+          {make === 'cnt' ? <CountSheet org={scope} warehouses={whs} defaultWarehouse={wh} onClose={() => nav({ make: null })} onSaved={(id) => go(`/inventory?tab=cnt&cnt=${id}`)} /> : null}
+          {make === 'ops' ? <Opening org={scope} warehouses={whs} defaultWarehouse={wh} canCost={canCost} onClose={() => nav({ make: null })} /> : null}
         </Suspense>
       </main>
     </div>

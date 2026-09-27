@@ -5,6 +5,106 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-27 — 0.2.32: Inventory, part 2 — adjustments, transfers, counts, batches and serials
+
+Inventory's control screens now open here instead of in the browser:
+Adjustments, Transfers, Stock counts, and Batches & serials. Opening stock
+is recorded here too. The rail's search opens an adjustment, a transfer, a
+serial unit or the batches here. The dashboard's "needs attention" links
+for these, and its New adjustment button, open here as well.
+
+**Added**
+
+- **Adjustments:**
+  - the list, by status, with reference, warehouse, reason, lines, value,
+    who raised it and when;
+  - one adjustment shows its lines (serial and batch named), what they are
+    expected to be worth before posting, and where it stands.
+  - **New adjustment:** warehouse, reason, why, and lines. A negative
+    quantity writes stock off; a positive one brings it on. A batch-tracked
+    line names its batch (and expiry when brought on); a serialised line
+    names one serial per unit.
+  - **Edit** a draft or rejected one, **Send for approval**, **Approve** or
+    **Reject** (with the reason added to its note), **Post to stock**,
+    **Reverse** a posted one (it opens the reversal to post), and
+    **Delete** one that hasn't posted.
+  - Approve isn't offered to whoever raised it, unless they manage
+    inventory, and the panel says why.
+- **Transfers:**
+  - the list, with from, to, status, lines, units, shipped and received;
+  - one transfer shows what was asked, sent and received;
+  - **New transfer:** from, to, date, expected, carrier, tracking number,
+    and lines, each naming its batch where it has one. Serialised products
+    move by an adjustment at each end, so they aren't offered.
+  - **Approve**, **Ship**, **Receive** (with what arrived typed per line),
+    **Cancel** and **Delete**.
+- **Stock counts:**
+  - the list, with kind, status, how many counted, variances and value;
+  - **New count:** warehouse, kind (random sample with how many lines,
+    cycle, full physical, spot check), everything or one category;
+  - **Start counting** freezes what is expected. Type the counts, and the
+    variance and value are worked out as you type; lines that moved since
+    the sheet was frozen are marked.
+  - **Save counts**, **Post variances** (it saves first), **Cancel**,
+    **Delete**. An empty count is left out, never read as zero.
+  - A posted count links to the adjustment it made.
+- **Batches & serials:**
+  - **Batches** in stock, soonest to expire first;
+  - **Serials**, every unit with its tags, status, warehouse, customer and
+    warranty, and a scan box for a barcode, QR reference, NFC tag or serial;
+  - **Expiring** within the usual window, or 30, 60 or 90 days. Expired
+    stock is flagged, with a way to start the write-off.
+  - A unit opens with how it is identified, what is known, and everything
+    it did. Those who manage inventory can attach or remove its NFC tag.
+- **Record opening stock** (Setup, in the rail): warehouse, as-at date, and
+  lines with quantity and unit cost, batch or serials where needed.
+  Products already moving in that warehouse are skipped and named.
+
+**Fixed**
+
+- Renaming a category saves reliably. It read the name from the screen's
+  state, which could lag a quick type-and-leave, so the rename was
+  sometimes dropped.
+
+**Server fixes this needed** (LHCP `415299bb`, committed, **not deployed**)
+
+- A serial unit's detail and the scan returned its cost unmasked, and an
+  adjustment's create, save and post responses returned its value
+  unmasked.
+- A serial unit's detail could open the wrong unit: another unit whose
+  barcode matched its serial number.
+- The detail views of adjustments, transfers and counts had no names (the
+  web printed "undefined").
+- A cancelled transfer could ship when approval is off.
+- Two presses of Post, Ship or Receive could both go through. Rows are now
+  locked.
+- A short receipt advised writing off stock that shipping had already
+  removed.
+- A count with a batch-tracked difference could never post. It now says
+  why, and what to do.
+- Warehouse viewers were listed as able to act.
+
+Until that is deployed, the desktop gets warehouse names on these panels
+from the list rows, and the cost and double-post problems remain on
+production.
+
+**Tests**
+
+- Unit: what each status allows, the forms' checks and bodies (batch,
+  serial, signed quantities, typed minus signs), empty counts, line
+  values, opening stock, and a unit's tags.
+- End-to-end, against a local server (`tests/e2e/inventory-2.mjs`, 17
+  checks, all passing):
+  - an adjustment raised, approved, posted and reversed;
+  - two cameras brought on by serial, listed, opened and scanned;
+  - a transfer shipped and received four of five, with the shortfall not
+    taken twice;
+  - a count posting a difference of one, and its adjustment;
+  - opening stock for a batch, seen in Batches and Expiring.
+- Part 1's end-to-end run and Files' still pass.
+
+---
+
 ## 2026-09-27 — 0.2.31: Files — drag to select
 
 **Fixed**

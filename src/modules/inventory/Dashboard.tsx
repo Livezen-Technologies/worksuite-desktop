@@ -14,6 +14,9 @@ import { openWeb, type InvView } from './Rail';
  * latest movements, what runs out soonest, what to reorder, and how the books
  * compare with the shelves. The warehouse picker narrows it.
  */
+/** The "needs attention" lines this app opens itself, and the list each opens on. */
+const HERE: Record<string, string> = { adj: '&st=pending', trf: '&st=in_transit', cnt: '&st=counting', trk: '&tt=expiring' };
+
 export default function Dashboard({
   data,
   org,
@@ -22,14 +25,16 @@ export default function Dashboard({
   onGo,
   onStock,
   onOpenProduct,
+  onNewAdjustment,
 }: {
   data: UseQueryResult<Data>;
   org: string;
   warehouse: number | null;
   currency: string | null;
-  onGo: (v: InvView) => void;
+  onGo: (v: InvView, extra?: string) => void;
   onStock: (filter: 'low' | 'out') => void;
   onOpenProduct: (id: number) => void;
+  onNewAdjustment: (() => void) | null;
 }) {
   const detail = useQuery({
     queryKey: K.detail(org, warehouse),
@@ -56,9 +61,9 @@ export default function Dashboard({
         <button type="button" className={btn} onClick={() => onGo('stock')}>
           Stock overview
         </button>
-        {d.can.adjust ? (
-          <button type="button" className={btn} title="Opens in your browser" onClick={() => openWeb('adjustments')}>
-            New adjustment <Icon name="external" size={12} className="text-ink-3" />
+        {onNewAdjustment ? (
+          <button type="button" className={btn} onClick={onNewAdjustment}>
+            New adjustment
           </button>
         ) : null}
         <button type="button" className={btn} title="Opens in your browser" onClick={() => openWeb('reports')}>
@@ -83,15 +88,15 @@ export default function Dashboard({
               <button
                 key={a.key}
                 type="button"
-                title={a.view === 'stock' ? undefined : 'Opens in your browser'}
-                onClick={() => (a.view === 'stock' ? onStock(a.key === 'out' ? 'out' : 'low') : openWeb(WEB_VIEW[a.view]))}
+                title={HERE[a.view] !== undefined || a.view === 'stock' ? undefined : 'Opens in your browser'}
+                onClick={() => (a.view === 'stock' ? onStock(a.key === 'out' ? 'out' : 'low') : HERE[a.view] !== undefined ? onGo(a.view as InvView, HERE[a.view]) : openWeb(WEB_VIEW[a.view]))}
                 className={cx(
                   'inline-flex h-7 items-center gap-1 rounded-[14px] px-3 text-[12.5px] font-semibold',
                   a.tone === 'red' ? 'bg-[#FCE9E4] text-[#8C2A14] hover:bg-[#F8DCD3] dark:bg-danger-bg dark:text-danger' : 'bg-[#FFF4E0] text-[#9A4A06] hover:bg-[#FCE8C4] dark:bg-warning-bg dark:text-warning',
                 )}
               >
                 {a.label}
-                {a.view === 'stock' ? null : <Icon name="external" size={11} />}
+                {a.view === 'stock' || HERE[a.view] !== undefined ? null : <Icon name="external" size={11} />}
               </button>
             ))}
           </div>
@@ -134,7 +139,7 @@ export default function Dashboard({
             <Line key="in" title="Units incoming" right={qty(t.incoming)} />,
             <Line key="so" title="Sales orders open" right={d.pending.sales_orders} onClick={() => openWeb('sales')} />,
             <Line key="res" title="Units reserved" right={qty(t.reserved)} />,
-            <Line key="trf" title="Transfers in flight" right={d.pending.transfers} onClick={() => openWeb('transfers')} />,
+            <Line key="trf" title="Transfers in flight" right={d.pending.transfers} onClick={() => onGo('trf', HERE.trf)} />,
           ]}
         </ListPanel>
         <ListPanel title="Stock health" empty="">
@@ -142,7 +147,7 @@ export default function Dashboard({
             <Line key="h" title="Products holding stock" right={t.stocked_products.toLocaleString()} onClick={() => onGo('stock')} />,
             <Line key="l" title="Below minimum" right={t.low_stock} rightClass={t.low_stock ? 'text-[#9A4A06] dark:text-warning' : undefined} onClick={() => onStock('low')} />,
             <Line key="o" title="Nothing available" right={t.out_of_stock} rightClass={t.out_of_stock ? 'text-danger' : undefined} onClick={() => onStock('out')} />,
-            <Line key="e" title="Batches expiring" right={t.expiring_batches} rightClass={t.expiring_batches ? 'text-[#9A4A06] dark:text-warning' : undefined} onClick={() => openWeb('tracked')} />,
+            <Line key="e" title="Batches expiring" right={t.expiring_batches} rightClass={t.expiring_batches ? 'text-[#9A4A06] dark:text-warning' : undefined} onClick={() => onGo('trk', HERE.trk)} />,
           ]}
         </ListPanel>
         <ListPanel title="Warehouses" empty="No warehouse holds stock yet.">

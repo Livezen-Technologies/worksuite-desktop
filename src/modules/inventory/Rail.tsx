@@ -9,15 +9,19 @@ import { HIT_LABEL, HIT_VIEW, hitProduct, K, searchInventory, WEB_VIEW, type Com
 /**
  * The Inventory rail (InvRail): the company and warehouse pickers, a box that
  * takes a scan or a search, then the screens by what they are for — control,
- * trade, insight, setup and administration. Dashboard, Products, Stock and
- * Movements are here; the rest open in the browser for now. The warehouse is
+ * trade, insight, setup and administration. Dashboard, Products, Stock,
+ * Movements and the control screens (adjustments, transfers, counts, batches
+ * and serials) are here; the rest open in the browser for now. The warehouse is
  * a filter, not a mode: it narrows the dashboard, stock and movements, and a
  * document that names its own warehouse ignores it.
  */
-export type InvView = 'dash' | 'prod' | 'stock' | 'mov';
+export type InvView = 'dash' | 'prod' | 'stock' | 'mov' | 'adj' | 'trf' | 'cnt' | 'trk';
 export type WebView = keyof typeof WEB_VIEW;
 
-export const NATIVE = new Set<string>(['dash', 'prod', 'stock', 'mov']);
+export const NATIVE = new Set<string>(['dash', 'prod', 'stock', 'mov', 'adj', 'trf', 'cnt', 'trk']);
+
+/** A search hit this app opens itself, other than a product. */
+export type DocHit = { kind: 'adj' | 'trf' | 'serial'; id: number } | { kind: 'batch' };
 
 /** The screens that need more than `inventory.view`; the rail leaves out what you cannot open. */
 export const NEEDS: Partial<Record<WebView, string>> = {
@@ -42,6 +46,8 @@ export function InvRail({
   view,
   onPick,
   onOpenProduct,
+  onOpenDoc,
+  onOpening,
   counts,
   org,
   companies,
@@ -54,6 +60,9 @@ export function InvRail({
   view: InvView;
   onPick: (v: InvView) => void;
   onOpenProduct: (id: number) => void;
+  onOpenDoc: (hit: DocHit) => void;
+  /** Record opening stock, for those who may adjust stock. */
+  onOpening: (() => void) | null;
   counts: RailCounts;
   org: string;
   companies: Company[];
@@ -74,6 +83,11 @@ export function InvRail({
 
   const choose = (h: SearchHit) => {
     setQ('');
+    // Documents and units this app shows open here; the rest in the browser.
+    if (h.type === 'adjustment') return onOpenDoc({ kind: 'adj', id: h.id });
+    if (h.type === 'transfer') return onOpenDoc({ kind: 'trf', id: h.id });
+    if (h.type === 'serial') return onOpenDoc({ kind: 'serial', id: h.id });
+    if (h.type === 'batch') return onOpenDoc({ kind: 'batch' });
     const pid = hitProduct(h);
     if (pid) onOpenProduct(pid);
     else openWeb(HIT_VIEW[h.type] ?? 'overview');
@@ -165,7 +179,7 @@ export function InvRail({
               {hits.isLoading ? <span className="px-3 py-2 text-[12px] text-ink-3">Searching…</span> : null}
               {!hits.isLoading && !results.length && !exact ? <span className="px-3 py-2 text-[12px] text-ink-3">Nothing matches.</span> : null}
               {[...(exact && !results.some((r) => r.type === exact.type && r.id === exact.id) ? [exact] : []), ...results].map((h) => {
-                const web = !hitProduct(h);
+                const web = !hitProduct(h) && !['adjustment', 'transfer', 'serial', 'batch'].includes(h.type);
                 return (
                   <button key={`${h.type}-${h.id}`} type="button" role="option" aria-selected={exact?.type === h.type && exact.id === h.id} onClick={() => choose(h)} className="flex items-start gap-1.5 px-3 py-1.5 text-left hover:bg-subtle">
                     <span className="flex min-w-0 flex-1 flex-col">
@@ -200,6 +214,11 @@ export function InvRail({
         {item('rpl', 'Replenishment', 'refresh')}
         {head('Setup')}
         {item('lk', 'Brands & units', 'hash')}
+        {onOpening ? (
+          <button type="button" onClick={onOpening} className="flex h-[29px] shrink-0 items-center rounded-[7px] px-2.5 text-left text-[12.5px] font-semibold text-primary hover:bg-subtle">
+            Record opening stock
+          </button>
+        ) : null}
         {head('Administration')}
         {item('set', 'Settings', 'settings')}
         {item('acc', 'My access', 'shield-check')}

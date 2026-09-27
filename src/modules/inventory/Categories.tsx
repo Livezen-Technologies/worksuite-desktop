@@ -140,8 +140,9 @@ function CategoryRow({ c, tree, onSave, onAdd, onRemove }: { c: TreeNode; tree: 
           aria-label={`Name of ${c.name}`}
           maxLength={150}
           onChange={(e) => setName(e.target.value)}
-          onBlur={() => {
-            const n = name.trim();
+          onBlur={(e) => {
+            // The field's own value: the state can lag a quick type-and-leave.
+            const n = e.currentTarget.value.trim();
             if (!n) setName(c.name);
             else if (n !== c.name) void onSave(c.id, { name: n });
           }}

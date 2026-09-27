@@ -235,6 +235,8 @@ export interface Warehouse {
   units: number;
   value: number | null;
   product_count: number;
+  /** This reader may move stock here (a warehouse that names its staff names them). */
+  can_act?: boolean;
 }
 
 export const fetchWarehouses = (org: string, signal?: AbortSignal) => apiGet<{ warehouses: Warehouse[] }>('/api/inventory/warehouses', withOrg(org), signal).then((r) => r.warehouses ?? []);
