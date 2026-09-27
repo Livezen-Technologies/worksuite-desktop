@@ -176,7 +176,8 @@ function AdjustmentPanel({ id, currency, warehouses, org, onClose, onOpen }: { i
   const d = q.data;
   const a = d?.adjustment;
   const posted = a?.status === 'posted';
-  const acts = a && d ? adjustmentActions(a, { needsApproval: d.needs_approval, canApprove: d.can_approve, canAdjust: can(perms, 'inventory.adjust'), mine: num(a.created_by) === me, manage: can(perms, 'inventory.manage') }) : null;
+  const acts =
+    a && d ? adjustmentActions(a, { needsApproval: d.needs_approval, canApprove: d.can_approve, canAdjust: can(perms, 'inventory.adjust'), mine: num(a.created_by) === me || num(a.edited_by) === me, manage: can(perms, 'inventory.manage') }) : null;
   const seesCost = !!d && d.lines.some((l) => l.unit_cost !== null);
   const worth = d ? d.lines.reduce((s, l) => s + (lineWorth(l, posted) ?? 0), 0) : 0;
 
@@ -203,7 +204,7 @@ function AdjustmentPanel({ id, currency, warehouses, org, onClose, onOpen }: { i
         ? `Approved${a.approved_by_name ? ` by ${a.approved_by_name}` : ''} — ready to post.`
         : a.status === 'pending'
           ? acts?.selfNote
-            ? 'Waiting for approval. You raised it, so somebody else has to approve it.'
+            ? `Waiting for approval. You ${num(a.created_by) === me ? 'raised' : 'last changed'} it, so somebody else has to approve it.`
             : 'Waiting for approval.'
           : a.status === 'rejected'
             ? 'Rejected. Change it and send it again, or delete it.'
@@ -357,7 +358,7 @@ function AdjustmentPanel({ id, currency, warehouses, org, onClose, onOpen }: { i
             {confirm === 'post'
               ? 'The stock moves now, at the cost the layers hold. It cannot be edited afterwards — only reversed.'
               : confirm === 'reverse'
-                ? 'A new adjustment is made that undoes this one, line for line. Review it, then post it.'
+                ? 'A new adjustment is made that undoes this one, line for line, as a draft. It is approved like any other, then posted.'
                 : 'It is removed from the list. Nothing has moved, so no stock changes.'}
           </span>
         </Sheet>

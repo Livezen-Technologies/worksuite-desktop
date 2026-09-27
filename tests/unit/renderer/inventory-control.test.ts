@@ -39,6 +39,13 @@ describe('inventory control: what may be done now', () => {
     expect(transferActions({ status: 'cancelled' }, { ...t, needsApproval: false })).toMatchObject({ ship: false, remove: true });
   });
 
+  it('never offers Approve on a transfer to whoever raised it, unless they manage inventory', () => {
+    const t = { needsApproval: true, canApprove: true, canTransfer: true };
+    expect(transferActions({ status: 'draft' }, { ...t, mine: true })).toMatchObject({ approve: false, selfNote: true });
+    expect(transferActions({ status: 'draft' }, { ...t, mine: true, manage: true })).toMatchObject({ approve: true, selfNote: false });
+    expect(transferActions({ status: 'draft' }, { ...t, mine: false })).toMatchObject({ approve: true, selfNote: false });
+  });
+
   it('names every status the server writes', () => {
     expect(docStatus('in_transit').label).toBe('In transit');
     expect(docStatus('review').label).toBe('Review');

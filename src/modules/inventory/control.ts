@@ -105,6 +105,8 @@ export interface Adjustment {
   total_value: number | string | null;
   adjusted_at: string | null;
   created_by: number | string;
+  /** Who last changed its contents; like its raiser, they may not approve it. */
+  edited_by?: number | string | null;
   created_by_name: string | null;
   approved_by_name: string | null;
   approved_at: string | null;
@@ -245,6 +247,7 @@ export interface Transfer {
   vehicle: string | null;
   driver: string | null;
   note: string | null;
+  created_by: number | string;
   created_by_name: string | null;
   line_count: number | string;
   total_qty: number | string;
@@ -284,11 +287,14 @@ export const createTransfer = (org: string, body: Record<string, unknown>) => ap
 export const transferAct = (id: number, act: 'approve' | 'ship' | 'receive' | 'cancel', body?: object) => apiPost<{ transfer?: Transfer; short?: string[] }>(`/api/inventory/transfers/${id}/${act}`, body ?? {});
 export const deleteTransfer = (id: number) => apiDelete<unknown>(`/api/inventory/transfers/${id}`);
 
-export function transferActions(t: Pick<Transfer, 'status'>, o: { needsApproval: boolean; canApprove: boolean; canTransfer: boolean }) {
+/** Whoever raised a transfer may not approve it, unless they manage inventory (as with adjustments). */
+export function transferActions(t: Pick<Transfer, 'status'>, o: { needsApproval: boolean; canApprove: boolean; canTransfer: boolean; mine?: boolean; manage?: boolean }) {
   const s = t.status;
   const open = s === 'draft' || s === 'pending';
+  const approveOk = o.canApprove && (!o.mine || !!o.manage);
   return {
-    approve: o.canApprove && o.needsApproval && open,
+    approve: approveOk && o.needsApproval && open,
+    selfNote: o.canApprove && o.needsApproval && open && !!o.mine && !o.manage,
     ship: o.canTransfer && (s === 'approved' || (!o.needsApproval && open)),
     receive: o.canTransfer && s === 'in_transit',
     cancel: o.canTransfer && (open || s === 'approved'),

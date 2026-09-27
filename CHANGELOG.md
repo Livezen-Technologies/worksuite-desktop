@@ -5,6 +5,32 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-27 — 0.2.33: Inventory — approval by a second person
+
+**Changed**
+
+- **Approve** isn't offered on an adjustment to whoever raised it *or last
+  changed it*, or on a transfer to whoever raised it, unless they manage
+  inventory. The panel says why.
+- **Reverse** now makes the reversal as a draft, which goes through
+  approval like any other adjustment before it posts. The confirmation says
+  so.
+
+**Server change this needs** (LHCP `30c8fa0e`, committed, **not deployed**):
+the same three rules on the server, with a new `edited_by` column on
+adjustments. Until it is deployed, production still approves a reversal
+automatically, and the server doesn't yet refuse a transfer's raiser or an
+adjustment's last editor.
+
+**Tests**
+
+- Unit: the transfer rule.
+- End-to-end (`tests/e2e/inventory-2.mjs`, 17 checks, all passing): a
+  reversal starts as a draft, is sent for approval and approved, then
+  posts.
+
+---
+
 ## 2026-09-27 — 0.2.32: Inventory, part 2 — adjustments, transfers, counts, batches and serials
 
 Inventory's control screens now open here instead of in the browser:

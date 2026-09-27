@@ -122,7 +122,13 @@ try {
   await confirmDialog('Reverse');
   await t.waitFor(`(document.querySelector('${panel('Adjustment ')} b')?.textContent.trim() ?? ${js(adjRef)}) !== ${js(adjRef)}`, 'the reversal opened', 20_000);
   const rev = await textOf(panel('Adjustment '));
-  t.check('the reversal says what it reverses, and is ready to post', rev.includes(`Reversal of ${adjRef}`) && rev.includes('+2') && rev.includes('ready to post'), rev.slice(0, 200));
+  // A reversal is a draft, approved like any other (decided 2026-09-27).
+  t.check('the reversal says what it reverses, and starts as a draft', rev.includes(`Reversal of ${adjRef}`) && rev.includes('+2') && rev.includes('Draft'), rev.slice(0, 200));
+  if (needs) {
+    await press(panel('Adjustment '), 'Send for approval');
+    await t.waitFor(`[...document.querySelectorAll('${panel('Adjustment ')} button')].some(b => b.textContent.trim() === 'Approve')`, 'Approve offered (this user manages inventory)', 15_000);
+    await press(panel('Adjustment '), 'Approve');
+  }
   await press(panel('Adjustment '), 'Post to stock');
   await confirmDialog('Post to stock');
   await until(async () => (await onHand(plainId, w1.id)) === 20, 'the reversal posted');

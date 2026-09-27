@@ -158,7 +158,8 @@ function TransferPanel({ id, onClose }: { id: number; onClose: () => void }) {
   const [confirm, setConfirm] = useState<'ship' | 'cancel' | 'remove' | null>(null);
   const d = q.data;
   const t = d?.transfer;
-  const acts = t && d ? transferActions(t, { needsApproval: d.needs_approval, canApprove: d.can_approve, canTransfer: can(perms, 'inventory.transfer') }) : null;
+  const me = useStore(app, (s) => Number(s.auth?.user?.id ?? 0));
+  const acts = t && d ? transferActions(t, { needsApproval: d.needs_approval, canApprove: d.can_approve, canTransfer: can(perms, 'inventory.transfer'), mine: num(t.created_by) === me, manage: can(perms, 'inventory.manage') }) : null;
   const inTransit = t?.status === 'in_transit';
 
   const run = async (label: string, fn: () => Promise<{ short?: string[] } | unknown>) => {
@@ -204,7 +205,9 @@ function TransferPanel({ id, onClose }: { id: number; onClose: () => void }) {
           : t.status === 'cancelled'
             ? 'Cancelled. Nothing moved.'
             : d?.needs_approval
-              ? 'A draft. It has to be approved before it ships.'
+              ? acts?.selfNote
+                ? 'A draft. It has to be approved before it ships — and you raised it, so by somebody else.'
+                : 'A draft. It has to be approved before it ships.'
               : 'A draft. Ship it when the stock leaves.';
 
   return (
