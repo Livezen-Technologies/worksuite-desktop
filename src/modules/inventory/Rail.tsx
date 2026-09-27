@@ -11,16 +11,16 @@ import { HIT_LABEL, HIT_VIEW, hitProduct, K, searchInventory, WEB_VIEW, type Com
  * takes a scan or a search, then the screens by what they are for — control,
  * trade, insight, setup and administration. Dashboard, Products, Stock,
  * Movements, the control screens (adjustments, transfers, counts, batches
- * and serials), Purchasing, Vendors and Manufacturing are here; Sales orders
- * open in Sales & Orders for those who may use it; the rest open in the
- * browser for now. The warehouse is
+ * and serials), trade, insight, setup and administration are all here; Sales
+ * orders open in Sales & Orders for those who may use it, and in the browser
+ * for anyone else. The warehouse is
  * a filter, not a mode: it narrows the dashboard, stock and movements, and a
  * document that names its own warehouse ignores it.
  */
-export type InvView = 'dash' | 'prod' | 'stock' | 'mov' | 'adj' | 'trf' | 'cnt' | 'trk' | 'pur' | 'ven' | 'mfg';
+export type InvView = 'dash' | 'prod' | 'stock' | 'mov' | 'adj' | 'trf' | 'cnt' | 'trk' | 'pur' | 'ven' | 'mfg' | 'rep' | 'rpl' | 'lk' | 'set' | 'acc';
 export type WebView = keyof typeof WEB_VIEW;
 
-export const NATIVE = new Set<string>(['dash', 'prod', 'stock', 'mov', 'adj', 'trf', 'cnt', 'trk', 'pur', 'ven', 'mfg']);
+export const NATIVE = new Set<string>(['dash', 'prod', 'stock', 'mov', 'adj', 'trf', 'cnt', 'trk', 'pur', 'ven', 'mfg', 'rep', 'rpl', 'lk', 'set', 'acc']);
 
 /** A search hit this app opens itself, other than a product. */
 export type DocHit = { kind: 'adj' | 'trf' | 'serial' | 'po' | 'grn' | 'vendor' | 'job'; id: number } | { kind: 'batch' };
@@ -106,7 +106,7 @@ export function InvRail({
   const item = (id: InvView | WebView, label: string, icon: string, badge?: number, tone?: 'amber') => {
     const inSales = id === 'so' && !!onSales;
     const web = !NATIVE.has(id) && !inSales;
-    if (web && NEEDS[id as WebView] && !allowed(NEEDS[id as WebView]!)) return null;
+    if (NEEDS[id as WebView] && !allowed(NEEDS[id as WebView]!)) return null;
     const on = view === id;
     return (
       <button

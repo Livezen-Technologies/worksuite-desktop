@@ -10,6 +10,7 @@ import { InvRail, NATIVE, type DocHit, type InvView } from './Rail';
 import type { TrackTab } from './Tracked';
 import type { BuyTab } from './Purchasing';
 import type { MakeTab } from './Manufacturing';
+import type { SetSection } from './Setup';
 
 /**
  * Inventory (the "Inv*" designs): the rail, and the screen it points at.
@@ -28,6 +29,9 @@ import type { MakeTab } from './Manufacturing';
  * - manufacturing as `?tab=mfg&mt=jobs|boms`, a job `&job=<id>`, a recipe
  *   `&bom=<id>`; `&make=job` (`&jobbom=<id>` from a recipe) starts a job,
  *   `&make=bom` a recipe (`&bomedit=<id>` edits one).
+ * - reports as `?tab=rep&r=<report>`; replenishment `?tab=rpl`; brands,
+ *   units and attributes `?tab=lk`; settings `?tab=set&ss=rules|warehouses`
+ *   (`&whid=<id>` opens a warehouse); `?tab=acc` is My access.
  * Sales orders open in Sales & Orders for those who may use it.
  */
 const Dashboard = lazy(() => import('./Dashboard'));
@@ -52,6 +56,11 @@ const VendorSheet = lazy(() => import('./Vendors').then((m) => ({ default: m.Ven
 const Manufacturing = lazy(() => import('./Manufacturing'));
 const JobSheet = lazy(() => import('./Manufacturing').then((m) => ({ default: m.JobSheet })));
 const BomSheet = lazy(() => import('./Manufacturing').then((m) => ({ default: m.BomSheet })));
+const Reports = lazy(() => import('./Reports'));
+const Replenishment = lazy(() => import('./Replenishment'));
+const Lookups = lazy(() => import('./Lookups'));
+const Setup = lazy(() => import('./Setup'));
+const MyAccess = lazy(() => import('./MyAccess'));
 
 const TITLES: Record<InvView, string> = {
   dash: 'Dashboard',
@@ -65,6 +74,11 @@ const TITLES: Record<InvView, string> = {
   pur: 'Purchasing',
   ven: 'Vendors',
   mfg: 'Manufacturing',
+  rep: 'Reports',
+  rpl: 'Replenishment',
+  lk: 'Brands & units',
+  set: 'Settings',
+  acc: 'My access',
 };
 const BUY_TABS = ['orders', 'receipts', 'requests'] as const;
 const TRACK_TABS = ['batches', 'serials', 'expiring'] as const;
@@ -104,6 +118,7 @@ export default function InventoryShell(_props: ModuleProps) {
   const vendorId = num(query.get('vendor'));
   const jobId = num(query.get('job'));
   const bomId = num(query.get('bom'));
+  const ss: SetSection = query.get('ss') === 'warehouses' || num(query.get('whid')) ? 'warehouses' : 'rules';
   const mt: MakeTab = query.get('mt') === 'boms' || (bomId && !jobId && query.get('mt') !== 'jobs') ? 'boms' : 'jobs';
   const st = query.get('st');
   const asked = (query.get('tab') ?? '') as InvView;
@@ -144,6 +159,7 @@ export default function InventoryShell(_props: ModuleProps) {
   const canTransfer = d?.can.transfer ?? has('inventory.transfer');
   const canPurchase = d?.can.purchase ?? has('inventory.purchase');
   const canMake = d?.can.manufacture ?? has('inventory.manufacture');
+  const canSettings = d?.can.settings ?? has('inventory.settings');
   const onSales = sellsHere ? (order?: number) => go(order ? `/sales?tab=orders&order=${order}` : '/sales?tab=orders') : null;
 
   const chooseOrg = (v: string) => {
@@ -323,6 +339,25 @@ export default function InventoryShell(_props: ModuleProps) {
               initialStatus={st}
             />
           ) : null}
+          {view === 'rep' ? <Reports org={scope} warehouse={wh} warehouses={whs} currency={currency} canCost={canCost} report={query.get('r')} onReport={(r) => go(`/inventory?tab=rep&r=${r}`)} /> : null}
+          {view === 'rpl' ? <Replenishment org={scope} warehouse={wh} warehouses={whs} canPurchase={canPurchase} onRequests={() => go('/inventory?tab=pur&bt=requests')} /> : null}
+          {view === 'lk' ? <Lookups org={scope} canCatalogue={canCatalogue} canSettings={canSettings} /> : null}
+          {view === 'set' ? (
+            canSettings ? (
+              <Setup
+                org={scope}
+                currency={currency}
+                canCost={canCost}
+                section={ss}
+                onSection={(x) => go(`/inventory?tab=set&ss=${x}`)}
+                warehouseId={num(query.get('whid'))}
+                onWarehouse={(id) => go(id ? `/inventory?tab=set&ss=warehouses&whid=${id}` : '/inventory?tab=set&ss=warehouses')}
+              />
+            ) : (
+              <p className="m-6 text-[13px] text-ink-2">Settings are for those who may set Inventory up. My access says what you can do here.</p>
+            )
+          ) : null}
+          {view === 'acc' ? <MyAccess /> : null}
         </Suspense>
         <Suspense fallback={null}>
           {product && !creating && !editing ? (

@@ -69,8 +69,8 @@ export default function Dashboard({
             New adjustment
           </button>
         ) : null}
-        <button type="button" className={btn} title="Opens in your browser" onClick={() => openWeb('reports')}>
-          Reports <Icon name="external" size={12} className="text-ink-3" />
+        <button type="button" className={btn} onClick={() => onGo('rep')}>
+          Reports
         </button>
       </PageHead>
       <div className="grid grid-cols-4 gap-2.5">
@@ -181,15 +181,7 @@ export default function Dashboard({
             );
           })}
         </ListPanel>
-        <ListPanel
-          title="Runs out soonest"
-          empty={detail.isLoading ? 'Working it out…' : 'Nothing is running out at the rate it moves.'}
-          action={
-            <HeadLink web onClick={() => openWeb('replenishment')}>
-              Replenishment
-            </HeadLink>
-          }
-        >
+        <ListPanel title="Runs out soonest" empty={detail.isLoading ? 'Working it out…' : 'Nothing is running out at the rate it moves.'} action={<HeadLink onClick={() => onGo('rpl')}>Replenishment</HeadLink>}>
           {(x?.cover.rows ?? []).slice(0, 5).map((r) => (
             <Line
               key={r.id}

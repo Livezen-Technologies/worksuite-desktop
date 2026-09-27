@@ -98,10 +98,9 @@ try {
   const tiles = await t.evaluate(`['Products', 'Categories', 'Vendors', 'Warehouses', 'Stock value', 'Units on hand', 'Low stock', 'Out of stock'].every(l => [...document.querySelectorAll('main span')].some(s => s.textContent.trim() === l))`);
   const panels = await t.evaluate(`['Stock movement, last 14 days', 'Stock health', 'Latest movements', 'Runs out soonest', 'To reorder', 'Checked against the shelves'].every(l => document.querySelector('main').textContent.includes(l))`);
   t.check('the dashboard has its eight figures and panels', tiles && panels, js({ tiles, panels }));
-  const webItems = await t.evaluate(
-    `['Reports', 'Replenishment', 'My access'].every(l => [...document.querySelectorAll('nav[aria-label="Inventory"] button')].some(b => b.textContent.trim().startsWith(l) && (b.title || '').includes('opens in your browser')))`,
-  );
-  t.check('the screens not yet on the desktop say they open in the browser', webItems, '');
+  // Every Inventory screen is on the desktop now (part 5, 0.2.37); none says it opens in the browser.
+  const webItems = await t.evaluate(`[...document.querySelectorAll('nav[aria-label="Inventory"] button')].filter(b => (b.title || '').includes('opens in your browser')).map(b => b.textContent.trim())`);
+  t.check('no Inventory screen sends you to the browser', webItems.length === 0, JSON.stringify(webItems));
   await t.shot('i1-dashboard');
 
   // ── products: the tree and a search ───────────────────────────────────

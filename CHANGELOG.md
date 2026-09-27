@@ -5,6 +5,88 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-27 — 0.2.37: Inventory, part 5 — reports, replenishment, brands & units, settings, My access
+
+Every Inventory screen now opens here: none sends you to the browser.
+Sales orders still open in Sales & Orders, or in the browser for anyone
+who can't use it. The dashboard's Reports and Replenishment links stay in
+the app too.
+
+**Added**
+
+- **Reports.** Fifteen, picked from a list grouped as stock, movement,
+  money and serials: valuation, balance, aging, by warehouse, movement,
+  fast moving, dead stock, ABC, expiry, product profitability, by vendor,
+  and the serial register, movement, warranty, labels and tags.
+  - Each shows its headline figure, any tiles (aging by age, profitability
+    totals, label counts) or state counts, its tables, and the server's
+    note on how the figures were worked out.
+  - The warehouse is the one picked in the rail. Each report can also be
+    narrowed by its own window, unit state or which labels.
+  - Reports that are all money aren't offered to people without cost
+    access; in the rest they see a dash for costs.
+- **Replenishment.** What's below its minimum, soonest to run out first:
+  available, coming, minimum, how much to order, use per day, days of cover
+  and the vendor. Tick lines, or none for all, and **Raise requests**, which
+  opens Purchasing › Requests with them there.
+- **Brands & units.** Three panels:
+  - **Brands:** new, edit (including archive) and delete.
+  - **Units:** new, a base unit or one made of a base unit at a factor,
+    and remove.
+  - **Attributes:** new with their values; add a value in place with
+    **+ value**; remove.
+
+  Brands and attributes are for those who keep the catalogue, units for
+  those who set Inventory up.
+- **Settings**, for those who may set Inventory up:
+  - **Rules & numbering:** each switch and prefix with its note, saving
+    only what changed. This includes "Buyers may approve their own
+    purchasing documents".
+  - **Warehouses:** the list, new and edit. One warehouse shows its
+    locations, what it holds most of, and who can act there. You can add
+    a location and archive it (refused while it holds stock).
+  - Labels, User access, Screens, Organization, Notifications and History
+    open the settings in the browser (marked).
+- **My access:** which of your companies' warehouses you can act in and
+  why, the rule that naming the first person closes a warehouse, whether
+  costs reach you, and every Inventory permission, granted or not.
+
+**Server fixes this needed** (LHCP `775f0be4`, committed, **not deployed**)
+
+- The vendor report counted each order once per receipt, and each receipt
+  once per order.
+- The movement report's daily values went to people without cost access.
+- My access showed other companies' warehouses.
+- A brand could be renamed to nothing, and duplicate brand names or unit
+  codes were accepted.
+- A value added to an attribute later sorted first.
+
+Until those are deployed, production has these problems whichever app is
+used.
+
+**Tests**
+
+- Unit:
+  - which reports are offered without cost access;
+  - what each report is asked, and how each answer is read (headline,
+    tiles, notes, tables);
+  - the unit, rules and warehouse forms;
+  - a warehouse's "0" switch read as off.
+- End-to-end, against a local server (`tests/e2e/inventory-5.mjs`, 20
+  checks, all passing). Covered:
+  - no Inventory screen sending you to the browser;
+  - the valuation, movement, vendor and serial reports, the vendor report
+    matching the orders it counts;
+  - a product two short of ten raised as a purchase request;
+  - a brand, a unit and an attribute made, with a duplicate refused;
+  - a rule changed and put back;
+  - a warehouse made (not called the default), given a location and
+    archived;
+  - My access naming the reader's warehouses and permissions.
+- The part 1, 3 and 4 end-to-end runs still pass.
+
+---
+
 ## 2026-09-27 — 0.2.36: Inventory, part 4 — manufacturing, and sales orders in Sales & Orders
 
 Manufacturing now opens here instead of in the browser. Sales orders — in
