@@ -133,7 +133,7 @@ export function AttachMenu({ label = 'Attach', disabled, onComputer, onDrive, sm
   );
 }
 
-type Source = { tenderDocument: number } | { tenderLine: { line: number; version?: number } } | { tenderLetter: { tender: number; letter: number } };
+type Source = { tenderDocument: number } | { tenderLine: { line: number; version?: number } } | { tenderLetter: { tender: number; letter: number } } | { tenderLibrary: number };
 
 /** Downloads a tender's file through the transfer manager, and opens it when asked. */
 export async function saveTenderFile(source: Source, name: string, open = false) {

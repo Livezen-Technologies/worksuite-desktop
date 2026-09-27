@@ -38,10 +38,11 @@ describe('a file uploaded for a tender is filed where it was asked', () => {
 
 describe("a tender's files are downloaded by what they are, never by a path", () => {
   const input = contract['transfers:download'].input;
-  it('takes a document, a checklist file or an earlier version of it, or a letter — one at a time', () => {
+  it('takes a document, a checklist file or an earlier version of it, a letter, or a library document — one at a time', () => {
     expect(input.safeParse({ tenderDocument: 4, name: 'Spec.pdf' }).success).toBe(true);
     expect(input.safeParse({ tenderLine: { line: 12, version: 3 }, name: 'VAT.pdf' }).success).toBe(true);
     expect(input.safeParse({ tenderLetter: { tender: 7, letter: 2 }, name: 'Letter.pdf' }).success).toBe(true);
+    expect(input.safeParse({ tenderLibrary: 103, name: 'Tax clearance.pdf' }).success).toBe(true);
     expect(input.safeParse({ tenderDocument: 4, tenderLetter: { tender: 7, letter: 2 }, name: 'x.pdf' }).success).toBe(false);
     expect(input.safeParse({ tenderLine: { line: -1 }, name: 'x.pdf' }).success).toBe(false);
   });

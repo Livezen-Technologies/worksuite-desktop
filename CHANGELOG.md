@@ -5,6 +5,61 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-27 — 0.2.40: Tenders, part 3 — the document library, reports and settings
+
+Tenders is now fully native: nothing in its rail opens in the browser. The
+whole tender can still be opened there from its own page.
+
+**Added**
+
+- **Document library.** The company's own certificates — registration, tax,
+  financials, insurance, certifications, references — kept once and filed
+  against every bid's checklist.
+  - Tiles for what is in the library, what has expired, what expires within
+    60 days, and what has no file (details alone satisfy nothing). The
+    rail's badge counts the expired ones.
+  - Soonest to lapse first, with the days left or since. Search, and filter
+    by state.
+  - **Open** a document's file. Add or edit one with its kind, reference,
+    issue and expiry dates, and a file chosen from this computer or from
+    Drive. With every company in view, it asks which company the document
+    is for.
+  - Remove one or several. A document a live bid's checklist is filed from
+    is refused and named.
+- **Reports**, for this month, this quarter, this year, the last 12 months,
+  all time, or two dates of your choosing.
+  - What came in: how many, how many are still open, by sector and by
+    industry.
+  - What was decided: won, lost, cancelled, the win rate, and the value
+    awarded per currency.
+  - Why we lost: the reasons given, who won instead, and how far above the
+    winning price our bid was.
+  - A period that ends before it starts is refused, and nothing is shown
+    for it.
+- **Settings**, for those who may set Tenders up.
+  - **Scoring rules**, each read as a sentence ("Published budget ceiling is
+    at least 1,000,000"). Add, edit, switch off and on, remove, and score
+    every open tender again. The form offers only comparisons that can match
+    what the rule looks at, and a rule that would move nothing is refused.
+  - **Sources**: the ways tenders can arrive, with why a way can't be used
+    yet, and each source's recent runs (seen, kept, already here,
+    unreadable).
+  - **General**: the module's switches, such as whether a required document
+    must be approved before a bid goes out.
+
+**Server fixes this needed** (LHCP 144c025b, not deployed yet)
+
+- A library document's file could be opened only by whoever uploaded it.
+  There's now a route for the company, and each document says which company
+  it belongs to.
+- The report counted cancelled tenders as open, and worked its win rate from
+  tenders *added* in the period while its loss analysis used losses
+  *decided* in it. Its days were UTC days.
+- A scoring rule that could never fire was saved without a word.
+- A tender source's configuration went to anyone who could view tenders.
+
+---
+
 ## 2026-09-27 — 0.2.39: Tenders, part 2 — a tender's working tabs
 
 A tender's working tabs now open here instead of in the browser: the

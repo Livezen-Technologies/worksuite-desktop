@@ -96,7 +96,7 @@ try {
   await t.evaluate(`(() => { const b = [...document.querySelectorAll('nav button')].find(b => b.textContent.trim() === 'Tenders'); if (b) b.click(); return !!b; })()`);
   await t.waitFor(`!!document.querySelector('nav[aria-label="Tenders"]')`, 'the Tenders rail', 30_000);
   const browserItems = await t.evaluate(`[...document.querySelectorAll('nav[aria-label="Tenders"] button')].filter(b => (b.title || '').includes('browser')).map(b => b.textContent.trim().replace(/\\d+$/, ''))`);
-  t.check('only the library, reports and settings open in the browser', js(browserItems) === js(['Document library', 'Reports', 'Settings']), js(browserItems));
+  t.check('nothing in the Tenders rail opens in the browser', js(browserItems) === js([]), js(browserItems));
 
   // ── the dashboard ─────────────────────────────────────────────────────
   await t.waitFor(`${mainHas('Closing this week')}`, 'the dashboard', 20_000);

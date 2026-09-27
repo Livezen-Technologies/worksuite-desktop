@@ -10,12 +10,13 @@ import { NATIVE, TenderRail, type TenderView } from './Rail';
 
 /**
  * Tenders: the rail, and the screen it points at. Addressed as
- * `/tenders?tab=dash|board|all|new|following|preparing|submitted|evaluation|won|lost|acc`:
+ * `/tenders?tab=dash|board|all|new|following|preparing|submitted|evaluation|won|lost|lib|rep|set|acc`
+ * (`&ss=scoring|sources|general` for a part of the settings):
  * - a tender as `?open=<id>` (what the server's notifications, search and the
  *   Social stream carry), its workspace in place of the list, `&wt=` for a tab
  *   of it (`overview|checklist|documents|bonds|meetings|budget|approvals|notice|decision|history|activity`);
  * - `&make=new` starts a tender, `&edit=<id>` edits one.
- * The document library, reports and settings open in the browser for now.
+ * Nothing in Tenders opens in the browser any more.
  */
 const Dashboard = lazy(() => import('./Dashboard'));
 const List = lazy(() => import('./List'));
@@ -23,6 +24,9 @@ const Board = lazy(() => import('./Board'));
 const Workspace = lazy(() => import('./Workspace'));
 const TenderSheet = lazy(() => import('./TenderSheet'));
 const MyAccess = lazy(() => import('./MyAccess'));
+const Library = lazy(() => import('./Library'));
+const Reports = lazy(() => import('./Reports'));
+const Settings = lazy(() => import('./Settings'));
 
 const TITLES: Record<TenderView, string> = {
   dash: 'Dashboard',
@@ -35,6 +39,9 @@ const TITLES: Record<TenderView, string> = {
   evaluation: 'Evaluation',
   won: 'Won',
   lost: 'Lost',
+  lib: 'Document library',
+  rep: 'Reports',
+  set: 'Settings',
   acc: 'My access',
 };
 const ORG_KEY = 'tenders.org';
@@ -123,6 +130,16 @@ export default function TendersShell(_props: ModuleProps) {
             <Board org={scope} bands={dash.data?.bands} onOpen={(id) => openTender(id)} onList={(v) => go(`/tenders?tab=${v}`)} />
           ) : view === 'acc' ? (
             <MyAccess companies={list} />
+          ) : view === 'lib' ? (
+            <Library org={scope} companies={list} canManage={canManage} />
+          ) : view === 'rep' ? (
+            <Reports org={scope} />
+          ) : view === 'set' ? (
+            canSettings ? (
+              <Settings org={scope} companies={list} section={query.get('ss')} onSection={(x) => go(`/tenders?tab=set&ss=${x}`)} />
+            ) : (
+              <p className="m-6 text-[13px] text-ink-2">Settings are for those who may set Tenders up. My access says what you can do here.</p>
+            )
           ) : (
             <List key={view} view={view as ListView} org={scope} stages={dash.data?.stages ?? []} bands={dash.data?.bands} canManage={canManage} onOpen={(id) => openTender(id)} />
           )}

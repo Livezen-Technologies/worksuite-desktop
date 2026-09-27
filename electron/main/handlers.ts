@@ -307,6 +307,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       ? `/api/tenders/checklist/${tl.line}/download${tl.version ? `?v=${tl.version}` : ''}`
       : input.tenderLetter
       ? `/api/tenders/${input.tenderLetter.tender}/letters/${input.tenderLetter.letter}/download`
+      : input.tenderLibrary
+      ? `/api/tender/library/${input.tenderLibrary}/file`
       : input.invoicePdf
       ? `/api/share/billing/${input.invoicePdf}/pdf`
       : input.paymentSlip
