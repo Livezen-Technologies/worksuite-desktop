@@ -13,11 +13,9 @@ import { NATIVE, TenderRail, type TenderView } from './Rail';
  * `/tenders?tab=dash|board|all|new|following|preparing|submitted|evaluation|won|lost|acc`:
  * - a tender as `?open=<id>` (what the server's notifications, search and the
  *   Social stream carry), its workspace in place of the list, `&wt=` for a tab
- *   of it (`overview|decision|history|activity`);
+ *   of it (`overview|checklist|documents|bonds|meetings|budget|approvals|notice|decision|history|activity`);
  * - `&make=new` starts a tender, `&edit=<id>` edits one.
- * A tender's working tabs — its checklist, documents, bonds, meetings, budget,
- * costs and approvals — and the library, reports and settings open in the
- * browser for now.
+ * The document library, reports and settings open in the browser for now.
  */
 const Dashboard = lazy(() => import('./Dashboard'));
 const List = lazy(() => import('./List'));
@@ -55,6 +53,7 @@ export default function TendersShell(_props: ModuleProps) {
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
   const canManage = can(perms, 'tender.manage');
   const canSettings = can(perms, 'tender.settings');
+  const canApprove = can(perms, 'tender.approve');
   const [org, setOrg] = useState(savedOrg);
   // `/tenders/<id>` as well as `?open=<id>`, for links written either way.
   const fromPath = num(path[path.length - 1]);
@@ -112,6 +111,7 @@ export default function TendersShell(_props: ModuleProps) {
               id={open}
               bands={dash.data?.bands}
               canManage={canManage}
+              canApprove={canApprove}
               tab={query.get('wt') ?? 'overview'}
               onTab={(t) => openTender(open, t)}
               onBack={() => openTender(null)}

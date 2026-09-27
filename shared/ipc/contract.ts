@@ -111,6 +111,18 @@ export const uploadTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('chat'), roomId: z.string().max(64), caption: z.string().max(4000).optional(), replyTo: z.number().int().positive().optional() }),
   /** A task's attachment (or a comment's, with its id): stored in Drive, then linked to the task. */
   z.object({ kind: z.literal('task'), taskId: z.number().int().positive(), commentId: z.number().int().positive().optional() }),
+  /**
+   * A tender's file: stored in Drive, then filed on the tender — as a new document (`docKind`), on a
+   * checklist line (`id` = the line), as the new version of a document (`id` = the document), or as a
+   * bond's copy (`id` = the security). The server checks the tender and the permission at the filing.
+   */
+  z.object({
+    kind: z.literal('tender'),
+    tenderId: z.number().int().positive(),
+    into: z.enum(['document', 'line', 'replace', 'security']),
+    id: z.number().int().positive().optional(),
+    docKind: z.string().regex(/^[a-z_]{1,60}$/).optional(),
+  }),
 ]);
 export type UploadTarget = z.infer<typeof uploadTargetSchema>;
 
@@ -262,6 +274,10 @@ export const contract = {
         invoicePdf: z.number().int().positive().optional(),
         /** A bank slip attached to a payment (Billing › Payments). */
         paymentSlip: z.object({ payment: z.number().int().positive(), slip: z.number().int().positive() }).optional(),
+        /** A tender's document, a checklist line's file (or an earlier version of it), or a generated letter. */
+        tenderDocument: z.number().int().positive().optional(),
+        tenderLine: z.object({ line: z.number().int().positive(), version: z.number().int().positive().optional() }).optional(),
+        tenderLetter: z.object({ tender: z.number().int().positive(), letter: z.number().int().positive() }).optional(),
         /** The order list as a CSV, as the Orders screen filtered it. */
         ordersCsv: z
           .object({
@@ -286,7 +302,7 @@ export const contract = {
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a payment slip, an order list or an Orders report'),
+      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.tenderDocument, v.tenderLine, v.tenderLetter].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a payment slip, an order list, an Orders report, or a tender document, checklist file or letter'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   'transfers:upload': ch(

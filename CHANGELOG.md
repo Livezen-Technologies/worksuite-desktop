@@ -5,6 +5,77 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-27 — 0.2.39: Tenders, part 2 — a tender's working tabs
+
+A tender's working tabs now open here instead of in the browser: the
+checklist, documents, bonds, meetings, budget, approvals, the buyer's notice
+and its letters, and recording the submission and what the buyer said. Only
+the document library, reports and settings still open in the browser.
+
+**Added**
+
+- **Checklist.** The buyer's requirements, section by section in the
+  buyer's order.
+  - Progress is the share of required lines that are ready, as the server
+    counts it: something readable on file, not sent back, not expired. A
+    tender with nothing required says "No checklist" rather than 100%.
+  - Filters: all, outstanding, missing, pending review, sent back,
+    approved, optional.
+  - Each line shows its file (open it, or an earlier version), who chases
+    it, its expiry, and, when it doesn't count, why — in the words the
+    pipeline uses when it refuses to move the tender on.
+  - **Attach** from this computer or from Drive, or drop a file on the
+    line. Each becomes the line's next version and waits for review.
+  - **Approve** and **Send back…** need the approval permission, and a
+    reason for sending back. Approve is not offered on a line with nothing
+    on it.
+  - Add a line, add a standard pack, edit a line (chased by, expiry,
+    required), remove. Approve or remove several at once.
+- **Documents.** Add the buyer's notice, the specification, our bid,
+  clarifications, addenda or the award letter, from this computer, from
+  Drive, or by dropping files on the list. Open or save each one; replace it
+  with a new version; rename it, change its kind, mark it final; take it off
+  the tender (the file stays in Drive). What you may do is the server's
+  answer, so buttons that would be refused aren't shown. A file held by the
+  malware scan, or removed from Drive, says so.
+- **Bonds.** Bid securities and guarantees, soonest to lapse first, with the
+  days left. Anything inside thirty days is called out. At the top, the
+  total still tied up per currency. Record, edit, attach a copy, remove.
+- **Meetings.** Pre-bid, site visit, clarification and opening, on your
+  clock. Mandatory ones say so, as does a past one not recorded as
+  attended. The questions deadline, who went and the minutes are kept with
+  each meeting.
+- **Budget.** Cost lines and the margin against our bid. The margin appears
+  only once a bid value is entered. Below them, what has actually been
+  spent: the expense claims filed against the tender, for those who may see
+  Expenses.
+- **Approvals.** The sign-off chain, with Approve, Reject (with a reason)
+  and Skip for those who may. Add a step, optionally naming who approves.
+- **Notice.** The buyer's notice as transcribed: who the letters go to, the
+  committee, how and when the documents are issued, the fee and its terms,
+  the envelope procedure. Beside it, what is kept elsewhere (closing time,
+  pre-bid meeting, bid security) and where to change it. **Write the
+  letter** produces the request for the bid documents as a PDF to open.
+- **Submission.** **Record a submission** — how, when, the bid value, the
+  receipt number — moves the tender to Submitted. Anything outstanding is
+  listed first, and **Record it anyway** keeps what was missing in the
+  history. **Record** what the buyer said at evaluation, with a score.
+- Opening a tender always reads it afresh, so one someone else has just
+  moved doesn't show its old stage and moves.
+
+**Server fixes this needed** (LHCP 69cb5d8f, not deployed yet)
+
+- A checklist line with nothing on it could be approved.
+- An owner, a line's "chased by" or an approver could be someone from a
+  different company, or anyone at all in the approver's case.
+- Budget lines turned figures they couldn't read into 0; line totals were
+  cut rather than rounded.
+- A mistyped bid value left the tender at Submitted with nothing recorded.
+- An edit could remove a bond's amount or a meeting's time, and moving a
+  meeting read a time given without a zone on the editor's clock.
+
+---
+
 ## 2026-09-27 — 0.2.38: Tenders, part 1 — the app, the lists, the board, one tender's workspace
 
 Tenders opens here now instead of in the browser, under Business in the
@@ -73,7 +144,7 @@ reports and settings still open in the browser.
   a tender in another company does not open, even from a link — what you
   may do, and every Tenders permission.
 
-**Server fixes this needed** (LHCP 691c7c5c, not deployed yet)
+**Server fixes this needed** (LHCP 691c7c5c, deployed 10:27 UTC 2026-09-27)
 
 - A search for `RFQ_12` matched `RFQ-12` too, because `_` was a wildcard.
 - A tender could be renamed to a blank title.

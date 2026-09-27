@@ -427,7 +427,40 @@ export interface Workspace {
   activity: Array<{ id: number; kind: string; body: string | null; actor_name: string | null; created_at: string }>;
   score: { score: number | null; band: string | null; reasons: ScoreReason[] } | null;
   next: Array<{ key: string; label: string }>;
-  can: { upload: boolean };
+  documents: TenderDoc[];
+  /** What this reader may do with the tender's documents (and the files on its checklist). */
+  can: DocAccess;
+  budget: Budget;
+}
+
+export interface DocAccess {
+  view: boolean;
+  download: boolean;
+  upload: boolean;
+  edit: boolean;
+  delete: boolean;
+}
+
+export interface TenderDoc {
+  id: number;
+  kind: string;
+  title: string;
+  note: string | null;
+  version: number;
+  is_final: boolean;
+  added_by_name: string | null;
+  created_at: string;
+  file: { id: number; name: string | null; size: number | null; mime_type: string | null; state: 'ready' | 'held' | 'deleted'; download_name: string } | null;
+}
+
+export interface Budget {
+  lines: Array<{ id: number; category: string; label: string; quantity: string; unit_cost: string; line_total: string; note: string | null }>;
+  by_category: Record<string, string>;
+  total_cost: string;
+  currency: string;
+  /** Only where a bid has been entered: the margin is never estimated. */
+  margin: { bid: string; cost: string; profit: string; percent: number } | null;
+  note: string | null;
 }
 
 export async function fetchTender(id: number, signal?: AbortSignal): Promise<Workspace> {
@@ -463,7 +496,30 @@ export async function fetchTender(id: number, signal?: AbortSignal): Promise<Wor
     activity: arr<Record<string, unknown>>(d.activity).map((a) => ({ id: int(a.id) ?? 0, kind: String(a.kind ?? ''), body: str(a.body), actor_name: str(a.actor_name), created_at: String(a.created_at ?? '') })),
     score: score ? { score: int(score.score), band: score.band ?? null, reasons: arr<ScoreReason>(score.reasons) } : null,
     next: arr(d.next_stages),
-    can: { upload: !!(d.attachments as { can?: { upload?: boolean } } | undefined)?.can?.upload },
+    documents: arr<TenderDoc>(d.documents),
+    can: { view: false, download: false, upload: false, edit: false, delete: false, ...((d.attachments as { can?: Partial<DocAccess> } | undefined)?.can ?? {}) },
+    budget: budgetOf(d.budget),
+  };
+}
+
+/** The budget as the server sent it; `by_category` arrives as [] when empty (a PHP empty array). */
+function budgetOf(v: unknown): Budget {
+  const b = (v ?? {}) as Partial<Budget> & { lines?: Array<Record<string, unknown>> };
+  return {
+    lines: (b.lines ?? []).map((l) => ({
+      id: int(l.id) ?? 0,
+      category: String(l.category ?? 'other'),
+      label: String(l.label ?? ''),
+      quantity: String(l.quantity ?? '0'),
+      unit_cost: String(l.unit_cost ?? '0'),
+      line_total: String(l.line_total ?? '0'),
+      note: str(l.note),
+    })),
+    by_category: b.by_category && !Array.isArray(b.by_category) ? b.by_category : {},
+    total_cost: String(b.total_cost ?? '0.00'),
+    currency: b.currency ?? 'LKR',
+    margin: b.margin ?? null,
+    note: b.note ?? null,
   };
 }
 

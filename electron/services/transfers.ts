@@ -99,6 +99,23 @@ export async function walkFolder(root: string): Promise<Array<{ path: string; si
 }
 const CHUNK = 8 * 1024 * 1024;
 
+/**
+ * Files an uploaded Drive file on a tender, the way the web's tender screens
+ * do: a new document, a checklist line's next version, a document's
+ * replacement, or a bond's copy. The server checks the tender, the caller's
+ * attachment permission and that the file is theirs to attach.
+ */
+export async function fileOnTender(http: Pick<HttpClient, 'post' | 'request'>, target: Extract<UploadTarget, { kind: 'tender' }>, fileId: number, name: string): Promise<void> {
+  if (target.into === 'document') {
+    await http.post(`/api/tenders/${target.tenderId}/documents`, { file_id: fileId, kind: target.docKind ?? 'other', title: name });
+    return;
+  }
+  if (!target.id) throw new DesktopError('IPC_VALIDATION_FAILED', 'Which line, document or bond is this for?');
+  if (target.into === 'line') await http.post(`/api/tenders/checklist/${target.id}/file`, { file_id: fileId, name });
+  else if (target.into === 'replace') await http.request('PUT', `/api/tenders/documents/${target.id}`, { body: { file_id: fileId } });
+  else await http.request('PUT', `/api/tenders/securities/${target.id}`, { body: { file_id: fileId } });
+}
+
 export class TransferManager {
   private handles = new Map<string, Handle>();
   private live = new Map<string, Live>();
@@ -340,7 +357,7 @@ export class TransferManager {
         direction: 'upload',
         name: (target.kind === 'files' && target.name) || (file.relativePath ?? file.name),
         source: file.path,
-        destination: target.kind === 'chat' ? 'Chat' : target.kind === 'task' ? 'Task' : 'WorkSuite Files',
+        destination: target.kind === 'chat' ? 'Chat' : target.kind === 'task' ? 'Task' : target.kind === 'tender' ? 'Tender' : 'WorkSuite Files',
         bytes: 0,
         total: file.size,
         state: 'queued',
@@ -389,7 +406,7 @@ export class TransferManager {
           ...(replacing ? { replace_file_id: replacing } : {}),
           ...(meta.relativePath ? { relative_path: meta.relativePath } : {}),
           // A task's files are Drive files (in the top folder, as the web's are), linked to the task once they are in.
-          ...(meta.target.kind === 'files' ? { purpose: 'drive', folder_id: meta.target.folderId } : meta.target.kind === 'task' ? { purpose: 'drive', folder_id: null } : { purpose: 'chat', room_id: meta.target.roomId }),
+          ...(meta.target.kind === 'files' ? { purpose: 'drive', folder_id: meta.target.folderId } : meta.target.kind === 'task' || meta.target.kind === 'tender' ? { purpose: 'drive', folder_id: null } : { purpose: 'chat', room_id: meta.target.roomId }),
         });
         // A server that does not know `replace_file_id` ignores it and would add a second file of the same
         // name: it says which file it will replace, and without that the upload stops before any bytes go.
@@ -430,6 +447,10 @@ export class TransferManager {
           file_ids: [Number(meta.fileId)],
           ...(meta.target.commentId ? { comment_id: meta.target.commentId } : {}),
         });
+      }
+      if (meta.target.kind === 'tender') {
+        if (!meta.fileId) throw new DesktopError('SERVER_ERROR', 'The file was stored but WorkSuite did not say where.');
+        await fileOnTender(this.deps.http, meta.target, Number(meta.fileId), basename(meta.path));
       }
       if (meta.target.kind === 'chat') {
         await this.deps.http.post('/api/chat/messages/attachments', {

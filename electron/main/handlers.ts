@@ -298,8 +298,15 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     const r = input.hrReport;
     const oc = input.ordersCsv;
     const rep = input.omsReport;
+    const tl = input.tenderLine;
     const path = input.orderPdf
       ? `/api/share/oms/${input.orderPdf}/pdf`
+      : input.tenderDocument
+      ? `/api/tenders/documents/${input.tenderDocument}/file`
+      : tl
+      ? `/api/tenders/checklist/${tl.line}/download${tl.version ? `?v=${tl.version}` : ''}`
+      : input.tenderLetter
+      ? `/api/tenders/${input.tenderLetter.tender}/letters/${input.tenderLetter.letter}/download`
       : input.invoicePdf
       ? `/api/share/billing/${input.invoicePdf}/pdf`
       : input.paymentSlip

@@ -5,9 +5,17 @@ import { dateLabel, relative, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Facts, Field, input, Panel, Seg, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Facts, Field, input, Panel, Sheet } from '../hr/parts';
 import { Pill } from '../inventory/parts';
 import { addNote, fetchBlockers, fetchTender, K, money, moveStage, recordLoss, recordWin, refusalOf, rescore, setFollowing, type Band, type LoseDraft, type WinDraft, type Workspace as Data } from './api';
+import Approvals from './Approvals';
+import Bonds from './Bonds';
+import Budget from './Budget';
+import Checklist from './Checklist';
+import Decision from './Decision';
+import Documents from './Documents';
+import Meetings from './Meetings';
+import Notice from './Notice';
 import { Left, openWeb, OutcomePill, PriorityPill, Score, StagePill, subline } from './parts';
 
 /**
@@ -23,15 +31,33 @@ import { Left, openWeb, OutcomePill, PriorityPill, Score, StagePill, subline } f
  * The working tabs — checklist, documents, bonds, meetings, budget, costs and
  * approvals — open in the browser for now.
  */
-type Tab = 'overview' | 'decision' | 'history' | 'activity';
-const TABS: Tab[] = ['overview', 'decision', 'history', 'activity'];
-const WEB_TABS = ['Checklist', 'Documents', 'Bonds', 'Meetings', 'Budget', 'Costs', 'Approvals'];
+type Tab = 'overview' | 'checklist' | 'documents' | 'bonds' | 'meetings' | 'budget' | 'approvals' | 'notice' | 'decision' | 'history' | 'activity';
+const TABS: Tab[] = ['overview', 'checklist', 'documents', 'bonds', 'meetings', 'budget', 'approvals', 'notice', 'decision', 'history', 'activity'];
 
 type Ask = { kind: 'move'; to: string; label: string; blockers: string[] } | { kind: 'cancel' } | { kind: 'win' } | { kind: 'lose' };
 
-export default function Workspace({ id, bands, canManage, tab, onTab, onBack, onEdit }: { id: number; bands: Band[] | undefined; canManage: boolean; tab: string; onTab: (t: string) => void; onBack: () => void; onEdit: () => void }) {
+export default function Workspace({
+  id,
+  bands,
+  canManage,
+  canApprove,
+  tab,
+  onTab,
+  onBack,
+  onEdit,
+}: {
+  id: number;
+  bands: Band[] | undefined;
+  canManage: boolean;
+  canApprove: boolean;
+  tab: string;
+  onTab: (t: string) => void;
+  onBack: () => void;
+  onEdit: () => void;
+}) {
   const qc = useQueryClient();
-  const q = useQuery({ queryKey: K.tender(id), queryFn: ({ signal }) => fetchTender(id, signal) });
+  // Opened means read afresh: a tender moved by somebody else a moment ago must not show its old stage and moves.
+  const q = useQuery({ queryKey: K.tender(id), queryFn: ({ signal }) => fetchTender(id, signal), refetchOnMount: 'always' });
   const [ask, setAsk] = useState<Ask | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const t: Tab = (TABS as string[]).includes(tab) ? (tab as Tab) : 'overview';
@@ -48,6 +74,8 @@ export default function Workspace({ id, bands, canManage, tab, onTab, onBack, on
   const d = q.data;
   const r = d.tender;
   const req = d.requirements.summary;
+  // Owners, approvers and who chases a line are asked of the tender's own company.
+  const org = r.org_id ? String(r.org_id) : '';
   const decided = r.outcome !== 'open';
 
   const act = async (key: string, fn: () => Promise<unknown>, done: string) => {
@@ -164,38 +192,60 @@ export default function Workspace({ id, bands, canManage, tab, onTab, onBack, on
           </div>
         ) : null}
         {req.mandatory > 0 && !decided ? (
-          <div
-            className={cx('flex items-start gap-2 rounded-[9px] px-3 py-2 text-[12.5px]', req.missing === 0 ? 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success' : 'bg-[#FFF4E0] text-[#7A3B05] dark:bg-warning-bg dark:text-warning')}
+          <button
+            type="button"
+            onClick={() => onTab('checklist')}
+            className={cx(
+              'flex items-start gap-2 rounded-[9px] px-3 py-2 text-left text-[12.5px] hover:underline',
+              req.missing === 0 ? 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success' : 'bg-[#FFF4E0] text-[#7A3B05] dark:bg-warning-bg dark:text-warning',
+            )}
           >
             <Icon name={req.missing === 0 ? 'check-circle' : 'warning'} size={15} className="mt-px shrink-0" />
             {req.missing === 0 ? 'Every mandatory requirement is satisfied.' : `Outstanding: ${req.missing} of ${req.mandatory} mandatory ${req.mandatory === 1 ? 'requirement' : 'requirements'}.`}
-          </div>
+          </button>
         ) : d.requirements.note && !decided ? (
           <p className="m-0 text-[12px] text-ink-3">{d.requirements.note}</p>
         ) : null}
       </section>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Seg
-          label="Tender"
-          value={t}
-          onChange={(v) => onTab(v)}
-          options={[
-            { id: 'overview', label: 'Overview' },
-            { id: 'decision', label: 'Submission & result' },
-            { id: 'history', label: `History · ${d.history.length}` },
-            { id: 'activity', label: 'Notes & activity' },
-          ]}
-        />
-        <span className="min-w-0 flex-1" />
-        <button type="button" title={`${WEB_TABS.join(', ')} — open in your browser`} onClick={() => openWeb(`/tenders?open=${id}`)} className="inline-flex min-w-0 items-center gap-1 text-[12.5px] font-semibold text-primary hover:underline">
-          <span className="truncate">Checklist, documents and the other working tabs</span>
-          <Icon name="external" size={12} className="shrink-0" />
-        </button>
-      </div>
+      <nav role="tablist" aria-label="Tender" className="-mb-1 flex gap-0.5 overflow-x-auto border-b border-line scroll-thin">
+        {(
+          [
+            ['overview', 'Overview'],
+            ['checklist', req.mandatory ? `Checklist · ${req.missing ? `${req.missing} outstanding` : 'ready'}` : 'Checklist'],
+            ['documents', d.documents.length ? `Documents · ${d.documents.length}` : 'Documents'],
+            ['bonds', 'Bonds'],
+            ['meetings', 'Meetings'],
+            ['budget', 'Budget'],
+            ['approvals', d.approvals.some((a) => a.status === 'pending') ? `Approvals · ${d.approvals.filter((a) => a.status === 'pending').length} pending` : 'Approvals'],
+            ['notice', 'Notice'],
+            ['decision', 'Submission'],
+            ['history', `History · ${d.history.length}`],
+            ['activity', 'Notes'],
+          ] as Array<[Tab, string]>
+        ).map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            role="tab"
+            aria-selected={t === k}
+            onClick={() => onTab(k)}
+            className={cx('-mb-px shrink-0 border-b-2 px-3 pt-1.5 pb-2 text-[12.5px] font-semibold whitespace-nowrap', t === k ? 'border-primary text-primary' : 'border-transparent text-ink-2 hover:text-ink')}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
 
-      {t === 'overview' ? <Overview d={d} canManage={canManage} busy={busy === 'score'} onRescore={() => void act('score', () => rescore(id), 'Scored again.')} /> : null}
-      {t === 'decision' ? <Decision d={d} /> : null}
+      {t === 'overview' ? <Overview d={d} canManage={canManage} busy={busy === 'score'} onRescore={() => void act('score', () => rescore(id), 'Scored again.')} onApprovals={() => onTab('approvals')} /> : null}
+      {t === 'checklist' ? <Checklist id={id} org={org} canManage={canManage} canApprove={canApprove} can={d.can} /> : null}
+      {t === 'documents' ? <Documents id={id} docs={d.documents} can={d.can} /> : null}
+      {t === 'bonds' ? <Bonds id={id} currency={r.currency} canManage={canManage} can={d.can} /> : null}
+      {t === 'meetings' ? <Meetings id={id} canManage={canManage} /> : null}
+      {t === 'budget' ? <Budget id={id} budget={d.budget} canManage={canManage} /> : null}
+      {t === 'approvals' ? <Approvals id={id} org={org} rows={d.approvals} canManage={canManage} canApprove={canApprove} /> : null}
+      {t === 'notice' ? <Notice id={id} canManage={canManage} /> : null}
+      {t === 'decision' ? <Decision d={d} canManage={canManage} /> : null}
       {t === 'history' ? <History d={d} /> : null}
       {t === 'activity' ? <Activity d={d} id={id} onAdded={refresh} /> : null}
 
@@ -224,7 +274,7 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function Overview({ d, canManage, busy, onRescore }: { d: Data; canManage: boolean; busy: boolean; onRescore: () => void }) {
+function Overview({ d, canManage, busy, onRescore, onApprovals }: { d: Data; canManage: boolean; busy: boolean; onRescore: () => void; onApprovals: () => void }) {
   const r = d.tender;
   const applied = d.score?.reasons.filter((x) => x.applied) ?? [];
   const unjudged = d.score?.reasons.filter((x) => !x.applied) ?? [];
@@ -302,7 +352,15 @@ function Overview({ d, canManage, busy, onRescore }: { d: Data; canManage: boole
           )}
         </Panel>
         {d.approvals.length ? (
-          <Panel title="Approvals" sub="Given or refused in the browser for now" bodyClassName="flex flex-col">
+          <Panel
+            title="Approvals"
+            action={
+              <button type="button" className="text-[12.5px] font-semibold text-primary hover:underline" onClick={onApprovals}>
+                Open
+              </button>
+            }
+            bodyClassName="flex flex-col"
+          >
             {d.approvals.map((a) => (
               <div key={a.id} className="flex items-center gap-2 border-b border-line/60 px-3.5 py-2 text-[12.5px] last:border-b-0">
                 <span className="w-5 shrink-0 text-ink-3 tabular-nums">{a.step}</span>
@@ -316,76 +374,6 @@ function Overview({ d, canManage, busy, onRescore }: { d: Data; canManage: boole
           </Panel>
         ) : null}
       </div>
-    </div>
-  );
-}
-
-function Decision({ d }: { d: Data }) {
-  const r = d.tender;
-  return (
-    <div className="grid grid-cols-2 gap-3.5">
-      {r.outcome === 'lost' ? (
-        <Panel title="Why it was lost" bodyClassName="px-3.5 py-2.5 text-[12.5px]">
-          <Facts
-            rows={[
-              ['Reason', r.lost_reason],
-              ['Won by', r.competitor],
-              ['Their price', r.winning_price ? money(r.winning_price, r.currency) : null],
-              ['What we learned', r.lessons],
-            ]}
-          />
-        </Panel>
-      ) : null}
-      {r.outcome === 'won' ? (
-        <Panel title="Won" bodyClassName="px-3.5 py-2.5 text-[12.5px]">
-          <Facts
-            rows={[
-              ['Awarded', r.award_value ? money(r.award_value, r.currency) : 'Not recorded yet'],
-              ['Decided', r.decided_at ? dateLabel(r.decided_at) : null],
-              ['Client', r.client_name],
-            ]}
-          />
-        </Panel>
-      ) : null}
-      <Panel title="Submissions" sub="Recorded in the browser for now" bodyClassName="flex flex-col">
-        {d.submissions.length ? (
-          d.submissions.map((s) => (
-            <div key={s.id} className="flex flex-col border-b border-line/60 px-3.5 py-2 text-[12.5px] last:border-b-0">
-              <b className="text-ink">
-                {s.submitted_at ? `${dateLabel(s.submitted_at)}, ${timeLabel(s.submitted_at)}` : 'Not dated'}
-                {s.method ? <span className="font-medium text-ink-3"> · {s.method}</span> : null}
-              </b>
-              <span className="text-[11.5px] text-ink-3">
-                {[s.bid_value ? money(s.bid_value, r.currency) : null, s.receipt_no ? `receipt ${s.receipt_no}` : null, s.acknowledged_at ? `acknowledged ${dateLabel(s.acknowledged_at)}` : 'not acknowledged yet'].filter(Boolean).join(' · ')}
-              </span>
-              {s.note ? <span className="text-[12px] text-ink-2">{s.note}</span> : null}
-            </div>
-          ))
-        ) : (
-          <Empty text="Nothing has been submitted." />
-        )}
-      </Panel>
-      <Panel title="Evaluation" sub="What the buyer said, and when" bodyClassName="flex flex-col">
-        {d.evaluations.length ? (
-          d.evaluations.map((e) => (
-            <div key={e.id} className="flex flex-col border-b border-line/60 px-3.5 py-2 text-[12.5px] last:border-b-0">
-              <span className="flex items-center gap-1.5">
-                <b className="min-w-0 flex-1 truncate text-ink">{e.title ?? e.kind[0]!.toUpperCase() + e.kind.slice(1)}</b>
-                {e.score !== null ? (
-                  <b className="shrink-0 text-ink tabular-nums">
-                    {Number(e.score)}
-                    {e.max_score !== null ? ` / ${Number(e.max_score)}` : ''}
-                  </b>
-                ) : null}
-              </span>
-              <span className="text-[11.5px] text-ink-3">{[e.kind, e.happened_at ? dateLabel(e.happened_at) : null].filter(Boolean).join(' · ')}</span>
-              {e.body ? <span className="text-[12px] whitespace-pre-wrap text-ink-2">{e.body}</span> : null}
-            </div>
-          ))
-        ) : (
-          <Empty text="Nothing from the buyer yet." />
-        )}
-      </Panel>
     </div>
   );
 }
