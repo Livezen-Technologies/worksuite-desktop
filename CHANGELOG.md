@@ -82,7 +82,7 @@ open in the browser, marked. `/inventory?product=` and
   Read as an instant, it would have shown the reader's hour at UTC
   midnight ("5:30 AM").
 
-**Server fixes this needed** (LHCP, committed, **not deployed**)
+**Server fixes this needed** (LHCP, deployed 04:15 UTC 2026-09-27)
 
 - **e308e777:**
   - Costs reached people without the cost permission: a product's variant
@@ -98,9 +98,6 @@ open in the browser, marked. `/inventory?product=` and
 - **a5589bbc:** adding a category, brand or unit with no company chosen,
   for someone in two, failed with a bare server error. It now says which
   company is missing.
-
-Until those are deployed, production still has these problems, and its
-stock overview shows no line count or total.
 
 **Tests**
 
