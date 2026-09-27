@@ -5,6 +5,103 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-27 — 0.2.34: Inventory, part 3 — purchasing and vendors
+
+Purchasing and Vendors now open here instead of in the browser. The rail's
+search opens an order, a goods receipt or a vendor here, and the
+dashboard's purchase-order and "to reorder" links do too. Sales orders,
+manufacturing, reports, replenishment, brands and units, and settings still
+open in the browser.
+
+**Added**
+
+- **Purchasing: orders.**
+  - The list, by state or search, with vendor, where it is delivered, when
+    it is expected (late ones in red), how much is still to come, and the
+    total.
+  - One order shows its lines (ordered, received, unit cost for those who
+    may see costs, line total), its freight, insurance and duty, and its
+    receipts.
+  - **New order and Edit:** vendor, where it is delivered, expected date,
+    our reference, freight, insurance, duty, and lines. A blank unit cost
+    takes the catalogue's. Someone who may not see costs doesn't set them,
+    and a line they change keeps its own.
+  - **Approve**, **Receive goods** (it makes the draft receipt and opens
+    it), **PDF** (filed in the Drive and opened), **Cancel order** (until
+    anything has arrived) and **Delete** (a draft or a cancelled one).
+- **Purchasing: receipts.**
+  - The list, with the order, vendor, warehouse, status, when received,
+    their invoice and the value.
+  - A draft receipt is checked before posting:
+    - their invoice and delivery note, and the freight and duty on this
+      delivery (it arrives filled with the order's share);
+    - per line, what was accepted and what was rejected, with why;
+    - the batch and expiry for a batch-tracked product, and a serial per
+      unit for a serialised one.
+  - **Post — put this stock on the shelf** (confirmed first) and
+    **Discard**.
+  - A posted receipt shows its landed costs.
+- **Purchasing: requests.**
+  - What people have asked for, by state: lines with the preferred vendor
+    and the note.
+  - **Raise from what is below minimum**, **Approve**, and **Turn into
+    draft orders** (one per vendor).
+- **Vendors.**
+  - The list, with type, contact, terms, lead time, orders, spend (for
+    those who may see costs) and status; search, status, type and
+    favourites.
+  - One vendor opens with:
+    - an overview: orders, values, on-time delivery, lead time and rejects
+      on arrival, compliance, contract and documents;
+    - people: contacts and addresses;
+    - trade terms, with bank and credit only for those who may see cost;
+    - orders and history, whose orders and receipts open here.
+  - Favourite, Edit and Archive.
+- **New vendor and Edit vendor:** name, code, status (with a reason when
+  it isn't active), and the general, financial (bank for cost holders) and
+  purchasing essentials. As you type, "This may already be on file" names
+  likely duplicates. Only the fields you changed are saved. Contacts,
+  addresses, documents, contract and custom fields are still edited in the
+  browser.
+
+**Server fixes this needed** (LHCP `5ea03135` and `f7c5e298`, committed,
+**not deployed**)
+
+- A receipt could post twice.
+- A cancelled order came back to life when its draft receipt was posted.
+- An order's freight, insurance and duty never reached stock cost.
+- Saving an order dropped most fields, and repriced hidden costs to 0.
+- Saving a vendor without cost access wiped its bank details.
+- Bills and vendor payments had no company check.
+- An awarded order had no company.
+- A vendor's records showed other companies' documents.
+- The vendor portal token, and several costs, went to everyone.
+- A goods receipt's detail had no names.
+- The bill filters were broken.
+
+Until those are deployed, production has these problems whichever app is
+used. In particular, a receipt there won't bring the order's charges.
+
+**Tests**
+
+- Unit: what each order state allows, the order form (blank and hidden
+  costs never sent), receipt checks (batch, serials, rejects) and vendor
+  saves (only what changed; never bank details from someone who may not
+  see them).
+- End-to-end, against a local server (`tests/e2e/inventory-3.mjs`, 15
+  checks, all passing):
+  - a vendor made with its bank details, and edited without losing them;
+  - an order raised with freight, edited (freight kept, duty and reference
+    added) and approved;
+  - goods received with the order's 250 of charges, nine accepted and one
+    rejected as damaged, posted at price plus charges;
+  - the order part received;
+  - its history reached from the vendor;
+  - a request approved and turned into a draft order.
+- Parts 1 and 2's end-to-end runs still pass.
+
+---
+
 ## 2026-09-27 — 0.2.33: Inventory — approval by a second person
 
 **Changed**

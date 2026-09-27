@@ -15,7 +15,7 @@ import { openWeb, type InvView } from './Rail';
  * compare with the shelves. The warehouse picker narrows it.
  */
 /** The "needs attention" lines this app opens itself, and the list each opens on. */
-const HERE: Record<string, string> = { adj: '&st=pending', trf: '&st=in_transit', cnt: '&st=counting', trk: '&tt=expiring' };
+const HERE: Record<string, string> = { adj: '&st=pending', trf: '&st=in_transit', cnt: '&st=counting', trk: '&tt=expiring', pur: '&bt=orders' };
 
 export default function Dashboard({
   data,
@@ -135,7 +135,7 @@ export default function Dashboard({
         </Panel>
         <ListPanel title="Coming in and going out" empty="">
           {[
-            <Line key="po" title="Purchase orders open" right={d.pending.purchase_orders} onClick={() => openWeb('purchasing')} />,
+            <Line key="po" title="Purchase orders open" right={d.pending.purchase_orders} onClick={() => onGo('pur', '&bt=orders')} />,
             <Line key="in" title="Units incoming" right={qty(t.incoming)} />,
             <Line key="so" title="Sales orders open" right={d.pending.sales_orders} onClick={() => openWeb('sales')} />,
             <Line key="res" title="Units reserved" right={qty(t.reserved)} />,
@@ -198,15 +198,7 @@ export default function Dashboard({
             />
           ))}
         </ListPanel>
-        <ListPanel
-          title="To reorder"
-          empty={detail.isLoading ? 'Working it out…' : 'Nothing is below its reorder point.'}
-          action={
-            <HeadLink web onClick={() => openWeb('purchasing')}>
-              Purchasing
-            </HeadLink>
-          }
-        >
+        <ListPanel title="To reorder" empty={detail.isLoading ? 'Working it out…' : 'Nothing is below its reorder point.'} action={<HeadLink onClick={() => onGo('pur', '&bt=requests')}>Purchasing</HeadLink>}>
           {(x?.reorder.rows ?? []).slice(0, 5).map((r) => {
             const covered = r.incoming > 0 && r.available + r.incoming > r.minimum;
             return (

@@ -15,13 +15,13 @@ import { HIT_LABEL, HIT_VIEW, hitProduct, K, searchInventory, WEB_VIEW, type Com
  * a filter, not a mode: it narrows the dashboard, stock and movements, and a
  * document that names its own warehouse ignores it.
  */
-export type InvView = 'dash' | 'prod' | 'stock' | 'mov' | 'adj' | 'trf' | 'cnt' | 'trk';
+export type InvView = 'dash' | 'prod' | 'stock' | 'mov' | 'adj' | 'trf' | 'cnt' | 'trk' | 'pur' | 'ven';
 export type WebView = keyof typeof WEB_VIEW;
 
-export const NATIVE = new Set<string>(['dash', 'prod', 'stock', 'mov', 'adj', 'trf', 'cnt', 'trk']);
+export const NATIVE = new Set<string>(['dash', 'prod', 'stock', 'mov', 'adj', 'trf', 'cnt', 'trk', 'pur', 'ven']);
 
 /** A search hit this app opens itself, other than a product. */
-export type DocHit = { kind: 'adj' | 'trf' | 'serial'; id: number } | { kind: 'batch' };
+export type DocHit = { kind: 'adj' | 'trf' | 'serial' | 'po' | 'grn' | 'vendor'; id: number } | { kind: 'batch' };
 
 /** The screens that need more than `inventory.view`; the rail leaves out what you cannot open. */
 export const NEEDS: Partial<Record<WebView, string>> = {
@@ -88,6 +88,9 @@ export function InvRail({
     if (h.type === 'transfer') return onOpenDoc({ kind: 'trf', id: h.id });
     if (h.type === 'serial') return onOpenDoc({ kind: 'serial', id: h.id });
     if (h.type === 'batch') return onOpenDoc({ kind: 'batch' });
+    if (h.type === 'purchase_order') return onOpenDoc({ kind: 'po', id: h.id });
+    if (h.type === 'receipt') return onOpenDoc({ kind: 'grn', id: h.id });
+    if (h.type === 'vendor') return onOpenDoc({ kind: 'vendor', id: h.id });
     const pid = hitProduct(h);
     if (pid) onOpenProduct(pid);
     else openWeb(HIT_VIEW[h.type] ?? 'overview');
@@ -179,7 +182,7 @@ export function InvRail({
               {hits.isLoading ? <span className="px-3 py-2 text-[12px] text-ink-3">Searching…</span> : null}
               {!hits.isLoading && !results.length && !exact ? <span className="px-3 py-2 text-[12px] text-ink-3">Nothing matches.</span> : null}
               {[...(exact && !results.some((r) => r.type === exact.type && r.id === exact.id) ? [exact] : []), ...results].map((h) => {
-                const web = !hitProduct(h) && !['adjustment', 'transfer', 'serial', 'batch'].includes(h.type);
+                const web = !hitProduct(h) && !['adjustment', 'transfer', 'serial', 'batch', 'purchase_order', 'receipt', 'vendor'].includes(h.type);
                 return (
                   <button key={`${h.type}-${h.id}`} type="button" role="option" aria-selected={exact?.type === h.type && exact.id === h.id} onClick={() => choose(h)} className="flex items-start gap-1.5 px-3 py-1.5 text-left hover:bg-subtle">
                     <span className="flex min-w-0 flex-1 flex-col">
