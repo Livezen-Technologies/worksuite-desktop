@@ -51,7 +51,7 @@ the app too.
   why, the rule that naming the first person closes a warehouse, whether
   costs reach you, and every Inventory permission, granted or not.
 
-**Server fixes this needed** (LHCP `775f0be4`, committed, **not deployed**)
+**Server fixes this needed** (LHCP `775f0be4`, deployed 09:03 UTC 2026-09-27)
 
 - The vendor report counted each order once per receipt, and each receipt
   once per order.
@@ -60,9 +60,6 @@ the app too.
 - A brand could be renamed to nothing, and duplicate brand names or unit
   codes were accepted.
 - A value added to an attribute later sorted first.
-
-Until those are deployed, production has these problems whichever app is
-used.
 
 **Tests**
 
