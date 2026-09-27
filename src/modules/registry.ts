@@ -153,6 +153,14 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
   },
   {
     input: defineDesktopManifest({
+      id: 'billing', name: 'Invoices', icon: 'receipt', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'READ_CACHE', entities: ['invoice'], cache: ['/api/billing/invoices'] },
+      quickActions: [{ id: 'new-invoice', label: 'New Invoice', route: '/billing?tab=inv&new=1' }],
+    }),
+    load: () => import('./billing/BillingShell'),
+  },
+  {
+    input: defineDesktopManifest({
       id: 'hr', name: 'HR', icon: 'id-card', contractVersion: 1, desktop: { enabled: true },
       offline: { mode: 'READ_CACHE', cache: ['/api/hr/attendance/me', '/api/hr/me/profile', '/api/hr/leave/balance', '/api/hr/leave/requests', '/api/hr/leave/approvals'] },
       native: ['notifications'],

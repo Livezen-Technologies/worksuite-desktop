@@ -5,6 +5,131 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-27 — 0.2.28: Billing (invoices), part 1
+
+From the "Bill*" designs. **Invoices** now opens here, in the sidebar under
+Business, instead of in the browser. The server's invoice links open the
+invoice here too: `/billing?invoice=…` and `/billing/invoices/…`, from
+notifications, shares and chat cards. What you may do follows the server's
+Billing permissions:
+- `billing.invoice` makes and edits drafts;
+- `billing.issue` issues, records as sent and cancels;
+- `billing.payment` records and removes payments;
+- `billing.manage` stands in for all of them.
+
+**Added**
+
+- **The rail:**
+  - a company picker when you work in several;
+  - New invoice;
+  - a search over invoices, credit notes, payments and customers;
+  - Dashboard;
+  - Invoices, with the overdue count;
+  - "needs attention": drafts not yet issued, payments on account;
+  - the sales flow: Quotes opens in CRM, and Deliveries and Sales returns
+    in Sales & Orders.
+
+  Payments, Credit notes, Recurring, Customers, Reports and Settings open in
+  the browser for now, marked. That is part 2.
+- **Dashboard:**
+  - outstanding, overdue, billed and received this month;
+  - drafts, unallocated payments, credit balance, recurring due;
+  - how old the money is;
+  - six months of billed against received;
+  - recurring due, longest overdue, due in the next week, recent activity.
+
+  An overdue or due invoice opens from the dashboard. Totals are in the base
+  currency; each invoice in a list is in its own.
+- **Invoices:**
+  - search, status, "unpaid only" and sort;
+  - the tallies by status;
+  - pages of 50;
+  - for those who may issue, the list's two bulk acts: record several as
+    sent, and cancel several. Issuing is never done in bulk, on the server
+    or here.
+- **Open invoices are tabs** above the list, as the design draws them. Each
+  is named by its number, or "Draft #id" until it is issued, and closes
+  with its ×.
+- **A draft:**
+  - its lines (description, quantity, rate, discount, and the taxes on each
+    line, chosen from a short list);
+  - products found by name or code;
+  - the discount on the invoice, the due date, notes and terms;
+  - Save draft, Issue (numbered and frozen, after a warning) and Delete
+    draft.
+  - The totals, taxes and withholding are the server's, and say so when
+    there are unsaved changes.
+- **An issued invoice:**
+  - its lines are read-only;
+  - PDF, on the company's letterhead through the share service. Without
+    `share.download`, it downloads the one Billing files in the Drive;
+  - Record as sent ("How was it sent?"; this sends nothing);
+  - Record payment, Duplicate, and Cancel invoice (with the reason, while
+    nothing has been paid);
+  - Settlement: the payments and credit notes against it, with Remove to
+    take a payment off;
+  - History.
+- **New invoice:**
+  - customer (searched), company when you work in several, type, date,
+    payment terms (showing the due date), PO number, warehouse, sale agent
+    (if you can see the staff list);
+  - ship to, the lines, a discount as an amount or a percentage, notes and
+    terms;
+  - **Save as draft** or **Create invoice** (created and issued).
+  - Bill to is not typed: when the invoice is issued, the server takes it
+    from the customer's record.
+- **Record a payment:**
+  - on an invoice, allocated to it, in its currency and its company;
+  - from the dashboard, a receipt for a customer, settling their oldest
+    invoices or held on account;
+  - method, date, bank account (if you can see Finance's), bank reference
+    and a note.
+
+  It records money that has already moved; it charges nothing.
+
+**Not yet**
+
+- Payments, credit and debit notes, recurring invoices, customers, reports
+  and settings (part 2).
+- Adding billable work (time, expenses, milestones) to a draft.
+- The invoice's team, and a revenue account on each line.
+
+**Server fix this needed** (LHCP 4214d4f1, committed, **not deployed**)
+
+- An invoice did not say which company it was in. A payment recorded against
+  it therefore went to a different company. A payment settles only its own
+  company's invoices, so the money was held on account and the invoice
+  stayed owing, for anybody who works in several companies.
+- Until that is deployed, the desktop's payment on an invoice has the same
+  limit as the web's.
+
+**Tests**
+
+- Unit:
+  - who may do what;
+  - status and method names;
+  - a line's amount and the due date;
+  - the ageing shares;
+  - which lines are sent, and how;
+  - the open tabs;
+  - the server's links.
+- End-to-end, against a local server (`tests/e2e/billing.mjs`, 19 checks, all
+  passing):
+  - the dashboard;
+  - a new invoice with a product, a typed line and a tax, saved as a draft
+    and opened as a tab;
+  - the draft edited and saved;
+  - issued and numbered, with its lines read-only;
+  - recorded as sent;
+  - a part payment recorded and removed;
+  - duplicated, and the duplicate deleted;
+  - cancelled with a reason;
+  - bulk "mark as sent" and cancel;
+  - a receipt held on account.
+- The Orders end-to-end run still passes.
+
+---
+
 ## 2026-09-27 — 0.2.27: Sales & Orders, part 2
 
 From the "12 · Orders (OMS)" designs. The rest of Sales & Orders now opens

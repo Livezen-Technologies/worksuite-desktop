@@ -70,6 +70,8 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'crm', label: 'CRM', group: 'business', icon: 'users', app: 'crm', perm: 'crm.view', webPath: '/crm', surface: 'native', sidebar: 'business', order: 110, keywords: 'leads customers pipeline' },
   // The server's OMS: `/oms?order=` (what notifications and shares link to) opens here as `/sales?order=`.
   { id: 'sales', label: 'Sales & Orders', group: 'business', icon: 'trending-up', app: 'oms', perm: 'oms.view', webPath: '/oms', surface: 'native', sidebar: 'business', order: 120, keywords: 'orders sales order fulfilment dispatch returns' },
+  // `/billing?invoice=` and `/billing/invoices/<id>` (notifications, shares, chat cards) open the invoice here.
+  { id: 'billing', label: 'Invoices', group: 'business', icon: 'receipt', app: 'billing', perm: 'billing.view', webPath: '/billing', surface: 'native', sidebar: 'business', order: 125, keywords: 'billing invoice invoices payments receipts owed overdue' },
   // HR carries no app slug: there is no `hr` row in `applications`, and its
   // self-service screens answer for the caller alone (web/src/core/sidebar/apps.ts).
   { id: 'hr', label: 'HR', group: 'people', icon: 'id-card', webPath: '/hr', surface: 'native', sidebar: 'business', order: 140, keywords: 'people leave attendance clock in' },
@@ -86,7 +88,7 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'tenders', label: 'Tenders', group: 'work', icon: 'file-text', app: 'tender', perm: 'tender.view', webPath: '/tenders', surface: 'browser', order: 180 },
   { id: 'notes', label: 'Notes', group: 'work', icon: 'notebook', app: 'notes', webPath: '/notes', surface: 'native', order: 190, keywords: 'notebook journal meeting notes' },
   { id: 'contacts', label: 'Contacts', group: 'work', icon: 'contact', app: 'contacts', webPath: '/contacts', surface: 'native', order: 80 },
-  { id: 'billing', label: 'Invoices', group: 'business', icon: 'receipt', app: 'billing', webPath: '/billing', surface: 'browser', order: 125 },
+
   { id: 'finance', label: 'Finance', group: 'business', icon: 'landmark', app: 'finance', perm: 'finance.view', webPath: '/finance', surface: 'browser', order: 130 },
   { id: 'expenses', label: 'Expenses', group: 'business', icon: 'wallet', app: 'expenses', webPath: '/expenses', surface: 'browser', order: 135 },
   { id: 'inventory', label: 'Inventory', group: 'business', icon: 'package', app: 'inventory', webPath: '/inventory', surface: 'browser', order: 160 },

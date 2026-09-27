@@ -258,6 +258,8 @@ export const contract = {
         picture: z.number().int().positive().optional(),
         /** A sales order as its PDF (the server's share of it). */
         orderPdf: z.number().int().positive().optional(),
+        /** An invoice as its PDF, on its company's letterhead (the server's share of it). */
+        invoicePdf: z.number().int().positive().optional(),
         /** The order list as a CSV, as the Orders screen filtered it. */
         ordersCsv: z
           .object({
@@ -282,7 +284,7 @@ export const contract = {
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.ordersCsv, v.omsReport].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order PDF, an order list or an Orders report'),
+      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.invoicePdf, v.ordersCsv, v.omsReport].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, an order list or an Orders report'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   'transfers:upload': ch(
