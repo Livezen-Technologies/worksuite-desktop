@@ -64,8 +64,8 @@ open in the browser.
   addresses, documents, contract and custom fields are still edited in the
   browser.
 
-**Server fixes this needed** (LHCP `5ea03135` and `f7c5e298`, committed,
-**not deployed**)
+**Server fixes this needed** (LHCP `5ea03135` and `f7c5e298`, deployed
+06:33 UTC 2026-09-27)
 
 - A receipt could post twice.
 - A cancelled order came back to life when its draft receipt was posted.
@@ -78,9 +78,6 @@ open in the browser.
 - The vendor portal token, and several costs, went to everyone.
 - A goods receipt's detail had no names.
 - The bill filters were broken.
-
-Until those are deployed, production has these problems whichever app is
-used. In particular, a receipt there won't bring the order's charges.
 
 **Tests**
 
