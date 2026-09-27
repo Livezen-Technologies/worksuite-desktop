@@ -66,7 +66,7 @@ for these, and its New adjustment button, open here as well.
   state, which could lag a quick type-and-leave, so the rename was
   sometimes dropped.
 
-**Server fixes this needed** (LHCP `415299bb`, committed, **not deployed**)
+**Server fixes this needed** (LHCP `415299bb`, deployed 05:22 UTC 2026-09-27)
 
 - A serial unit's detail and the scan returned its cost unmasked, and an
   adjustment's create, save and post responses returned its value
@@ -83,10 +83,6 @@ for these, and its New adjustment button, open here as well.
 - A count with a batch-tracked difference could never post. It now says
   why, and what to do.
 - Warehouse viewers were listed as able to act.
-
-Until that is deployed, the desktop gets warehouse names on these panels
-from the list rows, and the cost and double-post problems remain on
-production.
 
 **Tests**
 
