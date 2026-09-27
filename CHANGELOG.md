@@ -44,7 +44,7 @@ still open in the browser.
   ordered). It's offered on a confirmed order with something still to
   invoice, to anyone who may raise invoices.
 
-**Server fixes this needed** (LHCP `e21fd2f3`, committed, **not deployed**)
+**Server fixes this needed** (LHCP `e21fd2f3`, deployed 08:07 UTC 2026-09-27)
 
 - Two quick presses completed a job twice, using the parts and making the
   goods twice. Release and cancel had the same race.
@@ -57,10 +57,6 @@ still open in the browser.
 - Costs went to people who may not see them.
 - Two quick presses raised two invoices for the same goods.
 - An unconfirmed or cancelled order could be invoiced.
-
-Until those are deployed, production has these problems whichever app is
-used. This version's job panel also shows no product or warehouse against
-it.
 
 **Tests**
 
