@@ -9,6 +9,7 @@ import { can, currencyOf, fetchDashboard, fetchWarehouses, K, useCompanies } fro
 import { InvRail, NATIVE, type DocHit, type InvView } from './Rail';
 import type { TrackTab } from './Tracked';
 import type { BuyTab } from './Purchasing';
+import type { MakeTab } from './Manufacturing';
 
 /**
  * Inventory (the "Inv*" designs): the rail, and the screen it points at.
@@ -24,6 +25,10 @@ import type { BuyTab } from './Purchasing';
  *   (`tt=batches|serials|expiring`); `&st=` opens a list on one status;
  * - `&make=adj|trf|cnt|ops` starts an adjustment, a transfer, a count or
  *   opening stock.
+ * - manufacturing as `?tab=mfg&mt=jobs|boms`, a job `&job=<id>`, a recipe
+ *   `&bom=<id>`; `&make=job` (`&jobbom=<id>` from a recipe) starts a job,
+ *   `&make=bom` a recipe (`&bomedit=<id>` edits one).
+ * Sales orders open in Sales & Orders for those who may use it.
  */
 const Dashboard = lazy(() => import('./Dashboard'));
 const Products = lazy(() => import('./Products'));
@@ -44,6 +49,9 @@ const Purchasing = lazy(() => import('./Purchasing'));
 const Vendors = lazy(() => import('./Vendors'));
 const OrderSheet = lazy(() => import('./Purchasing').then((m) => ({ default: m.OrderSheet })));
 const VendorSheet = lazy(() => import('./Vendors').then((m) => ({ default: m.VendorSheet })));
+const Manufacturing = lazy(() => import('./Manufacturing'));
+const JobSheet = lazy(() => import('./Manufacturing').then((m) => ({ default: m.JobSheet })));
+const BomSheet = lazy(() => import('./Manufacturing').then((m) => ({ default: m.BomSheet })));
 
 const TITLES: Record<InvView, string> = {
   dash: 'Dashboard',
@@ -56,6 +64,7 @@ const TITLES: Record<InvView, string> = {
   trk: 'Batches & serials',
   pur: 'Purchasing',
   ven: 'Vendors',
+  mfg: 'Manufacturing',
 };
 const BUY_TABS = ['orders', 'receipts', 'requests'] as const;
 const TRACK_TABS = ['batches', 'serials', 'expiring'] as const;
@@ -73,6 +82,8 @@ function savedOrg(): string {
 export default function InventoryShell(_props: ModuleProps) {
   const { query, path, go } = useTab();
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
+  // Sales orders are Sales & Orders' screens, for whoever may open that app.
+  const sellsHere = useStore(app, (s) => s.apps.some((a) => a.id === 'sales'));
   const has = (p: string) => can(perms, p);
   const [org, setOrg] = useState(savedOrg);
   const [warehouse, setWarehouse] = useState<number | null>(null);
@@ -91,6 +102,9 @@ export default function InventoryShell(_props: ModuleProps) {
   const poId = num(query.get('po'));
   const grnId = num(query.get('grn'));
   const vendorId = num(query.get('vendor'));
+  const jobId = num(query.get('job'));
+  const bomId = num(query.get('bom'));
+  const mt: MakeTab = query.get('mt') === 'boms' || (bomId && !jobId && query.get('mt') !== 'jobs') ? 'boms' : 'jobs';
   const st = query.get('st');
   const asked = (query.get('tab') ?? '') as InvView;
   const view: InvView = asked && NATIVE.has(asked) ? asked : product ? 'prod' : 'dash';
@@ -129,6 +143,8 @@ export default function InventoryShell(_props: ModuleProps) {
   const canAdjust = d?.can.adjust ?? has('inventory.adjust');
   const canTransfer = d?.can.transfer ?? has('inventory.transfer');
   const canPurchase = d?.can.purchase ?? has('inventory.purchase');
+  const canMake = d?.can.manufacture ?? has('inventory.manufacture');
+  const onSales = sellsHere ? (order?: number) => go(order ? `/sales?tab=orders&order=${order}` : '/sales?tab=orders') : null;
 
   const chooseOrg = (v: string) => {
     setOrg(v);
@@ -158,7 +174,7 @@ export default function InventoryShell(_props: ModuleProps) {
     q.set('tab', tab);
     go(`/inventory?${q.toString()}`);
   };
-  const start = (what: 'adj' | 'trf' | 'cnt' | 'ops' | 'po' | 'vendor') => nav({ make: what });
+  const start = (what: 'adj' | 'trf' | 'cnt' | 'ops' | 'po' | 'vendor' | 'job' | 'bom') => nav({ make: what });
   const DOC_ROUTES: Record<string, (id: number) => string> = {
     adj: (id) => `/inventory?tab=adj&adj=${id}`,
     trf: (id) => `/inventory?tab=trf&trf=${id}`,
@@ -166,6 +182,8 @@ export default function InventoryShell(_props: ModuleProps) {
     po: (id) => `/inventory?tab=pur&bt=orders&po=${id}`,
     grn: (id) => `/inventory?tab=pur&bt=receipts&grn=${id}`,
     vendor: (id) => `/inventory?tab=ven&vendor=${id}`,
+    job: (id) => `/inventory?tab=mfg&mt=jobs&job=${id}`,
+    bom: (id) => `/inventory?tab=mfg&mt=boms&bom=${id}`,
   };
   const openDoc = (hit: DocHit) => go(hit.kind === 'batch' ? '/inventory?tab=trk&tt=batches' : DOC_ROUTES[hit.kind]!(hit.id));
   // The categories open over whatever is showing — the product form
@@ -186,6 +204,7 @@ export default function InventoryShell(_props: ModuleProps) {
         onOpenProduct={(id) => openProduct(id)}
         onOpenDoc={openDoc}
         onOpening={canAdjust ? () => start('ops') : null}
+        onSales={onSales}
         counts={counts}
         org={scope}
         companies={list}
@@ -207,6 +226,7 @@ export default function InventoryShell(_props: ModuleProps) {
               onStock={(filter) => go(`/inventory?tab=stock&filter=${filter}`)}
               onOpenProduct={(id) => openProduct(id)}
               onNewAdjustment={canAdjust ? () => start('adj') : null}
+              onSales={onSales ? () => onSales() : null}
             />
           ) : null}
           {view === 'prod' ? (
@@ -284,6 +304,25 @@ export default function InventoryShell(_props: ModuleProps) {
               onOpenReceipt={(id) => go(DOC_ROUTES.grn!(id))}
             />
           ) : null}
+          {view === 'mfg' ? (
+            <Manufacturing
+              org={scope}
+              warehouse={wh}
+              currency={currency}
+              canCost={canCost}
+              canMake={canMake}
+              tab={mt}
+              onTab={(t) => go(`/inventory?tab=mfg&mt=${t}`)}
+              jobId={jobId}
+              onJob={(id) => nav({ job: id ? String(id) : null, bom: null, mt: 'jobs' })}
+              bomId={bomId}
+              onBom={(id) => nav(id ? { bom: String(id), job: null, mt: 'boms' } : { bom: null })}
+              onNewJob={canMake ? (bom) => nav({ make: 'job', jobbom: bom ? String(bom) : null }) : null}
+              onNewBom={canMake ? () => start('bom') : null}
+              onEditBom={(id) => nav({ make: 'bom', bomedit: String(id) })}
+              initialStatus={st}
+            />
+          ) : null}
         </Suspense>
         <Suspense fallback={null}>
           {product && !creating && !editing ? (
@@ -320,6 +359,8 @@ export default function InventoryShell(_props: ModuleProps) {
           ) : null}
           {make === 'vendor' ? <VendorSheet key={query.get('vedit') ?? 'new'} id={num(query.get('vedit'))} onClose={() => nav({ make: null, vedit: null })} onSaved={(id) => go(DOC_ROUTES.vendor!(id))} /> : null}
           {make === 'ops' ? <Opening org={scope} warehouses={whs} defaultWarehouse={wh} canCost={canCost} onClose={() => nav({ make: null })} /> : null}
+          {make === 'job' ? <JobSheet org={scope} warehouses={whs} defaultWarehouse={wh} bom={num(query.get('jobbom'))} onClose={() => nav({ make: null, jobbom: null })} onSaved={(id) => go(DOC_ROUTES.job!(id))} /> : null}
+          {make === 'bom' ? <BomSheet key={query.get('bomedit') ?? 'new'} org={scope} id={num(query.get('bomedit'))} canCost={canCost} onClose={() => nav({ make: null, bomedit: null })} onSaved={(id) => go(DOC_ROUTES.bom!(id))} /> : null}
         </Suspense>
       </main>
     </div>

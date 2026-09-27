@@ -292,6 +292,22 @@ export const reject = (id: number, reason: string) => apiPost<{ status: Status }
 export const confirm = (id: number) => apiPost<{ short?: string[] }>(`/api/inventory/sales-orders/${id}/confirm`, {});
 /** Inventory's cancel: releases what was reserved; refused once anything was delivered. */
 export const cancel = (id: number) => apiPost(`/api/inventory/sales-orders/${id}/cancel`, {});
+/** Inventory's invoice: a draft invoice in Billing for what was delivered (stocked lines) or ordered (the rest), not yet invoiced. */
+export const raiseInvoice = (id: number) => apiPost<{ invoice_id: number; lines: number }>(`/api/inventory/sales-orders/${id}/invoice`, {});
+
+const UNBILLED_BEFORE = new Set<string>(['draft', 'pending_approval', 'approved', 'rejected', 'cancelled']);
+
+/**
+ * Whether to offer "Raise invoice": a confirmed order with something not yet
+ * invoiced, for someone who may raise invoices. What is billable — delivered
+ * stock, ordered services — is the server's to say, and it says so when
+ * nothing has been delivered yet.
+ */
+export function mayInvoice(o: Pick<OrderDetail, 'status' | 'lines'>, perms: readonly string[] | undefined): boolean {
+  const has = (p: string) => !!perms && (perms.includes('*') || perms.includes(p));
+  const allowed = has('inventory.manage') || (has('inventory.sell') && has('billing.invoice'));
+  return allowed && !UNBILLED_BEFORE.has(o.status) && o.lines.some((l) => l.invoiced_qty < l.quantity);
+}
 export const transition = (id: number, status: Status) => apiPost<{ status: Status }>(`/api/oms/orders/${id}/transition`, { status });
 export const assign = (id: number, userId: number, role: 'order' | 'sales' | 'fulfilment' | 'delivery' = 'order') => apiPost(`/api/oms/orders/${id}/assign`, { user_id: userId, role });
 export const bulk = (ids: number[], action: 'status' | 'priority' | 'delete', value?: string) =>

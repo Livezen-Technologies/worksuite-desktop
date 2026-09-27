@@ -11,7 +11,7 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Caps, Empty, Field, Grid, input, Seg, Sheet, SidePanel } from '../hr/parts';
-import { approve, assign, assignees, cancel, confirm, fetchOrder, fetchTimeline, K, movesFor, reject, submit, transition, type Move, type OrderDetail } from './api';
+import { approve, assign, assignees, cancel, confirm, fetchOrder, fetchTimeline, K, mayInvoice, movesFor, raiseInvoice, reject, submit, transition, type Move, type OrderDetail } from './api';
 import { moneyFull, PaymentPill, PriorityPill, StatusPill } from './parts';
 
 /**
@@ -142,6 +142,11 @@ export default function OrderDrawer({ id, onClose }: { id: number; onClose: () =
             {m.via === 'inventory-confirm' ? 'Confirm' : m.status === 'cancelled' ? 'Cancel order' : m.label}
           </button>
         ))}
+        {mayInvoice(o, perms) ? (
+          <button type="button" className={btn} disabled={busy} onClick={() => void run(() => raiseInvoice(o.id), `A draft invoice for ${o.number} is in Billing — see Linked.`)} title="A draft invoice for what was delivered and not yet invoiced">
+            Raise invoice
+          </button>
+        ) : null}
         <span className="flex-1" />
         <button type="button" className={btnSmall} onClick={copy} title="Copy the order’s details">
           <Icon name="copy" size={14} />

@@ -3,7 +3,7 @@ import { resolveWebLink } from '../../../shared/links';
 
 vi.mock('../../../src/core/api', () => ({ apiGet: vi.fn(), apiPost: vi.fn() }));
 
-const { BULK_STATUSES, movesFor, statusOf } = await import('../../../src/modules/sales/api');
+const { BULK_STATUSES, mayInvoice, movesFor, statusOf } = await import('../../../src/modules/sales/api');
 
 describe('orders: moves go where they are done properly', () => {
   it('never offers an approval move as a plain status change', () => {
@@ -57,5 +57,24 @@ describe('orders: moves go where they are done properly', () => {
 
   it('opens the server’s order links here', () => {
     expect(resolveWebLink('/oms?order=42')).toEqual({ kind: 'tab', route: '/sales?order=42', app: 'sales' });
+  });
+});
+
+describe('orders: raising an invoice', () => {
+  const line = (quantity: number, invoiced: number) => ({ id: 1, product_id: 2, product: 'Nut', code: 'N', description: null, quantity, reserved_qty: 0, delivered_qty: 0, invoiced_qty: invoiced, unit_price: 10, line_total: 10 * quantity });
+  const seller = ['inventory.sell', 'billing.invoice'];
+
+  it('is offered on a confirmed order with something not yet invoiced, to someone who may invoice', () => {
+    expect(mayInvoice({ status: 'confirmed', lines: [line(5, 0)] }, seller)).toBe(true);
+    expect(mayInvoice({ status: 'delivered', lines: [line(5, 2)] }, ['inventory.manage'])).toBe(true);
+    expect(mayInvoice({ status: 'partial', lines: [line(5, 0)] }, ['*'])).toBe(true);
+  });
+
+  it('is not offered before confirmation, once cancelled, when all is invoiced, or without both rights', () => {
+    for (const status of ['draft', 'pending_approval', 'approved', 'rejected', 'cancelled'] as const) expect(mayInvoice({ status, lines: [line(5, 0)] }, seller)).toBe(false);
+    expect(mayInvoice({ status: 'delivered', lines: [line(5, 5)] }, seller)).toBe(false);
+    expect(mayInvoice({ status: 'confirmed', lines: [line(5, 0)] }, ['inventory.sell'])).toBe(false);
+    expect(mayInvoice({ status: 'confirmed', lines: [line(5, 0)] }, ['billing.invoice'])).toBe(false);
+    expect(mayInvoice({ status: 'confirmed', lines: [line(5, 0)] }, undefined)).toBe(false);
   });
 });

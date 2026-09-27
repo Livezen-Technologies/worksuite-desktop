@@ -10,18 +10,20 @@ import { HIT_LABEL, HIT_VIEW, hitProduct, K, searchInventory, WEB_VIEW, type Com
  * The Inventory rail (InvRail): the company and warehouse pickers, a box that
  * takes a scan or a search, then the screens by what they are for — control,
  * trade, insight, setup and administration. Dashboard, Products, Stock,
- * Movements and the control screens (adjustments, transfers, counts, batches
- * and serials) are here; the rest open in the browser for now. The warehouse is
+ * Movements, the control screens (adjustments, transfers, counts, batches
+ * and serials), Purchasing, Vendors and Manufacturing are here; Sales orders
+ * open in Sales & Orders for those who may use it; the rest open in the
+ * browser for now. The warehouse is
  * a filter, not a mode: it narrows the dashboard, stock and movements, and a
  * document that names its own warehouse ignores it.
  */
-export type InvView = 'dash' | 'prod' | 'stock' | 'mov' | 'adj' | 'trf' | 'cnt' | 'trk' | 'pur' | 'ven';
+export type InvView = 'dash' | 'prod' | 'stock' | 'mov' | 'adj' | 'trf' | 'cnt' | 'trk' | 'pur' | 'ven' | 'mfg';
 export type WebView = keyof typeof WEB_VIEW;
 
-export const NATIVE = new Set<string>(['dash', 'prod', 'stock', 'mov', 'adj', 'trf', 'cnt', 'trk', 'pur', 'ven']);
+export const NATIVE = new Set<string>(['dash', 'prod', 'stock', 'mov', 'adj', 'trf', 'cnt', 'trk', 'pur', 'ven', 'mfg']);
 
 /** A search hit this app opens itself, other than a product. */
-export type DocHit = { kind: 'adj' | 'trf' | 'serial' | 'po' | 'grn' | 'vendor'; id: number } | { kind: 'batch' };
+export type DocHit = { kind: 'adj' | 'trf' | 'serial' | 'po' | 'grn' | 'vendor' | 'job'; id: number } | { kind: 'batch' };
 
 /** The screens that need more than `inventory.view`; the rail leaves out what you cannot open. */
 export const NEEDS: Partial<Record<WebView, string>> = {
@@ -48,6 +50,7 @@ export function InvRail({
   onOpenProduct,
   onOpenDoc,
   onOpening,
+  onSales,
   counts,
   org,
   companies,
@@ -63,6 +66,8 @@ export function InvRail({
   onOpenDoc: (hit: DocHit) => void;
   /** Record opening stock, for those who may adjust stock. */
   onOpening: (() => void) | null;
+  /** Sales orders, or one of them, in Sales & Orders — for those who may open it; the browser otherwise. */
+  onSales: ((order?: number) => void) | null;
   counts: RailCounts;
   org: string;
   companies: Company[];
@@ -91,22 +96,25 @@ export function InvRail({
     if (h.type === 'purchase_order') return onOpenDoc({ kind: 'po', id: h.id });
     if (h.type === 'receipt') return onOpenDoc({ kind: 'grn', id: h.id });
     if (h.type === 'vendor') return onOpenDoc({ kind: 'vendor', id: h.id });
+    if (h.type === 'assembly') return onOpenDoc({ kind: 'job', id: h.id });
+    if (h.type === 'sales_order' && onSales) return onSales(h.id);
     const pid = hitProduct(h);
     if (pid) onOpenProduct(pid);
     else openWeb(HIT_VIEW[h.type] ?? 'overview');
   };
 
   const item = (id: InvView | WebView, label: string, icon: string, badge?: number, tone?: 'amber') => {
-    const web = !NATIVE.has(id);
+    const inSales = id === 'so' && !!onSales;
+    const web = !NATIVE.has(id) && !inSales;
     if (web && NEEDS[id as WebView] && !allowed(NEEDS[id as WebView]!)) return null;
     const on = view === id;
     return (
       <button
         key={id}
         type="button"
-        title={web ? `${label} — opens in your browser` : label}
+        title={web ? `${label} — opens in your browser` : inSales ? `${label} — opens in Sales & Orders` : label}
         aria-current={on ? 'page' : undefined}
-        onClick={() => (web ? openWeb(WEB_VIEW[id as WebView]) : onPick(id as InvView))}
+        onClick={() => (inSales ? onSales!() : web ? openWeb(WEB_VIEW[id as WebView]) : onPick(id as InvView))}
         className={cx('relative flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
       >
         <span className={cx('absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-[3px]', on ? 'bg-primary' : 'bg-transparent')} />
@@ -182,7 +190,7 @@ export function InvRail({
               {hits.isLoading ? <span className="px-3 py-2 text-[12px] text-ink-3">Searching…</span> : null}
               {!hits.isLoading && !results.length && !exact ? <span className="px-3 py-2 text-[12px] text-ink-3">Nothing matches.</span> : null}
               {[...(exact && !results.some((r) => r.type === exact.type && r.id === exact.id) ? [exact] : []), ...results].map((h) => {
-                const web = !hitProduct(h) && !['adjustment', 'transfer', 'serial', 'batch', 'purchase_order', 'receipt', 'vendor'].includes(h.type);
+                const web = !hitProduct(h) && !['adjustment', 'transfer', 'serial', 'batch', 'purchase_order', 'receipt', 'vendor', 'assembly', ...(onSales ? ['sales_order'] : [])].includes(h.type);
                 return (
                   <button key={`${h.type}-${h.id}`} type="button" role="option" aria-selected={exact?.type === h.type && exact.id === h.id} onClick={() => choose(h)} className="flex items-start gap-1.5 px-3 py-1.5 text-left hover:bg-subtle">
                     <span className="flex min-w-0 flex-1 flex-col">

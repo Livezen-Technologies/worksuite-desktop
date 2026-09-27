@@ -99,7 +99,7 @@ try {
   const panels = await t.evaluate(`['Stock movement, last 14 days', 'Stock health', 'Latest movements', 'Runs out soonest', 'To reorder', 'Checked against the shelves'].every(l => document.querySelector('main').textContent.includes(l))`);
   t.check('the dashboard has its eight figures and panels', tiles && panels, js({ tiles, panels }));
   const webItems = await t.evaluate(
-    `['Sales orders', 'Manufacturing', 'Reports', 'My access'].every(l => [...document.querySelectorAll('nav[aria-label="Inventory"] button')].some(b => b.textContent.trim().startsWith(l) && (b.title || '').includes('opens in your browser')))`,
+    `['Reports', 'Replenishment', 'My access'].every(l => [...document.querySelectorAll('nav[aria-label="Inventory"] button')].some(b => b.textContent.trim().startsWith(l) && (b.title || '').includes('opens in your browser')))`,
   );
   t.check('the screens not yet on the desktop say they open in the browser', webItems, '');
   await t.shot('i1-dashboard');

@@ -5,6 +5,89 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-27 — 0.2.36: Inventory, part 4 — manufacturing, and sales orders in Sales & Orders
+
+Manufacturing now opens here instead of in the browser. Sales orders — in
+the rail, on the dashboard and in the rail's search — open in Sales &
+Orders for anyone who can use it; for anyone else they still open in the
+browser. Reports, replenishment, brands and units, settings and "My access"
+still open in the browser.
+
+**Added**
+
+- **Manufacturing: jobs.**
+  - The list, by state: what each job makes, where, how many are planned
+    and made (scrap in red), and the unit cost for those who see costs.
+  - One job shows its parts: needed, used and available, with a shortage
+    in amber. Once complete it shows what it cost.
+  - **New job:** the recipe (active ones only), where it's made, how many,
+    a planned date and notes. "Start a job" on a recipe fills it in.
+  - **Release:** reserves the parts, and says which are short.
+  - **Record a run:** good units made (blank means the rest), scrapped, and
+    the batch and expiry or the serials for a tracked product. It asks
+    first, since it can't be undone here. A job can be finished in several
+    runs.
+  - **Cancel job** while nothing is made; **Delete** a draft.
+- **Manufacturing: recipes.**
+  - The list, with search and state.
+  - One recipe shows each part per run, its waste and what's needed (waste
+    divides). Those who see costs also get unit costs and the estimated
+    cost of one run.
+  - **New recipe and Edit:** what it makes, how many one run makes, name,
+    version, and the parts with quantity and waste %. Labour and overhead
+    per run are set by those who see costs; anyone else keeps what's there.
+    Serialised parts are left out, because a run uses parts by quantity.
+  - **Make it the recipe used**, **Archive**, and **Delete** (refused once
+    jobs were built from it).
+- **Raise invoice** in a Sales & Orders order: a draft invoice in Billing
+  for what was delivered and not yet invoiced (for services, what was
+  ordered). It's offered on a confirmed order with something still to
+  invoice, to anyone who may raise invoices.
+
+**Server fixes this needed** (LHCP `e21fd2f3`, committed, **not deployed**)
+
+- Two quick presses completed a job twice, using the parts and making the
+  goods twice. Release and cancel had the same race.
+- A job finished in several runs undercharged labour and overhead, and its
+  unit cost was only the last run's.
+- A blank "good units made" ignored the scrap.
+- A released job showed a false shortage of the parts it had reserved.
+- A job's detail had no product, warehouse or unit.
+- Draft and archived recipes could be built.
+- Costs went to people who may not see them.
+- Two quick presses raised two invoices for the same goods.
+- An unconfirmed or cancelled order could be invoiced.
+
+Until those are deployed, production has these problems whichever app is
+used. This version's job panel also shows no product or warehouse against
+it.
+
+**Tests**
+
+- Unit:
+  - what each job state allows;
+  - "the rest" counts the scrap;
+  - the job and run forms (batch, serials);
+  - the recipe form: costs only from those who see them; no empty recipe,
+    no product as its own part, no 100% waste;
+  - waste divides;
+  - when Raise invoice is offered.
+- End-to-end, against a local server (`tests/e2e/inventory-4.mjs`, 20
+  checks, all passing). Covered:
+  - a recipe made, costed at 65 each and made the recipe used;
+  - a job started from it, named, and released without a false shortage;
+  - two runs: half the parts used first, then the rest;
+  - the planned labour left alone, each unit costing 65, the goods on the
+    shelf;
+  - two presses of Complete making the goods once;
+  - a draft recipe refused;
+  - Sales orders opening Sales & Orders;
+  - an invoice raised there for what was delivered, once;
+  - an unconfirmed order refused.
+- The part 1 and Sales & Orders end-to-end runs still pass.
+
+---
+
 ## 2026-09-27 — 0.2.35: purchasing, as decided
 
 The owner's decisions on the purchasing questions 0.2.34 raised, on the

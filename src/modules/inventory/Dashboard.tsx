@@ -15,7 +15,7 @@ import { openWeb, type InvView } from './Rail';
  * compare with the shelves. The warehouse picker narrows it.
  */
 /** The "needs attention" lines this app opens itself, and the list each opens on. */
-const HERE: Record<string, string> = { adj: '&st=pending', trf: '&st=in_transit', cnt: '&st=counting', trk: '&tt=expiring', pur: '&bt=orders' };
+const HERE: Record<string, string> = { adj: '&st=pending', trf: '&st=in_transit', cnt: '&st=counting', trk: '&tt=expiring', pur: '&bt=orders', mfg: '&mt=jobs' };
 
 export default function Dashboard({
   data,
@@ -26,6 +26,7 @@ export default function Dashboard({
   onStock,
   onOpenProduct,
   onNewAdjustment,
+  onSales,
 }: {
   data: UseQueryResult<Data>;
   org: string;
@@ -35,6 +36,8 @@ export default function Dashboard({
   onStock: (filter: 'low' | 'out') => void;
   onOpenProduct: (id: number) => void;
   onNewAdjustment: (() => void) | null;
+  /** Sales orders in Sales & Orders, for those who may open it; the browser otherwise. */
+  onSales: (() => void) | null;
 }) {
   const detail = useQuery({
     queryKey: K.detail(org, warehouse),
@@ -89,14 +92,14 @@ export default function Dashboard({
                 key={a.key}
                 type="button"
                 title={HERE[a.view] !== undefined || a.view === 'stock' ? undefined : 'Opens in your browser'}
-                onClick={() => (a.view === 'stock' ? onStock(a.key === 'out' ? 'out' : 'low') : HERE[a.view] !== undefined ? onGo(a.view as InvView, HERE[a.view]) : openWeb(WEB_VIEW[a.view]))}
+                onClick={() => (a.view === 'stock' ? onStock(a.key === 'out' ? 'out' : 'low') : a.view === 'so' && onSales ? onSales() : HERE[a.view] !== undefined ? onGo(a.view as InvView, HERE[a.view]) : openWeb(WEB_VIEW[a.view]))}
                 className={cx(
                   'inline-flex h-7 items-center gap-1 rounded-[14px] px-3 text-[12.5px] font-semibold',
                   a.tone === 'red' ? 'bg-[#FCE9E4] text-[#8C2A14] hover:bg-[#F8DCD3] dark:bg-danger-bg dark:text-danger' : 'bg-[#FFF4E0] text-[#9A4A06] hover:bg-[#FCE8C4] dark:bg-warning-bg dark:text-warning',
                 )}
               >
                 {a.label}
-                {a.view === 'stock' || HERE[a.view] !== undefined ? null : <Icon name="external" size={11} />}
+                {a.view === 'stock' || HERE[a.view] !== undefined || (a.view === 'so' && onSales) ? null : <Icon name="external" size={11} />}
               </button>
             ))}
           </div>
@@ -137,7 +140,7 @@ export default function Dashboard({
           {[
             <Line key="po" title="Purchase orders open" right={d.pending.purchase_orders} onClick={() => onGo('pur', '&bt=orders')} />,
             <Line key="in" title="Units incoming" right={qty(t.incoming)} />,
-            <Line key="so" title="Sales orders open" right={d.pending.sales_orders} onClick={() => openWeb('sales')} />,
+            <Line key="so" title="Sales orders open" right={d.pending.sales_orders} onClick={() => (onSales ? onSales() : openWeb('sales'))} />,
             <Line key="res" title="Units reserved" right={qty(t.reserved)} />,
             <Line key="trf" title="Transfers in flight" right={d.pending.transfers} onClick={() => onGo('trf', HERE.trf)} />,
           ]}
