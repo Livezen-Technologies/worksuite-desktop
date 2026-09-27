@@ -161,6 +161,14 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
   },
   {
     input: defineDesktopManifest({
+      id: 'inventory', name: 'Inventory', icon: 'package', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'READ_CACHE', entities: ['product'], cache: ['/api/inventory/products', '/api/inventory/stock'] },
+      quickActions: [{ id: 'new-product', label: 'New Product', route: '/inventory?tab=prod&new=1' }],
+    }),
+    load: () => import('./inventory/InventoryShell'),
+  },
+  {
+    input: defineDesktopManifest({
       id: 'hr', name: 'HR', icon: 'id-card', contractVersion: 1, desktop: { enabled: true },
       offline: { mode: 'READ_CACHE', cache: ['/api/hr/attendance/me', '/api/hr/me/profile', '/api/hr/leave/balance', '/api/hr/leave/requests', '/api/hr/leave/approvals'] },
       native: ['notifications'],

@@ -72,6 +72,8 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'sales', label: 'Sales & Orders', group: 'business', icon: 'trending-up', app: 'oms', perm: 'oms.view', webPath: '/oms', surface: 'native', sidebar: 'business', order: 120, keywords: 'orders sales order fulfilment dispatch returns' },
   // `/billing?invoice=` and `/billing/invoices/<id>` (notifications, shares, chat cards) open the invoice here.
   { id: 'billing', label: 'Invoices', group: 'business', icon: 'receipt', app: 'billing', perm: 'billing.view', webPath: '/billing', surface: 'native', sidebar: 'business', order: 125, keywords: 'billing invoice invoices payments receipts owed overdue' },
+  // `/inventory?product=` and `/inventory/products/<id>` open the product here.
+  { id: 'inventory', label: 'Inventory', group: 'business', icon: 'package', app: 'inventory', perm: 'inventory.view', webPath: '/inventory', surface: 'native', sidebar: 'business', order: 128, keywords: 'inventory stock products warehouse movements catalogue sku barcode' },
   // HR carries no app slug: there is no `hr` row in `applications`, and its
   // self-service screens answer for the caller alone (web/src/core/sidebar/apps.ts).
   { id: 'hr', label: 'HR', group: 'people', icon: 'id-card', webPath: '/hr', surface: 'native', sidebar: 'business', order: 140, keywords: 'people leave attendance clock in' },
@@ -91,7 +93,6 @@ export const APP_CATALOGUE: AppDefinition[] = [
 
   { id: 'finance', label: 'Finance', group: 'business', icon: 'landmark', app: 'finance', perm: 'finance.view', webPath: '/finance', surface: 'browser', order: 130 },
   { id: 'expenses', label: 'Expenses', group: 'business', icon: 'wallet', app: 'expenses', webPath: '/expenses', surface: 'browser', order: 135 },
-  { id: 'inventory', label: 'Inventory', group: 'business', icon: 'package', app: 'inventory', webPath: '/inventory', surface: 'browser', order: 160 },
   { id: 'purchasing', label: 'Purchasing', group: 'business', icon: 'cart', app: 'inventory', webPath: '/purchase', surface: 'browser', order: 161 },
   { id: 'subscriptions', label: 'Subscriptions', group: 'business', icon: 'repeat', app: 'subscriptions', webPath: '/subscriptions', surface: 'browser', order: 165 },
   { id: 'marketing', label: 'Marketing', group: 'business', icon: 'megaphone', app: 'marketing', webPath: '/marketing', surface: 'browser', order: 166 },

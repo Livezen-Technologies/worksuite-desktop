@@ -5,6 +5,125 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-27 — 0.2.30: Inventory, part 1
+
+Inventory now opens here: its rail, the dashboard, products, the stock
+overview and movements. The other screens in the rail (adjustments,
+transfers, counts, batches and serials, purchasing, sales orders, vendors,
+manufacturing, reports, replenishment, brands and units, settings, my access)
+open in the browser, marked. `/inventory?product=` and
+`/inventory/products/<id>` links open the product here.
+
+**Added**
+
+- **The rail:**
+  - a company picker (for anyone in more than one company) and a warehouse
+    picker. The warehouse narrows the dashboard, stock and movements;
+  - **Scan or search.** A code, barcode or serial typed or scanned and
+    followed by Enter opens its product. Other hits (documents, batches,
+    vendors, warehouses) open in the browser;
+  - badges: what is low or out, and what is waiting in each document type.
+- **Dashboard:**
+  - products, categories, vendors and warehouses;
+  - stock value, units on hand, low stock and out of stock;
+  - what needs attention;
+  - fourteen days of stock received and issued;
+  - what is coming in and going out, and stock health;
+  - each warehouse with its value;
+  - the latest movements;
+  - what runs out soonest at the rate it moves, and what to reorder;
+  - the last stock count, and any negative stock.
+- **Products:**
+  - The category tree beside the list. Choosing a category includes
+    everything filed under it, and each shows its count.
+  - Search, stock state (in, at or below minimum, out) and archived.
+  - Columns: tracking, available against on hand, incoming, sold, price
+    and cost. Load more, 50 at a time.
+- **A product** opens as a drawer:
+  - **Overview:** available, on hand, reserved and incoming; each warehouse
+    with its average cost; consumption and days of cover; variants, bundle
+    contents, specification, details and price lists.
+  - **Sales:** the invoices it was sold on. Each opens in Invoices.
+  - **Purchase:** the orders and supplier bills it was bought on.
+  - **History:** every movement and catalogue edit.
+  - **Archive** or **Restore**, for those who edit the catalogue.
+- **New product and Edit:**
+  - name, code (generated when blank), barcode, kind, category, brand and
+    unit;
+  - whether it is held in stock, with tracking and costing;
+  - selling price, cost price (only for those who may see costs), tax,
+    reorder point and quantity, lead time, and description.
+  - Tracking and costing are locked while stock is on hand anywhere, since
+    the server would refuse the change.
+  - Someone looking at every company chooses which company the product
+    belongs to.
+- **Categories:**
+  - rename in place (it saves as you leave the field);
+  - move one under another, taking everything beneath it along;
+  - add at the top or under one;
+  - delete an empty one. The dialog warns first when a category still holds
+    products or sub-categories.
+- **Stock:**
+  - a line per product (per product and warehouse when one is chosen),
+    with available against on hand and reserved, incoming, the minimum,
+    average cost, value and when it last moved;
+  - search, "at or below minimum", "out of stock", "has reservations" and
+    "show zero";
+  - the head gives the number of lines and their total value.
+- **Movements:**
+  - when, product (with serial or batch), warehouse and bin, reason and
+    reference, quantity, unit cost, value, the balance it left, and who;
+  - narrowed by product or reference, warehouse, reason, direction and
+    dates.
+  - A row opens its product's history.
+- Cost figures are a dash for anyone without the cost permission, never
+  0.00.
+- Opening stock is stored as midnight on its day, so it shows as that day.
+  Read as an instant, it would have shown the reader's hour at UTC
+  midnight ("5:30 AM").
+
+**Server fixes this needed** (LHCP, committed, **not deployed**)
+
+- **e308e777:**
+  - Costs reached people without the cost permission: a product's variant
+    costs, a saved product's cost price and a stock count's variance.
+  - A product's purchase history listed every company's bills and orders.
+  - The stock overview valued a product held in several warehouses at the
+    dearest one's cost. On MySQL its "all warehouses" view and its "at or
+    below minimum" filter failed. It now also returns its line count and
+    total value, which the desktop shows only once deployed.
+  - The drawer lacked category, brand and unit names. Consumption was
+    hidden from anyone without the cost permission.
+  - Sales returns were recorded as adjustments.
+- **a5589bbc:** adding a category, brand or unit with no company chosen,
+  for someone in two, failed with a bare server error. It now says which
+  company is missing.
+
+Until those are deployed, production still has these problems, and its
+stock overview shows no line count or total.
+
+**Tests**
+
+- Unit: permissions; numbers the server sends as text; masked costs; the
+  category tree, its counts and where a category may move; the product
+  form; movement wording; what needs attention; the midnight rule; and the
+  product links.
+- End-to-end, against a local server (`tests/e2e/inventory.mjs`, 23
+  checks, all passing):
+  - the dashboard and the browser-only screens;
+  - the tree nested and counted;
+  - a parent category narrowing the list;
+  - a product found by search, and its drawer's four tabs;
+  - tracking and costing locked on a stocked product;
+  - an edit;
+  - a new product with category, price and minimum;
+  - categories renamed, added, refused and deleted;
+  - stock and movements found by search, with the product's name keeping
+    its room;
+  - a barcode scanned into the rail.
+
+---
+
 ## 2026-09-27 — 0.2.29: Billing, part 2
 
 The rest of Billing now opens here instead of in the browser: Payments,
