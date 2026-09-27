@@ -23,7 +23,7 @@ screens here.
 - **PDF is offered only to those who see an order's prices.** Anyone else
   sees its lines and quantities, with a dash for the money.
 
-**Server fixes this needed** (LHCP `fbceb4ab`, committed, **not deployed**)
+**Server fixes this needed** (LHCP `fbceb4ab`, deployed 07:30 UTC 2026-09-27)
 
 - Order, bill and payment amounts were sent to anyone who could view
   inventory.
@@ -31,9 +31,6 @@ screens here.
 - The vendor link led nowhere; it now opens the vendor's page.
 - Orders took "tax inclusive", then added the tax on top anyway.
 - Orders, bills and payments numbered across companies.
-
-Until those are deployed, production has these problems whichever app is
-used. Against it, this version still offers Approve to the raiser.
 
 **Tests**
 
