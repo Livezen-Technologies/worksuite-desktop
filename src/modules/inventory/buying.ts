@@ -104,6 +104,8 @@ export interface OrderDetail {
   receipts: Array<{ id: number | string; grn_number: string; status: string; received_at: string | null; posted_at: string | null; total_value: number | string | null; vendor_invoice_no: string | null }>;
   editable: boolean;
   portal: { issued: boolean; expires: string | null; url: string | null };
+  /** False for whoever raised it, unless purchasing allows self-approval. */
+  may_approve?: boolean;
 }
 
 export const PER = 30;
@@ -120,13 +122,17 @@ export const saveOrder = (org: string, id: number | null, body: Record<string, u
 export const orderAct = (id: number, act: 'approve' | 'cancel' | 'receive' | 'pdf', body?: object) => apiPost<{ order?: PurchaseOrder; id?: number; file_id?: number; name?: string }>(`/api/inventory/purchase-orders/${id}/${act}`, body ?? {});
 export const deleteOrder = (id: number) => apiDelete<unknown>(`/api/inventory/purchase-orders/${id}`);
 
-/** What may be done to an order now. Receiving needs `inventory.purchase`; approving `inventory.approve`. */
-export function orderActions(o: Pick<PurchaseOrder, 'status'>, received: number, c: { purchase: boolean; approve: boolean }) {
+/**
+ * What may be done to an order now. Receiving needs `inventory.purchase`; approving `inventory.approve`, and
+ * someone other than whoever raised it (`mayApprove`, the server's answer) — `waiting` says so instead of a button.
+ */
+export function orderActions(o: Pick<PurchaseOrder, 'status'>, received: number, c: { purchase: boolean; approve: boolean; mayApprove?: boolean }) {
   const s = o.status;
   const open = s === 'draft' || s === 'pending';
   return {
     edit: c.purchase && open,
-    approve: c.approve && open,
+    approve: c.approve && open && c.mayApprove !== false,
+    waiting: c.approve && open && c.mayApprove === false,
     receive: c.purchase && ['approved', 'sent', 'acknowledged', 'partial'].includes(s),
     cancel: c.purchase && !['cancelled', 'received', 'closed'].includes(s) && received <= 0,
     remove: c.purchase && (open || s === 'cancelled'),
@@ -306,6 +312,8 @@ export interface PurchaseRequest {
   requested_by_name: string | null;
   created_at: string;
   lines: Array<{ id: number | string; product_id: number | string; code: string | null; name: string; unit: string | null; quantity: number | string; ordered_qty: number | string; vendor: string | null; note: string | null }>;
+  /** False for whoever raised it, unless purchasing allows self-approval. */
+  may_approve?: boolean;
 }
 
 export const fetchRequests = (org: string, status: string, signal?: AbortSignal) =>

@@ -312,7 +312,8 @@ export default function InventoryShell(_props: ModuleProps) {
               warehouses={whs}
               id={num(query.get('poedit'))}
               defaultWarehouse={wh}
-              canCost={canCost}
+              // Buyers set an order's prices, so its form shows them whether or not they see stock cost.
+              canCost={canCost || canPurchase}
               onClose={() => nav({ make: null, poedit: null })}
               onSaved={(id) => go(DOC_ROUTES.po!(id))}
             />

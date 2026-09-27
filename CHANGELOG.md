@@ -5,6 +5,50 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-27 — 0.2.35: purchasing, as decided
+
+The owner's decisions on the purchasing questions 0.2.34 raised, on the
+screens here.
+
+**Changed**
+
+- **Whoever raised an order or request isn't offered Approve.** The order
+  says "You raised this order, so someone else approves it", and a request
+  says the same. A team of one can allow it with the purchasing setting
+  "Buyers may approve their own purchasing documents", in Inventory →
+  Settings (in the browser for now).
+- **Buyers see and set prices even without cost access.** An order's
+  Unit cost column, and the unit cost on New order and Edit, now show for
+  anyone who may buy, not only those who see cost prices.
+- **PDF is offered only to those who see an order's prices.** Anyone else
+  sees its lines and quantities, with a dash for the money.
+
+**Server fixes this needed** (LHCP `fbceb4ab`, committed, **not deployed**)
+
+- Order, bill and payment amounts were sent to anyone who could view
+  inventory.
+- The raiser of an order or request could approve it.
+- The vendor link led nowhere; it now opens the vendor's page.
+- Orders took "tax inclusive", then added the tax on top anyway.
+- Orders, bills and payments numbered across companies.
+
+Until those are deployed, production has these problems whichever app is
+used. Against it, this version still offers Approve to the raiser.
+
+**Tests**
+
+- Unit: Approve is left off, with the reason shown, when the server says
+  this person may not approve. An older server that doesn't say changes
+  nothing.
+- End-to-end, against a local server (`tests/e2e/inventory-3.mjs`, 18
+  checks, all passing). New checks:
+  - the raiser of a new order sees the reason instead of Approve;
+  - the server refuses them for the order and for a request;
+  - with self-approval allowed, the order is approved here;
+  - the run puts the setting back as it found it.
+
+---
+
 ## 2026-09-27 — 0.2.34: Inventory, part 3 — purchasing and vendors
 
 Purchasing and Vendors now open here instead of in the browser. The rail's

@@ -3,7 +3,10 @@
 // without losing them; a purchase order raised with freight, edited, approved,
 // received and posted, the freight landing in the stock's cost; the order and
 // receipt reached from the vendor's history; a request approved and turned
-// into a draft order.
+// into a draft order. Whoever raised an order or request may not approve it
+// (decided 2026-09-27): with purchasing's self-approval setting off the raiser
+// is told so and refused; the run then turns it on to approve its own, and
+// puts the setting back as it found it.
 //
 // Makes its own vendor and products ("E2E Inv3 … <tag>"). Stock stays; the
 // draft order from the request is deleted. Needs a user who holds
@@ -22,6 +25,7 @@ if (!server || !email || !password) {
 }
 
 let bearer = '';
+let selfApproval = null;
 async function api(method, path, body) {
   const r = await fetch(`${server}${path}`, { method, headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `Bearer ${bearer}` }, body: body ? JSON.stringify(body) : undefined });
   const j = await r.json().catch(() => ({}));
@@ -113,6 +117,10 @@ try {
   await t.evaluate(`document.querySelector('${panel('Vendor ')} button[aria-label="Close"]')?.click()`);
 
   // ── an order, raised, edited, approved ────────────────────────────────
+  const settings = (await api('GET', '/api/inventory/settings')).data?.settings ?? [];
+  selfApproval = settings.find((x) => x.key === 'allow_self_approval')?.value ?? null;
+  t.check('purchasing offers the self-approval switch', selfApproval !== null, js(settings.map((x) => x.key)));
+  await api('PUT', '/api/inventory/settings', { allow_self_approval: false });
   await rail('Purchasing');
   await press('main', 'New order');
   await t.waitFor(`!!document.querySelector('[role="form"][aria-label="New purchase order"]')`, 'the new order form', 20_000);
@@ -128,6 +136,17 @@ try {
   const poNumber = (await textOf(`${panel('Order ')} b`)).trim();
   const po = ((await api('GET', `/api/inventory/purchase-orders?q=${encodeURIComponent(poNumber)}`)).data?.orders ?? [])[0];
   t.check('the order is a draft with its freight and line', po?.status === 'draft' && Number(po.freight_cost) === 200 && Number(po.line_count) === 1, js(po && { status: po.status, freight: po.freight_cost, lines: po.line_count }));
+  await t.waitFor(`document.querySelector('${panel('Order ')}')?.textContent.includes('You raised this order, so someone else approves it.')`, 'told someone else approves it', 15_000);
+  t.check('its raiser is not offered Approve, and is told why', !(await t.evaluate(`[...document.querySelectorAll('${panel('Order ')} button')].some(b => b.textContent.trim() === 'Approve')`)), '');
+  const refused = await api('POST', `/api/inventory/purchase-orders/${po.id}/approve`, {});
+  // The request turned into an order at the end, raised now so its raiser is refused too.
+  const req = await api('POST', '/api/inventory/requests', { warehouse_id: wh.id, reason: `E2E Inv3 ${tag}`, lines: [{ product_id: washerId, quantity: 40, preferred_vendor_id: vendor.id }] });
+  const reqId = req.data?.id;
+  const reqRow = ((await api('GET', '/api/inventory/requests')).data?.requests ?? []).find((r) => Number(r.id) === Number(reqId));
+  const refusedReq = await api('POST', `/api/inventory/requests/${reqId}/approve`, {});
+  t.check('the server refuses the raiser too, for an order and a request', refused.status === 403 && /someone else/.test(refused.message ?? '') && reqRow?.may_approve === false && refusedReq.status === 403, js({ order: refused.status, request: refusedReq.status, may: reqRow?.may_approve }));
+  await api('PUT', '/api/inventory/settings', { allow_self_approval: true });
+  await t.shot('k2b-raiser-waits');
   await press(panel('Order '), 'Edit');
   await t.waitFor(`!!document.querySelector('[role="form"][aria-label="Edit order"]')`, 'the order editor', 20_000);
   await typeInto('[role="dialog"] input[aria-label="Duty"]', '50');
@@ -139,6 +158,8 @@ try {
   }, 'the edit saved');
   t.check('saving keeps the freight and adds the duty and reference', Number(edited.freight_cost) === 200 && edited.reference_no === `REF${tag}`, js({ freight: edited.freight_cost, ref: edited.reference_no }));
   await t.waitFor(`!!document.querySelector('${panel('Order ')}')`, 'the order back', 15_000);
+  // Saving refetched it, now with self-approval allowed.
+  await t.waitFor(`[...document.querySelectorAll('${panel('Order ')} button')].some(b => b.textContent.trim() === 'Approve')`, 'Approve offered once self-approval is allowed', 15_000);
   await press(panel('Order '), 'Approve');
   await until(async () => (await api('GET', `/api/inventory/purchase-orders/${po.id}`)).data?.order?.status === 'approved', 'approved');
   t.check('approved', true);
@@ -180,8 +201,6 @@ try {
   await t.evaluate(`document.querySelector('${panel('Order ')} button[aria-label="Close"]').click()`);
 
   // ── a request becomes an order ────────────────────────────────────────
-  const req = await api('POST', '/api/inventory/requests', { warehouse_id: wh.id, reason: `E2E Inv3 ${tag}`, lines: [{ product_id: washerId, quantity: 40, preferred_vendor_id: vendor.id }] });
-  const reqId = req.data?.id;
   await rail('Purchasing');
   await press('main', 'Requests');
   await t.waitFor(`!!document.querySelector('[data-request="${reqId}"]')`, 'the request listed', 20_000);
@@ -201,5 +220,7 @@ try {
   await t.shot('kz-failure').catch(() => undefined);
 } finally {
   for (const id of requestOrderIds) await api('DELETE', `/api/inventory/purchase-orders/${id}`).catch(() => undefined);
+  // The setting as the run found it.
+  if (selfApproval !== null) await api('PUT', '/api/inventory/settings', { allow_self_approval: selfApproval }).catch(() => undefined);
   await t.finish();
 }

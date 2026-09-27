@@ -227,7 +227,9 @@ function OrderPanel({ id, currency, canCost, onClose, onEdit, onReceipt }: { id:
   const d = q.data;
   const o = d?.order;
   const received = d ? d.lines.reduce((s, l) => s + (num(l.received_qty) ?? 0), 0) : 0;
-  const acts = o ? orderActions(o, received, { purchase: can(perms, 'inventory.purchase'), approve: can(perms, 'inventory.approve') }) : null;
+  const acts = o ? orderActions(o, received, { purchase: can(perms, 'inventory.purchase'), approve: can(perms, 'inventory.approve'), mayApprove: d?.may_approve }) : null;
+  // Buyers and cost holders see an order's prices; the server sends null to anyone else.
+  const prices = !!o && num(o.total) !== null;
   const cur = o?.currency ?? currency;
   const charges = o ? (num(o.freight_cost) ?? 0) + (num(o.insurance_cost) ?? 0) + (num(o.duty_cost) ?? 0) + (num(o.other_charges) ?? 0) : 0;
 
@@ -284,7 +286,7 @@ function OrderPanel({ id, currency, canCost, onClose, onEdit, onReceipt }: { id:
                 <span className="min-w-0 flex-1">Item</span>
                 <span className="w-[62px] text-right">Ordered</span>
                 <span className="w-[66px] text-right">Received</span>
-                {canCost ? <span className="w-[80px] text-right">Unit cost</span> : null}
+                {prices ? <span className="w-[80px] text-right">Unit cost</span> : null}
                 <span className="w-[90px] text-right">Line total</span>
               </div>
               {d.lines.map((l) => {
@@ -298,7 +300,7 @@ function OrderPanel({ id, currency, canCost, onClose, onEdit, onReceipt }: { id:
                     </span>
                     <span className="w-[62px] text-right text-ink tabular-nums">{qty(ord)}</span>
                     <span className={cx('w-[66px] text-right tabular-nums', got >= ord ? 'text-[#166534] dark:text-success' : got > 0 ? 'text-[#9A4A06] dark:text-warning' : 'text-ink-3')}>{qty(got)}</span>
-                    {canCost ? <span className="w-[80px] text-right text-ink-2 tabular-nums">{whole(l.unit_cost)}</span> : null}
+                    {prices ? <span className="w-[80px] text-right text-ink-2 tabular-nums">{whole(l.unit_cost)}</span> : null}
                     <span className="w-[90px] text-right text-ink tabular-nums">{whole(l.line_total)}</span>
                   </div>
                 );
@@ -334,6 +336,7 @@ function OrderPanel({ id, currency, canCost, onClose, onEdit, onReceipt }: { id:
                     Approve
                   </button>
                 ) : null}
+                {acts.waiting ? <span className="self-center text-[12.5px] text-ink-3">You raised this order, so someone else approves it.</span> : null}
                 {acts.receive ? (
                   <button
                     type="button"
@@ -350,9 +353,11 @@ function OrderPanel({ id, currency, canCost, onClose, onEdit, onReceipt }: { id:
                     Receive goods
                   </button>
                 ) : null}
-                <button type="button" className={btnSmall} disabled={busy} onClick={pdf}>
-                  PDF
-                </button>
+                {prices ? (
+                  <button type="button" className={btnSmall} disabled={busy} onClick={pdf}>
+                    PDF
+                  </button>
+                ) : null}
                 {acts.cancel ? (
                   <button type="button" className={btnSmall} disabled={busy} onClick={() => setConfirm('cancel')}>
                     Cancel order
@@ -779,7 +784,10 @@ function Requests({ org, warehouse, onOrdered }: { org: string; warehouse: numbe
               <PoChip status={r.status} />
               {r.source === 'reorder' ? <span className="text-[11.5px] text-ink-3">raised by the reorder rules</span> : null}
               <span className="ml-auto flex gap-1.5">
-                {mayApprove && (r.status === 'pending' || r.status === 'draft') ? (
+                {mayApprove && r.may_approve === false && (r.status === 'pending' || r.status === 'draft') ? (
+                  <span className="self-center text-[12px] text-ink-3">You raised it, so someone else approves it</span>
+                ) : null}
+                {mayApprove && r.may_approve !== false && (r.status === 'pending' || r.status === 'draft') ? (
                   <button
                     type="button"
                     className={btnSmall}

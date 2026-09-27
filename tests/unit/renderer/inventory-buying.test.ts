@@ -20,6 +20,15 @@ describe('inventory buying: orders', () => {
     expect(orderActions({ status: 'draft' }, 0, { purchase: true, approve: false }).approve).toBe(false);
   });
 
+  it('leaves Approve off for whoever raised the order, and says someone else approves it', () => {
+    // `mayApprove` is the server's answer; absent (an older server) changes nothing.
+    expect(orderActions({ status: 'draft' }, 0, { purchase: true, approve: true, mayApprove: false })).toMatchObject({ approve: false, waiting: true, edit: true });
+    expect(orderActions({ status: 'draft' }, 0, { purchase: true, approve: true, mayApprove: true })).toMatchObject({ approve: true, waiting: false });
+    expect(orderActions({ status: 'draft' }, 0, { purchase: true, approve: true })).toMatchObject({ approve: true, waiting: false });
+    expect(orderActions({ status: 'approved' }, 0, { purchase: true, approve: true, mayApprove: false }).waiting).toBe(false);
+    expect(orderActions({ status: 'draft' }, 0, { purchase: true, approve: false, mayApprove: false }).waiting).toBe(false);
+  });
+
   it('names the states the web names', () => {
     expect(PO_LABEL.acknowledged).toBe('Vendor accepted');
     expect(PO_LABEL.partial).toBe('Part received');
