@@ -1,5 +1,5 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { useEffect, useState, type DragEvent, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type DragEvent, type MouseEvent } from 'react';
 import { app } from '../../core/app-state';
 import { request } from '../../core/api';
 import { useStore } from '../../core/store';
@@ -11,6 +11,7 @@ import { EMPTY, GROUPS, TITLES, can, fileKey, folderKey, kindOf, type DriveFile,
 import { fileMenu, folderMenu, keyOf, useDrive, type Item } from './ctx';
 import { Details } from './Details';
 import { lockPassword } from './locks';
+import { useMarquee } from './marquee';
 import { PopMenu, below, type MenuItem } from './Menu';
 import type { Place } from './Rail';
 import { FileIcon, FolderIcon, Tile } from './Thumb';
@@ -90,7 +91,8 @@ async function lockedPage(id: number, pw: string, signal: AbortSignal): Promise<
 /**
  * A folder, or a list across the Drive (Recent, Starred, Images, This week…):
  * DriveFolder and DriveGrid. List or grid; select with a click, Ctrl/⌘ and
- * Shift; the selection bar acts on all of them; right-click for the menu;
+ * Shift, or by dragging a rectangle over empty space (`marquee.ts`); the
+ * selection bar acts on all of them; right-click for the menu;
  * drop files from Finder to upload, or drag rows onto a folder to move them.
  */
 export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Place; active: boolean; onPlace: (p: Place) => void; ask: { key: Key; tab?: string; n: number } | null; initialQ: string }) {
@@ -108,6 +110,8 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
   const [dropping, setDropping] = useState(false);
   const [dragOver, setDragOver] = useState<number | null>(null);
   const [unlockTick, setUnlockTick] = useState(0);
+  const scroller = useRef<HTMLDivElement>(null);
+  const marquee = useMarquee(scroller, { selected, onChange: setSelected });
   const folderView = place.view === 'folder';
   const view = place.view;
   const [sortBy, dir] = sort.split(':') as [string, string];
@@ -385,7 +389,7 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
         {chosen.length > 1 || (chosen.length === 1 && layout === 'list' && !details) ? (
           <SelectionBar items={chosen} size={selectedSize} onClear={() => setSelected(new Set())} />
         ) : null}
-        <div className="relative min-h-0 flex-1 overflow-y-auto scroll-thin">
+        <div ref={scroller} data-files-space onMouseDown={marquee.onMouseDown} className="relative min-h-0 flex-1 overflow-y-auto scroll-thin">
           {list.isLoading ? <Spinner /> : null}
           {list.error && !list.data ? <div className="px-6"><ErrorNote error={list.error} onRetry={() => void list.refetch()} /></div> : null}
           {locked && place.folder ? <UnlockPrompt folderId={place.folder} name={title} onUnlocked={() => setUnlockTick((n) => n + 1)} /> : null}
@@ -482,6 +486,14 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
                 })}
               </div>
             </div>
+          ) : null}
+          {marquee.rect ? (
+            <div
+              aria-hidden
+              data-marquee
+              className="pointer-events-none absolute z-20 rounded-[3px] border border-primary bg-primary/10"
+              style={{ left: marquee.rect.left, top: marquee.rect.top, width: marquee.rect.right - marquee.rect.left, height: marquee.rect.bottom - marquee.rect.top }}
+            />
           ) : null}
           {list.hasNextPage ? (
             <div className="flex justify-center py-4">

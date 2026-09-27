@@ -5,6 +5,32 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-27 — 0.2.31: Files — drag to select
+
+**Fixed**
+
+- **Dragging the mouse over files didn't select them.** Files had no
+  drag-to-select, and a click on empty space didn't clear the selection
+  either. Now, in the list or the grid:
+  - press on empty space and drag: a rectangle follows the pointer, and
+    every file and folder it touches is selected;
+  - hold Shift or ⌘/Ctrl to add to what is already selected;
+  - dragging near the top or bottom edge scrolls the list;
+  - a plain click on empty space clears the selection.
+- Dragging a file itself still moves it into a folder, as before. In the
+  list, where rows fill the width, the rectangle starts from the space below
+  the rows.
+
+**Tests**
+
+- Unit: the rectangle whichever way it is dragged, and which tiles it
+  touches.
+- End-to-end (`tests/e2e/files.mjs`, now 37 checks, all passing): a drag
+  across two tiles selects exactly those two, and a click on empty space
+  clears it.
+
+---
+
 ## 2026-09-27 — 0.2.30: Inventory, part 1
 
 Inventory now opens here: its rail, the dashboard, products, the stock

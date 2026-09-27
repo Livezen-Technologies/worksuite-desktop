@@ -193,6 +193,35 @@ try {
   await t.evaluate(`document.querySelector('button[aria-label="Grid view"]').click()`);
   await t.waitFor(`document.querySelectorAll('main button[data-row] img').length >= 2`, 'the grid');
   t.check('the grid shows pictures as tiles', true);
+
+  // Drag to select: from empty space beside the tiles, across the first two.
+  const drag = await t.evaluate(`(async () => {
+    const space = document.querySelector('[data-files-space]');
+    const tiles = [...space.querySelectorAll('button[data-row]')].slice(0, 2).map((b) => b.getBoundingClientRect());
+    const s = space.getBoundingClientRect();
+    const x0 = s.left + 6, y0 = tiles[0].top + 10;
+    const x1 = tiles[1].left + tiles[1].width / 2, y1 = tiles[1].top + tiles[1].height / 2;
+    space.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: x0, clientY: y0 }));
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: (x0 + x1) / 2, clientY: (y0 + y1) / 2 }));
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: x1, clientY: y1 }));
+    await new Promise((r) => setTimeout(r, 150));
+    const box = !!document.querySelector('[data-marquee]');
+    window.dispatchEvent(new MouseEvent('mouseup', { clientX: x1, clientY: y1 }));
+    await new Promise((r) => setTimeout(r, 150));
+    const foot = [...document.querySelectorAll('main span')].find((x) => / selected/.test(x.textContent))?.textContent ?? '';
+    return { box, gone: !document.querySelector('[data-marquee]'), foot };
+  })()`);
+  t.check('dragging over empty space draws a rectangle and selects the tiles it touches', drag.box && drag.gone && /^2 selected/.test(drag.foot), JSON.stringify(drag));
+  const cleared = await t.evaluate(`(async () => {
+    const space = document.querySelector('[data-files-space]');
+    const s = space.getBoundingClientRect();
+    const x = s.left + 6, y = s.bottom - 10;
+    space.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: x, clientY: y }));
+    window.dispatchEvent(new MouseEvent('mouseup', { clientX: x, clientY: y }));
+    await new Promise((r) => setTimeout(r, 150));
+    return ![...document.querySelectorAll('main span')].some((x) => / selected/.test(x.textContent));
+  })()`);
+  t.check('a click on empty space lets go of the selection', cleared);
   await t.evaluate(`document.querySelector('button[aria-label="List view"]').click()`);
   await t.waitFor(`!!${rowSel(`photo-a-${tag}.png`)}`, 'the list');
 
