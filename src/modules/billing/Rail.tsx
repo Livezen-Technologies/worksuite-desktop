@@ -11,12 +11,11 @@ import { searchBilling } from './api';
  * invoices, payments and customers, then the screens by what they are for —
  * money in, adjustments, insight — what needs attention, the sales flow that
  * leads to an invoice (Quotes in CRM; Deliveries and Sales returns in Orders),
- * and Settings. The screens the desktop does not draw yet open WorkSuite in the
- * browser (marked).
+ * and Settings.
  */
 export type BillView = 'dash' | 'inv' | 'pay' | 'cn' | 'rec' | 'cus' | 'rep' | 'set';
 
-export const NATIVE = new Set<BillView>(['dash', 'inv']);
+export const NATIVE = new Set<BillView>(['dash', 'inv', 'pay', 'cn', 'rec', 'cus', 'rep', 'set']);
 
 export interface RailCounts {
   overdue: number;
@@ -24,12 +23,14 @@ export interface RailCounts {
   drafts: number;
 }
 
-export function BillRail({ view, draftsOnly, onPick, onDrafts, onNew, onOpenInvoice, onNavigate, counts, org, orgs, onOrg, canCreate, has }: {
+export function BillRail({ view, draftsOnly, onPick, onDrafts, onOnAccount, onNew, onOpenInvoice, onNavigate, counts, org, orgs, onOrg, canCreate, has }: {
   view: BillView;
   /** The invoice list is narrowed to drafts (the "needs attention" line). */
   draftsOnly: boolean;
   onPick: (v: BillView) => void;
   onDrafts: () => void;
+  /** Payments narrowed to money on account (the "needs attention" line). */
+  onOnAccount: () => void;
   onNew: () => void;
   onOpenInvoice: (id: number) => void;
   /** To another module (Quotes, Deliveries, Sales returns). */
@@ -110,14 +111,15 @@ export function BillRail({ view, draftsOnly, onPick, onDrafts, onNew, onOpenInvo
                   aria-selected={false}
                   onClick={() => {
                     setQ('');
-                    if (h.type === 'invoice' || h.type === 'note') onOpenInvoice(h.id);
-                    else browser();
+                    if (h.type === 'invoice') onOpenInvoice(h.id);
+                    else if (h.type === 'note') onNavigate(`/billing?tab=cn&note=${h.id}`);
+                    else if (h.type === 'payment') onNavigate(`/billing?tab=pay&payment=${h.id}`);
+                    else onNavigate(`/billing?tab=cus&customer=${h.id}`);
                   }}
                   className="flex flex-col px-3 py-1.5 text-left hover:bg-subtle"
                 >
                   <span className="flex items-center gap-1.5 text-[12.5px] font-semibold text-ink">
                     <span className="truncate">{h.title}</span>
-                    {h.type === 'payment' || h.type === 'customer' ? <Icon name="external" size={11} className="shrink-0 text-ink-3" /> : null}
                   </span>
                   <span className="truncate text-[11.5px] text-ink-3">{[h.type === 'note' ? 'Credit or debit note' : h.type.charAt(0).toUpperCase() + h.type.slice(1), h.subtitle, h.meta].filter(Boolean).join(' · ')}</span>
                 </button>
@@ -143,11 +145,8 @@ export function BillRail({ view, draftsOnly, onPick, onDrafts, onNew, onOpenInvo
           </button>
         ) : null}
         {counts.unallocated > 0 ? (
-          <button type="button" title="Opens in your browser" onClick={() => browser()} className="flex h-[29px] shrink-0 items-center gap-1.5 rounded-[7px] px-2.5 text-left text-[12.5px] text-[#9A4A06] hover:bg-subtle dark:text-warning">
-            <span className="flex-1">
-              {counts.unallocated} {counts.unallocated === 1 ? 'payment' : 'payments'} on account
-            </span>
-            <Icon name="external" size={11} />
+          <button type="button" onClick={onOnAccount} className="flex h-[29px] shrink-0 items-center rounded-[7px] px-2.5 text-left text-[12.5px] text-[#9A4A06] hover:bg-subtle dark:text-warning">
+            {counts.unallocated} {counts.unallocated === 1 ? 'payment' : 'payments'} on account
           </button>
         ) : null}
         {has('crm.view') || has('oms.view') ? head('Sales flow') : null}

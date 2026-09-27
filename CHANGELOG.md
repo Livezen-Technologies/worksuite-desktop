@@ -5,6 +5,125 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-27 — 0.2.29: Billing, part 2
+
+The rest of Billing now opens here instead of in the browser: Payments,
+Credit and debit notes, Recurring, Customers, Reports and Settings. The rail's
+search opens an invoice, note, payment or customer here, and "payments on
+account" opens Payments narrowed to them. Only the settings that hold
+credentials stay in the browser (marked): payment gateways, the CRM
+connector, WooCommerce stores and members.
+
+**Added**
+
+- **Payments:**
+  - the list, with search, method and "unallocated only", plus what was
+    received and what is on account;
+  - a refund is its own row, going out.
+  - One payment shows its details, the invoices it is set against (each
+    removable) and its refunds, with the rate used when it is not in the
+    base currency.
+  - **Allocate:** settle the oldest invoices first, or type amounts per
+    invoice. The amounts start where oldest-first would put them.
+  - **Refund** (needs `billing.credit`): only what is not set against an
+    invoice. The sheet says what was received, what is on invoices, what was
+    refunded already and what is free.
+  - **Receipt:** the PDF, filed in the Drive and downloaded.
+  - **Transfer slips:** the customer's proof of payment. Attach PDFs or
+    images (up to 10 MB), download and remove them.
+  - **Delete** a payment that is on nothing.
+- **Credit and debit notes:**
+  - the two lists, with number, customer, what the note is against, status,
+    amount and what is unused;
+  - one note shows its details, lines and what it is applied to;
+  - Issue: a credit note against an invoice is applied to it at once;
+  - Apply a standing credit to an invoice, the PDF, and Delete draft.
+  - **New note:** credit or debit; the customer; against an invoice or none
+    (with the company for a standalone note); amount, line and reason. A
+    credit note is capped at what the invoice still owes.
+  - An issued invoice has **Raise credit note**, which starts one against
+    it.
+- **Customers:**
+  - largest outstanding first, with invoices, billed, outstanding, overdue
+    and on account; search and "owing only";
+  - one customer shows their figures, how old their debt is, and their
+    invoices, payments and recurring billing, each opening here. Their
+    subscriptions open in the browser.
+- **Recurring:**
+  - each profile's schedule, next run (and how far ahead it is invoiced),
+    state and invoices generated; how many are due and how many cannot run;
+  - **Run** a due profile. It raises a draft to review, or an issued invoice
+    if the profile issues automatically, and opens it;
+  - **Set the company** on a profile that cannot run without one;
+  - one profile shows its schedule, the next few dates, its lines, and the
+    invoices and payments it produced;
+  - Pause, Resume and Remove;
+  - **New profile:** name, customer, company, frequency, first invoice,
+    optional end, lines (with products and taxes), and "Issue
+    automatically". It is off unless ticked.
+  - A profile run by Subscriptions says so, and is changed there.
+- **Reports:** Aging (by customer), Revenue (by month, customer or project),
+  Tax (by rate), Customers (with average days to pay), Payments (by method,
+  by month, and money on account) and What sold. The window is a preset or
+  your own dates. The server has no export for these.
+- **Settings:**
+  - **General:** numbering, money, letterhead, document and branding, for
+    one company at a time. These come from the server's own field list, so
+    a new setting appears without a release. The accent colour has a
+    picker; the logo is chosen in the browser.
+  - **Tax rates:** add one (sales or withholding, compound, on every
+    invoice), retire it, or bring it back.
+  - **Exchange rates:** record a rate as "1 EUR equals, in LKR", with a
+    worked example ("100 EUR is 33,000 LKR"), and remove it.
+  - **Payment modes:** add, edit and remove.
+  - **Currencies:** add, edit, make base (until the first invoice), remove
+    unused.
+  - **Data access**, with your Billing permissions.
+
+**Changed**
+
+- The settings form People uses (now shared) can read and save one company's
+  settings. People's own settings are unchanged.
+- A customer's own outstanding, overdue and on-account figures are exact
+  ("LKR 4,750.00", not "LKR 5k").
+
+**Server fixes this needed** (LHCP, committed, **not deployed**)
+
+- **a6c98a18:**
+  - A payment could be allocated to a credit note, including by "settle the
+    oldest first".
+  - Customers showed credit notes as money owed.
+  - The tax report overstated Charged and Net.
+  - Exchange rates were labelled the wrong way round. Anybody following the
+    old label entered the rate inverted.
+  - The web never showed a payment's transfer slips.
+- **539e2fe4:** raising a credit or debit note **against an invoice** has
+  failed with a server error since 2026-08-21, on the web and here.
+
+Until those are deployed, production has these problems whichever app is
+used.
+
+**Tests**
+
+- Unit: what can be refunded, the oldest-first plan (by due date, then id,
+  to the cent), and why a profile will or will not run.
+- End-to-end, against a local server (`tests/e2e/billing-2.mjs`, 21 checks,
+  all passing):
+  - money on account allocated oldest-first, then taken off;
+  - a refund, and the receipt;
+  - a credit note raised from an invoice and applied when issued;
+  - a standalone debit note;
+  - the customer owing invoice − credit + debit, to the cent;
+  - a profile made, run (a draft), paused, resumed and removed;
+  - every report;
+  - a tax rate added and retired;
+  - an exchange rate recorded the right way round;
+  - a payment mode;
+  - currencies and data access.
+- The Billing part 1 and Orders end-to-end runs still pass.
+
+---
+
 ## 2026-09-27 — 0.2.28: Billing (invoices), part 1
 
 From the "Bill*" designs. **Invoices** now opens here, in the sidebar under

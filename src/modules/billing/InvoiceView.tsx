@@ -41,16 +41,18 @@ import RecordPayment from './RecordPayment';
 type Tab = 'lines' | 'settle' | 'history';
 type Asking = 'issue' | 'sent' | 'cancel' | 'delete' | { unallocate: number; reference: string };
 
-export default function InvoiceView({ id, org, onClose, onOpen }: { id: number; org: string; onClose: () => void; onOpen: (id: number) => void }) {
+type Links = { onOpenPayment: (id: number) => void; onOpenNote: (id: number) => void; /** Raise a credit note against this invoice (absent without billing.credit). */ onCredit?: () => void };
+
+export default function InvoiceView({ id, org, onClose, onOpen, ...links }: { id: number; org: string; onClose: () => void; onOpen: (id: number) => void } & Links) {
   const q = useQuery({ queryKey: K.invoice(id), queryFn: ({ signal }) => fetchInvoice(id, signal) });
   if (q.isLoading) return <Spinner />;
   if (q.error) return <ErrorNote error={q.error} onRetry={() => void q.refetch()} />;
   const inv = q.data!.invoice;
   // Keyed by what the server last said, so a save or an issue starts the editor again from its figures.
-  return <Loaded key={`${inv.id}-${inv.status}-${inv.total}-${inv.lines.length}`} inv={inv} editable={q.data!.editable} org={org} onClose={onClose} onOpen={onOpen} />;
+  return <Loaded key={`${inv.id}-${inv.status}-${inv.total}-${inv.lines.length}`} inv={inv} editable={q.data!.editable} org={org} onClose={onClose} onOpen={onOpen} {...links} />;
 }
 
-function Loaded({ inv, editable, org, onClose, onOpen }: { inv: InvoiceDetail; editable: boolean; org: string; onClose: () => void; onOpen: (id: number) => void }) {
+function Loaded({ inv, editable, org, onClose, onOpen, onOpenPayment, onOpenNote, onCredit }: { inv: InvoiceDetail; editable: boolean; org: string; onClose: () => void; onOpen: (id: number) => void } & Links) {
   const qc = useQueryClient();
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
   const taxes = useQuery({ queryKey: K.taxes, queryFn: ({ signal }) => fetchTaxes(signal), staleTime: 300_000 });
@@ -175,6 +177,11 @@ function Loaded({ inv, editable, org, onClose, onOpen }: { inv: InvoiceDetail; e
                 Duplicate
               </button>
             ) : null}
+            {onCredit && inv.status !== 'cancelled' && inv.due > 0 ? (
+              <button type="button" className={btn} onClick={onCredit} title="Reduce what is owed on this invoice">
+                Raise credit note
+              </button>
+            ) : null}
             {mayIssue && inv.status !== 'cancelled' && inv.paid === 0 ? (
               <button type="button" className={btn + ' !text-danger'} onClick={() => setAsking('cancel')}>
                 Cancel invoice
@@ -276,13 +283,13 @@ function Loaded({ inv, editable, org, onClose, onOpen }: { inv: InvoiceDetail; e
           {inv.allocations.payments.length ? (
             inv.allocations.payments.map((p) => (
               <div key={p.id} className="flex items-center gap-3 border-b border-line/60 py-2 text-[12.5px] last:border-b-0">
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <b className="text-ink">{p.reference}</b>
+                <button type="button" className="flex min-w-0 flex-1 flex-col text-left" onClick={() => onOpenPayment(p.payment_id)}>
+                  <b className="text-primary hover:underline">{p.reference}</b>
                   <span className="text-[11.5px] text-ink-3">
                     {methodLabel(p.method)} · {dateLabel(p.paid_on)}
                     {p.gateway ? ` · ${p.gateway}` : ''}
                   </span>
-                </span>
+                </button>
                 <b className="text-ink tabular-nums">{amount(p.amount, inv.currency)}</b>
                 {mayPay ? (
                   <button type="button" className="font-semibold text-danger hover:underline" onClick={() => setAsking({ unallocate: p.id, reference: p.reference })}>
@@ -298,7 +305,9 @@ function Loaded({ inv, editable, org, onClose, onOpen }: { inv: InvoiceDetail; e
           {inv.allocations.credits.length ? (
             inv.allocations.credits.map((c) => (
               <div key={c.id} className="flex items-center gap-3 border-b border-line/60 py-2 text-[12.5px] last:border-b-0">
-                <b className="flex-1 text-ink">{c.number}</b>
+                <button type="button" className="flex-1 text-left font-bold text-primary hover:underline" onClick={() => onOpenNote(c.credit_id)}>
+                  {c.number}
+                </button>
                 <b className="text-ink tabular-nums">− {amount(c.amount, inv.currency)}</b>
               </div>
             ))

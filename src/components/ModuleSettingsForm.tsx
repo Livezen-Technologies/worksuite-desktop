@@ -43,7 +43,7 @@ function asText(f: FieldDef, v: unknown): string {
 /** A control drawn for one field instead of the plain one its type gives (a warehouse id as a list of warehouses). */
 export type CustomControl = (p: { value: string; onChange: (v: string) => void; disabled: boolean; label: string }) => ReactNode;
 
-export function ModuleSettingsForm({ slug, section, queryKey, note, readOnly, custom }: {
+export function ModuleSettingsForm({ slug, section, queryKey, note, readOnly, custom, org }: {
   slug: string;
   section: 'general' | 'advanced';
   queryKey: readonly unknown[];
@@ -52,9 +52,11 @@ export function ModuleSettingsForm({ slug, section, queryKey, note, readOnly, cu
   /** Said instead of Save to somebody who may only read. */
   readOnly: string;
   custom?: Partial<Record<string, CustomControl>>;
+  /** For a module whose settings differ per company: the company read and written (else the installation's). */
+  org?: string;
 }) {
   const qc = useQueryClient();
-  const q = useQuery({ queryKey, queryFn: ({ signal }) => apiGet<ModuleSettings>(`/api/module-settings/${slug}`, undefined, signal) });
+  const q = useQuery({ queryKey, queryFn: ({ signal }) => apiGet<ModuleSettings>(`/api/module-settings/${slug}`, org ? { org } : undefined, signal) });
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -77,7 +79,7 @@ export function ModuleSettingsForm({ slug, section, queryKey, note, readOnly, cu
     setBusy(true);
     setErrors({});
     try {
-      await apiPut(`/api/module-settings/${slug}/${section}`, Object.fromEntries(changed.map((f) => [f.key, draft[f.key]])));
+      await apiPut(`/api/module-settings/${slug}/${section}${org ? `?org=${encodeURIComponent(org)}` : ''}`, Object.fromEntries(changed.map((f) => [f.key, draft[f.key]])));
       toast('success', changed.length === 1 ? 'Setting saved.' : `${changed.length} settings saved.`);
       setDraft({});
       void qc.invalidateQueries({ queryKey });

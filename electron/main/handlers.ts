@@ -302,6 +302,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       ? `/api/share/oms/${input.orderPdf}/pdf`
       : input.invoicePdf
       ? `/api/share/billing/${input.invoicePdf}/pdf`
+      : input.paymentSlip
+      ? `/api/billing/payments/${input.paymentSlip.payment}/slips/${input.paymentSlip.slip}`
       : rep
       ? `/api/oms/reports/${rep.report}?${new URLSearchParams({ from: rep.from, to: rep.to, format: 'csv', ...(rep.org ? { org: rep.org } : {}), ...(rep.report === 'sales' && rep.group ? { group: rep.group } : {}) })}`
       : oc

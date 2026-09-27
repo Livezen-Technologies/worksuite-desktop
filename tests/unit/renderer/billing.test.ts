@@ -80,3 +80,38 @@ describe('billing: the server’s links open here', () => {
     expect(resolveWebLink('/billing/invoices/42')).toEqual({ kind: 'tab', route: '/billing/invoices/42', app: 'billing' });
   });
 });
+
+const { frequencyLabel, oldestFirst, profileState, refundable } = await import('../../../src/modules/billing/more');
+
+describe('billing part 2: payments, profiles', () => {
+  it('refunds only what is not set against an invoice, and never a refund', () => {
+    expect(refundable({ direction: 'in', unallocated: 95000 })).toBe(95000);
+    expect(refundable({ direction: 'in', unallocated: 0 })).toBe(0);
+    expect(refundable({ direction: 'out', unallocated: 500 })).toBe(0);
+  });
+
+  it('plans oldest-first as the server settles it: by due date, then by id, to the cent', () => {
+    const plan = oldestFirst(
+      [
+        { id: 9, due: 240000, due_date: '2026-10-12' },
+        { id: 4, due: 920000, due_date: '2026-09-28' },
+        { id: 7, due: 64000, due_date: null },
+        { id: 5, due: 10.005, due_date: '2026-09-28' },
+      ],
+      1_000_000.01,
+    );
+    expect(plan).toEqual({ 4: 920000, 5: 10.01, 9: 79990 });
+    expect(oldestFirst([{ id: 1, due: 100, due_date: '2026-01-01' }], 0)).toEqual({});
+  });
+
+  it('says why a profile will or will not run', () => {
+    const base = { status: 'active' as const, due_now: false, cannot_run: null, managed: null };
+    expect(profileState(base)).toEqual({ label: 'active', tone: 'green' });
+    expect(profileState({ ...base, due_now: true }).label).toBe('due now');
+    expect(profileState({ ...base, cannot_run: 'no company' }).label).toBe('cannot run');
+    expect(profileState({ ...base, status: 'paused' }).label).toBe('paused');
+    expect(profileState({ ...base, managed: { by: 'Subscriptions', id: 1, reference: 'SUB-1', live: true, why: '' } }).label).toBe('run by Subscriptions');
+    expect(frequencyLabel('semiannual')).toBe('Twice a year');
+    expect(frequencyLabel('custom')).toBe('Custom');
+  });
+});
