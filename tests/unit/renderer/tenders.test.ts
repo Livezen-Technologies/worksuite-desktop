@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
+import type * as CoreApi from '../../../src/core/api';
 
-vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof import('../../../src/core/api')>()), apiGet: vi.fn(), apiPost: vi.fn(), apiPut: vi.fn(), apiDelete: vi.fn() }));
+vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiPost: vi.fn(), apiPut: vi.fn(), apiDelete: vi.fn() }));
 
 const { ApiError } = await import('../../../src/core/api');
 const { setRegional } = await import('../../../src/core/time');
