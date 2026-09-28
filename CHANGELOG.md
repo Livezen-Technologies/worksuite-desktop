@@ -5,6 +5,94 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-28 — 0.2.41: SalonMate, part 1 — the front desk at the counter
+
+SalonMate is in the launcher, native, for anyone whose company has it and
+who may view it. This computer is paired as one location's front desk, and
+from then on it does the counter's daily work: who is next, check-in with
+the allergy read out, walk-ins, bookings, clients, and the day by stylist.
+Taking money, printing and working offline come in the next two releases;
+until then the desk sends people to pay where they pay today.
+
+**Added**
+
+- **Pairing this computer** as a front desk: a name, the location, and the
+  POS register its money will go to (or none). An owner approves it in
+  SalonMate → Front desk PCs; the screen moves on by itself when they have.
+  Someone who may approve desks is approved at once.
+  - The desk's key is kept in this computer's credential store, per server,
+    and added to SalonMate's requests by the app itself. The screens never
+    see it, and it cannot be read from them or sent anywhere else.
+  - Once revoked, a desk's bookings and check-ins are refused at once, and
+    the screen says it is revoked at its next check (five minutes at most).
+    **Pair this computer again…** forgets the pairing here; the old desk
+    stays listed on the server until an owner revokes it. **Sign out and
+    remove WorkSuite data** (Settings), or a remote wipe, forgets every
+    pairing.
+  - The desk checks in with WorkSuite every five minutes, so owners see
+    which desks are alive.
+- **Today.** Who arrives next and who is late, with a deposit owed or an
+  advance paid, and their allergy. Who is ready to pay and how much is
+  left after any advance. Who is in a chair and until when, and who is
+  free. Walk-in, New booking, Find a client and the day by stylist are one
+  press away. Refreshed every minute; its day and times are the salon's
+  clock, not this computer's.
+- **Check-in**, from Today or the calendar. A client with an allergy at or
+  above the salon's threshold has it read out first, and check-in waits
+  until "I have told the stylist…" is ticked. A service that needs a patch
+  test the client doesn't have asks why you are going ahead. The server
+  decides and keeps the acknowledgement; the desk only asks.
+- **Walk-in and New booking.** Pick services; only stylists who do every
+  one of them here are offered, each with when they are next free, from the
+  same availability check every booking uses. The price and any deposit
+  come from the server's quote.
+  - **Start now** books, checks in (through the allergy read-out) and starts
+    in one step. **Book a later slot** shows a stylist's free times, day by
+    day.
+  - Taken in the meantime? The nearest free time is offered to book
+    instead.
+  - Find the client by any part of their name, mobile or email, or add one.
+    WorkSuite asks whether a new client is somebody it already knows.
+- **Clients.** Search, then the card: the allergy first, the patch test on
+  file, points, store credit, what they owe and their last visits. Record an
+  allergy as the client tells it. **Book again** opens a booking with the
+  same services and stylist. **Open full record** opens it in WorkSuite on
+  the web.
+- **The day by stylist.** Each stylist's working hours, every booking as a
+  block, and a line at the time now. Press a booking to check it in or open
+  the client. Day before, day after, today.
+- **Owners' screens on the web** — reports, commission, settings, the list
+  of desks — open in the browser from the rail.
+
+**Where it bites**
+
+- Every write is one attempt under one key. After a dropped connection,
+  pressing again repeats the same attempt, never a second booking. The key
+  is renewed only once WorkSuite has answered.
+- The desk's key is never shown, logged or copied to the screens. A screen
+  that tries to send its own key header has it dropped by the app.
+- Money, receipts, the cash drawer and closing the day are not native yet.
+  The Ready to pay list shows what is owed, but nothing here takes it.
+- Nothing works offline yet. With WorkSuite unreachable each screen says
+  it could not load, with Retry.
+
+**Server this needs**
+
+- The SalonMate module in WorkSuite (merged to main in a94372b, not
+  deployed yet), including desk keys (`salon_desks.key_hash`). Against a
+  server without it, SalonMate is not offered.
+
+**Checked**
+
+- Unit tests for the desk's credential store and the app adding its key,
+  the check-in read-out, stylists offered, next free times, the salon's
+  clock, and tab addresses.
+- `tests/e2e/salon.mjs`, run against a local WorkSuite: pair, Today, a
+  client, Book again, the booking on the calendar, check-in through the
+  allergy read-out, forget. It cleans up what it made.
+
+---
+
 ## 2026-09-27 — 0.2.40: Tenders, part 3 — the document library, reports and settings
 
 Tenders is now fully native: nothing in its rail opens in the browser. The
