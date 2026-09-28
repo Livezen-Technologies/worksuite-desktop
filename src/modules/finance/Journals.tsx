@@ -171,7 +171,9 @@ function JournalPanel({ company, id, base, onOpen }: { company: Company; id: num
     setBusy(true);
     try {
       const r = await reverseJournal(company.id, j.id, reason, reverseOn || undefined);
-      toast('success', r?.message ?? `${j.journal_no} reversed.`);
+      const warning = r?.problems?.[0];
+      if (warning) toast('warning', `${j.journal_no} is reversed${r?.journal_no ? ` by ${r.journal_no}` : ''}, but: ${warning}`);
+      else toast('success', `${j.journal_no} reversed${r?.journal_no ? ` by ${r.journal_no}` : ''}.`);
       setAsking(null);
       bump(qc, company.id);
     } catch (e) {

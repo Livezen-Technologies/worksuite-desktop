@@ -26,8 +26,16 @@ export const VIEWS: FinanceView[] = [
   'settings', 'myaccess',
 ];
 
-/** What this app draws itself; the rest opens in the browser until it does. */
-export const NATIVE = new Set<FinanceView>(['dashboard', 'accounts', 'journals', 'periods', 'myaccess']);
+/**
+ * What every Finance screen is given: the company whose books it shows, and a
+ * way to go to another screen (`extra` is more of the address, such as
+ * `&open=12` for one journal).
+ */
+export interface ScreenProps {
+  company: Company;
+  onGo: (view: FinanceView, extra?: string) => void;
+}
+
 
 export const TITLES: Record<FinanceView, string> = {
   dashboard: 'Overview',
@@ -109,7 +117,6 @@ export function FinanceRail({
 }) {
   const item = (id: FinanceView) => {
     const on = view === id;
-    const web = !NATIVE.has(id);
     const badge = badges[id];
     return (
       <button
@@ -117,14 +124,13 @@ export function FinanceRail({
         type="button"
         aria-current={on ? 'page' : undefined}
         onClick={() => onPick(id)}
-        title={web ? `${TITLES[id]} — opens in your browser` : TITLES[id]}
+        title={TITLES[id]}
         className={cx('relative flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
       >
         <span className={cx('absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-[3px]', on ? 'bg-primary' : 'bg-transparent')} />
         <Icon name={ICONS[id]} size={16} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />
         <span className="min-w-0 flex-1 truncate">{TITLES[id]}</span>
         {badge ? <span className="flex h-[18px] min-w-5 shrink-0 items-center justify-center rounded-[9px] bg-subtle px-1.5 text-[11px] font-bold text-ink-2 tabular-nums">{badge}</span> : null}
-        {web ? <Icon name="external" size={11} className="shrink-0 text-ink-3" /> : null}
       </button>
     );
   };

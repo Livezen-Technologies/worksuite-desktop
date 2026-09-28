@@ -1,14 +1,8 @@
 import { useState, type ReactNode } from 'react';
-import { call } from '../../core/bridge';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { btn, btnPrimary, Sheet } from '../hr/parts';
 import { Pill } from '../inventory/parts';
-
-/** The Finance screens that still open in the browser. */
-export function openWeb(tab: string) {
-  void call('app:openInBrowser', { path: `/finance?tab=${tab}` });
-}
 
 /**
  * A read that failed. Never "no accounts" or "open the books first": a failed

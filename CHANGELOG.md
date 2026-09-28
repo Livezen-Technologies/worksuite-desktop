@@ -5,13 +5,15 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## Unreleased — Finance, part 1: the app and the books
+## Unreleased — Finance: the whole module, natively
 
 Finance opens here now instead of in the browser, under Business in the
-sidebar. Links to Finance screens (`/finance?tab=…`) open it here too. The
-screens not built yet are in the rail, marked, and open in the browser.
+sidebar, and every screen of it is drawn by the app. Links to Finance screens
+(`/finance?tab=…`) open here too. Only Finance's printable report and its
+public shared-report links are still the web's own pages, and open in the
+browser.
 
-**Added**
+**The app**
 
 - **The rail**, in the web's order, with the company picker at the top. It
   picks one company, because the books are that company's: a trial balance
@@ -19,34 +21,120 @@ screens not built yet are in the rail, marked, and open in the browser.
   address, so a restored tab reopens on the same books, and is remembered per
   person — always checked against the companies you still hold. A company
   without books says so in the picker.
+- Money is handled as the server's text throughout and added up in cents, so
+  no figure is ever rounded through a float. An amount you may not see is a
+  dash and a sentence naming the grant, never 0.00. A refusal shows every
+  problem the server names, not the first.
+
+**The books**
+
 - **Overview.** The management accounts on one page: whether the ledger
   balances and what is outstanding, the result for the year with the sentence
   that says what it leaves out, bank against ledger, what is owed each way
   with its age and whether it agrees with its control account, and what is
-  not in the figures yet. Without `finance.reports.view` the page shows what
-  was done and no amounts.
-- **Opening the books** for a company that has none: base currency, the
-  month the financial year starts and the first year, each picked from what
-  the server accepts. It happens once, and the form says so.
+  not in the figures yet. **Opening the books** for a company that has none —
+  base currency, first month, first year — picked, not typed, and said to
+  happen once.
 - **Chart of accounts.** The tree, headings apart from accounts, system
-  accounts locked, archived ones marked; find by code or name; new account
-  (the normal balance follows from the type); archive, with what archiving
-  does; and fixed or variable on cost accounts, for the cost breakdown.
-- **Journals.** Newest first, filtered to what is not yet posted, posted, or
-  reversals. One journal opens beside the list with its lines — approving is
-  asserting the lines are right — and its next step: submit, approve (by
-  somebody other than the writer), post, then reverse, with a reason and, if
-  you like, its own date. A reversal links both ways. **New journal** checks
-  the balance as you type, adding in cents as the server does, and shows
-  every problem the server finds at once.
-- **Periods.** Each year's months, lock and reopen (with a reason, kept on the
-  period), and add the next year — with a warning two months before the
-  calendar runs out, after which every entry would be refused.
+  accounts locked, archived ones marked; find; new account; archive; fixed or
+  variable on cost accounts.
+- **Bank accounts.** Which accounts are bank accounts, their currency, and a
+  statement per account: import a CSV, text or HTML file (up to 8 MB) or paste
+  rows; what loaded, what was already on file and what could not be read,
+  with every problem; park lines (singly or several) with a reason; the
+  import history with its proved or missing closing balances.
+- **Reconciliation.** Per account, its periods and how far it is locked;
+  reconcile a period (prefilled from the latest proved statement); then the
+  workspace — the difference as the headline with its working, match what is
+  obvious, scored suggestions with their reasons in words, choose one
+  yourself, park, and agree and lock (held, with its reasons, until the
+  difference is nil and nothing up to the end date is unmatched); reopen with
+  a reason.
+- **Journals.** Filtered to what is not yet posted, posted, or reversals. One
+  journal opens beside the list with its lines and its next step — submit,
+  approve (by somebody other than the writer), post, then reverse with a
+  reason and its own date if you like. A reversal that succeeds with a
+  warning says so. **New journal** balances as you type.
+
+**Who owes what**
+
+- **Receivables and Payables.** Ageing as at a date (or the end of last
+  month), the tie-out against the control account first — agreeing, or out by
+  how much and where to look — the five buckets per party, and each party's
+  documents in their own currency with the books' figure beneath.
+- **Not in the ledger.** Every document with no journal, with every reason
+  the server gives; **Post it** / **Try anyway** for those who may post, and
+  the journal it made one click away. Supplier debit notes are included.
+
+**Reports**
+
+- **General ledger** (an account and dates, kept in the tab's address;
+  opening and running balance; links to journals and reversals; up to 5,000
+  lines, and it says when there are more), **Trial balance** (position or
+  movements, balanced or out by how much), **Profit and loss** and **Balance
+  sheet** (sections from the chart, subtotals, last year beside this one —
+  including accounts that moved only last year — and the balanced check),
+  **Cash flow and equity** (the indirect statement and the changes in
+  equity, each checked against the balance sheet). Any account opens its
+  general ledger.
+- **Financial overview** and **Cash flow overview**: KPIs against the window
+  before, a monthly trend, margins, cost and revenue by account, cost by
+  dimension, cost variance, health signals, cash in and out by category, and
+  the forecast (labelled estimated; horizons over three months need the
+  forecast manage grant). Figures can be shown in another currency at the
+  server's rates; a missing rate is refused and said, never assumed 1.
+- **Budget vs actual**, and **All companies** — every company you reach, in
+  each one's currency or one you choose, with a company that has no rate
+  listed and not added.
+- **Export** (the report's summary) and **Transactions** (every journal line
+  in the window) save CSV files through the downloads tray; **Print** opens
+  the web's printable report; **Share link** makes a link for somebody
+  without an account (shown once, expires in 7 days). Each is offered only to
+  those the server would let through.
+- **Year-end close.** The close checklist, what blocks the year and what only
+  warns (each linked to where to fix it), versions — generate, approve (by
+  somebody other than the generator, with nothing blocking and the books
+  unchanged since), lock, reopen with a reason — and the history. Any fiscal
+  year can be chosen.
+
+**Setup**
+
+- **Budgets.** Create empty or from last year's actuals, copy (into the next
+  year if you like), approve (one plan per year), archive; the account ×
+  month grid grouped by type, totalled in cents, with income, cost and
+  planned profit, a find box, and keyboard movement. Saving replaces the
+  whole grid, and says so.
+- **Exchange rates** (the installation's, said as much), **Shared reports**
+  (see and revoke), **Tax codes** (rates dated and never edited — a new rate
+  closes the current one, and says on which day), **Fixed-asset accounts**,
+  **Depreciation** (preview, post a month, the months charged with their
+  journals, and the brought-forward split), **Purchase accounts**.
+- **Settings**: the accounting profile, and **Area access** — people by area,
+  presets, end dates, never your own row. The screen says plainly that the
+  server does not enforce these grants yet: they change what the screens
+  show.
 - **My access.** Whose books you can open, and why not the others; and your
   Finance permissions.
 
-Finance's printable report and public shared-report links still open in the
-browser; they are the web's own pages.
+**Server gaps found** (no server change in this release; details in the
+commit)
+
+- Area-access grants are not enforced by the API (known, SRS §12 #1).
+- Several endpoints return every column as text, so flags like `"0"` read as
+  true to a careless client; the web's year-end never shows "does not
+  balance", and its budget editor marks every row inactive. The desktop
+  converts once, on arrival.
+- A reconciliation lock keeps no "bank only" figure, so a locked period's
+  working cannot be reproduced; the lock's refusal sentence omits it too.
+- A budget holding a since-archived account can be neither saved nor copied.
+- Year-end opens on the newest open year, which at year end is the next one.
+- The dashboard exports' permission comment and route filter disagree;
+  translated CSVs run numeric account codes through the rate; the public
+  share page ignores the currency it was made in.
+- The depreciation screen's permission envelope names an area that does not
+  exist, so it always says no (the desktop gates on the posting permission).
+- A tax rate starting before the current one fails with a database error
+  (the desktop refuses it first).
 
 ---
 

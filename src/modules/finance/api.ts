@@ -345,8 +345,13 @@ export const NEXT: Partial<Record<string, { label: string; path: 'submit' | 'app
 
 export const advanceJournal = (company: number, id: number, path: 'submit' | 'approve' | 'post') => apiPost<{ message?: string }>(`/api/finance/journals/${id}/${path}`, { company_id: company });
 
+/**
+ * A reversal can succeed and still have something to say — the contra is in
+ * the books but the original could not be marked as reversed by it — so the
+ * server answers `problems` with a success too.
+ */
 export const reverseJournal = (company: number, id: number, reason: string, date?: string) =>
-  apiPost<{ message?: string }>(`/api/finance/journals/${id}/reverse`, { company_id: company, reason, ...(date ? { entry_date: date } : {}) });
+  apiPost<{ journal_no?: string; problems?: string[] }>(`/api/finance/journals/${id}/reverse`, { company_id: company, reason, ...(date ? { entry_date: date } : {}) });
 
 export interface DraftLine {
   key: string;

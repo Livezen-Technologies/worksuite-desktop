@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as CoreApi from '../../../src/core/api';
+import type { Dashboard } from '../../../src/modules/finance/api';
 
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiPost: vi.fn(), apiPut: vi.fn(), apiDelete: vi.fn() }));
 
@@ -17,7 +18,6 @@ const { default: Journals } = await import('../../../src/modules/finance/Journal
 const { default: Accounts } = await import('../../../src/modules/finance/Accounts');
 const { default: Periods } = await import('../../../src/modules/finance/Periods');
 const { default: MyAccess } = await import('../../../src/modules/finance/MyAccess');
-type Dashboard = import('../../../src/modules/finance/api').Dashboard;
 
 /*
  * Each Finance screen of part one, drawn from payloads shaped as the server
