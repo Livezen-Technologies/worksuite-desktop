@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
+import { useVisibleIds } from '../../core/access';
 import { app } from '../../core/app-state';
 import { call, errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
@@ -9,7 +10,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Spinner, cx } from '../../components/ui';
 import { Popover } from '../../app/overlays/Popover';
-import { appOf, fetchCentre, isApproval, isMention, K, markAllRead, sectioned, SECTION_LABEL, type Notice } from './api';
+import { appOf, fetchCentre, isApproval, isMention, K, markAllRead, sectioned, SECTION_LABEL, visibleCategories, visibleNotices, type Notice } from './api';
 import { NotifRow } from './NotifRow';
 
 /**
@@ -38,11 +39,12 @@ export function NotifDrawer() {
     refetchInterval: 60_000,
   });
   const paused = useStore(app, (s) => s.status?.notificationsPausedUntil);
+  const visible = useVisibleIds();
   const unread = q.data?.counts.unread ?? 0;
   const labels = q.data?.categories;
-  const list = (q.data?.notifications ?? []).filter((n: Notice) => (filter === 'mentions' ? isMention(n) : filter === 'approvals' ? isApproval(n) : true));
+  const list = visibleNotices(q.data?.notifications ?? [], visible).filter((n: Notice) => (filter === 'mentions' ? isMention(n) : filter === 'approvals' ? isApproval(n) : true));
   const groups = sectioned(list);
-  const byCat = Object.entries(q.data?.counts.by_category ?? {}).sort((a, b) => b[1].total - a[1].total);
+  const byCat = visibleCategories(Object.entries(q.data?.counts.by_category ?? {}), visible).sort((a, b) => b[1].total - a[1].total);
 
   const readAll = () =>
     void markAllRead().then(
