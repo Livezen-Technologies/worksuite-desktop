@@ -1,8 +1,8 @@
-import { app, BrowserWindow, clipboard, dialog, nativeImage, shell, systemPreferences } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, nativeImage, shell, systemPreferences, type WebContents } from 'electron';
 import os from 'node:os';
 import { writeFile } from 'node:fs/promises';
 import type { TabRecord } from '@shared/ipc/contract';
-import type { AppInfo, BusyReport } from '@shared/types';
+import type { AppInfo, BusyReport, SyncPolicy } from '@shared/types';
 import { DesktopError, isDesktopError } from './errors';
 import type { AppContext } from './context';
 import type { IpcRouter } from '../ipc/router';
@@ -92,8 +92,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('media:screenPick', (input, c) => ctx.screenShare.pick(c.sender.id, input.id, !!input.audio));
   router.handle('media:privacySettings', async (input) => {
     // Fixed addresses of the OS's own privacy panes; nothing from the page.
-    const mac = { microphone: 'Privacy_Microphone', camera: 'Privacy_Camera', screen: 'Privacy_ScreenCapture' } as const;
-    const win = { microphone: 'privacy-microphone', camera: 'privacy-webcam', screen: 'privacy' } as const;
+    const mac = { microphone: 'Privacy_Microphone', camera: 'Privacy_Camera', screen: 'Privacy_ScreenCapture', accessibility: 'Privacy_Accessibility' } as const;
+    const win = { microphone: 'privacy-microphone', camera: 'privacy-webcam', screen: 'privacy', accessibility: 'privacy' } as const;
     if (process.platform === 'darwin') await shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${mac[input.pane]}`);
     else if (process.platform === 'win32') await shell.openExternal(`ms-settings:${win[input.pane]}`);
   });
@@ -102,6 +102,53 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     if (w) ctx.calls.setActive(w, input.uuid, { kind: input.kind ?? 'call', title: input.title ?? '' });
   });
   router.handle('calls:list', () => ctx.calls.list());
+
+  // ── Meet remote control (WS-MEET-ENH-01) ──────────────────────────────
+  // Each call is taken only from the window it belongs to: the meeting
+  // window for its share, the consent window for its request, the control
+  // bar for resuming.
+  const kindOf = (sender: Electron.WebContents) => ctx.windows.kindOf(winOf(sender)?.id ?? -1);
+  const fromMeeting = (sender: Electron.WebContents) => {
+    if (kindOf(sender) !== 'meet') throw new DesktopError('IPC_FORBIDDEN_SENDER', 'Only a meeting window shares.');
+  };
+  const rc = ctx.remoteControl;
+  router.handle('rc:state', () => rc.view());
+  router.handle('rc:setAllowRequests', (input) => rc.setAllowRequests(input.value));
+  router.handle('rc:shareStarted', async (input, c) => {
+    fromMeeting(c.sender);
+    const granted = ctx.screenShare.lastGranted(c.sender.id);
+    // Only a capture granted in the last minute is this share's.
+    const source = granted && Date.now() - granted.source.at < 60_000 ? granted.source : null;
+    return rc.shareStarted(c.sender.id, input, source);
+  });
+  router.handle('rc:shareChanged', async (_input, c) => {
+    fromMeeting(c.sender);
+    const granted = ctx.screenShare.lastGranted(c.sender.id);
+    await rc.shareChanged(c.sender.id, granted?.source ?? null, granted?.byController ?? false);
+  });
+  router.handle('rc:shareStopped', async (_input, c) => {
+    fromMeeting(c.sender);
+    await rc.shareStopped(c.sender.id);
+  });
+  router.handle('rc:sharePaused', async (input, c) => {
+    fromMeeting(c.sender);
+    await rc.sharePaused(c.sender.id, input.paused);
+  });
+  router.handle('rc:packet', (input, c) => rc.packet(c.sender.id, input.sender, input.data, input.topic));
+  router.handle('rc:consent', (_input, c) => rc.consent(c.sender.id, ctx.lock.isLocked()));
+  router.handle('rc:answer', (input, c) => rc.answer(c.sender.id, input, ctx.lock.isLocked()));
+  router.handle('rc:pause', (input) => rc.pause(input.sessionId, 'sharer'));
+  router.handle('rc:resume', (input, c) => rc.resume(c.sender.id, input.sessionId));
+  router.handle('rc:fileAnswer', (input, c) => rc.answerFile(c.sender.id, input, ctx.lock.isLocked()));
+  router.handle('rc:sendFile', (input, c) => rc.sendFile(c.sender.id, input.sessionId));
+  router.handle('rc:takeFile', (input, c) => {
+    fromMeeting(c.sender);
+    return rc.takeFile(input, ctx.lock.isLocked());
+  });
+  router.handle('rc:stop', async (input) => {
+    if (input.sessionId) await rc.stop(input.sessionId, 'stopped');
+    else await rc.stopAll('stopped');
+  });
   router.handle('calls:focus', (input) => {
     const w = ctx.windows.all().find((x) => x.id === input.windowId);
     if (!w || !ctx.calls.has(w.id)) return false;
@@ -357,7 +404,14 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
           : `/api/mail/messages/${input.mail!.uid}/attachments/${encodeURIComponent(input.mail!.ref)}?${new URLSearchParams({ folder: input.mail!.folder, dl: '1', ...(input.mail!.mailbox ? { mailbox: input.mail!.mailbox } : {}) })}`;
     return ctx.transfers.download(path, input.name, !!input.open, input.fileId ?? null);
   });
-  router.handle('transfers:upload', (input) => ctx.transfers.upload(input.handles, input.target));
+  router.handle('transfers:upload', (input, c) => {
+    // A file for a remote-control session goes only from the meeting window that controls it; the shared
+    // computer's own offers are chosen in the main process's dialog, never through here.
+    if (input.target.kind === 'remote' && ctx.windows.kindOf(winOf(c.sender)?.id ?? -1) !== 'meet') {
+      throw new DesktopError('IPC_FORBIDDEN_SENDER', 'Files for a remote session are sent from the meeting window.');
+    }
+    return ctx.transfers.upload(input.handles, input.target);
+  });
   router.handle('transfers:pause', (input) => ctx.transfers.pause(input.id));
   router.handle('transfers:resume', (input) => ctx.transfers.resume(input.id));
   router.handle('transfers:cancel', (input) => ctx.transfers.cancel(input.id));
@@ -365,6 +419,83 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('transfers:open', (input) => ctx.transfers.openFile(input.id));
   router.handle('transfers:reveal', (input) => ctx.transfers.reveal(input.id));
   router.handle('transfers:clearFinished', () => ctx.transfers.clearFinished());
+
+  // ── Drive sync ─────────────────────────────────────────────────────────
+  router.handle('sync:status', () => ctx.sync.status());
+  router.handle('sync:devices', async () => {
+    const d = await ctx.http.get<{ devices?: Array<Record<string, unknown>>; policy?: SyncPolicy }>('/api/sync/devices');
+    const str = (v: unknown) => (typeof v === 'string' && v !== '' ? v : null);
+    return {
+      devices: (d.devices ?? []).map((x) => ({
+        id: Number(x.id),
+        name: String(x.name ?? ''),
+        platform: String(x.platform ?? 'other'),
+        osVersion: str(x.os_version),
+        appVersion: str(x.app_version),
+        status: String(x.status ?? 'active'),
+        storageUsed: Number(x.storage_used ?? 0),
+        fileCount: Number(x.file_count ?? 0),
+        lastSeenAt: str(x.last_seen_at),
+        lastSyncAt: str(x.last_sync_at),
+        wipeOrderedAt: str(x.wipe_ordered_at),
+      })),
+      policy: d.policy ?? null,
+      thisDevice: ctx.sync.status().deviceId ?? (ctx.device.current() ? Number(ctx.device.current()!.id) : null),
+    };
+  });
+  router.handle('sync:deviceAction', async (input) => {
+    const mine = ctx.sync.status().deviceId ?? Number(ctx.device.current()?.id ?? 0);
+    if (input.id === mine && input.action !== 'rename') {
+      throw new DesktopError('IPC_VALIDATION_FAILED', 'Pause or stop syncing on this computer instead — signing it out from here would cut off the app you are using.');
+    }
+    const path = `/api/sync/devices/${input.id}`;
+    if (input.action === 'rename') {
+      if (!input.name) throw new DesktopError('IPC_VALIDATION_FAILED', 'A device needs a name.');
+      await ctx.http.request('PUT', path, { body: { name: input.name } });
+    } else if (input.action === 'sign-out') await ctx.http.post(`${path}/logout`, {});
+    else if (input.action === 'wipe') await ctx.http.post(`${path}/wipe`, {});
+    else await ctx.http.request('DELETE', path);
+  });
+  router.handle('sync:add', async (input, c) => {
+    let localPath: string | null = null;
+    if (input.choose) {
+      const w = winOf(c.sender);
+      const opts: Electron.OpenDialogOptions = {
+        title: 'Choose the folder on this computer to keep in step',
+        buttonLabel: 'Sync here',
+        defaultPath: ctx.sync.defaultRoot(),
+        properties: ['openDirectory', 'createDirectory', 'promptToCreate'],
+      };
+      const res = w ? await dialog.showOpenDialog(w, opts) : await dialog.showOpenDialog(opts);
+      if (res.canceled || !res.filePaths[0]) return null;
+      localPath = res.filePaths[0];
+    }
+    return ctx.sync.add({ folderId: input.folderId, mode: input.mode, localPath });
+  });
+  router.handle('sync:remove', (input) => ctx.sync.remove(input.id));
+  router.handle('sync:setMode', (input) => ctx.sync.setMode(input.id, input.mode));
+  router.handle('sync:pause', (input) => ctx.sync.setPaused(input.id, input.paused));
+  router.handle('sync:now', () => {
+    ctx.sync.kick('now');
+    return ctx.sync.status();
+  });
+  router.handle('sync:resolve', (input) => ctx.sync.resolveHeld(input.id, input.choice));
+  router.handle('sync:reveal', async (input) => {
+    const at = ctx.sync.locate(input);
+    if (!at) throw new DesktopError('NOT_FOUND', 'That is not on this computer.');
+    if (at.isFile) {
+      shell.showItemInFolder(at.path);
+      return true;
+    }
+    return (await shell.openPath(at.path)) === '';
+  });
+  router.handle('sync:lookup', (input) => ctx.sync.lookup(input.files, input.folders, input.context));
+  router.handle('sync:reconnect', async () => {
+    const server = ctx.auth.getServer();
+    await ctx.device.reenrol(uid(), server?.api ?? 'core');
+    ctx.sync.start(uid());
+    return ctx.sync.status();
+  });
 
   // ── notifications ──────────────────────────────────────────────────────
   router.handle('notifications:list', () => ctx.notifications.refreshList());
@@ -398,6 +529,21 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('print:print', (input) => printHtml(input.html, input.title, { silent: input.silent, deviceName: input.deviceName }, false));
   router.handle('print:printers', (_i, c) => listPrinters(winOf(c.sender)));
   router.handle('print:toPdf', (input, c) => printToPdf(input.html, input.title, winOf(c.sender)));
+
+  // ── SalonMate's front desk ─────────────────────────────────────────────
+  // Pairing is done here so the key the server hands over never reaches a
+  // renderer; the API proxy adds it to SalonMate's requests (salon-desk.ts).
+  router.handle('salon:deskPairing', () => ctx.salonDesk.pairing());
+  router.handle('salon:deskPair', (input) => ctx.salonDesk.pair(input, `desktop-${ctx.device.installId()}`, app.getVersion()));
+  router.handle('salon:deskForget', () => ctx.salonDesk.forget());
+  // Receipts go to the desk's own printer, checked against what this computer has.
+  const installed = async (sender: WebContents) => (await listPrinters(winOf(sender))).map((p) => p.name);
+  router.handle('salon:printSettings', () => ctx.salonPrint.settings());
+  router.handle('salon:printSettingsSet', async (input, c) => ctx.salonPrint.update(input, await installed(c.sender)));
+  router.handle('salon:printReceipt', async (input, c) => ctx.salonPrint.receipt(input.visit_id, input.paper, await installed(c.sender)));
+  router.handle('salon:printTest', async (input, c) => ctx.salonPrint.test(input.paper, await installed(c.sender)));
+  router.handle('salon:printPage', async (input, c) => ctx.salonPrint.page(input.html, input.paper, await installed(c.sender)));
+  router.handle('salon:openDrawer', async (_i, c) => ctx.salonPrint.drawer(await installed(c.sender)));
 
   // ── offline ────────────────────────────────────────────────────────────
   router.handle('offline:status', () => ctx.queue.status(uid(), { bytes: ctx.cache.totalBytes(), entries: ctx.cache.count() }));

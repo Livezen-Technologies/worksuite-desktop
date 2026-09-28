@@ -97,6 +97,15 @@ export interface DesktopPolicy {
   wipe_on_revoke: 'tokens' | 'cache' | 'cache+offline_files';
   proxy: 'system' | 'manual' | 'pac';
   allow_offline: boolean;
+  /** Meet remote control on this computer (WS-MEET-ENH-01 §E.8). The server decides; these say what to offer. */
+  remote_control_host: 'allowed' | 'managed_only' | 'disabled';
+  remote_control_controller: 'allowed' | 'disabled';
+  remote_clipboard: 'off' | 'text_only' | 'text_and_files';
+  remote_file_receive: 'allowed' | 'managed_only' | 'disabled';
+  /** Stops control at once, whatever the controller is doing: `Ctrl+Alt+Shift+Esc`. Never injected. */
+  remote_emergency_stop_chord: string;
+  /** How long the controller waits after the person at this computer moves the mouse (RC-INP-04). */
+  remote_local_priority_hold_ms: number;
 }
 
 export interface MonitoringPolicySummary {
@@ -320,7 +329,7 @@ export interface AppInfo {
   restoredFromCrash: boolean;
 }
 
-export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'video-call' | 'ring' | 'meet';
+export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'video-call' | 'ring' | 'meet' | 'rc-consent' | 'rc-indicator' | 'rc-pointer';
 
 /** Screens and windows offered for sharing (FR-COM-05), and whether the OS lets us capture them. */
 export interface ScreenSources {
@@ -347,4 +356,248 @@ export interface ActiveCall {
   title: string;
   /** Epoch ms the window said it joined. */
   since: number;
+}
+
+/*
+ * Drive sync (Phase 2; WorkSuite Drive FR-SYN-01…06, WF-15). A Drive folder
+ * kept in step with a folder on this computer.
+ */
+
+/** Which way changes travel. The server's `sync_roots.mode` uses the same words. */
+export type SyncMode = 'two_way' | 'upload_only' | 'download_only';
+
+export type SyncFolderState = 'idle' | 'scanning' | 'syncing' | 'paused' | 'waiting' | 'error';
+
+/** Something one pass could not do, and why — shown against the folder until a pass clears it. */
+export interface SyncIssue {
+  path: string;
+  kind: 'skipped' | 'conflict' | 'error';
+  message: string;
+  /** When it happened (conflicts are shown for a day, whatever passes follow). */
+  at?: string;
+}
+
+export interface SyncFolder {
+  id: string;
+  /** The Drive folder; null is the whole of My Drive. */
+  folderId: number | null;
+  folderName: string;
+  /** Where it is on this computer (display only: the renderer never hands a path back). */
+  localPath: string;
+  mode: SyncMode;
+  paused: boolean;
+  state: SyncFolderState;
+  /** What the pass under way still has to do. */
+  pending: { up: number; down: number };
+  /** What is on this computer and in step. */
+  files: number;
+  bytes: number;
+  lastSyncAt: string | null;
+  error: string | null;
+  issues: SyncIssue[];
+  /** Deletions held back until somebody confirms them (see DriveSync's deletion guard). */
+  heldDeletions: { side: 'computer' | 'drive'; count: number } | null;
+}
+
+export interface SyncActivity {
+  at: string;
+  folderId: string;
+  action: 'uploaded' | 'downloaded' | 'deleted-here' | 'deleted-in-drive' | 'moved' | 'conflict' | 'folder';
+  path: string;
+}
+
+export interface SyncStatus {
+  /** Policy and permission allow Drive sync on this computer. */
+  available: boolean;
+  /** Why not, in words for the person. */
+  reason: string | null;
+  state: 'off' | 'idle' | 'syncing' | 'paused' | 'offline' | 'error' | 'disconnected' | 'blocked';
+  message: string | null;
+  /** Every folder paused from this computer. */
+  paused: boolean;
+  folders: SyncFolder[];
+  activity: SyncActivity[];
+  lastSyncAt: string | null;
+  /** Where a new folder goes unless the person chooses elsewhere. */
+  defaultRoot: string;
+  /** Changes whenever what is on this computer changes; per-file answers are cached on it. */
+  revision: number;
+  /** This computer's id among the sync devices (the server's), once it has said hello. */
+  deviceId: number | null;
+}
+
+export type SyncItemState = 'synced' | 'pending' | 'online' | 'conflict' | 'skipped';
+
+/** Per-item answers for the rows on screen (the SYNC column, and "On this Mac" in Details). */
+export interface SyncLookup {
+  files: Record<string, { state: SyncItemState; path: string | null }>;
+  folders: Record<string, { state: SyncItemState; path: string | null; syncFolderId: string | null; root: boolean }>;
+}
+
+/** A sync device as `/api/sync/devices` lists it. */
+export interface SyncDevice {
+  id: number;
+  name: string;
+  platform: string;
+  osVersion: string | null;
+  appVersion: string | null;
+  status: 'active' | 'paused' | 'disconnected' | 'wipe_pending' | 'wiped' | string;
+  storageUsed: number;
+  fileCount: number;
+  lastSeenAt: string | null;
+  lastSyncAt: string | null;
+  wipeOrderedAt: string | null;
+}
+
+/** The sync policy the server applies (`SyncEngine::policy`). */
+export interface SyncPolicy {
+  max_devices: number;
+  max_file_bytes: number;
+  upload_kbps: number;
+  download_kbps: number;
+  blocked_types: string[];
+  ignored_patterns: string[];
+  allow_offline: boolean;
+  require_encryption: boolean;
+  block_size: number;
+}
+
+// ── Meet remote control on this computer (WS-MEET-ENH-01) ─────────────────
+
+/** Whether this computer can be controlled, and if not, why — in a sentence. */
+export interface RemoteControlSupport {
+  available: boolean;
+  method: 'sendinput' | 'cgevent' | 'xdotool' | null;
+  displayServer: 'win32' | 'quartz' | 'x11' | 'wayland';
+  reason: string | null;
+  /** macOS: Accessibility, which injecting needs. Elsewhere 'not_required'. */
+  accessibility: 'granted' | 'denied' | 'not_required';
+  /** The computer's policy lets it be controlled at all (the server still decides each time). */
+  policyAllows: boolean;
+}
+
+export interface RemoteControlRequestView {
+  id: number;
+  sessionId: number;
+  kind: 'request' | 'handover' | 'increase';
+  requester: string;
+  reason: string | null;
+  expiresIn: number;
+}
+
+export interface RemoteControlSessionView {
+  id: number;
+  status: 'CONTROL_APPROVED' | 'CONTROL_ACTIVE' | 'CONTROL_PAUSED';
+  controller: string;
+  /** The controller's connection in the meeting: the meeting window relays messages from it alone. */
+  controllerIdentity: string;
+  capsLabel: string;
+  pauseReason: string | null;
+  /** Why control is paused, as the indicator says it. */
+  pauseText: string | null;
+  /** When control became active here (ms), for the indicator's clock. */
+  since: number | null;
+  expiresAt: string | null;
+  /** Control is on but this computer is holding the controller back: the person here moved the mouse, or the shared window is not in front. */
+  waiting: 'local' | 'window' | null;
+  type: 'meeting' | 'support' | 'call';
+}
+
+export interface RemoteControlView {
+  support: RemoteControlSupport;
+  /** "Let people ask to control my screen" when sharing starts. */
+  allowRequests: boolean;
+  emergencyChord: string;
+  /** False when another app holds the emergency chord; the indicator's Stop still works. */
+  chordRegistered: boolean;
+  share: { uuid: string; shareId: number; label: string; kind: 'screen' | 'window'; allowRequests: boolean; paused: boolean } | null;
+  requests: RemoteControlRequestView[];
+  session: RemoteControlSessionView | null;
+  /** Files the controller offered this computer, waiting for an answer (RC06). */
+  offers: RemoteControlOffer[];
+  /** This computer may offer the controller files (the grant allows file transfer). */
+  canSendFiles: boolean;
+}
+
+export interface RemoteControlOffer {
+  id: number;
+  sessionId: number;
+  name: string;
+  size: number;
+  from: string;
+  executable: boolean;
+  scan: 'clean' | 'not_scanned' | 'infected';
+}
+
+/** What the consent window (RC03) shows for one request. */
+export interface RemoteControlConsent {
+  id: number;
+  kind: 'request' | 'handover' | 'increase';
+  requester: string;
+  reason: string | null;
+  expiresIn: number;
+  share: string;
+  /** For a handover: who has control now. */
+  current: string | null;
+  clipboard: 'off' | 'text' | 'text_files';
+  fileTransfer: boolean;
+  locked: boolean;
+}
+
+/**
+ * SalonMate's front desk, as the server shapes it (`Desk::shape`). The fields
+ * the desktop reads; the rest travels with it.
+ */
+export interface SalonDeskInfo {
+  id: number;
+  org_id: number;
+  location_id: number;
+  location: string | null;
+  name: string;
+  status: 'requested' | 'active' | 'revoked';
+  device_id: string | null;
+  register: { id: number; code: string; name: string; open: boolean; session_id: number | null; opened_at: string | null } | null;
+  approved_at: string | null;
+  revoked_at: string | null;
+  [field: string]: unknown;
+}
+
+/** Which desk this computer is on the signed-in server. The key never leaves the main process. */
+export interface SalonDeskPairing {
+  desk_id: number;
+  name: string;
+}
+
+/** What the pairing screen sends (D01). The device id and app version are added in the main process. */
+export interface SalonDeskPairInput {
+  location_id: number;
+  name: string;
+  pos_register_id?: number | null;
+}
+
+/** What a SalonMate receipt is printed on: an 80 mm or 58 mm roll, or A4. */
+export type SalonPaper = '80mm' | '58mm' | 'a4';
+
+/** This computer's printers for SalonMate, on one server (salon-print.ts). */
+export interface SalonPrintSettings {
+  receipt_printer: string | null;
+  a4_printer: string | null;
+  paper: '80mm' | '58mm';
+  copies: number;
+  /** Print the receipt as soon as a payment is taken. */
+  auto_print: boolean;
+  /** Straight to the printer, without the print dialog. */
+  silent: boolean;
+  /** 'printer': a drawer plugged into the receipt printer, opened by the ESC/POS pulse. */
+  drawer: 'off' | 'printer';
+  drawer_pin: 2 | 5;
+}
+
+export type SalonPrintPatch = Partial<SalonPrintSettings>;
+
+export interface SalonPrintOutcome {
+  ok: boolean;
+  printer: string | null;
+  silent: boolean;
+  message: string;
 }

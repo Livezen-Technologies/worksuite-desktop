@@ -1,4 +1,5 @@
-import { app, crashReporter, ipcMain, powerMonitor, screen, session, BrowserWindow, type WebContents } from 'electron';
+import { app, crashReporter, dialog, ipcMain, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents } from 'electron';
+import os from 'node:os';
 import { join, resolve } from 'node:path';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
 import { resolveWebLink } from '@shared/links';
@@ -14,7 +15,7 @@ import { initLog, logger } from './log';
 import { isDesktopError } from './errors';
 import { buildMenu } from './menu';
 import { paths } from './paths';
-import { SessionController } from './session';
+import { SessionController, syncRefusal } from './session';
 import { IpcRouter } from '../ipc/router';
 import { registerAppProtocol } from '../protocols/app-protocol';
 import { devOrigin, hardenSession, isTrustedShellUrl, openExternalSafely, registerPrivilegedSchemes, hardenWebContents, setExternalAllowList } from '../security/hardening';
@@ -24,8 +25,12 @@ import { AuthService } from '../services/auth';
 import { BootstrapService } from '../services/bootstrap';
 import { CallService } from '../services/calls';
 import { ScreenShare } from '../services/screen-share';
+import { createRemoteControl } from '../services/remote-control/host';
+import { DEFAULT_POLICY } from '../services/policy';
 import { Database } from '../services/db';
 import { archName, DeviceService, platformName } from '../services/device';
+import { SalonDesk } from '../services/salon-desk';
+import { SalonPrint } from '../services/salon-print';
 import { DiagnosticsService } from '../services/diagnostics';
 import { readEnterpriseConfig } from '../services/enterprise';
 import { HttpClient, type FetchLike } from '../services/http';
@@ -36,6 +41,7 @@ import { OfflineQueue } from '../services/offline-queue';
 import { RealtimeService } from '../services/realtime';
 import { SecureStore } from '../services/secure-store';
 import { SettingsService } from '../services/settings';
+import { DriveSync } from '../services/sync/engine';
 import { ServiceSupervisor } from '../services/supervisor';
 import { TransferManager } from '../services/transfers';
 import { Vault } from '../services/vault';
@@ -192,6 +198,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   });
 
   const device: DeviceService = new DeviceService(db, secrets, http);
+  const salonDesk = new SalonDesk(secrets, http, () => auth.getServer()?.origin ?? null);
+  const salonPrint = new SalonPrint({ config: db, http, origin: () => auth.getServer()?.origin ?? null });
   const bootstrap = new BootstrapService(db, getVault, http, POLICY_PUBLIC_KEY);
   const cache = new OfflineCache(db, getVault);
   const audit = new AuditService(db, getVault, http, () => auth.getServer()?.api === 'desktop-v1');
@@ -202,6 +210,37 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const calls = new CallService(windows, http, () => sessionCtl.isReady() && !lock.isLocked());
   const screenShare = new ScreenShare(isTrustedShellUrl);
   screenShare.install(session.defaultSession);
+  // Meet remote control on this computer (WS-MEET-ENH-01): the share, consent, grant and input live here.
+  const remoteControl = createRemoteControl({
+    db,
+    http,
+    windows,
+    screenShare,
+    get transfers() {
+      return transfers;
+    },
+    deviceId: () => {
+      const id = Number(device.current()?.id);
+      return Number.isInteger(id) && id > 0 ? id : null;
+    },
+    policy: () => sessionCtl?.current()?.policy ?? DEFAULT_POLICY,
+    pinnedKey: POLICY_PUBLIC_KEY,
+    broadcast: (view) => {
+      broadcast('rc:changed', view);
+      tray.update({ remoteControl: view.session ? { controller: view.session.controller, paused: view.session.status === 'CONTROL_PAUSED' } : null });
+    },
+    toast: (text) => broadcast('toast', { kind: 'info', text }),
+  });
+  const reportCapabilities = (): void => {
+    const screenPermission = process.platform === 'darwin' ? systemPreferences.getMediaAccessStatus('screen') : 'not_required';
+    void remoteControl.reportCapabilities({
+      platform: platformName() as 'windows' | 'macos' | 'linux',
+      osVersion: `${process.getSystemVersion?.() ?? ''}`,
+      desktopVersion: app.getVersion(),
+      screenPermission,
+      displays: screen.getAllDisplays().length,
+    });
+  };
   calls.poll(() => realtime.getState() === 'connected');
 
   const realtime = new RealtimeService(http, () => auth.getServer()?.origin ?? null, allowInsecure);
@@ -211,30 +250,32 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const queue = new OfflineQueue(db, getVault, http, () => sessionCtl.capabilities().offlineQueue);
 
   // Hashing runs in a supervised utility process (FR-DIAG-07).
-  const hashWaiters = new Map<string, { resolve: (v: { sha256: string; bytes: number }) => void; reject: (e: Error) => void }>();
+  type Hashed = { sha256: string; bytes: number; blocks?: string[] };
+  const hashWaiters = new Map<string, { resolve: (v: Hashed) => void; reject: (e: Error) => void }>();
   supervisor.onHealth = () => emitStatus();
   supervisor.start({
     name: 'hash-worker',
     entry: join(__dirname, 'hash-worker.js'),
     onMessage: (msg) => {
-      const m = msg as { type?: string; id?: string; ok?: boolean; sha256?: string; bytes?: number; error?: string };
+      const m = msg as { type?: string; id?: string; ok?: boolean; sha256?: string; bytes?: number; blocks?: string[]; error?: string };
       if (m.type !== 'hash' || !m.id) return;
       const w = hashWaiters.get(m.id);
       if (!w) return;
       hashWaiters.delete(m.id);
-      if (m.ok && m.sha256) w.resolve({ sha256: m.sha256, bytes: m.bytes ?? 0 });
+      if (m.ok && m.sha256) w.resolve({ sha256: m.sha256, bytes: m.bytes ?? 0, blocks: m.blocks });
       else w.reject(new Error(m.error ?? 'hashing failed'));
     },
   });
-  const hash = (path: string) =>
-    new Promise<{ sha256: string; bytes: number }>((resolveHash, reject) => {
+  const hashWith = (type: 'hash' | 'blocks', path: string) =>
+    new Promise<Hashed>((resolveHash, reject) => {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       hashWaiters.set(id, { resolve: resolveHash, reject });
-      if (!supervisor.post('hash-worker', { type: 'hash', id, path })) {
+      if (!supervisor.post('hash-worker', { type, id, path })) {
         hashWaiters.delete(id);
         reject(new Error('The hashing helper is not running.'));
       }
     });
+  const hash = (path: string) => hashWith('hash', path);
 
   const transfers = new TransferManager({
     db,
@@ -246,6 +287,36 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     canOpenFiles: () => sessionCtl.hasPermission('desktop.files.open_external'),
     audit: (action, details) => audit.record(sessionCtl.userId(), action, details),
   });
+
+  // Drive sync (Phase 2): chosen Drive folders kept in step with folders here.
+  const syncAllowed = (): { ok: boolean; reason: string | null } => {
+    const b = sessionCtl.current();
+    if (!b || !sessionCtl.isReady()) return { ok: false, reason: 'Sign in to WorkSuite to sync Drive folders.' };
+    const why = syncRefusal(b.policy, device.getTrust(), device.getClassification());
+    if (why) return { ok: false, reason: why };
+    if (!sessionCtl.hasPermission('desktop.files.sync')) return { ok: false, reason: 'Drive sync on the desktop is not part of your role.' };
+    return { ok: true, reason: null };
+  };
+  const sync = new DriveSync({
+    db,
+    http,
+    platform: process.platform,
+    userId: () => sessionCtl.userId(),
+    userName: () => sessionCtl.get().user?.name ?? '',
+    deviceToken: () => device.deviceToken(),
+    allowed: syncAllowed,
+    removableAllowed: () => sessionCtl.current()?.policy.removable_media_sync === true,
+    hash,
+    hashBlocks: async (path) => {
+      const h = await hashWith('blocks', path);
+      return { sha256: h.sha256, bytes: h.bytes, blocks: h.blocks ?? [] };
+    },
+    trash: (path) => shell.trashItem(path),
+    info: () => ({ app_version: `WorkSuite Desktop ${app.getVersion()}`, os_version: `${os.type()} ${os.release()}`, hostname: os.hostname() }),
+    audit: (action, details) => audit.record(sessionCtl.userId(), action, details),
+    protectedPaths: () => [p.userData],
+  });
+  sync.onChanged = (s) => broadcast('sync:changed', s);
 
   let activeCall = false;
   // Updates wait while a call is on (FR-UPD); the call windows say when.
@@ -424,6 +495,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   realtime.onEvent = (e) => {
     notifications.handleRealtime(e);
     calls.handle(e);
+    remoteControl.onRealtime(e as { type?: string; meeting?: string });
     broadcast('realtime:event', e);
     if (e.type === 'profile.updated') void sessionCtl.refreshBootstrap().catch(() => undefined);
   };
@@ -516,6 +588,21 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   // ── the tray ───────────────────────────────────────────────────────────
   const quit = (): void => {
+    // RC15: someone controls this computer or it is being shared — say what quitting ends first.
+    if (remoteControl.isLive() || remoteControl.isSharing()) {
+      const live = remoteControl.view().session;
+      const choice = dialog.showMessageBoxSync({
+        type: 'warning',
+        buttons: [live ? 'Stop control and quit' : 'Stop sharing and quit', 'Cancel'],
+        defaultId: 1,
+        cancelId: 1,
+        title: 'Quit WorkSuite?',
+        message: live ? `${live.controller} is controlling this computer.` : 'You are sharing your screen in a meeting.',
+        detail: live ? 'Quitting stops remote control and screen sharing, and leaves the meeting.' : 'Quitting stops sharing and leaves the meeting.',
+      });
+      if (choice !== 0) return;
+      void remoteControl.shutdown('stopped');
+    }
     windows.quitting = true;
     // Leave any call first, so the other side is not left talking to nobody.
     void Promise.race([calls.endAll(), new Promise((r) => setTimeout(r, 2_000))]).finally(() => app.quit());
@@ -536,6 +623,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
     quit,
     lock: () => lock.lock('manual'),
+    pauseRemoteControl: () => {
+      const s = remoteControl.view().session;
+      if (s) void remoteControl.pause(s.id, 'sharer');
+    },
+    stopRemoteControl: () => void remoteControl.stopAll('stopped'),
   });
 
   // ── the session ────────────────────────────────────────────────────────
@@ -547,8 +639,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     device.start();
     device.extras = () => {
       const c = transfers.activeCounts();
-      return { pendingUp: queue.pendingCount(uid) + c.uploads, pendingDown: c.downloads, lastError: null };
+      const s = sync.health();
+      return { pendingUp: queue.pendingCount(uid) + c.uploads + s.pendingUp, pendingDown: c.downloads + s.pendingDown, lastError: s.lastError };
     };
+    sync.start(uid);
     transfers.recover();
     void queue.replay(uid);
     void audit.flush();
@@ -559,16 +653,20 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void heartbeatPresence();
     presenceTimer = setInterval(() => void heartbeatPresence(), 30_000);
     presenceTimer.unref?.();
+    // What this computer can do for Meet remote control (WF-RC-08), once the device is known.
+    setTimeout(reportCapabilities, 5_000).unref?.();
     // FR-OFF-06: prune mail bodies beyond the cache window.
     const days = settings.effective().mailCacheDays;
     if (days > 0) cache.pruneModuleOlderThan('mail', days);
     emitStatus();
   };
   const stopServices = (): void => {
+    void remoteControl.shutdown('logout');
     realtime.stop();
     notifications.stop();
     device.stop();
     transfers.stopAll();
+    sync.stop();
     if (attendanceTimer) clearInterval(attendanceTimer);
     attendanceTimer = null;
     stopPresence();
@@ -590,6 +688,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         queue.wipeUser(uid, includeDrafts);
         transfers.wipe(uid);
       }
+      // What Drive sync put on this computer counts as offline files (§11.2 wipe_on_revoke).
+      if (scope === 'cache+offline_files') void sync.wipe(uid, false);
+      // A remote wipe, or signing out with "remove WorkSuite's data", forgets
+      // the salon desk this computer was, and its printers; a plain sign-out keeps them.
+      if (includeDrafts) {
+        salonDesk.forgetAll();
+        salonPrint.forgetAll();
+      }
       log.info('local data removed', { scope });
     },
     changed: (s) => {
@@ -602,6 +708,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
     bootstrapChanged: (b) => {
       if (b) settings.setPolicy(b.policy);
+      // Policy or trust may have turned sync on or off.
+      sync.kick('policy');
       // Windows opened from now on allow the announced media server (calls
       // and Meet each open their own window, so none needs reloading).
       if (b?.source === 'desktop-v1' && b.mediaServers && JSON.stringify(b.mediaServers) !== JSON.stringify(mediaServers())) {
@@ -609,6 +717,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         log.info('media servers', { count: b.mediaServers.length });
       }
       broadcast('session:changed', b);
+    },
+    syncDisabled: (reason) => {
+      try {
+        sync.setPaused(null, true);
+      } catch {
+        /* not signed in: nothing is syncing */
+      }
+      broadcast('toast', { kind: 'warning', text: reason });
     },
     minimumVersion: (v) => updater.setMinimum(v),
     requireUpdate: (v) => updater.requireUpdate(v),
@@ -637,6 +753,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void audit.flush();
     void calls.check();
     device.poke();
+    sync.kick('reconnected');
     broadcast('realtime:resync');
   }
 
@@ -702,6 +819,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         return { enabled: caps.offlineCache, maxBytes: (pol?.offline_storage_max_mb ?? 2048) * 1024 * 1024 };
       },
       mailBodiesCached: () => settings.effective().mailCacheDays !== 0,
+      // SalonMate's desk calls carry the key this computer was paired with.
+      extraHeaders: (path) => {
+        const key = salonDesk.keyFor(path);
+        return key ? { 'X-Salon-Desk-Key': key } : null;
+      },
     }),
     // Read on each page load: the server chosen, and the media servers it announced.
     () => ({ server: auth.getServer()?.origin ?? null, media: mediaServers() }),
@@ -709,6 +831,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   const pasteGestures = new Map<number, number>();
   app.on('web-contents-created', (_e, contents: WebContents) => {
+    // A meeting window that goes away takes its share, and any control of it, with it.
+    const id = contents.id;
+    contents.once('destroyed', () => {
+      remoteControl.windowGone(id);
+      screenShare.forget(id);
+    });
     contents.on('before-input-event', (_ev, input) => {
       if (input.type === 'keyDown' && (input.control || input.meta) && input.key.toLowerCase() === 'v') pasteGestures.set(contents.id, Date.now());
     });
@@ -749,6 +877,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     db,
     vault: getVault,
     secrets,
+    salonDesk,
+    salonPrint,
     settings,
     http,
     auth,
@@ -760,6 +890,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     cache,
     queue,
     transfers,
+    sync,
     supervisor,
     lock,
     updater,
@@ -768,6 +899,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     windows,
     calls,
     screenShare,
+    remoteControl,
     tray,
     status: snapshot,
     setActiveCall: (a) => {
@@ -822,6 +954,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     statusTimer = null;
     calls.stop();
     transfers.stopAll();
+    sync.stop();
     supervisor.stopAll();
     realtime.stop();
     updater.stop();
@@ -830,8 +963,13 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     db.close();
     markCleanExit(p.runningMarker);
   });
+  // The screen locked, sleep, another user: control pauses on this computer (§E.6).
+  powerMonitor.on('lock-screen', () => remoteControl.onSystem('lock-screen'));
+  powerMonitor.on('suspend', () => remoteControl.onSystem('suspend'));
+  powerMonitor.on('user-did-resign-active', () => remoteControl.onSystem('user-did-resign-active'));
   powerMonitor.on('resume', () => {
     device.poke();
+    sync.kick('resume');
     realtime.kick();
     const uid = sessionCtl.userId();
     if (uid) void queue.replay(uid);

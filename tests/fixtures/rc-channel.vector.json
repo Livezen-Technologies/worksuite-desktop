@@ -1,0 +1,18 @@
+{
+    "key_hex": "0f1e2d3c4b5a69780f1e2d3c4b5a69780f1e2d3c4b5a69780f1e2d3c4b5a6978",
+    "iv_hex": "00112233445566778899aabb",
+    "grant_id": "6f1c7e2a-1b3d-4c5e-8f90-a1b2c3d4e5f6",
+    "seq": 42,
+    "type": "ptr.move",
+    "lease_until": 1790000000,
+    "payload_json": "{\"x\":0.25,\"y\":0.5,\"display\":1}",
+    "envelope": {
+        "g": "6f1c7e2a-1b3d-4c5e-8f90-a1b2c3d4e5f6",
+        "s": 42,
+        "t": "ptr.move",
+        "l": 1790000000,
+        "iv": "ABEiM0RVZneImaq7",
+        "ct": "70mt6BvM0RBqYmzpvh1gBi97RockfOsQPM7tF7FmGwLvzllDupulWWSZAZeLMg==",
+        "m": "jmc22a1vIbZ59SFRx4DeN2I4NvHcDSXe9lSCQHII8fs="
+    }
+}

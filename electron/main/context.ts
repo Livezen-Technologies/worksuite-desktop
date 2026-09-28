@@ -2,6 +2,7 @@ import type { AuditService } from '../services/audit';
 import type { AuthService } from '../services/auth';
 import type { CallService } from '../services/calls';
 import type { ScreenShare } from '../services/screen-share';
+import type { RemoteControlService } from '../services/remote-control/service';
 import type { BootstrapService } from '../services/bootstrap';
 import type { Database } from '../services/db';
 import type { DeviceService } from '../services/device';
@@ -15,7 +16,10 @@ import type { SecureStore } from '../services/secure-store';
 import type { SettingsService } from '../services/settings';
 import type { ServiceSupervisor } from '../services/supervisor';
 import type { TransferManager } from '../services/transfers';
+import type { DriveSync } from '../services/sync/engine';
 import type { RealtimeService } from '../services/realtime';
+import type { SalonDesk } from '../services/salon-desk';
+import type { SalonPrint } from '../services/salon-print';
 import type { TrayService } from '../tray/tray';
 import type { UpdaterService } from '../updater/updater';
 
@@ -38,6 +42,8 @@ export interface AppContext {
   db: Database;
   vault: () => Vault;
   secrets: SecureStore;
+  salonDesk: SalonDesk;
+  salonPrint: SalonPrint;
   settings: SettingsService;
   http: HttpClient;
   auth: AuthService;
@@ -49,6 +55,7 @@ export interface AppContext {
   cache: OfflineCache;
   queue: OfflineQueue;
   transfers: TransferManager;
+  sync: DriveSync;
   supervisor: ServiceSupervisor;
   lock: LockService;
   updater: UpdaterService;
@@ -57,6 +64,7 @@ export interface AppContext {
   windows: WindowManager;
   calls: CallService;
   screenShare: ScreenShare;
+  remoteControl: RemoteControlService;
   tray: TrayService;
   status: () => StatusSnapshot;
   setActiveCall: (active: boolean) => void;

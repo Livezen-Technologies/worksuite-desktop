@@ -148,6 +148,21 @@ export class DeviceService {
     return this.trust;
   }
 
+  getClassification(): DeviceClassification {
+    return this.classification;
+  }
+
+  /**
+   * A fresh registration, and with it a fresh device credential: for a
+   * computer that was signed out of Drive sync from another device, whose
+   * stored credential the server no longer accepts.
+   */
+  async reenrol(userId: string, api: ServerApi): Promise<DeviceRecord> {
+    this.secrets.delete(this.key(userId));
+    this.record = null;
+    return this.register(userId, api);
+  }
+
   load(userId: string): DeviceRecord | null {
     this.userId = userId;
     const raw = this.secrets.get(this.key(userId));

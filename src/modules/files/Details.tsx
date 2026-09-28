@@ -10,6 +10,7 @@ import { IMAGE_EDIT_EXTS, can, extOf, openWay, type DriveFile, type DriveFolder,
 import { fileMenu, folderMenu, useDrive, type Item } from './ctx';
 import { PopMenu, below, type MenuItem } from './Menu';
 import { FolderIcon, Tile } from './Thumb';
+import { SYNC_WORDS, hereLabel, revealLabel, useSyncAvailable, useSyncLookup } from './sync';
 
 type Tab = 'details' | 'activity' | 'comments' | 'versions' | 'access';
 
@@ -88,6 +89,51 @@ export function Details({ item, list, onClose, tab: firstTab }: { item: Item; li
   );
 }
 
+/**
+ * "On this Mac" and "Local path", with Show in Finder — whether Drive sync
+ * keeps this file or folder on this computer (the Drive designs' Details).
+ */
+function HereFacts({ kind, id, context, folder }: { kind: 'file' | 'folder'; id: number; context: number | null; folder?: DriveFolder }) {
+  const d = useDrive();
+  const on = useSyncAvailable();
+  const look = useSyncLookup(on && kind === 'file' ? [id] : [], on && kind === 'folder' ? [id] : [], context);
+  if (!on) return null;
+  const hit = kind === 'file' ? look.files[String(id)] : look.folders[String(id)];
+  const state = hit?.state ?? 'online';
+  const tone = state === 'synced' ? 'text-success' : state === 'conflict' ? 'text-warning' : state === 'pending' ? 'text-primary' : 'text-ink-2';
+  const icon = state === 'synced' ? 'check' : state === 'conflict' ? 'warning' : state === 'pending' ? 'refresh' : 'cloud';
+  const mayKeep = kind === 'folder' && state === 'online' && folder && folder.access?.owner !== false && !folder.is_locked;
+  const reveal = () =>
+    void call('sync:reveal', kind === 'file' ? { fileId: id } : { folderId: id }).catch((e) => toast('error', errorMessage(e)));
+  return (
+    <>
+      <div className="flex gap-2.5">
+        <span className="w-24 shrink-0 text-ink-3">{hereLabel()}</span>
+        <span className={cx('flex min-w-0 items-center gap-1.5 font-semibold', tone)}>
+          <Icon name={icon} size={14} className="shrink-0" />
+          {SYNC_WORDS[state]}
+        </span>
+      </div>
+      {hit?.path ? (
+        <div className="flex gap-2.5">
+          <span className="w-24 shrink-0 text-ink-3">Local path</span>
+          <span className="min-w-0 font-mono text-[12px] break-all text-ink">{hit.path}</span>
+        </div>
+      ) : null}
+      {state === 'synced' || state === 'conflict' ? (
+        <Button icon="folder-open" onClick={reveal} className="w-full">
+          {revealLabel()}
+        </Button>
+      ) : null}
+      {mayKeep ? (
+        <Button icon="laptop" onClick={() => d.syncFolder(folder)} className="w-full">
+          Keep on this computer…
+        </Button>
+      ) : null}
+    </>
+  );
+}
+
 function Fact({ k, v }: { k: string; v: string }) {
   return (
     <div className="flex gap-2.5">
@@ -124,6 +170,7 @@ function FileFacts({ f }: { f: DriveFile }) {
       {f.version ? <Fact k="Version" v={String(f.version)} /> : null}
       {f.downloads ? <Fact k="Downloads" v={f.downloads.toLocaleString()} /> : null}
       <Fact k="Your access" v={f.access?.owner ? 'Owner' : (LEVEL[f.access?.level ?? ''] ?? '—')} />
+      <HereFacts kind="file" id={f.id} context={f.folder_id} />
       <label className="flex flex-col gap-1 text-ink-3">
         Description
         <textarea value={desc} disabled={!editable} maxLength={1000} onChange={(e) => setDesc(e.target.value)} onBlur={() => void save()} aria-label="Description" placeholder={editable ? 'What is this file?' : 'No description'} className="h-[52px] resize-none rounded-[8px] border border-line bg-surface p-2 text-ink outline-none focus:border-primary disabled:bg-ground" />
@@ -154,6 +201,7 @@ function FolderFacts({ f }: { f: DriveFolder }) {
       <Fact k="Owner" v={f.access?.owner ? 'You' : (f.owner_name ?? '—')} />
       <Fact k="Password lock" v={f.is_locked ? 'On' : 'Off'} />
       <Fact k="Your access" v={f.access?.owner ? 'Owner' : (LEVEL[f.access?.level ?? ''] ?? '—')} />
+      <HereFacts kind="folder" id={f.id} context={f.parent_id} folder={f} />
       <label className="flex flex-col gap-1 text-ink-3">
         Description
         <textarea value={desc} disabled={!editable} maxLength={400} onChange={(e) => setDesc(e.target.value)} onBlur={() => void save()} aria-label="Description" placeholder={editable ? 'What is kept here?' : 'No description'} className="h-[52px] resize-none rounded-[8px] border border-line bg-surface p-2 text-ink outline-none focus:border-primary disabled:bg-ground" />

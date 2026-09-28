@@ -4,6 +4,7 @@ import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { GROUPS, type Counts, type TreeNode, type View } from './api';
 import { PopMenu, below, type MenuItem } from './Menu';
+import { useSync, useSyncAvailable } from './sync';
 
 export type Place = { view: View; folder: number | null };
 
@@ -122,6 +123,9 @@ export function Rail({
     });
 
   const pct = quota ? Math.min(100, Math.round((used / quota) * 100)) : 0;
+  const sync = useSync();
+  const syncOn = useSyncAvailable();
+  const syncLine = syncOn && sync?.folders.length ? syncSummary(sync) : null;
 
   return (
     <nav aria-label="Drive" className="flex w-[240px] shrink-0 flex-col border-r border-line bg-surface text-[13px]">
@@ -173,9 +177,10 @@ export function Rail({
             {item('trash', 'Recycle bin', 'trash', counts?.trash)}
           </>
         ) : null}
-        {head('set', 'Settings', canPartners ? 3 : 2)}
+        {head('set', 'Settings', (canPartners ? 3 : 2) + (syncOn ? 1 : 0))}
         {!shut.set ? (
           <>
+            {syncOn ? item('devices', 'Sync devices', 'laptop') : null}
             {item('links', 'Secure links', 'link')}
             {item('notifications', 'Drive notifications', 'bell')}
             {canPartners ? item('companies', 'Sharing between companies', 'building') : null}
@@ -193,8 +198,26 @@ export function Rail({
             <span className={cx('h-1.5 rounded-[3px]', pct > 90 ? 'bg-danger' : 'bg-primary')} style={{ width: `${pct}%` }} />
           </div>
         ) : null}
+        {syncLine ? (
+          <button type="button" onClick={() => onPlace({ view: 'devices', folder: null })} className="flex items-center gap-1.5 text-left text-[11.5px] text-ink-2 hover:text-ink">
+            <Icon name={syncLine.icon} size={13} className={cx('shrink-0', syncLine.tone)} />
+            <span className="min-w-0 flex-1 truncate">{syncLine.text}</span>
+          </button>
+        ) : null}
       </div>
       {menu ? <PopMenu at={menu} items={newItems} label="New" width={300} onClose={() => setMenu(null)} head={<div className="px-2.5 py-2 text-[11px] font-bold tracking-[0.6px] text-ink-2">NEW</div>} /> : null}
     </nav>
   );
+}
+
+/** The line under the storage meter: what sync on this computer is doing. */
+function syncSummary(s: NonNullable<ReturnType<typeof useSync>>): { icon: string; tone: string; text: string } {
+  const pending = s.folders.reduce((n, f) => n + f.pending.up + f.pending.down, 0);
+  const n = s.folders.length;
+  const folders = `${n} ${n === 1 ? 'folder' : 'folders'}`;
+  if (s.state === 'syncing') return { icon: 'refresh', tone: 'text-primary', text: pending ? `Syncing ${pending.toLocaleString()} ${pending === 1 ? 'item' : 'items'}` : 'Syncing…' };
+  if (s.state === 'paused') return { icon: 'pause', tone: 'text-ink-3', text: `Sync paused · ${folders}` };
+  if (s.state === 'offline') return { icon: 'cloud-off', tone: 'text-ink-3', text: 'Waiting for the server' };
+  if (s.state === 'error' || s.state === 'disconnected' || s.state === 'blocked' || s.folders.some((f) => f.heldDeletions)) return { icon: 'warning', tone: 'text-warning', text: 'Sync needs attention' };
+  return { icon: 'check-circle', tone: 'text-success', text: `Up to date · ${folders} on this computer` };
 }

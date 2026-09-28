@@ -71,6 +71,8 @@ module.exports = {
     extendInfo: {
       NSCameraUsageDescription: 'WorkSuite uses the camera only in video calls and meetings you join.',
       NSMicrophoneUsageDescription: 'WorkSuite uses the microphone only during calls and voice notes you record.',
+      // Remote control types the controller's text through System Events, only while you let them control this Mac.
+      NSAppleEventsUsageDescription: 'WorkSuite types text for someone you let control this Mac, and only while control lasts.',
       LSMultipleInstancesProhibited: true,
     },
   },
@@ -121,7 +123,8 @@ module.exports = {
     desktop: { entry: { StartupWMClass: 'WorkSuite' } },
     artifactName: 'WorkSuite-${version}-${arch}.${ext}',
   },
-  deb: { depends: ['libsecret-1-0', 'libnotify4', 'libxss1', 'libnss3'] },
+  // Remote control on X11: xdotool injects; xwininfo (x11-utils) tells a shared window from one covering it.
+  deb: { depends: ['libsecret-1-0', 'libnotify4', 'libxss1', 'libnss3'], recommends: ['xdotool', 'x11-utils'] },
   rpm: { depends: ['libsecret', 'libnotify', 'libXScrnSaver', 'nss'] },
 
   // Releases are published by the pipeline with a signed manifest

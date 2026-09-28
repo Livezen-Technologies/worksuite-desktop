@@ -17,6 +17,8 @@ import type { Place } from './Rail';
 import { FileIcon, FolderIcon, Tile } from './Thumb';
 import { UnlockPrompt } from './Dialogs';
 import { Select } from '../../components/Select';
+import { SYNC_WORDS, useSyncAvailable, useSyncLookup } from './sync';
+import type { SyncItemState } from '@shared/types';
 
 type Layout = 'list' | 'grid';
 const LAYOUT_KEY = 'files.layout';
@@ -139,6 +141,10 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
   const files = pages.flatMap((p) => p.files);
   const folders = first?.folders ?? [];
   const items: Item[] = [...folders.map((f) => ({ type: 'folder' as const, f })), ...files.map((f) => ({ type: 'file' as const, f }))];
+  // The SYNC column: whether each row is on this computer (Drive sync).
+  const syncCol = useSyncAvailable();
+  const here = useSyncLookup(syncCol ? files.map((f) => f.id) : [], syncCol ? folders.map((f) => f.id) : [], folderView ? place.folder : null);
+  const cols = syncCol ? 'grid-cols-[36px_minmax(0,2.6fr)_minmax(0,1.3fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_52px_40px]' : 'grid-cols-[36px_minmax(0,2.6fr)_minmax(0,1.3fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_40px]';
   const byKey = new Map(items.map((i) => [keyOf(i), i] as const));
   const chosen = [...selected].map((k) => byKey.get(k)).filter((x): x is Item => !!x);
   const chosenFiles = chosen.filter((i): i is Extract<Item, { type: 'file' }> => i.type === 'file').map((i) => i.f);
@@ -402,7 +408,7 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
           ) : null}
           {items.length && layout === 'list' ? (
             <div role="table" aria-label="Files" className="text-[13px]">
-              <div role="row" className="sticky top-0 z-[1] grid grid-cols-[36px_minmax(0,2.6fr)_minmax(0,1.3fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_40px] items-center border-y border-line bg-ground px-6 py-[7px] text-[11px] font-bold tracking-[0.4px] text-ink-2">
+              <div role="row" className={cx('sticky top-0 z-[1] grid items-center border-y border-line bg-ground px-6 py-[7px] text-[11px] font-bold tracking-[0.4px] text-ink-2', cols)}>
                 <span>
                   <input type="checkbox" aria-label="Select all" checked={items.length > 0 && selected.size === items.length} onChange={(e) => setSelected(e.target.checked ? new Set(items_()) : new Set())} className="h-4 w-4 accent-[var(--color-primary)]" />
                 </span>
@@ -410,6 +416,7 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
                 <span role="columnheader">{folderView ? 'OWNER' : 'LOCATION'}</span>
                 <span role="columnheader">MODIFIED</span>
                 <span role="columnheader">SIZE</span>
+                {syncCol ? <span role="columnheader">SYNC</span> : null}
                 <span />
               </div>
               {items.map((item) => {
@@ -428,7 +435,7 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
                     onDoubleClick={() => d.open(item, files)}
                     onContextMenu={(e) => (e.preventDefault(), e.stopPropagation(), openMenu(item, { x: e.clientX, y: e.clientY }))}
                     {...(isFolder ? dropOn(item.f) : {})}
-                    className={cx('grid cursor-default grid-cols-[36px_minmax(0,2.6fr)_minmax(0,1.3fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_40px] items-center border-b border-line/70 px-6 py-1.5 select-none', on ? 'bg-selection' : 'hover:bg-ground', isFolder && dragOver === item.f.id && 'outline-2 -outline-offset-2 outline-primary')}
+                    className={cx('grid cursor-default items-center border-b border-line/70 px-6 py-1.5 select-none', cols, on ? 'bg-selection' : 'hover:bg-ground', isFolder && dragOver === item.f.id && 'outline-2 -outline-offset-2 outline-primary')}
                   >
                     <span onClick={(e) => e.stopPropagation()}>
                       <input type="checkbox" aria-label={`Select ${item.f.name}`} checked={on} onChange={() => toggle(item)} className="h-4 w-4 accent-[var(--color-primary)]" />
@@ -442,6 +449,7 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
                     <span role="cell" className="truncate pr-2 text-ink-2">{isFolder ? (item.f.owner_name ?? (item.f.access?.owner ? 'Me' : '—')) : folderView ? owner(item.f) : item.f.folder_path || item.f.folder_name}</span>
                     <span role="cell" className="text-ink-2">{isFolder ? `${item.f.file_count.toLocaleString()} ${item.f.file_count === 1 ? 'file' : 'files'}` : listStamp(item.f.updated_at ?? item.f.created_at)}</span>
                     <span role="cell" className="font-mono text-[12px] text-ink-2">{isFolder ? (item.f.total_size ? bytes(item.f.total_size) : '—') : bytes(item.f.size)}</span>
+                    {syncCol ? <SyncMark state={(isFolder ? here.folders[String(item.f.id)] : here.files[String(item.f.id)])?.state ?? null} /> : null}
                     <button type="button" aria-label={`More actions for ${item.f.name}`} onClick={(e) => (e.stopPropagation(), openMenu(item, below(e.currentTarget, 'right')))} className="flex h-[30px] w-[30px] items-center justify-center rounded-[7px] text-[16px] font-bold text-ink-2 hover:bg-subtle">⋯</button>
                   </div>
                 );
@@ -541,5 +549,24 @@ function SelectionBar({ items, size, onClear }: { items: Item[]; size: number; o
       <span className="flex-1" />
       <button type="button" onClick={onClear} className="h-[30px] rounded-[7px] border border-[#33477E] px-2.5 text-white hover:bg-white/10">Clear</button>
     </div>
+  );
+}
+
+const SYNC_MARKS: Record<SyncItemState, { icon: string; tone: string }> = {
+  synced: { icon: 'check', tone: 'text-success' },
+  pending: { icon: 'refresh', tone: 'text-primary animate-spin-slow' },
+  online: { icon: 'cloud', tone: 'text-ink-3' },
+  conflict: { icon: 'warning', tone: 'text-warning' },
+  skipped: { icon: 'cloud-off', tone: 'text-ink-3' },
+};
+
+/** One row's SYNC cell: on this computer, on its way, or online only. */
+function SyncMark({ state }: { state: SyncItemState | null }) {
+  if (!state) return <span role="cell" />;
+  const m = SYNC_MARKS[state];
+  return (
+    <span role="cell" title={SYNC_WORDS[state]} className="flex">
+      <Icon name={m.icon} size={16} label={SYNC_WORDS[state]} className={m.tone} strokeWidth={state === 'synced' ? 2.4 : 1.8} />
+    </span>
   );
 }

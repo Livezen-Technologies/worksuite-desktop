@@ -5,6 +5,58 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## Unreleased — Drive sync: keep Drive folders on this computer
+
+Choose Drive folders in **Files → Sync devices** (or **Keep on this computer…**
+on a folder) and they are kept in step with a folder here —
+`~/WorkSuite Drive/<folder>` unless you pick another. Work on the files in any
+app, offline too; changes go both ways, and only what changed travels.
+
+**Added**
+
+- **Sync devices**, as in the Drive designs: your devices with their state
+  ("Up to date · 2 min ago", "Syncing 14 items", "Not seen for 42 days"),
+  **Manage** (rename, wipe its synced copy, remove) and **Sign out**; the
+  company's sync policy; and **On this Mac** — the folders kept here, how each
+  syncs (two-way, upload only, download only), what it is doing, anything it
+  could not sync and why, **Show in Finder**, **Pause**, **Stop syncing**
+  (nothing is deleted), and recent activity.
+- A **SYNC** column in file lists: ✓ on this computer, ☁ online only, ↻ on its
+  way, ⚠ both copies kept.
+- **On this Mac** and **Local path** in a file's or folder's Details, with
+  **Show in Finder**; **Keep on this computer…** for a folder that is not.
+- The status bar says what sync is doing, and the Drive rail shows it under
+  the storage meter.
+
+**How it behaves**
+
+- Renames and moves, on either side, move the file — it keeps its versions,
+  comments, shares and links.
+- A file changed on both sides is kept twice: Drive's under its name, this
+  computer's beside it as "<name> (<you>'s conflicted copy <date>)", which then
+  goes up to Drive too. The folder shows it for a day.
+- Deletions go to a recycle bin: Drive's, or this computer's Trash. More than
+  25 files at once, or more than 30% of a folder (a disk not plugged in looks
+  the same), waits for you:
+  delete them there too, or bring them back.
+- A folder missing on either side stops that folder's sync; nothing is
+  deleted anywhere because of it.
+- A file still being saved is left until it settles. Names this computer
+  cannot hold, files the policy refuses, password-locked folders and links
+  are listed with the reason, and left alone.
+- An administrator's **Disable sync**, a remote wipe, and sign-out with
+  "remove data" are obeyed: a wipe removes the files sync put here and
+  nothing else.
+
+**Server gaps found** (no server change in this release)
+
+- The Drive SRS lists "deletions are events" (FR-SYN-02) as built, but
+  trashing a file records no journal event, and folders record none at all;
+  events also carry a file's name without its folder. The app does not rely on
+  the journal for either (see docs/BACKEND.md).
+- `SyncController::commit` assembles a file in memory; the app sends files
+  past 256 MiB by the chunked upload.
+
 ## Unreleased — Expenses: the whole module, natively
 
 Expenses opens here now instead of in the browser, under Business in the
@@ -261,6 +313,400 @@ commit)
   (the desktop refuses it first).
 
 ---
+
+## 2026-09-28 — 0.2.42: SalonMate, part 2 — taking the money, receipts and the drawer
+
+The desk now takes payment itself, into the POS register it was paired
+with, prints the receipt straight to the counter's printer and opens the
+cash drawer. It opens the register in the morning and closes the day at
+night. Working offline comes with the next release.
+
+**Added**
+
+- **Take payment**, from Today's "Ready to pay", a booking on the calendar,
+  or the rail.
+  - The bill is WorkSuite's: the lines at booked prices, the member
+    discount, points, the advance applied once, store credit, and what is
+    left to pay. Points, store credit and retail from the desk's shelf are
+    priced again by the server as they are added.
+  - The money is the cashier's: cash on a keypad with the round sums a
+    client might hand over, a card, LankaQR, a transfer (each with its
+    reference), or a split. Over what is due, with cash in it, the desk
+    asks: give change, or keep it as store credit.
+  - One press is one invoice. After a dropped connection, pressing again
+    sends the same payment; it can never be taken twice.
+  - A visit that is checked out and still owes is paid against its
+    invoice.
+- **Paid.** What to give back, in large type; what was taken; points
+  earned; store credit now; the POS sale's number; the receipt again; the
+  drawer; and **Book the next visit** when WorkSuite suggests one.
+- **Receipts, printed without asking.** The receipt goes straight to this
+  desk's receipt printer as the payment is taken, on an 80 mm or 58 mm
+  roll, as long as the receipt and no longer. It is WorkSuite's own
+  receipt, in English, Sinhala and Tamil. Copies, printing by itself, and
+  printing without the dialog are each a setting. With no printer chosen,
+  the print dialog asks.
+- **The cash drawer**, plugged into the receipt printer, opens when cash is
+  taken, or from Paid or Printers. It is sent the ESC/POS pulse on pin 2
+  or 5. Every opening is recorded in the desktop's audit log.
+- **Register.** Open it on a float counted note by note (or as one
+  figure). Pay cash in and take it out, each with a reason. See the sales,
+  the cash in, the change given and what the drawer should hold (hidden
+  under a blind close).
+- **Close the day.** Count the drawer and close the register. The
+  difference is WorkSuite's, and a reason is needed when the count is out.
+  The Z-report prints from what the close answered, and stays on screen to
+  print again. Beside it is the salon's day: taken by tender, what was not
+  new money, visits not checked out (with Take payment), invoices still
+  owing and commission. The day's summary prints too.
+- **Printers**: the receipt printer and its roll, an A4 printer for
+  full-page copies, copies, automatic and silent printing, the drawer, a
+  test receipt and a test of the drawer. Kept on this computer, per
+  server, and forgotten by "Sign out and remove WorkSuite data". WorkSuite
+  is told as well, so owners see how each desk prints.
+
+**Where it bites**
+
+- Silent printing goes only to the printer this desk was set up with, and
+  only for SalonMate's receipts and pages. Everything else still prints
+  through the dialog.
+- The drawer needs a printer that takes ESC/POS commands, as thermal
+  receipt printers do. A drawer the printer's driver opens by itself
+  should be left as "None, or opened by the printer's driver". On Windows
+  the drawer goes through PowerShell; a computer that blocks it says so.
+- Pay in and Take out are not sent again by themselves. If WorkSuite does
+  not answer, the desk says so and asks you to look at the register before
+  doing it again.
+- Deposits are still taken in WorkSuite on the web. See the server notes
+  below.
+
+**Server notes** (Livezen-Technologies/worksuite; not changed here)
+
+- A cash deposit taken at a desk is not added to the register's session,
+  so the drawer counts over by it at close. That is why the desk does not
+  take deposits yet.
+- The register's pay-in and take-out are not kept under an idempotency
+  key, so a retried request records twice.
+- With `salon_desk_require_register` off, payments are not recorded into
+  an open register even when the desk is paired with one.
+- Each payment against a part-paid invoice records a POS sale for the
+  whole invoice total, so a session's sales total over-counts. Cash
+  figures are right.
+
+**Checked**
+
+- Unit tests for the page a receipt prints from, its size on the roll,
+  the drawer's pulse and how it reaches a printer on each system, the
+  printer settings, the print channels, and the cashier's arithmetic (the
+  keypad, change, the count).
+- `tests/e2e/salon-2.mjs`, run against a local WorkSuite with CUPS
+  printers that capture their jobs. It covers: pair with a register; set
+  up the printer and drawer; open the register on a counted float; pay a
+  visit in cash with LKR 500.00 change; close the day counted short.
+  - The drawer received `1b 70 00 19 fa` each time.
+  - The receipt and the Z-report arrived as 80 mm pages sized to their
+    content, without a dialog.
+
+---
+
+## 2026-09-28 — 0.2.41: SalonMate, part 1 — the front desk at the counter
+
+SalonMate is in the launcher, native, for anyone whose company has it and
+who may view it. This computer is paired as one location's front desk, and
+from then on it does the counter's daily work: who is next, check-in with
+the allergy read out, walk-ins, bookings, clients, and the day by stylist.
+Taking money, printing and working offline come in the next two releases;
+until then the desk sends people to pay where they pay today.
+
+**Added**
+
+- **Pairing this computer** as a front desk: a name, the location, and the
+  POS register its money will go to (or none). An owner approves it in
+  SalonMate → Front desk PCs; the screen moves on by itself when they have.
+  Someone who may approve desks is approved at once.
+  - The desk's key is kept in this computer's credential store, per server,
+    and added to SalonMate's requests by the app itself. The screens never
+    see it, and it cannot be read from them or sent anywhere else.
+  - Once revoked, a desk's bookings and check-ins are refused at once, and
+    the screen says it is revoked at its next check (five minutes at most).
+    **Pair this computer again…** forgets the pairing here; the old desk
+    stays listed on the server until an owner revokes it. **Sign out and
+    remove WorkSuite data** (Settings), or a remote wipe, forgets every
+    pairing.
+  - The desk checks in with WorkSuite every five minutes, so owners see
+    which desks are alive.
+- **Today.** Who arrives next and who is late, with a deposit owed or an
+  advance paid, and their allergy. Who is ready to pay and how much is
+  left after any advance. Who is in a chair and until when, and who is
+  free. Walk-in, New booking, Find a client and the day by stylist are one
+  press away. Refreshed every minute; its day and times are the salon's
+  clock, not this computer's.
+- **Check-in**, from Today or the calendar. A client with an allergy at or
+  above the salon's threshold has it read out first, and check-in waits
+  until "I have told the stylist…" is ticked. A service that needs a patch
+  test the client doesn't have asks why you are going ahead. The server
+  decides and keeps the acknowledgement; the desk only asks.
+- **Walk-in and New booking.** Pick services; only stylists who do every
+  one of them here are offered, each with when they are next free, from the
+  same availability check every booking uses. The price and any deposit
+  come from the server's quote.
+  - **Start now** books, checks in (through the allergy read-out) and starts
+    in one step. **Book a later slot** shows a stylist's free times, day by
+    day.
+  - Taken in the meantime? The nearest free time is offered to book
+    instead.
+  - Find the client by any part of their name, mobile or email, or add one.
+    WorkSuite asks whether a new client is somebody it already knows.
+- **Clients.** Search, then the card: the allergy first, the patch test on
+  file, points, store credit, what they owe and their last visits. Record an
+  allergy as the client tells it. **Book again** opens a booking with the
+  same services and stylist. **Open full record** opens it in WorkSuite on
+  the web.
+- **The day by stylist.** Each stylist's working hours, every booking as a
+  block, and a line at the time now. Press a booking to check it in or open
+  the client. Day before, day after, today.
+- **Owners' screens on the web** — reports, commission, settings, the list
+  of desks — open in the browser from the rail.
+
+**Where it bites**
+
+- Every write is one attempt under one key. After a dropped connection,
+  pressing again repeats the same attempt, never a second booking. The key
+  is renewed only once WorkSuite has answered.
+- The desk's key is never shown, logged or copied to the screens. A screen
+  that tries to send its own key header has it dropped by the app.
+- The app's API proxy now refuses any address with a `/./` segment, so its
+  list of refused addresses always sees the path the server will.
+- Money, receipts, the cash drawer and closing the day are not native yet.
+  The Ready to pay list shows what is owed, but nothing here takes it.
+- Nothing works offline yet. With WorkSuite unreachable each screen says
+  it could not load, with Retry.
+
+**Server this needs**
+
+- The SalonMate module in WorkSuite (merged to main in a94372b, not
+  deployed yet), including desk keys (`salon_desks.key_hash`). Against a
+  server without it, SalonMate is not offered.
+
+**Checked**
+
+- Unit tests for the desk's credential store and the app adding its key,
+  the check-in read-out, stylists offered, next free times, the salon's
+  clock, and tab addresses.
+- `tests/e2e/salon.mjs`, run against a local WorkSuite: pair, Today, a
+  client, Book again, the booking on the calendar, check-in through the
+  allergy read-out, forget. It cleans up what it made.
+
+## 2026-09-28 — Meet: pointing at and drawing on a shared screen; the controller's name at the pointer (not released)
+
+The last part of WS-MEET-ENH-01 the desktop did not have (RC-PTR-01…03,
+RC08, RC-INP-04).
+
+**Added**
+
+- **Pointer and Annotate over somebody's shared screen**, beside Request
+  control: a laser pointer with your name, and pen, arrow, rectangle, text
+  and highlight in six colours, with Clear mine. It is the web client's own
+  format on its own topic, so browsers and this app see each other's. The
+  marks are painted over the picture on each screen; the shared computer is
+  not changed. Off while you control that screen, and when the meeting or
+  the person sharing turns it off.
+- **Sharing: Clear viewers' annotations** and **Turn viewers' annotations
+  off** in the share menu, and the status line says who is pointing.
+- **Being controlled: the controller's name beside the pointer** while they
+  move it, gone a moment after they stop, when you move your own mouse, and
+  before every click and scroll they send — it is never what a click lands
+  on.
+
+**Fixed**
+
+- The Tenders tests' type imports, which failed the lint step of every
+  build.
+
+---
+
+## 2026-09-28 — Meet remote control: the input helpers, checked on real systems (not released)
+
+A check that drives each input helper against a test window reporting what
+arrives (`tests/os/remote-control/check.mjs`), run by CI on Windows, macOS
+and Linux whenever the helpers change. On Linux it found:
+
+**Fixed**
+
+- **With one window shared, clicks landed a title bar too low** — near
+  the bottom edge, on the app below. The xdotool that Debian and Ubuntu ship
+  places a window inside its frame by the frame's offset twice; the
+  window's place now comes from xwininfo, and without it one shared window
+  takes no clicks (Settings says to install x11-utils; a whole screen works
+  without it).
+- **Accented letters, other scripts and emoji were not typed** when the
+  app ran without a UTF-8 locale (no LANG, or LANG=C): xdotool reads text in
+  its locale. It now runs in a UTF-8 one.
+- **A character the keyboard layout lacks could come out wrong**: xdotool
+  types it on a spare key it remaps, and without a pause the app read the key
+  before the remapping. Text with such characters is typed with xdotool's
+  usual 12 ms between keys; plain text stays instant.
+
+---
+
+## 2026-09-28 — Meet remote control: the Windows and macOS helpers, checked from Linux (not released)
+
+Neither helper has run on its own system yet. The Windows one ran under
+PowerShell against a stand-in for Windows' input functions, and passed; the
+macOS one, run against a stand-in for its bridge, did not:
+
+**Fixed**
+
+- **On a Mac, a double-click did nothing more than two clicks** — no file
+  opened, no word was selected. macOS does not work out double-clicks from
+  posted events; each click now says which click it is.
+- **On a Mac, a modifier could stay on after it was let go**, so a V typed
+  after Command+C could arrive as Command+V. Keys now carry exactly the
+  modifiers held, none once they are let go.
+- **On a Mac, a small sideways scroll was lost**, and scrolling now uses the
+  system's own scroll event where the scripting bridge has it.
+- **On a Mac, typed text could be silently refused**: it goes through System
+  Events, and the app did not declare Apple Events. It now does, with a
+  sentence for the prompt macOS shows once.
+
+**Changed**
+
+- The Linux .deb recommends xdotool and x11-utils (xwininfo), which remote
+  control needs; with the .rpm and the AppImage, the app says what to
+  install.
+
+---
+
+## 2026-09-28 — Meet remote control, tried for real on Linux (not released)
+
+The shared computer's side run under a real X server (Xvfb and openbox) with
+xdotool and real Electron windows. Moves, clicks, keys, typed text and the
+wheel landed; the real-click rule, the red bar and the emergency chord held.
+Three things did not work, and are fixed:
+
+**Fixed**
+
+- **On Linux, the person here moving their mouse out on the desktop did not
+  hold the controller back.** Electron only learns where the pointer is from
+  events on its own windows, so away from them its reading stood still. The
+  pointer is now read through xdotool while control lasts.
+- **On Linux, with one window shared, clicks on it were refused.** xdotool
+  names the frame the window manager draws around a window, not the window;
+  `xwininfo` now says whether the shared window is inside that frame. Where
+  xwininfo is missing, clicks go through only while the shared window is the
+  one in front.
+- **On Linux, with one window shared, a click could make the next ones
+  wait.** Checking what is under the pointer takes the pointer there, and
+  that move could be taken for the person here using the mouse, holding the
+  controller back for a second and a half. It now counts as the
+  controller's.
+
+---
+
+## 2026-09-28 — Meet remote control: what the security review found (not released)
+
+Three reviews of the code that lets someone else drive this computer. Nothing
+let input through without the current key; these are the gaps they found.
+
+**Fixed**
+
+- **A page could take a file offered to the shared computer** through the
+  API proxy, skipping the red bar's Accept and its real-click check (the
+  server checks only who the receiver is). Taking, fetching and offering
+  files now go through the main process only; the controller's own Accept
+  goes there too and takes only files sent to the controller.
+- **Reserved chords written another way got through** (`Meta + L` locked the
+  screen, `Alt+Ctrl+Shift+Esc` fired the emergency stop as if the person
+  here had). They are now matched by key and modifiers in any order,
+  spelling or with extras; the policy's chord is normalised the same way.
+- **A lock or sleep during the approval or a key change was lost**, and
+  control went live unpaused. It now holds, and is told to the server when
+  control goes active. Only the person's own Resume lifts it.
+- **Queued input could run after a pause, and a late-running queued click
+  could pass for the person's own.** One batch at a time is in the input
+  helper, each confirmed; a pause forgets the rest and the releases go next;
+  the real-click check counts from when the helper finished, with nothing
+  queued.
+- **On Linux**, anything after typed text in a batch was typed as words (so
+  key-ups were lost), and ending a session could throw away the releases.
+- **One window shared**: clicks could land on another app covering it, and
+  keys could reach other apps for up to a second after Alt+Tab. Presses now
+  need that window under the pointer, keys wait until it has been seen in
+  front, and app switching (Alt+Tab, Command+Tab) is not passed on.
+- **A screen share whose display could not be matched** sent input to the
+  primary display. It now takes none, unless there is only one display.
+- **Any participant could flood the control channel** and crowd out the
+  controller: the meeting window now relays only the controller's messages.
+- The grant must say it is one, name this computer and name its key (the
+  server now puts the key's SHA-256 in the signed grant); only Ed25519 keys.
+- Leases can't be stamped far into the future; a key change no longer sends
+  administrators false "unsigned message" alerts; an input helper that exits
+  pauses control; stopping ends input before the server answers; offered
+  files are streamed from disk rather than read into memory; typed text lets
+  go of held modifiers first; the key table has no prototype.
+
+**Changed**
+
+- The rate limits were raised to what a person can make with a 120 Hz
+  trackpad and a held key (240 pointer and 60 key events a second), so fast
+  scrolling no longer trips the burst alarm.
+- The special-keys menu now says "Ask for Ctrl + Alt + Delete": no app can
+  send it; the person at the computer is asked to press it.
+
+---
+
+## 2026-09-28 — Meet remote control (not released)
+
+WS-MEET-ENH-01, the desktop's part. The server and web sides shipped
+earlier; a browser can be watched but never controlled, so this is what
+makes remote control work.
+
+**Added**
+
+- **Control another participant's shared screen** from a meeting window:
+  Request control (with a reason, and the server's sentence when it isn't
+  offered), the wait, then mouse, wheel, keyboard, special keys and text
+  mode; Release control. Turned off by the `remote_control_controller`
+  policy.
+- **Be controlled, when you allow it.** Sharing from WorkSuite Desktop
+  registers the share as the desktop's; the picker offers the quality and
+  "Let people ask to control what I share". A request opens a prompt above
+  everything (RC03): who asks and why, what they may do, for how long.
+  Allowing needs a click with this computer's own mouse or keyboard. While
+  control lasts, a red bar stays at the top of the screen with Pause and
+  Stop (RC04), the tray says so, and the emergency chord stops it at once.
+  Moving your own mouse always wins. Control pauses by itself for the lock
+  screen, sleep, a user switch, the secure desktop, and password managers
+  or system prompts; only you resume it. Quitting asks first (RC15).
+- **Settings › Remote control** (RC09): whether this computer can be
+  controlled and why not, the default for "Let people ask", the emergency
+  chord, and on a Mac the way to Accessibility.
+- **A second person asking** while someone has control gets the same prompt,
+  worded as a handover: the first loses control when you allow it.
+- **Files during control** (RC06), when the grant allows file transfer.
+  Either end can send: "Send a file" on the controller's bar, or on the red
+  bar here, which opens the system's file dialog (nothing is injected while
+  it is open). Files sent to you wait on the red bar with Accept and
+  Decline; accepting needs your own click, and a program asks a second
+  time. Accepted files arrive in the download folder and the transfer list.
+  Up to 512 MB each; the `remote_file_receive` policy can turn receiving off.
+
+**Needs**
+
+- **Windows:** Windows PowerShell (always there unless removed by policy).
+  Elevated windows can't be driven by a non-elevated WorkSuite.
+- **macOS:** WorkSuite in Privacy & Security › Accessibility.
+- **Linux:** an X11 session and `xdotool`. Wayland sessions can share but
+  not be controlled.
+
+**Not yet**
+
+- The input helpers have been exercised with a stand-in in the tests, not
+  yet on real Windows, macOS and X11 machines.
+- Switching screens for the controller (monitor switch) is wired through
+  the meeting window but not yet tried with a real second display.
+- Viewers' pointers and annotations are not drawn over this computer's
+  screen while it is shared; they show in the meeting window only.
 
 ## 2026-09-27 — 0.2.40: Tenders, part 3 — the document library, reports and settings
 

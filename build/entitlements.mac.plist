@@ -5,7 +5,8 @@
   relaxed (no unsigned executable memory beyond JIT, no DYLD variables,
   no library-validation exceptions). Camera and microphone are declared for
   calls (Phase 2) and are still gated by macOS's own permission prompts and
-  the app's permission handler.
+  the app's permission handler. Apple Events: remote control types text
+  through System Events, which macOS still asks about (Automation).
 -->
 <plist version="1.0">
   <dict>
@@ -16,6 +17,8 @@
     <key>com.apple.security.device.audio-input</key>
     <true/>
     <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.automation.apple-events</key>
     <true/>
   </dict>
 </plist>

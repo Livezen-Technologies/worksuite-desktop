@@ -12,6 +12,7 @@ import { Toasts } from './overlays/Toasts';
 import { LockScreen } from './screens/LockScreen';
 import { UpdateRequired } from './screens/UpdateScreens';
 import { WindowRoot } from './WindowRoot';
+import { RemoteControlWindow } from './RemoteControlWindow';
 
 /**
  * Top level: which screen this window shows, from the session stage.
@@ -33,6 +34,8 @@ export function App() {
     return <div className="flex h-full items-center justify-center p-8 text-center text-ink-2">WorkSuite Desktop's interface runs inside the desktop app.</div>;
   }
   if (!ready || !auth) return <Spinner label="Starting WorkSuite…" className="h-full" />;
+  // Remote control's prompt and bar: above everything else, and never behind the lock screen — stopping control must always work.
+  if (hash.startsWith('#/rc/')) return <RemoteControlWindow hash={hash} />;
 
   let body;
   if (required && auth.stage !== 'revoked') body = <UpdateRequired />;

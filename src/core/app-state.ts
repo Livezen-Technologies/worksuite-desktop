@@ -1,5 +1,5 @@
 import type { InputOf, LockState } from '@shared/ipc/contract';
-import type { AppInfo, AuthState, Bootstrap, Preferences, PreferenceLock, StatusSnapshot, Transfer, UpdateStatus } from '@shared/types';
+import type { AppInfo, AuthState, Bootstrap, Preferences, PreferenceLock, StatusSnapshot, SyncStatus, Transfer, UpdateStatus } from '@shared/types';
 import { visibleApps, type AppDefinition } from '@shared/apps';
 import { call, hasDesktop, on } from './bridge';
 import { createStore } from './store';
@@ -24,6 +24,8 @@ export interface AppState {
   update: UpdateStatus | null;
   organizationId: string | null;
   transfers: Transfer[];
+  /** Drive sync on this computer. */
+  sync: SyncStatus | null;
   resolvedTheme: 'light' | 'dark';
 }
 
@@ -40,6 +42,7 @@ export const app = createStore<AppState>({
   update: null,
   organizationId: null,
   transfers: [],
+  sync: null,
   resolvedTheme: 'light',
 });
 
@@ -81,6 +84,7 @@ export async function initAppState(): Promise<void> {
   if (auth.stage === 'ready') {
     applyBootstrap(await call('session:bootstrap'));
     call('transfers:list').then((t) => app.set({ transfers: t }), () => undefined);
+    call('sync:status').then((s) => app.set({ sync: s }), () => undefined);
   }
 
   on<AuthState>('auth:changed', async (a) => {
@@ -88,6 +92,7 @@ export async function initAppState(): Promise<void> {
     if (a.stage === 'ready') {
       applyBootstrap(await call('session:bootstrap'));
       call('transfers:list').then((t) => app.set({ transfers: t }), () => undefined);
+      call('sync:status').then((s) => app.set({ sync: s }), () => undefined);
     } else if (a.stage !== 'expired') {
       applyBootstrap(null);
     }
@@ -111,6 +116,7 @@ export async function initAppState(): Promise<void> {
   on<LockState>('lock:changed', (l) => app.set({ lock: l }));
   on<UpdateStatus>('update:changed', (u) => app.set({ update: u }));
   on<Transfer[]>('transfers:changed', (t) => app.set({ transfers: t }));
+  on<SyncStatus>('sync:changed', (s) => app.set({ sync: s }));
   on<{ organizationId: string | null }>('organization:changed', (o) => app.set({ organizationId: o.organizationId }));
   media?.addEventListener('change', () => applyTheme(app.get().prefs));
   app.set({ ready: true });

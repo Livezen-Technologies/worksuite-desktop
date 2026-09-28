@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
+import type * as CoreApi from '../../../src/core/api';
+import type { LibraryDoc } from '../../../src/modules/tenders/admin';
 
-vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof import('../../../src/core/api')>()), apiGet: vi.fn(), apiPost: vi.fn(), apiPut: vi.fn(), apiDelete: vi.fn() }));
+vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiPost: vi.fn(), apiPut: vi.fn(), apiDelete: vi.fn() }));
 
 const api = await import('../../../src/core/api');
 const a = await import('../../../src/modules/tenders/admin');
 
-const doc = (over: Partial<import('../../../src/modules/tenders/admin').LibraryDoc>) => ({
+const doc = (over: Partial<LibraryDoc>) => ({
   id: 1,
   org_id: 1,
   name: 'Tax clearance',

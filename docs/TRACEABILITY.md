@@ -83,13 +83,28 @@ blocked by something outside the code.
 | FR-OFF-07 | Done | Encrypted draft recovery (mail compose, chat, quick-add task) |
 | FR-RT-01..04 | Done | One socket in main, backoff with jitter, resync by REST refetch (the gateway has no cursor), reconnect on org change and resume |
 
+## Drive sync (WorkSuite Drive FR-SYN, WF-15)
+
+| ID | Status | Where / note |
+|---|---|---|
+| FR-SYN-01 | Done | Device credential from registration, `X-Device-Token` only — `services/sync/protocol.ts` |
+| FR-SYN-02 | Done | Journal polled (own writes excluded) and acknowledged after a complete pass; a snapshot pass every five minutes catches what the journal does not record — `services/sync/engine.ts` |
+| FR-SYN-03 | Done | have → block → commit; manifests with local block reuse — unit: `sync-engine.test.ts` (one changed block sends and fetches one block) |
+| FR-SYN-04 | Done | Both changed: both kept (here, and taking the server's conflicted copy when a commit races) — `plan.ts`, `engine.ts` |
+| FR-SYN-05 | Done | Sync policy applied both ways (size, blocked types, ignore patterns, speed limits); desktop policy `file_sync`, `personal_device_mode`, `removable_media_sync` |
+| FR-SYN-06 | Done | Chosen folders (`sync_roots` kept current), two-way / upload-only / download-only; sessions recorded |
+| FR-DEV-01 | Done | Files → Sync devices: rename, sign out, wipe, remove another device; wipe on `hello` or revoke removes only what sync put here |
+| FR-DEV-02 | Done | Pending up/down and the last error go out with the heartbeat |
+
 ## Communication (COM)
 
 | ID | Status | Where / note |
 |---|---|---|
 | FR-COM-01 | Partial | Three-pane mail, combined inbox, shared mailboxes, folders, read, reply/forward, archive/delete, print, attachments download; composer is plain text without attachments |
 | FR-COM-02/03 | Partial | Rooms, threads, receipts, reactions shown, files, typing, pending offline messages, mini window; sending reactions, voice notes and GIFs is on the web for now |
-| FR-COM-04..08 | Later | Meet, screen share, remote control, AI (P2/P4) |
+| FR-COM-04/05 | Done | Meet meetings in their own window; screen share through our picker only (`ScreenShare`) |
+| FR-COM-06 | Partial | Meet remote control (WS-MEET-ENH-01): controlling another shared screen (`src/modules/meet/remote`), and being controlled (`electron/services/remote-control`) — consent with local proof, signed grant, AES-GCM + HMAC channel, input through PowerShell/SendInput, osascript/CGEvent or xdotool; Wayland is share-only. Handover asked in the same prompt; files both ways (RC06), accepting with local proof. The named laser pointer and annotations over a shared screen (RC-PTR-01…03, RC08; `src/modules/meet/remote/pointers.ts`, `PointerLayer.tsx`), the web client's messages on its topic, which the person sharing can clear or switch off; the controller's name beside the pointer on the shared computer (RC-INP-04). Injection is unit-tested with a fake helper and run for real on Linux (X11, under Xvfb); the Windows helper ran under PowerShell against a stand-in user32 and the macOS script against a stand-in bridge. `tests/os/remote-control/check.mjs` (workflow *Remote control helpers*) runs them on real Windows and macOS: not yet run, as GitHub started no Actions jobs in the repository on 2026-09-28 |
+| FR-COM-07/08 | Later | AI (P4) |
 
 ## Devices, security, updates (SEC, UPD)
 
