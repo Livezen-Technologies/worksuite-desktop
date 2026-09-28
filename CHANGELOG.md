@@ -5,7 +5,45 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## Unreleased — Website chats ring like calls, and answer from Team Chat's composer
+## 2026-09-28 — 0.2.48: the AI Assistant on the desktop — Quick Ask, the dock, its settings
+
+From "WorkSuite AI Assistant — Web + Desktop UIs", on the server's writing
+assistant (`/api/ai/write`, which every role may use).
+
+**Added**
+
+- **Quick Ask** over any app: select text anywhere, press **⌥Space** on a
+  Mac (**Ctrl+Alt+Space** elsewhere), and a small window opens with it —
+  **Translate** (into the language you choose), **Rewrite**, **Shorten**,
+  **Make professional**, **Fix grammar**, **Make a task**, **Ask WorkSuite**.
+  The answer is shown; **Insert** pastes it back into the app you were in,
+  **Copy** copies it, **Open in WorkSuite** takes it to the AI dock. Esc, or
+  clicking elsewhere, closes it.
+- The selection is read once, when you press the shortcut, and nothing else
+  on your screen is: on Linux the selected text is read as it is; elsewhere
+  WorkSuite presses Copy in that app and puts your clipboard back straight
+  after. Insert pastes only when you click it, and restores the clipboard too.
+- **The AI dock** (Ctrl/Cmd+Shift+A) is the same assistant beside every tab,
+  for text you type or paste — no longer a "coming soon" card.
+- **Settings › AI Assistant**: Quick Ask on or off and its shortcut (it says
+  when another app already has it), inserting into other apps, the dock at
+  start-up, and the language Translate goes to. The tray has **Quick Ask**.
+
+**Where it bites**
+
+- On a Mac, reading the selection and inserting need WorkSuite in System
+  Settings › Privacy & Security › Accessibility; without it Quick Ask uses
+  what you copied last, and says so. Wayland sessions have no Insert.
+- The assistant never reads the tab beside it. Summaries of WorkSuite files
+  with page references, comparing versions, files from this computer, and
+  actions waiting for your confirmation (and their tray entry and alerts)
+  need an assistant service the server does not have yet.
+- The server's writing assistant has no "Summarize"; **Shorten** is the
+  nearest. Text is limited to 8,000 characters.
+
+---
+
+## 2026-09-28 — 0.2.47: Website chats ring like calls, and answer from Team Chat's composer
 
 From the Website Live Chat SRS v1.4 (ENH-WCHAT-01 and -02), the desktop's
 part, on the server as it is today.
@@ -72,7 +110,7 @@ part, on the server as it is today.
 
 ---
 
-## Unreleased — Multi-window docking: tabs in their own windows, and side by side
+## 2026-09-28 — 0.2.46: Multi-window docking: tabs in their own windows, and side by side
 
 Any tab can now leave the main window and come back. Drag it out of the tab
 strip and let go anywhere off the window, and it becomes its own window
@@ -130,7 +168,7 @@ you are working in, and see both at once.
 
 ---
 
-## Unreleased — Drive sync: keep Drive folders on this computer
+## 2026-09-28 — 0.2.45: Drive sync: keep Drive folders on this computer
 
 Choose Drive folders in **Files → Sync devices** (or **Keep on this computer…**
 on a folder) and they are kept in step with a folder here —
@@ -182,7 +220,7 @@ app, offline too; changes go both ways, and only what changed travels.
 - `SyncController::commit` assembles a file in memory; the app sends files
   past 256 MiB by the chunked upload.
 
-## Unreleased — Expenses: the whole module, natively
+## 2026-09-28 — 0.2.44: Expenses: the whole module, natively
 
 Expenses opens here now instead of in the browser, under Business in the
 sidebar, and every screen of it is drawn by the app. Links to Expenses screens
@@ -306,7 +344,7 @@ commit)
 
 ---
 
-## Unreleased — Finance: the whole module, natively
+## 2026-09-28 — 0.2.43: Finance: the whole module, natively
 
 Finance opens here now instead of in the browser, under Business in the
 sidebar, and every screen of it is drawn by the app. Links to Finance screens
@@ -622,7 +660,7 @@ until then the desk sends people to pay where they pay today.
   client, Book again, the booking on the calendar, check-in through the
   allergy read-out, forget. It cleans up what it made.
 
-## 2026-09-28 — Meet: pointing at and drawing on a shared screen; the controller's name at the pointer (not released)
+## 2026-09-28 — Meet: pointing at and drawing on a shared screen; the controller's name at the pointer (ships in 0.2.43)
 
 The last part of WS-MEET-ENH-01 the desktop did not have (RC-PTR-01…03,
 RC08, RC-INP-04).
@@ -650,7 +688,7 @@ RC08, RC-INP-04).
 
 ---
 
-## 2026-09-28 — Meet remote control: the input helpers, checked on real systems (not released)
+## 2026-09-28 — Meet remote control: the input helpers, checked on real systems (ships in 0.2.43)
 
 A check that drives each input helper against a test window reporting what
 arrives (`tests/os/remote-control/check.mjs`), run by CI on Windows, macOS
@@ -674,7 +712,7 @@ and Linux whenever the helpers change. On Linux it found:
 
 ---
 
-## 2026-09-28 — Meet remote control: the Windows and macOS helpers, checked from Linux (not released)
+## 2026-09-28 — Meet remote control: the Windows and macOS helpers, checked from Linux (ships in 0.2.43)
 
 Neither helper has run on its own system yet. The Windows one ran under
 PowerShell against a stand-in for Windows' input functions, and passed; the
@@ -702,7 +740,7 @@ macOS one, run against a stand-in for its bridge, did not:
 
 ---
 
-## 2026-09-28 — Meet remote control, tried for real on Linux (not released)
+## 2026-09-28 — Meet remote control, tried for real on Linux (ships in 0.2.43)
 
 The shared computer's side run under a real X server (Xvfb and openbox) with
 xdotool and real Electron windows. Moves, clicks, keys, typed text and the
@@ -728,7 +766,7 @@ Three things did not work, and are fixed:
 
 ---
 
-## 2026-09-28 — Meet remote control: what the security review found (not released)
+## 2026-09-28 — Meet remote control: what the security review found (ships in 0.2.43)
 
 Three reviews of the code that lets someone else drive this computer. Nothing
 let input through without the current key; these are the gaps they found.
@@ -780,7 +818,7 @@ let input through without the current key; these are the gaps they found.
 
 ---
 
-## 2026-09-28 — Meet remote control (not released)
+## 2026-09-28 — Meet remote control (ships in 0.2.43)
 
 WS-MEET-ENH-01, the desktop's part. The server and web sides shipped
 earlier; a browser can be watched but never controlled, so this is what
