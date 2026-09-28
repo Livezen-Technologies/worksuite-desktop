@@ -141,6 +141,19 @@ describe('offline mutation queue (FR-OFF-02/03/04, WF-17)', () => {
   }
   const input = (id: string, value = 'done') => ({ module: 'tasks', entity: 'task', entityId: id, label: `Complete ${id}`, method: 'PATCH' as const, path: `/api/tasks/${id}`, body: { field: 'status', value }, queueIfOffline: true });
 
+  it('writes only where the API proxy would let a page write (a desk\'s pairing, dot segments)', async () => {
+    const sent: string[] = [];
+    const { queue } = setup(async (url) => {
+      sent.push(url);
+      return json(200, { status: 'success', data: { key: 'desk-secret' } });
+    });
+    for (const path of ['/api/salon/v1/desk/pair', '/api/salon/v1/./desk/pair', '/api/tasks/../salon/v1/desk/pair', '/api/notifications/realtime-ticket']) {
+      await expect(queue.submit('u1', { ...input('1'), method: 'POST', path })).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    }
+    expect(sent).toEqual([]);
+    await expect(queue.submit('u1', input('1'))).resolves.toMatchObject({ delivered: true });
+  });
+
   it('queues when offline, durably and encrypted, then replays in order with idempotency keys', async () => {
     let online = false;
     const calls: Array<{ url: string; key: string | null }> = [];
