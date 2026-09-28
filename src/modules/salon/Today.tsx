@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Avatar, Button, Card, Chip, Empty, Spinner } from '../../components/ui';
-import { amount, clockAt, fetchToday, greeting, K, longDay, minutesOf, readyToPay, type TodayBoard, type Visit } from './api';
+import { amount, clockAt, fetchToday, greeting, K, longDay, minutesOf, owing, readyToPay, stillToPay, type TodayBoard, type Visit } from './api';
 import { AllergyChip, Failed, QuickAction, servicesOf, stylistsOf, useDesk, useNow } from './parts';
 
 /**
@@ -132,8 +132,9 @@ function Arriving({ visit, late, now }: { visit: Visit; late: boolean; now: numb
   );
 }
 
-/** Checked in, in the chair or done, and not yet paid. Taking the money comes with the next desktop release. */
+/** Checked in, in the chair or done, and not yet paid — or checked out and still owing. */
 function ReadyToPay({ board }: { board: TodayBoard }) {
+  const desk = useDesk();
   const ready = readyToPay(board);
   if (ready.length === 0) return null;
 
@@ -146,12 +147,15 @@ function ReadyToPay({ board }: { board: TodayBoard }) {
             <div className="min-w-0 flex-1">
               <div className="truncate text-[14px] font-bold text-ink">{v.client.name}</div>
               <div className="truncate text-[12.5px] text-ink-2">
-                {servicesOf(v)} · {v.status_label}
+                {servicesOf(v)} · {owing(v) ? 'still owing' : v.status_label}
               </div>
             </div>
             <span className="text-[13px] font-bold text-ink tabular-nums" title="Still to pay, after any advance">
-              {amount(v.money.balance, v.money.currency)}
+              {amount(stillToPay(v), v.money.currency)}
             </span>
+            <Button size="sm" variant="primary" disabled={!desk.may('salon.checkout')} onClick={() => desk.go('pay', { visit: v.id })}>
+              {owing(v) ? 'Take the rest' : 'Pay'}
+            </Button>
           </li>
         ))}
       </ul>

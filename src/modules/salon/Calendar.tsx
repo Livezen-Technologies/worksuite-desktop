@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Button, Chip, Empty, IconButton, Modal, Spinner } from '../../components/ui';
-import { addDays, clockAt, fetchCalendar, K, longDay, minutesOf, todayAt, type CalendarDay, type Visit } from './api';
+import { addDays, clockAt, fetchCalendar, K, longDay, minutesOf, owing, todayAt, type CalendarDay, type Visit } from './api';
 import { AllergyChip, Failed, servicesOf, stylistsOf, useDesk, useNow } from './parts';
 
 /**
@@ -134,6 +134,7 @@ export default function Calendar() {
 function VisitActions({ visit, onClose }: { visit: Visit; onClose: () => void }) {
   const desk = useDesk();
   const canCheckIn = (visit.status === 'pending' || visit.status === 'confirmed') && desk.may('salon.visit.checkin');
+  const canPay = ((['checked_in', 'in_service', 'completed'].includes(visit.status) && !visit.checked_out) || owing(visit)) && desk.may('salon.checkout');
 
   return (
     <Modal
@@ -149,6 +150,18 @@ function VisitActions({ visit, onClose }: { visit: Visit; onClose: () => void })
           >
             Open the client
           </Button>
+          {canPay ? (
+            <Button
+              variant="primary"
+              icon="banknote"
+              onClick={() => {
+                onClose();
+                desk.go('pay', { visit: visit.id });
+              }}
+            >
+              {owing(visit) ? 'Take the rest' : 'Take payment'}
+            </Button>
+          ) : null}
           {canCheckIn ? (
             <Button
               variant="primary"

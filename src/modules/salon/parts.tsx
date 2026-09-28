@@ -1,15 +1,17 @@
+import { useQuery } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import { Avatar, Button, Chip, cx } from '../../components/ui';
 import type { SalonDeskInfo } from '@shared/types';
-import type { Options, SalonLocation, Severity, Visit } from './api';
+import { amount, type Options, type SalonLocation, type Severity, type Visit } from './api';
+import { MK, printSettings, type CheckoutResult } from './money';
 
 /**
  * What every SalonMate screen reads: this computer's desk, its location and
  * that location's clock, the company, what the signed-in person may do, and
  * how to move between the desk's screens.
  */
-export type DeskView = 'today' | 'calendar' | 'walkin' | 'book' | 'clients';
+export type DeskView = 'today' | 'calendar' | 'walkin' | 'book' | 'clients' | 'pay' | 'paid' | 'register' | 'close' | 'printers';
 
 /** What a walk-in is started with: ids only, so it fits in a tab's address whatever the client's name. */
 export interface WalkInSeed {
@@ -23,6 +25,9 @@ export interface Desk {
   desk: SalonDeskInfo;
   location: SalonLocation;
   org: number;
+  /** The company's name and currency, as receipts and the day's pages give them. */
+  company: string;
+  currency: string;
   options: Options;
   params: URLSearchParams;
   may: (permission: string) => boolean;
@@ -31,6 +36,8 @@ export interface Desk {
   checkIn: (visit: Visit) => void;
   /** A walk-in, or a booking (`later`), started with what is already known. */
   walkIn: (seed: WalkInSeed, later?: boolean) => void;
+  /** What a payment answered, for the Paid screen that follows it. */
+  paid: { remember: (visitId: number, result: CheckoutResult) => void; get: (visitId: number) => CheckoutResult | undefined };
 }
 
 export const DeskContext = createContext<Desk | null>(null);
@@ -189,3 +196,77 @@ export function servicesOf(v: Visit): string {
 }
 
 export const firstName = (name: string) => name.split(/\s+/)[0] || name;
+
+/* ── Money ──────────────────────────────────────────────────────────── */
+
+/** This computer's printers and drawer for SalonMate (the main process keeps them). */
+export function usePrintSettings() {
+  return useQuery({ queryKey: MK.print, queryFn: printSettings, staleTime: Infinity });
+}
+
+/** A line of the bill: a label and a money figure, a credit shown as "− 500.00". */
+export function MoneyLine({ label, value, currency = '', strong = false }: { label: ReactNode; value: number; currency?: string; strong?: boolean }) {
+  return (
+    <div className={cx('flex items-baseline justify-between gap-3 text-[14px]', strong && 'font-extrabold')}>
+      <dt className="min-w-0 truncate text-ink-2">{label}</dt>
+      <dd className="m-0 font-bold text-ink tabular-nums">{value < 0 ? `− ${amount(-value, currency)}` : amount(value, currency)}</dd>
+    </div>
+  );
+}
+
+/** A figure in a box, for the register's tiles. */
+export function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-[12px] border border-line bg-surface p-3.5">
+      <div className="text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">{label}</div>
+      <div className="mt-1 text-[19px] leading-snug font-extrabold text-ink tabular-nums">{value}</div>
+      {sub ? <div className="text-[12px] text-ink-3">{sub}</div> : null}
+    </div>
+  );
+}
+
+const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0', 'back'];
+
+/** The cash keypad: big keys for a counter, and the keyboard's digits work too. */
+export function Keypad({ label, onKey }: { label: string; onKey: (key: string) => void }) {
+  return (
+    <div role="group" aria-label={label} className="grid grid-cols-3 gap-2">
+      {KEYS.map((k) => (
+        <button
+          key={k}
+          type="button"
+          aria-label={k === 'back' ? 'Delete the last digit' : k}
+          onClick={() => onKey(k)}
+          className="h-12 rounded-[10px] border border-line bg-surface text-[18px] font-bold text-ink tabular-nums hover:bg-subtle active:bg-selection"
+        >
+          {k === 'back' ? <Icon name="back" size={18} className="mx-auto" /> : k}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Counting the drawer note by note: how many of each, and what they come to. */
+export function CountSheet({ values, counts, onChange, label }: { values: number[]; counts: Record<string, string>; onChange: (c: Record<string, string>) => void; label: string }) {
+  return (
+    <div role="group" aria-label={label} className="grid grid-cols-2 gap-x-4 gap-y-1.5 md:grid-cols-3">
+      {values.map((v) => {
+        const n = Math.floor(Number(counts[String(v)] ?? '') || 0);
+        return (
+          <label key={v} className="flex items-center gap-2 text-[13px] text-ink">
+            <span className="w-16 shrink-0 text-right font-bold tabular-nums">{v.toLocaleString('en-US')}</span>
+            <span className="text-ink-3">×</span>
+            <input
+              aria-label={`How many ${v.toLocaleString('en-US')}`}
+              inputMode="numeric"
+              value={counts[String(v)] ?? ''}
+              onChange={(e) => onChange({ ...counts, [String(v)]: e.target.value.replace(/\D+/g, '').slice(0, 6) })}
+              className="h-8 w-16 rounded-[8px] border border-line bg-surface px-2 text-right text-[13px] text-ink outline-none tabular-nums focus:border-primary"
+            />
+            <span className="ml-auto text-ink-3 tabular-nums">{n > 0 ? amount(n * v) : ''}</span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}

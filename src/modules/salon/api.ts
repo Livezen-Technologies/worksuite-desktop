@@ -70,6 +70,8 @@ export interface Options {
   menu: Category[];
   stylists: Stylist[];
   currency?: string;
+  company?: string;
+  loyalty?: boolean;
   ack_severity?: Severity;
   may: Record<string, boolean>;
 }
@@ -112,6 +114,8 @@ export interface Visit {
   end: string;
   items: VisitItem[];
   money: { currency: string; total: number; deposit_due: number; advance: number; deposit_owed: number; balance: number };
+  /** Billing's invoice, once the visit is checked out: what it still owes is Billing's figure. */
+  invoice?: { id: number; number: string | null; status: string; total: number; paid: number; owed: number } | null;
   checked_out: boolean;
 }
 
@@ -312,7 +316,8 @@ export function refusal<T extends object = { code?: string; gate?: Gate; next?: 
   return e instanceof ApiError && e.data && typeof e.data === 'object' ? (e.data as Partial<T>) : {};
 }
 
-async function write<T>(path: string, body: unknown, key: string): Promise<{ data: T; message: string | null }> {
+/** A write the server keeps under the attempt's key: a retry after a dropped line is the same attempt. */
+export async function write<T>(path: string, body: unknown, key: string): Promise<{ data: T; message: string | null }> {
   const r = await request<T>('POST', `${BASE}${path}`, { body, headers: { 'Idempotency-Key': key } });
   return { data: r.data, message: r.message ?? null };
 }
@@ -382,7 +387,17 @@ export function freeNow(slot: StartOption | null, now: number): boolean {
 
 /** Checked in, in the chair or done, and not yet paid. */
 export function readyToPay(board: TodayBoard): Visit[] {
-  return board.visits.filter((v) => (v.status === 'checked_in' || v.status === 'in_service' || v.status === 'completed') && !v.checked_out);
+  return board.visits.filter((v) => ((v.status === 'checked_in' || v.status === 'in_service' || v.status === 'completed') && !v.checked_out) || owing(v));
+}
+
+/** Checked out, and the invoice still owes: the rest is taken against it. */
+export function owing(v: Visit): boolean {
+  return v.checked_out && (v.invoice?.owed ?? 0) > 0;
+}
+
+/** What is left to pay: the invoice's figure once there is one, else the visit's balance after any advance. */
+export function stillToPay(v: Visit): number {
+  return v.checked_out ? (v.invoice?.owed ?? 0) : v.money.balance;
 }
 
 /** "HH:MM" on a zone's clock. */

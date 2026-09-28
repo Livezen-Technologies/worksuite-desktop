@@ -145,9 +145,20 @@ describe('the desk’s rules', () => {
     expect(s.nextFree(undefined, now)).toBeNull();
   });
 
-  it('lists who is ready to pay: in the chair or done, not yet checked out', () => {
-    const board = { visits: [visit({ id: 1, status: 'in_service' }), visit({ id: 2, status: 'completed', checked_out: true }), visit({ id: 3, status: 'confirmed' }), visit({ id: 4, status: 'checked_in' })] } as s.TodayBoard;
-    expect(s.readyToPay(board).map((v) => v.id)).toEqual([1, 4]);
+  it('lists who is ready to pay: in the chair or done and not checked out, or checked out and still owing', () => {
+    const invoice = (owed: number) => ({ id: 1, number: 'INV-1', status: 'issued', total: 3500, paid: 3500 - owed, owed });
+    const board = {
+      visits: [
+        visit({ id: 1, status: 'in_service' }),
+        visit({ id: 2, status: 'completed', checked_out: true, invoice: invoice(0) }),
+        visit({ id: 3, status: 'confirmed' }),
+        visit({ id: 4, status: 'checked_in' }),
+        visit({ id: 5, status: 'completed', checked_out: true, invoice: invoice(1200) }),
+      ],
+    } as s.TodayBoard;
+    expect(s.readyToPay(board).map((v) => v.id)).toEqual([1, 4, 5]);
+    expect(s.stillToPay(board.visits[4]!)).toBe(1200);
+    expect(s.stillToPay(visit({ money: { currency: 'LKR', total: 3500, deposit_due: 1000, advance: 1000, deposit_owed: 0, balance: 2500 } }))).toBe(2500);
   });
 });
 

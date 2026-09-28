@@ -11,6 +11,7 @@ import { toast } from '../../core/toasts';
 import type { ModuleProps } from '../registry';
 import { deskState, fetchDesks, fetchOptions, forgetDesk, K, pairing as readPairing } from './api';
 import { useCheckIn } from './CheckIn';
+import type { CheckoutResult } from './money';
 import Connect from './Connect';
 import { DeskContext, Failed, Note, salonRoute, seedParam, type Desk, type DeskView } from './parts';
 
@@ -28,6 +29,11 @@ const Today = lazy(() => import('./Today'));
 const Calendar = lazy(() => import('./Calendar'));
 const WalkIn = lazy(() => import('./WalkIn'));
 const Clients = lazy(() => import('./Clients'));
+const Pay = lazy(() => import('./Pay'));
+const Paid = lazy(() => import('./Pay').then((m) => ({ default: m.Paid })));
+const Register = lazy(() => import('./Register'));
+const DayClose = lazy(() => import('./DayClose'));
+const Printers = lazy(() => import('./Printers'));
 
 const VIEWS: Record<DeskView, { label: string; icon: string }> = {
   today: { label: 'Today', icon: 'home' },
@@ -35,6 +41,11 @@ const VIEWS: Record<DeskView, { label: string; icon: string }> = {
   walkin: { label: 'Walk-in', icon: 'user-plus' },
   book: { label: 'New booking', icon: 'calendar-check' },
   clients: { label: 'Clients', icon: 'users' },
+  pay: { label: 'Take payment', icon: 'banknote' },
+  paid: { label: 'Paid', icon: 'check-circle' },
+  register: { label: 'Register', icon: 'unlock' },
+  close: { label: 'Close the day', icon: 'moon' },
+  printers: { label: 'Printers', icon: 'printer' },
 };
 
 const HEARTBEAT_MS = 5 * 60_000;
@@ -60,6 +71,8 @@ export default function SalonShell(_props: ModuleProps) {
   const info = deskId ? (desks.data?.items.find((d) => d.id === deskId) ?? null) : null;
   const options = useQuery({ queryKey: K.options(info?.org_id ?? null), queryFn: ({ signal }) => fetchOptions(info!.org_id, signal), enabled: state === 'active' && !!info });
   const checkIn = useCheckIn(options.data?.ack_severity ?? 'moderate');
+  /* What each payment answered, for the Paid screen that follows it. */
+  const [paid, setPaid] = useState<Record<number, CheckoutResult>>({});
 
   /* The heartbeat: WorkSuite shows owners which desks are alive, and a refusal is how a revoke reaches the counter. */
   useEffect(() => {
@@ -83,12 +96,15 @@ export default function SalonShell(_props: ModuleProps) {
       desk: info,
       location,
       org: info.org_id,
+      company: options.data.company ?? '',
+      currency: options.data.currency ?? '',
       options: options.data,
       params: query,
       may: (p) => may[p] === true,
       go,
       checkIn: (v) => checkIn.start(v),
       walkIn: (seed, later = false) => go(later ? 'book' : 'walkin', { seed: seedParam(seed) }),
+      paid: { remember: (id, r) => setPaid((p) => ({ ...p, [id]: r })), get: (id) => paid[id] },
     };
   }
 
@@ -123,6 +139,16 @@ export default function SalonShell(_props: ModuleProps) {
               <WalkIn key={`${view}-${query.get('seed') ?? ''}`} later={view === 'book'} />
             ) : view === 'clients' ? (
               <Clients />
+            ) : view === 'pay' ? (
+              <Pay key={query.get('visit') ?? ''} />
+            ) : view === 'paid' ? (
+              <Paid key={query.get('visit') ?? ''} />
+            ) : view === 'register' ? (
+              <Register />
+            ) : view === 'close' ? (
+              <DayClose />
+            ) : view === 'printers' ? (
+              <Printers />
             ) : (
               <Today />
             )}
@@ -177,6 +203,11 @@ function Rail({ view, desk }: { view: DeskView; desk: Desk }) {
         {item('walkin', !book)}
         {item('book', !book)}
         {item('clients')}
+        <div className="mx-1 my-1.5 border-t border-line" />
+        {item('pay', !desk.may('salon.checkout'))}
+        {desk.desk.register ? item('register') : null}
+        {item('close')}
+        {item('printers')}
       </div>
       <div className="mt-auto flex flex-col gap-2 border-t border-line px-3 py-3">
         <button type="button" onClick={() => void call('app:openInBrowser', { path: '/salon' })} className="flex items-center gap-2 text-left text-[12.5px] font-semibold text-ink-2 hover:text-ink">
