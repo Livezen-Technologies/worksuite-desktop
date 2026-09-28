@@ -10,7 +10,7 @@ import type { DesktopPolicy, RemoteControlSupport } from '@shared/types';
 import { isProxyPathAllowed } from '../../../electron/services/api-proxy';
 import { DEFAULT_POLICY, emergencyChord, normalizePolicy } from '../../../electron/services/policy';
 import { checkGrant } from '../../../electron/services/remote-control/grant';
-import { cleanText, displayServer, enqueue, inputSupport, nextBatch, protocolLines, xdotoolArgs, type InputAction, type Injector } from '../../../electron/services/remote-control/input';
+import { cleanText, displayServer, enqueue, inputSupport, nextBatch, protocolLines, utf8Env, xdotoolArgs, type InputAction, type Injector } from '../../../electron/services/remote-control/input';
 import { comboCodes, keyOf } from '../../../electron/services/remote-control/keys';
 import { Held, comboActions, keyActions, place, pointerActions } from '../../../electron/services/remote-control/mapping';
 import { RemoteControlService, isProtected, pauseText, type CapturedSource, type ControlState, type RemoteControlDeps } from '../../../electron/services/remote-control/service';
@@ -128,6 +128,18 @@ describe('the input helpers’ protocol', () => {
     expect(xdotoolArgs([{ t: 'move', x: 10, y: 20 }, { t: 'button', button: 'right', down: true }, { t: 'key', code: 'ControlLeft', down: true }, { t: 'wheel', dx: 0, dy: -240 }, { t: 'text', text: '--help' }])).toEqual([
       'mousemove', '10', '20', 'mousedown', '3', 'keydown', 'Control_L', 'click', '--repeat', '2', '4', 'type', '--delay', '0', '--', '--help',
     ]);
+  });
+
+  it('types text the keyboard layout lacks with a pause, so the remapped key is read right', () => {
+    expect(xdotoolArgs([{ t: 'text', text: 'plain text\n' }]).slice(1, 3)).toEqual(['--delay', '0']);
+    expect(xdotoolArgs([{ t: 'text', text: 'Olá 😀' }]).slice(1, 3)).toEqual(['--delay', '12']);
+  });
+
+  it('runs xdotool in a UTF-8 locale, the app’s own when it has one', () => {
+    expect(utf8Env({ LANG: 'de_DE.UTF-8' })).toEqual({ LANG: 'de_DE.UTF-8' });
+    expect(utf8Env({ LC_ALL: 'en_US.utf8' }).LC_ALL).toBe('en_US.utf8');
+    expect(utf8Env({}).LC_ALL).toBe('C.UTF-8');
+    expect(utf8Env({ LANG: 'C', PATH: '/usr/bin' })).toEqual({ LANG: 'C', PATH: '/usr/bin', LC_ALL: 'C.UTF-8' });
   });
 
   it('keeps text to readable characters', () => {

@@ -5,6 +5,27 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-28 — Meet remote control: the input helpers, checked on real systems (not released)
+
+A check that drives each input helper against a test window reporting what
+arrives (`tests/os/remote-control/check.mjs`), run by CI on Windows, macOS
+and Linux whenever the helpers change. On Linux it found:
+
+**Fixed**
+
+- **With one window shared, clicks landed a title bar too low.** The
+  xdotool that Debian and Ubuntu ship places a window inside its frame by
+  the frame's offset twice; the window's place now comes from xwininfo.
+- **Accented letters, other scripts and emoji were not typed** when the
+  app ran without a UTF-8 locale (no LANG, or LANG=C): xdotool reads text in
+  its locale. It now runs in a UTF-8 one.
+- **A character the keyboard layout lacks could come out wrong**: xdotool
+  types it on a spare key it remaps, and without a pause the app read the key
+  before the remapping. Text with such characters is typed with xdotool's
+  usual 12 ms between keys; plain text stays instant.
+
+---
+
 ## 2026-09-28 — Meet remote control: the Windows and macOS helpers, checked from Linux (not released)
 
 Neither helper has run on its own system yet. The Windows one ran under

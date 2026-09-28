@@ -101,6 +101,16 @@ export function cleanText(text: string): string {
 }
 
 /**
+ * xdotool reads the text it types in the locale it runs in: without a UTF-8
+ * one (no LANG, or LANG=C), anything past ASCII fails. The app's own locale
+ * when it is UTF-8, else C.UTF-8.
+ */
+export function utf8Env(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const ctype = env.LC_ALL || env.LC_CTYPE || env.LANG || '';
+  return /utf-?8/i.test(ctype) ? env : { ...env, LC_ALL: 'C.UTF-8' };
+}
+
+/**
  * The lines the Windows and macOS helpers read. A key not in `KEYS` produces
  * nothing; so does anything malformed.
  */
@@ -144,8 +154,10 @@ export function xdotoolArgs(actions: InputAction[]): string[] {
       if (k) args.push(a.down ? 'keydown' : 'keyup', k.x11);
     } else if (a.t === 'text') {
       const text = cleanText(a.text);
-      // `--` so text starting with a dash is typed, not read as an option.
-      if (text) args.push('type', '--delay', '0', '--', text);
+      // A character the keyboard layout lacks is typed on a spare key xdotool remaps for it; with no pause
+      // the app reads the key before (or after) the remapping and gets the wrong character. `--` so text
+      // starting with a dash is typed, not read as an option. `type` takes every argument after it.
+      if (text) args.push('type', '--delay', /^[\x20-\x7e\n\t]*$/.test(text) ? '0' : '12', '--', text);
     }
   }
   return args;
@@ -678,7 +690,7 @@ class X11Injector extends Batched implements Injector {
       let out = '';
       let p;
       try {
-        p = spawn(file, args, { stdio: ['ignore', 'pipe', 'ignore'] });
+        p = spawn(file, args, { stdio: ['ignore', 'pipe', 'ignore'], env: utf8Env() });
       } catch {
         resolve(null);
         return;
@@ -696,8 +708,20 @@ class X11Injector extends Batched implements Injector {
     });
   }
 
+  /**
+   * xwininfo asks the X server where the window is. xdotool 3.20160805 (what
+   * Debian and Ubuntu ship) adds the window's offset inside the window
+   * manager's frame twice — a title bar too low — so it is only the fallback.
+   */
   async windowBounds(windowId: string): Promise<Rect | null> {
-    if (!/^\d{1,20}$/.test(windowId)) return null;
+    if (!/^\d{1,10}$/.test(windowId)) return null;
+    if (this.xwininfo) {
+      const info = await this.runFile(this.xwininfo, ['-id', `0x${Number(windowId).toString(16)}`]);
+      // The last of each: the window's name, on the first line, could look like one.
+      const v = (k: string) => Number([...(info ?? '').matchAll(new RegExp(`^\\s*${k}:\\s+(-?\\d+)$`, 'gm'))].pop()?.[1]);
+      const r = { x: v('Absolute upper-left X'), y: v('Absolute upper-left Y'), width: v('Width'), height: v('Height') };
+      if (Object.values(r).every(Number.isFinite)) return r;
+    }
     const out = await this.run(['getwindowgeometry', '--shell', windowId]);
     if (!out) return null;
     const v = (k: string) => Number(new RegExp(`^${k}=(-?\\d+)$`, 'm').exec(out)?.[1]);

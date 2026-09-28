@@ -1,0 +1,63 @@
+# The remote-control input helpers on real systems (WS-MEET-ENH-01): each is
+# driven against a test window that reports what arrives — clicks and their
+# count, drags, the wheel, keys and their modifiers, typed text. Runs when the
+# helpers or this check change.
+name: Remote control helpers
+
+on:
+  push:
+    paths:
+      - electron/services/remote-control/input.ts
+      - electron/services/remote-control/keys.ts
+      - tests/os/remote-control/**
+      - .github/workflows/remote-control-helpers.yml
+  pull_request:
+    paths:
+      - electron/services/remote-control/input.ts
+      - electron/services/remote-control/keys.ts
+      - tests/os/remote-control/**
+      - .github/workflows/remote-control-helpers.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rc-helpers-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  helpers:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-14, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # Only esbuild is needed; no Electron download.
+      - run: npm ci --ignore-scripts
+      - name: What this Mac lets the helper do
+        if: runner.os == 'macOS'
+        run: |
+          sw_vers
+          osascript -l JavaScript -e 'ObjC.import("ApplicationServices"); "Accessibility trusted: " + $.AXIsProcessTrusted()' || true
+      - name: A display, a window manager and the X tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb openbox xdotool x11-utils python3-tk
+          Xvfb :99 -screen 0 1600x900x24 -nolisten tcp &
+          sleep 1
+          DISPLAY=:99 openbox &
+          sleep 1
+      - name: Check
+        run: node tests/os/remote-control/check.mjs
+        env:
+          DISPLAY: ':99'
+          XDG_SESSION_TYPE: ${{ runner.os == 'Linux' && 'x11' || '' }}
