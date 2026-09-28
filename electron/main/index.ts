@@ -31,6 +31,7 @@ import { Database } from '../services/db';
 import { archName, DeviceService, platformName } from '../services/device';
 import { SalonDesk } from '../services/salon-desk';
 import { SalonPrint } from '../services/salon-print';
+import { SalonSync } from '../services/salon-sync';
 import { DiagnosticsService } from '../services/diagnostics';
 import { readEnterpriseConfig } from '../services/enterprise';
 import { HttpClient, type FetchLike } from '../services/http';
@@ -251,6 +252,26 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   const notifications = new NotificationService(db, getVault, http, () => settings.effective());
   const queue = new OfflineQueue(db, getVault, http, () => sessionCtl.capabilities().offlineQueue);
+  // SalonMate's front desk, while WorkSuite is out of reach: the day's copy and the outbox.
+  const salonSync = new SalonSync({
+    db,
+    vault: getVault,
+    http,
+    origin: () => auth.getServer()?.origin ?? null,
+    user: () => (sessionCtl.isReady() ? sessionCtl.userId() : null),
+    desk: () => salonDesk.pairing(),
+    deskKey: () => salonDesk.keyFor('/api/salon/v1/'),
+    caps: () => {
+      const c = sessionCtl.capabilities();
+      return { offlineCache: c.offlineCache, offlineQueue: c.offlineQueue };
+    },
+    appVersion: app.getVersion(),
+    notify: (n) => notifications.notify({ ...n, module: 'salon', category: null, sender: 'SalonMate', critical: false }),
+    changed: () => {
+      broadcast('salon:changed');
+      emitStatus();
+    },
+  });
 
   // Hashing runs in a supervised utility process (FR-DIAG-07).
   type Hashed = { sha256: string; bytes: number; blocks?: string[] };
@@ -459,7 +480,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     return {
       network: networkStatus(apiReachable, realtime.getState(), realtimeDownSince),
       realtime: realtime.getState(),
-      pendingChanges: uid ? queue.pendingCount(uid) : 0,
+      pendingChanges: uid ? queue.pendingCount(uid) + salonSync.pending() : 0,
       unread: counts,
       notificationsPausedUntil: notifications.pausedUntilIso(),
       services,
@@ -748,11 +769,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     device.extras = () => {
       const c = transfers.activeCounts();
       const s = sync.health();
-      return { pendingUp: queue.pendingCount(uid) + c.uploads + s.pendingUp, pendingDown: c.downloads + s.pendingDown, lastError: s.lastError };
+      return { pendingUp: queue.pendingCount(uid) + salonSync.pending() + c.uploads + s.pendingUp, pendingDown: c.downloads + s.pendingDown, lastError: s.lastError };
     };
     sync.start(uid);
     transfers.recover();
     void queue.replay(uid);
+    salonSync.start();
     void audit.flush();
     void refreshAttendance();
     attendanceTimer = setInterval(() => void refreshAttendance(), 5 * 60_000);
@@ -781,6 +803,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     device.stop();
     transfers.stopAll();
     sync.stop();
+    salonSync.stop();
     if (attendanceTimer) clearInterval(attendanceTimer);
     attendanceTimer = null;
     stopPresence();
@@ -797,6 +820,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       // profile is touched; downloaded files the user saved are theirs.
       cache.clearUser(uid);
       notifications.clearUser(uid);
+      // The salon day's copy is cache; what the desk made waits for its maker (salon-sync.ts).
+      salonSync.signedOut(uid);
       db.run('DELETE FROM tab_sessions WHERE user_id = ?', uid);
       if (scope !== 'tokens') {
         queue.wipeUser(uid, includeDrafts);
@@ -809,6 +834,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       if (includeDrafts) {
         salonDesk.forgetAll();
         salonPrint.forgetAll();
+        salonSync.forgetAll();
       }
       log.info('local data removed', { scope });
     },
@@ -886,6 +912,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void calls.check();
     device.poke();
     sync.kick('reconnected');
+    void salonSync.sync();
     broadcast('realtime:resync');
   }
 
@@ -1011,6 +1038,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     secrets,
     salonDesk,
     salonPrint,
+    salonSync,
     settings,
     http,
     auth,
@@ -1113,6 +1141,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     realtime.kick();
     const uid = sessionCtl.userId();
     if (uid) void queue.replay(uid);
+    void salonSync.sync();
   });
   screen.on('display-removed', () => windows.refit());
   screen.on('display-metrics-changed', () => windows.refit());

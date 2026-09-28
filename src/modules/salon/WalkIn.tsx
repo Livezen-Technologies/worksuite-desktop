@@ -1,7 +1,9 @@
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
+import type { SalonOutboxInput } from '@shared/types';
 import { Icon } from '../../components/Icon';
 import { Button, Card, Chip, Spinner, TextField, cx } from '../../components/ui';
+import { ApiError } from '../../core/api';
 import { toast } from '../../core/toasts';
 import {
   addClient,
@@ -11,6 +13,7 @@ import {
   attemptKey,
   bookAt,
   capable,
+  clockAt,
   fetchAvailability,
   fetchClient,
   fetchClients,
@@ -22,6 +25,7 @@ import {
   refusal,
   startWalkIn,
   STATEMENT,
+  atLeast,
   todayAt,
   worstAllergy,
   type CheckInExtra,
@@ -31,6 +35,7 @@ import {
   type Severity,
 } from './api';
 import { AllergyGate } from './CheckIn';
+import { keep, localId, SK, syncNow, useCopyClient, useCopyClients } from './offline';
 import { AllergyChip, Failed, firstName, Note, Person, seedOf, useDesk, useNow } from './parts';
 
 /**
@@ -43,9 +48,19 @@ import { AllergyChip, Failed, firstName, Note, Person, seedOf, useDesk, useNow }
  * quote. "Start now" is one request — booked, checked in through the allergy
  * gate, and started — sent under a key made for this attempt, so a second
  * press after a dropped connection is the same walk-in (CTR-06).
+ *
+ * WITH WORKSUITE OUT OF REACH the desk still takes the walk-in (OFF-03): the
+ * client from the day's copy or a new one, the services, a stylist who does
+ * them, and "start now" or a time. It is kept — new client, visit, check-in,
+ * in that order — and sent when the line is back, where the availability
+ * check and the allergy gate run again. Nobody's diary is guessed at here:
+ * whether the stylist is free is WorkSuite's to say, then.
  */
 interface Chosen {
   id: number;
+  /** A client added here while WorkSuite is out of reach, until it knows them. */
+  local?: string;
+  mobile?: string;
   name: string;
   phone: string | null;
   note?: string | null;
@@ -63,10 +78,18 @@ export default function WalkIn({ later: bookingFirst }: { later: boolean }) {
 
   const [chosenClient, setClient] = useState<Chosen | null>(() => (seed.client_id ? { id: seed.client_id, name: '', phone: null, allergy: null } : null));
   /* Opened for a known client (Book again): who they are, and their allergy, come from their card. */
+  const offline = desk.offline;
   const seeded = !!chosenClient && chosenClient.name === '';
-  const card = useQuery({ queryKey: K.client(chosenClient?.id ?? 0), queryFn: ({ signal }) => fetchClient(chosenClient!.id, signal), enabled: seeded });
+  const card = useQuery({ queryKey: K.client(chosenClient?.id ?? 0), queryFn: ({ signal }) => fetchClient(chosenClient!.id, signal), enabled: seeded && !offline });
+  const copied = useCopyClient(chosenClient?.id ?? null, seeded && offline);
   const client: Chosen | null =
-    seeded && card.data ? { id: card.data.client.id, name: card.data.client.name, phone: card.data.client.phone ?? card.data.client.mobile, note: card.data.profile.tier, allergy: worstAllergy(card.data.allergies) } : seeded ? null : chosenClient;
+    seeded && card.data
+      ? { id: card.data.client.id, name: card.data.client.name, phone: card.data.client.phone ?? card.data.client.mobile, note: card.data.profile.tier, allergy: worstAllergy(card.data.allergies) }
+      : seeded && offline && copied.data
+        ? { id: copied.data.id, name: copied.data.name, phone: copied.data.phone, note: copied.data.tier ?? null, allergy: (copied.data.allergy ?? null) as Chosen['allergy'] }
+        : seeded
+          ? null
+          : chosenClient;
   const [picked, setPicked] = useState<number[]>(() => (seed.service_ids ?? []).filter((id) => services.some((s) => s.id === id)));
   const [stylistId, setStylistId] = useState<number | null>(seed.provider_id ?? null);
   const [category, setCategory] = useState('all');
@@ -78,6 +101,9 @@ export default function WalkIn({ later: bookingFirst }: { later: boolean }) {
   const [gate, setGate] = useState<Gate | null>(null);
   const [key, setKey] = useState(attemptKey);
   const [offer, setOffer] = useState<{ starts_at: string; label: string } | null>(null);
+  /* Offline: a booking's time as the salon's clock says it, "14:30". */
+  const [at, setAt] = useState('');
+  const canKeep = desk.sync?.can_write === true;
 
   const chosen = picked.map((id) => services.find((s) => s.id === id)).filter((s): s is Service & { category: string } => !!s);
   const categories = desk.options.menu.filter((c) => c.services.length > 0);
@@ -91,11 +117,13 @@ export default function WalkIn({ later: bookingFirst }: { later: boolean }) {
   const free = useQueries({
     queries: able.slice(0, 8).map((s) => {
       const asked = JSON.stringify(chosen.map((c) => ({ service_id: c.id, provider_id: s.id })));
-      return { queryKey: K.availability(loc, day, asked), queryFn: ({ signal }: { signal: AbortSignal }) => fetchAvailability(loc, day, asked, signal), enabled: chosen.length > 0, staleTime: 30_000 };
+      return { queryKey: K.availability(loc, day, asked), queryFn: ({ signal }: { signal: AbortSignal }) => fetchAvailability(loc, day, asked, signal), enabled: chosen.length > 0 && !offline, staleTime: 30_000 };
     }),
   });
   const quoteItems = JSON.stringify(chosen.map((s) => ({ service_id: s.id, provider_id: stylist?.id ?? 'any' })));
-  const quote = useQuery({ queryKey: K.quote(loc, client?.id ?? 0, quoteItems), queryFn: ({ signal }) => fetchQuote(loc, client?.id ?? null, quoteItems, signal), enabled: chosen.length > 0 });
+  const quote = useQuery({ queryKey: K.quote(loc, client?.id ?? 0, quoteItems), queryFn: ({ signal }) => fetchQuote(loc, client?.id ?? null, quoteItems, signal), enabled: chosen.length > 0 && !offline });
+  /* Offline, the menu's own prices: WorkSuite's quote (a tier's price, a deposit) comes with the visit. */
+  const listTotal = chosen.reduce((t, s) => t + (s.price ?? 0), 0);
 
   const stylistIndex = stylist ? able.findIndex((s) => s.id === stylist.id) : -1;
   const stylistDay = stylistIndex >= 0 ? free[stylistIndex]?.data : undefined;
@@ -119,6 +147,7 @@ export default function WalkIn({ later: bookingFirst }: { later: boolean }) {
   }
 
   function failed(e: unknown, again: string) {
+    if (e instanceof ApiError && e.offline) void syncNow().catch(() => undefined);
     if (answered(e)) {
       fresh();
       const d = refusal(e);
@@ -130,8 +159,59 @@ export default function WalkIn({ later: bookingFirst }: { later: boolean }) {
     }
   }
 
+  /**
+   * Keep the walk-in or booking for when WorkSuite answers: the new client
+   * first, when there is one, then the visit — and, for "start now", its
+   * check-in with the allergy read out here.
+   */
+  async function keepIt(startsAt: string, extra: CheckInExtra | null) {
+    if (!client || !stylist) return;
+    setBusy(true);
+    try {
+      const who = client.local ? `local:${client.local}` : client.id;
+      const visit = localId('V');
+      const what = `${chosen.map((s) => s.name).join(', ')} with ${firstName(stylist.name)}`;
+      const inputs: SalonOutboxInput[] = [];
+      if (client.local) {
+        inputs.push({ kind: 'client.create', local_id: client.local, payload: { name: client.name, ...(client.mobile ? { mobile: client.mobile } : {}) }, label: `New client: ${client.name}`, detail: client.mobile ?? null });
+      }
+      inputs.push({
+        kind: 'visit.book',
+        local_id: visit,
+        payload: { client_id: who, starts_at: startsAt, items: chosen.map((s) => ({ service_id: s.id, provider_id: stylist.id })) },
+        label: `${extra ? 'Walk-in' : 'Booking'}: ${client.name}`,
+        detail: extra ? what : `${longDay(date)} ${startsAt.slice(11, 16)} · ${what}`,
+      });
+      if (extra) inputs.push({ kind: 'visit.check_in', payload: { visit_id: `local:${visit}`, ...extra }, label: `Check-in: ${client.name}`, detail: what });
+      await keep(inputs);
+      setGate(null);
+      toast('success', extra ? `${client.name}’s walk-in is kept, and goes to WorkSuite when it answers.` : `${client.name}’s booking is kept, and goes to WorkSuite when it answers.`);
+      void qc.invalidateQueries({ queryKey: SK.all });
+      desk.go('today');
+    } catch (e) {
+      toast('error', e instanceof Error ? e.message : 'That could not be kept on this computer.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /* Offline "start now": the allergy on file is read out here first, as online. */
+  function startOffline() {
+    if (!client) return;
+    const a = client.allergy;
+    if (a && atLeast(a.severity, desk.options.ack_severity ?? 'moderate')) {
+      setGate({ ok: false, code: 'ack_required', message: '', allergies: [{ id: 0, substance: a.substance, severity: a.severity, reaction: null, withdrawn_at: null }], missing_patch: [] });
+    } else {
+      void keepIt('now', {});
+    }
+  }
+
   async function startNow(extra: CheckInExtra = {}) {
     if (!client || !stylist) return;
+    if (offline) {
+      await keepIt('now', extra);
+      return;
+    }
     setBusy(true);
     try {
       const r = await startWalkIn({ location_id: loc, client_id: client.id, items, desk_id: desk.desk.id }, extra, key);
@@ -170,8 +250,9 @@ export default function WalkIn({ later: bookingFirst }: { later: boolean }) {
     }
   }
 
-  const canBook = desk.may('salon.visit.book');
+  const canBook = desk.may('salon.visit.book') && (!offline || canKeep) && (!client?.local || desk.may('salon.client.edit'));
   const ready = !!client && chosen.length > 0 && !!stylist && canBook;
+  const atValid = /^\d{2}:\d{2}$/.test(at) && (date > today || at >= clockAt(new Date(clock).toISOString(), desk.location.timezone));
   const slots = (stylistDay?.starts ?? []).filter((s) => s.free && Date.parse(s.starts_at) >= clock - 5 * 60_000);
 
   return (
@@ -179,8 +260,11 @@ export default function WalkIn({ later: bookingFirst }: { later: boolean }) {
       <div className="flex min-w-0 flex-1 flex-col gap-4">
         <div>
           <h1 className="text-[22px] font-extrabold text-ink">{bookingFirst ? 'New booking' : 'Walk-in'}</h1>
-          <p className="mt-0.5 text-[13px] text-ink-2">Pick services, then a stylist who does them. Times come from the same check as every booking.</p>
+          <p className="mt-0.5 text-[13px] text-ink-2">
+            {offline ? 'Pick services, then a stylist who does them. It is kept here, and WorkSuite checks the time when it answers.' : 'Pick services, then a stylist who does them. Times come from the same check as every booking.'}
+          </p>
         </div>
+        {offline && !canKeep ? <Note tone="warning">{desk.sync?.why_not ?? 'This computer cannot keep changes to send later.'}</Note> : null}
         <Card>
           <div className="pt-4">
             <TextField aria-label="Search services" placeholder="Search services" value={find} onChange={(e) => setFind(e.target.value)} />
@@ -245,7 +329,7 @@ export default function WalkIn({ later: bookingFirst }: { later: boolean }) {
                   </div>
                 }
               />
-            ) : seeded && !card.isError ? (
+            ) : seeded && (offline ? copied.isLoading : !card.isError) ? (
               <Spinner label="Loading the client…" />
             ) : (
               <FindClient
@@ -286,7 +370,19 @@ export default function WalkIn({ later: bookingFirst }: { later: boolean }) {
                   const f = i >= 0 ? nextFree(free[i]?.data, clock) : null;
                   const lacks = chosen.filter((c) => !s.services.includes(c.id)).map((c) => c.name);
                   const status =
-                    i < 0 ? `Doesn't do ${lacks.join(', ') || 'these here'}` : free[i]?.isLoading ? 'Checking…' : free[i]?.isError ? 'Could not check' : f ? (freeNow(f, clock) ? 'Free now' : `Free ${f.label}`) : 'Not free that day';
+                    i < 0
+                      ? `Doesn't do ${lacks.join(', ') || 'these here'}`
+                      : offline
+                        ? 'Checked when WorkSuite answers'
+                        : free[i]?.isLoading
+                          ? 'Checking…'
+                          : free[i]?.isError
+                            ? 'Could not check'
+                            : f
+                              ? freeNow(f, clock)
+                                ? 'Free now'
+                                : `Free ${f.label}`
+                              : 'Not free that day';
                   return (
                     <button
                       key={s.id}
@@ -313,7 +409,9 @@ export default function WalkIn({ later: bookingFirst }: { later: boolean }) {
           {chosen.length > 0 ? (
             <div className="mt-3 flex items-baseline justify-between border-t border-line pt-3">
               <span className="text-[13px] text-ink-2">Total</span>
-              <span className="text-[18px] font-extrabold text-ink tabular-nums">{quote.data ? amount(quote.data.total, quote.data.currency) : quote.isError ? '—' : '…'}</span>
+              <span className="text-[18px] font-extrabold text-ink tabular-nums">
+                {offline ? `about ${amount(listTotal, desk.currency)}` : quote.data ? amount(quote.data.total, quote.data.currency) : quote.isError ? '—' : '…'}
+              </span>
             </div>
           ) : null}
           {quote.data && quote.data.deposit.due > 0 ? (
@@ -349,7 +447,12 @@ export default function WalkIn({ later: bookingFirst }: { later: boolean }) {
               </Button>
             </div>
             <p className="mt-1 text-[12.5px] text-ink-3">{longDay(date)}</p>
-            {!stylist ? (
+            {offline ? (
+              <div className="mt-2 flex flex-col gap-1">
+                <TextField label="Time" type="time" step={300} value={at} onChange={(e) => setAt(e.target.value)} />
+                <p className="text-[12.5px] text-ink-3">On the salon’s clock. WorkSuite checks the diary when it answers, and offers the nearest time if this one is taken.</p>
+              </div>
+            ) : !stylist ? (
               <p className="mt-2 text-[13px] text-ink-2">Choose a stylist to see their free times.</p>
             ) : !stylistDay ? (
               free[stylistIndex]?.isError ? <Failed text="Could not check the diary just now — this is not a full day." onRetry={() => void free[stylistIndex]?.refetch()} /> : <Spinner label="Checking free times…" />
@@ -389,8 +492,8 @@ export default function WalkIn({ later: bookingFirst }: { later: boolean }) {
               <Button size="lg" className="flex-1" disabled={!ready} onClick={() => setLater(true)}>
                 Book a later slot
               </Button>
-              <Button variant="primary" size="lg" className="flex-1" loading={busy} disabled={!ready || !desk.may('salon.visit.checkin')} onClick={() => void startNow()}>
-                Start now
+              <Button variant="primary" size="lg" className="flex-1" loading={busy} disabled={!ready || !desk.may('salon.visit.checkin')} onClick={() => (offline ? startOffline() : void startNow())}>
+                {offline ? 'Keep: start now' : 'Start now'}
               </Button>
             </>
           ) : (
@@ -407,15 +510,23 @@ export default function WalkIn({ later: bookingFirst }: { later: boolean }) {
                   Start now instead
                 </Button>
               ) : null}
-              <Button variant="primary" size="lg" className="flex-1" loading={busy} disabled={!ready || !slot} onClick={() => slot && void book(slot)}>
-                {slot && stylist ? `Book ${slots.find((s) => s.starts_at === slot)?.label ?? ''} with ${firstName(stylist.name)}` : 'Book'}
-              </Button>
+              {offline ? (
+                <Button variant="primary" size="lg" className="flex-1" loading={busy} disabled={!ready || !atValid} onClick={() => void keepIt(`${date} ${at}`, null)}>
+                  {atValid && stylist ? `Keep: ${at} with ${firstName(stylist.name)}` : 'Keep the booking'}
+                </Button>
+              ) : (
+                <Button variant="primary" size="lg" className="flex-1" loading={busy} disabled={!ready || !slot} onClick={() => slot && void book(slot)}>
+                  {slot && stylist ? `Book ${slots.find((s) => s.starts_at === slot)?.label ?? ''} with ${firstName(stylist.name)}` : 'Book'}
+                </Button>
+              )}
             </>
           )}
         </div>
         {!later && stylist && client ? (
           <p className="text-[12.5px] text-ink-3">
-            Start now books {now || !firstFree ? 'now' : firstFree.label} with {firstName(stylist.name)}, checks {firstName(client.name)} in and starts the service.
+            {offline
+              ? `Keeps ${firstName(client.name)}’s visit with ${firstName(stylist.name)} from now, checked in. It goes to WorkSuite, as of now, when it answers.`
+              : `Start now books ${now || !firstFree ? 'now' : firstFree.label} with ${firstName(stylist.name)}, checks ${firstName(client.name)} in and starts the service.`}
           </p>
         ) : null}
       </div>
@@ -430,7 +541,7 @@ export default function WalkIn({ later: bookingFirst }: { later: boolean }) {
           statement={STATEMENT}
           gate={gate.message ? gate : null}
           busy={busy}
-          confirmLabel={`Start ${firstName(client.name)} now`}
+          confirmLabel={offline ? `Keep ${firstName(client.name)}’s walk-in` : `Start ${firstName(client.name)} now`}
           onClose={() => setGate(null)}
           onConfirm={(extra) => void startNow(extra)}
         />
@@ -450,11 +561,19 @@ function FindClient({ onChosen }: { onChosen: (c: Chosen) => void }) {
   const [busy, setBusy] = useState(false);
   const [key, setKey] = useState(attemptKey);
   const t = term.trim();
-  const q = useQuery({ queryKey: K.clients(desk.org, t), queryFn: ({ signal }) => fetchClients(desk.org, t, 8, signal), enabled: t.length >= 2 });
+  const offline = desk.offline;
+  const live = useQuery({ queryKey: K.clients(desk.org, t), queryFn: ({ signal }) => fetchClients(desk.org, t, 8, signal), enabled: t.length >= 2 && !offline });
+  const copied = useCopyClients(t, 8, t.length >= 2 && offline);
+  const q = offline ? { data: copied.data ? { items: copied.data.map((c) => ({ ...c, tier: c.tier ?? null, allergy: (c.allergy ?? null) as Chosen['allergy'] })) } : undefined, isError: copied.isError, isLoading: copied.isLoading, refetch: copied.refetch } : live;
 
   async function add(confirmNew = false) {
     const n = name.trim();
     if (!n) return;
+    if (offline) {
+      /* Kept with the walk-in; WorkSuite checks for somebody with these details when it answers. */
+      onChosen({ id: 0, local: localId('C'), name: n, phone: mobile.trim() || null, mobile: mobile.trim() || undefined, note: 'new client', allergy: null });
+      return;
+    }
     setBusy(true);
     try {
       const r = await addClient(desk.org, { name: n, mobile: mobile.trim() || undefined, ...(confirmNew ? { confirm_new: true } : {}) }, key);
@@ -476,6 +595,7 @@ function FindClient({ onChosen }: { onChosen: (c: Chosen) => void }) {
         <h2 className="text-[15px] font-bold text-ink">New client</h2>
         <TextField label="Name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
         <TextField label="Mobile" hint="077 123 4567 — or leave it empty." inputMode="tel" value={mobile} onChange={(e) => setMobile(e.target.value)} />
+        {offline ? <p className="text-[12.5px] text-ink-3">WorkSuite cannot be reached: the client is added with the visit when it answers, and if it already knows somebody with these details it asks which.</p> : null}
         {candidates ? (
           <div className="flex flex-col gap-2 rounded-[10px] border border-warning/30 bg-warning-bg p-3">
             <p className="text-[13px] font-semibold text-warning">WorkSuite already knows somebody with these details. Is it one of them?</p>

@@ -115,6 +115,7 @@ const MODULE_LABELS: Record<string, string> = {
   crm: 'CRM',
   files: 'Files',
   support: 'Support',
+  salon: 'SalonMate',
   system: 'WorkSuite',
 };
 

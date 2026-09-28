@@ -2,10 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Icon } from '../../components/Icon';
 import { Button, Modal, Spinner, cx } from '../../components/ui';
-import { ApiError, request } from '../../core/api';
-import { app } from '../../core/app-state';
 import { call } from '../../core/bridge';
-import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
 import type { ModuleProps } from '../registry';
@@ -13,17 +10,22 @@ import { deskState, fetchDesks, fetchOptions, forgetDesk, K, pairing as readPair
 import { useCheckIn } from './CheckIn';
 import type { CheckoutResult } from './money';
 import Connect from './Connect';
+import { copyAge, deskFromCopy, optionsFromCopy, syncNow, unreachable, useCopy, useOnline, useSalonChanged, useSyncStatus, waitingLine } from './offline';
 import { DeskContext, Failed, Note, salonRoute, seedParam, type Desk, type DeskView } from './parts';
 
 /**
  * SalonMate's front desk, native in WorkSuite Desktop. Addressed as
- * `/salon?view=today|calendar|walkin|book|clients` (`&client=<id>` for a
- * client's card, `&date=YYYY-MM-DD` for a day, `&seed=` for a walk-in started
- * with what is known).
+ * `/salon?view=today|calendar|walkin|book|clients|outbox|…` (`&client=<id>`
+ * for a client's card, `&date=YYYY-MM-DD` for a day, `&seed=` for a walk-in
+ * started with what is known). A notification's `view=checkout` is the
+ * payment screen.
  *
  * Until this computer is an approved desk it shows the pairing screen. The
  * owners' screens — reports, commission, settings, the desks list — open in
  * WorkSuite on the web.
+ *
+ * When WorkSuite does not answer, the desk opens from its copy of the day and
+ * says so (offline.ts); taking money waits for WorkSuite.
  */
 const Today = lazy(() => import('./Today'));
 const Calendar = lazy(() => import('./Calendar'));
@@ -34,6 +36,7 @@ const Paid = lazy(() => import('./Pay').then((m) => ({ default: m.Paid })));
 const Register = lazy(() => import('./Register'));
 const DayClose = lazy(() => import('./DayClose'));
 const Printers = lazy(() => import('./Printers'));
+const Outbox = lazy(() => import('./Outbox'));
 
 const VIEWS: Record<DeskView, { label: string; icon: string }> = {
   today: { label: 'Today', icon: 'home' },
@@ -46,20 +49,27 @@ const VIEWS: Record<DeskView, { label: string; icon: string }> = {
   register: { label: 'Register', icon: 'unlock' },
   close: { label: 'Close the day', icon: 'moon' },
   printers: { label: 'Printers', icon: 'printer' },
+  outbox: { label: 'Changes to send', icon: 'upload' },
 };
 
-const HEARTBEAT_MS = 5 * 60_000;
+/** Screens that take or count money: they need WorkSuite, always. */
+const MONEY: DeskView[] = ['pay', 'register', 'close'];
 
 export default function SalonShell(_props: ModuleProps) {
   const { query, go: goRoute } = useTab();
   const qc = useQueryClient();
-  const version = useStore(app, (s) => s.info?.version ?? null);
-  const asked = (query.get('view') ?? '') as DeskView;
+  const raw = query.get('view') ?? '';
+  const asked = (raw === 'checkout' ? 'pay' : raw) as DeskView;
   const view: DeskView = asked in VIEWS ? asked : 'today';
   useTabTitle(`SalonMate · ${VIEWS[view].label}`);
+  useSalonChanged();
+  const online = useOnline();
 
   const pairing = useQuery({ queryKey: K.pairing, queryFn: readPairing });
   const deskId = pairing.data?.desk_id ?? null;
+  const sync = useSyncStatus();
+  const copyQ = useCopy(!!deskId);
+  const copy = copyQ.data && copyQ.data.desk_id === deskId ? copyQ.data : null;
   const desks = useQuery({
     queryKey: K.desks,
     queryFn: ({ signal }) => fetchDesks(signal),
@@ -67,44 +77,46 @@ export default function SalonShell(_props: ModuleProps) {
     // Waiting for an owner's approval: ask often. Working: now and then, to notice a revoke.
     refetchInterval: (q) => (deskId && deskState(q.state.data, deskId) === 'requested' ? 10_000 : 5 * 60_000),
   });
-  const state = deskId ? deskState(desks.data, deskId) : null;
-  const info = deskId ? (desks.data?.items.find((d) => d.id === deskId) ?? null) : null;
+  const desksDown = unreachable(desks);
+  /* Opened with WorkSuite out of reach: the desk as the copy last saw it. */
+  const fromCopy = !desks.data && desksDown ? deskFromCopy(copy) : null;
+  const state = fromCopy ? fromCopy.status : deskId ? deskState(desks.data, deskId) : null;
+  const info = fromCopy ?? (deskId ? (desks.data?.items.find((d) => d.id === deskId) ?? null) : null);
   const options = useQuery({ queryKey: K.options(info?.org_id ?? null), queryFn: ({ signal }) => fetchOptions(info!.org_id, signal), enabled: state === 'active' && !!info });
-  const checkIn = useCheckIn(options.data?.ack_severity ?? 'moderate');
+  const offline = !online || desksDown || unreachable(options) || sync.data?.reachable === false;
+  const opts = options.data ?? (offline && copy ? optionsFromCopy(copy) : undefined);
+  const checkIn = useCheckIn(opts?.ack_severity ?? 'moderate', offline);
   /* What each payment answered, for the Paid screen that follows it. */
   const [paid, setPaid] = useState<Record<number, CheckoutResult>>({});
 
-  /* The heartbeat: WorkSuite shows owners which desks are alive, and a refusal is how a revoke reaches the counter. */
+  /* The main process sends the desk's heartbeat; a refusal there is how a revoke reaches the counter. */
+  const problem = sync.data?.problem ?? null;
   useEffect(() => {
-    if (state !== 'active' || !deskId) return;
-    const beat = () =>
-      request('POST', '/api/salon/v1/desk/heartbeat', { body: { desk: deskId, app_version: version ? `desktop ${version}` : 'desktop', queue_depth: 0 } }).catch((e: unknown) => {
-        if (e instanceof ApiError && e.status === 403) void qc.invalidateQueries({ queryKey: K.desks });
-      });
-    void beat();
-    const t = window.setInterval(() => void beat(), HEARTBEAT_MS);
-    return () => window.clearInterval(t);
-  }, [state, deskId, version, qc]);
+    if (problem) void qc.invalidateQueries({ queryKey: K.desks });
+  }, [problem, qc]);
 
-  const location = options.data?.locations.find((l) => l.id === info?.location_id) ?? null;
+  const location = opts?.locations.find((l) => l.id === info?.location_id) ?? null;
 
   let desk: Desk | null = null;
-  if (info && options.data && location) {
-    const may = options.data.may ?? {};
+  if (info && opts && location) {
+    const may = opts.may ?? {};
     const go: Desk['go'] = (v, params = {}) => goRoute(salonRoute(v, params));
     desk = {
       desk: info,
       location,
       org: info.org_id,
-      company: options.data.company ?? '',
-      currency: options.data.currency ?? '',
-      options: options.data,
+      company: opts.company ?? '',
+      currency: opts.currency ?? '',
+      options: opts,
       params: query,
       may: (p) => may[p] === true,
       go,
       checkIn: (v) => checkIn.start(v),
       walkIn: (seed, later = false) => go(later ? 'book' : 'walkin', { seed: seedParam(seed) }),
       paid: { remember: (id, r) => setPaid((p) => ({ ...p, [id]: r })), get: (id) => paid[id] },
+      offline,
+      copy,
+      sync: sync.data ?? null,
     };
   }
 
@@ -115,9 +127,18 @@ export default function SalonShell(_props: ModuleProps) {
     return <Connect pairing={pairing.data ?? null} desk={info} state={state} desks={desks} onChange={() => void qc.invalidateQueries({ queryKey: K.all })} />;
   }
 
-  if (options.isError) return <div className="p-6"><Failed text="SalonMate’s menu, stylists and permissions could not be loaded." onRetry={() => void options.refetch()} /></div>;
+  if (options.isError && !opts) {
+    return (
+      <div className="p-6">
+        <Failed
+          text={offline ? 'WorkSuite cannot be reached, and this computer has no copy of the desk’s day yet. It keeps one once it has been open with WorkSuite reachable.' : 'SalonMate’s menu, stylists and permissions could not be loaded.'}
+          onRetry={() => void options.refetch()}
+        />
+      </div>
+    );
+  }
   if (!desk) {
-    if (options.data && !location) {
+    if (opts && !location) {
       return (
         <div className="p-6">
           <Note tone="warning">This desk’s location is not one you may work at. Ask an owner for access to it, or pair this computer again for another location.</Note>
@@ -132,8 +153,13 @@ export default function SalonShell(_props: ModuleProps) {
       <div className="flex h-full min-h-0">
         <Rail view={view} desk={desk} />
         <main className="min-w-0 flex-1 overflow-y-auto bg-ground scroll-thin" aria-label={`SalonMate · ${VIEWS[view].label}`}>
+          <SyncBar desk={desk} view={view} />
           <Suspense fallback={<Spinner />}>
-            {view === 'calendar' ? (
+            {offline && MONEY.includes(view) ? (
+              <NeedsWorkSuite view={view} />
+            ) : view === 'outbox' ? (
+              <Outbox />
+            ) : view === 'calendar' ? (
               <Calendar />
             ) : view === 'walkin' || view === 'book' ? (
               <WalkIn key={`${view}-${query.get('seed') ?? ''}`} later={view === 'book'} />
@@ -157,6 +183,64 @@ export default function SalonShell(_props: ModuleProps) {
       </div>
       {checkIn.panel}
     </DeskContext.Provider>
+  );
+}
+
+/** What the desk is working from, and what waits to be sent. */
+function SyncBar({ desk, view }: { desk: Desk; view: DeskView }) {
+  const [busy, setBusy] = useState(false);
+  const s = desk.sync;
+  const tryNow = async () => {
+    setBusy(true);
+    try {
+      await syncNow();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (desk.offline) {
+    const age = copyAge(desk.copy, desk.location.timezone);
+    return (
+      <div className="px-6 pt-4">
+        <Note
+          tone="warning"
+          action={
+            <Button size="sm" icon="refresh" loading={busy} onClick={() => void tryNow()}>
+              Try now
+            </Button>
+          }
+        >
+          <span className="font-bold">WorkSuite cannot be reached.</span> {age ? `Working from this desk’s copy of the day, taken at ${age}.` : 'This computer has no copy of the day yet.'}{' '}
+          {s?.can_write ? 'New clients, walk-ins, bookings and check-ins are kept here and sent when it is back.' : (s?.why_not ?? '')} Payments and the register need WorkSuite.
+        </Note>
+      </div>
+    );
+  }
+  const line = view === 'outbox' ? null : waitingLine(s ?? undefined);
+  if (!line) return null;
+  return (
+    <div className="px-6 pt-4">
+      <Note
+        tone={s && s.refused > 0 ? 'danger' : 'indigo'}
+        action={
+          <Button size="sm" onClick={() => desk.go('outbox')}>
+            Open
+          </Button>
+        }
+      >
+        {line}
+      </Note>
+    </div>
+  );
+}
+
+function NeedsWorkSuite({ view }: { view: DeskView }) {
+  const what = view === 'pay' ? 'Taking payment' : view === 'register' ? 'The register' : 'Closing the day';
+  return (
+    <div className="p-6">
+      <Note tone="muted">{what} needs WorkSuite, so that the money is counted once, in one place. Clients can still be checked in, walked in and booked here; take payment when the line is back.</Note>
+    </div>
   );
 }
 
@@ -184,6 +268,7 @@ function Rail({ view, desk }: { view: DeskView; desk: Desk }) {
     );
   };
   const book = desk.may('salon.visit.book');
+  const unsent = (desk.sync?.waiting ?? 0) + (desk.sync?.refused ?? 0) + (desk.sync?.others ?? 0);
 
   async function forget() {
     try {
@@ -203,6 +288,7 @@ function Rail({ view, desk }: { view: DeskView; desk: Desk }) {
         {item('walkin', !book)}
         {item('book', !book)}
         {item('clients')}
+        {outboxItem(view, desk)}
         <div className="mx-1 my-1.5 border-t border-line" />
         {item('pay', !desk.may('salon.checkout'))}
         {desk.desk.register ? item('register') : null}
@@ -240,8 +326,42 @@ function Rail({ view, desk }: { view: DeskView; desk: Desk }) {
           <p className="text-[13.5px] text-ink">
             This computer forgets that it is {desk.desk.name}. To work as a front desk again it is paired anew, and an owner approves it. The old desk stays on the server until an owner revokes it.
           </p>
+          {unsent > 0 ? (
+            <p className="mt-2 text-[13.5px] font-semibold text-danger">
+              {unsent} change{unsent === 1 ? '' : 's'} made at this desk while WorkSuite was out of reach {unsent === 1 ? 'has' : 'have'} not reached it, and will be dropped.
+            </p>
+          ) : null}
         </Modal>
       ) : null}
     </nav>
+  );
+}
+
+/** "Changes to send", with how many wait and whether any needs a person. */
+function outboxItem(view: DeskView, desk: Desk) {
+  const s = desk.sync;
+  const n = (s?.waiting ?? 0) + (s?.refused ?? 0);
+  if (n === 0 && view !== 'outbox' && !desk.offline) return null;
+  const on = view === 'outbox';
+  return (
+    <button
+      key="outbox"
+      type="button"
+      aria-current={on ? 'page' : undefined}
+      onClick={() => desk.go('outbox')}
+      className={cx(
+        'relative flex h-[34px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left',
+        on ? 'bg-selection font-bold text-primary' : 'font-medium text-ink hover:bg-subtle',
+      )}
+    >
+      <span className={cx('absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-[3px]', on ? 'bg-primary' : 'bg-transparent')} />
+      <Icon name={VIEWS.outbox.icon} size={16} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />
+      <span className="min-w-0 flex-1 truncate">{VIEWS.outbox.label}</span>
+      {n > 0 ? (
+        <span className={cx('rounded-full px-1.5 text-[11px] font-bold tabular-nums', s && s.refused > 0 ? 'bg-danger text-white' : 'bg-subtle text-ink-2')} aria-label={`${n} waiting`}>
+          {n}
+        </span>
+      ) : null}
+    </button>
   );
 }

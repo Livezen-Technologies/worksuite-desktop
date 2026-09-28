@@ -160,6 +160,34 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX sync_entries_remote ON sync_entries(kind, remote_id);
   `,
+  // 3 — SalonMate: the desk's copy of its day, and what the counter did while
+  // WorkSuite was out of reach. Each is kept per server, desk and person.
+  `
+  CREATE TABLE salon_copy (
+    origin TEXT NOT NULL,
+    desk_id INTEGER NOT NULL,
+    user_id TEXT NOT NULL,
+    payload TEXT NOT NULL,            -- enc: visits, clients, menu, settings
+    since TEXT,
+    after INTEGER,
+    refreshed_at TEXT NOT NULL,
+    pulled_at TEXT NOT NULL,
+    PRIMARY KEY (origin, desk_id, user_id)
+  );
+
+  CREATE TABLE salon_outbox (
+    id TEXT PRIMARY KEY,
+    origin TEXT NOT NULL,
+    desk_id INTEGER NOT NULL,
+    user_id TEXT NOT NULL,
+    seq INTEGER NOT NULL,
+    state TEXT NOT NULL,
+    item TEXT NOT NULL,               -- enc: key, payload, what the server said
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX salon_outbox_desk ON salon_outbox(origin, desk_id, user_id, seq);
+  `,
 ];
 
 export type Row = Record<string, unknown>;

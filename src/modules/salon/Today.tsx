@@ -1,19 +1,27 @@
 import { useQuery } from '@tanstack/react-query';
 import { Avatar, Button, Card, Chip, Empty, Spinner } from '../../components/ui';
 import { amount, clockAt, fetchToday, greeting, K, longDay, minutesOf, owing, readyToPay, stillToPay, type TodayBoard, type Visit } from './api';
-import { AllergyChip, Failed, QuickAction, servicesOf, stylistsOf, useDesk, useNow } from './parts';
+import { boardFromCopy, copyAge, unreachable, useOutbox } from './offline';
+import { AllergyChip, Failed, Note, QuickAction, servicesOf, stylistsOf, useDesk, useNow } from './parts';
 
 /**
  * Today at the counter (D02): who walks in next, who is late, who is in a
  * chair and until when, and the jobs the desk does most — a walk-in, a
  * booking, finding a client. The server's board for this desk's location,
  * refreshed every minute; its day and times are the salon's clock.
+ *
+ * With WorkSuite out of reach it is the same board, worked out from the day's
+ * copy by the server's rules, with what the desk has kept to send beside it.
  */
 export default function Today() {
   const desk = useDesk();
-  const q = useQuery({ queryKey: K.today(desk.location.id), queryFn: ({ signal }) => fetchToday(desk.location.id, signal), refetchInterval: 60_000 });
-  const board = q.data;
+  const q = useQuery({ queryKey: K.today(desk.location.id), queryFn: ({ signal }) => fetchToday(desk.location.id, signal), refetchInterval: 60_000, retry: desk.offline ? false : undefined });
   const now = useNow(60_000);
+  const fromCopy = !!desk.copy && (desk.offline || unreachable(q));
+  const board = fromCopy && desk.copy ? boardFromCopy(desk.copy, now) : q.data;
+  const outbox = useOutbox();
+  const waiting = (outbox.data ?? []).filter((i) => i.state === 'waiting');
+  const kept = new Set(waiting.filter((i) => i.kind === 'visit.check_in' && typeof i.payload.visit_id === 'number').map((i) => i.payload.visit_id as number));
   const hour = Math.floor(minutesOf(board?.now_label ?? clockAt(new Date(now).toISOString(), desk.location.timezone)) / 60);
   const book = desk.may('salon.visit.book');
 
@@ -21,7 +29,10 @@ export default function Today() {
     <div className="flex flex-col gap-4 p-6">
       <div>
         <h1 className="text-[22px] font-extrabold text-ink">{greeting(hour)}</h1>
-        <p className="mt-0.5 text-[13px] text-ink-2">{board ? summary(board) : desk.location.name}</p>
+        <p className="mt-0.5 text-[13px] text-ink-2">
+          {board ? summary(board) : desk.location.name}
+          {fromCopy ? ` · from this desk’s copy, taken at ${copyAge(desk.copy, desk.location.timezone) ?? '—'}` : ''}
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -30,6 +41,21 @@ export default function Today() {
         <QuickAction icon="search" label="Find a client" onClick={() => desk.go('clients')} />
         <QuickAction icon="calendar" label="The day by stylist" onClick={() => desk.go('calendar')} />
       </div>
+
+      {waiting.length > 0 ? (
+        <Card title="Kept to send" action={<span className="text-[12.5px] text-ink-3">Goes to WorkSuite when it answers</span>}>
+          <ul>
+            {waiting.map((i) => (
+              <li key={i.id} className="flex items-baseline gap-3 border-t border-line py-2 text-[13.5px] first:border-t-0">
+                <span className="min-w-0 flex-1 truncate font-semibold text-ink">{i.label}</span>
+                {i.detail ? <span className="truncate text-[12.5px] text-ink-3">{i.detail}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+
+      {fromCopy && board && board.figures.taken === null ? <Note tone="muted">What was taken today, and who is ready to pay, show when WorkSuite answers.</Note> : null}
 
       {!board ? (
         q.isError ? <Failed text="Today's board could not be loaded." onRetry={() => void q.refetch()} /> : <Spinner label="Loading today…" />
@@ -41,17 +67,17 @@ export default function Today() {
             ) : (
               <ul>
                 {board.late.map((v) => (
-                  <Arriving key={v.id} visit={v} late now={now} />
+                  <Arriving key={v.id} visit={v} late now={now} kept={kept.has(v.id)} />
                 ))}
                 {board.arriving.map((v) => (
-                  <Arriving key={v.id} visit={v} late={false} now={now} />
+                  <Arriving key={v.id} visit={v} late={false} now={now} kept={kept.has(v.id)} />
                 ))}
               </ul>
             )}
           </Card>
 
           <div className="grid w-full items-start gap-4 lg:grid-cols-2 2xl:flex 2xl:w-[380px] 2xl:flex-col">
-            <ReadyToPay board={board} />
+            {fromCopy ? null : <ReadyToPay board={board} />}
             <Card title="On the floor">
               {board.floor.length === 0 ? (
                 <Empty icon="users" title="No stylist is working here today." />
@@ -101,7 +127,7 @@ function dueIn(v: Visit, now: number): string | null {
   return mins > 0 && mins <= 90 ? `due in ${mins} min` : null;
 }
 
-function Arriving({ visit, late, now }: { visit: Visit; late: boolean; now: number }) {
+function Arriving({ visit, late, now, kept }: { visit: Visit; late: boolean; now: number; kept: boolean }) {
   const desk = useDesk();
   const owed = visit.money.deposit_owed > 0;
   const due = dueIn(visit, now);
@@ -115,7 +141,7 @@ function Arriving({ visit, late, now }: { visit: Visit; late: boolean; now: numb
           <button type="button" onClick={() => desk.go('clients', { client: visit.client.id })} className="truncate text-left text-[15px] font-bold text-ink hover:underline">
             {visit.client.name}
           </button>
-          {late ? <Chip tone="danger">Late</Chip> : null}
+          {kept ? <Chip tone="indigo">Check-in kept</Chip> : late ? <Chip tone="danger">Late</Chip> : null}
           {visit.client.allergy ? <AllergyChip allergy={visit.client.allergy} /> : null}
           {owed ? <Chip tone="warning">Deposit owed</Chip> : null}
           {!owed && visit.money.advance > 0 ? <Chip tone="indigo">Advance</Chip> : null}
@@ -125,7 +151,7 @@ function Arriving({ visit, late, now }: { visit: Visit; late: boolean; now: numb
           {due ? ` · ${due}` : ''}
         </div>
       </div>
-      <Button variant="primary" size="lg" icon="check-circle" disabled={!desk.may('salon.visit.checkin')} onClick={() => desk.checkIn(visit)}>
+      <Button variant="primary" size="lg" icon="check-circle" disabled={kept || !desk.may('salon.visit.checkin')} onClick={() => desk.checkIn(visit)}>
         Check in
       </Button>
     </li>

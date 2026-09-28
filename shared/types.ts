@@ -708,6 +708,98 @@ export interface SalonPrintSettings {
 
 export type SalonPrintPatch = Partial<SalonPrintSettings>;
 
+/** What the front desk does while WorkSuite is out of reach (salon-outbox.ts). */
+export type SalonOutboxKind = 'client.create' | 'visit.book' | 'visit.check_in';
+
+export interface SalonOutboxCandidate {
+  id: number;
+  name: string;
+  phone: string | null;
+  email: string | null;
+}
+
+export interface SalonOutboxItem {
+  id: string;
+  seq: number;
+  /** The Idempotency-Key it is sent under; a new one only for a new attempt. */
+  key: string;
+  kind: SalonOutboxKind;
+  /** C-<uuid> or V-<uuid>, for a client or booking made here. */
+  local_id: string | null;
+  payload: Record<string, unknown>;
+  /** The local ids it names, until the server has them. */
+  needs: string[];
+  /** What the counter sees: "Walk-in: Amaya Senanayake". */
+  label: string;
+  detail: string | null;
+  created_at: string;
+  updated_at: string;
+  state: 'waiting' | 'refused';
+  attempts: number;
+  message: string | null;
+  next: { starts_at: string; label?: string; date?: string } | { candidates: SalonOutboxCandidate[] } | null;
+  choices: string[];
+}
+
+export interface SalonOutboxInput {
+  kind: SalonOutboxKind;
+  local_id?: string | null;
+  payload: Record<string, unknown>;
+  label: string;
+  detail?: string | null;
+}
+
+export type SalonOutboxAction =
+  | { id: string; action: 'drop' | 'retry' | 'take_next' }
+  | { id: string; action: 'time'; starts_at: string }
+  | { id: string; action: 'client'; client_id: number }
+  | { id: string; action: 'edit'; changes: Record<string, string | boolean | null> };
+
+export interface SalonSyncStatus {
+  desk_id: number | null;
+  /** The day's copy on this computer, for this person. */
+  copy: { refreshed_at: string; pulled_at: string; visits: number; clients: number } | null;
+  waiting: number;
+  refused: number;
+  /** Items somebody else signed in here made, waiting for them. */
+  others: number;
+  /** Whether WorkSuite answered the desk's last call. */
+  reachable: boolean;
+  last_contact: string | null;
+  last_sync: { at: string; accepted: number; refused: number; duplicates: number } | null;
+  problem: string | null;
+  can_write: boolean;
+  why_not: string | null;
+  can_keep_copy: boolean;
+}
+
+/** A client in the day's copy: seen in the last year, with the worst allergy on file. */
+export interface SalonCopyClient {
+  id: number;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  tier?: string | null;
+  points?: number;
+  reliability?: string | null;
+  allergy?: { severity: string; substance: string } | null;
+}
+
+/** The day's copy, as the screens read it offline (clients are searched separately). */
+export interface SalonCopy {
+  desk_id: number;
+  refreshed_at: string;
+  pulled_at: string;
+  timezone: string;
+  location: { id: number; name: string; hours: Array<{ weekday: number | string; opens: string; closes: string }> };
+  menu: unknown[];
+  stylists: unknown[];
+  visits: unknown[];
+  settings: Record<string, unknown>;
+  options: { may: Record<string, boolean>; currency?: string; company?: string; ack_severity?: string; locations?: unknown[] } | null;
+  desk: SalonDeskInfo | null;
+}
+
 export interface SalonPrintOutcome {
   ok: boolean;
   printer: string | null;
