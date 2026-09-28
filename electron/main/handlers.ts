@@ -299,7 +299,10 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     const oc = input.ordersCsv;
     const rep = input.omsReport;
     const tl = input.tenderLine;
-    const path = input.orderPdf
+    const fc = input.financeCsv;
+    const path = fc
+      ? `/api/finance/export/${fc.report}${fc.lines ? '/transactions' : ''}?${new URLSearchParams({ company: String(fc.company), from: fc.from, to: fc.to, ...(fc.currency ? { currency: fc.currency } : {}) })}`
+      : input.orderPdf
       ? `/api/share/oms/${input.orderPdf}/pdf`
       : input.tenderDocument
       ? `/api/tenders/documents/${input.tenderDocument}/file`
