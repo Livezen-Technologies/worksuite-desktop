@@ -5,6 +5,58 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## Unreleased — Drive sync: keep Drive folders on this computer
+
+Choose Drive folders in **Files → Sync devices** (or **Keep on this computer…**
+on a folder) and they are kept in step with a folder here —
+`~/WorkSuite Drive/<folder>` unless you pick another. Work on the files in any
+app, offline too; changes go both ways, and only what changed travels.
+
+**Added**
+
+- **Sync devices**, as in the Drive designs: your devices with their state
+  ("Up to date · 2 min ago", "Syncing 14 items", "Not seen for 42 days"),
+  **Manage** (rename, wipe its synced copy, remove) and **Sign out**; the
+  company's sync policy; and **On this Mac** — the folders kept here, how each
+  syncs (two-way, upload only, download only), what it is doing, anything it
+  could not sync and why, **Show in Finder**, **Pause**, **Stop syncing**
+  (nothing is deleted), and recent activity.
+- A **SYNC** column in file lists: ✓ on this computer, ☁ online only, ↻ on its
+  way, ⚠ both copies kept.
+- **On this Mac** and **Local path** in a file's or folder's Details, with
+  **Show in Finder**; **Keep on this computer…** for a folder that is not.
+- The status bar says what sync is doing, and the Drive rail shows it under
+  the storage meter.
+
+**How it behaves**
+
+- Renames and moves, on either side, move the file — it keeps its versions,
+  comments, shares and links.
+- A file changed on both sides is kept twice: Drive's under its name, this
+  computer's beside it as "<name> (<you>'s conflicted copy <date>)", which then
+  goes up to Drive too. The folder shows it for a day.
+- Deletions go to a recycle bin: Drive's, or this computer's Trash. More than
+  25 files at once, or more than 30% of a folder (a disk not plugged in looks
+  the same), waits for you:
+  delete them there too, or bring them back.
+- A folder missing on either side stops that folder's sync; nothing is
+  deleted anywhere because of it.
+- A file still being saved is left until it settles. Names this computer
+  cannot hold, files the policy refuses, password-locked folders and links
+  are listed with the reason, and left alone.
+- An administrator's **Disable sync**, a remote wipe, and sign-out with
+  "remove data" are obeyed: a wipe removes the files sync put here and
+  nothing else.
+
+**Server gaps found** (no server change in this release)
+
+- The Drive SRS lists "deletions are events" (FR-SYN-02) as built, but
+  trashing a file records no journal event, and folders record none at all;
+  events also carry a file's name without its folder. The app does not rely on
+  the journal for either (see docs/BACKEND.md).
+- `SyncController::commit` assembles a file in memory; the app sends files
+  past 256 MiB by the chunked upload.
+
 ## Unreleased — Expenses: the whole module, natively
 
 Expenses opens here now instead of in the browser, under Business in the

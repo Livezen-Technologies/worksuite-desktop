@@ -25,6 +25,7 @@ import { ShareDialog } from './Share';
 import { UploadTray, UrlDownloads } from './Trays';
 import { Shared } from './Shared';
 import { Companies, Duplicates, Links, Notifications, Storage, Trash } from './Views';
+import { SyncDevices } from './SyncDevices';
 import { UploadConflicts, type ConflictChoice, type UploadConflict } from './UploadConflicts';
 
 type Dialog =
@@ -47,7 +48,7 @@ const DOCS: Array<[string, string, string, string]> = [
 ];
 const DOC_TONE: Record<string, string> = { docx: TONE.document!, xlsx: TONE.spreadsheet!, pptx: TONE.presentation!, txt: TONE.other!, md: TONE.other! };
 /** Views that are pages of their own rather than a list of files. */
-const PAGES: View[] = ['home', 'shared', 'trash', 'storage', 'duplicates', 'links', 'notifications', 'companies'];
+const PAGES: View[] = ['home', 'shared', 'trash', 'storage', 'duplicates', 'links', 'notifications', 'companies', 'devices'];
 
 function placeFrom(q: URLSearchParams): Place {
   const f = q.get('folder');
@@ -68,8 +69,9 @@ function nameIn(nodes: TreeNode[], id: number): string | null {
 /**
  * Files (the Drive designs): Home, My Drive and its folders, the lists across
  * the Drive, Shared, the recycle bin, storage and settings — with sharing,
- * links, versions, comments, previews and uploads. Everything is online;
- * keeping files on this Mac arrives with Drive sync.
+ * links, versions, comments, previews and uploads — and Sync devices, where
+ * Drive folders are kept on this computer (the SYNC column and "On this Mac"
+ * in Details say what is here).
  */
 export default function FilesPage(_props: ModuleProps) {
   const qc = useQueryClient();
@@ -319,6 +321,7 @@ export default function FilesPage(_props: ModuleProps) {
     editImage: (f) => (setPreview(null), setEditor({ kind: 'image', file: f })),
     play: (files, index) => setEditor({ kind: 'media', files, index }),
     inBrowser: (f) => void call('app:openInBrowser', { path: `/files?file=${f.id}` }),
+    syncFolder: (f) => go(`/files?view=devices&sync=${f.id}`),
     newFolder: () =>
       setDialog({
         kind: 'name',
@@ -394,6 +397,9 @@ export default function FilesPage(_props: ModuleProps) {
 
   const view = place.view;
   const listView = !PAGES.includes(view);
+  // /files?view=devices&sync=<folder id>: "Sync to this computer" from a folder's menu or details.
+  const syncParam = query.get('sync');
+  const syncAsk = syncParam === 'all' ? 'all' : syncParam && /^\d+$/.test(syncParam) ? Number(syncParam) : null;
 
   return (
     <DriveCtx.Provider value={d}>
@@ -420,6 +426,7 @@ export default function FilesPage(_props: ModuleProps) {
         {view === 'links' ? <Links /> : null}
         {view === 'notifications' ? <Notifications /> : null}
         {view === 'companies' ? <Companies /> : null}
+        {view === 'devices' ? <SyncDevices tree={tree} ask={syncAsk} onAsked={() => go('/files?view=devices')} /> : null}
       </div>
       {preview ? <Preview files={preview.files} start={preview.index} onClose={() => setPreview(null)} /> : null}
       {editor?.kind === 'code' ? <CodeEditor key={editor.file.id} file={editor.file} onClose={() => (setEditor(null), refresh())} /> : null}

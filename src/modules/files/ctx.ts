@@ -1,6 +1,8 @@
 import { createContext, useContext, type DragEvent } from 'react';
 import type { MenuItem } from './Menu';
 import { IMAGE_EDIT_EXTS, OFFICE_EXTS, PREVIEW_EXTS, TONE, ZIP_EXTS, can, extOf, openWay, type DriveFile, type DriveFolder, type Key } from './api';
+import { app } from '../../core/app-state';
+import { computerWord } from './sync';
 
 /** A thing in the Drive: a file or a folder, as a row carries it. */
 export type Item = { type: 'file'; f: DriveFile } | { type: 'folder'; f: DriveFolder };
@@ -35,6 +37,8 @@ export interface Drive {
   editImage: (f: DriveFile) => void;
   play: (files: DriveFile[], index: number) => void;
   inBrowser: (f: DriveFile) => void;
+  /** Keep a folder on this computer (Drive sync): opens Sync devices with the folder chosen. */
+  syncFolder: (f: DriveFolder) => void;
   newFolder: () => void;
   upload: () => void;
   /** Files from Finder upload into the folder; rows dragged from a list move there. */
@@ -101,6 +105,7 @@ export function folderMenu(f: DriveFolder, d: Drive): MenuItem[] {
     can(a, 'chat_share') ? { label: 'Send to Chat…', icon: 'send', run: () => d.sendToChat(item) } : null,
     can(a, 'download') ? { label: 'Download (zip)', icon: 'download', run: () => d.downloadFolder(f) } : null,
     owner ? { label: f.is_locked ? 'Remove the password lock' : 'Password lock…', icon: 'lock', run: () => d.lock(f, !f.is_locked) } : null,
+    owner && !f.is_locked && app.get().sync?.available ? { label: `Keep on this ${computerWord()}…`, icon: 'laptop', run: () => d.syncFolder(f) } : null,
     { sep: true },
     can(a, 'rename') ? { label: 'Rename', hint: 'F2', icon: 'compose', run: () => d.rename(item) } : null,
     can(a, 'move') ? { label: 'Move…', icon: 'folder-up', run: () => d.move([item], 'move') } : null,

@@ -168,10 +168,53 @@ Releases on such a server are static files at
 `https://<server>/desktop/releases/<channel>/manifest.json` (e.g. under
 `public/desktop/releases/`), checked at start-up and every four hours.
 
+## Drive sync
+
+The same on both API families. The device credential registration returns
+is sent as `X-Device-Token`; nothing else is.
+
+| Need | Endpoint |
+|---|---|
+| Who am I, the policy, pause or wipe | `POST /api/sync/hello` |
+| Has Drive changed (this computer's own writes excluded) | `GET /api/sync/delta?since=&limit=1`, then `POST /api/sync/ack {cursor}` |
+| Upload only what Drive lacks | `POST /api/sync/have {hashes}`, `POST /api/sync/block` (raw, `X-Block-Hash`), `POST /api/sync/commit {name, blocks, sha256, file_id?, base_version?, folder_id?}` |
+| Download only what differs | `GET /api/sync/files/{id}/manifest`, `GET /api/sync/files/{id}/block/{idx}` |
+| The record of a pass | `POST /api/sync/session`, `POST /api/sync/session/{id}/close` |
+| Confirm a wipe | `POST /api/sync/wiped` |
+
+With the session, as the Files screens use them: the picture of a folder
+(`GET /api/drive/tree`, `GET /api/drive/list?folder_id=&deep=1`), folders
+(`POST /api/folders`, `PUT /api/folders/{id}`, `POST /api/drive/folders/{id}/move`,
+`DELETE /api/folders/{id}`), renames and moves (`PUT /api/files/{id}`), the
+recycle bin (`DELETE /api/files/{id}`), a colleague's file
+(`GET /api/files/{id}/download`), what the block protocol cannot take — an
+empty file, one past 64 blocks, a colleague's file — (`/api/uploads/*`, with
+`replace_file_id` for a new version), and the device centre
+(`GET /api/sync/devices`, `PUT /api/sync/devices/{id}/roots`, `…/logout`,
+`…/wipe`).
+
+What the server does not give sync, and how the app copes:
+
+- **The journal is a hint, not the truth.** Events name a file without its
+  folder; trashing a file records nothing; folders record nothing. The app
+  compares pictures instead and uses the journal only to know when to look.
+  Recording `folder_id`, trash and restore, and folder events in
+  `SyncEngine::record` would let a pass skip the listing when nothing moved.
+- **Only the owner's files go through the protocol** (`SyncController::visible`),
+  so a colleague's file in your folder travels by the ordinary download and
+  upload, whole.
+- **A commit is assembled in PHP's memory**, so files past 64 blocks (256 MiB)
+  use the chunked upload instead.
+- **Deleting a folder does not take its files to the recycle bin**; the app
+  deletes a Drive folder only once it is empty.
+
 ## Not provided yet
 
 - `monitoring_policy` is always `null`, and every `feature_flags` entry is
-  false: Drive sync, monitoring, kiosk and AI are later phases.
+  false: monitoring, kiosk and AI are later phases. Drive sync is governed
+  by `file_sync`, `personal_device_mode`, `removable_media_sync` and
+  `wipe_on_revoke` in the desktop policy, and the sync policy
+  (`/api/sync/policy`) for sizes, types and ignore patterns.
 - Permissions are the same in every company: WorkSuite grants them
   installation-wide, so switching organizations reloads them but they do not
   change.

@@ -2,7 +2,7 @@ import { app, BrowserWindow, clipboard, dialog, nativeImage, shell, systemPrefer
 import os from 'node:os';
 import { writeFile } from 'node:fs/promises';
 import type { TabRecord } from '@shared/ipc/contract';
-import type { AppInfo, BusyReport } from '@shared/types';
+import type { AppInfo, BusyReport, SyncPolicy } from '@shared/types';
 import { DesktopError, isDesktopError } from './errors';
 import type { AppContext } from './context';
 import type { IpcRouter } from '../ipc/router';
@@ -365,6 +365,83 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('transfers:open', (input) => ctx.transfers.openFile(input.id));
   router.handle('transfers:reveal', (input) => ctx.transfers.reveal(input.id));
   router.handle('transfers:clearFinished', () => ctx.transfers.clearFinished());
+
+  // ── Drive sync ─────────────────────────────────────────────────────────
+  router.handle('sync:status', () => ctx.sync.status());
+  router.handle('sync:devices', async () => {
+    const d = await ctx.http.get<{ devices?: Array<Record<string, unknown>>; policy?: SyncPolicy }>('/api/sync/devices');
+    const str = (v: unknown) => (typeof v === 'string' && v !== '' ? v : null);
+    return {
+      devices: (d.devices ?? []).map((x) => ({
+        id: Number(x.id),
+        name: String(x.name ?? ''),
+        platform: String(x.platform ?? 'other'),
+        osVersion: str(x.os_version),
+        appVersion: str(x.app_version),
+        status: String(x.status ?? 'active'),
+        storageUsed: Number(x.storage_used ?? 0),
+        fileCount: Number(x.file_count ?? 0),
+        lastSeenAt: str(x.last_seen_at),
+        lastSyncAt: str(x.last_sync_at),
+        wipeOrderedAt: str(x.wipe_ordered_at),
+      })),
+      policy: d.policy ?? null,
+      thisDevice: ctx.sync.status().deviceId ?? (ctx.device.current() ? Number(ctx.device.current()!.id) : null),
+    };
+  });
+  router.handle('sync:deviceAction', async (input) => {
+    const mine = ctx.sync.status().deviceId ?? Number(ctx.device.current()?.id ?? 0);
+    if (input.id === mine && input.action !== 'rename') {
+      throw new DesktopError('IPC_VALIDATION_FAILED', 'Pause or stop syncing on this computer instead — signing it out from here would cut off the app you are using.');
+    }
+    const path = `/api/sync/devices/${input.id}`;
+    if (input.action === 'rename') {
+      if (!input.name) throw new DesktopError('IPC_VALIDATION_FAILED', 'A device needs a name.');
+      await ctx.http.request('PUT', path, { body: { name: input.name } });
+    } else if (input.action === 'sign-out') await ctx.http.post(`${path}/logout`, {});
+    else if (input.action === 'wipe') await ctx.http.post(`${path}/wipe`, {});
+    else await ctx.http.request('DELETE', path);
+  });
+  router.handle('sync:add', async (input, c) => {
+    let localPath: string | null = null;
+    if (input.choose) {
+      const w = winOf(c.sender);
+      const opts: Electron.OpenDialogOptions = {
+        title: 'Choose the folder on this computer to keep in step',
+        buttonLabel: 'Sync here',
+        defaultPath: ctx.sync.defaultRoot(),
+        properties: ['openDirectory', 'createDirectory', 'promptToCreate'],
+      };
+      const res = w ? await dialog.showOpenDialog(w, opts) : await dialog.showOpenDialog(opts);
+      if (res.canceled || !res.filePaths[0]) return null;
+      localPath = res.filePaths[0];
+    }
+    return ctx.sync.add({ folderId: input.folderId, mode: input.mode, localPath });
+  });
+  router.handle('sync:remove', (input) => ctx.sync.remove(input.id));
+  router.handle('sync:setMode', (input) => ctx.sync.setMode(input.id, input.mode));
+  router.handle('sync:pause', (input) => ctx.sync.setPaused(input.id, input.paused));
+  router.handle('sync:now', () => {
+    ctx.sync.kick('now');
+    return ctx.sync.status();
+  });
+  router.handle('sync:resolve', (input) => ctx.sync.resolveHeld(input.id, input.choice));
+  router.handle('sync:reveal', async (input) => {
+    const at = ctx.sync.locate(input);
+    if (!at) throw new DesktopError('NOT_FOUND', 'That is not on this computer.');
+    if (at.isFile) {
+      shell.showItemInFolder(at.path);
+      return true;
+    }
+    return (await shell.openPath(at.path)) === '';
+  });
+  router.handle('sync:lookup', (input) => ctx.sync.lookup(input.files, input.folders, input.context));
+  router.handle('sync:reconnect', async () => {
+    const server = ctx.auth.getServer();
+    await ctx.device.reenrol(uid(), server?.api ?? 'core');
+    ctx.sync.start(uid());
+    return ctx.sync.status();
+  });
 
   // ── notifications ──────────────────────────────────────────────────────
   router.handle('notifications:list', () => ctx.notifications.refreshList());

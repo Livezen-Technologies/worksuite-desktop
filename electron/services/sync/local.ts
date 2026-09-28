@@ -1,0 +1,139 @@
+import type { Dirent } from 'node:fs';
+import { lstat, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import type { SyncIssue, SyncPolicy } from '@shared/types';
+import type { BaseItem, LocalItem, Picture } from './plan';
+import { driveNameProblem, isIgnored, joinRel, policyRefusal } from './rules';
+
+/**
+ * The picture of the folder on this computer.
+ *
+ * A file's checksum is taken from the index when its size, modification time
+ * and inode are what the index recorded — so an unchanged folder of ten
+ * thousand files is a walk, not ten thousand reads. Anything else is hashed
+ * (off the main thread, by the hash helper).
+ *
+ * A file written in the last few seconds, or that changes while it is being
+ * hashed, is marked unstable and left for the next pass: uploading half a
+ * file that is still being saved is worse than waiting.
+ *
+ * What cannot be read is "blind", never "gone". A folder this pass could not
+ * open must not look like a folder somebody emptied.
+ */
+
+export interface LocalScan {
+  picture: Picture<LocalItem>;
+  issues: SyncIssue[];
+  /** The folder itself is not there (a moved folder, an unplugged disk). */
+  missingRoot: boolean;
+  /** Files this pass could not settle and will look at again. */
+  unstable: number;
+}
+
+export interface ScanOptions {
+  base: Map<string, BaseItem>;
+  key: (rel: string) => string;
+  patterns: readonly string[];
+  policy: SyncPolicy | null;
+  hash: (path: string) => Promise<{ sha256: string; bytes: number }>;
+  /** How long a file must have been left alone to be synced (ms). */
+  settleMs?: number;
+  now?: () => number;
+  signal?: AbortSignal;
+}
+
+const MAX_DEPTH = 64;
+
+export async function scanLocal(root: string, opts: ScanOptions): Promise<LocalScan> {
+  const { key, base } = opts;
+  const now = opts.now ?? Date.now;
+  const settle = opts.settleMs ?? 3000;
+  const items = new Map<string, LocalItem>();
+  const blind = new Set<string>();
+  const issues: SyncIssue[] = [];
+  let unstable = 0;
+
+  try {
+    const st = await lstat(root);
+    if (!st.isDirectory()) return { picture: { items, blind }, issues, missingRoot: true, unstable };
+  } catch {
+    return { picture: { items, blind }, issues, missingRoot: true, unstable };
+  }
+
+  const visit = async (dir: string, rel: string, depth: number): Promise<void> => {
+    if (opts.signal?.aborted) throw new Error('cancelled');
+    let entries: Dirent[];
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch (e) {
+      if (rel !== '') {
+        blind.add(key(rel));
+        issues.push({ path: rel, kind: 'error', message: `This folder could not be read (${(e as NodeJS.ErrnoException).code ?? 'error'}), so nothing in it is synced until it can be.` });
+      }
+      return;
+    }
+    for (const e of entries) {
+      const childRel = joinRel(rel, e.name);
+      if (isIgnored(childRel, opts.patterns)) continue;
+      const full = join(dir, e.name);
+      if (e.isSymbolicLink()) {
+        issues.push({ path: childRel, kind: 'skipped', message: 'Shortcuts and symbolic links are not synced.' });
+        continue;
+      }
+      const nameProblem = driveNameProblem(e.name);
+      if (nameProblem) {
+        blind.add(key(childRel));
+        issues.push({ path: childRel, kind: 'skipped', message: nameProblem });
+        continue;
+      }
+      let st;
+      try {
+        st = await lstat(full, { bigint: true });
+      } catch {
+        continue; // gone between the listing and the look
+      }
+      const ino = st.ino > 0n ? `${st.dev}:${st.ino}` : null;
+      const mtimeMs = Number(st.mtimeMs);
+      if (st.isDirectory()) {
+        items.set(key(childRel), { rel: childRel, kind: 'dir', size: 0, mtimeMs, ino, sha256: null });
+        if (depth + 1 >= MAX_DEPTH) {
+          blind.add(key(childRel));
+          issues.push({ path: childRel, kind: 'skipped', message: 'Folders nested this deep are not synced.' });
+        } else await visit(full, childRel, depth + 1);
+        continue;
+      }
+      if (!st.isFile()) continue;
+      const size = Number(st.size);
+      const refusal = policyRefusal(opts.policy, e.name, size);
+      if (refusal) {
+        blind.add(key(childRel));
+        issues.push({ path: childRel, kind: 'skipped', message: refusal });
+        continue;
+      }
+      const k = key(childRel);
+      const b = base.get(k);
+      if (b && b.kind === 'file' && b.size === size && b.mtimeMs === mtimeMs && b.ino === ino && b.sha256) {
+        items.set(k, { rel: childRel, kind: 'file', size, mtimeMs, ino, sha256: b.sha256 });
+        continue;
+      }
+      if (now() - mtimeMs < settle) {
+        unstable++;
+        items.set(k, { rel: childRel, kind: 'file', size, mtimeMs, ino, sha256: null, unstable: true });
+        continue;
+      }
+      try {
+        const h = await opts.hash(full);
+        const after = await lstat(full, { bigint: true });
+        if (Number(after.size) !== size || Number(after.mtimeMs) !== mtimeMs) throw new Error('changed while it was read');
+        items.set(k, { rel: childRel, kind: 'file', size, mtimeMs, ino, sha256: h.sha256 });
+      } catch {
+        // Open in another program with a lock (Windows), or still changing.
+        unstable++;
+        items.set(k, { rel: childRel, kind: 'file', size, mtimeMs, ino, sha256: null, unstable: true });
+      }
+    }
+  };
+
+  await visit(root, '', 0);
+  return { picture: { items, blind }, issues, missingRoot: false, unstable };
+}

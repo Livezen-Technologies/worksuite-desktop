@@ -15,6 +15,7 @@ import type { SecureStore } from '../services/secure-store';
 import type { SettingsService } from '../services/settings';
 import type { ServiceSupervisor } from '../services/supervisor';
 import type { TransferManager } from '../services/transfers';
+import type { DriveSync } from '../services/sync/engine';
 import type { RealtimeService } from '../services/realtime';
 import type { TrayService } from '../tray/tray';
 import type { UpdaterService } from '../updater/updater';
@@ -49,6 +50,7 @@ export interface AppContext {
   cache: OfflineCache;
   queue: OfflineQueue;
   transfers: TransferManager;
+  sync: DriveSync;
   supervisor: ServiceSupervisor;
   lock: LockService;
   updater: UpdaterService;

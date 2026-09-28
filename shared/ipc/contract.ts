@@ -30,6 +30,10 @@ import type {
   ScreenSources,
   ServiceHealth,
   StatusSnapshot,
+  SyncDevice,
+  SyncLookup,
+  SyncPolicy,
+  SyncStatus,
   Transfer,
   UpdateStatus,
 } from '../types';
@@ -125,6 +129,9 @@ export const uploadTargetSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 export type UploadTarget = z.infer<typeof uploadTargetSchema>;
+
+const syncMode = z.enum(['two_way', 'upload_only', 'download_only']);
+const driveId = z.number().int().positive().max(2 ** 31);
 
 interface ChannelSpec {
   input: z.ZodType;
@@ -349,6 +356,31 @@ export const contract = {
   'transfers:reveal': ch(z.object({ id: idString }), { session: true }),
   'transfers:clearFinished': ch(none, { session: true }),
 
+  /*
+   * Drive sync. The renderer names Drive folders and this app's own ids; a
+   * place on this computer is only ever chosen in the main process's dialog.
+   */
+  'sync:status': ch(none, { session: true }),
+  'sync:devices': ch(none, { session: true, rate: 5 }),
+  /** Another of my devices: rename it, sign it out of sync, wipe its synced copy, or remove it. Never this computer. */
+  'sync:deviceAction': ch(z.object({ id: driveId, action: z.enum(['rename', 'sign-out', 'wipe', 'remove']), name: z.string().trim().min(1).max(160).optional() }), { session: true, sensitive: true, rate: 5 }),
+  /** Sync a Drive folder (null: all of My Drive) — into ~/WorkSuite Drive, or, with `choose`, a folder picked in a dialog. */
+  'sync:add': ch(z.object({ folderId: driveId.nullable(), mode: syncMode, choose: z.boolean() }), { session: true, permission: 'desktop.files.sync', sensitive: true, rate: 3 }),
+  'sync:remove': ch(z.object({ id: idString }), { session: true, sensitive: true }),
+  'sync:setMode': ch(z.object({ id: idString, mode: syncMode }), { session: true, permission: 'desktop.files.sync' }),
+  /** One folder, or with `id` null every folder on this computer. */
+  'sync:pause': ch(z.object({ id: idString.nullable(), paused: z.boolean() }), { session: true }),
+  'sync:now': ch(none, { session: true, rate: 2 }),
+  /** Deletions held back by the guard: carry them out, or bring the files back. */
+  'sync:resolve': ch(z.object({ id: idString, choice: z.enum(['apply', 'restore']) }), { session: true, sensitive: true }),
+  'sync:reveal': ch(
+    z.object({ fileId: driveId.optional(), folderId: driveId.optional(), syncFolderId: idString.optional() }).refine((v) => [v.fileId, v.folderId, v.syncFolderId].filter((x) => x !== undefined).length === 1, 'name one file, folder or synced folder'),
+    { session: true, rate: 5 },
+  ),
+  'sync:lookup': ch(z.object({ files: z.array(driveId).max(500), folders: z.array(driveId).max(500), context: driveId.nullable() }), { session: true, rate: 30 }),
+  /** Registers this computer for sync again after it was signed out from elsewhere. */
+  'sync:reconnect': ch(none, { session: true, permission: 'desktop.files.sync', sensitive: true, rate: 1 }),
+
   'notifications:list': ch(none, { session: true }),
   'notifications:markRead': ch(z.object({ ids: z.array(idString).min(1).max(200) }), { session: true }),
   'notifications:markAllRead': ch(none, { session: true }),
@@ -527,6 +559,19 @@ export interface Outputs {
   'transfers:open': boolean;
   'transfers:reveal': boolean;
   'transfers:clearFinished': void;
+  'sync:status': SyncStatus;
+  'sync:devices': { devices: SyncDevice[]; policy: SyncPolicy | null; thisDevice: number | null };
+  'sync:deviceAction': void;
+  /** null: the dialog was cancelled. */
+  'sync:add': SyncStatus | null;
+  'sync:remove': SyncStatus;
+  'sync:setMode': SyncStatus;
+  'sync:pause': SyncStatus;
+  'sync:now': SyncStatus;
+  'sync:resolve': SyncStatus;
+  'sync:reveal': boolean;
+  'sync:lookup': SyncLookup;
+  'sync:reconnect': SyncStatus;
   'notifications:list': { items: NotificationItem[]; unread: number };
   'notifications:markRead': void;
   'notifications:markAllRead': void;
