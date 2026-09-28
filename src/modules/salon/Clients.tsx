@@ -153,7 +153,6 @@ function ClientCardView({ id }: { id: number }) {
                 desk.walkIn(
                   {
                     client_id: d.client.id,
-                    client_name: d.client.name,
                     service_ids: last ? [...new Set(last.items.map((i) => i.service_id))] : [],
                     provider_id: last?.items[0]?.provider_id,
                   },

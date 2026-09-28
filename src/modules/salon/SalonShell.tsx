@@ -12,7 +12,7 @@ import type { ModuleProps } from '../registry';
 import { deskState, fetchDesks, fetchOptions, forgetDesk, K, pairing as readPairing } from './api';
 import { useCheckIn } from './CheckIn';
 import Connect from './Connect';
-import { DeskContext, Failed, Note, type Desk, type DeskView } from './parts';
+import { DeskContext, Failed, Note, salonRoute, seedParam, type Desk, type DeskView } from './parts';
 
 /**
  * SalonMate's front desk, native in WorkSuite Desktop. Addressed as
@@ -78,11 +78,7 @@ export default function SalonShell(_props: ModuleProps) {
   let desk: Desk | null = null;
   if (info && options.data && location) {
     const may = options.data.may ?? {};
-    const go: Desk['go'] = (v, params = {}) => {
-      const q = new URLSearchParams({ view: v });
-      for (const [k, val] of Object.entries(params)) if (val !== undefined && val !== null && val !== '') q.set(k, String(val));
-      goRoute(`/salon?${q.toString()}`);
-    };
+    const go: Desk['go'] = (v, params = {}) => goRoute(salonRoute(v, params));
     desk = {
       desk: info,
       location,
@@ -92,7 +88,7 @@ export default function SalonShell(_props: ModuleProps) {
       may: (p) => may[p] === true,
       go,
       checkIn: (v) => checkIn.start(v),
-      walkIn: (seed, later = false) => go(later ? 'book' : 'walkin', { seed: JSON.stringify(seed) }),
+      walkIn: (seed, later = false) => go(later ? 'book' : 'walkin', { seed: seedParam(seed) }),
     };
   }
 

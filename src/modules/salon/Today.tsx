@@ -34,7 +34,7 @@ export default function Today() {
       {!board ? (
         q.isError ? <Failed text="Today's board could not be loaded." onRetry={() => void q.refetch()} /> : <Spinner label="Loading today…" />
       ) : (
-        <div className="flex flex-col gap-4 xl:flex-row">
+        <div className="flex flex-col gap-4 2xl:flex-row">
           <Card title="Arriving next" action={<span className="text-[12.5px] text-ink-3">{board.figures.to_come} still to come today</span>} className="min-w-0 flex-1">
             {board.late.length + board.arriving.length === 0 ? (
               <Empty icon="calendar" title="Nobody else is booked in today." hint="Walk-ins and new bookings appear here as they are made." />
@@ -50,7 +50,7 @@ export default function Today() {
             )}
           </Card>
 
-          <div className="flex w-full flex-col gap-4 xl:w-[380px]">
+          <div className="grid w-full items-start gap-4 lg:grid-cols-2 2xl:flex 2xl:w-[380px] 2xl:flex-col">
             <ReadyToPay board={board} />
             <Card title="On the floor">
               {board.floor.length === 0 ? (

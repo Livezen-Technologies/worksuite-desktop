@@ -12,6 +12,7 @@ import {
   bookAt,
   capable,
   fetchAvailability,
+  fetchClient,
   fetchClients,
   fetchQuote,
   freeNow,
@@ -22,6 +23,7 @@ import {
   startWalkIn,
   STATEMENT,
   todayAt,
+  worstAllergy,
   type CheckInExtra,
   type ClientCandidate,
   type Gate,
@@ -59,7 +61,12 @@ export default function WalkIn({ later: bookingFirst }: { later: boolean }) {
   const clock = useNow();
   const today = todayAt(desk.location.timezone, new Date(clock));
 
-  const [client, setClient] = useState<Chosen | null>(() => (seed.client_id ? { id: seed.client_id, name: seed.client_name ?? 'Client', phone: null, allergy: null } : null));
+  const [chosenClient, setClient] = useState<Chosen | null>(() => (seed.client_id ? { id: seed.client_id, name: '', phone: null, allergy: null } : null));
+  /* Opened for a known client (Book again): who they are, and their allergy, come from their card. */
+  const seeded = !!chosenClient && chosenClient.name === '';
+  const card = useQuery({ queryKey: K.client(chosenClient?.id ?? 0), queryFn: ({ signal }) => fetchClient(chosenClient!.id, signal), enabled: seeded });
+  const client: Chosen | null =
+    seeded && card.data ? { id: card.data.client.id, name: card.data.client.name, phone: card.data.client.phone ?? card.data.client.mobile, note: card.data.profile.tier, allergy: worstAllergy(card.data.allergies) } : seeded ? null : chosenClient;
   const [picked, setPicked] = useState<number[]>(() => (seed.service_ids ?? []).filter((id) => services.some((s) => s.id === id)));
   const [stylistId, setStylistId] = useState<number | null>(seed.provider_id ?? null);
   const [category, setCategory] = useState('all');
@@ -195,7 +202,7 @@ export default function WalkIn({ later: bookingFirst }: { later: boolean }) {
           {shown.length === 0 ? (
             <p className="py-4 text-[13px] text-ink-2">{services.length === 0 ? 'No services are set up yet. They are added in SalonMate → Services.' : 'No service matches.'}</p>
           ) : (
-            <div className="mt-3 grid grid-cols-2 gap-2.5 md:grid-cols-3">
+            <div className="mt-3 grid grid-cols-2 gap-2.5 2xl:grid-cols-3">
               {shown.map((s) => {
                 const on = picked.includes(s.id);
                 return (
@@ -210,9 +217,9 @@ export default function WalkIn({ later: bookingFirst }: { later: boolean }) {
                       <span className="flex-1">{s.name}</span>
                       {on ? <Icon name="check" size={16} className="text-primary" /> : null}
                     </span>
-                    <span className="flex w-full justify-between text-[12.5px] text-ink-2">
-                      <span>{s.duration_min} min</span>
-                      <span className="tabular-nums">{amount(s.price)}</span>
+                    <span className="flex w-full flex-wrap justify-between gap-x-2 text-[12.5px] text-ink-2">
+                      <span className="whitespace-nowrap">{s.duration_min} min</span>
+                      <span className="whitespace-nowrap tabular-nums">{amount(s.price)}</span>
                     </span>
                   </button>
                 );
@@ -238,6 +245,8 @@ export default function WalkIn({ later: bookingFirst }: { later: boolean }) {
                   </div>
                 }
               />
+            ) : seeded && !card.isError ? (
+              <Spinner label="Loading the client…" />
             ) : (
               <FindClient
                 onChosen={(c) => {

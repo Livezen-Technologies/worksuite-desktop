@@ -11,9 +11,9 @@ import type { Options, SalonLocation, Severity, Visit } from './api';
  */
 export type DeskView = 'today' | 'calendar' | 'walkin' | 'book' | 'clients';
 
+/** What a walk-in is started with: ids only, so it fits in a tab's address whatever the client's name. */
 export interface WalkInSeed {
   client_id?: number;
-  client_name?: string;
   service_ids?: number[];
   provider_id?: number;
   date?: string;
@@ -39,6 +39,22 @@ export function useDesk(): Desk {
   const d = useContext(DeskContext);
   if (!d) throw new Error('useDesk outside the SalonMate desk');
   return d;
+}
+
+/**
+ * A desk screen's address, as a tab keeps it. Tab routes are plain paths —
+ * letters, digits and `/_-.:?=&%` — so every value is percent-encoded all the
+ * way (URLSearchParams would write a space as `+`, and the tab not be kept).
+ */
+export function salonRoute(view: DeskView, params: Record<string, string | number | null | undefined> = {}): string {
+  const enc = (v: string) => encodeURIComponent(v).replace(/[!'()*~]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  const parts = [`view=${view}`];
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== '') parts.push(`${enc(k)}=${enc(String(v))}`);
+  return `/salon?${parts.join('&')}`;
+}
+
+export function seedParam(seed: WalkInSeed): string {
+  return JSON.stringify({ ...seed, ...(seed.service_ids ? { service_ids: seed.service_ids.slice(0, 12) } : {}) });
 }
 
 /** The seed a walk-in or booking screen was opened with. */
@@ -84,7 +100,7 @@ export function Figure({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="rounded-[10px] border border-line bg-ground px-3 py-2">
       <div className="text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">{label}</div>
-      <div className="mt-0.5 truncate text-[15px] font-bold text-ink tabular-nums">{value}</div>
+      <div className="mt-0.5 text-[15px] leading-snug font-bold text-ink tabular-nums">{value}</div>
     </div>
   );
 }

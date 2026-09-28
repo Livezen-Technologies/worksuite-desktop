@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { APP_CATALOGUE, isAppVisible } from '@shared/apps';
+import { tabRecordSchema } from '@shared/ipc/contract';
 import { ApiError } from '../../../src/core/api';
 import * as s from '../../../src/modules/salon/api';
 import { dayWindow } from '../../../src/modules/salon/Calendar';
-import { seedOf } from '../../../src/modules/salon/parts';
+import { salonRoute, seedOf, seedParam } from '../../../src/modules/salon/parts';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -113,6 +114,12 @@ describe('the desk’s rules', () => {
     expect(s.atLeast('mild', 'mild')).toBe(true);
   });
 
+  it('flags a client by the worst allergy still on file', () => {
+    const a = (id: number, severity: s.Severity, withdrawn_at: string | null = null): s.Allergy => ({ id, substance: `A${id}`, reaction: null, severity, withdrawn_at });
+    expect(s.worstAllergy([a(1, 'mild'), a(2, 'severe', '2026-01-01'), a(3, 'moderate')])).toEqual({ severity: 'moderate', substance: 'A3' });
+    expect(s.worstAllergy([a(2, 'severe', '2026-01-01')])).toBeNull();
+  });
+
   it('offers only stylists who do every chosen service, here', () => {
     const all = [stylist(1, [10, 11]), stylist(2, [10]), stylist(3, [10, 11], { active: false }), stylist(4, [10, 11], { locations: [99] }), stylist(5, [10, 11], { locations: [16] })];
     expect(s.capable(all, [10, 11], 16).map((x) => x.id)).toEqual([1, 5]);
@@ -180,6 +187,22 @@ describe('the salon’s clock, not this computer’s', () => {
 });
 
 describe('a walk-in started with what is known', () => {
+  it('travels in an address a tab can keep, whatever is in it', () => {
+    const route = tabRecordSchema.shape.route;
+    const seed = seedParam({ client_id: 29, service_ids: [3, 5], provider_id: 4, date: '2026-09-29' });
+    for (const r of [salonRoute('book', { seed }), salonRoute('clients', { client: 29 }), salonRoute('calendar', { date: '2026-09-29' }), salonRoute('walkin', { note: "it's (all) here * ~ + ok!" })]) {
+      expect(route.safeParse(r).success, r).toBe(true);
+    }
+    expect(seedOf(new URLSearchParams(salonRoute('book', { seed }).split('?')[1]))).toEqual({ client_id: 29, service_ids: [3, 5], provider_id: 4, date: '2026-09-29' });
+    expect(salonRoute('today', { client: null, date: '' })).toBe('/salon?view=today');
+  });
+
+  it('carries ids, never a name, and stays short', () => {
+    const seed = seedParam({ client_id: 29, service_ids: Array.from({ length: 40 }, (_, i) => i + 1) });
+    expect(JSON.parse(seed).service_ids).toHaveLength(12);
+    expect(salonRoute('book', { seed }).length).toBeLessThan(512);
+  });
+
   it('reads its seed, and survives a bad one', () => {
     expect(seedOf(new URLSearchParams({ seed: JSON.stringify({ client_id: 9, service_ids: [3] }) }))).toEqual({ client_id: 9, service_ids: [3] });
     expect(seedOf(new URLSearchParams({ seed: '{nope' }))).toEqual({});

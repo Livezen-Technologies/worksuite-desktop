@@ -356,6 +356,12 @@ export function atLeast(severity: string, threshold: string): boolean {
   return SEVERITIES.indexOf(severity as Severity) >= Math.max(0, SEVERITIES.indexOf(threshold as Severity));
 }
 
+/** The allergy a client is flagged by in lists: the most severe one still on file. */
+export function worstAllergy(allergies: Allergy[]): { severity: Severity; substance: string } | null {
+  const live = allergies.filter((a) => !a.withdrawn_at).sort((a, b) => SEVERITIES.indexOf(b.severity) - SEVERITIES.indexOf(a.severity));
+  return live[0] ? { severity: live[0].severity, substance: live[0].substance } : null;
+}
+
 /** The words confirmed at check-in (`Safety::STATEMENT`), for when the visit's own could not be read. */
 export const STATEMENT = 'I have told the stylist about these allergies and the client confirms nothing has changed.';
 
