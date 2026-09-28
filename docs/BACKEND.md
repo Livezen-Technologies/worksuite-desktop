@@ -158,7 +158,7 @@ specific to the desktop:
 | Device policy | `GET /api/sync/policy` (`allow_offline`), unsigned and applied as such |
 | Realtime | `GET /api/notifications/realtime-ticket` → WebSocket |
 | Notifications, badges | `GET /api/notifications`, `/api/notifications/unread-count`, `/api/badges`, `/api/chat/unread`, `/api/mail/unread?unified=1` |
-| Modules | the same endpoints the web client uses (mail, chat, calendar, tasks, files, CRM, HR, finance, search, activity, dashboard, uploads, downloads) |
+| Modules | the same endpoints the web client uses (mail, chat, calendar, tasks, files, CRM, HR, finance, expenses, search, activity, dashboard, uploads, downloads) |
 
 On these servers the app grants the Employee row of the §10 role matrix,
 applies the sync policy and device directives unsigned, and keeps device-side

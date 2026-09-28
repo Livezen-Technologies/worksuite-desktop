@@ -5,6 +5,130 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## Unreleased — Expenses: the whole module, natively
+
+Expenses opens here now instead of in the browser, under Business in the
+sidebar, and every screen of it is drawn by the app. Links to Expenses screens
+(`/expenses?tab=…`, `?claim=`, `?advance=`, `?sub=`) open here too, and **File
+an Expense** is a quick action. Only the settings sections the web draws with
+its shared admin screens (User Access, Screens & components, Organization,
+Notifications, the change log) still open in the browser, marked as such.
+
+**The app**
+
+- **The company switcher** at the top of the rail picks any number of
+  companies, with favourites, "Only" and a search once there are more than
+  six. Reads add the selection up, as the server does; **writes happen in one
+  company** — filing a claim, a budget, a payment run — and a screen that
+  needs one says so and offers to narrow to it, rather than guessing. The
+  selection rides in the tab's address and is remembered per person, always
+  checked against the companies you still hold. A company you can only read
+  through consolidated reporting is marked, and never offered for a write.
+- **The rail** shows what the server's area map allows in the companies
+  selected (asked of the same resolver its route filters use), with the
+  approvals and unmatched-card counts as badges, and a quick bar for what is
+  waiting on you. A hidden screen reached by a link says so, and **Settings ›
+  My access** — open to everyone — says why.
+- Money stays the server's text and is added up in cents. Where the companies
+  selected use different currencies, the screens show one figure per
+  currency, or counts, never a sum across currencies.
+
+**Claims**
+
+- **My expenses, My team, Organization.** Search, status, category, dates and
+  "flagged only"; paged, with the server's total for the whole filtered set.
+  Bulk approve and decline (with a reason) on team and organization, every
+  refusal listed with its sentence.
+- **One claim** opens beside the list: its facts, the receipt (drop or pick,
+  images shown in place, Open and **Save a copy** through the downloads
+  tray), what the rules said, look-alikes, the card match, and the approval
+  trail by round. Approve with a note, decline with a reason, edit and
+  resubmit, reopen with a reason, receipt reading, earlier versions.
+- **File an expense** — expense, mileage or per diem — with the live preview
+  of what the policies, budgets and routing will say before it is filed
+  (blocks, warnings, the rate used), receipt reading that copies in and asks
+  you to check, cost centre, related records and charging to an advance.
+  Vehicle, country and city come from the company's rate schedule, because
+  the server matches them exactly. A refused claim shows every rule that
+  refused it.
+
+**Approvals and advances**
+
+- **Approvals**: your queue across companies — claims and advances, oldest
+  first, a week's wait in red — filtered by the selection with what it hides
+  counted, bulk decisions, reassigning a step (to approvers only), and the
+  look-alike claims to settle as the same expense twice or not.
+- **Advances**: what you are holding, request (with project and vendor
+  pickers, and the "still to settle" check), the drawer with who owes whom in
+  words, approve, record as paid out, settle (figures first, then frozen),
+  and charge a claim to it.
+
+**Money out**
+
+- **Corporate cards**: statements imported from a file or pasted, with what
+  was new, already on file or unreadable; unmatched lines with ranked
+  suggestions and their reasons; match, unmatch, set aside and put back.
+- **Reimbursements**: claims waiting to be paid by person, payment runs
+  totalled in cents, the bank CSV through the downloads tray, mark paid (it
+  says no money moves), cancel.
+- **Accounting export**: prepare a batch for dates, "does not balance" in red,
+  export only what balances, void what is not yet exported, the lines.
+- **Petty cash**: funds in the company's currency, spend, top up, reconcile
+  with the difference as you type, refill to the ceiling, close.
+
+**Rules and suppliers**
+
+- **Budgets**: used, committed, approved, paid and remaining, "at this rate"
+  (said to be arithmetic, not a prediction), what consumed it, create, edit,
+  close. **Policies**: each rule's caps as one sentence, refuses or flags,
+  archive; and **approval routing** — the chains, stalled claims, and "who
+  would it ask?".
+- **Vendors**: purchases, paid, claims and last transaction; new, archive,
+  restore, delete. **Subscriptions**: renewals (overdue first), totals per
+  currency, this company or all of yours; the drawer edits in place, moves a
+  subscription between companies, keeps its invoices and payments, lists
+  the expenses charged to it and files a new one against it; pause, resume,
+  cancel, reactivate.
+
+**Insight and setup**
+
+- **Dashboard** (KPIs, what needs somebody, the monthly trend, by category,
+  renewals, budgets, petty cash — each linking to its screen), **Analytics**
+  and **Reports** (the named reports and the claims summary, one currency at a
+  time, exported as CSV through the downloads tray where the area allows),
+  **All organizations** (every company you report on, totals per currency).
+- **Settings**: company rules, cost centres, categories, mileage, per diem and
+  exchange rates, who gets told, activity, setting up a company, and **My
+  access**.
+
+**Server gaps found** (no server change in this release; details in the
+commit)
+
+- **Security:** card-match suggestions (`Cards::suggest`) never check the
+  transaction's company, so a finance user in one company can read another
+  company's claim descriptions, claimants and amounts by transaction id.
+  Editing a subscription (`SubscriptionController::update`) likewise never
+  checks it is visible to the caller.
+- The stale-approval guard never fires: the claim's revision is not passed to
+  the approval engine.
+- Several totals add up amounts in different currencies: the multi-company
+  dashboard, unmatched card lines, the classic claims summary, vendor totals,
+  petty cash, and the subscriptions overview (which the web labels LKR).
+- Editing a budget on the web turns a quarterly or yearly budget monthly,
+  refuses any non-company scope, and clears its category and owner; the
+  budget's claim list ignores its scope.
+- Several writes act in the company last remembered rather than the one on
+  screen (new subscriptions, the subscription's expenses, the web's petty
+  cash); a new petty-cash fund defaults to LKR.
+- Editing only a subscription's amount resets its exchange rate to 1;
+  clearing a stated renewal date does nothing.
+- "Mine" on Advances returns everyone's for finance; a step can be
+  reassigned to somebody who cannot approve it; editing a card blanks the
+  fields not sent; claim lists omit the company and the unconverted count; an
+  Asset link on a claim is dropped.
+
+---
+
 ## Unreleased — Finance: the whole module, natively
 
 Finance opens here now instead of in the browser, under Business in the
