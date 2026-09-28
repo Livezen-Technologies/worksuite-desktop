@@ -301,10 +301,40 @@ export const contract = {
             group: z.enum(['month', 'day', 'client', 'user', 'assignee', 'org', 'source', 'product', 'category', 'status', 'type', 'priority']).optional(),
           })
           .optional(),
+        /** A Finance report as a CSV: its summary rows, or (`lines`) every journal line in the window. */
+        financeCsv: z
+          .object({
+            report: z.enum(['financial-overview', 'cash-flow', 'budget-variance', 'profit-and-loss']),
+            lines: z.boolean().optional(),
+            company: z.number().int().positive(),
+            from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+            to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+            currency: z.string().regex(/^[A-Z]{3}$/).optional(),
+          })
+          .optional(),
+        /**
+         * An Expenses file: a claim's receipt, a receipt by its token (petty cash), a subscription's
+         * document, a payment run's bank file, an accounting export, or a report as a CSV. The main
+         * process builds the address; a report's query is short keys and values, nothing else.
+         */
+        expenseFile: z
+          .discriminatedUnion('kind', [
+            z.object({ kind: z.literal('claim-receipt'), claim: z.number().int().positive() }),
+            z.object({ kind: z.literal('receipt'), token: z.string().regex(/^[A-Za-z0-9._-]{6,128}$/) }),
+            z.object({ kind: z.literal('sub-document'), sub: z.number().int().positive(), doc: z.number().int().positive() }),
+            z.object({ kind: z.literal('run-csv'), run: z.number().int().positive(), org: z.number().int().positive().optional() }),
+            z.object({ kind: z.literal('posting'), posting: z.number().int().positive(), org: z.number().int().positive().optional() }),
+            z.object({
+              kind: z.literal('report'),
+              which: z.enum(['insights', 'classic']),
+              query: z.record(z.string().regex(/^[a-z_]{1,32}$/), z.string().max(200)).refine((q) => Object.keys(q).length <= 12, 'too many parameters'),
+            }),
+          ])
+          .optional(),
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a payment slip, an order list, an Orders report, or a tender document, checklist file, letter or library document'),
+      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a payment slip, an order list, an Orders report, a tender document, checklist file, letter or library document, a Finance report, or an Expenses file'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   'transfers:upload': ch(
