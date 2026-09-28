@@ -7,6 +7,7 @@ import { callUi } from '../../calls/ui/state';
 import { meet } from '../session';
 import { connectionLabel, endedOf, failure, rc, type ConnectionLabel, type ControlSession, type ControlState, type RemoteFile, type Share } from './api';
 import { MoveCoalescer, keyMessage, type ButtonName, type KeyLike, type KeyPayload, type Point } from './input';
+import { pointers } from './pointers';
 
 /**
  * Controlling somebody's shared screen from a meeting window (WS-MEET-ENH-01
@@ -600,3 +601,5 @@ export class MeetController {
 
 /** This meeting window's controller. */
 export const remote = new MeetController(() => meet.room);
+// Who may clear everybody's marks on a share, or switch annotation off: the person sharing it.
+pointers.sharerOf = (shareId) => remote.state?.shares.find((s) => s.id === shareId)?.identity ?? null;

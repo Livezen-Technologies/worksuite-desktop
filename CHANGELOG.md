@@ -5,6 +5,34 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-28 — Meet: pointing at and drawing on a shared screen; the controller's name at the pointer (not released)
+
+The last part of WS-MEET-ENH-01 the desktop did not have (RC-PTR-01…03,
+RC08, RC-INP-04).
+
+**Added**
+
+- **Pointer and Annotate over somebody's shared screen**, beside Request
+  control: a laser pointer with your name, and pen, arrow, rectangle, text
+  and highlight in six colours, with Clear mine. It is the web client's own
+  format on its own topic, so browsers and this app see each other's. The
+  marks are painted over the picture on each screen; the shared computer is
+  not changed. Off while you control that screen, and when the meeting or
+  the person sharing turns it off.
+- **Sharing: Clear viewers' annotations** and **Turn viewers' annotations
+  off** in the share menu, and the status line says who is pointing.
+- **Being controlled: the controller's name beside the pointer** while they
+  move it, gone a moment after they stop, when you move your own mouse, and
+  before every click and scroll they send — it is never what a click lands
+  on.
+
+**Fixed**
+
+- The Tenders tests' type imports, which failed the lint step of every
+  build.
+
+---
+
 ## 2026-09-28 — Meet remote control: the input helpers, checked on real systems (not released)
 
 A check that drives each input helper against a test window reporting what

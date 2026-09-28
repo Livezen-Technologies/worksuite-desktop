@@ -96,6 +96,18 @@ Being controlled is the main process's business, never a page's:
   exits on its own pauses control. Windows' UIPI keeps a non-elevated
   WorkSuite from driving elevated windows, and Ctrl+Alt+Delete cannot be
   injected by any app; the person here is asked to press it.
+- **The controller's name beside the pointer** (RC-INP-04) is a window of
+  its own: kept out of the capture, never focused, clicks pass through it
+  (on Windows and macOS; on X11 that does not survive the window moving, so
+  it is hidden before every press and scroll the controller sends and comes
+  back on their next move). macOS's check of what a click is aimed at looks
+  past WorkSuite's own capture-proof windows, never another app's.
+- **Pointers and annotations** (RC-PTR, RC08) travel on their own data topic,
+  never the control channel, and are only painted over the picture on each
+  participant's screen. Every message is checked for shape (points 0–1,
+  colours, lengths, 2,000 points, 500 strokes a share) and each person's
+  are dropped past 60 a second; nobody draws in another's name, and only the
+  person sharing clears everybody's or switches annotation off.
 - **Quitting** while controlled or sharing asks first, and stops both;
   stopping ends input here before the server has answered.
 - **Tried for real on Linux (X11)** under Xvfb and openbox, with the real

@@ -266,7 +266,7 @@ abstract class LineHelper extends Batched implements Injector {
   private nextQuery = 1;
   private closing = false;
 
-  protected abstract command(): { file: string; args: string[] };
+  protected abstract command(): { file: string; args: string[]; env?: NodeJS.ProcessEnv };
   protected abstract platform(): 'win32' | 'darwin';
 
   start(): Promise<boolean> {
@@ -275,10 +275,10 @@ abstract class LineHelper extends Batched implements Injector {
     this.stopping = false;
     this.closing = false;
     this.starting = new Promise<boolean>((resolve) => {
-      const { file, args } = this.command();
+      const { file, args, env } = this.command();
       let proc: ChildProcessWithoutNullStreams;
       try {
-        proc = spawn(file, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+        proc = spawn(file, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, ...(env ? { env } : {}) });
       } catch (e) {
         log.warn('input helper did not start', { error: String(e) });
         resolve(false);
@@ -569,6 +569,9 @@ function run() {
     post(e);
   }
   function lines(v) { var n = Math.round(-v / 40); return n || (v ? (v > 0 ? -1 : 1) : 0); }
+  // WorkSuite's own windows kept out of the capture (the name tag, the bar, the prompt) are not what a click is aimed at.
+  var own = 0;
+  try { own = +($.NSProcessInfo.processInfo.environment.objectForKey('WS_OWNER_PID').js || 0); } catch (err) { }
   function b64(s) { return $(s).dataUsingEncoding($.NSUTF8StringEncoding).base64EncodedStringWithOptions(0).js; }
   function text(s) {
     var se = Application('System Events');
@@ -625,6 +628,7 @@ function run() {
           a = '0';
           for (var j = 0; j < all.length; j++) {
             var b = all[j].kCGWindowBounds;
+            if (own && all[j].kCGWindowOwnerPID === own && all[j].kCGWindowSharingState === 0) continue;
             if (b && all[j].kCGWindowAlpha > 0 && px >= b.X && px < b.X + b.Width && py >= b.Y && py < b.Y + b.Height) { a = String(all[j].kCGWindowNumber); break; }
           }
         } else if (p[1] === 'fg') {
@@ -649,7 +653,7 @@ class MacInjector extends LineHelper {
     return 'darwin';
   }
   protected command() {
-    return { file: '/usr/bin/osascript', args: ['-l', 'JavaScript', '-e', MAC_SCRIPT] };
+    return { file: '/usr/bin/osascript', args: ['-l', 'JavaScript', '-e', MAC_SCRIPT], env: { ...process.env, WS_OWNER_PID: String(process.pid) } };
   }
 }
 

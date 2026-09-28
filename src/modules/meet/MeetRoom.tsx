@@ -18,6 +18,8 @@ import { formatCode, invitation } from './api';
 import { ShareInChat, ShareRow } from './MeetHome';
 import { remote } from './remote/controller';
 import { RemoteControlLayer } from './remote/ControllerSurface';
+import { PointerLayer } from './remote/PointerLayer';
+import { pointers } from './remote/pointers';
 import { isGuest, meet, metaOf } from './session';
 import { Whiteboard } from './Whiteboard';
 import { Select } from '../../components/Select';
@@ -37,6 +39,8 @@ export function hms(ms: number): string {
  */
 export function MeetRoom() {
   useSyncExternalStore(meet.subscribe, meet.snapshot);
+  useSyncExternalStore(pointers.subscribe, pointers.snapshot);
+  useSyncExternalStore(remote.subscribe, remote.snapshot);
   const ui = useSyncExternalStore(callUi.subscribe, callUi.get);
   const [picking, setPicking] = useState<'start' | 'change' | null>(null);
   const [ending, setEnding] = useState(false);
@@ -64,6 +68,12 @@ export function MeetRoom() {
       }
     : undefined;
   const controlNote = sharing && meet.control ? (meet.control.offered ? ' · others can ask to control it' : '') : '';
+  // Viewers point at and draw over my shared screen on their own screens (RC-PTR-02): I can clear it, or switch it off.
+  const myShare = sharing ? (remote.state?.shares.find((s) => s.identity === lp.identity) ?? null) : null;
+  const myMarks = myShare ? pointers.of(myShare.id) : null;
+  const pointing = myShare ? pointers.activity(myShare.id, lp.identity) : [];
+  const drawn = myShare ? pointers.othersMarks(myShare.id, lp.identity) : 0;
+  const viewerNote = pointing.length ? ` · ${pointing.join(', ')} ${pointing.length === 1 ? 'is' : 'are'} pointing` : drawn ? ` · ${drawn === 1 ? '1 mark' : `${drawn} marks`} drawn over it` : '';
   const panelOn = (tab: string) => ui.panelOpen && ui.panelTab === tab;
 
   const buttons: ControlButton[] = [
@@ -79,6 +89,14 @@ export function MeetRoom() {
             { heading: `Sharing ${meet.shareLabel ?? 'your screen'}` },
             { label: 'Share something else', hint: 'Another screen or window, without stopping', icon: 'monitor', onClick: () => setPicking('change') },
             { label: paused ? 'Resume sharing' : 'Pause sharing', hint: paused ? undefined : 'The others see "Screen sharing paused"', icon: paused ? 'play' : 'pause', onClick: () => void meet.pauseShare(!paused) },
+            ...(myShare && myMarks
+              ? [
+                  { label: "Clear viewers' annotations", hint: 'What others drew over your shared screen, for everyone', icon: 'eraser', onClick: () => pointers.clearAll(room, myShare.id) },
+                  myMarks.annotOn
+                    ? { label: "Turn viewers' annotations off", hint: 'Pointers still show; drawing stops', icon: 'pen', onClick: () => pointers.setAnnot(room, myShare.id, false) }
+                    : { label: "Turn viewers' annotations on", icon: 'pen', onClick: () => pointers.setAnnot(room, myShare.id, true) },
+                ]
+              : []),
             { label: 'Stop sharing', icon: 'stop', danger: true, onClick: () => void meet.share(null) },
           ],
         }
@@ -186,8 +204,13 @@ export function MeetRoom() {
         buttons={buttons}
         more={more}
         end={{ label: 'Leave the meeting', onClick: () => void meet.leave(), menu: meet.isHost ? [{ label: 'End for everyone', icon: 'phone-off', danger: true, onClick: () => setEnding(true) }] : undefined }}
-        status={sharing ? (paused ? `Sharing ${meet.shareLabel ?? 'your screen'} — paused` : `You are sharing ${meet.shareLabel ?? 'your screen'}${controlNote}`) : null}
-        screenLayer={(sharer) => <RemoteControlLayer sharer={sharer} />}
+        status={sharing ? (paused ? `Sharing ${meet.shareLabel ?? 'your screen'} — paused` : `You are sharing ${meet.shareLabel ?? 'your screen'}${controlNote}${viewerNote}`) : null}
+        screenLayer={(sharer) => (
+          <>
+            <PointerLayer sharer={sharer} />
+            <RemoteControlLayer sharer={sharer} />
+          </>
+        )}
       />
       {picking && (picking === 'change' || !rcView.isLoading) ? (
         <ScreenPicker

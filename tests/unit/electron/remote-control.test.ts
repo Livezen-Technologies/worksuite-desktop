@@ -249,6 +249,7 @@ function harness(opts: { support?: Partial<RemoteControlSupport>; policy?: Parti
     isIndicator: (wc: number) => wc === 600,
     showIndicator: vi.fn(),
     hideIndicator: vi.fn(),
+    pointerTag: vi.fn(),
     notify: vi.fn(),
     changed: vi.fn(),
     switchScreen: vi.fn(async () => true),
@@ -449,6 +450,32 @@ describe('control on this computer', () => {
     await x.h.tick(100);
     expect(x.h.cursor).toEqual({ x: 0, y: 0 });
     expect(x.rc.view().session?.waiting).toBe('local');
+  });
+
+  it('shows the controller’s name beside the pointer while they move it, and not once the person here takes over (RC-INP-04)', async () => {
+    const x = await active();
+    await x.h.tick(100);
+    await x.send('ptr.move', { x: 0.5, y: 0.5 });
+    expect(x.ui.pointerTag).toHaveBeenLastCalledWith({ x: 960, y: 540 });
+    x.h.advance(1_000);
+    x.h.cursor = { x: 100, y: 100 };
+    await x.h.tick(100);
+    expect(x.ui.pointerTag).toHaveBeenLastCalledWith(null);
+  });
+
+  it('takes the name away before a press or a scroll, so it is never what a click lands on', async () => {
+    const x = await active();
+    await x.send('ptr.move', { x: 0.5, y: 0.5 });
+    expect(x.ui.pointerTag).toHaveBeenLastCalledWith({ x: 960, y: 540 });
+    await x.send('ptr.button', { x: 0.52, y: 0.52, button: 'left', down: true });
+    expect(x.ui.pointerTag).toHaveBeenLastCalledWith(null);
+    await x.send('ptr.move', { x: 0.6, y: 0.6 });
+    expect(x.ui.pointerTag).toHaveBeenLastCalledWith(null);
+    await x.send('ptr.button', { x: 0.6, y: 0.6, button: 'left', down: false });
+    await x.send('ptr.move', { x: 0.61, y: 0.61 });
+    expect(x.ui.pointerTag).not.toHaveBeenLastCalledWith(null);
+    await x.send('ptr.wheel', { x: 0.61, y: 0.61, dx: 0, dy: 120 });
+    expect(x.ui.pointerTag).toHaveBeenLastCalledWith(null);
   });
 
   it('does not take the controller’s own move for the person here', async () => {

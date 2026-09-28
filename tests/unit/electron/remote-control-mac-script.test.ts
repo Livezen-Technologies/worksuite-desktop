@@ -23,7 +23,7 @@ interface Posted {
   w2?: number;
 }
 
-function runScript(lines: string[], opts: { clock?: number[]; scroll2?: boolean } = {}) {
+function runScript(lines: string[], opts: { clock?: number[]; scroll2?: boolean; ownPid?: number; windows?: Array<Record<string, unknown>> } = {}) {
   const posted: Posted[] = [];
   const said: string[] = [];
   const typed: string[] = [];
@@ -44,6 +44,7 @@ function runScript(lines: string[], opts: { clock?: number[]; scroll2?: boolean 
     NSString: { alloc: { initWithDataEncoding: (d: { bytes: Buffer }) => ({ js: d.bytes.toString('utf8') }) } },
     NSData: { alloc: { initWithBase64EncodedStringOptions: (s: string) => data(Buffer.from(s, 'base64')) } },
     NSEvent: { doubleClickInterval: 0.5 },
+    NSProcessInfo: { processInfo: { environment: { objectForKey: (k: string) => ({ js: k === 'WS_OWNER_PID' && opts.ownPid ? String(opts.ownPid) : undefined }) } } },
     NSWorkspace: { sharedWorkspace: { frontmostApplication: { localizedName: { js: 'Microsoft Excel' }, processIdentifier: 42 } } },
     CGPointMake: (x: number, y: number) => ({ x, y }),
     CGEventCreate: () => ({ kind: 'null', fields: {} }),
@@ -56,7 +57,7 @@ function runScript(lines: string[], opts: { clock?: number[]; scroll2?: boolean 
     CGEventSetFlags: (e: Posted, f: number) => (e.flags = f),
     CGEventPost: (_tap: number, e: Posted) => posted.push(e),
     CGWindowListCopyWindowInfo: (opt: number, id: number) => {
-      const all = [
+      const all = opts.windows ?? [
         { kCGWindowNumber: 7, kCGWindowLayer: 25, kCGWindowOwnerPID: 1, kCGWindowAlpha: 1, kCGWindowBounds: { X: 0, Y: 0, Width: 1440, Height: 25 } },
         { kCGWindowNumber: 88, kCGWindowLayer: 0, kCGWindowOwnerPID: 9, kCGWindowAlpha: 0, kCGWindowBounds: { X: 0, Y: 0, Width: 1440, Height: 900 } },
         { kCGWindowNumber: 51, kCGWindowLayer: 0, kCGWindowOwnerPID: 42, kCGWindowAlpha: 1, kCGWindowBounds: { X: 100.4, Y: 80.6, Width: 800, Height: 600 }, kCGWindowName: 'Budget — Q3' },
@@ -115,6 +116,16 @@ describe('the macOS helper script', () => {
     expect(made.map((e) => [e.kind, e.units, e.w1, e.w2, e.x, e.y])).toEqual([['scroll2', 1, -6, 0, 500, 400], ['scroll2', 1, 0, 3, 500, 400], ['scroll2', 1, 0, -1, 500, 400]]);
     const built = runScript(wheel).posted;
     expect(built.map((e) => [e.type, e.fields[11], e.fields[12]])).toEqual([[22, -6, 0], [22, 0, 3], [22, 0, -1]]);
+  });
+
+  it('looks past WorkSuite’s own capture-proof windows (the name tag) for what a click is aimed at, not past its others', () => {
+    const win = (n: number, pid: number, sharing: number) => ({ kCGWindowNumber: n, kCGWindowLayer: 0, kCGWindowOwnerPID: pid, kCGWindowAlpha: 1, kCGWindowSharingState: sharing, kCGWindowBounds: { X: 0, Y: 0, Width: 1000, Height: 800 } });
+    const tagOverShared = [win(90, 700, 0), win(51, 42, 1)];
+    expect(runScript(['?1 at 500 400'], { ownPid: 700, windows: tagOverShared }).said[1]).toBe('1 51');
+    // Another app's protected window is never looked past; nor WorkSuite's meeting window, which is captured.
+    expect(runScript(['?1 at 500 400'], { ownPid: 700, windows: [win(90, 333, 0), win(51, 42, 1)] }).said[1]).toBe('1 90');
+    expect(runScript(['?1 at 500 400'], { ownPid: 700, windows: [win(91, 700, 1), win(51, 42, 1)] }).said[1]).toBe('1 91');
+    expect(runScript(['?1 at 500 400'], { windows: tagOverShared }).said[1]).toBe('1 90');
   });
 
   it('types text through System Events as it was written', () => {

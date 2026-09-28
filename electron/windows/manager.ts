@@ -32,9 +32,10 @@ const SIZES: Record<WindowKind, { width: number; height: number; minWidth: numbe
   meet: { width: 1280, height: 800, minWidth: 960, minHeight: 600 },
   'rc-consent': { width: 460, height: 560, minWidth: 460, minHeight: 560 },
   'rc-indicator': { width: 560, height: 52, minWidth: 560, minHeight: 52 },
+  'rc-pointer': { width: 220, height: 30, minWidth: 220, minHeight: 30 },
 };
 /** Remote control's own windows: placed by remote control, never remembered. */
-const REMOTE = new Set<WindowKind>(['rc-consent', 'rc-indicator']);
+const REMOTE = new Set<WindowKind>(['rc-consent', 'rc-indicator', 'rc-pointer']);
 
 interface SavedLayout {
   displayId: string | null;
@@ -162,13 +163,16 @@ export class WindowManager {
   }
 
   /**
-   * Remote control's consent prompt (RC03) and control bar (RC04): above
-   * everything, including full-screen apps, and left out of screen capture
-   * so a controller watching the shared screen can neither read nor aim at
-   * them. The prompt takes focus; the bar never does.
+   * Remote control's consent prompt (RC03), control bar (RC04) and the
+   * controller's name beside the pointer (RC-INP-04): above everything,
+   * including full-screen apps, and left out of screen capture so a
+   * controller watching the shared screen can neither read nor aim at them.
+   * The prompt takes focus; the bar never does; the name tag is not even
+   * there for the mouse — clicks go through it to what is below.
    */
-  openRemote(kind: 'rc-consent' | 'rc-indicator', hash: string, bounds: Rectangle): BrowserWindow {
+  openRemote(kind: 'rc-consent' | 'rc-indicator' | 'rc-pointer', hash: string, bounds: Rectangle): BrowserWindow {
     const consent = kind === 'rc-consent';
+    const tag = kind === 'rc-pointer';
     const win = new BrowserWindow({
       ...bounds,
       show: false,
@@ -181,9 +185,12 @@ export class WindowManager {
       skipTaskbar: !consent,
       alwaysOnTop: true,
       title: consent ? 'Remote control request' : 'Remote control',
-      backgroundColor: consent ? '#FFFFFF' : '#0F1B3D',
+      ...(tag ? { transparent: true, focusable: false, hasShadow: false, backgroundColor: '#00000000' } : { backgroundColor: consent ? '#FFFFFF' : '#0F1B3D' }),
       webPreferences: this.webPreferences(),
     });
+    // On X11 this does not survive the window being shown or moved (tried under Xvfb), so remote control
+    // also hides the tag before every press and scroll it passes on: it is never under a controller's click.
+    if (tag) win.setIgnoreMouseEvents(true);
     win.setAlwaysOnTop(true, 'screen-saver');
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     win.setContentProtection(true);

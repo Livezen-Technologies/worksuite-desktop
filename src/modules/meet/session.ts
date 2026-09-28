@@ -5,6 +5,7 @@ import { CLEAN_AUDIO, pauseOn, shareOn } from '../calls/session';
 import type { SharePick } from '../calls/ScreenPicker';
 import type { MeetInfo, Sfu } from './api';
 import type { RemoteControlView } from '@shared/types';
+import { pointers } from './remote/pointers';
 
 /**
  * One Meet meeting, in its window (MeetLobby → MeetRoom). Like a call, kept
@@ -188,6 +189,11 @@ export class MeetSession {
           if (p && this.control && p.identity === this.controllerIdentity && payload.length <= 16_384) {
             void call('rc:packet', { sender: p.identity, topic, data: new TextDecoder().decode(payload) }).catch(() => undefined);
           }
+          return;
+        }
+        // Viewers' pointers and annotations over a shared screen: painted, never injected.
+        if (topic === 'rc.pointer') {
+          if (p) pointers.receive(payload, { identity: p.identity, name: p.name });
           return;
         }
         if (topic !== 'wb') return;
@@ -409,6 +415,7 @@ export class MeetSession {
 
   private teardown(): void {
     void call('calls:active', { uuid: null, kind: 'meet' }).catch(() => undefined);
+    pointers.reset();
     void this.shareEnded();
     this.shareLabel = null;
     for (const el of this.audio) el.remove();

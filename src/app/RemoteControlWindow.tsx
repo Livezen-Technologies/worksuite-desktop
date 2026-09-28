@@ -12,12 +12,31 @@ import { Select } from '../components/Select';
  *
  *   #/rc/consent   RC03 — somebody asks to control this computer
  *   #/rc/indicator RC04 — the bar that is up for as long as control lasts
+ *   #/rc/pointer   RC-INP-04 — the controller's name beside the pointer, while they move it
  *
  * Allowing and resuming count only when clicked with this computer's own
  * mouse or keyboard: the main process checks that, not this page.
  */
 export function RemoteControlWindow({ hash }: { hash: string }) {
-  return hash.startsWith('#/rc/consent') ? <ConsentWindow /> : <IndicatorWindow />;
+  return hash.startsWith('#/rc/consent') ? <ConsentWindow /> : hash.startsWith('#/rc/pointer') ? <PointerTagWindow /> : <IndicatorWindow />;
+}
+
+/** The controller's name, in a pill beside the pointer. The window is see-through and clicks pass through it. */
+function PointerTagWindow() {
+  const [name, setName] = useState<string | null>(null);
+  useEffect(() => {
+    document.documentElement.style.background = 'transparent';
+    document.body.style.background = 'transparent';
+    const take = (v: RemoteControlView) => setName(v.session?.controller ?? null);
+    void call('rc:state').then(take, () => undefined);
+    return on<RemoteControlView>('rc:changed', take);
+  }, []);
+  if (!name) return null;
+  return (
+    <div className="flex h-full items-start">
+      <span className="max-w-full truncate rounded-full bg-[#C8321E] px-2.5 py-1 text-[12px] font-bold text-white shadow-md">{name}</span>
+    </div>
+  );
 }
 
 /** "Ctrl+Alt+Shift+Esc", the way this keyboard writes it. */

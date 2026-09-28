@@ -51,6 +51,8 @@ function display(d: Electron.Display): Display {
 
 export function createRemoteControl(deps: HostDeps): RemoteControlService {
   const consents = new Map<number, BrowserWindow>();
+  let tag: BrowserWindow | null = null;
+  let tagWanted = false;
   let indicator: BrowserWindow | null = null;
 
   const physical = process.platform === 'win32' || process.platform === 'linux';
@@ -143,6 +145,28 @@ export function createRemoteControl(deps: HostDeps): RemoteControlService {
         const w = indicator;
         indicator = null;
         if (w && !w.isDestroyed()) w.close();
+        const t = tag;
+        tag = null;
+        if (t && !t.isDestroyed()) t.close();
+      },
+      pointerTag(at) {
+        tagWanted = !!at;
+        if (!at) {
+          if (tag && !tag.isDestroyed() && tag.isVisible()) tag.hide();
+          return;
+        }
+        // Below and to the right of the pointer's tip, so it never covers what the controller points at.
+        const bounds = { x: Math.round(at.x) + 16, y: Math.round(at.y) + 20, width: 220, height: 30 };
+        if (!tag || tag.isDestroyed()) {
+          const t = deps.windows.openRemote('rc-pointer', '/rc/pointer', bounds);
+          tag = t;
+          t.on('closed', () => tag === t && (tag = null));
+          // It shows itself once loaded: not if the controller stopped moving meanwhile.
+          t.on('show', () => !tagWanted && !t.isDestroyed() && t.hide());
+          return;
+        }
+        tag.setBounds(bounds);
+        if (!tag.isVisible()) tag.showInactive();
       },
       notify(text) {
         deps.toast(text);

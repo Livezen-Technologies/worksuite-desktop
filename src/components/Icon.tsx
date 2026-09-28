@@ -1,4 +1,9 @@
 import {
+  MousePointer2,
+  Pencil,
+  MoveUpRight,
+  Type,
+  Highlighter,
   ArrowDown,
   ArrowUp,
   ScanLine,
@@ -71,7 +76,7 @@ const ICONS: Record<string, LucideIcon> = {
   camera: Camera, film: Film, music: Music, stop: Square, at: AtSign,
   cake: Cake, mobile: Smartphone, 'map-pin': MapPin, tag: Tag, list: List,
   weight: Weight, key: Key, 'user-plus': UserPlus, door: DoorOpen, chart: ChartColumn, 'calendar-check': CalendarCheck, hourglass: Hourglass, 'chevrons-up-down': ChevronsUpDown, 'check-check': CheckCheck, 'more-vertical': EllipsisVertical, handshake: Handshake, volume: Volume2, 'volume-off': VolumeX, 'audio-lines': AudioLines, minimize: Minimize2, 'folder-plus': FolderPlus, 'file-code': FileCode, unlock: LockOpen, 'zoom-in': ZoomIn, 'zoom-out': ZoomOut,
-  fullscreen: Expand, 'fullscreen-exit': Shrink, pip: PictureInPicture2, 'layout-side': Columns2, 'layout-strip': PanelBottom, flip: FlipHorizontal2, scaling: Scaling, eraser: Eraser, board: Presentation, 'app-window': AppWindow,
+  fullscreen: Expand, 'fullscreen-exit': Shrink, pip: PictureInPicture2, 'layout-side': Columns2, 'layout-strip': PanelBottom, flip: FlipHorizontal2, scaling: Scaling, eraser: Eraser, board: Presentation, pointer: MousePointer2, pen: Pencil, 'arrow-draw': MoveUpRight, square: Square, type: Type, highlighter: Highlighter, 'app-window': AppWindow,
   'arrow-down': ArrowDown, 'arrow-up': ArrowUp, sliders: SlidersHorizontal, image: Image, 'rotate-cw': RotateCw, help: CircleHelp, shield: Shield, dice: Dices, crop: Crop,
 };
 

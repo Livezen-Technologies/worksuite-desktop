@@ -162,6 +162,8 @@ export interface RemoteControlDeps {
     isIndicator(webContentsId: number): boolean;
     showIndicator(on: Display | null): void;
     hideIndicator(): void;
+    /** The controller's name beside the pointer while they move it (RC-INP-04), at a display point; null hides it. */
+    pointerTag(at: Point | null): void;
     notify(text: string): void;
     changed(view: RemoteControlView): void;
     /** Share screen `n` (1-based, the system's order) in that meeting window instead: a controller allowed to switch asked. */
@@ -243,6 +245,7 @@ export class RemoteControlService {
   private expected: Point | null = null;
   private lastCursor: Point | null = null;
   private readingPointer = false;
+  private tagStop: (() => void) | null = null;
   private localUntil = 0;
   private windowRect: Rect | null = null;
   private keysAllowed = true;
@@ -863,6 +866,7 @@ export class RemoteControlService {
       this.localUntil = 0;
       this.expected = null;
       this.lastCursor = null;
+      this.hideTag();
     }
     this.changed();
   }
@@ -970,6 +974,7 @@ export class RemoteControlService {
       const wasWaiting = this.now() < this.localUntil;
       this.localUntil = this.now() + hold;
       this.expected = null;
+      this.hideTag();
       this.release();
       if (!wasWaiting) this.changed();
       this.timers.after(hold + 50, () => this.changed());
@@ -1088,6 +1093,9 @@ export class RemoteControlService {
 
     if (type === 'ptr.move' || type === 'ptr.button' || type === 'ptr.wheel') {
       if (local) return;
+      // The name beside the pointer goes before a press or a scroll: it must never be what is clicked (on X11 it
+      // is not see-through for the mouse once it has moved), nor what the window check finds under the pointer.
+      if (type === 'ptr.wheel' || (type === 'ptr.button' && payload.down === true)) this.hideTag();
       const at = this.target(Number(payload.x), Number(payload.y));
       if (!at) return;
       // One window shared: a press or a wheel lands only where that window is what the pointer is over —
@@ -1135,6 +1143,24 @@ export class RemoteControlService {
     if (actions.length === 0 || gated()) return;
     this.injector!.send(actions);
     this.lastInjected = this.now();
+    if (type === 'ptr.move' && this.held.buttons.size === 0) this.showTag(this.expected);
+  }
+
+  /** The controller's name follows the pointer while they move it, and goes a moment after they stop. */
+  private showTag(at: Point | null): void {
+    if (!at) return;
+    this.deps.ui.pointerTag(at);
+    this.tagStop?.();
+    this.tagStop = this.timers.after(1_500, () => {
+      this.tagStop = null;
+      this.deps.ui.pointerTag(null);
+    });
+  }
+
+  private hideTag(): void {
+    this.tagStop?.();
+    this.tagStop = null;
+    this.deps.ui.pointerTag(null);
   }
 
   /** Where (nx, ny) on the shared picture is, for the helper and in display coordinates. */
@@ -1180,6 +1206,7 @@ export class RemoteControlService {
       s.pausedHere = true;
       s.pausedAt = this.now();
     }
+    this.hideTag();
     this.release();
   }
 }
