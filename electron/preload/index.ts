@@ -194,6 +194,13 @@ const api = {
     printTest: call('salon:printTest'),
     printPage: call('salon:printPage'),
     openDrawer: call('salon:openDrawer'),
+    syncStatus: call('salon:syncStatus'),
+    syncNow: call('salon:syncNow'),
+    copy: call('salon:copy'),
+    copyClients: call('salon:copyClients'),
+    outbox: call('salon:outbox'),
+    outboxAdd: call('salon:outboxAdd'),
+    outboxResolve: call('salon:outboxResolve'),
   },
   offline: {
     status: call('offline:status'),

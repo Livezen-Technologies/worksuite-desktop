@@ -186,10 +186,12 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./expenses/ExpensesShell'),
   },
   {
-    // SalonMate's front desk. Online in this release; the day's copy and the outbox come later.
+    // SalonMate's front desk. Offline it reads the day's copy and keeps new clients, bookings and
+    // check-ins for later (salon-sync.ts, in its own tables); money always needs WorkSuite.
     input: defineDesktopManifest({
       id: 'salon', name: 'SalonMate', icon: 'scissors', contractVersion: 1, desktop: { enabled: true },
-      offline: { mode: 'NONE' },
+      offline: { mode: 'PARTIAL_WRITE', entities: ['client', 'visit'] },
+      native: ['notifications'],
       quickActions: [
         { id: 'walk-in', label: 'Walk-in', route: '/salon?view=walkin' },
         { id: 'new-booking', label: 'New Booking', route: '/salon?view=book' },

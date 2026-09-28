@@ -4,6 +4,7 @@ import type { Draft, MutationState, OfflineMutation } from '@shared/types';
 import { backoffDelay } from '@shared/backoff';
 import { DesktopError, UNREACHABLE_MESSAGE, isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
+import { isProxyPathAllowed } from './api-proxy';
 import type { Database } from './db';
 import type { HttpClient } from './http';
 import type { Vault } from './vault';
@@ -90,6 +91,13 @@ export class OfflineQueue {
   }
 
   async submit(userId: string, input: MutationInput): Promise<SubmitResult> {
+    // The same addresses the API proxy allows, and no others: this path goes
+    // to the server with the user's token, so it must not reach what the
+    // proxy keeps from a page (a salon desk's pairing, which answers with the
+    // desk's key; token and device endpoints) — nor get there by `..`.
+    if (!isProxyPathAllowed(input.path, input.method)) {
+      throw new DesktopError('POLICY_DENIED', 'That address cannot be written to from here.');
+    }
     const idempotencyKey = randomUUID();
     try {
       const res = await this.send({ method: input.method, path: input.path, body: input.body, idempotencyKey, baseEtag: input.baseEtag ?? null });

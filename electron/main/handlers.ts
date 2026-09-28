@@ -585,7 +585,13 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   // renderer; the API proxy adds it to SalonMate's requests (salon-desk.ts).
   router.handle('salon:deskPairing', () => ctx.salonDesk.pairing());
   router.handle('salon:deskPair', (input) => ctx.salonDesk.pair(input, `desktop-${ctx.device.installId()}`, app.getVersion()));
-  router.handle('salon:deskForget', () => ctx.salonDesk.forget());
+  router.handle('salon:deskForget', () => {
+    // The old desk's copy and outbox mean nothing to the next one (the screen has warned about anything unsent).
+    const origin = ctx.auth.getServer()?.origin;
+    const desk = ctx.salonDesk.pairing();
+    if (origin && desk) ctx.salonSync.forgetDesk(origin, desk.desk_id);
+    ctx.salonDesk.forget();
+  });
   // Receipts go to the desk's own printer, checked against what this computer has.
   const installed = async (sender: WebContents) => (await listPrinters(winOf(sender))).map((p) => p.name);
   router.handle('salon:printSettings', () => ctx.salonPrint.settings());
@@ -594,6 +600,15 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('salon:printTest', async (input, c) => ctx.salonPrint.test(input.paper, await installed(c.sender)));
   router.handle('salon:printPage', async (input, c) => ctx.salonPrint.page(input.html, input.paper, await installed(c.sender)));
   router.handle('salon:openDrawer', async (_i, c) => ctx.salonPrint.drawer(await installed(c.sender)));
+
+  // Offline working (salon-sync.ts): the day's copy, and the outbox.
+  router.handle('salon:syncStatus', () => ctx.salonSync.status());
+  router.handle('salon:syncNow', () => ctx.salonSync.sync());
+  router.handle('salon:copy', () => ctx.salonSync.copy());
+  router.handle('salon:copyClients', (input) => ctx.salonSync.clients(input.q, input.limit ?? 20, input.id));
+  router.handle('salon:outbox', () => ctx.salonSync.outbox());
+  router.handle('salon:outboxAdd', (input) => ctx.salonSync.add(input));
+  router.handle('salon:outboxResolve', (input) => ctx.salonSync.resolve(input));
 
   // ── offline ────────────────────────────────────────────────────────────
   router.handle('offline:status', () => ctx.queue.status(uid(), { bytes: ctx.cache.totalBytes(), entries: ctx.cache.count() }));

@@ -4,14 +4,18 @@ import { Icon } from '../../components/Icon';
 import { Button, Card, Chip, Empty, Modal, Spinner, TextField, cx } from '../../components/ui';
 import { call } from '../../core/bridge';
 import { toast } from '../../core/toasts';
-import { addAllergy, amount, answered, attemptKey, fetchClient, fetchClients, K, shortDay, todayAt, type ClientCard, type Reliability, type Severity } from './api';
-import { AllergyChip, Choice, Failed, Figure, Person, SEVERITY_TONE, servicesOf, severityLabel, useDesk, useNow } from './parts';
+import { addAllergy, amount, answered, attemptKey, fetchClient, fetchClients, K, shortDay, todayAt, type ClientCard, type ClientRow, type Reliability, type Severity } from './api';
+import { unreachable, useCopyClient, useCopyClients } from './offline';
+import { AllergyChip, Choice, Failed, Figure, Note, Person, SEVERITY_TONE, servicesOf, severityLabel, useDesk, useNow } from './parts';
 
 /**
  * Clients at the counter (D08, CLI-05, CTR-02): find somebody by any part of
  * their name, mobile or email, and see what the desk needs — the allergy
  * first, points, store credit, what they owe, their last visits — with Book
  * again one press away. The full record opens in WorkSuite on the web.
+ *
+ * With WorkSuite out of reach the search runs over the day's copy — the
+ * clients seen in the last year, with the allergy on file.
  */
 const RELIABILITY: Record<Reliability, { tone: 'success' | 'warning' | 'danger'; label: string }> = {
   reliable: { tone: 'success', label: 'Reliable' },
@@ -24,13 +28,20 @@ export default function Clients() {
   const [term, setTerm] = useState('');
   const selected = Number(desk.params.get('client') ?? 0) || null;
   const t = term.trim();
-  const q = useQuery({ queryKey: K.clients(desk.org, t), queryFn: ({ signal }) => fetchClients(desk.org, t, 20, signal) });
+  const live = useQuery({ queryKey: K.clients(desk.org, t), queryFn: ({ signal }) => fetchClients(desk.org, t, 20, signal), retry: desk.offline ? false : undefined });
+  const offline = desk.offline || unreachable(live);
+  const copied = useCopyClients(t, 20, offline && !!desk.copy);
+  const q =
+    offline && desk.copy
+      ? { data: copied.data ? { items: copied.data.map((c) => ({ ...c, tier: c.tier ?? null, points: c.points ?? 0, reliability: (c.reliability ?? 'reliable') as Reliability, visits: -1, store_credit: 0, allergy: (c.allergy ?? null) as ClientRow['allergy'] })) } : undefined, isError: copied.isError, refetch: copied.refetch }
+      : live;
 
   return (
     <div className="flex flex-col gap-4 p-6 xl:flex-row">
       <div className="flex w-full flex-col gap-3 xl:w-[380px]">
         <h1 className="text-[22px] font-extrabold text-ink">Clients</h1>
         <TextField aria-label="Name, mobile or email" placeholder="Name, mobile or email" value={term} onChange={(e) => setTerm(e.target.value)} />
+        {offline && desk.copy ? <p className="text-[12.5px] text-ink-3">Searching this desk’s copy: the clients seen in the last year.</p> : null}
         {q.isError ? (
           <Failed text="Clients could not be searched." onRetry={() => void q.refetch()} />
         ) : !q.data ? (
@@ -47,7 +58,7 @@ export default function Clients() {
                   onClick={() => desk.go('clients', { client: c.id })}
                   className={cx('w-full rounded-[10px] border px-3 py-2 text-left', selected === c.id ? 'border-primary bg-selection' : 'border-line bg-surface hover:bg-subtle')}
                 >
-                  <Person name={c.name} sub={[c.phone, c.tier, `${c.visits} visit${c.visits === 1 ? '' : 's'}`].filter(Boolean).join(' · ')} size={30} trailing={c.allergy ? <AllergyChip allergy={c.allergy} /> : null} />
+                  <Person name={c.name} sub={[c.phone, c.tier, c.visits >= 0 ? `${c.visits} visit${c.visits === 1 ? '' : 's'}` : null].filter(Boolean).join(' · ')} size={30} trailing={c.allergy ? <AllergyChip allergy={c.allergy} /> : null} />
                 </button>
               </li>
             ))}
@@ -55,8 +66,61 @@ export default function Clients() {
         )}
       </div>
 
-      <div className="min-w-0 flex-1">{selected ? <ClientCardView key={selected} id={selected} /> : <Empty icon="users" title="Choose a client" hint="Their allergy, points, store credit and last visits show here." />}</div>
+      <div className="min-w-0 flex-1">
+        {selected ? (
+          offline && desk.copy ? (
+            <CopiedClient key={selected} id={selected} />
+          ) : (
+            <ClientCardView key={selected} id={selected} />
+          )
+        ) : (
+          <Empty icon="users" title="Choose a client" hint="Their allergy, points, store credit and last visits show here." />
+        )}
+      </div>
     </div>
+  );
+}
+
+/** A client as the day's copy has them: enough to recognise them, read the allergy out and book them in. */
+function CopiedClient({ id }: { id: number }) {
+  const desk = useDesk();
+  const q = useCopyClient(id);
+  if (q.isLoading) return <Spinner label="Loading the client…" />;
+  const c = q.data;
+  if (!c) return <Note tone="warning">This client is not in the desk’s copy. Their card opens when WorkSuite answers.</Note>;
+  const rel = RELIABILITY[(c.reliability ?? 'reliable') as Reliability] ?? RELIABILITY.reliable;
+  return (
+    <Card>
+      <div className="flex flex-col gap-4 pt-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-[19px] font-extrabold text-ink">{c.name}</h2>
+          {c.tier ? <Chip tone="warning">{c.tier}</Chip> : null}
+          <Chip tone={rel.tone}>{rel.label}</Chip>
+          <span className="text-[12.5px] text-ink-2">{[c.phone, c.email].filter(Boolean).join(' · ')}</span>
+        </div>
+        {c.allergy ? (
+          <div className="flex flex-wrap items-baseline gap-2 rounded-[10px] border border-danger/30 bg-danger-bg px-3.5 py-2.5 text-[14px] text-ink">
+            <Chip tone={SEVERITY_TONE[c.allergy.severity as Severity]}>
+              <Icon name="warning" size={12} /> {severityLabel(c.allergy.severity as Severity)}
+            </Chip>
+            <b>{c.allergy.substance}</b>
+            <span className="text-[12.5px] text-ink-2">— the worst on file. Every allergy, patch tests and past visits show when WorkSuite answers.</span>
+          </div>
+        ) : null}
+        <div className="grid grid-cols-3 gap-3">
+          <Figure label="Points" value={(c.points ?? 0).toLocaleString()} />
+          <Figure label="Store credit" value="—" />
+          <Figure label="Owes" value="—" />
+        </div>
+        {desk.may('salon.visit.book') ? (
+          <div className="flex justify-end">
+            <Button variant="primary" onClick={() => desk.walkIn({ client_id: c.id }, true)}>
+              Book them in
+            </Button>
+          </div>
+        ) : null}
+      </div>
+    </Card>
   );
 }
 

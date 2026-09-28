@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import { Avatar, Button, Chip, cx } from '../../components/ui';
-import type { SalonDeskInfo } from '@shared/types';
+import type { SalonCopy, SalonDeskInfo, SalonSyncStatus } from '@shared/types';
 import { amount, type Options, type SalonLocation, type Severity, type Visit } from './api';
 import { MK, printSettings, type CheckoutResult } from './money';
 
@@ -11,7 +11,7 @@ import { MK, printSettings, type CheckoutResult } from './money';
  * that location's clock, the company, what the signed-in person may do, and
  * how to move between the desk's screens.
  */
-export type DeskView = 'today' | 'calendar' | 'walkin' | 'book' | 'clients' | 'pay' | 'paid' | 'register' | 'close' | 'printers';
+export type DeskView = 'today' | 'calendar' | 'walkin' | 'book' | 'clients' | 'pay' | 'paid' | 'register' | 'close' | 'printers' | 'outbox';
 
 /** What a walk-in is started with: ids only, so it fits in a tab's address whatever the client's name. */
 export interface WalkInSeed {
@@ -38,6 +38,12 @@ export interface Desk {
   walkIn: (seed: WalkInSeed, later?: boolean) => void;
   /** What a payment answered, for the Paid screen that follows it. */
   paid: { remember: (visitId: number, result: CheckoutResult) => void; get: (visitId: number) => CheckoutResult | undefined };
+  /** WorkSuite is out of reach: screens read the day's copy, and what the counter does is kept to send (offline.ts). */
+  offline: boolean;
+  /** The day's copy on this computer, when there is one. */
+  copy: SalonCopy | null;
+  /** The copy and the outbox, as the main process last saw them. */
+  sync: SalonSyncStatus | null;
 }
 
 export const DeskContext = createContext<Desk | null>(null);
