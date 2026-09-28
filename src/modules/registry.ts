@@ -169,6 +169,18 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./tenders/TendersShell'),
   },
   {
+    // SalonMate's front desk. Online in this release; the day's copy and the outbox come later.
+    input: defineDesktopManifest({
+      id: 'salon', name: 'SalonMate', icon: 'scissors', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'NONE' },
+      quickActions: [
+        { id: 'walk-in', label: 'Walk-in', route: '/salon?view=walkin' },
+        { id: 'new-booking', label: 'New Booking', route: '/salon?view=book' },
+      ],
+    }),
+    load: () => import('./salon/SalonShell'),
+  },
+  {
     input: defineDesktopManifest({
       id: 'inventory', name: 'Inventory', icon: 'package', contractVersion: 1, desktop: { enabled: true },
       offline: { mode: 'READ_CACHE', entities: ['product'], cache: ['/api/inventory/products', '/api/inventory/stock'] },
