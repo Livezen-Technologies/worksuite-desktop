@@ -5,6 +5,51 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## Unreleased — Finance, part 1: the app and the books
+
+Finance opens here now instead of in the browser, under Business in the
+sidebar. Links to Finance screens (`/finance?tab=…`) open it here too. The
+screens not built yet are in the rail, marked, and open in the browser.
+
+**Added**
+
+- **The rail**, in the web's order, with the company picker at the top. It
+  picks one company, because the books are that company's: a trial balance
+  across two companies is not a report. The company rides in the tab's
+  address, so a restored tab reopens on the same books, and is remembered per
+  person — always checked against the companies you still hold. A company
+  without books says so in the picker.
+- **Overview.** The management accounts on one page: whether the ledger
+  balances and what is outstanding, the result for the year with the sentence
+  that says what it leaves out, bank against ledger, what is owed each way
+  with its age and whether it agrees with its control account, and what is
+  not in the figures yet. Without `finance.reports.view` the page shows what
+  was done and no amounts.
+- **Opening the books** for a company that has none: base currency, the
+  month the financial year starts and the first year, each picked from what
+  the server accepts. It happens once, and the form says so.
+- **Chart of accounts.** The tree, headings apart from accounts, system
+  accounts locked, archived ones marked; find by code or name; new account
+  (the normal balance follows from the type); archive, with what archiving
+  does; and fixed or variable on cost accounts, for the cost breakdown.
+- **Journals.** Newest first, filtered to what is not yet posted, posted, or
+  reversals. One journal opens beside the list with its lines — approving is
+  asserting the lines are right — and its next step: submit, approve (by
+  somebody other than the writer), post, then reverse, with a reason and, if
+  you like, its own date. A reversal links both ways. **New journal** checks
+  the balance as you type, adding in cents as the server does, and shows
+  every problem the server finds at once.
+- **Periods.** Each year's months, lock and reopen (with a reason, kept on the
+  period), and add the next year — with a warning two months before the
+  calendar runs out, after which every entry would be refused.
+- **My access.** Whose books you can open, and why not the others; and your
+  Finance permissions.
+
+Finance's printable report and public shared-report links still open in the
+browser; they are the web's own pages.
+
+---
+
 ## 2026-09-27 — 0.2.40: Tenders, part 3 — the document library, reports and settings
 
 Tenders is now fully native: nothing in its rail opens in the browser. The
