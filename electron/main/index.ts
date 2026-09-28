@@ -1,4 +1,5 @@
-import { app, crashReporter, ipcMain, powerMonitor, screen, session, BrowserWindow, type WebContents } from 'electron';
+import { app, crashReporter, ipcMain, powerMonitor, screen, session, shell, BrowserWindow, type WebContents } from 'electron';
+import os from 'node:os';
 import { join, resolve } from 'node:path';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
 import { resolveWebLink } from '@shared/links';
@@ -14,7 +15,7 @@ import { initLog, logger } from './log';
 import { isDesktopError } from './errors';
 import { buildMenu } from './menu';
 import { paths } from './paths';
-import { SessionController } from './session';
+import { SessionController, syncRefusal } from './session';
 import { IpcRouter } from '../ipc/router';
 import { registerAppProtocol } from '../protocols/app-protocol';
 import { devOrigin, hardenSession, isTrustedShellUrl, openExternalSafely, registerPrivilegedSchemes, hardenWebContents, setExternalAllowList } from '../security/hardening';
@@ -36,6 +37,7 @@ import { OfflineQueue } from '../services/offline-queue';
 import { RealtimeService } from '../services/realtime';
 import { SecureStore } from '../services/secure-store';
 import { SettingsService } from '../services/settings';
+import { DriveSync } from '../services/sync/engine';
 import { ServiceSupervisor } from '../services/supervisor';
 import { TransferManager } from '../services/transfers';
 import { Vault } from '../services/vault';
@@ -211,30 +213,32 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const queue = new OfflineQueue(db, getVault, http, () => sessionCtl.capabilities().offlineQueue);
 
   // Hashing runs in a supervised utility process (FR-DIAG-07).
-  const hashWaiters = new Map<string, { resolve: (v: { sha256: string; bytes: number }) => void; reject: (e: Error) => void }>();
+  type Hashed = { sha256: string; bytes: number; blocks?: string[] };
+  const hashWaiters = new Map<string, { resolve: (v: Hashed) => void; reject: (e: Error) => void }>();
   supervisor.onHealth = () => emitStatus();
   supervisor.start({
     name: 'hash-worker',
     entry: join(__dirname, 'hash-worker.js'),
     onMessage: (msg) => {
-      const m = msg as { type?: string; id?: string; ok?: boolean; sha256?: string; bytes?: number; error?: string };
+      const m = msg as { type?: string; id?: string; ok?: boolean; sha256?: string; bytes?: number; blocks?: string[]; error?: string };
       if (m.type !== 'hash' || !m.id) return;
       const w = hashWaiters.get(m.id);
       if (!w) return;
       hashWaiters.delete(m.id);
-      if (m.ok && m.sha256) w.resolve({ sha256: m.sha256, bytes: m.bytes ?? 0 });
+      if (m.ok && m.sha256) w.resolve({ sha256: m.sha256, bytes: m.bytes ?? 0, blocks: m.blocks });
       else w.reject(new Error(m.error ?? 'hashing failed'));
     },
   });
-  const hash = (path: string) =>
-    new Promise<{ sha256: string; bytes: number }>((resolveHash, reject) => {
+  const hashWith = (type: 'hash' | 'blocks', path: string) =>
+    new Promise<Hashed>((resolveHash, reject) => {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       hashWaiters.set(id, { resolve: resolveHash, reject });
-      if (!supervisor.post('hash-worker', { type: 'hash', id, path })) {
+      if (!supervisor.post('hash-worker', { type, id, path })) {
         hashWaiters.delete(id);
         reject(new Error('The hashing helper is not running.'));
       }
     });
+  const hash = (path: string) => hashWith('hash', path);
 
   const transfers = new TransferManager({
     db,
@@ -246,6 +250,36 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     canOpenFiles: () => sessionCtl.hasPermission('desktop.files.open_external'),
     audit: (action, details) => audit.record(sessionCtl.userId(), action, details),
   });
+
+  // Drive sync (Phase 2): chosen Drive folders kept in step with folders here.
+  const syncAllowed = (): { ok: boolean; reason: string | null } => {
+    const b = sessionCtl.current();
+    if (!b || !sessionCtl.isReady()) return { ok: false, reason: 'Sign in to WorkSuite to sync Drive folders.' };
+    const why = syncRefusal(b.policy, device.getTrust(), device.getClassification());
+    if (why) return { ok: false, reason: why };
+    if (!sessionCtl.hasPermission('desktop.files.sync')) return { ok: false, reason: 'Drive sync on the desktop is not part of your role.' };
+    return { ok: true, reason: null };
+  };
+  const sync = new DriveSync({
+    db,
+    http,
+    platform: process.platform,
+    userId: () => sessionCtl.userId(),
+    userName: () => sessionCtl.get().user?.name ?? '',
+    deviceToken: () => device.deviceToken(),
+    allowed: syncAllowed,
+    removableAllowed: () => sessionCtl.current()?.policy.removable_media_sync === true,
+    hash,
+    hashBlocks: async (path) => {
+      const h = await hashWith('blocks', path);
+      return { sha256: h.sha256, bytes: h.bytes, blocks: h.blocks ?? [] };
+    },
+    trash: (path) => shell.trashItem(path),
+    info: () => ({ app_version: `WorkSuite Desktop ${app.getVersion()}`, os_version: `${os.type()} ${os.release()}`, hostname: os.hostname() }),
+    audit: (action, details) => audit.record(sessionCtl.userId(), action, details),
+    protectedPaths: () => [p.userData],
+  });
+  sync.onChanged = (s) => broadcast('sync:changed', s);
 
   let activeCall = false;
   // Updates wait while a call is on (FR-UPD); the call windows say when.
@@ -547,8 +581,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     device.start();
     device.extras = () => {
       const c = transfers.activeCounts();
-      return { pendingUp: queue.pendingCount(uid) + c.uploads, pendingDown: c.downloads, lastError: null };
+      const s = sync.health();
+      return { pendingUp: queue.pendingCount(uid) + c.uploads + s.pendingUp, pendingDown: c.downloads + s.pendingDown, lastError: s.lastError };
     };
+    sync.start(uid);
     transfers.recover();
     void queue.replay(uid);
     void audit.flush();
@@ -569,6 +605,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     notifications.stop();
     device.stop();
     transfers.stopAll();
+    sync.stop();
     if (attendanceTimer) clearInterval(attendanceTimer);
     attendanceTimer = null;
     stopPresence();
@@ -590,6 +627,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         queue.wipeUser(uid, includeDrafts);
         transfers.wipe(uid);
       }
+      // What Drive sync put on this computer counts as offline files (§11.2 wipe_on_revoke).
+      if (scope === 'cache+offline_files') void sync.wipe(uid, false);
       log.info('local data removed', { scope });
     },
     changed: (s) => {
@@ -602,6 +641,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
     bootstrapChanged: (b) => {
       if (b) settings.setPolicy(b.policy);
+      // Policy or trust may have turned sync on or off.
+      sync.kick('policy');
       // Windows opened from now on allow the announced media server (calls
       // and Meet each open their own window, so none needs reloading).
       if (b?.source === 'desktop-v1' && b.mediaServers && JSON.stringify(b.mediaServers) !== JSON.stringify(mediaServers())) {
@@ -609,6 +650,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         log.info('media servers', { count: b.mediaServers.length });
       }
       broadcast('session:changed', b);
+    },
+    syncDisabled: (reason) => {
+      try {
+        sync.setPaused(null, true);
+      } catch {
+        /* not signed in: nothing is syncing */
+      }
+      broadcast('toast', { kind: 'warning', text: reason });
     },
     minimumVersion: (v) => updater.setMinimum(v),
     requireUpdate: (v) => updater.requireUpdate(v),
@@ -637,6 +686,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void audit.flush();
     void calls.check();
     device.poke();
+    sync.kick('reconnected');
     broadcast('realtime:resync');
   }
 
@@ -760,6 +810,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     cache,
     queue,
     transfers,
+    sync,
     supervisor,
     lock,
     updater,
@@ -822,6 +873,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     statusTimer = null;
     calls.stop();
     transfers.stopAll();
+    sync.stop();
     supervisor.stopAll();
     realtime.stop();
     updater.stop();
@@ -832,6 +884,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   });
   powerMonitor.on('resume', () => {
     device.poke();
+    sync.kick('resume');
     realtime.kick();
     const uid = sessionCtl.userId();
     if (uid) void queue.replay(uid);

@@ -11,8 +11,33 @@
 Utility processes are run by the `ServiceSupervisor`: pinged every 10 s,
 restarted with exponential backoff (1 s → 5 min), marked FAILED after 5
 restarts in 10 minutes, shown in Diagnostics and the tray. A helper failing
-never takes the window down. The Drive sync engine (Phase 2) and the
-monitoring agent (Phase 3) join the supervisor the same way.
+never takes the window down. The monitoring agent (Phase 3) joins the
+supervisor the same way.
+
+## Drive sync
+
+`electron/services/sync/` keeps chosen Drive folders in step with folders on
+this computer (WorkSuite Drive FR-SYN-01…06). It runs in the main process;
+its hashing (whole files, and the protocol's 4 MiB blocks) runs in the
+hash-worker.
+
+- **plan.ts** — pure. Three pictures of a folder — the index (what both sides
+  last agreed), this computer, Drive — become actions: moves first (Drive's by
+  id, this computer's by inode, so a renamed file keeps its versions and
+  shares), then content. A path changed on both sides keeps both copies.
+- **local.ts / remote.ts** — the two pictures. Drive's comes from
+  `/api/drive/tree` and `/api/drive/list?deep=1`, because the server's journal
+  cannot carry a folder sync on its own (see BACKEND.md). What cannot be read
+  is *blind*, never *deleted*.
+- **protocol.ts** — `/api/sync/*` with the device credential:
+  hello → delta → have/block/commit, manifest/block, ack.
+- **engine.ts** — passes (a local change, the journal every minute, every
+  five minutes, Sync now), each action re-checked against the disk just
+  before it runs and written to the index as it completes. Deletions go to a
+  recycle bin; a mass deletion waits for a person; a folder missing on either
+  side stops that folder instead of reading as "everything was deleted".
+- **store.ts** — the index, in the profile database (`sync_folders`,
+  `sync_entries`).
 
 ## The request paths
 

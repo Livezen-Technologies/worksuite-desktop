@@ -127,6 +127,39 @@ const MIGRATIONS: string[] = [
     sent_at TEXT
   );
   `,
+  // 2 — Drive sync: the folders kept in step, and what each side last agreed on.
+  // Paths are not encrypted: they name files that sit in plain sight in the folder itself.
+  `
+  CREATE TABLE sync_folders (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    folder_id INTEGER,                -- NULL: the whole of My Drive
+    folder_name TEXT NOT NULL,
+    local_path TEXT NOT NULL,
+    mode TEXT NOT NULL,
+    paused INTEGER NOT NULL DEFAULT 0,
+    last_sync_at TEXT,
+    error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX sync_folders_user ON sync_folders(user_id);
+
+  CREATE TABLE sync_entries (
+    folder TEXT NOT NULL REFERENCES sync_folders(id) ON DELETE CASCADE,
+    key TEXT NOT NULL,
+    rel TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    remote_id INTEGER NOT NULL,
+    version INTEGER NOT NULL,
+    sha256 TEXT,
+    size INTEGER NOT NULL,
+    mtime_ms REAL NOT NULL,
+    ino TEXT,
+    PRIMARY KEY (folder, key)
+  );
+  CREATE INDEX sync_entries_remote ON sync_entries(kind, remote_id);
+  `,
 ];
 
 export type Row = Record<string, unknown>;

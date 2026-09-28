@@ -67,6 +67,19 @@ export const INVOKE_CHANNELS = [
   'transfers:reveal',
   'transfers:clearFinished',
 
+  'sync:status',
+  'sync:devices',
+  'sync:deviceAction',
+  'sync:add',
+  'sync:remove',
+  'sync:setMode',
+  'sync:pause',
+  'sync:now',
+  'sync:resolve',
+  'sync:reveal',
+  'sync:lookup',
+  'sync:reconnect',
+
   'notifications:list',
   'notifications:markRead',
   'notifications:markAllRead',
@@ -141,6 +154,7 @@ export const EVENT_CHANNELS = [
   'organization:changed',
   'windows:changed',
   'calls:changed',
+  'sync:changed',
 ] as const;
 
 export type EventChannel = (typeof EVENT_CHANNELS)[number];

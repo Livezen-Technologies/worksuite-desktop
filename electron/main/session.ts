@@ -1,5 +1,5 @@
 import { app } from 'electron';
-import type { AuthState, Bootstrap, DeviceTrust, ServerInfo } from '@shared/types';
+import type { AuthState, Bootstrap, DeviceClassification, DeviceTrust, ServerInfo } from '@shared/types';
 import { DesktopError, isDesktopError, UNREACHABLE_MESSAGE } from './errors';
 import { logger } from './log';
 import type { AuthService, SignInPayload } from '../services/auth';
@@ -39,10 +39,21 @@ export const IMPLIED_DESKTOP_PERMISSIONS = [
   'desktop.diagnostics.export',
 ];
 
+/** Why policy keeps Drive sync off this computer (§11.2 file_sync, personal_device_mode), or null. */
+export function syncRefusal(policy: Bootstrap['policy'], trust: DeviceTrust, classification: DeviceClassification): string | null {
+  if (policy.file_sync === 'disabled') return 'Your organization has turned Drive sync off.';
+  if (trust === 'RESTRICTED' || trust === 'REVOKED') return 'Your organization has restricted this computer, so it does not sync.';
+  if (policy.file_sync === 'managed_only' && trust !== 'TRUSTED') return 'Drive sync is allowed only on computers your organization manages.';
+  if (classification === 'PERSONAL' && policy.personal_device_mode !== 'full') return 'Your organization keeps Drive files online only on personal computers.';
+  return null;
+}
+
 export interface SessionHooks {
   started: (b: Bootstrap) => void;
   stopped: () => void;
   wiped: (userId: string, scope: 'tokens' | 'cache' | 'cache+offline_files', includeDrafts: boolean) => void;
+  /** An administrator's DISABLE_SYNC: every synced folder on this computer stops. */
+  syncDisabled: (reason: string) => void;
   changed: (s: AuthState) => void;
   bootstrapChanged: (b: Bootstrap | null) => void;
   minimumVersion: (v: string | null) => void;
@@ -92,8 +103,8 @@ export class SessionController {
         return { ok: true, result: { policy_version: b?.policy.version ?? null } };
       }
       case 'DISABLE_SYNC':
-        // Drive sync is not part of this version; nothing is syncing.
-        return { ok: true, result: { sync: 'not_running' } };
+        this.hooks.syncDisabled(reason ?? 'Your administrator turned Drive sync off for this computer.');
+        return { ok: true, result: { sync: 'paused' } };
       default:
         return { ok: false, result: { error: `unsupported command ${c.command}` } };
     }
@@ -427,6 +438,8 @@ export class SessionController {
         return b.policy.external_file_open !== 'disabled' && !(b.policy.external_file_open === 'managed_only' && this.device.getTrust() !== 'TRUSTED');
       case 'desktop.offline.write':
         return caps.offlineQueue === 'allowed';
+      case 'desktop.files.sync':
+        return syncRefusal(b.policy, this.device.getTrust(), this.device.getClassification()) === null;
       default:
         return true;
     }
