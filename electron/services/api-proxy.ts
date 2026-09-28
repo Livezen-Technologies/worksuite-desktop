@@ -64,7 +64,9 @@ export function isProxyPathAllowed(apiPath: string, method = 'GET'): boolean {
   if (MEDIA.test(apiPath)) return ['GET', 'HEAD'].includes(method.toUpperCase());
   if (!PATH_OK.test(apiPath)) return false;
   const pathOnly = apiPath.split('?')[0]!;
-  if (pathOnly.includes('..') || pathOnly.includes('//')) return false;
+  // No dot segments at all: a URL parser folds `/./` away, and the deny list
+  // must see the path the server will.
+  if (pathOnly.includes('..') || pathOnly.includes('//') || /\/\.(\/|$)/.test(pathOnly)) return false;
   const m = method.toUpperCase();
   if (ACCOUNT.some(([re, methods]) => re.test(pathOnly) && methods.includes(m))) return true;
   return !DENY.some((re) => re.test(pathOnly));

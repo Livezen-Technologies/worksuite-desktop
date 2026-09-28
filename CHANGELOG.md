@@ -71,6 +71,8 @@ until then the desk sends people to pay where they pay today.
   is renewed only once WorkSuite has answered.
 - The desk's key is never shown, logged or copied to the screens. A screen
   that tries to send its own key header has it dropped by the app.
+- The app's API proxy now refuses any address with a `/./` segment, so its
+  list of refused addresses always sees the path the server will.
 - Money, receipts, the cash drawer and closing the day are not native yet.
   The Ready to pay list shows what is owed, but nothing here takes it.
 - Nothing works offline yet. With WorkSuite unreachable each screen says

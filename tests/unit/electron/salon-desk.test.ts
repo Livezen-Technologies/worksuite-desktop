@@ -102,6 +102,9 @@ describe('API proxy and the salon desk key', () => {
   it('refuses pairing through the proxy, where the key would reach the renderer', () => {
     expect(isProxyPathAllowed('/api/salon/v1/desk/pair', 'POST')).toBe(false);
     expect(isProxyPathAllowed('/api/salon/v1/desk/pair?x=1', 'POST')).toBe(false);
+    expect(isProxyPathAllowed('/api/salon/v1/./desk/pair', 'POST')).toBe(false);
+    expect(isProxyPathAllowed('/api/salon/v1/desk/pair/.', 'POST')).toBe(false);
+    expect(isProxyPathAllowed('/api/files/v1.2/list')).toBe(true);
     expect(isProxyPathAllowed('/api/salon/v1/desk/bootstrap?desk=12')).toBe(true);
     expect(isProxyPathAllowed('/api/salon/v1/desks')).toBe(true);
   });
