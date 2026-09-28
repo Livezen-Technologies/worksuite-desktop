@@ -5,6 +5,64 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## Unreleased — Multi-window docking: tabs in their own windows, and side by side
+
+Any tab can now leave the main window and come back. Drag it out of the tab
+strip and let go anywhere off the window, and it becomes its own window
+there; dock it back and it is a tab again. Or dock one tab beside the one
+you are working in, and see both at once.
+
+**Added**
+
+- **Tear a tab off.** Drag a tab out of the window, or choose **Move to new
+  window** in its menu (**Ctrl+Shift+N**, **⌘⇧N** on a Mac, or *File › Move
+  Tab to New Window*). The window opens where the tab was let go — its title
+  bar under the pointer — and a second one opens a step down from the first.
+- **Dock it back.** A torn-off window has **Dock to main window** and **Dock
+  beside the main window's tab** in its title bar; or drag its name, at the
+  left of the title bar, onto the main window: onto the tab strip, between
+  two tabs, to open it there; onto the right of the page to dock it beside;
+  anywhere else on the page to open it as a tab. The main window comes to the
+  front if it was in the tray.
+- **Side by side.** **Dock beside** in a tab's menu (**Ctrl+Shift+D**, **⌘⇧D**,
+  or *View › Dock Tab Beside*), or drag a tab to the right of the page. The
+  docked tab has its own bar — **Swap sides**, **Move to new window**,
+  **Undock** — and is marked in the tab strip. Drag the divider to share the
+  width (a quarter to three quarters; double-click for half and half, or the
+  arrow keys once it has focus). Clicking the docked tab in the strip swaps
+  the two.
+- **Where you left them.** With *Restore tabs at start* on, the docked tab and
+  its width come back, and so do the torn-off windows, each where it was, on
+  whatever it had moved to. Never in Safe Mode.
+
+**Where it bites**
+
+- A tab moves by its address: a form half filled in, a scroll position or an
+  unsent draft that is not saved as a draft stays behind.
+- Signing out closes the torn-off windows (they show your data); the same
+  person gets them back at the next sign-in. Signing out with "remove
+  WorkSuite's data", or a remote wipe, forgets them.
+- A window closed with its own close button is closed, not docked: it does
+  not come back at the next start.
+- Dragging between windows is the operating system's drag. It is covered by
+  unit tests; the end-to-end run (`tests/e2e/docking.mjs`) uses the buttons
+  and menus instead, which DevTools input can press.
+- Only one tab docks beside at a time, on the right. Windows do not snap to
+  each other.
+
+**Under the hood**
+
+- New IPC: `windows:detach`, `windows:dock`, `windows:adopt`,
+  `windows:describe`, `windows:restoreDetached`. Tearing off, taking a window
+  in and restoring are the main window's alone. What a docked window shows is
+  the main process's own record of it, never what a drag or a page says: a
+  drag carries only the window's id.
+- Torn-off windows are remembered per person, encrypted, in `tab_sessions`
+  (`window = 'detached'`), beside the main window's tabs, which now also keep
+  the docked tab (`side`).
+
+---
+
 ## Unreleased — Drive sync: keep Drive folders on this computer
 
 Choose Drive folders in **Files → Sync devices** (or **Keep on this computer…**

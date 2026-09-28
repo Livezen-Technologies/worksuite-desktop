@@ -11,6 +11,10 @@ import { appForRoute, titleForRoute } from '../modules/registry';
  * rebuilt from its route when it is next opened. The set of tabs is saved (so
  * it can be restored at start-up) and restored only where the app is still
  * visible to the user.
+ *
+ * Docking (FR-NAV-05/07): one tab can sit beside the active one (`sideId`,
+ * the main pane's share of the width in `split`); a tab can be torn off into
+ * its own window, and a torn-off window taken back in as a tab.
  */
 export interface Tab {
   id: string;
@@ -28,9 +32,17 @@ interface TabsState {
   tabs: Tab[];
   activeId: string | null;
   closed: Tab[];
+  /** The tab docked beside the active one, or null. Never the active tab itself. */
+  sideId: string | null;
+  /** The main pane's share of the width while a tab is docked beside it. */
+  split: number;
 }
 
-export const tabsStore = createStore<TabsState>({ tabs: [], activeId: null, closed: [] });
+export const SPLIT_MIN = 0.25;
+export const SPLIT_MAX = 0.75;
+const clampSplit = (f: number) => (Number.isFinite(f) ? Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, f)) : 0.5);
+
+export const tabsStore = createStore<TabsState>({ tabs: [], activeId: null, closed: [], sideId: null, split: 0.5 });
 
 let seq = 0;
 const newId = () => `t${Date.now().toString(36)}${(++seq).toString(36)}`;
@@ -55,13 +67,30 @@ function persist(): void {
   saveTimer = setTimeout(() => {
     const s = tabsStore.get();
     const records: TabRecord[] = s.tabs.slice(0, 64).map((t) => ({ id: t.id, route: t.route, title: t.title.slice(0, 200), pinned: t.pinned, organizationId: t.organizationId, app: t.app }));
-    void call('tabs:save', { tabs: records, activeId: s.activeId }).catch(() => undefined);
+    const side = s.sideId && records.some((r) => r.id === s.sideId) ? { id: s.sideId, split: s.split } : null;
+    void call('tabs:save', { tabs: records, activeId: s.activeId, side }).catch(() => undefined);
   }, 500);
+}
+
+/** A docked tab that closed, or became the active one, is no longer beside it. */
+function fixSide(s: TabsState): Partial<TabsState> {
+  if (s.sideId === null) return {};
+  const side = s.tabs.find((t) => t.id === s.sideId);
+  return !side || s.sideId === s.activeId ? { sideId: null } : {};
 }
 
 function update(fn: (s: TabsState) => Partial<TabsState>): void {
   tabsStore.set(fn);
+  tabsStore.set(fixSide);
   persist();
+}
+
+/** The tab to bring forward when the one at `idx` leaves: its neighbour, never the docked one while another is left. */
+function nextActive(tabs: Tab[], idx: number, sideId: string | null): string | null {
+  const rest = tabs.filter((t) => t.id !== sideId);
+  const pool = rest.length ? rest : tabs;
+  const near = tabs.slice(idx).concat(tabs.slice(0, idx).reverse()).find((t) => pool.includes(t));
+  return near?.id ?? pool[0]?.id ?? null;
 }
 
 export function activeTab(): Tab | null {
@@ -72,6 +101,8 @@ export function activeTab(): Tab | null {
 export function activate(id: string): void {
   update((s) => ({
     activeId: id,
+    // Bringing the docked tab forward swaps the two panes.
+    sideId: id === s.sideId && s.activeId && s.activeId !== id ? s.activeId : s.sideId,
     tabs: s.tabs.map((t) => (t.id === id ? { ...t, lastActive: Date.now(), suspended: false } : t)),
   }));
 }
@@ -117,20 +148,87 @@ export function setTitle(id: string, title: string): void {
   update((s) => ({ tabs: s.tabs.map((x) => (x.id === id ? { ...x, title } : x)) }));
 }
 
+function remove(s: TabsState, id: string, remember: boolean): Partial<TabsState> {
+  const idx = s.tabs.findIndex((t) => t.id === id);
+  if (idx < 0) return {};
+  const tab = s.tabs[idx]!;
+  const tabs = s.tabs.filter((t) => t.id !== id);
+  const closed = remember ? [...s.closed.slice(-19), tab] : s.closed;
+  if (tabs.length === 0) {
+    const home = make('/home', null);
+    return { tabs: [home], activeId: home.id, closed, sideId: null };
+  }
+  const sideId = s.sideId === id ? null : s.sideId;
+  const activeId = s.activeId === id ? nextActive(tabs, idx, sideId) : s.activeId;
+  return { tabs, activeId, closed, sideId };
+}
+
 export function closeTab(id: string): void {
+  update((s) => remove(s, id, true));
+}
+
+// ── docking (FR-NAV-05/07) ───────────────────────────────────────────────
+
+/** Docks a tab beside the active one. The active tab itself goes beside the tab used before it. */
+export function dockSide(id: string): void {
   update((s) => {
-    const idx = s.tabs.findIndex((t) => t.id === id);
-    if (idx < 0) return {};
-    const tab = s.tabs[idx]!;
-    const tabs = s.tabs.filter((t) => t.id !== id);
-    const closed = [...s.closed.slice(-19), tab];
-    if (tabs.length === 0) {
-      const home = make('/home', null);
-      return { tabs: [home], activeId: home.id, closed };
-    }
-    const activeId = s.activeId === id ? (tabs[Math.min(idx, tabs.length - 1)]?.id ?? null) : s.activeId;
-    return { tabs, activeId, closed };
+    if (!s.tabs.some((t) => t.id === id)) return {};
+    if (id !== s.activeId) return { sideId: id, tabs: s.tabs.map((t) => (t.id === id ? { ...t, suspended: false, lastActive: Date.now() } : t)) };
+    const other = [...s.tabs].filter((t) => t.id !== id).sort((a, b) => b.lastActive - a.lastActive)[0];
+    if (!other) return {};
+    return { activeId: other.id, sideId: id, tabs: s.tabs.map((t) => (t.id === other.id ? { ...t, suspended: false, lastActive: Date.now() } : t)) };
   });
+}
+
+/** The docked tab goes back to being a tab like the others. */
+export function undockSide(): void {
+  update(() => ({ sideId: null }));
+}
+
+/** The docked tab and the active one change places. */
+export function swapSides(): void {
+  const s = tabsStore.get();
+  if (s.sideId) activate(s.sideId);
+}
+
+export function setSplit(f: number): void {
+  const split = clampSplit(f);
+  if (split !== tabsStore.get().split) update(() => ({ split }));
+}
+
+/**
+ * Tears a tab off into its own window, placed where the pointer let go of
+ * it. The tab leaves the strip (not into "recently closed": it is open).
+ */
+export async function detachTab(id: string, at?: { x: number; y: number }): Promise<boolean> {
+  const t = tabsStore.get().tabs.find((x) => x.id === id);
+  if (!t) return false;
+  try {
+    await call('windows:detach', { route: t.route, title: t.title, at: at ? { x: Math.round(at.x), y: Math.round(at.y) } : undefined });
+  } catch {
+    return false;
+  }
+  update((s) => remove(s, id, false));
+  return true;
+}
+
+/** Opens a tab at a place in the strip (a window docked back, dropped between two tabs). */
+export function insertTab(route: string, opts: { title?: string; index?: number; side?: boolean } = {}): string {
+  const tab = make(route, null, opts.title);
+  update((s) => {
+    const tabs = [...s.tabs];
+    tabs.splice(Math.max(0, Math.min(opts.index ?? tabs.length, tabs.length)), 0, tab);
+    if (opts.side && s.activeId) return { tabs, sideId: tab.id };
+    return { tabs, activeId: tab.id };
+  });
+  return tab.id;
+}
+
+/** A torn-off window dropped on the main window: it closes and its page comes back here as a tab. */
+export async function adoptWindow(windowId: number, opts: { index?: number; side?: boolean } = {}): Promise<string | null> {
+  const r = await call('windows:adopt', { windowId }).catch(() => null);
+  if (!r) return null;
+  return insertTab(r.route, { title: r.title || undefined, index: opts.index, side: opts.side });
 }
 
 export function closeOthers(id: string): void {
@@ -138,6 +236,7 @@ export function closeOthers(id: string): void {
     tabs: s.tabs.filter((t) => t.id === id || t.pinned),
     closed: [...s.closed, ...s.tabs.filter((t) => t.id !== id && !t.pinned)].slice(-20),
     activeId: id,
+    sideId: s.sideId === id ? s.activeId : s.sideId,
   }));
 }
 
@@ -198,7 +297,7 @@ export function suspendIdle(minutes: number): void {
   const s = tabsStore.get();
   let changed = false;
   const tabs = s.tabs.map((t) => {
-    if (t.id !== s.activeId && !t.suspended && now - t.lastActive > minutes * 60_000) {
+    if (t.id !== s.activeId && t.id !== s.sideId && !t.suspended && now - t.lastActive > minutes * 60_000) {
       changed = true;
       return { ...t, suspended: true };
     }
@@ -238,7 +337,14 @@ export async function restoreTabs(allowed: Set<string>): Promise<boolean> {
       .map((r) => ({ ...r, app: appForRoute(r.route), lastActive: Date.now(), suspended: true, reloadKey: 0 }));
     if (tabs.length === 0) return false;
     const activeId = tabs.some((t) => t.id === saved.activeId) ? saved.activeId : tabs[0]!.id;
-    tabsStore.set({ tabs: tabs.map((t) => (t.id === activeId ? { ...t, suspended: false } : t)), activeId, closed: [] });
+    const sideId = saved.side && saved.side.id !== activeId && tabs.some((t) => t.id === saved.side!.id) ? saved.side.id : null;
+    tabsStore.set({
+      tabs: tabs.map((t) => (t.id === activeId || t.id === sideId ? { ...t, suspended: false } : t)),
+      activeId,
+      closed: [],
+      sideId,
+      split: clampSplit(saved.side?.split ?? 0.5),
+    });
     return saved.restored;
   } catch {
     return false;
@@ -247,5 +353,5 @@ export async function restoreTabs(allowed: Set<string>): Promise<boolean> {
 
 export function resetTabs(): void {
   const home = make('/home', null);
-  tabsStore.set({ tabs: [home], activeId: home.id, closed: [] });
+  tabsStore.set({ tabs: [home], activeId: home.id, closed: [], sideId: null, split: 0.5 });
 }

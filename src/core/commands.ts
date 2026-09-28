@@ -25,6 +25,8 @@ export const DEFAULT_SHORTCUTS: Record<string, string> = {
   'new-tab': 'Mod+T',
   'close-tab': 'Mod+W',
   'restore-tab': 'Mod+Shift+T',
+  'move-tab-to-window': 'Mod+Shift+N',
+  'dock-tab-beside': 'Mod+Shift+D',
   settings: 'Mod+,',
   ai: 'Mod+Shift+A',
   'switch-org': 'Mod+Shift+O',

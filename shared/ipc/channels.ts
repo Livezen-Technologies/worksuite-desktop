@@ -37,6 +37,11 @@ export const INVOKE_CHANNELS = [
   'windows:toggleMaximize',
   'windows:close',
   'windows:state',
+  'windows:detach',
+  'windows:dock',
+  'windows:adopt',
+  'windows:describe',
+  'windows:restoreDetached',
 
   'tabs:save',
   'tabs:restore',

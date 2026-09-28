@@ -86,6 +86,11 @@ const api = {
     toggleMaximize: call('windows:toggleMaximize'),
     close: call('windows:close'),
     state: call('windows:state'),
+    detach: call('windows:detach'),
+    dock: call('windows:dock'),
+    adopt: call('windows:adopt'),
+    describe: call('windows:describe'),
+    restoreDetached: call('windows:restoreDetached'),
   },
   tabs: {
     save: call('tabs:save'),

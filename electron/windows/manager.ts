@@ -1,6 +1,6 @@
 import { app, BrowserWindow, screen, type Rectangle } from 'electron';
 import { join } from 'node:path';
-import type { WindowKind } from '@shared/types';
+import type { DetachedWindow, WindowKind } from '@shared/types';
 import type { Database } from '../services/db';
 import { APP_ORIGIN, devOrigin } from '../security/hardening';
 import { logger } from '../main/log';
@@ -57,13 +57,39 @@ export function fitToDisplays(bounds: Rectangle, displays: Array<{ id: number; w
   return { x, y, width, height };
 }
 
+/**
+ * Where a torn-off tab's window goes (FR-NAV-05/07): under the pointer that
+ * let go of the tab, its title bar where the tab was held; without a
+ * pointer, a step down and right of the last one, so none hides another.
+ * Null leaves the window's own remembered place.
+ */
+export function detachedBounds(
+  at: { x: number; y: number } | null,
+  size: { width: number; height: number },
+  others: Rectangle[],
+  displays: Array<{ id: number; workArea: Rectangle }>,
+  primary: { workArea: Rectangle },
+): Rectangle | null {
+  const last = others[others.length - 1];
+  let r: Rectangle;
+  if (at) r = { x: at.x - 120, y: at.y - 18, width: size.width, height: size.height };
+  else if (last) r = { x: last.x + 28, y: last.y + 28, width: last.width, height: last.height };
+  else return null;
+  return fitToDisplays(r, displays, primary);
+}
+
 export class WindowManager {
   private main: BrowserWindow | null = null;
   private kinds = new Map<number, WindowKind>();
   private saveTimers = new Map<number, NodeJS.Timeout>();
   private stopped = false;
   private compactFrom = new Map<number, { bounds: Rectangle; maximized: boolean; onTop: boolean }>();
+  /** Record windows — tabs torn off the main window — and what each shows now. */
+  private records = new Map<number, { route: string; title: string }>();
+  private recordsTimer: NodeJS.Timeout | null = null;
   quitting = false;
+  /** The torn-off windows changed (opened, moved, navigated, closed): remember them for the next start. */
+  onRecordsChanged: (windows: DetachedWindow[]) => void = () => undefined;
   minimizeToTray: () => boolean = () => true;
   onMainShown: () => void = () => undefined;
 
@@ -102,6 +128,13 @@ export class WindowManager {
   saveAllAndStop(): void {
     for (const t of this.saveTimers.values()) clearTimeout(t);
     this.saveTimers.clear();
+    if (this.recordsTimer) clearTimeout(this.recordsTimer);
+    this.recordsTimer = null;
+    try {
+      this.onRecordsChanged(this.detached());
+    } catch {
+      /* where torn-off windows were is a convenience too */
+    }
     for (const win of BrowserWindow.getAllWindows()) {
       const kind = this.kinds.get(win.id);
       if (kind && kind !== 'ring' && !REMOTE.has(kind)) {
@@ -208,14 +241,14 @@ export class WindowManager {
     return win;
   }
 
-  private create(kind: WindowKind, opts: { hash: string; title?: string; alwaysOnTop?: boolean; show?: boolean }): BrowserWindow {
+  private create(kind: WindowKind, opts: { hash: string; title?: string; alwaysOnTop?: boolean; show?: boolean; bounds?: Rectangle | null }): BrowserWindow {
     const size = SIZES[kind];
     // An incoming call always appears in the same place: top right of the
     // screen the pointer is on, clear of the menu bar.
     const ring = kind === 'ring';
     const saved = ring ? null : this.loadLayout(kind);
     const primary = ring ? screen.getDisplayNearestPoint(screen.getCursorScreenPoint()) : screen.getPrimaryDisplay();
-    const initial: Rectangle = saved?.bounds ?? {
+    const initial: Rectangle = opts.bounds ?? saved?.bounds ?? {
       x: ring ? primary.workArea.x + primary.workArea.width - size.width - 20 : primary.workArea.x + Math.round((primary.workArea.width - size.width) / 2),
       y: ring ? primary.workArea.y + 16 : primary.workArea.y + Math.round((primary.workArea.height - size.height) / 2),
       width: size.width,
@@ -305,7 +338,7 @@ export class WindowManager {
     return win;
   }
 
-  open(kind: Exclude<WindowKind, 'main'>, route: string, title?: string, alwaysOnTop?: boolean): BrowserWindow {
+  open(kind: Exclude<WindowKind, 'main'>, route: string, title?: string, alwaysOnTop?: boolean, place?: { at?: { x: number; y: number }; bounds?: Rectangle }): BrowserWindow {
     const hash = `/window/${kind}?route=${encodeURIComponent(route)}`;
     for (const w of BrowserWindow.getAllWindows()) {
       const k = this.kinds.get(w.id);
@@ -319,7 +352,82 @@ export class WindowManager {
       // A newer ring replaces an older one.
       if (k === 'ring' && kind === 'ring') w.close();
     }
-    return this.create(kind, { hash, title, alwaysOnTop: alwaysOnTop ?? (kind !== 'record' && kind !== 'meet') });
+    if (kind !== 'record') return this.create(kind, { hash, title, alwaysOnTop: alwaysOnTop ?? kind !== 'meet' });
+    const win = this.create(kind, { hash, title, alwaysOnTop: false, bounds: this.recordPlace(place) });
+    this.trackRecord(win, route, title ?? '');
+    return win;
+  }
+
+  // ── multi-window docking (FR-NAV-05/07) ─────────────────────────────────
+
+  private recordPlace(place?: { at?: { x: number; y: number }; bounds?: Rectangle }): Rectangle | null {
+    const displays = screen.getAllDisplays();
+    const primary = screen.getPrimaryDisplay();
+    if (place?.bounds) return fitToDisplays(place.bounds, displays, primary);
+    const size = this.loadLayout('record')?.bounds ?? SIZES.record;
+    const others = [...this.records.keys()].map((id) => BrowserWindow.fromId(id)).filter((w): w is BrowserWindow => !!w && !w.isDestroyed()).map((w) => w.getBounds());
+    return detachedBounds(place?.at ?? null, { width: size.width, height: size.height }, others, displays, primary);
+  }
+
+  private trackRecord(win: BrowserWindow, route: string, title: string): void {
+    const id = win.id;
+    this.records.set(id, { route, title });
+    win.on('move', () => this.recordsChanged());
+    win.on('resize', () => this.recordsChanged());
+    // A window closed on purpose (docked back, or closed by the person) is forgotten; one closed for
+    // sign-out is taken out of the map first, so it is still there at the next sign-in.
+    win.on('closed', () => {
+      if (this.records.delete(id)) this.recordsChanged();
+    });
+    this.recordsChanged();
+  }
+
+  private recordsChanged(): void {
+    if (this.stopped) return;
+    if (this.recordsTimer) clearTimeout(this.recordsTimer);
+    this.recordsTimer = setTimeout(() => {
+      this.recordsTimer = null;
+      if (!this.stopped) this.onRecordsChanged(this.detached());
+    }, 600);
+  }
+
+  /** The torn-off windows open now, in the order they were opened. */
+  detached(): DetachedWindow[] {
+    const out: DetachedWindow[] = [];
+    for (const [id, r] of this.records) {
+      const w = BrowserWindow.fromId(id);
+      if (!w || w.isDestroyed()) continue;
+      const b = w.isMaximized() || w.isMinimized() ? w.getNormalBounds() : w.getBounds();
+      out.push({ route: r.route, title: r.title, bounds: { x: b.x, y: b.y, width: b.width, height: b.height } });
+    }
+    return out;
+  }
+
+  /** What a torn-off window shows, or null for any other window. */
+  recordOf(id: number): { route: string; title: string } | null {
+    return this.records.get(id) ?? null;
+  }
+
+  /** A torn-off window moved within its module, or named itself. */
+  describe(win: BrowserWindow, route: string, title: string): void {
+    const r = this.records.get(win.id);
+    if (!r || (r.route === route && r.title === title)) return;
+    this.records.set(win.id, { route, title });
+    this.recordsChanged();
+  }
+
+  /**
+   * Signing out closes every torn-off window — they show the person's data —
+   * without forgetting them: the same person gets them back at sign-in.
+   */
+  closeRecords(): void {
+    if (this.recordsTimer) clearTimeout(this.recordsTimer);
+    this.recordsTimer = null;
+    for (const id of [...this.records.keys()]) {
+      this.records.delete(id);
+      const w = BrowserWindow.fromId(id);
+      if (w && !w.isDestroyed()) w.close();
+    }
   }
 
   /**

@@ -28,7 +28,7 @@ import { normalizeServerUrl, probeServer, toUserSummary } from '../../../electro
 import { parseDirectives } from '../../../electron/services/device';
 import { inDnd, mapServerNotification, present, utcStamp } from '../../../electron/services/notifications';
 import { evaluateBoot } from '../../../electron/main/boot';
-import { fitToDisplays } from '../../../electron/windows/manager';
+import { detachedBounds, fitToDisplays } from '../../../electron/windows/manager';
 import { realtimeUrlAllowed } from '../../../electron/services/realtime';
 import { HttpClient } from '../../../electron/services/http';
 import { OfflineCache } from '../../../electron/services/offline-cache';
@@ -312,6 +312,20 @@ describe('crash recovery (FR-DIAG-03/04)', () => {
     expect(third.safeMode).toBe(true);
     expect(third.hardwareAcceleration).toBe(false);
     expect(evaluateBoot(p, ['--safe-mode'], t0 + 3_600_000).safeModeReason).toBe('requested');
+  });
+});
+
+describe('torn-off windows (FR-NAV-05/07)', () => {
+  const primary = { id: 1, workArea: { x: 0, y: 0, width: 1440, height: 900 } };
+  const size = { width: 1100, height: 800 };
+  it('opens where the tab was let go, its title bar under the pointer, and on screen', () => {
+    expect(detachedBounds({ x: 300, y: 60 }, size, [], [primary], primary)).toEqual({ x: 180, y: 42, width: 1100, height: 800 });
+    // Let go at the bottom right: pulled back into view.
+    expect(detachedBounds({ x: 1400, y: 880 }, size, [], [primary], primary)).toEqual({ x: 340, y: 100, width: 1100, height: 800 });
+  });
+  it('without a pointer, steps down from the last one; with neither, keeps its own place', () => {
+    expect(detachedBounds(null, size, [{ x: 100, y: 50, width: 900, height: 700 }], [primary], primary)).toEqual({ x: 128, y: 78, width: 900, height: 700 });
+    expect(detachedBounds(null, size, [], [primary], primary)).toBeNull();
   });
 });
 

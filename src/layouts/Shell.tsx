@@ -5,7 +5,7 @@ import { call, on } from '../core/bridge';
 import { accelerator, commandForAccelerator, effectiveShortcuts, getCommand, registerCommand } from '../core/commands';
 import { noteRecentApp } from '../core/recent-apps';
 import { useStore } from '../core/store';
-import { activateIndex, activeTab, closeTab, closeTabsForApps, navigate, openTab, resetTabs, restoreClosed, restoreTabs, suspendIdle, tabsStore } from '../core/tabs';
+import { activateIndex, activeTab, closeTab, closeTabsForApps, detachTab, dockSide, insertTab, navigate, openTab, resetTabs, restoreClosed, restoreTabs, suspendIdle, tabsStore, undockSide } from '../core/tabs';
 import { toast } from '../core/toasts';
 import { closeOverlay, minimiseChatDrawer, openChatDrawer, openOverlay, toggleDock, ui } from '../core/ui';
 import { allowedModules, moduleFor } from '../modules/registry';
@@ -42,6 +42,8 @@ export function Shell() {
     const allowed = allowedModules(new Set(apps.map((a) => a.id)));
     void restoreTabs(allowed).then((ok) => {
       if (!ok || tabsStore.get().tabs.length === 0) resetTabs();
+      // And the tabs torn off into their own windows (FR-NAV-05/07), where they were.
+      void call('windows:restoreDetached').catch(() => undefined);
       if (!tabsStore.get().tabs.some((t) => t.app === 'home')) openTab('/home', { background: true });
       if (info?.restoredFromCrash) toast('info', 'WorkSuite closed unexpectedly. Your tabs, drafts and unsent changes have been restored.');
     });
@@ -69,6 +71,18 @@ export function Shell() {
       registerCommand({ id: 'new-tab', label: 'New tab', group: 'Shell', run: () => openTab('/home') }),
       registerCommand({ id: 'close-tab', label: 'Close tab', group: 'Shell', run: () => { const t = activeTab(); if (t && !t.pinned) closeTab(t.id); } }),
       registerCommand({ id: 'restore-tab', label: 'Reopen closed tab', group: 'Shell', run: restoreClosed }),
+      registerCommand({ id: 'move-tab-to-window', label: 'Move tab to new window', group: 'Shell', keywords: 'tear off detach undock window', run: () => { const t = activeTab(); if (t) void detachTab(t.id); } }),
+      registerCommand({
+        id: 'dock-tab-beside',
+        label: 'Dock tab beside / undock',
+        group: 'Shell',
+        keywords: 'split side by side dock panel',
+        run: () => {
+          const s = tabsStore.get();
+          if (s.sideId) undockSide();
+          else if (s.activeId) dockSide(s.activeId);
+        },
+      }),
       registerCommand({ id: 'settings', label: 'Settings', group: 'Navigate', run: () => navigate('/settings') }),
       registerCommand({ id: 'account', label: 'My account', group: 'Navigate', keywords: 'profile picture password two-factor passkey sessions', run: () => navigate('/account/profile') }),
       registerCommand({ id: 'account-security', label: 'Change my password', group: 'Navigate', keywords: 'security two-factor 2fa passkey sessions sign out', run: () => navigate('/account/security') }),
@@ -148,6 +162,11 @@ export function Shell() {
         if (!moduleFor(target)) {
           toast('info', 'That record opens in WorkSuite on the web.');
           void call('app:openInBrowser', { path: req.route });
+          return;
+        }
+        // A torn-off window docked back: a tab of its own, or beside the open one.
+        if (req.source === 'dock') {
+          insertTab(req.route, { title: req.title, side: req.side });
           return;
         }
         if (req.organizationId && req.organizationId !== app.get().organizationId) {
