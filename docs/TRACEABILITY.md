@@ -102,7 +102,9 @@ blocked by something outside the code.
 |---|---|---|
 | FR-COM-01 | Partial | Three-pane mail, combined inbox, shared mailboxes, folders, read, reply/forward, archive/delete, print, attachments download; composer is plain text without attachments |
 | FR-COM-02/03 | Partial | Rooms, threads, receipts, reactions shown, files, typing, pending offline messages, mini window; sending reactions, voice notes and GIFs is on the web for now |
-| FR-COM-04..08 | Later | Meet, screen share, remote control, AI (P2/P4) |
+| FR-COM-04/05 | Done | Meet meetings in their own window; screen share through our picker only (`ScreenShare`) |
+| FR-COM-06 | Partial | Meet remote control (WS-MEET-ENH-01): controlling another shared screen (`src/modules/meet/remote`), and being controlled (`electron/services/remote-control`) — consent with local proof, signed grant, AES-GCM + HMAC channel, input through PowerShell/SendInput, osascript/CGEvent or xdotool; Wayland is share-only. Handover asked in the same prompt; files both ways (RC06), accepting with local proof. The named laser pointer and annotations over a shared screen (RC-PTR-01…03, RC08; `src/modules/meet/remote/pointers.ts`, `PointerLayer.tsx`), the web client's messages on its topic, which the person sharing can clear or switch off; the controller's name beside the pointer on the shared computer (RC-INP-04). Injection is unit-tested with a fake helper and run for real on Linux (X11, under Xvfb); the Windows helper ran under PowerShell against a stand-in user32 and the macOS script against a stand-in bridge. `tests/os/remote-control/check.mjs` (workflow *Remote control helpers*) runs them on real Windows and macOS: not yet run, as GitHub started no Actions jobs in the repository on 2026-09-28 |
+| FR-COM-07/08 | Later | AI (P4) |
 
 ## Devices, security, updates (SEC, UPD)
 

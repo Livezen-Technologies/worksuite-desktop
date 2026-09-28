@@ -92,8 +92,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('media:screenPick', (input, c) => ctx.screenShare.pick(c.sender.id, input.id, !!input.audio));
   router.handle('media:privacySettings', async (input) => {
     // Fixed addresses of the OS's own privacy panes; nothing from the page.
-    const mac = { microphone: 'Privacy_Microphone', camera: 'Privacy_Camera', screen: 'Privacy_ScreenCapture' } as const;
-    const win = { microphone: 'privacy-microphone', camera: 'privacy-webcam', screen: 'privacy' } as const;
+    const mac = { microphone: 'Privacy_Microphone', camera: 'Privacy_Camera', screen: 'Privacy_ScreenCapture', accessibility: 'Privacy_Accessibility' } as const;
+    const win = { microphone: 'privacy-microphone', camera: 'privacy-webcam', screen: 'privacy', accessibility: 'privacy' } as const;
     if (process.platform === 'darwin') await shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${mac[input.pane]}`);
     else if (process.platform === 'win32') await shell.openExternal(`ms-settings:${win[input.pane]}`);
   });
@@ -102,6 +102,53 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     if (w) ctx.calls.setActive(w, input.uuid, { kind: input.kind ?? 'call', title: input.title ?? '' });
   });
   router.handle('calls:list', () => ctx.calls.list());
+
+  // ── Meet remote control (WS-MEET-ENH-01) ──────────────────────────────
+  // Each call is taken only from the window it belongs to: the meeting
+  // window for its share, the consent window for its request, the control
+  // bar for resuming.
+  const kindOf = (sender: Electron.WebContents) => ctx.windows.kindOf(winOf(sender)?.id ?? -1);
+  const fromMeeting = (sender: Electron.WebContents) => {
+    if (kindOf(sender) !== 'meet') throw new DesktopError('IPC_FORBIDDEN_SENDER', 'Only a meeting window shares.');
+  };
+  const rc = ctx.remoteControl;
+  router.handle('rc:state', () => rc.view());
+  router.handle('rc:setAllowRequests', (input) => rc.setAllowRequests(input.value));
+  router.handle('rc:shareStarted', async (input, c) => {
+    fromMeeting(c.sender);
+    const granted = ctx.screenShare.lastGranted(c.sender.id);
+    // Only a capture granted in the last minute is this share's.
+    const source = granted && Date.now() - granted.source.at < 60_000 ? granted.source : null;
+    return rc.shareStarted(c.sender.id, input, source);
+  });
+  router.handle('rc:shareChanged', async (_input, c) => {
+    fromMeeting(c.sender);
+    const granted = ctx.screenShare.lastGranted(c.sender.id);
+    await rc.shareChanged(c.sender.id, granted?.source ?? null, granted?.byController ?? false);
+  });
+  router.handle('rc:shareStopped', async (_input, c) => {
+    fromMeeting(c.sender);
+    await rc.shareStopped(c.sender.id);
+  });
+  router.handle('rc:sharePaused', async (input, c) => {
+    fromMeeting(c.sender);
+    await rc.sharePaused(c.sender.id, input.paused);
+  });
+  router.handle('rc:packet', (input, c) => rc.packet(c.sender.id, input.sender, input.data, input.topic));
+  router.handle('rc:consent', (_input, c) => rc.consent(c.sender.id, ctx.lock.isLocked()));
+  router.handle('rc:answer', (input, c) => rc.answer(c.sender.id, input, ctx.lock.isLocked()));
+  router.handle('rc:pause', (input) => rc.pause(input.sessionId, 'sharer'));
+  router.handle('rc:resume', (input, c) => rc.resume(c.sender.id, input.sessionId));
+  router.handle('rc:fileAnswer', (input, c) => rc.answerFile(c.sender.id, input, ctx.lock.isLocked()));
+  router.handle('rc:sendFile', (input, c) => rc.sendFile(c.sender.id, input.sessionId));
+  router.handle('rc:takeFile', (input, c) => {
+    fromMeeting(c.sender);
+    return rc.takeFile(input, ctx.lock.isLocked());
+  });
+  router.handle('rc:stop', async (input) => {
+    if (input.sessionId) await rc.stop(input.sessionId, 'stopped');
+    else await rc.stopAll('stopped');
+  });
   router.handle('calls:focus', (input) => {
     const w = ctx.windows.all().find((x) => x.id === input.windowId);
     if (!w || !ctx.calls.has(w.id)) return false;
@@ -357,7 +404,14 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
           : `/api/mail/messages/${input.mail!.uid}/attachments/${encodeURIComponent(input.mail!.ref)}?${new URLSearchParams({ folder: input.mail!.folder, dl: '1', ...(input.mail!.mailbox ? { mailbox: input.mail!.mailbox } : {}) })}`;
     return ctx.transfers.download(path, input.name, !!input.open, input.fileId ?? null);
   });
-  router.handle('transfers:upload', (input) => ctx.transfers.upload(input.handles, input.target));
+  router.handle('transfers:upload', (input, c) => {
+    // A file for a remote-control session goes only from the meeting window that controls it; the shared
+    // computer's own offers are chosen in the main process's dialog, never through here.
+    if (input.target.kind === 'remote' && ctx.windows.kindOf(winOf(c.sender)?.id ?? -1) !== 'meet') {
+      throw new DesktopError('IPC_FORBIDDEN_SENDER', 'Files for a remote session are sent from the meeting window.');
+    }
+    return ctx.transfers.upload(input.handles, input.target);
+  });
   router.handle('transfers:pause', (input) => ctx.transfers.pause(input.id));
   router.handle('transfers:resume', (input) => ctx.transfers.resume(input.id));
   router.handle('transfers:cancel', (input) => ctx.transfers.cancel(input.id));

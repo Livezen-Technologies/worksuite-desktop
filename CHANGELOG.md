@@ -5,6 +5,217 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-28 — Meet: pointing at and drawing on a shared screen; the controller's name at the pointer (not released)
+
+The last part of WS-MEET-ENH-01 the desktop did not have (RC-PTR-01…03,
+RC08, RC-INP-04).
+
+**Added**
+
+- **Pointer and Annotate over somebody's shared screen**, beside Request
+  control: a laser pointer with your name, and pen, arrow, rectangle, text
+  and highlight in six colours, with Clear mine. It is the web client's own
+  format on its own topic, so browsers and this app see each other's. The
+  marks are painted over the picture on each screen; the shared computer is
+  not changed. Off while you control that screen, and when the meeting or
+  the person sharing turns it off.
+- **Sharing: Clear viewers' annotations** and **Turn viewers' annotations
+  off** in the share menu, and the status line says who is pointing.
+- **Being controlled: the controller's name beside the pointer** while they
+  move it, gone a moment after they stop, when you move your own mouse, and
+  before every click and scroll they send — it is never what a click lands
+  on.
+
+**Fixed**
+
+- The Tenders tests' type imports, which failed the lint step of every
+  build.
+
+---
+
+## 2026-09-28 — Meet remote control: the input helpers, checked on real systems (not released)
+
+A check that drives each input helper against a test window reporting what
+arrives (`tests/os/remote-control/check.mjs`), run by CI on Windows, macOS
+and Linux whenever the helpers change. On Linux it found:
+
+**Fixed**
+
+- **With one window shared, clicks landed a title bar too low** — near
+  the bottom edge, on the app below. The xdotool that Debian and Ubuntu ship
+  places a window inside its frame by the frame's offset twice; the
+  window's place now comes from xwininfo, and without it one shared window
+  takes no clicks (Settings says to install x11-utils; a whole screen works
+  without it).
+- **Accented letters, other scripts and emoji were not typed** when the
+  app ran without a UTF-8 locale (no LANG, or LANG=C): xdotool reads text in
+  its locale. It now runs in a UTF-8 one.
+- **A character the keyboard layout lacks could come out wrong**: xdotool
+  types it on a spare key it remaps, and without a pause the app read the key
+  before the remapping. Text with such characters is typed with xdotool's
+  usual 12 ms between keys; plain text stays instant.
+
+---
+
+## 2026-09-28 — Meet remote control: the Windows and macOS helpers, checked from Linux (not released)
+
+Neither helper has run on its own system yet. The Windows one ran under
+PowerShell against a stand-in for Windows' input functions, and passed; the
+macOS one, run against a stand-in for its bridge, did not:
+
+**Fixed**
+
+- **On a Mac, a double-click did nothing more than two clicks** — no file
+  opened, no word was selected. macOS does not work out double-clicks from
+  posted events; each click now says which click it is.
+- **On a Mac, a modifier could stay on after it was let go**, so a V typed
+  after Command+C could arrive as Command+V. Keys now carry exactly the
+  modifiers held, none once they are let go.
+- **On a Mac, a small sideways scroll was lost**, and scrolling now uses the
+  system's own scroll event where the scripting bridge has it.
+- **On a Mac, typed text could be silently refused**: it goes through System
+  Events, and the app did not declare Apple Events. It now does, with a
+  sentence for the prompt macOS shows once.
+
+**Changed**
+
+- The Linux .deb recommends xdotool and x11-utils (xwininfo), which remote
+  control needs; with the .rpm and the AppImage, the app says what to
+  install.
+
+---
+
+## 2026-09-28 — Meet remote control, tried for real on Linux (not released)
+
+The shared computer's side run under a real X server (Xvfb and openbox) with
+xdotool and real Electron windows. Moves, clicks, keys, typed text and the
+wheel landed; the real-click rule, the red bar and the emergency chord held.
+Three things did not work, and are fixed:
+
+**Fixed**
+
+- **On Linux, the person here moving their mouse out on the desktop did not
+  hold the controller back.** Electron only learns where the pointer is from
+  events on its own windows, so away from them its reading stood still. The
+  pointer is now read through xdotool while control lasts.
+- **On Linux, with one window shared, clicks on it were refused.** xdotool
+  names the frame the window manager draws around a window, not the window;
+  `xwininfo` now says whether the shared window is inside that frame. Where
+  xwininfo is missing, clicks go through only while the shared window is the
+  one in front.
+- **On Linux, with one window shared, a click could make the next ones
+  wait.** Checking what is under the pointer takes the pointer there, and
+  that move could be taken for the person here using the mouse, holding the
+  controller back for a second and a half. It now counts as the
+  controller's.
+
+---
+
+## 2026-09-28 — Meet remote control: what the security review found (not released)
+
+Three reviews of the code that lets someone else drive this computer. Nothing
+let input through without the current key; these are the gaps they found.
+
+**Fixed**
+
+- **A page could take a file offered to the shared computer** through the
+  API proxy, skipping the red bar's Accept and its real-click check (the
+  server checks only who the receiver is). Taking, fetching and offering
+  files now go through the main process only; the controller's own Accept
+  goes there too and takes only files sent to the controller.
+- **Reserved chords written another way got through** (`Meta + L` locked the
+  screen, `Alt+Ctrl+Shift+Esc` fired the emergency stop as if the person
+  here had). They are now matched by key and modifiers in any order,
+  spelling or with extras; the policy's chord is normalised the same way.
+- **A lock or sleep during the approval or a key change was lost**, and
+  control went live unpaused. It now holds, and is told to the server when
+  control goes active. Only the person's own Resume lifts it.
+- **Queued input could run after a pause, and a late-running queued click
+  could pass for the person's own.** One batch at a time is in the input
+  helper, each confirmed; a pause forgets the rest and the releases go next;
+  the real-click check counts from when the helper finished, with nothing
+  queued.
+- **On Linux**, anything after typed text in a batch was typed as words (so
+  key-ups were lost), and ending a session could throw away the releases.
+- **One window shared**: clicks could land on another app covering it, and
+  keys could reach other apps for up to a second after Alt+Tab. Presses now
+  need that window under the pointer, keys wait until it has been seen in
+  front, and app switching (Alt+Tab, Command+Tab) is not passed on.
+- **A screen share whose display could not be matched** sent input to the
+  primary display. It now takes none, unless there is only one display.
+- **Any participant could flood the control channel** and crowd out the
+  controller: the meeting window now relays only the controller's messages.
+- The grant must say it is one, name this computer and name its key (the
+  server now puts the key's SHA-256 in the signed grant); only Ed25519 keys.
+- Leases can't be stamped far into the future; a key change no longer sends
+  administrators false "unsigned message" alerts; an input helper that exits
+  pauses control; stopping ends input before the server answers; offered
+  files are streamed from disk rather than read into memory; typed text lets
+  go of held modifiers first; the key table has no prototype.
+
+**Changed**
+
+- The rate limits were raised to what a person can make with a 120 Hz
+  trackpad and a held key (240 pointer and 60 key events a second), so fast
+  scrolling no longer trips the burst alarm.
+- The special-keys menu now says "Ask for Ctrl + Alt + Delete": no app can
+  send it; the person at the computer is asked to press it.
+
+---
+
+## 2026-09-28 — Meet remote control (not released)
+
+WS-MEET-ENH-01, the desktop's part. The server and web sides shipped
+earlier; a browser can be watched but never controlled, so this is what
+makes remote control work.
+
+**Added**
+
+- **Control another participant's shared screen** from a meeting window:
+  Request control (with a reason, and the server's sentence when it isn't
+  offered), the wait, then mouse, wheel, keyboard, special keys and text
+  mode; Release control. Turned off by the `remote_control_controller`
+  policy.
+- **Be controlled, when you allow it.** Sharing from WorkSuite Desktop
+  registers the share as the desktop's; the picker offers the quality and
+  "Let people ask to control what I share". A request opens a prompt above
+  everything (RC03): who asks and why, what they may do, for how long.
+  Allowing needs a click with this computer's own mouse or keyboard. While
+  control lasts, a red bar stays at the top of the screen with Pause and
+  Stop (RC04), the tray says so, and the emergency chord stops it at once.
+  Moving your own mouse always wins. Control pauses by itself for the lock
+  screen, sleep, a user switch, the secure desktop, and password managers
+  or system prompts; only you resume it. Quitting asks first (RC15).
+- **Settings › Remote control** (RC09): whether this computer can be
+  controlled and why not, the default for "Let people ask", the emergency
+  chord, and on a Mac the way to Accessibility.
+- **A second person asking** while someone has control gets the same prompt,
+  worded as a handover: the first loses control when you allow it.
+- **Files during control** (RC06), when the grant allows file transfer.
+  Either end can send: "Send a file" on the controller's bar, or on the red
+  bar here, which opens the system's file dialog (nothing is injected while
+  it is open). Files sent to you wait on the red bar with Accept and
+  Decline; accepting needs your own click, and a program asks a second
+  time. Accepted files arrive in the download folder and the transfer list.
+  Up to 512 MB each; the `remote_file_receive` policy can turn receiving off.
+
+**Needs**
+
+- **Windows:** Windows PowerShell (always there unless removed by policy).
+  Elevated windows can't be driven by a non-elevated WorkSuite.
+- **macOS:** WorkSuite in Privacy & Security › Accessibility.
+- **Linux:** an X11 session and `xdotool`. Wayland sessions can share but
+  not be controlled.
+
+**Not yet**
+
+- The input helpers have been exercised with a stand-in in the tests, not
+  yet on real Windows, macOS and X11 machines.
+- Switching screens for the controller (monitor switch) is wired through
+  the meeting window but not yet tried with a real second display.
+- Viewers' pointers and annotations are not drawn over this computer's
+  screen while it is shared; they show in the meeting window only.
+
 ## Unreleased — Drive sync: keep Drive folders on this computer
 
 Choose Drive folders in **Files → Sync devices** (or **Keep on this computer…**

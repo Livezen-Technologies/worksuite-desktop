@@ -56,6 +56,22 @@ export const INVOKE_CHANNELS = [
   'calls:active',
   'calls:list',
   'calls:focus',
+
+  'rc:state',
+  'rc:setAllowRequests',
+  'rc:shareStarted',
+  'rc:shareChanged',
+  'rc:shareStopped',
+  'rc:sharePaused',
+  'rc:packet',
+  'rc:consent',
+  'rc:answer',
+  'rc:pause',
+  'rc:resume',
+  'rc:stop',
+  'rc:fileAnswer',
+  'rc:sendFile',
+  'rc:takeFile',
   'transfers:list',
   'transfers:download',
   'transfers:upload',
@@ -155,6 +171,8 @@ export const EVENT_CHANNELS = [
   'windows:changed',
   'calls:changed',
   'sync:changed',
+  'rc:changed',
+  'rc:switchScreen',
 ] as const;
 
 export type EventChannel = (typeof EVENT_CHANNELS)[number];

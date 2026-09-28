@@ -46,6 +46,7 @@ Section: default
 Priority: optional
 Architecture: amd64
 Depends: libgtk-3-0 | libgtk-3-0t64, libnotify4, libnss3, libxss1, libxtst6, xdg-utils, libatspi2.0-0 | libatspi2.0-0t64, libuuid1, libsecret-1-0, libgbm1, libasound2 | libasound2t64
+Recommends: xdotool, x11-utils
 Installed-Size: {installed_kb(root)}
 Maintainer: Livezen Technologies <noreply@worksuite.lk>
 Homepage: https://worksuite.lk

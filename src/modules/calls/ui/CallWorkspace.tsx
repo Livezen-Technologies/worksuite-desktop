@@ -48,6 +48,8 @@ export interface WorkspaceProps {
   pinnable?: boolean;
   /** Who spoke last (the session keeps it), so the big picture does not flick between two voices. */
   lastSpeaker?: string | null;
+  /** Drawn over another person's shared screen on the stage (Meet's remote control). */
+  screenLayer?: (sharer: CallPerson) => ReactNode;
 }
 
 const IDLE_MS = 3_000;
@@ -220,7 +222,7 @@ export function CallWorkspace(props: WorkspaceProps) {
 
       <div className="absolute z-[10]" style={{ left: stageRect.x, top: stageRect.y, width: stageRect.width, height: stageRect.height }}>
         <div className="absolute top-0 left-0 overflow-hidden" style={{ width: mainWidth, height: inner.height }}>
-          <Stage layout={layout} people={people} tiles={tiles} star={star} self={self} remoteScreen={remoteScreen} board={props.board ?? null} size={{ width: mainWidth, height: inner.height }} />
+          <Stage layout={layout} people={people} tiles={tiles} star={star} self={self} remoteScreen={remoteScreen} board={props.board ?? null} size={{ width: mainWidth, height: inner.height }} screenLayer={props.screenLayer} />
           {props.alerts ? <div className="absolute inset-x-3 top-3 z-[25] flex flex-col gap-2">{props.alerts}</div> : null}
           {props.overlay ? <div className="absolute inset-0 z-[25] flex items-center justify-center bg-[rgba(11,18,38,.72)] p-6">{props.overlay}</div> : null}
         </div>
@@ -275,7 +277,7 @@ function Header({ title, clock, badges, headerExtra, pinnable = true, pinned, ma
   );
 }
 
-function Stage({ layout, people, tiles, star, self, remoteScreen, board, size }: { layout: LayoutOutput; people: CallPerson[]; tiles: CallPerson[]; star: CallPerson | null; self: CallPerson | null; remoteScreen: CallPerson | null; board: ReactNode | null; size: { width: number; height: number } }) {
+function Stage({ layout, people, tiles, star, self, remoteScreen, board, size, screenLayer }: { layout: LayoutOutput; people: CallPerson[]; tiles: CallPerson[]; star: CallPerson | null; self: CallPerson | null; remoteScreen: CallPerson | null; board: ReactNode | null; size: { width: number; height: number }; screenLayer?: (sharer: CallPerson) => ReactNode }) {
   const ui = callUi.get();
   if (layout.resolved.startsWith('screen')) {
     const pipPerson = remoteScreen ?? star;
@@ -294,6 +296,7 @@ function Stage({ layout, people, tiles, star, self, remoteScreen, board, size }:
                 <span className="text-[12.5px] text-[#AFC0E8]">{remoteScreen.name} will pick it up again in a moment.</span>
               </div>
             ) : null}
+            {screenLayer?.(remoteScreen)}
           </div>
         ) : null}
         {layout.pip ? <CallVideoPip person={pipPerson && pipPerson.self && !ui.selfView ? null : pipPerson} self={self} stage={size} inset={layout.controlsInset} /> : null}

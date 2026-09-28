@@ -26,6 +26,12 @@ export default tseslint.config(
     },
   },
   {
+    files: ['tests/os/**/*.mjs'],
+    languageOptions: {
+      globals: { process: 'readonly', console: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly', Buffer: 'readonly' },
+    },
+  },
+  {
     files: ['tests/e2e/**/*.mjs'],
     languageOptions: {
       globals: { process: 'readonly', console: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly', fetch: 'readonly', Blob: 'readonly', FormData: 'readonly', Buffer: 'readonly', WebSocket: 'readonly' },

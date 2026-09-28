@@ -97,6 +97,15 @@ export interface DesktopPolicy {
   wipe_on_revoke: 'tokens' | 'cache' | 'cache+offline_files';
   proxy: 'system' | 'manual' | 'pac';
   allow_offline: boolean;
+  /** Meet remote control on this computer (WS-MEET-ENH-01 §E.8). The server decides; these say what to offer. */
+  remote_control_host: 'allowed' | 'managed_only' | 'disabled';
+  remote_control_controller: 'allowed' | 'disabled';
+  remote_clipboard: 'off' | 'text_only' | 'text_and_files';
+  remote_file_receive: 'allowed' | 'managed_only' | 'disabled';
+  /** Stops control at once, whatever the controller is doing: `Ctrl+Alt+Shift+Esc`. Never injected. */
+  remote_emergency_stop_chord: string;
+  /** How long the controller waits after the person at this computer moves the mouse (RC-INP-04). */
+  remote_local_priority_hold_ms: number;
 }
 
 export interface MonitoringPolicySummary {
@@ -320,7 +329,7 @@ export interface AppInfo {
   restoredFromCrash: boolean;
 }
 
-export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'video-call' | 'ring' | 'meet';
+export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'video-call' | 'ring' | 'meet' | 'rc-consent' | 'rc-indicator' | 'rc-pointer';
 
 /** Screens and windows offered for sharing (FR-COM-05), and whether the OS lets us capture them. */
 export interface ScreenSources {
@@ -451,4 +460,86 @@ export interface SyncPolicy {
   allow_offline: boolean;
   require_encryption: boolean;
   block_size: number;
+}
+
+// ── Meet remote control on this computer (WS-MEET-ENH-01) ─────────────────
+
+/** Whether this computer can be controlled, and if not, why — in a sentence. */
+export interface RemoteControlSupport {
+  available: boolean;
+  method: 'sendinput' | 'cgevent' | 'xdotool' | null;
+  displayServer: 'win32' | 'quartz' | 'x11' | 'wayland';
+  reason: string | null;
+  /** macOS: Accessibility, which injecting needs. Elsewhere 'not_required'. */
+  accessibility: 'granted' | 'denied' | 'not_required';
+  /** The computer's policy lets it be controlled at all (the server still decides each time). */
+  policyAllows: boolean;
+}
+
+export interface RemoteControlRequestView {
+  id: number;
+  sessionId: number;
+  kind: 'request' | 'handover' | 'increase';
+  requester: string;
+  reason: string | null;
+  expiresIn: number;
+}
+
+export interface RemoteControlSessionView {
+  id: number;
+  status: 'CONTROL_APPROVED' | 'CONTROL_ACTIVE' | 'CONTROL_PAUSED';
+  controller: string;
+  /** The controller's connection in the meeting: the meeting window relays messages from it alone. */
+  controllerIdentity: string;
+  capsLabel: string;
+  pauseReason: string | null;
+  /** Why control is paused, as the indicator says it. */
+  pauseText: string | null;
+  /** When control became active here (ms), for the indicator's clock. */
+  since: number | null;
+  expiresAt: string | null;
+  /** Control is on but this computer is holding the controller back: the person here moved the mouse, or the shared window is not in front. */
+  waiting: 'local' | 'window' | null;
+  type: 'meeting' | 'support' | 'call';
+}
+
+export interface RemoteControlView {
+  support: RemoteControlSupport;
+  /** "Let people ask to control my screen" when sharing starts. */
+  allowRequests: boolean;
+  emergencyChord: string;
+  /** False when another app holds the emergency chord; the indicator's Stop still works. */
+  chordRegistered: boolean;
+  share: { uuid: string; shareId: number; label: string; kind: 'screen' | 'window'; allowRequests: boolean; paused: boolean } | null;
+  requests: RemoteControlRequestView[];
+  session: RemoteControlSessionView | null;
+  /** Files the controller offered this computer, waiting for an answer (RC06). */
+  offers: RemoteControlOffer[];
+  /** This computer may offer the controller files (the grant allows file transfer). */
+  canSendFiles: boolean;
+}
+
+export interface RemoteControlOffer {
+  id: number;
+  sessionId: number;
+  name: string;
+  size: number;
+  from: string;
+  executable: boolean;
+  scan: 'clean' | 'not_scanned' | 'infected';
+}
+
+/** What the consent window (RC03) shows for one request. */
+export interface RemoteControlConsent {
+  id: number;
+  kind: 'request' | 'handover' | 'increase';
+  requester: string;
+  reason: string | null;
+  expiresIn: number;
+  share: string;
+  /** For a handover: who has control now. */
+  current: string | null;
+  clipboard: 'off' | 'text' | 'text_files';
+  fileTransfer: boolean;
+  locked: boolean;
 }

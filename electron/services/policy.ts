@@ -1,6 +1,7 @@
 import { createPublicKey, verify } from 'node:crypto';
 import type { DesktopPolicy, DeviceTrust, NotificationPrivacy } from '@shared/types';
 import { canonicalJson } from '@shared/canonical-json';
+import { canonicalChord, parseChord } from '@shared/remote-control/channel';
 
 /**
  * Desktop policy (§11.2, FR-SEC-09).
@@ -39,7 +40,25 @@ export const DEFAULT_POLICY: DesktopPolicy = {
   wipe_on_revoke: 'cache+offline_files',
   proxy: 'system',
   allow_offline: true,
+  remote_control_host: 'managed_only',
+  remote_control_controller: 'allowed',
+  remote_clipboard: 'off',
+  remote_file_receive: 'managed_only',
+  remote_emergency_stop_chord: 'Ctrl+Alt+Shift+Esc',
+  remote_local_priority_hold_ms: 1500,
 };
+
+/**
+ * The emergency chord as the policy wrote it, in the one form the receiver
+ * and the shortcut use (`Alt+Ctrl+Shift+Escape` → `Ctrl+Alt+Shift+Esc`): at
+ * least one modifier and a plain key, else the default.
+ */
+export function emergencyChord(v: unknown): string {
+  if (typeof v !== 'string' || v.length > 64) return DEFAULT_POLICY.remote_emergency_stop_chord;
+  const c = parseChord(v);
+  const plain = /^([A-Z0-9]|F([1-9]|1[0-9]|2[0-4])|Esc|Tab|Space|Enter|Backspace|Delete|Home|End|PageUp|PageDown)$/.test(c.key);
+  return c.mods.size > 0 && plain ? canonicalChord(v) : DEFAULT_POLICY.remote_emergency_stop_chord;
+}
 
 const PRIVACY_ORDER: NotificationPrivacy[] = ['FULL', 'SENDER_ONLY', 'GENERIC'];
 
@@ -99,6 +118,12 @@ export function normalizePolicy(input: Record<string, unknown> | null | undefine
     wipe_on_revoke: pick(p.wipe_on_revoke, ['tokens', 'cache', 'cache+offline_files'], d.wipe_on_revoke),
     proxy: pick(p.proxy, ['system', 'manual', 'pac'], d.proxy),
     allow_offline: p.allow_offline !== false,
+    remote_control_host: pick(p.remote_control_host, ['allowed', 'managed_only', 'disabled'], d.remote_control_host),
+    remote_control_controller: pick(p.remote_control_controller, ['allowed', 'disabled'], d.remote_control_controller),
+    remote_clipboard: pick(p.remote_clipboard, ['off', 'text_only', 'text_and_files'], d.remote_clipboard),
+    remote_file_receive: pick(p.remote_file_receive, ['allowed', 'managed_only', 'disabled'], d.remote_file_receive),
+    remote_emergency_stop_chord: emergencyChord(p.remote_emergency_stop_chord),
+    remote_local_priority_hold_ms: clamp(p.remote_local_priority_hold_ms, 500, 5000, d.remote_local_priority_hold_ms),
   };
 }
 

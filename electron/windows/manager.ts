@@ -30,7 +30,12 @@ const SIZES: Record<WindowKind, { width: number; height: number; minWidth: numbe
   'video-call': { width: 1180, height: 760, minWidth: 720, minHeight: 480 },
   ring: { width: 360, height: 292, minWidth: 360, minHeight: 292 },
   meet: { width: 1280, height: 800, minWidth: 960, minHeight: 600 },
+  'rc-consent': { width: 460, height: 560, minWidth: 460, minHeight: 560 },
+  'rc-indicator': { width: 560, height: 52, minWidth: 560, minHeight: 52 },
+  'rc-pointer': { width: 220, height: 30, minWidth: 220, minHeight: 30 },
 };
+/** Remote control's own windows: placed by remote control, never remembered. */
+const REMOTE = new Set<WindowKind>(['rc-consent', 'rc-indicator', 'rc-pointer']);
 
 interface SavedLayout {
   displayId: string | null;
@@ -99,7 +104,7 @@ export class WindowManager {
     this.saveTimers.clear();
     for (const win of BrowserWindow.getAllWindows()) {
       const kind = this.kinds.get(win.id);
-      if (kind && kind !== 'ring') {
+      if (kind && kind !== 'ring' && !REMOTE.has(kind)) {
         try {
           this.saveLayout(win, kind);
         } catch {
@@ -140,6 +145,69 @@ export class WindowManager {
     return hash ? `${base}#${hash}` : base;
   }
 
+  private webPreferences(): Electron.WebPreferences {
+    return {
+      preload: this.preload,
+      nodeIntegration: false, // FR-SHL-04: never true
+      contextIsolation: true,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      spellcheck: true,
+      webviewTag: false,
+      navigateOnDragDrop: false,
+      devTools: !app.isPackaged || process.argv.includes('--diagnostics-devtools'),
+      // Unpackaged test runs only: lets test-only surfaces (the call layout preview) show.
+      additionalArguments: !app.isPackaged && process.env.WS_E2E_FAKE_MEDIA ? ['--ws-e2e'] : [],
+    };
+  }
+
+  /**
+   * Remote control's consent prompt (RC03), control bar (RC04) and the
+   * controller's name beside the pointer (RC-INP-04): above everything,
+   * including full-screen apps, and left out of screen capture so a
+   * controller watching the shared screen can neither read nor aim at them.
+   * The prompt takes focus; the bar never does; the name tag is not even
+   * there for the mouse — clicks go through it to what is below.
+   */
+  openRemote(kind: 'rc-consent' | 'rc-indicator' | 'rc-pointer', hash: string, bounds: Rectangle): BrowserWindow {
+    const consent = kind === 'rc-consent';
+    const tag = kind === 'rc-pointer';
+    const win = new BrowserWindow({
+      ...bounds,
+      show: false,
+      frame: false,
+      resizable: false,
+      maximizable: false,
+      minimizable: false,
+      fullscreenable: false,
+      movable: consent,
+      skipTaskbar: !consent,
+      alwaysOnTop: true,
+      title: consent ? 'Remote control request' : 'Remote control',
+      ...(tag ? { transparent: true, focusable: false, hasShadow: false, backgroundColor: '#00000000' } : { backgroundColor: consent ? '#FFFFFF' : '#0F1B3D' }),
+      webPreferences: this.webPreferences(),
+    });
+    // On X11 this does not survive the window being shown or moved (tried under Xvfb), so remote control
+    // also hides the tag before every press and scroll it passes on: it is never under a controller's click.
+    if (tag) win.setIgnoreMouseEvents(true);
+    win.setAlwaysOnTop(true, 'screen-saver');
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    win.setContentProtection(true);
+    this.kinds.set(win.id, kind);
+    const id = win.id;
+    win.on('closed', () => this.kinds.delete(id));
+    win.once('ready-to-show', () => {
+      if (consent) {
+        win.show();
+        win.focus();
+      } else win.showInactive();
+    });
+    win.webContents.on('render-process-gone', () => !win.isDestroyed() && win.close());
+    void win.loadURL(this.url(hash));
+    return win;
+  }
+
   private create(kind: WindowKind, opts: { hash: string; title?: string; alwaysOnTop?: boolean; show?: boolean }): BrowserWindow {
     const size = SIZES[kind];
     // An incoming call always appears in the same place: top right of the
@@ -170,20 +238,7 @@ export class WindowManager {
       alwaysOnTop: !!opts.alwaysOnTop && ALWAYS_ON_TOP_ALLOWED.has(kind),
       ...(ring ? { resizable: false, maximizable: false, minimizable: false, fullscreenable: false, skipTaskbar: true } : {}),
       icon: mac ? undefined : join(app.isPackaged ? process.resourcesPath : join(__dirname, '../../resources'), 'icons', '256x256.png'),
-      webPreferences: {
-        preload: this.preload,
-        nodeIntegration: false, // FR-SHL-04: never true
-        contextIsolation: true,
-        sandbox: true,
-        webSecurity: true,
-        allowRunningInsecureContent: false,
-        spellcheck: true,
-        webviewTag: false,
-        navigateOnDragDrop: false,
-        devTools: !app.isPackaged || process.argv.includes('--diagnostics-devtools'),
-        // Unpackaged test runs only: lets test-only surfaces (the call layout preview) show.
-        additionalArguments: !app.isPackaged && process.env.WS_E2E_FAKE_MEDIA ? ['--ws-e2e'] : [],
-      },
+      webPreferences: this.webPreferences(),
     });
     if (ring && mac) win.setWindowButtonVisibility(false);
     this.kinds.set(win.id, kind);

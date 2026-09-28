@@ -1,9 +1,11 @@
 import { DisconnectReason, Room, RoomEvent, Track, VideoPresets, type Participant, type RemoteParticipant } from 'livekit-client';
 import { ApiError, apiGet, apiPost, apiPut } from '../../core/api';
-import { call, errorMessage } from '../../core/bridge';
+import { call, errorMessage, on } from '../../core/bridge';
 import { CLEAN_AUDIO, pauseOn, shareOn } from '../calls/session';
 import type { SharePick } from '../calls/ScreenPicker';
 import type { MeetInfo, Sfu } from './api';
+import type { RemoteControlView } from '@shared/types';
+import { pointers } from './remote/pointers';
 
 /**
  * One Meet meeting, in its window (MeetLobby → MeetRoom). Like a call, kept
@@ -53,6 +55,14 @@ export class MeetSession {
   lastSpeaker: string | null = null;
   /** What is being shared, in words. */
   shareLabel: string | null = null;
+  /** Whether others can ask to control what this window shares, and if not, why (the main process decides). */
+  control: { offered: boolean; why: string | null } | null = null;
+  /** A share being started, switched or stopped here, so the track events it causes are not mistaken for the system stopping it. */
+  private switching = false;
+  private offSwitch: (() => void) | null = null;
+  private offControl: (() => void) | null = null;
+  /** Whose control messages to relay: the one controller the main process names. Anyone else's are dropped here. */
+  private controllerIdentity: string | null = null;
   private version = 0;
   private listeners = new Set<() => void>();
   private audio = new Set<HTMLMediaElement>();
@@ -146,7 +156,11 @@ export class MeetSession {
       .on(RoomEvent.TrackMuted, refresh)
       .on(RoomEvent.TrackUnmuted, refresh)
       .on(RoomEvent.LocalTrackPublished, refresh)
-      .on(RoomEvent.LocalTrackUnpublished, refresh)
+      .on(RoomEvent.LocalTrackUnpublished, (pub) => {
+        // Sharing stopped from outside (the system's own "Stop sharing"): the share, and any control of it, ends.
+        if (pub.source === Track.Source.ScreenShare && !this.switching) void this.shareEnded();
+        refresh();
+      })
       .on(RoomEvent.RecordingStatusChanged, refresh)
       .on(RoomEvent.TrackSubscribed, (track) => {
         if (track.kind === Track.Kind.Audio) {
@@ -168,7 +182,20 @@ export class MeetSession {
         if (p === room.localParticipant && this.phase === 'waiting' && this.canPublish) void this.enter();
         refresh();
       })
-      .on(RoomEvent.DataReceived, (payload, _p, _kind, topic) => {
+      .on(RoomEvent.DataReceived, (payload, p, _kind, topic) => {
+        // Remote control: relayed to the main process as it came. The key, and the decision, are there.
+        if (topic === 'rc.ctl' || topic === 'rc.ctl.move') {
+          // Only the controller's: another participant flooding the topic must not crowd them out.
+          if (p && this.control && p.identity === this.controllerIdentity && payload.length <= 16_384) {
+            void call('rc:packet', { sender: p.identity, topic, data: new TextDecoder().decode(payload) }).catch(() => undefined);
+          }
+          return;
+        }
+        // Viewers' pointers and annotations over a shared screen: painted, never injected.
+        if (topic === 'rc.pointer') {
+          if (p) pointers.receive(payload, { identity: p.identity, name: p.name });
+          return;
+        }
         if (topic !== 'wb') return;
         try {
           const msg = JSON.parse(new TextDecoder().decode(payload)) as Board;
@@ -251,11 +278,70 @@ export class MeetSession {
   async share(pick: SharePick | null): Promise<void> {
     const lp = this.room?.localParticipant;
     if (!lp) return;
+    const was = lp.isScreenShareEnabled;
+    this.switching = true;
     try {
       await shareOn(lp, pick);
       this.shareLabel = pick ? pick.name : null;
     } catch (e) {
       this.note(errorMessage(e));
+    } finally {
+      this.switching = false;
+    }
+    await this.registerShare(was, pick);
+    this.changed();
+  }
+
+  /**
+   * The server hears of every share from the main process, which knows what
+   * was really captured: started (as WorkSuite Desktop), switched, stopped.
+   */
+  private async registerShare(was: boolean, pick: SharePick | null): Promise<void> {
+    const lp = this.room?.localParticipant;
+    const now = !!lp?.isScreenShareEnabled;
+    try {
+      if (now && !was && lp) {
+        const r = await call('rc:shareStarted', { uuid: this.uuid, identity: lp.identity, quality: pick?.quality, allowRequests: pick?.allowRequests });
+        this.control = { offered: r.controlOffered, why: r.why };
+        this.offSwitch?.();
+        this.offSwitch = on<{ id: string; name: string }>('rc:switchScreen', (s) => void this.switchForController(s));
+        this.offControl?.();
+        this.offControl = on<RemoteControlView>('rc:changed', (v) => (this.controllerIdentity = v.session?.controllerIdentity ?? null));
+        void call('rc:state').then((v) => (this.controllerIdentity = v.session?.controllerIdentity ?? null), () => undefined);
+      } else if (now && was) await call('rc:shareChanged', { uuid: this.uuid });
+      else if (!now && was) await this.shareEnded();
+    } catch {
+      // Sharing works without the record; it just cannot be controlled.
+      if (now && !was) this.control = { offered: false, why: null };
+    }
+  }
+
+  private async shareEnded(): Promise<void> {
+    if (!this.control) return;
+    this.control = null;
+    this.offSwitch?.();
+    this.offSwitch = null;
+    this.offControl?.();
+    this.offControl = null;
+    this.controllerIdentity = null;
+    await call('rc:shareStopped', { uuid: this.uuid }).catch(() => undefined);
+    this.changed();
+  }
+
+  /** A controller allowed to switch screens asked for another one; the main process already chose it. */
+  private async switchForController(s: { id: string; name: string }): Promise<void> {
+    const lp = this.room?.localParticipant;
+    if (!lp?.isScreenShareEnabled) return;
+    this.switching = true;
+    try {
+      await lp.setScreenShareEnabled(false);
+      await lp.setScreenShareEnabled(true, { audio: false });
+      this.shareLabel = s.name;
+      await call('rc:shareChanged', { uuid: this.uuid });
+    } catch (e) {
+      this.note(errorMessage(e));
+    } finally {
+      this.switching = false;
     }
     this.changed();
   }
@@ -266,6 +352,7 @@ export class MeetSession {
 
   async pauseShare(paused: boolean): Promise<void> {
     await pauseOn(this.room?.localParticipant, paused).catch((e) => this.note(errorMessage(e)));
+    if (this.control) await call('rc:sharePaused', { uuid: this.uuid, paused }).catch(() => undefined);
     this.changed();
   }
 
@@ -328,6 +415,8 @@ export class MeetSession {
 
   private teardown(): void {
     void call('calls:active', { uuid: null, kind: 'meet' }).catch(() => undefined);
+    pointers.reset();
+    void this.shareEnded();
     this.shareLabel = null;
     for (const el of this.audio) el.remove();
     this.audio.clear();
