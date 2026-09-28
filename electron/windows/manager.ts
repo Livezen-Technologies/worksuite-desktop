@@ -345,6 +345,24 @@ export class WindowManager {
     return BrowserWindow.getAllWindows().filter((w) => this.kinds.has(w.id) && !w.isDestroyed());
   }
 
+  /**
+   * Closes the secondary windows whose route fails the test — those of an app
+   * the person was just refused (a mini chat, a record, a call): nothing of it
+   * stays on screen. Returns how many closed.
+   */
+  closeWhere(refuse: (route: string) => boolean): number {
+    let n = 0;
+    for (const w of this.all()) {
+      if (this.kinds.get(w.id) === 'main') continue;
+      const route = windowRoute(w.webContents.getURL());
+      if (route !== null && refuse(route)) {
+        w.close();
+        n++;
+      }
+    }
+    return n;
+  }
+
   /** Displays changed (monitor unplugged): pull every window back into view. */
   refit(): void {
     const displays = screen.getAllDisplays();
@@ -367,4 +385,11 @@ export class WindowManager {
       if (this.kinds.has(w.id) && !w.isDestroyed()) w.webContents.reload();
     }
   }
+}
+
+/** The route a secondary window was opened on (`…#/window/record?route=%2Fcrm%2Fleads%2F4` → `/crm/leads/4`); null for none. */
+export function windowRoute(url: string): string | null {
+  const hash = url.split('#')[1] ?? '';
+  if (!hash.startsWith('/window/')) return null;
+  return new URLSearchParams(hash.split('?')[1] ?? '').get('route');
 }

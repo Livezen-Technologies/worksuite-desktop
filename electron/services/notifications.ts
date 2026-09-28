@@ -14,8 +14,9 @@ const log = logger('notifications');
  * CoreNotificationService events → native notifications (FR-NTF-01..06,
  * WF-06), with the in-app notification centre kept from the same data.
  *
- * Every notification passes through, in order: dedupe by id → the user's
- * per-module switch → do-not-disturb / paused → privacy mode (the stricter of
+ * Every notification passes through, in order: dedupe by id → whether the
+ * person may open its app at all (an app they were not given never alerts)
+ * → the user's per-module switch → do-not-disturb / paused → privacy mode (the stricter of
  * the user's choice and the organization's minimum; GENERIC whenever the app
  * is locked) → the OS adapter.
  */
@@ -132,7 +133,8 @@ export class NotificationService {
   isLocked: () => boolean = () => false;
   isFocused: () => boolean = () => false;
   prefs: () => Preferences;
-  moduleEnabled: (module: string) => boolean = () => true;
+  /** Whether the person may open the app a notification is about (main wires shared/access `notificationAllowed`). */
+  moduleEnabled: (n: Pick<Incoming, 'module' | 'category' | 'link'>) => boolean = () => true;
 
   constructor(
     private readonly db: Database,
@@ -201,6 +203,15 @@ export class NotificationService {
   }
 
   private async pollMail(first: boolean): Promise<void> {
+    // No Mail for this person: nothing to count, nothing to announce.
+    if (!this.moduleEnabled({ module: 'mail', link: '/mail' })) {
+      this.lastMailCount = null;
+      if (this.unread.mail) {
+        this.unread.mail = 0;
+        this.onChanged();
+      }
+      return;
+    }
     try {
       const data = await this.http.get<{ count?: number }>('/api/mail/unread', { query: { unified: 1 }, timeoutMs: 60_000 });
       const count = Number(data.count ?? 0);
@@ -439,7 +450,7 @@ export class NotificationService {
   private suppressed(n: Incoming): string | null {
     const p = this.prefs();
     if (!p.notificationsEnabled || !p.backgroundServices.notifications) return 'disabled';
-    if (!this.moduleEnabled(n.module)) return 'module-off';
+    if (!this.moduleEnabled(n)) return 'module-off';
     if (p.moduleNotifications[n.module] === false) return 'module-muted';
     if (n.category && p.moduleNotifications[`cat:${n.category}`] === false) return 'category-muted';
     if (n.critical) return null;

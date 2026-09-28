@@ -27,7 +27,18 @@ export interface TrayModel {
   notificationsPausedUntil: string | null;
   attendance: { linked: boolean; clockedIn: boolean; since: string | null } | null;
   updateReady: boolean;
+  /** The catalogue ids of the apps the person may open (shared/access.ts): the menu offers nothing else. */
+  apps: string[];
 }
+
+/** Quick Actions, each of its app: offered only to whoever may open that app. */
+export const QUICK_ACTIONS: ReadonlyArray<{ app: string; label: string; route: string }> = [
+  { app: 'tasks', label: 'New Task', route: '/tasks?new=1' },
+  { app: 'mail', label: 'New Email', route: '/mail?compose=1' },
+  { app: 'chat', label: 'Open Chat', route: '/chat' },
+  { app: 'files', label: 'Upload File', route: '/files?upload=1' },
+  { app: 'crm', label: 'New Lead', route: '/crm?new=1' },
+];
 
 export interface TrayActions {
   open: () => void;
@@ -79,6 +90,7 @@ export class TrayService {
     notificationsPausedUntil: null,
     attendance: null,
     updateReady: false,
+    apps: [],
   };
   private lastState: TrayState | null = null;
 
@@ -112,7 +124,8 @@ export class TrayService {
     // On macOS the renderer paints it onto the Dock icon (core/dock-badge): an
     // unsigned build is never registered for notifications, and macOS will not
     // draw its badge.
-    const unread = attentionCount(m.unreadChat, m.unreadOther);
+    const hasChat = m.apps.includes('chat');
+    const unread = attentionCount(hasChat ? m.unreadChat : 0, m.unreadOther);
     const state = trayState({ error: !!m.error, offline: m.offline && m.signedIn, monitoring: false, syncing: false, unread });
     try {
       app.setBadgeCount(m.signedIn && m.badge && process.platform !== 'darwin' ? unread : 0);
@@ -131,69 +144,72 @@ export class TrayService {
         pending: m.pending,
         monitoring: null,
         syncing: 0,
-        unreadChat: m.unreadChat,
-        unreadMail: m.unreadMail,
+        unreadChat: hasChat ? m.unreadChat : 0,
+        unreadMail: m.apps.includes('mail') ? m.unreadMail : 0,
         unreadOther: m.unreadOther,
       }),
     );
-    this.tray.setContextMenu(Menu.buildFromTemplate(this.template()));
-  }
-
-  private template(): MenuItemConstructorOptions[] {
-    const m = this.model;
-    const a = this.actions;
-    const items: MenuItemConstructorOptions[] = [];
-    if (m.signedIn) {
-      items.push({ label: [m.userName, m.organization].filter(Boolean).join(' · ') || 'WorkSuite', enabled: false });
-      items.push({ type: 'separator' });
-    }
-    items.push({ label: 'Open WorkSuite', click: a.open });
-    if (m.signedIn) {
-      items.push({ label: `Unread Chat ${m.unreadChat} · Unread Mail ${m.unreadMail}`, click: () => a.openRoute(m.unreadChat >= m.unreadMail ? '/chat' : '/mail') });
-      items.push({ type: 'separator' });
-      if (m.attendance?.linked) {
-        items.push(
-          m.attendance.clockedIn
-            ? { label: `Clock Out${m.attendance.since ? ` (in since ${m.attendance.since})` : ''}`, click: a.clockOut }
-            : { label: 'Start Work / Clock In', click: a.clockIn },
-        );
-      }
-      items.push({
-        label: 'Quick Actions',
-        submenu: [
-          { label: 'New Task', click: () => a.openRoute('/tasks?new=1') },
-          { label: 'New Email', click: () => a.openRoute('/mail?compose=1') },
-          { label: 'Open Chat', click: () => a.openRoute('/chat') },
-          { label: 'Upload File', click: () => a.openRoute('/files?upload=1') },
-          { label: 'New Lead', click: () => a.openRoute('/crm?new=1') },
-        ],
-      });
-      const paused = m.notificationsPausedUntil && new Date(m.notificationsPausedUntil).getTime() > Date.now();
-      items.push({
-        label: paused ? `Notifications paused until ${new Date(m.notificationsPausedUntil!).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Pause Notifications',
-        submenu: [
-          { label: 'For 30 minutes', click: () => a.pauseNotifications(30) },
-          { label: 'For 1 hour', click: () => a.pauseNotifications(60) },
-          { label: 'Until tomorrow', click: () => a.pauseNotifications(untilTomorrowMinutes()) },
-          ...(paused ? [{ type: 'separator' as const }, { label: 'Resume notifications', click: () => a.pauseNotifications(null) }] : []),
-        ],
-      });
-      items.push({
-        label: m.offline ? (m.pending > 0 ? `Offline — ${m.pending} change${m.pending === 1 ? '' : 's'} waiting` : 'Offline') : 'Connected',
-        enabled: false,
-      });
-      items.push({ type: 'separator' });
-      items.push({ label: 'Lock WorkSuite', click: a.lock });
-    }
-    items.push({ label: 'Settings', click: a.openSettings });
-    items.push({ label: m.updateReady ? 'Restart to Update' : 'Check for Updates', click: a.checkUpdates });
-    items.push({ type: 'separator' });
-    items.push({ label: 'Quit WorkSuite', click: a.quit });
-    return items;
+    this.tray.setContextMenu(Menu.buildFromTemplate(trayMenu(m, this.actions)));
   }
 
   destroy(): void {
     this.tray?.destroy();
     this.tray = null;
   }
+}
+
+/**
+ * The tray menu. Built from the apps the person may open, and again whenever
+ * those change (a new bootstrap updates `apps`): no unread line for an app
+ * they do not have, no quick action into one.
+ */
+export function trayMenu(m: TrayModel, a: TrayActions): MenuItemConstructorOptions[] {
+  const items: MenuItemConstructorOptions[] = [];
+  const has = (id: string) => m.apps.includes(id);
+  if (m.signedIn) {
+    items.push({ label: [m.userName, m.organization].filter(Boolean).join(' · ') || 'WorkSuite', enabled: false });
+    items.push({ type: 'separator' });
+  }
+  items.push({ label: 'Open WorkSuite', click: a.open });
+  if (m.signedIn) {
+    const unread = [
+      has('chat') ? { label: `Unread Chat ${m.unreadChat}`, n: m.unreadChat, route: '/chat' } : null,
+      has('mail') ? { label: `Unread Mail ${m.unreadMail}`, n: m.unreadMail, route: '/mail' } : null,
+    ].filter((x) => x !== null);
+    if (unread.length) {
+      const most = unread.reduce((x, y) => (y.n > x.n ? y : x));
+      items.push({ label: unread.map((u) => u.label).join(' · '), click: () => a.openRoute(most.route) });
+    }
+    items.push({ type: 'separator' });
+    if (m.attendance?.linked) {
+      items.push(
+        m.attendance.clockedIn
+          ? { label: `Clock Out${m.attendance.since ? ` (in since ${m.attendance.since})` : ''}`, click: a.clockOut }
+          : { label: 'Start Work / Clock In', click: a.clockIn },
+      );
+    }
+    const quick = QUICK_ACTIONS.filter((q) => has(q.app));
+    if (quick.length) items.push({ label: 'Quick Actions', submenu: quick.map((q) => ({ label: q.label, click: () => a.openRoute(q.route) })) });
+    const paused = m.notificationsPausedUntil && new Date(m.notificationsPausedUntil).getTime() > Date.now();
+    items.push({
+      label: paused ? `Notifications paused until ${new Date(m.notificationsPausedUntil!).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Pause Notifications',
+      submenu: [
+        { label: 'For 30 minutes', click: () => a.pauseNotifications(30) },
+        { label: 'For 1 hour', click: () => a.pauseNotifications(60) },
+        { label: 'Until tomorrow', click: () => a.pauseNotifications(untilTomorrowMinutes()) },
+        ...(paused ? [{ type: 'separator' as const }, { label: 'Resume notifications', click: () => a.pauseNotifications(null) }] : []),
+      ],
+    });
+    items.push({
+      label: m.offline ? (m.pending > 0 ? `Offline — ${m.pending} change${m.pending === 1 ? '' : 's'} waiting` : 'Offline') : 'Connected',
+      enabled: false,
+    });
+    items.push({ type: 'separator' });
+    items.push({ label: 'Lock WorkSuite', click: a.lock });
+  }
+  items.push({ label: 'Settings', click: a.openSettings });
+  items.push({ label: m.updateReady ? 'Restart to Update' : 'Check for Updates', click: a.checkUpdates });
+  items.push({ type: 'separator' });
+  items.push({ label: 'Quit WorkSuite', click: a.quit });
+  return items;
 }

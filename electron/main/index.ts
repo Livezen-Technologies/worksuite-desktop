@@ -1,10 +1,12 @@
 import { app, crashReporter, ipcMain, powerMonitor, screen, session, BrowserWindow, type WebContents } from 'electron';
 import { join, resolve } from 'node:path';
+import { canOpenApp, canOpenLink, canOpenRoute, notificationAllowed, visibleAppIds } from '@shared/access';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
 import { resolveWebLink } from '@shared/links';
 import { networkStatus } from '@shared/network';
 import { redactUrl } from '@shared/redact';
 import type { Bootstrap, NavigateRequest, RealtimeState, ServiceHealth, StatusSnapshot } from '@shared/types';
+import { AccessWatch, NO_ACCESS } from './access';
 import { applyAutostart, startedHidden } from './autostart';
 import { evaluateBoot, markCleanExit, markRunning, clearCrashes, writeBootConfig } from './boot';
 import type { AppContext, ClockExtra } from './context';
@@ -199,7 +201,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const lock = new LockService();
   const windows = new WindowManager(db, join(__dirname, '../preload/index.js'));
   windows.minimizeToTray = () => settings.effective().minimizeToTray;
-  const calls = new CallService(windows, http, () => sessionCtl.isReady() && !lock.isLocked());
+  // A call rings only for whoever may open Chat (calls are part of it).
+  const calls = new CallService(windows, http, () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('calls', sessionCtl.visibleApps()));
   const screenShare = new ScreenShare(isTrustedShellUrl);
   screenShare.install(session.defaultSession);
   calls.poll(() => realtime.getState() === 'connected');
@@ -209,6 +212,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   const notifications = new NotificationService(db, getVault, http, () => settings.effective());
   const queue = new OfflineQueue(db, getVault, http, () => sessionCtl.capabilities().offlineQueue);
+  // What the person may open stays current: on `access.changed`, and every ten minutes while signed in and online.
+  const accessWatch = new AccessWatch({ refresh: () => sessionCtl.refreshBootstrap(), ready: () => sessionCtl.isReady(), online: () => apiReachable });
 
   // Hashing runs in a supervised utility process (FR-DIAG-07).
   const hashWaiters = new Map<string, { resolve: (v: { sha256: string; bytes: number }) => void; reject: (e: Error) => void }>();
@@ -293,10 +298,20 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   // ── navigation (deep links, notifications, tray) ──────────────────────
   const pendingNav: NavigateRequest[] = [];
+  const refuse = (): void => {
+    windows.showMain();
+    broadcast('toast', { kind: 'error', text: NO_ACCESS });
+  };
   const navigate = (req: NavigateRequest): void => {
     if (!sessionCtl.isReady() || !windows.getMain()) {
+      // Checked by the main window when it takes them (Shell).
       pendingNav.push(req);
       if (!sessionCtl.isReady()) windows.showMain();
+      return;
+    }
+    // A deep link, the tray or a notification never opens an app the person was not given.
+    if (!canOpenRoute(req.route, sessionCtl.visibleApps())) {
+      refuse();
       return;
     }
     if (req.newWindow) {
@@ -314,7 +329,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   };
   const openLink = (link: string | null): void => {
     const target = resolveWebLink(link);
-    if (target.kind === 'tab') navigate({ route: target.route, source: 'notification' });
+    // Nor in the browser instead: a link into an app the person may not open is refused.
+    if (!canOpenLink(link, sessionCtl.visibleApps())) refuse();
+    else if (target.kind === 'tab') navigate({ route: target.route, source: 'notification' });
     else if (target.kind === 'browser') {
       const origin = auth.getServer()?.origin;
       if (origin) void openExternalSafely(`${origin}${target.path}`);
@@ -380,7 +397,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   let statusTimer: NodeJS.Timeout | null = null;
   const snapshot = (): StatusSnapshot => {
     const uid = sessionCtl?.userId();
-    const counts = notifications.counts();
+    const raw = notifications.counts();
+    // Counts only of apps the person has: the badge, tray and title bar never count an app they cannot open.
+    const visible = sessionCtl?.visibleApps() ?? new Set<string>();
+    const counts = { ...raw, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: canOpenApp('mail', visible) ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0 };
     const services: Record<string, ServiceHealth> = { ...supervisor.health() };
     return {
       network: networkStatus(apiReachable, realtime.getState(), realtimeDownSince),
@@ -425,10 +445,13 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     notifications.handleRealtime(e);
     calls.handle(e);
     broadcast('realtime:event', e);
-    if (e.type === 'profile.updated') void sessionCtl.refreshBootstrap().catch(() => undefined);
+    // `access.changed` (the person's apps changed) and `profile.updated`: fetch the bootstrap again.
+    accessWatch.onEvent(e);
   };
   realtime.onResync = () => {
     broadcast('realtime:resync');
+    // Events may have been missed while the socket was down, `access.changed` among them.
+    if (sessionCtl.isReady()) void accessWatch.refresh('resync');
     void notifications.refreshList();
     void notifications.refreshCounts();
   };
@@ -437,6 +460,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     broadcast('notifications:changed');
   };
   notifications.onClick = (link) => openLink(link);
+  // An app the person may not open never alerts (and Mail is not polled for them).
+  notifications.moduleEnabled = (n) => notificationAllowed(n, sessionCtl.visibleApps());
   notifications.isLocked = () => lock.isLocked();
   queue.onChanged = () => {
     emitStatus();
@@ -538,6 +563,59 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     lock: () => lock.lock('manual'),
   });
 
+  // ── what the person may open (shared/access.ts) ───────────────────────
+  // READ_CACHE: which module's answers a GET path is.
+  const CACHE_PREFIXES: Array<[string, string]> = [
+    ['/api/mail/folders', 'mail'],
+    ['/api/mail/mailboxes', 'mail'],
+    ['/api/mail/messages', 'mail'],
+    ['/api/chat/rooms', 'chat'],
+    ['/api/chat/messages', 'chat'],
+    ['/api/calendar/events', 'calendar'],
+    ['/api/tasks', 'tasks'],
+    ['/api/task-lists', 'tasks'],
+    ['/api/crm/leads', 'crm'],
+    ['/api/hr/attendance/me', 'hr'],
+    ['/api/hr/leave', 'hr'],
+    ['/api/hr/approvals/pending', 'hr'],
+    ['/api/files/browse', 'files'],
+    ['/api/dashboard/home', 'home'],
+    ['/api/notifications', 'notifications'],
+  ];
+  const rebuildMenu = (visible: Set<string>): void =>
+    buildMenu(
+      (id, arg) => {
+        windows.showMain();
+        broadcast('command', { id, arg });
+      },
+      {
+        checkUpdates: () => void updater.check().then(() => navigate({ route: '/settings/about', source: 'menu' })),
+        diagnostics: () => navigate({ route: '/diagnostics', source: 'menu' }),
+        quit,
+      },
+      { ai: canOpenApp('ai', visible) },
+    );
+  /**
+   * A new bootstrap: the tray and the menu offer only the apps it allows, and
+   * what this computer saved of an app the person no longer has is removed.
+   * (Every window gets it as `session:changed`; the Shell closes those tabs.)
+   */
+  const applyAccess = (b: Bootstrap | null): void => {
+    const visible = visibleAppIds(b);
+    tray.update({ apps: [...visible] });
+    rebuildMenu(visible);
+    if (b) {
+      const closed = windows.closeWhere((route) => !canOpenRoute(route, visible));
+      if (closed) log.info('windows closed: app no longer available', { closed });
+    }
+    if (b) {
+      for (const module of cache.modules(b.user.id)) {
+        if (!canOpenApp(module, visible) && cache.clearModule(b.user.id, module) > 0) log.info('offline data removed: app no longer available', { module });
+      }
+    }
+    emitStatus();
+  };
+
   // ── the session ────────────────────────────────────────────────────────
   const startServices = (b: Bootstrap): void => {
     const uid = b.user.id;
@@ -559,6 +637,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void heartbeatPresence();
     presenceTimer = setInterval(() => void heartbeatPresence(), 30_000);
     presenceTimer.unref?.();
+    accessWatch.start();
     // FR-OFF-06: prune mail bodies beyond the cache window.
     const days = settings.effective().mailCacheDays;
     if (days > 0) cache.pruneModuleOlderThan('mail', days);
@@ -572,7 +651,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     if (attendanceTimer) clearInterval(attendanceTimer);
     attendanceTimer = null;
     stopPresence();
-    tray.update({ attendance: null });
+    accessWatch.stop();
+    tray.update({ attendance: null, apps: [] });
+    rebuildMenu(new Set());
     lock.reset();
     emitStatus();
   };
@@ -602,6 +683,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
     bootstrapChanged: (b) => {
       if (b) settings.setPolicy(b.policy);
+      applyAccess(b);
       // Windows opened from now on allow the announced media server (calls
       // and Meet each open their own window, so none needs reloading).
       if (b?.source === 'desktop-v1' && b.mediaServers && JSON.stringify(b.mediaServers) !== JSON.stringify(mediaServers())) {
@@ -632,6 +714,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     realtime.kick();
     if (!uid) return;
     void sessionCtl.revalidate();
+    // A session that started online asks again too: access may have changed while the server was out of reach.
+    if (sessionCtl.current()?.offline === false) void accessWatch.refresh('reconnect');
     void queue.replay(uid);
     void notifications.refreshCounts();
     void audit.flush();
@@ -670,23 +754,6 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   });
 
   // ── protocol + IPC ─────────────────────────────────────────────────────
-  const CACHE_PREFIXES: Array<[string, string]> = [
-    ['/api/mail/folders', 'mail'],
-    ['/api/mail/mailboxes', 'mail'],
-    ['/api/mail/messages', 'mail'],
-    ['/api/chat/rooms', 'chat'],
-    ['/api/chat/messages', 'chat'],
-    ['/api/calendar/events', 'calendar'],
-    ['/api/tasks', 'tasks'],
-    ['/api/task-lists', 'tasks'],
-    ['/api/crm/leads', 'crm'],
-    ['/api/hr/attendance/me', 'hr'],
-    ['/api/hr/leave', 'hr'],
-    ['/api/hr/approvals/pending', 'hr'],
-    ['/api/files/browse', 'files'],
-    ['/api/dashboard/home', 'home'],
-    ['/api/notifications', 'notifications'],
-  ];
   registerAppProtocol(
     createApiProxy({
       http,
@@ -694,7 +761,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       userId: () => sessionCtl.userId(),
       cacheModuleFor: (path) => {
         const clean = path.split('?')[0]!;
-        return CACHE_PREFIXES.find(([prefix]) => clean === prefix || clean.startsWith(`${prefix}/`))?.[1] ?? null;
+        const module = CACHE_PREFIXES.find(([prefix]) => clean === prefix || clean.startsWith(`${prefix}/`))?.[1] ?? null;
+        // Neither saved nor served for an app the person may not open.
+        return module && canOpenApp(module, sessionCtl.visibleApps()) ? module : null;
       },
       cacheLimits: () => {
         const caps = sessionCtl.capabilities();
@@ -786,14 +855,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const missing = router.missingHandlers();
   if (missing.length) log.warn('IPC channels without handlers', { missing });
 
-  buildMenu((id, arg) => {
-    windows.showMain();
-    broadcast('command', { id, arg });
-  }, {
-    checkUpdates: () => void updater.check().then(() => navigate({ route: '/settings/about', source: 'menu' })),
-    diagnostics: () => navigate({ route: '/diagnostics', source: 'menu' }),
-    quit,
-  });
+  rebuildMenu(sessionCtl.visibleApps());
 
   settings.onChange((prefs) => {
     broadcast('settings:changed', prefs);

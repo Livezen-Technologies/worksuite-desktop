@@ -6,7 +6,18 @@ import { app, Menu, type MenuItemConstructorOptions } from 'electron';
  * renderer's shortcut registry handles on Windows and Linux, where the custom
  * title bar replaces the menu bar.
  */
-export function buildMenu(send: (command: string, arg?: number) => void, actions: { checkUpdates: () => void; diagnostics: () => void; quit: () => void }): void {
+export interface MenuOptions {
+  /** The person has the AI app: View › AI Assistant is there only then. Rebuilt when the bootstrap changes. */
+  ai: boolean;
+}
+
+type MenuActions = { checkUpdates: () => void; diagnostics: () => void; quit: () => void };
+
+export function buildMenu(send: (command: string, arg?: number) => void, actions: MenuActions, opts: MenuOptions = { ai: false }): void {
+  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(send, actions, opts)));
+}
+
+export function menuTemplate(send: (command: string, arg?: number) => void, actions: MenuActions, opts: MenuOptions): MenuItemConstructorOptions[] {
   const mac = process.platform === 'darwin';
   const cmd = (id: string, arg?: number) => () => send(id, arg);
   // Shortcuts are handled by the renderer's registry on every platform (so
@@ -64,7 +75,7 @@ export function buildMenu(send: (command: string, arg?: number) => void, actions
     submenu: [
       { label: 'Search', accelerator: 'CmdOrCtrl+K', click: cmd('search'), ...r },
       { label: 'Command Palette', accelerator: 'CmdOrCtrl+Shift+P', click: cmd('palette'), ...r },
-      { label: 'AI Assistant', accelerator: 'CmdOrCtrl+Shift+A', click: cmd('ai'), ...r },
+      ...(opts.ai ? [{ label: 'AI Assistant', accelerator: 'CmdOrCtrl+Shift+A', click: cmd('ai'), ...r }] : []),
       { type: 'separator' },
       { role: 'resetZoom' },
       { role: 'zoomIn' },
@@ -82,5 +93,5 @@ export function buildMenu(send: (command: string, arg?: number) => void, actions
       ...(mac ? [] : [{ label: 'Check for Updates…', click: actions.checkUpdates }, { label: 'Lock WorkSuite', accelerator: 'Ctrl+L', click: cmd('lock'), ...r }]),
     ],
   });
-  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+  return template;
 }

@@ -1,8 +1,10 @@
 import { app, BrowserWindow, clipboard, dialog, nativeImage, shell, systemPreferences } from 'electron';
 import os from 'node:os';
 import { writeFile } from 'node:fs/promises';
+import { canOpenApp, notificationAllowed } from '@shared/access';
 import type { TabRecord } from '@shared/ipc/contract';
 import type { AppInfo, BusyReport } from '@shared/types';
+import { assertRoute, assertWebPath } from './access';
 import { DesktopError, isDesktopError } from './errors';
 import type { AppContext } from './context';
 import type { IpcRouter } from '../ipc/router';
@@ -55,7 +57,13 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   }));
   router.handle('app:quit', () => ctx.quit());
   router.handle('app:relaunch', () => ctx.relaunch(false));
-  router.handle('app:openExternal', (input, c) => openExternalSafely(input.url, winOf(c.sender)));
+  router.handle('app:openExternal', (input, c) => {
+    // A page of this server is the browser as a way round too: the same rule as app:openInBrowser.
+    const origin = ctx.auth.getServer()?.origin;
+    const u = URL.canParse(input.url) ? new URL(input.url) : null;
+    if (origin && u && u.origin === origin) assertWebPath(`${u.pathname}${u.search}`, ctx.session.visibleApps());
+    return openExternalSafely(input.url, winOf(c.sender));
+  });
   router.handle('app:setDockIcon', (input) => {
     // An unsigned build is never registered for notifications, so macOS will not draw
     // its Dock badge; the count is painted onto the icon instead (FR-TRAY-07).
@@ -68,6 +76,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('app:openInBrowser', async (input, c) => {
     const origin = ctx.auth.getServer()?.origin;
     if (!origin) throw new DesktopError('NOT_SIGNED_IN', 'No WorkSuite server is configured.');
+    // Never the browser as a way round: a page of an app the person was not given stays shut.
+    assertWebPath(input.path, ctx.session.visibleApps());
     return openExternalSafely(`${origin}${input.path}`, winOf(c.sender));
   });
 
@@ -192,6 +202,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
 
   // ── windows ────────────────────────────────────────────────────────────
   router.handle('windows:open', (input) => {
+    assertRoute(input.route, ctx.session.visibleApps());
     const w = ctx.windows.open(input.kind, input.route, input.title, input.alwaysOnTop);
     return { id: w.id };
   });
@@ -350,7 +361,11 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('transfers:clearFinished', () => ctx.transfers.clearFinished());
 
   // ── notifications ──────────────────────────────────────────────────────
-  router.handle('notifications:list', () => ctx.notifications.refreshList());
+  router.handle('notifications:list', async () => {
+    const r = await ctx.notifications.refreshList();
+    const visible = ctx.session.visibleApps();
+    return { ...r, items: r.items.filter((i) => notificationAllowed(i, visible)) };
+  });
   router.handle('notifications:markRead', (input) => ctx.notifications.markRead(input.ids));
   router.handle('notifications:markAllRead', () => ctx.notifications.markAllRead());
   router.handle('notifications:pause', (input) => ({ pausedUntil: ctx.notifications.pause(input.minutes) }));
@@ -399,7 +414,10 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('offline:search', (input) => {
     const q = input.q.toLowerCase();
     const out: Array<{ module: string; title: string; subtitle: string; route: string; cachedAt: string }> = [];
+    // Saved while an app was the person's, but not searched once it is not.
+    const visible = ctx.session.visibleApps();
     for (const e of ctx.cache.entries(uid())) {
+      if (!canOpenApp(e.module, visible)) continue;
       let data: unknown;
       try {
         data = (JSON.parse(e.value.body) as { data?: unknown }).data;
@@ -414,6 +432,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       if (Array.isArray(d.rooms)) lists.push(['chat', d.rooms, (x) => ({ title: String(x.name ?? ''), subtitle: 'Conversation', route: `/chat?room=${x.id}` })]);
       if (Array.isArray(d.files)) lists.push(['files', d.files, (x) => ({ title: String(x.name ?? ''), subtitle: 'File', route: `/files?file=${x.id}` })]);
       for (const [module, items, map] of lists) {
+        if (!canOpenApp(module, visible)) continue;
         for (const raw of items) {
           if (!raw || typeof raw !== 'object') continue;
           const hit = map(raw as Record<string, unknown>);
