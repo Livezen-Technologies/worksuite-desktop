@@ -48,6 +48,9 @@ const DENY: RegExp[] = [
   // Taking an offered file, and fetching it, go through the main process too: the server checks only who
   // the receiver is, and the shared computer must answer on its red bar with a real click.
   /^\/api\/meet\/control\/files\/\d+\/(accept|download)\/?$/,
+  // Pairing a salon desk answers with the desk's key: it is done in the main
+  // process (salon-desk.ts), so the key never reaches a renderer.
+  /^\/api\/salon\/v1\/desk\/pair(\/|\?|$)/,
 ];
 
 /** The shared computer's grant (`?end=sharer`): its key never reaches a page. */
@@ -81,7 +84,9 @@ export function isProxyPathAllowed(apiPath: string, method = 'GET'): boolean {
   if (MEDIA.test(apiPath)) return ['GET', 'HEAD'].includes(method.toUpperCase());
   if (!PATH_OK.test(apiPath)) return false;
   const pathOnly = apiPath.split('?')[0]!;
-  if (pathOnly.includes('..') || pathOnly.includes('//')) return false;
+  // No dot segments at all: a URL parser folds `/./` away, and the deny list
+  // must see the path the server will.
+  if (pathOnly.includes('..') || pathOnly.includes('//') || /\/\.(\/|$)/.test(pathOnly)) return false;
   const m = method.toUpperCase();
   if (ACCOUNT.some(([re, methods]) => re.test(pathOnly) && methods.includes(m))) return true;
   if (isSharerGrant(pathOnly, apiPath)) return false;
@@ -99,6 +104,8 @@ export interface ProxyDeps {
   cacheLimits: () => CacheLimits;
   /** Mail bodies are cached only when the mail cache window is not "headers only". */
   mailBodiesCached: () => boolean;
+  /** Headers the main process adds to a request — credentials the renderer must not hold (a salon desk's key). */
+  extraHeaders?: (path: string) => Record<string, string> | null;
 }
 
 function envelope(status: number, message: string, code: string): Response {
@@ -126,6 +133,7 @@ export function createApiProxy(deps: ProxyDeps) {
       const v = request.headers.get(h);
       if (v) headers.set(h, v);
     }
+    for (const [h, v] of Object.entries(deps.extraHeaders?.(apiPath) ?? {})) headers.set(h, v);
     let body: ArrayBuffer | undefined;
     if (method !== 'GET' && method !== 'HEAD') {
       body = await request.arrayBuffer();

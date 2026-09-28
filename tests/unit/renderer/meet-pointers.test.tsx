@@ -24,7 +24,7 @@ vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
 vi.mock('../../../src/core/app-state', () => ({ app: { get: () => ({ bootstrap: { policy: {} } }), subscribe: () => () => undefined } }));
 vi.mock('../../../src/modules/meet/session', () => ({ meet: { room } }));
 
-import { apiGet } from '../../../src/core/api';
+import { apiGet, apiPost } from '../../../src/core/api';
 import type { CallPerson } from '../../../src/modules/calls/ui/people';
 import type { ControlSession, ControlState, Share } from '../../../src/modules/meet/remote/api';
 import { remote } from '../../../src/modules/meet/remote/controller';
@@ -66,6 +66,8 @@ beforeEach(() => {
   // jsdom has no PointerEvent: without one the coordinates never reach the handler.
   vi.stubGlobal('PointerEvent', class extends MouseEvent { pointerId = 1; });
   vi.mocked(apiGet).mockImplementation(async () => structuredClone(current));
+  // Releasing control posts the stop; the controller chains .catch on the answer.
+  vi.mocked(apiPost).mockResolvedValue(undefined);
 });
 
 afterEach(() => {

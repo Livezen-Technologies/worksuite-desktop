@@ -18,6 +18,8 @@ import type { ServiceSupervisor } from '../services/supervisor';
 import type { TransferManager } from '../services/transfers';
 import type { DriveSync } from '../services/sync/engine';
 import type { RealtimeService } from '../services/realtime';
+import type { SalonDesk } from '../services/salon-desk';
+import type { SalonPrint } from '../services/salon-print';
 import type { TrayService } from '../tray/tray';
 import type { UpdaterService } from '../updater/updater';
 
@@ -40,6 +42,8 @@ export interface AppContext {
   db: Database;
   vault: () => Vault;
   secrets: SecureStore;
+  salonDesk: SalonDesk;
+  salonPrint: SalonPrint;
   settings: SettingsService;
   http: HttpClient;
   auth: AuthService;

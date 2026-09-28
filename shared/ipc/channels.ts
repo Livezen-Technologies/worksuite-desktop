@@ -109,6 +109,16 @@ export const INVOKE_CHANNELS = [
   'print:printers',
   'print:toPdf',
 
+  'salon:deskPairing',
+  'salon:deskPair',
+  'salon:deskForget',
+  'salon:printSettings',
+  'salon:printSettingsSet',
+  'salon:printReceipt',
+  'salon:printTest',
+  'salon:printPage',
+  'salon:openDrawer',
+
   'offline:status',
   'offline:pending',
   'offline:submit',

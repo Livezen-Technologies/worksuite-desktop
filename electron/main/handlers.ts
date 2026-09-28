@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, nativeImage, shell, systemPreferences } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, nativeImage, shell, systemPreferences, type WebContents } from 'electron';
 import os from 'node:os';
 import { writeFile } from 'node:fs/promises';
 import type { TabRecord } from '@shared/ipc/contract';
@@ -529,6 +529,21 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('print:print', (input) => printHtml(input.html, input.title, { silent: input.silent, deviceName: input.deviceName }, false));
   router.handle('print:printers', (_i, c) => listPrinters(winOf(c.sender)));
   router.handle('print:toPdf', (input, c) => printToPdf(input.html, input.title, winOf(c.sender)));
+
+  // ── SalonMate's front desk ─────────────────────────────────────────────
+  // Pairing is done here so the key the server hands over never reaches a
+  // renderer; the API proxy adds it to SalonMate's requests (salon-desk.ts).
+  router.handle('salon:deskPairing', () => ctx.salonDesk.pairing());
+  router.handle('salon:deskPair', (input) => ctx.salonDesk.pair(input, `desktop-${ctx.device.installId()}`, app.getVersion()));
+  router.handle('salon:deskForget', () => ctx.salonDesk.forget());
+  // Receipts go to the desk's own printer, checked against what this computer has.
+  const installed = async (sender: WebContents) => (await listPrinters(winOf(sender))).map((p) => p.name);
+  router.handle('salon:printSettings', () => ctx.salonPrint.settings());
+  router.handle('salon:printSettingsSet', async (input, c) => ctx.salonPrint.update(input, await installed(c.sender)));
+  router.handle('salon:printReceipt', async (input, c) => ctx.salonPrint.receipt(input.visit_id, input.paper, await installed(c.sender)));
+  router.handle('salon:printTest', async (input, c) => ctx.salonPrint.test(input.paper, await installed(c.sender)));
+  router.handle('salon:printPage', async (input, c) => ctx.salonPrint.page(input.html, input.paper, await installed(c.sender)));
+  router.handle('salon:openDrawer', async (_i, c) => ctx.salonPrint.drawer(await installed(c.sender)));
 
   // ── offline ────────────────────────────────────────────────────────────
   router.handle('offline:status', () => ctx.queue.status(uid(), { bytes: ctx.cache.totalBytes(), entries: ctx.cache.count() }));

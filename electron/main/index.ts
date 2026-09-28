@@ -29,6 +29,8 @@ import { createRemoteControl } from '../services/remote-control/host';
 import { DEFAULT_POLICY } from '../services/policy';
 import { Database } from '../services/db';
 import { archName, DeviceService, platformName } from '../services/device';
+import { SalonDesk } from '../services/salon-desk';
+import { SalonPrint } from '../services/salon-print';
 import { DiagnosticsService } from '../services/diagnostics';
 import { readEnterpriseConfig } from '../services/enterprise';
 import { HttpClient, type FetchLike } from '../services/http';
@@ -196,6 +198,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   });
 
   const device: DeviceService = new DeviceService(db, secrets, http);
+  const salonDesk = new SalonDesk(secrets, http, () => auth.getServer()?.origin ?? null);
+  const salonPrint = new SalonPrint({ config: db, http, origin: () => auth.getServer()?.origin ?? null });
   const bootstrap = new BootstrapService(db, getVault, http, POLICY_PUBLIC_KEY);
   const cache = new OfflineCache(db, getVault);
   const audit = new AuditService(db, getVault, http, () => auth.getServer()?.api === 'desktop-v1');
@@ -686,6 +690,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       }
       // What Drive sync put on this computer counts as offline files (§11.2 wipe_on_revoke).
       if (scope === 'cache+offline_files') void sync.wipe(uid, false);
+      // A remote wipe, or signing out with "remove WorkSuite's data", forgets
+      // the salon desk this computer was, and its printers; a plain sign-out keeps them.
+      if (includeDrafts) {
+        salonDesk.forgetAll();
+        salonPrint.forgetAll();
+      }
       log.info('local data removed', { scope });
     },
     changed: (s) => {
@@ -809,6 +819,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         return { enabled: caps.offlineCache, maxBytes: (pol?.offline_storage_max_mb ?? 2048) * 1024 * 1024 };
       },
       mailBodiesCached: () => settings.effective().mailCacheDays !== 0,
+      // SalonMate's desk calls carry the key this computer was paired with.
+      extraHeaders: (path) => {
+        const key = salonDesk.keyFor(path);
+        return key ? { 'X-Salon-Desk-Key': key } : null;
+      },
     }),
     // Read on each page load: the server chosen, and the media servers it announced.
     () => ({ server: auth.getServer()?.origin ?? null, media: mediaServers() }),
@@ -862,6 +877,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     db,
     vault: getVault,
     secrets,
+    salonDesk,
+    salonPrint,
     settings,
     http,
     auth,

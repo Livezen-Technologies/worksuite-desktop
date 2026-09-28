@@ -543,3 +543,61 @@ export interface RemoteControlConsent {
   fileTransfer: boolean;
   locked: boolean;
 }
+
+/**
+ * SalonMate's front desk, as the server shapes it (`Desk::shape`). The fields
+ * the desktop reads; the rest travels with it.
+ */
+export interface SalonDeskInfo {
+  id: number;
+  org_id: number;
+  location_id: number;
+  location: string | null;
+  name: string;
+  status: 'requested' | 'active' | 'revoked';
+  device_id: string | null;
+  register: { id: number; code: string; name: string; open: boolean; session_id: number | null; opened_at: string | null } | null;
+  approved_at: string | null;
+  revoked_at: string | null;
+  [field: string]: unknown;
+}
+
+/** Which desk this computer is on the signed-in server. The key never leaves the main process. */
+export interface SalonDeskPairing {
+  desk_id: number;
+  name: string;
+}
+
+/** What the pairing screen sends (D01). The device id and app version are added in the main process. */
+export interface SalonDeskPairInput {
+  location_id: number;
+  name: string;
+  pos_register_id?: number | null;
+}
+
+/** What a SalonMate receipt is printed on: an 80 mm or 58 mm roll, or A4. */
+export type SalonPaper = '80mm' | '58mm' | 'a4';
+
+/** This computer's printers for SalonMate, on one server (salon-print.ts). */
+export interface SalonPrintSettings {
+  receipt_printer: string | null;
+  a4_printer: string | null;
+  paper: '80mm' | '58mm';
+  copies: number;
+  /** Print the receipt as soon as a payment is taken. */
+  auto_print: boolean;
+  /** Straight to the printer, without the print dialog. */
+  silent: boolean;
+  /** 'printer': a drawer plugged into the receipt printer, opened by the ESC/POS pulse. */
+  drawer: 'off' | 'printer';
+  drawer_pin: 2 | 5;
+}
+
+export type SalonPrintPatch = Partial<SalonPrintSettings>;
+
+export interface SalonPrintOutcome {
+  ok: boolean;
+  printer: string | null;
+  silent: boolean;
+  message: string;
+}
