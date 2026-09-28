@@ -18,7 +18,7 @@ granted. Everything below asks that one list.
 **Changed**
 
 - **Tabs.** A tab never opens on an app you may not open — not from a link,
-  a button, a deep link, the tray, **Reopen closed tab** (⌘⇧T) or a tab
+  a button, a deep link, the tray, **Reopen closed tab** or a tab
   moving to another app's page. You are told "You don't have access to
   this." instead.
 - **Links no longer fall back to the browser.** A link into an app you may
@@ -33,15 +33,18 @@ granted. Everything below asks that one list.
   online, and after a reconnect. An app taken away leaves the sidebar, its
   tabs and its windows close — a call in Chat included — and you are told
   it is no longer available.
-- **Buttons into other apps** — make a task or a note from a message, email
-  or call a contact, open the order behind a product, a customer's
-  subscriptions, a meeting's notes, a visitor's ticket — show only when you
-  have the app they open.
+- **Buttons into other apps** — make a task or a note from a message, email,
+  chat with or meet a contact, open an invoice from an order or a product,
+  a customer's subscriptions, an event's meeting notes, raise a ticket from
+  a website chat, send a file to Chat, pick from Drive — show only when you
+  have the app they open. A chat card of a record in an app you do not have
+  says only that you have no access. Calendar's Show list leaves out apps
+  you do not have.
 - **The tray** shows unread Chat and Mail, and offers New Task, New Email,
   Open Chat, Upload File and New Lead, only for the apps you have. The
   unread counts on the tray, the Dock and the title bar leave out apps you
   do not have.
-- **AI.** The title bar's AI button, ⌘⇧A, the palette's command, View › AI
+- **AI.** The title bar's AI button, its shortcut, the palette's command, View › AI
   Assistant and Home's **Ask AI** appear only with the AI app. Before, the
   button showed for everybody.
 - **Home** counts unread messages only from Chat and Mail you have, and its
