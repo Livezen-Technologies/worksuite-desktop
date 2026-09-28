@@ -531,6 +531,13 @@ export class SalonSync {
     return id ? c.clients.filter((x) => x.id === id).slice(0, 1) : searchClients(c.clients, q, limit);
   }
 
+  /** What this person made at this desk that WorkSuite does not have yet: the app's "pending changes". */
+  pending(): number {
+    const s = this.scope();
+    if (!s) return 0;
+    return this.d.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM salon_outbox WHERE origin = ? AND desk_id = ? AND user_id = ?', s.origin, s.desk, s.user)?.n ?? 0;
+  }
+
   status(): SalonSyncStatus {
     const s = this.scope();
     if (!s) {

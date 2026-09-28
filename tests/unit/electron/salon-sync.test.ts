@@ -316,6 +316,7 @@ describe('salon sync: the outbox', () => {
     for (const i of walkInInputs()) h.sync.add(i);
     await h.sync.sync();
     expect(h.sync.status()).toMatchObject({ waiting: 3, refused: 0, reachable: false, can_write: true });
+    expect(h.sync.pending()).toBe(3);
     expect(h.db.get<{ item: string }>('SELECT item FROM salon_outbox LIMIT 1')!.item).not.toContain('Amaya');
 
     h.state.down = false;

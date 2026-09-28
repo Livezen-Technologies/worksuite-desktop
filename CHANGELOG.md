@@ -314,6 +314,103 @@ commit)
 
 ---
 
+## 2026-09-28 — 0.2.43: SalonMate, part 3 — working offline, and the desk's notifications
+
+The front desk keeps working when WorkSuite cannot be reached. It opens from
+its own copy of the day, keeps new clients, bookings and check-ins, and sends
+them in order when the line is back. WorkSuite checks each one again then.
+Money still needs WorkSuite.
+
+**Added**
+
+- **The day's copy.** Each paired desk keeps its copy, encrypted, per
+  server, desk and person, where the company's desktop policy lets this
+  computer keep data offline. It holds the menu, the stylists, the clients
+  seen in the last year with the worst allergy on file, and the book from
+  yesterday to the salon's "days ahead". Only what changed is fetched each
+  minute, and the whole copy every hour. Screens use the copy only when
+  WorkSuite does not answer, and say how old it is.
+  - **Today** is worked out from the copy by the server's own rules.
+  - **The calendar** draws any day the copy holds.
+  - **Clients** are searched by name, email, or part of the mobile, typed
+    as "077…" or "+9477…".
+- **Working offline.** These are kept on this computer and sent when
+  WorkSuite answers:
+  - a new client;
+  - a walk-in started now, with the allergy read out and ticked first, as
+    online;
+  - a booking at a time on the salon's clock;
+  - a check-in from Today or the calendar.
+
+  They go in the order they were made, and a booking for a new client
+  follows the client. WorkSuite judges each as of when it was made (within
+  a day).
+- **Changes to send.** What waits, and what WorkSuite would not do as it
+  was, with the choices it offered:
+  - take the nearest free time;
+  - choose a time;
+  - "it is this client" (for a new client WorkSuite already knows);
+  - change it;
+  - send again;
+  - drop it, together with what depended on it.
+
+  The rail counts what waits, and the status bar's "pending changes"
+  includes it.
+- **Notifications for the desk**, from the system tray even with the window
+  closed:
+  - WorkSuite's "ready to pay" alert opens the desk's payment for that
+    visit. "Booked online" opens Today.
+  - A client who cancels today's visit from their own link now tells the
+    desk. WorkSuite itself raises nothing for that.
+  - A change WorkSuite refused tells the desk too.
+
+  SalonMate has its own switch under Settings → Notifications.
+
+**Where it bites**
+
+- Only a **trusted** computer keeps changes to send (WorkSuite → Devices →
+  Trust), and only for a company that lets its desks book offline (the
+  SalonMate setting, on by default). Otherwise the desk says why and does
+  not offer to keep anything.
+- Payments, deposits, the register and closing the day need WorkSuite and
+  say so. So do receipts.
+- Offline, nobody's diary is guessed at. Whether a stylist is free, a
+  tier's price and a deposit come from WorkSuite when it answers. A time
+  that turns out to be taken comes back with the nearest free one.
+- Changes belong to whoever made them: WorkSuite takes each person's as
+  theirs. They wait through a plain sign-out. Somebody else signed in at
+  the counter sees only that they are there. "Pair this computer again"
+  drops them, and warns first. A remote wipe or "Sign out and remove
+  WorkSuite data" removes the copy and the changes.
+- A change older than a day is judged as of now when it arrives.
+
+**Security**
+
+- The generic offline queue (`offline:submit`) now keeps only writes the
+  API proxy would let a page make. A page could previously queue a request
+  to `/api/salon/v1/desk/pair`, or another path the proxy refuses, and have
+  it sent later.
+
+**Checked**
+
+- Unit tests:
+  - what is sent, in which order, and what is held behind a refusal;
+  - how a refusal's local ids resolve and what is sent again;
+  - the choices a refusal offers;
+  - the copy's bootstrap, delta with overlap, hourly refresh and window;
+  - cancellations the desk hears of, and phone search;
+  - trust and company rules, and what belongs to whom;
+  - the board and calendar from the copy, and the salon clock across a
+    change of clocks.
+- `tests/e2e/salon-3.mjs`, against a real server through a relay that cuts
+  the line: the desk keeps a new client's booking, a check-in from the
+  calendar, and a booking at a taken time. With the line back, the first
+  two are in WorkSuite as made. The third comes back refused with the
+  nearest time, and taking it books it. 13/13. `salon.mjs` (12/12) and
+  `salon-2.mjs` (12/12) pass as before.
+
+---
+
 ## 2026-09-28 — 0.2.42: SalonMate, part 2 — taking the money, receipts and the drawer
 
 The desk now takes payment itself, into the POS register it was paired

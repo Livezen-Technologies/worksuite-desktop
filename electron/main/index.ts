@@ -264,7 +264,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
     appVersion: app.getVersion(),
     notify: (n) => notifications.notify({ ...n, module: 'salon', category: null, sender: 'SalonMate', critical: false }),
-    changed: () => broadcast('salon:changed'),
+    changed: () => {
+      broadcast('salon:changed');
+      emitStatus();
+    },
   });
 
   // Hashing runs in a supervised utility process (FR-DIAG-07).
@@ -474,7 +477,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     return {
       network: networkStatus(apiReachable, realtime.getState(), realtimeDownSince),
       realtime: realtime.getState(),
-      pendingChanges: uid ? queue.pendingCount(uid) : 0,
+      pendingChanges: uid ? queue.pendingCount(uid) + salonSync.pending() : 0,
       unread: counts,
       notificationsPausedUntil: notifications.pausedUntilIso(),
       services,
@@ -658,7 +661,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     device.extras = () => {
       const c = transfers.activeCounts();
       const s = sync.health();
-      return { pendingUp: queue.pendingCount(uid) + c.uploads + s.pendingUp, pendingDown: c.downloads + s.pendingDown, lastError: s.lastError };
+      return { pendingUp: queue.pendingCount(uid) + salonSync.pending() + c.uploads + s.pendingUp, pendingDown: c.downloads + s.pendingDown, lastError: s.lastError };
     };
     sync.start(uid);
     transfers.recover();
