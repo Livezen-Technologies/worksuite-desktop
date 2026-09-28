@@ -300,7 +300,21 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     const rep = input.omsReport;
     const tl = input.tenderLine;
     const fc = input.financeCsv;
-    const path = fc
+    const ef = input.expenseFile;
+    const withOrg = (org?: number) => (org ? `?org=${org}` : '');
+    const path = ef
+      ? ef.kind === 'claim-receipt'
+        ? `/api/expense/claims2/${ef.claim}/receipt`
+        : ef.kind === 'receipt'
+          ? `/api/expense/receipts/${encodeURIComponent(ef.token)}`
+          : ef.kind === 'sub-document'
+            ? `/api/expense/subscriptions/${ef.sub}/documents/${ef.doc}`
+            : ef.kind === 'run-csv'
+              ? `/api/expense/runs/${ef.run}/csv${withOrg(ef.org)}`
+              : ef.kind === 'posting'
+                ? `/api/expense/postings/${ef.posting}/export${withOrg(ef.org)}`
+                : `/api/expense/${ef.which === 'insights' ? 'reports2' : 'reports'}/export?${new URLSearchParams(ef.query)}`
+      : fc
       ? `/api/finance/export/${fc.report}${fc.lines ? '/transactions' : ''}?${new URLSearchParams({ company: String(fc.company), from: fc.from, to: fc.to, ...(fc.currency ? { currency: fc.currency } : {}) })}`
       : input.orderPdf
       ? `/api/share/oms/${input.orderPdf}/pdf`
