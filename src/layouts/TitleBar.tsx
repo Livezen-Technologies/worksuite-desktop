@@ -1,3 +1,4 @@
+import { useCanOpen } from '../core/access';
 import { app } from '../core/app-state';
 import { isMac } from '../core/bridge';
 import { t } from '../core/i18n';
@@ -20,13 +21,12 @@ export function TitleBar() {
   const status = useStore(app, (s) => s.status);
   const user = useStore(app, (s) => s.auth?.user);
   const me = useMe();
-  const bootstrap = useStore(app, (s) => s.bootstrap);
   const overlay = useStore(ui, (s) => s.overlay);
   const dock = useStore(ui, (s) => s.dock);
   const transfers = useStore(app, (s) => s.transfers);
   const activeTransfers = transfers.filter((x) => x.state === 'running' || x.state === 'queued').length;
-  const hasAi = useStore(app, (s) => s.apps.some((a) => a.id === 'ai'));
-  const hasChat = useStore(app, (s) => s.apps.some((a) => a.id === 'chat'));
+  const hasAi = useCanOpen('ai');
+  const hasChat = useCanOpen('chat');
 
   const network = status?.network ?? 'ONLINE';
   const pending = status?.pendingChanges ?? 0;
@@ -72,7 +72,7 @@ export function TitleBar() {
       <TopButton icon="transfers" label={t('shell.transfers')} onClick={() => openOverlay('transfers')} active={overlay === 'transfers'} count={activeTransfers} countTone="indigo" />
       {hasChat ? <TopButton icon="chat" label="Chat" onClick={() => (dock === 'chat' ? minimiseChatDrawer() : openChatDrawer(null))} active={dock === 'chat'} count={status?.unread.chat ?? 0} /> : null}
       <TopButton icon="bell" label={t('nav.notifications')} onClick={() => openOverlay('notifications')} active={overlay === 'notifications'} count={unread} />
-      {hasAi || bootstrap ? (
+      {hasAi ? (
         <button
           type="button"
           className={cx('no-drag flex h-8 items-center gap-1.5 rounded-[8px] border border-teal-light/30 px-3 text-[13px] font-semibold text-teal-light hover:bg-teal/20', dock === 'ai' && 'bg-teal/25')}

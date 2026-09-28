@@ -1,10 +1,10 @@
 import { Suspense, useEffect, useState } from 'react';
+import { canOpenApp } from '@shared/access';
+import { useVisibleIds } from '../core/access';
 import { call, isMac } from '../core/bridge';
 import { TabProvider } from '../core/tab-context';
 import { appForRoute, moduleFor } from '../modules/registry';
 import { ModuleBoundary, Spinner, IconButton, cx } from '../components/ui';
-import { app } from '../core/app-state';
-import { useStore } from '../core/store';
 import { useWindowBarHidden } from './windowChrome';
 
 /**
@@ -21,10 +21,11 @@ export function WindowRoot({ hash }: { hash: string }) {
   const [route, setRoute] = useState(initial);
   const [pinned, setPinned] = useState(kind === 'chat-mini');
   const [named, setNamed] = useState<string | null>(null);
-  const apps = useStore(app, (s) => s.apps);
+  const visible = useVisibleIds();
   const id = appForRoute(route);
   const mod = moduleFor(id);
-  const allowed = mod && (mod.always || apps.some((a) => a.id === (mod.requires ?? id)));
+  // The same decision as the main window's (shared/access); the main process closes such a window when access goes.
+  const allowed = mod && canOpenApp(mod.id, visible);
   const barHidden = useWindowBarHidden();
 
   useEffect(() => {

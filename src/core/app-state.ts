@@ -1,5 +1,6 @@
 import type { InputOf, LockState } from '@shared/ipc/contract';
 import type { AppInfo, AuthState, Bootstrap, Preferences, PreferenceLock, StatusSnapshot, Transfer, UpdateStatus } from '@shared/types';
+import { grantOf } from '@shared/access';
 import { visibleApps, type AppDefinition } from '@shared/apps';
 import { call, hasDesktop, on } from './bridge';
 import { createStore } from './store';
@@ -54,8 +55,14 @@ function applyTheme(prefs: Preferences | null): void {
   app.set({ resolvedTheme: dark ? 'dark' : 'light' });
 }
 
+/**
+ * Every bootstrap — at sign-in, on an organization switch, after
+ * `access.changed` or the periodic check — lands here: `apps` is the one list
+ * of what the person may open (core/access), and the Shell closes the tabs of
+ * any app that left it.
+ */
 function applyBootstrap(b: Bootstrap | null): void {
-  const apps = b ? visibleApps({ apps: b.apps, permissions: b.permissions, serverApps: b.serverApps }) : [];
+  const apps = b ? visibleApps(grantOf(b)) : [];
   if (b) setRegional({ timezone: b.user.timezone, locale: b.user.locale, timeFormat: b.user.timeFormat });
   const current = app.get().organizationId;
   const orgId = b && current && b.organizations.some((o) => o.id === current) ? current : null;

@@ -1,4 +1,5 @@
 import type { TabRecord } from '@shared/ipc/contract';
+import { canOpen, refuse } from './access';
 import { call } from './bridge';
 import { createStore } from './store';
 import { appForRoute, titleForRoute } from '../modules/registry';
@@ -11,6 +12,10 @@ import { appForRoute, titleForRoute } from '../modules/registry';
  * rebuilt from its route when it is next opened. The set of tabs is saved (so
  * it can be restored at start-up) and restored only where the app is still
  * visible to the user.
+ *
+ * No tab ever opens on an app the person may not open (core/access): opening,
+ * navigating, moving a tab to another app's route and reopening a closed tab
+ * all refuse, saying so, instead.
  */
 export interface Tab {
   id: string;
@@ -76,8 +81,16 @@ export function activate(id: string): void {
   }));
 }
 
-/** Opens a route in a new tab. */
-export function openTab(route: string, opts: { background?: boolean; title?: string; organizationId?: string | null } = {}): string {
+/** Whether a route's app may be opened; says no when it may not. */
+function allowed(route: string): boolean {
+  if (canOpen(appForRoute(route))) return true;
+  refuse();
+  return false;
+}
+
+/** Opens a route in a new tab; null when the person may not open its app. */
+export function openTab(route: string, opts: { background?: boolean; title?: string; organizationId?: string | null } = {}): string | null {
+  if (!allowed(route)) return null;
   const tab = make(route, opts.organizationId ?? null, opts.title);
   update((s) => ({ tabs: [...s.tabs, tab], activeId: opts.background ? s.activeId : tab.id }));
   return tab.id;
@@ -89,6 +102,7 @@ export function openTab(route: string, opts: { background?: boolean; title?: str
  * to a new tab only when the app has none.
  */
 export function navigate(route: string, organizationId: string | null = null): void {
+  if (!allowed(route)) return;
   const s = tabsStore.get();
   const app = appForRoute(route);
   const current = s.tabs.find((t) => t.id === s.activeId);
@@ -106,6 +120,7 @@ export function navigate(route: string, organizationId: string | null = null): v
 }
 
 export function setRoute(id: string, route: string): void {
+  if (!allowed(route)) return;
   update((s) => ({
     tabs: s.tabs.map((t) => (t.id === id ? { ...t, route, app: appForRoute(route), title: t.route === route ? t.title : titleForRoute(route), suspended: false } : t)),
   }));
@@ -181,6 +196,12 @@ export function restoreClosed(): void {
   const s = tabsStore.get();
   const t = s.closed[s.closed.length - 1];
   if (!t) return;
+  if (!canOpen(t.app)) {
+    // Closed while the app was still the person's: it goes, rather than coming back.
+    tabsStore.set({ closed: s.closed.slice(0, -1) });
+    refuse();
+    return;
+  }
   update((st) => ({ closed: st.closed.slice(0, -1), tabs: [...st.tabs, { ...t, id: newId(), lastActive: Date.now(), suspended: false }] }));
   const last = tabsStore.get().tabs[tabsStore.get().tabs.length - 1];
   if (last) activate(last.id);
@@ -219,14 +240,21 @@ export function closeTabsOutside(organizationId: string | null): number {
   return gone.length;
 }
 
-/** Drops tabs whose app the user can no longer open (FR-REG-04, WF-28). */
+/**
+ * Drops tabs whose app the user can no longer open (FR-REG-04, WF-28) — and
+ * their closed tabs, so Reopen closed tab cannot bring one back.
+ */
 export function closeTabsForApps(allowed: Set<string>): string[] {
   const s = tabsStore.get();
   const gone = s.tabs.filter((t) => !allowed.has(t.app));
-  if (gone.length === 0) return [];
+  const closed = s.closed.filter((t) => allowed.has(t.app));
+  if (gone.length === 0) {
+    if (closed.length !== s.closed.length) tabsStore.set({ closed });
+    return [];
+  }
   const tabs = s.tabs.filter((t) => allowed.has(t.app));
   const home = tabs.length ? null : make('/home', null);
-  update(() => ({ tabs: home ? [home] : tabs, activeId: home ? home.id : tabs.some((t) => t.id === s.activeId) ? s.activeId : (tabs[0]?.id ?? null) }));
+  update(() => ({ tabs: home ? [home] : tabs, closed, activeId: home ? home.id : tabs.some((t) => t.id === s.activeId) ? s.activeId : (tabs[0]?.id ?? null) }));
   return [...new Set(gone.map((t) => t.app))];
 }
 

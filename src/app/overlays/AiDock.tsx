@@ -1,6 +1,5 @@
-import { app } from '../../core/app-state';
-import { call } from '../../core/bridge';
-import { useStore } from '../../core/store';
+import { call, errorMessage } from '../../core/bridge';
+import { toast } from '../../core/toasts';
 import { toggleDock } from '../../core/ui';
 import { Icon } from '../../components/Icon';
 import { Button, IconButton } from '../../components/ui';
@@ -9,10 +8,10 @@ import { Button, IconButton } from '../../components/ui';
  * The AI dock (Ctrl/Cmd+Shift+A). The desktop's own AI assistant —
  * CoreAIService in a dock, window or tab with permitted record context — is
  * Phase 2 (FR-COM-07/08). Until then the dock says so plainly and offers the
- * assistant the user already has in WorkSuite on the web.
+ * assistant the user already has in WorkSuite on the web. It is there only
+ * for whoever is given the AI app (Shell, TitleBar, the `ai` command).
  */
 export function AiDock() {
-  const hasAi = useStore(app, (s) => s.apps.some((a) => a.id === 'ai'));
   return (
     <aside className="flex w-[340px] shrink-0 flex-col border-l border-line bg-surface" aria-label="AI Assistant">
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
@@ -26,13 +25,9 @@ export function AiDock() {
           <div className="mb-1 font-semibold text-white">Coming to the desktop</div>
           Drafting replies, summarising threads and answering questions about the record you have open arrive with the desktop AI assistant in the next phase. It will only ever see what you are allowed to see, and it never sends anything on its own.
         </div>
-        {hasAi ? (
-          <Button variant="teal" icon="external" onClick={() => void call('app:openInBrowser', { path: '/ai' })}>
-            Open AI Assistant in your browser
-          </Button>
-        ) : (
-          <p className="text-[12.5px] text-ink-3">The AI Assistant is not enabled for your account.</p>
-        )}
+        <Button variant="teal" icon="external" onClick={() => void call('app:openInBrowser', { path: '/ai' }).catch((e) => toast('error', errorMessage(e)))}>
+          Open AI Assistant in your browser
+        </Button>
       </div>
     </aside>
   );
