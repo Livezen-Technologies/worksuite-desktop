@@ -37,6 +37,9 @@ export const INVOKE_CHANNELS = [
   'windows:toggleMaximize',
   'windows:close',
   'windows:state',
+  'ring:state',
+  'ring:join',
+  'ring:silence',
   'windows:detach',
   'windows:dock',
   'windows:adopt',
@@ -188,6 +191,7 @@ export const EVENT_CHANNELS = [
   'sync:changed',
   'rc:changed',
   'rc:switchScreen',
+  'ring:changed',
 ] as const;
 
 export type EventChannel = (typeof EVENT_CHANNELS)[number];

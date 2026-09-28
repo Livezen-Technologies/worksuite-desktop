@@ -210,6 +210,67 @@ export interface Preferences {
   pinnedApps: string[];
   shortcuts: Record<string, string>;
   backgroundServices: { notifications: boolean; realtime: boolean };
+  /** Website chat ringing on this computer (WS-WCHAT ENH-01 §14.3). */
+  webchatRinging: WebchatRingPrefs;
+}
+
+/** How website chats ring here (Settings › Notifications › Website chats; RING-UI-08). */
+export interface WebchatRingPrefs {
+  /** The call window over other apps; off leaves the bar in the main window and the tray. */
+  window: boolean;
+  /** During Do not disturb: the window without the tone (default), the tone only at risk, or as usual (RING-47). */
+  duringDnd: 'card' | 'at_risk' | 'ring';
+  /** Ctrl/Cmd+Shift+J joins the top ringing chat, registered only while one rings (RING-46). */
+  shortcut: boolean;
+  /** Ringtone volume, 0–100. */
+  volume: number;
+}
+
+/**
+ * A website chat ringing for this person (ENH-WCHAT-01): who, where, and how
+ * long, from the server's own pending list and events — never from opening
+ * the conversation, which would join it.
+ */
+export interface WebchatRingChat {
+  id: number;
+  visitor: string;
+  site: string | null;
+  /** The page they are reading (its title, or its address). */
+  page: string | null;
+  /** City and country, when known. */
+  place: string | null;
+  device: string | null;
+  returning: boolean;
+  /** What they wrote, when an event said. */
+  preview: string | null;
+  priority: 'low' | 'normal' | 'high' | 'urgent' | 'vip';
+  /** Started while nobody was answering: a card, not a continuous ring (RING-08, "once"). */
+  offline: boolean;
+  /** Waiting since, a server stamp (true UTC without a zone). */
+  since: string;
+  /** The escalation step that reached this person: first, priority, everyone, supervisor, released. */
+  stage: string | null;
+  atRisk: boolean;
+  /** Assigned to me and not yet opened: I ring until I join (RING-05). */
+  mine: boolean;
+  /** Who assigned it, for a chat that is mine. */
+  by: string | null;
+  /** Silenced by me on this computer until it is at risk (RING-11, locally). */
+  silenced: boolean;
+}
+
+export interface WebchatRingState {
+  /** Ordered: at risk, assigned to me, then oldest waiting (RING-23). */
+  chats: WebchatRingChat[];
+  /** What the tone does now: off (none left unsilenced, Do not disturb, the organisation's cap), or which tone. */
+  tone: 'off' | 'normal' | 'strong';
+  volume: number;
+  /** How a ring ended, said for a few seconds (RING-28). */
+  outcome: { id: number; text: string; at: number } | null;
+  /** Locked: the window says a chat is waiting, and nothing about who. */
+  hidden: boolean;
+  /** Ctrl/Cmd+Shift+J is registered now. */
+  shortcut: boolean;
 }
 
 export interface PreferenceLock {
@@ -329,7 +390,7 @@ export interface AppInfo {
   restoredFromCrash: boolean;
 }
 
-export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'video-call' | 'ring' | 'meet' | 'rc-consent' | 'rc-indicator' | 'rc-pointer';
+export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'video-call' | 'ring' | 'meet' | 'rc-consent' | 'rc-indicator' | 'rc-pointer' | 'webchat-ring';
 
 /** Screens and windows offered for sharing (FR-COM-05), and whether the OS lets us capture them. */
 export interface ScreenSources {

@@ -121,6 +121,8 @@ const MODULE_LABELS: Record<string, string> = {
 export class NotificationService {
   private shown: string[] = [];
   private pausedUntil: number | null = null;
+  /** The website-chat call window is showing: a ringing chat needs no toast as well. */
+  ringerShowing: () => boolean = () => false;
   private live = new Map<string, Notification>();
   private unread = { mail: 0, chat: 0, notifications: 0, tasks: 0 };
   private lastMailCount: number | null = null;
@@ -372,6 +374,8 @@ export class NotificationService {
       // take it is persistent, like a call; the others are ordinary.
       case 'chat.incoming':
       case 'chat.at_risk': {
+        // The call window is the alert (RING-40); a toast on top would say it twice.
+        if (this.ringerShowing()) break;
         const conv = String(e.conversation_id ?? '');
         const visitor = String(e.visitor_label ?? e.visitor ?? 'A visitor');
         const site = e.site ? String(e.site) : 'your website';
@@ -401,6 +405,7 @@ export class NotificationService {
         break;
       }
       case 'chat.assigned': {
+        if (this.ringerShowing()) break;
         const conv = String(e.conversation_id ?? '');
         this.notify({
           id: `webchat-assigned:${conv}:${String(e.at ?? Date.now())}`,

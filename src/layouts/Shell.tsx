@@ -18,7 +18,7 @@ import { ClockPopover } from '../app/overlays/ClockPopover';
 import { SearchOverlay } from '../app/overlays/SearchOverlay';
 import { UpdateBanner } from '../app/screens/UpdateScreens';
 import { ChatDrawer, MinimisedChats } from '../modules/chat/ChatDrawer';
-import { AssignmentAlert } from '../modules/chat/website/AssignmentAlert';
+import { RingingBar } from '../modules/chat/website/Ringing';
 import { Sidebar } from './Sidebar';
 import { StatusBar } from './StatusBar';
 import { TabStrip } from './TabStrip';
@@ -31,6 +31,8 @@ export function Shell() {
   const dock = useStore(ui, (s) => s.dock);
   const apps = useStore(app, (s) => s.apps);
   const hasChat = apps.some((a) => a.id === 'chat');
+  // With the call window off, the bar under the tabs plays the tone instead.
+  const ringWindow = useStore(app, (s) => s.prefs?.webchatRinging?.window ?? true);
   const info = useStore(app, (s) => s.info);
   const restored = useRef(false);
   const knownApps = useRef<Set<string> | null>(null);
@@ -216,6 +218,7 @@ export function Shell() {
         <div className="flex min-w-0 flex-1 flex-col">
           <UpdateBanner />
           <TabStrip />
+          {hasChat ? <RingingBar tone={!ringWindow} /> : null}
           <div className="relative flex min-h-0 flex-1">
             <Workspace />
             {dock === 'ai' ? <AiDock /> : null}
@@ -234,7 +237,6 @@ export function Shell() {
       {overlay === 'profile' ? <ProfileMenu /> : null}
       {overlay === 'network' ? <NetworkPopover /> : null}
       {overlay === 'clock' ? <ClockPopover /> : null}
-      {hasChat ? <AssignmentAlert /> : null}
     </div>
   );
 }

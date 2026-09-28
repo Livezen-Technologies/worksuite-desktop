@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import type { Preferences } from '@shared/types';
 import { app, isLocked, updatePrefs } from '../../core/app-state';
-import { call, errorMessage } from '../../core/bridge';
+import { call, errorMessage, isMac } from '../../core/bridge';
 import { conflicts, effectiveShortcuts, prettyAccelerator, accelerator, DEFAULT_SHORTCUTS } from '../../core/commands';
 import { LANGUAGES } from '../../core/i18n';
 import { useStore } from '../../core/store';
@@ -13,6 +13,7 @@ import { Icon } from '../../components/Icon';
 import { Button, Chip, Switch, cx } from '../../components/ui';
 import { Select } from '../../components/Select';
 import type { ModuleProps } from '../registry';
+import { playTone } from '../calls/tones';
 
 /** Settings / profile tree (§4.9). Anything the organization's policy decides is shown locked, with the reason. */
 const SECTIONS = [
@@ -242,6 +243,7 @@ function NotificationsSection({ prefs }: { prefs: Preferences }) {
   const { navigate } = useTab();
   const lock = isLocked('notificationPrivacy');
   const paused = useStore(app, (s) => s.status?.notificationsPausedUntil);
+  const hasChat = useStore(app, (s) => s.apps.some((a) => a.id === 'chat'));
   return (
     <>
       <H title="Notifications" hint="How this computer shows notifications — even when WorkSuite's window is closed, from the tray." />
@@ -282,6 +284,7 @@ function NotificationsSection({ prefs }: { prefs: Preferences }) {
           </div>
         </Row>
       ) : null}
+      {hasChat ? <WebchatRingingPrefs prefs={prefs} /> : null}
       <h3 className="mt-8 mb-1 text-[16px] font-bold text-ink">By app</h3>
       {MODULE_TOGGLES.map(([id, label]) => (
         <Row key={id} label={label}>
@@ -293,6 +296,59 @@ function NotificationsSection({ prefs }: { prefs: Preferences }) {
           Send a test notification
         </Button>
       </div>
+    </>
+  );
+}
+
+/**
+ * Website chats ringing on this computer (RING-UI-08): the call window, Do
+ * not disturb, the join shortcut, the ringtone, and starting with the
+ * computer so a chat can ring before anything is opened (RING-48).
+ */
+function WebchatRingingPrefs({ prefs }: { prefs: Preferences }) {
+  const r = prefs.webchatRinging;
+  const set = (patch: Partial<Preferences['webchatRinging']>) => void updatePrefs({ webchatRinging: { ...r, ...patch } });
+  const [testing, setTesting] = useState(false);
+  const test = () => {
+    if (testing) return;
+    setTesting(true);
+    const t = playTone('webchat', r.volume / 100);
+    setTimeout(() => {
+      t.stop();
+      setTesting(false);
+    }, 3_000);
+  };
+  return (
+    <>
+      <h3 className="mt-8 mb-1 text-[16px] font-bold text-ink">Website chats</h3>
+      <p className="mb-1 text-[13px] text-ink-2">A chat from your websites rings on this computer until someone joins it — while WorkSuite runs, with its window closed too.</p>
+      <Row label="Ring over other apps" hint="A small window at the bottom right, over full-screen apps where the system allows. Off: the bar under your tabs and the tray only.">
+        <Switch label="Ring over other apps" checked={r.window} onChange={(v) => set({ window: v })} />
+      </Row>
+      <Row label="During Do not disturb" hint="Quiet hours, or notifications paused.">
+        <Select
+          label="During Do not disturb"
+          value={r.duringDnd}
+          options={[
+            { value: 'card', label: 'Show the window, no sound' },
+            { value: 'at_risk', label: 'Ring only when a chat is at risk' },
+            { value: 'ring', label: 'Ring as usual' },
+          ]}
+          onValueChange={(v) => set({ duringDnd: v })}
+        />
+      </Row>
+      <Row label={`Join with ${isMac ? '⌘⇧J' : 'Ctrl+Shift+J'}`} hint="From any app, while a chat is ringing. Released as soon as nothing rings.">
+        <Switch label="Join shortcut" checked={r.shortcut} onChange={(v) => set({ shortcut: v })} />
+      </Row>
+      <Row label="Ringtone volume" hint="At risk, high, urgent and VIP chats use a stronger tone.">
+        <div className="flex items-center gap-3">
+          <input type="range" min={0} max={100} step={5} value={r.volume} aria-label="Ringtone volume" onChange={(e) => set({ volume: Number(e.target.value) })} className="w-40" />
+          <Button onClick={test} disabled={testing}>
+            {testing ? 'Ringing…' : 'Test'}
+          </Button>
+        </div>
+      </Row>
+      <Toggle k="startWithOs" prefs={prefs} label="Start WorkSuite with this computer" hint="So website chats can ring before you open anything." />
     </>
   );
 }

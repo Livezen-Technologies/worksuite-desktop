@@ -13,6 +13,7 @@ import { LockScreen } from './screens/LockScreen';
 import { UpdateRequired } from './screens/UpdateScreens';
 import { WindowRoot } from './WindowRoot';
 import { RemoteControlWindow } from './RemoteControlWindow';
+import { WebchatRingWindow } from '../modules/chat/website/Ringing';
 
 /**
  * Top level: which screen this window shows, from the session stage.
@@ -36,6 +37,8 @@ export function App() {
   if (!ready || !auth) return <Spinner label="Starting WorkSuite…" className="h-full" />;
   // Remote control's prompt and bar: above everything else, and never behind the lock screen — stopping control must always work.
   if (hash.startsWith('#/rc/')) return <RemoteControlWindow hash={hash} />;
+  // The website-chat call window: above the lock screen too, saying only that a chat waits while locked (RING-40).
+  if (hash.startsWith('#/window/webchat-ring')) return <WebchatRingWindow />;
 
   let body;
   if (required && auth.stage !== 'revoked') body = <UpdateRequired />;

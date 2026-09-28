@@ -1,16 +1,16 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
+import type { OfflineMutation } from '@shared/types';
 import { ApiError, apiPost } from '../../../core/api';
 import { app } from '../../../core/app-state';
-import { call, errorMessage } from '../../../core/bridge';
-import { useDraft } from '../../../core/drafts';
+import { call, errorMessage, registerDropped } from '../../../core/bridge';
 import { useStore } from '../../../core/store';
 import { useTab, useTabTitle } from '../../../core/tab-context';
 import { bytes, dateLabel, parseTs, timeLabel } from '../../../core/time';
 import { toast } from '../../../core/toasts';
 import { Avatar, Button, Chip, Empty, ErrorNote, Modal, Spinner, cx } from '../../../components/ui';
-import { EmojiPicker } from '../parts';
-import { PRIORITIES, useAgents, useCanned, useWebsiteConversation, websiteAction, websiteAttach, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
+import { Composer, type ComposerHandle } from '../Composer';
+import { PRIORITIES, useAgents, useCanned, useWebsiteConversation, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
 import { Select } from '../../../components/Select';
 
 const control = 'h-[30px] rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink disabled:opacity-60';
@@ -20,6 +20,11 @@ const control = 'h-[30px] rounded-[7px] border border-line bg-surface px-1.5 tex
  * it counts as joining (the server tells the visitor who joined and takes any
  * assignment as seen), the same as on the web. Replying to an unassigned chat
  * claims it.
+ *
+ * The box is Team Chat's own composer with the website profile (WS-WCHAT
+ * ENH-02): the same drafts, tray, paste, camera and emoji; saved replies with
+ * "/"; files a visitor cannot receive refused before upload; replies through
+ * the outbox, shown here as pending until they are sent.
  */
 export function WebsiteThread({ id, row }: { id: string; row?: WebsiteRow }) {
   const qc = useQueryClient();
@@ -27,12 +32,17 @@ export function WebsiteThread({ id, row }: { id: string; row?: WebsiteRow }) {
   const q = useWebsiteConversation(id);
   const data = q.data;
   const scroller = useRef<HTMLDivElement>(null);
+  const composer = useRef<ComposerHandle>(null);
+  const [drag, setDrag] = useState(false);
+  const canned = useCanned(true);
+  const outbox = useQuery({ queryKey: ['offline', 'pending'], queryFn: () => call('offline:pending') });
+  const waiting = (outbox.data ?? []).filter((m: OfflineMutation) => m.module === 'website-chat' && m.entityId === id && m.state !== 'DONE');
   const count = data?.messages.length ?? 0;
   useTabTitle(data ? `Website · ${data.visitor?.name || data.visitor?.label || 'Visitor'}` : 'Website chats');
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
-  }, [count, data?.conversation.visitor_typing]);
+  }, [count, data?.conversation.visitor_typing, waiting.length]);
 
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ['website'] });
@@ -54,7 +64,27 @@ export function WebsiteThread({ id, row }: { id: string; row?: WebsiteRow }) {
 
   return (
     <div className="flex h-full min-w-0 flex-1">
-      <section aria-label={`Chat with ${name}`} className="flex min-w-0 flex-1 flex-col bg-ground">
+      <section
+        aria-label={`Chat with ${name}`}
+        className={cx('relative flex min-w-0 flex-1 flex-col bg-ground', drag && 'ring-2 ring-inset ring-primary/50')}
+        // Files dropped from the computer join the tray through the preload's file channel (RDC-14).
+        onDragOver={(e) => {
+          if (canReply && c.status !== 'closed' && e.dataTransfer.types.includes('Files')) {
+            e.preventDefault();
+            setDrag(true);
+          }
+        }}
+        onDragLeave={() => setDrag(false)}
+        onDrop={(e) => {
+          if (!e.dataTransfer.files.length) return;
+          e.preventDefault();
+          setDrag(false);
+          void registerDropped(Array.from(e.dataTransfer.files)).then(
+            (files) => composer.current?.stage(files),
+            (err: unknown) => toast('error', errorMessage(err)),
+          );
+        }}
+      >
         {/* The controls move to a second line rather than squeeze the name away. */}
         <div className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b border-line bg-surface px-3.5 py-[11px]">
           <Avatar name={name} size={34} />
@@ -72,6 +102,27 @@ export function WebsiteThread({ id, row }: { id: string; row?: WebsiteRow }) {
           {c.started_at ? <div className="self-center text-[11px] text-ink-3">Started a chat on {c.website ?? c.widget ?? 'the website'}{data.journey?.[0]?.url ? pathOf(data.journey[0].url) : ''} · {timeLabel(c.started_at)}</div> : null}
           {data.messages.length === 0 ? <Empty icon="chat" title="No messages yet" hint="The visitor has opened the chat but not written anything." /> : null}
           {data.messages.map((m) => <Message key={m.id} m={m} />)}
+          {waiting.map((p) => (
+            <div key={p.id} className="flex flex-col items-end gap-1 self-end">
+              <div className="max-w-[360px] rounded-[12px_4px_12px_12px] border border-dashed border-[#8C9AD3] bg-[#DDE3F7] px-3 py-2 text-ink dark:bg-selection">{p.label.replace(/^Reply to a website visitor: /, '')}</div>
+              <span className="text-[11.5px] font-semibold text-[#9A4A06] dark:text-warning">
+                {p.state === 'FAILED' || p.state === 'CONFLICT' ? (
+                  <>
+                    Not sent — {p.error ?? 'the server refused it'} ·{' '}
+                    <button type="button" className="underline" onClick={() => void call('offline:retry', { id: p.id }).then(() => qc.invalidateQueries({ queryKey: ['offline'] }))}>
+                      Retry
+                    </button>{' '}
+                    ·{' '}
+                    <button type="button" className="underline" onClick={() => void call('offline:discard', { id: p.id }).then(() => qc.invalidateQueries({ queryKey: ['offline'] }))}>
+                      Discard
+                    </button>
+                  </>
+                ) : (
+                  'Pending — sends when WorkSuite is back online'
+                )}
+              </span>
+            </div>
+          ))}
           {c.visitor_typing ? <div className="self-start text-[12px] text-ink-3">{name.split(' ')[0]} is typing…</div> : null}
         </div>
         {c.status === 'closed' ? (
@@ -80,7 +131,15 @@ export function WebsiteThread({ id, row }: { id: string; row?: WebsiteRow }) {
             {canReply ? <Button size="sm" onClick={() => void websiteAction(c.id, 'reopen').then(refresh, (e) => toast('error', errorMessage(e)))}>Reopen</Button> : null}
           </div>
         ) : canReply ? (
-          <Composer id={c.id} onSent={refresh} />
+          <Composer
+            ref={composer}
+            roomId={`website-${c.id}`}
+            roomName={name}
+            group={false}
+            reply={null}
+            onClearReply={() => undefined}
+            website={{ conversationId: c.id, replies: canned.data?.responses ?? [] }}
+          />
         ) : (
           <div className="border-t border-line bg-surface px-3.5 py-2.5 text-[13px] text-ink-3">You can read this chat but not reply to it.</div>
         )}
@@ -178,124 +237,6 @@ function Message({ m }: { m: WebsiteMessage }) {
         </div>
       ) : null}
     </>
-  );
-}
-
-function Composer({ id, onSent }: { id: number; onSent: () => void }) {
-  const draft = useDraft<string>('website-chat', `conversation:${id}`, '');
-  const [sending, setSending] = useState(false);
-  const [emoji, setEmoji] = useState(false);
-  const [allReplies, setAllReplies] = useState(false);
-  const responses = useCanned(true);
-  const fileInput = useRef<HTMLInputElement>(null);
-  const lastTyping = useRef(0);
-  const replies = responses.data?.responses ?? [];
-
-  const send = async () => {
-    const text = draft.value.trim();
-    if (!text) return;
-    setSending(true);
-    try {
-      await apiPost(`${WEBSITE}/conversations/${id}/reply`, { message: text });
-      draft.setValue('');
-      await draft.clear();
-      onSent();
-    } catch (e) {
-      toast('error', e instanceof ApiError && e.offline ? 'Replying to a visitor needs a connection to WorkSuite.' : errorMessage(e));
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const typing = () => {
-    // The visitor sees "typing…" from this; once every few seconds is plenty.
-    const now = Date.now();
-    if (now - lastTyping.current < 3_000) return;
-    lastTyping.current = now;
-    void apiPost(`${WEBSITE}/conversations/${id}/typing`).catch(() => undefined);
-  };
-
-  const attach = async (files: FileList | File[] | null) => {
-    for (const f of Array.from(files ?? [])) {
-      try {
-        await websiteAttach(id, f);
-        onSent();
-      } catch (e) {
-        toast('error', `${f.name}: ${errorMessage(e)}`);
-      }
-    }
-  };
-
-  const use = (body: string) => {
-    draft.setValue(draft.value ? `${draft.value}\n${body}` : body);
-    setAllReplies(false);
-  };
-
-  return (
-    <div
-      className="relative flex flex-col gap-2 border-t border-line bg-surface px-3.5 py-2.5"
-      onDragOver={(e) => e.dataTransfer.types.includes('Files') && e.preventDefault()}
-      onDrop={(e) => {
-        if (!e.dataTransfer.files.length) return;
-        e.preventDefault();
-        void attach(e.dataTransfer.files);
-      }}
-    >
-      {replies.length ? (
-        <div className="flex flex-wrap items-center gap-[5px] text-[11.5px] font-semibold">
-          <span className="text-ink-3">Saved replies:</span>
-          {replies.slice(0, 4).map((r) => (
-            <button key={r.id} type="button" title={r.body} onClick={() => use(r.body)} className="rounded-[10px] border border-line px-2 py-0.5 text-ink hover:bg-subtle">{r.title}</button>
-          ))}
-          {replies.length > 4 ? <button type="button" onClick={() => setAllReplies(!allReplies)} className="px-1 text-primary hover:underline">More…</button> : null}
-        </div>
-      ) : null}
-      {allReplies ? (
-        <div className="absolute right-3.5 bottom-full left-3.5 mb-2 max-h-64 overflow-y-auto rounded-[10px] border border-line bg-surface py-1 shadow-xl scroll-thin" role="menu" aria-label="Saved replies">
-          {replies.map((r) => (
-            <button key={r.id} type="button" role="menuitem" className="block w-full px-3 py-2 text-left hover:bg-subtle" onClick={() => use(r.body)}>
-              <span className="block text-[13px] font-semibold text-ink">{r.title}{r.shortcut ? <span className="ml-2 font-mono text-[11.5px] text-ink-3">/{r.shortcut}</span> : null}</span>
-              <span className="block truncate text-[12px] text-ink-3">{r.body}</span>
-            </button>
-          ))}
-        </div>
-      ) : null}
-      <div className="relative flex items-end gap-1.5 rounded-[10px] border border-primary px-2 py-1.5">
-        <button type="button" aria-label="Send attachment" onClick={() => fileInput.current?.click()} className="h-7 px-1 text-[12.5px] text-ink-2 hover:text-ink">Attach</button>
-        <input ref={fileInput} type="file" multiple hidden onChange={(e) => void attach(e.target.files).then(() => { if (fileInput.current) fileInput.current.value = ''; })} />
-        <textarea
-          value={draft.value}
-          onChange={(e) => {
-            draft.setValue(e.target.value);
-            typing();
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              void send();
-            }
-          }}
-          rows={1}
-          placeholder="Type a message…"
-          aria-label="Message"
-          className="bare-focus max-h-40 min-h-[28px] flex-1 resize-none bg-transparent py-1 text-[13px] outline-none"
-        />
-        <button type="button" aria-label="Emoji" onClick={() => setEmoji(!emoji)} className="h-7 px-1 text-[12.5px] text-ink-2 hover:text-ink">Emoji</button>
-        <button type="button" disabled={sending || !draft.value.trim()} onClick={() => void send()} className="h-[30px] rounded-[7px] bg-primary px-3 text-[13px] font-bold text-white hover:bg-primary-hover disabled:opacity-50">
-          Send message
-        </button>
-        {emoji ? (
-          <EmojiPicker
-            className="absolute right-24 bottom-11"
-            onPick={(e) => {
-              draft.setValue(draft.value + e);
-              setEmoji(false);
-            }}
-            onClose={() => setEmoji(false)}
-          />
-        ) : null}
-      </div>
-    </div>
   );
 }
 

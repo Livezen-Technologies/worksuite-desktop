@@ -267,6 +267,11 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('windows:close', (_i, c) => {
     winOf(c.sender)?.close();
   });
+  // ── website chats ringing (ENH-WCHAT-01, RING-49) ───────────────────────
+  router.handle('ring:state', () => ctx.webchat.state());
+  router.handle('ring:join', (input) => ctx.webchat.join(input.id));
+  router.handle('ring:silence', (input) => ctx.webchat.silence(input.id, input.on));
+
   // ── multi-window docking (FR-NAV-05/07) ─────────────────────────────────
   const fromMain = (sender: WebContents) => {
     if (winOf(sender) !== ctx.windows.getMain()) throw new DesktopError('IPC_FORBIDDEN_SENDER', 'Tabs are torn off and docked from the main window.');

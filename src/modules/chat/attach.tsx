@@ -13,7 +13,7 @@ import { Select } from '../../components/Select';
 /** What the paperclip offers (ChatComposer, "Attach"). */
 export type AttachChoice = 'document' | 'image' | 'video' | 'audio' | 'any' | 'drive' | 'camera' | 'voice';
 
-const CHOICES: Array<{ id: AttachChoice; icon: string; label: string; hint: string; tone: string }> = [
+const ALL_CHOICES: Array<{ id: AttachChoice; icon: string; label: string; hint: string; tone: string }> = [
   { id: 'document', icon: 'file-text', label: 'Document', hint: 'PDF, Word, Excel…', tone: 'bg-[#E6ECFF] text-[#23349E] dark:bg-selection dark:text-primary' },
   { id: 'image', icon: 'file-image', label: 'Image', hint: 'PNG, JPG, GIF…', tone: 'bg-[#E3F4EC] text-[#1F7A4D] dark:bg-success-bg dark:text-success' },
   { id: 'video', icon: 'film', label: 'Video', hint: 'MP4, MOV, WEBM', tone: 'bg-[#F1E8FB] text-[#6B3FB5] dark:bg-[#2A1F4A] dark:text-[#B69CF0]' },
@@ -24,7 +24,8 @@ const CHOICES: Array<{ id: AttachChoice; icon: string; label: string; hint: stri
   { id: 'voice', icon: 'mic', label: 'Voice message', hint: 'Record and send', tone: 'bg-danger-bg text-danger' },
 ];
 
-export function AttachMenu({ onPick, onClose, compact, align = 'left' }: { onPick: (c: AttachChoice) => void; onClose: () => void; compact?: boolean; align?: 'left' | 'right' }) {
+export function AttachMenu({ onPick, onClose, compact, align = 'left', only }: { onPick: (c: AttachChoice) => void; onClose: () => void; compact?: boolean; align?: 'left' | 'right'; /** The choices a channel offers (a website visitor: documents, images, the camera). */ only?: AttachChoice[] }) {
+  const CHOICES = only ? ALL_CHOICES.filter((c) => only.includes(c.id)) : ALL_CHOICES;
   const ref = useRef<HTMLDivElement>(null);
   const [at, setAt] = useState(0);
   useEffect(() => {

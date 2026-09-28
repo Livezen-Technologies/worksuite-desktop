@@ -29,6 +29,8 @@ export interface TrayModel {
   updateReady: boolean;
   /** Someone controls this computer (RC04): who, and whether it is paused. First in the menu while it lasts. */
   remoteControl: { controller: string; paused: boolean } | null;
+  /** Website chats ringing for me (RING-43): listed first, with Join; the icon shows it. */
+  webchatRinging: Array<{ id: number; label: string }>;
 }
 
 export interface TrayActions {
@@ -43,6 +45,8 @@ export interface TrayActions {
   lock: () => void;
   pauseRemoteControl: () => void;
   stopRemoteControl: () => void;
+  joinWebchat: (conversationId: number) => void;
+  ringingSettings: () => void;
 }
 
 function resourcesDir(): string {
@@ -84,6 +88,7 @@ export class TrayService {
     attendance: null,
     updateReady: false,
     remoteControl: null,
+    webchatRinging: [],
   };
   private lastState: TrayState | null = null;
 
@@ -118,7 +123,9 @@ export class TrayService {
     // unsigned build is never registered for notifications, and macOS will not
     // draw its badge.
     const unread = attentionCount(m.unreadChat, m.unreadOther);
-    const state = trayState({ error: !!m.error, offline: m.offline && m.signedIn, monitoring: false, syncing: false, unread });
+    // A website chat ringing shows as something waiting for you, whatever else is going on (RING-43).
+    const ringing = m.signedIn ? m.webchatRinging.length : 0;
+    const state = ringing ? 'unread' : trayState({ error: !!m.error, offline: m.offline && m.signedIn, monitoring: false, syncing: false, unread });
     try {
       app.setBadgeCount(m.signedIn && m.badge && process.platform !== 'darwin' ? unread : 0);
     } catch {
@@ -141,6 +148,8 @@ export class TrayService {
         unreadOther: m.unreadOther,
       }),
     );
+    if (process.platform === 'darwin') this.tray.setTitle(ringing ? ` ${ringing} ringing` : '');
+    if (ringing) this.tray.setToolTip(`WorkSuite — ${ringing === 1 ? 'a website chat is' : `${ringing} website chats are`} ringing`);
     this.tray.setContextMenu(Menu.buildFromTemplate(this.template()));
   }
 
@@ -152,6 +161,13 @@ export class TrayService {
       items.push({ label: `${m.remoteControl.controller} ${m.remoteControl.paused ? 'had control — paused' : 'is controlling this computer'}`, enabled: false });
       if (!m.remoteControl.paused) items.push({ label: 'Pause remote control', click: a.pauseRemoteControl });
       items.push({ label: 'Stop remote control', click: a.stopRemoteControl });
+      items.push({ type: 'separator' });
+    }
+    if (m.signedIn && m.webchatRinging.length) {
+      items.push({ label: m.webchatRinging.length === 1 ? 'Website chat ringing' : `${m.webchatRinging.length} website chats ringing`, enabled: false });
+      for (const c of m.webchatRinging.slice(0, 5)) items.push({ label: `Join — ${c.label}`, click: () => a.joinWebchat(c.id) });
+      items.push({ label: 'Open Website Chats', click: () => a.openRoute('/chat?view=website') });
+      items.push({ label: 'Ringing settings…', click: a.ringingSettings });
       items.push({ type: 'separator' });
     }
     if (m.signedIn) {

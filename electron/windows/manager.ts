@@ -33,9 +33,17 @@ const SIZES: Record<WindowKind, { width: number; height: number; minWidth: numbe
   'rc-consent': { width: 460, height: 560, minWidth: 460, minHeight: 560 },
   'rc-indicator': { width: 560, height: 52, minWidth: 560, minHeight: 52 },
   'rc-pointer': { width: 220, height: 30, minWidth: 220, minHeight: 30 },
+  'webchat-ring': { width: 380, height: 250, minWidth: 380, minHeight: 120 },
 };
 /** Remote control's own windows: placed by remote control, never remembered. */
-const REMOTE = new Set<WindowKind>(['rc-consent', 'rc-indicator', 'rc-pointer']);
+const REMOTE = new Set<WindowKind>(['rc-consent', 'rc-indicator', 'rc-pointer', 'webchat-ring']);
+
+/** The website-chat call window's place: bottom right of the primary display, clear of the taskbar (RING-40). */
+export function ringerBounds(workArea: Rectangle, height: number): Rectangle {
+  const width = SIZES['webchat-ring'].width;
+  const h = Math.max(SIZES['webchat-ring'].minHeight, Math.min(height, workArea.height - 32));
+  return { x: workArea.x + workArea.width - width - 16, y: workArea.y + workArea.height - h - 16, width, height: h };
+}
 
 interface SavedLayout {
   displayId: string | null;
@@ -239,6 +247,58 @@ export class WindowManager {
     win.webContents.on('render-process-gone', () => !win.isDestroyed() && win.close());
     void win.loadURL(this.url(hash));
     return win;
+  }
+
+  private ringer: BrowserWindow | null = null;
+
+  /**
+   * The website-chat call window (RING-40): frameless, above other apps and
+   * full-screen ones where the system allows, shown without taking the
+   * keyboard from whatever the person is typing in, bottom right, and there
+   * with the main window minimised or closed to the tray. One window; its
+   * height follows how many chats are ringing.
+   */
+  showRinger(height: number): BrowserWindow {
+    const bounds = ringerBounds(screen.getPrimaryDisplay().workArea, height);
+    const existing = this.ringer && !this.ringer.isDestroyed() ? this.ringer : null;
+    if (existing) {
+      const b = existing.getBounds();
+      if (b.height !== bounds.height || b.x !== bounds.x || b.y !== bounds.y) existing.setBounds(bounds);
+      if (!existing.isVisible()) existing.showInactive();
+      return existing;
+    }
+    const win = new BrowserWindow({
+      ...bounds,
+      show: false,
+      frame: false,
+      resizable: false,
+      maximizable: false,
+      minimizable: false,
+      fullscreenable: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      title: 'Website chat ringing',
+      backgroundColor: '#0F1B3D',
+      webPreferences: this.webPreferences(),
+    });
+    win.setAlwaysOnTop(true, 'screen-saver');
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    this.kinds.set(win.id, 'webchat-ring');
+    const wid = win.id;
+    this.ringer = win;
+    win.on('closed', () => {
+      this.kinds.delete(wid);
+      if (this.ringer === win) this.ringer = null;
+    });
+    win.once('ready-to-show', () => win.showInactive());
+    win.webContents.on('render-process-gone', () => !win.isDestroyed() && win.close());
+    void win.loadURL(this.url('/window/webchat-ring'));
+    return win;
+  }
+
+  hideRinger(): void {
+    if (this.ringer && !this.ringer.isDestroyed()) this.ringer.close();
+    this.ringer = null;
   }
 
   private create(kind: WindowKind, opts: { hash: string; title?: string; alwaysOnTop?: boolean; show?: boolean; bounds?: Rectangle | null }): BrowserWindow {

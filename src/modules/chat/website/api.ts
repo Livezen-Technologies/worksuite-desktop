@@ -217,13 +217,6 @@ export async function websiteAction(id: number | string, action: string, extra: 
   await request('POST', `${WEBSITE}/conversations/${id}/action`, { body: { action, ...extra } });
 }
 
-export async function websiteAttach(id: number | string, file: File, caption?: string): Promise<void> {
-  const form = new FormData();
-  form.append('file', file, file.name);
-  if (caption) form.append('caption', caption);
-  await request('POST', `${WEBSITE}/conversations/${id}/attach`, { body: form });
-}
-
 /** What a visitor is doing, in the list's one word. */
 export function visitorStatus(v: { conversation_status: string | null; idle_seconds: number }): ['Chatting' | 'Active' | 'Inactive', string] {
   if (v.conversation_status === 'open' || v.conversation_status === 'pending') return ['Chatting', 'text-primary'];

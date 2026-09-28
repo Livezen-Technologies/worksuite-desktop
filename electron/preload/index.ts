@@ -92,6 +92,11 @@ const api = {
     describe: call('windows:describe'),
     restoreDetached: call('windows:restoreDetached'),
   },
+  ring: {
+    state: call('ring:state'),
+    join: call('ring:join'),
+    silence: call('ring:silence'),
+  },
   tabs: {
     save: call('tabs:save'),
     restore: call('tabs:restore'),

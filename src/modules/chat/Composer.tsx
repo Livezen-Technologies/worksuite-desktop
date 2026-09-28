@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useImperativeHandle, useRef, useState, type Ref, type ReactNode } from 'react';
 import type { PickedFile } from '@shared/ipc/contract';
 import { app } from '../../core/app-state';
-import { apiGet, apiPost } from '../../core/api';
+import { apiGet, apiPost, request } from '../../core/api';
 import { call, errorMessage, registerDropped } from '../../core/bridge';
 import { useDraft } from '../../core/drafts';
 import { useStore } from '../../core/store';
@@ -20,6 +20,19 @@ import { mentionQuery } from './mentions';
 import { EmojiPicker, VoiceRecorder } from './parts';
 import { typingLine } from './typing';
 import type { ReplyTarget } from './Thread';
+import { matchReplies, refuseForVisitor, savedReplyQuery, type SavedReply } from './website/profile';
+
+/**
+ * The website channel (WS-WCHAT ENH-02, RDC-01/02): the same composer, for a
+ * website visitor. Attach, paste, drop, camera, emoji and saved replies are
+ * on; @mentions, voice messages, urgent, sharing records and Drive links are
+ * not there at all — a visitor could receive none of them.
+ */
+export interface WebsiteChannel {
+  conversationId: number;
+  replies: SavedReply[];
+  maxUploadKb?: number;
+}
 
 /** At most one "typing" signal per few seconds; "stopped" after a pause or on send. */
 const TYPING_EVERY = 4_000;
@@ -44,7 +57,7 @@ export interface ComposerHandle {
  * an edit shown above it; files wait in a tray until Send; a voice message
  * records in its place. `compact` is the drawer's and the call panel's size.
  */
-export function Composer({ roomId, roomName, group, reply, onClearReply, typing = [], compact, look = 'box', extras, ref }: {
+export function Composer({ roomId, roomName, group, reply, onClearReply, typing = [], compact, look = 'box', extras, website, ref }: {
   roomId: string;
   roomName: string;
   group: boolean;
@@ -56,11 +69,15 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   look?: 'box' | 'pill';
   /** Actions above the box (the chat drawer's quick actions). */
   extras?: ReactNode;
+  /** A website visitor's conversation rather than a Team Chat room. */
+  website?: WebsiteChannel;
   ref?: Ref<ComposerHandle>;
 }) {
   const qc = useQueryClient();
-  const draft = useDraft<string>('chat', `room:${roomId}`, '');
-  const canUrgent = useStore(app, (s) => !!s.bootstrap?.permissions.some((p) => p === '*' || p === URGENT));
+  const site = website ?? null;
+  // A website draft keeps the key the website thread always used, so none is lost in the move (RDC-06).
+  const draft = useDraft<string>(site ? 'website-chat' : 'chat', site ? `conversation:${site.conversationId}` : `room:${roomId}`, '');
+  const canUrgent = useStore(app, (s) => !site && !!s.bootstrap?.permissions.some((p) => p === '*' || p === URGENT));
   const transfers = useStore(app, (s) => s.transfers);
   const [sending, setSending] = useState(false);
   const [editing, setEditing] = useState<{ id: number; original: string; text: string } | null>(null);
@@ -73,6 +90,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const [staged, setStaged] = useState<Staged[]>([]);
   const [asking, setAsking] = useState<{ start: number; word: string; left: number } | null>(null);
   const [pick, setPick] = useState(0);
+  const [slash, setSlash] = useState<{ start: number; word: string } | null>(null);
   const picked = useRef<Target[]>([]);
   const root = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -111,7 +129,15 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       if (at !== undefined) el.setSelectionRange(at, at);
     });
 
-  const stage = (items: Staged[]) => {
+  const stage = (all: Staged[]) => {
+    // What a visitor cannot receive is refused here, with the reason, before anything is uploaded (RDC-04).
+    const items = site
+      ? all.filter((it) => {
+          const why = it.kind === 'disk' ? refuseForVisitor(it.file.name, it.file.size, site.maxUploadKb) : refuseForVisitor(it.name, it.blob.size, site.maxUploadKb);
+          if (why) toast('error', why);
+          return !why;
+        })
+      : all;
     if (!items.length) return;
     setStaged((list) => [...list.filter((s) => !done(s)), ...items]);
     focus();
@@ -129,7 +155,14 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
     },
   }));
 
-  const typingSignal = (state: 'start' | 'stop') => void apiPost('/api/chat/typing', { room_id: Number(roomId), state }).catch(() => undefined);
+  const typingSignal = (state: 'start' | 'stop') => {
+    // The widget's typing stamp has no "stopped": it lapses by itself (LiveActivity::WINDOW).
+    if (site) {
+      if (state === 'start') void apiPost(`/api/chat/widget-admin/conversations/${site.conversationId}/typing`).catch(() => undefined);
+      return;
+    }
+    void apiPost('/api/chat/typing', { room_id: Number(roomId), state }).catch(() => undefined);
+  };
   const stopTyping = () => {
     if (idle.current) clearTimeout(idle.current);
     idle.current = null;
@@ -163,6 +196,10 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
     picked.current.filter((t) => words.includes(`@${t.name}`)).map((t) => (t.type === 'everyone' ? { type: 'everyone' } : { type: t.type, id: t.id, name: t.name }));
 
   const refresh = () => {
+    if (site) {
+      void qc.invalidateQueries({ queryKey: ['website'] });
+      return;
+    }
     void qc.invalidateQueries({ queryKey: ['chat', 'messages', roomId] });
     void qc.invalidateQueries({ queryKey: ['chat', 'rooms'] });
   };
@@ -170,6 +207,20 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const sendBlob = async (s: BlobItem, extra: Extra | null) => {
     const update = (patch: Partial<BlobItem>) => setStaged((list) => list.map((x) => (x.key === s.key && x.kind === 'blob' ? { ...x, ...patch } : x)));
     update({ state: 'sending', progress: 0, error: null, extra });
+    if (site) {
+      // A pasted screenshot or a camera picture: straight to the conversation's attach.
+      try {
+        const form = new FormData();
+        form.append('file', s.blob, s.name);
+        if (extra?.caption) form.append('caption', extra.caption.slice(0, 400));
+        await request('POST', `/api/chat/widget-admin/conversations/${site.conversationId}/attach`, { body: form });
+        setStaged((list) => list.filter((x) => x.key !== s.key));
+        refresh();
+      } catch (e) {
+        update({ state: 'failed', error: errorMessage(e) });
+      }
+      return;
+    }
     try {
       const { uploadId } = await uploadBlob(s.blob, s.name, { kind: 'chat', roomId }, (p) => update({ progress: p }));
       await apiPost('/api/chat/messages/attachments', {
@@ -188,13 +239,33 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
 
   const sendDisk = async (list: DiskItem[], extra: Extra) => {
     if (!list.length) return;
-    const out = await call('transfers:upload', { handles: list.map((s) => s.file.handle), target: { kind: 'chat', roomId, ...extra } });
+    const target = site ? { kind: 'website' as const, conversationId: site.conversationId, ...(extra.caption ? { caption: extra.caption.slice(0, 400) } : {}) } : { kind: 'chat' as const, roomId, ...extra };
+    const out = await call('transfers:upload', { handles: list.map((s) => s.file.handle), target });
     const byKey = new Map(list.map((s, i) => [s.key, out[i]?.id ?? null]));
     setStaged((all) => all.map((x) => (x.kind === 'disk' && byKey.has(x.key) ? { ...x, transfer: byKey.get(x.key) ?? null } : x)));
   };
 
   /** Words go through the offline queue (urgent ones only while online, so they are never late). */
   const sendWords = async (words: string, asUrgent: boolean): Promise<boolean> => {
+    if (site) {
+      // A reply to a visitor goes through the outbox too: pending while offline, sent once on reconnecting (RDC-07).
+      const r = await call('offline:submit', {
+        module: 'website-chat',
+        entity: 'reply',
+        entityId: String(site.conversationId),
+        label: `Reply to a website visitor: ${words.slice(0, 160)}`,
+        method: 'POST',
+        path: `/api/chat/widget-admin/conversations/${site.conversationId}/reply`,
+        body: { message: words.slice(0, 4000) },
+        queueIfOffline: true,
+      });
+      if (!r.delivered && !r.queued) {
+        toast('error', r.error ?? 'Not sent.');
+        return false;
+      }
+      void qc.invalidateQueries({ queryKey: r.queued ? ['offline'] : ['website'] });
+      return true;
+    }
     const mentions = mentionsIn(words);
     const r = await call('offline:submit', {
       module: 'chat',
@@ -304,7 +375,10 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
 
   const attach = async (c: AttachChoice) => {
     setMenu(null);
-    if (c === 'drive' || c === 'camera') return setModal(c);
+    if (c === 'camera') return setModal(c);
+    // A Drive link is never sent to a visitor, and a visitor cannot play a voice message (RDC-02, RDC-05).
+    if (site && (c === 'drive' || c === 'voice')) return;
+    if (c === 'drive') return setModal(c);
     if (c === 'voice') return setRecording(true);
     try {
       const files = await call('files:pickFiles', { multiple: true, title: `Send to ${roomName}`, ...(c === 'any' ? {} : { only: c }) });
@@ -336,6 +410,16 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
     if (s.kind === 'disk' && s.transfer) void call('transfers:cancel', { id: s.transfer }).catch(() => undefined);
   };
 
+  const replyOptions = site && slash ? matchReplies(site.replies, slash.word) : [];
+  /** A saved reply takes the place of the "/word" typed for it. */
+  const insertReply = (r: SavedReply) => {
+    const caret = input.current?.selectionStart ?? text.length;
+    const start = slash ? slash.start : caret;
+    setText(`${text.slice(0, start)}${r.body}${text.slice(caret)}`);
+    setSlash(null);
+    focus(start + r.body.length);
+  };
+
   const insert = (e: string) => {
     const el = input.current;
     const at = el?.selectionStart ?? text.length;
@@ -361,7 +445,9 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const tool = cx('flex shrink-0 items-center justify-center text-ink-2 hover:bg-subtle hover:text-ink', look === 'pill' ? 'rounded-full' : 'rounded-[8px]', size);
   const hint = editing
     ? 'Enter to save · Esc to cancel'
-    : urgent
+    : site
+      ? 'Enter to send · Shift + Enter for a new line · / for saved replies'
+      : urgent
       ? 'Urgent: reaches people who only want priority notifications'
       : `Enter to send · Shift + Enter for a new line${group ? ' · @ to mention' : ''} · Paste a WorkSuite link to share it as a card`;
 
@@ -371,10 +457,10 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                   <button type="button" aria-label="Attach" title="Attach" aria-haspopup="menu" aria-expanded={menu === 'attach'} onClick={() => setMenu(menu === 'attach' ? null : 'attach')} className={cx(tool, menu === 'attach' && '!bg-selection !text-primary')}>
                     <Icon name="paperclip" size={compact ? 16 : 18} />
                   </button>
-                  {menu === 'attach' ? <AttachMenu compact={compact} align={look === 'pill' ? 'right' : 'left'} onPick={(c) => void attach(c)} onClose={() => setMenu(null)} /> : null}
+                  {menu === 'attach' ? <AttachMenu compact={compact} align={look === 'pill' ? 'right' : 'left'} only={site ? ['document', 'image', 'camera'] : undefined} onPick={(c) => void attach(c)} onClose={() => setMenu(null)} /> : null}
                 </span>
               ) : null;
-  const shareBtn = !editing ? (
+  const shareBtn = !editing && !site ? (
                 <span className="relative">
                   <button type="button" aria-label="Share from WorkSuite" title="Share from WorkSuite" aria-haspopup="menu" aria-expanded={menu === 'share'} onClick={() => setMenu(menu === 'share' ? null : 'share')} className={cx(tool, menu === 'share' && '!bg-selection !text-primary')}>
                     <Icon name="plus" size={compact ? 16 : 18} />
@@ -389,6 +475,10 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                 onChange={(e) => {
                   setText(e.target.value);
                   if (!editing) onTyped();
+                  if (site) {
+                    setSlash(savedReplyQuery(e.target.value, e.target.selectionStart ?? e.target.value.length));
+                    setPick(0);
+                  }
                   if (group) {
                     const q = mentionQuery(e.target.value, e.target.selectionStart ?? e.target.value.length);
                     setAsking(q ? { ...q, left: leftOf(e.target, q.start) } : null);
@@ -398,8 +488,26 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                 onBlur={() => {
                   stopTyping();
                   setAsking(null);
+                  setSlash(null);
                 }}
                 onKeyDown={(e) => {
+                  if (slash && replyOptions.length) {
+                    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setPick((pick + (e.key === 'ArrowDown' ? 1 : replyOptions.length - 1)) % replyOptions.length);
+                      return;
+                    }
+                    if (e.key === 'Enter' || e.key === 'Tab') {
+                      e.preventDefault();
+                      insertReply(replyOptions[Math.min(pick, replyOptions.length - 1)]!);
+                      return;
+                    }
+                    if (e.key === 'Escape') {
+                      e.preventDefault();
+                      setSlash(null);
+                      return;
+                    }
+                  }
                   if (asking && options.length) {
                     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
                       e.preventDefault();
@@ -507,7 +615,45 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
           </button>
         </div>
       ) : null;
-  const detected = !editing ? recordsIn(text, origin) : [];
+  // A visitor's widget shows a WorkSuite link as a link, never as a card.
+  const detected = !editing && !site ? recordsIn(text, origin) : [];
+  const repliesEl = site && slash && replyOptions.length ? (
+        <div role="listbox" aria-label="Saved replies" className={cx('absolute bottom-full left-3 z-40 mb-1 flex max-h-[320px] flex-col rounded-[12px] border border-line bg-surface shadow-[0_12px_32px_rgb(var(--ws-shadow-rgb)/.18)]', compact ? 'w-[260px]' : 'w-[340px]')}>
+          <div className="px-2.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-ink-3">SAVED REPLIES</div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-1 scroll-thin">
+            {replyOptions.map((r, i) => (
+              <button
+                key={r.id}
+                type="button"
+                role="option"
+                aria-selected={i === pick}
+                onMouseDown={(e) => e.preventDefault()}
+                onMouseEnter={() => setPick(i)}
+                onClick={() => insertReply(r)}
+                className={cx('flex w-full flex-col rounded-[8px] px-2 py-1.5 text-left', i === pick ? 'bg-selection' : 'hover:bg-subtle')}
+              >
+                <span className="truncate text-[12.5px] font-semibold text-ink">
+                  {r.title}
+                  {r.shortcut ? <span className="ml-2 font-mono text-[11.5px] font-normal text-ink-3">/{r.shortcut}</span> : null}
+                </span>
+                <span className="truncate text-[11.5px] text-ink-3">{r.body}</span>
+              </button>
+            ))}
+          </div>
+          <div className="border-t border-line px-2.5 py-1.5 text-[11px] text-ink-3">↑↓ to move · Enter to insert · Esc to close</div>
+        </div>
+      ) : null;
+  // The first six saved replies as chips above the box (RDC-03).
+  const chipsEl = site && site.replies.length && !editing ? (
+        <div className="flex flex-wrap items-center gap-[5px] text-[11.5px] font-semibold" aria-label="Saved replies">
+          {site.replies.slice(0, 6).map((r) => (
+            <button key={r.id} type="button" title={r.body} onClick={() => insertReply(r)} className="rounded-[10px] border border-line px-2 py-0.5 text-ink hover:bg-subtle">
+              {r.title}
+            </button>
+          ))}
+          {site.replies.length > 6 ? <span className="px-1 font-normal text-ink-3">Type / for all {site.replies.length}</span> : null}
+        </div>
+      ) : null;
   const detectedEl = detected.length ? (
         <div className="flex items-center gap-2 rounded-[8px] border-l-[3px] border-primary bg-selection px-2.5 py-1.5 text-[12px]" aria-live="polite" data-detected>
           <Icon name="link" size={13} className="shrink-0 text-primary" />
@@ -642,6 +788,8 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       {barEl}
       {detectedEl}
       {mentionsEl}
+      {repliesEl}
+      {chipsEl}
       {menu === 'emoji' ? <EmojiPicker className="absolute right-3 bottom-full mb-2" onPick={insert} onClose={() => setMenu(null)} /> : null}
       <div
         className={cx(

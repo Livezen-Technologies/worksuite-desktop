@@ -40,6 +40,7 @@ export function defaultPreferences(): Preferences {
     pinnedApps: [],
     shortcuts: {},
     backgroundServices: { notifications: true, realtime: true },
+    webchatRinging: { window: true, duringDnd: 'card', shortcut: true, volume: 80 },
   };
 }
 

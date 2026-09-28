@@ -241,3 +241,10 @@ textarea,
   background-color: #0a0f22;
   background-image: radial-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px);
 }
+
+/* A website chat ringing (RING-UI-06): a soft ring around the visitor, under three pulses a second. */
+@keyframes ws-ring-pulse {
+  0% { box-shadow: 0 0 0 0 rgb(240 80 58 / 0.55); }
+  70% { box-shadow: 0 0 0 12px rgb(240 80 58 / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(240 80 58 / 0); }
+}

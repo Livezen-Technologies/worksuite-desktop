@@ -5,6 +5,73 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## Unreleased — Website chats ring like calls, and answer from Team Chat's composer
+
+From the Website Live Chat SRS v1.4 (ENH-WCHAT-01 and -02), the desktop's
+part, on the server as it is today.
+
+**Ringing (RING-40…48)**
+
+- **A chat from your websites rings until someone joins it** — in a small
+  window at the bottom right, over other apps and full-screen ones where the
+  system allows, with WorkSuite's window minimised or closed to the tray. It
+  never takes the keyboard from what you are typing in.
+- The window shows who is waiting, on which site, where they are, what page
+  they are reading and what they asked, how long they have waited and which
+  step of the escalation reached you; **Join chat** and **Silence**. Other
+  chats ringing are listed under it with their own Join — at risk first,
+  then assigned to you, then the longest waiting.
+- **Join** accepts the chat (or opens one assigned to you) and brings
+  WorkSuite forward on it. A moment too late, it says who has it; when a
+  colleague joins, it says so and stops.
+- **Silence** mutes one chat on this computer until it becomes at risk,
+  when it rings again with the stronger tone. At risk, high, urgent and VIP
+  chats use a stronger tone; an offline enquiry shows without ringing.
+- While a chat rings: a bar under your tabs, the tray icon and its menu
+  (**Join**, **Open Website Chats**, **Ringing settings…**), the Dock bouncing
+  on a Mac, the taskbar flashing elsewhere, and **Ctrl+Shift+J** (**⌘⇧J**)
+  joining from any app — registered only while something rings.
+- **Settings › Notifications › Website chats**: ring over other apps, what
+  Do not disturb does (the window without sound — the default; only at risk;
+  as usual), the join shortcut, the ringtone volume with a test, and starting
+  WorkSuite with the computer.
+- Locked, the window says a chat is waiting and nothing about who.
+
+**The website thread's composer (RDC-01…08, 14)**
+
+- It is Team Chat's composer now, with the website set: attach (documents,
+  images, the camera), paste, drop from the computer, emoji. Mentions, voice
+  messages, urgent, sharing records and Drive links are not there — a
+  visitor could receive none of them.
+- **Saved replies**: the first six as chips above the box, and **/** in the
+  box to find any by shortcut or title; Enter inserts it.
+- A file a visitor cannot receive (an SVG, a video, anything over 5 MB) is
+  refused before it is uploaded, with the reason.
+- Replies go through the outbox: offline, a reply shows as pending in the
+  thread and is sent once when WorkSuite reconnects; a refused one says why,
+  with Retry and Discard. Drafts stay per conversation, across restarts.
+
+**Fixed**
+
+- The "Chat assigned to you" card read the conversation to show it, and on
+  this server reading a conversation is joining it: the visitor was told you
+  had joined, and the assignment counted as seen, before you pressed
+  anything. The call window reads only the server's list of what is ringing.
+
+**Where it bites**
+
+- The server has no ring sessions, ring heartbeat or silence yet (ENH-01
+  R1): silence is for this computer only, the desktop and a browser tab can
+  both sound, and the ring stops when the server stops listing the chat
+  rather than when the visitor leaves. With the organisation's ring time set
+  (not the default), the tone stops at that time and the window stays.
+- Not in this release, as none of their server APIs exist yet: several
+  staff in a chat, invite and transfer (ENH-03); live typing and read
+  receipts (ENH-04); voice calls from the widget (ENH-05); copying a Drive
+  file to a visitor, reply quotes and delivery marks (RDC-05, 09, 10).
+
+---
+
 ## Unreleased — Multi-window docking: tabs in their own windows, and side by side
 
 Any tab can now leave the main window and come back. Drag it out of the tab
