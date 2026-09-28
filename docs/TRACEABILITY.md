@@ -89,7 +89,9 @@ blocked by something outside the code.
 |---|---|---|
 | FR-COM-01 | Partial | Three-pane mail, combined inbox, shared mailboxes, folders, read, reply/forward, archive/delete, print, attachments download; composer is plain text without attachments |
 | FR-COM-02/03 | Partial | Rooms, threads, receipts, reactions shown, files, typing, pending offline messages, mini window; sending reactions, voice notes and GIFs is on the web for now |
-| FR-COM-04..08 | Later | Meet, screen share, remote control, AI (P2/P4) |
+| FR-COM-04/05 | Done | Meet meetings in their own window; screen share through our picker only (`ScreenShare`) |
+| FR-COM-06 | Partial | Meet remote control (WS-MEET-ENH-01): controlling another shared screen (`src/modules/meet/remote`), and being controlled (`electron/services/remote-control`) — consent with local proof, signed grant, AES-GCM + HMAC channel, input through PowerShell/SendInput, osascript/CGEvent or xdotool; Wayland is share-only. File offers and handover prompts in a later change. Injection is unit-tested with a fake helper, not yet on real Windows/macOS/X11 machines |
+| FR-COM-07/08 | Later | AI (P4) |
 
 ## Devices, security, updates (SEC, UPD)
 

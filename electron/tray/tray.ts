@@ -27,6 +27,8 @@ export interface TrayModel {
   notificationsPausedUntil: string | null;
   attendance: { linked: boolean; clockedIn: boolean; since: string | null } | null;
   updateReady: boolean;
+  /** Someone controls this computer (RC04): who, and whether it is paused. First in the menu while it lasts. */
+  remoteControl: { controller: string; paused: boolean } | null;
 }
 
 export interface TrayActions {
@@ -39,6 +41,8 @@ export interface TrayActions {
   checkUpdates: () => void;
   quit: () => void;
   lock: () => void;
+  pauseRemoteControl: () => void;
+  stopRemoteControl: () => void;
 }
 
 function resourcesDir(): string {
@@ -79,6 +83,7 @@ export class TrayService {
     notificationsPausedUntil: null,
     attendance: null,
     updateReady: false,
+    remoteControl: null,
   };
   private lastState: TrayState | null = null;
 
@@ -143,6 +148,12 @@ export class TrayService {
     const m = this.model;
     const a = this.actions;
     const items: MenuItemConstructorOptions[] = [];
+    if (m.remoteControl) {
+      items.push({ label: `${m.remoteControl.controller} ${m.remoteControl.paused ? 'had control — paused' : 'is controlling this computer'}`, enabled: false });
+      if (!m.remoteControl.paused) items.push({ label: 'Pause remote control', click: a.pauseRemoteControl });
+      items.push({ label: 'Stop remote control', click: a.stopRemoteControl });
+      items.push({ type: 'separator' });
+    }
     if (m.signedIn) {
       items.push({ label: [m.userName, m.organization].filter(Boolean).join(' · ') || 'WorkSuite', enabled: false });
       items.push({ type: 'separator' });

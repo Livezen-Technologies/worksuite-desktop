@@ -5,6 +5,49 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-28 — Meet remote control (not released)
+
+WS-MEET-ENH-01, the desktop's part. The server and web sides shipped
+earlier; a browser can be watched but never controlled, so this is what
+makes remote control work.
+
+**Added**
+
+- **Control another participant's shared screen** from a meeting window:
+  Request control (with a reason, and the server's sentence when it isn't
+  offered), the wait, then mouse, wheel, keyboard, special keys and text
+  mode; Release control. Turned off by the `remote_control_controller`
+  policy.
+- **Be controlled, when you allow it.** Sharing from WorkSuite Desktop
+  registers the share as the desktop's; the picker offers the quality and
+  "Let people ask to control what I share". A request opens a prompt above
+  everything (RC03): who asks and why, what they may do, for how long.
+  Allowing needs a click with this computer's own mouse or keyboard. While
+  control lasts, a red bar stays at the top of the screen with Pause and
+  Stop (RC04), the tray says so, and the emergency chord stops it at once.
+  Moving your own mouse always wins. Control pauses by itself for the lock
+  screen, sleep, a user switch, the secure desktop, and password managers
+  or system prompts; only you resume it. Quitting asks first (RC15).
+- **Settings › Remote control** (RC09): whether this computer can be
+  controlled and why not, the default for "Let people ask", the emergency
+  chord, and on a Mac the way to Accessibility.
+
+**Needs**
+
+- **Windows:** Windows PowerShell (always there unless removed by policy).
+  Elevated windows can't be driven by a non-elevated WorkSuite.
+- **macOS:** WorkSuite in Privacy & Security › Accessibility.
+- **Linux:** an X11 session and `xdotool`. Wayland sessions can share but
+  not be controlled.
+
+**Not yet**
+
+- File offers during control, and the handover prompt's own screen, follow.
+- The input helpers have been exercised with a stand-in in the tests, not
+  yet on real Windows, macOS and X11 machines.
+
+---
+
 ## 2026-09-27 — 0.2.40: Tenders, part 3 — the document library, reports and settings
 
 Tenders is now fully native: nothing in its rail opens in the browser. The

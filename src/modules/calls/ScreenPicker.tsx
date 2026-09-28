@@ -2,12 +2,22 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { call, platform } from '../../core/bridge';
 import { Button, ErrorNote, Modal, Spinner, cx } from '../../components/ui';
+import { Select } from '../../components/Select';
 
 /** What was picked: the source, its name for "Sharing Screen 1", and whether its sound goes too. */
 export interface SharePick {
   id: string;
   name: string;
   audio: boolean;
+  /** In a meeting (RC01): how the picture is sent, and whether others may ask to control it. */
+  quality?: 'auto' | 'quality' | 'balanced' | 'performance';
+  allowRequests?: boolean;
+}
+
+/** What the meeting's picker offers about control (RC01): the person's default, and why it is not offered when it is not. */
+export interface PickerControl {
+  allowRequests: boolean;
+  unavailable: string | null;
 }
 
 /**
@@ -16,14 +26,16 @@ export interface SharePick {
  * to change what is shared without stopping. On Windows the computer's
  * sound can go with it; elsewhere the system does not allow it.
  */
-export function ScreenPicker({ onPick, onClose, changing }: { onPick: (p: SharePick) => void; onClose: () => void; changing?: boolean }) {
+export function ScreenPicker({ onPick, onClose, changing, control }: { onPick: (p: SharePick) => void; onClose: () => void; changing?: boolean; control?: PickerControl }) {
   const [tab, setTab] = useState<'screen' | 'window'>('screen');
   const [picked, setPicked] = useState<string | null>(null);
   const [audio, setAudio] = useState(false);
+  const [quality, setQuality] = useState<NonNullable<SharePick['quality']>>('auto');
+  const [allowRequests, setAllowRequests] = useState(control?.allowRequests ?? false);
   const canAudio = platform === 'win32';
   const choose = (id: string) => {
     const s = (q.data?.sources ?? []).find((x) => x.id === id);
-    onPick({ id, name: s?.name ?? 'your screen', audio: canAudio && audio });
+    onPick({ id, name: s?.name ?? 'your screen', audio: canAudio && audio, ...(control ? { quality, allowRequests: allowRequests && !control.unavailable } : {}) });
   };
   const q = useQuery({ queryKey: ['screen-sources'], queryFn: () => call('media:screenSources'), gcTime: 0, staleTime: 0 });
   const list = (q.data?.sources ?? []).filter((s) => s.kind === tab);
@@ -65,6 +77,27 @@ export function ScreenPicker({ onPick, onClose, changing }: { onPick: (p: ShareP
           </div>
         ) : null}
         {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
+        {control && !changing ? (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-[10px] border border-line px-3 py-2.5 text-[12.5px] text-ink-2">
+            <label className="flex items-center gap-2">
+              Quality
+              <Select value={quality} onChange={(e) => setQuality(e.target.value as NonNullable<SharePick['quality']>)} className="h-7 rounded-[7px] border border-line bg-surface px-1.5 text-ink" aria-label="Sharing quality">
+                <option value="auto">Automatic</option>
+                <option value="quality">Sharp text</option>
+                <option value="balanced">Balanced</option>
+                <option value="performance">Smooth motion</option>
+              </Select>
+            </label>
+            {control.unavailable ? (
+              <span className="text-ink-3">{control.unavailable}</span>
+            ) : (
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={allowRequests} onChange={(e) => setAllowRequests(e.target.checked)} className="accent-[var(--color-primary)]" />
+                Let people ask to control what I share
+              </label>
+            )}
+          </div>
+        ) : null}
         <div className="grid max-h-[360px] grid-cols-3 gap-2.5 overflow-y-auto scroll-thin" role="listbox" aria-label={tab === 'screen' ? 'Screens' : 'Windows'}>
           {list.map((s) => (
             <button

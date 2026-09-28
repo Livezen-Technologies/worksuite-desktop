@@ -39,7 +39,24 @@ const DENY: RegExp[] = [
   /^\/api\/notifications\/realtime-ticket/,
   /^\/api\/sync\//,
   /^\/api\/api-keys/,
+  // Meet remote control, the shared computer's side: allowing control, resuming it, reporting what was
+  // refused and saying what this computer can do are the main process's alone (it holds the proof of a
+  // local click and the grant). The page can still ask, cancel, pause and stop.
+  /^\/api\/meet\/control\/requests\/\d+\/answer\/?$/,
+  /^\/api\/meet\/control\/sessions\/\d+\/(resume|security)\/?$/,
+  /^\/api\/meet\/devices\/\d+\/capabilities\/?$/,
 ];
+
+/** The shared computer's grant (`?end=sharer`): its key never reaches a page. */
+function isSharerGrant(pathOnly: string, apiPath: string): boolean {
+  if (!/^\/api\/meet\/control\/sessions\/\d+\/grant\/?$/.test(pathOnly)) return false;
+  const q = apiPath.includes('?') ? apiPath.slice(apiPath.indexOf('?') + 1) : '';
+  try {
+    return [...new URLSearchParams(q).entries()].some(([k, v]) => k.startsWith('end') && v.trim().toLowerCase() === 'sharer');
+  } catch {
+    return true;
+  }
+}
 
 const FORWARD_HEADERS = ['content-type', 'accept', 'if-match', 'if-none-match', 'idempotency-key', 'x-folder-password', 'range'];
 const RETURN_HEADERS = ['content-type', 'content-disposition', 'content-length', 'etag', 'last-modified', 'accept-ranges', 'content-range', 'retry-after'];
@@ -64,6 +81,7 @@ export function isProxyPathAllowed(apiPath: string, method = 'GET'): boolean {
   if (pathOnly.includes('..') || pathOnly.includes('//')) return false;
   const m = method.toUpperCase();
   if (ACCOUNT.some(([re, methods]) => re.test(pathOnly) && methods.includes(m))) return true;
+  if (isSharerGrant(pathOnly, apiPath)) return false;
   return !DENY.some((re) => re.test(pathOnly));
 }
 

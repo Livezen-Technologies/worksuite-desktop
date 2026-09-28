@@ -28,6 +28,43 @@ main-process dialog or dropped (converted to paths in the preload from real
 download folder; "open" and "show in folder" only act on canonical paths
 inside it.
 
+## Meet remote control (WS-MEET-ENH-01 §E)
+
+Being controlled is the main process's business, never a page's:
+
+- **The key never reaches a page.** The API proxy refuses the shared
+  computer's grant (`grant?end=sharer`), answering a request, resuming,
+  security reports and capability reports; only the main process makes those
+  calls. A meeting window relays data-channel messages it cannot read.
+- **Consent needs this computer's own hand.** The prompt (RC03) is a window
+  of its own, above everything and left out of screen capture. Allowing
+  counts only if a real mouse-down or key-down reached that window in the last
+  ten seconds and nothing was injected for 1.5 s before it; nothing at all is
+  injected while a prompt is open. Resuming works the same way, from the
+  control bar only.
+- **The grant is checked before use**: Ed25519 over the exact signed bytes,
+  with the pinned policy key when the build has one; then session, meeting,
+  share identity, this device, expiry and key length.
+- **Every message** passes `ControlReceiver` (MAC, sender, per-channel
+  sequence, lease, state, capability, bounds, reserved chords, rate), then
+  this computer's gates: a prompt open, the person here moving the mouse
+  (they win for the policy's hold), a window share whose window is not in
+  front (keys wait), the share paused. A burst pauses control and is
+  reported; other refusals are counted and reported every ten seconds.
+- **Pauses**: lock screen, sleep, user switch, the secure desktop, and
+  password managers or system prompts in front. A pause made here holds
+  until the person resumes, which rotates the key. The emergency chord
+  (policy, default Ctrl+Alt+Shift+Esc) is a global shortcut while control
+  lasts and is never injected.
+- **Input helpers** are the system's own — PowerShell hosting a fixed C#
+  class calling SendInput (Windows), osascript posting CGEvents (macOS, needs
+  Accessibility), xdotool (X11) — started only while control is live, with
+  fixed scripts. They take numbers, key names from a fixed table and
+  base64 text; nothing from the controller is put into a command line.
+  Windows' UIPI keeps a non-elevated WorkSuite from driving elevated windows,
+  and Ctrl+Alt+Delete cannot be injected by any app; the controller is told.
+- **Quitting** while controlled or sharing asks first, and stops both.
+
 ## Credentials (FR-AUTH-02, FR-SEC-03, AC-21)
 
 - Access token: main-process memory only.

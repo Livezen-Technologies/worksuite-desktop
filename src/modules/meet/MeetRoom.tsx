@@ -55,6 +55,15 @@ export function MeetRoom() {
   // Sharing and control in this meeting, as the server sees it: asking to control a shared screen, and controlling it.
   const uuid = meet.uuid;
   useEffect(() => remote.start(uuid), [uuid]);
+  // Whether this computer can be controlled, for the picker's "Let people ask to control" (RC01).
+  const rcView = useQuery({ queryKey: ['rc-state'], queryFn: () => call('rc:state'), enabled: picking === 'start', staleTime: 0 });
+  const pickerControl = rcView.data
+    ? {
+        allowRequests: rcView.data.allowRequests,
+        unavailable: !rcView.data.support.policyAllows ? "This computer's policy doesn't let others control it." : rcView.data.support.available ? null : rcView.data.support.reason,
+      }
+    : undefined;
+  const controlNote = sharing && meet.control ? (meet.control.offered ? ' · others can ask to control it' : '') : '';
   const panelOn = (tab: string) => ui.panelOpen && ui.panelTab === tab;
 
   const buttons: ControlButton[] = [
@@ -177,12 +186,13 @@ export function MeetRoom() {
         buttons={buttons}
         more={more}
         end={{ label: 'Leave the meeting', onClick: () => void meet.leave(), menu: meet.isHost ? [{ label: 'End for everyone', icon: 'phone-off', danger: true, onClick: () => setEnding(true) }] : undefined }}
-        status={sharing ? (paused ? `Sharing ${meet.shareLabel ?? 'your screen'} — paused` : `You are sharing ${meet.shareLabel ?? 'your screen'}`) : null}
+        status={sharing ? (paused ? `Sharing ${meet.shareLabel ?? 'your screen'} — paused` : `You are sharing ${meet.shareLabel ?? 'your screen'}${controlNote}`) : null}
         screenLayer={(sharer) => <RemoteControlLayer sharer={sharer} />}
       />
-      {picking ? (
+      {picking && (picking === 'change' || !rcView.isLoading) ? (
         <ScreenPicker
           changing={picking === 'change'}
+          control={pickerControl}
           onClose={() => setPicking(null)}
           onPick={(pick) => {
             setPicking(null);

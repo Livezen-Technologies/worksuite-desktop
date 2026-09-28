@@ -24,6 +24,7 @@ const SECTIONS = [
   { id: 'desktop', label: 'Desktop', icon: 'monitor' },
   { id: 'files', label: 'Files & Sync', icon: 'folder' },
   { id: 'offline', label: 'Offline', icon: 'cloud-off' },
+  { id: 'remote-control', label: 'Remote control', icon: 'screen-share' },
   { id: 'monitoring', label: 'Monitoring', icon: 'eye' },
   { id: 'about', label: 'About', icon: 'info' },
 ] as const;
@@ -54,6 +55,7 @@ export default function SettingsPage(_props: ModuleProps) {
           {section === 'desktop' ? <DesktopSection prefs={prefs} /> : null}
           {section === 'files' ? <FilesSection prefs={prefs} /> : null}
           {section === 'offline' ? <OfflineSection prefs={prefs} /> : null}
+          {section === 'remote-control' ? <RemoteControlSection /> : null}
           {section === 'monitoring' ? <Monitoring /> : null}
           {section === 'about' ? <About /> : null}
         </div>
@@ -445,6 +447,57 @@ function OfflineSection({ prefs }: { prefs: Preferences }) {
           Clear saved data
         </Button>
       </div>
+    </>
+  );
+}
+
+/** RC09: whether others can control this computer in a meeting, and what it needs to. */
+export function methodLabel(method: string | null): string {
+  return method === 'sendinput' ? 'Windows input (SendInput, through PowerShell)' : method === 'cgevent' ? 'macOS events (CGEvent, through osascript)' : method === 'xdotool' ? 'xdotool (X11)' : 'None';
+}
+
+function RemoteControlSection() {
+  const q = useQuery({ queryKey: ['rc-state'], queryFn: () => call('rc:state'), refetchInterval: 5_000 });
+  const v = q.data;
+  const set = async (value: boolean) => {
+    try {
+      await call('rc:setAllowRequests', { value });
+      void q.refetch();
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
+  if (!v) return <H title="Remote control" />;
+  const s = v.support;
+  const works = s.available && s.policyAllows;
+  return (
+    <>
+      <H title="Remote control" hint="When you share your screen in a meeting, others can ask to use your mouse and keyboard. Nothing happens until you allow it, on this computer, each time." />
+      <div className={cx('mb-4 rounded-[12px] border p-4 text-[13.5px]', works ? 'border-line bg-surface' : 'border-[#F1D9B5] bg-[#FFF9EC] dark:bg-warning-bg')}>
+        <div className="flex items-center gap-2 font-semibold text-ink">
+          <Icon name={works ? 'shield-check' : 'warning'} size={17} className={works ? 'text-success' : 'text-warning'} />
+          {works ? 'This computer can be controlled when you allow it' : 'This computer can be shared, but not controlled'}
+        </div>
+        {!works ? <p className="mt-1.5 text-ink-2">{!s.policyAllows ? "Your organization's policy for this computer doesn't allow it." : s.reason}</p> : null}
+        {s.accessibility === 'denied' ? (
+          <Button className="mt-2.5" size="sm" onClick={() => void call('media:privacySettings', { pane: 'accessibility' })}>
+            Open Accessibility settings
+          </Button>
+        ) : null}
+      </div>
+      <Row label="Let people ask to control my screen" hint="The starting choice each time you share; you can change it in the share picker.">
+        <Switch label="Let people ask to control my screen" checked={v.allowRequests} disabled={!works} onChange={(x) => void set(x)} />
+      </Row>
+      <Row label="Emergency stop" hint="Ends control at once, whatever the other person is doing. It is never passed on to them.">
+        <span className="font-mono text-[13px] text-ink">{v.emergencyChord}</span>
+        {!v.chordRegistered ? <span className="ml-2 text-[12px] text-warning">Another app holds this shortcut — use Stop on the bar instead.</span> : null}
+      </Row>
+      <Row label="How input reaches this computer" hint="The system's own tools, started only while someone has control.">
+        <span className="text-[13px] text-ink-2">{methodLabel(s.method)}</span>
+      </Row>
+      <p className="mt-4 text-[12.5px] leading-relaxed text-ink-3">
+        While someone has control, a red bar stays at the top of your screen with Pause and Stop. Moving your own mouse always wins: their input waits until you stop. Control pauses by itself when the screen locks, the computer sleeps, or a password manager or system prompt comes to the front, and only you can resume it.
+      </p>
     </>
   );
 }

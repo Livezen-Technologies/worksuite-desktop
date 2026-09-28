@@ -1,4 +1,4 @@
-import { app, crashReporter, ipcMain, powerMonitor, screen, session, BrowserWindow, type WebContents } from 'electron';
+import { app, crashReporter, dialog, ipcMain, powerMonitor, screen, session, systemPreferences, BrowserWindow, type WebContents } from 'electron';
 import { join, resolve } from 'node:path';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
 import { resolveWebLink } from '@shared/links';
@@ -24,6 +24,8 @@ import { AuthService } from '../services/auth';
 import { BootstrapService } from '../services/bootstrap';
 import { CallService } from '../services/calls';
 import { ScreenShare } from '../services/screen-share';
+import { createRemoteControl } from '../services/remote-control/host';
+import { DEFAULT_POLICY } from '../services/policy';
 import { Database } from '../services/db';
 import { archName, DeviceService, platformName } from '../services/device';
 import { DiagnosticsService } from '../services/diagnostics';
@@ -202,6 +204,34 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const calls = new CallService(windows, http, () => sessionCtl.isReady() && !lock.isLocked());
   const screenShare = new ScreenShare(isTrustedShellUrl);
   screenShare.install(session.defaultSession);
+  // Meet remote control on this computer (WS-MEET-ENH-01): the share, consent, grant and input live here.
+  const remoteControl = createRemoteControl({
+    db,
+    http,
+    windows,
+    screenShare,
+    deviceId: () => {
+      const id = Number(device.current()?.id);
+      return Number.isInteger(id) && id > 0 ? id : null;
+    },
+    policy: () => sessionCtl?.current()?.policy ?? DEFAULT_POLICY,
+    pinnedKey: POLICY_PUBLIC_KEY,
+    broadcast: (view) => {
+      broadcast('rc:changed', view);
+      tray.update({ remoteControl: view.session ? { controller: view.session.controller, paused: view.session.status === 'CONTROL_PAUSED' } : null });
+    },
+    toast: (text) => broadcast('toast', { kind: 'info', text }),
+  });
+  const reportCapabilities = (): void => {
+    const screenPermission = process.platform === 'darwin' ? systemPreferences.getMediaAccessStatus('screen') : 'not_required';
+    void remoteControl.reportCapabilities({
+      platform: platformName() as 'windows' | 'macos' | 'linux',
+      osVersion: `${process.getSystemVersion?.() ?? ''}`,
+      desktopVersion: app.getVersion(),
+      screenPermission,
+      displays: screen.getAllDisplays().length,
+    });
+  };
   calls.poll(() => realtime.getState() === 'connected');
 
   const realtime = new RealtimeService(http, () => auth.getServer()?.origin ?? null, allowInsecure);
@@ -424,6 +454,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   realtime.onEvent = (e) => {
     notifications.handleRealtime(e);
     calls.handle(e);
+    remoteControl.onRealtime(e as { type?: string; meeting?: string });
     broadcast('realtime:event', e);
     if (e.type === 'profile.updated') void sessionCtl.refreshBootstrap().catch(() => undefined);
   };
@@ -516,6 +547,21 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   // ── the tray ───────────────────────────────────────────────────────────
   const quit = (): void => {
+    // RC15: someone controls this computer or it is being shared — say what quitting ends first.
+    if (remoteControl.isLive() || remoteControl.isSharing()) {
+      const live = remoteControl.view().session;
+      const choice = dialog.showMessageBoxSync({
+        type: 'warning',
+        buttons: [live ? 'Stop control and quit' : 'Stop sharing and quit', 'Cancel'],
+        defaultId: 1,
+        cancelId: 1,
+        title: 'Quit WorkSuite?',
+        message: live ? `${live.controller} is controlling this computer.` : 'You are sharing your screen in a meeting.',
+        detail: live ? 'Quitting stops remote control and screen sharing, and leaves the meeting.' : 'Quitting stops sharing and leaves the meeting.',
+      });
+      if (choice !== 0) return;
+      void remoteControl.shutdown('stopped');
+    }
     windows.quitting = true;
     // Leave any call first, so the other side is not left talking to nobody.
     void Promise.race([calls.endAll(), new Promise((r) => setTimeout(r, 2_000))]).finally(() => app.quit());
@@ -536,6 +582,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
     quit,
     lock: () => lock.lock('manual'),
+    pauseRemoteControl: () => {
+      const s = remoteControl.view().session;
+      if (s) void remoteControl.pause(s.id, 'sharer');
+    },
+    stopRemoteControl: () => void remoteControl.stopAll('stopped'),
   });
 
   // ── the session ────────────────────────────────────────────────────────
@@ -559,12 +610,15 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void heartbeatPresence();
     presenceTimer = setInterval(() => void heartbeatPresence(), 30_000);
     presenceTimer.unref?.();
+    // What this computer can do for Meet remote control (WF-RC-08), once the device is known.
+    setTimeout(reportCapabilities, 5_000).unref?.();
     // FR-OFF-06: prune mail bodies beyond the cache window.
     const days = settings.effective().mailCacheDays;
     if (days > 0) cache.pruneModuleOlderThan('mail', days);
     emitStatus();
   };
   const stopServices = (): void => {
+    void remoteControl.shutdown('logout');
     realtime.stop();
     notifications.stop();
     device.stop();
@@ -709,6 +763,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   const pasteGestures = new Map<number, number>();
   app.on('web-contents-created', (_e, contents: WebContents) => {
+    // A meeting window that goes away takes its share, and any control of it, with it.
+    const id = contents.id;
+    contents.once('destroyed', () => {
+      remoteControl.windowGone(id);
+      screenShare.forget(id);
+    });
     contents.on('before-input-event', (_ev, input) => {
       if (input.type === 'keyDown' && (input.control || input.meta) && input.key.toLowerCase() === 'v') pasteGestures.set(contents.id, Date.now());
     });
@@ -768,6 +828,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     windows,
     calls,
     screenShare,
+    remoteControl,
     tray,
     status: snapshot,
     setActiveCall: (a) => {
@@ -830,6 +891,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     db.close();
     markCleanExit(p.runningMarker);
   });
+  // The screen locked, sleep, another user: control pauses on this computer (§E.6).
+  powerMonitor.on('lock-screen', () => remoteControl.onSystem('lock-screen'));
+  powerMonitor.on('suspend', () => remoteControl.onSystem('suspend'));
+  powerMonitor.on('user-did-resign-active', () => remoteControl.onSystem('user-did-resign-active'));
   powerMonitor.on('resume', () => {
     device.poke();
     realtime.kick();
