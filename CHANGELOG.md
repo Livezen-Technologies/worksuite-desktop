@@ -15,6 +15,11 @@ Notes, Mail and Files, HR and the other apps without an app of their own on
 the server stay on for everyone, and anything else appears only once it is
 granted. Everything below asks that one list.
 
+Your own payslips and your own expense claims stay yours, like HR: My pay in
+HR, its downloads and payslip notifications work without the Payroll app,
+and without the Expenses app you still open Expenses to file and follow your
+own claims (the server shows you only those).
+
 **Changed**
 
 - **Tabs.** A tab never opens on an app you may not open — not from a link,

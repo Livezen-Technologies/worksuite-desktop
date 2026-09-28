@@ -11,8 +11,22 @@ export type LinkTarget = { kind: 'tab'; route: string; app: string } | { kind: '
 const PATH = /^\/[A-Za-z0-9/_\-.?=&%:,]*$/;
 const ACCOUNT_TABS = ['general', 'preferences', 'notifications', 'security', 'pictures'];
 
+/**
+ * Paths under another app's that are everyone's own, and where the desktop
+ * shows them: a person's own pay (`/payroll/me…`) is HR's My pay, Payroll or
+ * not.
+ */
+const OWN: Array<{ prefix: string; app: string; route: string }> = [{ prefix: '/payroll/me', app: 'hr', route: '/hr?tab=mypay' }];
+
+function ownPath(path: string) {
+  const clean = path.split(/[?#]/)[0]!;
+  return OWN.find((o) => clean === o.prefix || clean.startsWith(`${o.prefix}/`));
+}
+
 /** The catalogue app a WorkSuite web path belongs to (the longest `webPath` it sits under); none for Home's `/` and for paths of no app. */
 export function appForWebPath(path: string, catalogue: AppDefinition[] = APP_CATALOGUE): AppDefinition | undefined {
+  const own = ownPath(path);
+  if (own) return catalogue.find((a) => a.id === own.app);
   const clean = path.split(/[?#]/)[0]!;
   let best: AppDefinition | undefined;
   for (const a of catalogue) {
@@ -36,6 +50,8 @@ export function resolveWebLink(link: string | null | undefined, catalogue: AppDe
     const section = acct[1] === 'security' || acct[1] === 'access' ? acct[1] : ACCOUNT_TABS.includes(tab) ? tab : acct[1] === 'settings' ? 'general' : 'profile';
     return { kind: 'tab', route: `/account/${section}`, app: 'account' };
   }
+  const own = ownPath(path);
+  if (own) return { kind: 'tab', route: own.route, app: own.app };
   const app = appForWebPath(path, catalogue);
   if (!app) return { kind: 'browser', path, app: null };
   if (app.surface === 'native') {

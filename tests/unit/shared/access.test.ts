@@ -9,7 +9,8 @@ import {
   notificationAllowed,
   visibleAppIds,
 } from '@shared/access';
-import { appForWebPath } from '@shared/links';
+import { APP_CATALOGUE, isSelfService, visibleApps } from '@shared/apps';
+import { appForWebPath, resolveWebLink } from '@shared/links';
 
 /**
  * "If a person is not granted an app, don't show it anywhere." One decision
@@ -97,5 +98,44 @@ describe('notifications', () => {
     expect(notificationAllowed({ module: 'mail', link: '/mail' }, visibleAppIds(boot(['chat'])))).toBe(false);
     expect(notificationAllowed({ module: 'chat', link: '/chat?room=4' }, everyday)).toBe(true);
     expect(notificationAllowed({ module: 'system', link: null }, new Set())).toBe(true);
+  });
+});
+
+describe('self-service apps: their own claims, without the app', () => {
+  const grant = { apps: ['mail', 'chat'], permissions: [], serverApps: ['mail', 'chat'], selfService: ['expenses'] };
+
+  it('shows the app, marked self-service, so it can be opened — and nothing else it names', () => {
+    const exp = visibleApps(grant).find((a) => a.id === 'expenses');
+    expect(exp?.selfService).toBe(true);
+    expect(visibleApps(grant).find((a) => a.id === 'mail')?.selfService).toBeUndefined();
+    const visible = visibleAppIds(grant);
+    expect(canOpenApp('expenses', visible)).toBe(true);
+    expect(canOpenWebPath('/expenses', visible)).toBe(true);
+    expect(canOpenLink('/expenses?claim=7', visible)).toBe(true);
+    expect(notificationAllowed({ category: 'expenses', link: '/expenses?claim=7' }, visible)).toBe(true);
+    expect(categoryVisible('expenses', visible)).toBe(true);
+  });
+
+  it('is not self-service for whoever has the full app, and nothing without the server saying so', () => {
+    const def = APP_CATALOGUE.find((a) => a.id === 'expenses')!;
+    expect(isSelfService(def, { ...grant, apps: ['mail', 'expenses'], serverApps: ['mail', 'expenses'] })).toBe(false);
+    expect(isSelfService(def, { apps: '*', permissions: ['*'], selfService: ['expenses'] })).toBe(false);
+    expect(visibleAppIds({ ...grant, selfService: [] }).has('expenses')).toBe(false);
+    expect(visibleAppIds({ apps: ['mail'], permissions: [] }).has('expenses')).toBe(false);
+  });
+});
+
+describe('own payslips are everyone’s (HR’s My pay), Payroll or not', () => {
+  it('opens a /payroll/me link in HR’s My pay', () => {
+    expect(resolveWebLink('/payroll/me/payslips/PS-1')).toEqual({ kind: 'tab', route: '/hr?tab=mypay', app: 'hr' });
+    expect(appForWebPath('/payroll/me')?.id).toBe('hr');
+    expect(canOpenLink('/payroll/me/payslips/PS-1', everyday)).toBe(true);
+    expect(canOpenLink('/hr?tab=mypay', everyday)).toBe(true);
+  });
+
+  it('keeps the Pay and payslips category for everyone, and Payroll itself gated', () => {
+    expect(categoryVisible('payroll', everyday)).toBe(true);
+    expect(canOpenApp('payroll', everyday)).toBe(false);
+    expect(canOpenLink('/payroll?tab=runs', everyday)).toBe(false);
   });
 });

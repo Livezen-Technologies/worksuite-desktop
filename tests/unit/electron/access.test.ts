@@ -30,7 +30,7 @@ vi.mock('electron', () => ({
 const opened: string[] = [];
 vi.mock('../../../electron/security/hardening', () => ({ openExternalSafely: async (url: string) => (opened.push(url), true), APP_ORIGIN: 'app://worksuite', devOrigin: () => null }));
 
-import { visibleAppIds } from '@shared/access';
+import { canOpenApp, canOpenLink, notificationAllowed, visibleAppIds } from '@shared/access';
 import type { Preferences } from '@shared/types';
 import { AccessWatch, assertRoute, assertWebPath, NO_ACCESS } from '../../../electron/main/access';
 import { isDesktopError } from '../../../electron/main/errors';
@@ -38,6 +38,10 @@ import { registerHandlers } from '../../../electron/main/handlers';
 import type { AppContext } from '../../../electron/main/context';
 import { menuTemplate } from '../../../electron/main/menu';
 import type { IpcRouter } from '../../../electron/ipc/router';
+import { BootstrapService } from '../../../electron/services/bootstrap';
+import { Database } from '../../../electron/services/db';
+import type { HttpClient } from '../../../electron/services/http';
+import { Vault } from '../../../electron/services/vault';
 import { NotificationService } from '../../../electron/services/notifications';
 import { trayMenu, type TrayModel } from '../../../electron/tray/tray';
 import { windowRoute } from '../../../electron/windows/manager';
@@ -78,15 +82,18 @@ describe('the main process refuses what the bootstrap does not allow', () => {
   describe('over IPC', () => {
     const handlers = new Map<string, (input: unknown, c: unknown) => unknown>();
     const windowsOpen = vi.fn(() => ({ id: 9 }));
+    const download = vi.fn(async (path: string) => ({ id: 't1', path }));
     beforeEach(() => {
       handlers.clear();
       opened.length = 0;
       windowsOpen.mockClear();
+      download.mockClear();
       const router = { handle: (ch: string, fn: (input: unknown, c: unknown) => unknown) => void handlers.set(ch, fn) } as unknown as IpcRouter;
       const ctx = {
         auth: { getServer: () => ({ origin: 'https://ws.example' }) },
         session: { visibleApps: () => everyday },
         windows: { open: windowsOpen },
+        transfers: { download },
       } as unknown as AppContext;
       registerHandlers(router, ctx);
     });
@@ -105,6 +112,12 @@ describe('the main process refuses what the bootstrap does not allow', () => {
       expect(opened).toEqual([]);
       await call('app:openExternal', { url: 'https://example.com/crm' });
       expect(opened).toEqual(['https://example.com/crm']);
+    });
+
+    it('downloads the person’s own payslip without the Payroll app', async () => {
+      expect(everyday.has('payroll')).toBe(false);
+      await call('transfers:download', { payslip: 'PS-2026-09-7', name: 'Payslip.pdf', open: true });
+      expect(download).toHaveBeenCalledWith('/api/payroll/me/payslips/PS-2026-09-7/pdf', 'Payslip.pdf', true, null);
     });
 
     it('windows:open never opens a window on an app the person was not given', () => {
@@ -231,5 +244,50 @@ describe('OS notifications', () => {
     svc.notify({ id: '2', module: 'expenses', category: 'expenses', title: 'Claim approved', body: '', sender: null, link: null, critical: true });
     svc.notify({ id: '3', module: 'tasks', category: 'projects', title: 'Task due', body: 'Report', sender: null, link: '/tasks?task=3', critical: false });
     expect(shown.map((s) => s.title)).toEqual(['Task due']);
+  });
+});
+
+describe('the bootstrap says which apps are self-service', () => {
+  const answer = (routes: Record<string, unknown>) =>
+    ({
+      get: async (path: string) => {
+        if (path in routes) return routes[path];
+        throw new Error(`no ${path}`);
+      },
+    }) as unknown as HttpClient;
+  const service = (routes: Record<string, unknown>) => new BootstrapService(new Database(':memory:'), () => new Vault(Vault.generateKey()), answer(routes), null);
+  const user = { id: 7, name: 'Nuwan', email: 'n@ws.example' };
+
+  it('reads self_service from a desktop-API server', async () => {
+    const b = await service({ '/desktop/v1/bootstrap': { user, organizations: [], apps: ['mail', 'chat'], self_service: ['worksuite.expenses', { slug: 'x' }, 3] } }).fetch('desktop-v1');
+    expect(b.selfService).toEqual(['expenses', 'x']);
+  });
+
+  it('reads self_service from /api/auth/me on a core server', async () => {
+    const b = await service({ '/api/auth/me': { user, permissions: [], apps: ['mail'], self_service: ['expenses'] } }).fetch('core');
+    expect(b.selfService).toEqual(['expenses']);
+  });
+
+  it('has none when an older server does not say', async () => {
+    expect((await service({ '/desktop/v1/bootstrap': { user, apps: ['mail'] } }).fetch('desktop-v1')).selfService).toEqual([]);
+    expect((await service({ '/api/auth/me': { user, apps: ['mail'] } }).fetch('core')).selfService).toEqual([]);
+  });
+
+  it('keeps a self-service app open to its person: Expenses to file their own claims', async () => {
+    const b = await service({ '/desktop/v1/bootstrap': { user, apps: ['mail', 'chat'], self_service: ['expenses'] } }).fetch('desktop-v1');
+    const visible = visibleAppIds(b);
+    expect(canOpenApp('expenses', visible)).toBe(true);
+    expect(canOpenLink('/expenses?claim=12', visible)).toBe(true);
+    expect(notificationAllowed({ module: 'expenses', category: 'expenses', link: '/expenses?claim=12' }, visible)).toBe(true);
+    expect(canOpenApp('finance', visible)).toBe(false);
+  });
+});
+
+describe('own payslips without Payroll', () => {
+  it('lets the payslip notification (HR’s My pay) through, and keeps payroll runs out', () => {
+    expect(notificationAllowed({ module: 'payroll', category: 'payroll', link: '/hr?tab=mypay' }, everyday)).toBe(true);
+    expect(notificationAllowed({ module: 'payroll', category: 'payroll', link: '/payroll?tab=runs' }, everyday)).toBe(false);
+    expect(refused(() => assertWebPath('/payroll/me/payslips/PS-1/pdf', everyday))).toBe(false);
+    expect(refused(() => assertWebPath('/payroll?tab=runs', everyday))).toBe(true);
   });
 });

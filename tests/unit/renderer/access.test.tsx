@@ -76,6 +76,19 @@ describe('links (openWebLink)', () => {
   });
 });
 
+describe('their own claims and payslips', () => {
+  it('opens a claim for somebody who has Expenses only for themselves, and a payslip in HR without Payroll', () => {
+    app.set({ apps: visibleApps({ apps: ['mail'], permissions: [], selfService: ['expenses'] }) });
+    expect(app.get().apps.find((a) => a.id === 'expenses')?.selfService).toBe(true);
+    openWebLink('/expenses?claim=2');
+    expect(openInBrowser).toHaveBeenCalledWith({ path: '/expenses?claim=2' });
+    openWebLink('/payroll/me/payslips/PS-1');
+    expect(tabsStore.get().tabs.some((t) => t.app === 'hr' && t.route === '/hr?tab=mypay')).toBe(true);
+    openWebLink('/payroll?tab=runs');
+    expect(lastToast()).toBe("You don't have access to this.");
+  });
+});
+
 describe('tabs', () => {
   it('never opens a tab on an app the person may not open', () => {
     expect(openTab('/crm')).toBeNull();

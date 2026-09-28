@@ -14,7 +14,9 @@
  * from the people who needed them (see web/src/core/sidebar/apps.ts).
  *
  * Apps that fail a gate are not returned at all: no greyed-out entries
- * (FR-REG-05).
+ * (FR-REG-05). One exception, decided by the server too: an app the person
+ * may open only for themselves (`selfService`, e.g. Expenses for filing
+ * their own claims) is returned, marked `selfService`, even without the app.
  */
 
 export type LauncherGroup = 'communication' | 'work' | 'business' | 'people' | 'operations' | 'admin';
@@ -56,6 +58,8 @@ export interface AppDefinition {
   /** Badge counter key (from /api/badges or module unread endpoints). */
   badge?: 'mail' | 'chat' | 'tasks' | 'notifications';
   keywords?: string;
+  /** Set on a visible app the person has only in self-service mode (their own claims), not the full app. */
+  selfService?: boolean;
 }
 
 export const APP_CATALOGUE: AppDefinition[] = [
@@ -115,6 +119,8 @@ export interface AccessGrant {
   permissions: string[];
   /** App slugs the server resolved through all its gates (/desktop/v1), when it provides them. */
   serverApps?: string[] | null;
+  /** App slugs the person may open only in self-service mode, lacking the full app (the bootstrap's `self_service`). */
+  selfService?: string[] | null;
 }
 
 export function hasPermission(grant: AccessGrant, perm: string | undefined): boolean {
@@ -128,7 +134,8 @@ export function hasAppAccess(grant: AccessGrant, slug: string | undefined): bool
   return grant.apps.includes('*') || grant.apps.includes(slug);
 }
 
-export function isAppVisible(def: AppDefinition, grant: AccessGrant): boolean {
+/** The full app, through every gate. */
+function hasFullApp(def: AppDefinition, grant: AccessGrant): boolean {
   // When the server resolves the gates itself (/desktop/v1/apps), its answer
   // is authoritative for gates 1–4 and 6: an app it did not return is not
   // shown, whatever the local catalogue says.
@@ -136,8 +143,25 @@ export function isAppVisible(def: AppDefinition, grant: AccessGrant): boolean {
   return hasAppAccess(grant, def.app) && hasPermission(grant, def.perm);
 }
 
+/**
+ * The person has this app only in self-service mode: the server lists its
+ * slug in `self_service` (they may file their own claims) and they lack the
+ * full app. The server shows them only their own part of it.
+ */
+export function isSelfService(def: AppDefinition, grant: AccessGrant): boolean {
+  return !!def.app && !!grant.selfService?.includes(def.app) && !hasFullApp(def, grant);
+}
+
+export function isAppVisible(def: AppDefinition, grant: AccessGrant): boolean {
+  return hasFullApp(def, grant) || isSelfService(def, grant);
+}
+
+/** The apps the person may open, in order; a self-service one is marked `selfService`. */
 export function visibleApps(grant: AccessGrant, catalogue: AppDefinition[] = APP_CATALOGUE): AppDefinition[] {
-  return catalogue.filter((d) => isAppVisible(d, grant)).sort((a, b) => a.order - b.order);
+  return catalogue
+    .filter((d) => isAppVisible(d, grant))
+    .map((d) => (isSelfService(d, grant) ? { ...d, selfService: true } : d))
+    .sort((a, b) => a.order - b.order);
 }
 
 export function findApp(id: string, catalogue: AppDefinition[] = APP_CATALOGUE): AppDefinition | undefined {

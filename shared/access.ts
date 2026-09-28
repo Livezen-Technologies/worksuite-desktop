@@ -27,13 +27,16 @@ export interface VisibleApps {
 
 const CATALOGUE_IDS = new Set(APP_CATALOGUE.map((a) => a.id));
 
-/** The grant a bootstrap carries. */
-export function grantOf(b: { apps: AccessGrant['apps']; permissions: string[]; serverApps?: string[] | null }): AccessGrant {
-  return { apps: b.apps, permissions: b.permissions, serverApps: b.serverApps ?? null };
+/** What of a bootstrap decides access. */
+export type Grantable = { apps: AccessGrant['apps']; permissions: string[]; serverApps?: string[] | null; selfService?: string[] | null };
+
+/** The grant a bootstrap carries, self-service apps included (absent on older servers and cached copies). */
+export function grantOf(b: Grantable): AccessGrant {
+  return { apps: b.apps, permissions: b.permissions, serverApps: b.serverApps ?? null, selfService: b.selfService ?? [] };
 }
 
-/** The catalogue ids of the apps a bootstrap allows; none without one. */
-export function visibleAppIds(b: { apps: AccessGrant['apps']; permissions: string[]; serverApps?: string[] | null } | null | undefined): Set<string> {
+/** The catalogue ids of the apps a bootstrap allows (self-service ones included); none without one. */
+export function visibleAppIds(b: Grantable | null | undefined): Set<string> {
   return new Set(b ? visibleApps(grantOf(b)).map((a) => a.id) : []);
 }
 
@@ -114,7 +117,8 @@ export const NOTIFICATION_CATEGORY_APPS: Readonly<Record<string, readonly string
   hrm: ['hr'],
   leave: ['hr'],
   attendance: ['hr'],
-  payroll: ['payroll'],
+  // "Pay and payslips": a person's own payslips are everyone's (HR's My pay), Payroll or not.
+  payroll: ['payroll', 'hr'],
   expenses: ['expenses'],
   finance: ['finance'],
   marketing: ['marketing'],
