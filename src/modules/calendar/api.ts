@@ -55,17 +55,21 @@ export interface EventDetail extends CalendarEvent {
   participants: Participant[];
 }
 
-/** The SHOW filters of CalendarWeek: which sources each one covers, and its colour. */
-export const CATEGORIES: Array<{ id: string; label: string; color: string; sources: (s: string) => boolean }> = [
+/**
+ * The SHOW filters of CalendarWeek: which sources each one covers, and its
+ * colour. `apps`: the catalogue apps a category's entries come from — it is
+ * listed only while the person has one of them (none = the calendar's own, or HR's).
+ */
+export const CATEGORIES: Array<{ id: string; label: string; color: string; sources: (s: string) => boolean; apps?: string[] }> = [
   { id: 'events', label: 'Events', color: '#0E7C86', sources: (s) => s === 'event' },
-  { id: 'meetings', label: 'Meetings', color: '#23349E', sources: (s) => s === 'meeting' || s === 'businessmeeting' },
-  { id: 'tasks', label: 'Tasks', color: '#9A4A06', sources: (s) => s === 'task' },
+  { id: 'meetings', label: 'Meetings', color: '#23349E', sources: (s) => s === 'meeting' || s === 'businessmeeting', apps: ['meet', 'meetings'] },
+  { id: 'tasks', label: 'Tasks', color: '#9A4A06', sources: (s) => s === 'task', apps: ['tasks'] },
   { id: 'leave', label: 'Your leave', color: '#6B3FB5', sources: (s) => s === 'leave' },
   { id: 'holidays', label: 'Public holidays', color: '#B42318', sources: (s) => s === 'holiday' },
-  { id: 'projects', label: 'Projects & sprints', color: '#1F7A4D', sources: (s) => s.startsWith('project_') },
-  { id: 'tenders', label: 'Tender closing', color: '#B45309', sources: (s) => s === 'tender' },
-  { id: 'assets', label: 'Assets (licence, warranty, maintenance)', color: '#4A5168', sources: (s) => s.startsWith('asset_') },
-  { id: 'renewals', label: 'Subscription renewals', color: '#B83280', sources: (s) => s === 'subscription' },
+  { id: 'projects', label: 'Projects & sprints', color: '#1F7A4D', sources: (s) => s.startsWith('project_'), apps: ['projects'] },
+  { id: 'tenders', label: 'Tender closing', color: '#B45309', sources: (s) => s === 'tender', apps: ['tenders'] },
+  { id: 'assets', label: 'Assets (licence, warranty, maintenance)', color: '#4A5168', sources: (s) => s.startsWith('asset_'), apps: ['assets'] },
+  { id: 'renewals', label: 'Subscription renewals', color: '#B83280', sources: (s) => s === 'subscription', apps: ['subscriptions'] },
 ];
 
 export function categoryOf(source: string): string {

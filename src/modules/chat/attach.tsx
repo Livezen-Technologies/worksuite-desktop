@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PickedFile } from '@shared/ipc/contract';
 import type { Transfer } from '@shared/types';
+import { useCanOpen } from '../../core/access';
 import { ApiError, apiPost } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
 import { bytes } from '../../core/time';
@@ -27,6 +28,9 @@ const CHOICES: Array<{ id: AttachChoice; icon: string; label: string; hint: stri
 export function AttachMenu({ onPick, onClose, compact, align = 'left' }: { onPick: (c: AttachChoice) => void; onClose: () => void; compact?: boolean; align?: 'left' | 'right' }) {
   const ref = useRef<HTMLDivElement>(null);
   const [at, setAt] = useState(0);
+  // "From Drive" browses Files: only for whoever has it.
+  const files = useCanOpen('files');
+  const choices = CHOICES.filter((c) => c.id !== 'drive' || files);
   useEffect(() => {
     ref.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
     const onDown = (e: MouseEvent) => {
@@ -39,7 +43,7 @@ export function AttachMenu({ onPick, onClose, compact, align = 'left' }: { onPic
     };
   }, [onClose]);
   const move = (n: number) => {
-    const next = (at + n + CHOICES.length) % CHOICES.length;
+    const next = (at + n + choices.length) % choices.length;
     setAt(next);
     ref.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')[next]?.focus();
   };
@@ -57,7 +61,7 @@ export function AttachMenu({ onPick, onClose, compact, align = 'left' }: { onPic
       }}
       className={cx('absolute bottom-full z-40 mb-2 rounded-[12px] border border-line bg-surface p-1.5 shadow-[0_12px_32px_rgb(var(--ws-shadow-rgb)/.18)]', align === 'right' ? 'right-0' : 'left-0', compact ? 'w-[230px]' : 'w-[264px]')}
     >
-      {CHOICES.map((c, i) => (
+      {choices.map((c, i) => (
         <button
           key={c.id}
           type="button"

@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
+import { useCanOpen } from '../../core/access';
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
 import { useTab } from '../../core/tab-context';
@@ -21,6 +22,10 @@ const LINK_TONE: Record<string, string> = { contact: 'bg-[#E3F4F5] text-[#0B6770
 export function NoteEditor({ id, notebooks, sections, ownerName, onGone, onOpen }: { id: number; notebooks: Notebook[]; sections: Section[]; ownerName?: string; onGone: () => void; onOpen: (id: number) => void }) {
   const qc = useQueryClient();
   const { navigate } = useTab();
+  // A link goes into Calendar, Tasks or Contacts, and "Convert to task" into Tasks: each only for whoever has that app.
+  const canCalendar = useCanOpen('calendar');
+  const canTasks = useCanOpen('tasks');
+  const canContacts = useCanOpen('contacts');
   const detail = useQuery({ queryKey: ['notes', 'detail', id], queryFn: ({ signal }) => apiGet<NoteDetail>(`/api/notes/${id}`, undefined, signal), retry: (n, e) => !(e instanceof ApiError && e.status === 404) && n < 2 });
   const n = detail.data;
   const owner = n?.my_role === 'owner';
@@ -130,6 +135,8 @@ export function NoteEditor({ id, notebooks, sections, ownerName, onGone, onOpen 
       void links.refetch();
       setTimeout(() => setConverted(null), 10_000);
     });
+  // A link into an app the person was not given is not shown at all.
+  const opens = (l: Link) => (l.entity_type === 'event' ? canCalendar : l.entity_type === 'task' ? canTasks : canContacts);
   const openLink = (l: Link) => {
     if (l.entity_type === 'event') navigate(`/calendar?event=${l.entity_id}`);
     else if (l.entity_type === 'task') navigate(`/tasks?task=${l.entity_id}`);
@@ -185,7 +192,7 @@ export function NoteEditor({ id, notebooks, sections, ownerName, onGone, onOpen 
                 <button type="button" role="menuitem" className={item} onClick={() => (setMenu(false), setDialog('share'))}>Share</button>
                 <button type="button" role="menuitem" className={item} onClick={() => (setMenu(false), setDialog('history'))}>Version history</button>
                 <button type="button" role="menuitem" className={item} onClick={() => (setMenu(false), setDialog('move'))}>Move to…</button>
-                <button type="button" role="menuitem" className={item} onClick={() => void convert()}>Convert to task</button>
+                {canTasks ? <button type="button" role="menuitem" className={item} onClick={() => void convert()}>Convert to task</button> : null}
                 <button type="button" role="menuitem" className={item} onClick={() => void toggle('archive')}>{n.is_archived ? 'Unarchive' : 'Archive'}</button>
                 <button type="button" role="menuitem" className={cx(item, 'font-semibold text-danger')} onClick={() => (setMenu(false), setDialog('delete'))}>Delete</button>
               </div>
@@ -199,16 +206,16 @@ export function NoteEditor({ id, notebooks, sections, ownerName, onGone, onOpen 
   const linked = owner ? (
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-ground px-[18px] py-2 text-[12px]">
       <span className="text-ink-3">Linked:</span>
-      {(links.data ?? []).map((l) => (
+      {(links.data ?? []).filter(opens).map((l) => (
         <span key={l.id} className={cx('flex items-center gap-1 rounded-full px-2.5 py-[3px] font-semibold', LINK_TONE[l.entity_type])}>
           <button type="button" onClick={() => openLink(l)} className="hover:underline">{l.entity_type === 'event' ? `Event · ${l.label}` : l.entity_type === 'task' ? `Task · ${l.label}` : l.label}</button>
           <button type="button" aria-label={`Unlink ${l.label}`} onClick={() => void act(() => apiDelete(`/api/note-links/${l.id}`)).then(() => links.refetch())} className="opacity-70 hover:opacity-100">×</button>
         </span>
       ))}
-      <button type="button" onClick={() => setDialog('contact')} className="font-semibold text-primary hover:underline">Link to a contact…</button>
-      <button type="button" onClick={() => setDialog('event')} className="font-semibold text-primary hover:underline">Link to an event…</button>
+      {canContacts ? <button type="button" onClick={() => setDialog('contact')} className="font-semibold text-primary hover:underline">Link to a contact…</button> : null}
+      {canCalendar ? <button type="button" onClick={() => setDialog('event')} className="font-semibold text-primary hover:underline">Link to an event…</button> : null}
       <span className="flex-1" />
-      <button type="button" onClick={() => void convert()} className="font-bold text-primary hover:underline">Convert to task</button>
+      {canTasks ? <button type="button" onClick={() => void convert()} className="font-bold text-primary hover:underline">Convert to task</button> : null}
     </div>
   ) : null;
 
@@ -244,7 +251,7 @@ export function NoteEditor({ id, notebooks, sections, ownerName, onGone, onOpen 
           <NoteView html={n.body} noteId={id} className="text-[14px]" />
         </div>
       )}
-      {converted ? (
+      {converted && canTasks ? (
         <div role="status" className="absolute bottom-5 left-1/2 z-20 flex w-[300px] -translate-x-1/2 items-center gap-2 rounded-[10px] bg-[#0F1B3D] px-3.5 py-2.5 text-[13px] text-white shadow-xl">
           <span className="flex-1">Converted to task</span>
           <button type="button" onClick={() => navigate(`/tasks?task=${converted}`)} className="font-bold text-[#AFC6FF] hover:underline">Open</button>

@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
+import { useCanOpen } from '../../../core/access';
 import { ApiError, apiPost } from '../../../core/api';
 import { app } from '../../../core/app-state';
 import { call, errorMessage } from '../../../core/bridge';
@@ -302,6 +303,8 @@ function Composer({ id, onSent }: { id: number; onSent: () => void }) {
 function VisitorPanel({ v, data, online, onDone }: { v: WebsiteVisitor | null; data: WebsiteConversation; online: boolean; onDone: () => void }) {
   const [blocking, setBlocking] = useState(false);
   const [busy, setBusy] = useState(false);
+  // A ticket is raised in, and opened by, Support: offered only to whoever has it.
+  const support = useCanOpen('support');
   const rows: Array<[string, string | null | undefined]> = v
     ? [
         ['Email', v.email],
@@ -365,7 +368,7 @@ function VisitorPanel({ v, data, online, onDone }: { v: WebsiteVisitor | null; d
         ))}
       </div>
       <div className="mt-auto flex flex-col gap-1.5 pt-2">
-        <button type="button" disabled={busy} onClick={() => void ticket()} className="h-8 rounded-[8px] border border-line bg-surface font-semibold text-ink hover:bg-subtle disabled:opacity-60">Raise a support ticket from this chat</button>
+        {support ? <button type="button" disabled={busy} onClick={() => void ticket()} className="h-8 rounded-[8px] border border-line bg-surface font-semibold text-ink hover:bg-subtle disabled:opacity-60">Raise a support ticket from this chat</button> : null}
         {data.can?.manage && v && !v.is_blocked ? (
           <button type="button" onClick={() => setBlocking(true)} className="h-8 rounded-[8px] border border-[#F1B8A8] bg-surface font-bold text-danger hover:bg-danger-bg">Block this visitor</button>
         ) : null}

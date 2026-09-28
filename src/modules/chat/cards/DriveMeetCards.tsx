@@ -1,4 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
+import { canOpenLink } from '@shared/access';
+import { useVisibleIds } from '../../../core/access';
 import { ApiError, apiGet } from '../../../core/api';
 import { app } from '../../../core/app-state';
 import { useStore } from '../../../core/store';
@@ -31,13 +33,15 @@ export interface DriveCard {
 const bytes = (n: number) => (n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(1)} GB` : n >= 1024 ** 2 ? `${(n / 1024 ** 2).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
 export function DriveShareCard({ card, onOpen }: { card: DriveCard; onOpen: (link: string) => void }) {
+  const visible = useVisibleIds();
   const folder = card.type === 'folder' || card.kind === 'drive.folder';
   if (card.available === false) {
     return <CardFrame kind={folder ? 'folder' : 'file'} state="noaccess" gone={{ title: 'You don’t have access', sub: card.why ?? `Ask the owner to share this ${folder ? 'folder' : 'file'} with you.` }} />;
   }
   const ext = (card.extension ?? card.name?.split('.').pop() ?? '').toUpperCase();
+  // Open goes into Files: only for whoever has it. The file itself was sent to them, so Download stays.
   const actions = [
-    { label: folder ? 'Open' : 'Open', tone: 'primary' as const, onClick: () => card.link && onOpen(card.link) },
+    ...(canOpenLink(card.link, visible) ? [{ label: 'Open', tone: 'primary' as const, onClick: () => card.link && onOpen(card.link) }] : []),
     ...(!folder && card.id ? [{ label: 'Download', onClick: () => void call('transfers:download', { fileId: String(card.id), name: card.name ?? 'download' }).then(() => toast('success', 'Downloading.'), () => toast('error', 'That could not be downloaded.')) }] : []),
   ];
   return (

@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../../src/core/app-state', () => ({ app: { get: () => ({ auth: { server: { origin: 'https://ws.example' } } }) } }));
+// The apps this person was given (core/access reads them); a test may take one away.
+const granted = vi.hoisted(() => ({ apps: [{ id: 'files' }, { id: 'chat' }] as Array<{ id: string }> }));
+vi.mock('../../../src/core/app-state', () => ({ app: { get: () => ({ auth: { server: { origin: 'https://ws.example' } }, apps: granted.apps }), subscribe: () => () => undefined } }));
 import { mimeFor } from '../../../shared/mime';
 import { can, extOf, flatten, kindOf, openWay, pathTo, splitKeys, subtree, tagOf, type TreeNode } from '../../../src/modules/files/api';
 import { fileMenu, folderMenu, type Drive } from '../../../src/modules/files/ctx';
@@ -71,6 +73,21 @@ describe('the menus follow what the server allows', () => {
   it('the owner gets everything, the public link included', () => {
     const m = labels(fileMenu(file(['open', 'preview', 'download', 'edit', 'rename', 'share', 'move', 'delete', 'chat_share'], true), d));
     for (const l of ['Edit in Office', 'Share…', 'Secure link…', 'Copy public link', 'Send to Chat…', 'Rename', 'Move…', 'Copy to…', 'Zip', 'Move to trash']) expect(m).toContain(l);
+  });
+
+  it('offers Chat only to whoever has Chat', () => {
+    const all = ['open', 'download', 'share', 'chat_share'];
+    const folder = { id: 2, name: 'HR', is_locked: false, starred: false, access: { level: 'full', owner: true, via: null, can_download: true, capabilities: all } } as never;
+    expect(labels(fileMenu(file(all, true), d))).toContain('Discuss in Chat…');
+    const was = granted.apps;
+    granted.apps = [{ id: 'files' }];
+    try {
+      expect(labels(fileMenu(file(all, true), d))).not.toContain('Send to Chat…');
+      expect(labels(fileMenu(file(all, true), d))).not.toContain('Discuss in Chat…');
+      expect(labels(folderMenu(folder, d))).not.toContain('Send to Chat…');
+    } finally {
+      granted.apps = was;
+    }
   });
 
   it('a folder offers the password lock to its owner only', () => {

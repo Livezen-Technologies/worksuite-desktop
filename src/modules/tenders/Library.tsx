@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
+import { useCanOpen } from '../../core/access';
 import { errorMessage } from '../../core/bridge';
 import { dayWords } from '../../core/time';
 import { toast } from '../../core/toasts';
@@ -160,6 +161,8 @@ function DocSheet({ doc, org, companies, onClose, onSaved }: { doc: LibraryDoc |
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState<number | null>(null);
   const [drive, setDrive] = useState(false);
+  // "From Drive…" browses Files: only for whoever has it.
+  const files = useCanOpen('files');
   const [error, setError] = useState<string | null>(null);
   const picker = useRef<HTMLInputElement>(null);
   const needsCompany = !doc && !org && companies.length > 1;
@@ -246,9 +249,11 @@ function DocSheet({ doc, org, companies, onClose, onSaved }: { doc: LibraryDoc |
           <button type="button" className={btnSmall} disabled={uploading !== null} onClick={() => picker.current?.click()}>
             Choose a file…
           </button>
-          <button type="button" className={btnSmall} disabled={uploading !== null} onClick={() => setDrive(true)}>
-            From Drive…
-          </button>
+          {files ? (
+            <button type="button" className={btnSmall} disabled={uploading !== null} onClick={() => setDrive(true)}>
+              From Drive…
+            </button>
+          ) : null}
           {d.file ? (
             <button type="button" className={btnSmall + ' !text-danger'} onClick={() => setD({ ...d, file: null })}>
               Take it off

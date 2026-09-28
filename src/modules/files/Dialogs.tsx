@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useCanOpen } from '../../core/access';
 import { ApiError, apiGet, apiPost } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
 import { bytes } from '../../core/time';
@@ -415,6 +416,7 @@ export function SendToChatDialog({ item, discuss, onClose, onOpenChat }: { item:
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [needs, setNeeds] = useState<NeedsAccess | null>(null);
+  const chat = useCanOpen('chat');
   const people = useQuery({ queryKey: ['chat', 'directory'], queryFn: ({ signal }) => apiGet<{ users: Array<{ id: number; name: string; email?: string | null }> }>('/api/chat/directory', undefined, signal), staleTime: 5 * 60_000 });
   const rooms = useQuery({ queryKey: ['chat', 'rooms-plain'], queryFn: ({ signal }) => apiGet<{ rooms: Array<{ id: number; name: string; type: string }> }>('/api/chat/rooms', undefined, signal), enabled: tab === 'room' });
   const teams = useQuery({ queryKey: ['files', 'chat-teams', term.trim()], queryFn: ({ signal }) => apiGet<{ teams: Array<{ id: number; name: string; detail?: string | null }> }>('/api/drive/chat/teams', { q: term.trim() }, signal), enabled: tab === 'team' });
@@ -432,7 +434,7 @@ export function SendToChatDialog({ item, discuss, onClose, onOpenChat }: { item:
     try {
       const body = { [to.kind === 'user' ? 'user_id' : to.kind === 'room' ? 'room_id' : 'team_id']: to.id, message: message.trim() || undefined, ...(grant ? { grant, ...(grant === 'link' ? { link_lifetime: 604_800 } : {}) } : {}) };
       const r = await apiPost<{ room_id: number }>(`/api/drive/chat/${discuss || to.kind === 'team' ? 'discuss' : 'share'}/${item.type}/${item.f.id}`, body);
-      toast('success', discuss ? 'Conversation started' : 'Sent to Chat', { label: 'Open', run: () => onOpenChat(r.room_id) });
+      toast('success', discuss ? 'Conversation started' : 'Sent to Chat', chat ? { label: 'Open', run: () => onOpenChat(r.room_id) } : undefined);
       onClose();
     } catch (e) {
       if (e instanceof ApiError && e.status === 409 && (e.data as NeedsAccess | null)?.needs_access) setNeeds(e.data as NeedsAccess);

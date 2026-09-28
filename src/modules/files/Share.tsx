@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useCanOpen } from '../../core/access';
 import { app } from '../../core/app-state';
 import { apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
@@ -87,6 +88,7 @@ function Avatar({ name, i }: { name: string; i: number }) {
  */
 export function ShareDialog({ item, onClose, onSecureLink, onPublicLink, onSendToChat }: { item: Item; onClose: () => void; onSecureLink: () => void; onPublicLink: () => void; onSendToChat: () => void }) {
   const qc = useQueryClient();
+  const chat = useCanOpen('chat');
   const origin = app.get().auth?.server?.origin ?? '';
   const base = `/api/drive/access/${item.type}/${item.f.id}`;
   const key = ['files', 'access', item.type, item.f.id];
@@ -317,7 +319,7 @@ export function ShareDialog({ item, onClose, onSecureLink, onPublicLink, onSendT
         ) : null}
         <div className="flex items-center gap-2 border-t border-line px-5 py-3">
           <Button onClick={() => void navigator.clipboard.writeText(webLink).then(() => toast('success', 'WorkSuite link copied — it opens for people with access'))}>Copy WorkSuite link</Button>
-          {a?.my_access.capabilities.includes('chat_share') ? <Button onClick={onSendToChat}>Send to Chat…</Button> : null}
+          {chat && a?.my_access.capabilities.includes('chat_share') ? <Button onClick={onSendToChat}>Send to Chat…</Button> : null}
           <span className="flex-1" />
           <Button variant="primary" onClick={onClose}>Done</Button>
         </div>

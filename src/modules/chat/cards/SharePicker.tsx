@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
+import { canOpenApp } from '@shared/access';
+import { useVisibleIds } from '../../../core/access';
 import { ApiError, apiGet } from '../../../core/api';
 import { addDays, dateLabel, relative, todayInZone } from '../../../core/time';
 import { Icon } from '../../../components/Icon';
@@ -17,22 +19,30 @@ import { RecordCard } from './RecordCards';
  */
 export type ShareKind = 'drive' | 'meeting' | 'note' | 'task' | 'event' | 'crm' | 'invoice' | 'contact';
 
-export const SHARE_KINDS: Array<{ id: ShareKind; label: string; card: CardKind }> = [
-  { id: 'drive', label: 'Drive file or folder', card: 'folder' },
-  { id: 'meeting', label: 'Meeting', card: 'meeting' },
-  { id: 'note', label: 'Note', card: 'note' },
-  { id: 'task', label: 'Task', card: 'task' },
-  { id: 'event', label: 'Calendar event', card: 'event' },
-  { id: 'crm', label: 'CRM deal, lead or account', card: 'deal' },
-  { id: 'invoice', label: 'Invoice', card: 'invoice' },
-  { id: 'contact', label: 'Contact', card: 'contact' },
+/** `app`: the catalogue app each kind is picked from — a kind is offered only to whoever has that app. */
+export const SHARE_KINDS: Array<{ id: ShareKind; label: string; card: CardKind; app: string }> = [
+  { id: 'drive', label: 'Drive file or folder', card: 'folder', app: 'files' },
+  { id: 'meeting', label: 'Meeting', card: 'meeting', app: 'meetings' },
+  { id: 'note', label: 'Note', card: 'note', app: 'notes' },
+  { id: 'task', label: 'Task', card: 'task', app: 'tasks' },
+  { id: 'event', label: 'Calendar event', card: 'event', app: 'calendar' },
+  { id: 'crm', label: 'CRM deal, lead or account', card: 'deal', app: 'crm' },
+  { id: 'invoice', label: 'Invoice', card: 'invoice', app: 'billing' },
+  { id: 'contact', label: 'Contact', card: 'contact', app: 'contacts' },
 ];
+
+/** The kinds this person may share from: those of the apps they have. */
+function useShareKinds(): typeof SHARE_KINDS {
+  const visible = useVisibleIds();
+  return SHARE_KINDS.filter((k) => canOpenApp(k.app, visible));
+}
 
 /** The "+" menu: what can be shared, and a way back to a file from the computer. */
 export function ShareMenu({ onPick, onUpload, onClose, align = 'left' }: { onPick: (k: ShareKind) => void; onUpload: () => void; onClose: () => void; align?: 'left' | 'right' }) {
   const ref = useRef<HTMLDivElement>(null);
   const [at, setAt] = useState(0);
-  const count = SHARE_KINDS.length + 1;
+  const kinds = useShareKinds();
+  const count = kinds.length + 1;
   useEffect(() => {
     ref.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
     const onDown = (e: MouseEvent) => {
@@ -65,14 +75,14 @@ export function ShareMenu({ onPick, onUpload, onClose, align = 'left' }: { onPic
       className={cx('absolute bottom-full z-40 mb-2 w-[250px] rounded-[12px] border border-line bg-surface p-1.5 shadow-[0_12px_32px_rgb(var(--ws-shadow-rgb)/.18)]', align === 'right' ? 'right-0' : 'left-0')}
     >
       <div className="px-2 pt-1 pb-1.5 text-[10.5px] font-extrabold tracking-[.7px] text-ink-3">SHARE FROM WORKSUITE</div>
-      {SHARE_KINDS.map((k, i) => (
+      {kinds.map((k, i) => (
         <button key={k.id} type="button" role="menuitem" tabIndex={i === at ? 0 : -1} onClick={() => onPick(k.id)} className={item}>
           <KindIcon kind={k.card} />
           {k.label}
         </button>
       ))}
-      <div className="my-1 border-t border-line" />
-      <button type="button" role="menuitem" tabIndex={at === SHARE_KINDS.length ? 0 : -1} onClick={onUpload} className={item}>
+      {kinds.length ? <div className="my-1 border-t border-line" /> : null}
+      <button type="button" role="menuitem" tabIndex={at === kinds.length ? 0 : -1} onClick={onUpload} className={item}>
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-subtle text-ink-2">
           <Icon name="upload" size={14} />
         </span>
@@ -163,6 +173,7 @@ export function SharePicker({ kind: first, roomName, onClose, onDrive, onShare }
   onShare: (path: string) => Promise<boolean>;
 }) {
   const [kind, setKind] = useState(first);
+  const kinds = useShareKinds();
   const [q, setQ] = useState('');
   const [needle, setNeedle] = useState('');
   const [choice, setChosen] = useState<Row | null>(null);
@@ -203,7 +214,7 @@ export function SharePicker({ kind: first, roomName, onClose, onDrive, onShare }
     >
       <div className="flex flex-col gap-3 text-[13px]" data-share-picker>
         <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="What to share">
-          {SHARE_KINDS.map((k) => (
+          {kinds.map((k) => (
             <button
               key={k.id}
               type="button"
