@@ -118,6 +118,13 @@ export const INVOKE_CHANNELS = [
   'salon:printTest',
   'salon:printPage',
   'salon:openDrawer',
+  'salon:syncStatus',
+  'salon:syncNow',
+  'salon:copy',
+  'salon:copyClients',
+  'salon:outbox',
+  'salon:outboxAdd',
+  'salon:outboxResolve',
 
   'offline:status',
   'offline:pending',
@@ -183,6 +190,7 @@ export const EVENT_CHANNELS = [
   'sync:changed',
   'rc:changed',
   'rc:switchScreen',
+  'salon:changed',
 ] as const;
 
 export type EventChannel = (typeof EVENT_CHANNELS)[number];

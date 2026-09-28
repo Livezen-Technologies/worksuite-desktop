@@ -32,6 +32,10 @@ import type {
   SalonDeskInfo,
   SalonDeskPairing,
   SalonPrintOutcome,
+  SalonSyncStatus,
+  SalonCopy,
+  SalonCopyClient,
+  SalonOutboxItem,
   SalonPrintSettings,
   ScreenSources,
   ServiceHealth,
@@ -485,6 +489,31 @@ export const contract = {
   'salon:printTest': ch(z.object({ paper: salonPaper.optional() }), { session: true, rate: 2 }),
   'salon:printPage': ch(z.object({ html: z.string().max(500_000), paper: salonPaper.optional() }), { session: true, rate: 2 }),
   'salon:openDrawer': ch(none, { session: true, rate: 1, sensitive: true }),
+  // Offline: the day's copy the screens fall back to, and what the counter did while WorkSuite was out of reach (salon-sync.ts).
+  'salon:syncStatus': ch(none, { session: true }),
+  'salon:syncNow': ch(none, { session: true, rate: 2 }),
+  'salon:copy': ch(none, { session: true }),
+  'salon:copyClients': ch(z.object({ q: z.string().max(120), limit: z.number().int().min(1).max(100).optional() }), { session: true, rate: 20 }),
+  'salon:outbox': ch(none, { session: true }),
+  'salon:outboxAdd': ch(
+    z.object({
+      kind: z.enum(['client.create', 'visit.book', 'visit.check_in']),
+      local_id: z.string().max(40).nullable().optional(),
+      payload: z.record(z.string(), z.unknown()),
+      label: z.string().trim().min(1).max(200),
+      detail: z.string().max(300).nullable().optional(),
+    }),
+    { session: true, rate: 10 },
+  ),
+  'salon:outboxResolve': ch(
+    z.union([
+      z.object({ id: z.string().uuid(), action: z.enum(['drop', 'retry', 'take_next']) }),
+      z.object({ id: z.string().uuid(), action: z.literal('time'), starts_at: z.string().regex(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/) }),
+      z.object({ id: z.string().uuid(), action: z.literal('client'), client_id: z.number().int().positive() }),
+      z.object({ id: z.string().uuid(), action: z.literal('edit'), changes: z.record(z.string().max(40), z.union([z.string().max(2000), z.boolean(), z.null()])) }),
+    ]),
+    { session: true, rate: 5 },
+  ),
 
   'offline:status': ch(none, { session: true }),
   'offline:pending': ch(none, { session: true }),
@@ -697,6 +726,13 @@ export interface Outputs {
   'salon:printTest': SalonPrintOutcome;
   'salon:printPage': SalonPrintOutcome;
   'salon:openDrawer': SalonPrintOutcome;
+  'salon:syncStatus': SalonSyncStatus;
+  'salon:syncNow': SalonSyncStatus;
+  'salon:copy': SalonCopy | null;
+  'salon:copyClients': SalonCopyClient[];
+  'salon:outbox': SalonOutboxItem[];
+  'salon:outboxAdd': SalonOutboxItem;
+  'salon:outboxResolve': SalonOutboxItem[];
   'offline:status': OfflineStatus;
   'offline:pending': OfflineMutation[];
   'offline:submit': SubmitResult;

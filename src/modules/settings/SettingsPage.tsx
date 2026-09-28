@@ -235,6 +235,7 @@ const MODULE_TOGGLES = [
   ['crm', 'CRM'],
   ['files', 'Files'],
   ['support', 'Support'],
+  ['salon', 'SalonMate front desk'],
   ['system', 'System alerts'],
 ] as const;
 

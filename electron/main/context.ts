@@ -20,6 +20,7 @@ import type { DriveSync } from '../services/sync/engine';
 import type { RealtimeService } from '../services/realtime';
 import type { SalonDesk } from '../services/salon-desk';
 import type { SalonPrint } from '../services/salon-print';
+import type { SalonSync } from '../services/salon-sync';
 import type { TrayService } from '../tray/tray';
 import type { UpdaterService } from '../updater/updater';
 
@@ -44,6 +45,7 @@ export interface AppContext {
   secrets: SecureStore;
   salonDesk: SalonDesk;
   salonPrint: SalonPrint;
+  salonSync: SalonSync;
   settings: SettingsService;
   http: HttpClient;
   auth: AuthService;
