@@ -385,6 +385,8 @@ export interface RemoteControlSessionView {
   id: number;
   status: 'CONTROL_APPROVED' | 'CONTROL_ACTIVE' | 'CONTROL_PAUSED';
   controller: string;
+  /** The controller's connection in the meeting: the meeting window relays messages from it alone. */
+  controllerIdentity: string;
   capsLabel: string;
   pauseReason: string | null;
   /** Why control is paused, as the indicator says it. */

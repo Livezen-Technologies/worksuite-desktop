@@ -34,36 +34,62 @@ Being controlled is the main process's business, never a page's:
 
 - **The key never reaches a page.** The API proxy refuses the shared
   computer's grant (`grant?end=sharer`), answering a request, resuming,
-  security reports and capability reports; only the main process makes those
-  calls. A meeting window relays data-channel messages it cannot read.
+  security and capability reports, taking or fetching an offered file, and
+  offering a page's own bytes as a file; only the main process makes those
+  calls. A meeting window relays data-channel messages it cannot read, and
+  only the named controller's: another participant flooding the topic is
+  dropped before IPC (and the server gives no data channel to anyone still
+  waiting to be let in).
 - **Consent needs this computer's own hand.** The prompt (RC03) is a window
   of its own, above everything and left out of screen capture. Allowing
-  counts only if a real mouse-down or key-down reached that window in the last
-  ten seconds and nothing was injected for 1.5 s before it; nothing at all is
-  injected while a prompt is open. Resuming works the same way, from the
-  control bar only.
-- **The grant is checked before use**: Ed25519 over the exact signed bytes,
-  with the pinned policy key when the build has one; then session, meeting,
-  share identity, this device, expiry and key length.
-- **Every message** passes `ControlReceiver` (MAC, sender, per-channel
-  sequence, lease, state, capability, bounds, reserved chords, rate), then
-  this computer's gates: a prompt open, the person here moving the mouse
-  (they win for the policy's hold), a window share whose window is not in
-  front (keys wait), the share paused. A burst pauses control and is
-  reported; other refusals are counted and reported every ten seconds.
+  counts only if a real mouse-down or key-down reached that window in the
+  last ten seconds, more than 1.5 s after the input helper last *finished*
+  carrying input out, with nothing still queued; nothing at all is injected
+  while a prompt or the send-a-file dialog is open. Resuming, accepting a
+  file and sending one work the same way, from the control bar only. While
+  a controller keeps sending, those buttons refuse until they pause — the
+  safe way to fail.
+- **The grant is checked before use**: Ed25519 only, over the exact signed
+  bytes, with the pinned policy key when the build has one; it must say it is
+  a grant (`typ`), name this device, this session, meeting and share, not be
+  expired, and name its channel key (`key_sha256`, required when pinned).
+- **Every message** passes `ControlReceiver` (MAC, sender, per-lane
+  sequence, a lease no further ahead than its length plus two minutes of
+  clock skew, state, capability, bounds, reserved chords, rate), then this
+  computer's gates: a prompt or dialog open, the person here moving the
+  mouse (they win for the policy's hold), the share paused. Reserved chords
+  are matched by key and modifiers, whatever the order, spelling or extra
+  modifiers. A burst pauses control and is reported; other refusals are
+  reported every ten seconds, except messages under the other key for a
+  moment after a key change.
+- **One window shared**: a press or a wheel lands only where the helper sees
+  that window under the pointer (not another app covering it); keys wait
+  until the window has been seen in front (checked four times a second);
+  Alt+Tab, Command+Tab and Windows+Tab are not passed on, nor the Windows or
+  Command key sent alone from the menu (Command itself still works). A
+  screen share whose display cannot be matched takes no pointer input,
+  unless there is only one display.
 - **Pauses**: lock screen, sleep, user switch, the secure desktop, and
-  password managers or system prompts in front. A pause made here holds
-  until the person resumes, which rotates the key. The emergency chord
-  (policy, default Ctrl+Alt+Shift+Esc) is a global shortcut while control
-  lasts and is never injected.
+  password managers or system prompts in front — also during the approval
+  or a key change, told to the server once it goes active. A pause made here
+  holds until the person here resumes (the key rotates). The emergency chord
+  (policy, normalised, default Ctrl+Alt+Shift+Esc) is a global shortcut
+  while control lasts and is never injected. WorkSuite's own app lock does
+  not pause control: the computer is still in use; allowing, resuming and
+  files wait for unlock.
 - **Input helpers** are the system's own — PowerShell hosting a fixed C#
   class calling SendInput (Windows), osascript posting CGEvents (macOS, needs
   Accessibility), xdotool (X11) — started only while control is live, with
-  fixed scripts. They take numbers, key names from a fixed table and
-  base64 text; nothing from the controller is put into a command line.
-  Windows' UIPI keeps a non-elevated WorkSuite from driving elevated windows,
-  and Ctrl+Alt+Delete cannot be injected by any app; the controller is told.
-- **Quitting** while controlled or sharing asks first, and stops both.
+  fixed scripts. They take numbers, key names from a prototype-free table and
+  base64 text; nothing from the controller is put into a command line. One
+  batch is in the helper at a time and each is confirmed before the next, so
+  a pause forgets what was waiting and the releases go next. Text goes in
+  64-character pieces; on X11 typed text ends its xdotool run. A helper that
+  exits on its own pauses control. Windows' UIPI keeps a non-elevated
+  WorkSuite from driving elevated windows, and Ctrl+Alt+Delete cannot be
+  injected by any app; the person here is asked to press it.
+- **Quitting** while controlled or sharing asks first, and stops both;
+  stopping ends input here before the server has answered.
 
 ## Credentials (FR-AUTH-02, FR-SEC-03, AC-21)
 

@@ -26,7 +26,8 @@ const NUMPAD_MAC = [0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5b, 0x5c];
 const F_MAC = [0x7a, 0x78, 0x63, 0x76, 0x60, 0x61, 0x62, 0x64, 0x65, 0x6d, 0x67, 0x6f, 0x69, 0x6b, 0x71, 0x6a, 0x40, 0x4f, 0x50, 0x5a];
 
 function table(): Record<string, KeyCodes> {
-  const t: Record<string, KeyCodes> = {};
+  // No prototype: `KEYS['constructor']` and the like must be undefined, not a function.
+  const t = Object.create(null) as Record<string, KeyCodes>;
   for (const [l, mac] of Object.entries(LETTER_MAC)) t[`Key${l}`] = { win: l.charCodeAt(0), mac, x11: l.toLowerCase() };
   for (let d = 0; d <= 9; d++) {
     t[`Digit${d}`] = { win: 0x30 + d, mac: DIGIT_MAC[d]!, x11: String(d) };
@@ -87,6 +88,11 @@ function table(): Record<string, KeyCodes> {
 
 export const KEYS: Readonly<Record<string, KeyCodes>> = Object.freeze(table());
 
+/** A key this table knows, and only such a key. */
+export function keyOf(code: unknown): KeyCodes | null {
+  return typeof code === 'string' && Object.hasOwn(KEYS, code) ? KEYS[code]! : null;
+}
+
 /** The modifier keys, by the flag the controller's key events carry. */
 export const MODIFIERS = {
   ctrl: ['ControlLeft', 'ControlRight'],
@@ -106,8 +112,8 @@ export function comboCodes(combo: string): string[] | null {
   if (parts.length === 0 || parts.length > 5) return null;
   const codes: string[] = [];
   for (const p of parts) {
-    const code = names[p] ?? (/^[A-Z]$/.test(p) ? `Key${p}` : /^[0-9]$/.test(p) ? `Digit${p}` : /^F([1-9]|1[0-9]|20)$/.test(p) ? p : null);
-    if (!code || !KEYS[code]) return null;
+    const code = (Object.hasOwn(names, p) ? names[p] : undefined) ?? (/^[A-Z]$/.test(p) ? `Key${p}` : /^[0-9]$/.test(p) ? `Digit${p}` : /^F([1-9]|1[0-9]|20)$/.test(p) ? p : null);
+    if (!code || !keyOf(code)) return null;
     codes.push(code);
   }
   return codes;

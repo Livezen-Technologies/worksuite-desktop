@@ -1,5 +1,5 @@
 import type { InputAction, Rect } from './input';
-import { KEYS, MODIFIERS, comboCodes, isModifier } from './keys';
+import { MODIFIERS, comboCodes, isModifier, keyOf } from './keys';
 
 /**
  * From a controller's message to what the input helper does (§E.3).
@@ -80,9 +80,23 @@ export function pointerActions(type: 'ptr.move' | 'ptr.button' | 'ptr.wheel', pa
  * window lost focus). Text is typed as text.
  */
 export function keyActions(payload: Record<string, unknown>, held: Held): InputAction[] {
-  if (typeof payload.text === 'string') return payload.text ? [{ t: 'text', text: payload.text }] : [];
+  if (typeof payload.text === 'string') {
+    if (!payload.text) return [];
+    // Text is typed as text: a modifier still held would turn a letter into a shortcut (Super+L).
+    const out: InputAction[] = [];
+    for (const codes of Object.values(MODIFIERS)) {
+      for (const c of codes) {
+        if (held.keys.has(c)) {
+          held.keys.delete(c);
+          out.push({ t: 'key', code: c, down: false });
+        }
+      }
+    }
+    out.push({ t: 'text', text: payload.text });
+    return out;
+  }
   const code = typeof payload.code === 'string' ? payload.code : '';
-  if (!KEYS[code]) return [];
+  if (!keyOf(code)) return [];
   const down = payload.down === true;
   const out: InputAction[] = [];
   for (const [flag, codes] of Object.entries(MODIFIERS) as Array<[keyof typeof MODIFIERS, readonly string[]]>) {

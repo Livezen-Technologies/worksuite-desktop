@@ -266,6 +266,8 @@ export const contract = {
   'rc:fileAnswer': ch(z.object({ id: z.number().int().positive(), accept: z.boolean(), confirmExecutable: z.boolean().optional() }), { session: true, whileLocked: true, sensitive: true, rate: 5 }),
   /** Offer the controller a file from this computer, chosen in the system's dialog (nothing is injected while it is open). */
   'rc:sendFile': ch(z.object({ sessionId: z.number().int().positive() }), { session: true, sensitive: true, rate: 2 }),
+  /** As the controller, take a file the shared computer offered (only files sent to the controller). */
+  'rc:takeFile': ch(z.object({ sessionId: z.number().int().positive(), id: z.number().int().positive(), confirmExecutable: z.boolean().optional() }), { session: true, sensitive: true, rate: 5 }),
   'calls:focus': ch(z.object({ windowId: z.number().int().positive() }), { session: true }),
   'hr:clock': ch(
     z.object({
@@ -335,8 +337,6 @@ export const contract = {
         tenderLetter: z.object({ tender: z.number().int().positive(), letter: z.number().int().positive() }).optional(),
         /** A company document's file from the tender library. */
         tenderLibrary: z.number().int().positive().optional(),
-        /** A file offered in a remote-control session, once accepted: its id and one-time token. */
-        remoteFile: z.object({ id: z.number().int().positive(), t: z.string().regex(/^[A-Za-z0-9_-]{16,128}$/) }).optional(),
         /** The order list as a CSV, as the Orders screen filtered it. */
         ordersCsv: z
           .object({
@@ -361,7 +361,7 @@ export const contract = {
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.remoteFile].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a payment slip, an order list, an Orders report, a tender document, checklist file, letter or library document, or a file from a remote session'),
+      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a payment slip, an order list, an Orders report, or a tender document, checklist file, letter or library document'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   'transfers:upload': ch(
@@ -533,6 +533,7 @@ export interface Outputs {
   'rc:stop': void;
   'rc:fileAnswer': { status: string; confirmExecutable?: boolean; message?: string };
   'rc:sendFile': { sent: number };
+  'rc:takeFile': { status: string; confirmExecutable?: boolean; message?: string };
   'calls:focus': boolean;
   'auth:signOut': AuthState;
   'auth:completeSetup': AuthState;

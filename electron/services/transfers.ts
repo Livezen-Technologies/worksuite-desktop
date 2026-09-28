@@ -1,7 +1,7 @@
 import { shell } from 'electron';
 import { randomUUID } from 'node:crypto';
-import { createWriteStream, existsSync } from 'node:fs';
-import { lstat, mkdir, open, readFile, readdir, realpath, rename, stat, unlink } from 'node:fs/promises';
+import { createWriteStream, existsSync, openAsBlob } from 'node:fs';
+import { lstat, mkdir, open, readdir, realpath, rename, stat, unlink } from 'node:fs/promises';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import type { PickedFile, UploadTarget } from '@shared/ipc/contract';
 import type { Transfer, TransferState } from '@shared/types';
@@ -531,7 +531,8 @@ export class TransferManager {
   private async offerRemote(l: Live, sessionId: number, path: string, size: number): Promise<void> {
     if (size > REMOTE_MAX) return this.finish(l, 'failed', 'Files offered in a remote session can be up to 512 MB. Share bigger ones through Drive.');
     const form = new FormData();
-    form.append('file', new Blob([await readFile(path)], { type: mimeFor(basename(path)) ?? 'application/octet-stream' }), basename(path));
+    // Read from disk as it is sent, not held in memory whole.
+    form.append('file', await openAsBlob(path, { type: mimeFor(basename(path)) ?? 'application/octet-stream' }), basename(path));
     this.progress(l, 0);
     const res = await this.deps.http.raw('POST', this.deps.http.url(`/api/meet/control/sessions/${sessionId}/files`), { body: form, timeoutMs: 10 * 60_000, signal: l.abort?.signal });
     if (!res.ok) {

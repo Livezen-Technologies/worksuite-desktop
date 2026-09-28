@@ -1,12 +1,11 @@
 import { ControlSender, TOPIC_LOSSY, TOPIC_RELIABLE, importKeys, unb64, type ControlType, type GrantClaims } from '@shared/remote-control/channel';
 import type { Track } from 'livekit-client';
 import { app } from '../../../core/app-state';
-import { ApiError } from '../../../core/api';
 import { call, on } from '../../../core/bridge';
 import { toast } from '../../../core/toasts';
 import { callUi } from '../../calls/ui/state';
 import { meet } from '../session';
-import { connectionLabel, downloadToken, endedOf, failure, rc, type ConnectionLabel, type ControlSession, type ControlState, type RemoteFile, type Share } from './api';
+import { connectionLabel, endedOf, failure, rc, type ConnectionLabel, type ControlSession, type ControlState, type RemoteFile, type Share } from './api';
 import { MoveCoalescer, keyMessage, type ButtonName, type KeyLike, type KeyPayload, type Point } from './input';
 
 /**
@@ -256,20 +255,16 @@ export class MeetController {
     return picked.length;
   }
 
-  /** Take a file the sharer offered; a program needs `confirmExecutable`. Returns false when the server wants that first. */
+  /**
+   * Take a file the sharer offered; a program needs `confirmExecutable`. Returns false when the
+   * server wants that first. The main process accepts and fetches it: it takes only files sent to
+   * this end, and a page never holds the one-time address.
+   */
   async acceptFile(f: RemoteFile, confirmExecutable = false): Promise<boolean> {
-    let r: { download: string };
-    try {
-      r = await rc.acceptFile(f.id, confirmExecutable);
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 428) return false;
-      throw e;
-    }
-    const t = downloadToken(String(r.download ?? ''));
-    if (!t) throw new Error('The server did not say where to fetch the file from.');
+    const r = await call('rc:takeFile', { sessionId: f.session_id, id: f.id, confirmExecutable });
+    if (r.status === 'confirm') return false;
     this.offers = this.offers.filter((x) => x.id !== f.id);
     this.changed();
-    await call('transfers:download', { remoteFile: { id: f.id, t }, name: f.name });
     return true;
   }
 

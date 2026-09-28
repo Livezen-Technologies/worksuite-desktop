@@ -45,6 +45,9 @@ const DENY: RegExp[] = [
   /^\/api\/meet\/control\/requests\/\d+\/answer\/?$/,
   /^\/api\/meet\/control\/sessions\/\d+\/(resume|security)\/?$/,
   /^\/api\/meet\/devices\/\d+\/capabilities\/?$/,
+  // Taking an offered file, and fetching it, go through the main process too: the server checks only who
+  // the receiver is, and the shared computer must answer on its red bar with a real click.
+  /^\/api\/meet\/control\/files\/\d+\/(accept|download)\/?$/,
 ];
 
 /** The shared computer's grant (`?end=sharer`): its key never reaches a page. */
@@ -82,6 +85,8 @@ export function isProxyPathAllowed(apiPath: string, method = 'GET'): boolean {
   const m = method.toUpperCase();
   if (ACCOUNT.some(([re, methods]) => re.test(pathOnly) && methods.includes(m))) return true;
   if (isSharerGrant(pathOnly, apiPath)) return false;
+  // Offering a file in a session is the upload manager's (files the person chose), never a page's own bytes.
+  if (m !== 'GET' && m !== 'HEAD' && /^\/api\/meet\/control\/sessions\/\d+\/files\/?$/.test(pathOnly)) return false;
   return !DENY.some((re) => re.test(pathOnly));
 }
 

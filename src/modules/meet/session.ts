@@ -4,6 +4,7 @@ import { call, errorMessage, on } from '../../core/bridge';
 import { CLEAN_AUDIO, pauseOn, shareOn } from '../calls/session';
 import type { SharePick } from '../calls/ScreenPicker';
 import type { MeetInfo, Sfu } from './api';
+import type { RemoteControlView } from '@shared/types';
 
 /**
  * One Meet meeting, in its window (MeetLobby → MeetRoom). Like a call, kept
@@ -58,6 +59,9 @@ export class MeetSession {
   /** A share being started, switched or stopped here, so the track events it causes are not mistaken for the system stopping it. */
   private switching = false;
   private offSwitch: (() => void) | null = null;
+  private offControl: (() => void) | null = null;
+  /** Whose control messages to relay: the one controller the main process names. Anyone else's are dropped here. */
+  private controllerIdentity: string | null = null;
   private version = 0;
   private listeners = new Set<() => void>();
   private audio = new Set<HTMLMediaElement>();
@@ -179,8 +183,11 @@ export class MeetSession {
       })
       .on(RoomEvent.DataReceived, (payload, p, _kind, topic) => {
         // Remote control: relayed to the main process as it came. The key, and the decision, are there.
-        if ((topic === 'rc.ctl' || topic === 'rc.ctl.move') && p && this.control) {
-          if (payload.length <= 16_384) void call('rc:packet', { sender: p.identity, topic, data: new TextDecoder().decode(payload) }).catch(() => undefined);
+        if (topic === 'rc.ctl' || topic === 'rc.ctl.move') {
+          // Only the controller's: another participant flooding the topic must not crowd them out.
+          if (p && this.control && p.identity === this.controllerIdentity && payload.length <= 16_384) {
+            void call('rc:packet', { sender: p.identity, topic, data: new TextDecoder().decode(payload) }).catch(() => undefined);
+          }
           return;
         }
         if (topic !== 'wb') return;
@@ -292,6 +299,9 @@ export class MeetSession {
         this.control = { offered: r.controlOffered, why: r.why };
         this.offSwitch?.();
         this.offSwitch = on<{ id: string; name: string }>('rc:switchScreen', (s) => void this.switchForController(s));
+        this.offControl?.();
+        this.offControl = on<RemoteControlView>('rc:changed', (v) => (this.controllerIdentity = v.session?.controllerIdentity ?? null));
+        void call('rc:state').then((v) => (this.controllerIdentity = v.session?.controllerIdentity ?? null), () => undefined);
       } else if (now && was) await call('rc:shareChanged', { uuid: this.uuid });
       else if (!now && was) await this.shareEnded();
     } catch {
@@ -305,6 +315,9 @@ export class MeetSession {
     this.control = null;
     this.offSwitch?.();
     this.offSwitch = null;
+    this.offControl?.();
+    this.offControl = null;
+    this.controllerIdentity = null;
     await call('rc:shareStopped', { uuid: this.uuid }).catch(() => undefined);
     this.changed();
   }

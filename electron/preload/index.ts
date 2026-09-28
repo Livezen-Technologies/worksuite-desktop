@@ -135,6 +135,7 @@ const api = {
     stop: call('rc:stop'),
     fileAnswer: call('rc:fileAnswer'),
     sendFile: call('rc:sendFile'),
+    takeFile: call('rc:takeFile'),
   },
   transfers: {
     list: call('transfers:list'),

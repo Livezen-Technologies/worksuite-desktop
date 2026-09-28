@@ -571,18 +571,16 @@ describe('files in the session (RC06)', () => {
     expect(await c.sendFiles()).toBe(1);
     expect(bridgeCall).toHaveBeenCalledWith('transfers:upload', { handles: ['h1'], target: { kind: 'remote', sessionId: 12 } });
 
-    post.mockImplementation(async (path: string) => (path.endsWith('/31/accept') ? { download: '/api/meet/control/files/31/download?t=abcdefabcdefabcdef12' } : {}));
+    // The main process takes it (only files sent to this end) and fetches it; the page never sees the address.
+    bridgeCall.mockImplementation((async (ch: string) => (ch === 'rc:takeFile' ? { status: 'accepted' } : [])) as never);
     expect(await c.acceptFile(c.offers[0]!)).toBe(true);
-    expect(bridgeCall).toHaveBeenCalledWith('transfers:download', { remoteFile: { id: 31, t: 'abcdefabcdefabcdef12' }, name: 'log.zip' });
+    expect(bridgeCall).toHaveBeenCalledWith('rc:takeFile', { sessionId: 12, id: 31, confirmExecutable: false });
     expect(c.offers).toEqual([]);
   });
 
   it('asks again before taking a program', async () => {
     await withFiles([{ ...offered, name: 'fix.exe', executable: true }]);
-    post.mockImplementation(async (path: string) => {
-      if (path.endsWith('/31/accept')) throw new ApiError(428, 'fix.exe is a program. Confirm…', null, { code: 'confirm_executable' });
-      return {};
-    });
+    vi.mocked(call).mockImplementation((async (ch: string) => (ch === 'rc:takeFile' ? { status: 'confirm', confirmExecutable: true } : [])) as never);
     expect(await c.acceptFile(c.offers[0]!)).toBe(false);
     expect(c.offers).toHaveLength(1);
   });

@@ -1,17 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
 import { tmpdir } from 'node:os';
 
 vi.mock('electron', () => ({ app: { getPath: () => tmpdir(), getVersion: () => '0.1.0', isPackaged: false } }));
 
 import { canonicalJson } from '@shared/canonical-json';
-import { ControlSender, importKeys, type GrantClaims } from '@shared/remote-control/channel';
+import { ControlReceiver, ControlSender, acceleratorsFor, chordOf, importKeys, isReserved, reservedChords, seal, type Envelope, type GrantClaims } from '@shared/remote-control/channel';
 import type { DesktopPolicy, RemoteControlSupport } from '@shared/types';
 import { isProxyPathAllowed } from '../../../electron/services/api-proxy';
-import { DEFAULT_POLICY, normalizePolicy } from '../../../electron/services/policy';
+import { DEFAULT_POLICY, emergencyChord, normalizePolicy } from '../../../electron/services/policy';
 import { checkGrant } from '../../../electron/services/remote-control/grant';
-import { cleanText, displayServer, inputSupport, protocolLines, xdotoolArgs, type InputAction, type Injector } from '../../../electron/services/remote-control/input';
-import { comboCodes } from '../../../electron/services/remote-control/keys';
+import { cleanText, displayServer, enqueue, inputSupport, nextBatch, protocolLines, xdotoolArgs, type InputAction, type Injector } from '../../../electron/services/remote-control/input';
+import { comboCodes, keyOf } from '../../../electron/services/remote-control/keys';
 import { Held, comboActions, keyActions, place, pointerActions } from '../../../electron/services/remote-control/mapping';
 import { RemoteControlService, isProtected, pauseText, type CapturedSource, type ControlState, type RemoteControlDeps } from '../../../electron/services/remote-control/service';
 
@@ -49,8 +49,9 @@ function claims(over: Partial<GrantClaims> = {}): GrantClaims {
     lease_renew_s: 10,
     key_version: 1,
     idle_pause_s: 600,
+    key_sha256: createHash('sha256').update('meet.remote_control.key|').update(KEY).digest('hex'),
     ...over,
-  };
+  } as GrantClaims;
 }
 
 describe('what a meeting window may not reach through the proxy', () => {
@@ -190,7 +191,7 @@ describe('the policy keys for remote control', () => {
 
 const SCREEN: CapturedSource = { id: 'screen:1:0', name: 'Screen 1', kind: 'screen', displayId: '1', windowId: null };
 
-function harness(opts: { support?: Partial<RemoteControlSupport>; policy?: Partial<DesktopPolicy> } = {}) {
+function harness(opts: { support?: Partial<RemoteControlSupport>; policy?: Partial<DesktopPolicy>; displays?: Array<{ id: number; bounds: { x: number; y: number; width: number; height: number } }> } = {}) {
   let t = T0;
   const calls: Array<[string, string, unknown]> = [];
   const every: Array<{ ms: number; fn: () => void }> = [];
@@ -205,13 +206,21 @@ function harness(opts: { support?: Partial<RemoteControlSupport>; policy?: Parti
     advance: (ms: number) => (t += ms),
     tick: (ms: number) => every.filter((e) => e.ms === ms).forEach((e) => e.fn()),
   };
-  const injector: Injector = {
+  const injector: Injector & { busy: boolean; under: string | null; done: number } = {
     method: 'xdotool',
+    busy: false,
+    under: null,
+    done: 0,
     start: vi.fn(async () => true),
     send: (a) => void sent.push(a),
+    drop: vi.fn(),
+    idle: () => !injector.busy,
+    lastDone: () => injector.done,
     windowBounds: vi.fn(async () => null),
+    windowAt: vi.fn(async () => injector.under),
     foreground: vi.fn(async () => ({ window: null, app: 'Code', title: 'x' })),
     stop: vi.fn(),
+    onExit: null,
   };
   const ui = {
     showConsent: vi.fn(),
@@ -247,7 +256,7 @@ function harness(opts: { support?: Partial<RemoteControlSupport>; policy?: Parti
     pinnedKey: null,
     createInjector: () => injector,
     screen: {
-      displays: () => [{ id: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 } }],
+      displays: () => opts.displays ?? [{ id: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 } }],
       primary: () => ({ id: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 } }),
       cursor: () => h.cursor,
       toInput: (p) => p,
@@ -462,7 +471,11 @@ describe('control on this computer', () => {
     await x.send('ptr.move', { x: 0.5, y: 0.5 });
     expect(x.sent).toEqual([]);
     expect(x.rc.view().session?.status).toBe('CONTROL_PAUSED');
-    // Resumed: a new key, collected and confirmed, and input flows again.
+    // A new key alone does not lift it (a key change can cross a pause) ...
+    // ... the person resuming, with a real click on the bar, does.
+    x.h.advance(2_000);
+    x.rc.noteLocalInput(600);
+    await x.rc.resume(600, 9);
     const c2 = claims({ key_version: 2 });
     x.h.grant = { token: token(c2), key: KEY.toString('base64'), claims: c2, public_key: PEM };
     x.h.state = { ...x.h.state, sessions: [session('CONTROL_ACTIVE', { key_version: 2, grant_waiting: true })] };
@@ -600,5 +613,225 @@ describe('words on the bar', () => {
     expect(pauseText(null)).toBe('You paused control.');
     expect(isProtected({ app: '1Password 7', title: '' })).toBe(true);
     expect(isProtected({ app: 'Code', title: 'budget.xlsx' })).toBe(false);
+  });
+});
+
+// ── what the security review found (each case failed before its fix) ────────
+
+describe('reserved chords, however they are written', () => {
+  const reserved = [...reservedChords('Ctrl+Alt+Shift+Esc')];
+  it('are refused in any order, spacing, spelling, or with extra modifiers', () => {
+    for (const c of ['Meta + L', 'Meta+L ', 'meta+l', 'Ctrl+Meta+L', 'Alt+Ctrl+Shift+Esc', 'Ctrl+Alt+Shift+Escape', 'Meta+Ctrl+Q', 'Cmd+Alt+Shift+Esc']) expect(isReserved(c, reserved), c).toBe(true);
+    for (const c of ['Alt+Tab', 'Meta', 'Esc', 'Ctrl+Shift+Esc', 'Meta+K']) expect(isReserved(c, reserved), c).toBe(false);
+  });
+
+  it('are read from a key message whatever types its fields have', () => {
+    expect(chordOf({ ctrl: true, alt: true, shift: true, code: 'Escape' })).toBe('Ctrl+Alt+Shift+Esc');
+    expect(chordOf({ code: 5 as unknown as string, meta: 'yes' })).toBe('');
+  });
+
+  it('take the policy’s chord in the one form the receiver and the shortcut use', () => {
+    expect(emergencyChord('Alt+Ctrl+Shift+Escape')).toBe('Ctrl+Alt+Shift+Esc');
+    expect(emergencyChord('Ctrl+Alt+q')).toBe('Ctrl+Alt+Q');
+    expect(emergencyChord('Esc')).toBe('Ctrl+Alt+Shift+Esc');
+    expect(acceleratorsFor('Alt+Ctrl+F12', 'win32')).toEqual(['Control+Alt+F12']);
+  });
+});
+
+describe('the channel (review)', () => {
+  it('refuses a lease stamped far past the controller’s own clock, and a special combo of the wrong type', async () => {
+    const keys = await importKeys(new Uint8Array(KEY));
+    let t = T0;
+    const c = claims();
+    const receiver = new ControlReceiver(c, keys, () => t);
+    const far = await seal(keys, c.grant_id, 1, 'ptr.move', T0 / 1000 + 3_600, { x: 0.5, y: 0.5 });
+    expect(await receiver.accept(far, 'u5-xyz', true)).toEqual({ ok: false, reason: 'lease' });
+    const sender = new ControlSender(c, keys, () => t);
+    const env = JSON.parse(new TextDecoder().decode(await sender.next('special', { combo: ['Meta', 'L'] }))) as Envelope;
+    expect(await receiver.accept(env, 'u5-xyz', true)).toMatchObject({ ok: true });
+    t += 1;
+  });
+});
+
+describe('the grant (review)', () => {
+  const expected = { sessionId: 9, meeting: UUID, sharerIdentity: 'u3-abc', deviceId: 77, now: T0 };
+  const d = (c: GrantClaims, key = KEY) => ({ token: token(c), key: key.toString('base64'), claims: c, public_key: PEM });
+  it('must say it is a grant, name this computer, and name its key', () => {
+    const { typ: _t, ...noTyp } = claims();
+    expect(checkGrant(d(noTyp as GrantClaims), expected, null)).toMatchObject({ ok: false, why: 'That is not a remote-control grant.' });
+    const { sharer_device_id: _d, ...noDevice } = claims();
+    expect(checkGrant(d(noDevice as GrantClaims), expected, null)).toMatchObject({ ok: false, why: 'The grant is for another computer.' });
+    expect(checkGrant(d(claims(), Buffer.alloc(32, 9)), expected, null)).toMatchObject({ ok: false, why: 'The grant’s key is not the one the grant names.' });
+    const { key_sha256: _k, ...unnamed } = claims() as GrantClaims & { key_sha256?: string };
+    expect(checkGrant(d(unnamed as GrantClaims), expected, PEM)).toMatchObject({ ok: false });
+    expect(checkGrant(d(unnamed as GrantClaims), expected, null)).toMatchObject({ ok: true });
+  });
+
+  it('is checked only with an Ed25519 key', () => {
+    const rsa = generateKeyPairSync('rsa', { modulusLength: 2048 }).publicKey.export({ type: 'spki', format: 'pem' }).toString();
+    expect(checkGrant({ ...d(claims()), public_key: rsa }, expected, null)).toMatchObject({ ok: false });
+  });
+});
+
+describe('the proxy (review)', () => {
+  it('keeps taking and fetching offered files, and offering a page’s own bytes, to the main process', () => {
+    expect(isProxyPathAllowed('/api/meet/control/files/31/accept', 'POST')).toBe(false);
+    expect(isProxyPathAllowed('/api/meet/control/files/31/download?t=abc', 'GET')).toBe(false);
+    expect(isProxyPathAllowed('/api/meet/control/sessions/9/files', 'POST')).toBe(false);
+    expect(isProxyPathAllowed('/api/meet/control/sessions/9/files', 'GET')).toBe(true);
+    expect(isProxyPathAllowed('/api/meet/control/files/31/decline', 'POST')).toBe(true);
+  });
+});
+
+describe('the helper queue (review)', () => {
+  it('ends a batch at typed text, cuts long text, and keeps only the last waiting move', () => {
+    const q: InputAction[] = [];
+    enqueue(q, [{ t: 'move', x: 1, y: 1 }, { t: 'move', x: 2, y: 2 }, { t: 'text', text: 'x'.repeat(100) }, { t: 'key', code: 'ControlLeft', down: false }]);
+    expect(q.map((a) => a.t)).toEqual(['move', 'text', 'text', 'key']);
+    expect(nextBatch(q)).toEqual([{ t: 'move', x: 2, y: 2 }, { t: 'text', text: 'x'.repeat(64) }]);
+    expect(nextBatch(q)).toEqual([{ t: 'text', text: 'x'.repeat(36) }]);
+    expect(nextBatch(q)).toEqual([{ t: 'key', code: 'ControlLeft', down: false }]);
+  });
+
+  it('knows only its own keys', () => {
+    expect(keyOf('constructor')).toBeNull();
+    expect(keyOf('__proto__')).toBeNull();
+    expect(keyOf('KeyA')?.win).toBe(65);
+    expect(protocolLines([{ t: 'key', code: 'toString', down: true }], 'win32')).toEqual([]);
+  });
+
+  it('lets go of held modifiers before typing text', () => {
+    const held = new Held();
+    keyActions({ code: 'MetaLeft', down: true, meta: true }, held);
+    expect(keyActions({ text: 'l' }, held)).toEqual([{ t: 'key', code: 'MetaLeft', down: false }, { t: 'text', text: 'l' }]);
+  });
+});
+
+describe('control on this computer (review)', () => {
+  it('holds a lock that came during the approval, and tells the server once control goes active', async () => {
+    const x = harness();
+    await x.rc.shareStarted(11, { uuid: UUID, identity: 'u3-abc' }, SCREEN);
+    x.h.state = { shares: [{ id: 5, identity: 'u3-abc' }], asked: [], sessions: [session('CONTROL_APPROVED', { grant_waiting: true })] };
+    x.h.grant = { token: token(claims()), key: KEY.toString('base64'), claims: claims(), public_key: PEM };
+    await x.rc.poll();
+    await settle();
+    x.rc.onSystem('lock-screen');
+    await settle();
+    expect(x.calls.some(([, p]) => p.endsWith('/pause'))).toBe(false);
+    x.h.advance(1);
+    x.h.state = { ...x.h.state, sessions: [session('CONTROL_ACTIVE')] };
+    await x.rc.poll();
+    expect(x.calls).toContainEqual(['POST', '/api/meet/control/sessions/9/pause', { reason: 'lock_screen' }]);
+    const keys = await importKeys(new Uint8Array(KEY));
+    const sender = new ControlSender(claims(), keys, x.now);
+    x.rc.packet(11, 'u5-xyz', new TextDecoder().decode(await sender.next('ptr.move', { x: 0.5, y: 0.5 })), 'rc.ctl.move');
+    await settle();
+    expect(x.sent).toEqual([]);
+  });
+
+  it('does not take a click as the person’s own while input is still being carried out', async () => {
+    const x = await active();
+    x.h.advance(5_000);
+    x.injector.busy = true;
+    x.rc.noteLocalInput(600);
+    expect(x.rc.hasProof(600)).toBe(false);
+    x.injector.busy = false;
+    x.injector.done = x.now();
+    expect(x.rc.hasProof(600)).toBe(false);
+    x.h.advance(2_000);
+    x.rc.noteLocalInput(600);
+    expect(x.rc.hasProof(600)).toBe(true);
+  });
+
+  it('stops here at once, before the server has answered', async () => {
+    const x = await active();
+    const deps = (x.rc as unknown as { deps: RemoteControlDeps }).deps;
+    deps.http.request = () => new Promise(() => undefined);
+    void x.rc.stop(9);
+    expect(x.injector.stop).toHaveBeenCalled();
+    expect(x.rc.isLive()).toBe(false);
+  });
+
+  it('pauses and says so when the input helper goes away', async () => {
+    const x = await active();
+    x.injector.onExit!();
+    await settle();
+    expect(x.calls).toContainEqual(['POST', '/api/meet/control/sessions/9/pause', { reason: 'sharer' }]);
+    expect(x.ui.notify).toHaveBeenCalledWith(expect.stringContaining('Input stopped working'));
+  });
+
+  it('never guesses a display: with two and the shared one unknown, the pointer is not moved', async () => {
+    const x = await active(harness({ displays: [{ id: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 } }, { id: 2, bounds: { x: 1920, y: 0, width: 1920, height: 1080 } }] }));
+    await x.rc.shareChanged(11, { ...SCREEN, displayId: null }, true);
+    await x.send('ptr.move', { x: 0.5, y: 0.5 });
+    expect(x.sent).toEqual([]);
+  });
+
+  it('does not report the other key’s messages right after a key change', async () => {
+    const x = await active();
+    const keys = await importKeys(new Uint8Array(32).fill(3));
+    const stale = new ControlSender(claims(), keys, x.now);
+    x.rc.packet(11, 'u5-xyz', new TextDecoder().decode(await stale.next('lease', {})), 'rc.ctl');
+    await settle();
+    x.h.tick(10_000);
+    await settle();
+    expect(x.calls.some(([, p]) => p.endsWith('/security'))).toBe(false);
+  });
+
+  describe('one window shared', () => {
+    const WINDOW: CapturedSource = { id: 'window:4242:0', name: 'Budget', kind: 'window', displayId: null, windowId: '4242' };
+    async function windowShare() {
+      const x = await active();
+      await x.rc.shareChanged(11, WINDOW, true);
+      (x.injector.windowBounds as ReturnType<typeof vi.fn>).mockResolvedValue({ x: 100, y: 100, width: 800, height: 600 });
+      x.h.tick(500);
+      await settle();
+      return x;
+    }
+
+    it('presses only where that window is what the pointer is over', async () => {
+      const x = await windowShare();
+      x.injector.under = '999';
+      await x.send('ptr.button', { x: 0.5, y: 0.5, button: 'left', down: true });
+      expect(x.sent.flat().some((a) => a.t === 'button')).toBe(false);
+      x.injector.under = '4242';
+      await x.send('ptr.button', { x: 0.5, y: 0.5, button: 'left', down: true });
+      expect(x.sent.flat()).toContainEqual({ t: 'button', button: 'left', down: true });
+    });
+
+    it('holds keys until the window has been seen in front, and never switches apps', async () => {
+      const x = await windowShare();
+      await x.send('key', { code: 'KeyA', down: true });
+      expect(x.sent).toEqual([]);
+      (x.injector.foreground as ReturnType<typeof vi.fn>).mockResolvedValue({ window: '4242', app: 'Excel', title: 'Budget' });
+      x.h.tick(250);
+      await settle();
+      await x.send('key', { code: 'KeyA', down: true });
+      expect(x.sent.flat()).toContainEqual({ t: 'key', code: 'KeyA', down: true });
+      const n = x.sent.length;
+      await x.send('special', { combo: 'Alt+Tab' });
+      await x.send('special', { combo: 'Meta' });
+      await x.send('key', { code: 'Tab', down: true, meta: true });
+      expect(x.sent).toHaveLength(n);
+      // Command itself still works: Cmd+C on a Mac.
+      await x.send('key', { code: 'MetaLeft', down: true, meta: true });
+      await x.send('key', { code: 'KeyC', down: true, meta: true });
+      expect(x.sent.flat()).toContainEqual({ t: 'key', code: 'KeyC', down: true });
+    });
+  });
+});
+
+describe('taking a file as the controller (review)', () => {
+  it('takes only files sent to the controller', async () => {
+    const x = harness();
+    const deps = (x.rc as unknown as { deps: RemoteControlDeps }).deps;
+    const row = { id: 31, session_id: 9, direction: 'to_sharer', sender: { id: 3, name: 'Hasarinda' }, name: 'a.exe', size: 1, executable: true, scan: 'clean', status: 'offered' };
+    deps.http.get = async <T,>() => ({ files: [row] }) as T;
+    await expect(x.rc.takeFile({ sessionId: 9, id: 31 }, false)).rejects.toMatchObject({ code: 'IPC_FORBIDDEN_SENDER' });
+    deps.http.get = async <T,>() => ({ files: [{ ...row, direction: 'to_controller' }] }) as T;
+    const request = deps.http.request;
+    deps.http.request = async <T,>(m: string, p: string, o?: { body?: unknown }) => (p.endsWith('/accept') ? ({ download: '/api/meet/control/files/31/download?t=abcdefabcdefabcdef12' } as T) : request<T>(m, p, o));
+    expect(await x.rc.takeFile({ sessionId: 9, id: 31, confirmExecutable: true }, false)).toEqual({ status: 'accepted' });
+    expect(deps.files.download).toHaveBeenCalledWith('/api/meet/control/files/31/download?t=abcdefabcdefabcdef12', 'a.exe');
   });
 });

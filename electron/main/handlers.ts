@@ -141,6 +141,10 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('rc:resume', (input, c) => rc.resume(c.sender.id, input.sessionId));
   router.handle('rc:fileAnswer', (input, c) => rc.answerFile(c.sender.id, input, ctx.lock.isLocked()));
   router.handle('rc:sendFile', (input, c) => rc.sendFile(c.sender.id, input.sessionId));
+  router.handle('rc:takeFile', (input, c) => {
+    fromMeeting(c.sender);
+    return rc.takeFile(input, ctx.lock.isLocked());
+  });
   router.handle('rc:stop', async (input) => {
     if (input.sessionId) await rc.stop(input.sessionId, 'stopped');
     else await rc.stopAll('stopped');
@@ -342,9 +346,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     const oc = input.ordersCsv;
     const rep = input.omsReport;
     const tl = input.tenderLine;
-    const path = input.remoteFile
-      ? `/api/meet/control/files/${input.remoteFile.id}/download?t=${encodeURIComponent(input.remoteFile.t)}`
-      : input.orderPdf
+    const path = input.orderPdf
       ? `/api/share/oms/${input.orderPdf}/pdf`
       : input.tenderDocument
       ? `/api/tenders/documents/${input.tenderDocument}/file`
@@ -385,7 +387,14 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
           : `/api/mail/messages/${input.mail!.uid}/attachments/${encodeURIComponent(input.mail!.ref)}?${new URLSearchParams({ folder: input.mail!.folder, dl: '1', ...(input.mail!.mailbox ? { mailbox: input.mail!.mailbox } : {}) })}`;
     return ctx.transfers.download(path, input.name, !!input.open, input.fileId ?? null);
   });
-  router.handle('transfers:upload', (input) => ctx.transfers.upload(input.handles, input.target));
+  router.handle('transfers:upload', (input, c) => {
+    // A file for a remote-control session goes only from the meeting window that controls it; the shared
+    // computer's own offers are chosen in the main process's dialog, never through here.
+    if (input.target.kind === 'remote' && ctx.windows.kindOf(winOf(c.sender)?.id ?? -1) !== 'meet') {
+      throw new DesktopError('IPC_FORBIDDEN_SENDER', 'Files for a remote session are sent from the meeting window.');
+    }
+    return ctx.transfers.upload(input.handles, input.target);
+  });
   router.handle('transfers:pause', (input) => ctx.transfers.pause(input.id));
   router.handle('transfers:resume', (input) => ctx.transfers.resume(input.id));
   router.handle('transfers:cancel', (input) => ctx.transfers.cancel(input.id));

@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { logger } from '../../main/log';
-import { KEYS } from './keys';
+import { keyOf } from './keys';
 
 const log = logger('remote-input');
 
@@ -51,11 +51,23 @@ export interface Injector {
   readonly method: 'sendinput' | 'cgevent' | 'xdotool';
   /** Starts the helper; false when it cannot run here (blocked PowerShell, no permission, no xdotool). */
   start(): Promise<boolean>;
+  /** Queue actions. Moves waiting behind a running batch collapse to the last; long text is cut into pieces. */
   send(actions: InputAction[]): void;
+  /** Forget everything not yet handed to the system: a pause, a stop, the person here taking over. */
+  drop(): void;
+  /** Nothing is queued and nothing is being carried out. */
+  idle(): boolean;
+  /** When the system last finished carrying out a batch (ms): the helper said so, not when it was written. */
+  lastDone(): number;
   /** A captured window's place on screen, in the helper's space. */
   windowBounds(windowId: string): Promise<Rect | null>;
+  /** The top-level window under a point, in the helper's space, or null when it cannot tell. */
+  windowAt(x: number, y: number): Promise<string | null>;
   foreground(): Promise<Foreground | null>;
+  /** Let what is queued (the releases) finish, then end. */
   stop(): void;
+  /** The helper went away without being asked to. */
+  onExit: (() => void) | null;
 }
 
 export type DisplayServer = 'win32' | 'quartz' | 'x11' | 'wayland';
@@ -96,7 +108,7 @@ export function protocolLines(actions: InputAction[], platform: 'win32' | 'darwi
       const dy = int(a.dy, -2400, 2400);
       if (dx || dy) out.push(`w ${dx} ${dy}`);
     } else if (a.t === 'key') {
-      const k = KEYS[a.code];
+      const k = keyOf(a.code);
       if (!k) continue;
       out.push(platform === 'win32' ? `k ${k.win} ${k.ext ? 1 : 0} ${a.down ? 1 : 0}` : `k ${k.mac} ${a.down ? 1 : 0}`);
     } else if (a.t === 'text') {
@@ -122,7 +134,7 @@ export function xdotoolArgs(actions: InputAction[]): string[] {
       if (ny) args.push('click', '--repeat', String(ny), a.dy > 0 ? '5' : '4');
       if (nx) args.push('click', '--repeat', String(nx), a.dx > 0 ? '7' : '6');
     } else if (a.t === 'key') {
-      const k = KEYS[a.code];
+      const k = keyOf(a.code);
       if (k) args.push(a.down ? 'keydown' : 'keyup', k.x11);
     } else if (a.t === 'text') {
       const text = cleanText(a.text);
@@ -133,18 +145,108 @@ export function xdotoolArgs(actions: InputAction[]): string[] {
   return args;
 }
 
+// ── the queue every helper shares ─────────────────────────────────────────
+
+/** Text goes in pieces this long, each its own batch, so a pause cuts it short. */
+const TEXT_CHUNK = 64;
+const BATCH = 64;
+
+/** Add actions to a queue: a move replaces a move still waiting; text is cut into pieces. */
+export function enqueue(queue: InputAction[], actions: InputAction[]): void {
+  for (const a of actions) {
+    if (a.t === 'text') {
+      const chars = Array.from(cleanText(a.text));
+      for (let i = 0; i < chars.length; i += TEXT_CHUNK) queue.push({ t: 'text', text: chars.slice(i, i + TEXT_CHUNK).join('') });
+      continue;
+    }
+    const last = queue[queue.length - 1];
+    if (a.t === 'move' && last?.t === 'move') queue[queue.length - 1] = a;
+    else queue.push(a);
+  }
+}
+
+/** The next batch: up to 64 actions, ending at the first text (xdotool types every word that follows `type`). */
+export function nextBatch(queue: InputAction[]): InputAction[] {
+  const out: InputAction[] = [];
+  while (queue.length && out.length < BATCH) {
+    const a = queue.shift()!;
+    out.push(a);
+    if (a.t === 'text') break;
+  }
+  return out;
+}
+
+/**
+ * One batch at a time, each confirmed by the helper before the next goes.
+ * Nothing piles up inside a helper where a pause could not reach it: what
+ * waits, waits here, and `drop()` forgets it.
+ */
+abstract class Batched {
+  onExit: (() => void) | null = null;
+  private queue: InputAction[] = [];
+  private running = false;
+  private done = 0;
+  protected stopping = false;
+
+  protected abstract runBatch(batch: InputAction[]): Promise<void>;
+  protected abstract close(): void;
+
+  send(actions: InputAction[]): void {
+    if (this.stopping) return;
+    enqueue(this.queue, actions);
+    void this.drain();
+  }
+
+  drop(): void {
+    this.queue = [];
+  }
+
+  idle(): boolean {
+    return !this.running && this.queue.length === 0;
+  }
+
+  lastDone(): number {
+    return this.done;
+  }
+
+  private async drain(): Promise<void> {
+    if (this.running) return;
+    this.running = true;
+    try {
+      while (this.queue.length) {
+        const batch = nextBatch(this.queue);
+        try {
+          await this.runBatch(batch);
+        } catch (e) {
+          log.warn('input batch failed', { error: String((e as Error).message ?? e) });
+        }
+        this.done = Date.now();
+      }
+    } finally {
+      this.running = false;
+      if (this.stopping) this.close();
+    }
+  }
+
+  stop(): void {
+    this.stopping = true;
+    if (!this.running) this.close();
+  }
+}
+
 // ── helpers speaking the line protocol (Windows, macOS) ──────────────────
 
 /**
  * A long-lived helper process: actions are written as lines, queries
  * (`?<n> …`) are answered with a line starting `<n> `.
  */
-abstract class LineHelper implements Injector {
+abstract class LineHelper extends Batched implements Injector {
   abstract readonly method: Injector['method'];
   private proc: ChildProcessWithoutNullStreams | null = null;
   private starting: Promise<boolean> | null = null;
   private waiters = new Map<number, (line: string | null) => void>();
   private nextQuery = 1;
+  private closing = false;
 
   protected abstract command(): { file: string; args: string[] };
   protected abstract platform(): 'win32' | 'darwin';
@@ -152,6 +254,8 @@ abstract class LineHelper implements Injector {
   start(): Promise<boolean> {
     if (this.proc) return Promise.resolve(true);
     if (this.starting) return this.starting;
+    this.stopping = false;
+    this.closing = false;
     this.starting = new Promise<boolean>((resolve) => {
       const { file, args } = this.command();
       let proc: ChildProcessWithoutNullStreams;
@@ -185,11 +289,13 @@ abstract class LineHelper implements Injector {
       proc.stderr.on('data', (d: Buffer) => log.warn('input helper', { stderr: d.toString('utf8').slice(0, 400) }));
       proc.on('exit', (code) => {
         clearTimeout(timer);
-        if (this.proc === proc) this.proc = null;
+        const mine = this.proc === proc;
+        if (mine) this.proc = null;
         for (const w of this.waiters.values()) w(null);
         this.waiters.clear();
         log.info('input helper exited', { code });
         resolve(false);
+        if (mine && !this.closing) this.onExit?.();
       });
       proc.on('error', () => resolve(false));
     }).finally(() => {
@@ -198,13 +304,15 @@ abstract class LineHelper implements Injector {
     return this.starting;
   }
 
-  send(actions: InputAction[]): void {
-    const lines = protocolLines(actions, this.platform());
+  /** Write the batch, then wait for the helper to say it has carried it out (lines run in order). */
+  protected async runBatch(batch: InputAction[]): Promise<void> {
+    const lines = protocolLines(batch, this.platform());
     if (!this.proc || lines.length === 0) return;
     this.proc.stdin.write(`${lines.join('\n')}\n`);
+    await this.query('ack', 10_000);
   }
 
-  protected query(what: string): Promise<string | null> {
+  protected query(what: string, timeoutMs = 2_000): Promise<string | null> {
     const proc = this.proc;
     if (!proc) return Promise.resolve(null);
     const n = this.nextQuery++;
@@ -212,7 +320,7 @@ abstract class LineHelper implements Injector {
       const timer = setTimeout(() => {
         this.waiters.delete(n);
         resolve(null);
-      }, 2_000);
+      }, timeoutMs);
       this.waiters.set(n, (line) => {
         clearTimeout(timer);
         resolve(line);
@@ -228,6 +336,11 @@ abstract class LineHelper implements Injector {
     return m ? { x: +m[1]!, y: +m[2]!, width: +m[3]!, height: +m[4]! } : null;
   }
 
+  async windowAt(x: number, y: number): Promise<string | null> {
+    const r = await this.query(`at ${int(x, -100_000, 100_000)} ${int(y, -100_000, 100_000)}`);
+    return r && /^\d{1,20}$/.test(r) && r !== '0' ? r : null;
+  }
+
   async foreground(): Promise<Foreground | null> {
     const r = await this.query('fg');
     if (r === null) return null;
@@ -237,16 +350,18 @@ abstract class LineHelper implements Injector {
     return { window: id && id !== '0' ? id : null, app: text(app), title: text(title) };
   }
 
-  stop(): void {
+  /** After the last batch (the releases) has been carried out: stdin closes, and the helper ends. */
+  protected close(): void {
     const p = this.proc;
     this.proc = null;
+    this.closing = true;
     if (p) {
       try {
         p.stdin.end();
       } catch {
         /* already gone */
       }
-      setTimeout(() => p.kill(), 500).unref?.();
+      setTimeout(() => p.kill(), 2_000).unref?.();
     }
   }
 }
@@ -282,6 +397,9 @@ public static class WsInput {
   [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
   [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr h, int attr, out RECT r, int size);
   [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+  [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X; public int Y; }
+  [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(POINT p);
+  [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h, uint flags);
   const uint MOVE = 0x1, LDOWN = 0x2, LUP = 0x4, RDOWN = 0x8, RUP = 0x10, MDOWN = 0x20, MUP = 0x40, WHEEL = 0x800, HWHEEL = 0x1000, VIRTUALDESK = 0x4000, ABSOLUTE = 0x8000;
   const uint KEYUP = 0x2, EXTENDED = 0x1, UNICODE = 0x4;
   static readonly IntPtr MARK = new IntPtr(0x5753524D);
@@ -325,6 +443,13 @@ public static class WsInput {
     if (DwmGetWindowAttribute(h, 9, out r, Marshal.SizeOf(typeof(RECT))) != 0 && !GetWindowRect(h, out r)) return "-";
     return r.Left + " " + r.Top + " " + (r.Right - r.Left) + " " + (r.Bottom - r.Top);
   }
+  public static string At(int x, int y) {
+    POINT p; p.X = x; p.Y = y;
+    IntPtr h = WindowFromPoint(p);
+    if (h == IntPtr.Zero) return "0";
+    IntPtr r = GetAncestor(h, 2);
+    return (r == IntPtr.Zero ? h : r).ToInt64().ToString();
+  }
   static string B64(string s) { return Convert.ToBase64String(Encoding.UTF8.GetBytes(s ?? "")); }
   public static string Foreground() {
     IntPtr h = GetForegroundWindow();
@@ -355,7 +480,7 @@ while ($true) {
       default {
         if ($p[0].StartsWith('?')) {
           $n = $p[0].Substring(1)
-          $a = if ($p[1] -eq 'rect') { [WsInput]::Rect([long]$p[2]) } elseif ($p[1] -eq 'fg') { [WsInput]::Foreground() } else { '-' }
+          $a = if ($p[1] -eq 'rect') { [WsInput]::Rect([long]$p[2]) } elseif ($p[1] -eq 'fg') { [WsInput]::Foreground() } elseif ($p[1] -eq 'at') { [WsInput]::At([int]$p[2], [int]$p[3]) } elseif ($p[1] -eq 'ack') { 'ok' } else { '-' }
           [Console]::Out.WriteLine("$n $a")
           [Console]::Out.Flush()
         }
@@ -444,6 +569,16 @@ function run() {
           var list = ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo(8, +p[2])));
           var w = list && list[0];
           if (w && w.kCGWindowBounds) a = Math.round(w.kCGWindowBounds.X) + ' ' + Math.round(w.kCGWindowBounds.Y) + ' ' + Math.round(w.kCGWindowBounds.Width) + ' ' + Math.round(w.kCGWindowBounds.Height);
+        } else if (p[1] === 'ack') {
+          a = 'ok';
+        } else if (p[1] === 'at') {
+          // Front to back: the first window with something on screen at the point is the one a click reaches.
+          var px = +p[2], py = +p[3], all = ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo(17, 0))) || [];
+          a = '0';
+          for (var j = 0; j < all.length; j++) {
+            var b = all[j].kCGWindowBounds;
+            if (b && all[j].kCGWindowAlpha > 0 && px >= b.X && px < b.X + b.Width && py >= b.Y && py < b.Y + b.Height) { a = String(all[j].kCGWindowNumber); break; }
+          }
         } else if (p[1] === 'fg') {
           var app = $.NSWorkspace.sharedWorkspace.frontmostApplication;
           var name = app ? app.localizedName.js : '';
@@ -475,41 +610,25 @@ class MacInjector extends LineHelper {
  * never more than one at a time. Moves waiting behind a running batch are
  * collapsed to the last one, so a fast mouse never builds a backlog.
  */
-class X11Injector implements Injector {
+class X11Injector extends Batched implements Injector {
   readonly method = 'xdotool' as const;
-  private queue: InputAction[] = [];
-  private running = false;
-  private stopped = false;
 
-  constructor(private readonly bin: string) {}
+  constructor(private readonly bin: string) {
+    super();
+  }
 
   async start(): Promise<boolean> {
-    this.stopped = false;
+    this.stopping = false;
     return (await this.run(['version'])) !== null;
   }
 
-  send(actions: InputAction[]): void {
-    if (this.stopped) return;
-    for (const a of actions) {
-      const last = this.queue[this.queue.length - 1];
-      if (a.t === 'move' && last?.t === 'move') this.queue[this.queue.length - 1] = a;
-      else this.queue.push(a);
-    }
-    void this.drain();
+  protected async runBatch(batch: InputAction[]): Promise<void> {
+    const args = xdotoolArgs(batch);
+    if (args.length) await this.run(args);
   }
 
-  private async drain(): Promise<void> {
-    if (this.running) return;
-    this.running = true;
-    try {
-      while (this.queue.length && !this.stopped) {
-        const batch = this.queue.splice(0, 64);
-        const args = xdotoolArgs(batch);
-        if (args.length) await this.run(args);
-      }
-    } finally {
-      this.running = false;
-    }
+  protected close(): void {
+    /* nothing runs between batches */
   }
 
   private run(args: string[]): Promise<string | null> {
@@ -544,6 +663,13 @@ class X11Injector implements Injector {
     return Object.values(r).every(Number.isFinite) ? r : null;
   }
 
+  /** The client window under the point: the pointer goes there first, as the click that follows would take it. */
+  async windowAt(x: number, y: number): Promise<string | null> {
+    const out = await this.run(['mousemove', String(int(x, 0, 100_000)), String(int(y, 0, 100_000)), 'getmouselocation', '--shell']);
+    const id = out ? /^WINDOW=(\d{1,20})$/m.exec(out)?.[1] : undefined;
+    return id && id !== '0' ? id : null;
+  }
+
   async foreground(): Promise<Foreground | null> {
     const id = (await this.run(['getactivewindow']))?.trim();
     if (!id || !/^\d+$/.test(id)) return id === undefined ? null : { window: null, app: '', title: '' };
@@ -551,10 +677,6 @@ class X11Injector implements Injector {
     return { window: id, app: (cls ?? '').trim().slice(0, 200), title: (title ?? '').trim().slice(0, 200) };
   }
 
-  stop(): void {
-    this.stopped = true;
-    this.queue = [];
-  }
 }
 
 // ── which helper, and whether it can work here ───────────────────────────

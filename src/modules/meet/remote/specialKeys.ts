@@ -2,8 +2,8 @@
  * The special-key menu (WS-MEET-ENH-01 RC-KBD-04): what can be sent, per the sharer's platform.
  *
  * Alt+Tab, the Windows or Command key, Esc and the task manager everywhere it
- * exists; Ctrl+Alt+Delete only on Windows, where the desktop has a secure
- * equivalent to raise it. What the platform cannot take is not offered, and
+ * exists; Ctrl+Alt+Delete on Windows only as a request to the person there,
+ * because no app can send it. What the platform cannot take is not offered, and
  * the menu says so instead of leaving somebody to wonder. The emergency stop
  * and lock chords are never on it — the sharer's desktop refuses them anyway.
  * The same list as the web's.
@@ -60,8 +60,8 @@ export function specialKeys(platform: string | null | undefined): { available: S
       { label: 'Windows key', combo: 'Meta', hint: '⊞' },
       { label: 'Escape', combo: 'Esc', hint: 'Esc' },
       { label: 'Task Manager', combo: 'Ctrl+Shift+Esc', hint: 'Ctrl+Shift+Esc' },
-      { label: 'Ctrl + Alt + Delete', combo: 'Ctrl+Alt+Delete', hint: 'Ctrl+Alt+Del' },
+      { label: 'Ask for Ctrl + Alt + Delete', combo: 'Ctrl+Alt+Delete', hint: 'They press it' },
     ],
-    notes: ["Ctrl+Alt+Delete is raised by WorkSuite Desktop through Windows' secure path; the sign-in screen it opens is never controlled."],
+    notes: ["No app can send Ctrl+Alt+Delete — Windows takes it only from the keyboard. Asking for it tells the person at the computer to press it; the screen it opens is never controlled."],
   };
 }

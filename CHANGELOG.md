@@ -5,6 +5,58 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-28 — Meet remote control: what the security review found (not released)
+
+Three reviews of the code that lets someone else drive this computer. Nothing
+let input through without the current key; these are the gaps they found.
+
+**Fixed**
+
+- **A page could take a file offered to the shared computer** through the
+  API proxy, skipping the red bar's Accept and its real-click check (the
+  server checks only who the receiver is). Taking, fetching and offering
+  files now go through the main process only; the controller's own Accept
+  goes there too and takes only files sent to the controller.
+- **Reserved chords written another way got through** (`Meta + L` locked the
+  screen, `Alt+Ctrl+Shift+Esc` fired the emergency stop as if the person
+  here had). They are now matched by key and modifiers in any order,
+  spelling or with extras; the policy's chord is normalised the same way.
+- **A lock or sleep during the approval or a key change was lost**, and
+  control went live unpaused. It now holds, and is told to the server when
+  control goes active. Only the person's own Resume lifts it.
+- **Queued input could run after a pause, and a late-running queued click
+  could pass for the person's own.** One batch at a time is in the input
+  helper, each confirmed; a pause forgets the rest and the releases go next;
+  the real-click check counts from when the helper finished, with nothing
+  queued.
+- **On Linux**, anything after typed text in a batch was typed as words (so
+  key-ups were lost), and ending a session could throw away the releases.
+- **One window shared**: clicks could land on another app covering it, and
+  keys could reach other apps for up to a second after Alt+Tab. Presses now
+  need that window under the pointer, keys wait until it has been seen in
+  front, and app switching (Alt+Tab, Command+Tab) is not passed on.
+- **A screen share whose display could not be matched** sent input to the
+  primary display. It now takes none, unless there is only one display.
+- **Any participant could flood the control channel** and crowd out the
+  controller: the meeting window now relays only the controller's messages.
+- The grant must say it is one, name this computer and name its key (the
+  server now puts the key's SHA-256 in the signed grant); only Ed25519 keys.
+- Leases can't be stamped far into the future; a key change no longer sends
+  administrators false "unsigned message" alerts; an input helper that exits
+  pauses control; stopping ends input before the server answers; offered
+  files are streamed from disk rather than read into memory; typed text lets
+  go of held modifiers first; the key table has no prototype.
+
+**Changed**
+
+- The rate limits were raised to what a person can make with a 120 Hz
+  trackpad and a held key (240 pointer and 60 key events a second), so fast
+  scrolling no longer trips the burst alarm.
+- The special-keys menu now says "Ask for Ctrl + Alt + Delete": no app can
+  send it; the person at the computer is asked to press it.
+
+---
+
 ## 2026-09-28 — Meet remote control (not released)
 
 WS-MEET-ENH-01, the desktop's part. The server and web sides shipped

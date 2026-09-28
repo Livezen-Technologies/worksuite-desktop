@@ -37,7 +37,7 @@ const view = (session: Partial<NonNullable<RemoteControlView['session']>> | null
   requests: [],
   offers: [],
   canSendFiles: false,
-  session: session ? { id: 9, status: 'CONTROL_ACTIVE', controller: 'Olivia Chen', capsLabel: 'Mouse and keyboard', pauseReason: null, pauseText: null, since: Date.now() - 65_000, expiresAt: null, waiting: null, type: 'meeting', ...session } : null,
+  session: session ? { id: 9, status: 'CONTROL_ACTIVE', controller: 'Olivia Chen', controllerIdentity: 'u5-xyz', capsLabel: 'Mouse and keyboard', pauseReason: null, pauseText: null, since: Date.now() - 65_000, expiresAt: null, waiting: null, type: 'meeting', ...session } : null,
 });
 
 beforeEach(() => {

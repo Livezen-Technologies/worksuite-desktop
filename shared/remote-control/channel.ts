@@ -170,27 +170,75 @@ export function parseEnvelope(text: string): Envelope | null {
 
 // ── keys the shared computer never takes from a controller (RC-KBD-05, SEC-15) ──
 
-/** A key combination as `Ctrl+Alt+Shift+Esc`: modifiers in a fixed order, then the key. */
-export function chordOf(e: { ctrl?: boolean; alt?: boolean; shift?: boolean; meta?: boolean; code?: string; key?: string }): string {
-  const mods = [e.ctrl && 'Ctrl', e.alt && 'Alt', e.shift && 'Shift', e.meta && 'Meta'].filter(Boolean) as string[];
-  const key = (e.code ?? e.key ?? '').replace(/^Key/, '').replace(/^Digit/, '').replace(/^Escape$/, 'Esc');
-  return [...mods, key].join('+');
+/** Modifier names as people and systems write them, to the four this channel uses. */
+const MODIFIER: Readonly<Record<string, 'Ctrl' | 'Alt' | 'Shift' | 'Meta'>> = Object.freeze(
+  Object.assign(Object.create(null) as Record<string, 'Ctrl' | 'Alt' | 'Shift' | 'Meta'>, {
+    ctrl: 'Ctrl', control: 'Ctrl', alt: 'Alt', option: 'Alt', opt: 'Alt', shift: 'Shift', meta: 'Meta', cmd: 'Meta', command: 'Meta', super: 'Meta', win: 'Meta', windows: 'Meta',
+  }),
+);
+const MODIFIER_ORDER = ['Ctrl', 'Alt', 'Shift', 'Meta'] as const;
+
+function keyName(k: string): string {
+  const s = k.replace(/^Key(?=[A-Za-z]$)/, '').replace(/^Digit(?=\d$)/, '');
+  if (/^esc(ape)?$/i.test(s)) return 'Esc';
+  return s.length === 1 ? s.toUpperCase() : s;
+}
+
+/** A chord's modifiers and key, however it was written: `meta + l`, `Alt+Ctrl+Shift+Escape`. */
+export function parseChord(chord: string): { mods: Set<string>; key: string } {
+  const mods = new Set<string>();
+  let key = '';
+  for (const part of String(chord).split('+').map((p) => p.trim()).filter(Boolean)) {
+    const m = MODIFIER[part.toLowerCase()];
+    if (m) mods.add(m);
+    else key = keyName(part);
+  }
+  return { mods, key };
+}
+
+/** `Ctrl+Alt+Shift+Esc`: modifiers in a fixed order, then the key — the one way a chord is written here. */
+export function canonicalChord(chord: string): string {
+  const c = parseChord(chord);
+  return [...MODIFIER_ORDER.filter((m) => c.mods.has(m)), c.key].filter(Boolean).join('+');
+}
+
+/** A key message's chord. Fields of the wrong type count as absent. */
+export function chordOf(e: { ctrl?: unknown; alt?: unknown; shift?: unknown; meta?: unknown; code?: unknown; key?: unknown }): string {
+  const mods = [e.ctrl === true && 'Ctrl', e.alt === true && 'Alt', e.shift === true && 'Shift', e.meta === true && 'Meta'].filter(Boolean) as string[];
+  const raw = typeof e.code === 'string' ? e.code : typeof e.key === 'string' ? e.key : '';
+  return [...mods, keyName(raw)].filter(Boolean).join('+');
 }
 
 /** The emergency stop and the chords that lock or switch the shared session. Never injected. */
 export function reservedChords(emergency = 'Ctrl+Alt+Shift+Esc'): Set<string> {
-  const mac = emergency.replace('Ctrl', 'Meta');
-  return new Set([emergency, mac, 'Meta+Alt+Shift+Esc', 'Meta+L', 'Ctrl+Meta+Q']);
+  const e = canonicalChord(emergency);
+  return new Set([e, canonicalChord(e.replace('Ctrl', 'Meta')), 'Meta+L', 'Ctrl+Meta+Q']);
+}
+
+/**
+ * Whether a chord is reserved: the same key with at least the reserved
+ * modifiers, whatever order or spelling it came in (`Meta + l`, `Ctrl+Meta+L`).
+ */
+export function isReserved(chord: string, reserved: Iterable<string>): boolean {
+  const c = parseChord(chord);
+  if (!c.key) return false;
+  for (const r of reserved) {
+    const p = parseChord(r);
+    if (p.key === c.key && [...p.mods].every((m) => c.mods.has(m))) return true;
+  }
+  return false;
 }
 
 /** "Ctrl+Alt+Shift+Esc" → Electron accelerators for it (Command stands in for Ctrl on a Mac as well). */
 export function acceleratorsFor(chord: string, platform: string): string[] {
-  const parts = chord.split('+').map((p) => p.trim()).filter(Boolean);
-  if (parts.length < 2) return [];
-  const map: Record<string, string> = { Ctrl: 'Control', Alt: 'Alt', Shift: 'Shift', Meta: 'Super', Esc: 'Escape' };
-  const one = parts.map((p) => map[p] ?? p).join('+');
+  const c = parseChord(chord);
+  if (!c.key || c.mods.size === 0) return [];
+  const mods = MODIFIER_ORDER.filter((m) => c.mods.has(m));
+  const key = c.key === 'Esc' ? 'Escape' : c.key;
+  const name: Record<string, string> = { Ctrl: 'Control', Alt: 'Alt', Shift: 'Shift', Meta: 'Super' };
+  const one = [...mods.map((m) => name[m]!), key].join('+');
   if (platform !== 'darwin') return [one];
-  const cmd = parts.map((p) => (p === 'Ctrl' ? 'Command' : p === 'Meta' ? 'Command' : (map[p] ?? p))).join('+');
+  const cmd = [...new Set(mods.map((m) => (m === 'Ctrl' || m === 'Meta' ? 'Command' : name[m]!))), key].join('+');
   return cmd === one ? [one] : [one, cmd];
 }
 
@@ -200,7 +248,13 @@ export type Refusal = 'wrong_grant' | 'bad_mac' | 'stale_sequence' | 'wrong_send
 
 export type Verdict = { ok: true; type: ControlType; payload: Record<string, unknown> } | { ok: false; reason: Refusal };
 
-const LIMITS: Record<'pointer' | 'key' | 'click', number> = { pointer: 120, key: 30, click: 10 };
+/**
+ * A second's worth of input a person can make: moves and wheel from a fast
+ * trackpad on a 120 Hz screen, keys held down and repeating, clicks.
+ */
+const LIMITS: Record<'pointer' | 'key' | 'click', number> = { pointer: 240, key: 60, click: 10 };
+/** How far past its own clock a controller may stamp a lease: clock skew, not a way to outlive the lease. */
+const LEASE_SKEW_S = 120;
 
 /**
  * Decides, for every message that reaches the shared computer, whether it
@@ -219,7 +273,7 @@ export class ControlReceiver {
    */
   private lastSeq = { move: -1, other: -1 };
   private windows: Record<'pointer' | 'key' | 'click', number[]> = { pointer: [], key: [], click: [] };
-  private readonly reserved: Set<string>;
+  private readonly reserved: string[];
 
   constructor(
     readonly claims: GrantClaims,
@@ -227,7 +281,7 @@ export class ControlReceiver {
     private readonly now: () => number = () => Date.now(),
     emergencyChord = 'Ctrl+Alt+Shift+Esc',
   ) {
-    this.reserved = reservedChords(emergencyChord);
+    this.reserved = [...reservedChords(emergencyChord)];
   }
 
   async accept(env: Envelope, sender: string, active: boolean): Promise<Verdict> {
@@ -240,7 +294,7 @@ export class ControlReceiver {
     if (env.s <= this.lastSeq[lane]) return { ok: false, reason: 'stale_sequence' };
     const nowS = Math.floor(this.now() / 1000);
     if (nowS >= this.claims.exp) return { ok: false, reason: 'expired' };
-    if (env.l < nowS) return { ok: false, reason: 'lease' };
+    if (env.l < nowS || env.l > nowS + this.claims.lease_s + LEASE_SKEW_S) return { ok: false, reason: 'lease' };
     // A genuine, newer message moves the sequence on even if it is refused below: replaying it cannot help.
     this.lastSeq[lane] = env.s;
 
@@ -260,8 +314,8 @@ export class ControlReceiver {
     }
 
     if (type === 'key' || type === 'special') {
-      const chord = type === 'special' ? String(payload.combo ?? '') : chordOf(payload as never);
-      if (this.reserved.has(chord)) return { ok: false, reason: 'reserved_chord' };
+      const chord = type === 'special' ? (typeof payload.combo === 'string' ? payload.combo : '') : chordOf(payload);
+      if (isReserved(chord, this.reserved)) return { ok: false, reason: 'reserved_chord' };
     }
 
     const bucket = type === 'ptr.move' || type === 'ptr.wheel' ? 'pointer' : type === 'ptr.button' ? 'click' : type === 'key' || type === 'special' ? 'key' : null;

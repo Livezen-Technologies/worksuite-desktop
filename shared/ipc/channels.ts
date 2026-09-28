@@ -71,6 +71,7 @@ export const INVOKE_CHANNELS = [
   'rc:stop',
   'rc:fileAnswer',
   'rc:sendFile',
+  'rc:takeFile',
   'transfers:list',
   'transfers:download',
   'transfers:upload',

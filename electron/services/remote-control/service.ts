@@ -1,5 +1,5 @@
 import type { DesktopPolicy, RemoteControlConsent, RemoteControlOffer, RemoteControlRequestView, RemoteControlSessionView, RemoteControlSupport, RemoteControlView } from '@shared/types';
-import { ControlReceiver, acceleratorsFor, importKeys, parseEnvelope, type Caps, type Refusal } from '@shared/remote-control/channel';
+import { ControlReceiver, acceleratorsFor, chordOf, importKeys, parseChord, parseEnvelope, type Caps, type Refusal } from '@shared/remote-control/channel';
 import { DesktopError, isDesktopError } from '../../main/errors';
 import { logger } from '../../main/log';
 import { checkGrant, type GrantDelivery } from './grant';
@@ -120,6 +120,12 @@ interface Live {
   pausedHere: boolean;
   /** When it was paused here: a state read that started earlier cannot undo it. */
   pausedAt: number;
+  /** The server has heard of the pause made here (it takes a pause only while control is active). */
+  pauseSent: boolean;
+  /** When the person here last resumed: a new key after that, and only then, lifts a pause made here. */
+  resumedAt: number;
+  /** When the current receiver (its key) was set up: messages under the old key are expected for a moment. */
+  receiverAt: number;
 }
 
 export interface Display {
@@ -205,6 +211,18 @@ export function pauseText(reason: string | null): string {
   }
 }
 
+/**
+ * A chord that switches to another app: Alt+Tab, Command+Tab, Windows+Tab,
+ * or the Windows or Command key sent on its own from the special-keys menu.
+ * Command itself still works (Cmd+C on a Mac); a Windows-key tap that opens
+ * Start is caught by the foreground check, which then holds keys back.
+ */
+export function switchesApps(chord: string): boolean {
+  const c = parseChord(chord);
+  if (c.key === 'Tab' && (c.mods.has('Alt') || c.mods.has('Meta'))) return true;
+  return c.key === '' && c.mods.size === 1 && c.mods.has('Meta');
+}
+
 /** Whether an app in front is one control must not reach. */
 export function isProtected(fg: Pick<Foreground, 'app' | 'title'> | null): boolean {
   if (!fg) return false;
@@ -282,6 +300,7 @@ export class RemoteControlService {
             id: live.id,
             status: live.pausedHere && live.status === 'CONTROL_ACTIVE' ? 'CONTROL_PAUSED' : live.status,
             controller: live.controller,
+            controllerIdentity: live.controllerIdentity,
             capsLabel: live.capsLabel,
             pauseReason: live.pauseReason,
             pauseText: live.status === 'CONTROL_PAUSED' || live.pausedHere ? pauseText(live.pauseReason) : null,
@@ -375,6 +394,8 @@ export class RemoteControlService {
       },
     });
     this.share = { uuid: input.uuid, shareId: Number(share.id), identity: input.identity, webContentsId, source, allowRequests: offered, paused: false };
+    // One window shared: keys wait until it has been seen in front.
+    this.keysAllowed = source?.kind !== 'window';
     this.startPolling();
     this.changed();
     return { shareId: this.share.shareId, controlOffered: offered, why: offered ? null : why };
@@ -390,6 +411,7 @@ export class RemoteControlService {
     if (!this.share || this.share.webContentsId !== webContentsId) return;
     this.share.source = source;
     this.windowRect = null;
+    this.keysAllowed = source?.kind !== 'window';
     if (!byController) for (const s of [...this.sessions.values()]) await this.stop(s.id, 'stopped');
     this.changed();
   }
@@ -515,15 +537,19 @@ export class RemoteControlService {
         lastInput: this.now(),
         pausedHere: false,
         pausedAt: 0,
+        pauseSent: false,
+        resumedAt: 0,
+        receiverAt: 0,
       };
       // A read that left before this computer paused control says nothing about the pause.
       const stale = asked < live.pausedAt;
       const becameActive = !stale && s.status === 'CONTROL_ACTIVE' && live.status !== 'CONTROL_ACTIVE';
-      if (!stale) Object.assign(live, { status: s.status as Status, pauseReason: live.pausedHere && s.status === 'CONTROL_ACTIVE' ? live.pauseReason : s.pause_reason });
+      if (!stale) Object.assign(live, { status: s.status as Status, pauseReason: live.pausedHere ? live.pauseReason : s.pause_reason });
       // A pause made here holds until the person resumes, which rotates the key (see `collect`). The server
       // still calling it active ten seconds on means it never heard: say it again.
-      if (live.pausedHere && !stale && s.status === 'CONTROL_ACTIVE' && this.now() - live.pausedAt > 10_000) {
+      if (live.pausedHere && !stale && s.status === 'CONTROL_ACTIVE' && (!live.pauseSent || this.now() - live.pausedAt > 10_000)) {
         live.pausedAt = this.now();
+        live.pauseSent = true;
         void this.deps.http.request('POST', `/api/meet/control/sessions/${live.id}/pause`, { body: { reason: live.pauseReason ?? 'sharer' } }).catch(() => undefined);
       }
       Object.assign(live, { caps: s.caps, capsLabel: s.caps_label, expiresAt: s.expires_at, keyVersion: s.key_version, type: s.type });
@@ -603,6 +629,33 @@ export class RemoteControlService {
     return { status: 'accepted' };
   }
 
+  /**
+   * This computer as the CONTROLLER takes a file the sharer offered it. Only
+   * files sent to the controller: one sent to this computer as the shared
+   * one is answered on the red bar, with a real click, never from a page.
+   */
+  async takeFile(input: { sessionId: number; id: number; confirmExecutable?: boolean }, locked: boolean): Promise<{ status: string; confirmExecutable?: boolean; message?: string }> {
+    if (locked) throw new DesktopError('APP_LOCKED', 'Unlock WorkSuite to accept files.');
+    if (this.deps.policy().remote_file_receive === 'disabled') throw new DesktopError('POLICY_DENIED', "This computer's policy doesn't let it receive files in a remote session.");
+    const r = await this.deps.http.get<{ files: FileRow[] }>(`/api/meet/control/sessions/${input.sessionId}/files`);
+    const f = (r.files ?? []).find((x) => x.id === input.id);
+    if (!f || f.status !== 'offered') throw new DesktopError('NOT_FOUND', 'That file is no longer offered.');
+    if (f.direction !== 'to_controller') throw new DesktopError('IPC_FORBIDDEN_SENDER', 'Files sent to this computer are answered on the red bar at the top of the screen.');
+    if (f.scan === 'infected') throw new DesktopError('POLICY_DENIED', 'The virus scan found something in this file, so it can’t be received.');
+    let download: string;
+    try {
+      const a = await this.deps.http.request<{ download: string }>('POST', `/api/meet/control/files/${f.id}/accept`, { body: { confirm_executable: input.confirmExecutable === true } });
+      download = String(a.download ?? '');
+    } catch (e) {
+      if (isDesktopError(e) && e.status === 428) return { status: 'confirm', confirmExecutable: true, message: e.message };
+      throw e;
+    }
+    const t = /[?&]t=([A-Za-z0-9_-]{16,128})(?:&|$)/.exec(download)?.[1];
+    if (!t) throw new DesktopError('SERVER_ERROR', 'The server did not say where to fetch the file from.');
+    await this.deps.files.download(`/api/meet/control/files/${f.id}/download?t=${t}`, f.name);
+    return { status: 'accepted' };
+  }
+
   /** Offer the controller files from this computer: chosen by the person here, in the system's dialog. */
   async sendFile(webContentsId: number, sessionId: number): Promise<{ sent: number }> {
     if (!this.deps.ui.isIndicator(webContentsId)) throw new DesktopError('IPC_FORBIDDEN_SENDER', 'Send files from the control bar.');
@@ -634,7 +687,11 @@ export class RemoteControlService {
    */
   hasProof(webContentsId: number): boolean {
     const at = this.proofs.get(webContentsId) ?? 0;
-    return at > 0 && this.now() - at <= 10_000 && at - this.lastInjected > 1_500;
+    // Measured from when the helper last finished carrying input out, not when it was handed over, and
+    // with nothing still waiting: a queued click that runs late must not pass for the person's own.
+    const inj = this.injector;
+    const done = Math.max(this.lastInjected, inj?.lastDone() ?? 0);
+    return at > 0 && this.now() - at <= 10_000 && at - done > 1_500 && (!inj || inj.idle());
   }
 
   consent(webContentsId: number, locked: boolean): RemoteControlConsent {
@@ -712,8 +769,10 @@ export class RemoteControlService {
       live.receiver = new ControlReceiver(check.claims, keys, this.now, this.deps.policy().remote_emergency_stop_chord);
       live.receiverVersion = check.claims.key_version;
       live.controllerIdentity = check.claims.controller_identity;
-      // A new key is a resume the person here made: what they paused is theirs to let go.
-      live.pausedHere = false;
+      live.receiverAt = this.now();
+      // A new key lifts a pause made here only when the person here resumed after it: a lock or a
+      // pause during the approval or the key change stands.
+      if (live.resumedAt > live.pausedAt) live.pausedHere = false;
       if (!(await this.ensureInjector())) {
         this.deps.ui.notify(this.deps.support().reason ?? 'This computer could not start taking input, so control was stopped.');
         await this.stop(live.id, 'device_change');
@@ -739,6 +798,7 @@ export class RemoteControlService {
     this.injector = this.deps.createInjector();
     if (!this.injector) return Promise.resolve(false);
     const inj = this.injector;
+    inj.onExit = () => this.helperGone(inj);
     this.injectorReady = inj.start().then((ok) => {
       if (!ok) {
         this.injectorReady = null;
@@ -749,6 +809,21 @@ export class RemoteControlService {
     return this.injectorReady;
   }
 
+  /**
+   * The input helper went away by itself. Keys it held stay held in the
+   * system, so control pauses here and the person is told; resuming starts
+   * a new helper with the new key.
+   */
+  private helperGone(inj: Injector): void {
+    if (this.injector !== inj) return;
+    log.warn('input helper exited while control was live');
+    this.injector = null;
+    this.injectorReady = null;
+    this.held = new Held();
+    for (const s of this.sessions.values()) void this.pause(s.id, 'sharer');
+    if (this.sessions.size) this.deps.ui.notify('Input stopped working on this computer, so control is paused. Press any key you see stuck, then Resume to try again.');
+  }
+
   // ── the session's life ────────────────────────────────────────────────
 
   private sessionStarted(live: Live): void {
@@ -757,7 +832,12 @@ export class RemoteControlService {
     if (this.stops.length === 0) {
       this.registerChord();
       this.stops.push(this.timers.every(100, () => this.watchPointer()));
-      this.stops.push(this.timers.every(1_000, () => void this.watchForeground()));
+      // Once a second, or four times a second when one window is shared: keys wait while it is not in front.
+      let tick = 0;
+      this.stops.push(this.timers.every(250, () => {
+        tick += 1;
+        if (this.share?.source?.kind === 'window' || tick % 4 === 0) void this.watchForeground();
+      }));
       this.stops.push(this.timers.every(500, () => void this.watchWindow()));
       this.stops.push(this.timers.every(5_000, () => this.watchIdle()));
       this.stops.push(this.timers.every(10_000, () => void this.flushRefusals()));
@@ -792,12 +872,18 @@ export class RemoteControlService {
     this.gateNow();
     live.pausedHere = true;
     live.pausedAt = this.now();
+    live.pauseReason = reason;
+    // The server takes a pause only while control is active; one made earlier (during the approval or a
+    // key change) holds here and is told to the server when it goes active (see `reconcile`).
+    live.pauseSent = live.status === 'CONTROL_ACTIVE';
     if (live.status === 'CONTROL_ACTIVE') {
       live.status = 'CONTROL_PAUSED';
-      live.pauseReason = reason;
       this.changed();
-      await this.deps.http.request('POST', `/api/meet/control/sessions/${id}/pause`, { body: { reason } }).catch((e) => log.warn('pause not recorded', { error: String((e as Error).message ?? e) }));
-    }
+      await this.deps.http.request('POST', `/api/meet/control/sessions/${id}/pause`, { body: { reason } }).catch((e) => {
+        live.pauseSent = false;
+        log.warn('pause not recorded', { error: String((e as Error).message ?? e) });
+      });
+    } else this.changed();
     void this.poll();
   }
 
@@ -808,18 +894,21 @@ export class RemoteControlService {
     if (!this.sessions.has(id)) throw new DesktopError('NOT_FOUND', 'Control has ended.');
     this.proofs.delete(webContentsId);
     await this.deps.http.request('POST', `/api/meet/control/sessions/${id}/resume`, { body: { local_input_proof: true } });
+    const live = this.sessions.get(id);
+    if (live) live.resumedAt = this.now();
     void this.poll();
   }
 
   async stop(id: number, reason = 'stopped'): Promise<void> {
+    // Here first — the input stops and the helper ends now, not after the server has answered.
     this.gateNow();
     this.ended.add(id);
+    this.endSession(id, null);
     try {
       await this.deps.http.request('POST', `/api/meet/control/sessions/${id}/stop`, { body: { reason } });
     } catch (e) {
       log.warn('stop not recorded', { error: String((e as Error).message ?? e) });
     }
-    this.endSession(id, null);
     void this.poll();
   }
 
@@ -921,7 +1010,8 @@ export class RemoteControlService {
   /** The screen locked, the computer is going to sleep, the user switched (§E.6). */
   onSystem(event: 'lock-screen' | 'suspend' | 'user-did-resign-active'): void {
     const reason = event === 'lock-screen' ? 'lock_screen' : event === 'suspend' ? 'sleep' : 'user_switch';
-    for (const s of this.sessions.values()) if (s.status === 'CONTROL_ACTIVE') void this.pause(s.id, reason);
+    // Every live session, active or not yet: a lock during the approval or a key change must hold too.
+    for (const s of this.sessions.values()) void this.pause(s.id, reason);
   }
 
   // ── messages from the controller ───────────────────────────────────────
@@ -953,11 +1043,14 @@ export class RemoteControlService {
     }
     if (verdict.type === 'lease' || verdict.type === 'state') return;
     live.lastInput = this.now();
-    this.apply(live, verdict.type, verdict.payload);
+    await this.apply(live, verdict.type, verdict.payload);
   }
 
   private refused(live: Live, reason: Refusal): void {
-    if (REPORTED.includes(reason)) {
+    // Right after a key change, messages under the other key are expected (the two ends switch a moment
+    // apart): they are dropped, not reported to the administrators.
+    const rekeying = reason === 'bad_mac' && (live.receiverVersion !== live.keyVersion || this.now() - live.receiverAt < 15_000);
+    if (REPORTED.includes(reason) && !rekeying) {
       const k = `${live.id}:${reason}`;
       this.refusals.set(k, (this.refusals.get(k) ?? 0) + 1);
     }
@@ -977,23 +1070,34 @@ export class RemoteControlService {
   }
 
   /** The gates past the receiver, then the helper. */
-  private apply(live: Live, type: string, payload: Record<string, unknown>): void {
-    if (!this.injector || this.deps.ui.consentOpen() || this.dialogOpen || this.share?.paused) return;
+  private async apply(live: Live, type: string, payload: Record<string, unknown>): Promise<void> {
+    const gated = () => !this.injector || this.deps.ui.consentOpen() || this.dialogOpen || !!this.share?.paused;
+    if (gated()) return;
     const local = this.now() < this.localUntil;
+    const windowShare = this.share?.source?.kind === 'window' ? this.share.source : null;
     let actions: InputAction[] = [];
 
     if (type === 'ptr.move' || type === 'ptr.button' || type === 'ptr.wheel') {
       if (local) return;
       const at = this.target(Number(payload.x), Number(payload.y));
       if (!at) return;
+      // One window shared: a press or a wheel lands only where that window is what the pointer is over —
+      // not on another app covering part of it, which the controller cannot see.
+      if (windowShare && (type === 'ptr.wheel' || (type === 'ptr.button' && payload.down === true))) {
+        const under = await this.injector!.windowAt(at.input.x, at.input.y);
+        if (under !== windowShare.windowId || gated()) return;
+      }
       actions = pointerActions(type, payload, at.input, this.held);
       this.expected = at.display;
     } else if (type === 'key') {
       if (local || !this.keysAllowed) return;
+      // One window shared: no switching to another app from the keyboard (Alt+Tab, Command, the Windows key).
+      if (windowShare && switchesApps(chordOf(payload))) return;
       actions = keyActions(payload, this.held);
     } else if (type === 'special') {
       if (local || !this.keysAllowed) return;
-      const combo = String(payload.combo ?? '');
+      const combo = typeof payload.combo === 'string' ? payload.combo : '';
+      if (windowShare && switchesApps(combo)) return;
       if (/^Ctrl\+Alt\+Del(ete)?$/.test(combo)) {
         // No app can raise it (Windows takes it only from the keyboard), and the screen it opens is never controlled.
         this.deps.ui.notify(`${live.controller} asked for Ctrl+Alt+Delete. Press it yourself if it is needed.`);
@@ -1015,8 +1119,8 @@ export class RemoteControlService {
     } else {
       return;
     }
-    if (actions.length === 0) return;
-    this.injector.send(actions);
+    if (actions.length === 0 || gated()) return;
+    this.injector!.send(actions);
     this.lastInjected = this.now();
   }
 
@@ -1029,13 +1133,18 @@ export class RemoteControlService {
       const input = place(nx, ny, this.windowRect);
       return { input, display: this.deps.screen.fromInput(input) };
     }
-    const d = this.displayOf(source ?? null) ?? this.deps.screen.primary();
+    // The shared display, or the only one there is; never a guess at another display.
+    const all = this.deps.screen.displays();
+    const d = this.displayOf(source ?? null) ?? (all.length === 1 ? all[0]! : null);
+    if (!d) return null;
     const display = place(nx, ny, d.bounds);
     return { input: this.deps.screen.toInput(display), display };
   }
 
   /** Let go of everything held for the controller. */
   private release(): void {
+    // What is still waiting to be carried out is forgotten first, so the releases come next, not after it.
+    this.injector?.drop();
     const actions = this.held.releaseAll();
     if (actions.length && this.injector) {
       this.injector.send(actions);
@@ -1044,6 +1153,7 @@ export class RemoteControlService {
   }
 
   private releaseKeys(): void {
+    this.injector?.drop();
     const buttons = new Set(this.held.buttons);
     const actions = this.held.releaseAll().filter((a) => a.t === 'key');
     this.held.buttons = buttons;
