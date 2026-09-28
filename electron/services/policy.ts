@@ -39,7 +39,16 @@ export const DEFAULT_POLICY: DesktopPolicy = {
   wipe_on_revoke: 'cache+offline_files',
   proxy: 'system',
   allow_offline: true,
+  remote_control_host: 'managed_only',
+  remote_control_controller: 'allowed',
+  remote_clipboard: 'off',
+  remote_file_receive: 'managed_only',
+  remote_emergency_stop_chord: 'Ctrl+Alt+Shift+Esc',
+  remote_local_priority_hold_ms: 1500,
 };
+
+/** `Ctrl+Alt+Shift+Esc`: one to four modifiers, then a key. */
+const CHORD = /^((Ctrl|Alt|Shift|Meta)\+){1,4}[A-Za-z0-9]{1,6}$/;
 
 const PRIVACY_ORDER: NotificationPrivacy[] = ['FULL', 'SENDER_ONLY', 'GENERIC'];
 
@@ -99,6 +108,12 @@ export function normalizePolicy(input: Record<string, unknown> | null | undefine
     wipe_on_revoke: pick(p.wipe_on_revoke, ['tokens', 'cache', 'cache+offline_files'], d.wipe_on_revoke),
     proxy: pick(p.proxy, ['system', 'manual', 'pac'], d.proxy),
     allow_offline: p.allow_offline !== false,
+    remote_control_host: pick(p.remote_control_host, ['allowed', 'managed_only', 'disabled'], d.remote_control_host),
+    remote_control_controller: pick(p.remote_control_controller, ['allowed', 'disabled'], d.remote_control_controller),
+    remote_clipboard: pick(p.remote_clipboard, ['off', 'text_only', 'text_and_files'], d.remote_clipboard),
+    remote_file_receive: pick(p.remote_file_receive, ['allowed', 'managed_only', 'disabled'], d.remote_file_receive),
+    remote_emergency_stop_chord: typeof p.remote_emergency_stop_chord === 'string' && CHORD.test(p.remote_emergency_stop_chord) ? p.remote_emergency_stop_chord : d.remote_emergency_stop_chord,
+    remote_local_priority_hold_ms: clamp(p.remote_local_priority_hold_ms, 500, 5000, d.remote_local_priority_hold_ms),
   };
 }
 

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { Participant } from 'livekit-client';
 import { apiGet } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
@@ -16,6 +16,8 @@ import { Thread } from '../chat/Thread';
 import type { ChatFile } from '../chat/types';
 import { formatCode, invitation } from './api';
 import { ShareInChat, ShareRow } from './MeetHome';
+import { remote } from './remote/controller';
+import { RemoteControlLayer } from './remote/ControllerSurface';
 import { isGuest, meet, metaOf } from './session';
 import { Whiteboard } from './Whiteboard';
 import { Select } from '../../components/Select';
@@ -50,6 +52,9 @@ export function MeetRoom() {
   const sharing = lp.isScreenShareEnabled;
   const paused = meet.sharePaused;
   const copyLink = () => void navigator.clipboard.writeText(info.join_url).then(() => toast('success', 'Join link copied.'));
+  // Sharing and control in this meeting, as the server sees it: asking to control a shared screen, and controlling it.
+  const uuid = meet.uuid;
+  useEffect(() => remote.start(uuid), [uuid]);
   const panelOn = (tab: string) => ui.panelOpen && ui.panelTab === tab;
 
   const buttons: ControlButton[] = [
@@ -74,6 +79,8 @@ export function MeetRoom() {
     { id: 'board', icon: 'board', label: ui.boardOnStage ? 'Take the board off the stage' : 'Whiteboard', tone: ui.boardOnStage || panelOn('Board') ? 'active' : undefined, onClick: () => (ui.boardOnStage ? callUi.set({ boardOnStage: false }) : callUi.togglePanel('Board')) },
   ];
   const more: MenuEntry[] = [
+    // Reachable even when their screen is not on the stage (the board is, or the floating card).
+    ...(remote.session ? [{ label: 'Release control', hint: `Of ${remote.session.sharer.name}'s computer`, icon: 'stop', danger: true, onClick: () => void remote.release() }] : []),
     ...(meet.isHost ? [{ label: room.isRecording ? 'Stop recording' : 'Record the meeting', icon: room.isRecording ? 'stop' : 'film', onClick: () => void meet.record(!room.isRecording) }] : []),
     { label: ui.boardOnStage ? 'Board back to the panel' : 'Whiteboard on stage', icon: 'board', onClick: () => callUi.set({ boardOnStage: !ui.boardOnStage, ...(ui.boardOnStage ? {} : { panelOpen: false }) }) },
     { label: 'Files', icon: 'paperclip', onClick: () => callUi.togglePanel('Files') },
@@ -171,6 +178,7 @@ export function MeetRoom() {
         more={more}
         end={{ label: 'Leave the meeting', onClick: () => void meet.leave(), menu: meet.isHost ? [{ label: 'End for everyone', icon: 'phone-off', danger: true, onClick: () => setEnding(true) }] : undefined }}
         status={sharing ? (paused ? `Sharing ${meet.shareLabel ?? 'your screen'} — paused` : `You are sharing ${meet.shareLabel ?? 'your screen'}`) : null}
+        screenLayer={(sharer) => <RemoteControlLayer sharer={sharer} />}
       />
       {picking ? (
         <ScreenPicker
