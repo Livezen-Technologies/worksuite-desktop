@@ -69,6 +69,8 @@ export const INVOKE_CHANNELS = [
   'rc:pause',
   'rc:resume',
   'rc:stop',
+  'rc:fileAnswer',
+  'rc:sendFile',
   'transfers:list',
   'transfers:download',
   'transfers:upload',

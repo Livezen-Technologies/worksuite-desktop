@@ -103,6 +103,25 @@ export interface GrantDelivery {
 }
 
 /** The part of a finished session's record that says how it ended. */
+/** A file offered in a remote-control session (RC06). */
+export interface RemoteFile {
+  id: number;
+  session_id: number;
+  direction: 'to_sharer' | 'to_controller';
+  sender: { id: number; name: string };
+  receiver_id: number;
+  name: string;
+  size: number;
+  executable: boolean;
+  scan: 'clean' | 'not_scanned' | 'infected';
+  status: 'offered' | 'accepted' | 'declined' | 'downloaded' | 'purged';
+}
+
+/** The one-time token in an accepted file's download address. */
+export function downloadToken(download: string): string | null {
+  return /[?&]t=([A-Za-z0-9_-]{16,128})(?:&|$)/.exec(download)?.[1] ?? null;
+}
+
 export interface SessionEnd {
   id: number;
   termination: string | null;
@@ -122,6 +141,9 @@ export const rc = {
   quality: (sessionId: number, label: string) => apiPost(`/api/meet/control/sessions/${sessionId}/quality`, { label }),
   session: (sessionId: number) => apiGet<SessionEnd>(`/api/meet/control/sessions/${sessionId}`),
   stepUp: (code: string) => apiPost('/api/meet/control/step-up', { code }),
+  files: (sessionId: number) => apiGet<{ files: RemoteFile[] }>(`/api/meet/control/sessions/${sessionId}/files`),
+  acceptFile: (id: number, confirmExecutable = false) => apiPost<{ download: string }>(`/api/meet/control/files/${id}/accept`, { confirm_executable: confirmExecutable }),
+  declineFile: (id: number) => apiPost(`/api/meet/control/files/${id}/decline`, {}),
 };
 
 /**

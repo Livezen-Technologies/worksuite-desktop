@@ -256,6 +256,7 @@ function harness(opts: { support?: Partial<RemoteControlSupport>; policy?: Parti
     ui,
     shortcuts: { register: (a, fn) => (shortcuts.set(a, fn), true), unregister: (a) => void shortcuts.delete(a) },
     clipboard: { writeText: vi.fn() },
+    files: { download: vi.fn(async () => undefined), pickAndOffer: vi.fn(async () => 1) },
     prefs: { allowRequests: () => true, setAllowRequests: vi.fn() },
     now: () => t,
     timers: {
@@ -517,6 +518,79 @@ describe('control on this computer', () => {
     await settle();
     expect(x.calls).toContainEqual(['DELETE', `/api/meet/${UUID}/control/shares/5`, null]);
     expect(x.rc.isSharing()).toBe(false);
+  });
+});
+
+describe('files in a session (RC06)', () => {
+  async function withFiles() {
+    const x = harness();
+    const caps = { ...claims().caps, file_transfer: true };
+    const c = claims({ caps });
+    await x.rc.shareStarted(11, { uuid: UUID, identity: 'u3-abc' }, SCREEN);
+    x.h.state = { shares: [{ id: 5, identity: 'u3-abc' }], asked: [], sessions: [session('CONTROL_APPROVED', { grant_waiting: true, caps })] };
+    x.h.grant = { token: token(c), key: KEY.toString('base64'), claims: c, public_key: PEM };
+    await x.rc.poll();
+    await settle();
+    x.h.state = { ...x.h.state, sessions: [session('CONTROL_ACTIVE', { caps })] };
+    return x;
+  }
+  const row = { id: 31, session_id: 9, direction: 'to_sharer', sender: { id: 5, name: 'Olivia Chen' }, name: 'fix.log', size: 2048, executable: false, scan: 'clean', status: 'offered' };
+
+  it('lists what the controller offered and says so', async () => {
+    const x = await withFiles();
+    (x.rc as unknown as { deps: RemoteControlDeps }).deps.http.get = async <T,>(path: string) => (path.endsWith('/files') ? ({ files: [row, { ...row, id: 32, direction: 'to_controller' }] } as T) : (x.h.state as T));
+    await x.rc.poll();
+    expect(x.rc.view().offers).toEqual([{ id: 31, sessionId: 9, name: 'fix.log', size: 2048, from: 'Olivia Chen', executable: false, scan: 'clean' }]);
+    expect(x.rc.view().canSendFiles).toBe(true);
+    expect(x.ui.notify).toHaveBeenCalledWith(expect.stringContaining('Olivia Chen wants to send you fix.log'));
+  });
+
+  it('accepts only from the bar with a real click, then fetches it with its one-time token', async () => {
+    const x = await withFiles();
+    const deps = (x.rc as unknown as { deps: RemoteControlDeps }).deps;
+    deps.http.get = async <T,>(path: string) => (path.endsWith('/files') ? ({ files: [row] } as T) : (x.h.state as T));
+    const request = deps.http.request;
+    deps.http.request = async <T,>(method: string, path: string, o?: { body?: unknown }) => (path.endsWith('/31/accept') ? ({ download: '/api/meet/control/files/31/download?t=abcdefabcdefabcdef12' } as T) : request<T>(method, path, o));
+    await x.rc.poll();
+    await expect(x.rc.answerFile(500, { id: 31, accept: true }, false)).rejects.toMatchObject({ code: 'IPC_FORBIDDEN_SENDER' });
+    await expect(x.rc.answerFile(600, { id: 31, accept: true }, false)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    x.rc.noteLocalInput(600);
+    expect(await x.rc.answerFile(600, { id: 31, accept: true }, false)).toEqual({ status: 'accepted' });
+    expect(deps.files.download).toHaveBeenCalledWith('/api/meet/control/files/31/download?t=abcdefabcdefabcdef12', 'fix.log');
+    expect(x.rc.view().offers).toEqual([]);
+  });
+
+  it('asks again before taking a program', async () => {
+    const x = await withFiles();
+    const deps = (x.rc as unknown as { deps: RemoteControlDeps }).deps;
+    deps.http.get = async <T,>(path: string) => (path.endsWith('/files') ? ({ files: [{ ...row, name: 'fix.exe', executable: true }] } as T) : (x.h.state as T));
+    const { DesktopError } = await import('../../../electron/main/errors');
+    deps.http.request = async <T,>(_m: string, path: string) => {
+      if (path.endsWith('/accept')) throw new DesktopError('INTERNAL', 'fix.exe is a program. Confirm…', 428, { code: 'confirm_executable' });
+      return {} as T;
+    };
+    await x.rc.poll();
+    x.rc.noteLocalInput(600);
+    expect(await x.rc.answerFile(600, { id: 31, accept: true }, false)).toMatchObject({ status: 'confirm', confirmExecutable: true });
+  });
+
+  it('injects nothing while the person picks a file to send', async () => {
+    const x = await withFiles();
+    const deps = (x.rc as unknown as { deps: RemoteControlDeps }).deps;
+    await x.rc.poll();
+    const keys = await importKeys(new Uint8Array(KEY));
+    const sender = new ControlSender(claims({ caps: { ...claims().caps, file_transfer: true } }), keys, x.now);
+    let during = -1;
+    deps.files.pickAndOffer = vi.fn(async () => {
+      x.rc.packet(11, 'u5-xyz', new TextDecoder().decode(await sender.next('ptr.move', { x: 0.5, y: 0.5 })), 'rc.ctl.move');
+      await settle();
+      during = x.sent.length;
+      return 1;
+    });
+    await expect(x.rc.sendFile(600, 9)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    x.rc.noteLocalInput(600);
+    expect(await x.rc.sendFile(600, 9)).toEqual({ sent: 1 });
+    expect(during).toBe(0);
   });
 });
 

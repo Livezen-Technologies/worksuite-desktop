@@ -133,6 +133,8 @@ const api = {
     pause: call('rc:pause'),
     resume: call('rc:resume'),
     stop: call('rc:stop'),
+    fileAnswer: call('rc:fileAnswer'),
+    sendFile: call('rc:sendFile'),
   },
   transfers: {
     list: call('transfers:list'),

@@ -31,6 +31,15 @@ makes remote control work.
 - **Settings › Remote control** (RC09): whether this computer can be
   controlled and why not, the default for "Let people ask", the emergency
   chord, and on a Mac the way to Accessibility.
+- **A second person asking** while someone has control gets the same prompt,
+  worded as a handover: the first loses control when you allow it.
+- **Files during control** (RC06), when the grant allows file transfer.
+  Either end can send: "Send a file" on the controller's bar, or on the red
+  bar here, which opens the system's file dialog (nothing is injected while
+  it is open). Files sent to you wait on the red bar with Accept and
+  Decline; accepting needs your own click, and a program asks a second
+  time. Accepted files arrive in the download folder and the transfer list.
+  Up to 512 MB each; the `remote_file_receive` policy can turn receiving off.
 
 **Needs**
 
@@ -42,9 +51,12 @@ makes remote control work.
 
 **Not yet**
 
-- File offers during control, and the handover prompt's own screen, follow.
 - The input helpers have been exercised with a stand-in in the tests, not
   yet on real Windows, macOS and X11 machines.
+- Switching screens for the controller (monitor switch) is wired through
+  the meeting window but not yet tried with a real second display.
+- Viewers' pointers and annotations are not drawn over this computer's
+  screen while it is shared; they show in the meeting window only.
 
 ---
 

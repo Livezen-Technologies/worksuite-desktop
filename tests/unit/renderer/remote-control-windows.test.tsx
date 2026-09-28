@@ -35,6 +35,8 @@ const view = (session: Partial<NonNullable<RemoteControlView['session']>> | null
   chordRegistered: true,
   share: { uuid: 'u', shareId: 5, label: 'Screen 1', kind: 'screen', allowRequests: true, paused: false },
   requests: [],
+  offers: [],
+  canSendFiles: false,
   session: session ? { id: 9, status: 'CONTROL_ACTIVE', controller: 'Olivia Chen', capsLabel: 'Mouse and keyboard', pauseReason: null, pauseText: null, since: Date.now() - 65_000, expiresAt: null, waiting: null, type: 'meeting', ...session } : null,
 });
 
@@ -122,6 +124,22 @@ describe('the control bar (RC04)', () => {
     await waitFor(() => expect(bridge.listeners.has('rc:changed')).toBe(true));
     bridge.listeners.get('rc:changed')!(view({ waiting: 'local' }));
     expect(await screen.findByText('You’re using the mouse — Olivia Chen waits'.replace('’', "'"))).toBeTruthy();
+  });
+});
+
+describe('files offered on the bar (RC06)', () => {
+  it('asks before taking a program, and says what each file is', async () => {
+    const offer = { id: 31, sessionId: 9, name: 'fix.exe', size: 2_048, from: 'Olivia Chen', executable: true, scan: 'not_scanned' as const };
+    bridge.call.mockImplementation(async (ch: string) => (ch === 'rc:state' ? { ...view({}), offers: [offer], canSendFiles: true } : ch === 'rc:fileAnswer' ? { status: 'confirm', confirmExecutable: true } : undefined));
+    render(<RemoteControlWindow hash="#/rc/indicator" />);
+    const list = await screen.findByRole('list', { name: 'Files offered to you' });
+    expect(list.textContent).toMatch(/Olivia Chen sends fix.exe · 2(.0)? KB · a program/);
+    fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
+    await waitFor(() => expect(bridge.call).toHaveBeenCalledWith('rc:fileAnswer', { id: 31, accept: true, confirmExecutable: false }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Accept the program' }));
+    await waitFor(() => expect(bridge.call).toHaveBeenCalledWith('rc:fileAnswer', { id: 31, accept: true, confirmExecutable: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send a file' }));
+    await waitFor(() => expect(bridge.call).toHaveBeenCalledWith('rc:sendFile', { sessionId: 9 }));
   });
 });
 

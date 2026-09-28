@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { RemoteControlConsent, RemoteControlView } from '@shared/types';
 import { call, errorMessage, isMac, on } from '../core/bridge';
 import { apiPost } from '../core/api';
+import { bytes } from '../core/time';
 import { Button, Spinner, cx } from '../components/ui';
 import { Select } from '../components/Select';
 
@@ -163,6 +164,8 @@ function IndicatorWindow() {
   const [v, setV] = useState<RemoteControlView | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [error, setError] = useState<string | null>(null);
+  /** An offered program, waiting for "yes, I want this program". */
+  const [confirming, setConfirming] = useState<number | null>(null);
 
   useEffect(() => {
     void call('rc:state').then(setV, () => undefined);
@@ -185,6 +188,16 @@ function IndicatorWindow() {
     }
   };
   const paused = s.status === 'CONTROL_PAUSED';
+  const answerFile = async (id: number, accept: boolean, confirmExecutable = false) => {
+    setError(null);
+    try {
+      const r = await call('rc:fileAnswer', { id, accept, confirmExecutable });
+      if (r.confirmExecutable) setConfirming(id);
+      else setConfirming(null);
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
   const text = error
     ? error
     : paused
@@ -197,16 +210,40 @@ function IndicatorWindow() {
             ? `${s.controller}'s typing waits until the shared window is in front`
             : `${s.controller} is controlling your screen · ${s.capsLabel}`;
   return (
-    <div className={cx('flex h-full items-center gap-2.5 px-3 text-[12.5px] text-white', paused ? 'bg-[#6B4E0B]' : 'bg-[#B42318]')} role="status" aria-live="polite">
-      <span className={cx('h-2.5 w-2.5 shrink-0 rounded-full bg-white', !paused && 'animate-pulse')} />
-      <span className="min-w-0 flex-1 truncate font-semibold" title={text}>{text}</span>
-      {s.since && !paused ? <span className="tabular-nums opacity-80">{mmss(now - s.since)}</span> : null}
-      {paused ? (
-        <button type="button" onClick={() => void act(() => call('rc:resume', { sessionId: s.id }))} className="h-7 rounded-[7px] bg-white px-2.5 font-bold text-[#151A2D]">Resume</button>
-      ) : s.status === 'CONTROL_ACTIVE' ? (
-        <button type="button" onClick={() => void act(() => call('rc:pause', { sessionId: s.id }))} className="h-7 rounded-[7px] bg-white/20 px-2.5 font-bold hover:bg-white/30">Pause</button>
+    <div className={cx('flex h-full flex-col text-[12.5px] text-white', paused ? 'bg-[#6B4E0B]' : 'bg-[#B42318]')}>
+      <div className="flex h-[52px] shrink-0 items-center gap-2.5 px-3" role="status" aria-live="polite">
+        <span className={cx('h-2.5 w-2.5 shrink-0 rounded-full bg-white', !paused && 'animate-pulse')} />
+        <span className="min-w-0 flex-1 truncate font-semibold" title={text}>{text}</span>
+        {s.since && !paused ? <span className="tabular-nums opacity-80">{mmss(now - s.since)}</span> : null}
+        {v.canSendFiles ? (
+          <button type="button" onClick={() => void act(() => call('rc:sendFile', { sessionId: s.id }))} className="h-7 rounded-[7px] bg-white/20 px-2.5 font-bold hover:bg-white/30">Send a file</button>
+        ) : null}
+        {paused ? (
+          <button type="button" onClick={() => void act(() => call('rc:resume', { sessionId: s.id }))} className="h-7 rounded-[7px] bg-white px-2.5 font-bold text-[#151A2D]">Resume</button>
+        ) : s.status === 'CONTROL_ACTIVE' ? (
+          <button type="button" onClick={() => void act(() => call('rc:pause', { sessionId: s.id }))} className="h-7 rounded-[7px] bg-white/20 px-2.5 font-bold hover:bg-white/30">Pause</button>
+        ) : null}
+        <button type="button" onClick={() => void act(() => call('rc:stop', { sessionId: s.id }))} className="h-7 rounded-[7px] bg-white px-2.5 font-bold text-[#B42318]" title={`Or press ${chordLabel(v.emergencyChord)}`}>Stop</button>
+      </div>
+      {v.offers.length ? (
+        <ul className="flex flex-col border-t border-white/20 bg-black/15" aria-label="Files offered to you">
+          {v.offers.slice(0, 3).map((o) => (
+            <li key={o.id} className="flex h-11 items-center gap-2 px-3">
+              <span className="min-w-0 flex-1 truncate">
+                <b>{o.from}</b> sends <b title={o.name}>{o.name}</b> · {bytes(o.size)}
+                {confirming === o.id ? ' — a program: accept only if you trust it' : o.executable ? ' · a program' : ''}
+              </span>
+              {confirming === o.id ? (
+                <button type="button" onClick={() => void answerFile(o.id, true, true)} className="h-7 rounded-[7px] bg-white px-2.5 font-bold text-[#B42318]">Accept the program</button>
+              ) : (
+                <button type="button" onClick={() => void answerFile(o.id, true)} className="h-7 rounded-[7px] bg-white px-2.5 font-bold text-[#151A2D]">Accept</button>
+              )}
+              <button type="button" onClick={() => void answerFile(o.id, false)} className="h-7 rounded-[7px] bg-white/20 px-2.5 font-bold hover:bg-white/30">Decline</button>
+            </li>
+          ))}
+          {v.offers.length > 3 ? <li className="h-6 px-3 text-[11.5px] opacity-80">and {v.offers.length - 3} more after these</li> : null}
+        </ul>
       ) : null}
-      <button type="button" onClick={() => void act(() => call('rc:stop', { sessionId: s.id }))} className="h-7 rounded-[7px] bg-white px-2.5 font-bold text-[#B42318]" title={`Or press ${chordLabel(v.emergencyChord)}`}>Stop</button>
     </div>
   );
 }

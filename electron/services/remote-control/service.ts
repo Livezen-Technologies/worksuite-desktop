@@ -1,4 +1,4 @@
-import type { DesktopPolicy, RemoteControlConsent, RemoteControlRequestView, RemoteControlSessionView, RemoteControlSupport, RemoteControlView } from '@shared/types';
+import type { DesktopPolicy, RemoteControlConsent, RemoteControlOffer, RemoteControlRequestView, RemoteControlSessionView, RemoteControlSupport, RemoteControlView } from '@shared/types';
 import { ControlReceiver, acceleratorsFor, importKeys, parseEnvelope, type Caps, type Refusal } from '@shared/remote-control/channel';
 import { DesktopError, isDesktopError } from '../../main/errors';
 import { logger } from '../../main/log';
@@ -60,6 +60,19 @@ interface StateSession {
   key_version: number | null;
   grant_waiting: boolean;
   type: 'meeting' | 'support' | 'call';
+}
+
+/** A file offered in a session, as `GET control/sessions/{id}/files` lists it. */
+interface FileRow {
+  id: number;
+  session_id: number;
+  direction: 'to_sharer' | 'to_controller';
+  sender: { id: number; name: string };
+  name: string;
+  size: number;
+  executable: boolean;
+  scan: 'clean' | 'not_scanned' | 'infected';
+  status: string;
 }
 
 export interface ControlState {
@@ -150,6 +163,12 @@ export interface RemoteControlDeps {
   };
   shortcuts: { register(accelerator: string, fn: () => void): boolean; unregister(accelerator: string): void };
   clipboard: { writeText(text: string): void };
+  files: {
+    /** Fetch an accepted file into the download folder (the transfer list shows it). */
+    download(apiPath: string, name: string): Promise<void>;
+    /** Let the person here choose files in the system's dialog and offer them in the session; how many went. */
+    pickAndOffer(sessionId: number, to: string): Promise<number>;
+  };
   prefs: { allowRequests(): boolean; setAllowRequests(v: boolean): void };
   now?: () => number;
   timers?: { every(ms: number, fn: () => void): () => void; after(ms: number, fn: () => void): () => void };
@@ -215,6 +234,9 @@ export class RemoteControlService {
   private chordOk = true;
   private stops: Array<() => void> = [];
   private polling: Promise<void> | null = null;
+  private offers = new Map<number, RemoteControlOffer>();
+  /** The system's file dialog is open for sending: nothing is injected into it. */
+  private dialogOpen = false;
   /** Sessions this computer stopped: never taken up again. */
   private ended = new Set<number>();
   private pollAgain: Promise<void> | null = null;
@@ -253,6 +275,8 @@ export class RemoteControlService {
         ? { uuid: this.share.uuid, shareId: this.share.shareId, label: this.share.source?.name ?? 'your screen', kind: this.share.source?.kind ?? 'screen', allowRequests: this.share.allowRequests, paused: this.share.paused }
         : null,
       requests: [...this.requests.values()].map((r): RemoteControlRequestView => ({ id: r.id, sessionId: r.session_id, kind: r.kind, requester: r.requester.name, reason: r.reason, expiresIn: r.expires_in })),
+      offers: [...this.offers.values()],
+      canSendFiles: !!live && live.caps.file_transfer && live.status === 'CONTROL_ACTIVE',
       session: live
         ? {
             id: live.id,
@@ -443,6 +467,7 @@ export class RemoteControlService {
         const asked = this.now();
         const state = await this.deps.http.get<ControlState>(`/api/meet/${encodeURIComponent(share.uuid)}/control/state`);
         if (this.share === share) await this.reconcile(state, asked);
+        if (this.share === share) await this.readOffers();
       } catch (e) {
         log.debug('control state not read', { error: String((e as Error).message ?? e) });
       }
@@ -518,6 +543,80 @@ export class RemoteControlService {
   private displayOf(source: CapturedSource | null): Display | null {
     if (!source || source.kind !== 'screen') return null;
     return this.deps.screen.displays().find((d) => String(d.id) === source.displayId) ?? null;
+  }
+
+  // ── files (RC06) ───────────────────────────────────────────────────────
+
+  /** Files the controller offered this computer, while a session allows file transfer. */
+  private async readOffers(): Promise<void> {
+    const next = new Map<number, RemoteControlOffer>();
+    for (const s of this.sessions.values()) {
+      if (!s.caps.file_transfer) continue;
+      try {
+        const r = await this.deps.http.get<{ files: FileRow[] }>(`/api/meet/control/sessions/${s.id}/files`);
+        for (const f of r.files ?? []) {
+          if (f.direction === 'to_sharer' && f.status === 'offered') next.set(f.id, { id: f.id, sessionId: s.id, name: f.name, size: f.size, from: f.sender.name, executable: !!f.executable, scan: f.scan });
+        }
+      } catch {
+        for (const [id, o] of this.offers) if (o.sessionId === s.id) next.set(id, o);
+      }
+    }
+    const fresh = [...next.values()].find((o) => !this.offers.has(o.id));
+    this.offers = next;
+    if (fresh) this.deps.ui.notify(`${fresh.from} wants to send you ${fresh.name}. Accept or decline it on the bar at the top of your screen.`);
+    this.changed();
+  }
+
+  /**
+   * The person's answer to a file offer, on the control bar. Accepting
+   * needs a real click there, as allowing control does — a controller must
+   * not be able to accept a program onto this computer themselves.
+   */
+  async answerFile(webContentsId: number, input: { id: number; accept: boolean; confirmExecutable?: boolean }, locked: boolean): Promise<{ status: string; confirmExecutable?: boolean; message?: string }> {
+    if (!this.deps.ui.isIndicator(webContentsId)) throw new DesktopError('IPC_FORBIDDEN_SENDER', 'Answer on the control bar.');
+    const offer = this.offers.get(input.id);
+    if (!offer) throw new DesktopError('NOT_FOUND', 'That file is no longer offered.');
+    if (!input.accept) {
+      await this.deps.http.request('POST', `/api/meet/control/files/${offer.id}/decline`, { body: {} }).catch(() => undefined);
+      this.offers.delete(offer.id);
+      this.changed();
+      return { status: 'declined' };
+    }
+    if (locked) throw new DesktopError('APP_LOCKED', 'Unlock WorkSuite to accept files.');
+    if (!this.hasProof(webContentsId)) throw new DesktopError('POLICY_DENIED', 'Click Accept with this computer’s own mouse or keyboard.');
+    if (this.deps.policy().remote_file_receive === 'disabled') throw new DesktopError('POLICY_DENIED', "This computer's policy doesn't let it receive files in a remote session.");
+    if (offer.scan === 'infected') throw new DesktopError('POLICY_DENIED', 'The virus scan found something in this file, so it can’t be received.');
+    let download: string;
+    try {
+      const r = await this.deps.http.request<{ download: string }>('POST', `/api/meet/control/files/${offer.id}/accept`, { body: { confirm_executable: input.confirmExecutable === true } });
+      download = String(r.download ?? '');
+    } catch (e) {
+      if (isDesktopError(e) && e.status === 428) return { status: 'confirm', confirmExecutable: true, message: e.message };
+      throw e;
+    }
+    this.proofs.delete(webContentsId);
+    const t = /[?&]t=([A-Za-z0-9_-]{16,128})(?:&|$)/.exec(download)?.[1];
+    if (!t) throw new DesktopError('SERVER_ERROR', 'The server did not say where to fetch the file from.');
+    this.offers.delete(offer.id);
+    this.changed();
+    await this.deps.files.download(`/api/meet/control/files/${offer.id}/download?t=${t}`, offer.name);
+    return { status: 'accepted' };
+  }
+
+  /** Offer the controller files from this computer: chosen by the person here, in the system's dialog. */
+  async sendFile(webContentsId: number, sessionId: number): Promise<{ sent: number }> {
+    if (!this.deps.ui.isIndicator(webContentsId)) throw new DesktopError('IPC_FORBIDDEN_SENDER', 'Send files from the control bar.');
+    if (!this.hasProof(webContentsId)) throw new DesktopError('POLICY_DENIED', 'Click Send a file with this computer’s own mouse or keyboard.');
+    const live = this.sessions.get(sessionId);
+    if (!live || !live.caps.file_transfer) throw new DesktopError('POLICY_DENIED', 'This session does not allow files.');
+    this.proofs.delete(webContentsId);
+    this.dialogOpen = true;
+    this.release();
+    try {
+      return { sent: await this.deps.files.pickAndOffer(sessionId, live.controller) };
+    } finally {
+      this.dialogOpen = false;
+    }
   }
 
   // ── consent (RC03) ─────────────────────────────────────────────────────
@@ -669,6 +768,7 @@ export class RemoteControlService {
     const live = this.sessions.get(id);
     if (!live) return;
     this.sessions.delete(id);
+    for (const [oid, o] of this.offers) if (o.sessionId === id) this.offers.delete(oid);
     this.release();
     if (message) this.deps.ui.notify(`${message} ${live.controller} no longer controls your screen.`);
     if (this.sessions.size === 0) {
@@ -878,7 +978,7 @@ export class RemoteControlService {
 
   /** The gates past the receiver, then the helper. */
   private apply(live: Live, type: string, payload: Record<string, unknown>): void {
-    if (!this.injector || this.deps.ui.consentOpen() || this.share?.paused) return;
+    if (!this.injector || this.deps.ui.consentOpen() || this.dialogOpen || this.share?.paused) return;
     const local = this.now() < this.localUntil;
     let actions: InputAction[] = [];
 

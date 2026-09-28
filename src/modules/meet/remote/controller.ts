@@ -1,11 +1,12 @@
 import { ControlSender, TOPIC_LOSSY, TOPIC_RELIABLE, importKeys, unb64, type ControlType, type GrantClaims } from '@shared/remote-control/channel';
 import type { Track } from 'livekit-client';
 import { app } from '../../../core/app-state';
-import { on } from '../../../core/bridge';
+import { ApiError } from '../../../core/api';
+import { call, on } from '../../../core/bridge';
 import { toast } from '../../../core/toasts';
 import { callUi } from '../../calls/ui/state';
 import { meet } from '../session';
-import { connectionLabel, endedOf, failure, rc, type ConnectionLabel, type ControlSession, type ControlState, type Share } from './api';
+import { connectionLabel, downloadToken, endedOf, failure, rc, type ConnectionLabel, type ControlSession, type ControlState, type RemoteFile, type Share } from './api';
 import { MoveCoalescer, keyMessage, type ButtonName, type KeyLike, type KeyPayload, type Point } from './input';
 
 /**
@@ -63,6 +64,8 @@ export class MeetController {
   textMode = false;
   label: ConnectionLabel = '—';
   rtt: number | null = null;
+  /** Files the sharer offered this end, waiting for an answer (RC06). */
+  offers: RemoteFile[] = [];
 
   private sender: ControlSender | null = null;
   private claims: GrantClaims | null = null;
@@ -223,7 +226,57 @@ export class MeetController {
     if (this.session) {
       if (!this.active) this.moves.drop();
       await this.collect(this.session);
+      await this.readOffers(this.session);
+    } else this.offers = [];
+  }
+
+  // ── files (RC06) ──────────────────────────────────────────────────────────
+
+  private async readOffers(s: ControlSession): Promise<void> {
+    if (!s.caps.file_transfer) {
+      this.offers = [];
+      return;
     }
+    try {
+      const r = await rc.files(s.id);
+      this.offers = (r.files ?? []).filter((f) => f.direction === 'to_controller' && f.status === 'offered');
+    } catch {
+      /* the last list stands */
+    }
+  }
+
+  /** Offer the sharer files from this computer: chosen in the system's dialog, sent by the upload manager. */
+  async sendFiles(): Promise<number> {
+    const s = this.session;
+    if (!s || !s.caps.file_transfer) return 0;
+    const picked = await call('files:pickFiles', { multiple: true, title: `Send files to ${s.sharer.name}` });
+    if (!picked.length) return 0;
+    await call('transfers:upload', { handles: picked.map((p) => p.handle), target: { kind: 'remote', sessionId: s.id } });
+    toast('success', picked.length === 1 ? `${picked[0]!.name} offered to ${s.sharer.name}.` : `${picked.length} files offered to ${s.sharer.name}.`);
+    return picked.length;
+  }
+
+  /** Take a file the sharer offered; a program needs `confirmExecutable`. Returns false when the server wants that first. */
+  async acceptFile(f: RemoteFile, confirmExecutable = false): Promise<boolean> {
+    let r: { download: string };
+    try {
+      r = await rc.acceptFile(f.id, confirmExecutable);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 428) return false;
+      throw e;
+    }
+    const t = downloadToken(String(r.download ?? ''));
+    if (!t) throw new Error('The server did not say where to fetch the file from.');
+    this.offers = this.offers.filter((x) => x.id !== f.id);
+    this.changed();
+    await call('transfers:download', { remoteFile: { id: f.id, t }, name: f.name });
+    return true;
+  }
+
+  async declineFile(f: RemoteFile): Promise<void> {
+    await rc.declineFile(f.id).catch(() => undefined);
+    this.offers = this.offers.filter((x) => x.id !== f.id);
+    this.changed();
   }
 
   private begin(s: ControlSession): void {

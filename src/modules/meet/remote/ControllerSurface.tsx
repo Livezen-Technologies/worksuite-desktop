@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { app } from '../../../core/app-state';
+import { errorMessage } from '../../../core/bridge';
+import { bytes } from '../../../core/time';
+import { toast } from '../../../core/toasts';
 import { useStore } from '../../../core/store';
 import { Icon } from '../../../components/Icon';
 import { Button, Modal, TextField, cx } from '../../../components/ui';
 import { useNow } from '../../calls/parts';
 import type { CallPerson } from '../../calls/ui/people';
-import { offerFor, pauseText, type ControlSession, type Share } from './api';
+import { offerFor, pauseText, type ControlSession, type RemoteFile, type Share } from './api';
 import { remote, type Prompts, type Waiting } from './controller';
 import { buttonName, pointOn, wheelDelta } from './input';
 import { platformName, specialKeys } from './specialKeys';
@@ -198,10 +201,49 @@ function SessionBar({ session, share }: { session: ControlSession; share: Share 
           {keysOpen ? <KeysMenu sharer={session.sharer.name} platform={platform} active={active} onDone={() => setKeysOpen(false)} /> : null}
         </div>
       ) : null}
+      {session.caps.file_transfer ? (
+        <button type="button" onClick={() => void remote.sendFiles().catch((e) => toast('error', errorMessage(e)))} className="flex h-7 items-center gap-1 rounded-[8px] px-2.5 font-semibold hover:bg-white/10">
+          <Icon name="paperclip" size={14} />
+          Send a file
+        </button>
+      ) : null}
       <button type="button" onClick={() => void remote.release()} className="h-7 rounded-[8px] bg-[#E5484D] px-2.5 font-bold text-white hover:bg-[#D93D42]">
         Release control
       </button>
+      {remote.offers.length ? <Offers sharer={session.sharer.name} /> : null}
     </div>
+  );
+}
+
+/** Files the sharer offered this computer (RC06): accept (a program only once confirmed) or decline. */
+function Offers({ sharer }: { sharer: string }) {
+  const [confirming, setConfirming] = useState<number | null>(null);
+  const accept = async (f: RemoteFile, confirmExecutable: boolean) => {
+    try {
+      const done = await remote.acceptFile(f, confirmExecutable);
+      setConfirming(done ? null : f.id);
+      if (done) toast('success', `Downloading ${f.name}.`);
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
+  return (
+    <ul className="flex w-full flex-col gap-1 border-t border-white/10 pt-1.5" aria-label={`Files ${sharer} offered you`}>
+      {remote.offers.map((f) => (
+        <li key={f.id} className="flex items-center gap-2 pl-1">
+          <span className="min-w-0 flex-1 truncate">
+            <b>{sharer}</b> sends <b title={f.name}>{f.name}</b> · {bytes(f.size)}
+            {confirming === f.id ? ' — a program: accept only if you trust it' : f.executable ? ' · a program' : ''}
+          </span>
+          <button type="button" onClick={() => void accept(f, confirming === f.id)} className="h-7 rounded-[8px] bg-white px-2.5 font-bold text-[#151A2D]">
+            {confirming === f.id ? 'Accept the program' : 'Accept'}
+          </button>
+          <button type="button" onClick={() => void remote.declineFile(f)} className="h-7 rounded-[8px] px-2.5 font-semibold hover:bg-white/10">
+            Decline
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }
 

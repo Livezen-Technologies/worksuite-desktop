@@ -1,10 +1,11 @@
-import { Notification, clipboard, globalShortcut, screen, systemPreferences, type BrowserWindow, type Rectangle } from 'electron';
+import { Notification, clipboard, dialog, globalShortcut, screen, systemPreferences, type BrowserWindow, type Rectangle } from 'electron';
 import type { DesktopPolicy, RemoteControlSupport, RemoteControlView } from '@shared/types';
 import { logger } from '../../main/log';
 import type { WindowManager } from '../../windows/manager';
 import type { Database } from '../db';
 import type { HttpClient } from '../http';
 import type { ScreenShare } from '../screen-share';
+import type { TransferManager } from '../transfers';
 import { createInjector, inputSupport } from './input';
 import { RemoteControlService, type Display } from './service';
 
@@ -20,6 +21,7 @@ export interface HostDeps {
   http: HttpClient;
   windows: WindowManager;
   screenShare: ScreenShare;
+  transfers: TransferManager;
   deviceId: () => number | null;
   policy: () => DesktopPolicy;
   pinnedKey: string | null;
@@ -146,7 +148,15 @@ export function createRemoteControl(deps: HostDeps): RemoteControlService {
         deps.toast(text);
         if (Notification.isSupported()) new Notification({ title: 'WorkSuite remote control', body: text, silent: true }).show();
       },
-      changed: (view) => deps.broadcast(view),
+      changed: (view) => {
+        deps.broadcast(view);
+        // A row under the bar for each file waiting for an answer (RC06), up to three.
+        if (indicator && !indicator.isDestroyed()) {
+          const b = indicator.getBounds();
+          const height = 52 + 44 * Math.min(3, view.offers.length) + (view.offers.length > 3 ? 24 : 0);
+          if (b.height !== height) indicator.setBounds({ ...b, height });
+        }
+      },
       async switchScreen(webContentsId, n) {
         const screens = await deps.screenShare.screens();
         const target = screens[n - 1];
@@ -175,6 +185,18 @@ export function createRemoteControl(deps: HostDeps): RemoteControlService {
       },
     },
     clipboard: { writeText: (text) => clipboard.writeText(text) },
+    files: {
+      download: async (apiPath, name) => {
+        await deps.transfers.download(apiPath, name, false, null);
+      },
+      async pickAndOffer(sessionId, to) {
+        const r = await dialog.showOpenDialog({ title: `Send files to ${to}`, buttonLabel: 'Send', properties: ['openFile', 'multiSelections'] });
+        if (r.canceled || r.filePaths.length === 0) return 0;
+        const picked = await deps.transfers.register(r.filePaths.slice(0, 10));
+        await deps.transfers.upload(picked.map((p) => p.handle), { kind: 'remote', sessionId });
+        return picked.length;
+      },
+    },
     prefs: {
       allowRequests: () => deps.db.getConfig<boolean>('rc_allow_requests') ?? true,
       setAllowRequests: (v) => deps.db.setConfig('rc_allow_requests', v),

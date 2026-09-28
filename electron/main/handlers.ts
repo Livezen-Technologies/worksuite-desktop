@@ -139,6 +139,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('rc:answer', (input, c) => rc.answer(c.sender.id, input, ctx.lock.isLocked()));
   router.handle('rc:pause', (input) => rc.pause(input.sessionId, 'sharer'));
   router.handle('rc:resume', (input, c) => rc.resume(c.sender.id, input.sessionId));
+  router.handle('rc:fileAnswer', (input, c) => rc.answerFile(c.sender.id, input, ctx.lock.isLocked()));
+  router.handle('rc:sendFile', (input, c) => rc.sendFile(c.sender.id, input.sessionId));
   router.handle('rc:stop', async (input) => {
     if (input.sessionId) await rc.stop(input.sessionId, 'stopped');
     else await rc.stopAll('stopped');
@@ -340,7 +342,9 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     const oc = input.ordersCsv;
     const rep = input.omsReport;
     const tl = input.tenderLine;
-    const path = input.orderPdf
+    const path = input.remoteFile
+      ? `/api/meet/control/files/${input.remoteFile.id}/download?t=${encodeURIComponent(input.remoteFile.t)}`
+      : input.orderPdf
       ? `/api/share/oms/${input.orderPdf}/pdf`
       : input.tenderDocument
       ? `/api/tenders/documents/${input.tenderDocument}/file`

@@ -26,6 +26,7 @@ vi.mock('../../../src/modules/meet/session', () => ({ meet: { room: null } }));
 
 import { ApiError, apiDelete, apiGet, apiPost } from '../../../src/core/api';
 import { toast } from '../../../src/core/toasts';
+import { call } from '../../../src/core/bridge';
 import { POLICY_OFF, endedOf, failure, offerFor, pauseText, type ControlSession, type ControlState, type Share } from '../../../src/modules/meet/remote/api';
 import { MeetController } from '../../../src/modules/meet/remote/controller';
 import { MoveCoalescer, buttonName, keyMessage, pointOn, wheelDelta } from '../../../src/modules/meet/remote/input';
@@ -543,5 +544,46 @@ describe('asking for control (RC02, RC-REQ-01)', () => {
     expect(reads()).toBe(1);
     for (const cb of bridge.listeners) cb({ type: 'meet.control', meeting: 'm-1' });
     await vi.waitFor(() => expect(reads()).toBe(2));
+  });
+});
+
+describe('files in the session (RC06)', () => {
+  const caps = { ...claims(1).caps, file_transfer: true };
+  const offered = { id: 31, session_id: 12, direction: 'to_controller' as const, sender: { id: 3, name: 'Hasarinda' }, receiver_id: 5, name: 'log.zip', size: 10, executable: false, scan: 'clean' as const, status: 'offered' as const };
+
+  async function withFiles(files: unknown[]) {
+    const base = get.getMockImplementation()!;
+    get.mockImplementation(async (path: string, q?: unknown) => (path === '/api/meet/control/sessions/12/files' ? { files } : base(path, q as never)));
+    setSession({ caps });
+    server.grants.push(delivery(1, KEY1));
+    c.start('m-1');
+    await vi.waitFor(() => expect(posts(/\/confirm$/)).toHaveLength(1));
+    setSession({ status: 'CONTROL_ACTIVE', grant_waiting: false, caps });
+    await c.refresh();
+  }
+
+  it('lists what the sharer offered this end, offers files through the upload manager, and fetches with the one-time token', async () => {
+    await withFiles([offered, { ...offered, id: 32, direction: 'to_sharer' }]);
+    expect(c.offers.map((f) => f.id)).toEqual([31]);
+
+    const bridgeCall = vi.mocked(call);
+    bridgeCall.mockImplementation((async (ch: string) => (ch === 'files:pickFiles' ? [{ handle: 'h1', name: 'a.txt', size: 1 }] : [])) as never);
+    expect(await c.sendFiles()).toBe(1);
+    expect(bridgeCall).toHaveBeenCalledWith('transfers:upload', { handles: ['h1'], target: { kind: 'remote', sessionId: 12 } });
+
+    post.mockImplementation(async (path: string) => (path.endsWith('/31/accept') ? { download: '/api/meet/control/files/31/download?t=abcdefabcdefabcdef12' } : {}));
+    expect(await c.acceptFile(c.offers[0]!)).toBe(true);
+    expect(bridgeCall).toHaveBeenCalledWith('transfers:download', { remoteFile: { id: 31, t: 'abcdefabcdefabcdef12' }, name: 'log.zip' });
+    expect(c.offers).toEqual([]);
+  });
+
+  it('asks again before taking a program', async () => {
+    await withFiles([{ ...offered, name: 'fix.exe', executable: true }]);
+    post.mockImplementation(async (path: string) => {
+      if (path.endsWith('/31/accept')) throw new ApiError(428, 'fix.exe is a program. Confirm…', null, { code: 'confirm_executable' });
+      return {};
+    });
+    expect(await c.acceptFile(c.offers[0]!)).toBe(false);
+    expect(c.offers).toHaveLength(1);
   });
 });

@@ -210,6 +210,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     http,
     windows,
     screenShare,
+    get transfers() {
+      return transfers;
+    },
     deviceId: () => {
       const id = Number(device.current()?.id);
       return Number.isInteger(id) && id > 0 ? id : null;

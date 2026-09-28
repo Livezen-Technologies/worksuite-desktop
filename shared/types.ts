@@ -407,6 +407,20 @@ export interface RemoteControlView {
   share: { uuid: string; shareId: number; label: string; kind: 'screen' | 'window'; allowRequests: boolean; paused: boolean } | null;
   requests: RemoteControlRequestView[];
   session: RemoteControlSessionView | null;
+  /** Files the controller offered this computer, waiting for an answer (RC06). */
+  offers: RemoteControlOffer[];
+  /** This computer may offer the controller files (the grant allows file transfer). */
+  canSendFiles: boolean;
+}
+
+export interface RemoteControlOffer {
+  id: number;
+  sessionId: number;
+  name: string;
+  size: number;
+  from: string;
+  executable: boolean;
+  scan: 'clean' | 'not_scanned' | 'infected';
 }
 
 /** What the consent window (RC03) shows for one request. */

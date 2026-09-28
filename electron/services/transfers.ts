@@ -1,7 +1,7 @@
 import { shell } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { createWriteStream, existsSync } from 'node:fs';
-import { lstat, mkdir, open, readdir, realpath, rename, stat, unlink } from 'node:fs/promises';
+import { lstat, mkdir, open, readFile, readdir, realpath, rename, stat, unlink } from 'node:fs/promises';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import type { PickedFile, UploadTarget } from '@shared/ipc/contract';
 import type { Transfer, TransferState } from '@shared/types';
@@ -98,6 +98,8 @@ export async function walkFolder(root: string): Promise<Array<{ path: string; si
   return out;
 }
 const CHUNK = 8 * 1024 * 1024;
+/** The largest file offered in a remote-control session: it goes in one request. */
+const REMOTE_MAX = 512 * 1024 * 1024;
 
 /**
  * Files an uploaded Drive file on a tender, the way the web's tender screens
@@ -357,7 +359,7 @@ export class TransferManager {
         direction: 'upload',
         name: (target.kind === 'files' && target.name) || (file.relativePath ?? file.name),
         source: file.path,
-        destination: target.kind === 'chat' ? 'Chat' : target.kind === 'task' ? 'Task' : target.kind === 'tender' ? 'Tender' : 'WorkSuite Files',
+        destination: target.kind === 'chat' ? 'Chat' : target.kind === 'task' ? 'Task' : target.kind === 'tender' ? 'Tender' : target.kind === 'remote' ? 'Remote session' : 'WorkSuite Files',
         bytes: 0,
         total: file.size,
         state: 'queued',
@@ -384,6 +386,7 @@ export class TransferManager {
     try {
       const st = await stat(meta.path);
       if (st.size !== l.t.total) return this.finish(l, 'failed', 'The file changed on disk; choose it again.');
+      if (meta.target.kind === 'remote') return await this.offerRemote(l, meta.target.sessionId, meta.path, st.size);
       if (!meta.sha256) meta.sha256 = (await this.deps.hash(meta.path)).sha256;
       let received = new Set<number>();
       if (meta.uploadId) {
@@ -518,6 +521,30 @@ export class TransferManager {
     };
     const loaded: Live = { t, meta, abort: null, samples: [] };
     return loaded;
+  }
+
+  /**
+   * A file for the other end of a remote-control session (RC06): one
+   * multipart request, as the server takes it; they accept it or not there.
+   * Offers are for passing a log or a document, not for moving a library.
+   */
+  private async offerRemote(l: Live, sessionId: number, path: string, size: number): Promise<void> {
+    if (size > REMOTE_MAX) return this.finish(l, 'failed', 'Files offered in a remote session can be up to 512 MB. Share bigger ones through Drive.');
+    const form = new FormData();
+    form.append('file', new Blob([await readFile(path)], { type: mimeFor(basename(path)) ?? 'application/octet-stream' }), basename(path));
+    this.progress(l, 0);
+    const res = await this.deps.http.raw('POST', this.deps.http.url(`/api/meet/control/sessions/${sessionId}/files`), { body: form, timeoutMs: 10 * 60_000, signal: l.abort?.signal });
+    if (!res.ok) {
+      let message = `The server answered ${res.status}.`;
+      try {
+        message = String(((await res.json()) as { message?: string }).message ?? message);
+      } catch {
+        /* not JSON */
+      }
+      return this.finish(l, 'failed', message);
+    }
+    this.progress(l, size);
+    this.finish(l, 'done');
   }
 
   pause(id: string): void {
