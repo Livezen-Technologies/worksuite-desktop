@@ -267,6 +267,18 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('windows:close', (_i, c) => {
     winOf(c.sender)?.close();
   });
+  // ── Quick Ask (AI Assistant) ────────────────────────────────────────────
+  router.handle('quickask:context', () => ({ ...ctx.quickAsk.context(), shortcut: ctx.quickAsk.shortcut() }));
+  router.handle('quickask:open', () => void ctx.quickAsk.open());
+  router.handle('quickask:insert', (input) => ctx.quickAsk.insert(input.text));
+  router.handle('quickask:close', () => ctx.windows.hideQuickAsk());
+  // "Open in WorkSuite", "Make a task", "Ask WorkSuite": the main window takes the text (and any result) over.
+  router.handle('quickask:handoff', (input) => {
+    ctx.windows.hideQuickAsk();
+    const w = ctx.windows.showMain();
+    w.webContents.send('ai:open', { to: input.to, text: input.text, result: input.result });
+  });
+
   // ── website chats ringing (ENH-WCHAT-01, RING-49) ───────────────────────
   router.handle('ring:state', () => ctx.webchat.state());
   router.handle('ring:join', (input) => ctx.webchat.join(input.id));

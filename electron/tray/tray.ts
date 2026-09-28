@@ -31,6 +31,8 @@ export interface TrayModel {
   remoteControl: { controller: string; paused: boolean } | null;
   /** Website chats ringing for me (RING-43): listed first, with Join; the icon shows it. */
   webchatRinging: Array<{ id: number; label: string }>;
+  /** Quick Ask's shortcut while it is registered, or null (AI Assistant). */
+  quickAsk: string | null;
 }
 
 export interface TrayActions {
@@ -46,6 +48,7 @@ export interface TrayActions {
   pauseRemoteControl: () => void;
   stopRemoteControl: () => void;
   joinWebchat: (conversationId: number) => void;
+  quickAsk: () => void;
   ringingSettings: () => void;
 }
 
@@ -89,6 +92,7 @@ export class TrayService {
     updateReady: false,
     remoteControl: null,
     webchatRinging: [],
+    quickAsk: null,
   };
   private lastState: TrayState | null = null;
 
@@ -175,6 +179,7 @@ export class TrayService {
       items.push({ type: 'separator' });
     }
     items.push({ label: 'Open WorkSuite', click: a.open });
+    if (m.signedIn && m.quickAsk) items.push({ label: 'Quick Ask', accelerator: m.quickAsk, registerAccelerator: false, click: a.quickAsk });
     if (m.signedIn) {
       items.push({ label: `Unread Chat ${m.unreadChat} · Unread Mail ${m.unreadMail}`, click: () => a.openRoute(m.unreadChat >= m.unreadMail ? '/chat' : '/mail') });
       items.push({ type: 'separator' });

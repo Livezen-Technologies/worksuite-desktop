@@ -92,6 +92,13 @@ const api = {
     describe: call('windows:describe'),
     restoreDetached: call('windows:restoreDetached'),
   },
+  quickask: {
+    context: call('quickask:context'),
+    open: call('quickask:open'),
+    insert: call('quickask:insert'),
+    close: call('quickask:close'),
+    handoff: call('quickask:handoff'),
+  },
   ring: {
     state: call('ring:state'),
     join: call('ring:join'),

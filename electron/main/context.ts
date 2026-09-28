@@ -1,3 +1,4 @@
+import type { QuickAsk } from '../services/quick-ask';
 import type { WebchatRinger } from '../services/webchat-ring';
 import type { NavigateRequest } from '@shared/types';
 import type { AuditService } from '../services/audit';
@@ -77,6 +78,8 @@ export interface AppContext {
   navigate: (req: NavigateRequest) => void;
   /** Website chats ringing on this computer (ENH-WCHAT-01). */
   webchat: WebchatRinger;
+  /** Quick Ask over any app (AI Assistant). */
+  quickAsk: QuickAsk;
   relaunch: (safeMode: boolean) => void;
   quit: () => void;
   /** Clock in or out (FR-TRAY-01): the tray, the title bar and the HR page all go through this. */

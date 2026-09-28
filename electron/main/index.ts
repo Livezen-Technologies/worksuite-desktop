@@ -1,4 +1,4 @@
-import { app, crashReporter, dialog, globalShortcut, ipcMain, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents } from 'electron';
+import { app, clipboard, crashReporter, dialog, globalShortcut, ipcMain, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents } from 'electron';
 import os from 'node:os';
 import { join, resolve } from 'node:path';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
@@ -37,6 +37,8 @@ import { HttpClient, type FetchLike } from '../services/http';
 import { LockService } from '../services/lock';
 import { NotificationService, inDnd } from '../services/notifications';
 import { WebchatRinger, ringerHeight } from '../services/webchat-ring';
+import { QuickAsk } from '../services/quick-ask';
+import { createInjector, type Injector } from '../services/remote-control/input';
 import { OfflineCache } from '../services/offline-cache';
 import { OfflineQueue } from '../services/offline-queue';
 import { RealtimeService } from '../services/realtime';
@@ -631,6 +633,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
     stopRemoteControl: () => void remoteControl.stopAll('stopped'),
     joinWebchat: (id) => void webchat.join(id),
+    quickAsk: () => void quickAsk.open(),
     ringingSettings: () => navigate({ route: '/settings/notifications', source: 'tray' }),
   });
 
@@ -694,6 +697,45 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   });
   notifications.ringerShowing = () => settings.effective().webchatRinging.window && webchat.state().chats.length > 0;
 
+  // ── Quick Ask over any app (AI Assistant) ───────────────────────────────
+  // The keyboard helper remote control uses, started once, on first use, for copy and paste only.
+  let askHelper: Promise<Injector | null> | null = null;
+  const quickAskHelper = (): Promise<Injector | null> => {
+    if (process.platform === 'darwin' && !systemPreferences.isTrustedAccessibilityClient(false)) return Promise.resolve(null);
+    askHelper ??= (async () => {
+      const inj = createInjector(process.platform);
+      if (!inj) return null;
+      const ok = await inj.start().catch(() => false);
+      if (!ok) {
+        askHelper = null;
+        return null;
+      }
+      inj.onExit = () => {
+        askHelper = null;
+      };
+      return inj;
+    })();
+    return askHelper;
+  };
+  const quickAsk: QuickAsk = new QuickAsk({
+    clipboard,
+    platform: process.platform,
+    injector: quickAskHelper,
+    prefs: () => settings.effective().ai,
+    allowed: () => {
+      const b = sessionCtl.isReady() && !lock.isLocked() ? sessionCtl.current() : null;
+      return !!b && (b.permissions.includes('*') || b.permissions.includes('ai.write'));
+    },
+    register: (acc, fn) => globalShortcut.register(acc, fn),
+    unregister: (acc) => globalShortcut.unregister(acc),
+    show: () => windows.showQuickAsk(),
+    hide: () => windows.hideQuickAsk(),
+  });
+  const syncQuickAsk = (): void => {
+    quickAsk.sync();
+    tray.update({ quickAsk: quickAsk.shortcut() });
+  };
+
   // ── the session ────────────────────────────────────────────────────────
   const startServices = (b: Bootstrap): void => {
     const uid = b.user.id;
@@ -701,6 +743,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     if (settings.effective().backgroundServices.realtime) realtime.start();
     notifications.start(uid);
     webchat.start();
+    syncQuickAsk();
     device.start();
     device.extras = () => {
       const c = transfers.activeCounts();
@@ -728,6 +771,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const stopServices = (): void => {
     void remoteControl.shutdown('logout');
     webchat.stop();
+    quickAsk.release();
+    windows.hideQuickAsk();
+    tray.update({ quickAsk: null });
     // Torn-off windows show the person's data: they close, and come back at their next sign-in.
     windows.closeRecords();
     realtime.stop();
@@ -822,8 +868,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   lock.onChanged = (s) => {
     broadcast('lock:changed', s);
     emitStatus();
-    // Locked: the call window stops saying who is waiting.
+    // Locked: the call window stops saying who is waiting, and Quick Ask stops answering its shortcut.
     webchat.refresh();
+    syncQuickAsk();
+    if (s.locked) windows.hideQuickAsk();
   };
 
   function onReconnect(): void {
@@ -994,6 +1042,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     flushNavigation,
     navigate,
     webchat,
+    quickAsk,
     relaunch,
     quit,
     clockAttendance,
@@ -1015,6 +1064,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   settings.onChange((prefs) => {
     webchat.refresh();
+    syncQuickAsk();
     broadcast('settings:changed', prefs);
     if (prefs.backgroundServices.realtime && sessionCtl.isReady()) realtime.start();
     if (!prefs.backgroundServices.realtime) realtime.stop();
@@ -1036,6 +1086,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   app.on('before-quit', () => {
     windows.quitting = true;
     webchat.stop();
+    quickAsk.release();
+    void askHelper?.then((h) => h?.stop());
     // Windows' places are saved while the database is open; timers that read it stop first.
     windows.saveAllAndStop();
     if (statusTimer) clearTimeout(statusTimer);

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { NavigateRequest } from '@shared/types';
+import type { AiHandoff, NavigateRequest } from '@shared/types';
 import { app } from '../core/app-state';
 import { call, on } from '../core/bridge';
 import { accelerator, commandForAccelerator, effectiveShortcuts, getCommand, registerCommand } from '../core/commands';
@@ -9,7 +9,7 @@ import { activateIndex, activeTab, closeTab, closeTabsForApps, detachTab, dockSi
 import { toast } from '../core/toasts';
 import { closeOverlay, minimiseChatDrawer, openChatDrawer, openOverlay, toggleDock, ui } from '../core/ui';
 import { allowedModules, moduleFor } from '../modules/registry';
-import { AiDock } from '../app/overlays/AiDock';
+import { AiDock, askWorkSuite, makeTask, openAiDockWith } from '../app/overlays/AiDock';
 import { Launcher } from '../app/overlays/Launcher';
 import { NetworkPopover, NotificationCenter, ProfileMenu, TransferCenter } from '../app/overlays/Popovers';
 import { OrgSwitcher } from '../app/overlays/OrgSwitcher';
@@ -36,6 +36,11 @@ export function Shell() {
   const info = useStore(app, (s) => s.info);
   const restored = useRef(false);
   const knownApps = useRef<Set<string> | null>(null);
+
+  // Settings › AI Assistant: the dock beside every tab from the start.
+  useEffect(() => {
+    if (app.get().prefs?.ai?.dockAtStart && ui.get().dock === null) ui.set({ dock: 'ai' });
+  }, []);
 
   // Tab restore at start (FR-NAV-04) — only apps the user can still open.
   useEffect(() => {
@@ -153,6 +158,15 @@ export function Shell() {
       on<{ id: string; arg?: number }>('command', (c) => {
         const cmd = getCommand(c.id === 'tab' ? `tab-${c.arg ?? 1}` : c.id);
         cmd?.run();
+      }),
+      // Quick Ask handing its text over: the AI dock, a new task, or search.
+      on<AiHandoff>('ai:open', (h) => {
+        if (h.to === 'task') makeTask(h.text);
+        else if (h.to === 'search') askWorkSuite(h.text);
+        else {
+          openAiDockWith(h.text, h.result);
+          ui.set({ dock: 'ai' });
+        }
       }),
       on<NavigateRequest>('navigate', (req) => {
         const allowed = allowedModules(new Set(app.get().apps.map((a) => a.id)));

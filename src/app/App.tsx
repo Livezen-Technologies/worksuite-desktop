@@ -14,6 +14,7 @@ import { UpdateRequired } from './screens/UpdateScreens';
 import { WindowRoot } from './WindowRoot';
 import { RemoteControlWindow } from './RemoteControlWindow';
 import { WebchatRingWindow } from '../modules/chat/website/Ringing';
+import { QuickAskWindow } from './QuickAskWindow';
 
 /**
  * Top level: which screen this window shows, from the session stage.
@@ -43,6 +44,7 @@ export function App() {
   let body;
   if (required && auth.stage !== 'revoked') body = <UpdateRequired />;
   else if (auth.stage !== 'ready') body = <Onboarding auth={auth} />;
+  else if (hash.startsWith('#/window/quick-ask')) body = <QuickAskWindow />;
   else if (hash.startsWith('#/window/')) body = <WindowRoot hash={hash} />;
   else if (auth.setupPending) body = <SetupWizard />;
   else body = <Shell />;

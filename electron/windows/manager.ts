@@ -34,9 +34,10 @@ const SIZES: Record<WindowKind, { width: number; height: number; minWidth: numbe
   'rc-indicator': { width: 560, height: 52, minWidth: 560, minHeight: 52 },
   'rc-pointer': { width: 220, height: 30, minWidth: 220, minHeight: 30 },
   'webchat-ring': { width: 380, height: 250, minWidth: 380, minHeight: 120 },
+  'quick-ask': { width: 600, height: 480, minWidth: 600, minHeight: 480 },
 };
 /** Remote control's own windows: placed by remote control, never remembered. */
-const REMOTE = new Set<WindowKind>(['rc-consent', 'rc-indicator', 'rc-pointer', 'webchat-ring']);
+const REMOTE = new Set<WindowKind>(['rc-consent', 'rc-indicator', 'rc-pointer', 'webchat-ring', 'quick-ask']);
 
 /** The website-chat call window's place: bottom right of the primary display, clear of the taskbar (RING-40). */
 export function ringerBounds(workArea: Rectangle, height: number): Rectangle {
@@ -294,6 +295,65 @@ export class WindowManager {
     win.webContents.on('render-process-gone', () => !win.isDestroyed() && win.close());
     void win.loadURL(this.url('/window/webchat-ring'));
     return win;
+  }
+
+  private quickAsk: BrowserWindow | null = null;
+
+  /**
+   * Quick Ask (AI Assistant): over whatever app is in front, on the screen the
+   * pointer is on, taking the keyboard — it is opened to be typed in. It goes
+   * when it loses the focus, like a launcher.
+   */
+  showQuickAsk(): BrowserWindow {
+    const existing = this.quickAsk && !this.quickAsk.isDestroyed() ? this.quickAsk : null;
+    if (existing) {
+      // The same window, told to read the new selection.
+      existing.webContents.send('quickask:changed');
+      existing.show();
+      existing.focus();
+      return existing;
+    }
+    const size = SIZES['quick-ask'];
+    const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+    const win = new BrowserWindow({
+      x: area.x + Math.round((area.width - size.width) / 2),
+      y: area.y + Math.round(area.height * 0.18),
+      width: size.width,
+      height: size.height,
+      show: false,
+      frame: false,
+      resizable: false,
+      maximizable: false,
+      minimizable: false,
+      fullscreenable: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      title: 'Quick Ask',
+      backgroundColor: '#FFFFFF',
+      webPreferences: this.webPreferences(),
+    });
+    win.setAlwaysOnTop(true, 'floating');
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    this.kinds.set(win.id, 'quick-ask');
+    const wid = win.id;
+    this.quickAsk = win;
+    win.on('blur', () => !win.isDestroyed() && win.close());
+    win.on('closed', () => {
+      this.kinds.delete(wid);
+      if (this.quickAsk === win) this.quickAsk = null;
+    });
+    win.once('ready-to-show', () => {
+      win.show();
+      win.focus();
+    });
+    win.webContents.on('render-process-gone', () => !win.isDestroyed() && win.close());
+    void win.loadURL(this.url('/window/quick-ask'));
+    return win;
+  }
+
+  hideQuickAsk(): void {
+    if (this.quickAsk && !this.quickAsk.isDestroyed()) this.quickAsk.close();
+    this.quickAsk = null;
   }
 
   hideRinger(): void {

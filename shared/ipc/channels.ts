@@ -37,6 +37,11 @@ export const INVOKE_CHANNELS = [
   'windows:toggleMaximize',
   'windows:close',
   'windows:state',
+  'quickask:context',
+  'quickask:open',
+  'quickask:insert',
+  'quickask:close',
+  'quickask:handoff',
   'ring:state',
   'ring:join',
   'ring:silence',
@@ -192,6 +197,8 @@ export const EVENT_CHANNELS = [
   'rc:changed',
   'rc:switchScreen',
   'ring:changed',
+  'quickask:changed',
+  'ai:open',
 ] as const;
 
 export type EventChannel = (typeof EVENT_CHANNELS)[number];
