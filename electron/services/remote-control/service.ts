@@ -242,6 +242,7 @@ export class RemoteControlService {
   private lastInjected = 0;
   private expected: Point | null = null;
   private lastCursor: Point | null = null;
+  private readingPointer = false;
   private localUntil = 0;
   private windowRect: Rect | null = null;
   private keysAllowed = true;
@@ -831,7 +832,7 @@ export class RemoteControlService {
     this.deps.ui.showIndicator(this.displayOf(this.share?.source ?? null));
     if (this.stops.length === 0) {
       this.registerChord();
-      this.stops.push(this.timers.every(100, () => this.watchPointer()));
+      this.stops.push(this.timers.every(100, () => void this.watchPointer()));
       // Once a second, or four times a second when one window is shared: keys wait while it is not in front.
       let tick = 0;
       this.stops.push(this.timers.every(250, () => {
@@ -861,6 +862,7 @@ export class RemoteControlService {
       this.injectorReady = null;
       this.localUntil = 0;
       this.expected = null;
+      this.lastCursor = null;
     }
     this.changed();
   }
@@ -945,10 +947,17 @@ export class RemoteControlService {
   }
 
   /** The person here moved the mouse: they win for the hold, and whatever the controller held is let go (RC-INP-04). */
-  private watchPointer(): void {
-    const live = this.current();
-    if (!live || live.status !== 'CONTROL_ACTIVE') return;
-    const cur = this.deps.screen.cursor();
+  private async watchPointer(): Promise<void> {
+    if (this.readingPointer || this.current()?.status !== 'CONTROL_ACTIVE') return;
+    this.readingPointer = true;
+    let cur: Point;
+    try {
+      const at = await this.injector?.pointer().catch(() => null);
+      cur = at ? this.deps.screen.fromInput(at) : this.deps.screen.cursor();
+    } finally {
+      this.readingPointer = false;
+    }
+    if (this.current()?.status !== 'CONTROL_ACTIVE') return;
     const prev = this.lastCursor;
     this.lastCursor = cur;
     if (!prev) return;
@@ -1084,8 +1093,12 @@ export class RemoteControlService {
       // One window shared: a press or a wheel lands only where that window is what the pointer is over —
       // not on another app covering part of it, which the controller cannot see.
       if (windowShare && (type === 'ptr.wheel' || (type === 'ptr.button' && payload.down === true))) {
-        const under = await this.injector!.windowAt(at.input.x, at.input.y);
-        if (under !== windowShare.windowId || gated()) return;
+        // On X11 the check itself takes the pointer there: that move is the controller's, not the person's.
+        this.expected = at.display;
+        this.lastInjected = this.now();
+        const under = await this.injector!.isUnder(at.input.x, at.input.y, windowShare.windowId ?? '');
+        // Cannot tell (no xwininfo on this X11 desktop): only while the shared window is the one in front.
+        if (under === false || (under === null && !this.keysAllowed) || gated()) return;
       }
       actions = pointerActions(type, payload, at.input, this.held);
       this.expected = at.display;

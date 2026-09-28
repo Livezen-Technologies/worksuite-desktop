@@ -204,21 +204,26 @@ function harness(opts: { support?: Partial<RemoteControlSupport>; policy?: Parti
     consentOpen: false,
     cursor: { x: 0, y: 0 },
     advance: (ms: number) => (t += ms),
-    tick: (ms: number) => every.filter((e) => e.ms === ms).forEach((e) => e.fn()),
+    tick: async (ms: number) => {
+      every.filter((e) => e.ms === ms).forEach((e) => e.fn());
+      await settle();
+    },
   };
-  const injector: Injector & { busy: boolean; under: string | null; done: number } = {
+  const injector: Injector & { busy: boolean; under: string | null; done: number; at: { x: number; y: number } | null } = {
     method: 'xdotool',
     busy: false,
     under: null,
     done: 0,
+    at: null,
     start: vi.fn(async () => true),
     send: (a) => void sent.push(a),
     drop: vi.fn(),
     idle: () => !injector.busy,
     lastDone: () => injector.done,
     windowBounds: vi.fn(async () => null),
-    windowAt: vi.fn(async () => injector.under),
+    isUnder: vi.fn(async (_x: number, _y: number, id: string) => (injector.under === null ? null : injector.under === id)),
     foreground: vi.fn(async () => ({ window: null, app: 'Code', title: 'x' })),
+    pointer: vi.fn(async () => injector.at),
     stop: vi.fn(),
     onExit: null,
   };
@@ -395,7 +400,7 @@ describe('control on this computer', () => {
     const x = await active();
     await x.send('ptr.move', { x: 0.5, y: 0.5 }, 'u9-intruder');
     expect(x.sent).toEqual([]);
-    x.h.tick(10_000);
+    await x.h.tick(10_000);
     await settle();
     expect(x.calls).toContainEqual(['POST', '/api/meet/control/sessions/9/security', { kind: 'wrong_sender', count: 1 }]);
   });
@@ -409,10 +414,10 @@ describe('control on this computer', () => {
 
   it('lets the person here win: their mouse moves, the controller waits (RC-INP-04)', async () => {
     const x = await active();
-    x.h.tick(100);
+    await x.h.tick(100);
     x.h.advance(1_000);
     x.h.cursor = { x: 400, y: 300 };
-    x.h.tick(100);
+    await x.h.tick(100);
     expect(x.rc.view().session?.waiting).toBe('local');
     await x.send('ptr.move', { x: 0.5, y: 0.5 });
     expect(x.sent).toEqual([]);
@@ -421,13 +426,24 @@ describe('control on this computer', () => {
     expect(x.sent).toHaveLength(1);
   });
 
+  it('on X11, sees the person’s mouse through the helper: Electron’s reading stands still off its windows', async () => {
+    const x = await active();
+    x.injector.at = { x: 10, y: 10 };
+    await x.h.tick(100);
+    x.h.advance(1_000);
+    x.injector.at = { x: 400, y: 300 };
+    await x.h.tick(100);
+    expect(x.h.cursor).toEqual({ x: 0, y: 0 });
+    expect(x.rc.view().session?.waiting).toBe('local');
+  });
+
   it('does not take the controller’s own move for the person here', async () => {
     const x = await active();
-    x.h.tick(100);
+    await x.h.tick(100);
     await x.send('ptr.move', { x: 0.5, y: 0.5 });
     x.h.cursor = { x: 960, y: 540 };
     x.h.advance(100);
-    x.h.tick(100);
+    await x.h.tick(100);
     expect(x.rc.view().session?.waiting).toBeNull();
   });
 
@@ -773,7 +789,7 @@ describe('control on this computer (review)', () => {
     const stale = new ControlSender(claims(), keys, x.now);
     x.rc.packet(11, 'u5-xyz', new TextDecoder().decode(await stale.next('lease', {})), 'rc.ctl');
     await settle();
-    x.h.tick(10_000);
+    await x.h.tick(10_000);
     await settle();
     expect(x.calls.some(([, p]) => p.endsWith('/security'))).toBe(false);
   });
@@ -784,10 +800,36 @@ describe('control on this computer (review)', () => {
       const x = await active();
       await x.rc.shareChanged(11, WINDOW, true);
       (x.injector.windowBounds as ReturnType<typeof vi.fn>).mockResolvedValue({ x: 100, y: 100, width: 800, height: 600 });
-      x.h.tick(500);
+      await x.h.tick(500);
       await settle();
       return x;
     }
+
+    it('when the helper cannot tell what is under the pointer, presses only while the window is in front', async () => {
+      const x = await windowShare();
+      x.injector.under = null;
+      await x.send('ptr.button', { x: 0.5, y: 0.5, button: 'left', down: true });
+      expect(x.sent.flat().some((a) => a.t === 'button')).toBe(false);
+      (x.injector.foreground as ReturnType<typeof vi.fn>).mockResolvedValue({ window: '4242', app: 'Excel', title: 'Budget' });
+      await x.h.tick(250);
+      await x.send('ptr.button', { x: 0.5, y: 0.5, button: 'left', down: true });
+      expect(x.sent.flat()).toContainEqual({ t: 'button', button: 'left', down: true });
+    });
+
+    it('does not take the pointer going to the point for that check (X11) for the person here', async () => {
+      const x = await windowShare();
+      await x.h.tick(100);
+      x.h.advance(1_000);
+      x.injector.isUnder = vi.fn(async () => {
+        x.h.cursor = { x: 500, y: 400 };
+        await x.h.tick(100);
+        return true;
+      });
+      await x.send('ptr.button', { x: 0.5, y: 0.5, button: 'left', down: true });
+      await settle();
+      expect(x.rc.view().session?.waiting).not.toBe('local');
+      expect(x.sent.flat()).toContainEqual({ t: 'button', button: 'left', down: true });
+    });
 
     it('presses only where that window is what the pointer is over', async () => {
       const x = await windowShare();
@@ -804,7 +846,7 @@ describe('control on this computer (review)', () => {
       await x.send('key', { code: 'KeyA', down: true });
       expect(x.sent).toEqual([]);
       (x.injector.foreground as ReturnType<typeof vi.fn>).mockResolvedValue({ window: '4242', app: 'Excel', title: 'Budget' });
-      x.h.tick(250);
+      await x.h.tick(250);
       await settle();
       await x.send('key', { code: 'KeyA', down: true });
       expect(x.sent.flat()).toContainEqual({ t: 'key', code: 'KeyA', down: true });

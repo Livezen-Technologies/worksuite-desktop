@@ -5,6 +5,32 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-28 — Meet remote control, tried for real on Linux (not released)
+
+The shared computer's side run under a real X server (Xvfb and openbox) with
+xdotool and real Electron windows. Moves, clicks, keys, typed text and the
+wheel landed; the real-click rule, the red bar and the emergency chord held.
+Three things did not work, and are fixed:
+
+**Fixed**
+
+- **On Linux, the person here moving their mouse out on the desktop did not
+  hold the controller back.** Electron only learns where the pointer is from
+  events on its own windows, so away from them its reading stood still. The
+  pointer is now read through xdotool while control lasts.
+- **On Linux, with one window shared, clicks on it were refused.** xdotool
+  names the frame the window manager draws around a window, not the window;
+  `xwininfo` now says whether the shared window is inside that frame. Where
+  xwininfo is missing, clicks go through only while the shared window is the
+  one in front.
+- **On Linux, with one window shared, a click could make the next ones
+  wait.** Checking what is under the pointer takes the pointer there, and
+  that move could be taken for the person here using the mouse, holding the
+  controller back for a second and a half. It now counts as the
+  controller's.
+
+---
+
 ## 2026-09-28 — Meet remote control: what the security review found (not released)
 
 Three reviews of the code that lets someone else drive this computer. Nothing

@@ -57,13 +57,19 @@ Being controlled is the main process's business, never a page's:
   sequence, a lease no further ahead than its length plus two minutes of
   clock skew, state, capability, bounds, reserved chords, rate), then this
   computer's gates: a prompt or dialog open, the person here moving the
-  mouse (they win for the policy's hold), the share paused. Reserved chords
+  mouse (they win for the policy's hold; on X11 the pointer is read through
+  xdotool, because Electron's own reading stands still while the pointer is
+  off its windows), the share paused. Reserved chords
   are matched by key and modifiers, whatever the order, spelling or extra
   modifiers. A burst pauses control and is reported; other refusals are
   reported every ten seconds, except messages under the other key for a
   moment after a key change.
 - **One window shared**: a press or a wheel lands only where the helper sees
-  that window under the pointer (not another app covering it); keys wait
+  that window under the pointer (not another app covering it — on X11 the
+  window manager's frame is what xdotool names, so `xwininfo` walks up from
+  the shared window to see whether it is inside that frame, reading no other
+  app's window names, which could be made to look like it; without
+  xwininfo, presses land only while the window is the one in front); keys wait
   until the window has been seen in front (checked four times a second);
   Alt+Tab, Command+Tab and Windows+Tab are not passed on, nor the Windows or
   Command key sent alone from the menu (Command itself still works). A
@@ -90,6 +96,14 @@ Being controlled is the main process's business, never a page's:
   injected by any app; the person here is asked to press it.
 - **Quitting** while controlled or sharing asks first, and stops both;
   stopping ends input here before the server has answered.
+- **Tried for real on Linux (X11)** under Xvfb and openbox, with the real
+  service, xdotool and Electron windows: moves, clicks, keys, text and the
+  wheel land where they point; the prompt's Allow and the red bar's Accept
+  count only the person's own click (the controller's click reaches the bar
+  and is refused); the person's mouse, on or off WorkSuite's windows, holds
+  the controller back; the controller cannot send the emergency chord, and
+  pressing it here stops control. Windows and macOS have not been run for
+  real yet; content protection does nothing on Linux.
 
 ## Credentials (FR-AUTH-02, FR-SEC-03, AC-21)
 

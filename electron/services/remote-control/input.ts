@@ -61,9 +61,15 @@ export interface Injector {
   lastDone(): number;
   /** A captured window's place on screen, in the helper's space. */
   windowBounds(windowId: string): Promise<Rect | null>;
-  /** The top-level window under a point, in the helper's space, or null when it cannot tell. */
-  windowAt(x: number, y: number): Promise<string | null>;
+  /** Whether that window is what the pointer is over at a point (the helper's space); null when it cannot tell. */
+  isUnder(x: number, y: number, windowId: string): Promise<boolean | null>;
   foreground(): Promise<Foreground | null>;
+  /**
+   * Where the pointer is now (the helper's space), or null to use Electron's
+   * reading. On X11 Electron only learns it from events on its own windows,
+   * so out on the desktop its reading stands still.
+   */
+  pointer(): Promise<{ x: number; y: number } | null>;
   /** Let what is queued (the releases) finish, then end. */
   stop(): void;
   /** The helper went away without being asked to. */
@@ -336,9 +342,11 @@ abstract class LineHelper extends Batched implements Injector {
     return m ? { x: +m[1]!, y: +m[2]!, width: +m[3]!, height: +m[4]! } : null;
   }
 
-  async windowAt(x: number, y: number): Promise<string | null> {
+  /** Windows: the top-level window at the point; macOS: the frontmost window there. Both are the capture's id. */
+  async isUnder(x: number, y: number, windowId: string): Promise<boolean | null> {
     const r = await this.query(`at ${int(x, -100_000, 100_000)} ${int(y, -100_000, 100_000)}`);
-    return r && /^\d{1,20}$/.test(r) && r !== '0' ? r : null;
+    // The helper answers this itself: no answer, no press.
+    return !!r && /^\d{1,20}$/.test(r) && r === windowId;
   }
 
   async foreground(): Promise<Foreground | null> {
@@ -348,6 +356,11 @@ abstract class LineHelper extends Batched implements Injector {
     const [id, app, title] = r.split(' ');
     const text = (s: string | undefined) => (s ? Buffer.from(s, 'base64').toString('utf8').slice(0, 200) : '');
     return { window: id && id !== '0' ? id : null, app: text(app), title: text(title) };
+  }
+
+  /** Windows and macOS: Electron's own reading follows the pointer everywhere. */
+  async pointer(): Promise<null> {
+    return null;
   }
 
   /** After the last batch (the releases) has been carried out: stdin closes, and the helper ends. */
@@ -613,6 +626,8 @@ class MacInjector extends LineHelper {
 class X11Injector extends Batched implements Injector {
   readonly method = 'xdotool' as const;
 
+  private readonly xwininfo = ['/usr/bin/xwininfo', '/usr/local/bin/xwininfo', '/run/current-system/sw/bin/xwininfo'].find((p) => existsSync(p)) ?? null;
+
   constructor(private readonly bin: string) {
     super();
   }
@@ -632,11 +647,15 @@ class X11Injector extends Batched implements Injector {
   }
 
   private run(args: string[]): Promise<string | null> {
+    return this.runFile(this.bin, args);
+  }
+
+  private runFile(file: string, args: string[]): Promise<string | null> {
     return new Promise((resolve) => {
       let out = '';
       let p;
       try {
-        p = spawn(this.bin, args, { stdio: ['ignore', 'pipe', 'ignore'] });
+        p = spawn(file, args, { stdio: ['ignore', 'pipe', 'ignore'] });
       } catch {
         resolve(null);
         return;
@@ -663,11 +682,34 @@ class X11Injector extends Batched implements Injector {
     return Object.values(r).every(Number.isFinite) ? r : null;
   }
 
-  /** The client window under the point: the pointer goes there first, as the click that follows would take it. */
-  async windowAt(x: number, y: number): Promise<string | null> {
+  /**
+   * X11: the pointer goes to the point (the click that follows would take it
+   * there), and xdotool names the top-level window under it — with a window
+   * manager, the frame it put around the app's window, not the app's own
+   * (tried on openbox). So the shared window is under the pointer when it is
+   * that window or inside that frame: `xwininfo` walks up from the shared
+   * window to the root. Only the names of the shared window and its frames
+   * are read on the way, never those of an app covering it. Without xwininfo
+   * it cannot tell.
+   */
+  async isUnder(x: number, y: number, windowId: string): Promise<boolean | null> {
+    let id = /^\d{1,10}$/.test(windowId) ? Number(windowId) : 0;
+    if (!id) return false;
     const out = await this.run(['mousemove', String(int(x, 0, 100_000)), String(int(y, 0, 100_000)), 'getmouselocation', '--shell']);
-    const id = out ? /^WINDOW=(\d{1,20})$/m.exec(out)?.[1] : undefined;
-    return id && id !== '0' ? id : null;
+    const top = out ? /^WINDOW=(\d{1,20})$/m.exec(out)?.[1] : undefined;
+    if (!top) return null;
+    if (top === windowId) return true;
+    if (!this.xwininfo) return null;
+    for (let depth = 0; depth < 8; depth++) {
+      const info = await this.runFile(this.xwininfo, ['-children', '-id', `0x${id.toString(16)}`]);
+      const root = info ? /^\s*Root window id: 0x([0-9a-f]{1,8})\b/m.exec(info)?.[1] : undefined;
+      const parent = info ? /^\s*Parent window id: 0x([0-9a-f]{1,8})\b/m.exec(info)?.[1] : undefined;
+      if (!root || !parent) return null;
+      if (parent === root) return false;
+      id = parseInt(parent, 16);
+      if (String(id) === top) return true;
+    }
+    return false;
   }
 
   async foreground(): Promise<Foreground | null> {
@@ -677,6 +719,12 @@ class X11Injector extends Batched implements Injector {
     return { window: id, app: (cls ?? '').trim().slice(0, 200), title: (title ?? '').trim().slice(0, 200) };
   }
 
+  async pointer(): Promise<{ x: number; y: number } | null> {
+    const out = await this.run(['getmouselocation', '--shell']);
+    const x = Number(out ? /^X=(-?\d{1,6})$/m.exec(out)?.[1] : NaN);
+    const y = Number(out ? /^Y=(-?\d{1,6})$/m.exec(out)?.[1] : NaN);
+    return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+  }
 }
 
 // ── which helper, and whether it can work here ───────────────────────────
