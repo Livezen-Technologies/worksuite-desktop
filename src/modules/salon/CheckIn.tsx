@@ -2,8 +2,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import { Button, Chip, Modal, Spinner } from '../../components/ui';
+import { ApiError } from '../../core/api';
 import { toast } from '../../core/toasts';
 import { answered, attemptKey, atLeast, checkIn, fetchVisit, K, refusal, shortDay, STATEMENT, type Allergy, type CheckInExtra, type Gate, type PatchTest, type Visit } from './api';
+import { keep, SK, syncNow } from './offline';
 import { firstName, SEVERITY_TONE, servicesOf, severityLabel, stylistsOf } from './parts';
 
 /**
@@ -19,13 +21,18 @@ import { firstName, SEVERITY_TONE, servicesOf, severityLabel, stylistsOf } from 
  * tick themselves. Anybody else is checked in on the press; if the server
  * still finds something (an allergy added a minute ago, a colour service with
  * no valid patch test) its 409 opens the same panel with what it found.
+ *
+ * With WorkSuite out of reach the panel reads the allergy from the day's copy,
+ * and the check-in — with the statement ticked — is kept to send. WorkSuite
+ * judges it again then: a patch test it wants comes back as a change that
+ * needs a person.
  */
 interface Open {
   visit: Visit;
   gate: Gate | null;
 }
 
-export function useCheckIn(ackSeverity: string) {
+export function useCheckIn(ackSeverity: string, offline = false) {
   const qc = useQueryClient();
   const [open, setOpen] = useState<Open | null>(null);
   const [busy, setBusy] = useState(false);
@@ -33,6 +40,13 @@ export function useCheckIn(ackSeverity: string) {
   async function send(visit: Visit, extra: CheckInExtra) {
     setBusy(true);
     try {
+      if (offline) {
+        await keep([{ kind: 'visit.check_in', payload: { visit_id: visit.id, ...extra }, label: `Check-in: ${visit.client.name}`, detail: `${servicesOf(visit)} · ${visit.start}` }]);
+        toast('success', `${visit.client.name}’s check-in is kept, and goes to WorkSuite when it answers.`);
+        setOpen(null);
+        void qc.invalidateQueries({ queryKey: SK.all });
+        return;
+      }
       /* A new attempt, a new key: a refusal is kept against the last one. */
       const r = await checkIn(visit.id, extra, attemptKey());
       toast('success', r.message || `${visit.client.name} is checked in.`);
@@ -43,6 +57,8 @@ export function useCheckIn(ackSeverity: string) {
       if (answered(e) && d.gate && (d.code === 'ack_required' || d.code === 'patch_test_required' || d.code === 'patch_test_override')) {
         setOpen({ visit, gate: d.gate });
       } else {
+        /* No answer: the desk asks WorkSuite again now, and works from its copy if it is down. */
+        if (e instanceof ApiError && e.offline) void syncNow().catch(() => undefined);
         toast('error', e instanceof Error ? e.message : 'The check-in did not go through.');
       }
     } finally {
@@ -56,13 +72,13 @@ export function useCheckIn(ackSeverity: string) {
     else void send(visit, {});
   }
 
-  const panel = open ? <CheckInPanel visit={open.visit} gate={open.gate} busy={busy} onSubmit={(x) => void send(open.visit, x)} onClose={() => setOpen(null)} /> : null;
+  const panel = open ? <CheckInPanel visit={open.visit} gate={open.gate} busy={busy} offline={offline} onSubmit={(x) => void send(open.visit, x)} onClose={() => setOpen(null)} /> : null;
 
   return { start, panel, busy };
 }
 
-function CheckInPanel({ visit, gate, busy, onSubmit, onClose }: { visit: Visit; gate: Gate | null; busy: boolean; onSubmit: (x: CheckInExtra) => void; onClose: () => void }) {
-  const detail = useQuery({ queryKey: K.visit(visit.id), queryFn: ({ signal }) => fetchVisit(visit.id, signal) });
+function CheckInPanel({ visit, gate, busy, offline, onSubmit, onClose }: { visit: Visit; gate: Gate | null; busy: boolean; offline: boolean; onSubmit: (x: CheckInExtra) => void; onClose: () => void }) {
+  const detail = useQuery({ queryKey: K.visit(visit.id), queryFn: ({ signal }) => fetchVisit(visit.id, signal), enabled: !offline });
   const onFile = visit.client.allergy;
   const allergies: Allergy[] = gate?.allergies?.length
     ? gate.allergies
@@ -82,9 +98,9 @@ function CheckInPanel({ visit, gate, busy, onSubmit, onClose }: { visit: Visit; 
       missing={gate?.missing_patch ?? detail.data?.missing_patch ?? []}
       statement={detail.data?.ack_statement || STATEMENT}
       gate={gate}
-      loading={detail.isLoading && !gate}
+      loading={detail.isLoading && !gate && !offline}
       busy={busy}
-      confirmLabel={`Check in ${firstName(visit.client.name)}`}
+      confirmLabel={offline ? `Keep ${firstName(visit.client.name)}’s check-in` : `Check in ${firstName(visit.client.name)}`}
       onConfirm={onSubmit}
       onClose={onClose}
     />

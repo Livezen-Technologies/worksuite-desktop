@@ -555,7 +555,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('salon:syncStatus', () => ctx.salonSync.status());
   router.handle('salon:syncNow', () => ctx.salonSync.sync());
   router.handle('salon:copy', () => ctx.salonSync.copy());
-  router.handle('salon:copyClients', (input) => ctx.salonSync.clients(input.q, input.limit ?? 20));
+  router.handle('salon:copyClients', (input) => ctx.salonSync.clients(input.q, input.limit ?? 20, input.id));
   router.handle('salon:outbox', () => ctx.salonSync.outbox());
   router.handle('salon:outboxAdd', (input) => ctx.salonSync.add(input));
   router.handle('salon:outboxResolve', (input) => ctx.salonSync.resolve(input));

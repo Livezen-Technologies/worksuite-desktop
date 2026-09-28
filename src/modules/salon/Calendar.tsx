@@ -2,12 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Button, Chip, Empty, IconButton, Modal, Spinner } from '../../components/ui';
 import { addDays, clockAt, fetchCalendar, K, longDay, minutesOf, owing, todayAt, type CalendarDay, type Visit } from './api';
-import { AllergyChip, Failed, servicesOf, stylistsOf, useDesk, useNow } from './parts';
+import { calendarFromCopy, copyAge, copyHolds, unreachable } from './offline';
+import { AllergyChip, Failed, Note, servicesOf, stylistsOf, useDesk, useNow } from './parts';
 
 /**
  * The day by stylist (D03): each stylist's working hours, and every booking
  * as a block to press — check in, or open the client. Drawn on the salon's
  * clock, from the location's opening hours widened to fit every booking.
+ * With WorkSuite out of reach, a day the copy holds is drawn from it.
  */
 const PX_PER_MIN = 1.4;
 
@@ -33,7 +35,10 @@ export default function Calendar() {
   const today = todayAt(tz, new Date(clock));
   const date = desk.params.get('date') ?? today;
   const [open, setOpen] = useState<Visit | null>(null);
-  const q = useQuery({ queryKey: K.calendar(desk.location.id, date), queryFn: ({ signal }) => fetchCalendar(desk.location.id, date, signal), refetchInterval: 60_000 });
+  const live0 = useQuery({ queryKey: K.calendar(desk.location.id, date), queryFn: ({ signal }) => fetchCalendar(desk.location.id, date, signal), refetchInterval: 60_000, retry: desk.offline ? false : undefined });
+  const offline = desk.offline || unreachable(live0);
+  const copied = offline && desk.copy && copyHolds(desk.copy, date, clock) ? calendarFromCopy(desk.copy, date) : null;
+  const q = { data: copied ?? (offline ? undefined : live0.data), isError: !copied && live0.isError, refetch: live0.refetch };
   const [start, end] = useMemo(() => dayWindow(q.data, date), [q.data, date]);
   const hours = Array.from({ length: (end - start) / 60 }, (_, i) => start + i * 60);
   const y = (m: number) => (m - start) * PX_PER_MIN;
@@ -58,7 +63,10 @@ export default function Calendar() {
         ) : null}
       </div>
 
-      {q.isError ? (
+      {copied ? <Note tone="muted">From this desk’s copy, taken at {copyAge(desk.copy, tz)} — stylists’ own hours and time off show when WorkSuite answers.</Note> : null}
+      {offline && !copied ? (
+        <Note tone="warning">WorkSuite cannot be reached, and this desk’s copy does not hold {longDay(date)}.</Note>
+      ) : q.isError ? (
         <Failed text="The day could not be loaded." onRetry={() => void q.refetch()} />
       ) : !q.data ? (
         <Spinner label="Loading the day…" />
@@ -134,7 +142,7 @@ export default function Calendar() {
 function VisitActions({ visit, onClose }: { visit: Visit; onClose: () => void }) {
   const desk = useDesk();
   const canCheckIn = (visit.status === 'pending' || visit.status === 'confirmed') && desk.may('salon.visit.checkin');
-  const canPay = ((['checked_in', 'in_service', 'completed'].includes(visit.status) && !visit.checked_out) || owing(visit)) && desk.may('salon.checkout');
+  const canPay = ((['checked_in', 'in_service', 'completed'].includes(visit.status) && !visit.checked_out) || owing(visit)) && desk.may('salon.checkout') && !desk.offline;
 
   return (
     <Modal

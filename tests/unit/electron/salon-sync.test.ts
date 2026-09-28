@@ -138,10 +138,12 @@ describe('salon outbox: what is sent, and in which order', () => {
   });
 
   it('offers what fits the refusal', () => {
-    expect(choicesFor('visit.book', null, ['edit', 'drop'])).toEqual(['edit', 'retry', 'drop']);
+    expect(choicesFor('visit.book', null, ['edit', 'drop'])).toEqual(['time', 'retry', 'drop']);
+    expect(choicesFor('client.create', null, ['edit', 'drop'])).toEqual(['edit', 'retry', 'drop']);
+    expect(choicesFor('visit.check_in', null, ['edit', 'drop'])).toEqual(['edit', 'retry', 'drop']);
     expect(choicesFor('visit.check_in', { starts_at: 'x' }, ['take_next', 'choose_time', 'drop'])).toEqual(['retry', 'drop']);
     expect(choicesFor('client.create', { candidates: [] }, ['take_next', 'choose_time', 'drop'])).toEqual(['retry', 'drop']);
-    expect(choicesFor('visit.book', null, ['launch_missiles'])).toEqual(['retry', 'drop']);
+    expect(choicesFor('visit.check_in', null, ['launch_missiles'])).toEqual(['retry', 'drop']);
   });
 });
 

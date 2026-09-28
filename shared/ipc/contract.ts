@@ -493,7 +493,7 @@ export const contract = {
   'salon:syncStatus': ch(none, { session: true }),
   'salon:syncNow': ch(none, { session: true, rate: 2 }),
   'salon:copy': ch(none, { session: true }),
-  'salon:copyClients': ch(z.object({ q: z.string().max(120), limit: z.number().int().min(1).max(100).optional() }), { session: true, rate: 20 }),
+  'salon:copyClients': ch(z.object({ q: z.string().max(120), limit: z.number().int().min(1).max(100).optional(), id: z.number().int().positive().optional() }), { session: true, rate: 20 }),
   'salon:outbox': ch(none, { session: true }),
   'salon:outboxAdd': ch(
     z.object({

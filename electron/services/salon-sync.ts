@@ -523,11 +523,12 @@ export class SalonSync {
     };
   }
 
-  /** Clients in the copy, by any part of their name or email, or three digits or more of their mobile. */
-  clients(q: string, limit: number): CopyClient[] {
+  /** Clients in the copy, by any part of their name or email, or three digits or more of their mobile — or the one client asked for. */
+  clients(q: string, limit: number, id?: number): CopyClient[] {
     const s = this.scope();
     const c = s && this.d.caps().offlineCache ? this.readCopy(s) : null;
-    return c ? searchClients(c.clients, q, limit) : [];
+    if (!c) return [];
+    return id ? c.clients.filter((x) => x.id === id).slice(0, 1) : searchClients(c.clients, q, limit);
   }
 
   status(): SalonSyncStatus {

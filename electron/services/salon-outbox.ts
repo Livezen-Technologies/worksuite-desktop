@@ -164,23 +164,23 @@ const CHOICES = ['take_next', 'time', 'client', 'edit', 'retry', 'drop'] as cons
  * What a person may do about a refusal. The server offers "take the next
  * time" with a time and "edit" without one; a new client refused because
  * WorkSuite already knows someone like them comes with the candidates, and
- * the answer to that is "it is this client". Sending again is always there
- * (the diary may have changed), and so is dropping it.
+ * the answer to that is "it is this client". A booking is changed by its
+ * time. Sending again is always there (the diary may have changed), and so
+ * is dropping it.
  */
 export function choicesFor(kind: SalonOutboxKind, next: SalonOutboxItem['next'], given: string[] | undefined): string[] {
   const out = new Set<string>();
+  const offered = !!next && 'starts_at' in next;
   if (next && 'candidates' in next && next.candidates.length > 0) out.add('client');
-  if (next && 'starts_at' in next && kind === 'visit.book') {
-    out.add('take_next');
+  if (kind === 'visit.book') {
+    if (offered) out.add('take_next');
     out.add('time');
   }
   for (const c of given ?? []) {
     const name = c === 'choose_time' ? 'time' : c;
-    if (name === 'time' || name === 'take_next') {
-      if (kind === 'visit.book' && next && 'starts_at' in next) out.add(name);
-    } else if ((CHOICES as readonly string[]).includes(name)) {
-      out.add(name);
-    }
+    if (name === 'take_next' || name === 'time' || name === 'client') continue;
+    if (name === 'edit' && kind === 'visit.book') continue;
+    if ((CHOICES as readonly string[]).includes(name)) out.add(name);
   }
   out.add('retry');
   out.add('drop');
