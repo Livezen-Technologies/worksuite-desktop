@@ -661,7 +661,7 @@ class MacInjector extends LineHelper {
 class X11Injector extends Batched implements Injector {
   readonly method = 'xdotool' as const;
 
-  private readonly xwininfo = ['/usr/bin/xwininfo', '/usr/local/bin/xwininfo', '/run/current-system/sw/bin/xwininfo'].find((p) => existsSync(p)) ?? null;
+  private readonly xwininfo = XWININFO.find((p) => existsSync(p)) ?? null;
 
   constructor(private readonly bin: string) {
     super();
@@ -709,23 +709,18 @@ class X11Injector extends Batched implements Injector {
   }
 
   /**
-   * xwininfo asks the X server where the window is. xdotool 3.20160805 (what
-   * Debian and Ubuntu ship) adds the window's offset inside the window
-   * manager's frame twice — a title bar too low — so it is only the fallback.
+   * xwininfo asks the X server where the window is. Not xdotool: 3.20160805,
+   * what Debian and Ubuntu ship, adds the window's offset inside the window
+   * manager's frame twice — a title bar too low, where a click near the
+   * bottom edge would reach the app below. Without xwininfo, no place: one
+   * shared window then takes no clicks (a whole screen still does).
    */
   async windowBounds(windowId: string): Promise<Rect | null> {
-    if (!/^\d{1,10}$/.test(windowId)) return null;
-    if (this.xwininfo) {
-      const info = await this.runFile(this.xwininfo, ['-id', `0x${Number(windowId).toString(16)}`]);
-      // The last of each: the window's name, on the first line, could look like one.
-      const v = (k: string) => Number([...(info ?? '').matchAll(new RegExp(`^\\s*${k}:\\s+(-?\\d+)$`, 'gm'))].pop()?.[1]);
-      const r = { x: v('Absolute upper-left X'), y: v('Absolute upper-left Y'), width: v('Width'), height: v('Height') };
-      if (Object.values(r).every(Number.isFinite)) return r;
-    }
-    const out = await this.run(['getwindowgeometry', '--shell', windowId]);
-    if (!out) return null;
-    const v = (k: string) => Number(new RegExp(`^${k}=(-?\\d+)$`, 'm').exec(out)?.[1]);
-    const r = { x: v('X'), y: v('Y'), width: v('WIDTH'), height: v('HEIGHT') };
+    if (!/^\d{1,10}$/.test(windowId) || !this.xwininfo) return null;
+    const info = await this.runFile(this.xwininfo, ['-id', `0x${Number(windowId).toString(16)}`]);
+    // The last of each: the window's name, on the first line, could look like one.
+    const v = (k: string) => Number([...(info ?? '').matchAll(new RegExp(`^\\s*${k}:\\s+(-?\\d+)$`, 'gm'))].pop()?.[1]);
+    const r = { x: v('Absolute upper-left X'), y: v('Absolute upper-left Y'), width: v('Width'), height: v('Height') };
     return Object.values(r).every(Number.isFinite) ? r : null;
   }
 
@@ -776,6 +771,8 @@ class X11Injector extends Batched implements Injector {
 
 // ── which helper, and whether it can work here ───────────────────────────
 
+const XWININFO = ['/usr/bin/xwininfo', '/usr/local/bin/xwininfo', '/run/current-system/sw/bin/xwininfo'];
+
 function findXdotool(): string | null {
   for (const p of ['/usr/bin/xdotool', '/usr/local/bin/xdotool', '/bin/xdotool', '/run/current-system/sw/bin/xdotool']) if (existsSync(p)) return p;
   return null;
@@ -804,7 +801,10 @@ export function inputSupport(opts: { platform?: string; env?: NodeJS.ProcessEnv;
   }
   if (ds === 'wayland') return { displayServer: ds, available: false, method: null, reason: 'This is a Wayland session, which does not let apps control the mouse and keyboard. Your screen can be shared but not controlled.' };
   const x = opts.exists ? ['/usr/bin/xdotool', '/usr/local/bin/xdotool'].some(exists) : findXdotool() !== null;
-  return x ? { displayServer: ds, available: true, method: 'xdotool', reason: null } : { displayServer: ds, available: false, method: null, reason: 'Install xdotool (for example `sudo apt install xdotool`) to let others control this computer.' };
+  if (!x) return { displayServer: ds, available: false, method: null, reason: 'Install xdotool (for example `sudo apt install xdotool`) to let others control this computer.' };
+  // Without xwininfo a shared window's place is not known for sure, so one window shared takes no clicks.
+  if (!XWININFO.some(exists)) return { displayServer: ds, available: true, method: 'xdotool', reason: 'To let others control one shared window (not only a whole screen), install x11-utils too (for example `sudo apt install x11-utils`).' };
+  return { displayServer: ds, available: true, method: 'xdotool', reason: null };
 }
 
 export function createInjector(platform: string = process.platform): Injector | null {

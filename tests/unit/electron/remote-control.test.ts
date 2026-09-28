@@ -152,7 +152,9 @@ describe('the input helpers’ protocol', () => {
     expect(displayServer('linux', { WAYLAND_DISPLAY: 'wayland-0', XDG_SESSION_TYPE: 'x11' })).toBe('x11');
     expect(inputSupport({ platform: 'linux', env: { XDG_SESSION_TYPE: 'wayland' } })).toMatchObject({ available: false, reason: expect.stringContaining('Wayland') });
     expect(inputSupport({ platform: 'linux', env: { XDG_SESSION_TYPE: 'x11' }, exists: () => false })).toMatchObject({ available: false, reason: expect.stringContaining('xdotool') });
-    expect(inputSupport({ platform: 'linux', env: { XDG_SESSION_TYPE: 'x11' }, exists: (p) => p === '/usr/bin/xdotool' })).toMatchObject({ available: true, method: 'xdotool' });
+    expect(inputSupport({ platform: 'linux', env: { XDG_SESSION_TYPE: 'x11' }, exists: (p) => p === '/usr/bin/xdotool' || p === '/usr/bin/xwininfo' })).toMatchObject({ available: true, method: 'xdotool', reason: null });
+    // xdotool without xwininfo: a whole screen can be controlled, one window cannot — and the settings say what to add.
+    expect(inputSupport({ platform: 'linux', env: { XDG_SESSION_TYPE: 'x11' }, exists: (p) => p === '/usr/bin/xdotool' })).toMatchObject({ available: true, method: 'xdotool', reason: expect.stringContaining('x11-utils') });
     expect(inputSupport({ platform: 'darwin', env: {}, accessibility: false, exists: () => true })).toMatchObject({ available: false, reason: expect.stringContaining('Accessibility') });
     expect(inputSupport({ platform: 'win32', env: { SystemRoot: 'C:\\Windows' }, exists: () => true })).toMatchObject({ available: true, method: 'sendinput' });
   });

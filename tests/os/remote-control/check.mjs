@@ -92,7 +92,7 @@ const t0 = Date.now();
 while (!ready && Date.now() - t0 < 90_000 && target.exitCode === null) await sleep(50);
 if (!check('the test window is up', ready, ready ? `window ${ready.window}, pad ${JSON.stringify(ready.pad)}` : 'it never said ready')) finish(1);
 
-console.log(`  support here: ${JSON.stringify(inputSupport(platform))}`);
+console.log(`  support here: ${JSON.stringify(inputSupport({ platform }))}`);
 const inj = createInjector(platform);
 if (!check('the helper starts', inj && (await inj.start()))) finish(1);
 const idle = async () => {

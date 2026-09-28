@@ -478,7 +478,7 @@ function RemoteControlSection() {
           <Icon name={works ? 'shield-check' : 'warning'} size={17} className={works ? 'text-success' : 'text-warning'} />
           {works ? 'This computer can be controlled when you allow it' : 'This computer can be shared, but not controlled'}
         </div>
-        {!works ? <p className="mt-1.5 text-ink-2">{!s.policyAllows ? "Your organization's policy for this computer doesn't allow it." : s.reason}</p> : null}
+        {!works ? <p className="mt-1.5 text-ink-2">{!s.policyAllows ? "Your organization's policy for this computer doesn't allow it." : s.reason}</p> : s.reason ? <p className="mt-1.5 text-ink-2">{s.reason}</p> : null}
         {s.accessibility === 'denied' ? (
           <Button className="mt-2.5" size="sm" onClick={() => void call('media:privacySettings', { pane: 'accessibility' })}>
             Open Accessibility settings

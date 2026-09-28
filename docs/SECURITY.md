@@ -105,6 +105,19 @@ Being controlled is the main process's business, never a page's:
   and is refused); the person's mouse, on or off WorkSuite's windows, holds
   the controller back; the controller cannot send the emergency chord, and
   pressing it here stops control. Content protection does nothing on Linux.
+  A shared window's place comes from xwininfo, not xdotool (whose Debian
+  and Ubuntu version puts it a title bar low, where a click near the bottom
+  edge would reach the app below); without xwininfo one shared window takes
+  no clicks and Settings says to install x11-utils. xdotool runs in a UTF-8
+  locale, so text past ASCII is typed whatever locale the app started in.
+- **The helpers on real systems**: `tests/os/remote-control/check.mjs`
+  drives each helper, built as the app builds it, against a test window
+  that reports what arrives (clicks and their count, drags, the wheel, keys
+  and their modifiers, typed text); the "Remote control helpers" workflow
+  runs it on GitHub's Windows and macOS machines and on Linux under Xvfb
+  whenever the helpers change. It passes on Linux (X11) here; its first
+  Windows and macOS runs were not started by GitHub (no runner was given
+  to any job in the repository that day).
 - **Windows and macOS, as far as Linux can go**: the Windows helper's C#
   compiles as C# 5 (Windows PowerShell 5.1's compiler), and its script ran
   under PowerShell 7 against a stand-in user32 with Windows' structure

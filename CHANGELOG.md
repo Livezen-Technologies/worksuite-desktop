@@ -13,9 +13,12 @@ and Linux whenever the helpers change. On Linux it found:
 
 **Fixed**
 
-- **With one window shared, clicks landed a title bar too low.** The
-  xdotool that Debian and Ubuntu ship places a window inside its frame by
-  the frame's offset twice; the window's place now comes from xwininfo.
+- **With one window shared, clicks landed a title bar too low** — near
+  the bottom edge, on the app below. The xdotool that Debian and Ubuntu ship
+  places a window inside its frame by the frame's offset twice; the
+  window's place now comes from xwininfo, and without it one shared window
+  takes no clicks (Settings says to install x11-utils; a whole screen works
+  without it).
 - **Accented letters, other scripts and emoji were not typed** when the
   app ran without a UTF-8 locale (no LANG, or LANG=C): xdotool reads text in
   its locale. It now runs in a UTF-8 one.
