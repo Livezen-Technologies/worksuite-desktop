@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
-import type { Preferences } from '@shared/types';
+import { QUICK_ASK_SHORTCUTS, type Preferences } from '@shared/types';
 import { app, isLocked, updatePrefs } from '../../core/app-state';
-import { call, errorMessage } from '../../core/bridge';
+import { call, errorMessage, isMac } from '../../core/bridge';
 import { conflicts, effectiveShortcuts, prettyAccelerator, accelerator, DEFAULT_SHORTCUTS } from '../../core/commands';
 import { LANGUAGES } from '../../core/i18n';
 import { useStore } from '../../core/store';
@@ -13,6 +13,8 @@ import { Icon } from '../../components/Icon';
 import { Button, Chip, Switch, cx } from '../../components/ui';
 import { Select } from '../../components/Select';
 import type { ModuleProps } from '../registry';
+import { playTone } from '../calls/tones';
+import { shortcutLabel, useWriter, writerProblem } from '../ai/writer';
 
 /** Settings / profile tree (§4.9). Anything the organization's policy decides is shown locked, with the reason. */
 const SECTIONS = [
@@ -24,6 +26,7 @@ const SECTIONS = [
   { id: 'desktop', label: 'Desktop', icon: 'monitor' },
   { id: 'files', label: 'Files & Sync', icon: 'folder' },
   { id: 'offline', label: 'Offline', icon: 'cloud-off' },
+  { id: 'ai', label: 'AI Assistant', icon: 'sparkles' },
   { id: 'remote-control', label: 'Remote control', icon: 'screen-share' },
   { id: 'monitoring', label: 'Monitoring', icon: 'eye' },
   { id: 'about', label: 'About', icon: 'info' },
@@ -55,6 +58,7 @@ export default function SettingsPage(_props: ModuleProps) {
           {section === 'desktop' ? <DesktopSection prefs={prefs} /> : null}
           {section === 'files' ? <FilesSection prefs={prefs} /> : null}
           {section === 'offline' ? <OfflineSection prefs={prefs} /> : null}
+          {section === 'ai' ? <AiSection prefs={prefs} /> : null}
           {section === 'remote-control' ? <RemoteControlSection /> : null}
           {section === 'monitoring' ? <Monitoring /> : null}
           {section === 'about' ? <About /> : null}
@@ -243,6 +247,7 @@ function NotificationsSection({ prefs }: { prefs: Preferences }) {
   const { navigate } = useTab();
   const lock = isLocked('notificationPrivacy');
   const paused = useStore(app, (s) => s.status?.notificationsPausedUntil);
+  const hasChat = useStore(app, (s) => s.apps.some((a) => a.id === 'chat'));
   return (
     <>
       <H title="Notifications" hint="How this computer shows notifications — even when WorkSuite's window is closed, from the tray." />
@@ -283,6 +288,7 @@ function NotificationsSection({ prefs }: { prefs: Preferences }) {
           </div>
         </Row>
       ) : null}
+      {hasChat ? <WebchatRingingPrefs prefs={prefs} /> : null}
       <h3 className="mt-8 mb-1 text-[16px] font-bold text-ink">By app</h3>
       {MODULE_TOGGLES.map(([id, label]) => (
         <Row key={id} label={label}>
@@ -294,6 +300,107 @@ function NotificationsSection({ prefs }: { prefs: Preferences }) {
           Send a test notification
         </Button>
       </div>
+    </>
+  );
+}
+
+/**
+ * Website chats ringing on this computer (RING-UI-08): the call window, Do
+ * not disturb, the join shortcut, the ringtone, and starting with the
+ * computer so a chat can ring before anything is opened (RING-48).
+ */
+function WebchatRingingPrefs({ prefs }: { prefs: Preferences }) {
+  const r = prefs.webchatRinging;
+  const set = (patch: Partial<Preferences['webchatRinging']>) => void updatePrefs({ webchatRinging: { ...r, ...patch } });
+  const [testing, setTesting] = useState(false);
+  const test = () => {
+    if (testing) return;
+    setTesting(true);
+    const t = playTone('webchat', r.volume / 100);
+    setTimeout(() => {
+      t.stop();
+      setTesting(false);
+    }, 3_000);
+  };
+  return (
+    <>
+      <h3 className="mt-8 mb-1 text-[16px] font-bold text-ink">Website chats</h3>
+      <p className="mb-1 text-[13px] text-ink-2">A chat from your websites rings on this computer until someone joins it — while WorkSuite runs, with its window closed too.</p>
+      <Row label="Ring over other apps" hint="A small window at the bottom right, over full-screen apps where the system allows. Off: the bar under your tabs and the tray only.">
+        <Switch label="Ring over other apps" checked={r.window} onChange={(v) => set({ window: v })} />
+      </Row>
+      <Row label="During Do not disturb" hint="Quiet hours, or notifications paused.">
+        <Select
+          label="During Do not disturb"
+          value={r.duringDnd}
+          options={[
+            { value: 'card', label: 'Show the window, no sound' },
+            { value: 'at_risk', label: 'Ring only when a chat is at risk' },
+            { value: 'ring', label: 'Ring as usual' },
+          ]}
+          onValueChange={(v) => set({ duringDnd: v })}
+        />
+      </Row>
+      <Row label={`Join with ${isMac ? '⌘⇧J' : 'Ctrl+Shift+J'}`} hint="From any app, while a chat is ringing. Released as soon as nothing rings.">
+        <Switch label="Join shortcut" checked={r.shortcut} onChange={(v) => set({ shortcut: v })} />
+      </Row>
+      <Row label="Ringtone volume" hint="At risk, high, urgent and VIP chats use a stronger tone.">
+        <div className="flex items-center gap-3">
+          <input type="range" min={0} max={100} step={5} value={r.volume} aria-label="Ringtone volume" onChange={(e) => set({ volume: Number(e.target.value) })} className="w-40" />
+          <Button onClick={test} disabled={testing}>
+            {testing ? 'Ringing…' : 'Test'}
+          </Button>
+        </div>
+      </Row>
+      <Toggle k="startWithOs" prefs={prefs} label="Start WorkSuite with this computer" hint="So website chats can ring before you open anything." />
+    </>
+  );
+}
+
+/**
+ * Settings › AI Assistant (AI Assistant — Web + Desktop UIs, page 3): how the
+ * assistant works on this computer. It sees only what it is given, and never
+ * sends anything without the person.
+ */
+function AiSection({ prefs }: { prefs: Preferences }) {
+  const a = prefs.ai;
+  const set = (patch: Partial<Preferences['ai']>) => void updatePrefs({ ai: { ...a, ...patch } });
+  const writer = useWriter();
+  const held = useQuery({ queryKey: ['quickask', 'shortcut', a.quickAsk, a.shortcut], queryFn: () => call('quickask:context').then((c) => c.shortcut), retry: false });
+  const languages = writer.data?.languages?.length ? writer.data.languages : [a.language];
+  const taken = a.quickAsk && held.isSuccess && held.data === null;
+  return (
+    <>
+      <H title="AI Assistant" hint="How the assistant works on this computer. It only sees what you give it and never sends anything without you." />
+      {writer.isError || (writer.data && !writer.data.available) ? (
+        <p className="mb-2 rounded-[10px] bg-warning-bg px-3 py-2 text-[13px] text-[#7A4308] dark:text-warning">{writer.isError ? writerProblem(writer.error) : 'No AI connection is configured for this workspace yet.'}</p>
+      ) : null}
+      <Row label="Quick Ask" hint="Opens over any app with the text you have selected there. The selection is read only when you press the shortcut.">
+        <Switch label="Quick Ask" checked={a.quickAsk} onChange={(v) => set({ quickAsk: v })} />
+      </Row>
+      {a.quickAsk ? (
+        <Row label="Quick Ask shortcut" hint={taken ? 'Another app already uses this shortcut. Choose another.' : undefined}>
+          <Select
+            label="Quick Ask shortcut"
+            value={a.shortcut}
+            options={QUICK_ASK_SHORTCUTS.map((k) => ({ value: k, label: shortcutLabel(k, isMac) }))}
+            onValueChange={(v) => set({ shortcut: v })}
+          />
+        </Row>
+      ) : null}
+      <Row label="Insert results into other apps" hint="Pastes only when you click Insert, into the app Quick Ask was opened over.">
+        <Switch label="Insert results into other apps" checked={a.insert} onChange={(v) => set({ insert: v })} />
+      </Row>
+      <Row label="Open the AI dock at start-up" hint="Show the assistant beside every tab.">
+        <Switch label="Open the AI dock at start-up" checked={a.dockAtStart} onChange={(v) => set({ dockAtStart: v })} />
+      </Row>
+      <Row label="Language for translations" hint="Where Translate goes unless you choose another.">
+        <Select label="Language for translations" value={a.language} options={languages.map((l) => ({ value: l, label: l }))} onValueChange={(v) => set({ language: v })} />
+      </Row>
+      {isMac ? (
+        <p className="mt-4 text-[12.5px] text-ink-3">To read your selection in other apps, and to insert into them, WorkSuite needs System Settings › Privacy &amp; Security › Accessibility. Without it Quick Ask uses what you copied last.</p>
+      ) : null}
+      <p className="mt-2 text-[12.5px] text-ink-3">Files from this computer, summaries of WorkSuite files and actions waiting for your confirmation arrive when the assistant's desktop service does.</p>
     </>
   );
 }

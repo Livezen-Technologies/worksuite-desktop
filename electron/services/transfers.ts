@@ -359,7 +359,7 @@ export class TransferManager {
         direction: 'upload',
         name: (target.kind === 'files' && target.name) || (file.relativePath ?? file.name),
         source: file.path,
-        destination: target.kind === 'chat' ? 'Chat' : target.kind === 'task' ? 'Task' : target.kind === 'tender' ? 'Tender' : target.kind === 'remote' ? 'Remote session' : 'WorkSuite Files',
+        destination: target.kind === 'chat' ? 'Chat' : target.kind === 'task' ? 'Task' : target.kind === 'tender' ? 'Tender' : target.kind === 'remote' ? 'Remote session' : target.kind === 'website' ? 'Website chat' : 'WorkSuite Files',
         bytes: 0,
         total: file.size,
         state: 'queued',
@@ -387,6 +387,7 @@ export class TransferManager {
       const st = await stat(meta.path);
       if (st.size !== l.t.total) return this.finish(l, 'failed', 'The file changed on disk; choose it again.');
       if (meta.target.kind === 'remote') return await this.offerRemote(l, meta.target.sessionId, meta.path, st.size);
+      if (meta.target.kind === 'website') return await this.sendToVisitor(l, meta.target.conversationId, meta.path, meta.target.caption);
       if (!meta.sha256) meta.sha256 = (await this.deps.hash(meta.path)).sha256;
       let received = new Set<number>();
       if (meta.uploadId) {
@@ -545,6 +546,30 @@ export class TransferManager {
       return this.finish(l, 'failed', message);
     }
     this.progress(l, size);
+    this.finish(l, 'done');
+  }
+
+  /**
+   * A file for a website visitor: one multipart request to the conversation's
+   * attach, which checks the widget's size limit and type list itself — the
+   * chunked Drive uploader would put it in the Drive, not in the chat.
+   */
+  private async sendToVisitor(l: Live, conversationId: number, path: string, caption?: string): Promise<void> {
+    const form = new FormData();
+    form.append('file', await openAsBlob(path, { type: mimeFor(basename(path)) ?? 'application/octet-stream' }), basename(path));
+    if (caption) form.append('caption', caption);
+    this.progress(l, 0);
+    const res = await this.deps.http.raw('POST', this.deps.http.url(`/api/chat/widget-admin/conversations/${conversationId}/attach`), { body: form, timeoutMs: 5 * 60_000, signal: l.abort?.signal });
+    if (!res.ok) {
+      let message = `The server answered ${res.status}.`;
+      try {
+        message = String(((await res.json()) as { message?: string }).message ?? message);
+      } catch {
+        /* not JSON */
+      }
+      return this.finish(l, 'failed', message);
+    }
+    this.progress(l, l.t.total);
     this.finish(l, 'done');
   }
 

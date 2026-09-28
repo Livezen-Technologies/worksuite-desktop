@@ -5,7 +5,209 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## Unreleased — Multi-window docking: tabs in their own windows, and side by side
+## 2026-09-28 — 0.2.45: the AI Assistant on the desktop — Quick Ask, the dock, its settings
+
+From "WorkSuite AI Assistant — Web + Desktop UIs", on the server's writing
+assistant (`/api/ai/write`, which every role may use).
+
+**Added**
+
+- **Quick Ask** over any app: select text anywhere, press **⌥Space** on a
+  Mac (**Ctrl+Alt+Space** elsewhere), and a small window opens with it —
+  **Translate** (into the language you choose), **Rewrite**, **Shorten**,
+  **Make professional**, **Fix grammar**, **Make a task**, **Ask WorkSuite**.
+  The answer is shown; **Insert** pastes it back into the app you were in,
+  **Copy** copies it, **Open in WorkSuite** takes it to the AI dock. Esc, or
+  clicking elsewhere, closes it.
+- The selection is read once, when you press the shortcut, and nothing else
+  on your screen is: on Linux the selected text is read as it is; elsewhere
+  WorkSuite presses Copy in that app and puts your clipboard back straight
+  after. Insert pastes only when you click it, and restores the clipboard too.
+- **The AI dock** (Ctrl/Cmd+Shift+A) is the same assistant beside every tab,
+  for text you type or paste — no longer a "coming soon" card.
+- **Settings › AI Assistant**: Quick Ask on or off and its shortcut (it says
+  when another app already has it), inserting into other apps, the dock at
+  start-up, and the language Translate goes to. The tray has **Quick Ask**.
+
+**Where it bites**
+
+- On a Mac, reading the selection and inserting need WorkSuite in System
+  Settings › Privacy & Security › Accessibility; without it Quick Ask uses
+  what you copied last, and says so. Wayland sessions have no Insert.
+- The assistant never reads the tab beside it. Summaries of WorkSuite files
+  with page references, comparing versions, files from this computer, and
+  actions waiting for your confirmation (and their tray entry and alerts)
+  need an assistant service the server does not have yet.
+- The server's writing assistant has no "Summarize"; **Shorten** is the
+  nearest. Text is limited to 8,000 characters.
+
+---
+
+## 2026-09-28 — 0.2.44: Website chats ring like calls, and answer from Team Chat's composer
+
+From the Website Live Chat SRS v1.4 (ENH-WCHAT-01 and -02), the desktop's
+part, on the server as it is today.
+
+**Ringing (RING-40…48)**
+
+- **A chat from your websites rings until someone joins it** — in a small
+  window at the bottom right, over other apps and full-screen ones where the
+  system allows, with WorkSuite's window minimised or closed to the tray. It
+  never takes the keyboard from what you are typing in.
+- The window shows who is waiting, on which site, where they are, what page
+  they are reading and what they asked, how long they have waited and which
+  step of the escalation reached you; **Join chat** and **Silence**. Other
+  chats ringing are listed under it with their own Join — at risk first,
+  then assigned to you, then the longest waiting.
+- **Join** accepts the chat (or opens one assigned to you) and brings
+  WorkSuite forward on it. A moment too late, it says who has it; when a
+  colleague joins, it says so and stops.
+- **Silence** mutes one chat on this computer until it becomes at risk,
+  when it rings again with the stronger tone. At risk, high, urgent and VIP
+  chats use a stronger tone; an offline enquiry shows without ringing.
+- While a chat rings: a bar under your tabs, the tray icon and its menu
+  (**Join**, **Open Website Chats**, **Ringing settings…**), the Dock bouncing
+  on a Mac, the taskbar flashing elsewhere, and **Ctrl+Shift+J** (**⌘⇧J**)
+  joining from any app — registered only while something rings.
+- **Settings › Notifications › Website chats**: ring over other apps, what
+  Do not disturb does (the window without sound — the default; only at risk;
+  as usual), the join shortcut, the ringtone volume with a test, and starting
+  WorkSuite with the computer.
+- Locked, the window says a chat is waiting and nothing about who.
+
+**The website thread's composer (RDC-01…08, 14)**
+
+- It is Team Chat's composer now, with the website set: attach (documents,
+  images, the camera), paste, drop from the computer, emoji. Mentions, voice
+  messages, urgent, sharing records and Drive links are not there — a
+  visitor could receive none of them.
+- **Saved replies**: the first six as chips above the box, and **/** in the
+  box to find any by shortcut or title; Enter inserts it.
+- A file a visitor cannot receive (an SVG, a video, anything over 5 MB) is
+  refused before it is uploaded, with the reason.
+- Replies go through the outbox: offline, a reply shows as pending in the
+  thread and is sent once when WorkSuite reconnects; a refused one says why,
+  with Retry and Discard. Drafts stay per conversation, across restarts.
+
+**Fixed**
+
+- The "Chat assigned to you" card read the conversation to show it, and on
+  this server reading a conversation is joining it: the visitor was told you
+  had joined, and the assignment counted as seen, before you pressed
+  anything. The call window reads only the server's list of what is ringing.
+
+**Where it bites**
+
+- The server has no ring sessions, ring heartbeat or silence yet (ENH-01
+  R1): silence is for this computer only, the desktop and a browser tab can
+  both sound, and the ring stops when the server stops listing the chat
+  rather than when the visitor leaves. With the organisation's ring time set
+  (not the default), the tone stops at that time and the window stays.
+- Not in this release, as none of their server APIs exist yet: several
+  staff in a chat, invite and transfer (ENH-03); live typing and read
+  receipts (ENH-04); voice calls from the widget (ENH-05); copying a Drive
+  file to a visitor, reply quotes and delivery marks (RDC-05, 09, 10).
+
+---
+
+## 2026-09-28 — 0.2.43: SalonMate, part 3 — working offline, and the desk's notifications
+
+The front desk keeps working when WorkSuite cannot be reached. It opens from
+its own copy of the day, keeps new clients, bookings and check-ins, and sends
+them in order when the line is back. WorkSuite checks each one again then.
+Money still needs WorkSuite.
+
+**Added**
+
+- **The day's copy.** Each paired desk keeps its copy, encrypted, per
+  server, desk and person, where the company's desktop policy lets this
+  computer keep data offline. It holds the menu, the stylists, the clients
+  seen in the last year with the worst allergy on file, and the book from
+  yesterday to the salon's "days ahead". Only what changed is fetched each
+  minute, and the whole copy every hour. Screens use the copy only when
+  WorkSuite does not answer, and say how old it is.
+  - **Today** is worked out from the copy by the server's own rules.
+  - **The calendar** draws any day the copy holds.
+  - **Clients** are searched by name, email, or part of the mobile, typed
+    as "077…" or "+9477…".
+- **Working offline.** These are kept on this computer and sent when
+  WorkSuite answers:
+  - a new client;
+  - a walk-in started now, with the allergy read out and ticked first, as
+    online;
+  - a booking at a time on the salon's clock;
+  - a check-in from Today or the calendar.
+
+  They go in the order they were made, and a booking for a new client
+  follows the client. WorkSuite judges each as of when it was made (within
+  a day).
+- **Changes to send.** What waits, and what WorkSuite would not do as it
+  was, with the choices it offered:
+  - take the nearest free time;
+  - choose a time;
+  - "it is this client" (for a new client WorkSuite already knows);
+  - change it;
+  - send again;
+  - drop it, together with what depended on it.
+
+  The rail counts what waits, and the status bar's "pending changes"
+  includes it.
+- **Notifications for the desk**, from the system tray even with the window
+  closed:
+  - WorkSuite's "ready to pay" alert opens the desk's payment for that
+    visit. "Booked online" opens Today.
+  - A client who cancels today's visit from their own link now tells the
+    desk. WorkSuite itself raises nothing for that.
+  - A change WorkSuite refused tells the desk too.
+
+  SalonMate has its own switch under Settings → Notifications.
+
+**Where it bites**
+
+- Only a **trusted** computer keeps changes to send (WorkSuite → Devices →
+  Trust), and only for a company that lets its desks book offline (the
+  SalonMate setting, on by default). Otherwise the desk says why and does
+  not offer to keep anything.
+- Payments, deposits, the register and closing the day need WorkSuite and
+  say so. So do receipts.
+- Offline, nobody's diary is guessed at. Whether a stylist is free, a
+  tier's price and a deposit come from WorkSuite when it answers. A time
+  that turns out to be taken comes back with the nearest free one.
+- Changes belong to whoever made them: WorkSuite takes each person's as
+  theirs. They wait through a plain sign-out. Somebody else signed in at
+  the counter sees only that they are there. "Pair this computer again"
+  drops them, and warns first. A remote wipe or "Sign out and remove
+  WorkSuite data" removes the copy and the changes.
+- A change older than a day is judged as of now when it arrives.
+
+**Security**
+
+- The generic offline queue (`offline:submit`) now keeps only writes the
+  API proxy would let a page make. A page could previously queue a request
+  to `/api/salon/v1/desk/pair`, or another path the proxy refuses, and have
+  it sent later.
+
+**Checked**
+
+- Unit tests:
+  - what is sent, in which order, and what is held behind a refusal;
+  - how a refusal's local ids resolve and what is sent again;
+  - the choices a refusal offers;
+  - the copy's bootstrap, delta with overlap, hourly refresh and window;
+  - cancellations the desk hears of, and phone search;
+  - trust and company rules, and what belongs to whom;
+  - the board and calendar from the copy, and the salon clock across a
+    change of clocks.
+- `tests/e2e/salon-3.mjs`, against a real server through a relay that cuts
+  the line: the desk keeps a new client's booking, a check-in from the
+  calendar, and a booking at a taken time. With the line back, the first
+  two are in WorkSuite as made. The third comes back refused with the
+  nearest time, and taking it books it. 13/13. `salon.mjs` (12/12) and
+  `salon-2.mjs` (12/12) pass as before.
+
+---
+
+## 2026-09-28 — Multi-window docking: tabs in their own windows, and side by side (ships in 0.2.43)
 
 Any tab can now leave the main window and come back. Drag it out of the tab
 strip and let go anywhere off the window, and it becomes its own window
@@ -63,7 +265,7 @@ you are working in, and see both at once.
 
 ---
 
-## Unreleased — Drive sync: keep Drive folders on this computer
+## 2026-09-28 — Drive sync: keep Drive folders on this computer (ships in 0.2.43)
 
 Choose Drive folders in **Files → Sync devices** (or **Keep on this computer…**
 on a folder) and they are kept in step with a folder here —
@@ -115,7 +317,7 @@ app, offline too; changes go both ways, and only what changed travels.
 - `SyncController::commit` assembles a file in memory; the app sends files
   past 256 MiB by the chunked upload.
 
-## Unreleased — Expenses: the whole module, natively
+## 2026-09-28 — Expenses: the whole module, natively (ships in 0.2.43)
 
 Expenses opens here now instead of in the browser, under Business in the
 sidebar, and every screen of it is drawn by the app. Links to Expenses screens
@@ -239,7 +441,7 @@ commit)
 
 ---
 
-## Unreleased — Finance: the whole module, natively
+## 2026-09-28 — Finance: the whole module, natively (ships in 0.2.43)
 
 Finance opens here now instead of in the browser, under Business in the
 sidebar, and every screen of it is drawn by the app. Links to Finance screens
@@ -369,103 +571,6 @@ commit)
   exist, so it always says no (the desktop gates on the posting permission).
 - A tax rate starting before the current one fails with a database error
   (the desktop refuses it first).
-
----
-
-## 2026-09-28 — 0.2.43: SalonMate, part 3 — working offline, and the desk's notifications
-
-The front desk keeps working when WorkSuite cannot be reached. It opens from
-its own copy of the day, keeps new clients, bookings and check-ins, and sends
-them in order when the line is back. WorkSuite checks each one again then.
-Money still needs WorkSuite.
-
-**Added**
-
-- **The day's copy.** Each paired desk keeps its copy, encrypted, per
-  server, desk and person, where the company's desktop policy lets this
-  computer keep data offline. It holds the menu, the stylists, the clients
-  seen in the last year with the worst allergy on file, and the book from
-  yesterday to the salon's "days ahead". Only what changed is fetched each
-  minute, and the whole copy every hour. Screens use the copy only when
-  WorkSuite does not answer, and say how old it is.
-  - **Today** is worked out from the copy by the server's own rules.
-  - **The calendar** draws any day the copy holds.
-  - **Clients** are searched by name, email, or part of the mobile, typed
-    as "077…" or "+9477…".
-- **Working offline.** These are kept on this computer and sent when
-  WorkSuite answers:
-  - a new client;
-  - a walk-in started now, with the allergy read out and ticked first, as
-    online;
-  - a booking at a time on the salon's clock;
-  - a check-in from Today or the calendar.
-
-  They go in the order they were made, and a booking for a new client
-  follows the client. WorkSuite judges each as of when it was made (within
-  a day).
-- **Changes to send.** What waits, and what WorkSuite would not do as it
-  was, with the choices it offered:
-  - take the nearest free time;
-  - choose a time;
-  - "it is this client" (for a new client WorkSuite already knows);
-  - change it;
-  - send again;
-  - drop it, together with what depended on it.
-
-  The rail counts what waits, and the status bar's "pending changes"
-  includes it.
-- **Notifications for the desk**, from the system tray even with the window
-  closed:
-  - WorkSuite's "ready to pay" alert opens the desk's payment for that
-    visit. "Booked online" opens Today.
-  - A client who cancels today's visit from their own link now tells the
-    desk. WorkSuite itself raises nothing for that.
-  - A change WorkSuite refused tells the desk too.
-
-  SalonMate has its own switch under Settings → Notifications.
-
-**Where it bites**
-
-- Only a **trusted** computer keeps changes to send (WorkSuite → Devices →
-  Trust), and only for a company that lets its desks book offline (the
-  SalonMate setting, on by default). Otherwise the desk says why and does
-  not offer to keep anything.
-- Payments, deposits, the register and closing the day need WorkSuite and
-  say so. So do receipts.
-- Offline, nobody's diary is guessed at. Whether a stylist is free, a
-  tier's price and a deposit come from WorkSuite when it answers. A time
-  that turns out to be taken comes back with the nearest free one.
-- Changes belong to whoever made them: WorkSuite takes each person's as
-  theirs. They wait through a plain sign-out. Somebody else signed in at
-  the counter sees only that they are there. "Pair this computer again"
-  drops them, and warns first. A remote wipe or "Sign out and remove
-  WorkSuite data" removes the copy and the changes.
-- A change older than a day is judged as of now when it arrives.
-
-**Security**
-
-- The generic offline queue (`offline:submit`) now keeps only writes the
-  API proxy would let a page make. A page could previously queue a request
-  to `/api/salon/v1/desk/pair`, or another path the proxy refuses, and have
-  it sent later.
-
-**Checked**
-
-- Unit tests:
-  - what is sent, in which order, and what is held behind a refusal;
-  - how a refusal's local ids resolve and what is sent again;
-  - the choices a refusal offers;
-  - the copy's bootstrap, delta with overlap, hourly refresh and window;
-  - cancellations the desk hears of, and phone search;
-  - trust and company rules, and what belongs to whom;
-  - the board and calendar from the copy, and the salon clock across a
-    change of clocks.
-- `tests/e2e/salon-3.mjs`, against a real server through a relay that cuts
-  the line: the desk keeps a new client's booking, a check-in from the
-  calendar, and a booking at a taken time. With the line back, the first
-  two are in WorkSuite as made. The third comes back refused with the
-  nearest time, and taking it books it. 13/13. `salon.mjs` (12/12) and
-  `salon-2.mjs` (12/12) pass as before.
 
 ---
 
@@ -652,7 +757,7 @@ until then the desk sends people to pay where they pay today.
   client, Book again, the booking on the calendar, check-in through the
   allergy read-out, forget. It cleans up what it made.
 
-## 2026-09-28 — Meet: pointing at and drawing on a shared screen; the controller's name at the pointer (not released)
+## 2026-09-28 — Meet: pointing at and drawing on a shared screen; the controller's name at the pointer (ships in 0.2.43)
 
 The last part of WS-MEET-ENH-01 the desktop did not have (RC-PTR-01…03,
 RC08, RC-INP-04).
@@ -680,7 +785,7 @@ RC08, RC-INP-04).
 
 ---
 
-## 2026-09-28 — Meet remote control: the input helpers, checked on real systems (not released)
+## 2026-09-28 — Meet remote control: the input helpers, checked on real systems (ships in 0.2.43)
 
 A check that drives each input helper against a test window reporting what
 arrives (`tests/os/remote-control/check.mjs`), run by CI on Windows, macOS
@@ -704,7 +809,7 @@ and Linux whenever the helpers change. On Linux it found:
 
 ---
 
-## 2026-09-28 — Meet remote control: the Windows and macOS helpers, checked from Linux (not released)
+## 2026-09-28 — Meet remote control: the Windows and macOS helpers, checked from Linux (ships in 0.2.43)
 
 Neither helper has run on its own system yet. The Windows one ran under
 PowerShell against a stand-in for Windows' input functions, and passed; the
@@ -732,7 +837,7 @@ macOS one, run against a stand-in for its bridge, did not:
 
 ---
 
-## 2026-09-28 — Meet remote control, tried for real on Linux (not released)
+## 2026-09-28 — Meet remote control, tried for real on Linux (ships in 0.2.43)
 
 The shared computer's side run under a real X server (Xvfb and openbox) with
 xdotool and real Electron windows. Moves, clicks, keys, typed text and the
@@ -758,7 +863,7 @@ Three things did not work, and are fixed:
 
 ---
 
-## 2026-09-28 — Meet remote control: what the security review found (not released)
+## 2026-09-28 — Meet remote control: what the security review found (ships in 0.2.43)
 
 Three reviews of the code that lets someone else drive this computer. Nothing
 let input through without the current key; these are the gaps they found.
@@ -810,7 +915,7 @@ let input through without the current key; these are the gaps they found.
 
 ---
 
-## 2026-09-28 — Meet remote control (not released)
+## 2026-09-28 — Meet remote control (ships in 0.2.43)
 
 WS-MEET-ENH-01, the desktop's part. The server and web sides shipped
 earlier; a browser can be watched but never controlled, so this is what

@@ -210,6 +210,106 @@ export interface Preferences {
   pinnedApps: string[];
   shortcuts: Record<string, string>;
   backgroundServices: { notifications: boolean; realtime: boolean };
+  /** Website chat ringing on this computer (WS-WCHAT ENH-01 §14.3). */
+  webchatRinging: WebchatRingPrefs;
+  /** The AI Assistant on this computer (Settings › AI Assistant). */
+  ai: AiPrefs;
+}
+
+/** The AI Assistant's desktop settings (AI Assistant — Web + Desktop UIs, Settings). */
+export interface AiPrefs {
+  /** Quick Ask over any app with the selected text. */
+  quickAsk: boolean;
+  /** Its shortcut, as an Electron accelerator from QUICK_ASK_SHORTCUTS. */
+  shortcut: string;
+  /** Offer Insert, which pastes into the app Quick Ask was opened over — only when clicked. */
+  insert: boolean;
+  /** Open the AI dock beside the tabs when WorkSuite starts. */
+  dockAtStart: boolean;
+  /** The language Translate goes to unless another is chosen. */
+  language: string;
+}
+
+/** The shortcuts Quick Ask may use: ones no system or common app claims. */
+export const QUICK_ASK_SHORTCUTS = ['Alt+Space', 'Control+Alt+Space', 'CommandOrControl+Shift+Space'] as const;
+
+/** Quick Ask handing its text to the main window: the AI dock, a new task, or search. */
+export interface AiHandoff {
+  to: 'dock' | 'task' | 'search';
+  text: string;
+  result: string | null;
+}
+
+/** What Quick Ask was opened with (the selection, read once, when the shortcut was pressed). */
+export interface QuickAskContext {
+  text: string;
+  /** Where the text came from: the selection, what was copied last (no way to read the selection here), or nothing. */
+  source: 'selection' | 'clipboard' | 'none';
+  /** The app it was opened over, when the system says. */
+  app: string | null;
+  /** Insert can paste back into that app. */
+  canInsert: boolean;
+  /** Why the selection could not be read, in a sentence, when it could not. */
+  note: string | null;
+}
+
+/** How website chats ring here (Settings › Notifications › Website chats; RING-UI-08). */
+export interface WebchatRingPrefs {
+  /** The call window over other apps; off leaves the bar in the main window and the tray. */
+  window: boolean;
+  /** During Do not disturb: the window without the tone (default), the tone only at risk, or as usual (RING-47). */
+  duringDnd: 'card' | 'at_risk' | 'ring';
+  /** Ctrl/Cmd+Shift+J joins the top ringing chat, registered only while one rings (RING-46). */
+  shortcut: boolean;
+  /** Ringtone volume, 0–100. */
+  volume: number;
+}
+
+/**
+ * A website chat ringing for this person (ENH-WCHAT-01): who, where, and how
+ * long, from the server's own pending list and events — never from opening
+ * the conversation, which would join it.
+ */
+export interface WebchatRingChat {
+  id: number;
+  visitor: string;
+  site: string | null;
+  /** The page they are reading (its title, or its address). */
+  page: string | null;
+  /** City and country, when known. */
+  place: string | null;
+  device: string | null;
+  returning: boolean;
+  /** What they wrote, when an event said. */
+  preview: string | null;
+  priority: 'low' | 'normal' | 'high' | 'urgent' | 'vip';
+  /** Started while nobody was answering: a card, not a continuous ring (RING-08, "once"). */
+  offline: boolean;
+  /** Waiting since, a server stamp (true UTC without a zone). */
+  since: string;
+  /** The escalation step that reached this person: first, priority, everyone, supervisor, released. */
+  stage: string | null;
+  atRisk: boolean;
+  /** Assigned to me and not yet opened: I ring until I join (RING-05). */
+  mine: boolean;
+  /** Who assigned it, for a chat that is mine. */
+  by: string | null;
+  /** Silenced by me on this computer until it is at risk (RING-11, locally). */
+  silenced: boolean;
+}
+
+export interface WebchatRingState {
+  /** Ordered: at risk, assigned to me, then oldest waiting (RING-23). */
+  chats: WebchatRingChat[];
+  /** What the tone does now: off (none left unsilenced, Do not disturb, the organisation's cap), or which tone. */
+  tone: 'off' | 'normal' | 'strong';
+  volume: number;
+  /** How a ring ended, said for a few seconds (RING-28). */
+  outcome: { id: number; text: string; at: number } | null;
+  /** Locked: the window says a chat is waiting, and nothing about who. */
+  hidden: boolean;
+  /** Ctrl/Cmd+Shift+J is registered now. */
+  shortcut: boolean;
 }
 
 export interface PreferenceLock {
@@ -329,7 +429,7 @@ export interface AppInfo {
   restoredFromCrash: boolean;
 }
 
-export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'video-call' | 'ring' | 'meet' | 'rc-consent' | 'rc-indicator' | 'rc-pointer';
+export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'video-call' | 'ring' | 'meet' | 'rc-consent' | 'rc-indicator' | 'rc-pointer' | 'webchat-ring' | 'quick-ask';
 
 /** Screens and windows offered for sharing (FR-COM-05), and whether the OS lets us capture them. */
 export interface ScreenSources {

@@ -44,6 +44,8 @@ import type {
   SyncLookup,
   SyncPolicy,
   SyncStatus,
+  WebchatRingState,
+  QuickAskContext,
   Transfer,
   UpdateStatus,
 } from '../types';
@@ -94,6 +96,14 @@ export const preferencesPatchSchema = z
     pinnedApps: z.array(z.string().max(64)).max(64),
     shortcuts: z.record(z.string().max(64), z.string().max(64)),
     backgroundServices: z.object({ notifications: z.boolean(), realtime: z.boolean() }),
+    webchatRinging: z.object({ window: z.boolean(), duringDnd: z.enum(['card', 'at_risk', 'ring']), shortcut: z.boolean(), volume: z.number().int().min(0).max(100) }),
+    ai: z.object({
+      quickAsk: z.boolean(),
+      shortcut: z.enum(['Alt+Space', 'Control+Alt+Space', 'CommandOrControl+Shift+Space']),
+      insert: z.boolean(),
+      dockAtStart: z.boolean(),
+      language: z.string().regex(/^[A-Za-z ]{2,40}$/),
+    }),
   })
   .partial();
 
@@ -140,6 +150,8 @@ export const uploadTargetSchema = z.discriminatedUnion('kind', [
   }),
   /** Offered to the other end of a remote-control session (RC06): they accept or decline it there. */
   z.object({ kind: z.literal('remote'), sessionId: z.number().int().positive() }),
+  // To a website visitor (ENH-WCHAT-02, RDC-04/14): one request to the conversation's attach, the widget's own store.
+  z.object({ kind: z.literal('website'), conversationId: z.number().int().positive(), caption: z.string().max(400).optional() }),
 ]);
 export type UploadTarget = z.infer<typeof uploadTargetSchema>;
 
@@ -204,6 +216,16 @@ export const contract = {
   'windows:toggleMaximize': ch(none, { whileLocked: true }),
   'windows:close': ch(none, { whileLocked: true }),
   'windows:state': ch(none, { whileLocked: true }),
+  // Quick Ask (AI Assistant): what it was opened with, Insert back into that app, and handing a result to WorkSuite.
+  'quickask:context': ch(none, { session: true }),
+  'quickask:open': ch(none, { session: true, rate: 2 }),
+  'quickask:insert': ch(z.object({ text: z.string().min(1).max(20_000) }), { session: true, rate: 2 }),
+  'quickask:close': ch(none, { session: true }),
+  'quickask:handoff': ch(z.object({ to: z.enum(['dock', 'task', 'search']), text: z.string().max(8000), result: z.string().max(20_000).nullable() }), { session: true, rate: 2 }),
+  // Website chats ringing like calls (WS-WCHAT ENH-01, RING-49): the call window, the main window's bar.
+  'ring:state': ch(none, { session: true, whileLocked: true }),
+  'ring:join': ch(z.object({ id: z.number().int().positive() }), { session: true, rate: 4 }),
+  'ring:silence': ch(z.object({ id: z.number().int().positive(), on: z.boolean() }), { session: true, rate: 10 }),
   // Multi-window docking (FR-NAV-05/07): tear a tab off into its own window, and dock it back.
   'windows:detach': ch(
     z.object({ route, title: z.string().max(200).optional(), at: z.object({ x: z.number().int(), y: z.number().int() }).optional() }),
@@ -689,6 +711,14 @@ export interface Outputs {
   'windows:toggleMaximize': boolean;
   'windows:close': void;
   'windows:state': WindowState;
+  'quickask:context': QuickAskContext & { shortcut: string | null };
+  'quickask:open': void;
+  'quickask:insert': boolean;
+  'quickask:close': void;
+  'quickask:handoff': void;
+  'ring:state': WebchatRingState;
+  'ring:join': boolean;
+  'ring:silence': void;
   'windows:detach': { id: number };
   'windows:dock': void;
   'windows:adopt': { route: string; title: string } | null;

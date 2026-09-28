@@ -4,7 +4,9 @@
  */
 type Note = { hz: number[]; at: number; len: number };
 
-const PATTERNS: Record<'ring' | 'ringback', { every: number; notes: Note[]; level: number }> = {
+export type ToneKind = 'ring' | 'ringback' | 'webchat' | 'webchat-strong';
+
+const PATTERNS: Record<ToneKind, { every: number; notes: Note[]; level: number }> = {
   // Two rising notes, twice, then a pause.
   ring: {
     every: 2_400,
@@ -16,12 +18,34 @@ const PATTERNS: Record<'ring' | 'ringback', { every: number; notes: Note[]; leve
       { hz: [880], at: 0.8, len: 0.22 },
     ],
   },
+  // A website chat waiting (RING-21): about two seconds of ring, three of pause.
+  webchat: {
+    every: 5_000,
+    level: 0.2,
+    notes: [
+      { hz: [784], at: 0, len: 0.18 },
+      { hz: [988], at: 0.24, len: 0.24 },
+      { hz: [784], at: 1.0, len: 0.18 },
+      { hz: [988], at: 1.24, len: 0.3 },
+    ],
+  },
+  // At risk, or a high, urgent or VIP chat: the stronger tone, closer together.
+  'webchat-strong': {
+    every: 2_600,
+    level: 0.3,
+    notes: [
+      { hz: [880, 1175], at: 0, len: 0.2 },
+      { hz: [1175, 1397], at: 0.26, len: 0.24 },
+      { hz: [880, 1175], at: 0.62, len: 0.2 },
+      { hz: [1175, 1397], at: 0.88, len: 0.3 },
+    ],
+  },
   // The familiar two-tone ringback, quietly.
   ringback: { every: 4_000, level: 0.05, notes: [{ hz: [440, 480], at: 0, len: 1.6 }] },
 };
 
 /** Starts a pattern at `volume` (0–1); returns the function that stops it. */
-export function playTone(kind: 'ring' | 'ringback', volume = 1): { stop: () => void; setVolume: (v: number) => void } {
+export function playTone(kind: ToneKind, volume = 1): { stop: () => void; setVolume: (v: number) => void } {
   const pattern = PATTERNS[kind];
   let ctx: AudioContext | null = null;
   let master: GainNode | null = null;

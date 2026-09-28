@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { NavigateRequest } from '@shared/types';
+import type { AiHandoff, NavigateRequest } from '@shared/types';
 import { app } from '../core/app-state';
 import { call, on } from '../core/bridge';
 import { accelerator, commandForAccelerator, effectiveShortcuts, getCommand, registerCommand } from '../core/commands';
@@ -9,7 +9,7 @@ import { activateIndex, activeTab, closeTab, closeTabsForApps, detachTab, dockSi
 import { toast } from '../core/toasts';
 import { closeOverlay, minimiseChatDrawer, openChatDrawer, openOverlay, toggleDock, ui } from '../core/ui';
 import { allowedModules, moduleFor } from '../modules/registry';
-import { AiDock } from '../app/overlays/AiDock';
+import { AiDock, askWorkSuite, makeTask, openAiDockWith } from '../app/overlays/AiDock';
 import { Launcher } from '../app/overlays/Launcher';
 import { NetworkPopover, NotificationCenter, ProfileMenu, TransferCenter } from '../app/overlays/Popovers';
 import { OrgSwitcher } from '../app/overlays/OrgSwitcher';
@@ -18,7 +18,7 @@ import { ClockPopover } from '../app/overlays/ClockPopover';
 import { SearchOverlay } from '../app/overlays/SearchOverlay';
 import { UpdateBanner } from '../app/screens/UpdateScreens';
 import { ChatDrawer, MinimisedChats } from '../modules/chat/ChatDrawer';
-import { AssignmentAlert } from '../modules/chat/website/AssignmentAlert';
+import { RingingBar } from '../modules/chat/website/Ringing';
 import { Sidebar } from './Sidebar';
 import { StatusBar } from './StatusBar';
 import { TabStrip } from './TabStrip';
@@ -31,9 +31,16 @@ export function Shell() {
   const dock = useStore(ui, (s) => s.dock);
   const apps = useStore(app, (s) => s.apps);
   const hasChat = apps.some((a) => a.id === 'chat');
+  // With the call window off, the bar under the tabs plays the tone instead.
+  const ringWindow = useStore(app, (s) => s.prefs?.webchatRinging?.window ?? true);
   const info = useStore(app, (s) => s.info);
   const restored = useRef(false);
   const knownApps = useRef<Set<string> | null>(null);
+
+  // Settings › AI Assistant: the dock beside every tab from the start.
+  useEffect(() => {
+    if (app.get().prefs?.ai?.dockAtStart && ui.get().dock === null) ui.set({ dock: 'ai' });
+  }, []);
 
   // Tab restore at start (FR-NAV-04) — only apps the user can still open.
   useEffect(() => {
@@ -152,6 +159,15 @@ export function Shell() {
         const cmd = getCommand(c.id === 'tab' ? `tab-${c.arg ?? 1}` : c.id);
         cmd?.run();
       }),
+      // Quick Ask handing its text over: the AI dock, a new task, or search.
+      on<AiHandoff>('ai:open', (h) => {
+        if (h.to === 'task') makeTask(h.text);
+        else if (h.to === 'search') askWorkSuite(h.text);
+        else {
+          openAiDockWith(h.text, h.result);
+          ui.set({ dock: 'ai' });
+        }
+      }),
       on<NavigateRequest>('navigate', (req) => {
         const allowed = allowedModules(new Set(app.get().apps.map((a) => a.id)));
         const target = req.route.replace(/^\/+/, '').split(/[/?]/)[0] || 'home';
@@ -216,6 +232,7 @@ export function Shell() {
         <div className="flex min-w-0 flex-1 flex-col">
           <UpdateBanner />
           <TabStrip />
+          {hasChat ? <RingingBar tone={!ringWindow} /> : null}
           <div className="relative flex min-h-0 flex-1">
             <Workspace />
             {dock === 'ai' ? <AiDock /> : null}
@@ -234,7 +251,6 @@ export function Shell() {
       {overlay === 'profile' ? <ProfileMenu /> : null}
       {overlay === 'network' ? <NetworkPopover /> : null}
       {overlay === 'clock' ? <ClockPopover /> : null}
-      {hasChat ? <AssignmentAlert /> : null}
     </div>
   );
 }
