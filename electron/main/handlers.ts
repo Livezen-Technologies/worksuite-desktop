@@ -382,6 +382,13 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('print:printers', (_i, c) => listPrinters(winOf(c.sender)));
   router.handle('print:toPdf', (input, c) => printToPdf(input.html, input.title, winOf(c.sender)));
 
+  // ── SalonMate's front desk ─────────────────────────────────────────────
+  // Pairing is done here so the key the server hands over never reaches a
+  // renderer; the API proxy adds it to SalonMate's requests (salon-desk.ts).
+  router.handle('salon:deskPairing', () => ctx.salonDesk.pairing());
+  router.handle('salon:deskPair', (input) => ctx.salonDesk.pair(input, `desktop-${ctx.device.installId()}`, app.getVersion()));
+  router.handle('salon:deskForget', () => ctx.salonDesk.forget());
+
   // ── offline ────────────────────────────────────────────────────────────
   router.handle('offline:status', () => ctx.queue.status(uid(), { bytes: ctx.cache.totalBytes(), entries: ctx.cache.count() }));
   router.handle('offline:pending', () => ctx.queue.list(uid()));

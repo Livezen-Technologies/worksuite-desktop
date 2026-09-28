@@ -348,3 +348,34 @@ export interface ActiveCall {
   /** Epoch ms the window said it joined. */
   since: number;
 }
+
+/**
+ * SalonMate's front desk, as the server shapes it (`Desk::shape`). The fields
+ * the desktop reads; the rest travels with it.
+ */
+export interface SalonDeskInfo {
+  id: number;
+  org_id: number;
+  location_id: number;
+  location: string | null;
+  name: string;
+  status: 'requested' | 'active' | 'revoked';
+  device_id: string | null;
+  register: { id: number; code: string; name: string; open: boolean; session_id: number | null; opened_at: string | null } | null;
+  approved_at: string | null;
+  revoked_at: string | null;
+  [field: string]: unknown;
+}
+
+/** Which desk this computer is on the signed-in server. The key never leaves the main process. */
+export interface SalonDeskPairing {
+  desk_id: number;
+  name: string;
+}
+
+/** What the pairing screen sends (D01). The device id and app version are added in the main process. */
+export interface SalonDeskPairInput {
+  location_id: number;
+  name: string;
+  pos_register_id?: number | null;
+}

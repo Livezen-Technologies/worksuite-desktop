@@ -27,6 +27,8 @@ import type {
   OfflineMutation,
   Preferences,
   PreferenceLock,
+  SalonDeskInfo,
+  SalonDeskPairing,
   ScreenSources,
   ServiceHealth,
   StatusSnapshot,
@@ -333,6 +335,14 @@ export const contract = {
   'print:printers': ch(none, { session: true }),
   'print:toPdf': ch(z.object({ html: z.string().max(5_000_000), title: z.string().max(200) }), { session: true, rate: 2 }),
 
+  // SalonMate's front desk: the key it is paired with stays in the main process.
+  'salon:deskPairing': ch(none, { session: true }),
+  'salon:deskPair': ch(
+    z.object({ location_id: z.number().int().positive(), name: z.string().trim().min(1).max(80), pos_register_id: z.number().int().positive().nullable().optional() }),
+    { session: true, rate: 3, sensitive: true },
+  ),
+  'salon:deskForget': ch(none, { session: true, rate: 3, sensitive: true }),
+
   'offline:status': ch(none, { session: true }),
   'offline:pending': ch(none, { session: true }),
   'offline:submit': ch(mutationInputSchema, { session: true, rate: 20 }),
@@ -507,6 +517,9 @@ export interface Outputs {
   'print:print': boolean;
   'print:printers': Array<{ name: string; displayName: string; isDefault: boolean }>;
   'print:toPdf': string | null;
+  'salon:deskPairing': SalonDeskPairing | null;
+  'salon:deskPair': { desk: SalonDeskInfo; message: string | null };
+  'salon:deskForget': void;
   'offline:status': OfflineStatus;
   'offline:pending': OfflineMutation[];
   'offline:submit': SubmitResult;

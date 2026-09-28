@@ -26,6 +26,7 @@ import { CallService } from '../services/calls';
 import { ScreenShare } from '../services/screen-share';
 import { Database } from '../services/db';
 import { archName, DeviceService, platformName } from '../services/device';
+import { SalonDesk } from '../services/salon-desk';
 import { DiagnosticsService } from '../services/diagnostics';
 import { readEnterpriseConfig } from '../services/enterprise';
 import { HttpClient, type FetchLike } from '../services/http';
@@ -192,6 +193,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   });
 
   const device: DeviceService = new DeviceService(db, secrets, http);
+  const salonDesk = new SalonDesk(secrets, http, () => auth.getServer()?.origin ?? null);
   const bootstrap = new BootstrapService(db, getVault, http, POLICY_PUBLIC_KEY);
   const cache = new OfflineCache(db, getVault);
   const audit = new AuditService(db, getVault, http, () => auth.getServer()?.api === 'desktop-v1');
@@ -590,6 +592,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         queue.wipeUser(uid, includeDrafts);
         transfers.wipe(uid);
       }
+      // A remote wipe, or signing out with "remove WorkSuite's data", forgets
+      // the salon desk this computer was; a plain sign-out keeps it.
+      if (includeDrafts) salonDesk.forgetAll();
       log.info('local data removed', { scope });
     },
     changed: (s) => {
@@ -702,6 +707,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         return { enabled: caps.offlineCache, maxBytes: (pol?.offline_storage_max_mb ?? 2048) * 1024 * 1024 };
       },
       mailBodiesCached: () => settings.effective().mailCacheDays !== 0,
+      // SalonMate's desk calls carry the key this computer was paired with.
+      extraHeaders: (path) => {
+        const key = salonDesk.keyFor(path);
+        return key ? { 'X-Salon-Desk-Key': key } : null;
+      },
     }),
     // Read on each page load: the server chosen, and the media servers it announced.
     () => ({ server: auth.getServer()?.origin ?? null, media: mediaServers() }),
@@ -749,6 +759,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     db,
     vault: getVault,
     secrets,
+    salonDesk,
     settings,
     http,
     auth,

@@ -148,6 +148,11 @@ const api = {
     printers: call('print:printers'),
     toPdf: call('print:toPdf'),
   },
+  salon: {
+    deskPairing: call('salon:deskPairing'),
+    deskPair: call('salon:deskPair'),
+    deskForget: call('salon:deskForget'),
+  },
   offline: {
     status: call('offline:status'),
     pending: call('offline:pending'),

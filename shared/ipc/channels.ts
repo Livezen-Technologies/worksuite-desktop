@@ -80,6 +80,10 @@ export const INVOKE_CHANNELS = [
   'print:printers',
   'print:toPdf',
 
+  'salon:deskPairing',
+  'salon:deskPair',
+  'salon:deskForget',
+
   'offline:status',
   'offline:pending',
   'offline:submit',

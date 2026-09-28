@@ -16,6 +16,7 @@ import type { SettingsService } from '../services/settings';
 import type { ServiceSupervisor } from '../services/supervisor';
 import type { TransferManager } from '../services/transfers';
 import type { RealtimeService } from '../services/realtime';
+import type { SalonDesk } from '../services/salon-desk';
 import type { TrayService } from '../tray/tray';
 import type { UpdaterService } from '../updater/updater';
 
@@ -38,6 +39,7 @@ export interface AppContext {
   db: Database;
   vault: () => Vault;
   secrets: SecureStore;
+  salonDesk: SalonDesk;
   settings: SettingsService;
   http: HttpClient;
   auth: AuthService;

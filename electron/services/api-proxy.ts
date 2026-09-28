@@ -39,6 +39,9 @@ const DENY: RegExp[] = [
   /^\/api\/notifications\/realtime-ticket/,
   /^\/api\/sync\//,
   /^\/api\/api-keys/,
+  // Pairing a salon desk answers with the desk's key: it is done in the main
+  // process (salon-desk.ts), so the key never reaches a renderer.
+  /^\/api\/salon\/v1\/desk\/pair(\/|\?|$)/,
 ];
 
 const FORWARD_HEADERS = ['content-type', 'accept', 'if-match', 'if-none-match', 'idempotency-key', 'x-folder-password', 'range'];
@@ -76,6 +79,8 @@ export interface ProxyDeps {
   cacheLimits: () => CacheLimits;
   /** Mail bodies are cached only when the mail cache window is not "headers only". */
   mailBodiesCached: () => boolean;
+  /** Headers the main process adds to a request — credentials the renderer must not hold (a salon desk's key). */
+  extraHeaders?: (path: string) => Record<string, string> | null;
 }
 
 function envelope(status: number, message: string, code: string): Response {
@@ -103,6 +108,7 @@ export function createApiProxy(deps: ProxyDeps) {
       const v = request.headers.get(h);
       if (v) headers.set(h, v);
     }
+    for (const [h, v] of Object.entries(deps.extraHeaders?.(apiPath) ?? {})) headers.set(h, v);
     let body: ArrayBuffer | undefined;
     if (method !== 'GET' && method !== 'HEAD') {
       body = await request.arrayBuffer();
