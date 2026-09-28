@@ -5,6 +5,101 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-28 — 0.2.42: SalonMate, part 2 — taking the money, receipts and the drawer
+
+The desk now takes payment itself, into the POS register it was paired
+with, prints the receipt straight to the counter's printer and opens the
+cash drawer. It opens the register in the morning and closes the day at
+night. Working offline comes with the next release.
+
+**Added**
+
+- **Take payment**, from Today's "Ready to pay", a booking on the calendar,
+  or the rail.
+  - The bill is WorkSuite's: the lines at booked prices, the member
+    discount, points, the advance applied once, store credit, and what is
+    left to pay. Points, store credit and retail from the desk's shelf are
+    priced again by the server as they are added.
+  - The money is the cashier's: cash on a keypad with the round sums a
+    client might hand over, a card, LankaQR, a transfer (each with its
+    reference), or a split. Over what is due, with cash in it, the desk
+    asks: give change, or keep it as store credit.
+  - One press is one invoice. After a dropped connection, pressing again
+    sends the same payment; it can never be taken twice.
+  - A visit that is checked out and still owes is paid against its
+    invoice.
+- **Paid.** What to give back, in large type; what was taken; points
+  earned; store credit now; the POS sale's number; the receipt again; the
+  drawer; and **Book the next visit** when WorkSuite suggests one.
+- **Receipts, printed without asking.** The receipt goes straight to this
+  desk's receipt printer as the payment is taken, on an 80 mm or 58 mm
+  roll, as long as the receipt and no longer. It is WorkSuite's own
+  receipt, in English, Sinhala and Tamil. Copies, printing by itself, and
+  printing without the dialog are each a setting. With no printer chosen,
+  the print dialog asks.
+- **The cash drawer**, plugged into the receipt printer, opens when cash is
+  taken, or from Paid or Printers. It is sent the ESC/POS pulse on pin 2
+  or 5. Every opening is recorded in the desktop's audit log.
+- **Register.** Open it on a float counted note by note (or as one
+  figure). Pay cash in and take it out, each with a reason. See the sales,
+  the cash in, the change given and what the drawer should hold (hidden
+  under a blind close).
+- **Close the day.** Count the drawer and close the register. The
+  difference is WorkSuite's, and a reason is needed when the count is out.
+  The Z-report prints from what the close answered, and stays on screen to
+  print again. Beside it is the salon's day: taken by tender, what was not
+  new money, visits not checked out (with Take payment), invoices still
+  owing and commission. The day's summary prints too.
+- **Printers**: the receipt printer and its roll, an A4 printer for
+  full-page copies, copies, automatic and silent printing, the drawer, a
+  test receipt and a test of the drawer. Kept on this computer, per
+  server, and forgotten by "Sign out and remove WorkSuite data". WorkSuite
+  is told as well, so owners see how each desk prints.
+
+**Where it bites**
+
+- Silent printing goes only to the printer this desk was set up with, and
+  only for SalonMate's receipts and pages. Everything else still prints
+  through the dialog.
+- The drawer needs a printer that takes ESC/POS commands, as thermal
+  receipt printers do. A drawer the printer's driver opens by itself
+  should be left as "None, or opened by the printer's driver". On Windows
+  the drawer goes through PowerShell; a computer that blocks it says so.
+- Pay in and Take out are not sent again by themselves. If WorkSuite does
+  not answer, the desk says so and asks you to look at the register before
+  doing it again.
+- Deposits are still taken in WorkSuite on the web. See the server notes
+  below.
+
+**Server notes** (Livezen-Technologies/worksuite; not changed here)
+
+- A cash deposit taken at a desk is not added to the register's session,
+  so the drawer counts over by it at close. That is why the desk does not
+  take deposits yet.
+- The register's pay-in and take-out are not kept under an idempotency
+  key, so a retried request records twice.
+- With `salon_desk_require_register` off, payments are not recorded into
+  an open register even when the desk is paired with one.
+- Each payment against a part-paid invoice records a POS sale for the
+  whole invoice total, so a session's sales total over-counts. Cash
+  figures are right.
+
+**Checked**
+
+- Unit tests for the page a receipt prints from, its size on the roll,
+  the drawer's pulse and how it reaches a printer on each system, the
+  printer settings, the print channels, and the cashier's arithmetic (the
+  keypad, change, the count).
+- `tests/e2e/salon-2.mjs`, run against a local WorkSuite with CUPS
+  printers that capture their jobs. It covers: pair with a register; set
+  up the printer and drawer; open the register on a counted float; pay a
+  visit in cash with LKR 500.00 change; close the day counted short.
+  - The drawer received `1b 70 00 19 fa` each time.
+  - The receipt and the Z-report arrived as 80 mm pages sized to their
+    content, without a dialog.
+
+---
+
 ## 2026-09-28 — 0.2.41: SalonMate, part 1 — the front desk at the counter
 
 SalonMate is in the launcher, native, for anyone whose company has it and
