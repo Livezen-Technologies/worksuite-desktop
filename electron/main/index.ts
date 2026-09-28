@@ -27,6 +27,7 @@ import { ScreenShare } from '../services/screen-share';
 import { Database } from '../services/db';
 import { archName, DeviceService, platformName } from '../services/device';
 import { SalonDesk } from '../services/salon-desk';
+import { SalonPrint } from '../services/salon-print';
 import { DiagnosticsService } from '../services/diagnostics';
 import { readEnterpriseConfig } from '../services/enterprise';
 import { HttpClient, type FetchLike } from '../services/http';
@@ -194,6 +195,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   const device: DeviceService = new DeviceService(db, secrets, http);
   const salonDesk = new SalonDesk(secrets, http, () => auth.getServer()?.origin ?? null);
+  const salonPrint = new SalonPrint({ config: db, http, origin: () => auth.getServer()?.origin ?? null });
   const bootstrap = new BootstrapService(db, getVault, http, POLICY_PUBLIC_KEY);
   const cache = new OfflineCache(db, getVault);
   const audit = new AuditService(db, getVault, http, () => auth.getServer()?.api === 'desktop-v1');
@@ -593,8 +595,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         transfers.wipe(uid);
       }
       // A remote wipe, or signing out with "remove WorkSuite's data", forgets
-      // the salon desk this computer was; a plain sign-out keeps it.
-      if (includeDrafts) salonDesk.forgetAll();
+      // the salon desk this computer was, and its printers; a plain sign-out keeps them.
+      if (includeDrafts) {
+        salonDesk.forgetAll();
+        salonPrint.forgetAll();
+      }
       log.info('local data removed', { scope });
     },
     changed: (s) => {
@@ -760,6 +765,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     vault: getVault,
     secrets,
     salonDesk,
+    salonPrint,
     settings,
     http,
     auth,

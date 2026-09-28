@@ -29,6 +29,8 @@ import type {
   PreferenceLock,
   SalonDeskInfo,
   SalonDeskPairing,
+  SalonPrintOutcome,
+  SalonPrintSettings,
   ScreenSources,
   ServiceHealth,
   StatusSnapshot,
@@ -37,6 +39,7 @@ import type {
 } from '../types';
 
 const none = z.undefined().or(z.null()).optional();
+const salonPaper = z.enum(['80mm', '58mm', 'a4']);
 const idString = z.string().min(1).max(128).regex(/^[A-Za-z0-9._:-]+$/);
 const route = z
   .string()
@@ -342,6 +345,27 @@ export const contract = {
     { session: true, rate: 3, sensitive: true },
   ),
   'salon:deskForget': ch(none, { session: true, rate: 3, sensitive: true }),
+  // Its receipts go to the desk's own printer without a dialog; the drawer opens through it (salon-print.ts).
+  'salon:printSettings': ch(none, { session: true }),
+  'salon:printSettingsSet': ch(
+    z
+      .object({
+        receipt_printer: z.string().trim().min(1).max(200).nullable(),
+        a4_printer: z.string().trim().min(1).max(200).nullable(),
+        paper: z.enum(['80mm', '58mm']),
+        copies: z.number().int().min(1).max(3),
+        auto_print: z.boolean(),
+        silent: z.boolean(),
+        drawer: z.enum(['off', 'printer']),
+        drawer_pin: z.union([z.literal(2), z.literal(5)]),
+      })
+      .partial(),
+    { session: true, rate: 5 },
+  ),
+  'salon:printReceipt': ch(z.object({ visit_id: z.number().int().positive(), paper: salonPaper.optional() }), { session: true, rate: 3 }),
+  'salon:printTest': ch(z.object({ paper: salonPaper.optional() }), { session: true, rate: 2 }),
+  'salon:printPage': ch(z.object({ html: z.string().max(500_000), paper: salonPaper.optional() }), { session: true, rate: 2 }),
+  'salon:openDrawer': ch(none, { session: true, rate: 1, sensitive: true }),
 
   'offline:status': ch(none, { session: true }),
   'offline:pending': ch(none, { session: true }),
@@ -520,6 +544,12 @@ export interface Outputs {
   'salon:deskPairing': SalonDeskPairing | null;
   'salon:deskPair': { desk: SalonDeskInfo; message: string | null };
   'salon:deskForget': void;
+  'salon:printSettings': SalonPrintSettings;
+  'salon:printSettingsSet': SalonPrintSettings;
+  'salon:printReceipt': SalonPrintOutcome;
+  'salon:printTest': SalonPrintOutcome;
+  'salon:printPage': SalonPrintOutcome;
+  'salon:openDrawer': SalonPrintOutcome;
   'offline:status': OfflineStatus;
   'offline:pending': OfflineMutation[];
   'offline:submit': SubmitResult;

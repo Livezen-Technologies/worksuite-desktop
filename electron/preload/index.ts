@@ -152,6 +152,12 @@ const api = {
     deskPairing: call('salon:deskPairing'),
     deskPair: call('salon:deskPair'),
     deskForget: call('salon:deskForget'),
+    printSettings: call('salon:printSettings'),
+    printSettingsSet: call('salon:printSettingsSet'),
+    printReceipt: call('salon:printReceipt'),
+    printTest: call('salon:printTest'),
+    printPage: call('salon:printPage'),
+    openDrawer: call('salon:openDrawer'),
   },
   offline: {
     status: call('offline:status'),

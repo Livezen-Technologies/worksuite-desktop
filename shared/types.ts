@@ -379,3 +379,30 @@ export interface SalonDeskPairInput {
   name: string;
   pos_register_id?: number | null;
 }
+
+/** What a SalonMate receipt is printed on: an 80 mm or 58 mm roll, or A4. */
+export type SalonPaper = '80mm' | '58mm' | 'a4';
+
+/** This computer's printers for SalonMate, on one server (salon-print.ts). */
+export interface SalonPrintSettings {
+  receipt_printer: string | null;
+  a4_printer: string | null;
+  paper: '80mm' | '58mm';
+  copies: number;
+  /** Print the receipt as soon as a payment is taken. */
+  auto_print: boolean;
+  /** Straight to the printer, without the print dialog. */
+  silent: boolean;
+  /** 'printer': a drawer plugged into the receipt printer, opened by the ESC/POS pulse. */
+  drawer: 'off' | 'printer';
+  drawer_pin: 2 | 5;
+}
+
+export type SalonPrintPatch = Partial<SalonPrintSettings>;
+
+export interface SalonPrintOutcome {
+  ok: boolean;
+  printer: string | null;
+  silent: boolean;
+  message: string;
+}
