@@ -47,8 +47,8 @@ blocked by something outside the code.
 | ID | Status | Where / note |
 |---|---|---|
 | FR-NAV-01..04 | Done | Sidebar modes and pins; grouped launcher; full tab manager; tab restore filtered by permission |
-| FR-NAV-05/06/09 | Partial (P2 items) | Record and mini-chat windows, bounds per display, off-screen recovery, always-on-top for chat/timer |
-| FR-NAV-07 | Later | Dockable panels (P2); the AI dock is the first |
+| FR-NAV-05/06/09 | Done | Record and mini-chat windows, bounds per display, off-screen recovery, always-on-top for chat/timer. Tabs tear off into their own windows (drag out, menu, Mod+Shift+N; `windows:detach`, placed by `detachedBounds`) and dock back (title-bar buttons, or the window's handle dragged onto the strip or the page; `windows:dock`/`windows:adopt`); torn-off windows reopen where they were (`windows:restoreDetached`, `tab_sessions` `detached`), close at sign-out and come back at sign-in. `src/core/tabs.ts`, `src/core/dock-drag.ts`, `electron/windows/manager.ts`; `tests/unit/renderer/docking*.ts*`, `tests/e2e/docking.mjs` |
+| FR-NAV-07 | Partial | A tab docked beside the active one, with a resizable divider, swap and undock, restored with the tabs (`src/layouts/Workspace.tsx`). One docked tab, on the right; the AI dock is the other docked panel |
 | FR-NAV-08 | Done | Idle tab suspension |
 | FR-SRCH-01..04 | Done | Global search (server + offline cache), command palette, remappable shortcuts with conflict detection |
 

@@ -89,11 +89,12 @@ More: [architecture](docs/ARCHITECTURE.md) · [security](docs/SECURITY.md) ·
 
 ## What is deliberately not here yet
 
-Phases 2–4 of the SRS, apart from Drive folder sync (Files → Sync devices,
-see [the changelog](CHANGELOG.md)): multi-window docking,
-calls and Meet, the desktop AI assistant, the workforce-monitoring agent,
-POS hardware, the Admin Center fleet screens, kiosk mode, file-manager
-extensions and cloud placeholders. Where Phase 1 touches them, the app says
+Phases 2–4 of the SRS, apart from Drive folder sync (Files → Sync devices)
+and multi-window docking (tabs torn off into their own windows, and one
+docked beside another; see [the changelog](CHANGELOG.md)): calls and Meet,
+the desktop AI assistant, the workforce-monitoring agent, POS hardware, the
+Admin Center fleet screens, kiosk mode, file-manager extensions and cloud
+placeholders. Where Phase 1 touches them, the app says
 so plainly instead of pretending (Files shows what is synced and what is online only; the AI
 dock explains what is coming; Settings → Monitoring states that nothing is
 recorded). Apps without a desktop module yet open in the browser and are

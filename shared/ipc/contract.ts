@@ -200,8 +200,20 @@ export const contract = {
   'windows:toggleMaximize': ch(none, { whileLocked: true }),
   'windows:close': ch(none, { whileLocked: true }),
   'windows:state': ch(none, { whileLocked: true }),
+  // Multi-window docking (FR-NAV-05/07): tear a tab off into its own window, and dock it back.
+  'windows:detach': ch(
+    z.object({ route, title: z.string().max(200).optional(), at: z.object({ x: z.number().int(), y: z.number().int() }).optional() }),
+    { session: true, rate: 4 },
+  ),
+  'windows:dock': ch(z.object({ side: z.boolean().optional() }).optional(), { session: true, rate: 4 }),
+  'windows:adopt': ch(z.object({ windowId: z.number().int().positive() }), { session: true, rate: 4 }),
+  'windows:describe': ch(z.object({ route, title: z.string().max(200) }), { session: true, rate: 10 }),
+  'windows:restoreDetached': ch(none, { session: true, rate: 1 }),
 
-  'tabs:save': ch(z.object({ tabs: z.array(tabRecordSchema).max(64), activeId: idString.nullable() }), { session: true, rate: 10 }),
+  'tabs:save': ch(
+    z.object({ tabs: z.array(tabRecordSchema).max(64), activeId: idString.nullable(), side: z.object({ id: idString, split: z.number().min(0.2).max(0.8) }).nullable().optional() }),
+    { session: true, rate: 10 },
+  ),
   'tabs:restore': ch(none, { session: true }),
 
   'files:pickFiles': ch(z.object({ multiple: z.boolean(), title: z.string().max(100).optional(), only: z.enum(['gif', 'document', 'image', 'video', 'audio']).optional() }), { session: true, rate: 2 }),
@@ -648,8 +660,13 @@ export interface Outputs {
   'windows:toggleMaximize': boolean;
   'windows:close': void;
   'windows:state': WindowState;
+  'windows:detach': { id: number };
+  'windows:dock': void;
+  'windows:adopt': { route: string; title: string } | null;
+  'windows:describe': void;
+  'windows:restoreDetached': number;
   'tabs:save': void;
-  'tabs:restore': { tabs: TabRecord[]; activeId: string | null; restored: boolean };
+  'tabs:restore': { tabs: TabRecord[]; activeId: string | null; side: { id: string; split: number } | null; restored: boolean };
   'files:pickFiles': PickedFile[];
   'files:registerDropped': PickedFile[];
   'files:pickFolder': PickedFile[];

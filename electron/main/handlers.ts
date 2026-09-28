@@ -1,8 +1,8 @@
 import { app, BrowserWindow, clipboard, dialog, nativeImage, shell, systemPreferences, type WebContents } from 'electron';
 import os from 'node:os';
 import { writeFile } from 'node:fs/promises';
-import type { TabRecord } from '@shared/ipc/contract';
-import type { AppInfo, BusyReport, SyncPolicy } from '@shared/types';
+import { tabRecordSchema, type TabRecord } from '@shared/ipc/contract';
+import type { AppInfo, BusyReport, DetachedWindow, SyncPolicy } from '@shared/types';
 import { DesktopError, isDesktopError } from './errors';
 import type { AppContext } from './context';
 import type { IpcRouter } from '../ipc/router';
@@ -267,6 +267,56 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('windows:close', (_i, c) => {
     winOf(c.sender)?.close();
   });
+  // ── multi-window docking (FR-NAV-05/07) ─────────────────────────────────
+  const fromMain = (sender: WebContents) => {
+    if (winOf(sender) !== ctx.windows.getMain()) throw new DesktopError('IPC_FORBIDDEN_SENDER', 'Tabs are torn off and docked from the main window.');
+  };
+  // A tab torn off the main window: its own window, where the tab was let go.
+  router.handle('windows:detach', (input, c) => {
+    fromMain(c.sender);
+    const w = ctx.windows.open('record', input.route, input.title, false, { at: input.at });
+    return { id: w.id };
+  });
+  // "Dock to main window" in a torn-off window: it closes and comes back as a tab. What it shows is
+  // the window's own record here, never what the page says.
+  router.handle('windows:dock', (input, c) => {
+    const w = winOf(c.sender);
+    const r = w ? ctx.windows.recordOf(w.id) : null;
+    if (!w || !r) throw new DesktopError('IPC_FORBIDDEN_SENDER', 'Only a torn-off window docks.');
+    ctx.navigate({ route: r.route, title: r.title || undefined, side: !!input?.side, source: 'dock' });
+    w.close();
+  });
+  // A torn-off window dragged onto the main window's tabs: the main window takes it in.
+  router.handle('windows:adopt', (input, c) => {
+    fromMain(c.sender);
+    const r = ctx.windows.recordOf(input.windowId);
+    const w = r ? BrowserWindow.fromId(input.windowId) : null;
+    if (!r || !w || w.isDestroyed()) return null;
+    w.close();
+    return r;
+  });
+  router.handle('windows:describe', (input, c) => {
+    const w = winOf(c.sender);
+    if (w) ctx.windows.describe(w, input.route, input.title);
+  });
+  // At start, the torn-off windows open again where they were (with tab restore, and never in Safe Mode).
+  router.handle('windows:restoreDetached', (_i, c) => {
+    fromMain(c.sender);
+    const prefs = ctx.settings.effective();
+    if (!prefs.restoreTabs || ctx.boot.safeMode || ctx.windows.detached().length) return 0;
+    const row = ctx.db.get<{ payload: string }>('SELECT payload FROM tab_sessions WHERE user_id = ? AND window = ?', uid(), 'detached');
+    const saved = row ? (ctx.vault().decrypt<{ windows: DetachedWindow[] }>(row.payload)?.windows ?? []) : [];
+    let n = 0;
+    for (const d of saved.slice(0, 12)) {
+      if (!tabRecordSchema.shape.route.safeParse(d?.route).success) continue;
+      const b = d.bounds;
+      const bounds = b && [b.x, b.y, b.width, b.height].every(Number.isFinite) ? b : undefined;
+      ctx.windows.open('record', d.route, typeof d.title === 'string' && d.title ? d.title.slice(0, 200) : undefined, false, { bounds });
+      n++;
+    }
+    return n;
+  });
+
   router.handle('windows:state', (_i, c) => {
     const w = winOf(c.sender);
     return {
@@ -286,16 +336,16 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       'INSERT INTO tab_sessions (user_id, window, payload, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, window) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at',
       uid(),
       'main',
-      ctx.vault().encrypt({ tabs: input.tabs, activeId: input.activeId }),
+      ctx.vault().encrypt({ tabs: input.tabs, activeId: input.activeId, side: input.side ?? null }),
       new Date().toISOString(),
     );
   });
   router.handle('tabs:restore', () => {
     const prefs = ctx.settings.effective();
-    if (!prefs.restoreTabs || ctx.boot.safeMode) return { tabs: [], activeId: null, restored: false };
+    if (!prefs.restoreTabs || ctx.boot.safeMode) return { tabs: [], activeId: null, side: null, restored: false };
     const row = ctx.db.get<{ payload: string }>('SELECT payload FROM tab_sessions WHERE user_id = ? AND window = ?', uid(), 'main');
-    const v = row ? ctx.vault().decrypt<{ tabs: TabRecord[]; activeId: string | null }>(row.payload) : undefined;
-    return { tabs: v?.tabs ?? [], activeId: v?.activeId ?? null, restored: !!v };
+    const v = row ? ctx.vault().decrypt<{ tabs: TabRecord[]; activeId: string | null; side?: { id: string; split: number } | null }>(row.payload) : undefined;
+    return { tabs: v?.tabs ?? [], activeId: v?.activeId ?? null, side: v?.side ?? null, restored: !!v };
   });
 
   // ── files & transfers ──────────────────────────────────────────────────

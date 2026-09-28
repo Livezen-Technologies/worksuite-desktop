@@ -662,6 +662,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   };
   const stopServices = (): void => {
     void remoteControl.shutdown('logout');
+    // Torn-off windows show the person's data: they close, and come back at their next sign-in.
+    windows.closeRecords();
     realtime.stop();
     notifications.stop();
     device.stop();
@@ -733,6 +735,19 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   });
 
   auth.onDeviceRevoked = (message) => void sessionCtl.wipe(message);
+
+  // Torn-off windows (FR-NAV-05/07) are remembered per person, encrypted like the tabs.
+  windows.onRecordsChanged = (list) => {
+    const uid = sessionCtl.userId();
+    if (!uid || !sessionCtl.isReady()) return;
+    db.run(
+      'INSERT INTO tab_sessions (user_id, window, payload, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, window) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at',
+      uid,
+      'detached',
+      vault.encrypt({ windows: list }),
+      new Date().toISOString(),
+    );
+  };
 
   lock.enabled = () => sessionCtl.isReady();
   lock.minutes = () => settings.effective().appLockMinutes;
@@ -908,6 +923,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     activeCall: () => activeCall,
     lastPasteGesture: (id) => pasteGestures.get(id) ?? 0,
     flushNavigation,
+    navigate,
     relaunch,
     quit,
     clockAttendance,

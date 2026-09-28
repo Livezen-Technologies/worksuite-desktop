@@ -341,7 +341,20 @@ export interface NavigateRequest {
   route: string;
   newWindow?: boolean;
   organizationId?: string | null;
-  source: 'deep-link' | 'notification' | 'tray' | 'menu' | 'shortcut';
+  source: 'deep-link' | 'notification' | 'tray' | 'menu' | 'shortcut' | 'dock';
+  /** A window docked back into the main window (source 'dock'): its title, and whether it goes beside the open tab. */
+  title?: string;
+  side?: boolean;
+}
+
+/**
+ * A tab torn off into its own window (FR-NAV-05/07): what it shows and where
+ * it is, so it comes back where it was at the next start.
+ */
+export interface DetachedWindow {
+  route: string;
+  title: string;
+  bounds: { x: number; y: number; width: number; height: number };
 }
 
 export interface ToastMessage {
