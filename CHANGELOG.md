@@ -5,6 +5,34 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-28 — Meet remote control: the Windows and macOS helpers, checked from Linux (not released)
+
+Neither helper has run on its own system yet. The Windows one ran under
+PowerShell against a stand-in for Windows' input functions, and passed; the
+macOS one, run against a stand-in for its bridge, did not:
+
+**Fixed**
+
+- **On a Mac, a double-click did nothing more than two clicks** — no file
+  opened, no word was selected. macOS does not work out double-clicks from
+  posted events; each click now says which click it is.
+- **On a Mac, a modifier could stay on after it was let go**, so a V typed
+  after Command+C could arrive as Command+V. Keys now carry exactly the
+  modifiers held, none once they are let go.
+- **On a Mac, a small sideways scroll was lost**, and scrolling now uses the
+  system's own scroll event where the scripting bridge has it.
+- **On a Mac, typed text could be silently refused**: it goes through System
+  Events, and the app did not declare Apple Events. It now does, with a
+  sentence for the prompt macOS shows once.
+
+**Changed**
+
+- The Linux .deb recommends xdotool and x11-utils (xwininfo), which remote
+  control needs; with the .rpm and the AppImage, the app says what to
+  install.
+
+---
+
 ## 2026-09-28 — Meet remote control, tried for real on Linux (not released)
 
 The shared computer's side run under a real X server (Xvfb and openbox) with

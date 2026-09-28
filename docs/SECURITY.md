@@ -85,7 +85,9 @@ Being controlled is the main process's business, never a page's:
   files wait for unlock.
 - **Input helpers** are the system's own — PowerShell hosting a fixed C#
   class calling SendInput (Windows), osascript posting CGEvents (macOS, needs
-  Accessibility), xdotool (X11) — started only while control is live, with
+  Accessibility; typed text goes through System Events, so the app declares
+  Apple Events and macOS asks once, as Automation), xdotool (X11) — started
+  only while control is live, with
   fixed scripts. They take numbers, key names from a prototype-free table and
   base64 text; nothing from the controller is put into a command line. One
   batch is in the helper at a time and each is confirmed before the next, so
@@ -102,8 +104,18 @@ Being controlled is the main process's business, never a page's:
   count only the person's own click (the controller's click reaches the bar
   and is refused); the person's mouse, on or off WorkSuite's windows, holds
   the controller back; the controller cannot send the emergency chord, and
-  pressing it here stops control. Windows and macOS have not been run for
-  real yet; content protection does nothing on Linux.
+  pressing it here stops control. Content protection does nothing on Linux.
+- **Windows and macOS, as far as Linux can go**: the Windows helper's C#
+  compiles as C# 5 (Windows PowerShell 5.1's compiler), and its script ran
+  under PowerShell 7 against a stand-in user32 with Windows' structure
+  layouts — the INPUT size, absolute moves across a virtual desktop left of
+  the main screen, buttons, both wheels, extended keys, Unicode text with
+  surrogate pairs, window places, the window under a point and in front, a
+  clean stop; its command line is about half Windows' limit. The macOS
+  script ran against a stand-in bridge (a unit test): drags, the click
+  count of double- and triple-clicks, modifiers on keys, scrolling, the
+  answers. Neither has run on its own system yet — what SendInput and
+  CGEventPost then do there is the part still untried.
 
 ## Credentials (FR-AUTH-02, FR-SEC-03, AC-21)
 

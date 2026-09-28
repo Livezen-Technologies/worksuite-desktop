@@ -521,8 +521,12 @@ class WindowsInjector extends LineHelper {
 /**
  * macOS: CGEvents posted from osascript's JavaScript. Needs WorkSuite in
  * Privacy & Security › Accessibility (macOS asks WorkSuite, the app that
- * started it). Moves while a button is held are sent as drags, and the
- * modifiers held are set on every key and click, as the system expects.
+ * started it), and typed text goes through System Events, which macOS asks
+ * about once as Automation. Moves while a button is held are sent as drags;
+ * a click says which click of a double- or triple-click it is (macOS does
+ * not work that out from posted events, so without it nothing opens on a
+ * double-click); keys carry exactly the modifiers held for the controller,
+ * none once they are let go.
  */
 export const MAC_SCRIPT = String.raw`
 ObjC.import('Foundation'); ObjC.import('CoreGraphics'); ObjC.import('AppKit');
@@ -544,8 +548,15 @@ function run() {
   var FLAG = { 56: 0x20000, 60: 0x20000, 59: 0x40000, 62: 0x40000, 58: 0x80000, 61: 0x80000, 55: 0x100000, 54: 0x100000 };
   var cur = $.CGEventGetLocation($.CGEventCreate(null));
   x = cur.x; y = cur.y;
-  function post(e) { if (flags) $.CGEventSetFlags(e, flags); $.CGEventPost(0, e); }
-  function mouse(type, button) { post($.CGEventCreateMouseEvent(null, type, $.CGPointMake(x, y), button)); }
+  var interval = 0.5, clicks = { n: 0, t: 0, x: 0, y: 0, b: '' };
+  try { interval = +$.NSEvent.doubleClickInterval || 0.5; } catch (err) { }
+  function post(e, always) { if (flags || always) $.CGEventSetFlags(e, flags); $.CGEventPost(0, e); }
+  function mouse(type, button, count) {
+    var e = $.CGEventCreateMouseEvent(null, type, $.CGPointMake(x, y), button);
+    if (count) $.CGEventSetIntegerValueField(e, 1, count);
+    post(e);
+  }
+  function lines(v) { var n = Math.round(-v / 40); return n || (v ? (v > 0 ? -1 : 1) : 0); }
   function b64(s) { return $(s).dataUsingEncoding($.NSUTF8StringEncoding).base64EncodedStringWithOptions(0).js; }
   function text(s) {
     var se = Application('System Events');
@@ -562,18 +573,30 @@ function run() {
         if (held.l) mouse(6, 0); else if (held.r) mouse(7, 1); else if (held.m) mouse(27, 2); else mouse(5, 0);
       } else if (p[0] === 'b') {
         var down = p[2] === '1'; held[p[1]] = down;
-        if (p[1] === 'l') mouse(down ? 1 : 2, 0); else if (p[1] === 'r') mouse(down ? 3 : 4, 1); else mouse(down ? 25 : 26, 2);
+        if (down) {
+          // The same button again, soon and close by: the next click of a double- or triple-click.
+          var now = Date.now();
+          var again = clicks.b === p[1] && now - clicks.t <= interval * 1000 && Math.abs(x - clicks.x) <= 4 && Math.abs(y - clicks.y) <= 4;
+          clicks = { n: again ? clicks.n + 1 : 1, t: now, x: x, y: y, b: p[1] };
+        }
+        var count = clicks.b === p[1] ? clicks.n : 1;
+        if (p[1] === 'l') mouse(down ? 1 : 2, 0, count); else if (p[1] === 'r') mouse(down ? 3 : 4, 1, count); else mouse(down ? 25 : 26, 2, count);
       } else if (p[0] === 'w') {
-        var e = $.CGEventCreate(null);
-        $.CGEventSetType(e, 22);
-        $.CGEventSetIntegerValueField(e, 11, Math.round(-(+p[2]) / 40) || (+p[2] ? (+p[2] > 0 ? -1 : 1) : 0));
-        $.CGEventSetIntegerValueField(e, 12, Math.round(-(+p[1]) / 40));
+        var dy = lines(+p[2]), dx = lines(+p[1]), e = null;
+        // A scroll event made by the system (line units) where the bridge has it; built by hand otherwise.
+        try { if ($.CGEventCreateScrollWheelEvent2) e = $.CGEventCreateScrollWheelEvent2(null, 1, 2, dy, dx, 0); } catch (err) { e = null; }
+        if (!e) {
+          e = $.CGEventCreate(null);
+          $.CGEventSetType(e, 22);
+          $.CGEventSetIntegerValueField(e, 11, dy);
+          $.CGEventSetIntegerValueField(e, 12, dx);
+        }
         $.CGEventSetLocation(e, $.CGPointMake(x, y));
         post(e);
       } else if (p[0] === 'k') {
         var code = +p[1], kd = p[2] === '1';
         if (FLAG[code]) flags = kd ? (flags | FLAG[code]) : (flags & ~FLAG[code]);
-        post($.CGEventCreateKeyboardEvent(null, code, kd));
+        post($.CGEventCreateKeyboardEvent(null, code, kd), true);
       } else if (p[0] === 'u') {
         text($.NSString.alloc.initWithDataEncoding($.NSData.alloc.initWithBase64EncodedStringOptions(p[1], 0), $.NSUTF8StringEncoding).js);
       } else if (p[0].charAt(0) === '?') {
