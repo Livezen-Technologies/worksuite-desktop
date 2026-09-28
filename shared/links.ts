@@ -10,6 +10,8 @@ export type LinkTarget = { kind: 'tab'; route: string; app: string } | { kind: '
 
 const PATH = /^\/[A-Za-z0-9/_\-.?=&%:,]*$/;
 const ACCOUNT_TABS = ['general', 'preferences', 'notifications', 'security', 'pictures'];
+/** Pages of a native app that are the web's own, standalone: Finance's printable report and its public shared link. */
+const BROWSER_PAGES = [/^\/finance\/(print|shared)\//];
 
 function appForPath(path: string, catalogue: AppDefinition[]): AppDefinition | undefined {
   const clean = path.split(/[?#]/)[0]!;
@@ -37,6 +39,7 @@ export function resolveWebLink(link: string | null | undefined, catalogue: AppDe
   }
   const app = appForPath(path, catalogue);
   if (!app) return { kind: 'browser', path, app: null };
+  if (BROWSER_PAGES.some((re) => re.test(path))) return { kind: 'browser', path, app: app.id };
   if (app.surface === 'native') {
     const rest = path.slice(app.webPath.length);
     return { kind: 'tab', route: `/${app.id}${rest}`, app: app.id };

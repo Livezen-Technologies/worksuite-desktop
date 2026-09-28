@@ -5,6 +5,263 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## Unreleased — Expenses: the whole module, natively
+
+Expenses opens here now instead of in the browser, under Business in the
+sidebar, and every screen of it is drawn by the app. Links to Expenses screens
+(`/expenses?tab=…`, `?claim=`, `?advance=`, `?sub=`) open here too, and **File
+an Expense** is a quick action. Only the settings sections the web draws with
+its shared admin screens (User Access, Screens & components, Organization,
+Notifications, the change log) still open in the browser, marked as such.
+
+**The app**
+
+- **The company switcher** at the top of the rail picks any number of
+  companies, with favourites, "Only" and a search once there are more than
+  six. Reads add the selection up, as the server does; **writes happen in one
+  company** — filing a claim, a budget, a payment run — and a screen that
+  needs one says so and offers to narrow to it, rather than guessing. The
+  selection rides in the tab's address and is remembered per person, always
+  checked against the companies you still hold. A company you can only read
+  through consolidated reporting is marked, and never offered for a write.
+- **The rail** shows what the server's area map allows in the companies
+  selected (asked of the same resolver its route filters use), with the
+  approvals and unmatched-card counts as badges, and a quick bar for what is
+  waiting on you. A hidden screen reached by a link says so, and **Settings ›
+  My access** — open to everyone — says why.
+- Money stays the server's text and is added up in cents. Where the companies
+  selected use different currencies, the screens show one figure per
+  currency, or counts, never a sum across currencies.
+
+**Claims**
+
+- **My expenses, My team, Organization.** Search, status, category, dates and
+  "flagged only"; paged, with the server's total for the whole filtered set.
+  Bulk approve and decline (with a reason) on team and organization, every
+  refusal listed with its sentence.
+- **One claim** opens beside the list: its facts, the receipt (drop or pick,
+  images shown in place, Open and **Save a copy** through the downloads
+  tray), what the rules said, look-alikes, the card match, and the approval
+  trail by round. Approve with a note, decline with a reason, edit and
+  resubmit, reopen with a reason, receipt reading, earlier versions.
+- **File an expense** — expense, mileage or per diem — with the live preview
+  of what the policies, budgets and routing will say before it is filed
+  (blocks, warnings, the rate used), receipt reading that copies in and asks
+  you to check, cost centre, related records and charging to an advance.
+  Vehicle, country and city come from the company's rate schedule, because
+  the server matches them exactly. A refused claim shows every rule that
+  refused it.
+
+**Approvals and advances**
+
+- **Approvals**: your queue across companies — claims and advances, oldest
+  first, a week's wait in red — filtered by the selection with what it hides
+  counted, bulk decisions, reassigning a step (to approvers only), and the
+  look-alike claims to settle as the same expense twice or not.
+- **Advances**: what you are holding, request (with project and vendor
+  pickers, and the "still to settle" check), the drawer with who owes whom in
+  words, approve, record as paid out, settle (figures first, then frozen),
+  and charge a claim to it.
+
+**Money out**
+
+- **Corporate cards**: statements imported from a file or pasted, with what
+  was new, already on file or unreadable; unmatched lines with ranked
+  suggestions and their reasons; match, unmatch, set aside and put back.
+- **Reimbursements**: claims waiting to be paid by person, payment runs
+  totalled in cents, the bank CSV through the downloads tray, mark paid (it
+  says no money moves), cancel.
+- **Accounting export**: prepare a batch for dates, "does not balance" in red,
+  export only what balances, void what is not yet exported, the lines.
+- **Petty cash**: funds in the company's currency, spend, top up, reconcile
+  with the difference as you type, refill to the ceiling, close.
+
+**Rules and suppliers**
+
+- **Budgets**: used, committed, approved, paid and remaining, "at this rate"
+  (said to be arithmetic, not a prediction), what consumed it, create, edit,
+  close. **Policies**: each rule's caps as one sentence, refuses or flags,
+  archive; and **approval routing** — the chains, stalled claims, and "who
+  would it ask?".
+- **Vendors**: purchases, paid, claims and last transaction; new, archive,
+  restore, delete. **Subscriptions**: renewals (overdue first), totals per
+  currency, this company or all of yours; the drawer edits in place, moves a
+  subscription between companies, keeps its invoices and payments, lists
+  the expenses charged to it and files a new one against it; pause, resume,
+  cancel, reactivate.
+
+**Insight and setup**
+
+- **Dashboard** (KPIs, what needs somebody, the monthly trend, by category,
+  renewals, budgets, petty cash — each linking to its screen), **Analytics**
+  and **Reports** (the named reports and the claims summary, one currency at a
+  time, exported as CSV through the downloads tray where the area allows),
+  **All organizations** (every company you report on, totals per currency).
+- **Settings**: company rules, cost centres, categories, mileage, per diem and
+  exchange rates, who gets told, activity, setting up a company, and **My
+  access**.
+
+**Server gaps found** (no server change in this release; details in the
+commit)
+
+- **Security:** card-match suggestions (`Cards::suggest`) never check the
+  transaction's company, so a finance user in one company can read another
+  company's claim descriptions, claimants and amounts by transaction id.
+  Editing a subscription (`SubscriptionController::update`) likewise never
+  checks it is visible to the caller.
+- The stale-approval guard never fires: the claim's revision is not passed to
+  the approval engine.
+- Several totals add up amounts in different currencies: the multi-company
+  dashboard, unmatched card lines, the classic claims summary, vendor totals,
+  petty cash, and the subscriptions overview (which the web labels LKR).
+- Editing a budget on the web turns a quarterly or yearly budget monthly,
+  refuses any non-company scope, and clears its category and owner; the
+  budget's claim list ignores its scope.
+- Several writes act in the company last remembered rather than the one on
+  screen (new subscriptions, the subscription's expenses, the web's petty
+  cash); a new petty-cash fund defaults to LKR.
+- Editing only a subscription's amount resets its exchange rate to 1;
+  clearing a stated renewal date does nothing.
+- "Mine" on Advances returns everyone's for finance; a step can be
+  reassigned to somebody who cannot approve it; editing a card blanks the
+  fields not sent; claim lists omit the company and the unconverted count; an
+  Asset link on a claim is dropped.
+
+---
+
+## Unreleased — Finance: the whole module, natively
+
+Finance opens here now instead of in the browser, under Business in the
+sidebar, and every screen of it is drawn by the app. Links to Finance screens
+(`/finance?tab=…`) open here too. Only Finance's printable report and its
+public shared-report links are still the web's own pages, and open in the
+browser.
+
+**The app**
+
+- **The rail**, in the web's order, with the company picker at the top. It
+  picks one company, because the books are that company's: a trial balance
+  across two companies is not a report. The company rides in the tab's
+  address, so a restored tab reopens on the same books, and is remembered per
+  person — always checked against the companies you still hold. A company
+  without books says so in the picker.
+- Money is handled as the server's text throughout and added up in cents, so
+  no figure is ever rounded through a float. An amount you may not see is a
+  dash and a sentence naming the grant, never 0.00. A refusal shows every
+  problem the server names, not the first.
+
+**The books**
+
+- **Overview.** The management accounts on one page: whether the ledger
+  balances and what is outstanding, the result for the year with the sentence
+  that says what it leaves out, bank against ledger, what is owed each way
+  with its age and whether it agrees with its control account, and what is
+  not in the figures yet. **Opening the books** for a company that has none —
+  base currency, first month, first year — picked, not typed, and said to
+  happen once.
+- **Chart of accounts.** The tree, headings apart from accounts, system
+  accounts locked, archived ones marked; find; new account; archive; fixed or
+  variable on cost accounts.
+- **Bank accounts.** Which accounts are bank accounts, their currency, and a
+  statement per account: import a CSV, text or HTML file (up to 8 MB) or paste
+  rows; what loaded, what was already on file and what could not be read,
+  with every problem; park lines (singly or several) with a reason; the
+  import history with its proved or missing closing balances.
+- **Reconciliation.** Per account, its periods and how far it is locked;
+  reconcile a period (prefilled from the latest proved statement); then the
+  workspace — the difference as the headline with its working, match what is
+  obvious, scored suggestions with their reasons in words, choose one
+  yourself, park, and agree and lock (held, with its reasons, until the
+  difference is nil and nothing up to the end date is unmatched); reopen with
+  a reason.
+- **Journals.** Filtered to what is not yet posted, posted, or reversals. One
+  journal opens beside the list with its lines and its next step — submit,
+  approve (by somebody other than the writer), post, then reverse with a
+  reason and its own date if you like. A reversal that succeeds with a
+  warning says so. **New journal** balances as you type.
+
+**Who owes what**
+
+- **Receivables and Payables.** Ageing as at a date (or the end of last
+  month), the tie-out against the control account first — agreeing, or out by
+  how much and where to look — the five buckets per party, and each party's
+  documents in their own currency with the books' figure beneath.
+- **Not in the ledger.** Every document with no journal, with every reason
+  the server gives; **Post it** / **Try anyway** for those who may post, and
+  the journal it made one click away. Supplier debit notes are included.
+
+**Reports**
+
+- **General ledger** (an account and dates, kept in the tab's address;
+  opening and running balance; links to journals and reversals; up to 5,000
+  lines, and it says when there are more), **Trial balance** (position or
+  movements, balanced or out by how much), **Profit and loss** and **Balance
+  sheet** (sections from the chart, subtotals, last year beside this one —
+  including accounts that moved only last year — and the balanced check),
+  **Cash flow and equity** (the indirect statement and the changes in
+  equity, each checked against the balance sheet). Any account opens its
+  general ledger.
+- **Financial overview** and **Cash flow overview**: KPIs against the window
+  before, a monthly trend, margins, cost and revenue by account, cost by
+  dimension, cost variance, health signals, cash in and out by category, and
+  the forecast (labelled estimated; horizons over three months need the
+  forecast manage grant). Figures can be shown in another currency at the
+  server's rates; a missing rate is refused and said, never assumed 1.
+- **Budget vs actual**, and **All companies** — every company you reach, in
+  each one's currency or one you choose, with a company that has no rate
+  listed and not added.
+- **Export** (the report's summary) and **Transactions** (every journal line
+  in the window) save CSV files through the downloads tray; **Print** opens
+  the web's printable report; **Share link** makes a link for somebody
+  without an account (shown once, expires in 7 days). Each is offered only to
+  those the server would let through.
+- **Year-end close.** The close checklist, what blocks the year and what only
+  warns (each linked to where to fix it), versions — generate, approve (by
+  somebody other than the generator, with nothing blocking and the books
+  unchanged since), lock, reopen with a reason — and the history. Any fiscal
+  year can be chosen.
+
+**Setup**
+
+- **Budgets.** Create empty or from last year's actuals, copy (into the next
+  year if you like), approve (one plan per year), archive; the account ×
+  month grid grouped by type, totalled in cents, with income, cost and
+  planned profit, a find box, and keyboard movement. Saving replaces the
+  whole grid, and says so.
+- **Exchange rates** (the installation's, said as much), **Shared reports**
+  (see and revoke), **Tax codes** (rates dated and never edited — a new rate
+  closes the current one, and says on which day), **Fixed-asset accounts**,
+  **Depreciation** (preview, post a month, the months charged with their
+  journals, and the brought-forward split), **Purchase accounts**.
+- **Settings**: the accounting profile, and **Area access** — people by area,
+  presets, end dates, never your own row. The screen says plainly that the
+  server does not enforce these grants yet: they change what the screens
+  show.
+- **My access.** Whose books you can open, and why not the others; and your
+  Finance permissions.
+
+**Server gaps found** (no server change in this release; details in the
+commit)
+
+- Area-access grants are not enforced by the API (known, SRS §12 #1).
+- Several endpoints return every column as text, so flags like `"0"` read as
+  true to a careless client; the web's year-end never shows "does not
+  balance", and its budget editor marks every row inactive. The desktop
+  converts once, on arrival.
+- A reconciliation lock keeps no "bank only" figure, so a locked period's
+  working cannot be reproduced; the lock's refusal sentence omits it too.
+- A budget holding a since-archived account can be neither saved nor copied.
+- Year-end opens on the newest open year, which at year end is the next one.
+- The dashboard exports' permission comment and route filter disagree;
+  translated CSVs run numeric account codes through the rate; the public
+  share page ignores the currency it was made in.
+- The depreciation screen's permission envelope names an area that does not
+  exist, so it always says no (the desktop gates on the posting permission).
+- A tax rate starting before the current one fails with a database error
+  (the desktop refuses it first).
+
+---
+
 ## 2026-09-28 — 0.2.41: SalonMate, part 1 — the front desk at the counter
 
 SalonMate is in the launcher, native, for anyone whose company has it and

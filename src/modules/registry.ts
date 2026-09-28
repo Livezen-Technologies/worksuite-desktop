@@ -181,6 +181,23 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./salon/SalonShell'),
   },
   {
+    // Figures are not cached for offline reading: a stale trial balance looks exactly like a current one.
+    input: defineDesktopManifest({
+      id: 'finance', name: 'Finance', icon: 'landmark', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'NONE' },
+      quickActions: [{ id: 'new-journal', label: 'New Journal', route: '/finance?tab=journals&make=journal' }],
+    }),
+    load: () => import('./finance/FinanceShell'),
+  },
+  {
+    input: defineDesktopManifest({
+      id: 'expenses', name: 'Expenses', icon: 'wallet', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'NONE' },
+      quickActions: [{ id: 'file-expense', label: 'File an Expense', route: '/expenses?file=1' }],
+    }),
+    load: () => import('./expenses/ExpensesShell'),
+  },
+  {
     input: defineDesktopManifest({
       id: 'inventory', name: 'Inventory', icon: 'package', contractVersion: 1, desktop: { enabled: true },
       offline: { mode: 'READ_CACHE', entities: ['product'], cache: ['/api/inventory/products', '/api/inventory/stock'] },
