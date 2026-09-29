@@ -1,5 +1,8 @@
 import { createContext, useContext, type DragEvent } from 'react';
+import type { ExternalAppId, OfficeMode } from '@shared/office';
 import { canOpen } from '../../core/access';
+import { knownApps } from '../office/local';
+import { cachedOfficeActions, prefetchOfficeActions, type OfficeRouting } from './office';
 import type { MenuItem } from './Menu';
 import { IMAGE_EDIT_EXTS, OFFICE_EXTS, PREVIEW_EXTS, TONE, ZIP_EXTS, can, extOf, openWay, type DriveFile, type DriveFolder, type Key } from './api';
 import { app } from '../../core/app-state';
@@ -32,7 +35,12 @@ export interface Drive {
   lock: (f: DriveFolder, on: boolean) => void;
   star: (item: Item, on: boolean) => void;
   details: (item: Item, tab?: string) => void;
-  office: (f: DriveFile) => void;
+  /** An Office file in its tab (or, on a server without the Office API, the web's editor); `mode` only when chosen. */
+  office: (f: DriveFile, mode?: OfficeMode | null) => void;
+  /** An Office file in Word, Excel, PowerPoint or the default app here (OO-DSK-050). */
+  openIn: (f: DriveFile, app: ExternalAppId) => void;
+  /** How the server routes Office files (web-api §6). */
+  officeRouting: OfficeRouting;
   /** The code editor, the image editor and the media player (Files part 2). */
   editText: (f: DriveFile) => void;
   editImage: (f: DriveFile) => void;
@@ -65,12 +73,24 @@ export function fileMenu(f: DriveFile, d: Drive, list?: DriveFile[]): MenuItem[]
   const way = openWay(f);
   // Sending into a conversation is Chat's: offered only to whoever has it.
   const chat = can(a, 'chat_share') && canOpen('chat');
+  // Office files (OO-DRV-020/040): Edit, Open read-only and Open in another app, as the server's answer for this
+  // file says (asked when its menu first opens; until then Drive's own access decides, and the server refuses anyway).
+  const r = d.officeRouting;
+  const fmt = r.types?.formats[e];
+  const office = !r.legacy && (fmt ? fmt.route === 'office' : OFFICE_EXTS.includes(e));
+  if (office) prefetchOfficeActions(f.id);
+  const oa = office ? cachedOfficeActions(f.id) : null;
+  const canEdit = oa ? oa.actions.edit : can(a, 'edit') && (fmt ? fmt.editable || fmt.legacy : true);
+  const inApps = office && (oa ? oa.actions.open_in_external_app : can(a, 'download'));
   const out: Array<MenuItem | null> = [
     { label: 'Open', hint: 'Enter', strong: true, run: () => d.open(item, list) },
     way === 'preview' ? null : PREVIEWABLE(e) ? { label: 'Preview', hint: 'Space', run: () => d.preview(list ?? [f], Math.max(0, (list ?? [f]).indexOf(f))) } : null,
     IMAGE_EDIT_EXTS.includes(e) && (can(a, 'upload_version') || can(a, 'download')) ? { label: 'Edit image', icon: 'compose', run: () => d.editImage(f) } : null,
-    OFFICE_EXTS.includes(e) && can(a, 'edit') ? { label: 'Edit in Office', icon: 'external', run: () => d.office(f) } : null,
-    can(a, 'download') ? { label: 'Open locally', icon: 'laptop', run: () => d.download([f], true) } : null,
+    office && canEdit ? { label: 'Edit', icon: 'compose', run: () => d.office(f, 'EDIT') } : null,
+    office && (oa ? oa.actions.open_read_only : true) ? { label: 'Open read-only', icon: 'eye', run: () => d.office(f, 'VIEW') } : null,
+    r.legacy && OFFICE_EXTS.includes(e) && can(a, 'edit') ? { label: 'Edit in Office', icon: 'external', run: () => d.office(f) } : null,
+    ...(inApps ? knownApps(e).map((x) => ({ label: `Open in ${x.label}`, icon: 'laptop', run: () => d.openIn(f, x.id) })) : []),
+    !office && can(a, 'download') ? { label: 'Open locally', icon: 'laptop', run: () => d.download([f], true) } : null,
     { label: 'Open in the browser', icon: 'globe', run: () => d.inBrowser(f) },
     { sep: true },
     can(a, 'share') ? { label: 'Share…', icon: 'users', run: () => d.share(item) } : null,

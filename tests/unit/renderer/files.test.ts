@@ -63,16 +63,27 @@ describe('the menus follow what the server allows', () => {
   it('a viewer who may download gets no sharing, renaming or trash', () => {
     const m = labels(fileMenu(file(['open', 'preview', 'download']), d));
     expect(m).toContain('Download');
-    expect(m).toContain('Open locally');
+    // An Office file opens read-only in its tab, or in an app on this computer (the default one until others are found).
+    expect(m).toContain('Open read-only');
+    expect(m).toContain('Open in the default app');
+    expect(m).not.toContain('Open locally');
     expect(m).not.toContain('Share…');
     expect(m).not.toContain('Rename');
     expect(m).not.toContain('Move to trash');
-    expect(m).not.toContain('Edit in Office');
+    expect(m).not.toContain('Edit');
   });
 
   it('the owner gets everything, the public link included', () => {
     const m = labels(fileMenu(file(['open', 'preview', 'download', 'edit', 'rename', 'share', 'move', 'delete', 'chat_share'], true), d));
-    for (const l of ['Edit in Office', 'Share…', 'Secure link…', 'Copy public link', 'Send to Chat…', 'Rename', 'Move…', 'Copy to…', 'Zip', 'Move to trash']) expect(m).toContain(l);
+    for (const l of ['Edit', 'Open read-only', 'Share…', 'Secure link…', 'Copy public link', 'Send to Chat…', 'Rename', 'Move…', 'Copy to…', 'Zip', 'Move to trash']) expect(m).toContain(l);
+  });
+
+  it('on a server without the Office API, Office files still edit on the web and open locally', () => {
+    const legacy = new Proxy({}, { get: (_t, k) => (k === 'officeRouting' ? { types: null, legacy: true } : () => undefined) }) as unknown as Drive;
+    const m = labels(fileMenu(file(['open', 'preview', 'download', 'edit'], true), legacy));
+    expect(m).toContain('Edit in Office');
+    expect(m).toContain('Open locally');
+    expect(m).not.toContain('Open read-only');
   });
 
   it('offers Chat only to whoever has Chat', () => {

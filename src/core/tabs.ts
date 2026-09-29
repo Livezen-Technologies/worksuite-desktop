@@ -51,6 +51,49 @@ export const tabsStore = createStore<TabsState>({ tabs: [], activeId: null, clos
 let seq = 0;
 const newId = () => `t${Date.now().toString(36)}${(++seq).toString(36)}`;
 
+/**
+ * Apps whose tabs are one per record: an Office document opens in a tab of
+ * its own, and opening it again brings that tab forward instead of a second
+ * session (OO-DSK-004) — never replacing another document's tab.
+ */
+const RECORD_TAB_APPS = new Set(['office']);
+const pathOf = (route: string) => route.split('?')[0]!.replace(/\/+$/, '');
+
+/**
+ * A tab that must be closed with care — an Office document with changes the
+ * Document Server has not had yet (OO-DSK-006) — says so: its guard answers
+ * null when it may close now, or a promise that settles when it may (the tab
+ * shows "Saving changes…" meanwhile, and bounds its own wait). Such a tab is
+ * never suspended while idle either: unmounting it would close its document.
+ */
+export type CloseGuard = () => Promise<void> | null;
+const guards = new Map<string, CloseGuard>();
+const closing = new Set<string>();
+/** Why a tab was closed from outside, for a tab that tells its server (an organisation switch). */
+const closeReasons = new Map<string, 'ORG_SWITCH'>();
+
+export function setCloseGuard(id: string, guard: CloseGuard | null): void {
+  if (guard) guards.set(id, guard);
+  else guards.delete(id);
+}
+
+/** Read once, by the tab that is closing. */
+export function takeCloseReason(id: string): 'ORG_SWITCH' | null {
+  const r = closeReasons.get(id) ?? null;
+  closeReasons.delete(id);
+  return r;
+}
+
+function guardWait(id: string): Promise<void> | null {
+  const g = guards.get(id);
+  if (!g) return null;
+  try {
+    return g();
+  } catch {
+    return null;
+  }
+}
+
 function make(route: string, organizationId: string | null, title?: string): Tab {
   return {
     id: newId(),
@@ -135,6 +178,12 @@ export function navigate(route: string, organizationId: string | null = null): v
   if (!allowed(route)) return;
   const s = tabsStore.get();
   const app = appForRoute(route);
+  if (RECORD_TAB_APPS.has(app)) {
+    const same = s.tabs.find((t) => t.app === app && pathOf(t.route) === pathOf(route));
+    if (same) activate(same.id);
+    else openTab(route, { organizationId });
+    return;
+  }
   const current = s.tabs.find((t) => t.id === s.activeId);
   if (current && current.app === app) {
     setRoute(current.id, route);
@@ -178,7 +227,20 @@ function remove(s: TabsState, id: string, remember: boolean): Partial<TabsState>
 }
 
 export function closeTab(id: string): void {
-  update((s) => remove(s, id, true));
+  const wait = guardWait(id);
+  if (!wait) {
+    update((s) => remove(s, id, true));
+    return;
+  }
+  if (closing.has(id)) return;
+  closing.add(id);
+  void wait
+    .catch(() => undefined)
+    .finally(() => {
+      closing.delete(id);
+      guards.delete(id);
+      update((s) => remove(s, id, true));
+    });
 }
 
 // ── docking (FR-NAV-05/07) ───────────────────────────────────────────────
@@ -217,6 +279,9 @@ export function setSplit(f: number): void {
 export async function detachTab(id: string, at?: { x: number; y: number }): Promise<boolean> {
   const t = tabsStore.get().tabs.find((x) => x.id === id);
   if (!t) return false;
+  // A document with changes still on their way to its server lets them go first; the window opens it again.
+  const wait = guardWait(id);
+  if (wait) await wait.catch(() => undefined);
   try {
     await call('windows:detach', { route: t.route, title: t.title, at: at ? { x: Math.round(at.x), y: Math.round(at.y) } : undefined });
   } catch {
@@ -246,21 +311,28 @@ export async function adoptWindow(windowId: number, opts: { index?: number; side
 }
 
 export function closeOthers(id: string): void {
+  // Guarded tabs (open documents) close one by one, each when it may; the rest at once.
+  const careful = tabsStore.get().tabs.filter((t) => t.id !== id && !t.pinned && guards.has(t.id));
   update((s) => ({
-    tabs: s.tabs.filter((t) => t.id === id || t.pinned),
-    closed: [...s.closed, ...s.tabs.filter((t) => t.id !== id && !t.pinned)].slice(-20),
+    tabs: s.tabs.filter((t) => t.id === id || t.pinned || careful.includes(t)),
+    closed: [...s.closed, ...s.tabs.filter((t) => t.id !== id && !t.pinned && !careful.includes(t))].slice(-20),
     activeId: id,
     sideId: s.sideId === id ? s.activeId : s.sideId,
   }));
+  for (const t of careful) closeTab(t.id);
 }
 
 export function closeToRight(id: string): void {
+  const all = tabsStore.get().tabs;
+  const at = all.findIndex((t) => t.id === id);
+  const careful = all.filter((t, i) => i > at && !t.pinned && guards.has(t.id));
   update((s) => {
     const idx = s.tabs.findIndex((t) => t.id === id);
-    const keep = s.tabs.filter((t, i) => i <= idx || t.pinned);
-    const gone = s.tabs.filter((t, i) => i > idx && !t.pinned);
+    const keep = s.tabs.filter((t, i) => i <= idx || t.pinned || careful.includes(t));
+    const gone = s.tabs.filter((t, i) => i > idx && !t.pinned && !careful.includes(t));
     return { tabs: keep, closed: [...s.closed, ...gone].slice(-20), activeId: keep.some((t) => t.id === s.activeId) ? s.activeId : id };
   });
+  for (const t of careful) closeTab(t.id);
 }
 
 export function togglePin(id: string): void {
@@ -317,7 +389,7 @@ export function suspendIdle(minutes: number): void {
   const s = tabsStore.get();
   let changed = false;
   const tabs = s.tabs.map((t) => {
-    if (t.id !== s.activeId && t.id !== s.sideId && !t.suspended && now - t.lastActive > minutes * 60_000) {
+    if (t.id !== s.activeId && t.id !== s.sideId && !t.suspended && !guards.has(t.id) && now - t.lastActive > minutes * 60_000) {
       changed = true;
       return { ...t, suspended: true };
     }
@@ -332,6 +404,8 @@ export function closeTabsOutside(organizationId: string | null): number {
   const s = tabsStore.get();
   const gone = s.tabs.filter((t) => t.organizationId !== null && t.organizationId !== organizationId);
   if (gone.length === 0) return 0;
+  // A document of the organisation left behind closes as such (OO-DSK-060: `DELETE …?reason=ORG_SWITCH`).
+  for (const t of gone) if (guards.has(t.id)) closeReasons.set(t.id, 'ORG_SWITCH');
   const tabs = s.tabs.filter((t) => !gone.includes(t));
   const home = tabs.length ? null : make('/home', null);
   update(() => ({ tabs: home ? [home] : tabs, activeId: home ? home.id : tabs.some((t) => t.id === s.activeId) ? s.activeId : (tabs[0]?.id ?? null) }));

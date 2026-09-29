@@ -328,6 +328,45 @@ What the server does not give sync, and how the app copes:
 - **Deleting a folder does not take its files to the recycle bin**; the app
   deletes a Drive folder only once it is empty.
 
+## Office documents
+
+The Office tab and Files use the server's Office API (`app/Modules/EuroOffice`, on Drive's paths); the full client
+contract is kept with the server work (`office_docs/web-api.md`). Everything is decided there — the mode, what the
+person may do (`permissions`), what saving has reached — and every refusal's `errors.code` says what to offer.
+
+| Need | Calls |
+|---|---|
+| Open, reload, renew | `POST /api/files/{id}/office/session {client_type: DESKTOP_WIN\|DESKTOP_MAC\|DESKTOP_LINUX, layout: desktop, lang, mode_requested?}`, `GET …/office/config?session_id=&lang=&layout=` (a `replaced_session_id` means a new session on the new key) |
+| Keep alive, mode, close | `POST …/office/session/{sid}/heartbeat {ready_ms?}` every `heartbeat_interval_s`, `POST …/office/session/{sid}/mode {mode}`, `DELETE …/office/session/{sid}?reason=CLOSED\|ORG_SWITCH` |
+| Saving | `POST …/office/force-save {session_id, version_label?, description?}` (closing a tab; Save as version), `POST …/office/save/retry`; the save status comes in the bootstrap and every heartbeat |
+| Collaboration | presence in the heartbeat; `POST/DELETE …/office/lock` (keep to myself / release); `GET …/office/mentionable?q=`, `POST …/office/mentions {emails, action_link}` (never comment text); rename with Drive's `PUT /api/files/{id} {name}` then `POST …/office/meta` |
+| Routing, menus | `GET /api/files/office/types?org_id=` (READ_CACHE, `files`), `GET …/office/actions?client_type=` |
+| New, templates | `GET /api/files/office/templates`, `POST /api/files/office/new {type\|template_id, folder_id}` |
+| Export, convert | `POST …/office/export {target_format: pdf, destination: DOWNLOAD\|DRIVE}` — a download's `download_url` is fetched by its token as `/office/exports/{token}` from the configured server through the download manager (`transfers:download` with `officeExport`); `POST …/office/convert-legacy` |
+| Versions | Drive's `GET /api/files/{id}/versions`, `POST …/versions/{row}/restore`, `GET …/versions/{row}/download` |
+| An edited copy back | `POST /api/files/{id}/versions` (multipart `file`, `base_version`) from the main process; `409 OFFICE_VERSION_CONFLICT` with `base_version`, `server_version`, `actions`. Keep Both goes up through the upload manager as a new file |
+
+Realtime `office.*` events about an open document only trigger its heartbeat early; nothing is patched from them.
+
+What the desktop cannot do because the server does not (yet):
+
+- **The editor's @mention list is empty unless the editor sends what was typed.** `…/office/mentionable` answers
+  nothing under two characters, and ONLYOFFICE's `onRequestUsers` asks for the whole list without a search term (only
+  editors that search as you type send one). Mentions typed as an address still notify through `…/office/mentions`.
+  An empty term answering the people who can open the file (bounded) would fill the list.
+- **The bootstrap's `file` has no folder or company.** The tab is bound to the company chosen when it opened (not the
+  file's own), and a Keep Both copy made from the Office tab lands at the top of My Drive rather than beside the
+  original (from Files it goes beside it). `file.folder_id` and `file.organization_id` in the bootstrap would fix both.
+- **Only the multipart version upload checks `base_version`.** The chunked uploader (`/api/uploads/*` with
+  `replace_file_id`) does not, so an edited copy larger than the server's single-request upload limit cannot go back
+  with the conflict check; the desktop reports the server's refusal instead of falling back to an unchecked replace.
+- **`save_as_copy` and `download_working_copy`** are listed in a failed save's `actions` but have no route; the desktop
+  offers Retry only.
+- **`/api/files/office/types` answers one company's settings** (the chosen one, or the person's first): a Drive list
+  spanning companies is routed by those defaults; each file's menu asks `…/office/actions`, which is exact.
+- **No link opens a document in the desktop.** The web's "Open in Desktop App" has no `worksuite://` form for an
+  Office file, and `links/resolve` (`Desktop/Libraries/LinkGrammar`) knows none.
+
 ## Not provided yet
 
 - `monitoring_policy` is always `null`, and every `feature_flags` entry is

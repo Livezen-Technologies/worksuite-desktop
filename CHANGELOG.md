@@ -5,6 +5,121 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-29 — 0.2.55: Office documents in WorkSuite tabs
+
+Word, Excel and PowerPoint files from Drive open in a WorkSuite tab with the
+Office editor — the Document Server's own ONLYOFFICE editor, over the
+server's new Office API (WorkSuite Drive — ONLYOFFICE Office File
+Integration SRS, the desktop's MVP). No browser window, no download. What
+you may do in a document is what the server says; saving goes straight
+from the editor to Drive, never through this computer.
+
+**Added**
+
+- **Opening**: double-click (or Enter, Open) an Office file in Files and it
+  opens in a tab of its own, named after the file. Opening it again brings
+  that tab forward — in this window or the one it was torn off into —
+  instead of a second copy. What opening does is the server's choice for
+  that kind of file (edit, read, or the web's preview); the file menu adds
+  **Edit** and **Open read-only**.
+- **The tab's header**: the file's name; **Saving…** while your changes are
+  on their way, then **Saved · 14:32**, with the last WorkSuite version
+  beside it (version, time, who); **Save failed** or **Saving is delayed**
+  in the server's words, with **Retry**; who else is in it (● Samali ●
+  Ishan, editing or viewing); the **mode** — Editing, Reviewing (changes
+  tracked), Commenting, Viewing — as far as the server allows; **Share**
+  (WorkSuite's share dialog); and **⋯**: Download, Download as PDF, Save as
+  PDF to Drive, Save as version…, Version history, Open in Microsoft Word /
+  Excel / PowerPoint or the default app, Convert & Edit (DOC, XLS, PPT),
+  keep the document to yourself while you edit, reload the editor. Each
+  appears only when the server's permissions for you allow it.
+- **Read-only** documents say why, in the server's sentence ("You can view
+  this document, but you don't have permission to edit it.", "Samali is
+  editing — you can view until the lock is released."), with **Switch to
+  edit** when that becomes possible. "A newer version is available" when
+  someone uploads or restores one; you choose when to open it.
+- **Closing a tab with changes** shows "Saving changes…" and waits — ten
+  seconds at most — for them to reach the Office server, asks it to save,
+  and then closes. Switching company closes that company's documents.
+- **Version history** beside the document: download a version, restore
+  one as the current version (everyone in the document is offered it).
+- **In the editor**: rename (the file in Drive, and the title for everyone
+  in it), Share, mentions in comments (the server tells the people you
+  mention who can open the document, and offers to share it with those
+  who cannot — a mention never shares it), Edit from a read-only document.
+- **+ New → Document, Spreadsheet, Presentation** make the file on the
+  server ("Untitled Document.docx"…) and open it for editing; **From a
+  template…** lists your company's templates and WorkSuite's.
+- **Convert & Edit** for DOC, XLS and PPT: "This legacy file will be
+  converted to DOCX for editing." — a new file beside the original, which
+  stays as it is; or View Only.
+- **Open in Microsoft Word / Excel / PowerPoint** (where installed) or the
+  **default app**, from the file menu or the tab. A file Drive sync keeps
+  on this computer opens where sync keeps it, and sync takes the changes
+  back. Any other file is downloaded (it shows in Transfers) and watched:
+  when you save it there, Files and the document's tab offer **Upload as
+  new version**. If Drive has moved on meanwhile: "The cloud file changed
+  while you were editing." — **Keep Both**, **Review**, **Upload as New
+  Version** or **Cancel**. Nothing goes back without you, and nothing newer
+  is overwritten.
+
+**Works offline**
+
+- An Office file offline says so: "You're offline. This file is available
+  on this device." with **Preview** (macOS Quick Look) and **Open in
+  External App** when a copy is here — synced, or opened in another app
+  before — and "WorkSuite Office editing requires a connection." There is
+  no Office editing offline; the tab opens by itself when WorkSuite is
+  back. Files still knows how to route Office files offline (the server's
+  formats are kept with Files' offline answers).
+
+**Security**
+
+- The editor runs in a view of its own, in its own process and in an
+  in-memory storage partition per company — cleared when the company's last
+  document closes, at sign-out and when quitting. Its page can reach the
+  configured Document Server and nothing else of the network, cannot
+  navigate away, has no access to WorkSuite's API or your sign-in, and
+  talks to the app through a four-function bridge whose every message is
+  checked. Links from documents open in your browser after the usual
+  check. The editor's own "Download as" is off; documents leave through
+  the tab's Download and Export. See docs/SECURITY.md.
+- While the editor has the keyboard, its shortcuts are its own: ⌘/Ctrl+K
+  inserts a link rather than opening Search, ⌘/Ctrl+L aligns left rather
+  than locking WorkSuite. Closing and opening tabs still work.
+
+**Where it bites**
+
+- **Not yet tried against a real Document Server.** Everything here is
+  built to the server's contract and unit-tested with the editor faked;
+  loading ONLYOFFICE's editor into the desktop's own page, printing from
+  it, and co-editing with the web need a server to confirm.
+- A Document Server must be served over HTTPS for the desktop (plain HTTP
+  only on this computer, in a development build). The desktop refuses to
+  load the editor from anywhere else, with that sentence.
+- The editor's @mention list fills only as you type, and only with an
+  editor that sends what was typed; otherwise mention people by address
+  (the server needs two letters to search).
+- A menu, dialog or the command palette hides the document while it is open
+  (the editor is a native view and would cover them). Toasts and minimised
+  chats can sit under the editor.
+- A tab torn off into its own window, or docked back, opens the document
+  again there (a new session on the same document; nothing is lost).
+  Closing such a window does not wait for unsent changes the way closing a
+  tab does; the Office server keeps what it has.
+- A Keep Both copy made from the document's tab goes to the top of My
+  Drive (the server does not say which folder the document is in); from
+  Files it goes beside the original.
+- An edited copy goes back in one request, so a copy larger than the
+  server's upload limit cannot go back with the conflict check.
+- Word, Excel and PowerPoint are offered only where they are installed in
+  the usual place (macOS Applications, Windows' App Paths); Linux offers
+  the default app.
+- A server without the Office API keeps the old way: Office files open in
+  the web's editor in your browser.
+
+---
+
 ## 2026-09-29 — 0.2.53: eLearning on the desktop
 
 eLearning opens in its own tab for whoever has the app (and

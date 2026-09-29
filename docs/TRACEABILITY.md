@@ -96,6 +96,57 @@ blocked by something outside the code.
 | FR-DEV-01 | Done | Files → Sync devices: rename, sign out, wipe, remove another device; wipe on `hello` or revoke removes only what sync put here |
 | FR-DEV-02 | Done | Pending up/down and the last error go out with the heartbeat |
 
+## Office documents (WorkSuite Drive — ONLYOFFICE Office File Integration SRS, desktop)
+
+`src/modules/office` (the tab), `src/modules/files` (routing, menus, + New), `electron/services/office-editor.ts`
+(the editor view), `electron/security/office-policy.ts`, `electron/preload/office.ts`,
+`electron/services/office-external.ts` (other apps), over the server's Office API (`app/Modules/EuroOffice`; see
+BACKEND.md). The MVP items of §7 and §9, and the ones the desktop shares with every client. Tests:
+`tests/unit/shared/office.test.ts`, `tests/unit/electron/office.test.ts`, `tests/unit/renderer/office.test.tsx`,
+`tests/unit/renderer/files.test.ts`. Not yet run against a real Document Server (see the changelog).
+
+| ID | Status | Where / note |
+|---|---|---|
+| OO-DSK-001 (MVP) | Done | Opening an Office file in Files (double-click, Enter, Open, Edit, Open read-only) opens `/office/<id>` in a WorkSuite tab with the editor; no browser window |
+| OO-DSK-002 (MVP) | Done | `OfficePage.tsx`: header with the name, the save status, presence, the mode, Share and ⋯; the Document Server's own toolbar, canvas and status bar below |
+| OO-DSK-004 | Done | One tab per document (`core/tabs.ts` record tabs); a document open in another window is brought forward there (`office:focusFile`) |
+| OO-DSK-005 | Done | Each tab its own session and view |
+| OO-DSK-006 | Done | Close guard: "Saving changes…", waits up to 10 s for the editor's changes to reach the Document Server, force-saves, then closes |
+| OO-DSK-020 (MVP) | Done | `WebContentsView`, own in-memory partition per organisation and own process; nodeIntegration off, contextIsolation, sandbox, webSecurity |
+| OO-DSK-021 (MVP) | Done | Navigation and requests held to the Document Server's origin (and WorkSuite's pictures); new windows and links to the system browser after the check; no WorkSuite token reachable |
+| OO-DSK-022 | Done | `officeBridge`: ready, failed, events, commands; checked in the main process |
+| OO-DSK-023 | Done | Partition per organisation, in memory, cleared when its last document closes, at sign-out and quit |
+| OO-DSK-024 | Partial | The editor's own downloads are stopped; Download and Download as PDF in the tab go through Drive's permissions and the download manager |
+| OO-DSK-050 (MVP) | Done | Open in Microsoft Word / Excel / PowerPoint (where installed: macOS Applications, Windows App Paths) or the default app: sync's copy, or a download through the download manager, watched |
+| OO-DSK-051 | Done | Sync-owned files go back through Drive sync; other copies only when the person uploads |
+| OO-DSK-052 | Needs a Document Server | The editor's Print (shown only with `files.print`, from the signed configuration) goes to Chromium's print, which is the system dialog in Electron — not yet tried against a real server |
+| OO-DSK-060 | Done | Tabs bound to the organisation chosen when they opened; switching away closes them with `ORG_SWITCH` (the file's own company is not in the bootstrap — BACKEND.md) |
+| OO-DSK-003, 010, 011, 030–033, 040–043 | Later / partial | Tabs pin, close others, move to a new window and dock like any tab (the document reopens there); full-screen, local-file sessions and the docked preview pane are later phases |
+| OO-SES-001/002 (MVP) | Done | `POST …/office/session` with `client_type` by OS and `layout: desktop`; the signed `config` handed to the editor untouched |
+| OO-SAV-020 (MVP) | Done | "Saving…" while the editor has unsent changes, "Saved · 14:32", "Save failed" / "Saving is delayed" with Retry; last WorkSuite version beside it (OO-SAV-021) |
+| OO-SAV-030 | Done | A crashed editor or a reload renews the same session (`GET …/config`) and reloads on the same key |
+| OO-COL-001–004 | Done | Presence from the heartbeat in the header; realtime `office.*` events bring the next heartbeat forward |
+| OO-COL-020–022 | Partial | Mentions notify through the server, never with comment text; people who cannot open it are offered Share. The @-list is filled only when the editor sends what was typed (server gap) |
+| OO-COL-030 (MVP) | Done | Modes from `available_modes` (Editing, Reviewing, Commenting, Viewing); the switch is the server's |
+| OO-COL-040 (MVP) | Done | Read-only opens with the server's `read_only_reason` as the banner; Switch to edit when offered |
+| OO-COL-051/052 | Done | Keep to myself / let others edit again; "Switch to edit" when a lock runs out |
+| OO-COL-060–062 | Done | Rename from the editor through Drive and `…/office/meta`; Share opens WorkSuite's share dialog; the editor's chat is off (server) |
+| OO-VER-011/012/013 (MVP) | Done | Version history panel: download, restore; Save as version (labelled force save) |
+| OO-DRV-010/021 (MVP) | Done | Office files route by the server's formats (`…/office/types`, cached offline); default action is the server's |
+| OO-DRV-040 (MVP) | Done | Edit, Open read-only and Open in … in the file menu, from the file's `…/office/actions` when known |
+| OO-DRV-050/051 (MVP) | Done | + New → Document, Spreadsheet, Presentation, From a template… — made by the server, opened for editing |
+| OO-DRV-062, 070 | Later | Editing badges on Drive rows and recent editors in Details (P4) |
+| OO-CNV-020 (MVP) | Done | Download as PDF (the export's signed link, through the download manager) and Save as PDF to Drive |
+| OO-CNV-030/031 | Done | "This legacy file will be converted to DOCX for editing." — Convert & Edit, View Only, Cancel |
+| OO-CNV-040 (MVP) | Needs a Document Server | As OO-DSK-052 |
+| OO-OFF-001 (MVP) | Done | No Office editing offline: the tab never opens a session without WorkSuite |
+| OO-OFF-020 (MVP) | Done | "You're offline. This file is available on this device." [Preview] (Quick Look, macOS) [Open in External App] "WorkSuite Office editing requires a connection." |
+| OO-OFF-030 (MVP) | Done | "The cloud file changed while you were editing." — Keep Both, Review, Upload as New Version, Cancel, as the server offers |
+| OO-OFF-031 | Done | Uploads carry `base_version`; nothing is replaced silently |
+| OO-OFF-040 | Done | Other apps get a local copy; changes go back only on request (or through sync, for synced paths) |
+| OO-ERR-001 | Done | A Document Server outage shows the server's sentence with Download / Open in … / Open in the browser / Try again; Files keeps working |
+| AC-05, AC-21, AC-24 | Done | Tab, isolation, offline wording as above; AC-21's "inspect the renderer" is a unit test of the view's preferences and the bridge, not yet an e2e run |
+
 ## Communication (COM)
 
 | ID | Status | Where / note |
