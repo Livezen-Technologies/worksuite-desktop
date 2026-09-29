@@ -199,6 +199,21 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./salon/SalonShell'),
   },
   {
+    // Garage: the counter, the board, the technician's timer and the parts counter. The timer's
+    // start and pause wait in the offline queue with the moment they were pressed (NFR-05).
+    input: defineDesktopManifest({
+      id: 'garage', name: 'Garage', icon: 'wrench', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'PARTIAL_WRITE', entities: ['work_order'], cache: ['/api/garage/v1/options', '/api/garage/v1/overview', '/api/garage/v1/board', '/api/garage/v1/my-work'] },
+      native: ['notifications'],
+      quickActions: [
+        { id: 'garage-walk-in', label: 'Garage Walk-in', route: '/garage?view=walkin' },
+        { id: 'my-work', label: 'My Work', route: '/garage?view=mywork' },
+      ],
+      deepLinks: ['garage/jobs/:id', 'garage/vehicles/:id'],
+    }),
+    load: () => import('./garage/GarageShell'),
+  },
+  {
     input: defineDesktopManifest({
       id: 'inventory', name: 'Inventory', icon: 'package', contractVersion: 1, desktop: { enabled: true },
       offline: { mode: 'READ_CACHE', entities: ['product'], cache: ['/api/inventory/products', '/api/inventory/stock'] },

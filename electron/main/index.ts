@@ -829,6 +829,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/files/browse', 'files'],
     ['/api/dashboard/home', 'home'],
     ['/api/notifications', 'notifications'],
+    // A workshop terminal opens with WorkSuite out of reach: the technician's work and the board as last seen.
+    ['/api/garage/v1/options', 'garage'],
+    ['/api/garage/v1/overview', 'garage'],
+    ['/api/garage/v1/board', 'garage'],
+    ['/api/garage/v1/my-work', 'garage'],
   ];
   const rebuildMenu = (visible: Set<string>): void =>
     buildMenu(

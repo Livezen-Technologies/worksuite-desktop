@@ -5,6 +5,56 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-29 — 0.2.51: Garage on the desktop
+
+Garage & Service Center opens in its own tab, for whoever has the Garage app.
+The counter, the board, the technician's terminal and the parts counter are
+here; the screens with photos, signatures and money stay on the web for now,
+one click away from the rail and the job card.
+
+**Added**
+
+- **Overview.** Open jobs, checked in today, awaiting approval, in progress,
+  ready for delivery and overdue — each a way into its list — with what is
+  late, the bays, and the latest open jobs.
+- **Job board.** A column per stage; drag a card to move the job on. A move
+  the job's flow refuses, or one that only happens through an action (sending
+  an estimate), stays where it was and says why.
+- **Jobs.** The web's lists (new, estimates, awaiting approval, waiting for
+  parts, QC, ready, overdue…), searchable by plate, job number or customer.
+- **New walk-in.** One box for the plate, VIN, phone or name; the vehicle and
+  its owner, or new ones (a likely duplicate in CRM is offered first); then
+  the job card. A vehicle with an open job is asked about before a second
+  card is made.
+- **Job card.** Who and what, the moves it can make from where it is, cancel
+  with a reason, work orders with who is on the clock, parts, notes (internal
+  or for the customer) and history.
+- **My work**, for a technician: their work orders in the order to do them,
+  with big Start, Pause (with a reason), Complete, Ask for a part and Found
+  more work buttons, and the running timer.
+- **Parts counter.** Scan the job number, then the part's barcode — a scanner
+  that types works as it is — and that job's row opens ready to issue. The
+  queues to reserve, reserved, out and returned; issue, used, return and
+  release. More than was approved needs a reason, from someone who may.
+
+**Works offline**
+
+- **The timer keeps going without WorkSuite.** A start or a pause with
+  WorkSuite out of reach waits in the offline queue with the moment it was
+  pressed, and WorkSuite books it at that moment when it answers (up to 12
+  hours back). The card says it started offline.
+- The overview, the board and My work open from their last copy when
+  WorkSuite cannot be reached.
+
+**On the web for now**
+
+- Check-in (photos, marks, the customer's signature), inspections and
+  diagnosis, estimates and approvals, QC, road test, invoice and handover,
+  vehicles, customers, reports, the workshop and set-up. Until a company's
+  set-up is finished, Garage sends a manager to it on the web.
+
+---
+
 ## 2026-09-29 — 0.2.50: apps you were not given stay hidden
 
 An app you were not given is not there at all: not in a list, not behind a
