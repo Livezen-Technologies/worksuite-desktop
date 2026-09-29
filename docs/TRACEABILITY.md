@@ -166,6 +166,42 @@ serializers) are listed where the desktop shows them. Tests: `tests/unit/rendere
 | FR-REM-05, FR-NTF-03 | Gap | Customer opt-out per channel and per-branch notification switches are not on the server |
 | Offline (NFR-05) | Partial | READ_CACHE for options, overview, board, my work, jobs (with the tabs opened), vehicles, customers, workshop; the timer's start and pause queued with their moment; every other write waits for WorkSuite |
 
+## eLearning (WS-ELN-SRS-001 v1.1, P1 — Core LMS, desktop)
+
+`src/modules/elearning`, over the server's `/api/elearning/v1` (`app/Modules/Elearning`); offline copies in
+`electron/services/elearning-offline.ts`. The rules, scores, reach and lifecycles are the server's; the desktop shows
+what it answers and sends what happened. Tests: `tests/unit/renderer/elearning.test.tsx`,
+`tests/unit/renderer/elearning-admin.test.tsx`, `tests/unit/electron/elearning-offline.test.ts`.
+
+| ID | Status | Where / note |
+|---|---|---|
+| §4.1 navigation | Done | `ElearningShell.tsx`: Learning (My Learning, Course catalogue, Kept offline), Overview, Manage (Courses, Reviews, Categories), People (Learners, Enrolments, Requests to join, Grading), Settings — each by `options.can` (or course staff / line manager); later phases' items are not shown |
+| FR-DSH-01, 02 | Partial | `admin/Dashboard.tsx`: the ten KPIs and the P1 widgets, within reach, for the chosen company; later phases' are "Later". Not on Home: the server declares no Home widgets |
+| FR-DSH-04 | Done | `MyLearning.tsx`: continue learning with the resume point, deadlines, quizzes and assignments open, recommendations with reasons, history; certificates and classes are P2 (said so) |
+| FR-CRS-01, 02, 05, 06 | Done | `admin/Courses.tsx`, `admin/CourseAdmin.tsx`: create (code offered; `code_taken` suggestion), edit with `revision`, duplicate, submit / recall / review / publish (now or later) / suspend / resume / archive / reopen / delete, each as the course's `can` allows, with reasons; the audit trail |
+| FR-TYP-01 | Done | Type chosen on create; its defaults are the server's |
+| FR-BLD-01..03 | Done | `admin/Builder.tsx`: drag-and-drop (and arrow buttons) across sections, sent with the revision (conflicts offered, never overwritten); duplicate, hide, unpublish; mandatory, duration, rule, release date, prerequisite |
+| FR-BLD-04 | Done | `admin/Preview.tsx`: course and lesson preview, nothing recorded |
+| FR-VID-01 | Server | Drive prepares; the builder shows preparing / failed / quarantined / missing |
+| FR-VID-02 | Partial | `Lesson.tsx` Player: resume, 0.5×–2×, WebVTT captions, full screen, picture-in-picture. No quality choice: the adaptive rendition (`urls.hls`) needs an HLS player in the app |
+| FR-VID-03 | Done | `PlayedRanges` (api.ts): played ranges reported every 15 s and on pause/seek/end; a seek plays nothing; the server merges and credits |
+| FR-VID-04 | Done | Every rule offered in the lesson editor from `options.lesson_types` |
+| FR-LIB-05 | Partial | PDFs, images and text in the app's viewer (view only); Save a copy only where the lesson allows. Word/Excel/PowerPoint cannot be shown (original file only on the server) |
+| FR-CAT-01 | Partial | `admin/Categories.tsx`: create, rename, nest (5 levels), reorder, archive/restore, delete. Localised names (`names`) are the web's |
+| FR-ENR-01, 04, 05 | Done | `admin/CourseEnrollments.tsx`: people, departments, branches (by id), CSV; preview then assign once (idempotency key); due date or days, mandatory, note. The enrolment's type and who assigned it shown |
+| FR-ENR-06 | Done | `CourseAbout.tsx`: join / ask to join, or the server's reason (capacity, approval, assigned only) |
+| FR-ASM-01 | Done | `Quiz.tsx` (all ten types to answer), `admin/AssessmentsTab.tsx` (all ten to build, with the key), `admin/GradeAttempt.tsx` (a person's grading) |
+| FR-ASM-04, 07 | Done | The server's `seconds_left` counted down, asked again at zero; each answer saved as given (`PUT me/attempts/{id}/answers/{qid}`) |
+| FR-ASG-01, 02 | Done | `Assignment.tsx`: text, Drive files, files from this computer (multipart, 25 MB), drafts; late marked or refused per the server |
+| FR-ASG-03, 06 | Partial | `admin/Grading.tsx`, `admin/GradeSubmission.tsx`: queue, review, score, feedback, resubmit, grade change with reason. Rubrics are P2 |
+| FR-PRG-01, 02 | Done | Progress and the rule's checklist are the server's; the rule is edited in Details (every / any; nested groups kept, not edited) |
+| FR-PRG-05 | Done | `admin/EnrollmentDetail.tsx`: mark complete, reset, withdraw — reason required; extensions and extra attempts |
+| FR-PRG-06 (P3) | Done early | Progress made offline waits in the offline queue and replays in order |
+| FR-SRC-01 | Server | The catalogue is the server's search; a course out of reach answers 404 |
+| FR-ORG-01, 04 | Done | Company picker for single-company work (set-up, creating, the dashboard); lists cover every company |
+| FR-NTF-01, 03 | Done | The server's notifications open their screen (`/elearning/my/courses/<id>`, `/elearning/grading`, `/elearning/approvals`, `/elearning/learners/<id>`) |
+| Offline (download manifest) | Done | `elearning-offline.ts`: manifest → download manager (`TransferManager.keep`) → AES-256-GCM chunks in the profile, played through `app://bundle/__local/…`; `protected` copies never leave the app (none do); purged on `validate`, licence end, policy, losing the app, wipe |
+
 ## Devices, security, updates (SEC, UPD)
 
 | ID | Status | Where / note |

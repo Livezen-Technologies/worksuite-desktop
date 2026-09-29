@@ -68,6 +68,9 @@ export const DEEP_LINK_RULES: RouteRule[] = [
   { pattern: 'invoice/:id', module: 'billing', route: (p) => `/billing/invoices/${p.id}` },
   { pattern: 'garage/jobs/:id', module: 'garage', route: (p) => `/garage/jobs/${p.id}` },
   { pattern: 'garage/vehicles/:id', module: 'garage', route: (p) => `/garage/vehicles/${p.id}` },
+  { pattern: 'elearning', module: 'elearning', route: () => '/elearning' },
+  { pattern: 'elearning/courses/:id', module: 'elearning', route: (p) => `/elearning/my/courses/${p.id}` },
+  { pattern: 'elearning/catalog/:id', module: 'elearning', route: (p) => `/elearning/catalog/${p.id}` },
   { pattern: 'tenders/:id', module: 'tender', route: (p) => `/tenders/${p.id}` },
   { pattern: 'projects/:id', module: 'projects', route: (p) => `/projects/${p.id}` },
 ];

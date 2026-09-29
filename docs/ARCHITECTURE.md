@@ -115,6 +115,15 @@ or a queued change is on disk before the user is told it was saved.
   chunks under `job/`, the check-in, vehicles, customers, reports and the
   workshop's set-up. Photos go up as multipart through the API proxy (25 MB
   a request) and come back through it for thumbnails.
+- eLearning (`modules/elearning`) is a shell with a rail (`ElearningShell.tsx`)
+  whose screens are lazy chunks: the learner's (My Learning, the catalogue,
+  the course player with its lesson views, quizzes, assignments, kept
+  offline) and, under `admin/`, the training team's (dashboard, courses and
+  their lifecycle, the builder, assessments, assignments, enrolment, grading,
+  set-up, settings). A course, a quiz attempt or a submission to grade can
+  open in a window of its own. The video player reports the ranges played
+  (`PlayedRanges`), never a claim of completion; a heartbeat that cannot reach
+  WorkSuite waits in the offline queue.
 - eLearning's offline copies (`electron/services/elearning-offline.ts`):
   the server's download manifest names a course's lesson files; each is a
   download-manager transfer kept inside the app (`TransferManager.keep`,

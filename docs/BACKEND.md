@@ -198,7 +198,40 @@ What the desktop cannot do because the server does not (SRS Phase 1 **M** items)
 ### eLearning
 
 The eLearning tab uses the server's eLearning API, `/api/elearning/v1` (`app/Modules/Elearning`, phase P1 — Core
-LMS). Offline copies of a course:
+LMS), the same one the web's `/elearning` pages use. Every route is behind `elearning.access` (and the person needs the
+`elearning` application); each verb checks its own permission — or the course staff role or HR reporting line that
+stands for it — for the record's company, and a record outside the person's reach answers 404. `GET options` → `can`
+carries every permission for the chosen company (`elearning.course.publish` read as `course_publish`) plus `manager`
+and `staff`; a course carries its own `can` (`edit`, `submit`, `publish`, `enroll`…). A refusal's `errors.code` says
+what to offer (`revision_conflict`, `not_ready` + `problems`, `setup_required`, `locked` (423), `closed`, `timed`,
+`full`, `late_blocked`, `offline_off`…). Writes that can be pressed twice carry an `Idempotency-Key` (create a course or
+category, duplicate, assign, join, start an attempt, submit an assignment).
+
+| Screen | Calls |
+|---|---|
+| Shell, set-up | `GET options?org=`, `GET setup`, `POST setup/steps/{key} {how}`, `POST setup/categories`, `POST setup/finish`; settings at `GET` / `PUT /api/module-settings/elearning/general?org=` |
+| My Learning | `GET me/learning` |
+| Catalogue | `GET catalog?q=&category_id=&level=&course_type=&max_minutes=&page=`, `GET categories`, `GET catalog/{id}`, `POST catalog/{id}/enroll`, `POST me/enrollments/{id}/withdraw` |
+| Taking a course | `GET me/courses/{id}`, `GET me/lessons/{id}` (starts it; 423 with the reason), `POST me/lessons/{id}/progress` (heartbeats: `ranges`, `position`, `pages`, `scrolled_to_end`), `POST me/lessons/{id}/complete` (MANUAL only); media at the signed `/media/{token}` addresses through the API proxy |
+| Quizzes | `GET me/assessments/{id}`, `POST me/assessments/{id}/attempts`, `GET me/attempts/{id}`, `PUT me/attempts/{id}/answers/{qid} {response}`, `POST me/attempts/{id}/submit {answers}` |
+| Assignments | `GET me/assignments/{id}`, `POST me/assignments/{id}/submissions` (JSON `{text, file_ids, draft}`, or multipart with `files[]`) |
+| Dashboard | `GET overview?org=` |
+| Categories | `GET categories?org=&archived=1`, `POST categories`, `POST categories/{id}`, `POST categories/reorder {parent_id, ids}`, `POST categories/{id}/archive\|restore\|delete` |
+| Courses | `GET courses?status=&course_type=&q=&mine=1&page=`, `GET courses/code?category_id=`, `POST courses`, `GET courses/{id}`, `POST courses/{id}` (with `revision`, `reason`), `POST courses/{id}/submit-review\|recall\|review\|publish\|suspend\|resume\|archive\|reopen\|duplicate\|delete`, `GET reviews`, `POST courses/{id}/staff`, `POST courses/{id}/staff/{staffId}/remove`, `GET courses/{id}/activity`, `GET courses/{id}/preview`, `GET lessons/{id}/preview` |
+| Builder | `GET courses/{id}/structure`, `POST courses/{id}/structure {sections, revision}`, `POST courses/{id}/sections`, `POST sections/{id}[/duplicate\|/delete]`, `POST courses/{id}/lessons`, `GET lessons/{id}`, `POST lessons/{id}[/duplicate\|/delete]` |
+| Assessments | `GET courses/{id}/assessments`, `POST courses/{id}/assessments`, `GET assessments/{id}`, `POST assessments/{id}[/delete]`, `POST assessments/{id}/questions`, `POST questions/{id}[/delete]`, `POST assessments/{id}/questions/order {ids}`, `GET assessments/{id}/attempts` |
+| Assignments (staff) | `GET courses/{id}/assignments`, `POST courses/{id}/assignments`, `POST assignments/{id}[/delete]`, `GET assignments/{id}/submissions` |
+| Enrolment | `GET courses/{id}/enrollments`, `GET enrollments?status=&overdue=1&q=`, `POST courses/{id}/enrollments/preview`, `POST courses/{id}/enrollments`, `GET enrollments/{id}`, `POST enrollments/{id}` (due date, mandatory), `POST enrollments/{id}/withdraw\|complete\|reset {reason}`, `POST enrollments/{id}/extensions`, `GET approvals`, `POST enrollments/{id}/decide`, `GET learners`, `GET learners/{userId}` |
+| Grading | `GET grading?kind=`, `GET attempts/{id}`, `POST attempts/{id}/grade`, `GET submissions/{id}`, `POST submissions/{id}/review`, `POST submissions/{id}/grade` |
+
+People and departments to assign or name as staff come from `GET /api/chat/directory` and
+`GET /api/directory/departments` (where the person may read it); the eLearning API resolves ids, e-mails and employee
+numbers itself and says who it could not.
+
+**Offline.** READ_CACHE covers `options`, `me/learning`, `me/courses` (the outlines), `me/lessons` (lessons already
+opened), `catalog` and `categories`. A heartbeat with WorkSuite out of reach waits in the offline queue (entity
+`progress`) and replays to `POST me/lessons/{id}/progress`; the server credits it against the time since the course
+was downloaded. Offline copies of a course:
 
 | Need | Endpoint |
 |---|---|
@@ -208,7 +241,28 @@ LMS). Offline copies of a course:
 
 The main process fetches the manifest and the files itself (the renderer names a course, never an address) and keeps
 them sealed in the profile (see ARCHITECTURE.md). A course the server does not answer `active: true` for is removed;
-so is one past `license.expires_at`, without asking.
+so is one past `license.expires_at`, without asking. A lesson that allows downloading can also be saved to the
+downloads folder: `transfers:download` with `elearningMedia` (the token of its `file.urls.download`).
+
+What the desktop cannot do because the server does not:
+
+- **No people lookup in eLearning.** Assigning learners and naming staff use Chat's directory and the Directory's
+  departments; branches are taken by HR id only (there is no list of branches to choose from).
+- **Office documents and presentations** are served as the original file (`urls.view`), with no rendition a
+  desktop can show, so they are not shown in the app and a PAGES rule on them cannot be met from the desktop.
+- **A kept copy cannot tell it is stale** after a published course is edited in place: `me/courses/{id}` carries the
+  course `version` but not its builder `revision`, and `me/downloads/validate` says only active or not. The desktop
+  compares the version; lesson edits within a version go unnoticed until the course is downloaded again.
+- **The manifest has files only**: no captions (`tracks`), article bodies or quiz content, so captions do not play
+  offline and an article is readable offline only if it was opened before.
+- **Leaving a course** is offered for an optional, self-joined course; whether the company allows it
+  (`elearning_learner_withdraw`) is not in the course's answer, so the server may refuse.
+- A grader's view of an attempt carries option ids, not labels; the desktop reads them from the assessment's own
+  question list (a retired question version's options may show as ids).
+- On a `/desktop/v1` server, `links/resolve` does not know `worksuite://elearning/…` (`Desktop/Libraries/LinkGrammar`
+  and `Links::APP_OF`), so those links open without the server's record check (the tab's own requests are still
+  checked).
+- The server declares no Home widgets for eLearning.
 
 ## The existing API (servers without `/desktop/v1`)
 

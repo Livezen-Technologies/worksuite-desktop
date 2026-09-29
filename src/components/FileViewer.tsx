@@ -37,8 +37,12 @@ interface Loaded {
   url: string;
 }
 
-/** Reads a file through the app (the session's own credentials, the API proxy's rules) and shows it. */
-export function FileViewer({ path, name, onOpen, onSave }: { path: string; name: string; onOpen?: () => void; onSave?: () => void }) {
+/**
+ * Reads a file through the app (the session's own credentials, the API proxy's rules) and shows it.
+ * `url`: an address of the app's own to read instead (a copy kept on this computer); `onPage`: told
+ * each PDF page as it comes into view (a lesson counting the pages read).
+ */
+export function FileViewer({ path, name, onOpen, onSave, url: source, onPage }: { path: string; name: string; onOpen?: () => void; onSave?: () => void; url?: string; onPage?: (page: number) => void }) {
   const [file, setFile] = useState<Loaded | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,7 +52,7 @@ export function FileViewer({ path, name, onOpen, onSave }: { path: string; name:
     // A new file is a new viewer (callers key it by path), so there is no earlier state to clear.
     void (async () => {
       try {
-        const res = await fetch(apiUrl(path), { cache: 'no-store' });
+        const res = await fetch(source ?? apiUrl(path), { cache: 'no-store' });
         if (!res.ok) {
           let message = res.status === 403 ? 'You may not see this file.' : res.status === 404 ? 'The file is not there any more.' : `The server answered ${res.status}.`;
           try {
@@ -70,11 +74,11 @@ export function FileViewer({ path, name, onOpen, onSave }: { path: string; name:
       gone = true;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [path, name]);
+  }, [path, name, source]);
 
   if (error) return <Unshown icon="alert" title="This file could not be shown" hint={error} onOpen={onOpen} onSave={onSave} />;
   if (!file) return <Spinner label="Opening the file…" className="h-full" />;
-  if (file.kind === 'pdf') return <PdfView blob={file.blob} name={name} />;
+  if (file.kind === 'pdf') return <PdfView blob={file.blob} name={name} onPage={onPage} />;
   if (file.kind === 'image') return <ImageView url={file.url} name={name} />;
   if (file.kind === 'text') return <TextView blob={file.blob} />;
   return <Unshown icon="file" title={`${name} can't be shown inside WorkSuite`} hint="Word, Excel and other files open in the app they belong to." onOpen={onOpen} onSave={onSave} />;
@@ -141,7 +145,7 @@ async function pdfjs() {
   return lib;
 }
 
-function PdfView({ blob, name }: { blob: Blob; name: string }) {
+function PdfView({ blob, name, onPage }: { blob: Blob; name: string; onPage?: (page: number) => void }) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState<number | 'fit'>('fit');
@@ -181,6 +185,11 @@ function PdfView({ blob, name }: { blob: Blob; name: string }) {
     setWidth(el.clientWidth);
     return () => ro.disconnect();
   }, [doc]);
+
+  // Whoever counts the pages read hears of each one as it is shown.
+  useEffect(() => {
+    if (doc) onPage?.(page);
+  }, [doc, page, onPage]);
 
   const scale = zoom === 'fit' ? Math.max(0.3, (width - 48) / pageWidth) : zoom;
   const go = (n: number) => {

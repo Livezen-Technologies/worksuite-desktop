@@ -109,6 +109,10 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'salon', label: 'SalonMate', group: 'business', icon: 'scissors', app: 'salon', perm: 'salon.view', webPath: '/salon', surface: 'native', sidebar: 'business', order: 131, keywords: 'salon hair beauty front desk walk-in check-in stylists clients bookings' },
   // A workshop's counter, board, technician terminal and parts counter: native here; check-in, estimates, QC and delivery open on the web.
   { id: 'garage', label: 'Garage', group: 'business', icon: 'wrench', app: 'garage', perm: 'garage.access', webPath: '/garage', surface: 'native', sidebar: 'business', order: 132, keywords: 'garage workshop service center vehicle car repair job card walk-in technician parts mechanic' },
+  // Learning, for everybody given eLearning: My Learning, the catalogue and taking courses; the training
+  // team's courses, builder, enrolment, grading and dashboard by permission. `/elearning/my/courses/<id>`
+  // (the server's notifications) opens the course here.
+  { id: 'elearning', label: 'eLearning', group: 'people', icon: 'graduation-cap', app: 'elearning', perm: 'elearning.access', webPath: '/elearning', surface: 'native', sidebar: 'business', order: 145, keywords: 'elearning learning lms training courses course catalogue lessons quiz quizzes assessment assignment grading enrol enrolment my learning' },
   { id: 'support', label: 'Support', group: 'operations', icon: 'life-buoy', app: 'tickets', webPath: '/tickets', surface: 'browser', order: 200 },
   { id: 'assets', label: 'Assets', group: 'operations', icon: 'box', app: 'assets', webPath: '/assets', surface: 'browser', order: 210 },
   { id: 'amc', label: 'AMC & Service', group: 'operations', icon: 'wrench', app: 'amc', webPath: '/amc', surface: 'browser', order: 215 },

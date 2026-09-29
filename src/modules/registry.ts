@@ -219,6 +219,27 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./garage/GarageShell'),
   },
   {
+    // eLearning: My Learning, the catalogue, taking a course (a video credited by what is actually played),
+    // quizzes and assignments; for the training team the courses, their builder, enrolment, grading and the
+    // dashboard. Offline, My Learning, the catalogue and course outlines are the last copy; a course kept
+    // offline plays from the app's encrypted copy (elearning-offline.ts), and its progress waits in the queue.
+    input: defineDesktopManifest({
+      id: 'elearning', name: 'eLearning', icon: 'graduation-cap', contractVersion: 1, desktop: { enabled: true },
+      offline: {
+        mode: 'PARTIAL_WRITE',
+        entities: ['progress'],
+        cache: ['/api/elearning/v1/options', '/api/elearning/v1/me/learning', '/api/elearning/v1/me/courses', '/api/elearning/v1/me/lessons', '/api/elearning/v1/catalog', '/api/elearning/v1/categories'],
+      },
+      native: ['notifications'],
+      quickActions: [
+        { id: 'my-learning', label: 'My Learning', route: '/elearning?view=my' },
+        { id: 'course-catalogue', label: 'Course catalogue', route: '/elearning?view=catalog' },
+      ],
+      deepLinks: ['elearning', 'elearning/courses/:id', 'elearning/catalog/:id'],
+    }),
+    load: () => import('./elearning/ElearningShell'),
+  },
+  {
     input: defineDesktopManifest({
       id: 'inventory', name: 'Inventory', icon: 'package', contractVersion: 1, desktop: { enabled: true },
       offline: { mode: 'READ_CACHE', entities: ['product'], cache: ['/api/inventory/products', '/api/inventory/stock'] },

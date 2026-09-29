@@ -7,16 +7,123 @@ person who has to live with the change — what it does, and where it bites.
 
 ## 2026-09-29 — 0.2.53: eLearning on the desktop
 
-eLearning opens in its own tab for whoever has the app.
+eLearning opens in its own tab for whoever has the app (and
+`elearning.access`), over the server's `/api/elearning/v1` — learners take
+their courses here, and the training team builds, reviews, publishes,
+assigns and grades them here. Nothing in eLearning sends you to the web.
+What each person sees is what the server says they may do: the rail, the
+buttons and each course's actions follow its `can`.
 
 **Added**
 
-- **Courses kept for offline learning.** A course's lesson files — the ones
-  the server's download manifest lists — go through the download manager
-  (they show in Transfers, and pause and resume there) into WorkSuite's own
-  profile, encrypted, and play from there without WorkSuite. They are never
-  saved to your downloads folder, opened in another app or shown in a
-  folder, whether or not the lesson allows downloading.
+- **My Learning**: assigned, in progress, completed, overdue and waiting
+  for approval; Continue learning with Resume (the lesson you left); upcoming
+  deadlines; the quizzes and assignments still open; courses waiting for
+  approval; recommendations with the server's reason; what you completed.
+- **Course catalogue**: search by title, code, summary or category, with
+  category, level, type and length filters; a course's page with its outline,
+  what completes it and places left; **Join** (open courses), **Ask to
+  join** (courses that need approval, to your manager) or the server's
+  reason why not; take a request back.
+- **Taking a course**: the outline with each lesson's progress and, for a
+  locked lesson, why (release date, a lesson to finish first); the
+  completion rule as a checklist; Start / Resume. Lessons:
+  - **Video and audio** resume where you stopped, at 0.5×–2×, with the
+    server's captions, full screen and picture-in-picture. **Only what is
+    actually played counts**: the player reports the ranges played every 15
+    seconds and whenever playback stops; skipping ahead plays nothing, and
+    the server credits no faster than time allows (it says so when it
+    trims a claim).
+  - **Articles** count as read at the end (with the time spent, counted on
+    the server); **PDFs** count each page shown; images and documents open
+    in the app's viewer; **links** open in your browser.
+  - **Mark complete** where that is the lesson's rule; Previous / Next,
+    also **Alt+←** / **Alt+→**; **Save a copy** where the lesson allows
+    downloading (through the download manager).
+  - **Open in a window**: take the course beside your work.
+  - **Leave the course** (an optional course you joined yourself, where the
+    company allows it).
+- **Quizzes**: the rules, your attempts and the best score (as the quiz
+  shows it), start or carry on; every question type — single and multiple
+  choice, true/false, short answer, fill in the blanks, number, matching,
+  ordering (up/down, keyboard), long answer and files from Drive. Each answer
+  is saved as it is given; **the time left is the server's**; a quiz that
+  times out is submitted as it stood. Results: the score, passed or not, and
+  the answers and explanations as far as the quiz shows them. Learners never
+  receive the key before submitting.
+- **Assignments**: the brief, the due date that holds for you, attempts
+  left; hand in text and files — from Drive, or from this computer (up to
+  25 MB together) — as a draft or for grading; late work marked or refused as
+  the assignment says; grades and feedback.
+- **Kept offline** (see below): the courses on this computer.
+- **For the training team** (by permission, or as a course's instructor,
+  author or evaluator, or a line manager):
+  - **Training dashboard**: the ten KPIs (a later phase's are "Later", never
+    zero), completions over six months, learning progress, popular and
+    recently completed courses, daily learner activity, grading by
+    instructors.
+  - **Courses**: by status, type or search, or only yours; **New course**
+    with the code the server offers from the category.
+  - **A course**: its lifecycle — submit for review (with a note), recall,
+    approve or return (with a comment), publish now or later, suspend (with
+    a reason), resume, archive, reopen as a new version, duplicate, delete a
+    never-published draft — with the server's list of what stops it (every
+    problem, and the set-up when that is it). **Details** (type, level,
+    language, enrolment and visibility — later phases' choices named, not
+    offered — dates, due days, places, pass score, weighting, certificate,
+    and the **completion rule**: every or any of mandatory lessons, a
+    progress, passing an assessment, completing an assignment), saved with
+    the revision it was read at: someone else's change is offered, never
+    overwritten. **Staff**, **Activity** (the audit), **Preview as a
+    learner** (nothing recorded).
+  - **The builder**: sections and lessons **dragged** into place (or moved
+    with their arrows), across sections too, every move sent with the
+    revision; add, edit, duplicate, hide, unpublish, delete; each lesson's
+    type, file from Drive (with Drive's preparing/failed state), text, link,
+    quiz or assignment, completion rule and its settings, mandatory,
+    duration, release date, prerequisite, downloading allowed; preview.
+  - **Assessments**: settings (pass mark, timer, attempts, cooldown, what
+    counts, when answers show, shuffling, negative marking, window, due,
+    final) and questions of every type with their key, reordered; the
+    attempts. Editing a question someone answered keeps that version.
+  - **Assignments**: the brief, marks, pass score, file types and sizes,
+    attempts, late work and penalty; the submissions.
+  - **Enrolments**: a course's learners, or everyone you follow; **Assign
+    learners** by person, whole departments, branches or a list of e-mails
+    or employee numbers — previewed first (new, already there, blocked,
+    outside your reach, not found), then assigned once — with a due date,
+    mandatory and a note. An **enrolment's page**: lesson by lesson, the
+    rule's checklist, the history; due date and mandatory, **extension or
+    extra attempts**, **mark complete**, **reset**, **withdraw** (each with
+    its reason, audited).
+  - **Requests to join** (approve, or decline with a reason), **Learners**
+    (most overdue first) and a learner's courses, **Reviews** waiting for
+    you.
+  - **Grading**: the queue, oldest first, never your own work; grade a
+    quiz's answers that need a person, or a submission (take it for review,
+    score, feedback, ask for it again); changing a grade asks why. Any of them
+    opens in a window of its own.
+  - **Set-up wizard** (the fourteen default categories in one step) and
+    **Settings** (the company's eLearning settings).
+- `worksuite://elearning`, `worksuite://elearning/courses/<id>` and
+  `worksuite://elearning/catalog/<id>`; the server's notifications
+  (`/elearning/my/courses/<id>`, `/elearning/grading`, `/elearning/approvals`,
+  `/elearning/learners/<id>`…) open their screen in the tab.
+
+**Works offline**
+
+- My Learning, the catalogue, your courses' outlines and the lessons you have
+  opened show their last copy when WorkSuite cannot be reached.
+- **Courses kept for offline learning.** **Keep offline** on a course takes
+  the lesson files the server's download manifest lists through the download
+  manager (they show in Transfers, and pause and resume there) into
+  WorkSuite's own profile, encrypted, and they play from there without
+  WorkSuite. They are never saved to your downloads folder, opened in another
+  app or shown in a folder, whether or not the lesson allows downloading.
+- Progress made offline (a kept video played, an article read) waits in the
+  offline queue and is sent when WorkSuite is back; the server credits it
+  against the time since the course was downloaded.
+- Every other change needs WorkSuite: the buttons wait for it.
 
 **Where it bites**
 
@@ -25,6 +132,22 @@ eLearning opens in its own tab for whoever has the app.
   offline copies off), when its licence — the course's end date — runs out
   (online or not), when this computer's policy forbids offline data, when
   the app is taken away, and on a sign-out that removes WorkSuite's data.
+- A kept course is checked with WorkSuite at sign-in and on reconnecting. The
+  addresses in a download manifest are good for about an hour: a download
+  that stops for longer asks for **Download again**.
+- Word, Excel and PowerPoint lessons cannot be shown inside the app (the
+  server sends the original file only); where the lesson allows downloading
+  they can be saved, and a "view the pages" rule on them cannot be met from
+  the desktop.
+- Video plays the server's browser-playable version; there is no quality
+  choice yet (the adaptive rendition needs an HLS player in the app).
+- Files from this computer for an assignment go through the desktop's API
+  proxy, 25 MB a submission; put larger ones in Drive and choose them there.
+
+**Not in eLearning yet** (later phases on the server)
+
+- Certificates, live classes, learning paths and programs, compliance rules,
+  the content library and question bank, transcripts, report exports.
 
 ---
 
