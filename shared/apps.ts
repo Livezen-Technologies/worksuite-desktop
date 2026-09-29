@@ -115,6 +115,11 @@ export const APP_CATALOGUE: AppDefinition[] = [
   // A hotel's front desk, cashier and night audit: native here (the desk's computer). The server's notifications
   // (`/pms/reservations/<id>`, `/pms/folios/<id>`, `/pms/rooms/<id>`, `/pms/front-desk?arrivals=`, `/pms/night-audit`…)
   // open here; the back office — rates, rooms, packages, taxes, reports, settings — is the web's.
+  // WorkSuite Events' desk: check-in, scanning, walk-ins, badges and offline check-in at an event's gate, and the
+  // organiser's read of an event (Event 360, registrations, attendees, the day's program). Planning is the web's. The
+  // server's notifications (`/events/<id>`, `/events/<id>/registrations/<id>`, `/events/<id>/checkin/reconciliation`,
+  // `/events/<id>/devices`…) open here.
+  { id: 'events', label: 'Events', group: 'business', icon: 'ticket', app: 'events', perm: 'events.access', webPath: '/events', surface: 'native', sidebar: 'business', order: 134, keywords: 'events event desk check-in check in scan qr ticket gate badge print walk-in attendees registrations conference expo summit' },
   { id: 'pms', label: 'Hotel PMS', group: 'business', icon: 'bed', app: 'pms', perm: 'pms.access', webPath: '/pms', surface: 'native', sidebar: 'business', order: 133, keywords: 'hotel pms property front desk reception room rack arrivals departures in house check-in check-out walk-in reservation booking folio cashier night audit guest housekeeping' },
   // Learning, for everybody given eLearning: My Learning, the catalogue and taking courses; the training
   // team's courses, builder, enrolment, grading and dashboard by permission. `/elearning/my/courses/<id>`

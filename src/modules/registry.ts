@@ -284,6 +284,21 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./pms/PmsShell'),
   },
   {
+    // WorkSuite Events: the Event Desk (check-in, check-out, re-entry, scanner input, search, walk-ins, badges, live
+    // counters) and the organiser's read of an event, over /api/events/v1. This computer as a check-in device — its
+    // key, offline copy and queue — is the main process's (electron/services/event-desk.ts): offline, scans are
+    // answered from the copy with the server's rules and kept for WorkSuite. Badges print on the desk's own printer.
+    input: defineDesktopManifest({
+      id: 'events', name: 'Events', icon: 'ticket', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'PARTIAL_WRITE', entities: ['checkin', 'walk_in'] },
+      native: ['notifications', 'printing', 'barcode', 'camera', 'hardware'],
+      windows: [{ id: 'events-counters', route: '/events/:id/counters' }],
+      quickActions: [{ id: 'events-desk', label: 'Event check-in desk', route: '/events' }],
+      deepLinks: ['events', 'events/:id', 'events/:id/desk', 'events/:id/counters'],
+    }),
+    load: () => import('./events/EventsShell'),
+  },
+  {
     input: defineDesktopManifest({
       id: 'inventory', name: 'Inventory', icon: 'package', contractVersion: 1, desktop: { enabled: true },
       offline: { mode: 'READ_CACHE', entities: ['product'], cache: ['/api/inventory/products', '/api/inventory/stock'] },

@@ -138,6 +138,8 @@ export const NOTIFICATION_CATEGORY_APPS: Readonly<Record<string, readonly string
   ai: ['ai'],
   // Hotel PMS's notices (`pms.reservation.created`, `pms.guest.arriving`, `pms.night_audit.failed`…).
   pms: ['pms'],
+  // WorkSuite Events' notices (`events.checkin.duplicate`, `events.device.offline`, `events.event.live`…).
+  events: ['events'],
 };
 
 /** Whether a notification category is one of an app the person may open (or of no app). */

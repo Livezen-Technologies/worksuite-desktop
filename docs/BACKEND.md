@@ -348,6 +348,68 @@ service (stage S) sends them; stage D2 wires them (`DesktopPdfService`'s `policy
 and printing are audited on the desktop (`pdf.opened`, `pdf.printed`: source, file id, version, pages) and sent to
 `/desktop/v1/audit` where the server offers it.
 
+### WorkSuite Events — the Event Desk
+
+The Events tab uses the server's Events API, `/api/events/v1` (`app/Modules/EventManager`, stages A, B1 and B2), the
+same one the web's `/events` pages use. Every route is behind `events.access` (and the person needs the `events`
+application); each verb checks its own permission in the event's company and at the event, and a record outside the
+person's data scope answers 404 (403 when seen but not permitted). `GET options?org=` → `permissions` carries the
+person's `events.*` in that company, which the rail and the buttons follow. A refusal's `errors.code` says what to
+offer (`confirm` → the reprint's reason, `already_queued` → print the waiting job, `device_revoked` + `wipe` → wipe,
+`device_suspended`, `device_untrusted`, `device_key_missing`, `offline_off`, `not_inside`, `walkins_off`…).
+
+| Screen | Calls |
+|---|---|
+| Events, the shell | `GET events?per_page=&sort=`, `GET events/{id}`, `GET options?org=` |
+| This computer (main process) | `POST events/{id}/devices {name, gate_id, device_ref_type: desktop, device_ref_id: <sync device id>, platform, app_version}` → the key, once; `POST devices/{id}/key`; `POST devices/{id}/heartbeat {app_version, queue_size}`; `GET events/{id}/gates`, `GET events/{id}/devices` (read) |
+| Offline (main process) | `GET events/{id}/checkin/bootstrap?device_id=&after_id=&limit=` (pages of 2,000), `GET …/checkin/changes?device_id=&after=` (every 15 s), `POST …/checkin/sync {device_id, batch_uuid, cursor, queue_size, items}` |
+| The desk (main process) | `POST events/{id}/scan`, `/check-in`, `/check-out` `{code \| registration_id, gate_id, device_id, client_uuid}` — a fresh `client_uuid` each; six seconds before the desk answers from its copy |
+| Search, walk-in, payment | `GET events/{id}/checkin/search?q=`, `GET events/{id}/ticket-types`, `GET events/{id}/form`, `GET options/live`, `POST events/{id}/walk-ins` (+ `Idempotency-Key`), `GET registrations/{id}/payment`, `POST registrations/{id}/payment/take` (+ `Idempotency-Key`) |
+| Counters, recent, review | `GET events/{id}/checkin/summary` (every 10 s), `GET …/checkin/recent?device_id=`, `GET …/checkin/reconciliation?status=`, `POST reconciliation/{id}/resolve\|dismiss` |
+| Badges | `POST registrations/{id}/badge/print {device_id, printer, reason, confirm}`, `GET events/{id}/badge-prints/sheet?ids=` (printed by the main process), `POST badge-prints/{id}/printed\|failed\|dispatch\|retry\|cancel`, `GET events/{id}/badge-prints?status=&printer=`, `POST events/{id}/badge-prints/bulk`, `GET events/{id}/badge-templates`, `GET registrations/{id}/badge/prints` |
+| Program, session doors | `GET events/{id}/sessions`, `GET events/{id}/checkin/sessions`, `POST events/{id}/checkin/sessions/{sid}`, `GET sessions/{id}/registrations` |
+| Event 360, people | `GET events/{id}/overview`, `GET events/{id}/dashboard?mode=auto`, `GET events/{id}/registrations?list=&q=&page=`, `GET registrations/{id}`, `GET attendees?org=&q=`, `GET attendees/{id}` |
+| Emergency message | `GET events/{id}/screens/overrides?open=1`, `POST events/{id}/screens/override {message, targets: ALL, confirmation}`, `POST screen-overrides/{id}/clear {reason}` |
+
+**The key and the copy.** Registering, a new key, the heartbeat, the bootstrap, the changes and the upload are the
+main process's (the API proxy refuses them to pages): the key the server hands over is kept in the OS credential
+store, the copy and the queue encrypted in the profile. A scanned QR is matched against the copy by
+`HMAC-SHA256(text trimmed and in capitals, key)` in the main process, and judged with the server's `ScanRules`
+(`shared/event-desk.ts`, the same order and sentences). A PUBLISHED event past its start is taken as LIVE offline, as
+the server's sweep makes it every minute. `device_sequence` is one more than the last and never below the clock in
+milliseconds, so a counter that restarted is not taken for old scans.
+
+What the desktop cannot do because the server does not:
+
+- **A check-in agent needs `events.event.view`.** Every check-in route first asks whether the person sees the event
+  (`EventManagerController::sees()`, `events.event.view`), and `GET events` lists only those events: SRS §18.1's
+  Check-In Agent (`checkin.use`, `checkout.use`, `walkin.create`, `badge.print`) without it gets 404 everywhere. Give
+  desk staff the event view, or make `sees()` accept `events.checkin.use` at the event.
+- **A desktop device needs the Desktop module on the server.** Registering checks `desktop_devices` by
+  `sync_device_id`; on a server without it (the existing API only) the server refuses ("WorkSuite Desktop's device
+  registry is not installed here").
+- **Badges carry no pictures.** The badge page names the logo and the attendee's photo by Files id
+  (`data-file-id`) with no image: the event's name prints in the logo's place and no photo prints. A data URI (or an
+  address the desk may read) in `Badges::html()` would print them. A sheet of several templates is laid out at the
+  first one's size (`@page`).
+- **Photo verification** sends a Files id; the only address for it is the owner's download (`files/{id}/download`).
+  The desk shows the photo where that answers and says "not readable here" otherwise.
+- **The scans a person made offline go up as theirs only.** `checkin/sync` records whoever syncs as `recorded_by`,
+  with no per-item scanner, so the desk keeps each person's queue for them: after a shift change it waits until they
+  sign in at the desk again. A `scanned_by` per item (checked against the device's staff) would let it go at once.
+- **Switching offline check-in off also refuses the upload** (`offline_off` on `checkin/sync`): scans made offline
+  before that wait until it is on again.
+- **The offline copy has no registration form**, so a walk-in kept offline carries the standard fields (name, email,
+  phone, company); a form with other required fields or consents makes the server queue it as
+  `PROVISIONAL_WALK_IN` for review.
+- **Offline, a ticket of another gate is "not in this gate's copy"**, where online it is `ACCESS_DENIED` with the
+  gates that admit it (the copy holds the gate's tickets only, by design).
+- **No desk PIN** (EV-POR-013 "may require a PIN to leave the locked view"): the server keeps none; the desk's full
+  screen is left with Esc, as any other.
+- **Session doors, the counters, recent scans and review are online only**: the server has no offline copy for them.
+- On a `/desktop/v1` server, `links/resolve` does not know `worksuite://events/…` (`Desktop/Libraries/LinkGrammar`,
+  `Links::APP_OF`): those links open without the server's record check (the tab's own requests are still checked).
+
 ## The existing API (servers without `/desktop/v1`)
 
 | Need | Endpoint |

@@ -246,6 +246,15 @@ or a queued change is on disk before the user is told it was saved.
   held decrypted in memory while in use and written back two seconds after a
   scan changes it; the queue is on disk before the desk answers. Badges print
   from the server's sheet on the desk's printer (`event-desk-print.ts`).
+  The renderer's `modules/events` is a shell with a rail per event
+  (`EventsShell.tsx`, addresses in `routes.ts`) whose screens are lazy
+  chunks: the desk (`Desk.tsx` — the scan field keeps the keyboard's focus,
+  so a USB scanner types into it), search, walk-in, payment, the live
+  counters (also a window of their own), recent scans, the review queue, the
+  program and session doors, badges, and the organiser's read of Event 360,
+  registrations and attendees. It never sees the key: it asks the main
+  process to scan (`eventdesk:scan`) and reads the desk's status, queue and
+  offline search over IPC (`desk.ts`).
 - Tabs stay mounted while recent (instant switching) and are suspended after
   the configured idle time; the tab set is saved and restored only for apps
   the user can still open.

@@ -236,7 +236,19 @@ export interface DeskStatus {
   reachable: boolean;
   last_contact: string | null;
   last_sync: { at: string; accepted: number; duplicates: number; conflicts: number; rejected: number } | null;
-  copy: { rows: number; total: number; refreshed_at: string; pulled_at: string; cache_expires: When | null; event_status: string; gate: string | null; warning: string | null } | null;
+  copy: {
+    rows: number;
+    total: number;
+    refreshed_at: string;
+    pulled_at: string;
+    cache_expires: When | null;
+    event_status: string;
+    gate: string | null;
+    warning: string | null;
+    /** The tickets this gate admits, for a walk-in kept offline (names only). */
+    ticket_types: Array<{ id: number; name: string }>;
+    walk_ins: boolean;
+  } | null;
   waiting: number;
   rejected: number;
   flagged: number;

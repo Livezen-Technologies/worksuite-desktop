@@ -345,6 +345,46 @@ on a real system `tests/os/pdf/check.mjs` (workflow "PDF engine").
 | PDF-NFR-030, 031 | Done | Failures logged (redacted) with format, size, pages, engine error, app version; the diagnostic report carries the log |
 | PDF-NFR-032 | Done | PDF Diagnostics (`pdf:diagnostics` + the window's own drawing check) |
 
+## WorkSuite Events — the Event Desk (Events SRS §15.2 [D], §9, §8.4)
+
+`src/modules/events` (renderer), `electron/services/event-desk.ts` and `event-desk-print.ts` (main),
+`shared/event-desk.ts` (the rules both share), over the server's `/api/events/v1` (`app/Modules/EventManager`,
+stages A, B1, B2). Counts, capacity, money and every verdict online are the server's; offline, the verdict is the
+server's own `ScanRules` on the device's copy. Planning (events, tickets, forms, the schedule, screens, badge
+templates, gates and devices) is the web's. Tests: `tests/unit/shared/event-desk.test.ts`,
+`tests/unit/electron/event-desk.test.ts`, `tests/unit/electron/event-desk-print.test.ts`,
+`tests/unit/renderer/event-desk.test.tsx`.
+
+| ID | Status | Where / note |
+|---|---|---|
+| EV-POR-010 | Done | `EventsShell.tsx`: check-in desk, walk-in registration, badge printing, scanner input, fast search, offline check-in, local printing, the operations view (Event 360, live counters) |
+| EV-POR-011 | Done | `Desk.tsx`: the event's name, a large scan area, Inside and Checked in, Search / Walk-in / Print badge, online or offline with what waits; full screen on the desk alone |
+| EV-POR-012 | Done | Scanner input has the focus (a stray key goes to it); F2 / Alt+S search, F3 / Alt+W walk-in, F4 / Alt+P print, F6 / Alt+O in or out, Enter on an empty field presses the result's button, Esc clears |
+| EV-POR-013 | Later | "May require a PIN" to leave the desk: the server keeps no desk PIN (BACKEND.md) |
+| EV-CHK-001..003 | Done | Scan (USB/HID scanner as a keyboard, typed registration number, the camera where the system reads QR codes — `camera.tsx`, `BarcodeDetector`, macOS), the server's verdict with a Check In button or the gate's automatic check-in |
+| EV-CHK-010 | Done | `ResultPanel`: the result's colour, icon and words, a tone (switchable); refused scans are logged by the server, and offline kept as attempts |
+| EV-CHK-020..023 | Done | Check-out by mode or button, re-entry and daily check-in by the server's rules (online) and the copy's ticket rules (offline) |
+| EV-CHK-031 | Done | `Setup.tsx`, `event-desk.ts`: registered as a `desktop` device by its sync device id at a gate; the key in the OS credential store |
+| EV-CHK-032 | Done | Heartbeat every minute with the queue size; the event's devices listed (read) |
+| EV-CHK-033 | Done | `device_revoked` / `wipe` on any call or the heartbeat removes the key, copy and queue at once, and says so |
+| EV-CHK-040..042 | Done | `WalkIn.tsx`: name, phone or email, ticket, the published form's fields and consents for that ticket, payment or its waiver, one idempotent press — registered, checked in, badge printed |
+| EV-CHK-043 | Partial | Payment by Billing's methods with a reference (`payment/take`); no POS or payment link at the desk |
+| EV-CHK-050 | Done | `SearchPanel.tsx`: the server's search online; offline the copy's (name, number, company, ticket — no email or phone in the copy), 20,000 rows under 150 ms (tested) |
+| EV-CHK-060 | Done | `Program.tsx` session doors: `checkin/sessions/{id}`, online only |
+| EV-CHK-070 | Partial | The photo shows where its Files download answers the desk (BACKEND.md) |
+| EV-OFF-001..003 | Done | The gate's copy (`checkin/bootstrap`), encrypted, per server, event and person, bound to the device key, gone when it expires, when offline check-in is switched off, or on revocation; only on a computer the policy lets keep data and queue changes |
+| EV-OFF-004 | Done | `checkin/changes` every 15 seconds while online; the server's answer to an upload carries them too |
+| EV-OFF-005 | Done | The queue with the device's own sequence and `client_uuid`, uploaded on reconnect (`checkin/sync`), idempotent; each item keeps what the server made of it |
+| EV-OFF-006 | Partial | Offline walk-ins with a provisional number; the standard fields only (the copy has no form) |
+| EV-OFF-007 | Done | The desk's header and "This desk" panel: online or offline, last sync, what waits, what someone else's scans wait for |
+| EV-OFF-010..013 | Done | Online the server decides; offline the desk warns of its own second entry and says cross-device duplicates show late; `Review.tsx` shows the server's reconciliation queue (resolve with a note, dismiss with a reason) and the desk's flagged items |
+| EV-BDG-010..012 | Done | Scan / search → check in → print; the gate's automatic print on check-in printed here; reprints with the permission, confirmation and reason the server asks; each print reported printed or failed |
+| EV-BDG-013 | Done | `event-desk-print.ts`: the desk's own printer, silently when set so, the template's size or the printer's label; badges sent to the desk's printer by name taken while the desk is open |
+| EV-BDG-014 | Done | `Badges.tsx`: pre-printing by ticket and name/company, in runs of fifty, and the print queue (print here, queue again, cancel) |
+| EV-EVT-030 (read) | Done | `Overview.tsx`: the server's counts with what each counts, capacity, ticket money for financial viewers, the live view; `Registrations.tsx`, `Registration.tsx`, `Attendees.tsx`, `Attendee.tsx` read |
+| §11.5 override (desk) | Done | The emergency message on every screen, typed confirmation, cleared with a reason — for `events.screen.override` |
+| Multi-window | Done | The live counters in a window of their own beside the desk (`/events/<id>/counters`, the rail's "Counters in a window"); the window shows the counters alone |
+
 ## Devices, security, updates (SEC, UPD)
 
 | ID | Status | Where / note |

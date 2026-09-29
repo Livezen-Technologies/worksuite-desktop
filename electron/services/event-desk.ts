@@ -1041,6 +1041,8 @@ export class EventDesk {
             event_status: h.copy.event.status,
             gate: h.copy.gate?.name ?? null,
             warning: h.copy.warning,
+            ticket_types: h.copy.ticket_types.filter((t) => t.admitted_here).map((t) => ({ id: t.id, name: t.name })),
+            walk_ins: h.copy.rules.walk_ins,
           }
         : null,
       waiting: mine('waiting'),

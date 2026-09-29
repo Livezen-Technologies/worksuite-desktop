@@ -52,6 +52,8 @@ import {
   CreditCard,
   CalendarPlus,
   ConciergeBell,
+  Ticket,
+  QrCode,
   Activity, Archive, ArrowLeft, ArrowUpDown, Banknote, Bell, Box, Briefcase, Building2, Calendar, CalendarClock, Check, ChevronDown, ChevronLeft,
   ChevronRight, CircleAlert, CircleCheck, Clock, Cloud, CloudOff, Coffee, Contact, Copy, Download, Ellipsis, ExternalLink, Eye, File, FileImage,
   FileSpreadsheet, FileText, Filter, Fingerprint, Flag, Folder, FolderOpen, FolderUp, Globe, HardDrive, Hash, History, House, IdCard, Inbox, Info,
@@ -91,6 +93,7 @@ const ICONS: Record<string, LucideIcon> = {
   fullscreen: Expand, 'fullscreen-exit': Shrink, pip: PictureInPicture2, 'layout-side': Columns2, 'layout-strip': PanelBottom, flip: FlipHorizontal2, scaling: Scaling, eraser: Eraser, board: Presentation, pointer: MousePointer2, pen: Pencil, 'arrow-draw': MoveUpRight, square: Square, type: Type, highlighter: Highlighter, 'app-window': AppWindow,
   scissors: Scissors,
   'graduation-cap': GraduationCap, 'book-open': BookOpen,
+  ticket: Ticket, 'qr-code': QrCode,
   bed: BedDouble, bookmark: Bookmark, 'log-in': LogIn, 'badge-check': BadgeCheck, 'user-x': UserX, 'x-circle': CircleX, 'credit-card': CreditCard, 'calendar-plus': CalendarPlus, concierge: ConciergeBell,
   'arrow-down': ArrowDown, 'arrow-up': ArrowUp, sliders: SlidersHorizontal, image: Image, 'rotate-cw': RotateCw, help: CircleHelp, shield: Shield, dice: Dices, crop: Crop,
 };

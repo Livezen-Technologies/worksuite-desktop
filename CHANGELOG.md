@@ -7,39 +7,109 @@ person who has to live with the change — what it does, and where it bites.
 
 ## 2026-09-29 — 0.2.57: WorkSuite Events — the Event Desk
 
-This computer as a check-in device at an event (Events SRS §15.2, §9.4,
-§9.8–9.9), over the server's `/api/events/v1` (stage B1's gates, devices and
-offline routes).
+WorkSuite Events opens in its own tab for whoever has the app (and
+`events.access`), over the server's `/api/events/v1`: the **Event Desk** —
+check-in, check-out and re-entry at a gate, scanning, search, walk-ins,
+badge printing and offline check-in (Events SRS §15.2, §9, §8.4) — and the
+organiser's read of an event. What each person sees is what the server says
+they may do in the event's company. Counts, capacity, money and every
+verdict online are the server's, shown in its own words; planning — events,
+tickets, forms, the schedule, screens, badge templates, gates and devices —
+is the web's.
 
 **Added**
 
-- **Registering this computer at an event's gate** as a `desktop` device
-  (its sync device id). The server hands over the device key once; it is
-  kept in the OS credential store and never reaches a page, a log or the
-  diagnostic bundle. A new key, and forgetting the event on this computer
-  (never with scans still unsent, unless the person says so).
-- **Scanning through the main process**: to the server with the device, the
-  gate and a fresh scan id; when WorkSuite does not answer within six
-  seconds, from the desk's **offline copy** of the gate's tickets
-  (`checkin/bootstrap`, the ticket hashes under the device key) with the
-  server's own ScanRules — the same order of checks, the same sentences.
-  A check-in, a check-out, a refused attempt and a walk-in made offline wait
-  in a **queue** with the device's own sequence and go up on reconnect
-  (`checkin/sync`), recorded once however often they are sent; the server's
-  answer to each (recorded, possible duplicate, a cancelled ticket let in, a
-  walk-in it could not confirm) stays beside it. The copy is kept current
-  with `checkin/changes` every fifteen seconds, the device calls in every
-  minute with its queue size, and a revoked device wipes its key, copy and
-  queue at once.
-- **Badge printing** from the server's badge sheet on the desk's own printer
-  — silently when set so, at the template's size or the printer's label —
-  each job reported printed or failed.
+- **Events**: the events you reach, live ones first, and the events this
+  computer is a check-in device at.
+- **This computer at an event's gate** (EV-CHK-031..033): registered as a
+  `desktop` check-in device by its sync device id. The server hands over the
+  device key once; it is kept in the OS credential store and never reaches a
+  page, a log or the diagnostic bundle. Its state as the server sees it, a
+  new key, and stopping (never with scans still unsent, unless you say so).
+  The event's devices are listed; managing them is the web's.
+- **Event Desk Mode** (EV-POR-010..012): the event's name, a large scan area
+  that keeps the keyboard's focus — a USB or Bluetooth scanner types into it
+  and presses Enter, and so can you with a registration number — the result
+  in its colour with its icon and words (and a tone), the attendee, ticket
+  and where they are, the live counters (Inside, Checked in, today's), and
+  Search, Walk-in and Print badge. **F2 / Alt+S** search, **F3 / Alt+W**
+  walk-in, **F4 / Alt+P** print, **F6 / Alt+O** check in or out, **Enter** on
+  an empty field presses the result's button, **Esc** clears. Full screen on
+  the desk alone. The camera scans where the system reads QR codes itself
+  (macOS).
+- **Check-in, check-out and re-entry** with the server's answers (the Check
+  In button, or the gate's automatic check-in); a ticket waiting for its
+  payment offers **Take payment** (Billing's methods, with a reference) to
+  those who may.
+- **Search** (EV-CHK-050): name, number, phone, email, company or ticket;
+  arrows and Enter pick and scan.
+- **Walk-in** (EV-CHK-040..042): name, a phone or an email, the ticket, the
+  published form's fields and consents for it, the payment or its waiver, a
+  promo code — one press registers, checks in and prints the badge.
+- **Badges** (EV-BDG-010..014): printed on the desk's own printer —
+  silently when set so, at the template's size or the printer's label — from
+  the server's badge page, each reported printed or failed; the gate's
+  automatic print on check-in printed at once; a reprint asks its reason;
+  **pre-printing** by ticket, sorted by name or company, in runs of fifty;
+  the print queue; badges sent to the desk's printer by name (from a phone at
+  a door) taken while the desk is open.
+- **Offline check-in** (EV-OFF-001..013): when WorkSuite does not answer
+  within six seconds the desk answers from its copy of the gate's tickets
+  with the server's own ScanRules — the same checks in the same order, the
+  same sentences — and keeps the check-in, check-out, refused attempt or
+  walk-in (with a provisional number) for WorkSuite; they go up by
+  themselves when it answers, recorded once however often sent. The copy is
+  kept current every fifteen seconds while online; the desk warns of its own
+  second entry and says that entries at other gates show late. **To review**:
+  the server's possible duplicates and conflicts (resolve with a note,
+  dismiss with a reason) and what the server made of each offline scan.
+- **Live counters**, also in a window of their own for a second screen;
+  **recent scans** at this desk or everywhere.
+- **Today's program** and **session doors** (EV-CHK-060): a room's entrance
+  scans into its session, online; who holds a place.
+- **Event 360** read: the server's counts, each with what it counts, the
+  capacity, ticket money for financial viewers and the live view;
+  **registrations** by list, a registration with its answers and badge
+  prints, **attendees** and a profile. The **emergency message** on every
+  screen of the event, typed confirmation, for those who may raise it.
+- `worksuite://events`, `worksuite://events/<id>`, `…/<id>/desk` and
+  `…/<id>/counters`; the server's notifications (`/events/<id>`,
+  `/events/<id>/registrations/<id>`, `/events/<id>/checkin/reconciliation`,
+  `/events/<id>/devices`, `/events/<id>/schedule`…) open their screen here;
+  notices of category `events` show only to people who have the app.
+
+**Works offline**
+
+- The desk scans, checks in and out, searches (name, number, company,
+  ticket — the copy holds no email or phone) and takes walk-ins from this
+  computer's copy of the gate's tickets: hashes under the device key, name,
+  number, company, ticket, status, whether money is owed and presence — no
+  email, phone, address or amount — encrypted in the profile, per server,
+  event and person. It goes when it expires, when the event's offline
+  check-in is switched off, or when the device is revoked (with the key and
+  the queue, at once).
+- Scans made offline belong to the person who made them: another person
+  signed in at the desk sees only that they wait, and a plain sign-out keeps
+  them for their maker.
+- Everything else — counters, recent scans, review, badges, payments, the
+  program, Event 360 — waits for WorkSuite.
 
 **Where it bites**
 
 - Offline check-in needs a computer the desktop policy lets keep data
   offline and queue changes (a trusted one), and the event's offline
   check-in switched on.
+- Desk staff need to see the event (`events.event.view`) as well as check
+  in: the server hides every event, and every check-in call, from anyone who
+  does not.
+- A desktop check-in device needs a server with WorkSuite Desktop's device
+  registry (the `/desktop/v1` API).
+- Badges print without the logo and the photo (the server's badge page names
+  them without a picture); the event's name stands in the logo's place.
+- A walk-in kept offline carries the standard fields only; a form that asks
+  for more makes the server queue it for review.
+- The camera reads QR codes only where the system does (macOS); elsewhere a
+  USB scanner or the typed number does the job.
 
 ---
 
