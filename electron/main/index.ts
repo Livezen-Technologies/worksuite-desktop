@@ -39,6 +39,9 @@ import { LockService } from '../services/lock';
 import { NotificationService, inDnd } from '../services/notifications';
 import { WebchatRinger, ringerHeight } from '../services/webchat-ring';
 import { QuickAsk } from '../services/quick-ask';
+import { AiService } from '../services/ai';
+import { AI_CHANGES_LINK, AiPendingWatcher } from '../services/ai-pending';
+import * as fsp from 'node:fs/promises';
 import { createInjector, type Injector } from '../services/remote-control/input';
 import { OfflineCache } from '../services/offline-cache';
 import { OfflineQueue } from '../services/offline-queue';
@@ -407,7 +410,13 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     if (!w) return;
     while (pendingNav.length) w.webContents.send('navigate', pendingNav.shift());
   };
+  // The main window's Changes view: where a waiting change the assistant proposed is decided (DSK-5).
+  const openAiChanges = (): void => {
+    const w = windows.showMain();
+    w.webContents.send('ai:open', { to: 'changes', text: '', result: null });
+  };
   const openLink = (link: string | null): void => {
+    if (link === AI_CHANGES_LINK) return openAiChanges();
     const target = resolveWebLink(link);
     if (target.kind === 'tab') navigate({ route: target.route, source: 'notification' });
     else if (target.kind === 'browser') {
@@ -520,6 +529,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     notifications.handleRealtime(e);
     webchat.handle(e);
     calls.handle(e);
+    aiPending.handle(e as { type?: string });
     remoteControl.onRealtime(e as { type?: string; meeting?: string });
     broadcast('realtime:event', e);
     if (e.type === 'profile.updated') void sessionCtl.refreshBootstrap().catch(() => undefined);
@@ -655,6 +665,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     stopRemoteControl: () => void remoteControl.stopAll('stopped'),
     joinWebchat: (id) => void webchat.join(id),
     quickAsk: () => void quickAsk.open(),
+    aiChanges: () => openAiChanges(),
     ringingSettings: () => navigate({ route: '/settings/notifications', source: 'tray' }),
   });
 
@@ -738,19 +749,37 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     })();
     return askHelper;
   };
+  // The assistant's rules here (the device policy and the company's), confirming, local files (DSK-2…7).
+  const ai = new AiService({
+    get: (path, query) => http.get(path, { query }),
+    post: (path, body) => http.post(path, body, { timeoutMs: 120_000 }),
+    policy: () => (sessionCtl.isReady() ? (sessionCtl.current()?.policy ?? null) : null),
+    driveIdAt: (p) => sync.fileIdAt(p),
+    realpath: (p) => fsp.realpath(p),
+    size: async (p) => (await fsp.stat(p)).size,
+    read: (p) => fsp.readFile(p),
+  });
   const quickAsk: QuickAsk = new QuickAsk({
     clipboard,
     platform: process.platform,
     injector: quickAskHelper,
-    prefs: () => settings.effective().ai,
+    // Insert only where the company and this computer's policy both allow it.
+    prefs: () => ({ ...settings.effective().ai, insert: settings.effective().ai.insert && ai.rules().insert }),
     allowed: () => {
       const b = sessionCtl.isReady() && !lock.isLocked() ? sessionCtl.current() : null;
-      return !!b && (b.permissions.includes('*') || b.permissions.includes('ai.write'));
+      const may = !!b && (b.permissions.includes('*') || b.permissions.includes('ai.write') || b.permissions.includes('ai.assistant.use'));
+      return may && ai.rules().quickAsk;
     },
     register: (acc, fn) => globalShortcut.register(acc, fn),
     unregister: (acc) => globalShortcut.unregister(acc),
     show: () => windows.showQuickAsk(),
     hide: () => windows.hideQuickAsk(),
+  });
+  const aiPending = new AiPendingWatcher({
+    get: (path, query) => http.get(path, { query }),
+    notify: (n) => notifications.notify(n),
+    enabled: () => ai.rules().enabled && !lock.isLocked(),
+    onCount: (n) => tray.update({ aiChanges: n }),
   });
   const syncQuickAsk = (): void => {
     quickAsk.sync();
@@ -765,6 +794,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     notifications.start(uid);
     webchat.start();
     syncQuickAsk();
+    // Quick Ask waits on the company's rules; once they are known, it is offered (or not).
+    void ai.refresh().then(() => {
+      syncQuickAsk();
+      aiPending.start();
+    });
     device.start();
     device.extras = () => {
       const c = transfers.activeCounts();
@@ -794,6 +828,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void remoteControl.shutdown('logout');
     webchat.stop();
     quickAsk.release();
+    ai.forget();
+    aiPending.stop();
     windows.hideQuickAsk();
     tray.update({ quickAsk: null });
     // Torn-off windows show the person's data: they close, and come back at their next sign-in.
@@ -1071,6 +1107,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     navigate,
     webchat,
     quickAsk,
+    ai,
     relaunch,
     quit,
     clockAttendance,

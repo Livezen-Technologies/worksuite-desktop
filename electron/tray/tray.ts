@@ -33,6 +33,8 @@ export interface TrayModel {
   webchatRinging: Array<{ id: number; label: string }>;
   /** Quick Ask's shortcut while it is registered, or null (AI Assistant). */
   quickAsk: string | null;
+  /** Changes the assistant proposed that wait for a decision (DSK-5): opened in the main window, never confirmed here. */
+  aiChanges: number;
 }
 
 export interface TrayActions {
@@ -49,6 +51,7 @@ export interface TrayActions {
   stopRemoteControl: () => void;
   joinWebchat: (conversationId: number) => void;
   quickAsk: () => void;
+  aiChanges: () => void;
   ringingSettings: () => void;
 }
 
@@ -93,6 +96,7 @@ export class TrayService {
     remoteControl: null,
     webchatRinging: [],
     quickAsk: null,
+    aiChanges: 0,
   };
   private lastState: TrayState | null = null;
 
@@ -180,6 +184,7 @@ export class TrayService {
     }
     items.push({ label: 'Open WorkSuite', click: a.open });
     if (m.signedIn && m.quickAsk) items.push({ label: 'Quick Ask', accelerator: m.quickAsk, registerAccelerator: false, click: a.quickAsk });
+    if (m.signedIn && m.aiChanges > 0) items.push({ label: m.aiChanges === 1 ? 'A change from the assistant is waiting' : `${m.aiChanges} changes from the assistant are waiting`, click: a.aiChanges });
     if (m.signedIn) {
       items.push({ label: `Unread Chat ${m.unreadChat} · Unread Mail ${m.unreadMail}`, click: () => a.openRoute(m.unreadChat >= m.unreadMail ? '/chat' : '/mail') });
       items.push({ type: 'separator' });

@@ -51,6 +51,11 @@ const DENY: RegExp[] = [
   // Pairing a salon desk answers with the desk's key: it is done in the main
   // process (salon-desk.ts), so the key never reaches a renderer.
   /^\/api\/salon\/v1\/desk\/pair(\/|\?|$)/,
+  // The assistant (WS-AI-SRS-001 DSK-3, DSK-6): confirming a proposal is `ai:confirm`, which checks the
+  // request came from the main window and audits it; a file from this computer is `ai:upload`, picked
+  // there under the device policy. No page — Quick Ask's included — does either for itself.
+  /^\/api\/ai\/pending\/\d+\/confirm\/?$/,
+  /^\/api\/ai\/context\/uploads\/?$/,
 ];
 
 /** The shared computer's grant (`?end=sharer`): its key never reaches a page. */

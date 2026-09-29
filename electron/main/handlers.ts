@@ -279,6 +279,24 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     w.webContents.send('ai:open', { to: input.to, text: input.text, result: input.result });
   });
 
+  // ── the assistant (WS-AI-SRS-001 DSK-3, DSK-5…7) ────────────────────────
+  router.handle('ai:rules', (input) => (input?.refresh ? ctx.ai.refresh() : ctx.ai.rules()));
+  // A proposal is confirmed from the main window only: never from Quick Ask, never from a
+  // notification (which can only open the main window), and never through the page's API proxy.
+  router.handle('ai:confirm', (input, c) => {
+    if (winOf(c.sender) !== ctx.windows.getMain()) throw new DesktopError('IPC_FORBIDDEN_SENDER', 'A change the assistant proposed is confirmed in the main window.');
+    return ctx.ai.confirm(input.id, input.nonce);
+  });
+  // A file from this computer, picked here: never a path the page names.
+  router.handle('ai:upload', async (_i, c) => {
+    const w = winOf(c.sender);
+    if (!ctx.ai.rules().localFiles) throw new DesktopError('POLICY_DENIED', 'Files from this computer cannot be sent to the assistant here.');
+    const opts: Electron.OpenDialogOptions = { title: 'Choose a file to ask about', properties: ['openFile'] };
+    const res = w ? await dialog.showOpenDialog(w, opts) : await dialog.showOpenDialog(opts);
+    if (res.canceled || !res.filePaths[0]) return null;
+    return ctx.ai.upload(res.filePaths[0]);
+  });
+
   // ── website chats ringing (ENH-WCHAT-01, RING-49) ───────────────────────
   router.handle('ring:state', () => ctx.webchat.state());
   router.handle('ring:join', (input) => ctx.webchat.join(input.id));

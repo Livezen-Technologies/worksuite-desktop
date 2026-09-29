@@ -46,6 +46,9 @@ export const DEFAULT_POLICY: DesktopPolicy = {
   remote_file_receive: 'managed_only',
   remote_emergency_stop_chord: 'Ctrl+Alt+Shift+Esc',
   remote_local_priority_hold_ms: 1500,
+  ai_quick_ask: true,
+  ai_insert: true,
+  ai_local_files: true,
 };
 
 /**
@@ -124,7 +127,17 @@ export function normalizePolicy(input: Record<string, unknown> | null | undefine
     remote_file_receive: pick(p.remote_file_receive, ['allowed', 'managed_only', 'disabled'], d.remote_file_receive),
     remote_emergency_stop_chord: emergencyChord(p.remote_emergency_stop_chord),
     remote_local_priority_hold_ms: clamp(p.remote_local_priority_hold_ms, 500, 5000, d.remote_local_priority_hold_ms),
+    // Nested under `ai` or flat: an administrator writing either is understood, and only `false` switches off.
+    ai_quick_ask: aiKey(p, 'quick_ask') !== false,
+    ai_insert: aiKey(p, 'insert') !== false,
+    ai_local_files: aiKey(p, 'local_files') !== false,
   };
+}
+
+/** `ai.quick_ask` or `ai_quick_ask` — the policy file is written by people, in either shape. */
+function aiKey(p: Record<string, unknown>, key: 'quick_ask' | 'insert' | 'local_files'): unknown {
+  const nested = typeof p.ai === 'object' && p.ai !== null ? (p.ai as Record<string, unknown>)[key] : undefined;
+  return nested ?? p[`ai_${key}`];
 }
 
 /** Verifies an Ed25519 signature over the canonical JSON of `payload`. */
