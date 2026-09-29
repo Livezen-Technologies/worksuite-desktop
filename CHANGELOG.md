@@ -5,6 +5,64 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-29 — 0.2.46: Tenders — upload progress, reviewing files in the app, who uploaded it, meeting minutes
+
+From the Tender checklist and the Meetings tab.
+
+**Added**
+
+- **Uploads show their progress** under the line they go to: the file, how
+  much of it has gone, and a bar — *Preparing…*, the percentage, then
+  *Filing…* while WorkSuite stores it. Cancel is beside it. Files are sent in
+  about twenty parts (from 256 KB to 8 MB each), so a small file no longer sits
+  at 0% and jumps to done.
+- **Review a file inside WorkSuite**: click the file's name on a checklist
+  line. PDFs open in a viewer in the app (page through, zoom, fit to width),
+  and so do images and text files; anything else offers *Open in its app* or
+  *Save a copy*. Beside the file: who uploaded it and when, who chased it,
+  earlier versions, and the notes from earlier reviews. **Approve**, or
+  **Send back** with a comment, and the next file waiting for review opens.
+  A PDF is drawn as pictures of its pages; its links and scripts do not run.
+- **Who uploaded it**: each line shows *Uploaded by …* with the file.
+- **Sending back tells the owner**: when a file is sent back (from the review
+  screen or the line's menu), the person who uploaded it — and whoever chased
+  it — gets a Team Chat message with the comment and a link to the tender. The
+  box *Tell … in Chat* is ticked by default; untick it to say nothing. An
+  approval with a comment is passed on the same way.
+- **Meeting minutes**, on each meeting in a tender's **Meetings** tab:
+  **Minutes** opens the notes and the *points agreed*. Add a point (Enter),
+  and make it into:
+  - a **Task**: for anyone, with a due date and a priority, tagged
+    “tender”, and linked back to the tender;
+  - a **Reminder**: an event in your own calendar at the day and time you
+    choose, which WorkSuite reminds you of when it comes;
+  - a **Follow-up**: another meeting on this tender, held the same way as
+    this one, with the point as its first line.
+  The point then shows what it became (*Task #482*, *Reminder · Friday 3 Oct,
+  09:00*), and clicking it opens the task or the day in the calendar.
+  Converting saves the minutes at once. The minutes stay one text on the
+  server, so the web shows them as written: each point is a "- " line, and
+  what it became is noted in brackets at the end.
+
+**Changed**
+
+- A meeting's minutes are no longer typed in its **Edit** sheet; they have
+  their own **Minutes** button beside it. Minutes already written are kept as
+  notes, and any "-", "•" or "1." lines in them become points.
+- The **Attach** menu on a line opens where it fits — above the button when
+  the line is near the bottom of the window — instead of being cut off by the
+  card.
+
+**Known limits**
+
+- The notice goes to Team Chat, not to the bell: WorkSuite's Tender module
+  sends no notification of its own when a file is reviewed. That needs a
+  change on the server.
+- A follow-up here is a meeting on the tender. CRM follow-ups belong to a
+  lead, and a tender has none.
+
+---
+
 ## 2026-09-28 — 0.2.45: the AI Assistant on the desktop — Quick Ask, the dock, its settings
 
 From "WorkSuite AI Assistant — Web + Desktop UIs", on the server's writing

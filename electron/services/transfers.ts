@@ -98,6 +98,18 @@ export async function walkFolder(root: string): Promise<Array<{ path: string; si
   return out;
 }
 const CHUNK = 8 * 1024 * 1024;
+const MIN_CHUNK = 256 * 1024;
+
+/**
+ * The size of each part an upload is sent in. Progress moves when a part is
+ * in, so a file smaller than one part sat at 0% until it was done: parts are
+ * about a twentieth of the file (at least 256 KB, at most 8 MB), and a
+ * document shows its way up instead of jumping from nothing to finished.
+ */
+export function chunkSizeFor(size: number): number {
+  const twentieth = Math.ceil(Math.max(0, size) / 20);
+  return Math.min(CHUNK, Math.max(MIN_CHUNK, Math.ceil(twentieth / MIN_CHUNK) * MIN_CHUNK));
+}
 /** The largest file offered in a remote-control session: it goes in one request. */
 const REMOTE_MAX = 512 * 1024 * 1024;
 
@@ -404,7 +416,7 @@ export class TransferManager {
         const init = await this.deps.http.post<{ upload_id: string; chunk_size: number; total_chunks: number; replaces?: number | string }>('/api/uploads/init', {
           filename,
           total_size: st.size,
-          chunk_size: CHUNK,
+          chunk_size: chunkSizeFor(st.size),
           sha256: meta.sha256,
           mime_type: mimeFor(filename) ?? undefined,
           ...(replacing ? { replace_file_id: replacing } : {}),
@@ -419,7 +431,7 @@ export class TransferManager {
           throw new DesktopError('SERVER_ERROR', 'This WorkSuite server cannot replace a file by uploading yet. Upload it again and choose Keep both.');
         }
         meta.uploadId = init.upload_id;
-        meta.chunkSize = Number(init.chunk_size) || CHUNK;
+        meta.chunkSize = Number(init.chunk_size) || chunkSizeFor(st.size);
         meta.totalChunks = Number(init.total_chunks) || Math.max(1, Math.ceil(st.size / meta.chunkSize));
         this.persist(l);
       }

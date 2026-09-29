@@ -241,7 +241,7 @@ export default function Workspace({
       {t === 'checklist' ? <Checklist id={id} org={org} canManage={canManage} canApprove={canApprove} can={d.can} /> : null}
       {t === 'documents' ? <Documents id={id} docs={d.documents} can={d.can} /> : null}
       {t === 'bonds' ? <Bonds id={id} currency={r.currency} canManage={canManage} can={d.can} /> : null}
-      {t === 'meetings' ? <Meetings id={id} canManage={canManage} /> : null}
+      {t === 'meetings' ? <Meetings id={id} tender={r.title} canManage={canManage} /> : null}
       {t === 'budget' ? <Budget id={id} budget={d.budget} canManage={canManage} /> : null}
       {t === 'approvals' ? <Approvals id={id} org={org} rows={d.approvals} canManage={canManage} canApprove={canApprove} /> : null}
       {t === 'notice' ? <Notice id={id} canManage={canManage} /> : null}

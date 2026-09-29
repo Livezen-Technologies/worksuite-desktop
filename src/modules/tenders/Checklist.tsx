@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { app } from '../../core/app-state';
 import { errorMessage } from '../../core/bridge';
+import { useStore } from '../../core/store';
 import { dateLabel, dayWords, relative } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
@@ -9,7 +11,9 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../hr/parts';
 import { Pill } from '../inventory/parts';
 import { K, useOwners, type DocAccess } from './api';
-import { AttachMenu, saveTenderFile, Uploading, useDropZone, useTenderUploads } from './files';
+import { ReviewScreen } from './Review';
+import { reviewMessage, reviewRecipients, tellInChat, usePeople } from './people';
+import { AttachMenu, saveTenderFile, UploadBar, Uploading, uploadsFor, useDropZone, useTenderUploads, type LiveUpload } from './files';
 import { addLine, applyPack, attachToLine, bulkLines, fetchChecklist, filterLines, K2, LINE_STATUS, lineChanges, lineDraft, removeLine, reviewLine, sectionsOf, updateLine, type Line, type LineDraft, type LineFilter } from './work';
 
 /**
@@ -45,6 +49,8 @@ export default function Checklist({ id, org, canManage, canApprove, can }: { id:
   const [packs, setPacks] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [history, setHistory] = useState<number | null>(null);
+  const [reviewing, setReviewing] = useState<number | null>(null);
+  const nameOf = usePeople();
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: K2.checklist(id) });
     void qc.invalidateQueries({ queryKey: K.tender(id) });
@@ -152,7 +158,8 @@ export default function Checklist({ id, org, canManage, canApprove, can }: { id:
         </div>
       ) : null}
 
-      <Uploading live={uploads.live} />
+      {/* A line's own uploads show on the line; the rest here. */}
+      <Uploading live={uploads.live.filter((t) => t.target.into !== 'line')} />
 
       {!c.items.length ? (
         <div className="rounded-[12px] border border-line bg-surface">
@@ -189,6 +196,9 @@ export default function Checklist({ id, org, canManage, canApprove, can }: { id:
                 busy={busy}
                 showHistory={history === l.id}
                 onHistory={() => setHistory((h) => (h === l.id ? null : l.id))}
+                uploading={uploadsFor(uploads.live, 'line', l.id)}
+                uploaderName={nameOf(l.files.find((f) => f.current)?.uploaded_by)}
+                onReview={() => setReviewing(l.id)}
                 onAttach={() => void uploads.pick({ into: 'line', id: l.id }, `Attach to ${l.label}`.slice(0, 100))}
                 onDropFiles={canManage && can.upload ? (files) => void uploads.drop(files.slice(0, 1), { into: 'line', id: l.id }) : null}
                 onDrive={async (files) => {
@@ -206,7 +216,8 @@ export default function Checklist({ id, org, canManage, canApprove, can }: { id:
       )}
 
       {editing ? <LineSheet tenderId={id} org={org} line={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={refresh} /> : null}
-      {sending ? <SendBackSheet line={sending} onClose={() => setSending(null)} onSaved={refresh} /> : null}
+      {sending ? <SendBackSheet tenderId={id} line={sending} nameOf={nameOf} onClose={() => setSending(null)} onSaved={refresh} /> : null}
+      {reviewing !== null ? <ReviewScreen tenderId={id} lines={c.items} startId={reviewing} canApprove={canApprove} canDownload={can.download} onClose={() => setReviewing(null)} onChanged={refresh} /> : null}
       {packs ? <PackSheet tenderId={id} packs={c.packs} onClose={() => setPacks(false)} onSaved={refresh} /> : null}
     </div>
   );
@@ -222,6 +233,9 @@ function LineRow({
   busy,
   showHistory,
   onHistory,
+  uploading,
+  uploaderName,
+  onReview,
   onAttach,
   onDropFiles,
   onDrive,
@@ -239,6 +253,12 @@ function LineRow({
   busy: string | null;
   showHistory: boolean;
   onHistory: () => void;
+  /** Files on their way to this line, each shown with its progress bar. */
+  uploading: LiveUpload[];
+  /** Who uploaded the current file, by name, when the directory says. */
+  uploaderName: string | null;
+  /** Open the file in the reviewer, inside WorkSuite. */
+  onReview: () => void;
   onAttach: () => void;
   /** A file dropped on the line, filed as its next version. */
   onDropFiles: ((files: File[]) => void) | null;
@@ -280,13 +300,19 @@ function LineRow({
               <button
                 type="button"
                 disabled={!can.download}
-                title={can.download ? 'Open it' : 'You may not take copies of tender documents'}
-                onClick={() => void saveTenderFile({ tenderLine: { line: l.id } }, current.name ?? l.label, true)}
+                title={can.download ? 'Review it here' : 'You may not take copies of tender documents'}
+                onClick={onReview}
                 className="inline-flex items-center gap-1 font-semibold text-primary hover:underline disabled:text-ink-3 disabled:no-underline"
               >
                 <Icon name="file" size={12} /> {current.name ?? 'The file'}
                 {l.files.length > 1 ? <span className="font-medium text-ink-3"> · v{current.version}</span> : null}
               </button>
+            ) : null}
+            {current && (uploaderName || current.uploaded_at) ? (
+              <span>
+                Uploaded{uploaderName ? ` by ${uploaderName}` : ''}
+                {current.uploaded_at ? ` ${relative(current.uploaded_at)}` : ''}
+              </span>
             ) : null}
             {l.files.length > 1 ? (
               <button type="button" onClick={onHistory} className="hover:underline">
@@ -322,6 +348,13 @@ function LineRow({
                   </li>
                 ))}
             </ul>
+          ) : null}
+          {uploading.length ? (
+            <div className="mt-1.5 flex max-w-[520px] flex-col gap-1.5">
+              {uploading.map((t) => (
+                <UploadBar key={t.id} t={t} />
+              ))}
+            </div>
           ) : null}
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
@@ -441,7 +474,12 @@ function LineSheet({ tenderId, org, line, onClose, onSaved }: { tenderId: number
   );
 }
 
-function SendBackSheet({ line, onClose, onSaved }: { line: Line; onClose: () => void; onSaved: () => void }) {
+function SendBackSheet({ tenderId, line, nameOf, onClose, onSaved }: { tenderId: number; line: Line; nameOf: (id: number | null | undefined) => string | null; onClose: () => void; onSaved: () => void }) {
+  const me = useStore(app, (s) => (s.auth?.user?.id ? Number(s.auth.user.id) : null));
+  const current = line.files.find((f) => f.current) ?? null;
+  const tellIds = reviewRecipients(current?.uploaded_by ?? null, line.owner_id, me);
+  const tellNames = tellIds.map((u) => (u === current?.uploaded_by ? nameOf(u) : (nameOf(u) ?? line.owner_name)) ?? 'a colleague');
+  const [tell, setTell] = useState(true);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -449,7 +487,13 @@ function SendBackSheet({ line, onClose, onSaved }: { line: Line; onClose: () => 
     setBusy(true);
     try {
       await reviewLine(line.id, 'rejected', reason.trim());
-      toast('success', 'Sent back.');
+      let told = '';
+      if (tell && tellIds.length) {
+        const r = await tellInChat(tellIds, reviewMessage({ decision: 'rejected', line: line.label, file: current?.name ?? null, comment: reason.trim(), tenderId }));
+        told = r.sent ? ` ${tellNames.slice(0, r.sent).join(' and ')} ${r.sent === 1 ? 'was' : 'were'} told in Chat.` : '';
+        if (r.failed) toast('warning', 'Sent back, but a Chat message could not be sent.');
+      }
+      toast('success', `Sent back.${told}`);
       onSaved();
       onClose();
     } catch (e) {
@@ -478,6 +522,15 @@ function SendBackSheet({ line, onClose, onSaved }: { line: Line; onClose: () => 
       <Field label="What is wrong with it?">
         <input aria-label="What is wrong with it?" autoFocus value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} placeholder="The certificate expired in August; attach the renewed one." className={input} />
       </Field>
+      {tellIds.length ? (
+        <label className="flex items-start gap-2 text-[12.5px] text-ink-2">
+          <input type="checkbox" checked={tell} onChange={(e) => setTell(e.target.checked)} className="mt-0.5 accent-primary" />
+          <span>
+            Tell {tellNames.join(' and ')} in Chat
+            <span className="block text-[11.5px] text-ink-3">With what is wrong and a link to this tender.</span>
+          </span>
+        </label>
+      ) : null}
       {error ? <p className="m-0 text-[12.5px] text-danger">{error}</p> : null}
     </Sheet>
   );
