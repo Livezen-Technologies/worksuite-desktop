@@ -16,6 +16,8 @@ import { z } from 'zod';
 import type { InvokeChannel } from './channels';
 import type {
   ActiveCall,
+  AiRules,
+  AiUpload,
   AppInfo,
   AuthState,
   Bootstrap,
@@ -221,7 +223,12 @@ export const contract = {
   'quickask:open': ch(none, { session: true, rate: 2 }),
   'quickask:insert': ch(z.object({ text: z.string().min(1).max(20_000) }), { session: true, rate: 2 }),
   'quickask:close': ch(none, { session: true }),
-  'quickask:handoff': ch(z.object({ to: z.enum(['dock', 'task', 'search']), text: z.string().max(8000), result: z.string().max(20_000).nullable() }), { session: true, rate: 2 }),
+  'quickask:handoff': ch(z.object({ to: z.enum(['dock', 'task', 'search', 'changes']), text: z.string().max(8000), result: z.string().max(20_000).nullable() }), { session: true, rate: 2 }),
+  // The assistant (WS-AI-SRS-001 DSK-3): its rules here, confirming a proposal (the main window only, audited),
+  // and a file picked on this computer as context.
+  'ai:rules': ch(z.object({ refresh: z.boolean().optional() }).optional(), { session: true }),
+  'ai:confirm': ch(z.object({ id: z.number().int().positive(), nonce: z.string().regex(/^[a-f0-9]{16,64}$/) }), { session: true, sensitive: true, rate: 5 }),
+  'ai:upload': ch(none, { session: true, rate: 3 }),
   // Website chats ringing like calls (WS-WCHAT ENH-01, RING-49): the call window, the main window's bar.
   'ring:state': ch(none, { session: true, whileLocked: true }),
   'ring:join': ch(z.object({ id: z.number().int().positive() }), { session: true, rate: 4 }),
@@ -716,6 +723,9 @@ export interface Outputs {
   'quickask:insert': boolean;
   'quickask:close': void;
   'quickask:handoff': void;
+  'ai:rules': AiRules;
+  'ai:confirm': unknown;
+  'ai:upload': AiUpload | null;
   'ring:state': WebchatRingState;
   'ring:join': boolean;
   'ring:silence': void;
