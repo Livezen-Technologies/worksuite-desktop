@@ -27,6 +27,20 @@ describe('tenders: the checklist', () => {
     expect((await w.fetchChecklist(1)).completion).toBe(25);
   });
 
+  it('knows when the server notifies people about uploads and reviews itself', async () => {
+    vi.mocked(api.apiGet).mockResolvedValueOnce({ items: [], counts: {}, packs: [], notifies: ['tender.assigned', 'tender.checklist_rejected'] });
+    expect((await w.fetchChecklist(1)).notifies).toBe(true);
+    vi.mocked(api.apiGet).mockResolvedValueOnce({ items: [], counts: {}, packs: [] });
+    expect((await w.fetchChecklist(1)).notifies).toBe(false);
+  });
+
+  it('reads whom a review notified, and nothing from a server that does not say', async () => {
+    vi.mocked(api.apiPost).mockResolvedValueOnce({ notified: ['7', 9, 0] });
+    expect(await w.reviewLine(3, 'rejected', 'Unsigned.')).toEqual({ notified: [7, 9] });
+    vi.mocked(api.apiPost).mockResolvedValueOnce(null);
+    expect(await w.reviewLine(3, 'approved')).toEqual({ notified: null });
+  });
+
   it("keeps the buyer's order, grouping only where the section changes", () => {
     const lines = [w.toLine(row({ id: 1, section: 'B. Eligibility' })), w.toLine(row({ id: 2, section: 'A. Bid forms' })), w.toLine(row({ id: 3, section: 'A. Bid forms' })), w.toLine(row({ id: 4, section: null }))];
     expect(w.sectionsOf(lines).map((s) => [s.name, s.lines.map((l) => l.id)])).toEqual([
