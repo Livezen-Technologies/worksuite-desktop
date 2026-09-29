@@ -28,10 +28,11 @@ export default defineConfig({
     build: {
       outDir: 'out/preload',
       rollupOptions: {
-        input: { index: resolve(__dirname, 'electron/preload/index.ts') },
-        // A sandboxed preload cannot load other files: everything it needs is
-        // bundled into one CommonJS script.
-        output: { format: 'cjs', inlineDynamicImports: true },
+        // The shell's bridge, and the Office editor's (a page of its own partition, with none of the shell's).
+        input: { index: resolve(__dirname, 'electron/preload/index.ts'), office: resolve(__dirname, 'electron/preload/office.ts') },
+        // A sandboxed preload cannot load other files: each is one CommonJS script that imports only
+        // `electron` (two entries cannot inline dynamic imports, and neither has any).
+        output: { format: 'cjs', entryFileNames: '[name].js' },
       },
     },
   },

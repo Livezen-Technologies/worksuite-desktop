@@ -148,6 +148,21 @@ export const INVOKE_CHANNELS = [
   'elearning:offlineRemove',
   'elearning:offlineValidate',
 
+  // Office documents (shared/office.ts): the editor's view in a tab, and copies opened in other apps.
+  'office:open',
+  'office:place',
+  'office:command',
+  'office:close',
+  'office:focusFile',
+  'office:externalApps',
+  'office:openExternal',
+  'office:localCopies',
+  'office:uploadLocal',
+  'office:forgetLocal',
+  'office:revealLocal',
+  'office:localAvailable',
+  'office:openLocal',
+
   'offline:status',
   'offline:pending',
   'offline:submit',
@@ -217,6 +232,8 @@ export const EVENT_CHANNELS = [
   'ai:open',
   'salon:changed',
   'elearning:offlineChanged',
+  'office:event',
+  'office:localChanged',
 ] as const;
 
 export type EventChannel = (typeof EVENT_CHANNELS)[number];

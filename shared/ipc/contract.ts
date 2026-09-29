@@ -15,6 +15,7 @@
 import { z } from 'zod';
 import { garageDocSchema } from '../garage-docs';
 import { ELEARNING_MEDIA_TOKEN, elearningCourseRef, elearningDownloadInput, type OfflineCourse, type OfflineValidation } from '../elearning-offline';
+import { OFFICE_EDITOR_EVENTS, OFFICE_EXPORT_TOKEN, officeCommandSchema, type ExternalApp, type OfficeLocalCopy } from '../office';
 import type { InvokeChannel } from './channels';
 import type {
   ActiveCall,
@@ -466,10 +467,12 @@ export const contract = {
          * `/media/{token}?download=1`; a protected lesson has no such address to give.
          */
         elearningMedia: z.string().regex(ELEARNING_MEDIA_TOKEN).optional(),
+        /** An Office export's signed download (`POST …/office/export` → `download_url`): its token; the main process fetches `/office/exports/{token}` from the server. */
+        officeExport: z.string().regex(OFFICE_EXPORT_TOKEN).optional(),
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.elearningMedia].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a payment slip, an order list, an Orders report, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, or an eLearning lesson file'),
+      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.elearningMedia, v.officeExport].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a payment slip, an order list, an Orders report, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, an eLearning lesson file, or an Office export'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   'transfers:upload': ch(
@@ -586,6 +589,64 @@ export const contract = {
   'elearning:offlineDownload': ch(elearningDownloadInput, { session: true, rate: 2 }),
   'elearning:offlineRemove': ch(elearningCourseRef, { session: true, rate: 5 }),
   'elearning:offlineValidate': ch(none, { session: true, rate: 1 }),
+
+  /*
+   * Office documents (shared/office.ts, electron/services/office-editor.ts): a tab lays the editor's
+   * isolated view over its placeholder and talks to it; the session itself is the tab's, over the API.
+   * The configuration is the server's signed one, passed through untouched; the main process loads an
+   * editor only from a Document Server address it accepts (`documentServerOrigin`).
+   */
+  'office:open': ch(
+    z.object({
+      key: idString,
+      fileId: driveId,
+      sessionId: z.string().regex(/^[0-9a-f-]{36}$/),
+      organizationId: z.string().max(64).nullable(),
+      documentServerUrl: z.string().min(8).max(512),
+      apiUrl: z.string().min(8).max(1024),
+      config: z.record(z.string(), z.unknown()),
+      events: z.array(z.enum(OFFICE_EDITOR_EVENTS)).max(OFFICE_EDITOR_EVENTS.length),
+    }),
+    { session: true, rate: 5 },
+  ),
+  'office:place': ch(
+    z.object({
+      viewId: z.string().uuid(),
+      bounds: z.object({ x: z.number().finite(), y: z.number().finite(), width: z.number().finite().min(0).max(20_000), height: z.number().finite().min(0).max(20_000) }),
+      visible: z.boolean(),
+    }),
+    { session: true, rate: 120 },
+  ),
+  'office:command': ch(
+    z.object({
+      viewId: z.string().uuid(),
+      command: officeCommandSchema,
+      events: z.array(z.enum(OFFICE_EDITOR_EVENTS)).max(OFFICE_EDITOR_EVENTS.length).optional(),
+      /** A reload on a new session (reopened, or a newer version): the view's session is that one now. */
+      sessionId: z.string().regex(/^[0-9a-f-]{36}$/).optional(),
+    }),
+    { session: true, rate: 20 },
+  ),
+  'office:close': ch(z.object({ viewId: z.string().uuid() }), { session: true, rate: 20 }),
+  'office:focusFile': ch(z.object({ fileId: driveId }), { session: true, rate: 10 }),
+  'office:externalApps': ch(z.object({ extension: z.string().regex(/^[A-Za-z0-9]{0,10}$/) }), { session: true, rate: 10 }),
+  'office:openExternal': ch(
+    z.object({
+      fileId: driveId,
+      name: z.string().min(1).max(255),
+      folderId: driveId.nullable(),
+      version: z.number().int().min(0).max(2 ** 31),
+      app: z.enum(['default', 'word', 'excel', 'powerpoint']),
+    }),
+    { session: true, rate: 3, sensitive: true },
+  ),
+  'office:localCopies': ch(none, { session: true }),
+  'office:uploadLocal': ch(z.object({ id: z.string().uuid(), how: z.enum(['version', 'new_version', 'keep_both']) }), { session: true, rate: 3, sensitive: true }),
+  'office:forgetLocal': ch(z.object({ id: z.string().uuid() }), { session: true, rate: 10 }),
+  'office:revealLocal': ch(z.object({ id: z.string().uuid() }), { session: true, rate: 5 }),
+  /** Offline (OO-OFF-020): is this file on this computer — kept by Drive sync, or a copy opened in another app. */
+  'office:localAvailable': ch(z.object({ fileId: driveId }), { session: true, rate: 10 }),
+  'office:openLocal': ch(z.object({ fileId: driveId, preview: z.boolean().optional() }), { session: true, rate: 3 }),
 
   'offline:status': ch(none, { session: true }),
   'offline:pending': ch(none, { session: true }),
@@ -826,6 +887,19 @@ export interface Outputs {
   'elearning:offlineDownload': OfflineCourse;
   'elearning:offlineRemove': void;
   'elearning:offlineValidate': OfflineValidation;
+  'office:open': { viewId: string };
+  'office:place': boolean;
+  'office:command': boolean;
+  'office:close': boolean;
+  'office:focusFile': boolean;
+  'office:externalApps': ExternalApp[];
+  'office:openExternal': OfficeLocalCopy;
+  'office:localCopies': OfficeLocalCopy[];
+  'office:uploadLocal': { state: 'uploaded'; version: number | null } | { state: 'conflict'; conflict: NonNullable<OfficeLocalCopy['conflict']> } | { state: 'queued' };
+  'office:forgetLocal': boolean;
+  'office:revealLocal': boolean;
+  'office:localAvailable': { available: boolean; synced: boolean; preview: boolean; openInApp: boolean };
+  'office:openLocal': boolean;
   'offline:status': OfflineStatus;
   'offline:pending': OfflineMutation[];
   'offline:submit': SubmitResult;
