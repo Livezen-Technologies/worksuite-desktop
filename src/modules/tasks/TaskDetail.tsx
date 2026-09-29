@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import type { PickedFile } from '@shared/ipc/contract';
+import { useCanOpen } from '../../core/access';
 import { app } from '../../core/app-state';
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
 import { call, errorMessage, registerDropped } from '../../core/bridge';
@@ -342,6 +343,8 @@ function Attachments({ task, editable }: { task: Detail; editable: boolean }) {
   const qc = useQueryClient();
   const q = useAttachments(task.id);
   const uploads = useUploads(task.id);
+  // "From Drive" browses Files: only for whoever has it.
+  const files = useCanOpen('files');
   const [drive, setDrive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [drag, setDrag] = useState(false);
@@ -389,7 +392,7 @@ function Attachments({ task, editable }: { task: Detail; editable: boolean }) {
         {editable ? (
           <>
             <button type="button" onClick={() => void pick()} className="font-semibold text-primary hover:underline">Attach files</button>
-            <button type="button" onClick={() => setDrive(true)} className="font-semibold text-primary hover:underline">From Drive</button>
+            {files ? <button type="button" onClick={() => setDrive(true)} className="font-semibold text-primary hover:underline">From Drive</button> : null}
           </>
         ) : null}
       </div>
@@ -472,6 +475,7 @@ function Conversation({ task, me, people, emoji, setEmoji, onChanged }: { task: 
   const [disk, setDisk] = useState<PickedFile[]>([]);
   const [fromDrive, setFromDrive] = useState<DriveFileRow[]>([]);
   const [drive, setDrive] = useState(false);
+  const files = useCanOpen('files');
   const uploads = useUploads(task.id);
   const attachments = useAttachments(task.id);
   const directory = useQuery({ queryKey: ['chat', 'directory'], queryFn: ({ signal }) => apiGet<Directory>('/api/chat/directory', undefined, signal), staleTime: 5 * 60_000 });
@@ -554,7 +558,7 @@ function Conversation({ task, me, people, emoji, setEmoji, onChanged }: { task: 
                 extraTools={
                   <>
                     <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => void call('files:pickFiles', { multiple: true, title: 'Attach to the comment' }).then((f) => setDisk((d) => [...d, ...f]), (e) => toast('error', errorMessage(e)))} className="rounded-[5px] px-[7px] py-[3px] hover:bg-subtle hover:text-ink">Attach a file</button>
-                    <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => setDrive(true)} className="rounded-[5px] px-[7px] py-[3px] hover:bg-subtle hover:text-ink">Choose from Drive</button>
+                    {files ? <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => setDrive(true)} className="rounded-[5px] px-[7px] py-[3px] hover:bg-subtle hover:text-ink">Choose from Drive</button> : null}
                     <button type="button" aria-label="Emoji" onMouseDown={(e) => e.preventDefault()} onClick={() => setEmoji(!emoji)} className="rounded-[5px] px-[7px] py-[3px] hover:bg-subtle hover:text-ink"><Icon name="smile" size={14} /></button>
                   </>
                 }

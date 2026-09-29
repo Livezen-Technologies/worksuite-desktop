@@ -14,7 +14,10 @@ export interface Command {
   group: 'Shell' | 'Create' | 'Navigate' | 'Module';
   keywords?: string;
   run: () => void;
+  /** Whether the command is available now (its app is the person's, say). Unavailable, it is neither listed nor run. */
   when?: () => boolean;
+  /** Kept out of the palette; still runs from its shortcut. */
+  hidden?: boolean;
   source?: 'shell' | 'module';
 }
 
@@ -50,12 +53,26 @@ export function registerCommand(c: Command): () => void {
   };
 }
 
+const available = (c: Command): boolean => !c.when || c.when();
+
 export function allCommands(): Command[] {
-  return [...commands.values()].filter((c) => !c.when || c.when());
+  return [...commands.values()].filter((c) => !c.hidden && available(c));
 }
 
 export function getCommand(id: string): Command | undefined {
   return commands.get(id);
+}
+
+/**
+ * Runs a command from a shortcut or the application menu — only while it is
+ * available: a shortcut must not open what the palette would not list.
+ * Returns whether it ran.
+ */
+export function runCommand(id: string): boolean {
+  const c = commands.get(id);
+  if (!c || !available(c)) return false;
+  c.run();
+  return true;
 }
 
 export function onCommandsChanged(fn: () => void): () => void {

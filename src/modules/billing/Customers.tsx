@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useCanOpen } from '../../core/access';
 import { app } from '../../core/app-state';
 import { call } from '../../core/bridge';
 import { useStore } from '../../core/store';
@@ -87,7 +88,8 @@ function CustomerPanel({ id, org, onClose, onOpenInvoice, onOpenPayment, onOpenP
   const d = q.data;
   const cur = d?.customer.currency ?? null;
   const aging = agingParts(d?.aging);
-  const subs = !!perms && (perms.includes('*') || perms.includes('customer_subscription.view'));
+  // Their subscriptions are in Subscriptions (in the browser): only for whoever has that app, and its permission.
+  const subs = useCanOpen('subscriptions') && !!perms && (perms.includes('*') || perms.includes('customer_subscription.view'));
 
   return (
     <SidePanel

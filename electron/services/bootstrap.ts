@@ -28,6 +28,17 @@ interface MeResponse {
   user: PublicUser;
   permissions?: string[] | null;
   apps?: string[] | null;
+  /** Apps the person may open only for themselves (their own expense claims); absent on older servers. */
+  self_service?: unknown;
+}
+
+/** App slugs from a server list (strings, or `{slug}` / `{id}` objects), without the `worksuite.` prefix. */
+export function slugsOf(list: unknown): string[] {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((a) => (typeof a === 'string' ? a : a && typeof a === 'object' ? ((a as { slug?: unknown }).slug ?? (a as { id?: unknown }).id) : null))
+    .filter((a): a is string => typeof a === 'string')
+    .map((id) => id.replace(/^worksuite\./, ''));
 }
 
 function toOrg(o: unknown): Organization | null {
@@ -85,11 +96,7 @@ export class BootstrapService {
     // The server has already applied its gates (installed, enabled, enabled
     // for the organization, licensed, user access); what arrives is the slugs
     // the user may open. An installation that does not gate apps says so.
-    const apps = Array.isArray(d.apps) ? d.apps : [];
-    const slugs = apps
-      .map((a) => (typeof a === 'string' ? a : a && typeof a === 'object' ? ((a as { slug?: unknown }).slug ?? (a as { id?: unknown }).id) : null))
-      .filter((a): a is string => typeof a === 'string')
-      .map((id) => id.replace(/^worksuite\./, ''));
+    const slugs = slugsOf(d.apps);
     const gated = d.apps_gated !== false;
     const mv = (d.minimum_version ?? {}) as Record<string, string>;
     const platformKey = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'macos' : 'linux';
@@ -101,6 +108,7 @@ export class BootstrapService {
       defaultOrganizationId: typeof d.default_organization_id === 'string' ? d.default_organization_id : (orgs[0]?.id ?? null),
       apps: gated ? slugs : null,
       serverApps: gated ? slugs : null,
+      selfService: slugsOf(d.self_service),
       permissions: Array.isArray(d.permissions) ? (d.permissions as string[]) : [],
       entitlements: (d.entitlements ?? {}) as Record<string, boolean>,
       featureFlags: (d.feature_flags ?? {}) as Record<string, boolean>,
@@ -159,6 +167,7 @@ export class BootstrapService {
       defaultOrganizationId: ownOrg,
       apps: me.apps === null || me.apps === undefined ? null : me.apps.includes('*') ? '*' : me.apps,
       serverApps: null,
+      selfService: slugsOf(me.self_service),
       permissions: me.permissions ?? [],
       entitlements: {},
       featureFlags: {},
@@ -185,7 +194,8 @@ export class BootstrapService {
     const row = this.db.get<{ bootstrap: string }>('SELECT bootstrap FROM sessions WHERE user_id = ?', userId);
     const b = row ? this.vault().decrypt<Bootstrap>(row.bootstrap) : undefined;
     if (!b) return null;
-    this.current = { ...b, offline: true };
+    // A copy saved before servers said which apps are self-service has none.
+    this.current = { ...b, selfService: b.selfService ?? [], offline: true };
     this.lastValidPolicy = b.policy;
     return this.current;
   }

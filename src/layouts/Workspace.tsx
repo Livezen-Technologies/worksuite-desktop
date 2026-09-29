@@ -1,4 +1,6 @@
 import { Suspense, useRef, useState } from 'react';
+import { canOpenApp } from '@shared/access';
+import { useVisibleIds } from '../core/access';
 import { useStore } from '../core/store';
 import { adoptWindow, detachTab, dockSide, navigate, setSplit, swapSides, tabsStore, undockSide } from '../core/tabs';
 import { TabProvider } from '../core/tab-context';
@@ -16,12 +18,16 @@ import { TAB_DRAG, WINDOW_DRAG, dragHas, droppedWindow } from '../core/dock-drag
  * divider to share the width. Drag a tab — or a torn-off window's handle —
  * to the right-hand side of the workspace to dock it there; a window's
  * handle dropped anywhere else comes back as a tab.
+ *
+ * A tab of an app the person may no longer open renders nothing while it is
+ * being closed (Shell).
  */
 const DIVIDER = 6;
 
 export function Workspace() {
   const tabs = useStore(tabsStore, (s) => s.tabs);
   const activeId = useStore(tabsStore, (s) => s.activeId);
+  const visible = useVisibleIds();
   const sideId = useStore(tabsStore, (s) => s.sideId);
   const split = useStore(tabsStore, (s) => s.split);
   const ref = useRef<HTMLElement>(null);
@@ -75,7 +81,7 @@ export function Workspace() {
         const side = docked && tab.id === sideId;
         if (tab.suspended && !active && !side) return null;
         const mod = moduleFor(tab.app);
-        if (!mod) return null;
+        if (!mod || !canOpenApp(mod.id, visible)) return null;
         const C = mod.component;
         const shown = active || side;
         const style = !docked || !shown ? undefined : active ? { left: 0, width: `calc(${pct} - ${DIVIDER / 2}px)` } : { left: `calc(${pct} + ${DIVIDER / 2}px)`, right: 0 };

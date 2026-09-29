@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
+import { useCanOpen } from '../../core/access';
 import { app } from '../../core/app-state';
 import { errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
@@ -277,7 +278,8 @@ function Overview({ d, onOpenProduct }: { d: ProductDetail; onOpenProduct: (id: 
 function Sales({ id, org }: { id: number; org: string }) {
   const { navigate } = useTab();
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
-  const billing = !!perms && (perms.includes('*') || perms.includes('billing.view'));
+  // An invoice opens in Invoices: only for whoever has that app, and its permission.
+  const billing = useCanOpen('billing') && !!perms && (perms.includes('*') || perms.includes('billing.view'));
   const q = useQuery({
     queryKey: K.trade(id, org),
     queryFn: ({ signal }) => fetchTrade(id, org, signal),

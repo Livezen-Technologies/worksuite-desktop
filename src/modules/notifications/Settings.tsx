@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { categoryVisible } from '@shared/access';
 import type { Preferences } from '@shared/types';
+import { useVisibleIds } from '../../core/access';
 import { app, updatePrefs } from '../../core/app-state';
 import { apiGet, apiPut } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
@@ -52,6 +54,7 @@ export default function NotificationSettings() {
   const { navigate } = useTab();
   const qc = useQueryClient();
   const prefs = useStore(app, (s) => s.prefs);
+  const visible = useVisibleIds();
   const q = useQuery({ queryKey: AccountK.notifications, queryFn: ({ signal }) => apiGet<Payload>('/api/notifications/preferences', undefined, signal) });
   const [draft, setDraft] = useState<Prefs | null>(null);
   const save = useMutation({
@@ -124,7 +127,8 @@ export default function NotificationSettings() {
                 </tr>
               </thead>
               <tbody>
-                {data.catalogue.map((cat) => {
+                {/* Only apps the person has (and categories of no app): the rest are not theirs to tune. */}
+                {data.catalogue.filter((cat) => categoryVisible(cat.key, visible)).map((cat) => {
                   const a = appOf(cat.key, { [cat.key]: cat.label });
                   return (
                     <tr key={cat.key} className="border-b border-line/70 last:border-b-0">

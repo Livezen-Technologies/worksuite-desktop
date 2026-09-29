@@ -6,6 +6,8 @@ vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(), on: () => () => unde
 import { call } from '../../../src/core/bridge';
 import { activate, adoptWindow, closeTab, detachTab, dockSide, insertTab, openTab, resetTabs, restoreTabs, setSplit, suspendIdle, swapSides, tabsStore, undockSide } from '../../../src/core/tabs';
 import { droppedWindow, dropPoint } from '../../../src/core/dock-drag';
+import { app } from '../../../src/core/app-state';
+import { visibleApps } from '@shared/apps';
 
 const mocked = vi.mocked(call);
 const ids = () => tabsStore.get().tabs.map((t) => t.route);
@@ -14,13 +16,14 @@ const state = () => tabsStore.get();
 beforeEach(() => {
   mocked.mockReset();
   mocked.mockResolvedValue(undefined as never);
+  app.set({ apps: visibleApps({ apps: '*', permissions: ['*'] }) });
   resetTabs();
 });
 
 describe('docking a tab beside the active one (FR-NAV-07)', () => {
   it('docks, swaps, resizes within bounds and undocks', () => {
     const home = state().activeId!;
-    const mail = openTab('/mail');
+    const mail = openTab('/mail')!;
     dockSide(home);
     expect(state()).toMatchObject({ activeId: mail, sideId: home });
 
@@ -44,7 +47,7 @@ describe('docking a tab beside the active one (FR-NAV-07)', () => {
   it('docking the active tab brings the one used before it forward', () => {
     const home = state().activeId!;
     openTab('/mail');
-    const tasks = openTab('/tasks');
+    const tasks = openTab('/tasks')!;
     activate(home);
     activate(tasks);
     dockSide(tasks);
@@ -59,8 +62,8 @@ describe('docking a tab beside the active one (FR-NAV-07)', () => {
 
   it('closing the active tab never brings the docked one forward while another is left', () => {
     const home = state().activeId!;
-    const mail = openTab('/mail');
-    const tasks = openTab('/tasks');
+    const mail = openTab('/mail')!;
+    const tasks = openTab('/tasks')!;
     activate(mail);
     dockSide(tasks);
     expect(state()).toMatchObject({ activeId: mail, sideId: tasks });
@@ -73,7 +76,7 @@ describe('docking a tab beside the active one (FR-NAV-07)', () => {
 
   it('closing the docked tab undocks it, and it is never suspended', () => {
     const home = state().activeId!;
-    const mail = openTab('/mail');
+    const mail = openTab('/mail')!;
     dockSide(home);
     tabsStore.set((s) => ({ tabs: s.tabs.map((t) => ({ ...t, lastActive: 0 })) }));
     suspendIdle(1);
@@ -107,7 +110,7 @@ describe('docking a tab beside the active one (FR-NAV-07)', () => {
 
 describe('tearing tabs off and docking windows back (FR-NAV-05)', () => {
   it('a torn-off tab leaves the strip, not into recently closed', async () => {
-    const mail = openTab('/mail?folder=inbox', { title: 'Inbox' });
+    const mail = openTab('/mail?folder=inbox', { title: 'Inbox' })!;
     expect(await detachTab(mail, { x: 400.4, y: 300.6 })).toBe(true);
     expect(mocked).toHaveBeenCalledWith('windows:detach', { route: '/mail?folder=inbox', title: 'Inbox', at: { x: 400, y: 301 } });
     expect(ids()).toEqual(['/home']);
@@ -115,7 +118,7 @@ describe('tearing tabs off and docking windows back (FR-NAV-05)', () => {
   });
 
   it('keeps the tab when the window could not be opened', async () => {
-    const mail = openTab('/mail');
+    const mail = openTab('/mail')!;
     mocked.mockRejectedValueOnce(new Error('rate limited'));
     expect(await detachTab(mail)).toBe(false);
     expect(ids()).toEqual(['/home', '/mail']);

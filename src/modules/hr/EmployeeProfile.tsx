@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useCanOpen } from '../../core/access';
 import { app } from '../../core/app-state';
 import { apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
@@ -53,6 +54,9 @@ export default function EmployeeProfile({ id, onBack }: { id: number; onBack: ()
   const qc = useQueryClient();
   const { navigate } = useTab();
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
+  // Email and Chat open those apps: only for whoever has them. (User account is the web's Users, of no app.)
+  const canMail = useCanOpen('mail');
+  const canChat = useCanOpen('chat');
   const [tab, setTab] = useState<Tab>('overview');
   const [editing, setEditing] = useState(false);
   const [asking, setAsking] = useState(false);
@@ -106,12 +110,12 @@ export default function EmployeeProfile({ id, onBack }: { id: number; onBack: ()
             <b className={e.status === 'active' ? 'text-success' : 'text-[#9A4A06] dark:text-warning'}>{humanise(e.status)}</b>
           </span>
         </div>
-        {e.email ? (
+        {e.email && canMail ? (
           <button type="button" className={btn} onClick={() => navigate(`/mail?compose=1&to=${encodeURIComponent(e.email!)}`)}>
             Email
           </button>
         ) : null}
-        {e.user_id && !p.is_self ? (
+        {e.user_id && !p.is_self && canChat ? (
           <button type="button" className={btn} onClick={() => void chat()}>
             Chat
           </button>

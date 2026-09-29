@@ -98,6 +98,16 @@ export class OfflineCache {
     return Number(r?.n ?? 0);
   }
 
+  /** One app's answers for one person: dropped when the app is no longer theirs. */
+  clearModule(userId: string, module: string): number {
+    return this.db.run('DELETE FROM cached_records WHERE user_id = ? AND module = ?', userId, module).changes;
+  }
+
+  /** The modules a person has answers saved for. */
+  modules(userId: string): string[] {
+    return this.db.all<{ module: string }>('SELECT DISTINCT module FROM cached_records WHERE user_id = ?', userId).map((r) => r.module);
+  }
+
   clearUser(userId: string): number {
     return this.db.run('DELETE FROM cached_records WHERE user_id = ?', userId).changes;
   }

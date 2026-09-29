@@ -130,6 +130,12 @@ export interface Bootstrap {
   defaultOrganizationId: string | null;
   apps: string[] | '*' | null;
   serverApps: string[] | null;
+  /**
+   * App slugs the person may open only in self-service mode, because they
+   * lack the full app — today `expenses`, for filing their own claims.
+   * Empty when the server does not say (older servers).
+   */
+  selfService: string[];
   permissions: string[];
   entitlements: Record<string, boolean>;
   featureFlags: Record<string, boolean>;

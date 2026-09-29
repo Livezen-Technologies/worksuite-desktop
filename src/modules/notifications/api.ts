@@ -1,3 +1,5 @@
+import { canOpenLink, categoryVisible, type VisibleApps } from '@shared/access';
+import { canFollowLink, refuse } from '../../core/access';
 import { apiGet, apiPost } from '../../core/api';
 import { call } from '../../core/bridge';
 import { openWebLink } from '../../core/tab-context';
@@ -61,6 +63,20 @@ export function fetchCentre(p: { view: View; category?: string | null; q?: strin
     },
     signal,
   ).then((c) => ({ ...c, notifications: (c.notifications ?? []).filter((n) => inView(n, p.view)) }));
+}
+
+/**
+ * What the person may see of a list: a row whose link opens in an app they
+ * were not given is left out (a row with no link stays). The server stops
+ * sending these; this keeps any that arrive — or were cached — out of sight.
+ */
+export function visibleNotices(list: Notice[], visible: VisibleApps): Notice[] {
+  return list.filter((n) => canOpenLink(n.link, visible));
+}
+
+/** The "Apps" list: categories of apps the person may open, and those of no app (system, security…). */
+export function visibleCategories<T>(entries: Array<[string, T]>, visible: VisibleApps): Array<[string, T]> {
+  return entries.filter(([c]) => categoryVisible(c, visible));
 }
 
 /** Somebody named you: a chat, a task, a comment, the feed. */
@@ -151,7 +167,8 @@ const isChatLink = (link: string | null | undefined) => /^\/chat(\/|\?|$)/.test(
 /** Opens what a notification is about: a meeting in its window, anything else where it lives. */
 export function openNotice(n: Pick<Notice, 'link' | 'title'>): void {
   const uuid = meetUuid(n.link);
-  if (uuid) void openMeeting(uuid, n.title);
+  if (uuid && !canFollowLink(n.link)) refuse();
+  else if (uuid) void openMeeting(uuid, n.title);
   else if (n.link) openWebLink(n.link);
 }
 

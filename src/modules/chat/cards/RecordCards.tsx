@@ -1,3 +1,5 @@
+import { canOpenWebPath } from '@shared/access';
+import { useVisibleIds } from '../../../core/access';
 import { useStore } from '../../../core/store';
 import { app } from '../../../core/app-state';
 import { openWebLink } from '../../../core/tab-context';
@@ -25,6 +27,10 @@ export function RecordCards({ text }: { text: string | null | undefined }) {
 }
 
 export function RecordCard({ r }: { r: RecordRef }) {
+  const visible = useVisibleIds();
+  // A record in an app this person was not given is not read, named or offered:
+  // a plain "no access" frame stands where its card would be.
+  if (!canOpenWebPath(pathOf(r), visible)) return <CardFrame kind="link" state="noaccess" gone={{ title: 'You don’t have access', sub: 'This link is not one you can open.' }} />;
   if (r.kind === 'meet') return <MeetShareCard uuid={r.uuid} />;
   return <ModuleCard r={r} />;
 }

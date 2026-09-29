@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
 import type { AiHandoff, NavigateRequest } from '@shared/types';
+import { canOpen, canOpenWeb, refuse, useCanOpen, useVisibleIds } from '../core/access';
 import { app } from '../core/app-state';
-import { call, on } from '../core/bridge';
-import { accelerator, commandForAccelerator, effectiveShortcuts, getCommand, registerCommand } from '../core/commands';
+import { call, errorMessage, on } from '../core/bridge';
+import { accelerator, commandForAccelerator, effectiveShortcuts, getCommand, registerCommand, runCommand } from '../core/commands';
 import { noteRecentApp } from '../core/recent-apps';
 import { useStore } from '../core/store';
 import { activateIndex, activeTab, closeTab, closeTabsForApps, detachTab, dockSide, insertTab, navigate, openTab, resetTabs, restoreClosed, restoreTabs, suspendIdle, tabsStore, undockSide } from '../core/tabs';
@@ -30,7 +31,9 @@ export function Shell() {
   const overlay = useStore(ui, (s) => s.overlay);
   const dock = useStore(ui, (s) => s.dock);
   const apps = useStore(app, (s) => s.apps);
-  const hasChat = apps.some((a) => a.id === 'chat');
+  const visible = useVisibleIds();
+  const hasChat = useCanOpen('chat');
+  const hasAi = useCanOpen('ai');
   // With the call window off, the bar under the tabs plays the tone instead.
   const ringWindow = useStore(app, (s) => s.prefs?.webchatRinging?.window ?? true);
   const info = useStore(app, (s) => s.info);
@@ -46,7 +49,7 @@ export function Shell() {
   useEffect(() => {
     if (restored.current || apps.length === 0) return;
     restored.current = true;
-    const allowed = allowedModules(new Set(apps.map((a) => a.id)));
+    const allowed = allowedModules(visible);
     void restoreTabs(allowed).then((ok) => {
       if (!ok || tabsStore.get().tabs.length === 0) resetTabs();
       // And the tabs torn off into their own windows (FR-NAV-05/07), where they were.
@@ -54,21 +57,23 @@ export function Shell() {
       if (!tabsStore.get().tabs.some((t) => t.app === 'home')) openTab('/home', { background: true });
       if (info?.restoredFromCrash) toast('info', 'WorkSuite closed unexpectedly. Your tabs, drafts and unsent changes have been restored.');
     });
-  }, [apps, info]);
+  }, [apps, visible, info]);
 
-  // FR-REG-04 / WF-28: an app the administrator disabled leaves the navigation and its tabs close.
+  // FR-REG-04 / WF-28: an app the person is no longer given leaves the
+  // navigation and its tabs close — whichever way the bootstrap was refreshed
+  // (sign-in, organization switch, access.changed, the periodic check).
   useEffect(() => {
-    const ids = new Set(apps.map((a) => a.id));
     const prev = knownApps.current;
-    knownApps.current = ids;
+    knownApps.current = visible;
     if (!prev || !restored.current) return;
-    const allowed = allowedModules(ids);
+    const allowed = allowedModules(visible);
     const closed = closeTabsForApps(allowed);
     for (const id of closed) {
       const name = moduleFor(id)?.manifest.name ?? id;
-      toast('warning', `${name} was disabled by your administrator.`);
+      toast('warning', `${name} is no longer available to you.`);
     }
-  }, [apps]);
+    if (ui.get().dock === 'ai' && !canOpen('ai')) toggleDock('ai');
+  }, [visible]);
 
   // Shell commands (FR-SRCH-03) and shortcuts (FR-SRCH-04).
   useEffect(() => {
@@ -93,7 +98,7 @@ export function Shell() {
       registerCommand({ id: 'settings', label: 'Settings', group: 'Navigate', run: () => navigate('/settings') }),
       registerCommand({ id: 'account', label: 'My account', group: 'Navigate', keywords: 'profile picture password two-factor passkey sessions', run: () => navigate('/account/profile') }),
       registerCommand({ id: 'account-security', label: 'Change my password', group: 'Navigate', keywords: 'security two-factor 2fa passkey sessions sign out', run: () => navigate('/account/security') }),
-      registerCommand({ id: 'ai', label: 'Open AI Assistant', group: 'Shell', run: () => toggleDock('ai') }),
+      registerCommand({ id: 'ai', label: 'Open AI Assistant', group: 'Shell', run: () => toggleDock('ai'), when: () => canOpen('ai') }),
       registerCommand({ id: 'switch-org', label: 'Switch organization', group: 'Shell', run: () => openOverlay('org') }),
       registerCommand({ id: 'lock', label: 'Lock WorkSuite', group: 'Shell', run: () => void call('security:lock') }),
       registerCommand({ id: 'help', label: 'Help & Diagnostics', group: 'Navigate', run: () => navigate('/diagnostics') }),
@@ -102,13 +107,13 @@ export function Shell() {
       registerCommand({ id: 'theme', label: 'Change theme', group: 'Shell', keywords: 'dark light appearance', run: () => navigate('/settings/preferences') }),
       registerCommand({ id: 'pause-notifications', label: 'Pause notifications for an hour', group: 'Shell', run: () => void call('notifications:pause', { minutes: 60 }).then(() => toast('info', 'Notifications paused for an hour.')) }),
       registerCommand({ id: 'new', label: 'New (in this app)', group: 'Create', run: () => { const t = activeTab(); if (t) navigate(`/${t.app}?new=1`); } }),
-      registerCommand({ id: 'new-task', label: 'Create task', group: 'Create', run: () => navigate('/tasks?new=1'), when: () => app.get().apps.some((a) => a.id === 'tasks') }),
-      registerCommand({ id: 'new-email', label: 'New email', group: 'Create', run: () => navigate('/mail?compose=1'), when: () => app.get().apps.some((a) => a.id === 'mail') }),
-      registerCommand({ id: 'open-chat', label: 'Open chat', group: 'Navigate', run: () => navigate('/chat'), when: () => app.get().apps.some((a) => a.id === 'chat') }),
-      registerCommand({ id: 'chat-drawer', label: 'Chat over this screen', group: 'Shell', keywords: 'drawer message', run: () => (ui.get().dock === 'chat' ? minimiseChatDrawer() : openChatDrawer(ui.get().chatRoom)), when: () => app.get().apps.some((a) => a.id === 'chat') }),
-      registerCommand({ id: 'upload', label: 'Upload file', group: 'Create', run: () => navigate('/files?upload=1'), when: () => app.get().apps.some((a) => a.id === 'files') }),
-      registerCommand({ id: 'clock-in', label: 'Clock in / out', group: 'Create', run: () => navigate('/hr'), when: () => app.get().apps.some((a) => a.id === 'hr') }),
-      registerCommand({ id: 'new-lead', label: 'New lead', group: 'Create', run: () => navigate('/crm?new=1'), when: () => app.get().apps.some((a) => a.id === 'crm') }),
+      registerCommand({ id: 'new-task', label: 'Create task', group: 'Create', run: () => navigate('/tasks?new=1'), when: () => canOpen('tasks') }),
+      registerCommand({ id: 'new-email', label: 'New email', group: 'Create', run: () => navigate('/mail?compose=1'), when: () => canOpen('mail') }),
+      registerCommand({ id: 'open-chat', label: 'Open chat', group: 'Navigate', run: () => navigate('/chat'), when: () => canOpen('chat') }),
+      registerCommand({ id: 'chat-drawer', label: 'Chat over this screen', group: 'Shell', keywords: 'drawer message', run: () => (ui.get().dock === 'chat' ? minimiseChatDrawer() : openChatDrawer(ui.get().chatRoom)), when: () => canOpen('chat') }),
+      registerCommand({ id: 'upload', label: 'Upload file', group: 'Create', run: () => navigate('/files?upload=1'), when: () => canOpen('files') }),
+      registerCommand({ id: 'clock-in', label: 'Clock in / out', group: 'Create', run: () => navigate('/hr'), when: () => canOpen('hr') }),
+      registerCommand({ id: 'new-lead', label: 'New lead', group: 'Create', run: () => navigate('/crm?new=1'), when: () => canOpen('crm') }),
       ...Array.from({ length: 9 }, (_, i) => registerCommand({ id: `tab-${i + 1}`, label: `Go to tab ${i + 1}`, group: 'Shell', run: () => activateIndex(i + 1) })),
       // ⌃0–⌃9 (Ctrl+Alt elsewhere): All organizations, then the switcher's list in order. Shortcuts only, not palette entries.
       ...Array.from({ length: 10 }, (_, i) =>
@@ -116,7 +121,7 @@ export function Shell() {
           id: `org-${i}`,
           label: i === 0 ? 'Show all organizations' : `Switch to organization ${i}`,
           group: 'Shell',
-          when: () => false,
+          hidden: true,
           run: () => {
             const b = app.get().bootstrap;
             const orgs = b?.organizations ?? [];
@@ -138,11 +143,11 @@ export function Shell() {
         if (e.key === 'Escape') closeOverlay();
         return;
       }
-      const cmd = getCommand(id);
-      if (!cmd) return;
+      if (!getCommand(id)) return;
       e.preventDefault();
       e.stopPropagation();
-      cmd.run();
+      // Unavailable (an app the person was not given): the keys do nothing.
+      runCommand(id);
     };
     window.addEventListener('keydown', onKey);
     return () => {
@@ -156,8 +161,7 @@ export function Shell() {
   useEffect(() => {
     const offs = [
       on<{ id: string; arg?: number }>('command', (c) => {
-        const cmd = getCommand(c.id === 'tab' ? `tab-${c.arg ?? 1}` : c.id);
-        cmd?.run();
+        runCommand(c.id === 'tab' ? `tab-${c.arg ?? 1}` : c.id);
       }),
       // Quick Ask handing its text over: the AI dock, a new task, or search.
       on<AiHandoff>('ai:open', (h) => {
@@ -172,15 +176,14 @@ export function Shell() {
         }
       }),
       on<NavigateRequest>('navigate', (req) => {
-        const allowed = allowedModules(new Set(app.get().apps.map((a) => a.id)));
         const target = req.route.replace(/^\/+/, '').split(/[/?]/)[0] || 'home';
-        if (!allowed.has(target) && moduleFor(target)) {
-          toast('error', "You don't have access to this record.");
+        if (moduleFor(target) ? !canOpen(target) : !canOpenWeb(req.route)) {
+          refuse();
           return;
         }
         if (!moduleFor(target)) {
           toast('info', 'That record opens in WorkSuite on the web.');
-          void call('app:openInBrowser', { path: req.route });
+          void call('app:openInBrowser', { path: req.route }).catch((e) => toast('error', errorMessage(e)));
           return;
         }
         // A torn-off window docked back: a tab of its own, or beside the open one.
@@ -238,7 +241,7 @@ export function Shell() {
           {hasChat ? <RingingBar tone={!ringWindow} /> : null}
           <div className="relative flex min-h-0 flex-1">
             <Workspace />
-            {dock === 'ai' ? <AiDock /> : null}
+            {dock === 'ai' && hasAi ? <AiDock /> : null}
             {dock === 'chat' && hasChat ? <ChatDrawer /> : null}
             {hasChat ? <MinimisedChats /> : null}
           </div>

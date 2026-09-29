@@ -1,4 +1,5 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
+import { APP_PARTS, canOpenApp, SHELL_SCREENS, type VisibleApps } from '@shared/access';
 import { APP_CATALOGUE } from '@shared/apps';
 import { defineDesktopManifest, validateManifest, type DesktopManifest, type DesktopManifestInput } from '@shared/manifest';
 
@@ -21,13 +22,13 @@ export interface DesktopModule {
   id: string;
   manifest: DesktopManifest;
   component: LazyExoticComponent<ComponentType<ModuleProps>>;
-  /** Available to everyone signed in, regardless of app access. */
+  /** Available to everyone signed in, regardless of app access (a shell screen, shared/access.ts). */
   always?: boolean;
-  /** Available to whoever may open this app (a part of another app, in its own windows). */
+  /** Available to whoever may open this app (a part of another app, in its own windows; shared/access.ts). */
   requires?: string;
 }
 
-const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: ComponentType<ModuleProps> }>; always?: boolean; requires?: string }> = [
+const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: ComponentType<ModuleProps> }> }> = [
   {
     input: defineDesktopManifest({
       id: 'home', name: 'Home', icon: 'home', contractVersion: 1, desktop: { enabled: true },
@@ -36,7 +37,6 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
       widgets: [{ id: 'todays-work', size: 'md' }, { id: 'calendar', size: 'md' }, { id: 'waiting-for-me', size: 'md' }, { id: 'activity', size: 'md' }, { id: 'files', size: 'md' }, { id: 'summary', size: 'md' }],
     }),
     load: () => import('./home/HomePage'),
-    always: true,
   },
   {
     input: defineDesktopManifest({ id: 'activity', name: 'Activity', icon: 'activity', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' } }),
@@ -71,7 +71,6 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
       windows: [{ id: 'call', route: '/calls/call', alwaysOnTop: true }, { id: 'ring', route: '/calls/ring', alwaysOnTop: true }],
     }),
     load: () => import('./calls/CallsPage'),
-    requires: 'chat',
   },
   {
     input: defineDesktopManifest({
@@ -219,22 +218,18 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
   {
     input: defineDesktopManifest({ id: 'notifications', name: 'Notifications', icon: 'bell', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'READ_CACHE', cache: ['/api/notifications'] } }),
     load: () => import('./notifications/NotificationsPage'),
-    always: true,
   },
   {
     input: defineDesktopManifest({ id: 'settings', name: 'Settings', icon: 'settings', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' } }),
     load: () => import('./settings/SettingsPage'),
-    always: true,
   },
   {
     input: defineDesktopManifest({ id: 'account', name: 'My account', icon: 'user', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' }, deepLinks: ['account'] }),
     load: () => import('./account/AccountPage'),
-    always: true,
   },
   {
     input: defineDesktopManifest({ id: 'diagnostics', name: 'Diagnostics', icon: 'stethoscope', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' } }),
     load: () => import('./diagnostics/DiagnosticsPage'),
-    always: true,
   },
 ];
 
@@ -248,7 +243,8 @@ for (const def of DEFS) {
     console.warn('[registry] module rejected', def.input.id, check.error);
     continue;
   }
-  MODULES.push({ id: check.manifest.id, manifest: check.manifest, component: lazy(def.load), always: def.always, requires: def.requires });
+  const id = check.manifest.id;
+  MODULES.push({ id, manifest: check.manifest, component: lazy(def.load), always: SHELL_SCREENS.has(id), requires: APP_PARTS[id] });
 }
 
 export function moduleFor(id: string): DesktopModule | undefined {
@@ -265,10 +261,14 @@ export function titleForRoute(route: string): string {
   return moduleFor(id)?.manifest.name ?? APP_CATALOGUE.find((a) => a.id === id)?.label ?? 'WorkSuite';
 }
 
-/** Modules the current user may open: visible apps with a desktop module, plus the always-on screens. */
-export function allowedModules(visibleAppIds: Set<string>): Set<string> {
+/**
+ * Modules the current user may open: visible apps with a desktop module, the
+ * parts of a visible app (calls, of chat), and the always-on screens — the
+ * same decision as everywhere else (`canOpenApp`, shared/access.ts).
+ */
+export function allowedModules(visibleAppIds: VisibleApps): Set<string> {
   const out = new Set<string>();
-  for (const m of MODULES) if (m.always || visibleAppIds.has(m.id)) out.add(m.id);
+  for (const m of MODULES) if (canOpenApp(m.id, visibleAppIds)) out.add(m.id);
   return out;
 }
 

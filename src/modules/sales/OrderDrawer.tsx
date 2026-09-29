@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
+import { useCanOpen } from '../../core/access';
 import { app } from '../../core/app-state';
 import { apiDelete, apiGet, apiPost } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
@@ -408,6 +409,8 @@ function Activity({ id }: { id: number }) {
 
 function Linked({ o }: { o: OrderDetail }) {
   const { deliveries, invoices } = o.links;
+  // An invoice opens in Invoices: listed for everyone, a way in only for whoever has that app.
+  const billing = useCanOpen('billing');
   return (
     <div className="flex flex-col gap-3.5">
       <div>
@@ -427,14 +430,26 @@ function Linked({ o }: { o: OrderDetail }) {
       <div>
         <Caps>Invoices</Caps>
         {invoices.length ? (
-          invoices.map((i) => (
-            <button key={i.id} type="button" onClick={() => openWebLink(`/billing?invoice=${i.id}`)} className="flex w-full items-center gap-2 border-b border-line/70 py-1.5 text-left text-[12.5px] last:border-b-0 hover:bg-subtle">
-              <b className="flex-1 text-primary">{i.number}</b>
-              <span className="text-ink-3">{i.issue_date ? dateLabel(i.issue_date) : ''}</span>
-              <span className="rounded-full bg-subtle px-2 py-0.5 text-[11.5px] font-bold text-ink-2">{i.status}</span>
-              <b className="w-[120px] text-right text-ink tabular-nums">{moneyFull(i.total, o.currency)}</b>
-            </button>
-          ))
+          invoices.map((i) => {
+            const row = 'flex w-full items-center gap-2 border-b border-line/70 py-1.5 text-left text-[12.5px] last:border-b-0';
+            const cells = (
+              <>
+                <b className={cx('flex-1', billing ? 'text-primary' : 'text-ink')}>{i.number}</b>
+                <span className="text-ink-3">{i.issue_date ? dateLabel(i.issue_date) : ''}</span>
+                <span className="rounded-full bg-subtle px-2 py-0.5 text-[11.5px] font-bold text-ink-2">{i.status}</span>
+                <b className="w-[120px] text-right text-ink tabular-nums">{moneyFull(i.total, o.currency)}</b>
+              </>
+            );
+            return billing ? (
+              <button key={i.id} type="button" onClick={() => openWebLink(`/billing?invoice=${i.id}`)} className={cx(row, 'hover:bg-subtle')}>
+                {cells}
+              </button>
+            ) : (
+              <div key={i.id} className={row}>
+                {cells}
+              </div>
+            );
+          })
         ) : (
           <p className="m-0 text-[12.5px] text-ink-3">Nothing has been invoiced.</p>
         )}

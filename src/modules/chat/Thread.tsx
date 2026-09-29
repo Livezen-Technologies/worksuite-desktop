@@ -1,6 +1,8 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { canOpenLink } from '@shared/access';
 import type { OfflineMutation } from '@shared/types';
+import { useCanOpen, useVisibleIds } from '../../core/access';
 import { app } from '../../core/app-state';
 import { apiGet, apiPost, apiPut } from '../../core/api';
 import { call, errorMessage, on, registerDropped } from '../../core/bridge';
@@ -68,7 +70,10 @@ export function Thread({
 }) {
   const qc = useQueryClient();
   const me = useStore(app, (s) => s.auth?.user?.id);
-  const meetAllowed = useStore(app, (s) => s.apps.some((a) => a.id === 'meet'));
+  const meetAllowed = useCanOpen('meet');
+  // Making a task or a note from here crosses into Tasks or Notes: only for whoever has them.
+  const tasksAllowed = useCanOpen('tasks');
+  const notesAllowed = useCanOpen('notes');
   const scroller = useRef<HTMLDivElement>(null);
   const [typing, setTyping] = useState<Record<string, string>>({});
   const composer = useRef<ComposerHandle>(null);
@@ -326,14 +331,18 @@ export function Thread({
         extras={
           drawer ? (
             <div className="flex flex-wrap gap-1.5 text-[12px] font-bold">
-              <button type="button" onClick={() => navigate(`/tasks?new=1&title=${encodeURIComponent(`Follow up: ${room?.name ?? 'conversation'}`.slice(0, 200))}`)} className={chip}>
-                <Icon name="tasks" size={14} className="text-primary" />
-                Create task
-              </button>
-              <button type="button" disabled={saving} onClick={() => void saveAsNote()} className={chip}>
-                <Icon name="notebook" size={14} className="text-[#CA8A04]" />
-                {saving ? 'Saving…' : 'Save as note'}
-              </button>
+              {tasksAllowed ? (
+                <button type="button" onClick={() => navigate(`/tasks?new=1&title=${encodeURIComponent(`Follow up: ${room?.name ?? 'conversation'}`.slice(0, 200))}`)} className={chip}>
+                  <Icon name="tasks" size={14} className="text-primary" />
+                  Create task
+                </button>
+              ) : null}
+              {notesAllowed ? (
+                <button type="button" disabled={saving} onClick={() => void saveAsNote()} className={chip}>
+                  <Icon name="notebook" size={14} className="text-[#CA8A04]" />
+                  {saving ? 'Saving…' : 'Save as note'}
+                </button>
+              ) : null}
               <button type="button" aria-label="Search in conversation" aria-pressed={searching} onClick={() => setSearching(!searching)} className={cx(chip, searching && '!border-primary !bg-selection !text-primary')}>
                 <Icon name="search" size={14} className="text-ink-2" />
                 Search
@@ -357,6 +366,7 @@ type Card = { kind: string; available?: boolean; why?: string; heading?: string;
 function Bubble({ m, own, roomId, onReply, onForward, onEdit }: { m: ChatMessage & { starred?: boolean; pinned?: unknown; card?: Card | null }; own: boolean; roomId: string; onReply: (r: ReplyTarget) => void; onForward: (m: ChatMessage) => void; onEdit: (m: ChatMessage) => void }) {
   const qc = useQueryClient();
   const { openLink } = useTab();
+  const visible = useVisibleIds();
   const [picker, setPicker] = useState(false);
   const [more, setMore] = useState(false);
   const [deleting, setDeleting] = useState<'everyone' | 'me' | null>(null);
@@ -443,7 +453,7 @@ function Bubble({ m, own, roomId, onReply, onForward, onEdit }: { m: ChatMessage
                 <span className="text-[11px] font-bold tracking-[0.5px] text-[#9A4A06] uppercase dark:text-warning">{m.card.heading ?? m.card.kind.split('.')[0]}</span>
                 <b className="text-[13px] text-ink">{m.card.name ?? m.card.what ?? ''}{m.card.who ? ` · ${m.card.who}` : ''}</b>
                 {m.card.owner ? <span className="text-[12px] text-ink-3">{m.card.owner}</span> : null}
-                {m.card.link ? <button type="button" onClick={() => openLink(m.card!.link!)} className="self-start text-[12px] font-semibold text-primary hover:underline">Open</button> : null}
+                {m.card.link && canOpenLink(m.card.link, visible) ? <button type="button" onClick={() => openLink(m.card!.link!)} className="self-start text-[12px] font-semibold text-primary hover:underline">Open</button> : null}
               </>
             )}
           </div>
@@ -615,6 +625,8 @@ function useDismiss(open: boolean, box: React.RefObject<HTMLElement | null>, clo
 function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForward, onEdit }: { m: ChatMessage & { starred?: boolean; pinned?: unknown; card?: Card | null }; own: boolean; group: boolean; first: boolean; roomId: string; roomName: string; onReply: (r: ReplyTarget) => void; onForward: (m: ChatMessage) => void; onEdit: (m: ChatMessage) => void }) {
   const qc = useQueryClient();
   const { openLink } = useTab();
+  const visible = useVisibleIds();
+  const tasksAllowed = useCanOpen('tasks');
   const [pop, setPop] = useState<{ kind: 'react' | 'more'; left: number; top: number } | null>(null);
   const [picker, setPicker] = useState(false);
   const [deleting, setDeleting] = useState<'everyone' | 'me' | null>(null);
@@ -646,7 +658,7 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
     { icon: 'link', label: 'Copy link', run: () => void navigator.clipboard.writeText(`worksuite://chat/${roomId}`).then(() => toast('success', 'Link copied.')) },
     { icon: m.pinned ? 'pin-off' : 'pin', label: m.pinned ? 'Unpin message' : 'Pin message', run: () => void act(() => apiPut(`/api/chat/messages/${m.id}/pin`, { pinned: !m.pinned }), m.pinned ? 'Unpinned.' : 'Pinned for everyone.') },
     ...(can.forward ? [{ icon: 'forward', label: 'Forward…', run: () => onForward(m) }] : []),
-    { icon: 'tasks', label: 'Create task', run: () => navigate(`/tasks?new=1&title=${encodeURIComponent((m.message ?? `Follow up: ${roomName}`).replace(/\s+/g, ' ').slice(0, 200))}`) },
+    ...(tasksAllowed ? [{ icon: 'tasks', label: 'Create task', run: () => navigate(`/tasks?new=1&title=${encodeURIComponent((m.message ?? `Follow up: ${roomName}`).replace(/\s+/g, ' ').slice(0, 200))}`) }] : []),
     ...(can.edit ? [{ icon: 'compose', label: 'Edit', run: () => onEdit(m) }] : []),
     ...(can.delete_me || can.delete_everyone ? [{ icon: 'trash', label: 'Delete…', danger: true, run: () => setDeleting(can.delete_everyone ? 'everyone' : 'me') }] : []),
   ];
@@ -789,7 +801,7 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
                     <LinkedText text={shownText} className={accent} />
                   </span>
                 ) : null}
-                {m.card?.link && m.card.available !== false && !m.card.kind.startsWith('drive.') ? (
+                {m.card?.link && m.card.available !== false && !m.card.kind.startsWith('drive.') && canOpenLink(m.card.link, visible) ? (
                   <button type="button" onClick={() => openLink(m.card!.link!)} className={cx('pt-1 text-[12.5px] font-bold hover:underline', accent)}>
                     Open {m.card.kind.split('.').pop()}
                   </button>

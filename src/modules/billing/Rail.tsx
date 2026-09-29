@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useCanOpen } from '../../core/access';
 import { call } from '../../core/bridge';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
@@ -43,6 +44,9 @@ export function BillRail({ view, draftsOnly, onPick, onDrafts, onOnAccount, onNe
   has: (perm: string) => boolean;
 }) {
   const [q, setQ] = useState('');
+  // Quotes live in CRM and deliveries and returns in Sales & Orders: listed only for whoever has those apps.
+  const crm = useCanOpen('crm') && has('crm.view');
+  const sales = useCanOpen('sales') && has('oms.view');
   const term = q.trim();
   const hits = useQuery({ queryKey: ['billing', 'search', org, term], queryFn: ({ signal }) => searchBilling(term, org, signal), enabled: term.length >= 2, staleTime: 30_000 });
   const browser = (path = '/billing') => void call('app:openInBrowser', { path });
@@ -149,10 +153,10 @@ export function BillRail({ view, draftsOnly, onPick, onDrafts, onOnAccount, onNe
             {counts.unallocated} {counts.unallocated === 1 ? 'payment' : 'payments'} on account
           </button>
         ) : null}
-        {has('crm.view') || has('oms.view') ? head('Sales flow') : null}
-        {has('crm.view') ? link('q', 'Quotes', 'file-text', () => onNavigate('/crm?tab=quotes'), 'Quotes — in CRM') : null}
-        {has('oms.view') ? link('d', 'Deliveries', 'truck', () => onNavigate('/sales?tab=ful'), 'Deliveries — in Sales & Orders') : null}
-        {has('oms.view') ? link('sr', 'Sales returns', 'undo', () => onNavigate('/sales?tab=ret'), 'Sales returns — in Sales & Orders') : null}
+        {crm || sales ? head('Sales flow') : null}
+        {crm ? link('q', 'Quotes', 'file-text', () => onNavigate('/crm?tab=quotes'), 'Quotes — in CRM') : null}
+        {sales ? link('d', 'Deliveries', 'truck', () => onNavigate('/sales?tab=ful'), 'Deliveries — in Sales & Orders') : null}
+        {sales ? link('sr', 'Sales returns', 'undo', () => onNavigate('/sales?tab=ret'), 'Sales returns — in Sales & Orders') : null}
         {has('billing.settings') ? head('Administration') : null}
         {has('billing.settings') ? item('set', 'Settings', 'settings') : null}
       </div>
