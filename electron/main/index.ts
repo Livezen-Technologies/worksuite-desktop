@@ -1,5 +1,6 @@
 import { app, clipboard, crashReporter, dialog, globalShortcut, ipcMain, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents } from 'electron';
 import os from 'node:os';
+import { hkdfSync } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { canOpenApp, canOpenLink, canOpenRoute, notificationAllowed, visibleAppIds } from '@shared/access';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
@@ -59,6 +60,9 @@ import { EventDesk } from '../services/event-desk';
 import { EventDeskPrint } from '../services/event-desk-print';
 import { OfficeEditorHost } from '../services/office-editor';
 import { OfficeExternal } from '../services/office-external';
+import { createPdfStudio } from '../services/pdf/host';
+import { pdfPathsInArgv } from '../services/pdf/local-files';
+import { DEFAULT_PDF_POLICY } from '../services/pdf/service';
 import { Vault } from '../services/vault';
 import { TrayService } from '../tray/tray';
 import { POLICY_PUBLIC_KEY, RELEASE_PUBLIC_KEY } from '../updater/keys';
@@ -83,6 +87,10 @@ if (!app.isPackaged && process.env.WS_E2E_FAKE_MEDIA) {
   app.commandLine.appendSwitch('use-fake-device-for-media-stream');
   app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 }
+
+/** PDFs handed over before PDF Studio is running wait here. */
+const pendingPdfs: string[] = [];
+let handPdfs: (paths: string[]) => void = (paths) => void pendingPdfs.push(...paths);
 
 if (!app.requestSingleInstanceLock()) {
   // FR-DL-04: a second launch hands its arguments (and deep link) to the first.
@@ -124,6 +132,12 @@ function main(): void {
   });
   const argvLink = findDeepLinkInArgv(process.argv);
   if (argvLink) pendingLinks.push(argvLink);
+  // PDFs the operating system hands over ("Open with"; a file dropped on the Dock icon): PDF Studio opens each.
+  app.on('open-file', (e, path) => {
+    e.preventDefault();
+    handPdfs([path]);
+  });
+  handPdfs(pdfPathsInArgv(process.argv));
 
   app.whenReady().then(() => start(boot, pendingLinks, (fn) => (handleLink = fn)));
 }
@@ -1027,6 +1041,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     // Open documents close, and their editor partitions are cleared (OO-DSK-023).
     office.closeAll(true);
     officeLocal.stop();
+    // Open PDFs close, and passwords remembered for the session are forgotten.
+    void pdfStudio.closeAll();
     realtime.stop();
     notifications.stop();
     device.stop();
@@ -1062,6 +1078,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         transfers.wipe(uid);
         // Copies opened in other apps are no longer watched; the files stay the person's.
         officeLocal.forgetUser(uid);
+        // PDF Studio's working copies and thumbnails (PDF-OFF-005).
+        void pdfStudio.wipe();
       }
       // What Drive sync put on this computer counts as offline files (§11.2 wipe_on_revoke).
       if (scope === 'cache+offline_files') void sync.wipe(uid, false);
@@ -1162,6 +1180,27 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     broadcast('realtime:resync');
   }
 
+  // PDF Studio (services/pdf): engine workers, working copies, its IPC. Read-only viewing in this version.
+  const pdfStudio = createPdfStudio({
+    profile: p.profile,
+    userData: p.userData,
+    http,
+    cacheKey: secrets.getStatus().persistent ? Buffer.from(hkdfSync('sha256', Buffer.from(dbKey, 'base64'), 'worksuite-pdf', 'thumbnail-cache', 32)) : null,
+    // The organisation's PDF policies (§21.2) come with the server's PDF Studio service (stage D2).
+    policy: () => DEFAULT_PDF_POLICY,
+    desktop: () => ({
+      downloads: sessionCtl.current()?.policy.downloads !== 'disabled' && sessionCtl.hasPermission('desktop.downloads'),
+      diskCache: sessionCtl.capabilities().offlineCache,
+    }),
+    audit: (action, details) => audit.record(sessionCtl.userId(), action, details),
+    signedIn: () => sessionCtl.isReady(),
+    dbCheck: () => db.integrityCheck(),
+    navigate: (req) => navigate(req),
+    appVersion: app.getVersion(),
+  });
+  handPdfs = (paths) => void pdfStudio.openFromOs(paths);
+  if (pendingPdfs.length) handPdfs(pendingPdfs.splice(0));
+
   const diagnostics = new DiagnosticsService({
     serverOrigin: () => auth.getServer()?.origin ?? null,
     timedFetch: async (path) => {
@@ -1226,6 +1265,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     // A meeting window that goes away takes its share, and any control of it, with it.
     const id = contents.id;
     contents.once('destroyed', () => {
+      pdfStudio.senderGone(id);
       remoteControl.windowGone(id);
       screenShare.forget(id);
     });
@@ -1316,6 +1356,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     attendanceBreak,
   };
   registerHandlers(router, ctx);
+  pdfStudio.register(router);
   router.install();
   const missing = router.missingHandlers();
   if (missing.length) log.warn('IPC channels without handlers', { missing });
@@ -1334,6 +1375,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // ── lifecycle ──────────────────────────────────────────────────────────
   app.on('second-instance', (_e, argv) => {
     const link = findDeepLinkInArgv(argv);
+    const pdfs = pdfPathsInArgv(argv);
+    if (pdfs.length) handPdfs(pdfs);
     if (link) handleDeepLink(link);
     else windows.showMain();
   });

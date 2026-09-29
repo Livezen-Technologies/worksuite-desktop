@@ -146,6 +146,18 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./office/OfficePage'),
   },
   {
+    // PDF Studio (WorkSuite PDF Studio SRS, stage D1): PDFs from Drive, this computer and Mail open here, each in a
+    // tab of its own, drawn by PDFium in a worker process per document (electron/services/pdf). Read-only for now.
+    input: defineDesktopManifest({
+      id: 'pdf', name: 'PDF Studio', icon: 'file-text', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'NONE' },
+      native: ['file-drop', 'printing'],
+      quickActions: [{ id: 'pdf-open-local', label: 'Open a PDF', route: '/pdf' }],
+      fileTypes: ['pdf'],
+    }),
+    load: () => import('./pdf/PdfStudio'),
+  },
+  {
     input: defineDesktopManifest({
       id: 'crm', name: 'CRM', icon: 'users', contractVersion: 1, desktop: { enabled: true },
       offline: { mode: 'READ_CACHE', entities: ['lead'], cache: ['/api/crm/leads'] },

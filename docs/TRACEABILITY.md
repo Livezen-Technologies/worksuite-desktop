@@ -295,6 +295,56 @@ Tests: `tests/unit/renderer/pms-desk.test.tsx`, `tests/unit/renderer/pms-money.t
 | PMS-DSH-002..004 (desk) | Done | `Dashboard.tsx`: the server's widgets, each opening its list |
 | PMS-ARC-030 | Partial | `pms.*` realtime nudges refresh the rack and lists (`core/query.ts`); a 30-second re-read otherwise. Needs a server with the gateway on to prove the 2 s |
 
+## PDF Studio (WorkSuite PDF Studio SRS v1.0, stage D1 — foundation and viewer)
+
+`src/modules/pdf` (renderer), `electron/services/pdf` and `electron/workers/pdf-worker.ts` (main and engine).
+Read-only: stage D2 adds annotation, pages, saving, locks, autosave and offline. Tests:
+`tests/unit/electron/pdf-engine.test.ts` (the real PDFium), `pdf-worker.test.ts` (the worker protocol, crashes,
+hangs, memory), `pdf-service.test.ts` (DesktopPDFService with a fake engine), `tests/unit/renderer/pdf-studio.test.tsx`;
+on a real system `tests/os/pdf/check.mjs` (workflow "PDF engine").
+
+| ID | Status | Where / note |
+|---|---|---|
+| PDF-ARCH-001, 002 | Done | `PDFEngineInterface` (`engine.ts`); `PdfiumProvider` (PDFium, WebAssembly, `@embedpdf/pdfium` 2.15.1); no MuPDF provider (AGPL/commercial, §2.5) |
+| PDF-ARCH-003 | Done | Nothing above the interface knows the engine; the contract carries no engine types |
+| PDF-ARCH-004 | Later | OCR is Ph5 |
+| PDF-ARCH-005 | Done | `capabilities()` asked at run time (sent with the worker's `ready`); layers and text editing are false for PDFium and hidden |
+| PDF-ARCH-010, 011 | Done | `window.worksuite.pdf` only (preload); no fs / child_process / shell in the renderer |
+| PDF-ARCH-012, 013 | Done | A worker per document; cancelable (renders by ticket, searches and scans between pages), memory-capped (1 GB), ended on a hang (no pong 20 s, deadline 30 s) and restartable (Retry) |
+| PDF-ARCH-014, 015 | Done | `local-files.ts` (handles; resolved, regular, `%PDF-`, size, not in the app's data); working copies in `<profile>/PDF/work` |
+| PDF-UI-001, 002 | Partial | Left: Pages, Bookmarks (outline), Search, Files (attachments). Right: Properties, Versions, Activity. Comments, Forms, Signatures, Layers panels come with their features (layers: PDFium has no API); panels collapse (View), not yet dockable |
+| PDF-UI-003 | Partial | File, source, version and "Read only" (with why); Saved / Saving / Unsaved / Saved locally come with editing (D2) |
+| PDF-UI-004 | Done | A PDF per WorkSuite tab (`open.ts`), the open one brought to the front; the ● prefix comes with editing |
+| PDF-UI-005 | Later | D2 (nothing unsaved in a viewer) |
+| PDF-UI-006 | Done | Ribbon commands off with their reason as the tooltip (policy, the PDF's own flags, view-only shares); later stages' tabs not shown |
+| PDF-UI-007, 008 | Done | Full screen of the PDF workspace; Present: one page on black, keys |
+| §4.3 shortcuts | Done | Ctrl/⌘ O, S (says read-only), P, F, Shift F, + / −, H, V through the shortcut registry (`core/commands.ts`, Settings); Z / Y with D2. The app menu's own zoom roles may take Ctrl/⌘ + / − on macOS first — to try there |
+| PDF-OPEN-001 | Partial | Drive (Files), local (dialog, drop, OS argv / `open-file`), Mail attachments. Chat attachments, Google Drive / OneDrive (no connectors in the desktop) and module documents not yet |
+| PDF-OPEN-002, 003 | Partial | Local files read in place, never uploaded; Edit / Save / Save As / Upload are D2 |
+| PDF-OPEN-004 | Partial | Mail: preview only; Save to Drive and Edit Copy are D2 |
+| PDF-OPEN-008 | Done | Prompt with "Remember for this session" (memory only); permanent remembering not offered |
+| PDF-OPEN-009 | Done | Max PDF Size (policy seam, default 2 GB): refused with the limit, before fetching |
+| PDF-OPEN-010 | Partial | `GET /api/pdf/{id}/status` (the server's PdfAccess "open") before any content; `files.pdf.open` is the server's (stage S) |
+| PDF-VIEW-001, 002 | Done | Single, continuous, two page, two page continuous, presentation, full screen, read mode; 25 %–6400 %, fit page / width, actual size |
+| PDF-VIEW-003 | Partial | Thumbnails, bookmarks / outline, search results, attachments; comments, layers, signatures panels later |
+| PDF-VIEW-004 | Done | Status bar: page n / N (editable), zoom, fit, Find |
+| PDF-VIEW-010…015 | Done | `layout.ts` + `Canvas.tsx`: only visible pages (±1 screen), preview then sharp, 1024-px tiles above 4 Mpx, tickets cancelled when a page leaves; thumbnails by the worker, cached in memory and sealed on disk; custom file access (no whole-file load). 2,000 pages: opened and first page drawn in ~0.2 s on the Linux check |
+| PDF-SRCH-001…004 | Done | Match case, whole word, regex; pages, comments, bookmarks; results with page and snippet, highlighted; streamed as pages are searched, in the worker |
+| AC-03, AC-04, AC-05 | Done | As above |
+| PDF-SEC-030…035 | Done | See SECURITY.md → PDF Studio |
+| PDF-SEC-013, 014 | Done | Passwords in memory only; never in logs, audit, reports or IPC traces (tested) |
+| PDF-PRN-001 | Done | Range / current / pages, fit or actual size, copies, orientation, duplex and printer in the OS dialog |
+| PDF-PRN-002 | Partial | The PDF's print flag and the organisation's policy (seam); `files.print` / `files.pdf.print` are the server's (stage S) |
+| PDF-PRN-003, 004 | Done | With or without comments and fields; `pdf.printed` audited with id, version, page count |
+| PDF-API-001…003 | Done | Opaque handles; per-session sender check; strict schemas |
+| PDF-API-004 | Later | No destructive calls in D1 |
+| PDF-AUD-001, 004 | Partial | `pdf.opened`, `pdf.printed` (local audit outbox, sent to `/desktop/v1/audit`); editing events with D2 |
+| PDF-NFR-001, 002 | Partial | Measured on the Linux check (2,000 pages: 224 ms to the first page); needs the reference machine |
+| PDF-NFR-010 | Done | A crashed or hung worker fails its tab with Retry, nothing else |
+| PDF-NFR-020 | Done | Sealed working copies and thumbnails |
+| PDF-NFR-030, 031 | Done | Failures logged (redacted) with format, size, pages, engine error, app version; the diagnostic report carries the log |
+| PDF-NFR-032 | Done | PDF Diagnostics (`pdf:diagnostics` + the window's own drawing check) |
+
 ## Devices, security, updates (SEC, UPD)
 
 | ID | Status | Where / note |

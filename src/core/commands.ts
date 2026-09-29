@@ -35,6 +35,18 @@ export const DEFAULT_SHORTCUTS: Record<string, string> = {
   'switch-org': 'Mod+Shift+O',
   lock: 'Mod+L',
   help: 'F1',
+  // PDF Studio (PDF Studio SRS §4.3), answered only while a PDF Studio tab is in front.
+  'pdf-open': 'Mod+O',
+  'pdf-save': 'Mod+S',
+  'pdf-print': 'Mod+P',
+  'pdf-find': 'Mod+F',
+  'pdf-find-advanced': 'Mod+Shift+F',
+  'pdf-zoom-in': 'Mod+=',
+  'pdf-zoom-in-alt': 'Mod+Shift++',
+  'pdf-zoom-in-pad': 'Mod++',
+  'pdf-zoom-out': 'Mod+-',
+  'pdf-hand': 'H',
+  'pdf-select': 'V',
   ...Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`tab-${i + 1}`, `Mod+${i + 1}`])),
   // Organisations: 0 is All organizations, 1–9 the list in order. Control on
   // macOS, where ⌘1–9 are the tabs; Ctrl+Alt elsewhere, where Ctrl is.

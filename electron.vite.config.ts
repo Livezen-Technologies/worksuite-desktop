@@ -19,6 +19,8 @@ export default defineConfig({
           // Utility processes (§3.2): hashing and other CPU work never runs on
           // the main or renderer thread.
           'hash-worker': resolve(__dirname, 'electron/workers/hash-worker.ts'),
+          // PDF Studio: one per open document, PDFium (WebAssembly) inside (§3.4, §3.5).
+          'pdf-worker': resolve(__dirname, 'electron/workers/pdf-worker.ts'),
         },
       },
     },

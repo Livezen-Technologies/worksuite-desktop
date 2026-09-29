@@ -329,6 +329,25 @@ What the desktop cannot do because the server does not:
 - On a `/desktop/v1` server, `links/resolve` does not know `worksuite://pms/…` (`Desktop/Libraries/LinkGrammar`,
   `Links::APP_OF`): those links open without the server's record check (the tab's own requests are still checked).
 
+### PDF Studio
+
+PDF Studio (stage D1, the viewer) uses the server's existing PDF and Drive routes; it needs nothing new. The edit
+sessions, locks, versions and policies of the server's CorePDFService (stage S) are for stage D2.
+
+| For | Calls |
+|---|---|
+| Opening a Drive PDF | `GET /api/pdf/{id}/status` first (PdfAccess "open": 404 when the file cannot be seen; its `file.version`, `lock`, `versions`, `timeline` feed the title bar and the Review panel), then `GET /api/files/{id}/download` streamed into a sealed working copy |
+| A file shared to view only | `/download` answers 403: `GET /api/drive/preview/{id}` → its `url` (`/media/<token>`, the viewer's own signed address) instead; print and download are then off |
+| A mail attachment | `GET /api/mail/messages/{uid}/attachments/{ref}?folder=&dl=1&mailbox=` (preview only) |
+| Download | `transfers:download` (`fileId`, or the mail attachment's parts), as before |
+| PDF Diagnostics | `GET /api/pdf/capabilities` (the server's PDF service answering) |
+
+The organisation's PDF Studio policies (§21.2: print, copy, export, external links, local files, Max PDF Size) are
+checked by the desktop but read defaults (everything on, links confirmed, 2 GB) until the server's PDF Studio
+service (stage S) sends them; stage D2 wires them (`DesktopPdfService`'s `policy()`). Opening
+and printing are audited on the desktop (`pdf.opened`, `pdf.printed`: source, file id, version, pages) and sent to
+`/desktop/v1/audit` where the server offers it.
+
 ## The existing API (servers without `/desktop/v1`)
 
 | Need | Endpoint |

@@ -7,6 +7,7 @@
 | **Main** (`electron/main`) | lifecycle, windows, IPC router, tray, protocols, notifications, secure storage, SQLite, session, realtime socket, updater | full Node, never loads web content |
 | **Renderer** (`src/`) | React 19 UI for the shell and modules | sandboxed Chromium, no Node, talks only through `window.worksuite` |
 | **hash-worker** (`electron/workers`) | SHA-256 of files being uploaded | utility process, no network, reads only paths main names |
+| **pdf-worker** (`electron/workers`) | PDF Studio's engine: PDFium (WebAssembly) for one open document | utility process per document, no network; reads only the one file main names |
 
 Utility processes are run by the `ServiceSupervisor`: pinged every 10 s,
 restarted with exponential backoff (1 s → 5 min), marked FAILED after 5
@@ -79,6 +80,47 @@ Files routes Office files by the server's `/api/files/office/types`
 makes documents and copies of templates through `/api/files/office/new`
 and opens them for editing. A server without the Office API keeps the old
 way (the web's editor in the browser).
+
+## PDF Studio (PDF Studio SRS, stage D1 — the viewer)
+
+```
+renderer (src/modules/pdf)                main (electron/services/pdf)                 pdf-worker × open documents
+  PdfStudio → Workspace → Canvas  ──IPC──▶ DesktopPdfService ─────────────messages──▶ PdfiumProvider
+  session id, pages, tickets               sessions · render queue + cache ·            (PDFEngineInterface,
+  never a path or the file's bytes         sealed working copies · thumbnails ·         @embedpdf/pdfium)
+                                           links · print · audit
+```
+
+- **PDFEngineInterface** (`engine.ts`): every engine call goes through it. `PdfiumProvider`
+  (`pdfium-provider.ts`) implements it inside the worker; `WorkerEngine` (`worker-engine.ts`) implements it in
+  the main process over the worker protocol (`worker-protocol.ts`); unit tests use a fake. Capabilities are asked
+  at run time (`capabilities()`, PDF-ARCH-005) and the UI hides what is false.
+- **One worker per open document** (`electron/workers/pdf-worker.ts`, started by `host.ts`). The engine reads
+  the file a block at a time through `FPDF_LoadCustomDocument` (`file-reader.ts`), so a 2 GB drawing set is never
+  in memory whole. WebAssembly memory only grows; ending the process when the tab closes is how it is given back.
+  The worker answers pings; a hang, a crash or the memory ceiling ends it and the tab offers Retry. Once PDF
+  Studio has been used, one spare worker is kept warm so the next document does not wait for the engine to start.
+- **DesktopPDFService** (`service.ts`): sessions bound to the window that opened them; Drive files after
+  `GET /api/pdf/{id}/status` (the server's "may this person open it"), streamed into a sealed working copy
+  (`storage.ts`, the eLearning "WSL1" format, key in memory); renders queued per document, highest priority and
+  newest first, two at a time, cancelled by ticket when the page leaves the view, cached (96 MB a document);
+  thumbnails as JPEG, cached sealed on disk under a key derived from the database key; searches streamed as
+  `pdf:search` events; the background scan for active content updating the session (`pdf:changed`).
+- **PDFLocalFileBridge** (`local-files.ts`): handles for paths from the main process's dialog, a real drop, or
+  the OS (argv / `open-file`); resolved, a regular file, `%PDF-` in its first bytes, within the size limit, and
+  not inside the app's own data.
+- **PDFPrintBridge** (`print.ts`): pages drawn by the worker at 150/300 dpi, served from memory to a hidden
+  window (no preload, no JavaScript, no network, a CSP that allows only those images) on its own session, then the
+  OS print dialog.
+- **Renderer** (`src/modules/pdf`): `layout.ts` (pure: where pages sit for each view mode and zoom, which are
+  on screen by binary search, which tiles), `Canvas.tsx` (preview → sharp → tiles per visible page, links and
+  search highlights), `Workspace.tsx` (title bar, ribbon, panels, status bar, the §4.3 shortcuts through the
+  shortcut registry while the tab is in front), `Panels.tsx`, `Dialogs.tsx`, `open.ts` (the hand-off other
+  modules call: a tab per PDF).
+- **Seams for stage D2** (editing): the session's `mode` (VIEW) and `saveState` (read-only), the engine's
+  `annotationsWrite`/`pages`/`save` capabilities (PDFium has them: `FPDFPage_CreateAnnot`, `FPDF_ImportPages`,
+  `FPDFPage_SetRotation`, `PDFiumExt_SaveAsCopy`), the sealed working copies in `PDF/work`, and the service's
+  `policy()` for the server's policies (defaults until then).
 
 ## The request paths
 

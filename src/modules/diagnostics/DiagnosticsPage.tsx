@@ -4,7 +4,7 @@ import type { BundlePreview } from '@shared/ipc/contract';
 import { app } from '../../core/app-state';
 import { call, errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
-import { useTabTitle } from '../../core/tab-context';
+import { useTab, useTabTitle } from '../../core/tab-context';
 import { bytes } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
@@ -19,6 +19,7 @@ import type { ModuleProps } from '../registry';
  */
 export default function DiagnosticsPage(_props: ModuleProps) {
   useTabTitle('Diagnostics');
+  const { navigate } = useTab();
   const info = useStore(app, (s) => s.info);
   const checks = useQuery({ queryKey: ['diagnostics'], queryFn: () => call('diagnostics:run'), refetchOnWindowFocus: false });
   const [preview, setPreview] = useState<BundlePreview | null>(null);
@@ -59,6 +60,10 @@ export default function DiagnosticsPage(_props: ModuleProps) {
           <div className="flex gap-2">
             <Button icon="refresh" loading={checks.isFetching} onClick={() => void checks.refetch()}>
               Run again
+            </Button>
+            {/* Help → PDF Diagnostics (PDF Studio SRS §24.5): the engine, its worker, fonts, storage, printing. */}
+            <Button icon="file-text" onClick={() => navigate('/pdf?view=diagnostics')}>
+              PDF Diagnostics
             </Button>
             <Button variant="primary" icon="file-text" loading={build.isPending} onClick={() => build.mutate()}>
               Create diagnostic report
