@@ -10,6 +10,7 @@ import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../hr/par
 import { Pill } from '../inventory/parts';
 import { useNow } from '../calls/parts';
 import { K } from './api';
+import { MinutesSheet, MinutesView } from './Minutes';
 import { addMeeting, deleteMeeting, fetchMeetings, K2, labelOf, MEETING_KINDS, meetingBody, meetingDraft, MODES, updateMeeting, type Meeting, type MeetingDraft } from './work';
 
 /**
@@ -17,14 +18,17 @@ import { addMeeting, deleteMeeting, fetchMeetings, K2, labelOf, MEETING_KINDS, m
  * A mandatory one missed can disqualify the bid, so it says so; the deadline
  * for questions, when the buyer set one, is shown beside the meeting it
  * belongs to. Times are shown and typed on the reader's clock and stored as
- * the instant; attendance and the minutes are recorded afterwards.
+ * the instant; attendance and the minutes are recorded afterwards — the
+ * minutes as notes and the points agreed, each of which can become a task, a
+ * reminder or a follow-up meeting.
  */
-export default function Meetings({ id, canManage }: { id: number; canManage: boolean }) {
+export default function Meetings({ id, tender = null, canManage }: { id: number; tender?: string | null; canManage: boolean }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: K2.meetings(id), queryFn: ({ signal }) => fetchMeetings(id, signal) });
   // Which meetings are behind us; a minute is fine enough for that.
   const now = useNow(60_000);
   const [editing, setEditing] = useState<Meeting | 'new' | null>(null);
+  const [minutesOf, setMinutesOf] = useState<Meeting | null>(null);
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: K2.meetings(id) });
     void qc.invalidateQueries({ queryKey: K.all });
@@ -82,10 +86,13 @@ export default function Meetings({ id, canManage }: { id: number; canManage: boo
                     </span>
                   ) : null}
                   {m.attended_by ? <span className="text-[12px] text-ink-2">Went: {m.attended_by}</span> : null}
-                  {m.minutes ? <span className="text-[12px] whitespace-pre-wrap text-ink">{m.minutes}</span> : null}
+                  <MinutesView minutes={m.minutes} />
                 </span>
                 {canManage ? (
                   <span className="flex shrink-0 items-center gap-1.5">
+                    <button type="button" aria-label="Minutes of the meeting" title="Minutes: notes, and points to make into tasks, reminders or follow-ups" className={btnSmall + ' !h-7 gap-1 !px-2 !text-[12px]'} onClick={() => setMinutesOf(m)}>
+                      <Icon name="tasks" size={13} /> Minutes
+                    </button>
                     <button type="button" aria-label="Edit the meeting" title="Edit" className={btnSmall + ' !h-7 !w-7 justify-center !px-0'} onClick={() => setEditing(m)}>
                       <Icon name="compose" size={13} />
                     </button>
@@ -101,6 +108,7 @@ export default function Meetings({ id, canManage }: { id: number; canManage: boo
           <Empty text="No meetings recorded." />
         )}
       </div>
+      {minutesOf ? <MinutesSheet tenderId={id} tender={tender} meeting={minutesOf} onClose={() => setMinutesOf(null)} onSaved={refresh} /> : null}
       {editing ? <MeetingSheet tenderId={id} meeting={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={refresh} /> : null}
     </div>
   );
@@ -187,9 +195,6 @@ function MeetingSheet({ tenderId, meeting, onClose, onSaved }: { tenderId: numbe
               <input aria-label="Who went" value={d.attended_by} onChange={set('attended_by')} maxLength={250} className={input} />
             </Field>
           </div>
-          <Field label="Minutes">
-            <textarea aria-label="Minutes" value={d.minutes} onChange={set('minutes')} rows={4} className="w-full resize-y rounded-[8px] border border-line bg-surface px-2.5 py-2 text-[13px] text-ink outline-none focus:border-primary" />
-          </Field>
         </>
       ) : null}
       {error ? <p className="m-0 text-[12.5px] text-danger">{error}</p> : null}

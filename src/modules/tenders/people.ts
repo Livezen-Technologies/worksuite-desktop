@@ -9,13 +9,23 @@ import { apiGet, apiPost } from '../../core/api';
  * tender, which their app shows as the tender's card. The tender module sends
  * no notification of its own for a review.
  */
-export function usePeople() {
-  const q = useQuery({
+function useDirectoryQuery() {
+  return useQuery({
     queryKey: ['chat', 'directory'],
     queryFn: ({ signal }) => apiGet<{ users: Array<{ id: number; name: string }> }>('/api/chat/directory', undefined, signal),
     staleTime: 5 * 60_000,
     retry: false,
   });
+}
+
+/** Everyone in the directory, by name — whom a task from the minutes may be given to. */
+export function useDirectory(): Array<{ id: number; name: string }> {
+  const q = useDirectoryQuery();
+  return (q.data?.users ?? []).map((u) => ({ id: Number(u.id), name: u.name })).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function usePeople() {
+  const q = useDirectoryQuery();
   const names = new Map<number, string>((q.data?.users ?? []).map((u) => [Number(u.id), u.name]));
   return (id: number | null | undefined): string | null => (id ? (names.get(id) ?? null) : null);
 }
