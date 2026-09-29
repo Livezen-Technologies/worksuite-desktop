@@ -388,9 +388,19 @@ export class AuthService {
 
   /**
    * Checks the password for the app lock (FR-SEC-04) with the sign-in API.
-   * A correct password either opens a new session — which replaces this
-   * one — or, for MFA accounts, returns the MFA challenge, which the server
-   * only issues after the password matched; the challenge is discarded.
+   * A correct password either opens a new session or, for MFA accounts,
+   * returns the MFA challenge, which the server only issues after the
+   * password matched; the challenge is discarded.
+   *
+   * THE NEW SESSION IS CLOSED AT ONCE, WITH ITS OWN TOKENS, AND THIS ONE
+   * CARRIES ON. It used to be kept and the old one signed out — by posting
+   * the old refresh token to `/api/auth/logout` with the NEW access token.
+   * The server's logout also ends the session of the token it is called
+   * with, so every unlock ended the session it had just opened: the next
+   * request (within half a minute, whatever polled first) was refused with
+   * "Session ended. Please sign in again." and the app went back to the
+   * sign-in screen — QA-002 and QA-003. Nothing about this session needs
+   * replacing: it was only locked, not ended.
    */
   async verifyPassword(email: string, password: string): Promise<boolean> {
     const { res, json } = await this.post('/api/auth/login', { email, password });
@@ -399,10 +409,8 @@ export class AuthService {
     const data = (json?.data ?? {}) as Record<string, unknown>;
     if (data.mfa_required === true) return true;
     const tokens = data.tokens as Tokens | undefined;
-    if (tokens?.refresh_token) {
-      const old = this.secrets.get(REFRESH_KEY);
-      this.storeTokens(tokens);
-      if (old) void this.post('/api/auth/logout', { refresh_token: old }, tokens.access_token).catch(() => undefined);
+    if (tokens?.refresh_token && tokens.access_token) {
+      void this.post('/api/auth/logout', { refresh_token: tokens.refresh_token }, tokens.access_token).catch(() => undefined);
     }
     return true;
   }

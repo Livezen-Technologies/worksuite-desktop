@@ -18,6 +18,7 @@ export const INVOKE_CHANNELS = [
   'auth:cancelMfa',
   'auth:passkeyStart',
   'auth:passkeyCancel',
+  'auth:openPage',
   'auth:signOut',
   'auth:completeSetup',
   'auth:sessionId',

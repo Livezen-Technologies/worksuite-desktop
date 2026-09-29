@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 import { app, organizationName } from '../../core/app-state';
 import { ApiError, apiGet, apiGetMeta, apiPost } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
@@ -14,6 +14,7 @@ import { Avatar, Button, Card, CountBadge, Empty, ErrorNote, FileBadge, OfflineN
 import type { ModuleProps } from '../registry';
 import type { CalendarEvent } from '../calendar/api';
 import type { Task } from '../tasks/api';
+import { CARDS, dueToday as dueTodayOf, loadLayout, meetingsToday, mergeTasks, move, saveLayout, todaysWork, toggle, type CardId, type Layout } from './today';
 
 /**
  * Home — the desktop shell's dashboard (UI-04, §4.13). Every widget comes
@@ -48,11 +49,24 @@ export default function HomePage(_props: ModuleProps) {
   const has = (id: string) => apps.some((a) => a.id === id);
   const today = todayInZone();
   const [newOpen, setNewOpen] = useState(false);
+  const [customizing, setCustomizing] = useState(false);
+  const [layout, setLayoutState] = useState<Layout>(() => loadLayout(user?.id));
+  const setLayout = (l: Layout) => {
+    setLayoutState(l);
+    saveLayout(user?.id, l);
+  };
 
   const dash = useQuery({ queryKey: ['home', 'dashboard'], queryFn: () => apiGetMeta<Dashboard>('/api/dashboard/home') });
   const tasks = useQuery({
     queryKey: ['tasks', 'today', orgId],
-    queryFn: () => apiGetMeta<{ tasks: Task[] }>('/api/tasks', { filter: 'active', org: orgId }),
+    // Yours, and those you were added to afterwards — which only `shared` returns (QA-014).
+    queryFn: async () => {
+      const [mine, shared] = await Promise.all([
+        apiGetMeta<{ tasks: Task[] }>('/api/tasks', { filter: 'active', org: orgId }),
+        apiGetMeta<{ tasks: Task[] }>('/api/tasks', { filter: 'shared' }).catch(() => null),
+      ]);
+      return { ...mine, data: { tasks: mergeTasks(mine.data.tasks ?? [], shared?.data.tasks ?? []) } };
+    },
     enabled: has('tasks'),
   });
   const events = useQuery({
@@ -73,10 +87,88 @@ export default function HomePage(_props: ModuleProps) {
     staleTime: 10 * 60_000,
   });
 
-  const dueToday = (tasks.data?.data.tasks ?? []).filter((x) => x.status !== 'done' && x.status !== 'cancelled' && x.due_date !== null && x.due_date <= today);
-  const meetings = (events.data?.data.events ?? []).filter((e) => !e.all_day);
+  const dueToday = dueTodayOf(tasks.data?.data.tasks ?? [], today);
+  const meetings = meetingsToday(events.data?.data.events ?? []);
   const unread = (status?.unread.chat ?? 0) + (status?.unread.mail ?? 0);
   const offlineAt = dash.data?.offline ? dash.data.cachedAt : null;
+
+  const cards: Record<CardId, ReactNode> = {
+    work: has('tasks') ? (
+          <Card title={t('home.todaysWork')} action={<LinkButton onClick={() => navigate('/tasks')}>All tasks</LinkButton>} className="min-h-[300px]">
+            <TodaysWork loading={tasks.isLoading} error={tasks.error} tasks={todaysWork(tasks.data?.data.tasks ?? [], today).slice(0, 8)} today={today} />
+          </Card>
+    ) : null,
+    calendar: has('calendar') ? (
+          <Card title={t('home.calendar')} action={<span className="text-[13px] text-ink-3">Today</span>} className="min-h-[300px]">
+            <TodayCalendar loading={events.isLoading} events={events.data?.data.events ?? []} />
+          </Card>
+    ) : null,
+    waiting: has('hr') && approvals.data ? (
+          <Card title={t('home.waiting')} action={approvals.data.count ? <span className="rounded-full bg-warning-bg px-2 py-0.5 text-[12px] font-semibold text-warning">{approvals.data.count} approvals</span> : null} className="min-h-[300px]">
+            <WaitingForMe items={approvals.data.items} onOpen={openLink} />
+          </Card>
+    ) : null,
+    activity: (
+        <Card title={t('home.activity')} className="min-h-[260px]">
+          {dash.isLoading ? <Spinner /> : dash.error ? <ErrorNote error={dash.error} onRetry={() => void dash.refetch()} /> : null}
+          {(dash.data?.data.activity ?? []).length === 0 && !dash.isLoading ? <Empty icon="activity" title="Nothing new" /> : null}
+          <ul className="flex flex-col gap-3">
+            {(dash.data?.data.activity ?? []).slice(0, 5).map((a) => (
+              <li key={a.id} className="flex gap-3">
+                <Avatar name={a.user ?? 'WorkSuite'} size={32} />
+                <div className="min-w-0">
+                  <div className="text-[13.5px] text-ink">
+                    {a.user ? <span className="font-semibold">{a.user} </span> : null}
+                    {a.description}
+                  </div>
+                  <div className="text-[12.5px] text-ink-3">{relative(a.at)}</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+    ),
+    files: has('files') ? (
+          <Card title={t('home.files')} action={<LinkButton onClick={() => navigate('/files')}>Open Drive</LinkButton>} className="min-h-[260px]">
+            <ul className="flex flex-col gap-2">
+              {(dash.data?.data.recent_files ?? []).slice(0, 5).map((f) => (
+                <li key={f.id}>
+                  <button type="button" className="flex w-full items-center gap-3 rounded-[8px] p-1 text-left hover:bg-subtle" onClick={() => navigate(`/files?file=${f.id}`)}>
+                    <FileBadge name={f.name} />
+                    <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-ink">{f.name}</span>
+                    <span className="text-[12px] text-ink-3">{relative(f.at)}</span>
+                  </button>
+                </li>
+              ))}
+              {!dash.isLoading && (dash.data?.data.recent_files ?? []).length === 0 ? <Empty icon="folder" title="No recent files" /> : null}
+            </ul>
+          </Card>
+    ) : null,
+    summary: (
+        <section className="flex min-h-[260px] flex-col rounded-[12px] bg-navy p-5 text-white">
+          <h2 className="flex items-center gap-2 text-[15px] font-bold">
+            <Icon name="sparkles" size={17} className="text-teal-light" /> {t('home.summary')}
+          </h2>
+          <p className="mt-3 flex-1 text-[13.5px] leading-relaxed text-navy-ink">
+            {summary.isLoading
+              ? 'Preparing your summary…'
+              : summary.data?.digest.text
+                ? summary.data.digest.text
+                : summary.error instanceof ApiError && summary.error.forbidden
+                  ? 'Your daily summary is built from the company wall, which is not enabled for you.'
+                  : (summary.data?.digest.reason ?? `${dueToday.length} task${dueToday.length === 1 ? '' : 's'} due today, ${meetings.length} meeting${meetings.length === 1 ? '' : 's'} and ${unread} unread message${unread === 1 ? '' : 's'}.`)}
+          </p>
+          <div className="mt-4 flex gap-2">
+            <button type="button" className="rounded-[8px] bg-teal-light px-3 py-2 text-[13px] font-semibold text-navy hover:opacity-90" onClick={() => toggleDock('ai')}>
+              Ask AI
+            </button>
+            <button type="button" className="rounded-[8px] border border-white/20 px-3 py-2 text-[13px] font-semibold hover:bg-white/10" onClick={() => navigate('/notifications')}>
+              What's new
+            </button>
+          </div>
+        </section>
+    ),
+  };
 
   return (
     <div className="h-full overflow-y-auto px-8 py-7 scroll-thin">
@@ -92,9 +184,10 @@ export default function HomePage(_props: ModuleProps) {
           </div>
           <div className="relative flex items-center gap-2">
             {offlineAt ? <OfflineNote cachedAt={offlineAt} /> : null}
-            <Button size="lg" onClick={() => navigate('/settings/preferences')}>
+            <Button size="lg" onClick={() => setCustomizing((v) => !v)} aria-haspopup="dialog" aria-expanded={customizing}>
               Customize
             </Button>
+            {customizing ? <Customize layout={layout} onChange={setLayout} onClose={() => setCustomizing(false)} /> : null}
             <Button size="lg" variant="primary" icon="plus" onClick={() => setNewOpen((v) => !v)} aria-haspopup="menu" aria-expanded={newOpen}>
               New
             </Button>
@@ -112,85 +205,51 @@ export default function HomePage(_props: ModuleProps) {
 
         <div className="mt-6 flex flex-wrap gap-3">
           {has('tasks') ? <Counter label={t('home.tasksDue')} n={dueToday.length} tone="indigo" onClick={() => navigate('/tasks?filter=today')} /> : null}
-          {has('calendar') ? <Counter label={t('home.meetings')} n={meetings.length} tone="teal" onClick={() => navigate('/calendar')} /> : null}
+          {has('calendar') ? <Counter label={t('home.meetings')} n={meetings.length} tone="teal" onClick={() => navigate(has('meetings') ? '/meetings' : '/calendar')} /> : null}
           {has('hr') && approvals.data ? <Counter label={t('home.approvals')} n={approvals.data.count} tone="amber" onClick={() => navigate('/hr?tab=approvals')} /> : null}
           {has('chat') || has('mail') ? <Counter label={t('home.unread')} n={unread} tone="red" onClick={() => navigate((status?.unread.chat ?? 0) >= (status?.unread.mail ?? 0) ? '/chat' : '/mail')} /> : null}
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-3">
-          {has('tasks') ? (
-            <Card title={t('home.todaysWork')} action={<LinkButton onClick={() => navigate('/tasks')}>All tasks</LinkButton>} className="min-h-[300px]">
-              <TodaysWork loading={tasks.isLoading} error={tasks.error} tasks={(tasks.data?.data.tasks ?? []).filter((x) => x.due_date !== null && x.due_date <= today).slice(0, 8)} today={today} />
-            </Card>
-          ) : null}
-          {has('calendar') ? (
-            <Card title={t('home.calendar')} action={<span className="text-[13px] text-ink-3">Today</span>} className="min-h-[300px]">
-              <TodayCalendar loading={events.isLoading} events={events.data?.data.events ?? []} />
-            </Card>
-          ) : null}
-          {has('hr') && approvals.data ? (
-            <Card title={t('home.waiting')} action={approvals.data.count ? <span className="rounded-full bg-warning-bg px-2 py-0.5 text-[12px] font-semibold text-warning">{approvals.data.count} approvals</span> : null} className="min-h-[300px]">
-              <WaitingForMe items={approvals.data.items} onOpen={openLink} />
-            </Card>
-          ) : null}
-          <Card title={t('home.activity')} className="min-h-[260px]">
-            {dash.isLoading ? <Spinner /> : dash.error ? <ErrorNote error={dash.error} onRetry={() => void dash.refetch()} /> : null}
-            {(dash.data?.data.activity ?? []).length === 0 && !dash.isLoading ? <Empty icon="activity" title="Nothing new" /> : null}
-            <ul className="flex flex-col gap-3">
-              {(dash.data?.data.activity ?? []).slice(0, 5).map((a) => (
-                <li key={a.id} className="flex gap-3">
-                  <Avatar name={a.user ?? 'WorkSuite'} size={32} />
-                  <div className="min-w-0">
-                    <div className="text-[13.5px] text-ink">
-                      {a.user ? <span className="font-semibold">{a.user} </span> : null}
-                      {a.description}
-                    </div>
-                    <div className="text-[12.5px] text-ink-3">{relative(a.at)}</div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </Card>
-          {has('files') ? (
-            <Card title={t('home.files')} action={<LinkButton onClick={() => navigate('/files')}>Open Drive</LinkButton>} className="min-h-[260px]">
-              <ul className="flex flex-col gap-2">
-                {(dash.data?.data.recent_files ?? []).slice(0, 5).map((f) => (
-                  <li key={f.id}>
-                    <button type="button" className="flex w-full items-center gap-3 rounded-[8px] p-1 text-left hover:bg-subtle" onClick={() => navigate(`/files?file=${f.id}`)}>
-                      <FileBadge name={f.name} />
-                      <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-ink">{f.name}</span>
-                      <span className="text-[12px] text-ink-3">{relative(f.at)}</span>
-                    </button>
-                  </li>
-                ))}
-                {!dash.isLoading && (dash.data?.data.recent_files ?? []).length === 0 ? <Empty icon="folder" title="No recent files" /> : null}
-              </ul>
-            </Card>
-          ) : null}
-          <section className="flex min-h-[260px] flex-col rounded-[12px] bg-navy p-5 text-white">
-            <h2 className="flex items-center gap-2 text-[15px] font-bold">
-              <Icon name="sparkles" size={17} className="text-teal-light" /> {t('home.summary')}
-            </h2>
-            <p className="mt-3 flex-1 text-[13.5px] leading-relaxed text-navy-ink">
-              {summary.isLoading
-                ? 'Preparing your summary…'
-                : summary.data?.digest.text
-                  ? summary.data.digest.text
-                  : summary.error instanceof ApiError && summary.error.forbidden
-                    ? 'Your daily summary is built from the company wall, which is not enabled for you.'
-                    : (summary.data?.digest.reason ?? `${dueToday.length} task${dueToday.length === 1 ? '' : 's'} due today, ${meetings.length} meeting${meetings.length === 1 ? '' : 's'} and ${unread} unread message${unread === 1 ? '' : 's'}.`)}
-            </p>
-            <div className="mt-4 flex gap-2">
-              <button type="button" className="rounded-[8px] bg-teal-light px-3 py-2 text-[13px] font-semibold text-navy hover:opacity-90" onClick={() => toggleDock('ai')}>
-                Ask AI
-              </button>
-              <button type="button" className="rounded-[8px] border border-white/20 px-3 py-2 text-[13px] font-semibold hover:bg-white/10" onClick={() => navigate('/notifications')}>
-                What's new
-              </button>
-            </div>
-          </section>
+          {layout.order.filter((id) => !layout.hidden.includes(id) && cards[id]).map((id) => (
+            <Fragment key={id}>{cards[id]}</Fragment>
+          ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Which cards Home shows, and in what order (QA-015: the button opened
+ * Settings › Preferences, which has nothing about Home). Kept on this computer
+ * for this person.
+ */
+function Customize({ layout, onChange, onClose }: { layout: Layout; onChange: (l: Layout) => void; onClose: () => void }) {
+  const label = (id: CardId) => CARDS.find((c) => c.id === id)?.label ?? id;
+  return (
+    <div role="dialog" aria-label="Customize Home" className="animate-in absolute top-12 right-24 z-20 w-[300px] rounded-[12px] border border-line bg-surface p-3 shadow-xl" onKeyDown={(e) => e.key === 'Escape' && onClose()}>
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-[13px] font-bold text-ink">Cards on Home</span>
+        <button type="button" onClick={onClose} className="text-[12.5px] font-semibold text-primary hover:underline">
+          Done
+        </button>
+      </div>
+      <ul className="m-0 flex list-none flex-col gap-1 p-0">
+        {layout.order.map((id, i) => (
+          <li key={id} className="flex items-center gap-2 rounded-[8px] px-1.5 py-1 hover:bg-subtle">
+            <input type="checkbox" aria-label={`Show ${label(id)}`} checked={!layout.hidden.includes(id)} onChange={() => onChange(toggle(layout, id))} className="accent-primary" />
+            <span className={cx('min-w-0 flex-1 text-[13px]', layout.hidden.includes(id) ? 'text-ink-3' : 'text-ink')}>{label(id)}</span>
+            <button type="button" aria-label={`Move ${label(id)} up`} disabled={i === 0} onClick={() => onChange(move(layout, id, -1))} className="rounded p-1 text-ink-2 hover:bg-line disabled:opacity-30">
+              <Icon name="arrow-up" size={14} />
+            </button>
+            <button type="button" aria-label={`Move ${label(id)} down`} disabled={i === layout.order.length - 1} onClick={() => onChange(move(layout, id, 1))} className="rounded p-1 text-ink-2 hover:bg-line disabled:opacity-30">
+              <Icon name="arrow-down" size={14} />
+            </button>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 mb-0 text-[11.5px] text-ink-3">Cards for apps you don't have stay hidden. Kept on this computer.</p>
     </div>
   );
 }

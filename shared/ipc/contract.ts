@@ -188,6 +188,13 @@ export const contract = {
   // Opens the server's passkey page in the browser; the result returns through worksuite://auth/callback.
   'auth:passkeyStart': ch(none, { rate: 2 }),
   'auth:passkeyCancel': ch(none),
+  /**
+   * A page of the WorkSuite web app that needs nobody signed in — resetting a
+   * password, or the web app itself from a screen that cannot go on. Named, so
+   * nothing signed out can open an arbitrary path. `app:openInBrowser` needs a
+   * session, so the sign-in screen's "Forgot password" was always refused.
+   */
+  'auth:openPage': ch(z.object({ page: z.enum(['forgot-password', 'account']) }), { rate: 5 }),
   'auth:signOut': ch(z.object({ wipe: z.boolean().optional() }).optional(), { whileLocked: true, sensitive: true }),
   'auth:completeSetup': ch(none, { session: true }),
   // My account › Security: which listed session is this app's, and a password change that keeps it signed in.
@@ -670,6 +677,7 @@ export interface Outputs {
   'auth:cancelMfa': AuthState;
   'auth:passkeyStart': AuthState;
   'auth:passkeyCancel': AuthState;
+  'auth:openPage': boolean;
   'hr:clock': { ok: true };
   'hr:break': { ok: true };
   'media:access': { granted: boolean };
