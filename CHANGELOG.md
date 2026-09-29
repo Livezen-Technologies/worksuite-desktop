@@ -112,6 +112,10 @@ is the web's.
   for more makes the server queue it for review.
 - The camera reads QR codes only where the system does (macOS); elsewhere a
   USB scanner or the typed number does the job.
+- Tests: the docked-workspace tests no longer leave an unhandled error for
+  the next test. The tab store saves on a 500 ms timer that could fire after a
+  test had restored its mocks, and the store's `.catch` then met `undefined`;
+  the teardown now keeps the mocked call answering with a promise.
 
 ---
 
