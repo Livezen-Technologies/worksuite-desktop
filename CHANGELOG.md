@@ -5,6 +5,45 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-29 — 0.2.46: Tenders — upload progress, reviewing files in the app, who uploaded it
+
+From the Tender checklist.
+
+**Added**
+
+- **Uploads show their progress** under the line they go to: the file, how
+  much of it has gone, and a bar — *Preparing…*, the percentage, then
+  *Filing…* while WorkSuite stores it. Cancel is beside it. Files are sent in
+  about twenty parts (from 256 KB to 8 MB each), so a small file no longer sits
+  at 0% and jumps to done.
+- **Review a file inside WorkSuite**: click the file's name on a checklist
+  line. PDFs open in a viewer in the app (page through, zoom, fit to width),
+  and so do images and text files; anything else offers *Open in its app* or
+  *Save a copy*. Beside the file: who uploaded it and when, who chased it,
+  earlier versions, and the notes from earlier reviews. **Approve**, or
+  **Send back** with a comment, and the next file waiting for review opens.
+  A PDF is drawn as pictures of its pages; its links and scripts do not run.
+- **Who uploaded it**: each line shows *Uploaded by …* with the file.
+- **Sending back tells the owner**: when a file is sent back (from the review
+  screen or the line's menu), the person who uploaded it — and whoever chased
+  it — gets a Team Chat message with the comment and a link to the tender. The
+  box *Tell … in Chat* is ticked by default; untick it to say nothing. An
+  approval with a comment is passed on the same way.
+
+**Changed**
+
+- The **Attach** menu on a line opens where it fits — above the button when
+  the line is near the bottom of the window — instead of being cut off by the
+  card.
+
+**Known limits**
+
+- The notice goes to Team Chat, not to the bell: WorkSuite's Tender module
+  sends no notification of its own when a file is reviewed. That needs a
+  change on the server.
+
+---
+
 ## 2026-09-28 — 0.2.45: the AI Assistant on the desktop — Quick Ask, the dock, its settings
 
 From "WorkSuite AI Assistant — Web + Desktop UIs", on the server's writing

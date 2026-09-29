@@ -248,3 +248,9 @@ textarea,
   70% { box-shadow: 0 0 0 12px rgb(240 80 58 / 0); }
   100% { box-shadow: 0 0 0 0 rgb(240 80 58 / 0); }
 }
+
+/* An upload getting ready or being filed: a bar that moves without saying how far. */
+@keyframes ws-indeterminate {
+  0% { left: -35%; }
+  100% { left: 100%; }
+}

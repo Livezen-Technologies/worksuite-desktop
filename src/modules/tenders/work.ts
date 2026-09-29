@@ -37,6 +37,8 @@ export interface LineFile {
   version: number;
   name: string | null;
   uploaded_at: string | null;
+  /** Who uploaded this version (a user id; the name comes from the directory). */
+  uploaded_by: number | null;
   current: boolean;
 }
 
@@ -105,6 +107,7 @@ export function toLine(r: Record<string, unknown>): Line {
       version: int(f.version) ?? 1,
       name: str(f.name),
       uploaded_at: str(f.uploaded_at),
+      uploaded_by: int(f.uploaded_by),
       current: yes(f.is_current),
     })),
   };
