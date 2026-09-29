@@ -115,6 +115,17 @@ or a queued change is on disk before the user is told it was saved.
   chunks under `job/`, the check-in, vehicles, customers, reports and the
   workshop's set-up. Photos go up as multipart through the API proxy (25 MB
   a request) and come back through it for thumbnails.
+- eLearning's offline copies (`electron/services/elearning-offline.ts`):
+  the server's download manifest names a course's lesson files; each is a
+  download-manager transfer kept inside the app (`TransferManager.keep`,
+  a `DownloadSink`) instead of the downloads folder, sealed as it arrives —
+  AES-256-GCM in 1 MiB chunks, each with its own nonce and its index as
+  associated data, under a key per file held in the database's encrypted
+  column (`elearning_offline`). `app://bundle/__local/elearning/{course}/{lesson}`
+  serves the plain bytes to the app's pages, with ranges, a chunk at a time.
+  `POST me/downloads/validate` at sign-in and on reconnect, and the
+  licence's end date, decide what is removed; a wipe or losing the app
+  removes the rest.
 - Tabs stay mounted while recent (instant switching) and are suspended after
   the configured idle time; the tab set is saved and restored only for apps
   the user can still open.

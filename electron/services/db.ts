@@ -188,6 +188,18 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX salon_outbox_desk ON salon_outbox(origin, desk_id, user_id, seq);
   `,
+  // 4 — eLearning's offline copies: per person and course, what the server's
+  // manifest listed and each file's own key (the files themselves are sealed
+  // under that key in the profile's elearning/ folder).
+  `
+  CREATE TABLE elearning_offline (
+    user_id TEXT NOT NULL,
+    course_id INTEGER NOT NULL,
+    meta TEXT NOT NULL,               -- enc: title, version, licence, files with their keys
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, course_id)
+  );
+  `,
 ];
 
 export type Row = Record<string, unknown>;

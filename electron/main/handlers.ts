@@ -454,7 +454,9 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     const fc = input.financeCsv;
     const ef = input.expenseFile;
     const withOrg = (org?: number) => (org ? `?org=${org}` : '');
-    const path = input.garageDoc
+    const path = input.elearningMedia
+      ? `/media/${input.elearningMedia}?download=1`
+      : input.garageDoc
       ? garageDocPath(input.garageDoc)
       : ef
       ? ef.kind === 'claim-receipt'
@@ -511,6 +513,11 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
           : `/api/mail/messages/${input.mail!.uid}/attachments/${encodeURIComponent(input.mail!.ref)}?${new URLSearchParams({ folder: input.mail!.folder, dl: '1', ...(input.mail!.mailbox ? { mailbox: input.mail!.mailbox } : {}) })}`;
     return ctx.transfers.download(path, input.name, !!input.open, input.fileId ?? null);
   });
+  // eLearning's offline copies (electron/services/elearning-offline.ts).
+  router.handle('elearning:offlineList', () => ctx.elearning.list());
+  router.handle('elearning:offlineDownload', (input) => ctx.elearning.download(input.courseId, input.title));
+  router.handle('elearning:offlineRemove', (input) => ctx.elearning.remove(input.courseId));
+  router.handle('elearning:offlineValidate', () => ctx.elearning.validate());
   router.handle('transfers:upload', (input, c) => {
     // A file for a remote-control session goes only from the meeting window that controls it; the shared
     // computer's own offers are chosen in the main process's dialog, never through here.

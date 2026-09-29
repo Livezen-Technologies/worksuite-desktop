@@ -5,6 +5,29 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-29 — 0.2.53: eLearning on the desktop
+
+eLearning opens in its own tab for whoever has the app.
+
+**Added**
+
+- **Courses kept for offline learning.** A course's lesson files — the ones
+  the server's download manifest lists — go through the download manager
+  (they show in Transfers, and pause and resume there) into WorkSuite's own
+  profile, encrypted, and play from there without WorkSuite. They are never
+  saved to your downloads folder, opened in another app or shown in a
+  folder, whether or not the lesson allows downloading.
+
+**Where it bites**
+
+- A kept course goes when the server says the learning ended (you left or
+  were withdrawn, the course was suspended or archived, the company turned
+  offline copies off), when its licence — the course's end date — runs out
+  (online or not), when this computer's policy forbids offline data, when
+  the app is taken away, and on a sign-out that removes WorkSuite's data.
+
+---
+
 ## 2026-09-29 — 0.2.52: all of Garage on the desktop
 
 Everything the server's Garage does now happens in the Garage tab: check-in

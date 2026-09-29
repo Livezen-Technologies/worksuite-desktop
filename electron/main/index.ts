@@ -52,7 +52,8 @@ import { SecureStore } from '../services/secure-store';
 import { SettingsService } from '../services/settings';
 import { DriveSync } from '../services/sync/engine';
 import { ServiceSupervisor } from '../services/supervisor';
-import { TransferManager } from '../services/transfers';
+import { TransferManager, type DownloadSink } from '../services/transfers';
+import { ElearningOffline } from '../services/elearning-offline';
 import { Vault } from '../services/vault';
 import { TrayService } from '../tray/tray';
 import { POLICY_PUBLIC_KEY, RELEASE_PUBLIC_KEY } from '../updater/keys';
@@ -309,7 +310,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     });
   const hash = (path: string) => hashWith('hash', path);
 
-  const transfers = new TransferManager({
+  const transfers: TransferManager = new TransferManager({
     db,
     vault: getVault,
     http,
@@ -318,6 +319,22 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     hash,
     canOpenFiles: () => sessionCtl.hasPermission('desktop.files.open_external'),
     audit: (action, details) => audit.record(sessionCtl.userId(), action, details),
+    // eLearning's offline copies are kept inside the app, sealed as they arrive.
+    sink: (name): DownloadSink | null => elearning.sink(name),
+  });
+  // eLearning: a course's lessons kept for offline learning, as the server's manifest lists them.
+  const elearning: ElearningOffline = new ElearningOffline({
+    db,
+    vault: getVault,
+    http,
+    transfers,
+    root: join(p.profile, 'elearning'),
+    userId: () => (sessionCtl.isReady() ? sessionCtl.userId() : null),
+    allowed: () =>
+      sessionCtl.capabilities().offlineCache
+        ? { ok: true, reason: null }
+        : { ok: false, reason: 'Your organization does not allow WorkSuite data to be kept offline on this computer.' },
+    changed: () => broadcast('elearning:offlineChanged'),
   });
 
   // Drive sync (Phase 2): chosen Drive folders kept in step with folders here.
@@ -839,6 +856,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/garage/v1/vehicles', 'garage'],
     ['/api/garage/v1/customers', 'garage'],
     ['/api/garage/v1/workshop', 'garage'],
+    // A learner opens My Learning, the catalogue and their courses' outlines (with the lessons already opened)
+    // from the last copy; a course's lesson files kept offline are elearning-offline.ts's, not this cache's.
+    ['/api/elearning/v1/options', 'elearning'],
+    ['/api/elearning/v1/me/learning', 'elearning'],
+    ['/api/elearning/v1/me/courses', 'elearning'],
+    ['/api/elearning/v1/me/lessons', 'elearning'],
+    ['/api/elearning/v1/catalog', 'elearning'],
+    ['/api/elearning/v1/categories', 'elearning'],
   ];
   const rebuildMenu = (visible: Set<string>): void =>
     buildMenu(
@@ -870,6 +895,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       for (const module of cache.modules(b.user.id)) {
         if (!canOpenApp(module, visible) && cache.clearModule(b.user.id, module) > 0) log.info('offline data removed: app no longer available', { module });
       }
+      // Courses kept offline go with the app.
+      if (!canOpenApp('elearning', visible)) void elearning.wipeUser(b.user.id).catch((e) => log.warn('offline courses not removed', { error: String(e) }));
     }
     emitStatus();
   };
@@ -897,6 +924,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     transfers.recover();
     void queue.replay(uid);
     salonSync.start();
+    // Courses kept offline: the ones whose learning ended, or whose licence ran out, go.
+    void elearning.validate().catch((e) => log.warn('offline courses not checked', { error: String(e) }));
     void audit.flush();
     void refreshAttendance();
     attendanceTimer = setInterval(() => void refreshAttendance(), 5 * 60_000);
@@ -956,6 +985,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       }
       // What Drive sync put on this computer counts as offline files (§11.2 wipe_on_revoke).
       if (scope === 'cache+offline_files') void sync.wipe(uid, false);
+      // So are the courses kept for offline learning.
+      if (scope === 'cache+offline_files') void elearning.wipeUser(uid).catch(() => undefined);
       // A remote wipe, or signing out with "remove WorkSuite's data", forgets
       // the salon desk this computer was, and its printers; a plain sign-out keeps them.
       if (includeDrafts) {
@@ -1043,6 +1074,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     device.poke();
     sync.kick('reconnected');
     void salonSync.sync();
+    void elearning.validate().catch(() => undefined);
     broadcast('realtime:resync');
   }
 
@@ -1101,6 +1133,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     }),
     // Read on each page load: the server chosen, and the media servers it announced.
     () => ({ server: auth.getServer()?.origin ?? null, media: mediaServers() }),
+    // A course's lessons kept offline, played by the app's own pages.
+    (request, path) => (path.startsWith('/elearning/') ? elearning.serve(request, path) : Promise.resolve(new Response('Not found', { status: 404 }))),
   );
 
   const pasteGestures = new Map<number, number>();
@@ -1154,6 +1188,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     salonDesk,
     salonPrint,
     salonSync,
+    elearning,
     settings,
     http,
     auth,

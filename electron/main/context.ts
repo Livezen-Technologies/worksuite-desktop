@@ -25,6 +25,7 @@ import type { RealtimeService } from '../services/realtime';
 import type { SalonDesk } from '../services/salon-desk';
 import type { SalonPrint } from '../services/salon-print';
 import type { SalonSync } from '../services/salon-sync';
+import type { ElearningOffline } from '../services/elearning-offline';
 import type { TrayService } from '../tray/tray';
 import type { UpdaterService } from '../updater/updater';
 
@@ -50,6 +51,8 @@ export interface AppContext {
   salonDesk: SalonDesk;
   salonPrint: SalonPrint;
   salonSync: SalonSync;
+  /** eLearning's courses kept offline: encrypted copies, played inside the app (elearning-offline.ts). */
+  elearning: ElearningOffline;
   settings: SettingsService;
   http: HttpClient;
   auth: AuthService;

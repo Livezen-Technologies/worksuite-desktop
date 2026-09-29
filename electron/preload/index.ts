@@ -202,6 +202,12 @@ const api = {
     printers: call('print:printers'),
     toPdf: call('print:toPdf'),
   },
+  elearning: {
+    offlineList: call('elearning:offlineList'),
+    offlineDownload: call('elearning:offlineDownload'),
+    offlineRemove: call('elearning:offlineRemove'),
+    offlineValidate: call('elearning:offlineValidate'),
+  },
   salon: {
     deskPairing: call('salon:deskPairing'),
     deskPair: call('salon:deskPair'),

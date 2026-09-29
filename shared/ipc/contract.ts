@@ -14,6 +14,7 @@
  */
 import { z } from 'zod';
 import { garageDocSchema } from '../garage-docs';
+import { ELEARNING_MEDIA_TOKEN, elearningCourseRef, elearningDownloadInput, type OfflineCourse, type OfflineValidation } from '../elearning-offline';
 import type { InvokeChannel } from './channels';
 import type {
   ActiveCall,
@@ -459,10 +460,16 @@ export const contract = {
          * the address.
          */
         garageDoc: garageDocSchema.optional(),
+        /**
+         * An eLearning lesson's file where the lesson allows downloading: the signed token of the
+         * address the server gave with the lesson (`file.urls.download`). The main process builds
+         * `/media/{token}?download=1`; a protected lesson has no such address to give.
+         */
+        elearningMedia: z.string().regex(ELEARNING_MEDIA_TOKEN).optional(),
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a payment slip, an order list, an Orders report, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, or a Garage document'),
+      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.elearningMedia].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a payment slip, an order list, an Orders report, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, or an eLearning lesson file'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   'transfers:upload': ch(
@@ -569,6 +576,16 @@ export const contract = {
     ]),
     { session: true, rate: 5 },
   ),
+
+  /*
+   * eLearning's offline copies (shared/elearning-offline.ts): the course's files, as the server's download
+   * manifest lists them, kept encrypted in the profile and played only inside WorkSuite; removed when the
+   * server says the learning ended, when the licence runs out, or on request.
+   */
+  'elearning:offlineList': ch(none, { session: true }),
+  'elearning:offlineDownload': ch(elearningDownloadInput, { session: true, rate: 2 }),
+  'elearning:offlineRemove': ch(elearningCourseRef, { session: true, rate: 5 }),
+  'elearning:offlineValidate': ch(none, { session: true, rate: 1 }),
 
   'offline:status': ch(none, { session: true }),
   'offline:pending': ch(none, { session: true }),
@@ -805,6 +822,10 @@ export interface Outputs {
   'salon:outbox': SalonOutboxItem[];
   'salon:outboxAdd': SalonOutboxItem;
   'salon:outboxResolve': SalonOutboxItem[];
+  'elearning:offlineList': OfflineCourse[];
+  'elearning:offlineDownload': OfflineCourse;
+  'elearning:offlineRemove': void;
+  'elearning:offlineValidate': OfflineValidation;
   'offline:status': OfflineStatus;
   'offline:pending': OfflineMutation[];
   'offline:submit': SubmitResult;

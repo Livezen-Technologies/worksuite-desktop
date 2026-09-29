@@ -195,6 +195,21 @@ What the desktop cannot do because the server does not (SRS Phase 1 **M** items)
 - Labour rates are by class, hourly or flat; no customer, contract, warranty or internal-fleet rates (FR-PRC-01).
 - No customer opt-out per channel (FR-REM-05) or per-branch notification switches (FR-NTF-03).
 
+### eLearning
+
+The eLearning tab uses the server's eLearning API, `/api/elearning/v1` (`app/Modules/Elearning`, phase P1 — Core
+LMS). Offline copies of a course:
+
+| Need | Endpoint |
+|---|---|
+| What a course may take offline | `GET me/courses/{id}/download-manifest` → `{course_id, version, revision, total_bytes, files:[{lesson_id, file_id, name, mime, bytes, url, protected}], license:{expires_at, encrypted}}`; 409 `offline_off` when the company keeps none. Asking starts the server's credit clock for progress played offline. |
+| Each file | its `url` (`/media/{token}`, Drive's signed address, good to the end of the next hour), fetched by the main process with `Range` to resume |
+| Which copies may stay | `POST me/downloads/validate {course_ids}` → `{courses:[{course_id, active, ended_at}]}` |
+
+The main process fetches the manifest and the files itself (the renderer names a course, never an address) and keeps
+them sealed in the profile (see ARCHITECTURE.md). A course the server does not answer `active: true` for is removed;
+so is one past `license.expires_at`, without asking.
+
 ## The existing API (servers without `/desktop/v1`)
 
 | Need | Endpoint |

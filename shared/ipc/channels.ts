@@ -143,6 +143,11 @@ export const INVOKE_CHANNELS = [
   'salon:outboxAdd',
   'salon:outboxResolve',
 
+  'elearning:offlineList',
+  'elearning:offlineDownload',
+  'elearning:offlineRemove',
+  'elearning:offlineValidate',
+
   'offline:status',
   'offline:pending',
   'offline:submit',
@@ -211,6 +216,7 @@ export const EVENT_CHANNELS = [
   'quickask:changed',
   'ai:open',
   'salon:changed',
+  'elearning:offlineChanged',
 ] as const;
 
 export type EventChannel = (typeof EVENT_CHANNELS)[number];
