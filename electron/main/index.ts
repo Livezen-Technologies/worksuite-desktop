@@ -833,6 +833,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/garage/jobs', 'garage'],
     ['/api/garage/vehicles', 'garage'],
     ['/api/garage/customers', 'garage'],
+    ['/api/garage/estimates', 'garage'],
+    ['/api/garage/inspections', 'garage'],
+    ['/api/garage/bays', 'garage'],
+    ['/api/garage/calendar', 'garage'],
+    ['/api/garage/my', 'garage'],
+    ['/api/garage/technicians', 'garage'],
     ['/api/dashboard/home', 'home'],
     ['/api/notifications', 'notifications'],
   ];

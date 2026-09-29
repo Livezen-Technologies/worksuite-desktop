@@ -161,14 +161,22 @@ describe('permissions per company', () => {
     expect(blocked.map((x) => x.to)).toEqual(['estimate_preparation']);
   });
 
-  it('lists the job card’s tabs from the registry: stage B’s dimmed until they arrive, money only for those who may see it', () => {
-    const tabs = tabsFor(job360(), company(1, { can: can({ estimates: false }) }));
+  it('lists the job card’s tabs from the registry: a stage’s tabs only where the server has it, money only for those who may see it', () => {
+    const b = { inspections: [], estimate: null, additional_work: [], work_orders: { items: [] } };
+    const tabs = tabsFor(job360(b), company(1, { can: can({ estimates: false }) }));
     expect(tabs.map((t) => t.id)).not.toContain('estimate');
-    expect(tabsFor(job360(), company(1, { can: can({ estimates: true }) })).map((t) => t.id)).toContain('estimate');
+    expect(tabsFor(job360(b), company(1, { can: can({ estimates: true }) })).map((t) => t.id)).toEqual(expect.arrayContaining(['inspection', 'diagnosis', 'estimate', 'work-orders']));
+    // A stage-A server has none of stage B's keys: its tabs are not offered.
+    expect(tabsFor(job360(), company(1, { can: can({ estimates: true }) })).map((t) => t.id)).toEqual(['overview', 'checkin', 'parts', 'qc', 'invoice', 'media', 'notes', 'activity']);
+    // Without the permission to see them, the server sends inspections and work orders as null.
+    const hidden = tabsFor(job360({ ...b, inspections: null, work_orders: null }), company(1)).map((t) => t.id);
+    expect(hidden).not.toContain('inspection');
+    expect(hidden).not.toContain('work-orders');
+    expect(hidden).toContain('diagnosis');
     const built = JOB_TABS.filter((t) => t.component).map((t) => t.id);
-    expect(built).toEqual(['overview', 'checkin', 'media', 'notes', 'activity']);
-    expect(JOB_TABS.filter((t) => !t.component).every((t) => !!t.soon && t.stage !== 'A')).toBe(true);
-    expect(tabFor('inspection', tabs)?.id).toBe('overview');
+    expect(built).toEqual(['overview', 'checkin', 'inspection', 'diagnosis', 'estimate', 'work-orders', 'media', 'notes', 'activity']);
+    expect(JOB_TABS.filter((t) => !t.component).every((t) => !!t.soon && t.stage === 'B3')).toBe(true);
+    expect(tabFor('parts', tabs)?.id).toBe('overview');
     expect(tabFor('checkin', tabs)?.id).toBe('checkin');
   });
 });

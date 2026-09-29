@@ -1,5 +1,7 @@
 import { lazy, type ComponentType } from 'react';
 import type { CanKey, Company, Job360, Options } from './api';
+import { hasB1 } from './api-b1';
+import { hasWorkOrders } from './api-b2';
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
@@ -8,11 +10,12 @@ import type { CanKey, Company, Job360, Options } from './api';
  *
  * The job card (Job 360°, SRS §13 / §28.3, FR-JOB-07) draws the tabs listed
  * here, in this order, and nothing else. Stage A built Overview, Check-in,
- * Media, Notes and Activity. Stages B1–B3 each bring their area as their own
- * file under `job/` and change ONE entry below — the `soon` line of their tab
- * — to name the component:
+ * Media, Notes and Activity; B1 Inspection, Diagnosis and Estimate; B2 Work
+ * orders (with the labour). A stage brings its area as its own file under
+ * `job/` (and its calls in `api-<stage>.ts`) and changes ONE entry below —
+ * the `soon` line of its tab — to name the component, e.g. B3:
  *
- *   { id: 'estimate', label: 'Estimate', stage: 'B1', can: 'estimates', component: lazy(() => import('./job/Estimate')) },
+ *   { id: 'parts', label: 'Parts', stage: 'B3', when: (j) => j.parts != null, component: lazy(() => import('./job/Parts')) },
  *
  * A tab without a `component` is listed dimmed, with its `soon` sentence as
  * the reason, because FR-JOB-07 lists it for P1 and the person should see
@@ -56,10 +59,13 @@ export const JOB_TABS: JobTab[] = [
   { id: 'overview', label: 'Overview', stage: 'A', component: lazy(() => import('./job/Overview')) },
   { id: 'checkin', label: 'Check-in', stage: 'A', component: lazy(() => import('./job/Checkin')) },
   /* ---- B1: inspections, diagnosis, estimates, approval, additional work ---- */
-  { id: 'inspection', label: 'Inspection', stage: 'B1', soon: 'Inspections and the vehicle health check arrive with the next Garage update.' },
-  { id: 'estimate', label: 'Estimate', stage: 'B1', can: 'estimates', soon: 'Estimates and the customer’s approval arrive with the next Garage update.' },
+  // `inspections` is on the card only for those who may see inspections; a server without stage B1 has no such key.
+  { id: 'inspection', label: 'Inspection', stage: 'B1', when: (j) => Array.isArray(j.inspections), component: lazy(() => import('./job/Inspection')) },
+  { id: 'diagnosis', label: 'Diagnosis', stage: 'B1', when: hasB1, component: lazy(() => import('./job/Diagnosis')) },
+  { id: 'estimate', label: 'Estimate', stage: 'B1', can: 'estimates', when: hasB1, component: lazy(() => import('./job/Estimate')) },
   /* ---- B2: work orders, technicians, labour, bays ---- */
-  { id: 'work-orders', label: 'Work orders', stage: 'B2', soon: 'Work orders, technicians and the labour timer arrive with the next Garage update.' },
+  // `work_orders` is null for those who may not see work orders, and absent on a server without stage B2.
+  { id: 'work-orders', label: 'Work orders', stage: 'B2', when: hasWorkOrders, component: lazy(() => import('./job/WorkOrders')) },
   /* ---- B3: parts, QC, road test, invoice, handover ---- */
   { id: 'parts', label: 'Parts', stage: 'B3', soon: 'Parts requests, reservations and issues arrive with the next Garage update.' },
   { id: 'qc', label: 'QC', stage: 'B3', soon: 'Quality control, rework and the road test arrive with the next Garage update.' },
@@ -95,8 +101,8 @@ export interface GarageViewProps {
   org: string;
   options: Options;
   online: boolean;
-  /** Open a job card in this tab. */
-  onJob: (id: number) => void;
+  /** Open a job card in this tab, on one of its tabs. */
+  onJob: (id: number, tab?: string) => void;
 }
 
 export interface GarageView {
@@ -109,4 +115,11 @@ export interface GarageView {
   component: ComponentType<GarageViewProps>;
 }
 
-export const EXTRA_VIEWS: GarageView[] = [];
+export const EXTRA_VIEWS: GarageView[] = [
+  /* ---- B1: estimates held for a discount decision ---- */
+  { id: 'discounts', label: 'Discounts to approve', icon: 'receipt', group: 'work', can: 'estimates', component: lazy(() => import('./views/Discounts')) },
+  /* ---- B2: the technician's work, the bays, the calendar ---- */
+  { id: 'my-work', label: 'My work', icon: 'timer', group: 'workshop', can: 'work', component: lazy(() => import('./views/MyWork')) },
+  { id: 'bays', label: 'Service bays', icon: 'wrench', group: 'workshop', can: 'view', component: lazy(() => import('./views/Bays')) },
+  { id: 'calendar', label: 'Workshop calendar', icon: 'calendar', group: 'workshop', can: 'view', component: lazy(() => import('./views/Calendar')) },
+];

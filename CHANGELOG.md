@@ -5,6 +5,69 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-29 — Garage & Vehicle Service Center, part 2 — inspections, estimates and approval, work orders and the timer (ships in the next release)
+
+The job card's Inspection, Diagnosis, Estimate and Work orders tabs are no
+longer dimmed: they work against WorkSuite's Garage stages B1 and B2. Each
+appears only where the server has that stage and the person may see it.
+
+**Added**
+
+- **Inspection** (the vehicle health check): start one from the company's
+  templates; answer each item — good, attention, urgent, pass or fail, a
+  measurement coloured by its thresholds as it is typed, a note, a photo, a
+  recommendation — each saved as it is given; send what needs attention to
+  the estimate or leave it for later; complete it (WorkSuite names the
+  mandatory items still open); and **The customer's report** exactly as the
+  customer will see it. Showing an item to the customer, and the summary for
+  them, are for those who may publish to the customer.
+- **Diagnosis**: every complaint from check-in, with its finding, cause,
+  repair, labour hours, parts (found in Inventory), trouble codes as read and
+  photos; resolve it, or "no fault found"; sign it off; put it on the
+  estimate.
+- **Estimate**: versions v1, v2 … with their status, lines (with the health
+  check colour, safety, availability, who pays), and the server's totals.
+  On a draft: add, edit or remove lines — parts and labour are priced by
+  WorkSuite, never here — and pull in everything found. **Send to the
+  customer** makes the secure link and a ready message and shows them once:
+  copy them, or open them in your mail or WhatsApp (WorkSuite sends nothing
+  itself). A discount above your limit goes to an approver first; approvers
+  decide it on the estimate or from **Discounts to approve** in the rail.
+  **Record the customer's answer** (by phone, in person or by email): every
+  line approved, rejected or left for later, with the approved total from
+  WorkSuite as you choose, and declining a safety line only with the
+  customer's acknowledgement. **Customer asks for changes**, **New version**,
+  new links and taking a link back. Additional work found during the job is
+  listed with its answer.
+- **Work orders**: made from the work the customer approved (or internal
+  work, never billed); technicians and a bay for each, with who has the skill
+  and how busy they are; your own **Start / Pause (and why) / Resume /
+  Complete** with the timer counting on from WorkSuite's clock; a note; and
+  **Found more work…**, which goes to the advisor to price and ask the
+  customer. The **labour** under it comes from the timers only; a correction
+  (for those who may) adds a new entry with a reason and keeps the original.
+- **Rail:** **My work** (the technician's work orders by tab, the running
+  timer first), **Service bays** (each bay's state, the job in it, now and
+  next, and the manager's moves — cleaned, maintenance or blocked with a
+  reason, back in service), **Workshop calendar** (one day, a row per bay,
+  bookings where they fall, work not yet booked; a reserved slot can be let
+  go) and **Discounts to approve**.
+- **Set-up:** inspection templates and quality checklists, and copying one
+  from the library.
+
+**Where it bites**
+
+- Offline, these tabs read the saved copy like the rest of Garage; starting a
+  timer, answering an inspection or recording the customer's answer needs
+  WorkSuite. A phone may queue timer events; the desktop does not.
+- The customer's link is shown once. Closing the window without copying it
+  means making a new one, which stops the old one working.
+- Signing off a diagnosis needs `garage.diagnosis.edit`, which the options
+  do not report yet: the button shows to whoever may diagnose, and WorkSuite
+  refuses the rest.
+
+---
+
 ## 2026-09-29 — Garage & Vehicle Service Center, part 1 — the service desk: jobs, the board, walk-in and check-in (ships in the next release)
 
 Garage is in the launcher and under Business in the sidebar, native, for

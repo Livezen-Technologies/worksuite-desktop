@@ -151,7 +151,9 @@ describe('the job card', () => {
     expect(screen.queryByRole('button', { name: /Express estimate/ })).toBeNull();
     // Money is for those who may see estimates.
     expect(screen.queryByRole('tab', { name: 'Estimate' })).toBeNull();
-    expect(screen.getByRole('tab', { name: 'Work orders' }).getAttribute('aria-disabled')).toBe('true');
+    // A server without stage B2 sends no work orders: the tab is not offered.
+    expect(screen.queryByRole('tab', { name: 'Work orders' })).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Parts' }).getAttribute('aria-disabled')).toBe('true');
   });
 
   it('moves with the version it read, and shows the job as the server answered', async () => {

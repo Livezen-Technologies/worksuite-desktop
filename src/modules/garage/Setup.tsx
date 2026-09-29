@@ -5,6 +5,7 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, Switch, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Field, input, PageHead, Panel, Sheet } from '../hr/parts';
+import { copyFromLibrary, fetchLibrary, fetchTemplates } from './api-b1';
 import {
   fetchBranches,
   fetchCandidates,
@@ -298,9 +299,8 @@ function StepBody({ step, company, options, may, onChanged, onWalkIn }: { step: 
       </div>
     );
   if (kind) return <Records kind={kind} company={company} options={options} may={may} onChanged={onChanged} />;
+  if (step.key === 'inspections' || step.key === 'qc') return <Templates company={company} may={may} quality={step.key === 'qc'} onChanged={onChanged} />;
   const words: Record<string, string> = {
-    inspections: 'Inspection templates come with the inspections themselves, in the next Garage update. Skip this step for now, or mark it done if you have none to add.',
-    qc: 'The quality-control checklist from the specification is created with the company’s first job. It can be changed with the QC screens in the next Garage update.',
     approvals: 'The estimate approval defaults are in force until they are changed in Settings.',
     notifications: 'Garage’s notifications go through the Notification Centre with its defaults; each person chooses their own channels.',
     packages: 'Service packages arrive in a later Garage phase.',
@@ -324,6 +324,58 @@ function Pipelines({ company }: { company: Company }) {
         </div>
       ))}
     </Panel>
+  );
+}
+
+/**
+ * Inspection templates (stage B1): the company's own, and the library's to
+ * copy from ("Start from library", §27 step 9). The quality-control checklist
+ * is a template of type quality. Items are edited on the web for now.
+ */
+function Templates({ company, may, quality, onChanged }: { company: Company; may: boolean; quality: boolean; onChanged: () => void }) {
+  const qc = useQueryClient();
+  const t = useQuery({ queryKey: ['garage', 'inspection-templates', company.id], queryFn: ({ signal }) => fetchTemplates(company.id, signal) });
+  const lib = useQuery({ queryKey: ['garage', 'inspection-library'], queryFn: ({ signal }) => fetchLibrary(signal), enabled: may && !quality });
+  const rows = (t.data?.items ?? []).filter((x) => (x.inspection_type === 'quality') === quality);
+  const copy = async (key: string) => {
+    try {
+      const r = await copyFromLibrary(key, company.id);
+      toast('success', r.message || 'Copied from the library.');
+      void qc.invalidateQueries({ queryKey: ['garage', 'inspection-templates', company.id] });
+      onChanged();
+    } catch (e) {
+      toast('error', refusalOf(e).message);
+    }
+  };
+  return (
+    <div className="flex flex-col gap-3">
+      <Panel title={quality ? 'Quality-control checklists' : 'Inspection templates'} sub={`${rows.length} in use`}>
+        {t.isLoading ? <Spinner /> : t.error ? <ErrorNote error={t.error} onRetry={() => void t.refetch()} /> : null}
+        {rows.map((r) => (
+          <div key={r.id} className="flex items-center gap-2.5 border-b border-line/70 px-3.5 py-2 text-[12.5px] last:border-b-0">
+            <b className="w-[120px] shrink-0 truncate font-mono text-[12px] text-ink">{r.code}</b>
+            <span className="min-w-0 flex-1 truncate text-ink">{r.name}</span>
+            <span className="text-ink-3">
+              {r.type_label} · {r.items} items · v{r.version}
+            </span>
+          </div>
+        ))}
+        {t.data && !rows.length ? <div className="px-3.5 py-4 text-[12.5px] text-ink-3">{quality ? 'The specification’s checklist is made with the company’s first job.' : 'None yet; the vehicle health check is copied in the first time an inspection starts.'}</div> : null}
+      </Panel>
+      {lib.data?.items.length ? (
+        <Panel title="The library" sub="Copy one to start from">
+          {lib.data.items.map((l) => (
+            <div key={l.key} className="flex items-center gap-2.5 border-b border-line/70 px-3.5 py-2 text-[12.5px] last:border-b-0">
+              <span className="min-w-0 flex-1 truncate text-ink">{l.name}</span>
+              <span className="text-ink-3">{l.items} items</span>
+              <button type="button" className={btnSmall} onClick={() => void copy(l.key)}>
+                Copy
+              </button>
+            </div>
+          ))}
+        </Panel>
+      ) : null}
+    </div>
   );
 }
 

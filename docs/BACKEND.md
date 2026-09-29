@@ -229,10 +229,27 @@ needs `garage.access`; what a person may do is per company, in
 | Vehicles | `GET /api/garage/vehicles`, `GET …/lookup?number=&vin=`, `POST`, `GET\|PUT …/{id}`, `GET …/{id}/360`, `POST …/{id}/odometer` |
 | Set-up and settings | `GET /api/garage/setup`, `POST …/setup/steps/{step}`, `GET\|PUT …/setup/branches[/{id}]`, `GET\|POST\|PUT …/setup/{kind}[/{id}]`, `GET …/setup/technicians/candidates`, `GET /api/garage/pipelines`; `/api/module-settings/garage?org=` |
 
+Stages B1 and B2 (`web-api-b1.md`, `web-api-b2.md`), on the job card and the rail:
+
+| Need | Endpoint |
+|---|---|
+| Inspections | `GET\|POST /api/garage/jobs/{id}/inspections`, `PATCH /api/garage/inspections/{id}/items`, `POST …/complete`, `PATCH /api/garage/inspections/{id}` (customer summary), `POST …/items/{item}/next-step`, `GET …/report`; templates `GET /api/garage/inspection-templates`, `…/library`, `POST …/library/{key}` |
+| Diagnosis | `GET\|POST /api/garage/jobs/{id}/diagnostics`, `PATCH /api/garage/diagnostics/{id}`, `POST\|DELETE …/codes[/{code}]`, `POST …/sign-off`, `POST …/to-estimate` |
+| Estimates | `GET /api/garage/estimates/options`, `GET\|POST /api/garage/jobs/{id}/estimate`, `POST …/estimate/pull`, `POST …/estimate/carry/{item}`, `POST /api/garage/estimates/{id}/versions`, `PATCH /api/garage/versions/{id}`, `POST …/lines`, `PATCH\|DELETE /api/garage/estimate-lines/{id}`, `POST /api/garage/versions/{id}/send\|links\|discount\|recall\|preview\|approvals\|changes`, `DELETE /api/garage/estimate-links/{id}`, `GET /api/garage/estimates/discount-approvals` |
+| Additional work | `GET\|POST /api/garage/jobs/{id}/additional-work`, `POST /api/garage/additional-work/{id}/withdraw` |
+| Work orders and labour | `GET\|POST /api/garage/jobs/{id}/work-orders`, `POST /api/garage/work-orders/{id}/assign\|cancel\|complete\|notes`, `POST …/timer/{start\|resume\|pause\|stop}`, `GET /api/garage/jobs/{id}/labour`, `POST /api/garage/labour/{id}/correct`, `GET /api/garage/technicians`, `GET /api/garage/my/work-orders` |
+| Bays and the calendar | `GET /api/garage/bays`, `PATCH /api/garage/bays/{id}/status`, `GET /api/garage/calendar`, `DELETE /api/garage/calendar/assignments/{id}` |
+
+Sending an estimate answers the customer's link and a message once; the
+desktop shows them and hands them to the person's mail or WhatsApp — the
+server sends nothing itself. Timer events carry no device time: the entry is
+the server's clock.
+
 Refusals carry what a screen acts on in `errors` (`missing`, `field`,
 `existing`, `code: open_job | version_conflict`, `server`, `added`), and the
 screens show the server's sentence as written. READ_CACHE covers options,
-board, dashboard, jobs, vehicles and customers (`CACHE_PREFIXES` in
+board, dashboard, jobs (and every tab under a job), vehicles, customers,
+estimate options, inspections, bays, the calendar, technicians and my work (`CACHE_PREFIXES` in
 `electron/main/index.ts`); nothing is written offline. The server's garage
 notifications link to `/garage?job=ID`, which opens the job card here.
 

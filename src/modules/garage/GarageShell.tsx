@@ -167,7 +167,7 @@ export default function GarageShell({ active }: ModuleProps) {
         return <Settings org={org} options={opts} onSetup={() => nav.view('setup')} />;
       default: {
         const X = EXTRA_VIEWS.find((v) => v.id === view)?.component;
-        return X ? <X org={org} options={opts} online={online} onJob={(id) => nav.job(id)} /> : null;
+        return X ? <X org={org} options={opts} online={online} onJob={(id, tab) => nav.job(id, tab)} /> : null;
       }
     }
   })();

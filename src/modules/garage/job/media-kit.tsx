@@ -17,6 +17,8 @@ import { MAX_UPLOAD_BYTES, mediaPath, OFFLINE_WRITE, refusalOf, tempId, uploadMe
  */
 export interface UploadMeta {
   context: string;
+  /** The item, diagnostic or work order the file is of (`inspection`, `diagnostic`, `work_order` contexts). */
+  context_id?: number | null;
   slot?: string | null;
   caption?: string | null;
 }

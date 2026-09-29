@@ -139,11 +139,20 @@ blocked by something outside the code.
 | FR-CHK-01..06, 08 | Done | `job/Checkin.tsx`: readings, complaints, conditions, damage diagram (the web's zone codes), photo slots (drop, pick, camera), belongings, valuables, signature, the server's list of what is missing |
 | FR-CHK-07 | Later | Printing / sending the check-in sheet: no document on the server yet |
 | FR-JOB-01, 03..09 | Done | `JobCard.tsx`: header, pipeline tracker, the server's transitions, edit, cancel with reason, version conflicts, overdue |
-| FR-JOB-07 | Partial | Overview, Check-in, Media, Notes, Activity; Inspection, Estimate, Work orders, Parts, QC, Invoice & handover arrive with stage B |
+| FR-JOB-07 | Partial | Overview, Check-in, Inspection, Diagnosis, Estimate, Work orders (with labour), Media, Notes, Activity; Parts, QC, Invoice & handover arrive with stage B3 |
+| FR-INS-01..06 | Done | `job/Inspection.tsx` (stage B1): templates, traffic light / pass-fail / measurement with thresholds, photos per item, next step to the estimate or later, complete with the server's missing list, the customer's report; templates copied from the library in Set-up. Template items are edited on the web |
+| FR-DIA-01..05 | Done | `job/Diagnosis.tsx`: finding, cause, repair, parts (Inventory lookup), hours, codes, no fault found, sign-off, to the estimate |
+| FR-EST-01..08 | Done | `job/Estimate.tsx`: versions, lines priced by the server, availability, coverage and payer, pull recommendations, carry deferred work, discount approval |
+| FR-APR-01..06 | Done | Send (link + message shown once; copy, mail, WhatsApp from this computer), new link / take back, the customer's answer recorded by staff with live approved total and safety acknowledgement, changes requested |
+| FR-ADD-01..04 | Done | Found more work from a work order; listed with its answer; withdraw |
+| FR-WO-01..03 | Done | `job/WorkOrders.tsx` (stage B2): from approved lines, internal work, the job following its work orders on the server |
+| FR-TEC-01..05 | Done | My work (`views/MyWork.tsx`), the caller's timer (server clock), pause reasons, labour from timers, corrections keeping the original |
+| FR-TEC-06 | Done | Skill shown per technician; the server warns or refuses by policy |
+| FR-BAY-01..04 | Partial | `views/Bays.tsx` (board and manual moves), `views/Calendar.tsx` (day view, let a slot go); booking is from a work order's Technicians and bay — no drag on the calendar yet |
 | FR-JOB-10 | Later | Job QR on a printed card |
 | FR-MED-01..03 | Done | `job/Media.tsx` (internal until published, `garage.media.publish`), `job/Notes.tsx` (internal / customer) |
 | FR-SET-01, §25, §27 | Partial | `Settings.tsx` (the standard settings form, per company), `Setup.tsx` (the wizard and its records); the workflow builder is phase 2 |
-| Offline | Partial | READ_CACHE for options, board, overview, jobs (and job cards opened), vehicles, customers; every write online only — nothing is queued |
+| Offline | Partial | READ_CACHE for options, board, overview, jobs (and job cards and their tabs opened), vehicles, customers, estimates' options, inspections, bays, the calendar and my work; every write online only — nothing is queued |
 
 ## Devices, security, updates (SEC, UPD)
 
