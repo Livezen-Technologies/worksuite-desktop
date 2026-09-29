@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
+import { useCanOpen } from '../../core/access';
 import { apiDelete, apiGet, apiPost, apiPut, request } from '../../core/api';
 import { app } from '../../core/app-state';
 import { call, errorMessage } from '../../core/bridge';
@@ -44,6 +45,9 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
   const qc = useQueryClient();
   const { navigate } = useTab();
   const me = useStore(app, (s) => (s.auth?.user?.id ? Number(s.auth.user.id) : null));
+  // Its conversation is in Chat and its video call in Meet: each offered only to whoever has that app.
+  const canChat = useCanOpen('chat');
+  const canMeet = useCanOpen('meet');
   const [tab, setTab] = useState<Tab>('Agenda');
   const [cancelling, setCancelling] = useState(false);
   const [reason, setReason] = useState('');
@@ -68,7 +72,7 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
   const mine = d.participants.find((p) => p.user_id === me) ?? null;
   const organiser = m.organizer_id === me;
   const canEdit = organiser || d.can.manage || mine?.role === 'host';
-  const joinable = m.live_status !== 'cancelled' && m.live_status !== 'completed' && (m.meet_uuid || m.online_url);
+  const joinable = m.live_status !== 'cancelled' && m.live_status !== 'completed' && (m.meet_uuid ? canMeet : m.online_url);
   const rsvps = d.participants.reduce<Record<string, number>>((n, p) => ((n[p.rsvp] = (n[p.rsvp] ?? 0) + 1), n), {});
   const btn = 'h-9 rounded-[8px] border border-line bg-surface px-3 font-semibold text-ink hover:bg-subtle';
 
@@ -89,7 +93,7 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
               {m.project ? ` · Project: ${m.project}` : ''}
             </span>
           </div>
-          {d.chat?.room_id ? <button type="button" className={btn} onClick={() => navigate(`/chat?room=${d.chat!.room_id}`)}>Open in Chat</button> : null}
+          {d.chat?.room_id && canChat ? <button type="button" className={btn} onClick={() => navigate(`/chat?room=${d.chat!.room_id}`)}>Open in Chat</button> : null}
           {canEdit ? <button type="button" className={btn} title="Opens on the web" onClick={() => void call('app:openInBrowser', { path: `/meetings?meeting=${m.id}` })}>Edit ↗</button> : null}
           {canEdit && m.live_status !== 'cancelled' && m.live_status !== 'completed' ? (
             <button type="button" className="h-9 rounded-[8px] border border-[#F1B8A8] bg-surface px-3 font-semibold text-danger hover:bg-danger-bg" onClick={() => setCancelling(true)}>Cancel meeting</button>

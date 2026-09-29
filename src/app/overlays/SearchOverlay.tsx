@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { canOpenApp, canOpenLink, canOpenRoute } from '@shared/access';
 import { resolveWebLink } from '@shared/links';
+import { idsOf } from '../../core/access';
 import { app } from '../../core/app-state';
 import { ApiError, apiGet } from '../../core/api';
 import { appColour, groupLook } from '../../core/app-look';
@@ -143,7 +145,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
     enabled: !commandMode && debounced.length >= 2 && (!online || (server.error instanceof ApiError && server.error.offline)),
   });
 
-  const allowed = useMemo(() => new Set(apps.map((a) => a.id)), [apps]);
+  const allowed = idsOf(apps);
   const create = CREATE.filter((c) => allowed.has(c.app));
 
   const openApp = (a: (typeof apps)[number]) => {
@@ -194,8 +196,10 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
     for (const g of server.data?.results ?? []) {
       const look = groupLook(g.group);
       for (const it of g.items) {
+        // A hit in an app the person was not given is not shown (the server should not send one).
+        if (!canOpenLink(it.route, allowed)) continue;
         const target = resolveWebLink(it.route);
-        const native = target.kind === 'tab' && (allowed.has(target.app) || target.app === 'home');
+        const native = target.kind === 'tab' && canOpenApp(target.app, allowed);
         out.push({
           key: `srv:${g.group}:${it.id}:${it.route}`,
           group: g.group,
@@ -218,6 +222,8 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
       }
     }
     for (const it of offline.data ?? []) {
+      // Saved on this computer while the app was the person's; not shown once it is not.
+      if (!canOpenApp(it.module, allowed) || !canOpenRoute(it.route, allowed)) continue;
       const look = groupLook('offline results');
       out.push({ key: `off:${it.route}`, group: 'Offline results', title: it.title, subtitle: it.subtitle, at: `saved ${relative(it.cachedAt)}`, colour: look.colour, icon: look.icon, kv: [['Saved', relative(it.cachedAt)]], verb: 'Open', run: () => navigate(it.route) });
     }

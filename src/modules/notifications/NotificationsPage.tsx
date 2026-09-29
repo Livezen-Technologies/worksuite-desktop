@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { useVisibleIds } from '../../core/access';
 import { app, updatePrefs } from '../../core/app-state';
 import { apiGet } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
@@ -12,7 +13,7 @@ import { Button, Spinner, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
 import { refOf } from '../chat/cards/recordLinks';
 import { RecordCard } from '../chat/cards/RecordCards';
-import { act, appOf, bulk, fetchCentre, inView, K, markAllRead, openNotice, quickActions, sectioned, SECTION_LABEL, sectionOf, snoozedLabel, type Notice, type View } from './api';
+import { act, appOf, bulk, fetchCentre, inView, K, markAllRead, openNotice, quickActions, sectioned, SECTION_LABEL, sectionOf, snoozedLabel, visibleCategories, visibleNotices, type Notice, type View } from './api';
 import { NotifRow, SnoozeMenu } from './NotifRow';
 
 const NotificationSettings = lazy(() => import('./Settings'));
@@ -58,6 +59,7 @@ function Centre() {
   const [checked, setChecked] = useState<Set<number>>(new Set());
   const [snoozing, setSnoozing] = useState(false);
   const moduleNotifications = useStore(app, (s) => s.prefs?.moduleNotifications);
+  const visible = useVisibleIds();
 
   useEffect(() => {
     const t = setTimeout(() => setNeedle(q.trim()), 300);
@@ -74,8 +76,9 @@ function Centre() {
     getNextPageParam: (last) => (last.page * last.per_page < last.total && !DERIVED.includes(view) ? last.page + 1 : undefined),
   });
   const labels = overview.data?.categories ?? list.data?.pages[0]?.categories;
-  const items = useMemo(() => (list.data?.pages ?? []).flatMap((p) => p.notifications), [list.data]);
-  const inbox = overview.data?.notifications ?? [];
+  // Only what belongs to apps the person has (visibleNotices), in the list, the counts and the Apps rail.
+  const items = useMemo(() => visibleNotices((list.data?.pages ?? []).flatMap((p) => p.notifications), visible), [list.data, visible]);
+  const inbox = visibleNotices(overview.data?.notifications ?? [], visible);
   const counts: Partial<Record<View, number>> = {
     inbox: overview.data?.counts.unread,
     mentions: inbox.filter((n) => !n.read && inView(n, 'mentions')).length,
@@ -83,7 +86,7 @@ function Centre() {
     assigned: inbox.filter((n) => !n.read && inView(n, 'assigned')).length,
     snoozed: snoozedCount.data,
   };
-  const byCat = Object.entries(overview.data?.counts.by_category ?? {}).sort((a, b) => b[1].unread - a[1].unread || b[1].total - a[1].total);
+  const byCat = visibleCategories(Object.entries(overview.data?.counts.by_category ?? {}), visible).sort((a, b) => b[1].unread - a[1].unread || b[1].total - a[1].total);
   const current = items.find((n) => n.id === selected) ?? null;
   const picked = items.filter((n) => checked.has(n.id));
   const refresh = () => void qc.invalidateQueries({ queryKey: K.all });

@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
+import { useCanOpen } from '../../core/access';
 import { apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
 import { useTab } from '../../core/tab-context';
@@ -38,6 +39,12 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
   const { navigate } = useTab();
   const [tab, setTab] = useState<Tab>('det');
   const [deleting, setDeleting] = useState(false);
+  // Each quick action opens another app; one the person was not given is not offered.
+  const canMail = useCanOpen('mail');
+  const canChat = useCanOpen('chat');
+  const canMeet = useCanOpen('meet');
+  const canCalendar = useCanOpen('calendar');
+  const canTasks = useCanOpen('tasks');
   const detail = useQuery({ queryKey: ['contacts', 'detail', id], queryFn: ({ signal }) => apiGet<ContactDetail>(`/api/contacts/${id}`, undefined, signal) });
   const notes = useQuery({ queryKey: ['contacts', 'notes', id], queryFn: ({ signal }) => apiGet<ContactNote[]>(`/api/contacts/${id}/notes`, undefined, signal) });
   const found: (Contact & Partial<ContactDetail>) | undefined = detail.data ?? card;
@@ -87,10 +94,11 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
     }
   };
 
-  const actions: Array<{ label: string; icon: string; on: boolean; go: () => void }> = [
+  const actions: Array<{ label: string; icon: string; shown: boolean; on: boolean; go: () => void }> = [
     {
       label: 'Email',
       icon: 'mail',
+      shown: canMail,
       on: !!email,
       go: () => {
         if (!email) return toast('info', 'No email on file');
@@ -101,6 +109,7 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
     {
       label: 'Chat',
       icon: 'chat',
+      shown: canChat,
       on: !!c.user_id,
       go: async () => {
         if (!c.user_id) return toast('info', 'Link this contact to a team member to chat');
@@ -116,6 +125,7 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
     {
       label: 'Meet',
       icon: 'video',
+      shown: canMeet,
       on: true,
       go: async () => {
         try {
@@ -130,6 +140,7 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
     {
       label: 'Schedule',
       icon: 'calendar',
+      shown: canCalendar,
       on: true,
       go: () => {
         void logAct(id, 'meeting', `Opened Calendar to schedule with ${c.display_name}`);
@@ -139,13 +150,14 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
     {
       label: 'Task',
       icon: 'check-circle',
+      shown: canTasks,
       on: true,
       go: () => {
         void logAct(id, 'task', `Opened Tasks for ${c.display_name}`);
         navigate(`/tasks?new=1&title=${encodeURIComponent(`Follow up with ${c.display_name}`)}`);
       },
     },
-  ];
+  ].filter((a) => a.shown);
 
   const tone = typeOf(c.type).tone;
   const color = c.avatar_color ?? '#23349E';
@@ -194,22 +206,24 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
                 <span key={l} className="inline-flex h-5 items-center rounded-[10px] bg-subtle px-2 text-[11px] font-semibold text-ink-2">{l}</span>
               ))}
             </div>
-            <div className="mt-3.5 flex gap-1.5">
-              {actions.map((a) => (
-                <span key={a.label} className="flex w-16 flex-col items-center gap-1.5">
-                  <button
-                    type="button"
-                    aria-label={a.label}
-                    title={a.on ? a.label : a.label === 'Email' ? 'No email on file' : 'Link this contact to a team member to chat'}
-                    onClick={() => void a.go()}
-                    className={cx('flex h-[46px] w-[46px] items-center justify-center rounded-full border', a.on ? 'border-[#DCE2F5] bg-selection text-primary hover:brightness-95 dark:border-line' : 'border-line bg-ground text-ink-3')}
-                  >
-                    <Icon name={a.icon} size={19} />
-                  </button>
-                  <span className="text-[11.5px] font-semibold text-ink-2">{a.label}</span>
-                </span>
-              ))}
-            </div>
+            {actions.length ? (
+              <div className="mt-3.5 flex gap-1.5">
+                {actions.map((a) => (
+                  <span key={a.label} className="flex w-16 flex-col items-center gap-1.5">
+                    <button
+                      type="button"
+                      aria-label={a.label}
+                      title={a.on ? a.label : a.label === 'Email' ? 'No email on file' : 'Link this contact to a team member to chat'}
+                      onClick={() => void a.go()}
+                      className={cx('flex h-[46px] w-[46px] items-center justify-center rounded-full border', a.on ? 'border-[#DCE2F5] bg-selection text-primary hover:brightness-95 dark:border-line' : 'border-line bg-ground text-ink-3')}
+                    >
+                      <Icon name={a.icon} size={19} />
+                    </button>
+                    <span className="text-[11.5px] font-semibold text-ink-2">{a.label}</span>
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </div>
           <div role="tablist" aria-label="Contact" className="sticky top-0 z-[1] flex shrink-0 gap-1 border-b border-line bg-surface px-4">
             {(
@@ -274,11 +288,14 @@ async function copy(text: string) {
   }
 }
 
-type Row = { k: string; icon: string; v: string; wide?: boolean; go?: () => void; phone?: string };
+type Row = { k: string; icon: string; v: string; wide?: boolean; go?: () => void; phone?: string; copy?: boolean };
 
 /** Communication, Business and More, then social links and the notes field. */
 function Details({ c, loading }: { c: Contact & Partial<ContactDetail>; loading: boolean }) {
   const { navigate } = useTab();
+  // An address opens Mail's compose, and a number WhatsApp, only for whoever has them; the copy button stays.
+  const canMail = useCanOpen('mail');
+  const canWhatsapp = useCanOpen('whatsapp');
   const [menu, setMenu] = useState<string | null>(null);
   const [whatsapp, setWhatsapp] = useState<string | null>(null);
   const mail = (to: string) => {
@@ -291,8 +308,8 @@ function Details({ c, loading }: { c: Contact & Partial<ContactDetail>; loading:
     {
       t: 'Communication',
       rows: [
-        c.work_email ? { k: 'Work email', icon: 'mail', v: c.work_email, wide: true, go: () => mail(c.work_email!) } : null,
-        c.personal_email ? { k: 'Personal email', icon: 'mail', v: c.personal_email, go: () => mail(c.personal_email!) } : null,
+        c.work_email ? { k: 'Work email', icon: 'mail', v: c.work_email, wide: true, copy: true, go: canMail ? () => mail(c.work_email!) : undefined } : null,
+        c.personal_email ? { k: 'Personal email', icon: 'mail', v: c.personal_email, copy: true, go: canMail ? () => mail(c.personal_email!) : undefined } : null,
         c.mobile ? { k: 'Mobile', icon: 'mobile', v: c.mobile, phone: c.mobile } : null,
         c.office_phone ? { k: 'Office phone', icon: 'phone', v: c.office_phone, phone: c.office_phone } : null,
         c.home_phone ? { k: 'Home phone', icon: 'phone', v: c.home_phone, phone: c.home_phone } : null,
@@ -343,7 +360,7 @@ function Details({ c, loading }: { c: Contact & Partial<ContactDetail>; loading:
                     <span className="text-[13px] leading-[1.4] font-semibold break-words text-ink">{r.v}</span>
                   )}
                 </span>
-                {r.go || r.phone ? (
+                {r.go || r.phone || r.copy ? (
                   <button type="button" title="Copy" aria-label={`Copy ${r.k.toLowerCase()}`} onClick={() => void copy(r.v)} className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-ink-3 hover:bg-subtle hover:text-ink">
                     <Icon name="copy" size={13} />
                   </button>
@@ -352,7 +369,7 @@ function Details({ c, loading }: { c: Contact & Partial<ContactDetail>; loading:
                   <PhoneMenu
                     phone={r.phone}
                     onClose={() => setMenu(null)}
-                    onWhatsapp={() => (setMenu(null), setWhatsapp(r.phone!))}
+                    onWhatsapp={canWhatsapp ? () => (setMenu(null), setWhatsapp(r.phone!)) : undefined}
                     onCall={() => {
                       setMenu(null);
                       void logAct(c.id, 'call', `Called ${r.phone}`);
@@ -380,14 +397,15 @@ function Details({ c, loading }: { c: Contact & Partial<ContactDetail>; loading:
   );
 }
 
-function PhoneMenu({ phone, onClose, onWhatsapp, onCall }: { phone: string; onClose: () => void; onWhatsapp: () => void; onCall: () => void }) {
+/** Call, and — for whoever has WhatsApp — send on it or open the conversation there. */
+function PhoneMenu({ phone, onClose, onWhatsapp, onCall }: { phone: string; onClose: () => void; onWhatsapp?: () => void; onCall: () => void }) {
   const d = digits(phone);
   const item = 'flex h-[34px] w-full items-center gap-2.5 rounded-[8px] px-2.5 text-left text-[12.5px] font-semibold text-ink hover:bg-ground';
   return (
     <>
       <div className="fixed inset-0 z-10" onMouseDown={onClose} />
       <div role="menu" aria-label="Phone" className="absolute top-10 left-12 z-20 flex w-[230px] flex-col rounded-[12px] border border-line bg-surface p-1.5 shadow-[0_12px_32px_rgb(var(--ws-shadow-rgb)/.16)]">
-        {d.length >= 7 ? (
+        {onWhatsapp && d.length >= 7 ? (
           <>
             <button type="button" role="menuitem" autoFocus onClick={onWhatsapp} className={item}>
               <Icon name="send" size={15} className="text-[#15803D]" /> Send a WhatsApp message

@@ -1,5 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type DragEvent, type MouseEvent } from 'react';
+import { useCanOpen } from '../../core/access';
 import { app } from '../../core/app-state';
 import { request } from '../../core/api';
 import { useStore } from '../../core/store';
@@ -532,6 +533,7 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
 /** The dark bar over a selection: what can be done to all of it. */
 function SelectionBar({ items, size, onClear }: { items: Item[]; size: number; onClear: () => void }) {
   const d = useDrive();
+  const chat = useCanOpen('chat');
   const files = items.filter((i): i is Extract<Item, { type: 'file' }> => i.type === 'file').map((i) => i.f);
   const all = (cap: string) => items.every((i) => can(i.f.access, cap));
   const one = items.length === 1 ? items[0]! : null;
@@ -544,7 +546,7 @@ function SelectionBar({ items, size, onClear }: { items: Item[]; size: number; o
       {files.length === items.length && all('download') ? <button type="button" className={btn} onClick={() => d.move(items, 'copy')}>Copy to…</button> : null}
       {files.length && files.every((f) => can(f.access, 'download')) ? <button type="button" className={btn} onClick={() => d.download(files)}>Download</button> : null}
       {files.length > 1 && files.length === items.length && all('download') ? <button type="button" className={btn} onClick={() => d.zip(files)}>Zip</button> : null}
-      {one && can(one.f.access, 'chat_share') ? <button type="button" className={btn} onClick={() => d.sendToChat(one)}>Send to Chat…</button> : null}
+      {one && chat && can(one.f.access, 'chat_share') ? <button type="button" className={btn} onClick={() => d.sendToChat(one)}>Send to Chat…</button> : null}
       {all('delete') ? <button type="button" className={cx(btn, 'text-[#FFB4A3]')} onClick={() => d.trash(items)}>Move to trash</button> : null}
       <span className="flex-1" />
       <button type="button" onClick={onClear} className="h-[30px] rounded-[7px] border border-[#33477E] px-2.5 text-white hover:bg-white/10">Clear</button>

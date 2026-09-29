@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
+import { categoryVisible } from '@shared/access';
 import { QUICK_ASK_SHORTCUTS, type Preferences } from '@shared/types';
+import { useCanOpen, useVisibleIds } from '../../core/access';
 import { app, isLocked, updatePrefs } from '../../core/app-state';
 import { call, errorMessage, isMac } from '../../core/bridge';
 import { conflicts, effectiveShortcuts, prettyAccelerator, accelerator, DEFAULT_SHORTCUTS } from '../../core/commands';
@@ -182,6 +184,8 @@ function Shortcuts({ prefs }: { prefs: Preferences }) {
   const map = effectiveShortcuts(prefs.shortcuts);
   const clashes = conflicts(map);
   const [recording, setRecording] = useState<string | null>(null);
+  // The AI Assistant's shortcut only for whoever has the AI app.
+  const hasAi = useCanOpen('ai');
   return (
     <div className="mt-8">
       <h3 className="mb-2 text-[16px] font-bold text-ink">Keyboard shortcuts</h3>
@@ -190,7 +194,7 @@ function Shortcuts({ prefs }: { prefs: Preferences }) {
           {clashes.map((c) => `${prettyAccelerator(c.accelerator)} is used by ${c.commands.map((id) => SHORTCUT_LABELS[id] ?? id).join(' and ')}`).join('. ')}. The shell command wins.
         </div>
       ) : null}
-      {Object.keys(SHORTCUT_LABELS).map((id) => (
+      {Object.keys(SHORTCUT_LABELS).filter((id) => id !== 'ai' || hasAi).map((id) => (
         <Row key={id} label={SHORTCUT_LABELS[id]!}>
           <div className="flex items-center gap-2">
             <button
@@ -245,6 +249,7 @@ const MODULE_TOGGLES = [
 
 function NotificationsSection({ prefs }: { prefs: Preferences }) {
   const { navigate } = useTab();
+  const visible = useVisibleIds();
   const lock = isLocked('notificationPrivacy');
   const paused = useStore(app, (s) => s.status?.notificationsPausedUntil);
   const hasChat = useStore(app, (s) => s.apps.some((a) => a.id === 'chat'));
@@ -290,7 +295,8 @@ function NotificationsSection({ prefs }: { prefs: Preferences }) {
       ) : null}
       {hasChat ? <WebchatRingingPrefs prefs={prefs} /> : null}
       <h3 className="mt-8 mb-1 text-[16px] font-bold text-ink">By app</h3>
-      {MODULE_TOGGLES.map(([id, label]) => (
+      {/* Only the apps the person has; System alerts belong to no app and always show. */}
+      {MODULE_TOGGLES.filter(([id]) => categoryVisible(id, visible)).map(([id, label]) => (
         <Row key={id} label={label}>
           <Switch label={label} checked={prefs.moduleNotifications[id] !== false} onChange={(v) => void updatePrefs({ moduleNotifications: { ...prefs.moduleNotifications, [id]: v } })} />
         </Row>

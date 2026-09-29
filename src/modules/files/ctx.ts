@@ -1,4 +1,5 @@
 import { createContext, useContext, type DragEvent } from 'react';
+import { canOpen } from '../../core/access';
 import type { MenuItem } from './Menu';
 import { IMAGE_EDIT_EXTS, OFFICE_EXTS, PREVIEW_EXTS, TONE, ZIP_EXTS, can, extOf, openWay, type DriveFile, type DriveFolder, type Key } from './api';
 import { app } from '../../core/app-state';
@@ -62,6 +63,8 @@ export function fileMenu(f: DriveFile, d: Drive, list?: DriveFile[]): MenuItem[]
   const e = extOf(f.name, f.extension);
   const item: Item = { type: 'file', f };
   const way = openWay(f);
+  // Sending into a conversation is Chat's: offered only to whoever has it.
+  const chat = can(a, 'chat_share') && canOpen('chat');
   const out: Array<MenuItem | null> = [
     { label: 'Open', hint: 'Enter', strong: true, run: () => d.open(item, list) },
     way === 'preview' ? null : PREVIEWABLE(e) ? { label: 'Preview', hint: 'Space', run: () => d.preview(list ?? [f], Math.max(0, (list ?? [f]).indexOf(f))) } : null,
@@ -73,8 +76,8 @@ export function fileMenu(f: DriveFile, d: Drive, list?: DriveFile[]): MenuItem[]
     can(a, 'share') ? { label: 'Share…', icon: 'users', run: () => d.share(item) } : null,
     can(a, 'download') ? { label: 'Secure link…', icon: 'lock', run: () => d.secureLink(f) } : null,
     can(a, 'share') && a?.owner ? { label: 'Copy public link', icon: 'link', run: () => d.publicLink(item) } : null,
-    can(a, 'chat_share') ? { label: 'Send to Chat…', icon: 'send', run: () => d.sendToChat(item) } : null,
-    can(a, 'chat_share') ? { label: 'Discuss in Chat…', icon: 'chat', run: () => d.sendToChat(item, true) } : null,
+    chat ? { label: 'Send to Chat…', icon: 'send', run: () => d.sendToChat(item) } : null,
+    chat ? { label: 'Discuss in Chat…', icon: 'chat', run: () => d.sendToChat(item, true) } : null,
     { sep: true },
     can(a, 'rename') ? { label: 'Rename', hint: 'F2', icon: 'compose', run: () => d.rename(item) } : null,
     can(a, 'move') ? { label: 'Move…', icon: 'folder-up', run: () => d.move([item], 'move') } : null,
@@ -96,13 +99,14 @@ export function folderMenu(f: DriveFolder, d: Drive): MenuItem[] {
   const a = f.access;
   const item: Item = { type: 'folder', f };
   const owner = !!a?.owner;
+  const chat = can(a, 'chat_share') && canOpen('chat');
   const out: Array<MenuItem | null> = [
     { label: 'Open', hint: 'Enter', strong: true, run: () => d.openFolder(f.id) },
     { label: 'Details', icon: 'info', run: () => d.details(item) },
     { sep: true },
     can(a, 'share') ? { label: 'Share…', icon: 'users', run: () => d.share(item) } : null,
     can(a, 'share') && owner ? { label: 'Get link…', icon: 'link', run: () => d.publicLink(item) } : null,
-    can(a, 'chat_share') ? { label: 'Send to Chat…', icon: 'send', run: () => d.sendToChat(item) } : null,
+    chat ? { label: 'Send to Chat…', icon: 'send', run: () => d.sendToChat(item) } : null,
     can(a, 'download') ? { label: 'Download (zip)', icon: 'download', run: () => d.downloadFolder(f) } : null,
     owner ? { label: f.is_locked ? 'Remove the password lock' : 'Password lock…', icon: 'lock', run: () => d.lock(f, !f.is_locked) } : null,
     owner && !f.is_locked && app.get().sync?.available ? { label: `Keep on this ${computerWord()}…`, icon: 'laptop', run: () => d.syncFolder(f) } : null,

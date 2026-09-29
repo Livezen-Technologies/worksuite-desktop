@@ -1,4 +1,5 @@
 import { Fragment } from 'react';
+import { canOpen, refuse } from '../core/access';
 import { app } from '../core/app-state';
 import { call } from '../core/bridge';
 import { openWebLink } from '../core/tab-context';
@@ -68,8 +69,11 @@ export function linkTarget(href: string, serverOrigin: string | null | undefined
 export function openAnyLink(href: string): void {
   const t = linkTarget(href, app.get().auth?.server?.origin);
   if (!t) return;
-  if (t.kind === 'meeting') void openMeeting(t.uuid);
-  else if (t.kind === 'app') openWebLink(t.path);
+  if (t.kind === 'meeting') {
+    // A meeting is Meet's: not opened for somebody without it.
+    if (canOpen('meet')) void openMeeting(t.uuid);
+    else refuse();
+  } else if (t.kind === 'app') openWebLink(t.path);
   else void call('app:openExternal', { url: t.url });
 }
 

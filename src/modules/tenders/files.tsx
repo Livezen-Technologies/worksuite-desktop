@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import type { UploadTarget } from '@shared/ipc/contract';
 import type { Transfer } from '@shared/types';
+import { useCanOpen } from '../../core/access';
 import { app } from '../../core/app-state';
 import { call, errorMessage, registerDropped } from '../../core/bridge';
 import { useStore } from '../../core/store';
@@ -130,6 +131,8 @@ export function AttachMenu({ label = 'Attach', disabled, onComputer, onDrive, sm
     if (!r) return;
     setOpen(menuPlace(r, { width: window.innerWidth, height: window.innerHeight }));
   };
+  // "From Drive" browses Files: only for whoever has it.
+  const files = useCanOpen('files');
   return (
     <span className="relative inline-flex">
       <button
@@ -153,9 +156,11 @@ export function AttachMenu({ label = 'Attach', disabled, onComputer, onDrive, sm
             <button type="button" role="menuitem" onClick={() => (setOpen(null), onComputer())} className="flex items-center gap-2 px-3 py-1.5 text-left text-[12.5px] text-ink hover:bg-subtle">
               <Icon name="upload" size={14} className="text-ink-3" /> From this computer…
             </button>
-            <button type="button" role="menuitem" onClick={() => (setOpen(null), setDrive(true))} className="flex items-center gap-2 px-3 py-1.5 text-left text-[12.5px] text-ink hover:bg-subtle">
-              <Icon name="folder" size={14} className="text-ink-3" /> From Drive…
-            </button>
+            {files ? (
+              <button type="button" role="menuitem" onClick={() => (setOpen(null), setDrive(true))} className="flex items-center gap-2 px-3 py-1.5 text-left text-[12.5px] text-ink hover:bg-subtle">
+                <Icon name="folder" size={14} className="text-ink-3" /> From Drive…
+              </button>
+            ) : null}
           </span>
         </>
       ) : null}

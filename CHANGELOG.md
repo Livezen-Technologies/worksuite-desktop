@@ -5,6 +5,79 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-29 — 0.2.50: apps you were not given stay hidden
+
+An app you were not given is not there at all: not in a list, not behind a
+button, not one link or shortcut away, and not in the browser instead. What
+you may open is what the server says (the bootstrap's apps, from its
+AppGate) — somebody not set up has Home, Search, Calendar, Tasks, Chat,
+Notes, Mail and Files, HR and the other apps without an app of their own on
+the server stay on for everyone, and anything else appears only once it is
+granted. Everything below asks that one list.
+
+Your own payslips and your own expense claims stay yours, like HR: My pay in
+HR, its downloads and payslip notifications work without the Payroll app,
+and without the Expenses app you still open Expenses to file and follow your
+own claims (the server shows you only those).
+
+**Changed**
+
+- **Tabs.** A tab never opens on an app you may not open — not from a link,
+  a button, a deep link, the tray, **Reopen closed tab** or a tab
+  moving to another app's page. You are told "You don't have access to
+  this." instead.
+- **Links no longer fall back to the browser.** A link into an app you may
+  not open — in a notification, a chat card or message, a search result,
+  Home's approvals — used to open it on the web; it is now refused. The
+  same holds for apps that only open in the browser (Finance, Support,
+  WhatsApp…), and for the app's own checks: the browser, other windows and
+  external links to this server refuse such a page whatever asks for it.
+- **Access changes arrive by themselves.** When your administrator gives or
+  takes an app, the app notices within moments (the server's
+  `access.changed`), and checks again every ten minutes while you are
+  online, and after a reconnect. An app taken away leaves the sidebar, its
+  tabs and its windows close — a call in Chat included — and you are told
+  it is no longer available.
+- **Buttons into other apps** — make a task or a note from a message, email,
+  chat with or meet a contact, open an invoice from an order or a product,
+  a customer's subscriptions, an event's meeting notes, raise a ticket from
+  a website chat, send a file to Chat, pick from Drive — show only when you
+  have the app they open. A chat card of a record in an app you do not have
+  says only that you have no access. Calendar's Show list leaves out apps
+  you do not have.
+- **The tray** shows unread Chat and Mail, and offers New Task, New Email,
+  Open Chat, Upload File and New Lead, only for the apps you have. The
+  unread counts on the tray, the Dock and the title bar leave out apps you
+  do not have.
+- **AI.** The title bar's AI button, its shortcut, the palette's command, View › AI
+  Assistant and Home's **Ask AI** appear only with the AI app. Before, the
+  button showed for everybody.
+- **Home** counts unread messages only from Chat and Mail you have, and its
+  Activity card needs Activity.
+- **Shortcuts and the menu** run a command only when the palette would list
+  it: a shortcut into an app you do not have does nothing.
+- **Notifications.** The bell's drawer and the notification centre leave out
+  anything that would open an app you do not have (one without a link
+  stays), and their Apps lists leave those apps out. No desktop banner
+  appears for such an app, and Mail is not checked for new mail if you do
+  not have it. Notification settings list only your apps, and the
+  categories that belong to no app.
+- **Offline.** What this computer saved of an app is removed when the app
+  is taken away, and never shown, served or searched while you do not have
+  it.
+
+**Where it bites**
+
+- A link someone shares into an app you were not given now says "You don't
+  have access to this." Where you used to reach it on the web, ask your
+  administrator for the app instead.
+- Losing an app while a call or a record window of it is open closes that
+  window, and the call with it.
+- Changes you made offline in an app that was since taken away are not
+  thrown away, but the server refuses them when they are sent.
+
+---
+
 ## 2026-09-29 — 0.2.49: fixes from the desktop QA sheet — staying signed in, Forgot password, Home
 
 From "Desktop App QA Task Sheet": each item names its test.

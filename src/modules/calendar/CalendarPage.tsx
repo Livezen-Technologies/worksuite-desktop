@@ -1,5 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { canOpenApp } from '@shared/access';
+import { useVisibleIds } from '../../core/access';
 import { apiDelete, apiGet, apiGetMeta, apiPost, apiPut } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
 import { useTab, useTabTitle } from '../../core/tab-context';
@@ -77,6 +79,10 @@ export default function CalendarPage(_props: ModuleProps) {
   });
   const offline = !!q.data?.offline;
   const [hidden, setHidden] = useState<string[]>(loadHidden);
+  // A category of an app the person was not given is not listed, and its entries (a cached feed's) not drawn.
+  const visible = useVisibleIds();
+  const categories = CATEGORIES.filter((c) => !c.apps || c.apps.some((a) => canOpenApp(a, visible)));
+  const shows = (e: CalendarEvent) => !hidden.includes(categoryOf(e.source)) && categories.some((c) => c.id === categoryOf(e.source));
   const [mini, setMini] = useState(monthStart(date));
   const [drawer, setDrawer] = useState<{ event: CalendarEvent | null; draft: Draft | null } | null>(null);
   const [series, setSeries] = useState<Change | null>(null);
@@ -85,9 +91,9 @@ export default function CalendarPage(_props: ModuleProps) {
   const [report, setReport] = useState<{ name: string; report: IcsReport } | null>(null);
   const [handled, setHandled] = useState<string | null>(null);
   const file = useRef<HTMLInputElement>(null);
-  const events = (q.data?.data.events ?? []).filter((e) => !hidden.includes(categoryOf(e.source)));
+  const events = (q.data?.data.events ?? []).filter(shows);
   const todayList = (todays.data?.data.events ?? [])
-    .filter((e) => !hidden.includes(categoryOf(e.source)))
+    .filter(shows)
     .sort((a, b) => Number(b.all_day) - Number(a.all_day) || minutesOf(a.start_at) - minutesOf(b.start_at));
 
   const set = (nv: View, nd: string) => go(`/calendar?view=${nv}&date=${nd}`);
@@ -260,7 +266,7 @@ export default function CalendarPage(_props: ModuleProps) {
         <MiniMonth month={mini} today={today} range={view === 'month' ? [] : days} selected={date} onMonth={(n) => setMini(addMonths(mini, n))} onPick={(x) => set(view === 'month' ? 'day' : view, x)} />
         <div className="flex flex-col gap-[5px]">
           <b className="text-[11px] tracking-[0.5px] text-ink-3">SHOW</b>
-          {CATEGORIES.map((c) => (
+          {categories.map((c) => (
             <label key={c.id} className="flex items-center gap-2 text-ink">
               <input
                 type="checkbox"

@@ -6,13 +6,14 @@ import type * as Registry from '../../../src/modules/registry';
 vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(), on: () => () => undefined, errorMessage: (e: unknown) => String(e), isMac: false }));
 vi.mock('../../../src/core/app-state', async () => {
   const { createStore } = await import('../../../src/core/store');
-  return { app: createStore({ apps: [] as Array<{ id: string }> }) };
+  const { visibleApps } = await import('../../../shared/apps');
+  return { app: createStore({ apps: visibleApps({ apps: '*', permissions: ['*'] }) }) };
 });
 // Each tab shows its route, so a test can see which pane holds what.
 vi.mock('../../../src/modules/registry', async (orig) => {
   const real = await orig<typeof Registry>();
   const Page = ({ route }: { route: string }) => <p>page {route}</p>;
-  return { ...real, moduleFor: (id: string) => ({ manifest: { name: id }, component: Page, always: true }) };
+  return { ...real, moduleFor: (id: string) => ({ id, manifest: { name: id }, component: Page, always: true }) };
 });
 
 import { call } from '../../../src/core/bridge';

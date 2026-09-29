@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import qrcode from 'qrcode-generator';
+import { useCanOpen } from '../../core/access';
 import { apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
 import { app } from '../../core/app-state';
 import { call, errorMessage } from '../../core/bridge';
@@ -20,7 +21,9 @@ export function MeetHome() {
   const { navigate } = useTab();
   const me = useStore(app, (s) => s.auth?.user?.name ?? null);
   const perms = useStore(app, (s) => s.bootstrap?.permissions ?? []);
-  const meetings = useStore(app, (s) => s.apps.some((a) => a.id === 'meetings'));
+  // Meetings (details, scheduling) and Chat (a meeting's conversation) are other apps: offered only to whoever has them.
+  const meetings = useCanOpen('meetings');
+  const chat = useCanOpen('chat');
   const [menu, setMenu] = useState(false);
   const [code, setCode] = useState('');
   const [created, setCreated] = useState<Created | null>(null);
@@ -86,7 +89,7 @@ export function MeetHome() {
               <div role="menu" aria-label="New meeting" className="absolute top-12 left-0 z-20 flex w-[360px] flex-col rounded-[12px] border border-line bg-surface p-1.5 shadow-[0_14px_36px_rgb(var(--ws-shadow-rgb)/.18)]">
                 <MenuItem title="Start an instant meeting" hint="Join now and invite people from inside" onClick={() => void instant()} />
                 <MenuItem title="Create a meeting for later" hint="Get a link and code to share" onClick={() => void later()} />
-                <MenuItem title="Schedule a meeting" hint={canSchedule ? 'Invite people; it shows in Calendar' : 'Needs the "Schedule meetings" permission'} disabled={!canSchedule} onClick={() => (setMenu(false), setScheduling(true))} />
+                {meetings ? <MenuItem title="Schedule a meeting" hint={canSchedule ? 'Invite people; it shows in Calendar' : 'Needs the "Schedule meetings" permission'} disabled={!canSchedule} onClick={() => (setMenu(false), setScheduling(true))} /> : null}
               </div>
             ) : null}
           </div>
@@ -131,7 +134,7 @@ export function MeetHome() {
             {history.isLoading ? <Spinner /> : history.error ? <ErrorNote error={history.error} onRetry={() => void history.refetch()} /> : null}
             {!history.isLoading && !history.data?.meetings.length ? <p className="py-2 text-ink-3">No meetings yet.</p> : null}
             {(history.data?.meetings ?? []).slice(0, 8).map((h) => (
-              <RecentRow key={h.uuid} h={h} onChat={(id) => navigate(`/chat?room=${id}`)} />
+              <RecentRow key={h.uuid} h={h} onChat={chat ? (id) => navigate(`/chat?room=${id}`) : undefined} />
             ))}
           </section>
         </div>
@@ -157,7 +160,7 @@ function minutes(h: HistoryRow): string | null {
   return m > 0 ? `${m} min` : null;
 }
 
-function RecentRow({ h, onChat }: { h: HistoryRow; onChat: (roomId: number) => void }) {
+function RecentRow({ h, onChat }: { h: HistoryRow; onChat?: (roomId: number) => void }) {
   const meta = [
     relative(h.started_at ?? h.created_at),
     minutes(h),
@@ -173,7 +176,7 @@ function RecentRow({ h, onChat }: { h: HistoryRow; onChat: (roomId: number) => v
       </span>
       <span className="flex shrink-0 gap-2 text-[12px] font-semibold text-primary">
         {h.status !== 'ended' ? <button type="button" className="hover:underline" onClick={() => void openMeeting(h.uuid, h.title)}>Join</button> : null}
-        {h.room_id ? <button type="button" className="hover:underline" onClick={() => onChat(h.room_id!)}>Open chat</button> : null}
+        {h.room_id && onChat ? <button type="button" className="hover:underline" onClick={() => onChat(h.room_id!)}>Open chat</button> : null}
         <button type="button" className="hover:underline" onClick={() => void navigator.clipboard.writeText(h.join_url).then(() => toast('success', 'Meeting link copied.'))}>
           Copy meeting link
         </button>
@@ -285,12 +288,14 @@ export function CreatedDialog({ m, host, onClose }: { m: Created; host: string |
 }
 
 export function ShareRow({ text, m, onChat, copy }: { text: string; m: { uuid: string; title?: string | null }; onChat: () => void; copy: (v: string, what: string) => void }) {
+  // Posting into a conversation is Chat's: only for whoever has it.
+  const chat = useCanOpen('chat');
   const btn = 'h-8 rounded-[8px] border border-line bg-surface px-3 text-[12px] font-semibold text-ink hover:bg-subtle';
   return (
     <div className="flex flex-wrap gap-2">
       <button type="button" className={btn} onClick={() => copy(text, 'Invitation')}>Copy invitation</button>
       <button type="button" className={btn} onClick={() => void call('app:openExternal', { url: `mailto:?subject=${encodeURIComponent(m.title || 'WorkSuite meeting')}&body=${encodeURIComponent(text)}` })}>Email invite</button>
-      <button type="button" className={btn} onClick={onChat}>Share in chat</button>
+      {chat ? <button type="button" className={btn} onClick={onChat}>Share in chat</button> : null}
       <button type="button" className={btn} onClick={() => void call('app:openExternal', { url: `https://wa.me/?text=${encodeURIComponent(text)}` })}>WhatsApp</button>
       <button type="button" className={btn} onClick={() => void call('app:openInBrowser', { path: `/meet/${m.uuid}` })}>Open link</button>
     </div>

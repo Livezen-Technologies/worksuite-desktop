@@ -1,9 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { canOpenRoute, canOpenWebPath } from '@shared/access';
+import { useCanOpen, useVisibleIds } from '../../core/access';
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
-import { app } from '../../core/app-state';
 import { call, errorMessage } from '../../core/bridge';
-import { useStore } from '../../core/store';
 import { useTab } from '../../core/tab-context';
 import { dayLabel, wallTimeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
@@ -63,14 +63,18 @@ function Shell({ title, colour, extra, onClose, children, footer }: { title: str
 
 function Summary({ e, onClose }: { e: CalendarEvent; onClose: () => void }) {
   const { navigate } = useTab();
-  const to = destinationOf(e);
+  const visible = useVisibleIds();
+  // "Open" goes to the app the entry lives in, and a Meet meeting's "Join" to Meet: neither for an app the person was not given.
+  const where = destinationOf(e);
+  const to = where && (where.route ? canOpenRoute(where.route, visible) : canOpenWebPath(where.web!, visible)) ? where : null;
+  const meet = useCanOpen('meet');
   const kind = CATEGORIES.find((c) => c.id === categoryOf(e.source))?.label ?? 'Entry';
   const when = e.all_day
     ? dayOf(e.start_at) === dayOf(e.end_at ?? e.start_at)
       ? dayLabel(dayOf(e.start_at))
       : `${dayLabel(dayOf(e.start_at), 'short')} – ${dayLabel(dayOf(e.end_at!), 'short')}`
     : `${dayLabel(dayOf(e.start_at))} · ${wallTimeLabel(e.start_at)}${e.end_at ? `–${wallTimeLabel(e.end_at)}` : ''}`;
-  const join = e.source === 'meeting' && e.uuid ? () => void openMeeting(e.uuid!, e.title) : e.join_url ? () => void call('app:openExternal', { url: e.join_url! }) : null;
+  const join = e.source === 'meeting' && e.uuid ? (meet ? () => void openMeeting(e.uuid!, e.title) : null) : e.join_url ? () => void call('app:openExternal', { url: e.join_url! }) : null;
   return (
     <Shell
       title={kind}
@@ -98,7 +102,9 @@ function Summary({ e, onClose }: { e: CalendarEvent; onClose: () => void }) {
 function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft: Draft | null; onClose: () => void }) {
   const qc = useQueryClient();
   const { navigate } = useTab();
-  const notesApp = useStore(app, (s) => s.apps.some((a) => a.id === 'notes'));
+  // Meeting notes are made in Notes, and a video meeting in Meet: each only for whoever has that app.
+  const notesApp = useCanOpen('notes');
+  const meetApp = useCanOpen('meet');
   const id = event?.id ?? null;
   const detail = useQuery({ queryKey: ['calendar', 'event', id], queryFn: ({ signal }) => apiGet<EventDetail>(`/api/calendar/events/${id}`, undefined, signal), enabled: id !== null });
   const e = detail.data ?? event;
@@ -221,8 +227,7 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
         link_id: id,
       });
       onClose();
-      if (notesApp) navigate(`/notes?note=${r.id}`);
-      else void call('app:openInBrowser', { path: `/notes?note=${r.id}` });
+      navigate(`/notes?note=${r.id}`);
     } catch (err) {
       toast('error', errorMessage(err));
     }
@@ -314,7 +319,7 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
       </label>
       <div className="flex gap-2">
         <input value={location} onChange={(ev) => setLocation(ev.target.value)} disabled={!editable} aria-label="Location" placeholder="Add location" className={cx(field, 'flex-1')} />
-        {meetUuid ? (
+        {!meetApp ? null : meetUuid ? (
           <button type="button" onClick={() => void openMeeting(meetUuid, title)} className="flex items-center gap-1.5 rounded-[7px] bg-success-bg px-2.5 font-bold text-success" title="Join the video meeting">
             Video meeting added · Join
           </button>
@@ -383,7 +388,7 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
           ))}
         </div>
       ) : null}
-      {id ? (
+      {id && notesApp ? (
         <div className="flex flex-col gap-1.5 rounded-[10px] bg-subtle px-3 py-2.5">
           <b className="text-ink">Meeting notes</b>
           <span className="text-ink-2">Agenda · Decisions · Action items</span>

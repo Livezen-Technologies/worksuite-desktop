@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+import { useCanOpen } from '../../../core/access';
 import { ApiError, apiGet } from '../../../core/api';
 import { call } from '../../../core/bridge';
 import { dateLabel, relative, timeLabel } from '../../../core/time';
@@ -163,7 +164,8 @@ function EventCard({ e, open }: { e: Rec; open: () => void }) {
   const people = ((e.participants as Rec[]) ?? []).map((p) => str(p.name) ?? '?');
   const going = ((e.participants as Rec[]) ?? []).filter((p) => /accept|yes|going|organizer/i.test(str(p.status) ?? '')).length;
   const uuid = str(e.meeting_uuid);
-  const actions: CardAction[] = [openAct('Open event', open), ...(uuid ? [{ label: 'Join', tone: 'go' as const, onClick: () => void openMeeting(uuid, str(e.title)) }] : [])];
+  const meet = useCanOpen('meet');
+  const actions: CardAction[] = [openAct('Open event', open), ...(uuid && meet ? [{ label: 'Join', tone: 'go' as const, onClick: () => void openMeeting(uuid, str(e.title)) }] : [])];
   return (
     <CardFrame kind="event" actions={actions} foot={str(e.my_rsvp) ? human(str(e.my_rsvp)) : 'Invited'}>
       <div className="flex gap-3 px-3.5 py-3.5">
@@ -317,7 +319,8 @@ function MeetingCard({ m, people, open }: { m: Rec; people: Rec[]; open: () => v
   const live = str(m.live_status);
   const uuid = str(m.meet_uuid);
   const start = str(m.start_at);
-  const actions: CardAction[] = [openAct('Open meeting', open), ...(uuid && live !== 'completed' && live !== 'cancelled' ? [{ label: 'Join', tone: 'go' as const, onClick: () => void openMeeting(uuid, str(m.title)) }] : [])];
+  const meet = useCanOpen('meet');
+  const actions: CardAction[] = [openAct('Open meeting', open), ...(uuid && meet && live !== 'completed' && live !== 'cancelled' ? [{ label: 'Join', tone: 'go' as const, onClick: () => void openMeeting(uuid, str(m.title)) }] : [])];
   return (
     <CardFrame kind="meeting" actions={actions} foot={str(m.meeting_no) ?? undefined} live={live === 'ongoing'}>
       <div className={pad}>

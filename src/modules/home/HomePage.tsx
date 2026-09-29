@@ -89,7 +89,10 @@ export default function HomePage(_props: ModuleProps) {
 
   const dueToday = dueTodayOf(tasks.data?.data.tasks ?? [], today);
   const meetings = meetingsToday(events.data?.data.events ?? []);
-  const unread = (status?.unread.chat ?? 0) + (status?.unread.mail ?? 0);
+  // Unread counts only of the apps the person has: someone without Mail is not told about mail.
+  const unreadChat = has('chat') ? (status?.unread.chat ?? 0) : 0;
+  const unreadMail = has('mail') ? (status?.unread.mail ?? 0) : 0;
+  const unread = unreadChat + unreadMail;
   const offlineAt = dash.data?.offline ? dash.data.cachedAt : null;
 
   const cards: Record<CardId, ReactNode> = {
@@ -108,7 +111,7 @@ export default function HomePage(_props: ModuleProps) {
             <WaitingForMe items={approvals.data.items} onOpen={openLink} />
           </Card>
     ) : null,
-    activity: (
+    activity: has('activity') ? (
         <Card title={t('home.activity')} className="min-h-[260px]">
           {dash.isLoading ? <Spinner /> : dash.error ? <ErrorNote error={dash.error} onRetry={() => void dash.refetch()} /> : null}
           {(dash.data?.data.activity ?? []).length === 0 && !dash.isLoading ? <Empty icon="activity" title="Nothing new" /> : null}
@@ -127,7 +130,7 @@ export default function HomePage(_props: ModuleProps) {
             ))}
           </ul>
         </Card>
-    ),
+    ) : null,
     files: has('files') ? (
           <Card title={t('home.files')} action={<LinkButton onClick={() => navigate('/files')}>Open Drive</LinkButton>} className="min-h-[260px]">
             <ul className="flex flex-col gap-2">
@@ -159,9 +162,11 @@ export default function HomePage(_props: ModuleProps) {
                   : (summary.data?.digest.reason ?? `${dueToday.length} task${dueToday.length === 1 ? '' : 's'} due today, ${meetings.length} meeting${meetings.length === 1 ? '' : 's'} and ${unread} unread message${unread === 1 ? '' : 's'}.`)}
           </p>
           <div className="mt-4 flex gap-2">
-            <button type="button" className="rounded-[8px] bg-teal-light px-3 py-2 text-[13px] font-semibold text-navy hover:opacity-90" onClick={() => toggleDock('ai')}>
-              Ask AI
-            </button>
+            {has('ai') ? (
+              <button type="button" className="rounded-[8px] bg-teal-light px-3 py-2 text-[13px] font-semibold text-navy hover:opacity-90" onClick={() => toggleDock('ai')}>
+                Ask AI
+              </button>
+            ) : null}
             <button type="button" className="rounded-[8px] border border-white/20 px-3 py-2 text-[13px] font-semibold hover:bg-white/10" onClick={() => navigate('/notifications')}>
               What's new
             </button>
@@ -207,7 +212,7 @@ export default function HomePage(_props: ModuleProps) {
           {has('tasks') ? <Counter label={t('home.tasksDue')} n={dueToday.length} tone="indigo" onClick={() => navigate('/tasks?filter=today')} /> : null}
           {has('calendar') ? <Counter label={t('home.meetings')} n={meetings.length} tone="teal" onClick={() => navigate(has('meetings') ? '/meetings' : '/calendar')} /> : null}
           {has('hr') && approvals.data ? <Counter label={t('home.approvals')} n={approvals.data.count} tone="amber" onClick={() => navigate('/hr?tab=approvals')} /> : null}
-          {has('chat') || has('mail') ? <Counter label={t('home.unread')} n={unread} tone="red" onClick={() => navigate((status?.unread.chat ?? 0) >= (status?.unread.mail ?? 0) ? '/chat' : '/mail')} /> : null}
+          {has('chat') || has('mail') ? <Counter label={t('home.unread')} n={unread} tone="red" onClick={() => navigate(has('chat') && (unreadChat >= unreadMail || !has('mail')) ? '/chat' : '/mail')} /> : null}
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-3">

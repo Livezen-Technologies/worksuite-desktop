@@ -1,4 +1,5 @@
 import { app } from 'electron';
+import { visibleAppIds } from '@shared/access';
 import type { AuthState, Bootstrap, DeviceClassification, DeviceTrust, ServerInfo } from '@shared/types';
 import { DesktopError, isDesktopError, UNREACHABLE_MESSAGE } from './errors';
 import { logger } from './log';
@@ -116,6 +117,19 @@ export class SessionController {
 
   current(): Bootstrap | null {
     return this.boot;
+  }
+
+  private visible: { boot: Bootstrap | null; ids: Set<string> } = { boot: null, ids: new Set() };
+
+  /**
+   * The catalogue ids of the apps the person may open (shared/access.ts):
+   * what the renderer shows as `app.apps`, for the main process's own
+   * decisions — the browser, windows, the tray, the menu, notifications.
+   * None without a bootstrap.
+   */
+  visibleApps(): Set<string> {
+    if (this.visible.boot !== this.boot) this.visible = { boot: this.boot, ids: visibleAppIds(this.boot) };
+    return this.visible.ids;
   }
 
   userId(): string | null {
