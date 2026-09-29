@@ -42,6 +42,14 @@ export function reviewMessage(o: { decision: 'approved' | 'rejected'; line: stri
   return [head, o.comment ? `Comment: ${o.comment}` : null, `${origin}/tenders?open=${o.tenderId}`].filter(Boolean).join('\n');
 }
 
+/** "Dinusha and Kasun were notified." — whom the server told, by name; nothing when it told nobody or does not say. */
+export function notifiedNote(ids: number[] | null, nameOf: (id: number) => string | null): string {
+  if (!ids?.length) return '';
+  const names = ids.map((id) => nameOf(id) ?? 'a colleague');
+  const list = names.length > 2 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names.join(' and ');
+  return ` ${list} ${names.length === 1 ? 'was' : 'were'} notified.`;
+}
+
 /** Sends the message to each person in a direct conversation; says who could not be reached. */
 export async function tellInChat(userIds: number[], text: string): Promise<{ sent: number; failed: number }> {
   let sent = 0;

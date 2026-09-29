@@ -8,7 +8,7 @@ import { FileViewer } from '../../components/FileViewer';
 import { Icon } from '../../components/Icon';
 import { IconButton, cx } from '../../components/ui';
 import { saveTenderFile } from './files';
-import { reviewMessage, reviewRecipients, tellInChat, usePeople } from './people';
+import { notifiedNote, reviewMessage, reviewRecipients, tellInChat, usePeople } from './people';
 import { reviewLine, type Line } from './work';
 
 /** A line with something on it to look at. */
@@ -37,6 +37,7 @@ export function ReviewScreen({
   startId,
   canApprove,
   canDownload,
+  serverTells = false,
   onClose,
   onChanged,
 }: {
@@ -45,6 +46,8 @@ export function ReviewScreen({
   startId: number;
   canApprove: boolean;
   canDownload: boolean;
+  /** The server notifies the uploader and the chaser itself; a Chat message is then an extra, off unless ticked. */
+  serverTells?: boolean;
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -55,7 +58,7 @@ export function ReviewScreen({
   const line = files.find((l) => l.id === id) ?? files[0] ?? null;
   const [version, setVersion] = useState<number | null>(null);
   const [comment, setComment] = useState('');
-  const [tell, setTell] = useState(true);
+  const [tell, setTell] = useState(!serverTells);
   const [busy, setBusy] = useState<'approve' | 'send' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,11 +96,11 @@ export function ReviewScreen({
     setBusy(decision === 'approved' ? 'approve' : 'send');
     setError(null);
     try {
-      await reviewLine(line.id, decision, decision === 'rejected' ? comment.trim() : undefined);
-      let told = '';
+      const r0 = await reviewLine(line.id, decision, comment.trim() || undefined);
+      let told = notifiedNote(r0.notified, (u) => (u === current.uploaded_by ? uploader : u === line.owner_id ? owner : nameOf(u)));
       if (tell && tellIds.length && (decision === 'rejected' || comment.trim())) {
         const r = await tellInChat(tellIds, reviewMessage({ decision, line: line.label, file: current.name, comment: comment.trim(), tenderId }));
-        told = r.sent ? ` ${tellNames.slice(0, r.sent).join(' and ')} ${r.sent === 1 ? 'was' : 'were'} told in Chat.` : '';
+        told += r.sent ? ` ${tellNames.slice(0, r.sent).join(' and ')} ${r.sent === 1 ? 'was' : 'were'} told in Chat.` : '';
         if (r.failed) toast('warning', 'The decision is saved, but a Chat message could not be sent.');
       }
       toast('success', `${decision === 'approved' ? 'Approved' : 'Sent back'}.${told}`);
@@ -214,11 +217,19 @@ export function ReviewScreen({
                   className="resize-none rounded-[8px] border border-line bg-surface px-2.5 py-2 text-[13px] font-normal text-ink outline-none focus:border-primary"
                 />
               </label>
+              {tellIds.length && serverTells ? (
+                <p className="m-0 flex items-start gap-1.5 text-[12px] text-ink-2">
+                  <Icon name="bell" size={13} className="mt-0.5 shrink-0 text-primary" />
+                  <span>
+                    {tellNames.join(' and ')} {tellNames.length === 1 ? 'is' : 'are'} notified of your decision, with your comment — in the bell, and on their phone and desktop.
+                  </span>
+                </p>
+              ) : null}
               {tellIds.length ? (
                 <label className="flex items-start gap-2 text-[12.5px] text-ink-2">
                   <input type="checkbox" checked={tell} onChange={(e) => setTell(e.target.checked)} className="mt-0.5 accent-primary" />
                   <span>
-                    Tell {tellNames.join(' and ')} in Chat
+                    {serverTells ? `Also message ${tellNames.join(' and ')} in Team Chat` : `Tell ${tellNames.join(' and ')} in Chat`}
                     <span className="block text-[11.5px] text-ink-3">With your comment and a link to this tender. Approving sends nothing unless you write a comment.</span>
                   </span>
                 </label>

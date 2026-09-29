@@ -15,9 +15,10 @@ vi.mock('../../../src/core/app-state', async () => {
 vi.mock('../../../src/components/FileViewer', async (orig) => ({ ...(await orig<Record<string, unknown>>()), FileViewer: ({ path, name }: { path: string; name: string }) => <p>viewing {name} at {path}</p> }));
 
 import { apiGet, apiPost } from '../../../src/core/api';
+import { toast } from '../../../src/core/toasts';
 import { stepZoom, viewKind } from '../../../src/components/FileViewer';
 import { menuPlace, uploadStage } from '../../../src/modules/tenders/files';
-import { reviewMessage, reviewRecipients } from '../../../src/modules/tenders/people';
+import { notifiedNote, reviewMessage, reviewRecipients } from '../../../src/modules/tenders/people';
 import { nextToReview, ReviewScreen } from '../../../src/modules/tenders/Review';
 import type { Line } from '../../../src/modules/tenders/work';
 
@@ -68,6 +69,13 @@ describe('telling people about a review', () => {
       'Sent back: “letters.pdf” for Board Resolution. Please upload a corrected version.\nComment: This is the bid document request, not the resolution.\nhttps://app.worksuite.lk/tenders?open=35',
     );
   });
+  it('names whom the server notified', () => {
+    const names: Record<number, string> = { 7: 'Dimuthu', 9: 'Dinusha', 11: 'Kasun' };
+    expect(notifiedNote([7], (u) => names[u] ?? null)).toBe(' Dimuthu was notified.');
+    expect(notifiedNote([7, 9, 11, 12], (u) => names[u] ?? null)).toBe(' Dimuthu, Dinusha, Kasun and a colleague were notified.');
+    expect(notifiedNote([], () => null)).toBe('');
+    expect(notifiedNote(null, () => null)).toBe('');
+  });
   it('goes on to the next file waiting for a decision', () => {
     const lines = [line({ id: 1 }), line({ id: 2, status: 'approved' }), line({ id: 3, files: [] }), line({ id: 4, status: 'uploaded' })];
     expect(nextToReview(lines, 1)?.id).toBe(4);
@@ -83,13 +91,13 @@ describe('the review screen', () => {
   });
   afterEach(() => cleanup());
 
-  function mount(lines = [line({}), line({ id: 2, label: 'Audited Financial Statements', files: [{ id: 41, file_id: 601, version: 1, name: '2025 Financial.pdf', uploaded_at: null, uploaded_by: 9, current: true }] })]) {
+  function mount(lines = [line({}), line({ id: 2, label: 'Audited Financial Statements', files: [{ id: 41, file_id: 601, version: 1, name: '2025 Financial.pdf', uploaded_at: null, uploaded_by: 9, current: true }] })], serverTells = false) {
     const onChanged = vi.fn();
     const onClose = vi.fn();
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={qc}>
-        <ReviewScreen tenderId={35} lines={lines} startId={1} canApprove canDownload onClose={onClose} onChanged={onChanged} />
+        <ReviewScreen tenderId={35} lines={lines} startId={1} canApprove canDownload serverTells={serverTells} onClose={onClose} onChanged={onChanged} />
       </QueryClientProvider>,
     );
     return { onChanged, onClose };
@@ -125,6 +133,31 @@ describe('the review screen', () => {
     expect((sent[0]![1] as { message: string }).message).toContain('Comment: Signed copy please.');
     expect(onChanged).toHaveBeenCalled();
     expect(screen.getByText('viewing 2025 Financial.pdf at /api/tenders/checklist/2/download')).toBeTruthy();
+  });
+
+  it('leaves the telling to a server that notifies, and says whom it told', async () => {
+    vi.mocked(apiPost).mockImplementation(async (path: string) => (path === '/api/tenders/checklist/1/review' ? { notified: [7, 9] } : {}) as never);
+    mount(undefined, true);
+    expect(await screen.findByText(/notified of your decision, with your comment/)).toBeTruthy();
+    const chat = screen.getByRole('checkbox') as HTMLInputElement;
+    expect(chat.checked).toBe(false);
+    expect(screen.getByText(/Also message .* in Team Chat/)).toBeTruthy();
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Signed copy please.' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Send back to Dimuthu' }));
+    });
+    expect(apiPost).toHaveBeenCalledWith('/api/tenders/checklist/1/review', { decision: 'rejected', reason: 'Signed copy please.' });
+    expect(vi.mocked(apiPost).mock.calls.some(([p]) => String(p).startsWith('/api/chat/'))).toBe(false);
+    expect(toast).toHaveBeenCalledWith('success', 'Sent back. Dimuthu Anuraj and Dinusha Hansani were notified.');
+  });
+
+  it("passes an approval's comment on, for the server to include in its notice", async () => {
+    mount(undefined, true);
+    fireEvent.change(await screen.findByRole('textbox'), { target: { value: 'Thanks — the stamped one.' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    });
+    expect(apiPost).toHaveBeenCalledWith('/api/tenders/checklist/1/review', { decision: 'approved', reason: 'Thanks — the stamped one.' });
   });
 
   it('approves without messaging anyone unless there is a comment', async () => {
