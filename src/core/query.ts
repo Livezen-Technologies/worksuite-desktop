@@ -42,6 +42,8 @@ export function wireQueryInvalidation(): void {
     if (e.type === 'notification') void queryClient.invalidateQueries({ queryKey: ['notifications'] });
     if (e.type === 'activity.new') void queryClient.invalidateQueries({ queryKey: ['home'] });
     if (e.type === 'hr.attendance.changed') void queryClient.invalidateQueries({ queryKey: ['hr'] });
+    // Hotel PMS's live nudges (`pms.room`, `pms.hk_task`, `pms.request`): the rack and the desk's lists ask again (PMS-ARC-030).
+    if (e.type.startsWith('pms.')) void queryClient.invalidateQueries({ queryKey: ['pms', 'live'] });
   });
   on('notifications:changed', () => void queryClient.invalidateQueries({ queryKey: ['notifications'] }));
   on('offline:changed', () => void queryClient.invalidateQueries({ queryKey: ['offline'] }));

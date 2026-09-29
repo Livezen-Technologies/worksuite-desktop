@@ -253,6 +253,25 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./elearning/ElearningShell'),
   },
   {
+    // Hotel PMS: the front desk (room rack, arrivals, departures, in house, check-in, walk-in, room moves, check-out),
+    // the cashier (folios, charges, payments, shifts) and the night audit, over /api/pms/v1. Offline the rack and the
+    // desk's lists are the last copy (READ_CACHE, per property — shared/pms-cache.ts); money, check-ins and new bookings
+    // wait for WorkSuite, never queued. The desk's hardware goes through the device agent seam (modules/pms/devices.ts).
+    input: defineDesktopManifest({
+      id: 'pms', name: 'Hotel PMS', icon: 'bed', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'READ_CACHE', entities: ['room', 'reservation', 'stay'], cache: ['/api/pms/v1/options', '/api/pms/v1/properties'] },
+      native: ['notifications', 'printing', 'hardware', 'file-drop'],
+      windows: [{ id: 'pms-rack', route: '/pms?view=rack' }, { id: 'pms-record', route: '/pms/reservations/:id' }],
+      quickActions: [
+        { id: 'pms-rack', label: 'Room rack', route: '/pms?view=rack' },
+        { id: 'pms-new-reservation', label: 'New hotel reservation', route: '/pms?view=new' },
+        { id: 'pms-walk-in', label: 'Hotel walk-in', route: '/pms?view=walkin' },
+      ],
+      deepLinks: ['pms', 'pms/reservations/:id', 'pms/rooms/:id'],
+    }),
+    load: () => import('./pms/PmsShell'),
+  },
+  {
     input: defineDesktopManifest({
       id: 'inventory', name: 'Inventory', icon: 'package', contractVersion: 1, desktop: { enabled: true },
       offline: { mode: 'READ_CACHE', entities: ['product'], cache: ['/api/inventory/products', '/api/inventory/stock'] },
