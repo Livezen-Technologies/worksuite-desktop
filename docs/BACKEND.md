@@ -371,6 +371,10 @@ offer (`confirm` → the reprint's reason, `already_queued` → print the waitin
 | Event 360, people | `GET events/{id}/overview`, `GET events/{id}/dashboard?mode=auto`, `GET events/{id}/registrations?list=&q=&page=`, `GET registrations/{id}`, `GET attendees?org=&q=`, `GET attendees/{id}` |
 | Emergency message | `GET events/{id}/screens/overrides?open=1`, `POST events/{id}/screens/override {message, targets: ALL, confirmation}`, `POST screen-overrides/{id}/clear {reason}` |
 
+**Offline.** READ_CACHE keeps `options`, the events list, the event and its gates (`shared/event-desk.ts:
+eventsCached`), so a desk opened with the line down knows what the person may do there; the desk's own copy of the
+gate's tickets and its queue are the main process's (below). Everything else waits for WorkSuite.
+
 **The key and the copy.** Registering, a new key, the heartbeat, the bootstrap, the changes and the upload are the
 main process's (the API proxy refuses them to pages): the key the server hands over is kept in the OS credential
 store, the copy and the queue encrypted in the profile. A scanned QR is matched against the copy by

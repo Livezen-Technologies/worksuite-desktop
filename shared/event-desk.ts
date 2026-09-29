@@ -656,3 +656,21 @@ export function copyExpired(copy: Pick<DeskCopy, 'cache_expires'>, at: number): 
 export function resultLabel(r: string): string {
   return (SCAN_RESULTS as Record<string, readonly [string, string]>)[r]?.[0] ?? r;
 }
+
+/* ── What the tab reads with WorkSuite out of reach ─────────────────────── */
+
+/**
+ * The few answers of the Events API a desk keeps for offline reading
+ * (READ_CACHE): the person's permissions in the company, the events list and
+ * the event itself, and its gates — so a desk opened with the line down still
+ * knows what the person may do there and can scan from its copy. Nothing
+ * with people in it is kept this way; the desk's copy of the gate's tickets
+ * is the main process's own (event-desk.ts).
+ */
+const EVENTS_CACHED: readonly RegExp[] = [/^\/api\/events\/v1\/options$/, /^\/api\/events\/v1\/events$/, /^\/api\/events\/v1\/events\/\d{1,10}$/, /^\/api\/events\/v1\/events\/\d{1,10}\/gates$/];
+
+/** Whether a GET path (query left out) is one the Events tab keeps for offline reading. */
+export function eventsCached(path: string): boolean {
+  const clean = path.split('?')[0] ?? '';
+  return EVENTS_CACHED.some((re) => re.test(clean));
+}

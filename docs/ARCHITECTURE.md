@@ -254,7 +254,10 @@ or a queued change is on disk before the user is told it was saved.
   program and session doors, badges, and the organiser's read of Event 360,
   registrations and attendees. It never sees the key: it asks the main
   process to scan (`eventdesk:scan`) and reads the desk's status, queue and
-  offline search over IPC (`desk.ts`).
+  offline search over IPC (`desk.ts`). READ_CACHE keeps its options, the
+  events and their gates (`eventsCached`, matched in `electron/main/index.ts`)
+  so a desk opened offline still knows what the person may do; someone who
+  loses the Events app loses their copies, and the desk does nothing for them.
 - Tabs stay mounted while recent (instant switching) and are suspended after
   the configured idle time; the tab set is saved and restored only for apps
   the user can still open.

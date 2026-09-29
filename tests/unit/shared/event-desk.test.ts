@@ -4,6 +4,7 @@ import {
   checkOutRefusal,
   copyExpired,
   copyFacts,
+  eventsCached,
   dayKeyFor,
   gateEventStatus,
   localDate,
@@ -226,5 +227,13 @@ describe('the queue’s numbers', () => {
     expect(scanId('dsk')).toMatch(/^[A-Za-z0-9_\-:.]{8,64}$/);
     expect(scanId('batch')).not.toBe(scanId('batch'));
     expect(provisionalNumber(12, 1_790_000_000_123)).toBe('WALKIN-12-000123');
+  });
+});
+
+describe('what the Events tab keeps for offline reading', () => {
+  it('keeps the permissions, the events and their gates — nothing with people in it', () => {
+    for (const p of ['/api/events/v1/options?org=5', '/api/events/v1/events?per_page=100&sort=start', '/api/events/v1/events/7', '/api/events/v1/events/7/gates']) expect(eventsCached(p)).toBe(true);
+    for (const p of ['/api/events/v1/events/7/registrations', '/api/events/v1/attendees', '/api/events/v1/events/7/checkin/search', '/api/events/v1/events/7/checkin/bootstrap', '/api/events/v1/registrations/101'])
+      expect(eventsCached(p)).toBe(false);
   });
 });

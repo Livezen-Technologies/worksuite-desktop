@@ -290,7 +290,7 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     // answered from the copy with the server's rules and kept for WorkSuite. Badges print on the desk's own printer.
     input: defineDesktopManifest({
       id: 'events', name: 'Events', icon: 'ticket', contractVersion: 1, desktop: { enabled: true },
-      offline: { mode: 'PARTIAL_WRITE', entities: ['checkin', 'walk_in'] },
+      offline: { mode: 'PARTIAL_WRITE', entities: ['checkin', 'walk_in'], cache: ['/api/events/v1/options', '/api/events/v1/events'] },
       native: ['notifications', 'printing', 'barcode', 'camera', 'hardware'],
       windows: [{ id: 'events-counters', route: '/events/:id/counters' }],
       quickActions: [{ id: 'events-desk', label: 'Event check-in desk', route: '/events' }],

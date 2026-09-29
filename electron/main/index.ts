@@ -7,6 +7,7 @@ import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
 import { resolveWebLink } from '@shared/links';
 import { networkStatus } from '@shared/network';
 import { pmsCached } from '@shared/pms-cache';
+import { eventsCached } from '@shared/event-desk';
 import { redactUrl } from '@shared/redact';
 import type { Bootstrap, NavigateRequest, RealtimeState, ServiceHealth, StatusSnapshot } from '@shared/types';
 import { AccessWatch, NO_ACCESS } from './access';
@@ -362,7 +363,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     http,
     secrets,
     origin: () => auth.getServer()?.origin ?? null,
-    user: () => (sessionCtl.isReady() ? sessionCtl.userId() : null),
+    // Nothing is sent, caught up or scanned for someone who does not have the Events app.
+    user: () => (sessionCtl.isReady() && canOpenApp('events', sessionCtl.visibleApps()) ? sessionCtl.userId() : null),
     deviceRef: () => device.current()?.id ?? null,
     platform: platformName() as 'windows' | 'macos' | 'linux',
     appVersion: app.getVersion(),
@@ -948,7 +950,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/elearning/v1/me/lessons', 'elearning'],
     ['/api/elearning/v1/catalog', 'elearning'],
     ['/api/elearning/v1/categories', 'elearning'],
-    // Hotel PMS keeps the rack and the front desk's lists per property (shared/pms-cache.ts: `pmsCached`), below.
+    // Hotel PMS keeps the rack and the front desk's lists per property (shared/pms-cache.ts: `pmsCached`), below;
+    // the Events tab its options, the events and their gates (shared/event-desk.ts: `eventsCached`).
   ];
   const rebuildMenu = (visible: Set<string>): void =>
     buildMenu(
@@ -982,6 +985,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       }
       // Courses kept offline go with the app.
       if (!canOpenApp('elearning', visible)) void elearning.wipeUser(b.user.id).catch((e) => log.warn('offline courses not removed', { error: String(e) }));
+      // So do an event desk's copies of the gates' tickets (scans still unsent wait, should the app come back).
+      if (!canOpenApp('events', visible)) eventDesk.signedOut(b.user.id);
     }
     emitStatus();
   };
@@ -1238,7 +1243,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       userId: () => sessionCtl.userId(),
       cacheModuleFor: (path) => {
         const clean = path.split('?')[0]!;
-        const module = CACHE_PREFIXES.find(([prefix]) => clean === prefix || clean.startsWith(`${prefix}/`))?.[1] ?? (pmsCached(clean) ? 'pms' : null);
+        const module = CACHE_PREFIXES.find(([prefix]) => clean === prefix || clean.startsWith(`${prefix}/`))?.[1] ?? (pmsCached(clean) ? 'pms' : eventsCached(clean) ? 'events' : null);
         // Neither saved nor served for an app the person may not open.
         return module && canOpenApp(module, sessionCtl.visibleApps()) ? module : null;
       },

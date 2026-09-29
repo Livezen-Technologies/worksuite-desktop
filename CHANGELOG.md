@@ -91,6 +91,8 @@ is the web's.
 - Scans made offline belong to the person who made them: another person
   signed in at the desk sees only that they wait, and a plain sign-out keeps
   them for their maker.
+- The person's permissions, the events and their gates are the last copy
+  (READ_CACHE), so a desk opened with the line down still scans.
 - Everything else — counters, recent scans, review, badges, payments, the
   program, Event 360 — waits for WorkSuite.
 
