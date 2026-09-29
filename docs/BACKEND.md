@@ -144,6 +144,57 @@ specific to the desktop:
   list carries `my_role` and `my_rsvp`. The detail carries the agenda timer
   and each person's attendance and permissions.
 
+### Garage
+
+The Garage tab uses the server's Garage API, `/api/garage/v1` (`app/Modules/Garage`), the same one the web's
+`/garage` page uses. Every route is behind `garage.access`; each verb checks its own permission for the record's
+company and the person's data scope, and a job outside it answers 404. The finer grants come back in
+`GET options` → `can` (`garage.parts.issue` read as `parts_issue`), and each screen's answer carries its own `can`.
+Writes that can be pressed twice carry an `Idempotency-Key`; a refusal's `errors.code` (`odometer_reason`,
+`discount`, `setup`…) says what to ask for.
+
+| Screen | Calls |
+|---|---|
+| Shell, overview | `GET options?org=`, `GET overview` |
+| Board, jobs | `GET board`, `GET jobs?view=&q=&page=`, `POST jobs/{id}/drop {column}` |
+| Walk-in | `GET search?q=`, `POST customers` (409 with `candidates`), `POST vehicles` (409 with `duplicate`), `POST jobs` (409 with `open`; `confirm_open`) |
+| Job 360° | `GET jobs/{id}`, `POST jobs/{id}` (edit), `POST jobs/{id}/move {to}`, `POST jobs/{id}/cancel {reason, note}`, `POST jobs/{id}/notes`, `POST notes/{id}/visibility` |
+| Check-in | `GET` / `POST jobs/{id}/checkin`, `POST jobs/{id}/checkin/sign {image, signer_name, signer_relation}`, `POST jobs/{id}/checkin/complete {email, odometer_reason?}`, `POST jobs/{id}/checkin/email`, `POST jobs/{id}/media` (multipart: `file`, `subject` checkin / damage, `slot`), `DELETE media/{id}` |
+| Media | `GET media/{id}` (thumbnails, through the API proxy), `POST jobs/{id}/media` (`subject` job / inspection_item), `POST media/{id}/visibility`, `DELETE media/{id}` |
+| Inspection | `GET jobs/{id}/inspections`, `POST jobs/{id}/inspections {template_id}`, `POST inspections/{id} {items, customer_note, internal_note}`, `POST inspections/{id}/complete`, `POST recommendations/{id}/status` |
+| Diagnosis | `GET jobs/{id}/diagnosis`, `POST jobs/{id}/diagnosis {complaint}`, `POST diagnosis/{id}`, `POST jobs/{id}/dtc`, `POST jobs/{id}/diagnosis/signoff`, `GET parts?job=&q=` |
+| Estimate | `GET jobs/{id}/estimates`, `POST jobs/{id}/estimates {summary?}`, `POST estimates/{id}/lines[/{line}]`, `DELETE estimates/{id}/lines/{line}`, `POST estimates/{id}/recommendations {ids}`, `POST estimates/{id}/approve-discount`, `POST estimates/{id}/send {message, email}` (answers the link once), `POST estimates/{id}/decision {method, decisions, name, note, signature?}`, `POST estimates/{id}/changes` |
+| Work | `GET jobs/{id}/work`, `POST jobs/{id}/work-orders`, `POST work-orders/{id}`, `GET work-orders/{id}/suggest`, `POST work-orders/{id}/assign`, `POST work-orders/{id}/bay`, `POST work-orders/{id}/start\|pause\|complete\|cancel`, `POST work-orders/{id}/additional`, `POST jobs/{id}/additional/price {ids}`, `POST work-orders/{id}/labour`, `POST labour/{id}/correct`, `POST jobs/{id}/parts`, `POST jobs/{id}/removed-parts` |
+| My work, parts counter | `GET my-work`, `GET parts-queue?view=&q=`, `POST parts-scan {job, code}`, `POST parts-usage/{id}/reserve\|requisition\|issue\|used\|return\|release` |
+| Quality & delivery | `GET jobs/{id}/delivery`, `POST quality-checks/{id}/start`, `POST quality-checks/{id} {items}`, `POST quality-checks/{id}/pass\|fail`, `POST jobs/{id}/road-test`, `POST jobs/{id}/ready {items_present}`, `POST jobs/{id}/invoice`, `POST jobs/{id}/pay {amount, method, reference}`, `POST jobs/{id}/handover`, `POST customers/{id}/credit {limit, note}` |
+| Vehicles | `GET vehicles?q=&type=&page=`, `GET vehicles/{id}` (the 360°), `POST vehicles/{id}`, `POST vehicles/{id}/odometer {reading, reason?}`, `POST vehicles/{id}/transfer {client_id, note}`, `POST vehicles/{id}/notes` |
+| Customers | `GET customers?q=&page=`, `GET customers/{id}?org=`, `POST customers/{id}/prefs`, `POST customers/{id}/credit` |
+| Workshop | `GET workshop`, `GET workshop/employees?q=`, `POST workshop/{branches\|workshops\|bays\|technicians\|rates\|service-types\|models\|inspection-templates}[/{id}]`, `POST bays/{id}/status {status, note}` |
+| Set-up, settings | `GET setup`, `POST setup/steps/{key} {how}`, `POST setup/finish`; the module's settings at `GET` / `PUT /api/module-settings/garage/general?org=` |
+| Reports | `GET reports`, `GET reports/{name}?from=&to=&branch_id=` |
+
+**Documents** leave through the download manager (`transfers:download` with `garageDoc`, `shared/garage-docs.ts`),
+by what they are; the main process builds the address: `jobs/{id}/checkin/sheet`, `estimates/{id}/print`,
+`work-orders/{id}/sheet`, `jobs/{id}/delivery-note` (pages the server renders for printing, saved as `.html` and
+opened in the browser) and `reports/{name}?format=csv` (for `garage.report.export`).
+
+**Offline.** READ_CACHE covers `options`, `overview`, `board`, `my-work`, `jobs` (lists, job cards and their
+tabs), `vehicles`, `customers` and `workshop`. A timer's start or pause with WorkSuite out of reach waits in the
+offline queue with `at`, the moment it was pressed, which the server books as `OFFLINE_SYNC` (within twelve hours).
+Every other write needs the server.
+
+What the desktop cannot do because the server does not (SRS Phase 1 **M** items):
+
+- The overview has no revenue today, technicians working, appointments, technician workload, parts consumption,
+  customer updates or reminders (FR-DSH-01/02); a board card has no technician (FR-BRD-02).
+- No next-service-due on a vehicle (FR-VEH-05), and no per-vehicle inspections, parts-replaced or documents lists
+  (FR-VEH-04; they are on each job).
+- Documents are HTML pages for printing: no PDF, WhatsApp or share link for them, and no job card, inspection, QC,
+  road-test, parts-issue or warranty documents (FR-CHK-07, FR-DOC-02/03).
+- Estimates go out by email and the link; no WhatsApp sending or portal (FR-APR-01), no service packages (FR-EST-07).
+- Labour rates are by class, hourly or flat; no customer, contract, warranty or internal-fleet rates (FR-PRC-01).
+- No customer opt-out per channel (FR-REM-05) or per-branch notification switches (FR-NTF-03).
+
 ## The existing API (servers without `/desktop/v1`)
 
 | Need | Endpoint |

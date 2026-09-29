@@ -3,6 +3,7 @@ import os from 'node:os';
 import { writeFile } from 'node:fs/promises';
 import { canOpenApp, notificationAllowed } from '@shared/access';
 import { tabRecordSchema, type TabRecord } from '@shared/ipc/contract';
+import { garageDocPath } from '@shared/garage-docs';
 import type { AppInfo, BusyReport, DetachedWindow, SyncPolicy } from '@shared/types';
 import { assertRoute, assertWebPath } from './access';
 import { DesktopError, isDesktopError } from './errors';
@@ -453,7 +454,9 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     const fc = input.financeCsv;
     const ef = input.expenseFile;
     const withOrg = (org?: number) => (org ? `?org=${org}` : '');
-    const path = ef
+    const path = input.garageDoc
+      ? garageDocPath(input.garageDoc)
+      : ef
       ? ef.kind === 'claim-receipt'
         ? `/api/expense/claims2/${ef.claim}/receipt`
         : ef.kind === 'receipt'

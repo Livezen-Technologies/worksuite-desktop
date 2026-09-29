@@ -117,6 +117,55 @@ blocked by something outside the code.
 | RDC-05, 09…13, 15…17 | Gap | Copy-from-Drive, receipts, reply quotes and the shared message components need server and widget changes; notification inline reply and the mini window are not done |
 | TEAM-*, LIVE-*, VOICE-* | Gap | Multi-staff chats, live typing/receipts and widget voice calls: none of their APIs exist on the server yet |
 
+## Garage & Vehicle Service Center (WS-GARAGE-SRS-001 v1.1, desktop)
+
+`src/modules/garage`, over the server's `/api/garage/v1` (`app/Modules/Garage`, parts 1–4). The SRS's Phase 1 is its
+**M** requirements; the ones that are the server's alone (install, numbering, the state machine, audit, scopes,
+serializers) are listed where the desktop shows them. Tests: `tests/unit/renderer/garage*.test.tsx`,
+`tests/unit/electron/garage-proxy.test.ts`.
+
+| ID | Status | Where / note |
+|---|---|---|
+| FR-APP-01 | Done | Catalogue app `garage` (`garage.access`), manifest in `modules/registry.ts` |
+| FR-APP-04 | Done | People with `garage.settings.manage` land on `Setup.tsx` until the company is set up; everyone else is told it is being set up; the floor's own screens (My work, Parts counter) and Workshop stay open |
+| FR-APP-05 | Done | Tabs and actions follow `options.can` and each screen's own `can`; parts, invoice and payment appear only where the server gives them |
+| FR-DSH-01, 03 | Partial | `Overview.tsx`: open, checked in today, awaiting approval, waiting for parts, in progress, ready, overdue (each opening its list), delivered today, bays available. Technicians working and revenue today: not on the server |
+| FR-DSH-02, 05 | Partial | Overdue jobs, bays, latest open jobs. Appointments, technician workload, parts consumption, daily revenue, customer updates and reminders are not in the server's overview (revenue is in Reports, for money readers) |
+| FR-BRD-01..04 | Done | `Board.tsx`: the server's columns; a drop asks the server, a refusal stays with its sentence; cancel (the one move that needs data) is on the job card with its reason |
+| FR-BRD-02 | Partial | The card carries no technician: the server's card has the advisor only |
+| FR-CUS-01, 02, 04 | Done | `Customers.tsx` (CRM's clients; added through CRM with the likely duplicates offered), owed (money readers), contact preferences, vehicles; credit terms for Garage managers |
+| FR-VEH-01..05, 07 | Done | `Vehicles.tsx`, `Vehicle360.tsx` (edit incl. engine, registration, insurance, warranty; duplicate refused with the vehicle on file; odometer with a reason when lower; owners), `Workshop.tsx` makes and models. Next service due (FR-VEH-05) is not on the server |
+| FR-VEH-04 | Partial | Overview, service history, open jobs, mileage, photos, notes, activity, owners, insurance and warranty. Per-vehicle inspections, parts replaced and documents are not in the server's 360° (they are on each job) |
+| FR-WLK-01, 02 | Done | `WalkIn.tsx`: one search, create-if-missing, the open-job question; NORMAL unless someone chooses |
+| FR-CHK-01, 02, 04, 05 | Done | `CheckIn.tsx`: readings, complaints, services, accessories, valuables, condition per area, damage diagram, photo slots (drop, choose, camera), signature, the server's missing list |
+| FR-CHK-07 | Partial | The sheet through the download manager (view to print, save) and emailed again; WhatsApp and PDF are not on the server |
+| FR-JOB-01, 03..06, 08, 09 | Done | `JobCard.tsx`: header, tracker, the server's moves, edit, cancel with a reason, history, timeline, overdue |
+| FR-JOB-07 | Done | Tabs Overview, Check-in, Inspection, Diagnosis, Estimate, Work (work orders, parts, labour), Quality & delivery (QC, road test, invoice, handover), Media, Activity; approvals are in Estimate. A Warranty tab has nothing to show: warranty is P2 on the server |
+| FR-DIA-01, 03 | Done | `job/Diagnosis.tsx`: finding, cause, repair, labour, parts, urgency, codes, sign-off; repairs become recommendations the estimate takes |
+| FR-INS-01..04, 06 | Done | `job/Inspection.tsx` (lights, pass/fail, measurements, text, photos per item; customer-visible per item); templates in `Workshop.tsx` |
+| FR-EST-01..05 | Done | `job/Estimate.tsx`: typed lines priced by the server, labour by rate class, parts with availability, versions locked once sent with what changed |
+| FR-EST-07 | Partial | From recommendations; service packages are not on the server |
+| FR-APR-01 | Partial | Send by email and the secure link (shown once, to copy into WhatsApp). Portal and WhatsApp sending are not on the server |
+| FR-APR-02..06 | Done | Line decisions recorded by staff (method, who, note, signature in person); changes asked; deferred lines become recommendations on the server |
+| FR-ADD-01, 02, 04 | Done | Found more work (My work and the Work tab), priced into a supplementary version, decided like any estimate |
+| FR-WO-01..03 | Done | `job/Work.tsx`: work orders from approved lines, internal work, people, bay, cancel; the job's status follows on the server |
+| FR-TEC-01..05 | Done | `MyWork.tsx` and the Work tab: start / pause with a reason / complete, one timer unless configured (server), roles, manual labour and corrections keeping the original |
+| FR-BAY-01..03 | Done | `Workshop.tsx`: bays per workshop with type, the bay board with vehicle, job and status, manual status with a reason |
+| FR-PRT-01..05, 07 | Done | Ask for a part, reserve, purchase request, issue by scan (`PartsCounter.tsx`), used, return with condition, release; over-approval only with a reason from someone who may |
+| FR-QC-01..03, 05, 06 | Done | `job/Delivery.tsx`: the checklist item by item, pass, fail with reason and work orders to rework (not billed), attempts and rework listed, self-check explained |
+| FR-DLV-01, 02, 04..06 | Done | Final review and Mark ready; invoice raised from approved charges; payment (cash, card, transfer, online, cheque); release paid, on credit, or by override with a reason; handover with signature; the delivery note through the download manager |
+| FR-HIS-01, 02 | Done | Vehicle 360°'s history (work, parts, technicians, invoice, cost for money readers, warranty); the customer's across their vehicles (up to ten at a time) |
+| FR-ANL-05 | Done | `Reports.tsx`: technician work as facts, beside aging, estimate vs actual, quality, parts, revenue, profitability; CSV for exporters |
+| FR-MED-01, 02 | Done | `job/Media.tsx`, notes and inspection items: internal by default, shown to the customer by someone who may publish |
+| FR-BRN-01, 02 | Partial | Branch → workshop → bay, warehouses, technicians per branch, rates per branch. Packages, price lists, hours and capacity are not edited on the server's API |
+| FR-PRC-01, 02 | Partial | Labour rates by class, hourly or flat, per branch. Customer-specific, contract, warranty and internal-fleet rates are not on the server |
+| FR-DOC-02, 03 | Partial | Check-in sheet, estimate, work order sheet and delivery note: view (to print) and save through the download manager. Job card, inspection and QC reports, parts issue sheet and warranty certificate, and PDF / WhatsApp / share: not on the server |
+| FR-SET-01 | Done | `Settings.tsx`: the module's standard settings per company (`/api/module-settings/garage`) |
+| FR-NTF-01 | Done | The server's notifications (`/garage?job=`) open the job card |
+| FR-NTF-02 | Partial | The server emails the check-in sheet, the estimate link and (where on) ready for collection; appointment, reminder and warranty messages are Phase 2 there |
+| FR-REM-05, FR-NTF-03 | Gap | Customer opt-out per channel and per-branch notification switches are not on the server |
+| Offline (NFR-05) | Partial | READ_CACHE for options, overview, board, my work, jobs (with the tabs opened), vehicles, customers, workshop; the timer's start and pause queued with their moment; every other write waits for WorkSuite |
+
 ## Devices, security, updates (SEC, UPD)
 
 | ID | Status | Where / note |

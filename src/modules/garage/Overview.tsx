@@ -4,7 +4,7 @@ import { PageHead } from '../hr/parts';
 import { gGet, K, nice, type Overview as Data } from './api';
 import { JobCardView, Section, Tile, useGarage } from './parts';
 
-/** Today at a glance: jobs by stage, what is late, and the bays. */
+/** Today at a glance (FR-DSH-01..03): jobs by stage — each a way into its list — what is late, and the bays. */
 export default function Overview() {
   const g = useGarage();
   const q = useQuery({ queryKey: K.overview(g.org), queryFn: ({ signal }) => gGet<Data>('/overview', { org: g.org }, signal), refetchInterval: 60_000 });
@@ -27,13 +27,16 @@ export default function Overview() {
           </Button>
         ) : null}
       </PageHead>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         {tile('Open jobs', c.open, 'open')}
         {tile('Checked in today', d.checked_in_today)}
         {tile('Awaiting approval', c.approval, 'approval')}
+        {tile('Waiting for parts', c.parts, 'parts')}
         {tile('In progress', c.progress, 'progress')}
         {tile('Ready for delivery', c.ready, 'ready')}
         {tile('Overdue', c.overdue, 'overdue')}
+        {tile('Delivered today', d.delivered_today)}
+        {tile('Bays available', d.bays.AVAILABLE)}
       </div>
       <div className="grid gap-4 lg:grid-cols-3">
         <Section title="Overdue" className="lg:col-span-2">
@@ -47,7 +50,14 @@ export default function Overview() {
             </div>
           )}
         </Section>
-        <Section title="Bays">
+        <Section
+          title="Bays"
+          action={
+            <button type="button" className="text-[12px] font-semibold text-primary" onClick={() => g.go('workshop')}>
+              Bay board
+            </button>
+          }
+        >
           {Object.keys(d.bays).length === 0 ? (
             <p className="text-[13px] text-ink-3">No bays yet.</p>
           ) : (

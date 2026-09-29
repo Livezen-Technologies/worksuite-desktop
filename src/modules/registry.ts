@@ -199,12 +199,17 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./salon/SalonShell'),
   },
   {
-    // Garage: the counter, the board, the technician's timer and the parts counter. The timer's
-    // start and pause wait in the offline queue with the moment they were pressed (NFR-05).
+    // Garage: the counter, the board, the job card with check-in, estimate, work, quality and delivery,
+    // vehicles, customers, reports, the workshop and its set-up. The timer's start and pause wait in the
+    // offline queue with the moment they were pressed (NFR-05); every other write needs WorkSuite.
     input: defineDesktopManifest({
       id: 'garage', name: 'Garage', icon: 'wrench', contractVersion: 1, desktop: { enabled: true },
-      offline: { mode: 'PARTIAL_WRITE', entities: ['work_order'], cache: ['/api/garage/v1/options', '/api/garage/v1/overview', '/api/garage/v1/board', '/api/garage/v1/my-work'] },
-      native: ['notifications'],
+      offline: {
+        mode: 'PARTIAL_WRITE',
+        entities: ['work_order'],
+        cache: ['/api/garage/v1/options', '/api/garage/v1/overview', '/api/garage/v1/board', '/api/garage/v1/my-work', '/api/garage/v1/jobs', '/api/garage/v1/vehicles', '/api/garage/v1/customers', '/api/garage/v1/workshop'],
+      },
+      native: ['notifications', 'camera', 'file-drop', 'printing', 'barcode'],
       quickActions: [
         { id: 'garage-walk-in', label: 'Garage Walk-in', route: '/garage?view=walkin' },
         { id: 'my-work', label: 'My Work', route: '/garage?view=mywork' },

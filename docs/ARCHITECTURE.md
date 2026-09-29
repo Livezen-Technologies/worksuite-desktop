@@ -102,6 +102,19 @@ or a queued change is on disk before the user is told it was saved.
 - `modules/` — one folder per desktop module with a validated manifest
   (`modules/registry.ts`, §15). Modules are lazy chunks; each renders inside
   its own error boundary.
+- A module's documents leave through the download manager by what they are,
+  never by a path: `transfers:download` takes a typed variant (Garage's
+  `garageDoc` — a check-in sheet, an estimate, a work order sheet, a delivery
+  note or a report's CSV, `shared/garage-docs.ts`), and the main process
+  builds the address it fetches.
+- READ_CACHE is declared in a module's manifest and served by the main
+  process for the prefixes in `CACHE_PREFIXES` (`electron/main/index.ts`),
+  per module, so an app taken away takes its saved answers with it.
+- Garage (`modules/garage`) is a shell with a rail (`GarageShell.tsx`), the
+  day's screens, the Job 360° (`JobCard.tsx`) whose heavier tabs are lazy
+  chunks under `job/`, the check-in, vehicles, customers, reports and the
+  workshop's set-up. Photos go up as multipart through the API proxy (25 MB
+  a request) and come back through it for thumbnails.
 - Tabs stay mounted while recent (instant switching) and are suspended after
   the configured idle time; the tab set is saved and restored only for apps
   the user can still open.

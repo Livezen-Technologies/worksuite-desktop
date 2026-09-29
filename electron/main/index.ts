@@ -829,11 +829,16 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/files/browse', 'files'],
     ['/api/dashboard/home', 'home'],
     ['/api/notifications', 'notifications'],
-    // A workshop terminal opens with WorkSuite out of reach: the technician's work and the board as last seen.
+    // A workshop terminal opens with WorkSuite out of reach: the technician's work and the board as last seen,
+    // and the job cards (with their check-in, estimate, work and delivery), vehicles, customers and workshop.
     ['/api/garage/v1/options', 'garage'],
     ['/api/garage/v1/overview', 'garage'],
     ['/api/garage/v1/board', 'garage'],
     ['/api/garage/v1/my-work', 'garage'],
+    ['/api/garage/v1/jobs', 'garage'],
+    ['/api/garage/v1/vehicles', 'garage'],
+    ['/api/garage/v1/customers', 'garage'],
+    ['/api/garage/v1/workshop', 'garage'],
   ];
   const rebuildMenu = (visible: Set<string>): void =>
     buildMenu(

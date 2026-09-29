@@ -38,7 +38,7 @@ export default function MyWork() {
   if (!d.technician) {
     return (
       <div className="p-6">
-        <Empty icon="wrench" title="You are not on the technician roster" hint="A workshop manager adds you under Workshop → Technicians, on the web." />
+        <Empty icon="wrench" title="You are not on the technician roster" hint="A workshop manager adds you under Workshop → Technicians." />
       </div>
     );
   }
@@ -170,6 +170,7 @@ export default function MyWork() {
       {pausing ? (
         <PauseTimer
           w={pausing}
+          technicianId={pausing.my_technician_id}
           reasons={d.pause_reasons}
           onClose={() => setPausing(null)}
           onDone={(queued) => {
@@ -190,13 +191,17 @@ export default function MyWork() {
   );
 }
 
-function PauseTimer({ w, reasons, onClose, onDone }: { w: MyWorkItem; reasons: string[]; onClose: () => void; onDone: (queued: boolean) => void }) {
+/**
+ * Pause with a reason (WF-12 step 2): big buttons, for a tablet. A pause
+ * WorkSuite cannot take now is kept with its moment and sent later.
+ */
+export function PauseTimer({ w, technicianId, who, reasons, onClose, onDone }: { w: { id: number; code: string; job_number?: string }; technicianId: number; who?: string; reasons: string[]; onClose: () => void; onDone: (queued: boolean) => void }) {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const pause = async (reason: string) => {
     setBusy(true);
     try {
-      const r = await timer(w.id, 'pause', { technician_id: w.my_technician_id, reason, note: note || undefined }, `Pause ${w.code} on ${w.job_number}`);
+      const r = await timer(w.id, 'pause', { technician_id: technicianId, reason, note: note || undefined }, `Pause ${w.code}${who ? ` for ${who}` : ''}${w.job_number ? ` on ${w.job_number}` : ''}`);
       toast(r.queued ? 'info' : 'success', r.message);
       onDone(r.queued);
     } catch (e) {
@@ -206,7 +211,7 @@ function PauseTimer({ w, reasons, onClose, onDone }: { w: MyWorkItem; reasons: s
     }
   };
   return (
-    <Modal title={`Pause ${w.code} — why?`} onClose={onClose}>
+    <Modal title={`Pause ${w.code}${who ? ` for ${who}` : ''} — why?`} onClose={onClose}>
       <div className="grid grid-cols-2 gap-2">
         {reasons.map((r) => (
           <button key={r} type="button" disabled={busy} onClick={() => void pause(r)} className="rounded-[10px] border border-line px-3 py-4 text-[13.5px] font-semibold text-ink hover:border-primary hover:bg-selection disabled:opacity-50">
@@ -254,7 +259,7 @@ function Complete({ w, onClose, onDone }: { w: MyWorkItem; onClose: () => void; 
 }
 
 /** Find a part in Inventory for this job, with what the branch has of it. */
-function PartPicker({ jobId, currency, onPick }: { jobId: number; currency: string; onPick: (p: PartHit) => void }) {
+export function PartPicker({ jobId, currency, onPick }: { jobId: number; currency: string; onPick: (p: PartHit) => void }) {
   const [text, setText] = useState('');
   const [hits, setHits] = useState<PartHit[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -303,7 +308,8 @@ function PartPicker({ jobId, currency, onPick }: { jobId: number; currency: stri
   );
 }
 
-function AskForPart({ w, currency, onClose, onDone }: { w: MyWorkItem; currency: string; onClose: () => void; onDone: () => void }) {
+/** Ask the parts counter for a part (FR-PRT-01), for a work order on a job. */
+export function AskForPart({ w, currency, onClose, onDone }: { w: { id: number; code: string; job_id: number }; currency: string; onClose: () => void; onDone: () => void }) {
   const [part, setPart] = useState<PartHit | null>(null);
   const [n, setN] = useState('1');
   const [reason, setReason] = useState('');
@@ -372,7 +378,8 @@ const FIND_PRIORITY = [
   { value: 'GREEN', label: 'Can wait' },
 ];
 
-function RaiseAdditional({ w, currency, onClose, onDone }: { w: MyWorkItem; currency: string; onClose: () => void; onDone: () => void }) {
+/** Additional work found during the repair (FR-ADD-01): what, how urgent, the labour and parts it needs. */
+export function RaiseAdditional({ w, currency, onClose, onDone }: { w: { id: number; code: string; job_id: number }; currency: string; onClose: () => void; onDone: () => void }) {
   const [finding, setFinding] = useState('');
   const [priority, setPriority] = useState('AMBER');
   const [minutes, setMinutes] = useState('');

@@ -5,6 +5,123 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-29 — 0.2.52: all of Garage on the desktop
+
+Everything the server's Garage does now happens in the Garage tab: check-in
+with photos and the customer's signature, the inspection, diagnosis and
+estimate, the work, quality check, road test, invoice and handover, vehicles
+and customers, reports, the workshop, the set-up wizard and the settings.
+Nothing in Garage sends you to the web any more. Printed documents — the
+check-in sheet, an estimate, a work order sheet, the delivery note — and
+report exports go through the download manager and show in Transfers.
+
+**Added**
+
+- **Check-in** (opens from the job card, and straight after a walk-in for
+  whoever checks vehicles in): odometer and fuel, what the customer says,
+  what is left in the vehicle and any valuables, the condition of every area
+  with "mark the rest good", damage on the diagram, photos in their slots —
+  dropped on the window, chosen, or taken with the camera — and the
+  customer's signature last. The bar at the bottom lists what the server
+  still wants; a reading lower than the last one asks why, for someone who
+  may accept it. A change after signing clears the signature and says so.
+  Once complete: the check-in sheet (view or save), and "Email it again".
+- **The job card is a Job 360°**, with the tracker and tabs:
+  - **Check-in**: readings, condition, damage, photos and the signature.
+  - **Inspection**: start from the suggested template; each light is saved
+    as it is tapped, measurements and notes when the field is left; photos
+    per item; what the customer sees, for someone who may publish; complete,
+    then the recommendations to leave for later, decline or reopen.
+  - **Diagnosis**: a finding for every complaint (no fault found counts),
+    cause, repair, labour, urgency and parts from Inventory; fault codes as
+    read; sign-off where the company asks for it.
+  - **Estimate**: every version; labour, parts, services and other lines
+    priced by the server, with availability and who pays; recommendations in
+    one step; send (the customer's link shown once, to copy into WhatsApp);
+    discount approval; the decision given by phone, in person (signed) or by
+    email, line by line; changes asked; the next version; print.
+  - **Work**: each work order's people, bay and time; Start and Pause for
+    the technician — or, for someone who assigns work, for each technician
+    on it — Complete, Found more work, People with suggestions, Bay with a
+    slot, Cancel with a reason, and the work order sheet; parts with the
+    counter's actions; additional work priced for the customer; every labour
+    entry, with corrections that keep the original; removed parts.
+  - **Quality & delivery**: the quality check item by item, pass, or fail
+    with the work that goes back; the road test; the final review and Mark
+    ready; the invoice and payment, for people who handle money; credit
+    terms; the handover with the customer's signature, and the delivery note.
+  - **Media**: photos, videos and PDFs, dropped, chosen or from the camera;
+    shown to the customer or not; removed.
+  - **Activity**: the job's timeline.
+  - **Edit** (priority, type, promised time, advisor, what was asked for),
+    and notes that someone who may publish shows to the customer or hides.
+- **Vehicles** and the **Vehicle 360°**: the owner and earlier owners,
+  where it is now, the mileage history, the service history with the work,
+  parts, technicians, invoice and the workmanship warranty on each job,
+  insurance and warranty, photos, notes and activity. Edit, record a
+  reading, transfer to a new owner, add a note, start a new job.
+- **Customers**: CRM's customers who have a vehicle or a job here, with what
+  they owe (for people who may see money), how they like to be reached,
+  their vehicles, their service history across every vehicle, and credit
+  terms for people who manage Garage.
+- **Reports**: job aging, technician work, estimate against actual, quality
+  and rework, parts consumption, and — for people who may see money —
+  revenue and job profitability, by date and branch; CSV for people who may
+  export.
+- **Workshop**: the bay board (each bay's vehicle, job and status, set by
+  someone who assigns work), branches and their parts warehouse, the
+  technician roster from HR, labour rates, service types, makes and models,
+  and inspection templates.
+- **Set-up wizard** and **Settings** (the company's Garage settings). People
+  who manage Garage land on the wizard until the company is set up; everyone
+  else is told it is being set up.
+- **Overview**: waiting for parts, delivered today and bays available.
+
+**Changed**
+
+- **The rail** has Vehicles, Customers, Reports, Workshop, Set-up wizard and
+  Settings in the app; "On the web" is gone.
+- `worksuite://garage/vehicles/<id>` and `/garage?vehicle=<id>` open the
+  Vehicle 360°; `/garage?checkin=<id>` opens the check-in; `&jt=` picks a
+  job card's tab.
+- **A new walk-in** opens its check-in.
+
+**Fixed**
+
+- The job card offered "Cancelled" as a move beside Cancel the job; the move
+  was refused without a reason. Cancelling is now only Cancel the job, which
+  asks why.
+- The job card offered "The customer may see it" on a note to people who
+  may not publish, whose note the server then refused. It is offered to
+  people who may publish; others add staff notes.
+
+**Works offline**
+
+- Job cards (with the tabs opened), vehicles, customers and the workshop now
+  open from their last copy when WorkSuite cannot be reached, beside the
+  overview, the board and My work. A bar says the screen is the last copy.
+- Every other change needs WorkSuite: the buttons wait for it. A
+  technician's Start and Pause, on My work or the Work tab, are still kept
+  with the moment they were pressed and sent when it is back.
+
+**Where it bites**
+
+- Documents are pages WorkSuite prints, saved as `.html` and opened in your
+  browser to read or print; the server does not make PDFs of them.
+- Uploads over 25 MB cannot pass the desktop's API proxy: add long videos
+  from the web or a phone.
+
+**Not in Garage yet** (the server does not have them)
+
+- Revenue today, technicians working, today's appointments and service
+  reminders on the overview; role dashboards; the TV board.
+- Sending the check-in sheet or the estimate by WhatsApp from WorkSuite
+  (copy the estimate's link instead), and a customer portal.
+- Appointments, service packages, reminders, warranty claims, customer
+  opt-outs per channel, and the workshop calendar.
+
+---
+
 ## 2026-09-29 — 0.2.51: Garage on the desktop
 
 Garage & Service Center opens in its own tab, for whoever has the Garage app.
