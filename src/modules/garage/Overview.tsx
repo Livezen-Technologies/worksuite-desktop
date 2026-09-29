@@ -5,13 +5,15 @@ import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { Kpi, PageHead, Panel } from '../hr/parts';
 import { canAny, fetchBoard, fetchDashboard, jobsRoute, K, needsSetup, type Job, type Options } from './api';
+import { moneyList } from './api-b3';
 import { JobSummary, OfflineBanner, Pill, StatusPill, when } from './parts';
 
 /**
  * The garage overview (SRS §9.1, §28.1, FR-DSH-01..03): the server's figures,
  * each opening the job list that counted it; the jobs by stage; what is late,
- * waiting on the customer and ready to collect; the bays. Revenue is the
- * server's to add (behind financial visibility) — it is not worked out here.
+ * waiting on the customer and ready to collect; the bays. Revenue (stage B3)
+ * is Billing's figure as the server sends it, per currency, to those who may
+ * see money — it is not worked out here.
  */
 const TILES: Array<{ key: string; label: string; tone?: 'amber' | 'red' | 'green' }> = [
   { key: 'open_jobs', label: 'Open jobs' },
@@ -34,6 +36,7 @@ export default function Overview({ org, options, onGo, onJob, onSetup }: { org: 
 
   if (!canAny(options, 'dashboard', org)) return <p className="m-6 text-[13px] text-ink-2">The overview is for those who may see the garage dashboard.</p>;
   const k = dash.data?.data.kpis ?? {};
+  const revenue = dash.data?.data.revenue ?? null;
   const cols = board.data?.data.columns ?? [];
   const all = cols.flatMap((c) => c.jobs);
   const late = all.filter((j) => j.overdue && j.status !== 'completed');
@@ -66,6 +69,8 @@ export default function Overview({ org, options, onGo, onJob, onSetup }: { org: 
             const go = kpi.filter ? () => onGo(jobsRoute(kpi.filter)) : t.key === 'bays_available' ? () => onGo('/garage?view=board') : undefined;
             return <Kpi key={t.key} label={t.label} value={value} tone={kpi.value ? t.tone : undefined} onClick={go} sub={kpi.filter ? 'Open the list' : undefined} />;
           })}
+          {revenue ? <Kpi label="Revenue today" value={moneyList(revenue.today)} sub={`${revenue.invoices_today} ${revenue.invoices_today === 1 ? 'invoice' : 'invoices'}`} /> : null}
+          {revenue ? <Kpi label="Revenue this month" value={moneyList(revenue.month)} sub="Issued in Billing" /> : null}
         </div>
       ) : null}
       {board.data ? (

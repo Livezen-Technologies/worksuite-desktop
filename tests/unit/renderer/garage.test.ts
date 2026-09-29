@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { canOpenApp, canOpenLink, canOpenRoute, categoryVisible, notificationAllowed, visibleAppIds } from '@shared/access';
 import { APP_CATALOGUE, isAppVisible } from '@shared/apps';
 import { parseDeepLink } from '@shared/deeplink';
+import { contract } from '@shared/ipc/contract';
 import { resolveWebLink } from '@shared/links';
 import { validateManifest } from '@shared/manifest';
 import { ApiError } from '../../../src/core/api';
@@ -13,7 +14,7 @@ import { movesOf } from '../../../src/modules/garage/JobCard';
 import { checkinBody, draftFrom, odometerLower } from '../../../src/modules/garage/job/Checkin';
 import { markAt, zoneLabel, zonesOf } from '../../../src/modules/garage/job/DamageMap';
 import { LISTS, readRoute } from '../../../src/modules/garage/parts';
-import { JOB_TABS, tabFor, tabsFor } from '../../../src/modules/garage/registry';
+import { EXTRA_VIEWS, JOB_TABS, tabFor, tabsFor } from '../../../src/modules/garage/registry';
 import { valueIn, valueOut } from '../../../src/modules/garage/Setup';
 import { vehicleBody, vehicleDraft } from '../../../src/modules/garage/Vehicles';
 import { adoptAdded, walkInBody, walkInGaps, type WalkInDraft } from '../../../src/modules/garage/WalkIn';
@@ -163,21 +164,31 @@ describe('permissions per company', () => {
 
   it('lists the job card’s tabs from the registry: a stage’s tabs only where the server has it, money only for those who may see it', () => {
     const b = { inspections: [], estimate: null, additional_work: [], work_orders: { items: [] } };
+    const b3 = { parts: { requests: [] }, qc: { current: null }, road_tests: { tests: [] }, delivery: { handover: null } };
     const tabs = tabsFor(job360(b), company(1, { can: can({ estimates: false }) }));
     expect(tabs.map((t) => t.id)).not.toContain('estimate');
     expect(tabsFor(job360(b), company(1, { can: can({ estimates: true }) })).map((t) => t.id)).toEqual(expect.arrayContaining(['inspection', 'diagnosis', 'estimate', 'work-orders']));
+    // Every P1 area, in the order FR-JOB-07 lists them, on a server with all three stages.
+    expect(tabsFor(job360({ ...b, ...b3 }), company(1, { can: can({ estimates: true }) })).map((t) => t.id)).toEqual(['overview', 'checkin', 'inspection', 'diagnosis', 'estimate', 'work-orders', 'parts', 'qc', 'road-test', 'invoice', 'media', 'notes', 'activity']);
     // A stage-A server has none of stage B's keys: its tabs are not offered.
-    expect(tabsFor(job360(), company(1, { can: can({ estimates: true }) })).map((t) => t.id)).toEqual(['overview', 'checkin', 'parts', 'qc', 'invoice', 'media', 'notes', 'activity']);
-    // Without the permission to see them, the server sends inspections and work orders as null.
-    const hidden = tabsFor(job360({ ...b, inspections: null, work_orders: null }), company(1)).map((t) => t.id);
+    expect(tabsFor(job360(), company(1, { can: can({ estimates: true }) })).map((t) => t.id)).toEqual(['overview', 'checkin', 'media', 'notes', 'activity']);
+    // Without the permission to see them, the server sends inspections, work orders and the quality check as null.
+    const hidden = tabsFor(job360({ ...b, ...b3, inspections: null, work_orders: null, qc: null }), company(1)).map((t) => t.id);
     expect(hidden).not.toContain('inspection');
     expect(hidden).not.toContain('work-orders');
-    expect(hidden).toContain('diagnosis');
-    const built = JOB_TABS.filter((t) => t.component).map((t) => t.id);
-    expect(built).toEqual(['overview', 'checkin', 'inspection', 'diagnosis', 'estimate', 'work-orders', 'media', 'notes', 'activity']);
-    expect(JOB_TABS.filter((t) => !t.component).every((t) => !!t.soon && t.stage === 'B3')).toBe(true);
+    expect(hidden).not.toContain('qc');
+    expect(hidden).toEqual(expect.arrayContaining(['diagnosis', 'parts', 'road-test', 'invoice']));
+    // Every tab P1 lists is built: none is left dimmed.
+    expect(JOB_TABS.every((t) => !!t.component)).toBe(true);
     expect(tabFor('parts', tabs)?.id).toBe('overview');
+    expect(tabFor('parts', tabsFor(job360({ ...b, ...b3 }), company(1)))?.id).toBe('parts');
     expect(tabFor('checkin', tabs)?.id).toBe('checkin');
+  });
+
+  it('adds the parts counter and the reports to the rail for those who may use them', () => {
+    const ids = EXTRA_VIEWS.map((v) => `${v.id}:${v.group}:${v.can}`);
+    expect(ids).toEqual(expect.arrayContaining(['parts-counter:workshop:parts_issue', 'reports:reports:reports']));
+    expect(readRoute(['garage'], new URLSearchParams('view=parts-counter'), new Set(EXTRA_VIEWS.map((v) => v.id))).view).toBe('parts-counter');
   });
 });
 
@@ -361,5 +372,17 @@ describe('saying things', () => {
     expect(g.fuelMark(48, OPTIONS.checkin.fuel_marks)).toBe('1/2');
     expect(g.fuelMark(null, OPTIONS.checkin.fuel_marks)).toBeNull();
     expect(g.vehicleLine(job().vehicle)).toBe('Toyota Prius · WP CAB-1234');
+  });
+});
+
+describe('garage files are downloaded by what they are, never by a path', () => {
+  const input = contract['transfers:download'].input;
+  it('takes a report as CSV with its short filters, or a job’s delivery note — one at a time', () => {
+    expect(input.safeParse({ garageFile: { kind: 'report', report: 'open-jobs', query: { org: '1', from: '2026-09-01', to: '2026-09-29' } }, name: 'garage-open-jobs.csv' }).success).toBe(true);
+    expect(input.safeParse({ garageFile: { kind: 'delivery-note', job: 12 }, name: 'delivery-note.pdf' }).success).toBe(true);
+    expect(input.safeParse({ garageFile: { kind: 'report', report: '../jobs', query: {} }, name: 'x.csv' }).success).toBe(false);
+    expect(input.safeParse({ garageFile: { kind: 'report', report: 'open-jobs', query: { 'a&b': '1' } }, name: 'x.csv' }).success).toBe(false);
+    expect(input.safeParse({ garageFile: { kind: 'delivery-note', job: 0 }, name: 'x.pdf' }).success).toBe(false);
+    expect(input.safeParse({ garageFile: { kind: 'delivery-note', job: 12 }, tenderDocument: 4, name: 'x.pdf' }).success).toBe(false);
   });
 });

@@ -452,8 +452,13 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     const tl = input.tenderLine;
     const fc = input.financeCsv;
     const ef = input.expenseFile;
+    const gf = input.garageFile;
     const withOrg = (org?: number) => (org ? `?org=${org}` : '');
-    const path = ef
+    const path = gf
+      ? gf.kind === 'report'
+        ? `/api/garage/reports/${gf.report}?${new URLSearchParams({ ...gf.query, format: 'csv' })}`
+        : `/api/garage/jobs/${gf.job}/delivery-note`
+      : ef
       ? ef.kind === 'claim-receipt'
         ? `/api/expense/claims2/${ef.claim}/receipt`
         : ef.kind === 'receipt'

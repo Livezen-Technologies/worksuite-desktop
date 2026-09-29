@@ -105,7 +105,13 @@ or a queued change is on disk before the user is told it was saved.
 - A module may keep its own small registry for parts that arrive later:
   Garage's job card draws its tabs from `modules/garage/registry.ts`
   (`JOB_TABS`, and `EXTRA_VIEWS` for its rail), so a stage of the server's
-  Garage module adds one file and one line, not a change to the card.
+  Garage module adds one file and one line, not a change to the card. A tab
+  is keyed to the Job 360° key its server stage adds, so a server without
+  that stage simply does not show it.
+- A module's files leave through the download manager by what they are, not
+  by a path: `transfers:download` takes a typed variant (for Garage,
+  `garageFile`: a report's CSV or a job's delivery note), and the main
+  process builds the address it fetches.
 - READ_CACHE is declared in a module's manifest and served by the main
   process for the prefixes in `CACHE_PREFIXES` (`electron/main/index.ts`),
   per module, so an app taken away takes its saved answers with it.

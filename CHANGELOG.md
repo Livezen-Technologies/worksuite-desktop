@@ -5,6 +5,78 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-29 — Garage & Vehicle Service Center, part 3 — parts and the counter, QC and rework, road tests, invoice and handover, history, reports (ships in the next release)
+
+The last dimmed tabs on the job card — Parts, QC, and Invoice & handover —
+work now, with a new **Road test** tab, against WorkSuite's Garage stage B3.
+With it every area of the first Garage phase is on the desktop. Each tab
+appears only where the server has the stage and the person may see it.
+Approving an estimate now moves the job on by itself, to "ready to start"
+or "waiting for parts", as WorkSuite decides.
+
+**Added**
+
+- **Parts** on the job: per part, what the customer approved against what
+  was requested, reserved, issued, used and returned — Inventory's figures,
+  never counted here. **Reserve what was approved** (WorkSuite says what it
+  could not find), request a part from Inventory's catalogue, reserve one,
+  note it is ordered, issue it, mark what was used, return the rest in its
+  condition, cancel, and give every removed part a disposition.
+- **Parts counter** in the rail, scan first: scan (or type) the job, press
+  Enter — a barcode scanner does — then the part, and WorkSuite answers with
+  what was approved, issued and on the shelf. **Issue**, and the counter is
+  ready for the job's next part. Issuing more than the customer approved
+  needs a workshop manager's tick and a reason; everybody else is told to
+  raise it as additional work. Below it, the queue of requests by urgency,
+  with Reserve and Issue….
+- **QC**: the checklist the server opened when the last work order was
+  done — pass or fail each item, name the work order a failure is about, a
+  note. **Pass the check** only when every required item has passed; **Fail**
+  with a reason, sending back the work orders the failures name (or those
+  you choose) to rework. Rework and earlier attempts are listed. Whoever
+  worked on the job is told at once that somebody else must check it,
+  unless the company allows it.
+- **Road test**: the tests the phone recorded, with their distance, time and
+  verdict; record one after the fact (pressing Save again after a lost
+  connection records it once); give a verdict; send a failed test back to
+  rework.
+- **Invoice & handover**, in the order the counter works: the **final
+  review** (what stands before delivery, and the belongings to confirm) and
+  **Mark ready for delivery**; the invoice to raise from approved work only —
+  parts as used, labour at the timer's time, what is left off and why, and
+  WorkSuite's totals — **once**, with payment terms for those Invoices lets
+  set them; the invoice as Billing has it, with what is paid and
+  outstanding, and **Open in Invoices** to take a payment; whether the
+  vehicle may be released (paid, or on the customer's terms) and, for those
+  who may, releasing it anyway with a reason; and the **handover** — odometer
+  and fuel out, who collects, what is given back, the signature — kept as a
+  signed delivery note whose fingerprint WorkSuite checks. Open the note, or
+  **Save a copy** to your downloads.
+- **Service history** on Vehicle 360° and on the customer: each completed
+  job with what was reported, the work done, the parts used, who did it,
+  the labour hours and the invoice, and — for those who may see money —
+  what was invoiced and paid, per currency.
+- **Reports** in the rail: WorkSuite's list (open and completed jobs, job
+  ageing, a vehicle's or a customer's history, technician work, labour, bay
+  use, parts consumption, waiting parts, estimate approval, estimate against
+  actual, QC failures, revenue by service type, branch performance), for
+  two dates, with the server's columns, totals and notes, and **CSV** to
+  your downloads for those who may export.
+- **Overview**: revenue today and this month, per currency, from Billing,
+  for those who may see money.
+
+**Where it bites**
+
+- Every write here needs WorkSuite: offline, the tabs, the queue and the
+  reports read the saved copy, and issue, reserve, QC decisions, ready,
+  invoice and handover are disabled.
+- Payment is taken in Invoices, not on the job card; the job card reads it
+  back.
+- A report is one of the server's; PDF and spreadsheet exports, job
+  profitability and warranty reports come with a later Garage phase.
+
+---
+
 ## 2026-09-29 — Garage & Vehicle Service Center, part 2 — inspections, estimates and approval, work orders and the timer (ships in the next release)
 
 The job card's Inspection, Diagnosis, Estimate and Work orders tabs are no

@@ -119,16 +119,16 @@ blocked by something outside the code.
 
 ## Garage & Vehicle Service Center (WS-GARAGE-SRS-001 v1.1, desktop)
 
-`src/modules/garage`, against the server's stage-A contract (`/api/garage/*`). Tests:
-`tests/unit/renderer/garage.test.ts`, `garage-screens.test.tsx`.
+`src/modules/garage`, against the server's contracts for stage A and stages B1–B3 (`/api/garage/*`). Tests:
+`tests/unit/renderer/garage.test.ts`, `garage-screens.test.tsx`, `garage-stage-b.test.tsx`, `garage-stage-b3.test.tsx`.
 
 | ID | Status | Where / note |
 |---|---|---|
 | FR-APP-01, §36 | Done | Native catalogue app `garage` (app `garage`, `garage.access`), manifest in `modules/registry.ts`; hidden from anyone the server does not give it |
 | FR-APP-04 | Done | Holders of `garage.settings.manage` land on Set-up while a company is not set up (`GarageShell.landing`) |
-| FR-APP-05 | Partial | Stage-B job-card tabs listed dimmed until they arrive (`garage/registry.ts`); Edit in CRM only with CRM |
-| FR-DSH-01, 03 | Done | `Overview.tsx`: the server's nine figures, each opening the job list that counted it. Revenue today is the server's to add (B3) |
-| FR-DSH-02 | Partial | Jobs by stage, bays, overdue, waiting for the customer, ready for collection. Appointments, technician workload, parts, revenue and reminders wait for stage B / phase 2 |
+| FR-APP-05 | Done | Each stage's job-card tab appears only where the server has that stage and the reader may see it (`garage/registry.ts`); Edit in CRM only with CRM; Open in Invoices only with Billing |
+| FR-DSH-01, 03 | Done | `Overview.tsx`: the server's nine figures, each opening the job list that counted it; revenue today and this month per currency from Billing (B3), for money readers |
+| FR-DSH-02 | Partial | Jobs by stage, bays, overdue, waiting for the customer, ready for collection, revenue. Appointments, technician workload and reminders wait for phase 2 |
 | FR-DSH-04 | Later | Role dashboards |
 | FR-BRD-01..04 | Done | `Board.tsx`: the server's columns; a drop (or Alt+→/←) asks `transition {column}` with the version shown; a refusal leaves the card and shows the sentence; a reason is asked first when the move needs one |
 | FR-BRD-05 | Partial | Branch, advisor, priority, search; read again every 30 s and on any garage notification. No workshop / technician / vehicle-type filter; TV mode later |
@@ -139,7 +139,7 @@ blocked by something outside the code.
 | FR-CHK-01..06, 08 | Done | `job/Checkin.tsx`: readings, complaints, conditions, damage diagram (the web's zone codes), photo slots (drop, pick, camera), belongings, valuables, signature, the server's list of what is missing |
 | FR-CHK-07 | Later | Printing / sending the check-in sheet: no document on the server yet |
 | FR-JOB-01, 03..09 | Done | `JobCard.tsx`: header, pipeline tracker, the server's transitions, edit, cancel with reason, version conflicts, overdue |
-| FR-JOB-07 | Partial | Overview, Check-in, Inspection, Diagnosis, Estimate, Work orders (with labour), Media, Notes, Activity; Parts, QC, Invoice & handover arrive with stage B3 |
+| FR-JOB-07 | Done | Overview, Check-in, Inspection, Diagnosis, Estimate, Work orders (with labour), Parts, QC, Road test, Invoice & handover, Media, Notes, Activity |
 | FR-INS-01..06 | Done | `job/Inspection.tsx` (stage B1): templates, traffic light / pass-fail / measurement with thresholds, photos per item, next step to the estimate or later, complete with the server's missing list, the customer's report; templates copied from the library in Set-up. Template items are edited on the web |
 | FR-DIA-01..05 | Done | `job/Diagnosis.tsx`: finding, cause, repair, parts (Inventory lookup), hours, codes, no fault found, sign-off, to the estimate |
 | FR-EST-01..08 | Done | `job/Estimate.tsx`: versions, lines priced by the server, availability, coverage and payer, pull recommendations, carry deferred work, discount approval |
@@ -149,10 +149,19 @@ blocked by something outside the code.
 | FR-TEC-01..05 | Done | My work (`views/MyWork.tsx`), the caller's timer (server clock), pause reasons, labour from timers, corrections keeping the original |
 | FR-TEC-06 | Done | Skill shown per technician; the server warns or refuses by policy |
 | FR-BAY-01..04 | Partial | `views/Bays.tsx` (board and manual moves), `views/Calendar.tsx` (day view, let a slot go); booking is from a work order's Technicians and bay — no drag on the calendar yet |
+| FR-PRT-01, 02, 04..06 | Done | `job/Parts.tsx` (stage B3): the per-part balance (Inventory's figures), request from the catalogue, reserve all approved or one, ordered (a noted reference), issue, used, return with condition, cancel, removed parts and dispositions |
+| FR-PRT-03, 07, 08 | Done | `views/PartsCounter.tsx`: issue by scan (job, then part; a keyboard-wedge scanner's Enter moves on), the server's confirmation, over-approval only with `assign` and a reason; the queue by urgency |
+| FR-QC-01..06 | Done | `job/Quality.tsx`: the server's checklist, pass/fail per item with its work order, pass only when every required item passed, fail with a reason sending work orders to rework, self-check explained, rework and attempts listed |
+| FR-RDT-01, 02 | Done | `job/RoadTests.tsx`: the phone's tests, one recorded after the fact (idempotent key), verdict, send back to rework |
+| FR-DLV-01, 02, 04..06 | Done | `job/Delivery.tsx`: final review with belongings, ready for delivery, the invoice once from the server's preview (terms with Billing's permission), Billing's invoice and payments read back, release check and override with reason, the signed handover and its delivery note (view, save a copy) |
+| FR-DLV-03 | Later | Invoicing covered lines to their payer (phase 2, as on the server) |
+| FR-HIS-01, 02 | Done | `History.tsx` on Vehicle 360° and the customer: work, parts, people, labour, invoice, Billing's totals per currency |
+| FR-ANL-01..05 | Done | `views/Reports.tsx`: the server's reports for two dates, columns, totals, notes; vehicle and customer history ask for the record |
+| FR-ANL-06 | Partial | CSV through the download manager for `garage.report.export` holders; PDF/XLSX are phase 2 on the server |
 | FR-JOB-10 | Later | Job QR on a printed card |
 | FR-MED-01..03 | Done | `job/Media.tsx` (internal until published, `garage.media.publish`), `job/Notes.tsx` (internal / customer) |
 | FR-SET-01, §25, §27 | Partial | `Settings.tsx` (the standard settings form, per company), `Setup.tsx` (the wizard and its records); the workflow builder is phase 2 |
-| Offline | Partial | READ_CACHE for options, board, overview, jobs (and job cards and their tabs opened), vehicles, customers, estimates' options, inspections, bays, the calendar and my work; every write online only — nothing is queued |
+| Offline | Partial | READ_CACHE for options, board, overview, jobs (and job cards and their tabs opened), vehicles, customers, estimates' options, inspections, bays, the calendar, my work, the parts queue and the reports (not a scan: it answers the shelf now); every write online only — nothing is queued |
 
 ## Devices, security, updates (SEC, UPD)
 

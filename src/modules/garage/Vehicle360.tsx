@@ -7,6 +7,8 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, Field, Grid, input, PageHead, Panel, Sheet } from '../hr/parts';
 import { amount, canIn, distance, fetchVehicle, fetchVehicle360, K, OFFLINE_WRITE, recordOdometer, refusalOf, vehicleLine, type Options, type Vehicle } from './api';
 import { Pill, StatusPill, when } from './parts';
+import { fetchVehicleHistory, KB3 } from './api-b3';
+import { ServiceHistory } from './History';
 import { Thumb } from './job/media-kit';
 import { VehicleSheet } from './Vehicles';
 
@@ -44,6 +46,8 @@ export default function Vehicle360({ id, options, online, onBack, onJob, onCusto
   const [tab, setTab] = useState<Tab>('overview');
   const [editing, setEditing] = useState(false);
   const [odo, setOdo] = useState(false);
+  // Stage B3's history adds Billing's totals; an older server has none (404), and the 360° rows stand.
+  const hist = useQuery({ queryKey: KB3.vehicleHistory(id), queryFn: ({ signal }) => fetchVehicleHistory(id, signal), enabled: tab === 'history', retry: false });
   if (q.isLoading) return <Spinner />;
   const back = (
     <button type="button" onClick={onBack} className="flex items-center gap-1 self-start text-[12.5px] font-semibold text-ink-2 hover:text-ink" title="Back">
@@ -124,13 +128,7 @@ export default function Vehicle360({ id, options, online, onBack, onJob, onCusto
 
       <div role="tabpanel" aria-label={LABELS[tab]}>
         {tab === 'overview' ? <Profile v={v} options={options} /> : null}
-        {tab === 'history' ? (
-          <Rows empty="No service recorded yet." head={['Date', 'Job', 'Odometer', 'Type', 'Complaints', 'Technicians']}>
-            {d.service_history.map((h) => (
-              <Tr key={h.job_id} onClick={() => onJob(h.job_id)} cells={[dateLabel(h.date), h.number, distance(h.odometer, unit), h.service_type ?? (options.job_types[h.job_type ?? ''] ?? h.job_type ?? '—'), h.complaints.join('; ') || '—', h.technicians.join(', ') || '—']} />
-            ))}
-          </Rows>
-        ) : null}
+        {tab === 'history' ? <ServiceHistory rows={hist.data?.jobs ?? d.service_history} totals={hist.data?.totals} unit={unit} options={options} onJob={onJob} /> : null}
         {tab === 'open' ? (
           <Rows empty="No job open." head={['Job', 'Status', 'Promised', 'Advisor']}>
             {d.open_jobs.map((j) => (

@@ -153,7 +153,7 @@ describe('the job card', () => {
     expect(screen.queryByRole('tab', { name: 'Estimate' })).toBeNull();
     // A server without stage B2 sends no work orders: the tab is not offered.
     expect(screen.queryByRole('tab', { name: 'Work orders' })).toBeNull();
-    expect(screen.getByRole('tab', { name: 'Parts' }).getAttribute('aria-disabled')).toBe('true');
+    expect(screen.queryByRole('tab', { name: 'Parts' })).toBeNull();
   });
 
   it('moves with the version it read, and shows the job as the server answered', async () => {

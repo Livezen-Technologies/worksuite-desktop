@@ -292,6 +292,12 @@ export interface BoardData {
 export type Kpi = { value: number | null; total?: number; filter: Record<string, string> | null };
 export interface Dashboard {
   kpis: Record<string, Kpi>;
+  /**
+   * Stage B3: Billing's issued garage invoices by issue date, per currency, in
+   * the companies where the reader may see money; null for everybody else and
+   * absent on an older server.
+   */
+  revenue?: { date: string; today: Array<{ currency: string; amount: string }>; month: Array<{ currency: string; amount: string }>; invoices_today: number } | null;
 }
 
 export interface CustomerRow {
@@ -380,7 +386,8 @@ export interface Vehicle360 {
     next_service: unknown;
     current_job: Job | null;
   };
-  service_history: Array<{ job_id: number; number: string; date: string | null; odometer: number | null; job_type: string | null; service_type: string | null; complaints: string[]; technicians: string[]; invoice_id: number | null }>;
+  /** Stage A's rows; stage B3 sends its fuller history rows here (`api-b3` HistoryRow). */
+  service_history: Array<{ job_id: number; number: string; date: string | null; odometer: number | null; job_type: string | null; service_type: string | null; complaints: string[]; technicians: Array<string | { id?: number; name: string | null; role?: string | null }>; invoice_id: number | null }>;
   open_jobs: Job[];
   inspections: Array<{ id: number; job_id: number; type: string; status: string; completed_at: string | null; summary: unknown }>;
   repairs: Array<{ job_id: number; line_type: string; description: string; qty: string | number; decision: string }>;

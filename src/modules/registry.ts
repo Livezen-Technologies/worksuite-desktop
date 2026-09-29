@@ -204,7 +204,7 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     // and the numbering are the server's, so nothing is queued.
     input: defineDesktopManifest({
       id: 'garage', name: 'Garage', icon: 'car', contractVersion: 1, desktop: { enabled: true },
-      offline: { mode: 'READ_CACHE', entities: ['job', 'vehicle', 'customer'], cache: ['/api/garage/options', '/api/garage/board', '/api/garage/dashboard', '/api/garage/jobs', '/api/garage/vehicles', '/api/garage/customers', '/api/garage/estimates', '/api/garage/inspections', '/api/garage/bays', '/api/garage/calendar', '/api/garage/my', '/api/garage/technicians'] },
+      offline: { mode: 'READ_CACHE', entities: ['job', 'vehicle', 'customer'], cache: ['/api/garage/options', '/api/garage/board', '/api/garage/dashboard', '/api/garage/jobs', '/api/garage/vehicles', '/api/garage/customers', '/api/garage/estimates', '/api/garage/inspections', '/api/garage/bays', '/api/garage/calendar', '/api/garage/my', '/api/garage/technicians', '/api/garage/parts/queue', '/api/garage/parts/options', '/api/garage/reports'] },
       native: ['notifications', 'file-drop', 'camera'],
       quickActions: [
         { id: 'walk-in', label: 'New walk-in', route: '/garage?view=walkin' },

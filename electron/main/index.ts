@@ -839,6 +839,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/garage/calendar', 'garage'],
     ['/api/garage/my', 'garage'],
     ['/api/garage/technicians', 'garage'],
+    // Stage B3: the counter's queue and labels (not `parts/scan`: a scan answers the shelf now), and the reports.
+    ['/api/garage/parts/queue', 'garage'],
+    ['/api/garage/parts/options', 'garage'],
+    ['/api/garage/reports', 'garage'],
     ['/api/dashboard/home', 'home'],
     ['/api/notifications', 'notifications'],
   ];

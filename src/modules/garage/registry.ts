@@ -2,6 +2,7 @@ import { lazy, type ComponentType } from 'react';
 import type { CanKey, Company, Job360, Options } from './api';
 import { hasB1 } from './api-b1';
 import { hasWorkOrders } from './api-b2';
+import { hasKey } from './api-b3';
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
@@ -11,17 +12,19 @@ import { hasWorkOrders } from './api-b2';
  * The job card (Job 360°, SRS §13 / §28.3, FR-JOB-07) draws the tabs listed
  * here, in this order, and nothing else. Stage A built Overview, Check-in,
  * Media, Notes and Activity; B1 Inspection, Diagnosis and Estimate; B2 Work
- * orders (with the labour). A stage brings its area as its own file under
- * `job/` (and its calls in `api-<stage>.ts`) and changes ONE entry below —
- * the `soon` line of its tab — to name the component, e.g. B3:
+ * orders (with the labour); B3 Parts, QC, Road test and Invoice & handover —
+ * every tab P1 lists. A later stage (phase 2: warranty, insurance, external
+ * work) brings its area as its own file under `job/` (and its calls in
+ * `api-<stage>.ts`) and adds ONE entry below, keyed to the Job 360° key its
+ * server stage adds, e.g.:
  *
- *   { id: 'parts', label: 'Parts', stage: 'B3', when: (j) => j.parts != null, component: lazy(() => import('./job/Parts')) },
+ *   { id: 'warranty', label: 'Warranty', stage: 'P2', when: (j) => j.warranty != null, component: lazy(() => import('./job/Warranty')) },
  *
  * A tab without a `component` is listed dimmed, with its `soon` sentence as
- * the reason, because FR-JOB-07 lists it for P1 and the person should see
- * where it will be. `can` hides it from whoever may not (a key of the
- * company's `can` in `GET options`; stage B may add keys there); `when` hides
- * it from jobs it does not apply to (a pipeline without a road test).
+ * the reason, so the person sees where an announced area will be. `can` hides
+ * it from whoever may not (a key of the company's `can` in `GET options`);
+ * `when` hides it from jobs it does not apply to, and from a server that has
+ * not got the stage yet (its key is missing from Job 360°).
  *
  * A tab gets the job exactly as the server sent it — Job 360°, with the
  * stage's own key added to `JobCard::view` — and calls `onChanged` after a
@@ -45,7 +48,7 @@ export interface JobTab {
   id: string;
   label: string;
   /** Which part of P1 builds it (A, or the stage-B agent that owns it). */
-  stage: 'A' | 'B1' | 'B2' | 'B3';
+  stage: 'A' | 'B1' | 'B2' | 'B3' | 'P2';
   /** Shown only to those who may do this in the job's company. Absent: everybody who sees the job. */
   can?: CanKey;
   /** Whether it applies to this job at all. */
@@ -66,10 +69,12 @@ export const JOB_TABS: JobTab[] = [
   /* ---- B2: work orders, technicians, labour, bays ---- */
   // `work_orders` is null for those who may not see work orders, and absent on a server without stage B2.
   { id: 'work-orders', label: 'Work orders', stage: 'B2', when: hasWorkOrders, component: lazy(() => import('./job/WorkOrders')) },
-  /* ---- B3: parts, QC, road test, invoice, handover ---- */
-  { id: 'parts', label: 'Parts', stage: 'B3', soon: 'Parts requests, reservations and issues arrive with the next Garage update.' },
-  { id: 'qc', label: 'QC', stage: 'B3', soon: 'Quality control, rework and the road test arrive with the next Garage update.' },
-  { id: 'invoice', label: 'Invoice & handover', stage: 'B3', soon: 'The invoice and the handover arrive with the next Garage update.' },
+  /* ---- B3: parts, QC and rework, road tests, final review, invoice, handover ---- */
+  // Each is a key of Job 360° from stage B3: absent on an older server, and `qc` is null for whoever may not see quality checks.
+  { id: 'parts', label: 'Parts', stage: 'B3', when: hasKey('parts'), component: lazy(() => import('./job/Parts')) },
+  { id: 'qc', label: 'QC', stage: 'B3', when: hasKey('qc'), component: lazy(() => import('./job/Quality')) },
+  { id: 'road-test', label: 'Road test', stage: 'B3', when: hasKey('road_tests'), component: lazy(() => import('./job/RoadTests')) },
+  { id: 'invoice', label: 'Invoice & handover', stage: 'B3', when: hasKey('delivery'), component: lazy(() => import('./job/Delivery')) },
   /* ---- stage A ---- */
   { id: 'media', label: 'Media', stage: 'A', component: lazy(() => import('./job/Media')) },
   { id: 'notes', label: 'Notes', stage: 'A', component: lazy(() => import('./job/Notes')) },
@@ -88,10 +93,10 @@ export function tabFor(asked: string | null, visible: JobTab[]): JobTab | undefi
 
 /**
  * Screens a stage adds to the Garage rail (SRS §8: Inspections, Estimates,
- * Workshop, Parts, Quality Control, Reports). Empty in stage A. A stage adds
- * its file and one line:
+ * Workshop, Parts, Quality Control, Reports). A stage adds its file under
+ * `views/` and one line:
  *
- *   { id: 'parts', label: 'Parts', icon: 'package', group: 'work', can: 'parts_issue', component: lazy(() => import('./views/Parts')) },
+ *   { id: 'parts-counter', label: 'Parts counter', icon: 'package', group: 'workshop', can: 'parts_issue', component: lazy(() => import('./views/PartsCounter')) },
  *
  * The shell routes `/garage?view=<id>` to it and lists it in the rail under
  * `group`, for those who hold `can` in some company in view.
@@ -122,4 +127,7 @@ export const EXTRA_VIEWS: GarageView[] = [
   { id: 'my-work', label: 'My work', icon: 'timer', group: 'workshop', can: 'work', component: lazy(() => import('./views/MyWork')) },
   { id: 'bays', label: 'Service bays', icon: 'wrench', group: 'workshop', can: 'view', component: lazy(() => import('./views/Bays')) },
   { id: 'calendar', label: 'Workshop calendar', icon: 'calendar', group: 'workshop', can: 'view', component: lazy(() => import('./views/Calendar')) },
+  /* ---- B3: the parts counter and the reports ---- */
+  { id: 'parts-counter', label: 'Parts counter', icon: 'package', group: 'workshop', can: 'parts_issue', component: lazy(() => import('./views/PartsCounter')) },
+  { id: 'reports', label: 'Reports', icon: 'chart', group: 'reports', can: 'reports', component: lazy(() => import('./views/Reports')) },
 ];

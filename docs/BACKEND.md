@@ -211,7 +211,7 @@ What the server does not give sync, and how the app copes:
 ## Garage & Vehicle Service Center
 
 The Garage module uses the web page's JSON API, `/api/garage/*`, through the
-API proxy (contract: the backend's Garage `web-api.md`, stage A). Every route
+API proxy (contract: the backend's Garage `web-api.md`, stage A, and its stage-B files). Every route
 needs `garage.access`; what a person may do is per company, in
 `GET options` → `companies[].can`, and the screens hide the rest.
 
@@ -240,6 +240,27 @@ Stages B1 and B2 (`web-api-b1.md`, `web-api-b2.md`), on the job card and the rai
 | Work orders and labour | `GET\|POST /api/garage/jobs/{id}/work-orders`, `POST /api/garage/work-orders/{id}/assign\|cancel\|complete\|notes`, `POST …/timer/{start\|resume\|pause\|stop}`, `GET /api/garage/jobs/{id}/labour`, `POST /api/garage/labour/{id}/correct`, `GET /api/garage/technicians`, `GET /api/garage/my/work-orders` |
 | Bays and the calendar | `GET /api/garage/bays`, `PATCH /api/garage/bays/{id}/status`, `GET /api/garage/calendar`, `DELETE /api/garage/calendar/assignments/{id}` |
 
+Stage B3 (`web-api-b3.md`): parts, QC, road tests, delivery, history and reports. Job 360° carries `parts`, `qc`,
+`road_tests` and `delivery`; a tab shows only when its key is there.
+
+| Need | Endpoint |
+|---|---|
+| Parts on the job | `GET /api/garage/parts/options`, `GET /api/garage/jobs/{id}/parts`, `GET …/parts/catalogue?q=`, `POST …/parts/requests` (`client_temp_id`), `POST …/parts/reserve`; `POST /api/garage/parts/requests/{id}/reserve\|order\|cancel\|issue\|used\|return`; `POST /api/garage/jobs/{id}/removed-parts`, `PATCH /api/garage/removed-parts/{id}` |
+| The parts counter | `GET /api/garage/parts/queue?org=&status=&urgency=&q=`, `GET /api/garage/parts/scan?job=&code=&qty=`, `POST /api/garage/parts/issue` (`override` + `override_reason`, `garage.job.assign`) |
+| Quality control | `GET\|POST /api/garage/jobs/{id}/qc`, `PATCH /api/garage/qc/{id} {items}`, `POST /api/garage/qc/{id}/decide {result, reason, work_orders}` |
+| Road tests | `POST /api/garage/jobs/{id}/road-tests` (`client_temp_id`), `PATCH /api/garage/road-tests/{id}` |
+| Final review and ready | `GET /api/garage/jobs/{id}/final-review?customer_items_present=1`, `POST …/ready` |
+| Invoice (Billing), release, handover | `GET\|POST /api/garage/jobs/{id}/invoice`, `GET …/release`, `POST …/handover` (signature as a PNG data URI), `GET …/delivery-note` (PDF) |
+| History | `GET /api/garage/vehicles/{id}/history`, `GET /api/garage/customers/{id}/history` |
+| Reports | `GET /api/garage/reports`, `GET /api/garage/reports/{key}?org=&from=&to=&vehicle_id=&customer_id=` (`&format=csv` for `garage.report.export`) |
+| Overview revenue | `GET /api/garage/dashboard` → `revenue` (money readers; `null` otherwise) |
+
+A report's CSV and a delivery note are saved through the download manager
+(`transfers:download` with `garageFile: {kind: 'report', report, query}` or
+`{kind: 'delivery-note', job}`); the main process builds the address, so the
+renderer never names a path. Payment is Billing's: the job card reads it back
+and opens Invoices (`/billing?invoice=ID`) for whoever has Billing.
+
 Sending an estimate answers the customer's link and a message once; the
 desktop shows them and hands them to the person's mail or WhatsApp — the
 server sends nothing itself. Timer events carry no device time: the entry is
@@ -249,7 +270,7 @@ Refusals carry what a screen acts on in `errors` (`missing`, `field`,
 `existing`, `code: open_job | version_conflict`, `server`, `added`), and the
 screens show the server's sentence as written. READ_CACHE covers options,
 board, dashboard, jobs (and every tab under a job), vehicles, customers,
-estimate options, inspections, bays, the calendar, technicians and my work (`CACHE_PREFIXES` in
+estimate options, inspections, bays, the calendar, technicians, my work, the parts queue and options, and the reports (`CACHE_PREFIXES` in
 `electron/main/index.ts`); nothing is written offline. The server's garage
 notifications link to `/garage?job=ID`, which opens the job card here.
 

@@ -2,12 +2,15 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useCanOpen } from '../../core/access';
 import { openWebLink } from '../../core/tab-context';
+import { dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, Cell, Field, Grid, input, PageHead, Panel, row, Sheet, THead } from '../hr/parts';
 import { amount, companiesWhere, createCustomer, fetchCustomer, fetchCustomers, K, OFFLINE_WRITE, refusalOf, useMayAddCustomer, vehicleLine, type Job, type Options, type Refusal } from './api';
+import { fetchCustomerHistory, KB3 } from './api-b3';
+import { ServiceHistory } from './History';
 import { OfflineBanner, StatusPill, when } from './parts';
 
 /**
@@ -86,6 +89,8 @@ export default function Customers({ org, options, online, open, onOpen, onBack, 
 function CustomerDetail({ id, options, onBack, onJob, onVehicle }: { id: number; options: Options; onBack: () => void; onJob: (id: number) => void; onVehicle: (id: number) => void }) {
   const q = useQuery({ queryKey: K.customer(id), queryFn: ({ signal }) => fetchCustomer(id, signal), refetchOnMount: 'always' });
   const crm = useCanOpen('crm');
+  // Stage B3's history across the customer's vehicles; an older server answers 404 and the plain list stands.
+  const hist = useQuery({ queryKey: KB3.customerHistory(id), queryFn: ({ signal }) => fetchCustomerHistory(id, signal), retry: false });
   if (q.isLoading) return <Spinner />;
   const back = (
     <button type="button" onClick={onBack} className="flex items-center gap-1 self-start text-[12.5px] font-semibold text-ink-2 hover:text-ink">
@@ -150,8 +155,24 @@ function CustomerDetail({ id, options, onBack, onJob, onVehicle }: { id: number;
           </Panel>
         ) : null}
         <JobList title="Open jobs" jobs={open_jobs} options={options} onJob={onJob} empty="No job open." />
-        <JobList title="Service history" jobs={history} options={options} onJob={onJob} empty="No completed job yet." />
+        {hist.data ? null : <JobList title="Service history" jobs={history} options={options} onJob={onJob} empty="No completed job yet." />}
       </div>
+      {hist.data ? (
+        <div className="flex flex-col gap-2">
+          <h2 className="m-0 text-[14px] font-bold text-ink">Service history</h2>
+          {hist.data.vehicles.length > 1 ? (
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12.5px] text-ink-2">
+              {hist.data.vehicles.map((x) => (
+                <button key={x.vehicle.id} type="button" className="hover:underline" onClick={() => onVehicle(x.vehicle.id)}>
+                  <b className="text-ink">{x.vehicle.vehicle_number}</b> · {x.jobs} {x.jobs === 1 ? 'job' : 'jobs'}
+                  {x.last_service ? ` · last ${dateLabel(x.last_service)}` : ''}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <ServiceHistory rows={hist.data.jobs} totals={hist.data.totals} unit={options.companies.find((co) => co.id === (history[0] ?? open_jobs[0])?.org_id)?.distance_unit ?? 'km'} options={options} onJob={onJob} showVehicle empty="No completed job yet." />
+        </div>
+      ) : null}
     </div>
   );
 }
