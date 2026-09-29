@@ -5,6 +5,108 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-29 — 0.2.56: PDF Studio — the viewer
+
+PDFs now open inside WorkSuite, in **PDF Studio** (WorkSuite PDF Studio SRS,
+stage D1): from Files, from Mail, from this computer, or handed over by the
+operating system — each in a tab of its own. This first stage **views**:
+annotation, page tools, saving back to Drive, autosave and offline editing
+come with the next stage, and the app says so where their buttons will be.
+
+**Added**
+
+- **Opening** (§5). A PDF in Files opens in PDF Studio instead of the
+  browser; a tab already showing it comes to the front. A PDF attached to an
+  email opens for **preview only** (the original stays as it arrived; other
+  attachments still download and open). **Open a PDF…** (Ctrl/⌘ O) and
+  dropping PDFs on PDF Studio open files from this computer, read where they
+  are and never uploaded. A PDF the system hands to WorkSuite ("Open with…"
+  and choosing WorkSuite) opens in a new tab. The web's `/pdf?file=` links
+  open here too. Opening a Drive file asks WorkSuite first; nothing of the
+  file is fetched before it says yes (PDF-OPEN-010).
+- **The viewer** (§6). PDFium draws the pages — the engine inside Chrome —
+  in a separate process for each document. Only the pages on screen exist,
+  each drawn small first and sharp once scrolling stops, in tiles at high
+  zoom; a page scrolled past stops being drawn. A 2,000-page PDF opens
+  without drawing it. Single page, continuous, two pages, two pages
+  continuous; zoom 25 %–6400 %, fit width, fit page, actual size, Ctrl/⌘ +
+  wheel; full screen, presentation (one page on black, arrow keys) and read
+  mode. Page thumbnails, bookmarks (the outline), links inside the document.
+- **Find** (Ctrl/⌘ F; Ctrl/⌘ Shift F adds comments and bookmarks): match
+  case, whole word, regular expression; results stream in as pages are
+  searched, each with its page and the words around it, and are highlighted
+  on the page.
+- **Password-protected PDFs** (PDF-OPEN-008): "Enter PDF password", with
+  "Remember for this session" — kept in memory until you sign out or quit,
+  never saved, never sent.
+- **Print** (Ctrl/⌘ P, §14.4): all pages, this page or a range; fit or
+  actual size; with or without comments and form fields; standard or high
+  quality; printer, copies, orientation and two-sided in the system dialog.
+  Up to 500 pages a job.
+- **Properties, versions, activity**: the document's facts, its own security
+  settings and what was found in it; for a Drive file its versions and
+  activity, and who is editing it if someone is.
+- **Download** a Drive PDF or an attachment through the download manager.
+- **PDF Diagnostics** (Help → Diagnostics → PDF Diagnostics, or from PDF
+  Studio): the engine, its process, drawing, fonts, temporary storage,
+  WorkSuite's PDF service, the local database, printing; OCR and conversion
+  said to be later.
+- The keyboard shortcuts of §4.3 (Open, Save, Print, Find, Zoom, H for the
+  hand, V for select) go through WorkSuite's shortcut registry: Settings lists
+  them and changes them.
+
+**Safe by default** (§12.5)
+
+- Scripts in PDFs never run: the engine has none, and nothing else would run
+  them. Actions that start a program or open another file are never followed.
+  A web link asks first ("Open this link from the PDF?"); only https and mail
+  links leave the app. Embedded files are listed, never opened. A banner says
+  what was found and blocked; Properties counts it.
+- The engine runs in its own process per document, inside WebAssembly: a
+  malformed PDF can crash only that process. The tab then says so and offers
+  **Retry**; the rest of WorkSuite carries on. A document past its memory
+  ceiling (1 GB) or an engine that stops answering is ended the same way.
+- Drive files and attachments are kept while open as sealed working copies
+  (AES-256-GCM, key in memory only) in WorkSuite's own folder, removed when
+  the tab closes and at start-up; page thumbnails are cached sealed, and all
+  of it is removed with WorkSuite's data at sign-out or a remote wipe.
+- Passwords, paths, file names and document text are never logged, audited
+  or reported. Opening and printing are audited with the file's id, version
+  and page count. A failure is logged with the file's format, size and page
+  count and the engine's error — that is what a diagnostic report carries.
+
+**Where it bites**
+
+- **Read only.** Annotation, page organising, saving as a Drive version,
+  autosave, crash recovery, offline editing and edit locks arrive with the
+  next stage. Save (Ctrl/⌘ S) says so.
+- **Text cannot be selected or copied yet**; the Select tool follows links.
+- **Chat attachments** still open the way they did.
+- A Drive PDF needs WorkSuite to open; files kept offline for PDF Studio come
+  with offline editing.
+- Printing sends pages as images at 150 dpi (300 at high quality), up to 500
+  pages at a time; a printer's own PDF handling is not used.
+- **WorkSuite is not registered as a PDF handler** (the desktop claims no
+  common file types, FR-DL-06): choose it in "Open with…". Dropping a PDF on
+  the Dock icon works once macOS knows WorkSuite opens PDFs, which needs that
+  registration.
+- The engine in its own process, a 2,000-page file, a crashed worker and a
+  print job laid out from memory were tried for real on Linux (under Xvfb,
+  `tests/os/pdf/check.mjs`); the "PDF engine" workflow runs the same on
+  Windows and macOS and has not run there yet. The system print dialog and a
+  real printer have not been tried.
+
+**For administrators**
+
+- New dependency `@embedpdf/pdfium` 2.15.1 (MIT; PDFium itself BSD-3-Clause
+  and Apache-2.0), a WebAssembly build of PDFium. MuPDF was not used: it is
+  AGPL or commercial.
+- The organisation's PDF Studio policies (print, copy, export, external
+  links, local files, largest PDF) are checked everywhere they apply, but
+  read their defaults until the server's PDF Studio service sends its own
+  (all on, links ask first, 2 GB). The desktop's own `downloads` policy and
+  `desktop.downloads` permission already govern Download.
+
 ## 2026-09-29 — 0.2.54: Hotel PMS at the front desk
 
 Hotel PMS opens in its own tab for whoever has the app (and `pms.access`),

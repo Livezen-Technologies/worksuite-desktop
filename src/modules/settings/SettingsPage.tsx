@@ -178,6 +178,15 @@ const SHORTCUT_LABELS: Record<string, string> = {
   'switch-org': 'Switch organization',
   lock: 'Lock WorkSuite',
   help: 'Help & Diagnostics',
+  'pdf-open': 'PDF Studio: open a PDF',
+  'pdf-save': 'PDF Studio: save',
+  'pdf-print': 'PDF Studio: print',
+  'pdf-find': 'PDF Studio: find',
+  'pdf-find-advanced': 'PDF Studio: search comments and bookmarks too',
+  'pdf-zoom-in': 'PDF Studio: zoom in',
+  'pdf-zoom-out': 'PDF Studio: zoom out',
+  'pdf-hand': 'PDF Studio: hand tool',
+  'pdf-select': 'PDF Studio: select tool',
 };
 
 function Shortcuts({ prefs }: { prefs: Preferences }) {

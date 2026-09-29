@@ -17,6 +17,7 @@ import { Home } from './Home';
 import { lockPassword } from './locks';
 import type { MenuItem } from './Menu';
 import { Preview } from './Preview';
+import { openPdf } from '../pdf/open';
 import { Rail, type Place } from './Rail';
 import { CodeEditor } from './CodeEditor';
 import { ImageEditor } from './ImageEditor';
@@ -230,7 +231,8 @@ export default function FilesPage(_props: ModuleProps) {
       }
       if (way === 'code') return setEditor({ kind: 'code', file: f });
       void apiPost(`/api/drive/opened/${f.id}`, { action: 'opened' }).catch(() => undefined);
-      if (way === 'pdf') void call('app:openInBrowser', { path: `/pdf?file=${f.id}&mode=read` });
+      // PDFs open in PDF Studio, a tab each (the preview workspace's hand-off for application/pdf).
+      if (way === 'pdf') openPdf({ kind: 'drive', fileId: f.id }, f.name);
       else if (way === 'office') d.office(f);
       else if (way === 'archive') setDialog({ kind: 'archive', file: f });
       else if (can(f.access, 'download')) d.download([f], true);

@@ -75,7 +75,7 @@ electron/            main process (Node, no web content)
   services/          auth, device, bootstrap, policy, realtime, notifications, offline cache/queue/drafts,
                      transfers, lock, diagnostics, audit, supervisor, SQLite + column encryption, secure storage
   updater/           signed-manifest updater (Ed25519 + SHA-256 + OS code signature)
-  windows/ tray/ workers/
+  windows/ tray/ workers/  (workers: hash-worker, pdf-worker — PDF Studio's engine, one per open document)
 shared/              code both sides use: IPC contract (zod), app catalogue + visibility gates,
                      module manifest contract, deep-link grammar, redaction, versions, release manifest
 src/                 React 19 renderer (sandboxed): shell, onboarding, overlays, modules
@@ -86,6 +86,11 @@ build/               electron-builder config, entitlements, app icon
 More: [architecture](docs/ARCHITECTURE.md) · [security](docs/SECURITY.md) ·
 [backend contract](docs/BACKEND.md) · [releasing](docs/RELEASING.md) ·
 [requirement traceability](docs/TRACEABILITY.md) · [changelog](CHANGELOG.md)
+
+**PDF Studio** (`src/modules/pdf`, `electron/services/pdf`) opens PDFs from Files, Mail, this computer and the
+OS in tabs of their own, drawn by PDFium (WebAssembly) in a worker process per document. This version views,
+searches and prints; editing, saving and offline work come next. Its engine can be checked on a real system with
+`npm run build && node tests/os/pdf/check.mjs` (Linux: under `xvfb-run`).
 
 ## What is deliberately not here yet
 
