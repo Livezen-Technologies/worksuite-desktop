@@ -55,6 +55,8 @@ import { DriveSync } from '../services/sync/engine';
 import { ServiceSupervisor } from '../services/supervisor';
 import { TransferManager, type DownloadSink } from '../services/transfers';
 import { ElearningOffline } from '../services/elearning-offline';
+import { EventDesk } from '../services/event-desk';
+import { EventDeskPrint } from '../services/event-desk-print';
 import { OfficeEditorHost } from '../services/office-editor';
 import { OfficeExternal } from '../services/office-external';
 import { Vault } from '../services/vault';
@@ -339,6 +341,28 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         : { ok: false, reason: 'Your organization does not allow WorkSuite data to be kept offline on this computer.' },
     changed: () => broadcast('elearning:offlineChanged'),
   });
+  // WorkSuite Events' desk: this computer as a check-in device at an event, its key, offline copy and queue.
+  const eventDesk = new EventDesk({
+    db,
+    vault: getVault,
+    http,
+    secrets,
+    origin: () => auth.getServer()?.origin ?? null,
+    user: () => (sessionCtl.isReady() ? sessionCtl.userId() : null),
+    deviceRef: () => device.current()?.id ?? null,
+    platform: platformName() as 'windows' | 'macos' | 'linux',
+    appVersion: app.getVersion(),
+    caps: () => {
+      const c = sessionCtl.capabilities();
+      return { offlineCache: c.offlineCache, offlineQueue: c.offlineQueue };
+    },
+    notify: (n) => notifications.notify({ ...n, module: 'events', category: 'events', sender: 'Events', critical: false }),
+    changed: (eventId) => {
+      broadcast('eventdesk:changed', { event_id: eventId });
+      emitStatus();
+    },
+  });
+  const eventDeskPrint = new EventDeskPrint({ config: db, http, origin: () => auth.getServer()?.origin ?? null });
 
   // Drive sync (Phase 2): chosen Drive folders kept in step with folders here.
   const syncAllowed = (): { ok: boolean; reason: string | null } => {
@@ -570,7 +594,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     return {
       network: networkStatus(apiReachable, realtime.getState(), realtimeDownSince),
       realtime: realtime.getState(),
-      pendingChanges: uid ? queue.pendingCount(uid) + salonSync.pending() : 0,
+      pendingChanges: uid ? queue.pendingCount(uid) + salonSync.pending() + eventDesk.pending() : 0,
       unread: counts,
       notificationsPausedUntil: notifications.pausedUntilIso(),
       services,
@@ -965,12 +989,13 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     device.extras = () => {
       const c = transfers.activeCounts();
       const s = sync.health();
-      return { pendingUp: queue.pendingCount(uid) + salonSync.pending() + c.uploads + s.pendingUp, pendingDown: c.downloads + s.pendingDown, lastError: s.lastError };
+      return { pendingUp: queue.pendingCount(uid) + salonSync.pending() + eventDesk.pending() + c.uploads + s.pendingUp, pendingDown: c.downloads + s.pendingDown, lastError: s.lastError };
     };
     sync.start(uid);
     transfers.recover();
     void queue.replay(uid);
     salonSync.start();
+    eventDesk.start();
     // Courses kept offline: the ones whose learning ended, or whose licence ran out, go.
     void elearning.validate().catch((e) => log.warn('offline courses not checked', { error: String(e) }));
     void audit.flush();
@@ -1008,6 +1033,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     transfers.stopAll();
     sync.stop();
     salonSync.stop();
+    eventDesk.stop();
     if (attendanceTimer) clearInterval(attendanceTimer);
     attendanceTimer = null;
     stopPresence();
@@ -1028,6 +1054,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       notifications.clearUser(uid);
       // The salon day's copy is cache; what the desk made waits for its maker (salon-sync.ts).
       salonSync.signedOut(uid);
+      // So is an event desk's offline copy; the scans made offline wait for the person who made them (event-desk.ts).
+      eventDesk.signedOut(uid);
       db.run('DELETE FROM tab_sessions WHERE user_id = ?', uid);
       if (scope !== 'tokens') {
         queue.wipeUser(uid, includeDrafts);
@@ -1045,6 +1073,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         salonDesk.forgetAll();
         salonPrint.forgetAll();
         salonSync.forgetAll();
+        // Every event this computer was a check-in device at: the keys, the copies, the queues, the badge printer.
+        eventDesk.forgetAll();
+        eventDeskPrint.forgetAll();
       }
       log.info('local data removed', { scope });
     },
@@ -1126,6 +1157,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     device.poke();
     sync.kick('reconnected');
     void salonSync.sync();
+    void eventDesk.sync();
     void elearning.validate().catch(() => undefined);
     broadcast('realtime:resync');
   }
@@ -1241,6 +1273,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     salonPrint,
     salonSync,
     elearning,
+    eventDesk,
+    eventDeskPrint,
     settings,
     http,
     auth,
@@ -1324,6 +1358,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     calls.stop();
     transfers.stopAll();
     sync.stop();
+    // What scans changed in an event desk's copy is written back before the database closes.
+    eventDesk.stop();
     supervisor.stopAll();
     realtime.stop();
     updater.stop();
@@ -1343,6 +1379,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     const uid = sessionCtl.userId();
     if (uid) void queue.replay(uid);
     void salonSync.sync();
+    void eventDesk.sync();
   });
   screen.on('display-removed', () => windows.refit());
   screen.on('display-metrics-changed', () => windows.refit());

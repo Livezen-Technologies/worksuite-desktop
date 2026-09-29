@@ -5,6 +5,44 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-29 — 0.2.57: WorkSuite Events — the Event Desk
+
+This computer as a check-in device at an event (Events SRS §15.2, §9.4,
+§9.8–9.9), over the server's `/api/events/v1` (stage B1's gates, devices and
+offline routes).
+
+**Added**
+
+- **Registering this computer at an event's gate** as a `desktop` device
+  (its sync device id). The server hands over the device key once; it is
+  kept in the OS credential store and never reaches a page, a log or the
+  diagnostic bundle. A new key, and forgetting the event on this computer
+  (never with scans still unsent, unless the person says so).
+- **Scanning through the main process**: to the server with the device, the
+  gate and a fresh scan id; when WorkSuite does not answer within six
+  seconds, from the desk's **offline copy** of the gate's tickets
+  (`checkin/bootstrap`, the ticket hashes under the device key) with the
+  server's own ScanRules — the same order of checks, the same sentences.
+  A check-in, a check-out, a refused attempt and a walk-in made offline wait
+  in a **queue** with the device's own sequence and go up on reconnect
+  (`checkin/sync`), recorded once however often they are sent; the server's
+  answer to each (recorded, possible duplicate, a cancelled ticket let in, a
+  walk-in it could not confirm) stays beside it. The copy is kept current
+  with `checkin/changes` every fifteen seconds, the device calls in every
+  minute with its queue size, and a revoked device wipes its key, copy and
+  queue at once.
+- **Badge printing** from the server's badge sheet on the desk's own printer
+  — silently when set so, at the template's size or the printer's label —
+  each job reported printed or failed.
+
+**Where it bites**
+
+- Offline check-in needs a computer the desktop policy lets keep data
+  offline and queue changes (a trusted one), and the event's offline
+  check-in switched on.
+
+---
+
 ## 2026-09-29 — 0.2.55: Office documents in WorkSuite tabs
 
 Word, Excel and PowerPoint files from Drive open in a WorkSuite tab with the

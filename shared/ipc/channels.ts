@@ -148,6 +148,21 @@ export const INVOKE_CHANNELS = [
   'elearning:offlineRemove',
   'elearning:offlineValidate',
 
+  'eventdesk:list',
+  'eventdesk:status',
+  'eventdesk:register',
+  'eventdesk:rotateKey',
+  'eventdesk:forget',
+  'eventdesk:sync',
+  'eventdesk:scan',
+  'eventdesk:search',
+  'eventdesk:queue',
+  'eventdesk:queueResolve',
+  'eventdesk:walkIn',
+  'eventdesk:printSettings',
+  'eventdesk:printSettingsSet',
+  'eventdesk:printJobs',
+
   // Office documents (shared/office.ts): the editor's view in a tab, and copies opened in other apps.
   'office:open',
   'office:place',
@@ -232,6 +247,7 @@ export const EVENT_CHANNELS = [
   'ai:open',
   'salon:changed',
   'elearning:offlineChanged',
+  'eventdesk:changed',
   'office:event',
   'office:localChanged',
 ] as const;

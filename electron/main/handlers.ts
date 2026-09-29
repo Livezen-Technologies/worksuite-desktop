@@ -704,6 +704,28 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('salon:printPage', async (input, c) => ctx.salonPrint.page(input.html, input.paper, await installed(c.sender)));
   router.handle('salon:openDrawer', async (_i, c) => ctx.salonPrint.drawer(await installed(c.sender)));
 
+  // ── WorkSuite Events' desk ─────────────────────────────────────────────
+  // Registering at an event and a new key are done here, so the key never
+  // reaches a renderer (event-desk.ts); scans are matched against the offline
+  // copy here too. Badges print from the server's own page (event-desk-print.ts).
+  router.handle('eventdesk:list', () => ctx.eventDesk.registrations());
+  router.handle('eventdesk:status', (input) => ctx.eventDesk.status(input.event_id));
+  router.handle('eventdesk:register', (input) => ctx.eventDesk.register(input));
+  router.handle('eventdesk:rotateKey', (input) => ctx.eventDesk.rotateKey(input.event_id));
+  router.handle('eventdesk:forget', (input) => ctx.eventDesk.forget(input.event_id, input.discard === true));
+  router.handle('eventdesk:sync', async (input) => {
+    await ctx.eventDesk.sync(input.event_id);
+    return ctx.eventDesk.status(input.event_id);
+  });
+  router.handle('eventdesk:scan', (input) => ctx.eventDesk.scan(input));
+  router.handle('eventdesk:search', (input) => ctx.eventDesk.search(input.event_id, input.q, input.limit ?? 20));
+  router.handle('eventdesk:queue', (input) => ctx.eventDesk.queue(input.event_id));
+  router.handle('eventdesk:queueResolve', (input) => ctx.eventDesk.resolveItem(input.event_id, input.client_uuid, input.action));
+  router.handle('eventdesk:walkIn', (input) => ctx.eventDesk.walkIn(input));
+  router.handle('eventdesk:printSettings', () => ctx.eventDeskPrint.settings());
+  router.handle('eventdesk:printSettingsSet', async (input, c) => ctx.eventDeskPrint.update(input, await installed(c.sender)));
+  router.handle('eventdesk:printJobs', async (input, c) => ctx.eventDeskPrint.printJobs(input.event_id, input.job_ids, await installed(c.sender)));
+
   // Offline working (salon-sync.ts): the day's copy, and the outbox.
   router.handle('salon:syncStatus', () => ctx.salonSync.status());
   router.handle('salon:syncNow', () => ctx.salonSync.sync());

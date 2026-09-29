@@ -15,6 +15,24 @@
 import { z } from 'zod';
 import { garageDocSchema } from '../garage-docs';
 import { ELEARNING_MEDIA_TOKEN, elearningCourseRef, elearningDownloadInput, type OfflineCourse, type OfflineValidation } from '../elearning-offline';
+import {
+  deskEventRef,
+  deskForgetInput,
+  deskPrintJobsInput,
+  deskPrintSettingsPatch,
+  deskQueueAction,
+  deskRegisterInput,
+  deskScanInput,
+  deskSearchInput,
+  deskWalkInInput,
+  type DeskPrintOutcome,
+  type DeskPrintSettings,
+  type DeskQueueItem,
+  type DeskRegistration,
+  type DeskScanOutcome,
+  type DeskSearchHit,
+  type DeskStatus,
+} from '../event-desk';
 import { OFFICE_EDITOR_EVENTS, OFFICE_EXPORT_TOKEN, officeCommandSchema, type ExternalApp, type OfficeLocalCopy } from '../office';
 import type { InvokeChannel } from './channels';
 import type {
@@ -591,6 +609,27 @@ export const contract = {
   'elearning:offlineValidate': ch(none, { session: true, rate: 1 }),
 
   /*
+   * WorkSuite Events' desk (shared/event-desk.ts, electron/services/event-desk.ts): this computer as a check-in
+   * device. The key the server hands over when it is registered stays in the main process, which also matches
+   * scans against the offline copy and keeps what was done offline for the server.
+   */
+  'eventdesk:list': ch(none, { session: true }),
+  'eventdesk:status': ch(deskEventRef, { session: true, rate: 20 }),
+  'eventdesk:register': ch(deskRegisterInput, { session: true, rate: 2, sensitive: true }),
+  'eventdesk:rotateKey': ch(deskEventRef, { session: true, rate: 1, sensitive: true }),
+  'eventdesk:forget': ch(deskForgetInput, { session: true, rate: 2, sensitive: true }),
+  'eventdesk:sync': ch(deskEventRef, { session: true, rate: 2 }),
+  'eventdesk:scan': ch(deskScanInput, { session: true, rate: 20 }),
+  'eventdesk:search': ch(deskSearchInput, { session: true, rate: 30 }),
+  'eventdesk:queue': ch(deskEventRef, { session: true, rate: 10 }),
+  'eventdesk:queueResolve': ch(deskQueueAction, { session: true, rate: 10 }),
+  'eventdesk:walkIn': ch(deskWalkInInput, { session: true, rate: 5 }),
+  // Badges go to the desk's own printer, silently when it says so; the page is the server's (event-desk-print.ts).
+  'eventdesk:printSettings': ch(none, { session: true }),
+  'eventdesk:printSettingsSet': ch(deskPrintSettingsPatch, { session: true, rate: 5 }),
+  'eventdesk:printJobs': ch(deskPrintJobsInput, { session: true, rate: 5 }),
+
+  /*
    * Office documents (shared/office.ts, electron/services/office-editor.ts): a tab lays the editor's
    * isolated view over its placeholder and talks to it; the session itself is the tab's, over the API.
    * The configuration is the server's signed one, passed through untouched; the main process loads an
@@ -887,6 +926,20 @@ export interface Outputs {
   'elearning:offlineDownload': OfflineCourse;
   'elearning:offlineRemove': void;
   'elearning:offlineValidate': OfflineValidation;
+  'eventdesk:list': DeskRegistration[];
+  'eventdesk:status': DeskStatus;
+  'eventdesk:register': { registration: DeskRegistration; message: string; reregistered: boolean };
+  'eventdesk:rotateKey': { message: string };
+  'eventdesk:forget': number;
+  'eventdesk:sync': DeskStatus;
+  'eventdesk:scan': DeskScanOutcome;
+  'eventdesk:search': DeskSearchHit[];
+  'eventdesk:queue': DeskQueueItem[];
+  'eventdesk:queueResolve': DeskQueueItem[];
+  'eventdesk:walkIn': { provisional_number: string; message: string };
+  'eventdesk:printSettings': DeskPrintSettings;
+  'eventdesk:printSettingsSet': DeskPrintSettings;
+  'eventdesk:printJobs': DeskPrintOutcome;
   'office:open': { viewId: string };
   'office:place': boolean;
   'office:command': boolean;

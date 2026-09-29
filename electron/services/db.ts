@@ -200,6 +200,36 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (user_id, course_id)
   );
   `,
+  // 5 — WorkSuite Events' desk: the device's offline copy of an event (its
+  // gate's tickets, as HMACs under the device key), per server, event and
+  // person, and the scans made while WorkSuite was out of reach, in the
+  // device's own sequence (electron/services/event-desk.ts).
+  `
+  CREATE TABLE event_desk_copy (
+    origin TEXT NOT NULL,
+    event_id INTEGER NOT NULL,
+    user_id TEXT NOT NULL,
+    device_id INTEGER NOT NULL,
+    payload TEXT NOT NULL,            -- enc: the event, gate, rules, ticket types and registrations
+    refreshed_at TEXT NOT NULL,
+    pulled_at TEXT NOT NULL,
+    PRIMARY KEY (origin, event_id, user_id)
+  );
+
+  CREATE TABLE event_desk_queue (
+    client_uuid TEXT PRIMARY KEY,
+    origin TEXT NOT NULL,
+    event_id INTEGER NOT NULL,
+    user_id TEXT NOT NULL,
+    device_id INTEGER NOT NULL,
+    seq INTEGER NOT NULL,
+    state TEXT NOT NULL,
+    item TEXT NOT NULL,               -- enc: the item as sent, what the desk showed, what the server said
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX event_desk_queue_event ON event_desk_queue(origin, event_id, user_id, seq);
+  `,
 ];
 
 export type Row = Record<string, unknown>;

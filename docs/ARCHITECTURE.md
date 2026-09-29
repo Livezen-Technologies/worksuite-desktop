@@ -188,6 +188,22 @@ or a queued change is on disk before the user is told it was saved.
   the OS print dialog ship); printed cards, receipts and reports are laid out
   in `print.ts` from the server's data and printed with no script and no
   network.
+- The WorkSuite Events desk (`electron/services/event-desk.ts`, rules in
+  `shared/event-desk.ts`): this computer as a check-in device at an event.
+  Registering it, its key, its offline copy of the gate's tickets and the
+  queue of what it did offline are the main process's; a scan goes to the
+  server with the device and gate and a fresh `client_uuid`, and when the
+  server does not answer (within six seconds) the desk answers from its copy
+  with the server's own `ScanRules`, ported line for line, and keeps the
+  check-in, check-out, refused attempt or walk-in in the queue with the
+  device's sequence. Every fifteen seconds while signed in it sends what
+  waits (`checkin/sync`, idempotent), catches up (`checkin/changes`) and,
+  every minute, calls in (`devices/{id}/heartbeat`); the server's answer to
+  each queued item (recorded, a possible duplicate, a cancelled ticket let in,
+  a walk-in it could not confirm) stays beside it for the desk. The copy is
+  held decrypted in memory while in use and written back two seconds after a
+  scan changes it; the queue is on disk before the desk answers. Badges print
+  from the server's sheet on the desk's printer (`event-desk-print.ts`).
 - Tabs stay mounted while recent (instant switching) and are suspended after
   the configured idle time; the tab set is saved and restored only for apps
   the user can still open.

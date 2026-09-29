@@ -214,6 +214,41 @@ Being controlled is the main process's business, never a page's:
 - Refresh tokens rotate on use; refresh is single-flight so two refreshes never
   revoke each other.
 
+## WorkSuite Events desk (Events SRS §9.4, §9.8, EV-CHK-031..033, EV-OFF-002/003)
+
+A computer registered as a check-in device at an event holds a credential
+of its own:
+
+- **The device key** — 256 bits, handed over once when the computer is
+  registered at an event (`POST events/{id}/devices`, as a `desktop` device
+  named by its sync device id) or given a new key. The main process makes
+  both calls and keeps the key in the OS credential store (`event-desk:<server>`),
+  per event; no renderer, IPC answer, log or diagnostic bundle carries it. The
+  API proxy refuses registering a device, a new key, the heartbeat, the
+  offline copy and its upload to pages (`electron/services/api-proxy.ts`).
+- **The offline copy** — only the gate's tickets, as `HMAC-SHA256(QR text,
+  device key)`, with name, number, company, ticket type, status, whether money
+  is owed and presence; no email, phone, address or amount (the server's
+  choice). It is AES-256-GCM in the profile database (`event_desk_copy`), per
+  server, event and person, and only where the desktop policy lets the
+  computer keep data offline and queue changes (a trusted computer). A scan is
+  matched against it in the main process; the key never leaves it. A copy
+  stolen from the database is useless without the key, and matches nothing on
+  another device.
+- **The scan queue** — what the desk did offline, in the device's own sequence
+  (`event_desk_queue`, encrypted: it holds the scanned QR text). It belongs to
+  the person who scanned; another person at the desk sees only that it is
+  there.
+- **Revocation** — when the server says the device was revoked (`device_revoked`,
+  `wipe: true`, on any call or the heartbeat), the key, the copy and the queue
+  for that event are removed at once, whoever is signed in, and the desk says
+  so (EV-CHK-033). A plain sign-out removes the person's copy (cache) and keeps
+  their unsent scans; a remote wipe or "remove WorkSuite's data" removes every
+  event desk, key, copy, queue and the badge printer settings.
+- **Badges** print from the server's own badge page, fetched by the main
+  process (a page cannot hand it something else to print without a dialog),
+  in a hidden window with no preload, no script and no network.
+
 ## Updates (FR-UPD-01, WF-25)
 
 1. Manifest signature: Ed25519 over canonical JSON, public key pinned in
