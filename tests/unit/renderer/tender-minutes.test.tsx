@@ -16,7 +16,7 @@ vi.mock('../../../src/core/app-state', async () => {
 import { apiGet, apiPost, apiPut } from '../../../src/core/api';
 import { navigate } from '../../../src/core/tabs';
 import { MinutesSheet, MinutesView } from '../../../src/modules/tenders/Minutes';
-import { parseMinutes, sourceOf, toFollowUp, toReminder, toTask, writeMinutes, type Context } from '../../../src/modules/tenders/minutes';
+import { parseMinutes, sourceOf, toFollowUp, toReminder, toTask, writeMinutes, type Context } from '../../../src/modules/tenders/minutesText';
 import type { Meeting } from '../../../src/modules/tenders/work';
 
 const meeting = (over: Partial<Meeting> = {}): Meeting => ({

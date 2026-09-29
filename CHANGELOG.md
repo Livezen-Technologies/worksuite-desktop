@@ -5,6 +5,18 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-29 — 0.2.52: Tenders — meeting minutes open on Mac and Windows
+
+**Fixed**
+
+- **A tender meeting's minutes** did not open in the Mac and Windows builds.
+  The screen (`Minutes.tsx`) and the code that reads and writes the minutes
+  text (`minutes.ts`) had names differing only in capitals, which Mac and
+  Windows treat as the same file, so the Meetings tab loaded the wrong one.
+  The text code is now `minutesText.ts`. Linux was not affected.
+
+---
+
 ## 2026-09-29 — 0.2.51: Garage on the desktop
 
 Garage & Service Center opens in its own tab, for whoever has the Garage app.
