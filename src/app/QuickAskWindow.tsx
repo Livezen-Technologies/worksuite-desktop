@@ -4,7 +4,9 @@ import { app } from '../core/app-state';
 import { call, isMac, on } from '../core/bridge';
 import { useStore } from '../core/store';
 import { Assist } from '../modules/ai/Assist';
+import { AskPanel } from '../modules/ai/AskPanel';
 import { shortcutLabel } from '../modules/ai/writer';
+import { cx } from '../components/ui';
 
 type Ctx = QuickAskContext & { shortcut: string | null };
 
@@ -17,6 +19,8 @@ export function QuickAskWindow() {
   const [ctx, setCtx] = useState<Ctx | null>(null);
   const [text, setText] = useState('');
   const [round, setRound] = useState(0);
+  // Ask the assistant about the selection, or have the writing assistant rework it.
+  const [mode, setMode] = useState<'ask' | 'write'>('ask');
   const org = useStore(app, (s) => s.bootstrap?.organizations.find((o) => o.id === s.organizationId)?.name ?? null);
   const language = useStore(app, (s) => s.prefs?.ai?.language ?? 'English');
 
@@ -41,7 +45,14 @@ export function QuickAskWindow() {
   }, []);
 
   const key = ctx?.shortcut ? shortcutLabel(ctx.shortcut, isMac) : null;
-  const handoff = (to: 'dock' | 'task' | 'search', t: string, result: string | null = null) => void call('quickask:handoff', { to, text: t.slice(0, 8000), result });
+  const handoff = (to: 'dock' | 'task' | 'search' | 'changes', t: string, result: string | null = null) => void call('quickask:handoff', { to, text: t.slice(0, 8000), result });
+  const insert = ctx?.canInsert ? { label: `Insert into ${ctx.app ?? 'the app'}`, run: (r: string) => void call('quickask:insert', { text: r }) } : undefined;
+  const tab = (m: 'ask' | 'write', label: string) => (
+    <button type="button" role="tab" aria-selected={mode === m} onClick={() => setMode(m)}
+      className={cx('rounded-[7px] px-2.5 py-1 text-[12px] font-semibold', mode === m ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink')}>
+      {label}
+    </button>
+  );
   return (
       <div className="flex h-full flex-col overflow-hidden border border-line bg-surface">
         <div className="drag flex h-11 shrink-0 items-center gap-2 border-b border-line px-4 text-[13px]">
@@ -55,13 +66,30 @@ export function QuickAskWindow() {
         </div>
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 scroll-thin">
           {ctx ? (
+            <div role="tablist" aria-label="What Quick Ask does" className="mb-3 flex w-fit gap-1 rounded-[9px] bg-subtle p-1">
+              {tab('ask', 'Ask')}
+              {tab('write', 'Rewrite or translate')}
+            </div>
+          ) : null}
+          {ctx && mode === 'ask' ? (
+            <AskPanel
+              key={`ask-${round}`}
+              surface="desktop.quick"
+              selection={ctx.text}
+              insert={insert}
+              onOpen={(q, r) => handoff('dock', q, r)}
+              reviewElsewhere={() => handoff('changes', '')}
+              autoFocus
+            />
+          ) : null}
+          {ctx && mode === 'write' ? (
             <Assist
               key={round}
               text={text}
               onText={setText}
               language={language}
               autoFocus={!ctx.text}
-              insert={ctx.canInsert ? { label: `Insert into ${ctx.app ?? 'the app'}`, run: (r) => void call('quickask:insert', { text: r }) } : undefined}
+              insert={insert}
               onOpen={(t, r) => handoff('dock', t, r)}
               onTask={(t) => handoff('task', t)}
               onSearch={(t) => handoff('search', t)}

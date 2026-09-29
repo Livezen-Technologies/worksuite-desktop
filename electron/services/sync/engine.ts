@@ -357,6 +357,24 @@ export class DriveSync {
     return p === home ? '~' : p.startsWith(home + sep) ? `~${p.slice(home.length)}` : p;
   }
 
+  /**
+   * The Drive id of the synced file at this place on this computer, or null
+   * (WS-AI-SRS-001 DSK-6): a file picked for the assistant that is already in
+   * the Drive is asked about by its id, with the Drive's own rules, and is
+   * never uploaded a second time. `path` is already a real path.
+   */
+  fileIdAt(path: string): number | null {
+    const uid = this.uid;
+    if (!uid) return null;
+    for (const f of this.store.folders(uid)) {
+      if (!isUnder(path, f.localPath) || path === f.localPath) continue;
+      const rel = path.slice(f.localPath.length).split(sep).filter(Boolean).join('/');
+      const id = this.store.fileAt(f.id, rel);
+      if (id) return id;
+    }
+    return null;
+  }
+
   /** The place on this computer of a synced Drive item, or of a synced folder. */
   locate(what: { fileId?: number; folderId?: number; syncFolderId?: string }): { path: string; isFile: boolean } | null {
     const uid = this.uid;

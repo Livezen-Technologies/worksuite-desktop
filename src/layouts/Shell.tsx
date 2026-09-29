@@ -9,7 +9,7 @@ import { activateIndex, activeTab, closeTab, closeTabsForApps, detachTab, dockSi
 import { toast } from '../core/toasts';
 import { closeOverlay, minimiseChatDrawer, openChatDrawer, openOverlay, toggleDock, ui } from '../core/ui';
 import { allowedModules, moduleFor } from '../modules/registry';
-import { AiDock, askWorkSuite, makeTask, openAiDockWith } from '../app/overlays/AiDock';
+import { AiDock, askWorkSuite, makeTask, openAiChanges, openAiDockWith } from '../app/overlays/AiDock';
 import { Launcher } from '../app/overlays/Launcher';
 import { NetworkPopover, NotificationCenter, ProfileMenu, TransferCenter } from '../app/overlays/Popovers';
 import { OrgSwitcher } from '../app/overlays/OrgSwitcher';
@@ -163,7 +163,10 @@ export function Shell() {
       on<AiHandoff>('ai:open', (h) => {
         if (h.to === 'task') makeTask(h.text);
         else if (h.to === 'search') askWorkSuite(h.text);
-        else {
+        else if (h.to === 'changes') {
+          openAiChanges();
+          ui.set({ dock: 'ai' });
+        } else {
           openAiDockWith(h.text, h.result);
           ui.set({ dock: 'ai' });
         }

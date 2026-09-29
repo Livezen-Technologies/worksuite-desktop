@@ -100,6 +100,11 @@ const api = {
     close: call('quickask:close'),
     handoff: call('quickask:handoff'),
   },
+  ai: {
+    rules: call('ai:rules'),
+    confirm: call('ai:confirm'),
+    upload: call('ai:upload'),
+  },
   ring: {
     state: call('ring:state'),
     join: call('ring:join'),

@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-09-29 — 0.2.48: fixes from the desktop QA sheet — staying signed in, Forgot password, Home
+## 2026-09-29 — 0.2.49: fixes from the desktop QA sheet — staying signed in, Forgot password, Home
 
 From "Desktop App QA Task Sheet": each item names its test.
 
@@ -63,6 +63,76 @@ From "Desktop App QA Task Sheet": each item names its test.
 longer shows other people's projects (QA-023).
 
 ---
+
+## 2026-09-29 — 0.2.48: The AI assistant on the desktop — ask about your work, confirm what it proposes, files from this computer
+
+From the AI dock (Ctrl/Cmd+Shift+A), Quick Ask, and the tray. Needs a
+WorkSuite server with the assistant's desktop service
+(WS-AI-SRS-001 phase 6). Against an older server, Quick Ask and the writing
+assistant work as before.
+
+**Added**
+
+- **Ask the assistant in the dock.** The dock now has three tabs:
+  - **Ask**: the server's assistant.
+  - **Write**: the writing assistant, as before.
+  - **Changes**: what the assistant has proposed.
+
+  Ask reads only what you can open. It is given the record the tab beside it
+  shows (a task, a note, a file, a chat, a CRM lead, deal or account, a
+  contact), and you can untick **Use this tab** to leave it out. A tab showing
+  a list gives it nothing.
+- **Changes are cards, confirmed in the main window.** When the assistant
+  proposes a change (a task, an event, an email), it is a card with the
+  module's own preview. Only **Confirm** on the card, in the main window, makes
+  it happen:
+  - Confirming goes through the main process, which refuses any other window
+    and records it.
+  - The page's connection to the server refuses the confirm route outright.
+  - A change that reaches outside the company is marked, and each outside
+    recipient is named.
+  - **Undo** is offered for thirty seconds where the module can undo.
+- **Quick Ask can ask.** Over any app, **Ask** puts a question about the
+  selected text to the assistant. The selection goes with the first question
+  only. **Insert** puts the answer where you were, only when you click it. A
+  card that appears in Quick Ask cannot be confirmed there: **Review in
+  WorkSuite** opens it in the main window.
+- **Waiting changes are announced.** A change waiting for you, proposed here,
+  on another computer or on the web, arrives as a notification and shows in
+  the tray.
+  - The notification only opens the dock's Changes view. It has no buttons,
+    so nothing, and certainly nothing that reaches outside, is confirmed from
+    it.
+  - What was already waiting when you signed in is counted, not announced.
+- **A file from this computer.** The paperclip in Ask opens a file picker.
+  - A file in a synced Drive folder is asked about by its Drive id, and
+    nothing is uploaded.
+  - Any other file sends only its words, which the server keeps for a day and
+    for you alone (up to 10 MB: text, PDF, Word, Excel, PowerPoint and
+    OpenDocument).
+  - Only a file you pick is read. Nothing on this computer is scanned.
+
+**Changed**
+
+- **What this computer may do is the stricter of two policies:**
+  - the device policy, which has three new keys, `ai_quick_ask`, `ai_insert`
+    and `ai_local_files` (or `ai.quick_ask` and so on), each on unless
+    set to `false`;
+  - the company's AI policy on the server.
+
+  Quick Ask's shortcut, Insert and the paperclip each need both. A file is
+  refused in the main process when either policy says no, and again by the
+  server when the company's does.
+- **Quick Ask for the assistant alone.** Quick Ask is offered to people who
+  have the assistant (`ai.assistant.use`) as well as the writing assistant.
+
+**Known limits**
+
+- **The dock does not stream.** Answers arrive whole.
+- **No local-file context on older servers.** Against a server without the
+  assistant's desktop service, the paperclip is not offered.
+- **Choose files with the picker.** Dropping a file on the dock does nothing
+  yet.
 
 ## 2026-09-29 — 0.2.47: Tenders — the bell and push instead of Team Chat
 

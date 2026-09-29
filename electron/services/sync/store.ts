@@ -168,6 +168,12 @@ export class SyncStore {
     );
   }
 
+  /** The Drive id of the synced file at `rel` in this folder, or null — never a folder's. */
+  fileAt(folder: string, rel: string): number | null {
+    const r = this.db.get<{ remote_id: number; kind: string }>('SELECT remote_id, kind FROM sync_entries WHERE folder = ? AND key = ?', folder, this.key(rel));
+    return r && r.kind !== 'dir' ? Number(r.remote_id) : null;
+  }
+
   /** Forgets one path — and, for a folder, everything the index holds under it. */
   remove(folder: string, rel: string): void {
     const k = this.key(rel);

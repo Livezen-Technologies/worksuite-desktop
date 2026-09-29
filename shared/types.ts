@@ -106,6 +106,15 @@ export interface DesktopPolicy {
   remote_emergency_stop_chord: string;
   /** How long the controller waits after the person at this computer moves the mouse (RC-INP-04). */
   remote_local_priority_hold_ms: number;
+  /**
+   * The AI assistant on this computer (WS-AI-SRS-001 DSK-7): Quick Ask's
+   * shortcut, Insert into other apps, and files picked from this computer as
+   * context. Each is also switched by the company's AI policy on the server;
+   * the stricter of the two wins.
+   */
+  ai_quick_ask: boolean;
+  ai_insert: boolean;
+  ai_local_files: boolean;
 }
 
 export interface MonitoringPolicySummary {
@@ -235,9 +244,32 @@ export const QUICK_ASK_SHORTCUTS = ['Alt+Space', 'Control+Alt+Space', 'CommandOr
 
 /** Quick Ask handing its text to the main window: the AI dock, a new task, or search. */
 export interface AiHandoff {
-  to: 'dock' | 'task' | 'search';
+  /** `changes`: a card to review in the main window, the only place one is confirmed. */
+  to: 'dock' | 'task' | 'search' | 'changes';
   text: string;
   result: string | null;
+}
+
+/**
+ * What this computer may do with the assistant (WS-AI-SRS-001 DSK-7): the
+ * stricter of the device policy and the company's AI policy on the server.
+ */
+export interface AiRules {
+  /** The assistant is on for this person here. */
+  enabled: boolean;
+  quickAsk: boolean;
+  insert: boolean;
+  localFiles: boolean;
+  /** Why something is off on this computer, in a sentence, when it is. */
+  note: string | null;
+}
+
+/** A file picked on this computer, as the assistant will read it (DSK-6). */
+export interface AiUpload {
+  ref: string;
+  name: string;
+  /** Its words, sent for a day — or, a synced Drive file, its Drive id and nothing sent. */
+  via: 'upload' | 'drive';
 }
 
 /** What Quick Ask was opened with (the selection, read once, when the shortcut was pressed). */
