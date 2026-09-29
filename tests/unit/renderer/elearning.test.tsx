@@ -32,6 +32,8 @@ const { ApiError, apiGet, apiGetMeta, request } = await import('../../../src/cor
 const { call } = await import('../../../src/core/bridge');
 const { toast } = await import('../../../src/core/toasts');
 const { default: ElearningShell, screenOf } = await import('../../../src/modules/elearning/ElearningShell');
+// The shell's screens are lazy chunks: loaded once here, so a first render does not race their transform.
+await Promise.all(['MyLearning', 'CourseAbout', 'CoursePlayer', 'Lesson', 'Quiz', 'Catalogue'].map((m) => import(`../../../src/modules/elearning/${m}.tsx`)));
 const { PlayedRanges, sendBeat } = await import('../../../src/modules/elearning/api');
 const { rightAnswer } = await import('../../../src/modules/elearning/Quiz');
 
@@ -291,6 +293,12 @@ describe('heartbeats: only what is played counts', () => {
     const offline = await sendBeat(40, { ranges: [[8, 16]], position: 16 }, 'Progress in Welcome');
     expect(offline).toEqual({ answer: null, queued: true });
     expect(call).toHaveBeenCalledWith('offline:submit', { module: 'elearning', entity: 'progress', entityId: '40', label: 'Progress in Welcome', method: 'POST', path: '/api/elearning/v1/me/lessons/40/progress', body: { ranges: [[8, 16]], position: 16 }, queueIfOffline: true });
+
+    // Time passing alone is not queued offline: it would only fill the queue.
+    vi.mocked(call).mockClear();
+    vi.mocked(request).mockRejectedValueOnce(new ApiError(0, 'WorkSuite Desktop could not complete the request.', 'INTERNAL'));
+    expect(await sendBeat(42, { position: '40' }, 'Progress in Wrap-up')).toEqual({ answer: null, queued: false });
+    expect(call).not.toHaveBeenCalled();
   });
 });
 

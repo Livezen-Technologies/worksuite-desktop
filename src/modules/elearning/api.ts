@@ -194,10 +194,17 @@ export interface BeatAnswer {
   progress: Progress;
 }
 
+/** A beat that records something (played ranges, pages, the end reached), not just time passing. */
+export function beatCarries(beat: Beat): boolean {
+  return !!beat.ranges?.length || !!beat.pages?.length || beat.scrolled_to_end === true;
+}
+
 /**
- * One heartbeat. With WorkSuite out of reach it waits in the offline queue
- * (a kept lesson played offline) and is sent in order when the line is back;
- * the server credits it against the time since the course was downloaded.
+ * One heartbeat. With WorkSuite out of reach, one that records something
+ * waits in the offline queue (a kept lesson played offline) and is sent in
+ * order when the line is back; the server credits it against the time since
+ * the course was downloaded. A beat that only marks time is dropped offline
+ * rather than filling the queue.
  */
 export async function sendBeat(lessonId: number, beat: Beat, label: string): Promise<{ answer: BeatAnswer | null; queued: boolean }> {
   try {
@@ -205,6 +212,7 @@ export async function sendBeat(lessonId: number, beat: Beat, label: string): Pro
     return { answer: r.data, queued: false };
   } catch (e) {
     if (!unreachable(e)) throw e;
+    if (!beatCarries(beat)) return { answer: null, queued: false };
   }
   const r = await call('offline:submit', {
     module: 'elearning',

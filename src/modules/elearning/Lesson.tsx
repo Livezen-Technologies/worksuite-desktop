@@ -343,8 +343,8 @@ function Article({ html, onBeat }: { html: string | null; onBeat: (b: Beat) => P
       }
     });
     io.observe(el);
-    // Time with the article open counts (between beats, up to the server's idle gap).
-    const t = setInterval(() => void onBeat({ position: position(), ...(reached.current ? { scrolled_to_end: true } : {}) }), BEAT_MS);
+    // Time with the article open counts (between beats, up to the server's idle gap); reaching the end is sent once and kept.
+    const t = setInterval(() => void onBeat({ position: position() }), BEAT_MS);
     return () => {
       io.disconnect();
       clearInterval(t);

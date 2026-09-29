@@ -143,6 +143,10 @@ buttons and each course's actions follow its `can`.
   choice yet (the adaptive rendition needs an HLS player in the app).
 - Files from this computer for an assignment go through the desktop's API
   proxy, 25 MB a submission; put larger ones in Drive and choose them there.
+- Offline, reading time is not counted — only reaching the end of an
+  article, the pages of a PDF and the parts of a video played are kept for
+  WorkSuite. An article with a minimum reading time completes once it is
+  read online.
 
 **Not in eLearning yet** (later phases on the server)
 

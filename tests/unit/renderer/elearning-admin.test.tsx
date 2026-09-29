@@ -19,6 +19,10 @@ window.matchMedia ??= ((query: string) => ({ matches: false, media: query, oncha
 const { ApiError, apiGet, apiGetMeta, request } = await import('../../../src/core/api');
 const { call } = await import('../../../src/core/bridge');
 const { default: ElearningShell } = await import('../../../src/modules/elearning/ElearningShell');
+// The shell's screens are lazy chunks: loaded once here, so a first render does not race their transform.
+await Promise.all(
+  ['CourseAdmin', 'Builder', 'CourseEnrollments', 'GradeSubmission', 'AssessmentsTab', 'AssignmentsTab', 'Preview'].map((m) => import(`../../../src/modules/elearning/admin/${m}.tsx`)),
+);
 const { arrangement, moveLesson } = await import('../../../src/modules/elearning/admin/Builder');
 const { questionBody } = await import('../../../src/modules/elearning/admin/AssessmentsTab');
 const { responseText } = await import('../../../src/modules/elearning/admin/GradeAttempt');
