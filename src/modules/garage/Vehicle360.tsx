@@ -5,7 +5,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, Field, Grid, input, PageHead, Panel, Sheet } from '../hr/parts';
-import { amount, canIn, distance, fetchVehicle, fetchVehicle360, K, OFFLINE_WRITE, recordOdometer, refusalOf, vehicleLine, type Options, type Vehicle } from './api';
+import { amount, canIn, distance, fetchVehicle, fetchVehicle360, K, OFFLINE_WRITE, recordOdometer, refusalOf, vehicleLine, type Options, type Vehicle, type Vehicle360 as Vehicle360Data } from './api';
 import { Pill, StatusPill, when } from './parts';
 import { fetchVehicleHistory, KB3 } from './api-b3';
 import { ServiceHistory } from './History';
@@ -208,10 +208,10 @@ export default function Vehicle360({ id, options, online, onBack, onJob, onCusto
           <div className="mt-3">
             <Panel title="Declined and deferred work" sub="Offered again at the next visit">
               {d.deferred.map((x) => (
-                <button key={x.item_id} type="button" onClick={() => onJob(x.job_id)} className="flex w-full items-center gap-2.5 border-b border-line/70 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle">
+                <button key={deferredKey(x)} type="button" onClick={() => onJob(x.job_id)} className="flex w-full items-center gap-2.5 border-b border-line/70 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle">
                   {x.vhc ? <Pill tone={x.vhc === 'red' ? 'red' : x.vhc === 'amber' ? 'amber' : 'green'}>{x.vhc}</Pill> : null}
                   <span className="min-w-0 flex-1 truncate text-ink">{x.description}</span>
-                  <span className="text-ink-3">{dateLabel(x.decided_at)}</span>
+                  <span className="text-ink-3">{[x.source === 'inspection' ? 'from an inspection' : null, x.follow_up_on ? `follow up ${dateLabel(x.follow_up_on)}` : dateLabel(x.decided_at)].filter(Boolean).join(' · ')}</span>
                 </button>
               ))}
             </Panel>
@@ -236,6 +236,9 @@ export default function Vehicle360({ id, options, online, onBack, onJob, onCusto
     </div>
   );
 }
+
+/** A deferred row's key: an estimate line and an inspection item may share an id. */
+export const deferredKey = (x: Vehicle360Data['deferred'][number]) => `${x.source ?? 'estimate'}-${x.item_id ?? x.inspection_item_id ?? x.description}`;
 
 function Fact({ k, children }: { k: string; children: ReactNode }) {
   return (

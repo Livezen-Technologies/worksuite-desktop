@@ -194,6 +194,32 @@ describe('the job card', () => {
     expect(toast).toHaveBeenCalledWith('success', 'Job cancelled.');
   });
 
+  it('shows a refused cancel as the server words it: another try after a 500, the job read again after a 409', async () => {
+    let answer = () => fail(500, 'The job could not be cancelled. Try again.');
+    serve({
+      'GET /api/garage/jobs/12': () => ok({ job: job360({ status: 'in_progress', column: 'in_progress', transitions }) }),
+      'POST /api/garage/jobs/12/cancel': () => answer(),
+    });
+    mount(job360());
+    fireEvent.click(await screen.findByRole('button', { name: /Cancel job/ }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('combobox', { name: 'Reason' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Customer declined' }));
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel the job' }));
+    });
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('error', 'The job could not be cancelled. Try again.'));
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    const reads = sent.filter((s) => s.method === 'GET').length;
+    answer = () => fail(409, 'The job could not be cancelled: a part was issued meanwhile.');
+    await act(async () => {
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel the job' }));
+    });
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('error', 'The job could not be cancelled: a part was issued meanwhile.'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(sent.filter((s) => s.method === 'GET').length).toBeGreaterThan(reads));
+  });
+
   it('shows the job as it is now when somebody else changed it first', async () => {
     let now = job360({ status: 'checked_in', column: 'check_in', transitions });
     const theirs = job360({ status: 'inspection', status_label: 'Inspection', version: 5, transitions: [] });

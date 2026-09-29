@@ -395,7 +395,8 @@ export interface Vehicle360 {
   mileage: { readings: Reading[]; per_day: number | null };
   invoices: Array<{ invoice_id: number; job_id: number; number: string | null; status: string; issue_date: string | null; currency?: string; total?: string }>;
   warranty: { available: boolean; items: unknown[] };
-  deferred: Array<{ item_id: number; job_id: number; line_type: string; description: string; vhc: string | null; decided_at: string | null }>;
+  /** Each piece of work once: an estimate line (`item_id`) or an inspection item left for later (`inspection_item_id`); key by `source` and id. */
+  deferred: Array<{ source?: 'estimate' | 'inspection'; item_id: number | null; inspection_item_id?: number | null; job_id: number; line_type: string; description: string; vhc: string | null; decided_at: string | null; follow_up_on?: string | null }>;
   media: Array<Media & { job_id: number }>;
   notes: Array<{ id: number; job_id: number; body: string; visibility: string; by: Person | null; at: string | null }>;
   owners: Array<{ customer_id: number; customer: string | null; from: string | null; to: string | null }>;

@@ -266,6 +266,13 @@ desktop shows them and hands them to the person's mail or WhatsApp — the
 server sends nothing itself. Timer events carry no device time: the entry is
 the server's clock.
 
+Cancelling a job releases its timers, work orders, bay bookings and parts in
+one server transaction; it may answer `409` (the job changed: the card reads
+it again) or `500` ("The job could not be cancelled. Try again.": the sheet
+stays). A media upload's `context_id` must be a row of that context on the
+same job (`422 field: context_id` otherwise); the desktop sends only the
+inspection item or diagnosis it was taken on.
+
 Refusals carry what a screen acts on in `errors` (`missing`, `field`,
 `existing`, `code: open_job | version_conflict`, `server`, `added`), and the
 screens show the server's sentence as written. READ_CACHE covers options,

@@ -65,6 +65,16 @@ or "waiting for parts", as WorkSuite decides.
 - **Overview**: revenue today and this month, per currency, from Billing,
   for those who may see money.
 
+**Changed**
+
+- Vehicle 360°'s declined and deferred work also lists inspection items left
+  for later, and shows each one's follow-up date when it has one.
+- Cancelling a job now also stops its timers and lets go of its work
+  orders, bays and parts, all at once on WorkSuite. When that is refused,
+  the job card shows WorkSuite's sentence: after "Try again." the cancel
+  stays open for another try; when the job changed meanwhile, the card reads
+  it again.
+
 **Where it bites**
 
 - Every write here needs WorkSuite: offline, the tabs, the queue and the

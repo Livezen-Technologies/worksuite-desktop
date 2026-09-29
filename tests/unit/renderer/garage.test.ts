@@ -16,6 +16,7 @@ import { markAt, zoneLabel, zonesOf } from '../../../src/modules/garage/job/Dama
 import { LISTS, readRoute } from '../../../src/modules/garage/parts';
 import { EXTRA_VIEWS, JOB_TABS, tabFor, tabsFor } from '../../../src/modules/garage/registry';
 import { valueIn, valueOut } from '../../../src/modules/garage/Setup';
+import { deferredKey } from '../../../src/modules/garage/Vehicle360';
 import { vehicleBody, vehicleDraft } from '../../../src/modules/garage/Vehicles';
 import { adoptAdded, walkInBody, walkInGaps, type WalkInDraft } from '../../../src/modules/garage/WalkIn';
 import { can, checkin, company, fail, job, job360, ok, OPTIONS } from './garage-fixtures';
@@ -344,6 +345,12 @@ describe('vehicles and set-up forms', () => {
   it('sends a new vehicle whole, with its company and first reading', () => {
     const d = { ...vehicleDraft(null, '1'), customer: { id: 1, name: 'Dilani' }, vehicle_number: 'CAR-1', odometer: '1200' };
     expect(vehicleBody(d, null)).toMatchObject({ org_id: 1, customer_id: 1, vehicle_number: 'CAR-1', vehicle_type: 'car', odometer: 1200, make: null });
+  });
+
+  it('keeps deferred work from an estimate and from an inspection apart on Vehicle 360°', () => {
+    const row = { job_id: 12, line_type: 'service', description: 'Wiper blades', vhc: 'amber', decided_at: null };
+    const keys = [deferredKey({ ...row, source: 'estimate', item_id: 5 }), deferredKey({ ...row, source: 'inspection', item_id: null, inspection_item_id: 5 }), deferredKey({ ...row, item_id: 6 })];
+    expect(keys).toEqual(['estimate-5', 'inspection-5', 'estimate-6']);
   });
 
   it('reads and writes set-up fields in the server’s types', () => {

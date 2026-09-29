@@ -107,7 +107,15 @@ export default function JobCard({
         toast('error', `${p.message} This is the job as it is now.`);
         setAsk(null);
         changed(p.server);
-      } else toast('error', p.message);
+      } else {
+        // The server's sentence as written. A 409 means the job changed under the action (a cancel that met a
+        // timer or a part moving): read it again. A 500 rolled everything back: the sheet stays for another try.
+        toast('error', p.message);
+        if (p.status === 409) {
+          setAsk(null);
+          changed();
+        }
+      }
     } finally {
       setBusy(null);
     }
