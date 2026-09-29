@@ -5,6 +5,7 @@ import { canOpenApp, canOpenLink, canOpenRoute, notificationAllowed, visibleAppI
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
 import { resolveWebLink } from '@shared/links';
 import { networkStatus } from '@shared/network';
+import { pmsCached } from '@shared/pms-cache';
 import { redactUrl } from '@shared/redact';
 import type { Bootstrap, NavigateRequest, RealtimeState, ServiceHealth, StatusSnapshot } from '@shared/types';
 import { AccessWatch, NO_ACCESS } from './access';
@@ -864,6 +865,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/elearning/v1/me/lessons', 'elearning'],
     ['/api/elearning/v1/catalog', 'elearning'],
     ['/api/elearning/v1/categories', 'elearning'],
+    // Hotel PMS keeps the rack and the front desk's lists per property (shared/pms-cache.ts: `pmsCached`), below.
   ];
   const rebuildMenu = (visible: Set<string>): void =>
     buildMenu(
@@ -1115,7 +1117,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       userId: () => sessionCtl.userId(),
       cacheModuleFor: (path) => {
         const clean = path.split('?')[0]!;
-        const module = CACHE_PREFIXES.find(([prefix]) => clean === prefix || clean.startsWith(`${prefix}/`))?.[1] ?? null;
+        const module = CACHE_PREFIXES.find(([prefix]) => clean === prefix || clean.startsWith(`${prefix}/`))?.[1] ?? (pmsCached(clean) ? 'pms' : null);
         // Neither saved nor served for an app the person may not open.
         return module && canOpenApp(module, sessionCtl.visibleApps()) ? module : null;
       },

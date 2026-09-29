@@ -264,6 +264,71 @@ What the desktop cannot do because the server does not:
   checked).
 - The server declares no Home widgets for eLearning.
 
+### Hotel PMS
+
+The Hotel PMS tab uses the server's Hotel PMS API, `/api/pms/v1` (`app/Modules/Pms`, stages A, B1 and B2), the same
+one the web's `/pms` pages use. Every route is behind `pms.access` (and the person needs the `pms` application); each
+verb checks its own permission in the record's company and property, and a record outside the person's data scope
+answers 404. `GET options?org=&property_id=` → `permissions` carries the person's `pms.*` in that company, which the
+rail and the buttons follow. A refusal's `errors.code` says what to offer (`room_not_ready` with `overridable`,
+`balance` with `folios`, `restricted` with `reasons`, `possible_duplicate` with `candidates`, `no_longer_available`,
+`early_departure`, `over_limit`, `step_failed`, `version_conflict`…). Writes that can be pressed twice carry an
+`Idempotency-Key` (a booking, a walk-in, a check-in, a check-out, a charge, a payment, a deposit, a guest, a request,
+a fault).
+
+| Screen | Calls |
+|---|---|
+| Shell | `GET properties`, `GET options?org=&property_id=` |
+| Rack | `GET properties/{id}/rack` (the whole rack, filtered here), `POST rooms/{id}/outages {kind: blocked}`, `POST properties/{id}/maintenance`, `GET properties/{id}/in-house` (the stay behind a room's guest) |
+| Lists | `GET properties/{id}/arrivals?date=`, `GET properties/{id}/departures?date=`, `GET properties/{id}/in-house`, `POST properties/{id}/assign-rooms {date}`, `GET stays/{id}/registration-card` |
+| Assign a room | `GET reservation-rooms/{id}/rooms?any_type=`, `POST reservation-rooms/{id} {room_id, version, upgrade_type?, reason?}`, `POST reservations/{id}/assign` |
+| Reservations | `GET properties/{id}/reservations?status=&page=`, `GET search?q=`, `GET reservations/{id}`, `POST reservations/{id}` (dates, ETA, requests, notes, with `version`), `POST reservations/{id}/status`, `POST reservations/{id}/cancel`, `GET reservations/{id}/history` |
+| Deposit | `GET reservations/{id}/deposit`, `POST reservations/{id}/deposit/payments`, `POST deposits/{id}/waive\|refund` |
+| New reservation | `GET availability?property_id=&arrival=&departure=&adults=&children=&rooms=&source_id=&promo_code=`, `POST properties/{id}/reservations` |
+| Guests | `GET guests?q=&org=`, `POST guests/check`, `POST guests` (`client_id`, or the details with `force`), `GET guests/{id}`, `GET guests/{id}/reservations`, `POST guests/{id}/documents` (multipart), `POST guests/{id}/identity` (a scanned ID, confirmed) |
+| Check-in | `GET reservations/{id}/check-in`, `POST reservations/{id}/check-in {rooms, id_verified, guarantee_verified, override_reason, early_checkin, posting_allowed, keys, version}`, `POST stays/{id}/registration-card {document_id}` |
+| Walk-in | `GET availability` (tonight), `POST properties/{id}/walk-ins {…, payment?}` |
+| A stay | `GET stays/{id}`, `POST stays/{id}` (charges allowed, credit limit), `POST stays/{id}/move`, `POST stays/{id}/departure`, `POST stays/{id}/keys`, `POST stays/{id}/folios`, `POST stays/{id}/routing`, `DELETE routing-rules/{id}`, `POST stays/{id}/charges` |
+| Folios | `GET folios/{id}`, `GET folios/{id}/document`, `GET properties/{id}/services`, `POST folios/{id}/charges`, `POST folio-items/{id}/void\|adjust\|transfer`, `POST folios/{id}/payments`, `POST payments/{id}/refund\|void`, `POST folios/{id}/settle\|reopen\|transfer-ar\|invoice` |
+| Check-out | `GET reservations/{id}/check-out`, `POST reservations/{id}/check-out {rooms, early, late_checkout, apply_deposit, transfer_ar}` |
+| Cashier | `GET properties/{id}/cashier-sessions`, `POST properties/{id}/cashier-sessions`, `GET cashier-sessions/{id}`, `POST cashier-sessions/{id}/close\|reconcile` |
+| Night audit | `GET properties/{id}/night-audit`, `POST properties/{id}/night-audit/check\|run`, `GET night-audits/{id}`, `POST night-audit-blockers/{id}/override` |
+| Housekeeping, rooms | `GET properties/{id}/housekeeping/tasks`, `GET rooms/{id}`, `GET rooms/{id}/history`, `POST outages/{id}/release` |
+| Requests, dashboard | `GET properties/{id}/requests?open=1`, `POST properties/{id}/requests`, `GET guest-requests/{id}`, `POST guest-requests/{id}/{action}`, `GET properties/{id}/dashboard` |
+
+**Printed pages** (registration cards, receipts, invoices, statements, shift and night-audit reports) are laid out on
+the desktop from the server's answers (`registration-card`, `folios/{id}/document`, the shift, the audit's `report`) and
+printed through the OS dialog; the server renders none.
+
+**Offline.** READ_CACHE covers `options`, `properties`, and per property `rack`, `arrivals`, `departures`, `in-house`,
+`business-date` and `front-desk/lists` (`shared/pms-cache.ts`). Nothing is queued: every write needs the server
+(PMS-DSK-003). The server's live nudges (`pms.room`, `pms.hk_task`, `pms.request` on the realtime socket) refresh the
+rack and the lists; without them they are read again every 30 seconds.
+
+What the desktop cannot do because the server does not:
+
+- **A reservation does not name its stays, and the rack's guest does not name their stay.** The desktop finds the stay
+  in `GET properties/{id}/in-house` by reservation (room) to open a folio, post a charge, move or extend from the rack or
+  a reservation. A `stays: [{id, reservation_room_id, room_number}]` on the reservation view (and `stay_id` on the
+  rack's guest) would save the call.
+- **Night-audit blockers come without their `link`.** `NightAudit::conditions()` builds one, `blockers()` drops it; the
+  desktop derives it from `ref_type`/`ref_id` (reservation, stay, folio, cashier). A pending payment (`ref_type:
+  payment`) and a night without a rate (`night`) open nothing.
+- **Registration cards exist only for a stay.** FD-005's "print registration cards" for the day's arrivals before
+  they arrive cannot be served; the desktop prints them for guests checked in today. The server keeps a signed card
+  as an uploaded guest document; it renders no card (the desktop draws card and signature into a PNG).
+- **No card payload for a key encoder.** `POST stays/{id}/keys` answers `{ok, status, message}` from the property's
+  `DoorLockProvider`; a desk-side encoder has nothing to write. Keys are the server's door-lock integration.
+- **Payment methods are not in `options`**; the desktop carries `PaymentMachine::METHODS` (less `deposit`).
+- **Charge codes are listed only to rate managers and reservation readers** (`GET properties/{id}/services`); a cashier
+  with `pms.folio.post` alone types the code.
+- **A stay's move takes the reservation's `version`**, which the stay does not carry: the desktop sends none (the
+  server's claim still guards it).
+- **No staff list for guest requests**: the desktop takes and moves requests but does not assign them to a person.
+- **Check-out needs `pms.folio.view`** besides `pms.checkout` (`StaysController::checkOutScreen`).
+- On a `/desktop/v1` server, `links/resolve` does not know `worksuite://pms/…` (`Desktop/Libraries/LinkGrammar`,
+  `Links::APP_OF`): those links open without the server's record check (the tab's own requests are still checked).
+
 ## The existing API (servers without `/desktop/v1`)
 
 | Need | Endpoint |

@@ -136,6 +136,8 @@ export const NOTIFICATION_CATEGORY_APPS: Readonly<Record<string, readonly string
   contacts: ['contacts'],
   activity: ['activity'],
   ai: ['ai'],
+  // Hotel PMS's notices (`pms.reservation.created`, `pms.guest.arriving`, `pms.night_audit.failed`…).
+  pms: ['pms'],
 };
 
 /** Whether a notification category is one of an app the person may open (or of no app). */

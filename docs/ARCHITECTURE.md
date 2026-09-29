@@ -135,6 +135,18 @@ or a queued change is on disk before the user is told it was saved.
   `POST me/downloads/validate` at sign-in and on reconnect, and the
   licence's end date, decide what is removed; a wipe or losing the app
   removes the rest.
+- Hotel PMS (`modules/pms`) is a shell with a rail (`PmsShell.tsx`) and a
+  property selector; its screens are lazy chunks — the rack, the desk's
+  lists, reservations, check-in and check-out, the stay with its folios, the
+  cashier and the night audit. Addresses are read in one place
+  (`routes.ts`), so a deep link, a notification's link and a window's route
+  open the same screen. Offline it reads the rack and lists from READ_CACHE
+  (per property: `shared/pms-cache.ts`, matched by pattern in
+  `electron/main/index.ts`) and refuses every write. The desk's hardware is
+  reached through `devices.ts`, a seam of typed providers ("no device" and
+  the OS print dialog ship); printed cards, receipts and reports are laid out
+  in `print.ts` from the server's data and printed with no script and no
+  network.
 - Tabs stay mounted while recent (instant switching) and are suspended after
   the configured idle time; the tab set is saved and restored only for apps
   the user can still open.

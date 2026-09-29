@@ -150,6 +150,7 @@ export const APPS: Record<string, { short: string; icon: string; acc: string; ti
   amc: { short: 'AMC', icon: 'wrench', acc: '#3FB7C8', tint: '#10262B', tintLight: '#E1F4F6' },
   social: { short: 'Social', icon: 'megaphone', acc: '#6C8CFF', tint: '#16203E', tintLight: '#E8EDFF' },
   voip: { short: 'Calls', icon: 'phone', acc: '#34C38F', tint: '#12291F', tintLight: '#E3F6EE' },
+  pms: { short: 'Hotel PMS', icon: 'bed', acc: '#3FB7C8', tint: '#10262B', tintLight: '#E1F4F6' },
   documents: { short: 'Documents', icon: 'file-text', acc: '#9B7CF6', tint: '#1F1836', tintLight: '#F1ECFE' },
   other: { short: 'Other', icon: 'bell', acc: '#AFC0FF', tint: '#1B2542', tintLight: '#EEF1FB' },
 };

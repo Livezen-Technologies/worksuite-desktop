@@ -109,6 +109,10 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'salon', label: 'SalonMate', group: 'business', icon: 'scissors', app: 'salon', perm: 'salon.view', webPath: '/salon', surface: 'native', sidebar: 'business', order: 131, keywords: 'salon hair beauty front desk walk-in check-in stylists clients bookings' },
   // A workshop's counter, board, technician terminal and parts counter: native here; check-in, estimates, QC and delivery open on the web.
   { id: 'garage', label: 'Garage', group: 'business', icon: 'wrench', app: 'garage', perm: 'garage.access', webPath: '/garage', surface: 'native', sidebar: 'business', order: 132, keywords: 'garage workshop service center vehicle car repair job card walk-in technician parts mechanic' },
+  // A hotel's front desk, cashier and night audit: native here (the desk's computer). The server's notifications
+  // (`/pms/reservations/<id>`, `/pms/folios/<id>`, `/pms/rooms/<id>`, `/pms/front-desk?arrivals=`, `/pms/night-audit`…)
+  // open here; the back office — rates, rooms, packages, taxes, reports, settings — is the web's.
+  { id: 'pms', label: 'Hotel PMS', group: 'business', icon: 'bed', app: 'pms', perm: 'pms.access', webPath: '/pms', surface: 'native', sidebar: 'business', order: 133, keywords: 'hotel pms property front desk reception room rack arrivals departures in house check-in check-out walk-in reservation booking folio cashier night audit guest housekeeping' },
   // Learning, for everybody given eLearning: My Learning, the catalogue and taking courses; the training
   // team's courses, builder, enrolment, grading and dashboard by permission. `/elearning/my/courses/<id>`
   // (the server's notifications) opens the course here.

@@ -5,6 +5,138 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-29 — 0.2.54: Hotel PMS at the front desk
+
+Hotel PMS opens in its own tab for whoever has the app (and `pms.access`),
+over the server's `/api/pms/v1`: the front desk, the cashier and the night
+audit of a hotel (PMS-DSK-001). What each person sees is what the server
+says they may do — the rail, the rack's quick actions, every button. Money,
+prices, availability, taxes, balances and the business date are the
+server's; the desktop writes them as they come, and shows a refusal in the
+server's own sentence. The back office — rates, rooms and room types,
+packages, taxes, reports, settings and the set-up wizard — is on the web
+("Back office on the web" in the rail).
+
+**Added**
+
+- **A property selector** in the rail (kept on this computer; a record of
+  another property moves it), with the property's **business date** — "today"
+  for the desk until the night audit moves it on.
+- **Room rack** (PMS-FD-001…005): every room by building and floor with the
+  server's status badge — colour, icon and words — the counts by status (a
+  click filters), and filters by building, floor, room type, housekeeping
+  status, VIP and due in/out. A click opens the room's quick actions as the
+  server lists them for you: new reservation, walk-in, block room (the
+  reservations on it named, to move), report a fault, view room; for an
+  occupied room also open folio, post charge, room move, check-out and extend
+  stay. The arrivals, departures and in-house lists are one click away. It
+  follows the house: the server's live nudges refresh it, and it asks again
+  every half minute.
+- **Arrivals** with each room's readiness (a number, in service, empty,
+  clean or inspected) and the guest's ID, deposit and requests; **Assign
+  rooms** for the day (VIPs first) or one room at a time from the server's
+  candidates — another type is an upgrade or a downgrade, complimentary or
+  paid. **Departures** and **In house**, with the registration cards of the
+  day's arrivals printed in one go.
+- **Check-in** (PMS-CKI-001…005, AC-06): the quick screen — rooms, readiness,
+  flagged preferences, ID and guarantee ticks, the early check-in offer,
+  cash-only, keys per room — and one button (**Alt+I**). A room that is not
+  ready is refused unless someone who may override gives a reason; the
+  server's refusal is shown as it is. Several rooms check in together or one
+  by one. Then the keys (the property's door-lock system), and the
+  **registration card**: printed, or signed on the screen (or a signature
+  pad) and kept as the guest's document.
+- **Walk-in** (PMS-WLK-001/002) on one screen: how long, what is free
+  tonight at what price (a rate not on offer says why), the guest, the room
+  (or the best ready one), a payment if there is one — checked in with one
+  press.
+- **Reservations**: the property's list by status, and **search** across the
+  properties you reach by guest name, email or phone, confirmation number,
+  channel reference or room (**Alt+F**). A reservation's page: the rooms and
+  their prices night by night, the moves the server offers you from its
+  status, cancel (the plan's fee, or waived by someone who may), change dates
+  and requests, assign rooms, the deposit (take, waive, refund), its history.
+- **New reservation** (PMS-RSV-010, AC-01, AC-03): availability for the
+  stay with every rate's price or the server's reasons, the guest found or
+  added — "Possible existing guest found" when the details match someone
+  (AC-05) — the details, and one booking per press; a restriction is booked
+  through only by someone who may, with a reason. **Alt+N** (and Ctrl/⌘+N).
+- **A guest in house**: the stay (key, ID, card, what the room may be
+  charged), **room move** (the old room goes to housekeeping; a paid or
+  complimentary upgrade; a room not ready only with the override),
+  **extend or shorten**, **keys** (issue, revoke, ask the lock system),
+  **charges to the room** and the credit limit, **split folio** and
+  **routing** of charge types to another folio.
+- **Folios** (§10): lines with their taxes, payments, totals and the tax
+  summary; **post a charge** (**Alt+P**), void a line of today, adjust or move
+  a line with a reason, **take a payment** (card by the slip's reference and
+  last four digits — never a card number), refund, void a waiting payment,
+  settle, reopen, move a company's balance to its account, raise the
+  invoice, **print** the receipt, invoice or statement.
+- **Check-out** (PMS-CKO-001…003): each room in house with its folios, the
+  mini bar still to be charged, the deposit to apply, late check-out, an
+  early departure, the company's balance to its account; the folios that
+  still owe named when the server refuses; the invoices or receipts after,
+  to print.
+- **Cashier** (§10.7): open a shift at this terminal with the opening cash,
+  what it took by method, close it by counting the drawer (a variance within
+  the property's allowance reconciles itself; beyond it someone else
+  approves it with a reason), the shift's payments, its printed report.
+- **Night audit** (§13.1, AC-10, AC-11): the business date, the checks with
+  their counts, each blocker with a way to its record and — for the general
+  manager — an override with a reason; **Run** once nothing is open, the ten
+  steps as they go, a failed step in the server's words and **Resume**; the
+  report (occupancy, ADR, RevPAR, revenue, taxes, payments, movements) on
+  screen and printed, and earlier audits.
+- **Housekeeping** as the desk reads it: every room's housekeeping status
+  beside its front-office status, and the day's cleaning tasks.
+- **Guests**: lookup across guests and CRM contacts, a guest's profile,
+  reservations and documents (identification only for people who may see
+  it), a document added from this computer.
+- **Guest requests**: take one for a room, and move the open ones on.
+- **Dashboard**: the server's widgets on the business date, each opening its
+  list.
+- **Desk devices** (PMS-DSK-002): the device agent seam — ID scanner, key
+  encoder, registration-card and receipt printer, signature pad, cash drawer,
+  card terminal — with the "no device" providers and this computer's own
+  printing for cards and receipts. No vendor driver ships.
+- **Windows** (PMS-DSK-004): the rack, a reservation, a stay or a folio in a
+  window of its own — the rack on one screen, a reservation on another.
+- `worksuite://pms`, `worksuite://pms/reservations/<id>` and
+  `worksuite://pms/rooms/<id>`; the server's notifications
+  (`/pms/reservations/<id>`, `/pms/folios/<id>`, `/pms/rooms/<id>`,
+  `/pms/front-desk?arrivals=`, `/pms/night-audit`, `/pms/cashier/<id>`,
+  `/pms/requests/<id>`…) open their screen in the tab; notices of category
+  `pms` show only to people who have the app.
+
+**Works offline** (PMS-DSK-003)
+
+- The room rack, the arrivals, departures and in-house lists, the property
+  list and its options are kept (READ_CACHE, per property) and shown with a
+  clear banner when WorkSuite cannot be reached.
+- Nothing is queued: check-ins, walk-ins, new bookings, charges, payments,
+  refunds and the night audit wait for WorkSuite, so no room or payment is
+  taken against what this computer cannot see. Money is not kept for offline
+  reading, and balances are hidden on the rack while offline.
+
+**Where it bites**
+
+- The desk's hardware is the seam only: without a vendor driver, keys follow
+  the property's door-lock system on the server (or are handed over by hand),
+  the guest signs on the screen, and a card taken on a standalone terminal is
+  recorded with the slip's reference and last four digits.
+- Registration cards print once a guest is checked in: the server's card is
+  a stay's, so cards cannot be printed ahead for the day's arrivals.
+- Check-out needs "See folios" as well as "Check guests out" (the server's
+  rule: the folios are the check-out).
+- A cashier who may post charges but not read reservations types the charge
+  code (the server lists charge codes to rate managers and reservation
+  readers).
+- The tape-chart calendar, rates, rooms, packages, taxes, reports and
+  settings are the web's.
+
+---
+
 ## 2026-09-29 — 0.2.53: eLearning on the desktop
 
 eLearning opens in its own tab for whoever has the app (and
