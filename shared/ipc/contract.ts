@@ -15,6 +15,7 @@
 import { z } from 'zod';
 import { garageDocSchema } from '../garage-docs';
 import { ELEARNING_MEDIA_TOKEN, elearningCourseRef, elearningDownloadInput, type OfflineCourse, type OfflineValidation } from '../elearning-offline';
+import { pdfPrintSchema, pdfSearchOptionsSchema, pdfSourceSchema, SEARCH_MAX_QUERY, type PdfAttachmentView, type PdfBitmap, type PdfDiagnosticCheck, type PdfDriveDetails, type PdfFailureReport, type PdfLinkView, type PdfLocalPick, type PdfOutlineNode, type PdfSessionView } from '../pdf';
 import type { InvokeChannel } from './channels';
 import type {
   ActiveCall,
@@ -160,6 +161,9 @@ export const uploadTargetSchema = z.discriminatedUnion('kind', [
 export type UploadTarget = z.infer<typeof uploadTargetSchema>;
 
 const syncMode = z.enum(['two_way', 'upload_only', 'download_only']);
+const pdfSession = z.string().regex(/^[0-9a-f-]{36}$/);
+const pdfPage = z.number().int().min(0).max(1_000_000);
+const pdfTicket = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 const driveId = z.number().int().positive().max(2 ** 31);
 
 interface ChannelSpec {
@@ -523,6 +527,44 @@ export const contract = {
   'print:printers': ch(none, { session: true }),
   'print:toPdf': ch(z.object({ html: z.string().max(5_000_000), title: z.string().max(200) }), { session: true, rate: 2 }),
 
+  /*
+   * PDF Studio (WorkSuite PDF Studio SRS §23.1). Unknown fields are refused,
+   * not stripped (PDF-API-003). The renderer names a session it opened, pages
+   * and tickets; files arrive as a Drive id, a mail attachment's parts or a
+   * handle the main process issued — never a path (PDF-API-001).
+   */
+  'pdf:open': ch(z.strictObject({ source: pdfSourceSchema }), { session: true, rate: 5 }),
+  'pdf:state': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 20 }),
+  // The password goes to the engine and is kept, if asked, in memory for this session only (PDF-OPEN-008, PDF-SEC-013/014).
+  'pdf:unlock': ch(z.strictObject({ session: pdfSession, password: z.string().min(1).max(1024), remember: z.boolean() }), { session: true, rate: 2, sensitive: true }),
+  'pdf:retry': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 2 }),
+  'pdf:close': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 20 }),
+  'pdf:render': ch(
+    z.strictObject({
+      session: pdfSession,
+      page: pdfPage,
+      scale: z.number().positive().max(64),
+      tile: z.strictObject({ x: z.number().int().min(0).max(1_000_000), y: z.number().int().min(0).max(1_000_000), w: z.number().int().min(1).max(4096), h: z.number().int().min(1).max(4096) }).optional(),
+      ticket: pdfTicket,
+    }),
+    { session: true, rate: 400 },
+  ),
+  'pdf:thumbnail': ch(z.strictObject({ session: pdfSession, page: pdfPage, ticket: pdfTicket }), { session: true, rate: 400 }),
+  'pdf:cancel': ch(z.strictObject({ session: pdfSession, tickets: z.array(pdfTicket).max(1000) }), { session: true, rate: 60 }),
+  'pdf:search': ch(z.strictObject({ session: pdfSession, query: z.string().min(1).max(SEARCH_MAX_QUERY), options: pdfSearchOptionsSchema }), { session: true, rate: 10 }),
+  'pdf:searchCancel': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 20 }),
+  'pdf:outline': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 10 }),
+  'pdf:links': ch(z.strictObject({ session: pdfSession, page: pdfPage }), { session: true, rate: 200 }),
+  'pdf:followLink': ch(z.strictObject({ session: pdfSession, page: pdfPage, index: z.number().int().min(0).max(10_000) }), { session: true, rate: 5 }),
+  'pdf:attachments': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 5 }),
+  'pdf:details': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 5 }),
+  'pdf:print': ch(pdfPrintSchema, { session: true, rate: 2 }),
+  // The main process's open dialog; the chosen PDFs come back as handles.
+  'pdf:pickLocal': ch(none, { session: true, rate: 2 }),
+  // Paths only from a real drop, turned into paths in the preload (as files:registerDropped).
+  'pdf:registerDropped': ch(z.strictObject({ paths: z.array(z.string().min(1).max(4096)).min(1).max(20) }), { session: true, rate: 5 }),
+  'pdf:diagnostics': ch(none, { session: true, rate: 1 }),
+
   // SalonMate's front desk: the key it is paired with stays in the main process.
   'salon:deskPairing': ch(none, { session: true }),
   'salon:deskPair': ch(
@@ -806,6 +848,25 @@ export interface Outputs {
   'print:print': boolean;
   'print:printers': Array<{ name: string; displayName: string; isDefault: boolean }>;
   'print:toPdf': string | null;
+  'pdf:open': PdfSessionView;
+  'pdf:state': PdfSessionView;
+  'pdf:unlock': PdfSessionView;
+  'pdf:retry': PdfSessionView;
+  'pdf:close': void;
+  'pdf:render': PdfBitmap;
+  'pdf:thumbnail': PdfBitmap;
+  'pdf:cancel': number;
+  'pdf:search': { searchId: string };
+  'pdf:searchCancel': void;
+  'pdf:outline': PdfOutlineNode[];
+  'pdf:links': PdfLinkView[];
+  'pdf:followLink': { opened: boolean; reason: string | null };
+  'pdf:attachments': PdfAttachmentView[];
+  'pdf:details': PdfDriveDetails | null;
+  'pdf:print': { printed: boolean; pages: number; reason: string | null };
+  'pdf:pickLocal': PdfLocalPick[];
+  'pdf:registerDropped': { files: PdfLocalPick[]; rejected: Array<{ name: string; reason: string }> };
+  'pdf:diagnostics': { checks: PdfDiagnosticCheck[]; failures: PdfFailureReport[] };
   'salon:deskPairing': SalonDeskPairing | null;
   'salon:deskPair': { desk: SalonDeskInfo; message: string | null };
   'salon:deskForget': void;

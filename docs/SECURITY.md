@@ -142,6 +142,38 @@ Being controlled is the main process's business, never a page's:
   answers. Neither has run on its own system yet — what SendInput and
   CGEventPost then do there is the part still untried.
 
+## PDF Studio (PDF Studio SRS §2.5, §3.5, §12.5, §23)
+
+- **The engine never runs in the renderer** (§2.5, PDF-ARCH-010/011). PDFium runs in a utility process, one per
+  open document, compiled to WebAssembly: a parser bug corrupts only the engine's linear memory; the module's
+  only imports are an in-memory file system, the clock and a read callback over the one file main named. Electron's
+  utility processes do not take Node's `--permission` flags (tried), so WebAssembly and "main names the file" are
+  the boundary, plus the process: a crash, a hang (no pong for 20 s, or a request past its deadline) or the 1 GB
+  memory ceiling ends that process only (PDF-SEC-034, PDF-NFR-005/010).
+- **Scripts never run** (PDF-SEC-030): the WebAssembly build has no JavaScript engine and no form-fill
+  environment is started. Launch actions, links into other files, form submissions, media and embedded files are
+  never followed or opened (PDF-SEC-031/033). A web link is re-read from the document by the main process (the
+  renderer names only the link), must be https or mailto without credentials, follows the organisation's rule
+  (allow, confirm — the default —, block), and "confirm" is a native dialog (PDF-SEC-032). Active content is
+  counted — document scripts, page actions, links and bookmarks page by page, and a pdfid-style scan of the raw
+  file for `/JS`, `/Launch`, `/RichMedia`… with `#xx` escapes decoded — and shown in a banner (PDF-SEC-035).
+- **IPC** (§23.1, PDF-API-001…003): `pdf:*` inputs are strict (unknown fields refused, not stripped); the
+  renderer names a session it opened, pages and tickets; a session is bound to the window that opened it. Local
+  files arrive only as handles (see PDFLocalFileBridge in ARCHITECTURE.md): no path is accepted from the
+  renderer except from a real drop, turned into paths in the preload as `files:registerDropped` does.
+- **At rest** (PDF-NFR-020, PDF-OFF-005): Drive files and attachments are sealed working copies (AES-256-GCM in
+  1 MiB chunks, random key in memory only) in `<profile>/PDF/work`, never in a synced folder (Drive sync refuses
+  the app's own folder), removed when the tab closes and at start-up. Thumbnails are sealed under a key derived
+  (HKDF) from the database key, and not kept without a lasting keyring. Both go with WorkSuite's data at sign-out
+  or a wipe.
+- **Passwords** (PDF-SEC-013/014): typed into PDF Studio, sent once to the engine; "Remember for this session"
+  keeps them in main-process memory until sign-out or quit. Never persisted, logged, audited or put in an error.
+- **Print** (§14.4): pages drawn by the engine, served from memory to a hidden window with no preload, no
+  JavaScript, no network, its own session and a CSP allowing only those images; nothing is written to disk.
+- **Logs and reports** (PDF-NFR-030/031, PDF-AUD-002): a failure is logged with the file's format, size, page
+  count, the engine's error and the app version; opening and printing are audited with the file's id, version and
+  page count. Never a name, a path, text or a password.
+
 ## Credentials (FR-AUTH-02, FR-SEC-03, AC-21)
 
 - Access token: main-process memory only.

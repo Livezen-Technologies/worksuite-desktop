@@ -29,6 +29,7 @@
     "icons": "electron scripts/render-icons.mjs"
   },
   "dependencies": {
+    "@embedpdf/pdfium": "2.15.1",
     "livekit-client": "^2.22.3",
     "pdfjs-dist": "^5.7.284",
     "qrcode-generator": "^2.0.4"

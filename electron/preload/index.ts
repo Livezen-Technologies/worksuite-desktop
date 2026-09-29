@@ -202,6 +202,35 @@ const api = {
     printers: call('print:printers'),
     toPdf: call('print:toPdf'),
   },
+  pdf: {
+    open: call('pdf:open'),
+    state: call('pdf:state'),
+    unlock: call('pdf:unlock'),
+    retry: call('pdf:retry'),
+    close: call('pdf:close'),
+    render: call('pdf:render'),
+    thumbnail: call('pdf:thumbnail'),
+    cancel: call('pdf:cancel'),
+    search: call('pdf:search'),
+    searchCancel: call('pdf:searchCancel'),
+    outline: call('pdf:outline'),
+    links: call('pdf:links'),
+    followLink: call('pdf:followLink'),
+    attachments: call('pdf:attachments'),
+    details: call('pdf:details'),
+    print: call('pdf:print'),
+    pickLocal: call('pdf:pickLocal'),
+    diagnostics: call('pdf:diagnostics'),
+    /** PDFs from a real drop: turned into paths here, into handles in main — as files.registerDropped. */
+    registerDropped: (files: File[]): Promise<unknown> => {
+      const paths = Array.from(files)
+        .map((f) => webUtils.getPathForFile(f))
+        .filter((p) => typeof p === 'string' && p.length > 0)
+        .slice(0, 20);
+      if (paths.length === 0) return Promise.resolve({ files: [], rejected: [] });
+      return invoke('pdf:registerDropped', { paths });
+    },
+  },
   elearning: {
     offlineList: call('elearning:offlineList'),
     offlineDownload: call('elearning:offlineDownload'),
