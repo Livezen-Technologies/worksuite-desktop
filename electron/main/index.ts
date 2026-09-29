@@ -16,7 +16,7 @@ import type { AppContext, ClockExtra } from './context';
 import { broadcast } from './events';
 import { registerHandlers } from './handlers';
 import { initLog, logger } from './log';
-import { isDesktopError } from './errors';
+import { DesktopError, isDesktopError } from './errors';
 import { buildMenu } from './menu';
 import { paths } from './paths';
 import { SessionController, syncRefusal } from './session';
@@ -56,6 +56,8 @@ import { DriveSync } from '../services/sync/engine';
 import { ServiceSupervisor } from '../services/supervisor';
 import { TransferManager, type DownloadSink } from '../services/transfers';
 import { ElearningOffline } from '../services/elearning-offline';
+import { OfficeEditorHost } from '../services/office-editor';
+import { OfficeExternal } from '../services/office-external';
 import { createPdfStudio } from '../services/pdf/host';
 import { pdfPathsInArgv } from '../services/pdf/local-files';
 import { DEFAULT_PDF_POLICY } from '../services/pdf/service';
@@ -163,10 +165,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   // A dedicated network session for API traffic: its own cookie jar and proxy.
   const net = session.fromPartition('persist:ws-net');
-  if (enterprise.proxy && enterprise.proxy.mode !== 'system') {
-    const cfg = enterprise.proxy.mode === 'pac' ? { pacScript: enterprise.proxy.url ?? '' } : { proxyRules: enterprise.proxy.rules ?? enterprise.proxy.url ?? '', proxyBypassRules: enterprise.proxy.bypass ?? '' };
-    void net.setProxy(cfg);
-    void session.defaultSession.setProxy(cfg);
+  const proxyConfig = enterprise.proxy && enterprise.proxy.mode !== 'system' ? (enterprise.proxy.mode === 'pac' ? { pacScript: enterprise.proxy.url ?? '' } : { proxyRules: enterprise.proxy.rules ?? enterprise.proxy.url ?? '', proxyBypassRules: enterprise.proxy.bypass ?? '' }) : null;
+  if (proxyConfig) {
+    void net.setProxy(proxyConfig);
+    void session.defaultSession.setProxy(proxyConfig);
   }
   const fetchImpl: FetchLike = (url, init) => net.fetch(url, init as RequestInit);
 
@@ -381,6 +383,47 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     protectedPaths: () => [p.userData],
   });
   sync.onChanged = (s) => broadcast('sync:changed', s);
+
+  // Office documents (WorkSuite Drive — ONLYOFFICE SRS §7): the editor in a tab, isolated in a partition of
+  // its own, and copies opened in Word, Excel, PowerPoint or the default app, taken back only on request.
+  const office = new OfficeEditorHost({
+    preload: join(__dirname, '../preload/office.js'),
+    serverOrigin: () => auth.getServer()?.origin ?? null,
+    allowInsecureLocal: allowInsecure,
+    devTools: !app.isPackaged || process.argv.includes('--diagnostics-devtools'),
+    platform: process.platform,
+    // A window or the app going away with a document open: the session is ended for it (the Document Server saves anyway).
+    endSession: (fileId, sessionId) =>
+      void http.request('DELETE', `/api/files/${fileId}/office/session/${sessionId}`, { query: { reason: 'CLOSED' }, timeoutMs: 5000 }).catch(() => undefined),
+    configureSession: (ses) => {
+      if (proxyConfig) void ses.setProxy(proxyConfig);
+    },
+  });
+  office.install();
+  const officeLocal = new OfficeExternal({
+    db,
+    vault: getVault,
+    http,
+    userId: () => (sessionCtl.isReady() ? sessionCtl.userId() : null),
+    platform: process.platform,
+    home: app.getPath('home'),
+    canOpenFiles: () => sessionCtl.hasPermission('desktop.files.open_external'),
+    syncedPath: (fileId) => {
+      const at = sync.locate({ fileId });
+      return at?.isFile ? at.path : null;
+    },
+    download: async (fileId, name, then) => {
+      await transfers.download(`/api/files/${fileId}/download`, name, false, String(fileId), then);
+    },
+    uploadNew: async (path, name, folderId) => {
+      const [picked] = await transfers.register([path]);
+      if (!picked) throw new DesktopError('NOT_FOUND', 'The copy on this computer was moved or deleted.');
+      await transfers.upload([picked.handle], { kind: 'files', folderId: folderId === null ? null : String(folderId), name });
+    },
+    openPath: (path) => shell.openPath(path),
+    audit: (action, details) => audit.record(sessionCtl.userId(), action, details),
+    onChanged: (copies) => broadcast('office:localChanged', copies),
+  });
 
   let activeCall = false;
   // Updates wait while a call is on (FR-UPD); the call windows say when.
@@ -859,6 +902,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/hr/leave', 'hr'],
     ['/api/hr/approvals/pending', 'hr'],
     ['/api/files/browse', 'files'],
+    // How Drive opens each kind of Office file (web-api §6), so an Office file offline still goes to its tab.
+    ['/api/files/office/types', 'files'],
     ['/api/dashboard/home', 'home'],
     ['/api/notifications', 'notifications'],
     // A workshop terminal opens with WorkSuite out of reach: the technician's work and the board as last seen,
@@ -968,6 +1013,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     tray.update({ quickAsk: null });
     // Torn-off windows show the person's data: they close, and come back at their next sign-in.
     windows.closeRecords();
+    // Open documents close, and their editor partitions are cleared (OO-DSK-023).
+    office.closeAll(true);
+    officeLocal.stop();
     // Open PDFs close, and passwords remembered for the session are forgotten.
     void pdfStudio.closeAll();
     realtime.stop();
@@ -1000,6 +1048,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       if (scope !== 'tokens') {
         queue.wipeUser(uid, includeDrafts);
         transfers.wipe(uid);
+        // Copies opened in other apps are no longer watched; the files stay the person's.
+        officeLocal.forgetUser(uid);
         // PDF Studio's working copies and thumbnails (PDF-OFF-005).
         void pdfStudio.wipe();
       }
@@ -1264,6 +1314,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     webchat,
     quickAsk,
     ai,
+    office,
+    officeLocal,
     relaunch,
     quit,
     clockAttendance,
@@ -1302,6 +1354,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   });
   app.on('before-quit', () => {
     windows.quitting = true;
+    // The Document Server saves after the last editor leaves; the sessions are ended on the way out.
+    office.closeAll(true);
+    officeLocal.stop();
     webchat.stop();
     quickAsk.release();
     void askHelper?.then((h) => h?.stop());

@@ -17,8 +17,8 @@ import { appForWebPath, resolveWebLink } from './links';
 /** Screens of the shell itself: open to everyone signed in. */
 export const SHELL_SCREENS: ReadonlySet<string> = new Set(['home', 'notifications', 'settings', 'account', 'diagnostics']);
 
-/** Desktop screens that are part of another app: open to whoever may open that app. */
-export const APP_PARTS: Readonly<Record<string, string>> = { calls: 'chat' };
+/** Desktop screens that are part of another app: open to whoever may open that app. An Office document's tab is Files'. */
+export const APP_PARTS: Readonly<Record<string, string>> = { calls: 'chat', office: 'files' };
 
 /** A set of visible catalogue app ids (a `Set`, or anything with `has`). */
 export interface VisibleApps {

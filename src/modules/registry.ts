@@ -126,11 +126,24 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
   {
     input: defineDesktopManifest({
       id: 'files', name: 'Files', icon: 'folder', contractVersion: 1, desktop: { enabled: true },
-      offline: { mode: 'READ_CACHE', cache: ['/api/files/browse', '/api/drive/list', '/api/drive/tree', '/api/drive/home'] },
+      offline: { mode: 'READ_CACHE', cache: ['/api/files/browse', '/api/drive/list', '/api/drive/tree', '/api/drive/home', '/api/files/office/types'] },
       native: ['file-drop', 'printing'],
       quickActions: [{ id: 'upload', label: 'Upload File', route: '/files?upload=1' }],
     }),
     load: () => import('./files/FilesPage'),
+  },
+  {
+    // Office documents (WorkSuite Drive — ONLYOFFICE SRS §7): a Word, Excel or PowerPoint file from Drive in a
+    // tab of its own, one tab per document, the Document Server's editor in an isolated view (office-editor.ts).
+    // Part of Files (shared/access APP_PARTS). Editing needs WorkSuite: offline the tab says so and offers the
+    // copy on this computer, if there is one (§9).
+    input: defineDesktopManifest({
+      id: 'office', name: 'Office document', icon: 'file-text', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'NONE' },
+      native: ['printing'],
+      fileTypes: ['docx', 'xlsx', 'pptx', 'doc', 'xls', 'ppt', 'odt', 'ods', 'odp', 'rtf', 'csv', 'docm', 'xlsm', 'pptm'],
+    }),
+    load: () => import('./office/OfficePage'),
   },
   {
     // PDF Studio (WorkSuite PDF Studio SRS, stage D1): PDFs from Drive, this computer and Mail open here, each in a

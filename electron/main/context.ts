@@ -26,6 +26,8 @@ import type { SalonDesk } from '../services/salon-desk';
 import type { SalonPrint } from '../services/salon-print';
 import type { SalonSync } from '../services/salon-sync';
 import type { ElearningOffline } from '../services/elearning-offline';
+import type { OfficeEditorHost } from '../services/office-editor';
+import type { OfficeExternal } from '../services/office-external';
 import type { TrayService } from '../tray/tray';
 import type { UpdaterService } from '../updater/updater';
 
@@ -53,6 +55,9 @@ export interface AppContext {
   salonSync: SalonSync;
   /** eLearning's courses kept offline: encrypted copies, played inside the app (elearning-offline.ts). */
   elearning: ElearningOffline;
+  /** Office documents: the editor views in tabs (office-editor.ts) and copies opened in other apps (office-external.ts). */
+  office: OfficeEditorHost;
+  officeLocal: OfficeExternal;
   settings: SettingsService;
   http: HttpClient;
   auth: AuthService;

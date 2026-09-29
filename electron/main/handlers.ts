@@ -454,7 +454,9 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     const fc = input.financeCsv;
     const ef = input.expenseFile;
     const withOrg = (org?: number) => (org ? `?org=${org}` : '');
-    const path = input.elearningMedia
+    const path = input.officeExport
+      ? `/office/exports/${input.officeExport}`
+      : input.elearningMedia
       ? `/media/${input.elearningMedia}?download=1`
       : input.garageDoc
       ? garageDocPath(input.garageDoc)
@@ -513,6 +515,39 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
           : `/api/mail/messages/${input.mail!.uid}/attachments/${encodeURIComponent(input.mail!.ref)}?${new URLSearchParams({ folder: input.mail!.folder, dl: '1', ...(input.mail!.mailbox ? { mailbox: input.mail!.mailbox } : {}) })}`;
     return ctx.transfers.download(path, input.name, !!input.open, input.fileId ?? null);
   });
+  // Office documents: the editor's view (office-editor.ts) and copies opened in other apps (office-external.ts).
+  router.handle('office:open', (input, c) => ctx.office.open(c.sender, input));
+  router.handle('office:place', (input, c) => ctx.office.place(c.sender, input.viewId, input.bounds, input.visible));
+  router.handle('office:command', (input, c) => ctx.office.command(c.sender, input.viewId, input.command.type === 'start' && input.events ? { ...input.command, events: input.events } : input.command, input.sessionId));
+  router.handle('office:close', (input, c) => ctx.office.close(c.sender, input.viewId));
+  router.handle('office:focusFile', (input, c) => ctx.office.focusFile(c.sender, input.fileId));
+  router.handle('office:externalApps', (input) => ctx.officeLocal.apps(input.extension));
+  router.handle('office:openExternal', (input) => ctx.officeLocal.open(input));
+  router.handle('office:localCopies', () => ctx.officeLocal.list());
+  router.handle('office:uploadLocal', (input) => ctx.officeLocal.upload(input.id, input.how));
+  router.handle('office:forgetLocal', (input) => ctx.officeLocal.forget(input.id));
+  router.handle('office:revealLocal', (input) => {
+    shell.showItemInFolder(ctx.officeLocal.pathOf(input.id));
+    return true;
+  });
+  router.handle('office:localAvailable', (input) => {
+    const at = ctx.officeLocal.localPath(input.fileId);
+    return { available: !!at, synced: !!at?.synced, preview: !!at && process.platform === 'darwin', openInApp: !!at && ctx.session.hasPermission('desktop.files.open_external') };
+  });
+  router.handle('office:openLocal', async (input, c) => {
+    const at = ctx.officeLocal.localPath(input.fileId);
+    if (!at) throw new DesktopError('NOT_FOUND', 'This file is not on this computer.');
+    if (input.preview) {
+      // Quick Look shows the file without another app, and without the network (macOS).
+      const win = winOf(c.sender);
+      if (process.platform !== 'darwin' || !win) throw new DesktopError('UNSUPPORTED', 'Previewing an Office file without WorkSuite needs macOS Quick Look.');
+      win.previewFile(at.path);
+      return true;
+    }
+    if (!ctx.session.hasPermission('desktop.files.open_external')) throw new DesktopError('POLICY_DENIED', 'Your organization does not allow opening files in other applications.');
+    return (await shell.openPath(at.path)) === '';
+  });
+
   // eLearning's offline copies (electron/services/elearning-offline.ts).
   router.handle('elearning:offlineList', () => ctx.elearning.list());
   router.handle('elearning:offlineDownload', (input) => ctx.elearning.download(input.courseId, input.title));

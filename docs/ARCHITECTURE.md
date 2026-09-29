@@ -40,6 +40,47 @@ hash-worker.
 - **store.ts** — the index, in the profile database (`sync_folders`,
   `sync_entries`).
 
+## Office documents
+
+An Office file from Drive opens in a tab of its own (`/office/<file id>`,
+module `modules/office`, a part of Files), one tab per document; opening it
+again brings that tab forward, in this window or another (WorkSuite Drive —
+ONLYOFFICE SRS §7). Three pieces:
+
+- **The session** (`modules/office/session.ts`, the renderer): the server's
+  Office API (`/api/files/{id}/office/*`) — open, a heartbeat a minute,
+  renewal of the ten-minute signed configuration before it lapses or when
+  the editor asks, reload when the server says so, reopen after a 410, mode
+  switches, the save status, and closing: a tab with changes waits (up to
+  ten seconds) for them to reach the Document Server, asks it to save,
+  then ends the session (`core/tabs.ts` close guards; such a tab is never
+  suspended). An organisation switch closes that organisation's documents
+  with `reason=ORG_SWITCH`.
+- **The editor view** (`electron/services/office-editor.ts`, the main
+  process): a `WebContentsView` in the tab's window, laid over the tab's
+  placeholder (`EditorSurface.tsx` reports where it is and whether it
+  shows — hidden while a menu, dialog or the command palette is over it),
+  in its organisation's in-memory partition, loading
+  `wsoffice://editor/index.html` (`office-host-page.ts`), which loads the
+  Document Server's `api.js` with the signed configuration. Its events come
+  back over the editor bridge (`preload/office.ts`) as `office:event`; the
+  tab's commands go to it as `office:command`. See SECURITY.md.
+- **Other apps** (`electron/services/office-external.ts`): "Open in
+  Microsoft Word / Excel / PowerPoint" or the default app — Drive sync's
+  copy when sync keeps the file (sync takes the changes back), otherwise a
+  download through the download manager that is then watched; an edited
+  copy goes back only when the person says, as a new version with
+  `base_version`, and the server's conflict is offered as Keep Both,
+  Review, Upload as New Version or Cancel. Offline, the tab offers that
+  copy (Quick Look on macOS, or the default app) and says editing needs a
+  connection.
+
+Files routes Office files by the server's `/api/files/office/types`
+(cached for offline) and asks `…/office/actions` for a file's menu; + New
+makes documents and copies of templates through `/api/files/office/new`
+and opens them for editing. A server without the Office API keeps the old
+way (the web's editor in the browser).
+
 ## PDF Studio (PDF Studio SRS, stage D1 — the viewer)
 
 ```

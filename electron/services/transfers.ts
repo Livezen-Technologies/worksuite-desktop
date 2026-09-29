@@ -11,6 +11,7 @@ import { mimeFor } from '@shared/mime';
 import { DesktopError, isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import { isMediaPath } from './api-proxy';
+import { OFFICE_EXPORT_TOKEN } from '@shared/office';
 import type { Database } from './db';
 import type { HttpClient } from './http';
 import type { Vault } from './vault';
@@ -97,6 +98,15 @@ export interface TransferDeps {
 }
 
 const MAX_UPLOAD = 5 * 1024 * 1024 * 1024;
+
+/** An Office export's signed download (`/office/exports/{token}`, ten minutes, web-api §8): fetched from our own server. */
+export function isOfficeExportPath(apiPath: string): boolean {
+  const m = /^\/office\/exports\/([^/?#]+)$/.exec(apiPath);
+  return !!m && OFFICE_EXPORT_TOKEN.test(m[1]!);
+}
+
+/** How a download that someone is waiting for ended (a copy to open in another app). */
+export type DownloadOutcome = { path: string } | { error: string };
 const MAX_FOLDER_FILES = 2000;
 
 /**
@@ -158,6 +168,8 @@ export class TransferManager {
   private handles = new Map<string, Handle>();
   private live = new Map<string, Live>();
   private emitTimer: NodeJS.Timeout | null = null;
+  /** Downloads a service waits for (Office's copies for another app): told once, when they end. */
+  private whenDone = new Map<string, (outcome: DownloadOutcome) => void>();
   onChanged: (list: Transfer[]) => void = () => undefined;
 
   constructor(private readonly deps: TransferDeps) {}
@@ -288,12 +300,17 @@ export class TransferManager {
     this.persist(l);
     if (state !== 'running' && state !== 'queued') this.live.delete(l.t.id);
     this.emit();
+    const then = this.whenDone.get(l.t.id);
+    if (then && (state === 'done' || state === 'failed' || state === 'cancelled')) {
+      this.whenDone.delete(l.t.id);
+      then(state === 'done' && l.meta.finalPath ? { path: l.meta.finalPath } : { error: error ?? (state === 'cancelled' ? 'The download was cancelled.' : 'The download did not finish.') });
+    }
   }
 
   // ── downloads ──────────────────────────────────────────────────────────
 
-  async download(apiPath: string, name: string, openWhenDone: boolean, fileId: string | null): Promise<Transfer> {
-    if (!apiPath.startsWith('/api/') && !isMediaPath(apiPath)) throw new DesktopError('IPC_VALIDATION_FAILED', 'Not a WorkSuite download.');
+  async download(apiPath: string, name: string, openWhenDone: boolean, fileId: string | null, then?: (outcome: DownloadOutcome) => void): Promise<Transfer> {
+    if (!apiPath.startsWith('/api/') && !isMediaPath(apiPath) && !isOfficeExportPath(apiPath)) throw new DesktopError('IPC_VALIDATION_FAILED', 'Not a WorkSuite download.');
     const folder = this.deps.downloadFolder();
     await mkdir(folder, { recursive: true });
     const safe = safeFileName(name);
@@ -314,7 +331,8 @@ export class TransferManager {
     const l: Live = { t, meta, abort: null, samples: [] };
     this.live.set(t.id, l);
     this.persist(l);
-    this.deps.audit('file.download', fileId ? { file_id: fileId } : { kind: apiPath.startsWith('/api/meet/') ? 'meet-recording' : apiPath.startsWith('/api/files/') ? 'file-version' : apiPath.startsWith('/api/calendar/') || apiPath.startsWith('/api/contacts/') || apiPath.startsWith('/api/data/') || apiPath.startsWith('/api/finance/export/') || /^\/api\/expense\/(reports2?\/export|runs\/|postings\/)/.test(apiPath) ? 'export' : apiPath.startsWith('/api/expense/') ? 'expense-document' : apiPath.startsWith('/api/garage/') ? 'garage-document' : isMediaPath(apiPath) ? 'elearning-lesson' : 'mail-attachment' });
+    if (then) this.whenDone.set(t.id, then);
+    this.deps.audit('file.download', fileId ? { file_id: fileId } : { kind: isOfficeExportPath(apiPath) ? 'office-export' : apiPath.startsWith('/api/meet/') ? 'meet-recording' : apiPath.startsWith('/api/files/') ? 'file-version' : apiPath.startsWith('/api/calendar/') || apiPath.startsWith('/api/contacts/') || apiPath.startsWith('/api/data/') || apiPath.startsWith('/api/finance/export/') || /^\/api\/expense\/(reports2?\/export|runs\/|postings\/)/.test(apiPath) ? 'export' : apiPath.startsWith('/api/expense/') ? 'expense-document' : apiPath.startsWith('/api/garage/') ? 'garage-document' : isMediaPath(apiPath) ? 'elearning-lesson' : 'mail-attachment' });
     void this.runDownload(l);
     return { ...t };
   }

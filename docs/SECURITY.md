@@ -6,7 +6,8 @@
 |---|---|
 | `nodeIntegration: false`, `contextIsolation: true`, `sandbox: true`, `webSecurity: true` on every window; `app.enableSandbox()` | `electron/windows/manager.ts`, `electron/main/index.ts` |
 | No `<webview>`, no remote module; `setWindowOpenHandler` denies everything and hands https/mailto to the OS after an allow-list or a confirmation | `electron/security/hardening.ts` |
-| `will-navigate` / `will-redirect` / subframe navigation limited to `app://bundle` | `hardening.ts` |
+| The Office editor: a `WebContentsView` in its own in-memory partition and process, on `wsoffice://editor`, held to the Document Server's origin (see below) | `electron/services/office-editor.ts`, `electron/security/office-policy.ts` |
+| `will-navigate` / `will-redirect` / subframe navigation limited to `app://bundle` (the Office editor's view has its own, stricter rule: `setNavigationRule`) | `hardening.ts` |
 | The UI loads only from `app://bundle` (the asar); remote origins never host shell UI | `electron/protocols/app-protocol.ts` |
 | CSP: `default-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'none'` | `hardening.ts` |
 | Permission handler: only clipboard write and fullscreen for the shell; camera, microphone, screen capture, geolocation, devices denied | `hardening.ts` |
@@ -27,6 +28,67 @@ main-process dialog or dropped (converted to paths in the preload from real
 `File` objects), and the renderer holds opaque handles. Downloads land in the
 download folder; "open" and "show in folder" only act on canonical paths
 inside it.
+
+## The Office editor (WorkSuite Drive — ONLYOFFICE SRS §7.4, AC-21)
+
+The Document Server's editor is third-party code, so it never runs in the
+shell's page and never meets its bridge or its credentials:
+
+- **Its own view, partition and process** (OO-DSK-020): each open document
+  is a `WebContentsView` laid over its tab's placeholder
+  (`electron/services/office-editor.ts`) — still no `<webview>`, no browser
+  window. `nodeIntegration: false`, `contextIsolation`, `sandbox`,
+  `webSecurity`, no `<webview>` tag, DevTools only in development builds.
+  Its partition is one per organisation (`ws-office-<org>`), in memory (no
+  `persist:`), and its cookies, storage and cache are cleared when the
+  organisation's last document closes, at sign-out and on quitting
+  (OO-DSK-023).
+- **No WorkSuite credential can be reached from it.** Its page is
+  `wsoffice://editor/index.html`, a privileged scheme of its own served
+  only inside that partition, which has no `app://` handler: the API
+  proxy (`app://bundle/__api`) does not exist there, and the access token
+  stays in the main process as always. The editor gets only the
+  configuration the server signed for this session (ten minutes), handed
+  over untouched.
+- **Where it may go** (OO-DSK-021, `electron/security/office-policy.ts`):
+  the page never navigates away; its frames only to the configured
+  Document Server's origin (and its own blank and blob frames); requests
+  from the partition only to the Document Server (pages, scripts, fonts,
+  its socket) and to the WorkSuite server for the pictures in the editor's
+  user list — everything else is cancelled in `webRequest`. New windows and
+  links go through the same `openExternalSafely` as the shell's (the
+  system browser, after the allow-list or a confirmation). The page's CSP:
+  `default-src 'none'`, scripts from itself and the Document Server, frames
+  and connections to the Document Server only.
+- **Which Document Server**: HTTPS only (plain HTTP only on this computer,
+  in a development build), no credentials in the address, and `api_url`
+  must be that server's own `…/web-apps/apps/api/documents/api.js`
+  (`documentServerOrigin`, shared/office.ts); anything else is refused
+  before a view exists.
+- **The bridge** (OO-DSK-022, `electron/preload/office.ts`): `officeBridge`
+  with four functions — ready, failed, emit an editor event, take
+  commands. The main process hears it only from the main frame of an
+  editor view's own page, drops unknown events and any field an event
+  should not carry (a mention's comment text never crosses), caps size and
+  rate, and passes the rest to that view's tab only. Commands back are a
+  fixed list (start, refresh, setUsers, denyEditingRights, showMessage).
+- **Permissions and downloads**: the partition allows only writing to the
+  clipboard and full screen (slide shows); devices are denied. The
+  editor's own "Download as" is stopped (`will-download`): documents leave
+  through the tab's Download and Export, under Drive's permissions and the
+  download manager (OO-DSK-024).
+- **Keyboard**: while the editor has the keyboard the app menu keeps only
+  close tab, new tab and quit; ⌘/Ctrl+K, ⌘/Ctrl+L and the rest are the
+  editor's (`menuKeepsShortcut`).
+- **Copies for other apps** (OO-DSK-050, `electron/services/office-external.ts`):
+  downloaded by the download manager into the downloads folder (they are
+  the person's, like any download) and opened only where the device
+  policy allows opening files in other apps; Word, Excel and PowerPoint are
+  found by fixed paths (macOS) or their App Paths registry entry (Windows)
+  and started with the file as their one argument, no shell. The list of
+  copies being watched is encrypted in the profile and forgotten at a wipe;
+  nothing goes back to Drive without the person choosing, and never over a
+  newer version without the server's conflict answer (OO-OFF-030/031).
 
 ## Meet remote control (WS-MEET-ENH-01 §E)
 

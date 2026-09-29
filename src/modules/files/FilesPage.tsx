@@ -28,6 +28,10 @@ import { Shared } from './Shared';
 import { Companies, Duplicates, Links, Notifications, Storage, Trash } from './Views';
 import { SyncDevices } from './SyncDevices';
 import { UploadConflicts, type ConflictChoice, type UploadConflict } from './UploadConflicts';
+import { officeOpenWay, openOfficeTab, useOfficeRouting } from './office';
+import { TemplateDialog } from './Templates';
+import { createDocument } from '../office/api';
+import { LocalCopiesTray, externalApps, openInApp } from '../office/local';
 
 type Dialog =
   | { kind: 'name'; title: string; initial: string; action: string; save: (name: string) => Promise<void> }
@@ -38,7 +42,8 @@ type Dialog =
   | { kind: 'share'; item: Item }
   | { kind: 'secure'; file: DriveFile }
   | { kind: 'link'; item: Item }
-  | { kind: 'chat'; item: Item; discuss?: boolean };
+  | { kind: 'chat'; item: Item; discuss?: boolean }
+  | { kind: 'templates' };
 
 const DOCS: Array<[string, string, string, string]> = [
   ['docx', 'DOC', 'Document', 'Untitled document'],
@@ -87,6 +92,11 @@ export default function FilesPage(_props: ModuleProps) {
   const [detailsAsk, setDetailsAsk] = useState<{ key: Key; tab?: string; n: number } | null>(null);
   const now = useNow(60_000);
   const perms = useStore(app, (s) => s.bootstrap?.permissions ?? []);
+  const officeRouting = useOfficeRouting();
+  // Which Microsoft apps are here, found once, for the file menus' "Open in …" (OO-DSK-050).
+  useEffect(() => {
+    for (const e of ['docx', 'xlsx', 'pptx']) void externalApps(e);
+  }, []);
   const uploadsDone = useStore(app, (s) => s.transfers.filter((t) => t.direction === 'upload' && t.state === 'done').length);
 
   const treeQ = useQuery({ queryKey: ['files', 'tree'], queryFn: ({ signal }) => loadTree(signal), refetchInterval: 120_000 });
@@ -230,6 +240,11 @@ export default function FilesPage(_props: ModuleProps) {
         return setEditor({ kind: 'media', files: all.length ? all : [f], index: Math.max(0, all.findIndex((x) => x.id === f.id)) });
       }
       if (way === 'code') return setEditor({ kind: 'code', file: f });
+      // Office files go where the server routes them (web-api §6): their tab, the code editor, or the web's preview.
+      const office = officeOpenWay(f, officeRouting);
+      if (office === 'code') return setEditor({ kind: 'code', file: f });
+      if (office === 'office') return d.office(f);
+      if (office === 'preview') return d.inBrowser(f);
       void apiPost(`/api/drive/opened/${f.id}`, { action: 'opened' }).catch(() => undefined);
       // PDFs open in PDF Studio, a tab each (the preview workspace's hand-off for application/pdf).
       if (way === 'pdf') openPdf({ kind: 'drive', fileId: f.id }, f.name);
@@ -318,7 +333,10 @@ export default function FilesPage(_props: ModuleProps) {
       if (item.type === 'file') s.set('file', String(item.f.id));
       go(`/files?${s}`);
     },
-    office: (f) => void call('app:openInBrowser', { path: `/editor/${f.id}` }),
+    // A server without the Office API keeps the web's editor, in the browser.
+    office: (f, mode) => (officeRouting.legacy ? void call('app:openInBrowser', { path: `/editor/${f.id}` }) : void openOfficeTab(f, mode ?? null)),
+    openIn: (f, appId) => void openInApp({ id: f.id, name: f.name, folderId: f.folder_id, version: f.version ?? 0 }, appId),
+    officeRouting,
     editText: (f) => setEditor({ kind: 'code', file: f }),
     editImage: (f) => (setPreview(null), setEditor({ kind: 'image', file: f })),
     play: (files, index) => setEditor({ kind: 'media', files, index }),
@@ -357,6 +375,20 @@ export default function FilesPage(_props: ModuleProps) {
     refresh,
   };
 
+  /** + New → Document, Spreadsheet, Presentation, or from a template: made by the server and opened for editing (OO-DRV-050). */
+  const newOffice = async (input: { type?: 'document' | 'spreadsheet' | 'presentation'; template_id?: string }) => {
+    try {
+      const r = await createDocument({ ...input, folder_id: folderId });
+      toast('success', `“${r.file.name}” created`);
+      refresh();
+      void openOfficeTab(r.file, 'EDIT');
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
+  const OFFICE_KINDS: Record<string, 'document' | 'spreadsheet' | 'presentation'> = { docx: 'document', xlsx: 'spreadsheet', pptx: 'presentation' };
+  const serverOffice = !officeRouting.legacy;
+
   const newItems: MenuItem[] = [
     { label: 'New folder', hint: '⇧⌘N', tag: { text: 'DIR', tone: TONE.folder! }, run: d.newFolder },
     { sep: true },
@@ -369,7 +401,7 @@ export default function FilesPage(_props: ModuleProps) {
       hint: ['docx', 'xlsx', 'pptx'].includes(ext) ? 'Office' : '',
       tag: { text: tag, tone: DOC_TONE[ext]! },
       run: () =>
-        setDialog({
+        serverOffice && OFFICE_KINDS[ext] ? void newOffice({ type: OFFICE_KINDS[ext] }) : setDialog({
           kind: 'name',
           title: `New ${label.toLowerCase()}`,
           initial: `${base}.${ext}`,
@@ -383,6 +415,7 @@ export default function FilesPage(_props: ModuleProps) {
           },
         }),
     })),
+    ...(serverOffice ? [{ label: 'From a template…', hint: 'Office', tag: { text: 'TPL', tone: TONE.document! }, run: () => setDialog({ kind: 'templates' }) }] : []),
   ];
 
   // Quick actions and links: /files?upload=1, ?new=folder.
@@ -449,6 +482,8 @@ export default function FilesPage(_props: ModuleProps) {
         ) : null}
         {urlTray ? <UrlDownloads folderId={folderId} folderName={folderId ? (nameIn(tree, folderId) ?? 'this folder') : 'My Drive'} onClose={() => setUrlTray(false)} onOpenFolder={(id) => onPlace({ view: 'folder', folder: id })} /> : null}
         {!editor && !preview ? <UploadTray /> : null}
+        {/* Office files edited in another app here, waiting for a decision (OO-OFF-030). */}
+        {!editor && !preview ? <LocalCopiesTray onReview={(c) => void openOfficeTab({ id: c.fileId, name: c.name }, 'VIEW')} /> : null}
       </div>
       {dialog?.kind === 'name' ? <NameDialog title={dialog.title} initial={dialog.initial} action={dialog.action} onClose={() => setDialog(null)} onSave={dialog.save} /> : null}
       {dialog?.kind === 'confirm' ? <ConfirmDialog title={dialog.title} body={dialog.body} action={dialog.action} danger onClose={() => setDialog(null)} onYes={dialog.run} /> : null}
@@ -466,6 +501,9 @@ export default function FilesPage(_props: ModuleProps) {
       ) : null}
       {dialog?.kind === 'secure' ? <SecureLinkDialog file={dialog.file} onClose={() => setDialog(null)} onAll={() => onPlace({ view: 'links', folder: null })} /> : null}
       {dialog?.kind === 'link' ? <LinkDialog item={dialog.item} onClose={() => (setDialog(null), refresh())} /> : null}
+      {dialog?.kind === 'templates' ? (
+        <TemplateDialog folderName={folderId ? (nameIn(tree, folderId) ?? 'this folder') : 'My Drive'} onClose={() => setDialog(null)} onPick={(t) => newOffice({ template_id: t.id })} />
+      ) : null}
       {dialog?.kind === 'chat' ? <SendToChatDialog item={dialog.item} discuss={dialog.discuss} onClose={() => setDialog(null)} onOpenChat={(room) => navigate(`/chat?room=${room}`)} /> : null}
     </DriveCtx.Provider>
   );
