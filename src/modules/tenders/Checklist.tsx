@@ -12,7 +12,7 @@ import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../hr/par
 import { Pill } from '../inventory/parts';
 import { K, useOwners, type DocAccess } from './api';
 import { ReviewScreen } from './Review';
-import { reviewMessage, reviewRecipients, tellInChat, usePeople } from './people';
+import { notifiedNote, reviewMessage, reviewRecipients, tellInChat, usePeople } from './people';
 import { AttachMenu, saveTenderFile, UploadBar, Uploading, uploadsFor, useDropZone, useTenderUploads, type LiveUpload } from './files';
 import { addLine, applyPack, attachToLine, bulkLines, fetchChecklist, filterLines, K2, LINE_STATUS, lineChanges, lineDraft, removeLine, reviewLine, sectionsOf, updateLine, type Line, type LineDraft, type LineFilter } from './work';
 
@@ -216,8 +216,8 @@ export default function Checklist({ id, org, canManage, canApprove, can }: { id:
       )}
 
       {editing ? <LineSheet tenderId={id} org={org} line={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={refresh} /> : null}
-      {sending ? <SendBackSheet tenderId={id} line={sending} nameOf={nameOf} onClose={() => setSending(null)} onSaved={refresh} /> : null}
-      {reviewing !== null ? <ReviewScreen tenderId={id} lines={c.items} startId={reviewing} canApprove={canApprove} canDownload={can.download} onClose={() => setReviewing(null)} onChanged={refresh} /> : null}
+      {sending ? <SendBackSheet tenderId={id} line={sending} nameOf={nameOf} serverTells={c.notifies} onClose={() => setSending(null)} onSaved={refresh} /> : null}
+      {reviewing !== null ? <ReviewScreen tenderId={id} lines={c.items} startId={reviewing} canApprove={canApprove} canDownload={can.download} serverTells={c.notifies} onClose={() => setReviewing(null)} onChanged={refresh} /> : null}
       {packs ? <PackSheet tenderId={id} packs={c.packs} onClose={() => setPacks(false)} onSaved={refresh} /> : null}
     </div>
   );
@@ -474,23 +474,23 @@ function LineSheet({ tenderId, org, line, onClose, onSaved }: { tenderId: number
   );
 }
 
-function SendBackSheet({ tenderId, line, nameOf, onClose, onSaved }: { tenderId: number; line: Line; nameOf: (id: number | null | undefined) => string | null; onClose: () => void; onSaved: () => void }) {
+function SendBackSheet({ tenderId, line, nameOf, serverTells, onClose, onSaved }: { tenderId: number; line: Line; nameOf: (id: number | null | undefined) => string | null; serverTells: boolean; onClose: () => void; onSaved: () => void }) {
   const me = useStore(app, (s) => (s.auth?.user?.id ? Number(s.auth.user.id) : null));
   const current = line.files.find((f) => f.current) ?? null;
   const tellIds = reviewRecipients(current?.uploaded_by ?? null, line.owner_id, me);
   const tellNames = tellIds.map((u) => (u === current?.uploaded_by ? nameOf(u) : (nameOf(u) ?? line.owner_name)) ?? 'a colleague');
-  const [tell, setTell] = useState(true);
+  const [tell, setTell] = useState(!serverTells);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const go = async () => {
     setBusy(true);
     try {
-      await reviewLine(line.id, 'rejected', reason.trim());
-      let told = '';
+      const r0 = await reviewLine(line.id, 'rejected', reason.trim());
+      let told = notifiedNote(r0.notified, (u) => nameOf(u) ?? (u === line.owner_id ? line.owner_name : null));
       if (tell && tellIds.length) {
         const r = await tellInChat(tellIds, reviewMessage({ decision: 'rejected', line: line.label, file: current?.name ?? null, comment: reason.trim(), tenderId }));
-        told = r.sent ? ` ${tellNames.slice(0, r.sent).join(' and ')} ${r.sent === 1 ? 'was' : 'were'} told in Chat.` : '';
+        told += r.sent ? ` ${tellNames.slice(0, r.sent).join(' and ')} ${r.sent === 1 ? 'was' : 'were'} told in Chat.` : '';
         if (r.failed) toast('warning', 'Sent back, but a Chat message could not be sent.');
       }
       toast('success', `Sent back.${told}`);
@@ -522,11 +522,16 @@ function SendBackSheet({ tenderId, line, nameOf, onClose, onSaved }: { tenderId:
       <Field label="What is wrong with it?">
         <input aria-label="What is wrong with it?" autoFocus value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} placeholder="The certificate expired in August; attach the renewed one." className={input} />
       </Field>
+      {tellIds.length && serverTells ? (
+        <p className="m-0 text-[12.5px] text-ink-2">
+          {tellNames.join(' and ')} {tellNames.length === 1 ? 'is' : 'are'} notified with what is wrong — in the bell, on their phone and desktop, and by email.
+        </p>
+      ) : null}
       {tellIds.length ? (
         <label className="flex items-start gap-2 text-[12.5px] text-ink-2">
           <input type="checkbox" checked={tell} onChange={(e) => setTell(e.target.checked)} className="mt-0.5 accent-primary" />
           <span>
-            Tell {tellNames.join(' and ')} in Chat
+            {serverTells ? `Also message ${tellNames.join(' and ')} in Team Chat` : `Tell ${tellNames.join(' and ')} in Chat`}
             <span className="block text-[11.5px] text-ink-3">With what is wrong and a link to this tender.</span>
           </span>
         </label>

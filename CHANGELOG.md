@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-09-29 — 0.2.47: The AI assistant on the desktop — ask about your work, confirm what it proposes, files from this computer
+## 2026-09-29 — 0.2.48: The AI assistant on the desktop — ask about your work, confirm what it proposes, files from this computer
 
 From the AI dock (Ctrl/Cmd+Shift+A), Quick Ask, and the tray. Needs a
 WorkSuite server with the assistant's desktop service
@@ -74,6 +74,38 @@ assistant work as before.
   assistant's desktop service, the paperclip is not offered.
 - **Choose files with the picker.** Dropping a file on the dock does nothing
   yet.
+
+## 2026-09-29 — 0.2.47: Tenders — the bell and push instead of Team Chat
+
+With WorkSuite Server 3.1 (`Livezen-Technologies/worksuite#31`), the server
+itself notifies people about the tender checklist: in the bell, as a push to
+their phone and desktop, and by email for a document sent back.
+
+**Changed**
+
+- **Reviewing a file** (the review screen and the line's *Send back*) no
+  longer messages people in Team Chat by default when the server notifies.
+  - The screen says who will be notified of your decision.
+  - After you decide, the toast says who was notified: *Sent back. Dimuthu
+    and Dinusha were notified.*
+  - *Also message … in Team Chat* is still there, unticked, for when you want
+    a conversation too.
+- **An approval's comment** now goes to the server, which puts it in the
+  approval notice. It is not stored, as before.
+- **Against an older server**, which does not notify, nothing changes: the
+  Team Chat message stays ticked by default, as in 0.2.46.
+
+**What the server now notifies** (nothing to do in the app — they arrive like
+any other WorkSuite notification, and clicking one opens the tender's
+Checklist):
+
+- a document **sent back** to its uploader and the line's chaser, with the
+  reason;
+- a document **approved**, with the reviewer's comment if there was one;
+- a document **waiting for review**, to the line's chaser, the tender's owner
+  and the tender's creator;
+- a checklist line **given to you** to get;
+- a tender **assigned to you**.
 
 ---
 

@@ -79,6 +79,12 @@ export interface Checklist {
   completion: number | null;
   basis: string;
   packs: Pack[];
+  /**
+   * The server notifies people about uploads and reviews itself (WorkSuite
+   * 3.1: the bell, push and, for a document sent back, email) — so the screen
+   * no longer messages them in Team Chat unless asked to.
+   */
+  notifies: boolean;
 }
 
 export function toLine(r: Record<string, unknown>): Line {
@@ -114,7 +120,7 @@ export function toLine(r: Record<string, unknown>): Line {
 }
 
 export async function fetchChecklist(id: number, signal?: AbortSignal): Promise<Checklist> {
-  const d = await apiGet<{ items?: Array<Record<string, unknown>>; counts?: Checklist['counts']; completion?: number; completion_basis?: string; packs?: Pack[] }>(`/api/tenders/${id}/checklist`, undefined, signal);
+  const d = await apiGet<{ items?: Array<Record<string, unknown>>; counts?: Checklist['counts']; completion?: number; completion_basis?: string; packs?: Pack[]; notifies?: unknown }>(`/api/tenders/${id}/checklist`, undefined, signal);
   const counts = { required: 0, optional: 0, missing: 0, uploaded: 0, pending_review: 0, approved: 0, rejected: 0, ...(d.counts ?? {}) };
   return {
     items: (d.items ?? []).map(toLine),
@@ -123,6 +129,7 @@ export async function fetchChecklist(id: number, signal?: AbortSignal): Promise<
     completion: counts.required === 0 ? null : Number(d.completion ?? 0),
     basis: d.completion_basis ?? '',
     packs: d.packs ?? [],
+    notifies: Array.isArray(d.notifies) && d.notifies.includes('tender.checklist_rejected'),
   };
 }
 
@@ -154,7 +161,15 @@ export const updateLine = (rid: number, patch: Record<string, string | number | 
 export const removeLine = (rid: number) => apiDelete(`/api/tenders/checklist/${rid}`);
 /** A Drive file as a line's next version. */
 export const attachToLine = (rid: number, fileId: number, name: string) => apiPost(`/api/tenders/checklist/${rid}/file`, { file_id: fileId, name });
-export const reviewLine = (rid: number, decision: 'approved' | 'rejected', reason?: string) => apiPost(`/api/tenders/checklist/${rid}/review`, { decision, ...(reason ? { reason } : {}) });
+/**
+ * Approve or send back. The reason goes with an approval too: a server that
+ * notifies passes it on as the reviewer's note (and does not store it); an
+ * older one ignores it. `notified` is whom the server told, when it does.
+ */
+export const reviewLine = (rid: number, decision: 'approved' | 'rejected', reason?: string) =>
+  apiPost<{ notified?: unknown } | null>(`/api/tenders/checklist/${rid}/review`, { decision, ...(reason ? { reason } : {}) }).then((r) => ({
+    notified: Array.isArray(r?.notified) ? r.notified.map(Number).filter((n) => n > 0) : null,
+  }));
 export const bulkLines = (id: number, action: 'approve' | 'remove', ids: number[]) => apiPost<{ count: number }>(`/api/tenders/${id}/checklist/bulk`, { action, ids });
 
 export interface LineDraft {
