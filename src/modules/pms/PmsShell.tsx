@@ -3,7 +3,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } 
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Modal, Spinner, cx } from '../../components/ui';
-import { call } from '../../core/bridge';
+import { call, isMac } from '../../core/bridge';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
 import type { ModuleProps } from '../registry';
@@ -127,6 +127,8 @@ export default function PmsShell({ active }: ModuleProps) {
       if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
       const s = ALT_KEYS[e.code];
       if (!s) return;
+      // On a Mac, Option+letter types a character (ñ, é…): in a field it is left to the field.
+      if (isMac && e.target instanceof Element && e.target.closest('input, textarea, [contenteditable="true"]')) return;
       e.preventDefault();
       if (handlers.get(s)?.()) return;
       const p = opts.permissions;

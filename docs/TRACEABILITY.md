@@ -216,7 +216,7 @@ Tests: `tests/unit/renderer/pms-desk.test.tsx`, `tests/unit/renderer/pms-money.t
 | PMS-DSK-003 | Done | READ_CACHE for the property list, options, rack, arrivals, departures, in house (`shared/pms-cache.ts`, per property); the offline banner; every write disabled offline and never queued; balances hidden on the rack offline |
 | PMS-DSK-004 | Done | The rack, a reservation, a stay and a folio open in windows of their own (`openInWindow`, record windows) |
 | PMS-DSK-005 | Later | Cold-start and open-time targets need measuring on real hardware against a real server |
-| PMS-WEB-003 (desktop) | Done | Alt+N new reservation (and the shell's Ctrl/⌘+N), Alt+W walk-in, Alt+F search, Alt+I check in, Alt+P post charge, Alt+R/A/D/H rack and lists — `shortcuts.ts`, the rail's "Keyboard shortcuts" |
+| PMS-WEB-003 (desktop) | Done | Alt+N new reservation (and the shell's Ctrl/⌘+N), Alt+W walk-in, Alt+F search, Alt+I check in, Alt+P post charge, Alt+R/A/D/H rack and lists — `shortcuts.ts`, the rail's "Keyboard shortcuts"; on a Mac, Option+letter inside a text field is left to the field |
 | PMS-WEB-004 (desktop) | Done | The rail's search (`GET search?q=`): guest name, email, phone, confirmation, channel reference, room, across the properties reached |
 | PMS-FD-001..004 | Done | `Rack.tsx`: rooms by building and floor with the server's badge (colour, icon, words), counts, FD-003 filters, FD-004 actions as the server lists them |
 | PMS-FD-005 | Partial | `Lists.tsx`: the three lists one click from the rack; bulk room assignment; bulk registration cards for guests checked in today. Cards before arrival: the server's card is a stay's (gap) |

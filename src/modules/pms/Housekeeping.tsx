@@ -16,7 +16,8 @@ export default function Housekeeping({ room }: { room: number | null }) {
   const pms = usePms();
   const pid = pms.property.id;
   const [hk, setHk] = useState('');
-  const rack = useQuery({ queryKey: K.rack(pid), queryFn: ({ signal }) => pGetMeta<Rack>(`/properties/${pid}/rack`, undefined, signal), refetchInterval: pms.online ? 30_000 : false });
+  const readsRack = pms.mayAny('pms.room.view', 'pms.reservation.view', 'pms.checkin', 'pms.room.manage');
+  const rack = useQuery({ queryKey: K.rack(pid), queryFn: ({ signal }) => pGetMeta<Rack>(`/properties/${pid}/rack`, undefined, signal), refetchInterval: pms.online ? 30_000 : false, enabled: readsRack });
   const readsTasks = pms.mayAny('pms.housekeeping.view', 'pms.housekeeping.manage');
   const tasks = useQuery({ queryKey: K.hkTasks(pid), queryFn: ({ signal }) => pGet<{ items: HkTask[] }>(`/properties/${pid}/housekeeping/tasks`, undefined, signal), enabled: readsTasks && pms.online, refetchInterval: 60_000 });
   const rooms = useMemo(() => (rack.data?.data.rooms ?? []).filter((r) => !hk || r.hk_status === hk), [rack.data, hk]);
@@ -26,60 +27,64 @@ export default function Housekeeping({ room }: { room: number | null }) {
     return c;
   }, [rack.data]);
 
-  if (rack.isLoading) return <Spinner />;
-  if (rack.error || !rack.data) return <div className="p-6"><ErrorNote error={rack.error ?? new Error('The rooms could not be loaded.')} onRetry={() => void rack.refetch()} /></div>;
-  const ready = (rack.data.data.rooms ?? []).filter((r) => r.ready).length;
+  if (readsRack && rack.isLoading) return <Spinner />;
+  if (readsRack && (rack.error || !rack.data)) return <div className="p-6"><ErrorNote error={rack.error ?? new Error('The rooms could not be loaded.')} onRetry={() => void rack.refetch()} /></div>;
+  const ready = (rack.data?.data.rooms ?? []).filter((r) => r.ready).length;
 
   return (
     <div className="flex flex-col gap-4 px-6 py-5">
-      <PageHead title="Housekeeping" sub={`${ready} vacant ${ready === 1 ? 'room' : 'rooms'} ready to sell`}>
-        {rack.data.offline ? <OfflineNote cachedAt={rack.data.cachedAt} /> : null}
+      <PageHead title="Housekeeping" sub={readsRack ? `${ready} vacant ${ready === 1 ? 'room' : 'rooms'} ready to sell` : pms.property.name}>
+        {rack.data?.offline ? <OfflineNote cachedAt={rack.data.cachedAt} /> : null}
       </PageHead>
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Housekeeping status">
-        <button type="button" aria-pressed={!hk} onClick={() => setHk('')} className={cx('rounded-[8px] border px-2 py-1 text-[12px] font-semibold', !hk ? 'border-primary bg-selection text-primary' : 'border-line bg-surface')}>
-          Every room
-        </button>
-        {pms.options.housekeeping_statuses.map((s) => (
-          <button key={s.value} type="button" aria-pressed={hk === s.value} onClick={() => setHk(hk === s.value ? '' : s.value)} className={cx('rounded-[8px] border px-2 py-1 text-[12px] font-semibold', hk === s.value ? 'border-primary bg-selection text-primary' : 'border-line bg-surface')}>
-            {s.label} <span className="tabular-nums opacity-75">{counts[s.value] ?? 0}</span>
-          </button>
-        ))}
-      </div>
-      <div className="overflow-hidden rounded-[12px] border border-line bg-surface">
-        <table className="w-full text-left text-[13px]">
-          <thead className="bg-subtle text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase">
-            <tr>
-              <th className="px-3 py-2">Room</th>
-              <th className="px-3 py-2">Housekeeping</th>
-              <th className="px-3 py-2">Front office</th>
-              <th className="px-3 py-2">Task</th>
-              <th className="px-3 py-2" />
-            </tr>
-          </thead>
-          <tbody>
-            {rooms.map((r) => (
-              <tr key={r.id} className={cx('border-t border-line', room === r.id && 'bg-selection')}>
-                <td className="px-3 py-1.5">
-                  <b className="tabular-nums">{r.number}</b> <span className="text-[11.5px] text-ink-3">{r.room_type}</span>
-                </td>
-                <td className="px-3 py-1.5">
-                  {r.hk_status_label}
-                  {r.ready ? <span className="ml-1.5 text-[11.5px] font-semibold text-success">ready</span> : null}
-                </td>
-                <td className="px-3 py-1.5">
-                  <StatusBadge badge={r.badge} size="sm" />
-                </td>
-                <td className="px-3 py-1.5 text-ink-2">{r.hk_task ? r.hk_task.status.replace(/_/g, ' ') : '—'}</td>
-                <td className="px-3 py-1.5 text-right">
-                  <Button size="sm" variant="ghost" onClick={() => pms.open({ kind: 'room', id: r.id })}>
-                    Room
-                  </Button>
-                </td>
-              </tr>
+      {readsRack ? (
+        <>
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Housekeeping status">
+            <button type="button" aria-pressed={!hk} onClick={() => setHk('')} className={cx('rounded-[8px] border px-2 py-1 text-[12px] font-semibold', !hk ? 'border-primary bg-selection text-primary' : 'border-line bg-surface')}>
+              Every room
+            </button>
+            {pms.options.housekeeping_statuses.map((s) => (
+              <button key={s.value} type="button" aria-pressed={hk === s.value} onClick={() => setHk(hk === s.value ? '' : s.value)} className={cx('rounded-[8px] border px-2 py-1 text-[12px] font-semibold', hk === s.value ? 'border-primary bg-selection text-primary' : 'border-line bg-surface')}>
+                {s.label} <span className="tabular-nums opacity-75">{counts[s.value] ?? 0}</span>
+              </button>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </div>
+          <div className="overflow-hidden rounded-[12px] border border-line bg-surface">
+            <table className="w-full text-left text-[13px]">
+              <thead className="bg-subtle text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase">
+                <tr>
+                  <th className="px-3 py-2">Room</th>
+                  <th className="px-3 py-2">Housekeeping</th>
+                  <th className="px-3 py-2">Front office</th>
+                  <th className="px-3 py-2">Task</th>
+                  <th className="px-3 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {rooms.map((r) => (
+                  <tr key={r.id} className={cx('border-t border-line', room === r.id && 'bg-selection')}>
+                    <td className="px-3 py-1.5">
+                      <b className="tabular-nums">{r.number}</b> <span className="text-[11.5px] text-ink-3">{r.room_type}</span>
+                    </td>
+                    <td className="px-3 py-1.5">
+                      {r.hk_status_label}
+                      {r.ready ? <span className="ml-1.5 text-[11.5px] font-semibold text-success">ready</span> : null}
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <StatusBadge badge={r.badge} size="sm" />
+                    </td>
+                    <td className="px-3 py-1.5 text-ink-2">{r.hk_task ? r.hk_task.status.replace(/_/g, ' ') : '—'}</td>
+                    <td className="px-3 py-1.5 text-right">
+                      <Button size="sm" variant="ghost" onClick={() => pms.open({ kind: 'room', id: r.id })}>
+                        Room
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : null}
       {readsTasks ? (
         <section aria-label="Today’s cleaning tasks">
           <h2 className="mb-2 text-[13.5px] font-bold">Today’s cleaning tasks</h2>

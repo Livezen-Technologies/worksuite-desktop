@@ -138,6 +138,21 @@ describe('Hotel PMS, the shell', () => {
   });
 });
 
+describe('housekeeping as the desk reads it', () => {
+  it('shows someone who reads only housekeeping the day’s tasks, and never asks for the rack', async () => {
+    serve(['pms.access', 'pms.housekeeping.view'], (p) =>
+      p === '/api/pms/v1/properties/1/housekeeping/tasks'
+        ? { business_date: '2026-09-18', items: [{ id: 1, room_id: 11, room_number: '102', room_type: 'Deluxe King', floor: '1', task_type: 'checkout', task_type_label: 'Checkout clean', priority: 'high', priority_label: 'High', status: 'assigned', status_label: 'Assigned', assigned_name: 'Sita K.', checklist_open: 8, minutes: null, flags: { vip: false, due_in: true, due_out: false, occupied: false } }] }
+        : undefined,
+    );
+    show();
+    expect(await screen.findByText('Checkout clean')).toBeTruthy();
+    expect(screen.getByText(/Assigned · Sita K\./)).toBeTruthy();
+    expect(screen.getByText('Guest due in today')).toBeTruthy();
+    expect(vi.mocked(apiGetMeta).mock.calls.some(([p]) => p === '/api/pms/v1/properties/1/rack')).toBe(false);
+  });
+});
+
 describe('the room rack (PMS-FD-001…005)', () => {
   it('draws every room with the server’s badge in words, filters by status, and offers the server’s quick actions', async () => {
     serve(['pms.access', 'pms.room.view', 'pms.reservation.view', 'pms.folio.view', 'pms.checkout']);

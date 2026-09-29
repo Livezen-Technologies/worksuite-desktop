@@ -132,6 +132,8 @@ packages, taxes, reports, settings and the set-up wizard — is on the web
 - A cashier who may post charges but not read reservations types the charge
   code (the server lists charge codes to rate managers and reservation
   readers).
+- On a Mac, Option+letter in a text field types its character (ñ, é…); the
+  desk's shortcuts work anywhere else on the screen.
 - The tape-chart calendar, rates, rooms, packages, taxes, reports and
   settings are the web's.
 
