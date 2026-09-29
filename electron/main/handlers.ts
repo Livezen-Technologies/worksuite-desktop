@@ -16,6 +16,9 @@ import { openExternalSafely } from '../security/hardening';
 import { broadcast } from './events';
 import { logger } from './log';
 
+/** The web app's pages `auth:openPage` may open, signed out. */
+const AUTH_PAGES = { 'forgot-password': '/forgot-password', account: '/account/settings' } as const;
+
 /** The chat attachment menu's kinds of file, as open-dialog filters. */
 const PICK_FILTERS: Record<'gif' | 'document' | 'image' | 'video' | 'audio', Electron.FileFilter> = {
   gif: { name: 'GIF images', extensions: ['gif'] },
@@ -182,6 +185,11 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     return ctx.session.get();
   });
   router.handle('auth:passkeyCancel', () => ctx.session.cancelPasskey());
+  router.handle('auth:openPage', async (input, c) => {
+    const origin = ctx.auth.getServer()?.origin;
+    if (!origin) throw new DesktopError('NOT_SIGNED_IN', 'Choose your WorkSuite server first.');
+    return openExternalSafely(`${origin}${AUTH_PAGES[input.page]}`, winOf(c.sender));
+  });
 
   // ── HR ────────────────────────────────────────────────────────────────
   router.handle('hr:clock', async (input) => {
@@ -708,6 +716,9 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
         return { ok: false, message: 'WorkSuite cannot check your password while offline. Use Touch ID, or reconnect.' };
       }
       if (code === 'RATE_LIMITED') return { ok: false, message: (e as Error).message };
+      // The password was right and the server still said no — an access policy, a suspended account.
+      // Its words, and not a wrong password: it would not count towards signing out.
+      if (e instanceof DesktopError && e.status !== null && e.status !== 401) return { ok: false, message: e.message };
     }
     const failures = ctx.lock.recordFailure();
     if (failures >= 5) {
@@ -715,7 +726,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       ctx.lock.reset();
       return { ok: false, message: 'Too many attempts. You have been signed out.' };
     }
-    return { ok: false, message: 'That password is not right.' };
+    return { ok: false, message: `That password is not right (${failures} of 5). If you sign in with a passkey, choose Sign out and sign in again — your drafts are kept.` };
   });
   router.handle('security:unlockBiometric', async () => {
     const ok = await ctx.lock.unlockWithBiometric();

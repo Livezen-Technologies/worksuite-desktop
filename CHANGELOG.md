@@ -5,6 +5,65 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-29 — 0.2.49: fixes from the desktop QA sheet — staying signed in, Forgot password, Home
+
+From "Desktop App QA Task Sheet": each item names its test.
+
+**Fixed**
+
+- **Signed out again straight after unlocking (QA-002, QA-003, critical).**
+  - Unlocking WorkSuite with your password checks it by signing in once more.
+    The app then signed its old session out, using the new session's token.
+  - WorkSuite's sign-out also ends the session of the token it is called with,
+    so every unlock ended the session it had just opened.
+  - The next request, within half a minute, was refused with *Session ended.
+    Please sign in again*, and the app asked for your password again, and again
+    after the next lock.
+  - Now the session the check opens is closed at once, and yours carries on.
+    It was only locked, not ended.
+- **The lock screen said a right password was wrong** when the server refused
+  for another reason: an access policy, a suspended account, a second factor it
+  requires. It now shows the server's reason, and such a refusal no longer
+  counts towards the five attempts that sign you out. A wrong password says
+  how many of the five are used.
+- **Forgot your password? did nothing (QA-004).**
+  - The link asks the app to open the web app's reset page. That request is
+    only allowed once you are signed in, so from the sign-in screen it was
+    always refused, and silently.
+  - The link now opens the page while signed out, as does *Open WorkSuite in
+    browser* on the "this computer was removed" screen.
+  - Only these two named pages open this way, not any address.
+- **Today's Tasks was empty for people with tasks due today (QA-014).**
+  - Home asked only for the tasks you created, or are the first assignee of. A
+    task you were added to afterwards was left out, though the Tasks page shows
+    it.
+  - Home also compared the day the task's setter typed with today. For a task
+    with a time, that is their day, not yours.
+  - Home now fetches both lists and reads the due time on your clock, as the
+    Tasks page does.
+  - *Tasks due today* no longer counts overdue tasks. The *Today's work* card
+    lists them first.
+- **Customize opened Settings (QA-015).** It now opens a panel listing Home's
+  cards. Show or hide each one and move it up or down. It is kept on this
+  computer.
+- **Meetings on Home opened the Calendar (QA-018).** It opens Meetings when you
+  have that app, and the count is of meetings, not every event with a time.
+
+**Changed**
+
+- **Signing in with a passkey (QA-006):** after a minute with nothing back from
+  the browser, the screen says the likely reason: a passkey works only once it
+  has been added to your WorkSuite account on that server, on the web under My
+  account › Security.
+- **Adding a passkey (QA-010)** now says up front that the browser will ask
+  for your WorkSuite password. The server asks for it on purpose: a new way
+  into your account needs a fresh proof that it is you.
+
+**Server** (`Livezen-Technologies/worksuite`, same day): the calendar no
+longer shows other people's projects (QA-023).
+
+---
+
 ## 2026-09-29 — 0.2.48: The AI assistant on the desktop — ask about your work, confirm what it proposes, files from this computer
 
 From the AI dock (Ctrl/Cmd+Shift+A), Quick Ask, and the tray. Needs a

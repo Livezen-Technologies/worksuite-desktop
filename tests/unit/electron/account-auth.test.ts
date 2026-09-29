@@ -128,3 +128,33 @@ describe('the hold across a password change', () => {
     expect(auth.sessionId()).toBe(12);
   });
 });
+
+describe('unlocking with the password (QA-002, QA-003)', () => {
+  it('keeps this session, and closes the one the check opened with its own tokens', async () => {
+    let n = 644;
+    const bearers: Array<string | null> = [];
+    const { auth, calls, secrets } = setup(() => json(tokens(++n)));
+    await auth.signIn('a@x.lk', 'pw');
+    expect(auth.sessionId()).toBe(645);
+    const fetch = (auth as unknown as { fetch: ReturnType<typeof vi.fn> }).fetch;
+    fetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, string>;
+      calls.push({ url, body });
+      bearers.push(new Headers(init?.headers).get('Authorization'));
+      return json(tokens(++n));
+    });
+    expect(await auth.verifyPassword('a@x.lk', 'pw')).toBe(true);
+    await new Promise((r) => setTimeout(r, 0));
+    // Signing the old session out with the new token ended the new one too (the server's logout ends its caller's).
+    expect(calls.at(-1)).toEqual({ url: 'https://ws.example/api/auth/logout', body: { refresh_token: 'rt646' } });
+    expect(bearers.at(-1)).toBe(`Bearer ${jwt({ sub: 7, type: 'access', sid: 646 })}`);
+    expect(auth.sessionId()).toBe(645);
+    expect(secrets.get('auth:refresh')).toBe('rt645');
+  });
+
+  it('says no to a wrong password, and opens nothing', async () => {
+    const { auth, calls } = setup((url) => (url.endsWith('/api/auth/login') ? json(null, 401) : json(tokens(1))));
+    expect(await auth.verifyPassword('a@x.lk', 'nope')).toBe(false);
+    expect(calls.map((c) => c.url)).toEqual(['https://ws.example/api/auth/login']);
+  });
+});

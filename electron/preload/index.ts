@@ -65,6 +65,7 @@ const api = {
     cancelMfa: call('auth:cancelMfa'),
     passkeyStart: call('auth:passkeyStart'),
     passkeyCancel: call('auth:passkeyCancel'),
+    openPage: call('auth:openPage'),
     signOut: call('auth:signOut'),
     completeSetup: call('auth:completeSetup'),
     sessionId: call('auth:sessionId'),

@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AuthState } from '@shared/types';
 import { app } from '../../core/app-state';
 import { call, errorMessage, isMac } from '../../core/bridge';
@@ -124,7 +124,7 @@ function SignInStep({ auth }: { auth: AuthState }) {
       <Button variant="primary" size="lg" type="submit" loading={busy} disabled={!email || !password}>
         {t('auth.signIn')}
       </Button>
-      <button type="button" className="text-left text-[12.5px] font-semibold text-primary hover:underline" onClick={() => void call('app:openInBrowser', { path: '/forgot-password' })}>
+      <button type="button" className="text-left text-[12.5px] font-semibold text-primary hover:underline" onClick={() => void call('auth:openPage', { page: 'forgot-password' }).catch((e: unknown) => setError(errorMessage(e)))}>
         Forgot your password?
       </button>
       {auth.server?.passkey ? (
@@ -154,6 +154,13 @@ function SignInStep({ auth }: { auth: AuthState }) {
 function PasskeyStep({ auth }: { auth: AuthState }) {
   const host = auth.server ? new URL(auth.server.origin).host : '';
   const [busy, setBusy] = useState(false);
+  // Nothing back after a minute is, most often, an account with no passkey for this server:
+  // Windows Hello then has nothing to offer, and says so only in the browser (QA-006).
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 60_000);
+    return () => clearTimeout(t);
+  }, []);
   const again = async () => {
     setBusy(true);
     try {
@@ -181,6 +188,11 @@ function PasskeyStep({ auth }: { auth: AuthState }) {
           Use my password instead
         </Button>
       </div>
+      {slow ? (
+        <p className="rounded-[10px] bg-warning-bg px-3.5 py-2.5 text-[12.5px] text-[#7A4308] dark:text-warning">
+          Nothing yet? A passkey works only once it has been added to your WorkSuite account for {host} — in the web app, under My account › Security. If Windows Hello said it found no passkey, add one there, or use your password.
+        </p>
+      ) : null}
       <p className="text-[12px] text-ink-3">If your browser asks whether to open WorkSuite, allow it. The sign-in expires after five minutes.</p>
     </div>
   );
@@ -259,7 +271,7 @@ function Stopped({ auth }: { auth: AuthState }) {
         {auth.stage === 'revoked' ? <p className="mt-2 text-[12.5px] text-ink-3">WorkSuite's data on this computer has been removed. Files you saved yourself were not touched.</p> : null}
       </div>
       <div className="flex gap-2">
-        <Button onClick={() => void call('app:openInBrowser', { path: '/account/settings' })} icon="external">
+        <Button onClick={() => void call('auth:openPage', { page: 'account' }).catch(() => undefined)} icon="external">
           Open WorkSuite in browser
         </Button>
         <Button variant="primary" onClick={() => void call('auth:signOut', { wipe: false })}>

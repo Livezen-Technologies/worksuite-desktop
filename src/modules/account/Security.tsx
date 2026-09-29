@@ -383,12 +383,12 @@ function Passkeys({ list, loading, max }: { list: Passkey[]; loading: boolean; m
     <Card
       title="Passkeys"
       action={
-        <button type="button" className={btn} onClick={add} disabled={max > 0 && active.length >= max} title="Opens WorkSuite in your browser, where a passkey can be made">
+        <button type="button" className={btn} onClick={add} disabled={max > 0 && active.length >= max} title="Opens WorkSuite in your browser. You confirm your WorkSuite password there, then your device makes the passkey.">
           <Icon name="plus" size={15} /> Add passkey <Icon name="external" size={12} className="text-ink-3" />
         </button>
       }
     >
-      <p className="m-0 -mt-2 mb-3 text-[12.5px] text-ink-3">Sign in with your fingerprint, face or device PIN. Added in your browser, then listed here.</p>
+      <p className="m-0 -mt-2 mb-3 text-[12.5px] text-ink-3">Sign in with your fingerprint, face or device PIN. Adding one opens WorkSuite in your browser: confirm your WorkSuite password there — a new way into your account needs it — then Windows Hello, Touch ID or your security key makes the passkey, and it is listed here.</p>
       {loading ? (
         <Spinner />
       ) : active.length === 0 ? (
