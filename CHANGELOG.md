@@ -5,6 +5,127 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-29 — Garage & Vehicle Service Center, part 1 — the service desk: jobs, the board, walk-in and check-in (ships in the next release)
+
+Garage is in the launcher and under Business in the sidebar, native, for
+anyone whose company has the Garage app and who holds `garage.access`
+there. Everybody else does not see it at all — not in a list, a link, a
+notification or the browser. It works against WorkSuite's Garage module
+(the web page's `/api/garage/*`); what each person may do is what the
+server says, company by company.
+
+**Added**
+
+- **The rail**, as a service desk works: Overview, the Job board, the jobs
+  by where they are (new, awaiting diagnosis, estimate pending, awaiting
+  approval, waiting for parts, in progress, quality check, ready,
+  completed, cancelled, overdue, mine, all), Customers, Vehicles, Set-up
+  and Settings. With several companies, a picker narrows everything to one.
+  **New walk-in** is at the top for those who may open jobs.
+- **Overview.** The server's figures — open jobs, vehicles in the
+  workshop, started today, waiting for approval, waiting for parts,
+  overdue, ready for delivery, technicians working, bays free — each
+  opening the list that counted it. Jobs by stage, the bays, what is late,
+  what waits for the customer, and what is ready to collect. A company not
+  set up yet says so, with a way to its set-up.
+- **The job board.** The server's nine columns. Drag a card to ask for the
+  move — or Alt+→ / Alt+← on a card. WorkSuite decides: the card never
+  moves on this computer by itself, and a move it refuses stays put with
+  its sentence ("Estimate not approved: record the customer's decision on
+  the estimate."). A move that needs a reason asks for one first. Filter by
+  branch, advisor, priority or a search.
+- **Jobs.** Each list, a search (job number, plate, VIN, customer) and the
+  priority and branch; newest first, fifty to a page.
+- **A walk-in.** One search for a phone, a name, a vehicle number or a
+  VIN. Pick the vehicle (its owner comes with it) or the customer (their
+  vehicles are listed), or add either when missing — a customer goes into
+  CRM, so adding one also needs CRM's permission to add accounts; a new
+  vehicle is checked against the numbers and VINs already recorded. A
+  vehicle with a job already open is said before anything is sent; the
+  server refuses a second job until **Open a second job** confirms it. If
+  it refuses after adding the customer, the next try uses that customer
+  instead of adding them twice. The job opens as a draft at normal
+  priority, and the check-in is next.
+- **The job card.** Number, vehicle, customer, advisor, technicians, bay,
+  promised time, odometer, pipeline, where it is on the board, the moves
+  WorkSuite offers from here and what stands in the way of the others,
+  **Edit** (priority, job type, promised time, what is asked for, notes —
+  only what changed is sent), and **Cancel job…** with a reason (and words
+  for "other"). A move sends the version the card was read at; when
+  somebody else changed the job first the card shows it as it is now.
+  Esc goes back.
+- **The check-in**, on the card's Check-in tab: odometer (a reading lower
+  than the vehicle's last asks why, of those allowed to record one), fuel
+  E–¼–½–¾–F, the promised handover, complaints (quick picks or the
+  customer's words — each becomes a diagnostic item), requested services,
+  the condition of every area, damage marked on the diagram, photos in
+  their slots (dropped from this computer, chosen, or taken with the
+  camera), belongings, valuables, and the customer's signature. **Save**
+  keeps what is there; **Check the vehicle in** asks WorkSuite to complete
+  it, and what it still needs — the company's required fields and photo
+  count — is listed beside the button and again as the refusal. Once
+  checked in it is the read-only record of how the vehicle arrived.
+- **Media, Notes, Activity** tabs: every file on the job (drop, choose or
+  camera; show one to the customer if you may publish), notes internal or
+  for the customer (only those who may publish write the second kind), and
+  the job's timeline. Inspection, Estimate, Work orders, Parts, QC and
+  Invoice & handover are listed, dimmed, until those parts of Garage
+  arrive.
+- **Customers** — CRM's accounts as the garage sees them: vehicles, open
+  jobs, history and, with financial visibility, what they owe. **Edit in
+  CRM** for the identity; **New customer** adds one through CRM.
+- **Vehicles** and **Vehicle 360°**: the list and a search, a new vehicle
+  or an edit (another customer records a new owner, and the history stays
+  with the vehicle), an odometer reading with the override rules, and the
+  vehicle's history tab by tab — service, open jobs, inspections, repairs,
+  parts, mileage, invoices, photos, notes, owners, activity. **New job**
+  opens a walk-in for it.
+- **Set-up** (the first-time wizard) one company at a time: the seventeen
+  steps with what is done, and branches (hours, warehouse, labour rate),
+  workshops, bays, technicians, labour rates, service types, skills and
+  makes and models edited in place. Somebody who may set up Garage lands
+  here until the minimum is done. **Settings** is the company's own garage
+  settings from WorkSuite's standard form.
+- **Links and keys.** `/garage?job=ID` (the server's notifications) and
+  `worksuite://garage/jobs/<id>` or `…/vehicles/<id>` open here. N a new
+  walk-in, O overview, B board, J jobs, C customers, V vehicles, / search;
+  **New walk-in job** and **Garage job board** in the command palette.
+  A garage notification reads the board and the lists again at once.
+
+**Where it bites**
+
+- **Offline it reads, it does not write.** The overview, the board, the
+  lists, customers, vehicles and the job cards you opened are served from
+  this computer's encrypted copy when WorkSuite cannot be reached, marked as
+  such. Every write — a move, a walk-in, a check-in, a photo — needs
+  WorkSuite: the state machine, the check-in and the numbering are the
+  server's, so nothing is queued for later.
+- A job card in that copy includes the valuables declared at check-in, as
+  WorkSuite shows them to staff. The copy is encrypted like every other
+  cached answer and is removed when Garage is taken away.
+- A file above 25 MB (a long video) cannot go through the desktop's API
+  proxy; add it from the web or the phone.
+- Links into Garage used to count as "no app" and were never refused; now
+  they need the Garage app like any other.
+
+**Server this needs**
+
+- WorkSuite's Garage module, stage A (backend branch `wt/garage`, not
+  deployed yet). Against a server without it, Garage is not offered.
+
+**Checked**
+
+- Unit tests for the board (a drop asks with the version shown, a refusal
+  leaves the card and shows the server's words, a reason is asked for
+  first, nothing is sent offline, the keyboard move), the walk-in (open-job
+  warning and confirmation, adding a customer and vehicle, reusing what a
+  refused walk-in added), the check-in (what is missing, the refusal's
+  list, a lower odometer), the job card's moves and cancel, actions hidden
+  without the permission, the tab registry, deep links and notification
+  links, the catalogue change, and a garage notice refreshing the board.
+
+---
+
 ## 2026-09-29 — 0.2.50: apps you were not given stay hidden
 
 An app you were not given is not there at all: not in a list, not behind a

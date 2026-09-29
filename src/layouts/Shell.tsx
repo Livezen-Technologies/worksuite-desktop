@@ -114,6 +114,8 @@ export function Shell() {
       registerCommand({ id: 'upload', label: 'Upload file', group: 'Create', run: () => navigate('/files?upload=1'), when: () => canOpen('files') }),
       registerCommand({ id: 'clock-in', label: 'Clock in / out', group: 'Create', run: () => navigate('/hr'), when: () => canOpen('hr') }),
       registerCommand({ id: 'new-lead', label: 'New lead', group: 'Create', run: () => navigate('/crm?new=1'), when: () => canOpen('crm') }),
+      registerCommand({ id: 'garage-walk-in', label: 'New walk-in job', group: 'Create', keywords: 'garage vehicle job card check-in', run: () => navigate('/garage?view=walkin'), when: () => canOpen('garage') }),
+      registerCommand({ id: 'garage-board', label: 'Garage job board', group: 'Navigate', keywords: 'garage workshop kanban jobs', run: () => navigate('/garage?view=board'), when: () => canOpen('garage') }),
       ...Array.from({ length: 9 }, (_, i) => registerCommand({ id: `tab-${i + 1}`, label: `Go to tab ${i + 1}`, group: 'Shell', run: () => activateIndex(i + 1) })),
       // ⌃0–⌃9 (Ctrl+Alt elsewhere): All organizations, then the switcher's list in order. Shortcuts only, not palette entries.
       ...Array.from({ length: 10 }, (_, i) =>

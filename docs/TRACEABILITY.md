@@ -117,6 +117,34 @@ blocked by something outside the code.
 | RDC-05, 09…13, 15…17 | Gap | Copy-from-Drive, receipts, reply quotes and the shared message components need server and widget changes; notification inline reply and the mini window are not done |
 | TEAM-*, LIVE-*, VOICE-* | Gap | Multi-staff chats, live typing/receipts and widget voice calls: none of their APIs exist on the server yet |
 
+## Garage & Vehicle Service Center (WS-GARAGE-SRS-001 v1.1, desktop)
+
+`src/modules/garage`, against the server's stage-A contract (`/api/garage/*`). Tests:
+`tests/unit/renderer/garage.test.ts`, `garage-screens.test.tsx`.
+
+| ID | Status | Where / note |
+|---|---|---|
+| FR-APP-01, §36 | Done | Native catalogue app `garage` (app `garage`, `garage.access`), manifest in `modules/registry.ts`; hidden from anyone the server does not give it |
+| FR-APP-04 | Done | Holders of `garage.settings.manage` land on Set-up while a company is not set up (`GarageShell.landing`) |
+| FR-APP-05 | Partial | Stage-B job-card tabs listed dimmed until they arrive (`garage/registry.ts`); Edit in CRM only with CRM |
+| FR-DSH-01, 03 | Done | `Overview.tsx`: the server's nine figures, each opening the job list that counted it. Revenue today is the server's to add (B3) |
+| FR-DSH-02 | Partial | Jobs by stage, bays, overdue, waiting for the customer, ready for collection. Appointments, technician workload, parts, revenue and reminders wait for stage B / phase 2 |
+| FR-DSH-04 | Later | Role dashboards |
+| FR-BRD-01..04 | Done | `Board.tsx`: the server's columns; a drop (or Alt+→/←) asks `transition {column}` with the version shown; a refusal leaves the card and shows the sentence; a reason is asked first when the move needs one |
+| FR-BRD-05 | Partial | Branch, advisor, priority, search; read again every 30 s and on any garage notification. No workshop / technician / vehicle-type filter; TV mode later |
+| FR-CUS-01, 02 | Done | `Customers.tsx`: CRM accounts, added through CRM (`crm.account`); WhatsApp and preferred contact are not kept by CRM |
+| FR-VEH-01..06 | Done | `Vehicles.tsx`, `Vehicle360.tsx`: duplicate check, new owner, odometer override with reason, 360° tabs |
+| FR-VEH-07 | Done | Set-up → Makes and models |
+| FR-WLK-01, 02 | Done | `WalkIn.tsx`: one search, create-if-missing, open-job warning and confirmation, what a refused walk-in added is reused |
+| FR-CHK-01..06, 08 | Done | `job/Checkin.tsx`: readings, complaints, conditions, damage diagram (the web's zone codes), photo slots (drop, pick, camera), belongings, valuables, signature, the server's list of what is missing |
+| FR-CHK-07 | Later | Printing / sending the check-in sheet: no document on the server yet |
+| FR-JOB-01, 03..09 | Done | `JobCard.tsx`: header, pipeline tracker, the server's transitions, edit, cancel with reason, version conflicts, overdue |
+| FR-JOB-07 | Partial | Overview, Check-in, Media, Notes, Activity; Inspection, Estimate, Work orders, Parts, QC, Invoice & handover arrive with stage B |
+| FR-JOB-10 | Later | Job QR on a printed card |
+| FR-MED-01..03 | Done | `job/Media.tsx` (internal until published, `garage.media.publish`), `job/Notes.tsx` (internal / customer) |
+| FR-SET-01, §25, §27 | Partial | `Settings.tsx` (the standard settings form, per company), `Setup.tsx` (the wizard and its records); the workflow builder is phase 2 |
+| Offline | Partial | READ_CACHE for options, board, overview, jobs (and job cards opened), vehicles, customers; every write online only — nothing is queued |
+
 ## Devices, security, updates (SEC, UPD)
 
 | ID | Status | Where / note |

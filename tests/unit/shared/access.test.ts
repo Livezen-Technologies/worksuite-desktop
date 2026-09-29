@@ -66,7 +66,9 @@ describe('a web path belongs to an app', () => {
     expect(canOpenRoute('/calls/ring?uuid=x', everyday)).toBe(true);
     expect(canOpenRoute('/chat?room=4', everyday)).toBe(true);
     expect(canOpenRoute('/diagnostics', everyday)).toBe(true);
-    expect(canOpenRoute('/garage/jobs/1', everyday)).toBe(true);
+    // Garage is a native app now: its routes are the person's only with the app.
+    expect(canOpenRoute('/garage/jobs/1', everyday)).toBe(false);
+    expect(canOpenRoute('/garage/jobs/1', visibleAppIds(boot(['garage'], ['garage.access'])))).toBe(true);
   });
 
   it('refuses a link whichever way it would open — a tab, or the browser', () => {

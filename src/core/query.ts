@@ -29,7 +29,7 @@ const QUIET_CHAT_EVENTS = /^chat\.(typing\.|presence$|call\.)/;
 export function wireQueryInvalidation(): void {
   on('realtime:resync', () => void queryClient.invalidateQueries());
   on('organization:changed', () => void queryClient.invalidateQueries());
-  on<{ type: string; room_id?: number; conversation_id?: number }>('realtime:event', (e) => {
+  on<{ type: string; room_id?: number; conversation_id?: number; category?: string; link?: string }>('realtime:event', (e) => {
     if (WEBSITE_EVENTS.has(e.type)) {
       void queryClient.invalidateQueries({ queryKey: ['website', 'inbox'] });
       if (e.conversation_id !== undefined) void queryClient.invalidateQueries({ queryKey: ['website', 'conversation', String(e.conversation_id)] });
@@ -40,6 +40,8 @@ export function wireQueryInvalidation(): void {
       if (e.room_id !== undefined) void queryClient.invalidateQueries({ queryKey: ['chat', 'messages', String(e.room_id)] });
     }
     if (e.type === 'notification') void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    // A garage notice (a job opened, overdue, waiting for QC, ready) means the board and the lists moved: read them again.
+    if (e.type === 'notification' && (e.category === 'garage' || (typeof e.link === 'string' && e.link.startsWith('/garage')))) void queryClient.invalidateQueries({ queryKey: ['garage'] });
     if (e.type === 'activity.new') void queryClient.invalidateQueries({ queryKey: ['home'] });
     if (e.type === 'hr.attendance.changed') void queryClient.invalidateQueries({ queryKey: ['hr'] });
   });

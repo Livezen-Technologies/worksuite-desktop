@@ -98,6 +98,7 @@ const CREATE: Array<{ id: string; label: string; app: string; route: string; ico
   { id: 'upload', label: 'Upload file', app: 'files', route: '/files?upload=1', icon: 'upload' },
   { id: 'new-contact', label: 'New contact', app: 'contacts', route: '/contacts?new=1', icon: 'contact' },
   { id: 'new-lead', label: 'New lead', app: 'crm', route: '/crm?new=1', icon: 'users' },
+  { id: 'new-walk-in', label: 'New walk-in job', app: 'garage', route: '/garage?view=walkin', icon: 'car' },
 ];
 
 interface ServerGroup {

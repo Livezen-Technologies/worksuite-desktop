@@ -130,6 +130,7 @@ export const NOTIFICATION_CATEGORY_APPS: Readonly<Record<string, readonly string
   tickets: ['support'],
   appointments: ['appointments'],
   amc: ['amc'],
+  garage: ['garage'],
   assets: ['assets'],
   pos: ['pos'],
   notes: ['notes'],

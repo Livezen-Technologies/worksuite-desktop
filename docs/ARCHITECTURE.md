@@ -102,6 +102,13 @@ or a queued change is on disk before the user is told it was saved.
 - `modules/` — one folder per desktop module with a validated manifest
   (`modules/registry.ts`, §15). Modules are lazy chunks; each renders inside
   its own error boundary.
+- A module may keep its own small registry for parts that arrive later:
+  Garage's job card draws its tabs from `modules/garage/registry.ts`
+  (`JOB_TABS`, and `EXTRA_VIEWS` for its rail), so a stage of the server's
+  Garage module adds one file and one line, not a change to the card.
+- READ_CACHE is declared in a module's manifest and served by the main
+  process for the prefixes in `CACHE_PREFIXES` (`electron/main/index.ts`),
+  per module, so an app taken away takes its saved answers with it.
 - Tabs stay mounted while recent (instant switching) and are suspended after
   the configured idle time; the tab set is saved and restored only for apps
   the user can still open.

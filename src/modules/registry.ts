@@ -199,6 +199,22 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./salon/SalonShell'),
   },
   {
+    // Garage & Vehicle Service Center. Lists, the board and the overview are read from the saved copy while
+    // WorkSuite cannot be reached (READ_CACHE); every write needs it — the job's state machine, the check-in
+    // and the numbering are the server's, so nothing is queued.
+    input: defineDesktopManifest({
+      id: 'garage', name: 'Garage', icon: 'car', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'READ_CACHE', entities: ['job', 'vehicle', 'customer'], cache: ['/api/garage/options', '/api/garage/board', '/api/garage/dashboard', '/api/garage/jobs', '/api/garage/vehicles', '/api/garage/customers'] },
+      native: ['notifications', 'file-drop', 'camera'],
+      quickActions: [
+        { id: 'walk-in', label: 'New walk-in', route: '/garage?view=walkin' },
+        { id: 'job-board', label: 'Job board', route: '/garage?view=board' },
+      ],
+      deepLinks: ['garage/jobs/:id', 'garage/vehicles/:id'],
+    }),
+    load: () => import('./garage/GarageShell'),
+  },
+  {
     input: defineDesktopManifest({
       id: 'inventory', name: 'Inventory', icon: 'package', contractVersion: 1, desktop: { enabled: true },
       offline: { mode: 'READ_CACHE', entities: ['product'], cache: ['/api/inventory/products', '/api/inventory/stock'] },

@@ -208,6 +208,34 @@ What the server does not give sync, and how the app copes:
 - **Deleting a folder does not take its files to the recycle bin**; the app
   deletes a Drive folder only once it is empty.
 
+## Garage & Vehicle Service Center
+
+The Garage module uses the web page's JSON API, `/api/garage/*`, through the
+API proxy (contract: the backend's Garage `web-api.md`, stage A). Every route
+needs `garage.access`; what a person may do is per company, in
+`GET options` → `companies[].can`, and the screens hide the rest.
+
+| Need | Endpoint |
+|---|---|
+| Companies, what the reader may do, every list of choices | `GET /api/garage/options` |
+| Overview figures, each with the job-list filter that counted it | `GET /api/garage/dashboard?org=&branch_id=` |
+| The board (columns, bays) | `GET /api/garage/board?org=&branch_id=&advisor=&priority=&q=` |
+| Jobs | `GET /api/garage/jobs?…filters…&page=`, `GET /api/garage/jobs/{id}` (Job 360°), `PATCH /api/garage/jobs/{id}` |
+| Moves (SM-01, decided by the server) | `POST /api/garage/jobs/{id}/transition {to\|column, reason}`, `POST …/cancel {reason_code, reason}` — both with `If-Match: <version>` |
+| Walk-in | `GET /api/garage/walk-in/search?q=`, `POST /api/garage/walk-in` (`confirm_open_job` after a `409 open_job`) |
+| Check-in | `POST /api/garage/jobs/{id}/checkin` (`complete: true` to check the vehicle in; `422 errors.missing` otherwise) |
+| Media and notes | `POST /api/garage/jobs/{id}/media` (multipart, `client_temp_id`), `GET\|PATCH\|DELETE /api/garage/media/{id}`, `POST …/notes`, `GET …/timeline` |
+| Customers (CRM accounts) | `GET /api/garage/customers?q=`, `GET …/{id}`, `POST /api/garage/customers` (also needs `crm.account`) |
+| Vehicles | `GET /api/garage/vehicles`, `GET …/lookup?number=&vin=`, `POST`, `GET\|PUT …/{id}`, `GET …/{id}/360`, `POST …/{id}/odometer` |
+| Set-up and settings | `GET /api/garage/setup`, `POST …/setup/steps/{step}`, `GET\|PUT …/setup/branches[/{id}]`, `GET\|POST\|PUT …/setup/{kind}[/{id}]`, `GET …/setup/technicians/candidates`, `GET /api/garage/pipelines`; `/api/module-settings/garage?org=` |
+
+Refusals carry what a screen acts on in `errors` (`missing`, `field`,
+`existing`, `code: open_job | version_conflict`, `server`, `added`), and the
+screens show the server's sentence as written. READ_CACHE covers options,
+board, dashboard, jobs, vehicles and customers (`CACHE_PREFIXES` in
+`electron/main/index.ts`); nothing is written offline. The server's garage
+notifications link to `/garage?job=ID`, which opens the job card here.
+
 ## Not provided yet
 
 - `monitoring_policy` is always `null`, and every `feature_flags` entry is
