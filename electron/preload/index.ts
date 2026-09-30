@@ -221,6 +221,16 @@ const api = {
     print: call('pdf:print'),
     pickLocal: call('pdf:pickLocal'),
     diagnostics: call('pdf:diagnostics'),
+    mode: call('pdf:mode'),
+    edit: call('pdf:edit'),
+    undo: call('pdf:undo'),
+    redo: call('pdf:redo'),
+    annotations: call('pdf:annotations'),
+    textSpan: call('pdf:textSpan'),
+    save: call('pdf:save'),
+    resolve: call('pdf:resolve'),
+    discard: call('pdf:discard'),
+    extract: call('pdf:extract'),
     /** PDFs from a real drop: turned into paths here, into handles in main — as files.registerDropped. */
     registerDropped: (files: File[]): Promise<unknown> => {
       const paths = Array.from(files)

@@ -57,6 +57,22 @@ class FakeEngine implements EngineHandle {
   async scan() {
     return { ...emptySecurity(), javascript: 2, launchActions: 1, pagesScanned: 3, structureScanned: true };
   }
+  async annotations() {
+    return [];
+  }
+  async apply() {
+    return [[612, 792], [612, 792], [792, 612]] as Array<[number, number]>;
+  }
+  async textSpan() {
+    return { rects: [], text: '' };
+  }
+  async save() {
+    return new Uint8Array(0);
+  }
+  async extract() {
+    return new Uint8Array(0);
+  }
+  async unload() {}
   async close() {
     this.closed = true;
   }
@@ -201,7 +217,9 @@ describe('opening (§5, PDF-OPEN-010)', () => {
     const v0 = await svc.open(7, { kind: 'local', handle: pick!.handle });
     expect(v0.state).toBe('opening');
     const v = await readyView(v0.id);
-    expect(v).toMatchObject({ state: 'ready', name: 'Contract.pdf', pageCount: 3, mode: 'VIEW', saveState: 'read-only', source: { kind: 'local', label: 'This computer' } });
+    // Stage D2: a PDF on this computer can be changed and saved in place, so it opens with nothing to save rather than read-only.
+    expect(v).toMatchObject({ state: 'ready', name: 'Contract.pdf', pageCount: 3, mode: 'VIEW', saveState: 'saved', source: { kind: 'local', label: 'This computer' } });
+    expect(v.edit).toMatchObject({ modes: ['VIEW', 'ANNOTATE', 'EDIT'], canAnnotate: true, canOrganize: true, local: true });
     expect(engines[0]!.opened[0]!.file).toMatchObject({ kind: 'plain', path: join(dir, 'Contract.pdf') });
     expect(v.gates.download).toBe('This file is already on this computer.');
     expect(audit).toEqual([{ action: 'pdf.opened', details: { source: 'local', file_id: null, version: null, pages: 3, mode: 'VIEW' } }]);

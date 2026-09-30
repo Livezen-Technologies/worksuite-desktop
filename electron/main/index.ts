@@ -92,6 +92,8 @@ if (!app.isPackaged && process.env.WS_E2E_FAKE_MEDIA) {
 /** PDFs handed over before PDF Studio is running wait here. */
 const pendingPdfs: string[] = [];
 let handPdfs: (paths: string[]) => void = (paths) => void pendingPdfs.push(...paths);
+/** PDF Studio's saves waiting for WorkSuite go when it answers again (set once PDF Studio exists). */
+let pdfOnline: () => void = () => undefined;
 
 if (!app.requestSingleInstanceLock()) {
   // FR-DL-04: a second launch hands its arguments (and deep link) to the first.
@@ -1174,6 +1176,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     // A session that started online asks again too: access may have changed while the server was out of reach.
     if (sessionCtl.current()?.offline === false) void accessWatch.refresh('reconnect');
     void queue.replay(uid);
+    pdfOnline();
     void notifications.refreshCounts();
     void audit.flush();
     void calls.check();
@@ -1202,8 +1205,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     dbCheck: () => db.integrityCheck(),
     navigate: (req) => navigate(req),
     appVersion: app.getVersion(),
+    device: () => ({ id: device.installId(), name: device.deviceName() }),
+    userName: () => sessionCtl.get().user?.name ?? '',
   });
   handPdfs = (paths) => void pdfStudio.openFromOs(paths);
+  pdfOnline = () => pdfStudio.online();
   if (pendingPdfs.length) handPdfs(pendingPdfs.splice(0));
 
   const diagnostics = new DiagnosticsService({

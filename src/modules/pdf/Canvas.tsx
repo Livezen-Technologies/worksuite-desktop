@@ -26,7 +26,8 @@ export interface CanvasProps {
   mode: PdfViewMode;
   /** The page single and two-page modes show; kept in step by `onPage` in continuous modes. */
   page: number;
-  tool: 'select' | 'hand';
+  /** `annotate`: the page overlay (annotation tools) takes the pointer; links and the hand are off. */
+  tool: 'select' | 'hand' | 'annotate';
   hits: PdfSearchHit[];
   activeHit: PdfSearchHit | null;
   jump: Jump | null;
@@ -35,6 +36,10 @@ export interface CanvasProps {
   onLink: (page: number, link: PdfLinkView) => void;
   onViewport?: (w: number, h: number) => void;
   presentation?: boolean;
+  /** Goes up with every edit: pages are drawn again (the old image stays until the new one arrives). */
+  revision?: number;
+  /** Drawn over each page (annotations, the tool being used), in CSS pixels; `k` is CSS pixels per point. */
+  overlay?: (page: number, k: number) => ReactNode;
 }
 
 /** Render requests with tickets: those no longer wanted are cancelled together, a frame later. */
@@ -65,6 +70,7 @@ class Requests {
 }
 
 const quantize = (s: number) => Math.round(s * 1000) / 1000;
+const EMPTY_LINKS = new Map<number, PdfLinkView[]>();
 const noop = () => undefined;
 
 function BitmapCanvas({ bitmap, style }: { bitmap: PdfBitmap; style: CSSProperties }) {
@@ -76,6 +82,7 @@ function BitmapCanvas({ bitmap, style }: { bitmap: PdfBitmap; style: CSSProperti
 }
 
 interface PageProps {
+  revision: number;
   requests: Requests;
   placed: PlacedPage;
   size: PdfPageSize;
@@ -87,12 +94,12 @@ interface PageProps {
   children?: ReactNode;
 }
 
-function PageView({ requests, placed, size, zoom, dpr, settled, visible, children }: PageProps) {
+function PageView({ revision, requests, placed, size, zoom, dpr, settled, visible, children }: PageProps) {
   const target = quantize(zoom * CSS_PER_POINT * dpr);
   const previewScale = quantize(Math.min(target, PREVIEW_WIDTH / Math.max(1, size[0])));
   const tiled = Math.round(size[0] * target) * Math.round(size[1] * target) > WHOLE_PAGE_PIXELS;
   const [preview, setPreview] = useState<PdfBitmap | null>(null);
-  const [sharp, setSharp] = useState<{ scale: number; bmp: PdfBitmap } | null>(null);
+  const [sharp, setSharp] = useState<{ scale: number; rev: number; bmp: PdfBitmap } | null>(null);
   const [tiles, setTiles] = useState<Array<{ key: string; scale: number; tile: Tile; bmp: PdfBitmap }>>([]);
   const have = useRef(new Set<string>());
 
@@ -105,20 +112,21 @@ function PageView({ requests, placed, size, zoom, dpr, settled, visible, childre
       live = false;
       requests.cancel([r.ticket]);
     };
-  }, [requests, placed.index, previewScale]);
+  }, [requests, placed.index, previewScale, revision]);
 
   // The sharp page, once the view has settled.
   const sharpScale = sharp?.scale ?? 0;
+  const sharpRev = sharp?.rev ?? -1;
   useEffect(() => {
-    if (!settled || tiled || sharpScale === target || previewScale >= target) return;
+    if (!settled || tiled || (sharpScale === target && sharpRev === revision) || previewScale >= target) return;
     let live = true;
     const r = requests.render({ page: placed.index, scale: target });
-    r.done.then((bmp) => live && setSharp({ scale: target, bmp }), noop);
+    r.done.then((bmp) => live && setSharp({ scale: target, rev: revision, bmp }), noop);
     return () => {
       live = false;
       requests.cancel([r.ticket]);
     };
-  }, [requests, placed.index, settled, tiled, target, sharpScale, previewScale]);
+  }, [requests, placed.index, settled, tiled, target, sharpScale, sharpRev, previewScale, revision]);
 
   // Tiles of the part on screen, when the page is too large to draw whole (PDF-VIEW-012).
   const wanted = useMemo(() => (tiled && settled ? tilesFor(size, target, dpr, visible) : []), [tiled, settled, size, target, dpr, visible]);
@@ -128,7 +136,7 @@ function PageView({ requests, placed, size, zoom, dpr, settled, visible, childre
     let live = true;
     const tickets: string[] = [];
     for (const tile of wanted) {
-      const key = `${target}:${tile.x},${tile.y}`;
+      const key = `${target}:${revision}:${tile.x},${tile.y}`;
       if (have.current.has(key)) continue;
       const r = requests.render({ page: placed.index, scale: target, tile });
       tickets.push(r.ticket);
@@ -144,19 +152,20 @@ function PageView({ requests, placed, size, zoom, dpr, settled, visible, childre
     };
     // `wantKey` names the tiles; `wanted` itself is a new array each time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requests, placed.index, target, wantKey]);
+  }, [requests, placed.index, target, wantKey, revision]);
 
-  // A new zoom forgets the old tiles (the preview covers the gap until the new ones arrive).
+  // A new zoom or an edit forgets the old tiles (the preview covers the gap until the new ones arrive).
   useEffect(() => {
-    have.current = new Set([...have.current].filter((k) => k.startsWith(`${target}:`)));
-  }, [target]);
+    have.current = new Set([...have.current].filter((k) => k.startsWith(`${target}:${revision}:`)));
+  }, [target, revision]);
 
   const k = zoom * CSS_PER_POINT;
   const whole: CSSProperties = { left: 0, top: 0, width: placed.w, height: placed.h };
   return (
     <div data-page={placed.index} className="absolute overflow-hidden bg-white shadow-[0_1px_4px_rgba(0,0,0,0.25)]" style={{ left: placed.x, top: placed.y, width: placed.w, height: placed.h }}>
       {preview ? <BitmapCanvas bitmap={preview} style={whole} /> : null}
-      {!tiled && sharp ? <BitmapCanvas bitmap={sharp.bmp} style={whole} /> : null}
+      {/* An edit's new preview replaces an older sharp image: until the new sharp one arrives, the preview shows the change. */}
+      {!tiled && sharp && (sharp.rev === revision || !preview) ? <BitmapCanvas bitmap={sharp.bmp} style={whole} /> : null}
       {tiled
         ? tiles
             .filter((t) => t.scale === target)
@@ -171,7 +180,7 @@ function rectStyle(r: PdfRect, k: number): CSSProperties {
   return { left: r[0] * k, top: r[1] * k, width: Math.max(2, r[2] * k), height: Math.max(2, r[3] * k) };
 }
 
-export function PdfCanvas({ session, pages, zoom, mode, page, tool, hits, activeHit, jump, onPage, onZoom, onLink, onViewport, presentation }: CanvasProps) {
+export function PdfCanvas({ session, pages, zoom, mode, page, tool, hits, activeHit, jump, onPage, onZoom, onLink, onViewport, presentation, revision = 0, overlay }: CanvasProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 800, h: 600 });
   const [scroll, setScroll] = useState({ top: 0, left: 0 });
@@ -180,7 +189,9 @@ export function PdfCanvas({ session, pages, zoom, mode, page, tool, hits, active
   const [quiet, setQuiet] = useState(0);
   const settled = motion === quiet;
   const [dpr, setDpr] = useState(() => (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1));
-  const [links, setLinks] = useState<Map<number, PdfLinkView[]>>(() => new Map());
+  // Links of the pages read so far, for the document as it was at `rev` (pages moved, turned or went: read again).
+  const [linkState, setLinks] = useState<{ rev: number; map: Map<number, PdfLinkView[]> }>(() => ({ rev: revision, map: new Map() }));
+  const links = linkState.rev === revision ? linkState.map : EMPTY_LINKS;
   const requests = useMemo(() => new Requests(session), [session]);
   const reported = useRef(-1);
   const last = useRef<{ layout: Layout; zoom: number; mode: PdfViewMode } | null>(null);
@@ -281,15 +292,15 @@ export function PdfCanvas({ session, pages, zoom, mode, page, tool, hits, active
     void Promise.all(missing.map((i) => call('pdf:links', { session, page: i }).then((l) => [i, l] as const, () => [i, [] as PdfLinkView[]] as const))).then((got) => {
       if (!live) return;
       setLinks((prev) => {
-        const next = new Map(prev);
+        const next = new Map(prev.rev === revision ? prev.map : undefined);
         for (const [i, l] of got) next.set(i, l);
-        return next;
+        return { rev: revision, map: next };
       });
     });
     return () => {
       live = false;
     };
-  }, [settled, shown, links, session]);
+  }, [settled, shown, links, session, revision]);
 
   // Ctrl/⌘ + wheel zooms the page, not the app (a listener that may cancel the wheel: React's are passive).
   const wheelZoom = useRef({ zoom, onZoom });
@@ -358,7 +369,7 @@ export function PdfCanvas({ session, pages, zoom, mode, page, tool, hits, active
           if (!p) return null;
           const visible = { x: Math.max(0, scroll.left - p.x), y: Math.max(0, scroll.top - p.y), w: box.w, h: box.h };
           return (
-            <PageView key={i} requests={requests} placed={p} size={pages[i]!} zoom={zoom} dpr={dpr} settled={settled} visible={visible}>
+            <PageView key={i} revision={revision} requests={requests} placed={p} size={pages[i]!} zoom={zoom} dpr={dpr} settled={settled} visible={visible}>
               {(byPage.get(i) ?? []).map((h, n) =>
                 h.rects.map((r, m) => (
                   <span key={`${n}-${m}`} aria-hidden="true" className={cx('pointer-events-none absolute rounded-[2px] mix-blend-multiply', h === activeHit ? 'bg-[#FF9F1C]/70 ring-2 ring-[#E8590C]' : 'bg-[#FFE066]/60')} style={rectStyle(r, k)} />
@@ -377,6 +388,7 @@ export function PdfCanvas({ session, pages, zoom, mode, page, tool, hits, active
                     />
                   ))
                 : null}
+              {overlay?.(i, k)}
             </PageView>
           );
         })}

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { emptySecurity, parsePageRange, textMatcher, nextZoom, type PdfSessionView } from '../../../shared/pdf';
+import { emptyEditState, emptySecurity, parsePageRange, textMatcher, nextZoom, type PdfSessionView } from '../../../shared/pdf';
 
 /**
  * PDF Studio in the renderer: the layout maths for 2,000 pages, the
@@ -53,6 +53,7 @@ function view(over: Partial<PdfSessionView> = {}): PdfSessionView {
     source: { kind: 'drive', fileId: 12, version: 4, label: 'WorkSuite Drive' },
     mode: 'VIEW',
     saveState: 'read-only',
+    edit: emptyEditState(),
     readOnly: 'Viewing only: annotation, page tools and saving arrive in a later update.',
     size: 1234,
     pageCount: 3,

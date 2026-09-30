@@ -8,7 +8,7 @@ import { VirtualList } from '../../components/VirtualList';
 import { ticket } from './client';
 
 export type LeftPanel = 'pages' | 'bookmarks' | 'search' | 'attachments';
-export type RightPanel = 'properties' | 'versions' | 'activity';
+export type RightPanel = 'properties' | 'comments' | 'versions' | 'activity';
 
 function Tabs<T extends string>({ label, value, items, onChange }: { label: string; value: T; items: Array<{ id: T; label: string; icon: string }>; onChange: (v: T) => void }) {
   return (
@@ -33,7 +33,8 @@ function Tabs<T extends string>({ label, value, items, onChange }: { label: stri
 
 // ── thumbnails (PDF-VIEW-003, PDF-VIEW-013) ─────────────────────────────
 
-function Thumb({ session, page, width, height, current, onOpen }: { session: string; page: number; width: number; height: number; current: boolean; onOpen: () => void }) {
+/** A page's thumbnail, drawn again when the document's `revision` changes (an edit). */
+export function Thumb({ session, page, width, height, current, onOpen, revision = 0, size = 120, selected }: { session: string; page: number; width: number; height: number; current: boolean; onOpen: () => void; revision?: number; size?: number; selected?: boolean }) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
@@ -52,11 +53,11 @@ function Thumb({ session, page, width, height, current, onOpen }: { session: str
       if (made) URL.revokeObjectURL(made);
       else void call('pdf:cancel', { session, tickets: [t] }).catch(() => undefined);
     };
-  }, [session, page]);
-  const h = Math.round((120 * height) / Math.max(1, width));
+  }, [session, page, revision]);
+  const h = Math.round((size * height) / Math.max(1, width));
   return (
     <button type="button" onClick={onOpen} aria-label={`Page ${page + 1}`} aria-current={current ? 'page' : undefined} className="flex w-full flex-col items-center gap-1 py-2">
-      <span className={cx('block overflow-hidden rounded-[3px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.25)]', current && 'outline-3 outline-offset-2 outline-primary')} style={{ width: 120, height: h }}>
+      <span className={cx('block overflow-hidden rounded-[3px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.25)]', (current || selected) && 'outline-3 outline-offset-2 outline-primary')} style={{ width: size, height: h }}>
         {url ? <img src={url} alt="" draggable={false} className="h-full w-full object-contain" /> : null}
       </span>
       <span className={cx('text-[11.5px] tabular', current ? 'font-bold text-primary' : 'text-ink-3')}>{page + 1}</span>
@@ -71,7 +72,7 @@ export function Thumbnails({ view, page, onPage }: { view: PdfSessionView; page:
       items={items}
       estimate={190}
       getKey={(x) => x.i}
-      render={(x) => <Thumb session={view.id} page={x.i} width={x.s[0]} height={x.s[1]} current={x.i === page} onOpen={() => onPage(x.i)} />}
+      render={(x) => <Thumb session={view.id} page={x.i} width={x.s[0]} height={x.s[1]} current={x.i === page} onOpen={() => onPage(x.i)} revision={view.edit.revision} />}
     />
   );
 }
@@ -399,7 +400,7 @@ export function RightTabs({ value, drive, onChange }: { value: RightPanel; drive
       label="Details"
       value={value}
       onChange={onChange}
-      items={[{ id: 'properties' as const, label: 'Properties', icon: 'info' }, ...(drive ? [{ id: 'versions' as const, label: 'Versions', icon: 'history' }, { id: 'activity' as const, label: 'Activity', icon: 'activity' }] : [])]}
+      items={[{ id: 'properties' as const, label: 'Properties', icon: 'info' }, { id: 'comments' as const, label: 'Comments', icon: 'chat' }, ...(drive ? [{ id: 'versions' as const, label: 'Versions', icon: 'history' }, { id: 'activity' as const, label: 'Activity', icon: 'activity' }] : [])]}
     />
   );
 }

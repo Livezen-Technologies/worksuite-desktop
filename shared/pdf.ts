@@ -1,5 +1,6 @@
 /**
- * PDF Studio (WorkSuite PDF Studio SRS, stage D1 — the viewer): what the
+ * PDF Studio (WorkSuite PDF Studio SRS, stages D1 — the viewer — and D2 —
+ * annotating, organising pages, saving, locks, recovery): what the
  * renderer, the main process and the engine worker say to each other.
  *
  * Plain data and pure helpers only, so the sandboxed preload, the renderer,
@@ -295,8 +296,236 @@ export type PdfSessionState = 'opening' | 'password' | 'ready' | 'failed';
 /** Why an action is off, or null when it is allowed (PDF-UI-006: disabled with a reason). */
 export type Gate = string | null;
 
-/** Title-bar save state (PDF-UI-003). D1 opens read-only; editing states arrive with D2. */
+/** Title-bar save state (PDF-UI-003): read-only, nothing to save, saving, changes not saved, or kept on this computer until WorkSuite can take them. */
 export type PdfSaveState = 'read-only' | 'saved' | 'saving' | 'unsaved' | 'saved-locally';
+
+/** Edit session modes (§16, the server's `PdfPermissions::MODES`). */
+export type PdfMode = 'VIEW' | 'ANNOTATE' | 'EDIT';
+export const PDF_MODES: PdfMode[] = ['VIEW', 'ANNOTATE', 'EDIT'];
+
+// ── editing (stage D2) ───────────────────────────────────────────────────
+
+/**
+ * Every change is one of these operations. The engine applies them; the
+ * main process keeps them, in order, as the session's journal (sealed on
+ * disk): undo and redo replay the journal onto the opened version, a
+ * crashed or closed window's work is recovered by replaying it
+ * (PDF-SAVE-020), and a save declares what they add up to (the server's
+ * change summary, PDF-SAVE-008).
+ *
+ * Positions are in points from the displayed page's top-left corner — what
+ * the renderer draws in — and the engine turns them into page space.
+ */
+const point = z.tuple([z.number().min(-20_000).max(20_000), z.number().min(-20_000).max(20_000)]);
+const rect = z.tuple([z.number().min(-20_000).max(20_000), z.number().min(-20_000).max(20_000), z.number().min(0).max(20_000), z.number().min(0).max(20_000)]);
+const rgb = z.tuple([z.number().int().min(0).max(255), z.number().int().min(0).max(255), z.number().int().min(0).max(255)]);
+const pageIndex = z.number().int().min(0).max(100_000);
+/** An annotation's WorkSuite id (its /NM), or `idx:<n>` for one the file had without a name. */
+export const annotIdSchema = z.string().regex(/^(ws-[A-Za-z0-9-]{8,64}|idx:\d{1,5})$/);
+
+export const ANNOT_KINDS = ['highlight', 'underline', 'strikeout', 'squiggly', 'note', 'ink', 'square', 'circle', 'line', 'text', 'stamp'] as const;
+export type PdfAnnotKind = (typeof ANNOT_KINDS)[number];
+/** Kinds drawn over text the person dragged across. */
+export const MARKUP_KINDS: PdfAnnotKind[] = ['highlight', 'underline', 'strikeout', 'squiggly'];
+
+export const STAMPS = ['Approved', 'Rejected', 'Draft', 'Confidential', 'Final', 'For comment', 'Received', 'Void'] as const;
+
+export const pdfNewAnnotSchema = z.strictObject({
+  id: annotIdSchema,
+  kind: z.enum(ANNOT_KINDS),
+  color: rgb,
+  opacity: z.number().min(0.1).max(1),
+  /** Line width in points (ink, shapes, lines). */
+  width: z.number().min(0.25).max(24),
+  /** The box: shapes, notes, text boxes, stamps; worked out from the rest for markup and ink. */
+  rect: rect.optional(),
+  /** Markup: one rectangle per line of text covered. */
+  rects: z.array(rect).max(400).optional(),
+  /** Ink: strokes of points; a line: one stroke of two points. */
+  strokes: z.array(z.array(point).min(1).max(4000)).max(200).optional(),
+  /** The comment (/Contents); a text box's or stamp's own words. */
+  text: z.string().max(10_000).optional(),
+  fontSize: z.number().min(4).max(144).optional(),
+});
+export type PdfNewAnnot = z.infer<typeof pdfNewAnnotSchema>;
+
+export const pdfEditOpSchema = z.discriminatedUnion('op', [
+  z.strictObject({ op: z.literal('annot.add'), page: pageIndex, annot: pdfNewAnnotSchema }),
+  z.strictObject({
+    op: z.literal('annot.update'),
+    page: pageIndex,
+    id: annotIdSchema,
+    color: rgb.optional(),
+    opacity: z.number().min(0.1).max(1).optional(),
+    text: z.string().max(10_000).optional(),
+    rect: rect.optional(),
+  }),
+  z.strictObject({ op: z.literal('annot.remove'), page: pageIndex, id: annotIdSchema }),
+  z.strictObject({ op: z.literal('page.rotate'), pages: z.array(pageIndex).min(1).max(10_000), by: z.union([z.literal(90), z.literal(180), z.literal(270)]) }),
+  z.strictObject({ op: z.literal('page.delete'), pages: z.array(pageIndex).min(1).max(10_000) }),
+  /** Moves the pages, in their order, to start at `to` in the document as it is after they are taken out. */
+  z.strictObject({ op: z.literal('page.move'), pages: z.array(pageIndex).min(1).max(10_000), to: pageIndex }),
+  z.strictObject({ op: z.literal('page.insertBlank'), at: pageIndex, size: z.tuple([z.number().min(36).max(14_400), z.number().min(36).max(14_400)]) }),
+  /** Pages of another PDF on this computer, by the handle it was chosen with; the main process keeps a sealed copy with the journal. */
+  z.strictObject({ op: z.literal('page.insertFile'), at: pageIndex, file: z.string().regex(/^[A-Za-z0-9-]{8,64}$/), pages: z.array(pageIndex).max(10_000).optional() }),
+]);
+export type PdfEditOp = z.infer<typeof pdfEditOpSchema>;
+
+/** An annotation as the renderer lists and selects it (the Comments panel, the selection box). */
+export interface PdfAnnotView {
+  id: string;
+  page: number;
+  kind: PdfAnnotKind | 'other';
+  /** PDF subtype number, for the ones WorkSuite does not create (links, fields and popups are never listed). */
+  subtype: number;
+  rect: PdfRect;
+  color: [number, number, number] | null;
+  opacity: number;
+  text: string;
+  author: string;
+  modified: string;
+  /** WorkSuite can change or remove it here. */
+  editable: boolean;
+}
+
+/** The counts a save declares (the server's `PdfSaves::SUMMARY`). */
+export interface PdfChangeSummary {
+  pages_rotated: number;
+  pages_deleted: number;
+  pages_inserted: number;
+  pages_reordered: number;
+  pages_extracted: number;
+  annotations_added: number;
+  annotations_changed: number;
+  annotations_removed: number;
+  content_edits: number;
+}
+
+export function emptySummary(): PdfChangeSummary {
+  return { pages_rotated: 0, pages_deleted: 0, pages_inserted: 0, pages_reordered: 0, pages_extracted: 0, annotations_added: 0, annotations_changed: 0, annotations_removed: 0, content_edits: 0 };
+}
+
+/** The part of an operation a summary reads (the journal's engine operations have it too). */
+export type SummarizableOp =
+  | { op: 'annot.add'; annot: { id: string } }
+  | { op: 'annot.update' | 'annot.remove'; id: string }
+  | { op: 'page.rotate' | 'page.delete' | 'page.move'; pages: number[] }
+  | { op: 'page.insertBlank' }
+  | { op: 'page.insertFile'; pages?: number[] };
+
+/** What a journal of operations adds up to. An annotation added and then removed before saving counts for neither. */
+export function summarize(ops: readonly SummarizableOp[]): PdfChangeSummary {
+  const s = emptySummary();
+  const added = new Set<string>();
+  for (const o of ops) {
+    if (o.op === 'annot.add') {
+      added.add(o.annot.id);
+      s.annotations_added++;
+    } else if (o.op === 'annot.update') {
+      if (!added.has(o.id)) s.annotations_changed++;
+    } else if (o.op === 'annot.remove') {
+      if (added.has(o.id)) {
+        added.delete(o.id);
+        s.annotations_added--;
+      } else s.annotations_removed++;
+    } else if (o.op === 'page.rotate') s.pages_rotated += o.pages.length;
+    else if (o.op === 'page.delete') s.pages_deleted += o.pages.length;
+    else if (o.op === 'page.move') s.pages_reordered += o.pages.length;
+    else if (o.op === 'page.insertBlank') s.pages_inserted++;
+    else if (o.op === 'page.insertFile') s.pages_inserted += o.pages?.length ?? 1;
+  }
+  return s;
+}
+
+/** "3 pages rotated, 5 annotations added" — the words a save shows; the server writes its own for the version. */
+export function describeSummary(s: PdfChangeSummary): string {
+  const parts: string[] = [];
+  const add = (n: number, one: string, many: string) => n > 0 && parts.push(`${n} ${n === 1 ? one : many}`);
+  add(s.annotations_added, 'annotation added', 'annotations added');
+  add(s.annotations_changed, 'annotation changed', 'annotations changed');
+  add(s.annotations_removed, 'annotation removed', 'annotations removed');
+  add(s.pages_rotated, 'page rotated', 'pages rotated');
+  add(s.pages_deleted, 'page deleted', 'pages deleted');
+  add(s.pages_inserted, 'page inserted', 'pages inserted');
+  add(s.pages_reordered, 'page moved', 'pages moved');
+  return parts.join(', ');
+}
+
+/** Which permission a change needs (the server's `PdfSaves::SUMMARY`): annotating, or organising pages. */
+export function opNeeds(op: PdfEditOp): 'annotate' | 'organize' {
+  return op.op.startsWith('annot.') ? 'annotate' : 'organize';
+}
+
+/** The server's refusal of a save because Drive moved on (PDF-SAVE-004, §17.2). */
+export interface PdfConflict {
+  baseVersion: number;
+  serverVersion: number;
+  savedBy: string | null;
+  savedAt: string | null;
+  offline: boolean;
+  message: string;
+}
+
+/** The edit side of a session (stage D2): what may be done here, what has been done, and where saving has got to. */
+export interface PdfEditState {
+  /** The modes the server offers this person on this file now (VIEW first). */
+  modes: PdfMode[];
+  canAnnotate: boolean;
+  canOrganize: boolean;
+  canSaveVersion: boolean;
+  canSaveCopy: boolean;
+  /** Why a mode or save is not offered, in the server's words (PDF-COL-002, §21.3). */
+  reason: string | null;
+  undo: number;
+  redo: number;
+  summary: PdfChangeSummary;
+  /** Unsaved work found on this computer for this file and version, recovered into the session (PDF-SAVE-020). */
+  recovered: boolean;
+  /** Somebody saved a newer version in WorkSuite since this one was opened. */
+  newVersion: boolean;
+  /** The edit lock: held by this session, with its expiry and the last-two-minutes warning (PDF-COL-003). */
+  lock: { mine: boolean; holder: string; device: string | null; expiresInS: number | null; warning: boolean } | null;
+  /** The lock was taken away (expired, released, taken over): who and why; the work stays here to save as a copy. */
+  lockLost: { reason: string; by: string | null } | null;
+  /** Offered when the server refused the lock: take it over (an owner or PDF administrator). */
+  mayTakeOver: boolean;
+  conflict: PdfConflict | null;
+  /** The last save: the Drive version it made, or the copy. */
+  lastSaved: { version: number | null; copyFileId: number | null; at: string } | null;
+  /** A save is waiting for WorkSuite (offline, or it did not answer): it goes when it can. */
+  pendingSave: boolean;
+  /** The server's sentence about the last thing that failed, for the banner. */
+  message: string | null;
+  /** A local file: Save writes it back in place. */
+  local: boolean;
+  /** Goes up with every change to what the pages look like: the window draws them again. */
+  revision: number;
+}
+
+export function emptyEditState(): PdfEditState {
+  return {
+    modes: ['VIEW'],
+    canAnnotate: false,
+    canOrganize: false,
+    canSaveVersion: false,
+    canSaveCopy: false,
+    reason: null,
+    undo: 0,
+    redo: 0,
+    summary: emptySummary(),
+    recovered: false,
+    newVersion: false,
+    lock: null,
+    lockLost: null,
+    mayTakeOver: false,
+    conflict: null,
+    lastSaved: null,
+    pendingSave: false,
+    message: null,
+    local: false,
+    revision: 0,
+  };
+}
 
 export interface PdfSessionView {
   id: string;
@@ -309,9 +538,10 @@ export interface PdfSessionView {
     /** Where it lives, for the title bar ("WorkSuite Drive", "This computer", "Mail attachment"). */
     label: string;
   };
-  /** Edit session mode (§16): VIEW only in this version. */
-  mode: 'VIEW';
+  /** Edit session mode (§16). */
+  mode: PdfMode;
   saveState: PdfSaveState;
+  edit: PdfEditState;
   /** Why the document is read-only here. */
   readOnly: string;
   size: number;

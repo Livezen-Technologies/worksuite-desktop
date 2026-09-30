@@ -1,6 +1,13 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   MAX_PDF_BYTES,
+  emptyEditState,
+  opNeeds,
+  summarize,
+  type PdfAnnotView,
+  type PdfEditOp,
+  type PdfMode,
+  type PdfPageSize,
   MAX_RENDER_PIXELS,
   PRINT_MAX_PAGES,
   emptySecurity,
@@ -23,10 +30,12 @@ import {
 } from '@shared/pdf';
 import { DesktopError, isDesktopError } from '../../main/errors';
 import { SealWriter } from '../elearning-offline';
-import { EngineError, ENGINE_MESSAGES, isEngineError, type CancelToken, type EngineFile, type PDFEngine } from './engine';
+import { EngineError, ENGINE_MESSAGES, isEngineError, type CancelToken, type EngineEditOp, type EngineFile, type PDFEngine, type TextSpan } from './engine';
 import type { PdfLocalFiles } from './local-files';
 import type { PrintJob, PrintOutcome } from './print';
 import { PdfStorage } from './storage';
+import type { PdfRecovery, RecoveryMeta } from './recovery';
+import { isStudioError, isUnreachable, type StudioApi, type StudioClient, type StudioFlags, type StudioLock, type StudioState } from './studio-api';
 
 /**
  * DesktopPDFService (§3.3): PDF Studio's half in the main process.
@@ -40,9 +49,15 @@ import { PdfStorage } from './storage';
  * entries. Every call names a session the calling window opened; another
  * window's session is not found (PDF-API-002).
  *
- * Read-only in this version (stage D1): the session mode is VIEW. Edit
- * sessions, locks, saving and offline editing arrive in stage D2 on the
- * server's CorePDFService contract; see docs/ARCHITECTURE.md for the seams.
+ * Stage D2 adds editing on the server's CorePDFService: a Drive PDF opens
+ * through an edit session (modes, heartbeat, the edit lock), changes are
+ * operations the engine applies and the session keeps as a journal (undo
+ * and redo replay it), unsaved work is kept sealed on this computer and
+ * offered back (PDF-SAVE-020), and a save uploads the PDF in chunks and
+ * commits it as a Drive version on the version it was made from — or,
+ * when Drive moved on, answers the server's conflict (§17.2). A PDF on this
+ * computer saves in place or as a new file; a mail attachment stays a
+ * preview.
  */
 
 /**
@@ -93,6 +108,19 @@ export interface PdfServiceDeps {
   audit: (action: string, details: Record<string, unknown>) => void;
   log: { info: (m: string, d?: Record<string, unknown>) => void; warn: (m: string, d?: Record<string, unknown>) => void; error: (m: string, d?: Record<string, unknown>) => void };
   appVersion: string;
+  // ── editing (stage D2) ──
+  /** The server's PDF Studio API; absent where there is none (older servers, the unit tests of D1). */
+  studio?: StudioApi;
+  recovery?: PdfRecovery;
+  client?: StudioClient;
+  /** This computer, for the server's sessions and locks ("You are editing this PDF on another device (Laptop)"). */
+  device?: () => { id: string | null; name: string };
+  /** The signed-in person's name: the author of what they add. */
+  userName?: () => string;
+  /** Writes a PDF to a place on this computer (in place, atomically; or where the person chose). */
+  writeLocal?: (path: string, bytes: Uint8Array) => Promise<void>;
+  /** Asks where to save a PDF on this computer; null when cancelled. */
+  chooseSavePath?: (sender: number, suggested: string) => Promise<string | null>;
 }
 
 interface RenderJob {
@@ -126,6 +154,29 @@ interface Session {
   drive: PdfDriveDetails | null;
   viewOnly: boolean;
   closed: boolean;
+  // ── editing (stage D2) ──
+  /** The server's edit session for a Drive PDF, when it has PDF Studio. */
+  server: { sid: string; fileId: number; flags: StudioFlags; baseVersion: number; heartbeatS: number; autosaveS: number } | null;
+  /** The file the journal replays onto: the version opened, or the last one saved. */
+  base: EngineFile | null;
+  /** Kept only while the document is open: undo reopens it. */
+  password: string | null;
+  ops: EngineEditOp[];
+  redo: EngineEditOp[];
+  /** Other PDFs whose pages were inserted, sealed beside the working copy for replay. */
+  extra: string[];
+  /** Replays and saves wait for each other. */
+  lock: Promise<unknown>;
+  heartbeat: NodeJS.Timeout | null;
+  autosave: NodeJS.Timeout | null;
+  /** Changes since the last copy kept on this computer. */
+  dirtySinceSnapshot: boolean;
+  /** A save that is waiting for WorkSuite: how it was asked for. */
+  pending: { target: 'version' | 'copy'; note?: string } | null;
+  /** An upload WorkSuite has, kept for the conflict's answers (it is valid a day): the same bytes are not sent twice. */
+  upload: { id: string; sha: string } | null;
+  recoveredFrom: RecoveryMeta | null;
+  lastActive: number;
 }
 
 const MAX_SESSIONS = 16;
@@ -185,7 +236,8 @@ export class DesktopPdfService {
 
   private readOnlyReason(src: PdfSource): string {
     if (src.kind === 'mail') return 'Mail attachments open for preview only; the original stays as it arrived.';
-    return 'Viewing only: annotation, page tools and saving arrive in a later update.';
+    if (src.kind === 'drive' && !this.deps.studio) return 'This WorkSuite server does not offer editing PDFs yet: viewing only.';
+    return '';
   }
 
   async open(sender: number, source: PdfSource): Promise<PdfSessionView> {
@@ -205,6 +257,7 @@ export class DesktopPdfService {
         source: { kind: source.kind, fileId: source.kind === 'drive' ? source.fileId : null, version: null, label: this.sourceLabel(source) },
         mode: 'VIEW',
         saveState: 'read-only',
+        edit: emptyEditState(),
         readOnly: this.readOnlyReason(source),
         size: 0,
         pageCount: 0,
@@ -234,7 +287,22 @@ export class DesktopPdfService {
       drive: null,
       viewOnly: false,
       closed: false,
+      server: null,
+      base: null,
+      password: null,
+      ops: [],
+      redo: [],
+      extra: [],
+      lock: Promise.resolve(),
+      heartbeat: null,
+      autosave: null,
+      dirtySinceSnapshot: false,
+      pending: null,
+      upload: null,
+      recoveredFrom: null,
+      lastActive: Date.now(),
     };
+    s.view.edit.local = source.kind === 'local';
     this.sessions.set(id, s);
     void this.load(s);
     return s.view;
@@ -263,6 +331,10 @@ export class DesktopPdfService {
       return { kind: 'plain', path: f.path, size: f.size };
     }
     if (src.kind === 'drive') {
+      const studio = this.deps.studio ? await this.openStudio(s, src.fileId, policy.maxBytes) : null;
+      if (studio) return studio;
+      // An older WorkSuite (no PDF Studio sessions): viewing only, as in stage D1.
+      s.view.readOnly = 'This WorkSuite server does not offer editing PDFs yet: viewing only.';
       // WorkSuite first: may this person open it (PDF-OPEN-010)? Nothing of the file is fetched before it says yes.
       const st = await this.deps.http.get<DriveStatus>(`/api/pdf/${src.fileId}/status`);
       s.view.name = st.file.name;
@@ -353,8 +425,9 @@ export class DesktopPdfService {
         error: null,
       };
       s.view.gates = this.gates(s, caps);
+      await this.startEditing(s, password);
       this.publish(s);
-      this.deps.audit('pdf.opened', { source: s.source.kind, file_id: s.view.source.fileId, version: s.view.source.version, pages: o.pageCount, mode: 'VIEW' });
+      this.deps.audit('pdf.opened', { source: s.source.kind, file_id: s.view.source.fileId, version: s.view.source.version, pages: o.pageCount, mode: s.view.mode });
       void this.scan(s);
     } catch (e) {
       if (isEngineError(e) && e.code === 'password') {
@@ -385,6 +458,16 @@ export class DesktopPdfService {
             : viewOnly;
     const copy: Gate = !policy.allowCopy ? 'Your organization does not allow copying from PDFs.' : viewOnly ?? (perms && !perms.copy ? 'This PDF’s own settings do not allow copying.' : null);
     const externalLinks: Gate = policy.externalLinks === 'block' ? 'Your organization blocks web links in PDFs.' : null;
+    // A PDF Studio session's flags are the server's decision — company policy, role and share together — and only narrow these.
+    const f = s.server?.flags;
+    if (f) {
+      return {
+        print: print ?? (f.print ? null : 'You do not have permission to print this PDF.'),
+        download: download ?? (f.download && f.export ? null : 'You do not have permission to download this PDF.'),
+        copy: copy ?? (f.copy ? null : 'You do not have permission to copy from this PDF.'),
+        externalLinks,
+      };
+    }
     return { print, download, copy, externalLinks };
   }
 
@@ -490,15 +573,22 @@ export class DesktopPdfService {
   }
 
   private async dispose(s: Session): Promise<void> {
+    // Unsaved work is kept on this computer first (PDF-SAVE-020): closing a window, signing out or a crash never loses it.
+    if ((s.ops.length || s.recoveredFrom) && s.dirtySinceSnapshot) await this.snapshot(s, !!s.pending).catch(() => false);
     s.closed = true;
     this.sessions.delete(s.id);
+    if (s.heartbeat) clearTimeout(s.heartbeat);
+    if (s.autosave) clearTimeout(s.autosave);
     if (s.search) s.search.token.cancelled = true;
     if (s.scan) s.scan.cancelled = true;
     for (const j of s.queue.splice(0)) j.reject(cancelled());
     const engine = s.engine;
     s.engine = null;
     await engine?.close().catch(() => undefined);
+    if (s.server?.sid && this.deps.studio) void this.deps.studio.end(s.server.fileId, s.server.sid).catch(() => undefined);
     if (s.workCopy) await this.deps.storage.removeWorkCopy(s.workCopy);
+    for (const f of s.extra) await this.deps.storage.removeWorkCopy(f);
+    s.password = null;
     s.cache.clear();
     s.thumbs.clear();
   }
@@ -519,6 +609,7 @@ export class DesktopPdfService {
   async wipe(): Promise<void> {
     await this.closeAll();
     await this.deps.storage.wipe();
+    await this.deps.recovery?.wipe();
   }
 
   // ── rendering (§6.2) ───────────────────────────────────────────────────
@@ -772,6 +863,673 @@ export class DesktopPdfService {
     this.deps.audit('pdf.printed', { source: s.source.kind, file_id: s.view.source.fileId, version: s.view.source.version, pages: pages.length, outcome: out.printed ? 'printed' : out.reason });
     if (!out.printed && out.reason === 'failed') this.report(s, 'print', 'print_failed');
     return { printed: out.printed, pages: pages.length, reason: out.printed ? null : out.reason === 'cancelled' ? null : 'The document could not be sent to the printer.' };
+  }
+
+
+  // ── editing (stage D2) ─────────────────────────────────────────────────
+
+  /**
+   * A Drive PDF through the server's PDF Studio: an edit session in VIEW
+   * (PDF-OPEN-010 — nothing of the file is fetched before WorkSuite says
+   * yes), then its bytes from the session's ten-minute address, sealed.
+   * Null when the server has no PDF Studio.
+   */
+  private async openStudio(s: Session, fileId: number, maxBytes: number): Promise<EngineFile | null> {
+    const studio = this.deps.studio!;
+    const device = this.deps.device?.() ?? { id: null, name: 'This computer' };
+    const boot = await studio
+      .open(fileId, { mode: 'VIEW', client_type: this.deps.client ?? 'DESKTOP_LINUX', ...(device.id ? { device_id: device.id.slice(0, 100) } : {}), device_name: device.name.slice(0, 100) })
+      .catch((e) => {
+        throw this.fromStudio(e);
+      });
+    if (!boot) return null;
+    s.view.name = boot.file.name;
+    s.view.size = boot.file.size;
+    s.view.source.version = boot.content.version;
+    const autosave = Number(boot.policy.autosave_interval_s ?? 30);
+    s.server = {
+      sid: boot.session_id,
+      fileId,
+      flags: boot.permissions,
+      baseVersion: boot.content.version,
+      heartbeatS: Math.max(10, boot.timeouts?.heartbeat_interval_s ?? boot.next_heartbeat_s ?? 30),
+      autosaveS: Number.isFinite(autosave) && autosave > 0 ? Math.max(10, autosave) : 30,
+    };
+    this.applyState(s, boot);
+    if (boot.file.size > maxBytes) throw new DesktopError('POLICY_DENIED', `This PDF is larger than ${formatLimit(maxBytes)}, the most your organization allows to open.`);
+    s.docKey = PdfStorage.docKey(`drive:${fileId}:v${boot.content.version}`);
+    this.publish(s);
+    const res = await studio.content(boot.content.url, 60 * 60_000);
+    if (res.status === 410) throw new DesktopError('SERVER_ERROR', 'The link to this PDF expired before it arrived. Try again.');
+    return this.seal(s, res, maxBytes);
+  }
+
+  /** A server refusal as the window shows it: the server's sentence, and the kind of failure. */
+  private fromStudio(e: unknown): unknown {
+    if (!isStudioError(e)) return e;
+    if (e.code === 'PDF_FILE_NOT_FOUND') return new DesktopError('NOT_FOUND', e.message);
+    if (e.code === 'PDF_PERMISSION_DENIED' || e.code === 'PDF_POLICY_DENIED') return new DesktopError('PERMISSION_DENIED', e.message);
+    if (e.code === 'PDF_FILE_TOO_LARGE') return new DesktopError('POLICY_DENIED', e.message);
+    if (e.code === 'PDF_UNSUPPORTED_FORMAT') return new DesktopError('NOT_FOUND', e.message);
+    return new DesktopError('SERVER_ERROR', e.message);
+  }
+
+  /** What the server says about the session now: modes, flags, the lock, a newer version. */
+  private applyState(s: Session, st: StudioState): void {
+    if (s.server) {
+      s.server.flags = st.permissions;
+      s.server.heartbeatS = Math.max(10, st.next_heartbeat_s || s.server.heartbeatS);
+    }
+    const f = st.permissions;
+    const e = s.view.edit;
+    e.modes = st.available_modes.length ? st.available_modes : ['VIEW'];
+    e.canAnnotate = f.annotate && st.available_modes.includes('ANNOTATE');
+    e.canOrganize = f.organize && st.available_modes.includes('EDIT');
+    e.canSaveVersion = f.save_version;
+    e.canSaveCopy = f.save_copy;
+    e.reason = st.read_only_reason?.message ?? null;
+    e.newVersion = st.new_version_available;
+    e.lock = st.lock ? this.lockView(st.lock) : null;
+    e.mayTakeOver = f.break_lock;
+    s.view.mode = st.mode;
+    s.view.lock = st.lock && !st.lock.mine ? { holder: st.lock.holder.name, mine: false } : null;
+  }
+
+  private lockView(l: StudioLock): NonNullable<PdfSessionView['edit']['lock']> {
+    return { mine: l.mine, holder: l.holder.name, device: l.device?.name ?? l.device?.client ?? null, expiresInS: l.expires_in_s, warning: l.warning };
+  }
+
+  /** After a document opened: what editing it offers here, the heartbeat, and any work kept from before. */
+  private async startEditing(s: Session, password: string | null): Promise<void> {
+    s.base = s.file;
+    s.password = password;
+    const e = s.view.edit;
+    if (s.source.kind === 'local') {
+      const perms = s.view.permissions;
+      e.modes = ['VIEW', 'ANNOTATE', 'EDIT'];
+      e.canAnnotate = perms?.annotate !== false;
+      e.canOrganize = perms?.assemble !== false;
+      e.canSaveVersion = true;
+      e.canSaveCopy = true;
+      if (!e.canAnnotate && !e.canOrganize) e.reason = 'This PDF’s own settings do not allow changing it.';
+    } else if (s.source.kind === 'mail' || !s.server) {
+      e.modes = ['VIEW'];
+    }
+    s.view.saveState = e.modes.length > 1 ? 'saved' : 'read-only';
+    if (s.server) this.scheduleHeartbeat(s);
+    await this.offerRecovery(s);
+  }
+
+  private identityFor(s: Session): string | null {
+    if (s.source.kind === 'drive') return `drive:${s.source.fileId}`;
+    if (s.source.kind === 'local') return s.identity;
+    return null;
+  }
+
+  /** Work kept on this computer for this document: recovered into the session, to save or undo. */
+  private async offerRecovery(s: Session): Promise<void> {
+    const rec = this.deps.recovery;
+    const identity = this.identityFor(s);
+    if (!rec || !identity) return;
+    const meta = await rec.read(identity);
+    if (!meta) return;
+    const file = await rec.file(identity);
+    if (!file || !s.engine) return;
+    try {
+      await this.reopenOn(s, file);
+    } catch {
+      return;
+    }
+    s.recoveredFrom = meta;
+    s.base = file;
+    if (s.server && meta.baseVersion !== null) s.server.baseVersion = meta.baseVersion;
+    const e = s.view.edit;
+    e.recovered = true;
+    e.summary = meta.summary;
+    e.message = `Unsaved changes from ${new Date(meta.savedAt).toLocaleString()} were kept on this computer and are back.${meta.pendingSave ? ' They were waiting to be saved.' : ''}`;
+    s.view.saveState = 'unsaved';
+    this.invalidate(s);
+    this.publish(s);
+    if (meta.pendingSave) s.pending = { target: 'version' };
+  }
+
+  /** The engine on another file: the working copy after a save, the kept copy, the base for a replay. */
+  private async reopenOn(s: Session, file: EngineFile): Promise<PdfPageSize[]> {
+    const engine = s.engine;
+    if (!engine) throw new EngineError('crashed', ENGINE_MESSAGES.crashed);
+    await engine.unload();
+    const o = await engine.open(file, s.password);
+    s.view.pages = o.pages;
+    s.view.pageCount = o.pageCount;
+    return o.pages;
+  }
+
+  /** Everything drawn or listed from the old pages goes. */
+  private invalidate(s: Session): void {
+    s.view.edit.revision++;
+    s.cache.clear();
+    s.cacheBytes = 0;
+    s.thumbs.clear();
+    s.links.clear();
+    s.outline = null;
+    s.docKey = null;
+  }
+
+  private serialized<T>(s: Session, run: () => Promise<T>): Promise<T> {
+    const next = s.lock.then(run, run);
+    s.lock = next.catch(() => undefined);
+    return next;
+  }
+
+  /** Changes the session's mode (§16): ANNOTATE, EDIT (with the edit lock — or taking it over), or back to VIEW. */
+  async setMode(sender: number, id: string, mode: PdfMode, takeover = false): Promise<PdfSessionView> {
+    const s = this.ready(sender, id);
+    const e = s.view.edit;
+    if (!e.modes.includes(mode) && !takeover) throw new DesktopError('PERMISSION_DENIED', e.reason ?? 'That is not possible on this PDF.');
+    if (s.server && this.deps.studio) {
+      try {
+        const st = await this.deps.studio.mode(s.server.fileId, s.server.sid, mode, e.canOrganize || s.server.flags.organize ? 'STRUCTURAL_EDIT' : 'EDIT', takeover);
+        this.applyState(s, st);
+        e.lockLost = null;
+        e.message = null;
+      } catch (err) {
+        if (isStudioError(err)) {
+          const lock = err.details.lock as StudioLock | undefined;
+          if (lock) e.lock = this.lockView(lock);
+          e.mayTakeOver = err.actions.includes('take_over');
+          e.message = err.message;
+          this.publish(s);
+          throw new DesktopError(err.code === 'PDF_FILE_LOCKED' ? 'FILE_LOCKED' : 'PERMISSION_DENIED', err.message);
+        }
+        throw err;
+      }
+    } else {
+      s.view.mode = mode;
+    }
+    this.publish(s);
+    return s.view;
+  }
+
+  private assertMay(s: Session, op: PdfEditOp): void {
+    const e = s.view.edit;
+    const need = opNeeds(op);
+    if (need === 'annotate' && !(e.canAnnotate && (s.view.mode === 'ANNOTATE' || s.view.mode === 'EDIT'))) {
+      throw new DesktopError('PERMISSION_DENIED', e.canAnnotate ? 'Choose Annotate to add comments and markup.' : (e.reason ?? 'You cannot annotate this PDF.'));
+    }
+    if (need === 'organize' && !(e.canOrganize && s.view.mode === 'EDIT')) {
+      throw new DesktopError('PERMISSION_DENIED', e.canOrganize ? 'Choose Edit to organise pages.' : (e.reason ?? 'You cannot change this PDF’s pages.'));
+    }
+  }
+
+  /** What the engine is given for an operation: the author and time of a new annotation, the file behind inserted pages. */
+  private async toEngine(s: Session, op: PdfEditOp): Promise<EngineEditOp> {
+    if (op.op === 'annot.add') return { ...op, author: (this.deps.userName?.() ?? '').slice(0, 200), at: new Date().toISOString() };
+    if (op.op !== 'page.insertFile') return op;
+    const path = this.deps.local.path(op.file);
+    if (!path) throw new DesktopError('NOT_FOUND', 'That PDF is no longer available. Choose it again.');
+    const f = await this.deps.local.resolve(op.file);
+    // A sealed copy beside the working copy: the journal replays from it, whatever becomes of the original.
+    const { path: copy, key } = await this.deps.storage.newWorkCopy();
+    s.extra.push(copy);
+    const { createReadStream } = await import('node:fs');
+    const w = await SealWriter.create(copy, key);
+    let ok = false;
+    try {
+      for await (const chunk of createReadStream(f.path)) await w.write(chunk as Buffer);
+      ok = true;
+    } finally {
+      await w.close(ok);
+    }
+    return { op: 'page.insertFile', at: op.at, ...(op.pages ? { pages: op.pages } : {}), source: { kind: 'sealed', path: copy, size: f.size, key: key.toString('base64') } };
+  }
+
+  /** One change: applied, kept in the journal (redo cleared), everything drawn from the old pages dropped. */
+  async edit(sender: number, id: string, op: PdfEditOp): Promise<PdfSessionView> {
+    const s = this.ready(sender, id);
+    this.assertMay(s, op);
+    return this.serialized(s, async () => {
+      const engineOp = await this.toEngine(s, op);
+      try {
+        const sizes = await s.engine!.apply(engineOp);
+        s.view.pages = sizes;
+        s.view.pageCount = sizes.length;
+      } catch (e) {
+        throw this.asDesktop(e);
+      }
+      s.ops.push(engineOp);
+      s.redo = [];
+      this.changed(s, op.op.startsWith('page.'));
+      return s.view;
+    });
+  }
+
+  private changed(s: Session, pagesMoved: boolean): void {
+    s.lastActive = Date.now();
+    if (pagesMoved) this.invalidate(s);
+    else {
+      // Annotations change what a page looks like: its renders and thumbnail go, the rest stays.
+      s.view.edit.revision++;
+      s.cache.clear();
+      s.cacheBytes = 0;
+      s.thumbs.clear();
+      s.docKey = null;
+    }
+    const e = s.view.edit;
+    const base = s.recoveredFrom?.summary;
+    const now = summarize(s.ops);
+    e.summary = base ? (Object.fromEntries(Object.entries(now).map(([k, v]) => [k, v + (base[k as keyof typeof base] ?? 0)])) as typeof now) : now;
+    e.undo = s.ops.length;
+    e.redo = s.redo.length;
+    e.conflict = null;
+    s.view.saveState = s.ops.length || s.recoveredFrom ? 'unsaved' : 'saved';
+    s.dirtySinceSnapshot = true;
+    this.scheduleSnapshot(s);
+    this.publish(s);
+  }
+
+  /** Undo: the journal, less its last change, replayed onto the base. */
+  async undo(sender: number, id: string): Promise<PdfSessionView> {
+    const s = this.ready(sender, id);
+    return this.serialized(s, async () => {
+      const last = s.ops.pop();
+      if (!last) return s.view;
+      s.redo.push(last);
+      await this.replay(s);
+      this.changed(s, true);
+      return s.view;
+    });
+  }
+
+  async redoOp(sender: number, id: string): Promise<PdfSessionView> {
+    const s = this.ready(sender, id);
+    return this.serialized(s, async () => {
+      const next = s.redo.pop();
+      if (!next) return s.view;
+      const sizes = await s.engine!.apply(next).catch((e) => {
+        throw this.asDesktop(e);
+      });
+      s.ops.push(next);
+      s.view.pages = sizes;
+      s.view.pageCount = sizes.length;
+      this.changed(s, true);
+      return s.view;
+    });
+  }
+
+  private async replay(s: Session): Promise<void> {
+    if (!s.base) throw new DesktopError('CONFLICT', 'The PDF is not open yet.');
+    let sizes = await this.reopenOn(s, s.base);
+    for (const op of s.ops) sizes = await s.engine!.apply(op);
+    s.view.pages = sizes;
+    s.view.pageCount = sizes.length;
+  }
+
+  async annotations(sender: number, id: string, page: number): Promise<PdfAnnotView[]> {
+    const s = this.ready(sender, id);
+    if (page < 0 || page >= s.view.pageCount) throw new DesktopError('NOT_FOUND', 'That page is not in this PDF.');
+    await s.lock;
+    return s.engine!.annotations(page).catch((e) => {
+      throw this.asDesktop(e);
+    });
+  }
+
+  async textSpan(sender: number, id: string, page: number, from: [number, number], to: [number, number]): Promise<TextSpan> {
+    const s = this.ready(sender, id);
+    if (page < 0 || page >= s.view.pageCount) throw new DesktopError('NOT_FOUND', 'That page is not in this PDF.');
+    return s.engine.textSpan(page, from, to).catch((e) => {
+      throw this.asDesktop(e);
+    });
+  }
+
+  // ── heartbeat and the lock (§18.1) ─────────────────────────────────────
+
+  private scheduleHeartbeat(s: Session): void {
+    if (s.heartbeat) clearTimeout(s.heartbeat);
+    if (s.closed || !s.server) return;
+    s.heartbeat = setTimeout(() => void this.beat(s), s.server.heartbeatS * 1000);
+    s.heartbeat.unref?.();
+  }
+
+  /**
+   * Every heartbeat asks the server again: the mode (editing may have been
+   * taken away), the lock (lost, or two minutes from lapsing), a newer
+   * version in Drive. Active while the person has changed something lately,
+   * so the lock does not lapse under them.
+   */
+  private async beat(s: Session): Promise<void> {
+    if (s.closed || !s.server || !this.deps.studio) return;
+    try {
+      const hb = await this.deps.studio.heartbeat(s.server.fileId, s.server.sid, Date.now() - s.lastActive < 5 * 60_000);
+      this.applyState(s, hb);
+      const e = s.view.edit;
+      if (hb.lock_lost) {
+        e.lockLost = { reason: hb.lock_lost.reason, by: hb.lock_lost.by?.name ?? null };
+        e.message = hb.lock_lost.by ? `${hb.lock_lost.by.name} took over editing this PDF. Your changes are still here: save them as a copy.` : 'Your hold on editing this PDF lapsed. Your changes are still here: save them, or save them as a copy.';
+      }
+      if (hb.downgraded) e.message = hb.read_only_reason?.message ?? 'Editing this PDF is no longer allowed. Your changes are still here: save them as a copy.';
+      if (s.pending) void this.flushPending(s);
+      this.publish(s);
+    } catch (err) {
+      if (isStudioError(err) && (err.status === 410 || err.status === 404)) {
+        // The session is over (the file went, access went, or it lapsed): the work stays, and saving opens a new one if it can.
+        const e = s.view.edit;
+        e.message = err.message;
+        if (err.details.session_ended || err.status === 404) s.server = { ...s.server, sid: '' };
+        e.modes = ['VIEW'];
+        s.view.mode = 'VIEW';
+        this.publish(s);
+        return;
+      }
+    } finally {
+      if (s.server?.sid) this.scheduleHeartbeat(s);
+    }
+  }
+
+  // ── keeping work on this computer (PDF-SAVE-020) ───────────────────────
+
+  private scheduleSnapshot(s: Session): void {
+    if (s.autosave || !this.deps.recovery?.enabled) return;
+    const every = (s.server?.autosaveS ?? 30) * 1000;
+    s.autosave = setTimeout(() => {
+      s.autosave = null;
+      void this.snapshot(s).catch((e) => this.deps.log.warn('pdf work not kept', { error: String((e as Error)?.message ?? e) }));
+    }, every);
+    s.autosave.unref?.();
+  }
+
+  /** The document as it stands, sealed on this computer, with what it is. */
+  private async snapshot(s: Session, pendingSave = false): Promise<boolean> {
+    const rec = this.deps.recovery;
+    const identity = this.identityFor(s);
+    if (!rec || !identity || !s.engine || s.closed) return false;
+    if (!s.dirtySinceSnapshot && !pendingSave) return true;
+    return this.serialized(s, async () => {
+      const bytes = await s.engine!.save();
+      const localPath = s.source.kind === 'local' ? this.deps.local.path(s.source.handle) : null;
+      const meta: RecoveryMeta = {
+        identity,
+        source: s.source.kind === 'drive' ? { kind: 'drive', fileId: s.source.fileId } : { kind: 'local', path: localPath ?? '' },
+        name: s.view.name,
+        baseVersion: s.server?.baseVersion ?? null,
+        summary: s.view.edit.summary,
+        savedAt: new Date().toISOString(),
+        pendingSave,
+        size: bytes.byteLength,
+      };
+      const ok = await rec.write(meta, bytes);
+      if (ok) s.dirtySinceSnapshot = false;
+      return ok;
+    });
+  }
+
+  /** "Don't save": the changes go, and so does what was kept of them. */
+  async discard(sender: number, id: string): Promise<PdfSessionView> {
+    const s = this.ready(sender, id);
+    return this.serialized(s, async () => {
+      const identity = this.identityFor(s);
+      if (identity) await this.deps.recovery?.remove(identity);
+      s.recoveredFrom = null;
+      s.ops = [];
+      s.redo = [];
+      s.pending = null;
+      s.base = s.file;
+      await this.replay(s);
+      this.changed(s, true);
+      const e = s.view.edit;
+      e.recovered = false;
+      e.message = null;
+      e.pendingSave = false;
+      s.dirtySinceSnapshot = false;
+      s.view.saveState = 'saved';
+      this.publish(s);
+      return s.view;
+    });
+  }
+
+  // ── saving (§16.1, §17.2) ──────────────────────────────────────────────
+
+  /**
+   * Save: a Drive PDF as a new version on the version it was made from (or
+   * a copy beside it); a PDF on this computer in place (or as a new file).
+   * When WorkSuite cannot be reached the work is kept here and the save goes
+   * when it can (`saved-locally`).
+   */
+  async save(sender: number, id: string, target: 'version' | 'copy', note?: string): Promise<PdfSessionView> {
+    const s = this.ready(sender, id);
+    const e = s.view.edit;
+    if (target === 'version' && !e.canSaveVersion && !e.lockLost) throw new DesktopError('PERMISSION_DENIED', e.reason ?? 'You cannot save a version of this PDF. Save a copy instead.');
+    if (target === 'copy' && !e.canSaveCopy) throw new DesktopError('PERMISSION_DENIED', 'You cannot save a copy of this PDF.');
+    if (s.source.kind === 'local') return this.saveLocal(s, sender, target);
+    if (s.source.kind !== 'drive' || !s.server || !this.deps.studio) throw new DesktopError('UNSUPPORTED', 'This PDF cannot be saved here.');
+    return this.saveDrive(s, target, note);
+  }
+
+  private async saveLocal(s: Session, sender: number, target: 'version' | 'copy'): Promise<PdfSessionView> {
+    const handle = s.source.kind === 'local' ? s.source.handle : '';
+    let path = target === 'version' ? this.deps.local.path(handle) : null;
+    if (target === 'copy') path = (await this.deps.chooseSavePath?.(sender, s.view.name.replace(/\.pdf$/i, '') + ' (edited).pdf')) ?? null;
+    if (!path) {
+      if (target === 'copy') return s.view;
+      throw new DesktopError('NOT_FOUND', 'The file is no longer where it was. Save it somewhere else.');
+    }
+    const write = this.deps.writeLocal;
+    if (!write) throw new DesktopError('UNSUPPORTED', 'Saving to this computer is not available.');
+    s.view.saveState = 'saving';
+    this.publish(s);
+    try {
+      await this.serialized(s, async () => {
+        const bytes = await s.engine!.save();
+        // Writing over the file the engine reads: it lets go first (Windows will not replace an open file), and opens the saved one after.
+        if (target === 'version') await s.engine!.unload();
+        try {
+          await write(path!, bytes);
+        } catch (e) {
+          if (target === 'version') await this.replay(s).catch(() => undefined);
+          throw e;
+        }
+        if (target === 'version') s.file = { kind: 'plain', path: path!, size: bytes.byteLength };
+        this.deps.audit('pdf.saved', { source: 'local', target, pages: s.view.pageCount, ...s.view.edit.summary });
+      });
+    } catch (e) {
+      s.view.saveState = 'unsaved';
+      this.publish(s);
+      throw isDesktopError(e) ? e : new DesktopError('INTERNAL', 'The PDF could not be written to this computer.');
+    }
+    if (target === 'version') await this.settle(s, { version: null, copyFileId: null });
+    else {
+      s.view.saveState = s.ops.length ? 'unsaved' : 'saved';
+      s.view.edit.message = `Saved a copy as ${path.split(/[\\/]/).pop()}.`;
+      this.publish(s);
+    }
+    return s.view;
+  }
+
+  /** After a save that the document now matches: the saved file becomes the base, the journal starts again, the kept copy goes. */
+  private async settle(s: Session, made: { version: number | null; copyFileId: number | null }, bytes?: Uint8Array): Promise<void> {
+    await this.serialized(s, async () => {
+      if (bytes) {
+        // The saved PDF, sealed, is what undo replays onto from now on.
+        const { path, key } = await this.deps.storage.newWorkCopy();
+        const w = await SealWriter.create(path, key);
+        let ok = false;
+        try {
+          await w.write(bytes);
+          ok = true;
+        } finally {
+          await w.close(ok);
+        }
+        const old = s.workCopy;
+        s.workCopy = path;
+        s.base = { kind: 'sealed', path, size: bytes.byteLength, key: key.toString('base64') };
+        s.file = s.base;
+        await this.reopenOn(s, s.base);
+        if (old && old !== path) await this.deps.storage.removeWorkCopy(old);
+      } else if (s.source.kind === 'local' && s.file) {
+        s.base = s.file;
+        await this.reopenOn(s, s.base);
+      }
+      s.ops = [];
+      s.redo = [];
+      s.recoveredFrom = null;
+      s.pending = null;
+      s.upload = null;
+      s.dirtySinceSnapshot = false;
+      const identity = this.identityFor(s);
+      if (identity) await this.deps.recovery?.remove(identity);
+    });
+    this.invalidate(s);
+    const e = s.view.edit;
+    e.undo = 0;
+    e.redo = 0;
+    e.summary = summarize([]);
+    e.recovered = false;
+    e.pendingSave = false;
+    e.conflict = null;
+    e.lastSaved = { ...made, at: new Date().toISOString() };
+    e.message = null;
+    s.view.saveState = 'saved';
+    if (made.version !== null) s.view.source.version = made.version;
+    this.publish(s);
+  }
+
+  private async saveDrive(s: Session, target: 'version' | 'copy', note?: string, resolution?: 'upload_after_review'): Promise<PdfSessionView> {
+    const server = s.server!;
+    const studio = this.deps.studio!;
+    const e = s.view.edit;
+    s.view.saveState = 'saving';
+    e.message = null;
+    this.publish(s);
+    let bytes: Uint8Array;
+    try {
+      bytes = await this.serialized(s, () => s.engine!.save());
+    } catch (err) {
+      s.view.saveState = 'unsaved';
+      this.publish(s);
+      throw this.asDesktop(err);
+    }
+    const device = this.deps.device?.();
+    try {
+      const sha = createHash('sha256').update(bytes).digest('hex');
+      const uploadId = s.upload && s.upload.sha === sha ? s.upload.id : await studio.upload(server.fileId, bytes, server.sid || null);
+      s.upload = { id: uploadId, sha };
+      const saved = await studio.save(server.fileId, {
+        upload_id: uploadId,
+        mode: target === 'version' ? 'new_version' : 'copy',
+        ...(target === 'version' ? { base_version: resolution ? (e.conflict?.serverVersion ?? server.baseVersion) : server.baseVersion } : {}),
+        ...(server.sid ? { session_id: server.sid } : {}),
+        summary: e.summary,
+        client_type: this.deps.client ?? 'DESKTOP_LINUX',
+        ...(device?.id ? { device_id: device.id.slice(0, 100) } : {}),
+        offline: !!s.pending,
+        edited_at: new Date(s.lastActive).toISOString(),
+        ...(resolution ? { resolution } : {}),
+        ...(target === 'copy' ? { name: `${s.view.name.replace(/\.pdf$/i, '')} (copy).pdf` } : {}),
+        ...(note ? { note: note.slice(0, 200) } : {}),
+      });
+      if (saved.mode === 'new_version') {
+        server.baseVersion = saved.version ?? saved.file.version;
+        await this.settle(s, { version: server.baseVersion, copyFileId: null }, bytes);
+      } else {
+        // A copy is another file: this document keeps its changes (still unsaved here) unless it was only a way out of a conflict.
+        s.upload = null;
+        s.pending = null;
+        e.pendingSave = false;
+        e.conflict = null;
+        e.lastSaved = { version: null, copyFileId: saved.file.id, at: new Date().toISOString() };
+        e.message = `Saved as “${saved.file.name}” beside the original in Drive.`;
+        s.view.saveState = s.ops.length || s.recoveredFrom ? 'unsaved' : 'saved';
+        this.publish(s);
+      }
+      this.deps.audit('pdf.saved', { source: 'drive', file_id: server.fileId, target, version: saved.version ?? null, ...e.summary });
+      return s.view;
+    } catch (err) {
+      if (isUnreachable(err)) {
+        // Kept here; it goes when WorkSuite answers again (PDF-OFF).
+        s.pending = { target, ...(note ? { note } : {}) };
+        e.pendingSave = true;
+        e.message = 'WorkSuite cannot be reached. Your changes are kept on this computer and will be saved when it can be reached.';
+        s.view.saveState = 'saved-locally';
+        await this.snapshot(s, true).catch(() => false);
+        this.publish(s);
+        return s.view;
+      }
+      s.view.saveState = 'unsaved';
+      if (isStudioError(err) && err.code === 'PDF_VERSION_CONFLICT') {
+        const d = err.details;
+        e.conflict = {
+          baseVersion: Number(d.base_version ?? server.baseVersion),
+          serverVersion: Number(d.server_version ?? 0),
+          savedBy: (d.saved_by as { name?: string } | null)?.name ?? null,
+          savedAt: typeof d.saved_at === 'string' ? d.saved_at : null,
+          offline: d.offline === true,
+          message: err.message,
+        };
+        this.publish(s);
+        return s.view;
+      }
+      if (isStudioError(err) && (err.code === 'PDF_UPLOAD_NOT_FOUND' || err.code === 'PDF_UPLOAD_INVALID')) s.upload = null;
+      e.message = isStudioError(err) ? err.message : (err as Error)?.message ?? 'The PDF could not be saved.';
+      this.publish(s);
+      throw isStudioError(err) ? new DesktopError(err.code === 'PDF_FILE_LOCKED' ? 'FILE_LOCKED' : err.status === 403 ? 'PERMISSION_DENIED' : 'SERVER_ERROR', err.message) : this.asDesktop(err);
+    }
+  }
+
+  /**
+   * The answers to a conflict (§17.2): keep both (a copy beside the
+   * original), save over it after reviewing (a version on the newer one),
+   * or use WorkSuite's (the changes here go and the newer version opens).
+   */
+  async resolve(sender: number, id: string, answer: 'keep_both' | 'upload_as_new_version' | 'use_cloud'): Promise<PdfSessionView> {
+    const s = this.ready(sender, id);
+    const e = s.view.edit;
+    if (!e.conflict) return s.view;
+    if (answer === 'keep_both') return this.saveDrive(s, 'copy');
+    if (answer === 'upload_as_new_version') return this.saveDrive(s, 'version', undefined, 'upload_after_review');
+    const identity = this.identityFor(s);
+    if (identity) await this.deps.recovery?.remove(identity);
+    const sess: Session = s;
+    sess.ops = [];
+    sess.redo = [];
+    sess.recoveredFrom = null;
+    sess.upload = null;
+    sess.file = null;
+    await sess.engine?.close().catch(() => undefined);
+    sess.engine = null;
+    if (s.server?.sid && this.deps.studio) await this.deps.studio.end(s.server.fileId, s.server.sid).catch(() => undefined);
+    if (s.heartbeat) clearTimeout(s.heartbeat);
+    s.server = null;
+    s.view = { ...s.view, state: 'opening', edit: { ...emptyEditState(), local: false, revision: s.view.edit.revision + 1 }, saveState: 'read-only', mode: 'VIEW', error: null };
+    this.invalidate(s);
+    this.publish(s);
+    void this.load(s);
+    return s.view;
+  }
+
+  /** WorkSuite answers again: saves that were waiting go. */
+  online(): void {
+    for (const s of this.sessions.values()) if (s.pending) void this.flushPending(s);
+  }
+
+  private async flushPending(s: Session): Promise<void> {
+    const p = s.pending;
+    if (!p || s.closed || s.view.saveState === 'saving' || s.view.state !== 'ready') return;
+    await this.saveDrive(s, p.target, p.note).catch(() => undefined);
+  }
+
+  /** These pages as a new PDF on this computer (the document is unchanged). */
+  async extract(sender: number, id: string, pages: number[]): Promise<{ saved: boolean; name: string | null }> {
+    const s = this.ready(sender, id);
+    if (s.view.gates.download && s.source.kind !== 'local') throw new DesktopError('POLICY_DENIED', s.view.gates.download);
+    const unique = [...new Set(pages)].filter((p) => p >= 0 && p < s.view.pageCount);
+    if (!unique.length) throw new DesktopError('IPC_VALIDATION_FAILED', 'Choose the pages to extract.');
+    const path = await this.deps.chooseSavePath?.(sender, `${s.view.name.replace(/\.pdf$/i, '')} (pages).pdf`);
+    if (!path) return { saved: false, name: null };
+    const bytes = await this.serialized(s, () => s.engine!.extract(unique)).catch((e) => {
+      throw this.asDesktop(e);
+    });
+    await this.deps.writeLocal!(path, bytes);
+    this.deps.audit('pdf.exported', { source: s.source.kind, file_id: s.view.source.fileId, pages: unique.length, kind: 'extract' });
+    return { saved: true, name: path.split(/[\\/]/).pop() ?? null };
   }
 
   // ── local files ────────────────────────────────────────────────────────

@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { activeContentBlocked, clampZoom, nextZoom, VIEW_MODES, ZOOM_STEPS, type PdfLinkView, type PdfSearchOptions, type PdfSessionView, type PdfSource, type PdfViewMode } from '@shared/pdf';
+import { activeContentBlocked, clampZoom, nextZoom, VIEW_MODES, ZOOM_STEPS, type PdfAnnotView, type PdfLinkView, type PdfSearchOptions, type PdfSessionView, type PdfSource, type PdfViewMode } from '@shared/pdf';
 import { call, errorMessage } from '../../core/bridge';
 import { registerCommand } from '../../core/commands';
+import { setCloseGuard } from '../../core/tabs';
 import { toast } from '../../core/toasts';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { Icon } from '../../components/Icon';
-import { Button, Chip, FileBadge, Spinner, cx } from '../../components/ui';
+import { Button, FileBadge, Spinner, cx } from '../../components/ui';
 import { PdfCanvas, type Jump } from './Canvas';
 import { onSearch, onSession, pdf, routeFor } from './client';
 import { Failure, PasswordPrompt, PrintDialog } from './Dialogs';
 import { fitZoom } from './layout';
 import { Attachments, Bookmarks, DriveDetails, LeftTabs, Properties, RightTabs, SearchPanel, Thumbnails, type LeftPanel, type RightPanel, type SearchState } from './Panels';
+import { AnnotLayer } from './AnnotLayer';
+import { canUse, DEFAULT_STYLE, moveTarget, pdfEdit, type AnnotStyle, type AnnotTool } from './edit';
+import { AnnotateRibbon, CommentsPanel, ConflictDialog, EditBanners, ModeSwitch, OrganizeRibbon, SaveControls, SaveState } from './EditUI';
+import { Organize } from './Organize';
 
 /**
  * One PDF in a WorkSuite tab (§4): the title bar with its save state, the
@@ -21,12 +26,20 @@ export interface WorkspaceActions {
   find: (advanced: boolean) => void;
   print: () => void;
   save: () => void;
+  undo: () => void;
+  redo: () => void;
   zoom: (dir: 1 | -1) => void;
   tool: (t: 'select' | 'hand') => void;
 }
 
 type Fit = 'width' | 'page' | 'auto' | null;
-type RibbonTab = 'home' | 'view' | 'review';
+type RibbonTab = 'home' | 'annotate' | 'organize' | 'view' | 'review';
+
+/** A text field has the keyboard: its own undo, not the document's. */
+const typing = () => {
+  const el = document.activeElement;
+  return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || (el as HTMLElement).isContentEditable);
+};
 
 const MODE_LABEL: Record<PdfViewMode, { label: string; icon: string }> = {
   single: { label: 'Single page', icon: 'file' },
@@ -67,7 +80,7 @@ function RibbonButton({ icon, label, onClick, disabled, why, active, shortcut }:
 const Sep = () => <span className="mx-1 h-9 w-px shrink-0 bg-line" />;
 
 export function Workspace({ source }: { source: PdfSource }) {
-  const { navigate, active } = useTab();
+  const { navigate, active, tabId } = useTab();
   const [view, setView] = useState<PdfSessionView | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
@@ -88,6 +101,12 @@ export function Workspace({ source }: { source: PdfSource }) {
   const [presentation, setPresentation] = useState<{ mode: PdfViewMode; fit: Fit } | null>(null);
   const [readMode, setReadMode] = useState(false);
   const [pageText, setPageText] = useState<string | null>(null);
+  // Stage D2: the tool, its style, the selected annotation, the pages chosen in Organize, the annotations read so far.
+  const [annotTool, setAnnotTool] = useState<AnnotTool | null>(null);
+  const [style, setStyle] = useState<AnnotStyle>(DEFAULT_STYLE);
+  const [selectedAnnot, setSelectedAnnot] = useState<{ id: string; page: number } | null>(null);
+  const [organizeSel, setOrganizeSel] = useState<number[]>([]);
+  const [annots, setAnnots] = useState<Map<number, PdfAnnotView[]>>(() => new Map());
   const root = useRef<HTMLDivElement>(null);
   const findInput = useRef<HTMLInputElement>(null);
   const searchId = useRef<string | null>(null);
@@ -206,7 +225,77 @@ export function Workspace({ source }: { source: PdfSource }) {
     );
   };
 
-  const save = () => toast('info', ready?.readOnly ?? 'This PDF is open read-only.');
+  const runEdit = (fn: () => Promise<PdfSessionView>) =>
+    fn().then(setView, (e) => {
+      toast('error', errorMessage(e));
+    });
+
+  const save = () => {
+    if (!ready) return;
+    const e = ready.edit;
+    if (ready.saveState === 'read-only' || (!e.canSaveVersion && !e.canSaveCopy)) return toast('info', ready.readOnly || e.reason || 'This PDF is open read-only.');
+    if (ready.saveState !== 'unsaved' && ready.saveState !== 'saved-locally') return toast('info', 'There are no changes to save.');
+    void runEdit(() => pdfEdit.save(ready.id, e.canSaveVersion ? 'version' : 'copy'));
+  };
+  const undo = () => {
+    if (typing()) return void document.execCommand('undo');
+    if (ready?.edit.undo) void runEdit(() => pdfEdit.undo(ready.id));
+  };
+  const redo = () => {
+    if (typing()) return void document.execCommand('redo');
+    if (ready?.edit.redo) void runEdit(() => pdfEdit.redo(ready.id));
+  };
+
+  const annotating = !!ready && canUse(ready, 'annotate');
+  const organizing = !!ready && canUse(ready, 'organize');
+  // Derived, not stored: a tool is put down, a tab falls back to Home and a selection lapses when the mode or the page changes under them.
+  const activeTool = annotating ? annotTool : null;
+  const shownTab: RibbonTab = (tab === 'organize' && !organizing) || (tab === 'annotate' && !annotating) ? 'home' : tab;
+  const selected = selectedAnnot && [...annots.values()].flat().some((a) => a.id === selectedAnnot.id) ? selectedAnnot : null;
+  const deleteSelected = () => {
+    if (!ready || !selected) return;
+    const sel = selected;
+    setSelectedAnnot(null);
+    void runEdit(() => pdfEdit.apply(ready.id, { op: 'annot.remove', page: sel.page, id: sel.id }));
+  };
+
+  const organize = async (action: 'rotate-left' | 'rotate-right' | 'delete' | 'earlier' | 'later' | 'blank' | 'insert' | 'extract') => {
+    if (!ready) return;
+    const sel = [...organizeSel].sort((a, b) => a - b);
+    const after = sel.length ? sel[sel.length - 1]! + 1 : ready.pageCount;
+    try {
+      if (action === 'rotate-left' || action === 'rotate-right') setView(await pdfEdit.apply(ready.id, { op: 'page.rotate', pages: sel, by: action === 'rotate-left' ? 270 : 90 }));
+      else if (action === 'delete') {
+        setView(await pdfEdit.apply(ready.id, { op: 'page.delete', pages: sel }));
+        setOrganizeSel([]);
+      } else if (action === 'earlier' || action === 'later') {
+        const to = action === 'earlier' ? Math.max(0, sel[0]! - 1) : Math.min(ready.pageCount - sel.length, sel[0]! + 1);
+        setView(await pdfEdit.apply(ready.id, { op: 'page.move', pages: sel, to }));
+        setOrganizeSel(sel.map((_, i) => to + i));
+      } else if (action === 'blank') {
+        const [w, h] = ready.pages[Math.max(0, after - 1)] ?? [612, 792];
+        setView(await pdfEdit.apply(ready.id, { op: 'page.insertBlank', at: after, size: [w, h] }));
+      } else if (action === 'insert') {
+        const [pick] = await call('pdf:pickLocal');
+        if (!pick) return;
+        setView(await pdfEdit.apply(ready.id, { op: 'page.insertFile', at: after, file: pick.handle }));
+      } else if (action === 'extract') {
+        const r = await pdfEdit.extract(ready.id, sel);
+        if (r.saved) toast('success', `Saved ${sel.length} page${sel.length === 1 ? '' : 's'} as ${r.name ?? 'a new PDF'}.`);
+      }
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
+
+  const onAnnotations = useCallback((p: number, list: PdfAnnotView[]) => {
+    setAnnots((prev) => {
+      const next = new Map(prev);
+      if (list.length) next.set(p, list);
+      else next.delete(p);
+      return next;
+    });
+  }, []);
 
   const toggleFullscreen = () => {
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
@@ -247,6 +336,8 @@ export function Workspace({ source }: { source: PdfSource }) {
       find,
       print: () => (ready && !ready.gates.print ? setPrinting(true) : toast('warning', ready?.gates.print ?? 'Open a PDF first.')),
       save,
+      undo,
+      redo,
       zoom: (dir) => setZoomTo(nextZoom(effectiveZoom, dir)),
       tool: (t) => setTool(t),
     };
@@ -260,6 +351,9 @@ export function Workspace({ source }: { source: PdfSource }) {
       cmd('pdf-find-advanced', 'Search this PDF, its comments and bookmarks', () => a()?.find(true)),
       cmd('pdf-print', 'Print this PDF', () => a()?.print()),
       cmd('pdf-save', 'Save this PDF', () => a()?.save()),
+      cmd('pdf-undo', 'Undo the last change to this PDF', () => a()?.undo()),
+      cmd('pdf-redo', 'Redo', () => a()?.redo()),
+      cmd('pdf-redo-alt', 'Redo', () => a()?.redo(), true),
       cmd('pdf-zoom-in', 'Zoom in', () => a()?.zoom(1)),
       cmd('pdf-zoom-in-alt', 'Zoom in', () => a()?.zoom(1), true),
       cmd('pdf-zoom-in-pad', 'Zoom in', () => a()?.zoom(1), true),
@@ -269,6 +363,39 @@ export function Workspace({ source }: { source: PdfSource }) {
     ];
     return () => offs.forEach((off) => off());
   }, [active]);
+
+  // Closing the tab with unsaved changes: they are kept on this computer (sealed) before it goes, and offered back when the PDF is opened again.
+  const unsaved = ready?.saveState === 'unsaved' || ready?.saveState === 'saved-locally';
+  const sessionId = ready?.id ?? null;
+  const name = ready?.name ?? '';
+  useEffect(() => {
+    if (!sessionId || !unsaved) return;
+    setCloseGuard(tabId, () =>
+      pdf.close(sessionId).then(
+        () => toast('info', `Your unsaved changes to ${name} are kept on this computer. Open it again to save them.`),
+        () => undefined,
+      ),
+    );
+    return () => setCloseGuard(tabId, null);
+  }, [tabId, sessionId, unsaved, name]);
+
+
+  // Delete removes the selected annotation; Escape puts the tool down.
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (typing()) return;
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selected && annotating) {
+        e.preventDefault();
+        deleteSelected();
+      } else if (e.key === 'Escape') {
+        setAnnotTool(null);
+        setSelectedAnnot(null);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   if (openError) {
     return (
@@ -300,26 +427,29 @@ export function Workspace({ source }: { source: PdfSource }) {
             <FileBadge name={view.name.endsWith('.pdf') ? view.name : `${view.name}.pdf`} size={26} />
             <b className="min-w-0 truncate text-[14px] text-ink">{view.name}</b>
             <span className="text-[12px] text-ink-3">{view.source.label}{view.source.version ? ` · v${view.source.version}` : ''}</span>
-            {view.state === 'ready' ? <span title={view.readOnly}><Chip tone="muted"><Icon name="eye" size={12} /> Read only</Chip></span> : null}
+            {ready ? <SaveState view={ready} /> : null}
+            {ready ? <ModeSwitch view={ready} onView={setView} /> : null}
             <span className="flex-1" />
+            {ready ? <SaveControls view={ready} onView={setView} /> : null}
             {ready && !ready.gates.download ? <Button size="sm" icon="download" onClick={download}>Download</Button> : null}
             {ready ? <Button size="sm" icon="printer" disabled={!!ready.gates.print} title={ready.gates.print ?? 'Print (Ctrl/⌘ P)'} onClick={() => setPrinting(true)}>Print</Button> : null}
           </div>
-          {view.lock && !view.lock.mine ? (
+          {view.lock && !view.lock.mine && view.saveState === 'read-only' ? (
             <div className="flex shrink-0 items-center gap-2 border-b border-line bg-selection px-3 py-1.5 text-[12.5px] text-primary">
               <Icon name="lock" size={14} /> {view.lock.holder} is editing this PDF. You are viewing the last saved version.
             </div>
           ) : null}
+          {ready ? <EditBanners view={ready} onView={setView} /> : null}
           {/* Ribbon (§4.1): this version's commands; the others arrive with editing. */}
           <div role="tablist" aria-label="Ribbon" className="flex shrink-0 gap-1 bg-surface px-2 pt-1">
-            {(['home', 'view', ...(view.source.kind === 'drive' ? ['review'] : [])] as RibbonTab[]).map((t) => (
-              <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={cx('rounded-t-[7px] px-3 py-1 text-[12.5px] font-semibold', tab === t ? 'bg-subtle text-ink' : 'text-ink-3 hover:text-ink')}>
-                {t === 'home' ? 'Home' : t === 'view' ? 'View' : 'Review'}
+            {(['home', ...(annotating ? ['annotate'] : []), ...(organizing ? ['organize'] : []), 'view', ...(view.source.kind === 'drive' || annots.size ? ['review'] : [])] as RibbonTab[]).map((t) => (
+              <button key={t} type="button" role="tab" aria-selected={shownTab === t} onClick={() => setTab(t)} className={cx('rounded-t-[7px] px-3 py-1 text-[12.5px] font-semibold', shownTab === t ? 'bg-subtle text-ink' : 'text-ink-3 hover:text-ink')}>
+                {t === 'home' ? 'Home' : t === 'annotate' ? 'Annotate' : t === 'organize' ? 'Organize' : t === 'view' ? 'View' : 'Review'}
               </button>
             ))}
           </div>
           {bar(
-            tab === 'home' ? (
+            shownTab === 'home' ? (
               <>
                 <RibbonButton icon="pointer" label="Select" shortcut="V" active={tool === 'select'} onClick={() => setTool('select')} />
                 <RibbonButton icon="maximize" label="Hand" shortcut="H" active={tool === 'hand'} onClick={() => setTool('hand')} />
@@ -330,9 +460,20 @@ export function Workspace({ source }: { source: PdfSource }) {
                 <Sep />
                 <RibbonButton icon="printer" label="Print" shortcut="Ctrl/⌘ P" disabled={!ready} why={ready?.gates.print} onClick={() => setPrinting(true)} />
                 {view.source.kind !== 'local' ? <RibbonButton icon="download" label="Download" disabled={!ready} why={ready?.gates.download} onClick={download} /> : null}
-                <RibbonButton icon="disk" label="Save" why={view.readOnly} />
+                <RibbonButton
+                  icon="disk"
+                  label="Save"
+                  shortcut="Ctrl/⌘ S"
+                  disabled={!ready || !(ready.saveState === 'unsaved' || ready.saveState === 'saved-locally')}
+                  why={view.saveState === 'read-only' ? view.readOnly || view.edit.reason || 'Read only' : null}
+                  onClick={save}
+                />
               </>
-            ) : tab === 'view' ? (
+            ) : shownTab === 'annotate' ? (
+              <AnnotateRibbon tool={activeTool} onTool={setAnnotTool} style={style} onStyle={setStyle} disabled={!annotating} why={ready?.edit.reason ?? null} selected={!!selected} onDelete={deleteSelected} />
+            ) : shownTab === 'organize' ? (
+              <OrganizeRibbon selected={organizeSel} pageCount={n} disabled={!organizing} why={ready?.edit.reason ?? null} onRun={(a) => void organize(a)} />
+            ) : shownTab === 'view' ? (
               <>
                 {VIEW_MODES.map((m) => (
                   <RibbonButton key={m} icon={MODE_LABEL[m].icon} label={MODE_LABEL[m].label} active={mode === m} onClick={() => setMode(m)} />
@@ -351,8 +492,13 @@ export function Workspace({ source }: { source: PdfSource }) {
               </>
             ) : (
               <>
-                <RibbonButton icon="history" label="Versions" active={right === 'versions'} onClick={() => setRight('versions')} />
-                <RibbonButton icon="activity" label="Activity" active={right === 'activity'} onClick={() => setRight('activity')} />
+                <RibbonButton icon="chat" label="Comments" active={right === 'comments'} onClick={() => setRight('comments')} />
+                {view.source.kind === 'drive' ? (
+                  <>
+                    <RibbonButton icon="history" label="Versions" active={right === 'versions'} onClick={() => setRight('versions')} />
+                    <RibbonButton icon="activity" label="Activity" active={right === 'activity'} onClick={() => setRight('activity')} />
+                  </>
+                ) : null}
               </>
             ),
           )}
@@ -399,14 +545,37 @@ export function Workspace({ source }: { source: PdfSource }) {
               <Failure view={view} onRetry={() => void call('pdf:retry', { session: view.id }).then(setView, (e) => toast('error', errorMessage(e)))} onReport={() => navigate('/pdf?view=diagnostics')} />
             </div>
           ) : null}
-          {ready ? (
+          {ready && shownTab === 'organize' ? (
+            <Organize
+              view={ready}
+              selected={organizeSel}
+              onSelect={setOrganizeSel}
+              disabled={!organizing}
+              onOpen={(p) => {
+                setTab('home');
+                goTo(p);
+              }}
+              onMove={(before) => {
+                const sel = [...organizeSel].sort((a, b) => a - b);
+                if (!sel.length) return;
+                const to = moveTarget(sel, before);
+                void pdfEdit.apply(ready.id, { op: 'page.move', pages: sel, to }).then(
+                  (v) => {
+                    setView(v);
+                    setOrganizeSel(sel.map((_, i) => to + i));
+                  },
+                  (e) => toast('error', errorMessage(e)),
+                );
+              }}
+            />
+          ) : ready ? (
             <PdfCanvas
               session={ready.id}
               pages={ready.pages}
               zoom={effectiveZoom}
               mode={mode}
               page={page}
-              tool={tool}
+              tool={activeTool ? 'annotate' : tool}
               hits={search.hits}
               activeHit={search.hits[search.active] ?? null}
               jump={jump}
@@ -415,6 +584,21 @@ export function Workspace({ source }: { source: PdfSource }) {
               onLink={onLink}
               onViewport={onViewport}
               presentation={!!presentation}
+              revision={ready.edit.revision}
+              overlay={(p, k) => (
+                <AnnotLayer
+                  session={ready.id}
+                  page={p}
+                  k={k}
+                  revision={ready.edit.revision}
+                  tool={activeTool}
+                  style={style}
+                  editable={annotating}
+                  selected={selected?.page === p ? selected.id : null}
+                  onSelect={(sel, pg) => setSelectedAnnot(sel ? { id: sel, page: pg } : null)}
+                  onAnnotations={onAnnotations}
+                />
+              )}
             />
           ) : null}
         </main>
@@ -423,7 +607,22 @@ export function Workspace({ source }: { source: PdfSource }) {
           <aside aria-label="Properties panel" className="flex w-[290px] shrink-0 flex-col border-s border-line bg-surface">
             <RightTabs value={right} drive={ready.source.kind === 'drive'} onChange={setRight} />
             <div className="min-h-0 flex-1">
-              {right === 'properties' ? <Properties view={ready} page={page} /> : <DriveDetails view={ready} tab={right} />}
+              {right === 'properties' ? (
+                <Properties view={ready} page={page} />
+              ) : right === 'comments' ? (
+                <CommentsPanel
+                  view={ready}
+                  byPage={annots}
+                  selected={selected?.id ?? null}
+                  editable={annotating}
+                  onGo={(a) => {
+                    setSelectedAnnot({ id: a.id, page: a.page });
+                    goTo(a.page, a.rect[1]);
+                  }}
+                />
+              ) : right === 'versions' || right === 'activity' ? (
+                <DriveDetails view={ready} tab={right} />
+              ) : null}
             </div>
           </aside>
         ) : null}
@@ -482,6 +681,7 @@ export function Workspace({ source }: { source: PdfSource }) {
       ) : null}
 
       {printing && ready ? <PrintDialog view={ready} page={page} onClose={() => setPrinting(false)} /> : null}
+      {ready ? <ConflictDialog view={ready} onView={setView} /> : null}
     </div>
   );
 }

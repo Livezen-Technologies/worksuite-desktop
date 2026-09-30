@@ -1,5 +1,5 @@
-import type { PdfAttachmentView, PdfEngineCapabilities, PdfLinkView, PdfOutlineNode, PdfSearchOptions, PdfSecurityReport } from '@shared/pdf';
-import { EngineError, ENGINE_MESSAGES, type CancelToken, type EngineFile, type EngineOpened, type PDFEngine, type RenderedPixels, type RenderRequest, type SearchProgress } from './engine';
+import type { PdfAnnotView, PdfAttachmentView, PdfEngineCapabilities, PdfLinkView, PdfOutlineNode, PdfPageSize, PdfSearchOptions, PdfSecurityReport } from '@shared/pdf';
+import { EngineError, ENGINE_MESSAGES, type CancelToken, type EngineEditOp, type EngineFile, type EngineOpened, type PDFEngine, type RenderedPixels, type RenderRequest, type SearchProgress, type TextSpan } from './engine';
 import type { WorkerMessage, WorkerRequest } from './worker-protocol';
 
 /**
@@ -218,6 +218,32 @@ export class WorkerEngine implements PDFEngine {
 
   attachments(): Promise<PdfAttachmentView[]> {
     return this.request<PdfAttachmentView[]>({ op: 'attachments' }, this.opts.timeoutMs);
+  }
+
+  annotations(page: number): Promise<PdfAnnotView[]> {
+    return this.request<PdfAnnotView[]>({ op: 'annotations', page }, this.opts.timeoutMs);
+  }
+
+  apply(edit: EngineEditOp): Promise<PdfPageSize[]> {
+    // Inserting another file's pages reads that file: as long as opening one may take.
+    return this.request<PdfPageSize[]>({ op: 'apply', edit }, edit.op === 'page.insertFile' ? this.opts.openTimeoutMs : this.opts.timeoutMs);
+  }
+
+  textSpan(page: number, from: [number, number], to: [number, number]): Promise<TextSpan> {
+    return this.request<TextSpan>({ op: 'textSpan', page, from, to }, this.opts.timeoutMs);
+  }
+
+  /** Writing out a large document takes as long as opening one may. */
+  save(): Promise<Uint8Array> {
+    return this.request<Uint8Array>({ op: 'save' }, this.opts.openTimeoutMs);
+  }
+
+  extract(pages: number[]): Promise<Uint8Array> {
+    return this.request<Uint8Array>({ op: 'extract', pages }, this.opts.openTimeoutMs);
+  }
+
+  unload(): Promise<void> {
+    return this.request<void>({ op: 'unload' }, this.opts.timeoutMs);
   }
 
   /** Closes the document and ends the process (its memory goes with it). */
