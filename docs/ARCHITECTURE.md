@@ -141,6 +141,17 @@ renderer (src/modules/pdf)                main (electron/services/pdf)          
   dialog, the Annotate and Organize ribbons, the Comments panel). A tab with unsaved changes has a close guard
   that keeps the work for recovery.
 
+## Office editors
+
+An Office tab (`/office/<id>`, `OfficePage.tsx`) picks its editor: the full Office session when the server has the
+Office API; otherwise the server's EuroOffice editor from `GET /api/office/config/{id}` (`ClassicEditor.tsx`: the
+signed config into the same isolated editor view, `office-editor.ts`; the Document Server saves through its
+callback); and, when the server has no Document Server or the person chooses it (`?editor=builtin`),
+**BetterOffice** (`BuiltinEditor.tsx`, `better/BetterEditor.tsx` — its own lazily loaded chunk): the file's bytes
+from `/api/files/{id}/download` edited in the renderer by Rust engines compiled to WebAssembly, with the bundled
+open fonts (`@betteroffice/fonts`, same-origin; Google Fonts off), and saved as a new version with
+`POST /api/files/{id}/versions`. Any of them works in a detached window; the close guard saves first.
+
 ## Side panels
 
 Modules' side menus and panes are wrapped in `SidePanel` (`src/components/SidePanel.tsx`): a handle on the inner

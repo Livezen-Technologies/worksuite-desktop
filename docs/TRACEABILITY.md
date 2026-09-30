@@ -108,7 +108,9 @@ BACKEND.md). The MVP items of §7 and §9, and the ones the desktop shares with 
 | ID | Status | Where / note |
 |---|---|---|
 | Office tile | Done | `/office` (`OfficeHome.tsx`): New Document / Spreadsheet / Presentation, From a template, copies open in other apps, recent Office files |
-| Legacy server | Done | Without the Office API an Office file opens in the installed Word / Excel / PowerPoint (`office:openExternal`, tracked copy saved back), never the browser |
+| Legacy server | Done | Without the Office API an Office file opens in the server's EuroOffice editor inside the app (`GET /api/office/config/{id}` → `ClassicEditor.tsx`, the same isolated editor view), never the browser |
+| Built-in editor | Done | BetterOffice (Apache-2.0) for .docx / .xlsx / .pptx in the renderer (`BuiltinEditor.tsx`, `better/`): read from `/api/files/{id}/download`, saved with `POST /api/files/{id}/versions`; used when there is no Document Server, or chosen |
+| Separate window | Done | Both editors' **New window** (`detachTab`, the tab menu's Move to new window) |
 | OO-DSK-001 (MVP) | Done | Opening an Office file in Files (double-click, Enter, Open, Edit, Open read-only) opens `/office/<id>` in a WorkSuite tab with the editor; no browser window |
 | OO-DSK-002 (MVP) | Done | `OfficePage.tsx`: header with the name, the save status, presence, the mode, Share and ⋯; the Document Server's own toolbar, canvas and status bar below |
 | OO-DSK-004 | Done | One tab per document (`core/tabs.ts` record tabs); a document open in another window is brought forward there (`office:focusFile`) |

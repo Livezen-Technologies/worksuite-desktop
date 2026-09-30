@@ -5,6 +5,39 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-30 — 0.2.60: Office documents edit inside WorkSuite — EuroOffice, or the built-in editor
+
+**Added**
+
+- **EuroOffice inside the app on every server**: on a server with the
+  EuroOffice editor but not the newer Office API (`GET /api/office/config/{id}`,
+  the web's own editor), Word, Excel and PowerPoint files now open in
+  WorkSuite's editor tab — the Document Server's editor in the app's isolated
+  view — instead of Word, Excel or PowerPoint on this computer. The Document
+  Server saves to the Drive as you edit; the tab says Saving… / Saved to your
+  Drive.
+- **Built-in editor (BetterOffice)**: .docx, .xlsx and .pptx files can be
+  edited inside WorkSuite with no Document Server and no Office app on this
+  computer — BetterOffice's Rust engines compiled to WebAssembly, with open,
+  metric-compatible fonts bundled (nothing is fetched from the internet).
+  The file is read from the Drive and saved back as a new version (Save,
+  the editor's own Save, and when the tab closes). It opens by itself when
+  the server has no EuroOffice editor, from **Built-in editor** in an
+  EuroOffice tab, and from **Edit in WorkSuite (built-in)** in a file's menu.
+- **New window** in both Office editors' headers moves the document to a
+  window of its own (changes are saved first).
+
+**Changed**
+
+- The app's content security policy allows WebAssembly to compile
+  (`'wasm-unsafe-eval'`) for the built-in editor; JavaScript `eval` and
+  scripts from anywhere but the app itself are still refused.
+- Office files no longer go to an installed app by default on a server
+  without the Office API; **Open in Word / Excel / PowerPoint** stays in the
+  file's menu, and the editors offer **Open in desktop app**.
+
+---
+
 ## 2026-09-30 — 0.2.59: the App Launcher in the top bar, side panels that hide
 
 **Added**

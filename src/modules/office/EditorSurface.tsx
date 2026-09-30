@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { OfficeBootstrap, OfficeCommand, OfficeEditorEventName, OfficeViewEvent } from '@shared/office';
 import { call, errorMessage, on } from '../../core/bridge';
 import type { EditorPort, OfficeSession } from './session';
@@ -83,8 +83,16 @@ export function EditorSurface({ session, tabKey, organizationId, visible }: { se
     };
   }, [session, tabKey, organizationId]);
 
-  // Keep the view on the placeholder: its size, its place (the sidebar, a docked tab, a panel beside it), and
-  // whether it shows.
+  useEditorPlacement(ref, viewId, visible);
+
+  return <div ref={ref} data-office-editor className="relative min-h-0 min-w-0 flex-1 bg-white" />;
+}
+
+/**
+ * Keeps an editor's view on its placeholder: its size, its place (the sidebar, a docked tab, a panel beside it),
+ * and whether it shows.
+ */
+export function useEditorPlacement(ref: RefObject<HTMLDivElement | null>, viewId: string | null, visible: boolean): void {
   useEffect(() => {
     if (!viewId) return;
     let last = '';
@@ -118,7 +126,5 @@ export function EditorSurface({ session, tabKey, organizationId, visible }: { se
       if (frame) cancelAnimationFrame(frame);
       void call('office:place', { viewId, bounds: { x: 0, y: 0, width: 0, height: 0 }, visible: false }).catch(() => undefined);
     };
-  }, [viewId, visible]);
-
-  return <div ref={ref} data-office-editor className="relative min-h-0 min-w-0 flex-1 bg-white" />;
+  }, [ref, viewId, visible]);
 }

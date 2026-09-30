@@ -29,8 +29,11 @@ describe('Office: one tab per document (OO-DSK-004)', () => {
     expect(r.startsWith('/office/42?mode=edit&name=')).toBe(true);
     // The tab store and the window manager accept only their route grammar: parentheses and quotes are encoded.
     expect(tabRecordSchema.safeParse({ id: 't1', route: r, title: 'x', pinned: false, organizationId: null, app: 'office' }).success).toBe(true);
-    expect(parseOfficeRoute(r)).toEqual({ fileId: 42, mode: 'EDIT', name: "Q4 budget (Ben's copy).xlsx" });
-    expect(parseOfficeRoute('/office/7')).toEqual({ fileId: 7, mode: null, name: null });
+    expect(parseOfficeRoute(r)).toEqual({ fileId: 42, mode: 'EDIT', name: "Q4 budget (Ben's copy).xlsx", builtin: false });
+    expect(parseOfficeRoute('/office/7')).toEqual({ fileId: 7, mode: null, name: null, builtin: false });
+    // WorkSuite's built-in editor (BetterOffice) instead of the Document Server's.
+    expect(officeRoute(7, { name: 'Plan.docx', editor: 'builtin' })).toBe('/office/7?editor=builtin&name=Plan.docx');
+    expect(parseOfficeRoute('/office/7?editor=builtin&name=Plan.docx')).toEqual({ fileId: 7, mode: null, name: 'Plan.docx', builtin: true });
     expect(parseOfficeRoute('/office/7?mode=bogus')?.mode).toBeNull();
     expect(parseOfficeRoute('/office/abc')).toBeNull();
     expect(parseOfficeRoute('/files?folder=2')).toBeNull();

@@ -11,7 +11,7 @@ import { OFFICE_EXTS, type DriveFile, type DriveList } from '../files/api';
 import { openOfficeTab, useOfficeRouting } from '../files/office';
 import { TemplateDialog } from '../files/Templates';
 import { createDocument } from './api';
-import { ConflictDialog, LocalCopyRow, openInApp, useLocalCopies } from './local';
+import { ConflictDialog, LocalCopyRow, useLocalCopies } from './local';
 
 type Kind = 'document' | 'spreadsheet' | 'presentation';
 
@@ -32,9 +32,8 @@ export function officeFiles(files: DriveFile[], max = 30): DriveFile[] {
  * Office (the launcher's tile): start a document, spreadsheet or presentation —
  * blank or from a template — in My files, and get back to the Office files
  * opened lately and the copies being edited in Word, Excel or PowerPoint on
- * this computer. A file opens in WorkSuite's editor when the server has it,
- * otherwise in the installed application on a copy that is saved back — never
- * in the browser.
+ * this computer. A file opens in WorkSuite's EuroOffice editor, inside the
+ * app — never in the browser.
  */
 export function OfficeHome() {
   const routing = useOfficeRouting();
@@ -51,10 +50,8 @@ export function OfficeHome() {
   const files = officeFiles(recent.data?.data.files ?? []);
   const canCreate = !routing.legacy;
 
-  const open = (f: DriveFile) => {
-    if (routing.legacy) void openInApp({ id: f.id, name: f.name, folderId: f.folder_id, version: f.version ?? 0 }, 'default');
-    else void openOfficeTab(f);
-  };
+  // WorkSuite's editor, inside the app (OfficePage picks the full session or the EuroOffice editor).
+  const open = (f: DriveFile) => void openOfficeTab(f);
   const create = async (input: { type?: Kind; template_id?: string }) => {
     try {
       const r = await createDocument({ ...input, folder_id: null });
@@ -105,7 +102,7 @@ export function OfficeHome() {
               </span>
             </button>
           </div>
-          {!canCreate ? <p className="mt-2 text-[12px] text-ink-3">Your WorkSuite server does not create Office documents yet. Files you open go to Word, Excel or PowerPoint on this computer and are saved back to your Drive.</p> : null}
+          {!canCreate ? <p className="mt-2 text-[12px] text-ink-3">Your WorkSuite server does not create new Office documents yet. Files you open here edit in WorkSuite’s EuroOffice editor and save back to your Drive.</p> : null}
         </section>
 
         {copies.length ? (
@@ -134,7 +131,7 @@ export function OfficeHome() {
                       <b className="block truncate text-[13px] font-semibold text-ink">{f.name}</b>
                       <span className="block truncate text-[11.5px] text-ink-3">{f.updated_at ? `Changed ${relative(f.updated_at)}` : ''}</span>
                     </span>
-                    <span className="text-[12px] font-semibold text-primary">{routing.legacy ? 'Open in app' : 'Open'}</span>
+                    <span className="text-[12px] font-semibold text-primary">Open</span>
                   </button>
                 </li>
               ))}

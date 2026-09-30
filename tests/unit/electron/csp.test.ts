@@ -29,7 +29,9 @@ describe('content security policy', () => {
     expect(directive(csp, 'img-src')).toContain('https://app.worksuite.lk');
     expect(directive(csp, 'media-src')).toContain('https://app.worksuite.lk');
     expect(directive(csp, 'connect-src')).toBe("connect-src 'self'");
-    expect(directive(csp, 'script-src')).toBe("script-src 'self'");
+    // Only the app's own scripts; WebAssembly may compile (the built-in Office editor), JavaScript eval may not.
+    expect(directive(csp, 'script-src')).toBe("script-src 'self' 'wasm-unsafe-eval'");
+    expect(csp).not.toContain("'unsafe-eval'");
   });
 
   it('lets a media server be reached over both wss and https, on its own host only', () => {

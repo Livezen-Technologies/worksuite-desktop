@@ -335,9 +335,9 @@ export default function FilesPage(_props: ModuleProps) {
       if (item.type === 'file') s.set('file', String(item.f.id));
       go(`/files?${s}`);
     },
-    // A server without the Office API: the installed Word, Excel or PowerPoint, on a
-    // tracked copy that is saved back to the Drive — never the browser.
-    office: (f, mode) => (officeRouting.legacy ? void openInApp({ id: f.id, name: f.name, folderId: f.folder_id, version: f.version ?? 0 }, 'default') : void openOfficeTab(f, mode ?? null)),
+    // Office files open in WorkSuite's editor tab: the full Office session, or on a server with only the
+    // EuroOffice editor, that editor (OfficePage decides) — never the browser. "Open in" still offers Word & co.
+    office: (f, mode) => void openOfficeTab(f, mode ?? null),
     openIn: (f, appId) => void openInApp({ id: f.id, name: f.name, folderId: f.folder_id, version: f.version ?? 0 }, appId),
     officeRouting,
     editText: (f) => setEditor({ kind: 'code', file: f }),

@@ -19,6 +19,9 @@ import { ShareDialog } from '../files/Share';
 import { clock, convertLegacy, exportDocument, names, restoreVersion, versions, type OfficeRefusal } from './api';
 import { EditorSurface } from './EditorSurface';
 import { OfficeHome } from './OfficeHome';
+import { ClassicEditor } from './ClassicEditor';
+import { BuiltinEditor } from './BuiltinEditor';
+import { useOfficeRouting } from '../files/office';
 import { ConflictDialog, LocalCopyRow, externalApps, openInApp, useLocalCopies } from './local';
 import { OfficeSession, type OfficeState } from './session';
 
@@ -35,7 +38,19 @@ export default function OfficePage({ tabId, route, active }: ModuleProps) {
   // The launcher's Office tile: new documents, templates and the recent ones.
   if (!parsed && /^\/office\/?(?:[?#].*)?$/.test(route)) return <OfficeHome />;
   if (!parsed) return <Empty icon="file-text" title="This is not a document" hint="Open Office documents from Files." />;
-  return <OfficeDocument key={parsed.fileId} tabId={tabId} fileId={parsed.fileId} requested={parsed.mode} routeName={parsed.name} active={active} />;
+  if (parsed.builtin) return <BuiltinEditor key={`b${parsed.fileId}`} tabKey={tabId} fileId={parsed.fileId} routeName={parsed.name} active={active} />;
+  return <OfficeTab key={parsed.fileId} tabId={tabId} fileId={parsed.fileId} requested={parsed.mode} routeName={parsed.name} active={active} />;
+}
+
+/**
+ * Which editor a document gets: the full Office session (the server's Office API) or, on a server with only the
+ * EuroOffice editor (`/api/office/config`), that editor — inside the app either way, never the browser.
+ */
+function OfficeTab({ tabId, fileId, requested, routeName, active }: { tabId: string; fileId: number; requested: OfficeMode | null; routeName: string | null; active: boolean }) {
+  const routing = useOfficeRouting();
+  if (routing.pending) return <Spinner label="Opening the document…" />;
+  if (routing.legacy) return <ClassicEditor tabKey={tabId} fileId={fileId} routeName={routeName} active={active} />;
+  return <OfficeDocument tabId={tabId} fileId={fileId} requested={requested} routeName={routeName} active={active} />;
 }
 
 export const MODE_LABELS: Record<OfficeMode, string> = {

@@ -9,7 +9,7 @@
 | The Office editor: a `WebContentsView` in its own in-memory partition and process, on `wsoffice://editor`, held to the Document Server's origin (see below) | `electron/services/office-editor.ts`, `electron/security/office-policy.ts` |
 | `will-navigate` / `will-redirect` / subframe navigation limited to `app://bundle` (the Office editor's view has its own, stricter rule: `setNavigationRule`) | `hardening.ts` |
 | The UI loads only from `app://bundle` (the asar); remote origins never host shell UI | `electron/protocols/app-protocol.ts` |
-| CSP: `default-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'none'` | `hardening.ts` |
+| CSP: `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'none'` — WebAssembly may compile (the built-in Office editor, BetterOffice); `eval` and remote scripts may not | `hardening.ts` |
 | Permission handler: only clipboard write and fullscreen for the shell; camera, microphone, screen capture, geolocation, devices denied | `hardening.ts` |
 | Fuses: RunAsNode off, NODE_OPTIONS off, `--inspect` off, only load from asar, asar integrity on, cookie encryption on | `build/electron-builder.config.cjs` |
 | DevTools off in packaged builds | `manager.ts` |
