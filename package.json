@@ -38,6 +38,7 @@
     "@betteroffice/xlsx-react": "^0.3.0",
     "@embedpdf/pdfium": "2.15.1",
     "livekit-client": "^2.22.3",
+    "node-llama-cpp": "^3.22.1",
     "pdfjs-dist": "^5.7.284",
     "qrcode-generator": "^2.0.4"
   },
