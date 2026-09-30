@@ -1,3 +1,4 @@
+import type * as NodeLlamaCpp from 'node-llama-cpp';
 import type { LocalAIRequest } from '@shared/local-ai';
 
 /**
@@ -7,7 +8,7 @@ import type { LocalAIRequest } from '@shared/local-ai';
  *
  * One model is loaded at a time. Generation streams text pieces and stops on the request's signal.
  */
-type NodeLlama = typeof import('node-llama-cpp');
+type NodeLlama = typeof NodeLlamaCpp;
 type Llama = Awaited<ReturnType<NodeLlama['getLlama']>>;
 type Model = Awaited<ReturnType<Llama['loadModel']>>;
 
