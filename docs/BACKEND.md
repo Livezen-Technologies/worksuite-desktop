@@ -486,7 +486,8 @@ removed from the till (nothing was sold); one refused later stays with the reaso
 **No drawer, no sale** (`Pos\Libraries\Sales::admit`). WorkSuite takes a sale only into an open register session; the
 register screen starts none without one open at this till (a pick or a scan says to open the register; the cart shows
 the way there). A sale that names this till's session after it closed is still taken when its `date` falls in that
-session's open window — sold offline while the drawer was open — flagged `late`; the closed count is not rewritten.
+session's open window, widened at each end by `pos_late_sale_grace_minutes` (default 10, for a till's clock a few
+minutes off) — sold offline while the drawer was open — flagged `late`; the closed count is not rewritten.
 Otherwise it is `rejected` with `code: drawer_closed` (or `session_not_here`, the session another till's) and kept with
 that code and the sentence; *Send again* sends it into the register open now (`pos:resolve {session_id}`, the sale's
 `session_id` changed on this computer) and is not offered without one; *Drop* removes it. The till always sends
