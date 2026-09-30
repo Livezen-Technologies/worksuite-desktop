@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as CoreApi from '../../../src/core/api';
 
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiGetMeta: vi.fn(), request: vi.fn() }));
-vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(async () => true), on: () => () => undefined, errorMessage: (e: unknown) => String(e), isMac: false, registerDropped: vi.fn() }));
+vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(async () => true), hasDesktop: () => false, on: () => () => undefined, errorMessage: (e: unknown) => String(e), isMac: false, registerDropped: vi.fn() }));
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
 
 const tab = vi.hoisted(() => ({ query: new URLSearchParams(), path: ['pms'] as string[], go: (_r: string) => undefined as void, win: (_r: string, _t?: string) => undefined as void }));
