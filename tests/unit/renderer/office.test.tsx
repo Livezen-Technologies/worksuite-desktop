@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OfficeBootstrap, OfficeHeartbeat } from '../../../shared/office';
@@ -503,6 +503,80 @@ describe('the Office tab', () => {
     expect(open.apiUrl).toBe('https://docs.example.com/web-apps/apps/api/documents/api.js');
     expect(open.config).toEqual({ document: { key: 'f42v7-a' }, token: 'eyJ' });
     expect(apiPost).toHaveBeenCalledWith('/api/files/42/office/session', expect.objectContaining({ client_type: 'DESKTOP_LINUX', layout: 'desktop' }));
+  });
+
+  describe('menus over the editor, and Open in new window (worksuite-desktop#39)', () => {
+    const VIEW = '5f9c3a2e-5b1f-4c7e-9a41-2f1d7c9b8e10';
+    const SHOT = 'data:image/jpeg;base64,c3RpbGw=';
+    const serve = (over: Partial<OfficeBootstrap> = {}) => {
+      vi.mocked(apiPost).mockImplementation(async (path: string) => (path.endsWith('/office/session') ? boot(over) : beat(over.save ? { save: over.save } : {})));
+      vi.mocked(call).mockImplementation((async (ch: string) =>
+        ch === 'office:open' ? { viewId: VIEW } : ch === 'office:snapshot' ? SHOT : ch === 'office:externalApps' ? [{ id: 'default', label: 'the default app' }] : ch === 'office:localCopies' ? [] : ch === 'windows:detach' ? { id: 5 } : null) as never);
+    };
+    const still = () => document.querySelector(`[data-office-editor] img[src="${SHOT}"]`);
+
+    afterEach(() => tabs.tabsStore.set({ tabs: [], activeId: null }));
+
+    it('the Editing menu opens over the editor: a picture of it stands in, and Escape brings the editor back', async () => {
+      serve();
+      mount('/office/42?name=Proposal.docx');
+      await waitFor(() => expect(vi.mocked(call).mock.calls.some(([ch]) => ch === 'office:open')).toBe(true));
+      const mode = await screen.findByRole('button', { name: /Editing/ });
+      expect(mode.getAttribute('aria-haspopup')).toBe('menu');
+      fireEvent.click(mode);
+      const menu = await screen.findByRole('menu', { name: 'Mode' });
+      expect(vi.mocked(call)).toHaveBeenCalledWith('office:snapshot', { viewId: VIEW });
+      expect(mode.getAttribute('aria-expanded')).toBe('true');
+      expect(still()).not.toBeNull();
+      // Only the modes this person may use.
+      expect([...menu.querySelectorAll('[role="menuitem"]')].map((b) => b.textContent)).toEqual(['Editing', 'Reviewing (changes tracked)', 'Commenting', 'Viewing']);
+      fireEvent.keyDown(window, { key: 'Escape' });
+      await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+      await waitFor(() => expect(still()).toBeNull());
+    });
+
+    it('More actions opens over the editor, closes on a click outside, and offers only what the permissions allow', async () => {
+      serve({ permissions: { ...all, export: false, convert: false, version_history: false } });
+      mount('/office/42?name=Proposal.docx');
+      await waitFor(() => expect(vi.mocked(call).mock.calls.some(([ch]) => ch === 'office:open')).toBe(true));
+      fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+      const menu = await screen.findByRole('menu', { name: /Actions — Proposal\.docx/ });
+      const labels = [...menu.querySelectorAll('[role="menuitem"]')].map((b) => b.textContent);
+      expect(labels).toContain('Download');
+      expect(labels).not.toContain('Download as PDF');
+      expect(labels).not.toContain('Version history');
+      expect(still()).not.toBeNull();
+      fireEvent.mouseDown(document.querySelector('.fixed.inset-0')!);
+      await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    });
+
+    it('Open in new window moves the document to a window of its own', async () => {
+      tabs.tabsStore.set({ tabs: [{ id: 't9', route: '/office/42?name=Proposal.docx', title: 'Proposal.docx', pinned: false, organizationId: null, app: 'office', lastActive: 0, suspended: false, reloadKey: 0 }], activeId: 't9' });
+      serve();
+      mount('/office/42?name=Proposal.docx');
+      const btn = await screen.findByRole('button', { name: 'Open in new window' });
+      expect(btn.getAttribute('title')).toBe('Open in new window');
+      fireEvent.click(btn);
+      await waitFor(() => expect(vi.mocked(call)).toHaveBeenCalledWith('windows:detach', expect.objectContaining({ route: '/office/42?name=Proposal.docx', title: 'Proposal.docx' })));
+      await waitFor(() => expect(tabs.tabsStore.get().tabs.some((t) => t.id === 't9')).toBe(false));
+    });
+
+    it('a document whose last save failed is not moved until it is saved', async () => {
+      tabs.tabsStore.set({ tabs: [{ id: 't9', route: '/office/42', title: 'Proposal.docx', pinned: false, organizationId: null, app: 'office', lastActive: 0, suspended: false, reloadKey: 0 }], activeId: 't9' });
+      serve({ save: { ...saved, state: 'save_failed', message: 'Save failed.', retry_available: true, actions: ['retry'] } });
+      mount('/office/42');
+      fireEvent.click(await screen.findByRole('button', { name: 'Open in new window' }));
+      const { toast } = await import('../../../src/core/toasts');
+      await waitFor(() => expect(vi.mocked(toast)).toHaveBeenCalledWith('error', expect.stringContaining('The last save failed'), expect.anything()));
+      expect(vi.mocked(call).mock.calls.some(([ch]) => ch === 'windows:detach')).toBe(false);
+    });
+
+    it('a window that is already its own has no Open in new window', async () => {
+      serve();
+      mount('/office/42');
+      await screen.findByRole('button', { name: 'More actions' });
+      expect(screen.queryByRole('button', { name: 'Open in new window' })).toBeNull();
+    });
   });
 
   it("a read-only open shows the server's reason, and no Share without the permission", async () => {

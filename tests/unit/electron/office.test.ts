@@ -67,6 +67,7 @@ const fake = vi.hoisted(() => {
       ignoreMenu: null as boolean | null,
       zoom: 1,
       mainFrame: { parent: null, url: '' },
+      capturePage: async () => ({ isEmpty: () => false, toJPEG: (q: number) => Buffer.from(`jpeg-${q}`) }),
       on(ev: string, fn: Handler) {
         handlers.set(ev, [...(handlers.get(ev) ?? []), fn]);
         return this;
@@ -113,6 +114,9 @@ const fake = vi.hoisted(() => {
     }
     setVisible(v: boolean) {
       this.visible = v;
+    }
+    getVisible() {
+      return this.visible;
     }
     setBackgroundColor() {}
   }
@@ -373,6 +377,16 @@ describe('the editor host (OO-DSK-001/020/022)', () => {
     // Another window's page cannot move or command it.
     expect(host.place(owner() as never, viewId, { x: 0, y: 0, width: 10, height: 10 }, true)).toBe(false);
     expect(host.command(owner() as never, viewId, { type: 'showMessage', message: 'hi' })).toBe(false);
+  });
+
+  it('takes a picture of the editor for its own page only, and none while it is hidden (worksuite-desktop#39)', async () => {
+    const w = owner();
+    const { viewId } = host.open(w as never, spec());
+    host.place(w as never, viewId, { x: 0, y: 0, width: 800, height: 600 }, true);
+    expect(await host.snapshot(w as never, viewId)).toBe(`data:image/jpeg;base64,${Buffer.from('jpeg-72').toString('base64')}`);
+    expect(await host.snapshot(owner() as never, viewId)).toBeNull();
+    host.place(w as never, viewId, { x: 0, y: 0, width: 800, height: 600 }, false);
+    expect(await host.snapshot(w as never, viewId)).toBeNull();
   });
 
   it('gives the editor the keyboard shortcuts it owns', () => {

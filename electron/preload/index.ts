@@ -300,6 +300,7 @@ const api = {
   office: {
     open: call('office:open'),
     place: call('office:place'),
+    snapshot: call('office:snapshot'),
     command: call('office:command'),
     close: call('office:close'),
     focusFile: call('office:focusFile'),

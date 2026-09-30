@@ -796,6 +796,8 @@ export const contract = {
     }),
     { session: true, rate: 120 },
   ),
+  /** A picture of the editor, shown in its place while a menu over it is open (worksuite-desktop#39). */
+  'office:snapshot': ch(z.object({ viewId: z.string().uuid() }), { session: true, rate: 30 }),
   'office:command': ch(
     z.object({
       viewId: z.string().uuid(),
@@ -1166,6 +1168,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'restaurant:openDrawer': RestaurantPrintOutcome;
   'office:open': { viewId: string };
   'office:place': boolean;
+  'office:snapshot': string | null;
   'office:command': boolean;
   'office:close': boolean;
   'office:focusFile': boolean;

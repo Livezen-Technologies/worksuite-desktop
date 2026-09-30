@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-09-30 — 0.2.71: Chat's channel toolbar (WhatsApp in Chat), profile pictures, a resizable conversation list; AI Assistant scrolling; Local AI first-use setup and Gemma 3 4B
+## 2026-09-30 — 0.2.71: Chat's channel toolbar (WhatsApp in Chat), profile pictures, a resizable conversation list; AI Assistant scrolling; Local AI first-use setup and Gemma 3 4B; Office menus and Open in new window
 
 - **A channel toolbar down the far left of Chat** (#33): Chat, Web Chat and WhatsApp, each with its unread count
   (waiting visitors for Web Chat) and a warning dot when a WhatsApp number is not connected. Hover for the name and
@@ -25,6 +25,15 @@ person who has to live with the change — what it does, and where it bites.
   When somebody changes their picture it changes here too, without signing out (the server announces it; pictures
   are also checked again after 15 minutes). Group conversations keep their rounded-square initials, so they never
   look like a person. WhatsApp contacts' pictures show once the server provides them; it does not fetch them yet.
+- **Office: the Editing and ⋯ menus open again** (#39). In a Word, Excel or PowerPoint document open in WorkSuite, the
+  mode menu (Editing / Reviewing / Commenting / Viewing) and More (⋯) opened behind the document — the editor is a
+  native view laid over the page, and covered them. Now the editor steps aside while a menu is open, and a picture of
+  it taken just before stays in its place, so the document does not vanish. The menus keep to the window, move with
+  ↑ ↓, and close with Escape or a click elsewhere; they offer only what your access allows.
+- **Office: Open in new window**, beside Share and ⋯, moves the document to a window of its own, as you, with the
+  same access. Changes still on their way to the Office server go first ("Saving changes…"); if the last save failed
+  it says so, with Retry, and leaves the document where it is. In a narrow window the header stays on one line (Share
+  becomes its icon; who else is in the document is hidden).
 - **"Set up your AI Assistant"** (#49). The first time the assistant opens with nothing on this computer that can
   answer, it offers the model that suits it — name, download size, the free space it needs — with **Download and Set
   Up** and **Not Now** (asked again in a week; Settings → Local AI has it meanwhile). Space is checked first (too little

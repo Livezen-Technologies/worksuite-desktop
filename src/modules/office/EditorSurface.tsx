@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type MutableRefObject, type RefObject } from 'react';
 import type { OfficeBootstrap, OfficeCommand, OfficeEditorEventName, OfficeViewEvent } from '@shared/office';
 import { call, errorMessage, on } from '../../core/bridge';
 import type { EditorPort, OfficeSession } from './session';
@@ -9,9 +9,24 @@ import type { EditorPort, OfficeSession } from './session';
  * laid over this placeholder by the main process. This keeps the view where
  * the placeholder is and shows it only while the tab is on screen and
  * nothing of the shell is over it (a menu, a dialog, the command palette —
- * a native view would cover them).
+ * a native view would cover them). While it is hidden for a menu, `still` — a picture of it taken just before —
+ * stands in, so the document stays on screen under the menu (worksuite-desktop#39); `snapshotRef` takes that picture.
  */
-export function EditorSurface({ session, tabKey, organizationId, visible }: { session: OfficeSession; tabKey: string; organizationId: string | null; visible: boolean }) {
+export function EditorSurface({
+  session,
+  tabKey,
+  organizationId,
+  visible,
+  still = null,
+  snapshotRef,
+}: {
+  session: OfficeSession;
+  tabKey: string;
+  organizationId: string | null;
+  visible: boolean;
+  still?: string | null;
+  snapshotRef?: MutableRefObject<(() => Promise<string | null>) | null>;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [viewId, setViewId] = useState<string | null>(null);
 
@@ -85,7 +100,19 @@ export function EditorSurface({ session, tabKey, organizationId, visible }: { se
 
   useEditorPlacement(ref, viewId, visible);
 
-  return <div ref={ref} data-office-editor className="relative min-h-0 min-w-0 flex-1 bg-white" />;
+  useEffect(() => {
+    if (!snapshotRef) return;
+    snapshotRef.current = viewId ? () => call('office:snapshot', { viewId }).catch(() => null) : null;
+    return () => {
+      snapshotRef.current = null;
+    };
+  }, [snapshotRef, viewId]);
+
+  return (
+    <div ref={ref} data-office-editor className="relative min-h-0 min-w-0 flex-1 bg-white">
+      {!visible && still ? <img src={still} alt="" aria-hidden draggable={false} className="pointer-events-none absolute inset-0 h-full w-full object-cover object-left-top select-none" /> : null}
+    </div>
+  );
 }
 
 /**
