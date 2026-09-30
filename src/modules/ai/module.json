@@ -1,0 +1,10 @@
+{
+    "module": "ai",
+    "version": "1.0.0",
+    "paths": [
+        "electron/services/ai-pending.ts",
+        "electron/services/ai.ts",
+        "electron/services/local-ai",
+        "electron/services/quick-ask.ts"
+    ]
+}

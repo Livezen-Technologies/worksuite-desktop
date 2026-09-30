@@ -1,0 +1,10 @@
+{
+    "module": "office",
+    "version": "1.0.0",
+    "paths": [
+        "electron/services/office-editor.ts",
+        "electron/services/office-external.ts",
+        "electron/services/office-host-page.ts",
+        "electron/services/office-local.ts"
+    ]
+}

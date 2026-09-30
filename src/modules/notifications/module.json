@@ -1,0 +1,7 @@
+{
+    "module": "notifications",
+    "version": "1.0.0",
+    "paths": [
+        "electron/services/notifications.ts"
+    ]
+}
