@@ -5,6 +5,17 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-30 — 0.2.71: a resizable conversation list in Chat
+
+- **Drag the right edge of Chat's conversation list** to make it wider or narrower (#34). The edge shows the resize
+  cursor and a highlight on hover; the list stays between 240 px and 560 px, and never leaves the conversation less
+  than about 480 px of the window. Long names and previews end in "…" at any width.
+- **The width is remembered** on this computer, across restarts. A double-click on the edge puts it back to 300 px.
+- **From the keyboard:** Tab to the edge, then ← / → (Shift for bigger steps), Home / End for the narrowest and
+  widest, Enter for the default.
+
+---
+
 ## 2026-09-30 — Modules carry their own version and changelog
 
 Nothing changes in the app. For developers: every module in `src/modules/` now has a `module.json` (its version,

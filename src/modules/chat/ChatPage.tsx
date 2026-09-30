@@ -18,6 +18,7 @@ import type { Room } from './types';
 import { useWebsiteAccess, useWebsiteInbox, type WebsiteRow } from './website/api';
 import { WebsiteWorkspace } from './website/WebsiteWorkspace';
 import { SidePanel } from '../../components/SidePanel';
+import { ResizeDivider, useResizableWidth } from '../../components/ResizeDivider';
 
 /**
  * Chat (UI-08, FR-COM-02/03, §4.15; the "Chat · conversations, thread,
@@ -119,6 +120,13 @@ export default function ChatPage({ tabId }: ModuleProps) {
   );
 }
 
+/**
+ * The conversation list's width (worksuite-desktop#34): dragged on its right edge, remembered on this computer.
+ * Never so narrow that a name and its time do not fit, and never so wide that the conversation beside it has less
+ * than 480px.
+ */
+const LIST_WIDTH = { defaultWidth: 300, min: 240, max: () => Math.min(560, window.innerWidth - 480) };
+
 interface RailProps {
   rooms: Room[];
   loading: boolean;
@@ -167,10 +175,12 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
     ['Direct', visible.filter((r) => !r.pinned && r.type === 'direct')],
     ['Groups & channels', visible.filter((r) => !r.pinned && r.type !== 'direct')],
   ];
+  const list = useResizableWidth('chat.list', LIST_WIDTH);
   const visitors = websiteAccess && filter === 'all' ? (web.data?.conversations ?? []).filter((c) => !needle || (c.visitor_name ?? c.label).toLowerCase().includes(needle)).slice(0, 6) : [];
 
   return (
-    <aside aria-label="Conversations" className="flex w-[300px] shrink-0 flex-col border-r border-line bg-surface">
+    <aside aria-label="Conversations" className="relative flex shrink-0 flex-col border-r border-line bg-surface" style={{ width: list.width }}>
+      <ResizeDivider state={list} label="Resize the conversation list" />
       <div className="flex flex-col gap-2 px-3 pt-3 pb-2">
         <div className="flex items-center gap-2">
           <MyStatus />
