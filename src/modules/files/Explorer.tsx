@@ -283,7 +283,15 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
   const title = folderView ? (current?.name ?? (place.folder ? (first?.breadcrumb.at(-1)?.name ?? 'Folder') : 'My Drive')) : TITLES[view];
   const selectedSize = chosenFiles.reduce((n, f) => n + f.size, 0);
   const one = chosen.length === 1 ? chosen[0]! : null;
-  const showDetails = details && !!one;
+  const showDetails = details;
+  // With nothing (or several things) chosen, the panel shows the folder you are in, or a summary of the view.
+  const shown: Item | null = one ?? (first?.folder ? { type: 'folder', f: first.folder } : null);
+  const [spinning, setSpinning] = useState(false);
+  const refreshNow = () => {
+    setSpinning(true);
+    d.refresh();
+    void list.refetch().finally(() => setSpinning(false));
+  };
   const locked = !!first?.locked;
   const owner = (f: DriveFile) => (f.owner_id && f.owner_id === me ? 'Me' : (f.owner_name ?? '—'));
 
@@ -384,8 +392,8 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
                 </button>
               ))}
             </span>
-            <button type="button" aria-label="Refresh" title="Refresh" onClick={d.refresh} className="flex h-9 w-9 items-center justify-center rounded-[8px] border border-line text-ink-2 hover:bg-subtle">
-              <Icon name="refresh" size={15} />
+            <button type="button" aria-label="Refresh" title="Refresh" aria-busy={spinning} disabled={spinning} onClick={refreshNow} className="flex h-9 w-9 items-center justify-center rounded-[8px] border border-line text-ink-2 hover:bg-subtle disabled:text-primary">
+              <Icon name="refresh" size={15} className={cx(spinning && 'animate-spin')} />
             </button>
             <button type="button" aria-label="Details" title="Details" aria-pressed={details} onClick={() => setDetails(!details)} className={cx('flex h-9 w-9 items-center justify-center rounded-[8px] border border-line', details ? 'bg-selection text-primary' : 'text-ink-2 hover:bg-subtle')}>
               <Icon name="panel-open" size={15} />
@@ -524,7 +532,26 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
           </div>
         ) : null}
       </main>
-      {showDetails && one ? <Details key={`${keyOf(one)}:${seenAsk}`} item={one} list={files} tab={detailsTab as Parameters<typeof Details>[0]['tab']} onClose={() => setDetails(false)} /> : null}
+      {showDetails && shown ? <Details key={`${keyOf(shown)}:${seenAsk}`} item={shown} list={files} tab={detailsTab as Parameters<typeof Details>[0]['tab']} onClose={() => setDetails(false)} /> : null}
+      {showDetails && !shown ? (
+        <aside aria-label="Details" className="flex w-[360px] shrink-0 flex-col border-l border-line bg-surface">
+          <div className="flex items-center justify-between border-b border-line px-4 py-3">
+            <b className="text-[14px] text-ink">{title}</b>
+            <button type="button" aria-label="Close details" onClick={() => setDetails(false)} className="flex h-7 w-7 items-center justify-center rounded-full text-ink-2 hover:bg-subtle hover:text-ink">
+              <Icon name="x" size={14} />
+            </button>
+          </div>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 px-4 py-3 text-[12.5px]">
+            <dt className="text-ink-3">Folders</dt>
+            <dd className="text-ink">{folders.length}</dd>
+            <dt className="text-ink-3">Files</dt>
+            <dd className="text-ink">{first?.total ?? files.length}</dd>
+            <dt className="text-ink-3">Size shown</dt>
+            <dd className="text-ink">{bytes(files.reduce((n, f) => n + f.size, 0))}</dd>
+          </dl>
+          <p className="px-4 text-[12.5px] text-ink-3">Select a file or folder to see its details, activity, versions and sharing.</p>
+        </aside>
+      ) : null}
       {menu ? <PopMenu at={menu.at} items={menu.items} label={menu.label} onClose={() => setMenu(null)} /> : null}
     </div>
   );
