@@ -10,7 +10,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btnSmall, Facts, SidePanel } from '../hr/parts';
-import { archiveProduct, cost, costingLabel, fetchProduct, fetchTimeline, fetchTrade, K, kindLabel, moveWhat, num, qty, restoreProduct, signed, trackingLabel, whole, type ProductDetail, stampWords } from './api';
+import { archiveProduct, cost, costingLabel, fetchProduct, fetchTimeline, fetchTrade, K, kindLabel, moveWhat, num, pictureSrc, qty, restoreProduct, signed, trackingLabel, whole, type ProductDetail, type ProductImage, stampWords } from './api';
 import { Pill, Signed } from './parts';
 import { openWeb } from './Rail';
 
@@ -143,6 +143,7 @@ function Overview({ d, onOpenProduct }: { d: ProductDetail; onOpenProduct: (id: 
 
   return (
     <>
+      {p.images?.length ? <Gallery images={p.images} name={p.name} /> : null}
       {p.is_stocked ? (
         <div className="grid grid-cols-4 gap-2">
           <Tile label="Available" value={qty(t.available)} tone={avail <= 0 ? 'red' : reorder !== null && avail <= reorder ? 'amber' : undefined} />
@@ -494,6 +495,33 @@ function Table({ cols, rows, empty }: { cols: Array<[string, number | null]>; ro
       ) : (
         <span className="block px-3 py-3 text-[12.5px] text-ink-3">{empty}</span>
       )}
+    </div>
+  );
+}
+
+/** The product's pictures: the one looked at large, the rest to pick from. */
+function Gallery({ images, name }: { images: ProductImage[]; name: string }) {
+  const [at, setAt] = useState(0);
+  const shown = images[Math.min(at, images.length - 1)]!;
+  return (
+    <div className="flex gap-2">
+      <img src={pictureSrc(shown.url)} alt={shown.caption ?? name} className="h-[180px] min-w-0 flex-1 rounded-[10px] border border-line bg-subtle object-contain" />
+      {images.length > 1 ? (
+        <div className="flex max-h-[180px] w-[52px] shrink-0 flex-col gap-1.5 overflow-y-auto" aria-label="Pictures">
+          {images.map((img, n) => (
+            <button
+              key={img.id}
+              type="button"
+              aria-label={`Picture ${n + 1}${img.main ? ' (main)' : ''}`}
+              aria-pressed={n === at}
+              onClick={() => setAt(n)}
+              className={cx('size-[48px] shrink-0 overflow-hidden rounded-[7px] border bg-subtle', n === at ? 'border-primary' : 'border-line')}
+            >
+              <img src={pictureSrc(img.url)} alt="" className="size-full object-cover" />
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

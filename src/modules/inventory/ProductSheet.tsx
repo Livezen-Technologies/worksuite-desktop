@@ -5,13 +5,15 @@ import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner } from '../../components/ui';
 import { btn, btnPrimary, Field, input, Sheet } from '../hr/parts';
+import ProductPictures, { sendPictures } from './ProductPictures';
 import { bodyOf, COSTING, createProduct, draftOf, fetchBrands, fetchCategories, fetchProduct, fetchUnits, K, KINDS, TRACKING, treeOf, updateProduct, type Company, type ProductDraft } from './api';
 
 /**
  * A new product, or an edit of one (InvProductSheet). The code is generated
  * when left blank. Tracking and costing are fixed once stock is on hand
  * anywhere — the server refuses the change, so the form does not offer it.
- * The cost price is only here for someone who may see costs.
+ * The cost price is only here for someone who may see costs. Pictures are
+ * sent as they change on an edit, and after the save on a new product.
  */
 const STOCKABLE = new Set(['product', 'bundle', 'combo']);
 const sel = 'h-[34px] w-full rounded-[8px] border border-line bg-surface px-2.5 text-[13px] font-medium text-ink';
@@ -93,6 +95,7 @@ function Form({
   const [company, setCompany] = useState(org || (companies.length === 1 ? String(companies[0]!.id) : ''));
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [pending, setPending] = useState<File[]>([]);
   const scope = id ? org : company;
   const cats = useQuery({
     queryKey: K.categories(scope),
@@ -131,9 +134,12 @@ function Form({
     setSaving(true);
     try {
       const r = id ? await updateProduct(id, body) : await createProduct(company, body);
+      const saved = r.product?.id ?? id!;
+      // A new product's pictures go once it has an id; one refused is said, and the product stays.
+      const failed = !id && pending.length ? await sendPictures(saved, pending, () => undefined) : [];
       void qc.invalidateQueries({ queryKey: ['inventory'] });
-      toast('success', id ? 'Product saved' : 'Product added');
-      onSaved(r.product?.id ?? id!);
+      toast('success', id ? 'Product saved' : failed.length ? 'Product added — edit it to add the pictures that were not kept' : 'Product added');
+      onSaved(saved);
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -325,6 +331,11 @@ function Form({
             </Field>
           </div>
         ) : null}
+        {/* Not a Field: that is a <label>, and a click on it would press the first button inside. */}
+        <div className="flex flex-col gap-1 text-[12.5px] font-semibold text-ink">
+          Pictures
+          <ProductPictures productId={id} pending={pending} onPending={setPending} />
+        </div>
         <Field label="Description">
           <textarea className={input + ' !h-[76px] py-2'} value={d.description} onChange={(e) => set('description', e.target.value)} aria-label="Description" />
         </Field>

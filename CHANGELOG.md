@@ -5,6 +5,39 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-30 — 0.2.67: product pictures, and the AI dock no longer takes the window down
+
+**New: pictures on products** (needs the server's product pictures update)
+
+- **Inventory → New product / Edit product** has a Pictures section. Add
+  several at once or drop them onto it; drag them into order, make one the main
+  picture (★), remove one. JPEG, PNG, WebP or GIF, up to 12. A large photo is
+  made smaller before it is sent; a PNG keeps its transparency.
+- A new product's pictures are sent once it is saved. If the server refuses
+  one, the product is still added and the message says so; edit it to add that
+  picture again.
+- The first picture is the main one: the product list shows it as a thumbnail
+  and the product panel shows all of them above the stock figures.
+
+"This screen stopped working — destroy_ is not a function" (or, before
+0.2.64, an empty window) on closing the AI Assistant, on opening Chat while
+it was open, and on Lock now.
+
+**Fixed**
+
+- The cause: this version of Chromium (152) returns a Promise from
+  `scrollIntoView`, `scrollTo` and `scrollBy`. The AI dock scrolled to its
+  last answer in an effect written so that it returned that Promise, and
+  React calls whatever an effect returns when it closes — so anything that
+  closed the dock (closing it, Chat taking its place, the lock screen
+  covering everything) failed. The effect no longer returns anything; the
+  lock screen's and a new order's focus effects are written the same way.
+- A lint rule now refuses an effect that returns a scroll, focus or play
+  call, or is `async`, and a test runs the dock with the DOM answering as
+  Chromium does.
+
+---
+
 ## 2026-09-30 — 0.2.66: POS and Restaurant on the desktop; Hotel PMS completed
 
 **Added**

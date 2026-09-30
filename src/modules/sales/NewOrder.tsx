@@ -286,7 +286,9 @@ function ScanBox({ warehouseId, onUnit, taken }: { warehouseId: number | null; o
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => ref.current?.focus(), []);
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
   const scan = async () => {
     const c = code.trim();
     if (!c) return;

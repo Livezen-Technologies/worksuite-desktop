@@ -21,7 +21,9 @@ export function LockScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
-  useEffect(() => input.current?.focus(), [pinMode]);
+  useEffect(() => {
+    input.current?.focus();
+  }, [pinMode]);
 
   const unlock = async () => {
     if (!password) return;
