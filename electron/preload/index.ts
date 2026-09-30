@@ -341,6 +341,15 @@ const api = {
   pms: {
     download: call('pms:download'),
   },
+  // Hotel PMS door locks (pms-locks-channels.ts): the on-site lock server; its secret never comes back.
+  pmsLocks: {
+    config: call('pmsLocks:config'),
+    configSet: call('pmsLocks:configSet'),
+    forget: call('pmsLocks:forget'),
+    test: call('pmsLocks:test'),
+    run: call('pmsLocks:run'),
+    status: call('pmsLocks:status'),
+  },
   pos: {
     till: call('pos:till'),
     pair: call('pos:pair'),

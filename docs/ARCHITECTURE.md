@@ -323,6 +323,23 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   the OS print dialog ship); printed cards, receipts and reports are laid out
   in `print.ts` from the server's data and printed with no script and no
   network.
+- Hotel PMS door locks (`electron/services/pms-locks/`, `shared/pms-locks.ts`,
+  `pmsLocks:*`): the key encoder of the device seam, through the property's
+  on-site lock server. WorkSuite's door-lock provider decides every key and
+  answers an **encoder payload** (rooms, validity, common areas, guest, cards,
+  new or copy, and the vendor's own request); the renderer (`locks.ts`,
+  `Keys.tsx`) hands it to `pmsLocks:run`, the main process checks it against
+  this desk's settings (same property, vendor and connection, not expired),
+  fills in this desk's encoder, frames it for the vendor's link and sends it —
+  SHIP for Salto and Saflok's PMS link as STX…ETX+LRC frames over TCP
+  (`frame.ts`, `link.ts`), Visionline, Vostio and Ambiance as JSON over HTTPS
+  (`vingcard.ts`, `dormakaba.ts`) — and the renderer reports the outcome to
+  WorkSuite (`POST keys/{log}/result`). The lock server's address is kept per
+  WorkSuite server and property in the settings (`pmsLocks.servers`), its
+  password or API key in the OS keystore; `LockServer.tsx` (Desk devices) sets
+  it up and tests it. Check-in, a room move and the stay's Keys run the jobs
+  WorkSuite answers; a desk with no lock server leaves them waiting. TTLock is
+  cloud-to-cloud (WorkSuite calls it): the desk only shows its passcodes.
 - The WorkSuite Events desk (`electron/services/event-desk.ts`, rules in
   `shared/event-desk.ts`): this computer as a check-in device at an event.
   Registering it, its key, its offline copy of the gate's tickets and the

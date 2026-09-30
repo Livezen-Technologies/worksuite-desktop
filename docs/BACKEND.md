@@ -288,7 +288,8 @@ a fault).
 | Guests | `GET guests?q=&org=`, `POST guests/check`, `POST guests` (`client_id`, or the details with `force`), `GET guests/{id}`, `GET guests/{id}/reservations`, `POST guests/{id}/documents` (multipart), `GET guest-documents/{id}` (the file, fetched by the main process's download manager through `pms:download`), `DELETE guest-documents/{id}`, `POST guests/{id}/merge {from_guest_id, reason}`, `POST guests/{id}/identity` (a scanned ID, confirmed) |
 | Check-in | `GET reservations/{id}/check-in`, `POST reservations/{id}/check-in {rooms, id_verified, guarantee_verified, override_reason, early_checkin, posting_allowed, keys, version}`, `POST stays/{id}/registration-card {document_id}` |
 | Walk-in | `GET availability` (tonight), `POST properties/{id}/walk-ins {…, payment?}` |
-| A stay | `GET stays/{id}`, `POST stays/{id}` (charges allowed, credit limit), `POST stays/{id}/move`, `POST stays/{id}/departure`, `POST stays/{id}/keys`, `POST stays/{id}/folios`, `POST stays/{id}/routing`, `DELETE routing-rules/{id}`, `POST stays/{id}/charges` |
+| A stay | `GET stays/{id}`, `POST stays/{id}` (charges allowed, credit limit), `POST stays/{id}/move` (its `key` and `old_key` run on the desk's encoder), `POST stays/{id}/departure`, `POST stays/{id}/folios`, `POST stays/{id}/routing`, `DELETE routing-rules/{id}`, `POST stays/{id}/charges` |
+| Keys, door locks | `GET properties/{id}/door-locks` (the property's vendor, connection, default cards, common areas — no secrets), `POST stays/{id}/keys {action: issue\|duplicate\|cancel\|status, cards, common_areas, mobile, receiver}` → `key: {ok, status, message, log_id, mode, vendor, payload?, secret?}`, `GET stays/{id}/keys` (the key log), `POST properties/{id}/keys/read`, `POST keys/{id}/result {ok, message, card, encoder}` (the desk's report on an encoder job). Needs `pms.keys.issue` |
 | Folios | `GET folios/{id}`, `GET folios/{id}/document`, `GET properties/{id}/services`, `POST folios/{id}/charges`, `POST folio-items/{id}/void\|adjust\|transfer`, `POST folios/{id}/payments`, `POST payments/{id}/refund\|void`, `POST folios/{id}/settle\|reopen\|transfer-ar\|invoice` |
 | Check-out | `GET reservations/{id}/check-out`, `POST reservations/{id}/check-out {rooms, early, late_checkout, apply_deposit, transfer_ar}` |
 | Cashier | `GET properties/{id}/cashier-sessions`, `POST properties/{id}/cashier-sessions`, `GET cashier-sessions/{id}`, `POST cashier-sessions/{id}/close\|reconcile` |
@@ -301,6 +302,15 @@ a fault).
 | Tape chart | `GET properties/{id}/calendar?from=&days=7\|14\|30`, `POST calendar/preview`, `POST calendar/move {…, version, reason?}` |
 | Invoices | `GET properties/{id}/folios?status=settled\|transferred_ar\|closed`, `POST folios/{id}/invoice`, `GET properties/{id}/outbox?status=`, `POST outbox/{id}/retry` |
 | KPIs, reports | `GET properties/{id}/kpis?from=&to=`, `GET properties/{id}/reports`, `GET properties/{id}/reports/{key}?from=&to=&room_type_id=&source_id=&rate_plan_id=`, the export `…&format=csv\|xlsx\|pdf` fetched by the main process (`pms:download`), `GET properties/{id}/room-types`, `GET properties/{id}/rate-plans` |
+
+**Door locks.** The property's lock system is WorkSuite's (Settings → Door locks on the web, `pms_door_locks`).
+TTLock is called by the server: the answer is `mode: server` with the passcodes as `secret`, shown once. Salto, Vingcard
+and dormakaba answer `mode: encoder`, `status: pending` and `payload` — `{v: 1, log_id, vendor, connection, operation,
+property_id, stay_id, rooms, room_numbers, common_areas, valid_from, valid_until, timezone, guest_name, cards, kind,
+operator, vendor_fields, issued_at, expires_at}` — which this desk sends to the on-site lock server set up in Desk
+devices → Door-lock server and reports back. The vendors' protocol details (SHIP, Visionline / Vostio, Ambiance /
+Saflok) follow the published outlines and are to be confirmed with each vendor's specification during certification;
+each is off until configured on the server and on the desk.
 
 **Printed pages** (registration cards, receipts, invoices, statements, shift and night-audit reports) are laid out on
 the desktop from the server's answers (`registration-card`, `folios/{id}/document`, the shift, the audit's `report`) and
@@ -330,8 +340,10 @@ What the desktop cannot do because the server does not:
 - **Registration cards exist only for a stay.** FD-005's "print registration cards" for the day's arrivals before
   they arrive cannot be served; the desktop prints them for guests checked in today. The server keeps a signed card
   as an uploaded guest document; it renders no card (the desktop draws card and signature into a PNG).
-- **No card payload for a key encoder.** `POST stays/{id}/keys` answers `{ok, status, message}` from the property's
-  `DoorLockProvider`; a desk-side encoder has nothing to write. Keys are the server's door-lock integration.
+- ~~No card payload for a key encoder~~ — served since: an on-premise vendor (Salto, Vingcard, dormakaba) answers
+  `status: pending` with the encoder payload, which the desk runs on its lock server (`pmsLocks:run`) and reports with
+  `POST keys/{id}/result`. A job made on the web waits for a desk; the web's answer carries no way to fetch its
+  payload again, so the desk issues the key again from the stay (the server replaces the waiting job).
 - **Payment methods are not in `options`**; the desktop carries `PaymentMachine::METHODS` (less `deposit`).
 - **Charge codes are listed only to rate managers and reservation readers** (`GET properties/{id}/services`); a cashier
   with `pms.folio.post` alone types the code.

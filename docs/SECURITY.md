@@ -336,6 +336,29 @@ A computer paired as a POS till holds a credential of its own (`Pos\Libraries\De
 - **The customer display** is an ordinary sandboxed window of the shell; it reads only what the register posts on a
   same-origin `BroadcastChannel` (lines, totals, change) — no cashier, customer or drawer figures.
 
+## Hotel PMS door locks (PMS-KEY-002, PMS-DSK-002)
+
+- **What decides a key** is WorkSuite: its door-lock provider builds the encoder payload (rooms, validity, common
+  areas, cards, new or copy). The main process only runs a payload that parses against `keyPayloadSchema` (known
+  vendor commands, printable-ASCII fields, a path under `/api/`, at most four rooms), is for the property, vendor and
+  connection this desk is set up for, and has not passed its `expires_at` (15 minutes); it changes nothing but the
+  `{encoder}` cells. A page cannot name a host, port or raw bytes to send.
+- **Where it goes** — only to the lock server set up for the property on this computer (`pmsLocks.servers`, per
+  WorkSuite server and property). A plain (non-TLS) link is refused unless the host is on the hotel's own network
+  (private, loopback or link-local address, or a `.local` / `.lan` / `.internal` name). With TLS the certificate is
+  checked against the CA chain, or against a pinned SHA-256 fingerprint for an on-site server with its own
+  certificate — checked on the connected socket before a byte of the request is written.
+- **The lock server's password or API key** is kept only in the OS credential store (`pmsLocks:<server>#<property>`);
+  `pmsLocks:config` answers `hasSecret`, never the secret; logs name the vendor, operation and job, never a secret or
+  a card. Setting it up needs Hotel PMS in the session (and the screen offers it to `pms.keys.manage` /
+  `pms.device.manage`); `pmsLocks:configSet`, `forget` and `run` are audited. A remote wipe or "remove WorkSuite's
+  data" removes every lock server and secret; a plain sign-out keeps them (the desk's hardware is the computer's).
+- **What comes back** from a card is only rooms, validity, a serial and a count — reported to WorkSuite, which keeps
+  only those; no track data is read out. Answers are bounded (64 KB on a framed link, 1 MB over HTTP) and control
+  characters are stripped before a lock server's words are shown.
+- **TTLock** is cloud-to-cloud: its OAuth credentials are WorkSuite's (sealed on the server); nothing of it passes
+  through this computer but the passcode shown to the desk once.
+
 ## Restaurant terminal (Restaurant SRS RM-PLT-003, RM-COM-003, §4.3–4.4)
 
 - **The terminal key** (`rt_` + 48 hex) is handed over once, to a person with `restaurant.device.manage`, by
