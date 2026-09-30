@@ -932,7 +932,13 @@ export interface HkTaskFull extends HkTask {
   options?: ActionOption[];
   primary?: string | null;
   room?: { hk_status: string; hk_status_label: string; badge: Badge; version: number };
+  /** The task's photos (`Photos::listed`), each served by `GET housekeeping-tasks/{id}/photos/{fileId}`. */
+  photos?: Array<{ id: number; url: string }>;
 }
+
+/** The server keeps up to 12 photos a record, 10 MB each (`Pms\Libraries\Photos`). */
+export const MAX_PHOTO = 10 * 1024 * 1024;
+export const MAX_PHOTOS = 12;
 
 export interface HkStaff {
   user_id: number;

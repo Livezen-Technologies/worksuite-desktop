@@ -207,6 +207,29 @@ describe('housekeeping writes (§11.1–11.2)', () => {
     expect((within(dialog).getByRole('button', { name: 'Record' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it('adds a photo to the attendant’s own task, and offers none on someone else’s', async () => {
+    perms = ['pms.access', 'pms.housekeeping.view'];
+    tab.path = ['pms', 'housekeeping', 'tasks', '12'];
+    app.set({ bootstrap: { user: { id: '7', name: 'Ruwan Silva' }, permissions: ['*'] } as never });
+    extra = (p) => (p === '/api/pms/v1/housekeeping-tasks/12' ? { task: { ...TASK, photos: [{ id: 31, url: '/api/pms/v1/housekeeping-tasks/12/photos/31' }] }, history: [], restocks: [] } : undefined);
+    vi.mocked(request).mockResolvedValue(ok({ file_id: 32 }, 'Photo added.'));
+    const first = show();
+    const img = await screen.findByRole('img', { name: 'Room 102, photo' });
+    expect(img.getAttribute('src')).toContain('/api/pms/v1/housekeeping-tasks/12/photos/31');
+    const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], 'bath.jpg', { type: 'image/jpeg' });
+    fireEvent.change(screen.getByLabelText('Add a photo…'), { target: { files: [file] } });
+    await waitFor(() => expect(posted()).toContainEqual(expect.objectContaining({ method: 'POST', path: '/api/pms/v1/housekeeping-tasks/12/photos' })));
+    const body = posted().find((x) => x.path === '/api/pms/v1/housekeeping-tasks/12/photos')!.body as unknown as FormData;
+    expect(body).toBeInstanceOf(FormData);
+    expect((body.get('file') as File).name).toBe('bath.jpg');
+    first.unmount();
+
+    app.set({ bootstrap: { user: { id: '9', name: 'Other' }, permissions: ['*'] } as never });
+    show();
+    expect(await screen.findByRole('img', { name: 'Room 102, photo' })).toBeTruthy();
+    expect(screen.queryByLabelText('Add a photo…')).toBeNull();
+  });
+
   it('waits for WorkSuite: a task shows no stale copy offline', async () => {
     perms = ['pms.access', 'pms.housekeeping.view'];
     tab.path = ['pms', 'housekeeping', 'tasks', '12'];
