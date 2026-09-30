@@ -9,6 +9,9 @@
  *       `'<key-id>': '<public key>'` line into LOCAL_AI_CATALOG_KEYS and ship it before the CDN signs with it.
  *   node scripts/local-ai-catalog.mjs hash <model.gguf>
  *       Prints `sha256` and `bytes` for the catalog entry.
+ *   node scripts/local-ai-catalog.mjs fill <catalog-body.json> <models-dir> [out.json]
+ *       Fills each model's `sha256` and `bytes` from `<models-dir>/<id>.gguf` (the files that go to the CDN).
+ *       `docs/local-ai/catalog.qwen3.5.json` is the starting body (Qwen3.5 0.8B / 2B / 4B / 9B, Q4_K_M).
  *   node scripts/local-ai-catalog.mjs sign <catalog-body.json> <private-key.pem> <key-id> [envelope-out.json]
  *       Checks the body's shape, then writes the envelope to publish as catalog.json.
  *   node scripts/local-ai-catalog.mjs verify <envelope.json> <public-key-base64>
@@ -53,6 +56,25 @@ if (cmd === 'keygen') {
   const h = createHash('sha256');
   for await (const chunk of createReadStream(file)) h.update(chunk);
   console.log(JSON.stringify({ sha256: h.digest('hex'), bytes: (await stat(file)).size }));
+} else if (cmd === 'fill') {
+  const [bodyFile, dir, out] = args;
+  if (!bodyFile || !dir) die('usage: fill <catalog-body.json> <models-dir> [out.json]');
+  const c = JSON.parse(await readFile(bodyFile, 'utf8'));
+  for (const m of c.models) {
+    const file = `${dir}/${m.id}.gguf`;
+    const h = createHash('sha256');
+    try {
+      for await (const chunk of createReadStream(file)) h.update(chunk);
+    } catch {
+      die(`${m.id}: ${file} not found`);
+    }
+    m.sha256 = h.digest('hex');
+    m.bytes = (await stat(file)).size;
+    console.error(`${m.id}: ${m.bytes} bytes, sha256 ${m.sha256}`);
+  }
+  const text = JSON.stringify(c, null, 2) + '\n';
+  if (out) await writeFile(out, text);
+  else console.log(text);
 } else if (cmd === 'sign') {
   const [bodyFile, keyFile, keyId, out] = args;
   if (!bodyFile || !keyFile || !KEY_ID.test(keyId ?? '')) die('usage: sign <catalog-body.json> <private-key.pem> <key-id> [envelope-out.json]');
@@ -70,5 +92,5 @@ if (cmd === 'keygen') {
   const c = checkBody(env.body);
   console.log(`OK: ${c.models.length} models, key ${env.keyId}, expires ${c.expiresAt}`);
 } else {
-  die('commands: keygen, hash, sign, verify (see the top of this file)');
+  die('commands: keygen, hash, fill, sign, verify (see the top of this file)');
 }
