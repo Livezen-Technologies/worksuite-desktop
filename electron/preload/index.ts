@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { EVENT_CHANNELS, INVOKE_CHANNELS, type EventChannel, type InvokeChannel } from '@shared/ipc/channels';
+import { POS_INVOKE_CHANNELS } from '@shared/ipc/pos-channels';
 
 /**
  * The only bridge between the sandboxed renderer and the desktop (§3.3, §8.4).
@@ -296,6 +297,8 @@ const api = {
     outboxAdd: call('salon:outboxAdd'),
     outboxResolve: call('salon:outboxResolve'),
   },
+  // POS: every `pos:x` channel as pos.x (pos-channels.ts).
+  pos: Object.fromEntries(POS_INVOKE_CHANNELS.map((c) => [c.slice(4), call(c)])),
   offline: {
     status: call('offline:status'),
     pending: call('offline:pending'),

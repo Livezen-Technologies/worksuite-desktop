@@ -51,6 +51,10 @@ const DENY: RegExp[] = [
   // Pairing a salon desk answers with the desk's key: it is done in the main
   // process (salon-desk.ts), so the key never reaches a renderer.
   /^\/api\/salon\/v1\/desk\/pair(\/|\?|$)/,
+  // Pairing a POS till answers with its credential, and the till's own door takes that credential: both are the
+  // main process's (pos-desk.ts), so it never reaches a page.
+  /^\/api\/pos\/terminals\/\d+\/pair\/?$/,
+  /^\/api\/pos\/device(\/|\?|$)/,
   // An event desk's key is answered by a new key, and its copy and queue are made with it: this computer as a
   // check-in device is the main process's (event-desk.ts). Registering one is refused below, by method.
   /^\/api\/events\/v1\/devices\/\d+\/(key|heartbeat)\/?$/,

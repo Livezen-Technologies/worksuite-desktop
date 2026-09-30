@@ -34,6 +34,7 @@ import { createRemoteControl } from '../services/remote-control/host';
 import { DEFAULT_POLICY } from '../services/policy';
 import { Database } from '../services/db';
 import { archName, DeviceService, platformName } from '../services/device';
+import { createPos } from '../services/pos-ipc';
 import { SalonDesk } from '../services/salon-desk';
 import { SalonPrint } from '../services/salon-print';
 import { SalonSync } from '../services/salon-sync';
@@ -397,6 +398,31 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
   });
   const eventDeskPrint = new EventDeskPrint({ config: db, http, origin: () => auth.getServer()?.origin ?? null });
+  // POS: this computer as a paired till — its credential, catalogue copy, sales outbox, printer, customer display.
+  const pos = createPos({
+    db,
+    vault: getVault,
+    secrets,
+    http,
+    windows,
+    origin: () => auth.getServer()?.origin ?? null,
+    cashier: () => {
+      const id = Number(sessionCtl.isReady() ? sessionCtl.userId() : NaN);
+      return Number.isInteger(id) && id > 0 ? { id, name: sessionCtl.get().user?.name ?? null } : null;
+    },
+    allowed: () => sessionCtl.isReady() && canOpenApp('pos', sessionCtl.visibleApps()),
+    caps: () => {
+      const c = sessionCtl.capabilities();
+      return { offlineCache: c.offlineCache, offlineQueue: c.offlineQueue };
+    },
+    installId: () => device.installId(),
+    device: () => ({ name: device.deviceName(), info: `WorkSuite Desktop on ${platformName()}` }),
+    appVersion: app.getVersion(),
+    changed: () => {
+      broadcast('pos:changed');
+      emitStatus();
+    },
+  });
 
   // Drive sync (Phase 2): chosen Drive folders kept in step with folders here.
   const syncAllowed = (): { ok: boolean; reason: string | null } => {
@@ -630,7 +656,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     return {
       network: networkStatus(apiReachable, realtime.getState(), realtimeDownSince),
       realtime: realtime.getState(),
-      pendingChanges: uid ? queue.pendingCount(uid) + salonSync.pending() + eventDesk.pending() : 0,
+      pendingChanges: uid ? queue.pendingCount(uid) + salonSync.pending() + eventDesk.pending() + pos.pending() : 0,
       unread: counts,
       notificationsPausedUntil: notifications.pausedUntilIso(),
       services,
@@ -964,6 +990,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/garage/v1/workshop', 'garage'],
     // A learner opens My Learning, the catalogue and their courses' outlines (with the lessons already opened)
     // from the last copy; a course's lesson files kept offline are elearning-offline.ts's, not this cache's.
+    // A till opens with WorkSuite out of reach: what the cashier may do, the registers and their drawer as last seen.
+    ['/api/pos/options', 'pos'],
+    ['/api/pos/registers', 'pos'],
+    ['/api/pos/sessions', 'pos'],
+    ['/api/pos/setup', 'pos'],
     ['/api/elearning/v1/options', 'elearning'],
     ['/api/elearning/v1/me/learning', 'elearning'],
     ['/api/elearning/v1/me/courses', 'elearning'],
@@ -1028,7 +1059,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     device.extras = () => {
       const c = transfers.activeCounts();
       const s = sync.health();
-      return { pendingUp: queue.pendingCount(uid) + salonSync.pending() + eventDesk.pending() + c.uploads + s.pendingUp, pendingDown: c.downloads + s.pendingDown, lastError: s.lastError };
+      return { pendingUp: queue.pendingCount(uid) + salonSync.pending() + eventDesk.pending() + pos.pending() + c.uploads + s.pendingUp, pendingDown: c.downloads + s.pendingDown, lastError: s.lastError };
     };
     sync.start(uid);
     transfers.recover();
@@ -1124,6 +1155,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         // Every event this computer was a check-in device at: the keys, the copies, the queues, the badge printer.
         eventDesk.forgetAll();
         eventDeskPrint.forgetAll();
+        // The till this computer was: its credential, catalogue, sales (sent or not) and printer settings.
+        pos.forgetAll();
       }
       log.info('local data removed', { scope });
     },
@@ -1208,6 +1241,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     sync.kick('reconnected');
     void salonSync.sync();
     void eventDesk.sync();
+    pos.sync();
     void elearning.validate().catch(() => undefined);
     broadcast('realtime:resync');
   }
@@ -1406,6 +1440,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   };
   registerHandlers(router, ctx);
   pdfStudio.register(router);
+  pos.register(router);
   localAI.register(router);
   router.install();
   const missing = router.missingHandlers();
@@ -1455,6 +1490,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     sync.stop();
     // What scans changed in an event desk's copy is written back before the database closes.
     eventDesk.stop();
+    pos.stop();
     supervisor.stopAll();
     realtime.stop();
     updater.stop();
@@ -1475,12 +1511,15 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     if (uid) void queue.replay(uid);
     void salonSync.sync();
     void eventDesk.sync();
+    pos.sync();
   });
   screen.on('display-removed', () => windows.refit());
   screen.on('display-metrics-changed', () => windows.refit());
 
   tray.start();
   lock.start();
+  // The till sends its sales with its own credential, whoever is signed in (or nobody).
+  pos.start();
   updater.start();
   applyAutostartOnce(settings);
 

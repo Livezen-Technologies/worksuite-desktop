@@ -3,6 +3,8 @@
  * process and only these can be reached from the preload. This file is plain
  * data so the sandboxed preload can import it without pulling in zod.
  */
+import { POS_EVENT_CHANNELS, POS_INVOKE_CHANNELS } from './pos-channels';
+
 export const INVOKE_CHANNELS = [
   'app:info',
   'app:quit',
@@ -270,6 +272,8 @@ export const INVOKE_CHANNELS = [
   'diagnostics:saveBundle',
   'diagnostics:restartSafeMode',
   'diagnostics:services',
+  // POS: the till on this computer (pos-channels.ts).
+  ...POS_INVOKE_CHANNELS,
 ] as const;
 
 export type InvokeChannel = (typeof INVOKE_CHANNELS)[number];
@@ -309,6 +313,7 @@ export const EVENT_CHANNELS = [
   'ai:localEvent',
   'ai:localChanged',
   'office:localChanged',
+  ...POS_EVENT_CHANNELS,
 ] as const;
 
 export type EventChannel = (typeof EVENT_CHANNELS)[number];

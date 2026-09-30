@@ -35,6 +35,7 @@ import {
 } from '../event-desk';
 import { localRequestSchema, type LocalAIStatus, type LocalModelView } from '../local-ai';
 import { MAX_OFFICE_LOCAL_BYTES, OFFICE_EDITOR_EVENTS, OFFICE_EXPORT_TOKEN, officeCommandSchema, type ExternalApp, type OfficeLocalCopy, type OfficeLocalPick } from '../office';
+import { posContract, type PosOutputs } from '../pos';
 import { pdfEditOpSchema, pdfPrintSchema, pdfSearchOptionsSchema, pdfSourceSchema, SEARCH_MAX_QUERY, type PdfAnnotView, type PdfAttachmentView, type PdfBitmap, type PdfDiagnosticCheck, type PdfDriveDetails, type PdfFailureReport, type PdfLinkView, type PdfLocalPick, type PdfOutlineNode, type PdfRect, type PdfSessionView } from '../pdf';
 import type { InvokeChannel } from './channels';
 import type {
@@ -835,6 +836,9 @@ export const contract = {
   'diagnostics:saveBundle': ch(none, { permission: 'desktop.diagnostics.export', whileLocked: true, sensitive: true, rate: 1 }),
   'diagnostics:restartSafeMode': ch(z.object({ safe: z.boolean() }), { whileLocked: true }),
   'diagnostics:services': ch(none, { whileLocked: true }),
+
+  // POS: the till on this computer — its credential stays in the main process (shared/pos.ts, pos-ipc.ts).
+  ...posContract,
 } satisfies Record<InvokeChannel, ChannelSpec>;
 
 export type Contract = typeof contract;
@@ -904,7 +908,7 @@ export interface WindowState {
   fullScreen?: boolean;
 }
 
-export interface Outputs {
+export interface Outputs extends PosOutputs {
   'app:info': AppInfo;
   'app:quit': void;
   'app:relaunch': void;
