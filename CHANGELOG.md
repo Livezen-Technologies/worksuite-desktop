@@ -5,6 +5,16 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-30 — 0.2.69: a slow AI answer says so
+
+"The server answered 502." in the AI dock, on a request that makes the assistant act (an invoice for 10 Windows
+11 Pro keys): the web server in front of WorkSuite gave up on a turn that ran too long. The dock now says
+"WorkSuite took too long to answer this — the AI model may still be starting. Try again in a moment, or ask for
+one thing at a time." The server keeps a turn within its time (WorkSuite server update), so this should rarely
+be seen at all.
+
+---
+
 ## 2026-09-30 — 0.2.68: Local AI uses AI Studio's models
 
 "Local AI" showed `net::ERR_SSL_UNRECOGNIZED_NAME_ALERT` and no models: it asked for its catalog at
