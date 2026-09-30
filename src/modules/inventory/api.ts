@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
+import { apiDelete, apiGet, apiPost, apiPut, apiUrl, request } from '../../core/api';
 import { addDays, dayWords, listStamp, parseTs, timeLabel, dayKey, todayInZone } from '../../core/time';
 
 /**
@@ -36,6 +36,7 @@ export const K = {
   detail: (org: string, wh: number | null) => ['inventory', 'dashboard-detail', org, wh] as const,
   products: (org: string, f: object) => ['inventory', 'products', org, f] as const,
   product: (id: number, org: string) => ['inventory', 'product', id, org] as const,
+  images: (id: number) => ['inventory', 'images', id] as const,
   trade: (id: number, org: string) => ['inventory', 'trade', id, org] as const,
   timeline: (id: number, org: string) => ['inventory', 'timeline', id, org] as const,
   categories: (org: string) => ['inventory', 'categories', org] as const,
@@ -531,6 +532,8 @@ export interface Product {
   brand_id: number | null;
   brand: string | null;
   image_file_id: number | null;
+  /** The main picture, under `/api` (list rows); null when it has none. */
+  image_url?: string | null;
   is_stocked: boolean;
   active: boolean;
   reorder_point: number | null;
@@ -592,7 +595,7 @@ export interface Level {
 }
 
 export interface ProductDetail {
-  product: Product;
+  product: Product & { images?: ProductImage[] };
   levels: Level[];
   variants: Array<{
     id: number;
@@ -808,6 +811,77 @@ export function bodyOf(d: ProductDraft, canCost: boolean): { body: Record<string
 
 export const createProduct = (org: string, body: Record<string, unknown>) => apiPost<{ product: Product }>('/api/inventory/products', bodyOrg(org, body));
 export const updateProduct = (id: number, body: Record<string, unknown>) => apiPut<{ product: Product }>(`/api/inventory/products/${id}`, body);
+// ── a product's pictures ────────────────────────────────────────────────
+
+/**
+ * A picture in a product's gallery (the server's ProductImages). The first is
+ * the product's own — lists, labels and the point of sale show it. The server
+ * keeps JPEG, PNG, WebP and GIF, read from the bytes, never the name, up to
+ * 12 of them, 10 MB each.
+ */
+export interface ProductImage {
+  id: number;
+  file_id: number;
+  mime: string;
+  bytes: number;
+  position: number;
+  caption: string | null;
+  main: boolean;
+  /** Under `/api`, as the server gives it. */
+  url: string;
+}
+
+export const PICTURE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+export const PICTURE_LIMIT = 12;
+export const PICTURE_MAX = 10 * 1024 * 1024;
+
+/** A picture read through the API proxy (which adds the session), for `<img>`. */
+export const pictureSrc = (url: string) => apiUrl(url.startsWith('/api/') ? url : `/api${url}`);
+
+export const fetchProductImages = (id: number, signal?: AbortSignal) =>
+  apiGet<{ images: ProductImage[] }>(`/api/inventory/products/${id}/images`, undefined, signal).then((r) => r.images ?? []);
+
+/** One picture, as it will be sent: `shrinkPicture` first. */
+export async function uploadProductImage(id: number, file: Blob, name: string): Promise<ProductImage[]> {
+  const form = new FormData();
+  form.append('file', file, name);
+  const r = await request<{ images: ProductImage[] }>('POST', `/api/inventory/products/${id}/images`, { body: form });
+  return r.data.images ?? [];
+}
+
+export const mainProductImage = (id: number, imageId: number) => apiPost<{ images: ProductImage[] }>(`/api/inventory/products/${id}/images/${imageId}/main`).then((r) => r.images ?? []);
+export const removeProductImage = (id: number, imageId: number) => apiDelete<{ images: ProductImage[] }>(`/api/inventory/products/${id}/images/${imageId}`).then((r) => r.images ?? []);
+export const orderProductImages = (id: number, ids: number[]) => apiPut<{ images: ProductImage[] }>(`/api/inventory/products/${id}/images/order`, { ids }).then((r) => r.images ?? []);
+
+/** Why a file cannot be a product picture, before anything is sent; null when it can. */
+export function pictureProblem(file: { type: string; size: number; name: string }): string | null {
+  if (!PICTURE_TYPES.includes(file.type)) return `${file.name}: only JPEG, PNG, WebP or GIF pictures.`;
+  return null;
+}
+
+/**
+ * A picture made reasonable to send: a photo larger than 2048 px or 3 MB goes
+ * as a JPEG at 0.85; a PNG or WebP over the server's 10 MB as WebP, which
+ * keeps its transparency. A GIF, which may move, goes as it is.
+ */
+export async function shrinkPicture(file: Blob, max = 2048): Promise<Blob> {
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type) || typeof createImageBitmap !== 'function' || typeof document === 'undefined') return file;
+  const photo = file.type === 'image/jpeg';
+  if (!photo && file.size <= PICTURE_MAX) return file;
+  try {
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    if (scale === 1 && file.size < 3 * 1024 * 1024) return file;
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bmp.width * scale);
+    canvas.height = Math.round(bmp.height * scale);
+    canvas.getContext('2d')?.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    return await new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b ?? file), photo ? 'image/jpeg' : 'image/webp', photo ? 0.85 : 0.9));
+  } catch {
+    return file;
+  }
+}
+
 export const archiveProduct = (id: number) => apiDelete<unknown>(`/api/inventory/products/${id}`);
 export const restoreProduct = (id: number) => apiPost<unknown>(`/api/inventory/products/${id}/restore`);
 

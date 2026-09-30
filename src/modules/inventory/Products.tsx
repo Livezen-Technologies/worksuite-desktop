@@ -4,7 +4,7 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, Empty, input, PageHead } from '../hr/parts';
-import { fetchCategories, fetchProducts, K, num, PER_PAGE, qty, trackingLabel, treeOf, whole, type Company, type Product, type ProductFilters } from './api';
+import { fetchCategories, fetchProducts, K, num, PER_PAGE, pictureSrc, qty, trackingLabel, treeOf, whole, type Company, type Product, type ProductFilters } from './api';
 import { minWidth, Pill } from './parts';
 
 const NewCategory = lazy(() => import('./Categories').then((m) => ({ default: m.NewCategory })));
@@ -252,7 +252,9 @@ function Row({
   const other = p.currency && currency && p.currency !== currency ? p.currency : null;
   return (
     <div data-product={p.id} className={cx('group flex items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] last:border-b-0 hover:bg-subtle/60', on && 'bg-[#F4F6FE] dark:bg-selection/40', !p.active && 'opacity-60')}>
-      <button type="button" onClick={() => onOpen(p.id)} className="flex min-w-0 flex-1 flex-col text-left">
+      <button type="button" onClick={() => onOpen(p.id)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+        <Thumb key={p.image_url ?? ''} url={p.image_url ?? null} />
+        <span className="flex min-w-0 flex-1 flex-col">
         <b className="truncate text-ink">
           {p.name}
           {p.variant_label ? ` — ${p.variant_label}` : ''}
@@ -261,6 +263,7 @@ function Row({
         <span className="truncate text-[11px] text-ink-3">
           <span className="font-mono">{[p.code, p.barcode].filter(Boolean).join(' · ') || '—'}</span>
           {!showCat && p.category ? ` · ${p.category}` : ''}
+        </span>
         </span>
       </button>
       {showCat ? (
@@ -308,5 +311,15 @@ function Row({
         </button>
       ) : null}
     </div>
+  );
+}
+
+/** The product's main picture, small; an empty tile when it has none or it cannot be read. */
+function Thumb({ url }: { url: string | null }) {
+  const [broken, setBroken] = useState(false);
+  return (
+    <span className="grid size-[30px] shrink-0 place-items-center overflow-hidden rounded-[6px] border border-line bg-subtle">
+      {url && !broken ? <img src={pictureSrc(url)} alt="" loading="lazy" className="size-full object-cover" onError={() => setBroken(true)} /> : null}
+    </span>
   );
 }

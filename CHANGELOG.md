@@ -5,7 +5,19 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-09-30 — 0.2.66: the AI dock no longer takes the window down
+## 2026-09-30 — 0.2.66: product pictures, and the AI dock no longer takes the window down
+
+**New: pictures on products** (needs the server's product pictures update)
+
+- **Inventory → New product / Edit product** has a Pictures section. Add
+  several at once or drop them onto it; drag them into order, make one the main
+  picture (★), remove one. JPEG, PNG, WebP or GIF, up to 12. A large photo is
+  made smaller before it is sent; a PNG keeps its transparency.
+- A new product's pictures are sent once it is saved. If the server refuses
+  one, the product is still added and the message says so; edit it to add that
+  picture again.
+- The first picture is the main one: the product list shows it as a thumbnail
+  and the product panel shows all of them above the stock figures.
 
 "This screen stopped working — destroy_ is not a function" (or, before
 0.2.64, an empty window) on closing the AI Assistant, on opening Chat while
