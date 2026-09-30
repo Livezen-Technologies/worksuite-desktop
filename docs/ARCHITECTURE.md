@@ -301,7 +301,14 @@ Vault-sealed, so the database file alone gives nothing to guess against.
 - Hotel PMS (`modules/pms`) is a shell with a rail (`PmsShell.tsx`) and a
   property selector; its screens are lazy chunks — the rack, the desk's
   lists, reservations, check-in and check-out, the stay with its folios, the
-  cashier and the night audit. Addresses are read in one place
+  cashier and the night audit, the operations (housekeeping tasks, rooms,
+  restocks, maintenance, lost and found, guest requests), the tape chart,
+  invoices and the reports. The operations share `ops.tsx`: a record's moves
+  as the server offers them (`options`), each asking what it `needs` and sent
+  with the record's `version`, and a people picker over the company
+  directory. A file from the server (a report's CSV, a guest's document) is
+  fetched through the API proxy and saved with the save dialog, where the
+  organization allows downloads. Addresses are read in one place
   (`routes.ts`), so a deep link, a notification's link and a window's route
   open the same screen. Offline it reads the rack and lists from READ_CACHE
   (per property: `shared/pms-cache.ts`, matched by pattern in

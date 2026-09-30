@@ -262,14 +262,15 @@ what it answers and sends what happened. Tests: `tests/unit/renderer/elearning.t
 
 `src/modules/pms`, over the server's `/api/pms/v1` (`app/Modules/Pms`, stages A, B1 and B2). Business rules, money,
 availability and the business date are the server's; the desktop shows what it answers and sends what the desk did.
-The back office (rates, rooms, packages, taxes, reports, settings, the set-up wizard, the tape chart) is the web's.
-Tests: `tests/unit/renderer/pms-desk.test.tsx`, `tests/unit/renderer/pms-money.test.tsx`, `tests/unit/shared/pms.test.ts`.
+The back office (rates, rooms, packages, taxes, settings, the set-up wizard) is the web's.
+Tests: `tests/unit/renderer/pms-desk.test.tsx`, `tests/unit/renderer/pms-money.test.tsx`, `tests/unit/renderer/pms-ops.test.tsx`,
+`tests/unit/shared/pms.test.ts`.
 
 | ID | Status | Where / note |
 |---|---|---|
-| PMS-DSK-001 | Partial | `PmsShell.tsx`: the front desk, cashier and night audit with the web's P1 set for those roles — rack, arrivals / departures / in house, reservations with availability, check-in, walk-in, assignment, moves, check-out, folios, postings, payments, cashier, night audit, housekeeping read, guests, guest requests, dashboard. Rates, rooms, packages, taxes, reports, settings, the wizard and the tape chart stay on the web ("Back office on the web") |
+| PMS-DSK-001 | Partial | `PmsShell.tsx`: the front desk, cashier and night audit with the web's P1 set for those roles — rack, arrivals / departures / in house, reservations with availability, check-in, walk-in, assignment, moves, check-out, folios, postings, payments, deposits (take, waive, refund, apply), cashier, night audit, housekeeping (tasks, rooms, restocks), maintenance, lost and found, guests (documents, merge), guest requests, the tape chart, invoices and the billing outbox, KPIs and reports, dashboard. Rates, rooms, packages, taxes, settings and the wizard stay on the web ("Back office on the web") |
 | PMS-DSK-002 | Partial | `devices.ts`: typed providers for the ID scanner, key encoder, card/receipt printer, signature pad, cash drawer and card terminal; "no device" providers, and the printer is `print:print` (OS dialog). No vendor driver; a driver would sit in the main process behind its own IPC, as SalonMate's printer does |
-| PMS-DSK-003 | Done | READ_CACHE for the property list, options, rack, arrivals, departures, in house (`shared/pms-cache.ts`, per property); the offline banner; every write disabled offline and never queued; balances hidden on the rack offline |
+| PMS-DSK-003 | Done | READ_CACHE for the property list, options, rack, arrivals, departures, in house (`shared/pms-cache.ts`, per property); the offline banner; every write disabled offline and never queued; balances hidden on the rack offline. The operations, the tape chart, invoices and reports are not cached: offline they say they wait for WorkSuite |
 | PMS-DSK-004 | Done | The rack, a reservation, a stay and a folio open in windows of their own (`openInWindow`, record windows) |
 | PMS-DSK-005 | Later | Cold-start and open-time targets need measuring on real hardware against a real server |
 | PMS-WEB-003 (desktop) | Done | Alt+N new reservation (and the shell's Ctrl/⌘+N), Alt+W walk-in, Alt+F search, Alt+I check in, Alt+P post charge, Alt+R/A/D/H rack and lists — `shortcuts.ts`, the rail's "Keyboard shortcuts"; on a Mac, Option+letter inside a text field is left to the field |
@@ -291,12 +292,20 @@ Tests: `tests/unit/renderer/pms-desk.test.tsx`, `tests/unit/renderer/pms-money.t
 | PMS-FOL-005 | Server | Locked lines shown as locked, never voided |
 | PMS-CHG-001 | Done | Post a charge to the stay (routed) or to a folio, idempotent |
 | PMS-PAY-001..003 | Done | Methods, pending for providers, foreign currency (converted by the server), card by token / last four only |
-| PMS-DEP-001/002 | Done | `Reservation.tsx` deposit panel: take, waive, refund; applied at check-out |
+| PMS-DEP-001/002 | Done | `Reservation.tsx` deposit panel: take, waive, refund; applied at check-out, or to one of the reservation's open folios at any time ("Apply to folio", `POST reservations/{id}/deposit/apply`, for `pms.payment.process` with `pms.folio.view`, only while the deposit holds money) |
 | PMS-INV-001..003 | Done | Settle, invoice now, to the company's account; receipt / invoice / statement printed from `GET folios/{id}/document` |
 | PMS-CSH-001/002 | Done | `Cashier.tsx`, `Shift.tsx`: open with terminal and cash, close by counting, variance approval by someone else, report |
 | PMS-NA-001..005, AC-10, AC-11 | Done | `NightAudit.tsx`: checks with counts, blockers linked and overridden with a reason, run / resume, steps, report |
-| PMS-HK-002 (desk) | Done | `Housekeeping.tsx`: statuses and the day's tasks, read only |
-| PMS-REQ-001/002 (desk) | Partial | `Requests.tsx`: take a request, move the open ones; assigning to a person is the supervisors' (no staff list for requests) |
+| PMS-HK-002, PMS-HK-003 (desk) | Done | `Housekeeping.tsx`: statuses and the day's tasks; `Room.tsx`: the room's housekeeping status moved along the server's `housekeeping_options` (a reason where the edge needs one; an edge's permission or `pms.room.manage`) |
+| PMS-HK-005, PMS-HK-006, PMS-HK-010, PMS-HK-011 (desk) | Done | `Housekeeping.tsx`, `HkTask.tsx`: each task's primary move on its card; the task screen with every move the server offers (each asking what it `needs`), the checklist ticked, a note, the task given to someone from `housekeeping/staff` (`pms.housekeeping.manage`), a new task and "Make today's tasks" (`generate`) for supervisors. Photos and the board's drag and drop stay on the web and the phone |
+| PMS-HK-012, PMS-STK-002 | Done | `Restock.tsx`: what went into a room on a task (`housekeeping-tasks/{id}/restocks`) or the room alone (`rooms/{id}/restocks`), Inventory products found with Inventory's own lookup (needs Inventory), kind and "charge" per line, one idempotent press |
+| PMS-MNT-001..003, PMS-MOB-004 (desk) | Done | `Maintenance.tsx`, `Issue.tsx`: open / mine (`maintenance/my`) / all by category; a fault reported (from the list, a room, or the rack) with a technician and the room out of order at once; the lifecycle the server offers — take it, assign (people picker), start, hold, resume, resolve, reopen, close, cancel — out of order / back in service, parts (Inventory product or a name), photos; the room's issues on `Room.tsx` |
+| PMS-LNF-001 | Done | `LostFound.tsx`: items logged (a room or a place), searched, open / due for disposal; stored, claimed, returned, disposed by a supervisor with what each needs; a photo |
+| PMS-REQ-001/002 (desk) | Done | `Requests.tsx`: take a request, move the open ones, assign or reassign to a person from the company directory (the server takes only someone with `pms.guest_request.manage` at the property) |
+| PMS-DOC-001, PMS-DUP-003 | Done | `Guest.tsx`: a document added, saved on this computer (where `desktop.downloads` allows) or removed (`pms.guest.edit`); a duplicate merged into the guest with a reason (`pms.guest.merge`) |
+| PMS-CAL-001..004 | Done | `Calendar.tsx`: the tape chart natively — rooms by nights (7, 14, 30), bars in the server's colour with the status in words, outages shaded, bookings without a room listed; a booking moved to another room or dates after the server's price impact (`calendar/preview`, then `calendar/move` with the reservation's `version`), for `pms.reservation.edit` / `pms.room.move`. No drag and drop: a bar is chosen, then moved |
+| PMS-INV-001 (desk) | Done | `Invoices.tsx`: settled / to account / closed folios with their invoice or receipt, "Invoice now"; the hand-offs to Billing and Finance (`outbox`) with a retry, for `pms.settings.manage` |
+| PMS-RPT-001, §13.7 KPIs | Done | `Reports.tsx`, `Report.tsx`: the server's KPIs (a period for `pms.reports.view`, today for the dashboard alone), the report catalogue, a report with its filters, and the server's CSV (and the other formats it lists) saved through the save dialog for `pms.reports.export` where `desktop.downloads` allows |
 | PMS-DSH-002..004 (desk) | Done | `Dashboard.tsx`: the server's widgets, each opening its list |
 | PMS-ARC-030 | Partial | `pms.*` realtime nudges refresh the rack and lists (`core/query.ts`); a 30-second re-read otherwise. Needs a server with the gateway on to prove the 2 s |
 

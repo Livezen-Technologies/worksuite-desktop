@@ -4,7 +4,7 @@
  * read the same way (tested in `pms.test.ts`).
  *
  *   /pms?view=rack|arrivals|departures|inhouse|dashboard|reservations|new|walkin|guests|cashier|audit|housekeeping|requests|devices
- *        |maintenance|lostfound
+ *        |maintenance|lostfound|invoices|reports|calendar
  *   /pms/reservations/<id>              a reservation (the deep link `worksuite://pms/reservations/<id>`)
  *   /pms/reservations/<id>/check-in     its quick check-in screen
  *   /pms/reservations/<id>/check-out    its check-out screen
@@ -17,7 +17,8 @@
  *   /pms/housekeeping/tasks/<id>        a housekeeping task
  *   /pms/maintenance/<id>               a maintenance issue
  *   /pms/lost-found/<id>                a found item
- *   /pms/maintenance, /pms/lost-found  their lists (the web's addresses)
+ *   /pms/reports/<key>                  one report
+ *   /pms/maintenance, /pms/lost-found, /pms/invoices, /pms/reports, /pms/calendar  their lists (the web's addresses)
  *
  * And the server's notification links, which name the web's pages:
  * `/pms/front-desk?arrivals=<date>` (the day's arrivals), `/pms/front-desk?room=<id>`
@@ -41,9 +42,12 @@ export type PmsView =
   | 'requests'
   | 'maintenance'
   | 'lostfound'
+  | 'invoices'
+  | 'reports'
+  | 'calendar'
   | 'devices';
 
-export const VIEW_IDS: readonly PmsView[] = ['dashboard', 'rack', 'arrivals', 'departures', 'inhouse', 'reservations', 'new', 'walkin', 'guests', 'cashier', 'audit', 'housekeeping', 'requests', 'maintenance', 'lostfound', 'devices'];
+export const VIEW_IDS: readonly PmsView[] = ['dashboard', 'rack', 'arrivals', 'departures', 'inhouse', 'reservations', 'new', 'walkin', 'guests', 'cashier', 'audit', 'housekeeping', 'requests', 'maintenance', 'lostfound', 'invoices', 'reports', 'calendar', 'devices'];
 
 /** What a stay opens straight into, from the rack's quick actions. */
 export type StayAct = 'charge' | 'move' | 'extend';
@@ -63,7 +67,8 @@ export type Screen =
   | { kind: 'request'; id: number }
   | { kind: 'task'; id: number }
   | { kind: 'issue'; id: number }
-  | { kind: 'lost'; id: number };
+  | { kind: 'lost'; id: number }
+  | { kind: 'report'; key: string };
 
 const num = (v: string | null | undefined): number | null => (v && /^\d{1,10}$/.test(v) && Number(v) > 0 ? Number(v) : null);
 const ymd = (v: string | null | undefined): string | null => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
@@ -87,6 +92,7 @@ export function screenOf(path: string[], query: URLSearchParams): Screen {
   if (a === 'housekeeping' && b === 'tasks' && num(c)) return { kind: 'task', id: num(c)! };
   if (a === 'maintenance' && id) return { kind: 'issue', id };
   if (a === 'lost-found' && id) return { kind: 'lost', id };
+  if (a === 'reports' && b && /^[a-z0-9_-]{1,64}$/.test(b)) return { kind: 'report', key: b };
 
   // Records named in the query (a tab moving inside the module).
   const q = (k: string) => num(query.get(k));
@@ -115,6 +121,9 @@ export function screenOf(path: string[], query: URLSearchParams): Screen {
     else if (a === 'requests') view = 'requests';
     else if (a === 'maintenance') view = 'maintenance';
     else if (a === 'lost-found') view = 'lostfound';
+    else if (a === 'invoices') view = 'invoices';
+    else if (a === 'reports') view = 'reports';
+    else if (a === 'calendar') view = 'calendar';
     else if (room) view = 'rack';
   }
   return { kind: 'view', view, date, room, q: search };
@@ -152,6 +161,8 @@ export function routeOf(s: Screen | { kind: 'view'; view: PmsView; date?: string
       return `/pms/maintenance/${s.id}`;
     case 'lost':
       return `/pms/lost-found/${s.id}`;
+    case 'report':
+      return `/pms/reports/${s.key}`;
     default: {
       const p = new URLSearchParams();
       if (s.view) p.set('view', s.view);

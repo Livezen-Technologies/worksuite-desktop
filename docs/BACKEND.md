@@ -283,9 +283,9 @@ a fault).
 | Lists | `GET properties/{id}/arrivals?date=`, `GET properties/{id}/departures?date=`, `GET properties/{id}/in-house`, `POST properties/{id}/assign-rooms {date}`, `GET stays/{id}/registration-card` |
 | Assign a room | `GET reservation-rooms/{id}/rooms?any_type=`, `POST reservation-rooms/{id} {room_id, version, upgrade_type?, reason?}`, `POST reservations/{id}/assign` |
 | Reservations | `GET properties/{id}/reservations?status=&page=`, `GET search?q=`, `GET reservations/{id}`, `POST reservations/{id}` (dates, ETA, requests, notes, with `version`), `POST reservations/{id}/status`, `POST reservations/{id}/cancel`, `GET reservations/{id}/history` |
-| Deposit | `GET reservations/{id}/deposit`, `POST reservations/{id}/deposit/payments`, `POST deposits/{id}/waive\|refund` |
+| Deposit | `GET reservations/{id}/deposit`, `POST reservations/{id}/deposit/payments`, `POST deposits/{id}/waive\|refund`, `GET properties/{id}/folios?status=open&q=<confirmation>` then `POST reservations/{id}/deposit/apply {folio_id, amount?}` |
 | New reservation | `GET availability?property_id=&arrival=&departure=&adults=&children=&rooms=&source_id=&promo_code=`, `POST properties/{id}/reservations` |
-| Guests | `GET guests?q=&org=`, `POST guests/check`, `POST guests` (`client_id`, or the details with `force`), `GET guests/{id}`, `GET guests/{id}/reservations`, `POST guests/{id}/documents` (multipart), `POST guests/{id}/identity` (a scanned ID, confirmed) |
+| Guests | `GET guests?q=&org=`, `POST guests/check`, `POST guests` (`client_id`, or the details with `force`), `GET guests/{id}`, `GET guests/{id}/reservations`, `POST guests/{id}/documents` (multipart), `GET guest-documents/{id}` (the file, saved), `DELETE guest-documents/{id}`, `POST guests/{id}/merge {from_guest_id, reason}`, `POST guests/{id}/identity` (a scanned ID, confirmed) |
 | Check-in | `GET reservations/{id}/check-in`, `POST reservations/{id}/check-in {rooms, id_verified, guarantee_verified, override_reason, early_checkin, posting_allowed, keys, version}`, `POST stays/{id}/registration-card {document_id}` |
 | Walk-in | `GET availability` (tonight), `POST properties/{id}/walk-ins {…, payment?}` |
 | A stay | `GET stays/{id}`, `POST stays/{id}` (charges allowed, credit limit), `POST stays/{id}/move`, `POST stays/{id}/departure`, `POST stays/{id}/keys`, `POST stays/{id}/folios`, `POST stays/{id}/routing`, `DELETE routing-rules/{id}`, `POST stays/{id}/charges` |
@@ -293,8 +293,14 @@ a fault).
 | Check-out | `GET reservations/{id}/check-out`, `POST reservations/{id}/check-out {rooms, early, late_checkout, apply_deposit, transfer_ar}` |
 | Cashier | `GET properties/{id}/cashier-sessions`, `POST properties/{id}/cashier-sessions`, `GET cashier-sessions/{id}`, `POST cashier-sessions/{id}/close\|reconcile` |
 | Night audit | `GET properties/{id}/night-audit`, `POST properties/{id}/night-audit/check\|run`, `GET night-audits/{id}`, `POST night-audit-blockers/{id}/override` |
-| Housekeeping, rooms | `GET properties/{id}/housekeeping/tasks`, `GET rooms/{id}`, `GET rooms/{id}/history`, `POST outages/{id}/release` |
-| Requests, dashboard | `GET properties/{id}/requests?open=1`, `POST properties/{id}/requests`, `GET guest-requests/{id}`, `POST guest-requests/{id}/{action}`, `GET properties/{id}/dashboard` |
+| Housekeeping, rooms | `GET properties/{id}/housekeeping/tasks`, `POST properties/{id}/housekeeping/tasks` (idempotent), `POST properties/{id}/housekeeping/generate`, `GET properties/{id}/housekeeping/staff`, `GET housekeeping-tasks/{id}`, `POST housekeeping-tasks/{id}/{action}\|assign\|checklist`, `GET rooms/{id}`, `GET rooms/{id}/history`, `POST rooms/{id}/housekeeping {to, version, reason?}`, `POST outages/{id}/release` |
+| Restocks | `POST housekeeping-tasks/{id}/restocks`, `POST rooms/{id}/restocks` (`{items: [{product_id, quantity, kind, chargeable}]}`, idempotent); products from Inventory's `GET /api/inventory/products/lookup?q=&org_id=` |
+| Maintenance | `GET properties/{id}/maintenance?open=&category=`, `GET properties/{id}/maintenance/my`, `GET rooms/{id}/maintenance`, `POST properties/{id}/maintenance` (idempotent, `assigned_to?`, `out_of_order?`), `GET maintenance-issues/{id}`, `POST maintenance-issues/{id}/{action}`, `…/out-of-order`, `…/back-in-service`, `…/parts` (idempotent), `…/photos` (multipart) |
+| Lost and found | `GET properties/{id}/lost-found?open=&due=&q=`, `POST properties/{id}/lost-found` (idempotent), `GET lost-found/{id}`, `POST lost-found/{id}/{store\|claim\|return\|dispose}`, `POST lost-found/{id}/photo` (multipart) |
+| Requests, dashboard | `GET properties/{id}/requests?open=1`, `POST properties/{id}/requests`, `GET guest-requests/{id}`, `POST guest-requests/{id}/{action}` (`assign {assigned_to}` from the company directory, `GET /api/chat/directory`), `GET properties/{id}/dashboard` |
+| Tape chart | `GET properties/{id}/calendar?from=&days=7\|14\|30`, `POST calendar/preview`, `POST calendar/move {…, version, reason?}` |
+| Invoices | `GET properties/{id}/folios?status=settled\|transferred_ar\|closed`, `POST folios/{id}/invoice`, `GET properties/{id}/outbox?status=`, `POST outbox/{id}/retry` |
+| KPIs, reports | `GET properties/{id}/kpis?from=&to=`, `GET properties/{id}/reports`, `GET properties/{id}/reports/{key}?from=&to=&room_type_id=&source_id=&rate_plan_id=[&format=csv]`, `GET properties/{id}/room-types`, `GET properties/{id}/rate-plans` |
 
 **Printed pages** (registration cards, receipts, invoices, statements, shift and night-audit reports) are laid out on
 the desktop from the server's answers (`registration-card`, `folios/{id}/document`, the shift, the audit's `report`) and
@@ -324,7 +330,22 @@ What the desktop cannot do because the server does not:
   with `pms.folio.post` alone types the code.
 - **A stay's move takes the reservation's `version`**, which the stay does not carry: the desktop sends none (the
   server's claim still guards it).
-- **No staff list for guest requests**: the desktop takes and moves requests but does not assign them to a person.
+- **No staff list for guest requests or maintenance.** Only housekeeping has one (`housekeeping/staff`);
+  `properties/{id}/staff` needs `pms.settings.manage`. The desktop offers the company directory
+  (`/api/chat/directory`) and the server refuses anyone without `pms.guest_request.manage` / `pms.maintenance.manage` at
+  the property, in its own words. A `GET properties/{id}/requests/staff` and `…/maintenance/staff` (who may take it,
+  with their open work) would let the picker offer only those.
+- **An `assign` move says it needs nobody.** `GuestRequestMachine` and `MaintenanceMachine` guard `assignee` but list
+  `needs: []`, and a lost item's `claim` guards `claimant` the same way; the desktop knows to ask for a person or a
+  claimant. The options' labels are the target state's ("Assigned", "Cancelled"), not the verb.
+- **No PMS product lookup.** Restocks and parts name Inventory products; `/api/pms/v1` has no product list (the mobile
+  gateway has `pms/properties/{id}/products`), so the desktop uses Inventory's own lookup, which needs Inventory
+  (`inventory.view`). An attendant without Inventory cannot record a restock from the desktop.
+- **Folios cannot be listed by reservation.** Applying a deposit asks `properties/{id}/folios?q=<confirmation>` and
+  keeps the reservation's own; a `reservation_id` filter would say it exactly.
+- **The billing outbox is `pms.settings.manage`'s only**; finance staff who follow Billing hand-offs cannot see it.
+- **A new housekeeping task names a room from the rack**; a supervisor without any rack permission has no room list to
+  choose from (`properties/{id}/rooms` is the back office's).
 - **Check-out needs `pms.folio.view`** besides `pms.checkout` (`StaysController::checkOutScreen`).
 - On a `/desktop/v1` server, `links/resolve` does not know `worksuite://pms/…` (`Desktop/Libraries/LinkGrammar`,
   `Links::APP_OF`): those links open without the server's record check (the tab's own requests are still checked).
