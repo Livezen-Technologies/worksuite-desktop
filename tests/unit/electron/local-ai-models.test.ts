@@ -123,7 +123,7 @@ describe('Local AI model manager', () => {
 
   it('never installs a file that does not match the catalog', async () => {
     const wrong = Buffer.from(MODEL_BYTES);
-    wrong[1000] ^= 0xff;
+    wrong[1000] = wrong[1000]! ^ 0xff;
     const s = manager(envelope([model()]), wrong);
     await s.m.init();
     await s.m.refresh();
