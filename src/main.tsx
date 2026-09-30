@@ -8,6 +8,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { App } from './app/App';
+import { AppBoundary } from './app/Boundaries';
 import { initAppState } from './core/app-state';
 import { queryClient, wireQueryInvalidation } from './core/query';
 
@@ -16,7 +17,9 @@ void initAppState().then(() => wireQueryInvalidation());
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App />
+      <AppBoundary>
+        <App />
+      </AppBoundary>
     </QueryClientProvider>
   </StrictMode>,
 );

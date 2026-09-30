@@ -10,6 +10,7 @@ import { activateIndex, activeTab, closeTab, closeTabsForApps, detachTab, dockSi
 import { toast } from '../core/toasts';
 import { closeOverlay, minimiseChatDrawer, openChatDrawer, openOverlay, toggleDock, ui } from '../core/ui';
 import { allowedModules, moduleFor } from '../modules/registry';
+import { PanelBoundary } from '../app/Boundaries';
 import { AiDock, askWorkSuite, makeTask, openAiChanges, openAiDockWith } from '../app/overlays/AiDock';
 import { Launcher } from '../app/overlays/Launcher';
 import { NetworkPopover, NotificationCenter, ProfileMenu, TransferCenter } from '../app/overlays/Popovers';
@@ -241,22 +242,36 @@ export function Shell() {
           {hasChat ? <RingingBar tone={!ringWindow} /> : null}
           <div className="relative flex min-h-0 flex-1">
             <Workspace />
-            {dock === 'ai' && hasAi ? <AiDock /> : null}
-            {dock === 'chat' && hasChat ? <ChatDrawer /> : null}
-            {hasChat ? <MinimisedChats /> : null}
+            {dock === 'ai' && hasAi ? (
+              <PanelBoundary name="The AI Assistant" onClose={() => toggleDock('ai')}>
+                <AiDock />
+              </PanelBoundary>
+            ) : null}
+            {dock === 'chat' && hasChat ? (
+              <PanelBoundary name="Chat" onClose={() => minimiseChatDrawer()}>
+                <ChatDrawer />
+              </PanelBoundary>
+            ) : null}
+            {hasChat ? (
+              <PanelBoundary name="Minimised chats" floating>
+                <MinimisedChats />
+              </PanelBoundary>
+            ) : null}
           </div>
           <StatusBar />
         </div>
       </div>
-      {overlay === 'search' ? <SearchOverlay mode="search" /> : null}
-      {overlay === 'palette' ? <SearchOverlay mode="palette" /> : null}
-      {overlay === 'launcher' ? <Launcher /> : null}
-      {overlay === 'notifications' ? <NotificationCenter /> : null}
-      {overlay === 'transfers' ? <TransferCenter /> : null}
-      {overlay === 'org' ? <OrgSwitcher /> : null}
-      {overlay === 'profile' ? <ProfileMenu /> : null}
-      {overlay === 'network' ? <NetworkPopover /> : null}
-      {overlay === 'clock' ? <ClockPopover /> : null}
+      <PanelBoundary name="This panel" onClose={() => closeOverlay()} floating resetKey={overlay}>
+        {overlay === 'search' ? <SearchOverlay mode="search" /> : null}
+        {overlay === 'palette' ? <SearchOverlay mode="palette" /> : null}
+        {overlay === 'launcher' ? <Launcher /> : null}
+        {overlay === 'notifications' ? <NotificationCenter /> : null}
+        {overlay === 'transfers' ? <TransferCenter /> : null}
+        {overlay === 'org' ? <OrgSwitcher /> : null}
+        {overlay === 'profile' ? <ProfileMenu /> : null}
+        {overlay === 'network' ? <NetworkPopover /> : null}
+        {overlay === 'clock' ? <ClockPopover /> : null}
+      </PanelBoundary>
     </div>
   );
 }

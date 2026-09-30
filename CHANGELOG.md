@@ -5,6 +5,33 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-30 — 0.2.64: a screen that fails no longer empties the window
+
+Opening the AI Assistant, the Chat drawer or the lock screen could leave the
+window empty — only its background, nothing to click — when something in
+them failed to draw. Nothing caught the failure, so everything was taken down
+with it.
+
+**Fixed**
+
+- **The AI dock, the Chat drawer, the minimised chats and every panel over the
+  workspace** (search, apps, notifications, transfers, organisations, your
+  profile menu, the network and clock popovers) now fail on their own: the
+  panel says it stopped working and what went wrong, with **Try again**,
+  **Close** and **Copy details**. The rest of WorkSuite keeps working.
+- **The window as a whole** says what went wrong, with **Try again**, **Reload
+  window** and **Copy details**, instead of going blank.
+- **The lock screen stays locked if it fails**: a plain password form takes
+  its place, never the workspace it was covering.
+
+**Changed**
+
+- A window's errors are written to the app's log (`main.log` in the logs
+  folder — on a Mac, `~/Library/Application Support/WorkSuite/logs`), at most
+  200 per window, so a failure can be read afterwards.
+
+---
+
 ## 2026-09-30 — 0.2.63: Local AI in Settings and the AI dock
 
 **Added**
