@@ -424,6 +424,14 @@ export class WindowManager {
       }
     });
     win.webContents.on('unresponsive', () => log.warn('window unresponsive', { kind }));
+    // What the window's page reports as an error — a screen that failed to draw among them (app/Boundaries.tsx) —
+    // goes to the log, so a crash can be read afterwards. Capped: a failing loop must not fill the disk.
+    let logged = 0;
+    win.webContents.on('console-message', (e) => {
+      if (e.level !== 'error' || logged >= 200) return;
+      logged++;
+      log.error('renderer error', { kind, message: e.message.slice(0, 4000), source: e.sourceId.slice(0, 300), line: e.lineNumber });
+    });
     void win.loadURL(this.url(opts.hash));
     return win;
   }

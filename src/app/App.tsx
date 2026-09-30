@@ -10,6 +10,7 @@ import { Spinner } from '../components/ui';
 import { Onboarding, SetupWizard } from './onboarding/Onboarding';
 import { Toasts } from './overlays/Toasts';
 import { LockScreen } from './screens/LockScreen';
+import { LockBoundary } from './Boundaries';
 import { UpdateRequired } from './screens/UpdateScreens';
 import { WindowRoot } from './WindowRoot';
 import { RemoteControlWindow } from './RemoteControlWindow';
@@ -51,7 +52,13 @@ export function App() {
 
   return (
     <Suspense fallback={<Spinner className="h-full" />}>
-      {locked && auth.stage === 'ready' ? <LockScreen /> : body}
+      {locked && auth.stage === 'ready' ? (
+        <LockBoundary>
+          <LockScreen />
+        </LockBoundary>
+      ) : (
+        body
+      )}
       <Toasts />
     </Suspense>
   );
