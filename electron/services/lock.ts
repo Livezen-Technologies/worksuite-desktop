@@ -31,6 +31,7 @@ export class LockService {
   lockOnSystemLock: () => boolean = () => true;
   enabled: () => boolean = () => false;
   hasPin: () => boolean = () => false;
+  pinLength: () => number | null = () => null;
   user: () => { name: string | null; email: string | null } = () => ({ name: null, email: null });
 
   start(): void {
@@ -72,12 +73,14 @@ export class LockService {
 
   state(): LockState {
     const u = this.user();
+    const pin = this.hasPin();
     return {
       locked: this.locked,
       reason: this.reason,
       since: this.since,
       biometric: this.biometric(),
-      pin: this.hasPin(),
+      pin,
+      pinLength: pin ? this.pinLength() : null,
       userName: u.name,
       userEmail: u.email,
       lockMinutes: this.minutes(),

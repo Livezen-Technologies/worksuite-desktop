@@ -39,6 +39,7 @@ const en = {
   'lock.usePin': 'Use PIN instead',
   'lock.usePassword': 'Use password instead',
   'lock.unlock': 'Unlock',
+  'lock.unlocking': 'Unlocking…',
   'lock.touchId': 'Use Touch ID',
   'lock.signOut': 'Sign out instead',
   'auth.serverTitle': 'Connect to WorkSuite',

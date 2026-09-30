@@ -5,6 +5,19 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-30 — The lock screen unlocks on the last digit of the PIN
+
+**Changed**
+
+- **No Unlock click for a PIN.** The PIN field has the cursor as soon as the lock screen shows, and the PIN is
+  checked as soon as its last digit is typed or pasted. It says "Unlocking…" meanwhile and sends it once. A wrong PIN
+  says so (with the attempt count; five wrong PINs or passwords still sign you out), empties the field and puts the
+  cursor back. The password, Touch ID and Sign out work as before, and the password still waits for Unlock.
+- WorkSuite now keeps how many digits the PIN has (never the digits), with its sealed hash. A PIN set before this
+  version needs Unlock once more; from then on it goes on its last digit.
+
+---
+
 ## 2026-09-30 — Modules carry their own version and changelog
 
 Nothing changes in the app. For developers: every module in `src/modules/` now has a `module.json` (its version,

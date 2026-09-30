@@ -9,6 +9,8 @@ interface StoredPin {
   v: 1;
   salt: string;
   hash: string;
+  /** How many digits: the lock screen unlocks on the last one. Absent on a PIN set before it was kept; learnt at its next use. */
+  length?: number;
 }
 
 // scrypt's cost: ~50 ms a try on a laptop, so guessing is slow even with the database and its key.
@@ -42,12 +44,21 @@ export class LockPin {
     return !!userId && !!this.read(userId);
   }
 
+  /** The PIN's number of digits, or null: no PIN, or one set before its length was kept. */
+  length(userId: string | null): number | null {
+    const n = userId ? this.read(userId)?.length : undefined;
+    return typeof n === 'number' && Number.isInteger(n) && n >= 4 && n <= 8 ? n : null;
+  }
+
+  private write(userId: string, stored: StoredPin): void {
+    this.db.setConfig(this.key(userId), this.vault().encrypt(stored));
+  }
+
   set(userId: string, pin: string): void {
     if (!PIN_PATTERN.test(pin)) throw new Error('A PIN is 4 to 8 digits.');
     if (/^(\d)\1+$/.test(pin) || '0123456789'.includes(pin) || '9876543210'.includes(pin)) throw new Error('Choose a PIN that is harder to guess than repeated or consecutive digits.');
     const salt = randomBytes(16);
-    const stored: StoredPin = { v: 1, salt: salt.toString('base64'), hash: hashOf(pin, salt).toString('base64') };
-    this.db.setConfig(this.key(userId), this.vault().encrypt(stored));
+    this.write(userId, { v: 1, salt: salt.toString('base64'), hash: hashOf(pin, salt).toString('base64'), length: pin.length });
   }
 
   clear(userId: string): void {
@@ -59,6 +70,8 @@ export class LockPin {
     if (!p || !PIN_PATTERN.test(pin)) return false;
     const want = Buffer.from(p.hash, 'base64');
     const got = hashOf(pin, Buffer.from(p.salt, 'base64'));
-    return want.length === got.length && timingSafeEqual(want, got);
+    const ok = want.length === got.length && timingSafeEqual(want, got);
+    if (ok && p.length !== pin.length) this.write(userId, { ...p, length: pin.length });
+    return ok;
   }
 }

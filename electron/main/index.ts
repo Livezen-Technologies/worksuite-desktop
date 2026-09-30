@@ -1251,6 +1251,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   lock.enabled = () => sessionCtl.isReady();
   lock.hasPin = () => lockPin.has(sessionCtl.userId());
+  lock.pinLength = () => lockPin.length(sessionCtl.userId());
   lock.minutes = () => settings.effective().appLockMinutes;
   lock.lockOnSystemLock = () => settings.effective().lockOnSystemLock;
   lock.user = () => ({ name: sessionCtl.get().user?.name ?? null, email: sessionCtl.get().user?.email ?? null });
