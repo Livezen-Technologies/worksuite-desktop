@@ -1,0 +1,12 @@
+{
+    "module": "pos",
+    "version": "1.0.0",
+    "paths": [
+        "electron/services/pos-desk.ts",
+        "electron/services/pos-display.ts",
+        "electron/services/pos-ipc.ts",
+        "electron/services/pos-outbox.ts",
+        "electron/services/pos-print.ts",
+        "electron/services/pos-till.ts"
+    ]
+}

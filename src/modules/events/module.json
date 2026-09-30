@@ -1,0 +1,8 @@
+{
+    "module": "events",
+    "version": "1.0.0",
+    "paths": [
+        "electron/services/event-desk.ts",
+        "electron/services/event-desk-print.ts"
+    ]
+}

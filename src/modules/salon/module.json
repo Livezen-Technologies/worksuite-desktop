@@ -1,0 +1,10 @@
+{
+    "module": "salon",
+    "version": "1.0.0",
+    "paths": [
+        "electron/services/salon-desk.ts",
+        "electron/services/salon-outbox.ts",
+        "electron/services/salon-print.ts",
+        "electron/services/salon-sync.ts"
+    ]
+}

@@ -1,0 +1,19 @@
+name: Module versions
+
+# A pull request that changes a desktop module must raise that module's version and write its changelog section
+# (docs/MODULES.md). `npm run module -- check` lists what is owed and fails the job when anything is.
+
+on:
+  pull_request:
+
+jobs:
+  versions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/module.mjs check "origin/${{ github.base_ref }}"

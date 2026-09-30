@@ -17,6 +17,7 @@
     "test": "node scripts/run-tests.mjs",
     "test:watch": "node scripts/run-tests.mjs watch",
     "check": "npm run typecheck && npm run lint && npm run test",
+    "module": "node scripts/module.mjs",
     "dist": "npm run build && electron-builder --config build/electron-builder.config.cjs",
     "dist:dir": "npm run build && electron-builder --config build/electron-builder.config.cjs --dir",
     "dist:mac": "npm run build && electron-builder --config build/electron-builder.config.cjs --mac",

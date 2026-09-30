@@ -5,6 +5,17 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-30 — Modules carry their own version and changelog
+
+Nothing changes in the app. For developers: every module in `src/modules/` now has a `module.json` (its version,
+and its main-process files in `electron/services/`) and a `CHANGELOG.md`, all starting at 1.0.0. Work on a module
+goes on a `module/<module>/<topic>` branch; `npm run module -- release <module> patch|minor|major "…"` raises the
+version and writes the section; `npm run module -- check` fails a pull request that changes a module without doing
+so (`.github/workflows/modules.yml`, and a pre-push hook: `git config core.hooksPath scripts/git-hooks`); releases
+are tagged `<module>/vX.Y.Z`. See `docs/MODULES.md`.
+
+---
+
 ## 2026-09-30 — 0.2.70: Hotel PMS door locks; POS follows the new drawer and payment rules
 
 **Added**

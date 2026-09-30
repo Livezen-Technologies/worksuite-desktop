@@ -1,0 +1,7 @@
+{
+    "module": "pdf",
+    "version": "1.0.0",
+    "paths": [
+        "electron/services/pdf"
+    ]
+}

@@ -1,0 +1,10 @@
+#!/bin/sh
+# Refuses a push whose commits change a desktop module without raising its version and writing its changelog
+# (docs/MODULES.md). Install once per clone:
+#
+#   git config core.hooksPath scripts/git-hooks
+#
+# Skip a module on purpose (a mechanical change across many):  MODULE_SKIP=chat,pos git push
+# Skip the check entirely (rarely):                             git push --no-verify
+git fetch -q origin main 2>/dev/null || true
+exec node scripts/module.mjs check "${MODULE_BASE:-origin/main}"
