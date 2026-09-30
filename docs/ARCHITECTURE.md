@@ -159,7 +159,8 @@ read through the app's proxy: mail attachments, tender files, chat files; `openI
 `src/core/open-document.ts` is what modules call) — or `local`, a handle from **OfficeFileService**
 (`electron/services/office-local.ts`: `office:pickFile`, `office:readFile`, `office:writeFile`,
 `office:saveCopy`; files from the main process's dialogs or the OS's "Open with", never a path from a page).
-Record tabs are keyed by `recordKey()` (`src/core/tabs.ts`), so each attachment or local file is its own tab.
+**New** (`office/create.ts`): the server's Office API, else Drive's `POST /api/files/create`, else a bundled blank
+OOXML file (`office/blank/`, made by `scripts/make-blank-office.py`) uploaded with `uploadBlob`. Record tabs are keyed by `recordKey()` (`src/core/tabs.ts`), so each attachment or local file is its own tab.
 
 ## Side panels
 

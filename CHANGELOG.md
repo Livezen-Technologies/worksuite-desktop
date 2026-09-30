@@ -21,6 +21,11 @@ person who has to live with the change — what it does, and where it bites.
   (atomically). The page never sees a path: the main process issues a handle for a file from its own dialog or
   from the OS, checked by its name and its first bytes, and outside WorkSuite's own data.
 - Every Office tab can **Save a copy** on this computer.
+- **Office → New works on every server**: Document, Spreadsheet and Presentation were greyed out on a server
+  without the Office API. A new file now comes from the server's Office API, else from Drive's own blank
+  documents (`POST /api/files/create`), and only on a server with neither from WorkSuite's own blank file
+  (`scripts/make-blank-office.py`) uploaded to My files — then opens in a WorkSuite DOC / Sheet / Slides tab.
+  **From a template** still needs WorkSuite Office on the server.
 
 **Changed**
 
