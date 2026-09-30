@@ -124,6 +124,10 @@ export function assistantProblem(e: unknown): string {
   if (e instanceof ApiError) {
     if (e.offline) return 'You are offline. The assistant needs a connection.';
     if (e.forbidden) return e.message || 'The assistant is not switched on for you.';
+    // A 502/504 with no words of its own is the web server in front of WorkSuite giving up on a slow turn.
+    if ((e.status === 502 || e.status === 504) && (!e.message || /^The server answered \d+\.$/.test(e.message))) {
+      return 'WorkSuite took too long to answer this — the AI model may still be starting. Try again in a moment, or ask for one thing at a time.';
+    }
     return e.message || 'The assistant could not answer just now.';
   }
   if (e && typeof e === 'object' && 'message' in e && typeof (e as { message: unknown }).message === 'string') return (e as { message: string }).message;
