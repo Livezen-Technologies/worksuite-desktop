@@ -1,4 +1,5 @@
-import { Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { parseOfficeRoute } from '@shared/office';
 import { canOpenApp } from '@shared/access';
 import { useVisibleIds } from '../core/access';
 import { call, isMac } from '../core/bridge';
@@ -22,7 +23,29 @@ import { Icon } from '../components/Icon';
  * where it has moved to, so it opens there again at the next start.
  */
 const PINNABLE = new Set(['chat-mini', 'timer', 'call', 'video-call']);
+/** WorkSuite Office's document window (OO-DSK): its own title bar, header and editor view. */
+const OfficeWindow = lazy(() => import('../modules/files/office/OfficeWindow').then((m) => ({ default: m.OfficeWindow })));
+
 export function WindowRoot({ hash }: { hash: string }) {
+  const [kind, qs] = hash.replace('#/window/', '').split('?') as [string, string | undefined];
+  if (kind === 'office') return <OfficeRoot route={new URLSearchParams(qs ?? '').get('route') ?? ''} />;
+  return <ModuleWindow hash={hash} />;
+}
+
+function OfficeRoot({ route }: { route: string }) {
+  const visible = useVisibleIds();
+  const doc = parseOfficeRoute(route);
+  if (!doc || !canOpenApp('files', visible)) return <div className="p-6 text-[13px] text-ink-2">You don't have access to this.</div>;
+  return (
+    <ModuleBoundary name="WorkSuite Office" onDiagnostics={() => undefined} resetKey={route}>
+      <Suspense fallback={<Spinner />}>
+        <OfficeWindow fileId={doc.fileId} mode={doc.mode as 'VIEW' | 'EDIT' | 'COMMENT' | 'REVIEW' | null} />
+      </Suspense>
+    </ModuleBoundary>
+  );
+}
+
+function ModuleWindow({ hash }: { hash: string }) {
   const [kind, qs] = hash.replace('#/window/', '').split('?') as [string, string | undefined];
   const initial = new URLSearchParams(qs ?? '').get('route') ?? '/home';
   const [route, setRoute] = useState(initial);

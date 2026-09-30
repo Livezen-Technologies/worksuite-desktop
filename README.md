@@ -11,6 +11,12 @@ Calendar, Tasks, Files (online), CRM, HR, native notifications, the system
 tray, `worksuite://` deep links, the signed auto-updater, basic offline (read
 cache + drafts + queued changes), diagnostics and the app lock.
 
+Drive's Word, Excel and PowerPoint files open in **WorkSuite Office**, the
+Document Server's editor in a window of its own, kept apart from the app (see
+[docs/SECURITY.md](docs/SECURITY.md#worksuite-offices-editor-view)); a server
+without WorkSuite Office opens them in the browser. `xvfb-run -a node
+tests/os/office-editor/check.mjs` checks the editor view in a real Electron.
+
 It works against the **existing WorkSuite API today** and switches to the
 `/desktop/v1` API (SRS §8.1) automatically when a server offers it — see
 [docs/BACKEND.md](docs/BACKEND.md).

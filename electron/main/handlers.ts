@@ -3,6 +3,7 @@ import os from 'node:os';
 import { writeFile } from 'node:fs/promises';
 import { canOpenApp, notificationAllowed } from '@shared/access';
 import { tabRecordSchema, type TabRecord } from '@shared/ipc/contract';
+import { officeRoute, officeSwitchQuestion } from '@shared/office';
 import type { AppInfo, BusyReport, DetachedWindow, SyncPolicy } from '@shared/types';
 import { assertRoute, assertWebPath } from './access';
 import { DesktopError, isDesktopError } from './errors';
@@ -249,8 +250,19 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     return ctx.session.current();
   });
   router.handle('session:refresh', () => ctx.session.refreshBootstrap());
-  router.handle('session:switchOrganization', async (input) => {
+  router.handle('session:switchOrganization', async (input, c) => {
+    // "Close documents from Organization A before switching?" (OO-DSK-060): asked here, so every way of switching asks.
+    const question = officeSwitchQuestion(ctx.office.documents(), input.organizationId, ctx.session.current()?.organizations ?? []);
+    if (question) {
+      const parent = winOf(c.sender);
+      const opts = { type: 'question' as const, buttons: ['Close and switch', 'Cancel'], defaultId: 0, cancelId: 1, message: question.message, detail: question.detail };
+      const { response } = parent ? await dialog.showMessageBox(parent, opts) : await dialog.showMessageBox(opts);
+      if (response !== 0) throw new DesktopError('CANCELLED', 'The organization was not switched.');
+    }
     const organizationId = await ctx.session.switchOrganization(input.organizationId);
+    // "Close documents from Organization A before switching?" (OO-DSK-060): the windows asked first; whatever
+    // is still open from another organisation is closed now, its session ended as a switch.
+    if (organizationId !== null) await ctx.office.closeWhere('ORG_SWITCH', { organizationId });
     broadcast('organization:changed', { organizationId });
     return { organizationId, closedTabs: 0 };
   });
@@ -261,6 +273,32 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     const w = ctx.windows.open(input.kind, input.route, input.title, input.alwaysOnTop);
     return { id: w.id };
   });
+  // ── WorkSuite Office (OO-DSK) ───────────────────────────────────────────
+  router.handle('office:open', (input) => {
+    const route = officeRoute(input.fileId, input.mode ?? null);
+    assertRoute(route, ctx.session.visibleApps());
+    const open = ctx.office.windowFor(input.fileId);
+    if (open) {
+      if (open.isMinimized()) open.restore();
+      open.show();
+      open.focus();
+      return { id: open.id };
+    }
+    const w = ctx.windows.open('office', route, input.name || 'WorkSuite Office');
+    ctx.office.register(w, input.fileId, input.name);
+    return { id: w.id };
+  });
+  const documentWindow = (sender: Electron.WebContents) => {
+    const w = winOf(sender);
+    if (!ctx.office.isDocumentWindow(w)) throw new DesktopError('IPC_FORBIDDEN_SENDER', 'Only a document window has an editor.');
+    return w;
+  };
+  router.handle('office:editor', (input, c) => ctx.office.command(documentWindow(c.sender), input));
+  router.handle('office:bounds', (input, c) => ctx.office.setBounds(documentWindow(c.sender), input.rect, input.hidden));
+  router.handle('office:track', (input, c) => ctx.office.track(documentWindow(c.sender), input));
+  router.handle('office:documents', () => ctx.office.documents());
+  router.handle('office:showInDrive', (input) => ctx.navigate({ route: `/files?file=${input.fileId}`, source: 'menu' }));
+
   router.handle('windows:setAlwaysOnTop', (input, c) => {
     const w = winOf(c.sender);
     return w ? ctx.windows.setAlwaysOnTop(w, input.value) : false;
@@ -440,6 +478,14 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('files:registerDropped', (input) => ctx.transfers.register(input.paths));
   router.handle('transfers:list', () => ctx.transfers.list());
   router.handle('transfers:download', async (input) => {
+    if (input.officePdf) {
+      // A ten-minute address that needs no sign-in, on the WorkSuite server itself; asked for as the download starts.
+      const r = await ctx.http.post<{ download_url: string; file_name?: string }>(`/api/files/${input.officePdf}/office/export`, { target_format: 'pdf', destination: 'DOWNLOAD' });
+      const server = new URL(ctx.http.url('/'));
+      const u = new URL(String(r.download_url), server);
+      if (u.origin !== server.origin) throw new DesktopError('POLICY_DENIED', 'The PDF is not on your WorkSuite server.');
+      return ctx.transfers.download(`${u.pathname}${u.search}`, input.name ?? r.file_name, !!input.open, null);
+    }
     if (input.hrDocument) {
       // A one-time link, asked for at the moment of downloading (it expires).
       const base = input.hrEmployee ? `/api/hr/employees/${input.hrEmployee}/documents` : '/api/hr/me/documents';

@@ -168,6 +168,21 @@ Releases on such a server are static files at
 `https://<server>/desktop/releases/<channel>/manifest.json` (e.g. under
 `public/desktop/releases/`), checked at start-up and every four hours.
 
+## WorkSuite Office
+
+The EuroOffice module's session API (its README is the contract), the same
+routes the web uses, with `client_type` `DESKTOP_WIN` / `DESKTOP_MAC` /
+`DESKTOP_LINUX` and `layout: desktop`:
+
+| Need | Endpoint |
+|---|---|
+| Is it there (404: open Office files on the web) | `GET /api/files/office/types` |
+| Open, again, mode, keep, close | `POST /api/files/{id}/office/session`, `GET …/office/config`, `POST …/session/{sid}/mode`, `POST …/session/{sid}/heartbeat`, `DELETE …/session/{sid}?reason=CLOSED\|ORG_SWITCH` |
+| Save | `POST …/office/force-save` (a label: a version), `POST …/office/save/retry` |
+| Mentions | `GET …/office/mentionable?q=`, `POST …/office/mentions` |
+| New, templates | `GET /api/files/office/templates`, `POST /api/files/office/new` |
+| PDF, legacy | `POST …/office/export` (`DOWNLOAD`: through the main process and the transfer manager), `POST …/office/convert-legacy` |
+
 ## Drive sync
 
 The same on both API families. The device credential registration returns

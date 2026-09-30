@@ -28,10 +28,15 @@ export default defineConfig({
     build: {
       outDir: 'out/preload',
       rollupOptions: {
-        input: { index: resolve(__dirname, 'electron/preload/index.ts') },
+        input: {
+          index: resolve(__dirname, 'electron/preload/index.ts'),
+          // WorkSuite Office's editor view: its own bridge, never the shell's.
+          'office-host': resolve(__dirname, 'electron/preload/office-host.ts'),
+        },
         // A sandboxed preload cannot load other files: everything it needs is
-        // bundled into one CommonJS script.
-        output: { format: 'cjs', inlineDynamicImports: true },
+        // bundled into one CommonJS script. Neither imports the other or
+        // anything dynamically, so each input is one file (a test checks).
+        output: { format: 'cjs' },
       },
     },
   },

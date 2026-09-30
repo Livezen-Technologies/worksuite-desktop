@@ -199,7 +199,11 @@ export function Shell() {
           }
           toast('info', `This record belongs to ${org.name}.`, {
             label: 'Switch',
-            run: () => void call('session:switchOrganization', { organizationId: org.id }).then(() => app.set({ organizationId: org.id })),
+            run: () =>
+              void call('session:switchOrganization', { organizationId: org.id })
+                .then(() => app.set({ organizationId: org.id }))
+                // Cancelled to keep open documents (OO-DSK-060), or refused: the organization stays as it was.
+                .catch(() => undefined),
           });
         }
         navigate(req.route, req.organizationId ?? null);

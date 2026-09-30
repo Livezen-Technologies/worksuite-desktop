@@ -57,6 +57,7 @@ import { Vault } from '../services/vault';
 import { TrayService } from '../tray/tray';
 import { POLICY_PUBLIC_KEY, RELEASE_PUBLIC_KEY } from '../updater/keys';
 import { UpdaterService } from '../updater/updater';
+import { OfficeEditors } from '../services/office/editors';
 import { WindowManager } from '../windows/manager';
 
 /**
@@ -215,6 +216,17 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const supervisor = new ServiceSupervisor();
   const lock = new LockService();
   const windows = new WindowManager(db, join(__dirname, '../preload/index.js'));
+  // WorkSuite Office (OO-DSK): documents in windows of their own, the editor in an isolated view.
+  const office = new OfficeEditors({
+    preload: join(__dirname, '../preload/office-host.js'),
+    allowHttp: !app.isPackaged,
+    devTools: !app.isPackaged || process.argv.includes('--diagnostics-devtools'),
+    endSession: async (fileId, sessionId, reason) => {
+      await http.request('DELETE', `/api/files/${fileId}/office/session/${encodeURIComponent(sessionId)}`, { query: { reason } });
+    },
+    organizationId: () => sessionCtl.organizationScope(),
+    locked: () => lock.isLocked(),
+  });
   windows.minimizeToTray = () => settings.effective().minimizeToTray;
   // A call rings only for whoever may open Chat (calls are part of it).
   const calls = new CallService(windows, http, () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('calls', sessionCtl.visibleApps()));
@@ -962,6 +974,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
     changed: (s) => {
       broadcast('auth:changed', s);
+      // Signed out, expired, revoked: the documents close with the session.
+      if (s.stage !== 'ready') office.closeAllNow();
       emitStatus();
       if (s.stage === 'ready') {
         flushNavigation();
@@ -1021,6 +1035,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     webchat.refresh();
     syncQuickAsk();
     if (s.locked) windows.hideQuickAsk();
+    // A document's editor is a view of its own, above the page: it goes while the lock shows.
+    office.lockChanged();
   };
 
   function onReconnect(): void {
@@ -1142,6 +1158,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   };
 
   const ctx: AppContext = {
+    office,
     boot,
     db,
     vault: getVault,

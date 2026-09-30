@@ -35,6 +35,8 @@ const SIZES: Record<WindowKind, { width: number; height: number; minWidth: numbe
   'rc-pointer': { width: 220, height: 30, minWidth: 220, minHeight: 30 },
   'webchat-ring': { width: 380, height: 250, minWidth: 380, minHeight: 120 },
   'quick-ask': { width: 600, height: 480, minWidth: 600, minHeight: 480 },
+  // WorkSuite Office: one window per document.
+  office: { width: 1320, height: 880, minWidth: 900, minHeight: 600 },
 };
 /** Remote control's own windows: placed by remote control, never remembered. */
 const REMOTE = new Set<WindowKind>(['rc-consent', 'rc-indicator', 'rc-pointer', 'webchat-ring', 'quick-ask']);

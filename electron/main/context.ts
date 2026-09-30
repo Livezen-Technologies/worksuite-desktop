@@ -36,6 +36,7 @@ export interface ClockExtra {
   noteType?: 'normal' | 'overtime' | 'customer_visit' | 'off_site' | 'wfh' | 'early_departure' | 'missed_break' | 'technical_issue' | 'other';
 }
 import type { WindowManager } from '../windows/manager';
+import type { OfficeEditors } from '../services/office/editors';
 import type { BootState } from './boot';
 import type { SessionController } from './session';
 import type { StatusSnapshot } from '@shared/types';
@@ -68,6 +69,8 @@ export interface AppContext {
   diagnostics: DiagnosticsService;
   audit: AuditService;
   windows: WindowManager;
+  /** WorkSuite Office's document windows and their editor views (OO-DSK). */
+  office: OfficeEditors;
   calls: CallService;
   screenShare: ScreenShare;
   remoteControl: RemoteControlService;

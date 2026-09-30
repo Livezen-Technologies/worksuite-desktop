@@ -25,6 +25,9 @@ import { ShareDialog } from './Share';
 import { UploadTray, UrlDownloads } from './Trays';
 import { Shared } from './Shared';
 import { Companies, Duplicates, Links, Notifications, Storage, Trash } from './Views';
+import { openOffice } from './office/open';
+import { serverHasOffice } from './office/api';
+import { TemplatePicker } from './office/Templates';
 import { SyncDevices } from './SyncDevices';
 import { UploadConflicts, type ConflictChoice, type UploadConflict } from './UploadConflicts';
 
@@ -82,6 +85,9 @@ export default function FilesPage(_props: ModuleProps) {
   const [preview, setPreview] = useState<{ files: DriveFile[]; index: number } | null>(null);
   const [editor, setEditor] = useState<{ kind: 'code' | 'image'; file: DriveFile } | { kind: 'media'; files: DriveFile[]; index: number } | null>(null);
   const [urlTray, setUrlTray] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  // Whether this server has WorkSuite Office (older servers open Office files on the web instead).
+  const officeReady = useQuery({ queryKey: ['office-available'], queryFn: serverHasOffice, staleTime: Infinity }).data === true;
   const [clash, setClash] = useState<{ picked: PickedFile[]; conflicts: UploadConflict[]; folder: number | null } | null>(null);
   const [detailsAsk, setDetailsAsk] = useState<{ key: Key; tab?: string; n: number } | null>(null);
   const now = useNow(60_000);
@@ -316,7 +322,7 @@ export default function FilesPage(_props: ModuleProps) {
       if (item.type === 'file') s.set('file', String(item.f.id));
       go(`/files?${s}`);
     },
-    office: (f) => void call('app:openInBrowser', { path: `/editor/${f.id}` }),
+    office: (f) => void openOffice(f),
     editText: (f) => setEditor({ kind: 'code', file: f }),
     editImage: (f) => (setPreview(null), setEditor({ kind: 'image', file: f })),
     play: (files, index) => setEditor({ kind: 'media', files, index }),
@@ -381,6 +387,8 @@ export default function FilesPage(_props: ModuleProps) {
           },
         }),
     })),
+    // WorkSuite Office's blanks and the company's own templates, when the server has WorkSuite Office.
+    ...(officeReady ? [{ label: 'From a template…', hint: 'Office', tag: { text: 'TPL', tone: TONE.document! }, run: () => setTemplatesOpen(true) }] : []),
   ];
 
   // Quick actions and links: /files?upload=1, ?new=folder.
@@ -448,6 +456,18 @@ export default function FilesPage(_props: ModuleProps) {
         {urlTray ? <UrlDownloads folderId={folderId} folderName={folderId ? (nameIn(tree, folderId) ?? 'this folder') : 'My Drive'} onClose={() => setUrlTray(false)} onOpenFolder={(id) => onPlace({ view: 'folder', folder: id })} /> : null}
         {!editor && !preview ? <UploadTray /> : null}
       </div>
+      {templatesOpen ? (
+        <TemplatePicker
+          folderId={folderId}
+          onClose={() => setTemplatesOpen(false)}
+          onCreated={(f) => {
+            setTemplatesOpen(false);
+            toast('success', `“${f.name}” created`);
+            refresh();
+            void openOffice(f);
+          }}
+        />
+      ) : null}
       {dialog?.kind === 'name' ? <NameDialog title={dialog.title} initial={dialog.initial} action={dialog.action} onClose={() => setDialog(null)} onSave={dialog.save} /> : null}
       {dialog?.kind === 'confirm' ? <ConfirmDialog title={dialog.title} body={dialog.body} action={dialog.action} danger onClose={() => setDialog(null)} onYes={dialog.run} /> : null}
       {dialog?.kind === 'pick' ? <FolderPicker items={dialog.items} mode={dialog.mode} onClose={() => setDialog(null)} onPick={(folder, name) => moveTo(dialog.items, folder, name, dialog.mode)} /> : null}

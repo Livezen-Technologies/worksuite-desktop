@@ -14,6 +14,7 @@
  */
 import { z } from 'zod';
 import type { InvokeChannel } from './channels';
+import { OFFICE_EDITOR_EVENTS, type OpenOfficeDocument } from '../office';
 import type {
   ActiveCall,
   AiRules,
@@ -225,6 +226,41 @@ export const contract = {
   'windows:toggleMaximize': ch(none, { whileLocked: true }),
   'windows:close': ch(none, { whileLocked: true }),
   'windows:state': ch(none, { whileLocked: true }),
+  // WorkSuite Office (OO-DSK, shared/office.ts): a Drive file in a document window of its own, and that window's
+  // editor view — its commands, where it sits, and what the window knows of its session. Only a document window
+  // may drive an editor (the handlers check); the view itself has no channel here.
+  'office:open': ch(
+    z.object({ fileId: z.number().int().positive(), name: z.string().max(255), mode: z.enum(['VIEW', 'EDIT', 'COMMENT', 'REVIEW']).nullable().optional() }),
+    { session: true, rate: 4 },
+  ),
+  'office:editor': ch(
+    z.discriminatedUnion('op', [
+      z.object({
+        op: z.literal('load'),
+        build: z.number().int().nonnegative(),
+        apiUrl: z.string().url().max(2048),
+        config: z.record(z.string(), z.unknown()),
+        events: z.array(z.enum(OFFICE_EDITOR_EVENTS)).max(OFFICE_EDITOR_EVENTS.length),
+      }),
+      z.object({ op: z.literal('destroy') }),
+      z.object({ op: z.literal('refreshFile'), config: z.record(z.string(), z.unknown()) }),
+      z.object({ op: z.literal('setUsers'), data: z.record(z.string(), z.unknown()) }),
+      z.object({ op: z.literal('downloadAs'), format: z.string().regex(/^[a-z0-9]{2,8}$/).optional() }),
+    ]),
+    // While locked too: the view is hidden then, and a reload the server asks for must not fail for it.
+    { session: true, whileLocked: true, rate: 20 },
+  ),
+  'office:bounds': ch(
+    z.object({
+      rect: z.object({ x: z.number().min(0).max(20_000), y: z.number().min(0).max(20_000), width: z.number().min(0).max(20_000), height: z.number().min(0).max(20_000) }).nullable(),
+      hidden: z.boolean(),
+    }),
+    { session: true, whileLocked: true, rate: 60 },
+  ),
+  'office:track': ch(z.object({ sessionId: z.string().max(64).nullable(), dirty: z.boolean(), name: z.string().max(255).optional() }), { session: true, whileLocked: true, rate: 20 }),
+  'office:documents': ch(none, { session: true }),
+  // The document's place in Drive, in the main window: its details, versions and Share are there.
+  'office:showInDrive': ch(z.object({ fileId: z.number().int().positive() }), { session: true, rate: 4 }),
   // Quick Ask (AI Assistant): what it was opened with, Insert back into that app, and handing a result to WorkSuite.
   'quickask:context': ch(none, { session: true }),
   'quickask:open': ch(none, { session: true, rate: 2 }),
@@ -368,6 +404,8 @@ export const contract = {
         export: z.enum(['calendar', 'contacts-csv', 'contacts-vcf', 'contacts-template']).optional(),
         /** The rows an import could not take, as a CSV (a data job's errors). */
         importErrors: z.number().int().positive().optional(),
+        /** A Drive Office file as a PDF (WorkSuite Office's export; the main process asks for its ten-minute address). */
+        officePdf: z.number().int().positive().optional(),
         /** An earlier version of a Drive file. */
         version: z.object({ fileId: z.number().int().positive(), versionId: z.number().int().positive() }).optional(),
         /** My payslip as a PDF, by its reference. */
@@ -719,6 +757,12 @@ export interface Outputs {
   'session:refresh': Bootstrap | null;
   'session:switchOrganization': { organizationId: string | null; closedTabs: number };
   'windows:open': { id: number };
+  'office:open': { id: number };
+  'office:editor': void;
+  'office:bounds': void;
+  'office:track': void;
+  'office:documents': OpenOfficeDocument[];
+  'office:showInDrive': void;
   'windows:setAlwaysOnTop': boolean;
   'windows:setCompact': boolean;
   'windows:fitVideo': boolean;

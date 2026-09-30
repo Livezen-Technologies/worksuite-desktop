@@ -13,6 +13,35 @@
 | Fuses: RunAsNode off, NODE_OPTIONS off, `--inspect` off, only load from asar, asar integrity on, cookie encryption on | `build/electron-builder.config.cjs` |
 | DevTools off in packaged builds | `manager.ts` |
 
+## WorkSuite Office's editor view
+
+The Document Server's editor is third-party code in a page; it gets less than
+any WorkSuite page:
+
+- **Its own view, session and origin**: a `WebContentsView` per document
+  window, `session.fromPartition('office-<uuid>')` (in memory: nothing
+  persists; cleared when the window closes), page `app://office/host.html`
+  served only on that session. `sandbox`, context isolation, no Node, no
+  `webview`, DevTools only in development.
+- **No WorkSuite bridge, no token.** Its preload exposes `officeHost`
+  (`onCommand`, `emit`, `ready`) and nothing else; the page sees only the
+  configuration WorkSuite signed. The WorkSuite access token never leaves the
+  main process.
+- **One Document Server.** The script address must be the session's
+  `…/web-apps/apps/api/documents/api.js` over https (http only in a
+  development build); its origin is fixed for the view's life. The page's CSP
+  allows its own script by hash and that origin only; `webRequest` cancels any
+  request elsewhere (https and wss to that host and port, data: and its blob:);
+  subframes may navigate only to that origin (`allowFrameOrigin`). No
+  navigation, windows, downloads or permissions (the global hardening).
+- **Events are data.** The main process takes events only from the view's own
+  main frame, by name from a fixed list, 64 KB at most, and passes them to the
+  document window's page; the page checks the build they belong to.
+- **Out of the way when it should be**: hidden while WorkSuite is locked,
+  closed on sign-out, revoke or loss of Drive.
+- Checked for real: `tests/os/office-editor/check.mjs` (Electron, a stand-in
+  Document Server and a server that must see nothing).
+
 ## IPC (§3.4, WF-05)
 
 Only channels in `shared/ipc/channels.ts` exist. Every call passes, in order:

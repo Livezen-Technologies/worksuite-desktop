@@ -150,9 +150,31 @@ export function hardenWebContents(contents: WebContents): void {
   });
   contents.on('will-frame-navigate', (event) => {
     // Subframes (mail bodies, previews) are sandboxed srcdoc/blob frames; they
-    // may not navigate anywhere.
-    if (!event.isMainFrame && !event.url.startsWith('about:')) event.preventDefault();
+    // may not navigate anywhere. WorkSuite Office's editor view frames its
+    // Document Server, and only that origin.
+    if (event.isMainFrame || event.url.startsWith('about:')) return;
+    if (!frameOriginAllowed(contents, event.url)) event.preventDefault();
   });
+}
+
+/** WebContents allowed to frame one origin beyond their own: WorkSuite Office's editor views. */
+const frameOrigins = new Map<number, string>();
+
+export function allowFrameOrigin(contents: WebContents, origin: string): void {
+  const id = contents.id;
+  frameOrigins.set(id, origin);
+  contents.once('destroyed', () => frameOrigins.delete(id));
+}
+
+export function frameOriginAllowed(contents: Pick<WebContents, 'id'>, url: string): boolean {
+  const allowed = frameOrigins.get(contents.id);
+  if (!allowed) return false;
+  try {
+    // A blob: frame the Document Server made carries its origin.
+    return new URL(url).origin === allowed;
+  } catch {
+    return false;
+  }
 }
 
 export function installGlobalHardening(): void {

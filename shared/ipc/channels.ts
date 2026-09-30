@@ -55,6 +55,14 @@ export const INVOKE_CHANNELS = [
   'windows:describe',
   'windows:restoreDetached',
 
+  // WorkSuite Office (OO-DSK): a document's window and its editor view.
+  'office:open',
+  'office:editor',
+  'office:bounds',
+  'office:track',
+  'office:documents',
+  'office:showInDrive',
+
   'tabs:save',
   'tabs:restore',
 
@@ -211,6 +219,7 @@ export const EVENT_CHANNELS = [
   'quickask:changed',
   'ai:open',
   'salon:changed',
+  'office:editorEvent',
 ] as const;
 
 export type EventChannel = (typeof EVENT_CHANNELS)[number];

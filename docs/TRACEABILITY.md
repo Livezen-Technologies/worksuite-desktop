@@ -96,6 +96,26 @@ blocked by something outside the code.
 | FR-DEV-01 | Done | Files → Sync devices: rename, sign out, wipe, remove another device; wipe on `hello` or revoke removes only what sync put here |
 | FR-DEV-02 | Done | Pending up/down and the last error go out with the heartbeat |
 
+## WorkSuite Office (Drive + ONLYOFFICE SRS, desktop client OO-DSK)
+
+| ID | Status | Where / note |
+|---|---|---|
+| Open in the app | Done | Drive's Office files open in a document window of their own (`office:open`, window kind `office`, one per file), the Document Server's editor in an isolated `WebContentsView` — `electron/services/office/editors.ts`, `host-page.ts`, `electron/preload/office-host.ts`, `shared/office.ts`; the page `src/modules/files/office/` |
+| Client type | Done | `DESKTOP_WIN` / `DESKTOP_MAC` / `DESKTOP_LINUX`, `layout: desktop` (the full editor) — the company's desktop switch and the audit's "Client: WorkSuite Desktop" |
+| Session life cycle | Done | Open, heartbeat (`ready_ms` first), renewal before `expires_at` and on the editor's token errors, `reload`, 410 → a new session, the end in the server's words, close on window close (main process) — `OfficeSession.ts`, unit: `office-session.test.ts` |
+| Save status, versions | Done | Saving… / Saved · time / the server's "delayed" or "failed" with Retry; Save version (named force save) |
+| Modes, presence, banners | Done | The modes the server allows; who is in the document; read-only reason, free to edit, newer version, reconnecting |
+| Refusals | Done | The server's sentence and its actions: retry, read-only, download, browser, Convert & Edit for DOC/XLS/PPT |
+| Mentions | Done | @-list through `office/mentionable` (mention keys, never unshown addresses), `office/mentions` |
+| New documents | Done | New › Word/Excel/PowerPoint (Drive's create) and From a template… (`office/templates`, `office/new`) |
+| Export | Done | Download as PDF through the transfer manager (`transfers:download` `officePdf`: the ten-minute address, asked for by the main process) |
+| OO-DSK-041 | Server | A save is a new Drive version, which Drive sync brings down like any other change |
+| OO-DSK-060 | Done | "Close documents from … before switching?" before any organisation switch (`session:switchOrganization`), sessions ended with `ORG_SWITCH` |
+| Lock, sign-out | Done | The editor view hides while WorkSuite is locked; document windows close with the session |
+| Older servers | Done | No `office/types` (404): Office files open on the web, as before |
+| Real Document Server | Not yet | Run under Electron against a stand-in Document Server (`tests/os/office-editor/check.mjs`, 13 checks); not yet against ONLYOFFICE / euro-office itself |
+| Open the local copy, edit offline | Gap | Office files are online only; "Open locally" of a synced copy is Drive sync's |
+
 ## Communication (COM)
 
 | ID | Status | Where / note |

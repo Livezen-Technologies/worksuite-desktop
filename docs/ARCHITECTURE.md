@@ -39,6 +39,31 @@ hash-worker.
 - **store.ts** — the index, in the profile database (`sync_folders`,
   `sync_entries`).
 
+## WorkSuite Office
+
+A Drive Office file opens in a document window of its own (window kind
+`office`, route `/files/office/{id}`, one per file). The window's page is
+WorkSuite's (app://bundle): title bar, save status, modes, presence, banners,
+refusals — `src/modules/files/office/` (`OfficeSession.ts` runs the session
+API's life cycle outside React, as the web's does). The Document Server's
+editor is **not** on that page: it runs in a `WebContentsView` the main
+process lays over the page's placeholder (`office:bounds`) —
+`electron/services/office/editors.ts`:
+
+```
+window page ──office:editor──▶ main ──office-host:command──▶ editor view (app://office/host.html)
+window page ◀─office:editorEvent── main ◀─office-host:event── editor view
+```
+
+The view has its own in-memory session per window, its own origin and
+preload (`electron/preload/office-host.ts`, three functions), a page with one
+hashed script (`host-page.ts`) that loads `api_url` and hands `DocsAPI.DocEditor`
+the signed configuration as it came. Events are checked (the view's own main
+frame, a known name, 64 KB) and passed on with their build number; commands
+are the five in `shared/office.ts`. Closing the window ends the session
+(`DELETE …/office/session/{id}`) from the main process; an organisation
+switch ends the other organisation's with `ORG_SWITCH` after asking.
+
 ## The request paths
 
 ```

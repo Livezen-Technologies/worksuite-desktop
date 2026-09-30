@@ -1,5 +1,5 @@
 import { app, organizationName } from './app-state';
-import { call, errorMessage, isMac } from './bridge';
+import { call, DesktopError, errorMessage, isMac } from './bridge';
 import { closeTabsOutside } from './tabs';
 import { toast } from './toasts';
 
@@ -18,7 +18,8 @@ export async function switchOrganization(id: string | null): Promise<boolean> {
     toast('success', `Showing ${organizationName(id)}.`);
     return true;
   } catch (e) {
-    toast('error', errorMessage(e));
+    // The person kept their open documents rather than switch (OO-DSK-060): nothing went wrong.
+    if (!(e instanceof DesktopError && e.code === 'CANCELLED')) toast('error', errorMessage(e));
     return false;
   }
 }

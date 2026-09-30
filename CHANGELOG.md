@@ -5,6 +5,60 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-30 — 0.2.53: WorkSuite Office on the desktop
+
+Word, Excel and PowerPoint files from Drive open in WorkSuite Office in a
+window of their own — the Document Server's own editor, inside the app —
+instead of the browser, on a WorkSuite server with WorkSuite Office
+(EuroOffice's session API). An older server opens them on the web, as before.
+
+**Added**
+
+- **A window per document.** Opening an Office file in Drive (or making a new
+  one) opens it in its own window; opening it again brings that window to the
+  front. The title bar says where saving has got to ("Saving…", "Saved ·
+  14:32", and the server's own sentence when a save is late or failed, with
+  Retry). The header has the modes the server allows (Viewing, Editing,
+  Commenting, Reviewing), who else is in the document, Save version, Share
+  (the file in Drive), Download as PDF, Download the file, Show in Drive and
+  Open in the browser — each only when the server says this person may.
+- **Banners in the server's words:** why a document opened read-only, "You can
+  edit this document now", "A newer version of this document is available"
+  (Load it), reconnecting.
+- **When it cannot open**, the server's sentence and what may be done instead:
+  try again, open read-only, download, open in the browser, and for an old
+  DOC, XLS or PPT, Convert & Edit (a new DOCX, XLSX or PPTX beside it).
+- **New › From a template…** in Drive: the server's blanks and the company's
+  own templates; the new file opens straight away.
+- **@-mentions in comments** find colleagues through WorkSuite, which tells
+  them — and says who cannot open the document yet.
+- **Switching organisation with documents open** asks first: "Close documents
+  from Livezen before switching?" (OO-DSK-060). Closing them ends their
+  sessions as a switch.
+- WorkSuite tells the server it is a desktop client (Windows, macOS or Linux),
+  so the company's "desktop" switch applies and the audit log names WorkSuite
+  Desktop.
+
+**Where it bites**
+
+- **The editor is kept apart from the app.** It runs in a view of its own: an
+  in-memory session (nothing it stores outlives the window), another origin,
+  sandboxed, with no WorkSuite bridge and never WorkSuite's token — only the
+  configuration WorkSuite signed. It may load and frame the Document Server
+  the session names and reach nothing else; it cannot navigate, open windows,
+  download or ask for a permission.
+- **The document hides while WorkSuite is locked**, and closes when you sign
+  out.
+- **Closing a window with changes the Document Server has not taken yet**
+  asks first.
+- **Checked for real** under Electron against a stand-in Document Server
+  (`tests/os/office-editor/check.mjs`); not yet against a real Document
+  Server.
+- The session API is on the WorkSuite server's EuroOffice module; a server
+  without it keeps opening Office files in the browser.
+
+---
+
 ## 2026-09-29 — 0.2.52: Tenders — meeting minutes open on Mac and Windows
 
 **Fixed**

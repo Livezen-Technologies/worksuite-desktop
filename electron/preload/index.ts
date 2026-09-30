@@ -93,6 +93,14 @@ const api = {
     describe: call('windows:describe'),
     restoreDetached: call('windows:restoreDetached'),
   },
+  office: {
+    open: call('office:open'),
+    editor: call('office:editor'),
+    bounds: call('office:bounds'),
+    track: call('office:track'),
+    documents: call('office:documents'),
+    showInDrive: call('office:showInDrive'),
+  },
   quickask: {
     context: call('quickask:context'),
     open: call('quickask:open'),
