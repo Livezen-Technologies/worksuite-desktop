@@ -331,8 +331,20 @@ What the desktop cannot do because the server does not:
 
 ### PDF Studio
 
-PDF Studio (stage D1, the viewer) uses the server's existing PDF and Drive routes; it needs nothing new. The edit
-sessions, locks, versions and policies of the server's CorePDFService (stage S) are for stage D2.
+PDF Studio (stage D1, the viewer) uses the server's existing PDF and Drive routes. Editing (stage D2) uses the
+server's PDF Studio API (`app/Modules/Pdf`); on a server without it (`/pdf/sessions` answers a plain 404) a Drive PDF
+opens read-only as in D1, and local files are still edited and saved in place.
+
+| For (D2) | Calls |
+|---|---|
+| A session | `POST /api/files/{id}/pdf/sessions {mode, client_type, device_id, device_name, lock_type?, takeover?}` → `session`, `mode`, `available_modes`, `permissions`, `lock`, `policy.autosave_interval_s`, `timeouts`, `content.url` (`/pdf/content/{token}`, fetched without the bearer token) |
+| Keeping it | `POST …/pdf/sessions/{sid}/heartbeat {active}` → `lock_lost`, `downgraded`; `POST …/mode {mode, takeover?}`; `DELETE …/pdf/sessions/{sid}` when the tab closes |
+| Saving | `POST /api/files/{id}/pdf/uploads {size, sha256, chunk_size, session_id}`, `PUT …/uploads/{uid}/chunks/{n}` (header `X-Chunk-Sha256`), then `POST /api/files/{id}/pdf/save {upload_id, mode: new_version\|copy, base_version, session_id, summary, client_type, device_id, offline, edited_at, resolution?, name?, note?}` |
+| Refusals | `{status:'error', message, errors:{code…}}`: `409 PDF_VERSION_CONFLICT` (`server_version`, `saved_by`, `saved_at`, actions) → the conflict dialog; `409 PDF_FILE_LOCKED` (`lock`, `take_over`) → Take over; `PDF_UPLOAD_INVALID` → the chunk is sent again |
+
+Documents from other modules open through `transfers:download` with `open: true`; two sources are new:
+`chatMedia` (a chat attachment's `download_url`, `/media/{token}?download=1`) and `taskAttachment`
+(`POST /api/tasks/{task}/attachments/{id}/link` → `url` ending `/d/{token}`, fetched as `/d/{token}`).
 
 | For | Calls |
 |---|---|

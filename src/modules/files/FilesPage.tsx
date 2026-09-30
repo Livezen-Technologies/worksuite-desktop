@@ -244,7 +244,8 @@ export default function FilesPage(_props: ModuleProps) {
       const office = officeOpenWay(f, officeRouting);
       if (office === 'code') return setEditor({ kind: 'code', file: f });
       if (office === 'office') return d.office(f);
-      if (office === 'preview') return d.inBrowser(f);
+      // A preview-only file opens read-only in the installed app; the browser only when it cannot be downloaded.
+      if (office === 'preview') return can(f.access, 'download') ? d.download([f], true) : d.inBrowser(f);
       void apiPost(`/api/drive/opened/${f.id}`, { action: 'opened' }).catch(() => undefined);
       // PDFs open in PDF Studio, a tab each (the preview workspace's hand-off for application/pdf).
       if (way === 'pdf') openPdf({ kind: 'drive', fileId: f.id }, f.name);
@@ -333,8 +334,9 @@ export default function FilesPage(_props: ModuleProps) {
       if (item.type === 'file') s.set('file', String(item.f.id));
       go(`/files?${s}`);
     },
-    // A server without the Office API keeps the web's editor, in the browser.
-    office: (f, mode) => (officeRouting.legacy ? void call('app:openInBrowser', { path: `/editor/${f.id}` }) : void openOfficeTab(f, mode ?? null)),
+    // A server without the Office API: the installed Word, Excel or PowerPoint, on a
+    // tracked copy that is saved back to the Drive — never the browser.
+    office: (f, mode) => (officeRouting.legacy ? void openInApp({ id: f.id, name: f.name, folderId: f.folder_id, version: f.version ?? 0 }, 'default') : void openOfficeTab(f, mode ?? null)),
     openIn: (f, appId) => void openInApp({ id: f.id, name: f.name, folderId: f.folder_id, version: f.version ?? 0 }, appId),
     officeRouting,
     editText: (f) => setEditor({ kind: 'code', file: f }),

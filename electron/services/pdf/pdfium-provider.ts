@@ -7,6 +7,8 @@ import {
   MAX_RENDER_SIDE,
   SEARCH_MAX_HITS,
   textMatcher,
+  type PdfAnnotKind,
+  type PdfAnnotView,
   type PdfAttachmentView,
   type PdfDocInfo,
   type PdfEngineCapabilities,
@@ -19,7 +21,7 @@ import {
   type PdfSearchOptions,
   type PdfSecurityReport,
 } from '@shared/pdf';
-import { EngineError, ENGINE_MESSAGES, type CancelToken, type EngineFile, type EngineOpened, type PDFEngine, type RenderedPixels, type RenderRequest, type SearchProgress } from './engine';
+import { EngineError, ENGINE_MESSAGES, type CancelToken, type EngineEditOp, type EngineFile, type EngineOpened, type PDFEngine, type RenderedPixels, type RenderRequest, type SearchProgress, type TextSpan } from './engine';
 import { openReader, type BlockReader } from './file-reader';
 
 /**
@@ -72,6 +74,17 @@ const FIND_MATCHCASE = 0x1;
 const FIND_WHOLEWORD = 0x2;
 const ANNOT = { LINK: 2, POPUP: 16, FILEATTACHMENT: 17, SOUND: 18, MOVIE: 19, WIDGET: 20, SCREEN: 21, RICHMEDIA: 26 } as const;
 
+/** The annotation subtypes WorkSuite creates (fpdf_annot.h FPDF_ANNOT_*), and back. A stamp is a bordered text box: PDFium draws no /Stamp appearance of its own. */
+const SUBTYPE: Record<PdfAnnotKind, number> = { note: 1, text: 3, line: 4, square: 5, circle: 6, highlight: 9, underline: 10, squiggly: 11, strikeout: 12, ink: 15, stamp: 3 };
+const KIND_OF: Record<number, PdfAnnotKind> = { 1: 'note', 3: 'text', 4: 'line', 5: 'square', 6: 'circle', 9: 'highlight', 10: 'underline', 11: 'squiggly', 12: 'strikeout', 15: 'ink' };
+const COLOR_STROKE = 0;
+const FLAG_PRINT = 4;
+/** EPDFAnnot_SetDefaultAppearance's font: Helvetica. */
+const FONT_HELVETICA = 4;
+const NOTE_SIZE = 24;
+/** Where a drag may start or end on text and still count (points). */
+const TEXT_TOLERANCE = 6;
+
 const OUTLINE_MAX_NODES = 20_000;
 const OUTLINE_MAX_DEPTH = 64;
 const PAGE_CACHE = 6;
@@ -96,6 +109,8 @@ export class PdfiumProvider implements PDFEngine {
   private readonly P: Runtime;
   private doc = 0;
   private reader: BlockReader | null = null;
+  /** A second file being read while its pages are inserted (the read callback's param 1). */
+  private importReader: BlockReader | null = null;
   private fileAccess = 0;
   private readCallback = 0;
   private sizes: PdfPageSize[] = [];
@@ -169,6 +184,29 @@ export class PdfiumProvider implements PDFEngine {
 
   // ── open ───────────────────────────────────────────────────────────────
 
+  /**
+   * An FPDF_FILEACCESS for a reader: `{ unsigned long m_FileLen; GetBlock*
+   * m_GetBlock; void* m_Param; }`. One callback serves both files; its param
+   * says which — 0 the open document, 1 a file whose pages are being inserted.
+   */
+  private access(reader: BlockReader, param: 0 | 1): number {
+    const P = this.P;
+    if (!this.readCallback) {
+      // int GetBlock(void* param, unsigned long position, unsigned char* pBuf, unsigned long size)
+      this.readCallback = P.addFunction((which: number, position: number, buf: number, size: number) => {
+        const r = which === 1 ? this.importReader : this.reader;
+        if (!r) return 0;
+        // The heap may have grown since the last call: always take the current view.
+        return r.read(position >>> 0, P.HEAPU8.subarray(buf, buf + (size >>> 0))) ? 1 : 0;
+      }, 'iiiii');
+    }
+    const fa = this.malloc(12);
+    P.setValue(fa, reader.size, 'i32');
+    P.setValue(fa + 4, this.readCallback, 'i32');
+    P.setValue(fa + 8, param, 'i32');
+    return fa;
+  }
+
   async open(file: EngineFile, password: string | null): Promise<EngineOpened> {
     if (this.doc) throw new EngineError('unsupported', 'A document is already open in this engine.');
     let reader: BlockReader;
@@ -178,21 +216,7 @@ export class PdfiumProvider implements PDFEngine {
       throw new EngineError('file', ENGINE_MESSAGES.file);
     }
     this.reader = reader;
-    const P = this.P;
-    if (!this.readCallback) {
-      // int GetBlock(void* param, unsigned long position, unsigned char* pBuf, unsigned long size)
-      this.readCallback = P.addFunction((_param: number, position: number, buf: number, size: number) => {
-        const r = this.reader;
-        if (!r) return 0;
-        // The heap may have grown since the last call: always take the current view.
-        return r.read(position >>> 0, P.HEAPU8.subarray(buf, buf + (size >>> 0))) ? 1 : 0;
-      }, 'iiiii');
-    }
-    // FPDF_FILEACCESS { unsigned long m_FileLen; GetBlock* m_GetBlock; void* m_Param; }
-    this.fileAccess = this.malloc(12);
-    P.setValue(this.fileAccess, reader.size, 'i32');
-    P.setValue(this.fileAccess + 4, this.readCallback, 'i32');
-    P.setValue(this.fileAccess + 8, 0, 'i32');
+    this.fileAccess = this.access(reader, 0);
     const doc = this.m.FPDF_LoadCustomDocument(this.fileAccess, password ?? '');
     if (!doc) {
       const err = this.m.FPDF_GetLastError();
@@ -204,20 +228,26 @@ export class PdfiumProvider implements PDFEngine {
       throw new EngineError('unknown', ENGINE_MESSAGES.unknown);
     }
     this.doc = doc;
-    const count = this.m.FPDF_GetPageCount(doc);
+    const sizes = this.refreshSizes();
+    this.checkMemory();
+    return { pageCount: sizes.length, pages: sizes, info: this.info(), permissions: this.permissions(), security: this.docSecurity() };
+  }
+
+  /** Every page's displayed size, read again (after pages came, went or turned). */
+  private refreshSizes(): PdfPageSize[] {
+    const count = this.m.FPDF_GetPageCount(this.doc);
     const size = this.malloc(8);
     const sizes: PdfPageSize[] = [];
     try {
       for (let i = 0; i < count; i++) {
-        if (this.m.FPDF_GetPageSizeByIndexF(doc, i, size)) sizes.push([round2(P.getValue(size, 'float')), round2(P.getValue(size + 4, 'float'))]);
+        if (this.m.FPDF_GetPageSizeByIndexF(this.doc, i, size)) sizes.push([round2(this.P.getValue(size, 'float')), round2(this.P.getValue(size + 4, 'float'))]);
         else sizes.push([612, 792]);
       }
     } finally {
       this.free(size);
     }
     this.sizes = sizes;
-    this.checkMemory();
-    return { pageCount: count, pages: sizes, info: this.info(), permissions: this.permissions(), security: this.docSecurity() };
+    return sizes;
   }
 
   private info(): PdfDocInfo {
@@ -729,6 +759,398 @@ export class PdfiumProvider implements PDFEngine {
     return total;
   }
 
+
+  // ── editing (stage D2) ─────────────────────────────────────────────────
+
+  /** Points from the displayed page's top-left corner to page space (the inverse of `toDisplay`). */
+  private toPage(page: number, size: PdfPageSize, x: number, y: number, out: number): [number, number] {
+    const S = 64;
+    this.m.FPDF_DeviceToPage(page, 0, 0, Math.round(size[0] * S), Math.round(size[1] * S), 0, Math.round(x * S), Math.round(y * S), out, out + 8);
+    return [this.P.getValue(out, 'double'), this.P.getValue(out + 8, 'double')];
+  }
+
+  /** A displayed rectangle as page space `[left, bottom, right, top]`. */
+  private pageRect(page: number, size: PdfPageSize, r: PdfRect, scratch: number): [number, number, number, number] {
+    const [x1, y1] = this.toPage(page, size, r[0], r[1], scratch);
+    const [x2, y2] = this.toPage(page, size, r[0] + r[2], r[1] + r[3], scratch);
+    return [Math.min(x1, x2), Math.min(y1, y2), Math.max(x1, x2), Math.max(y1, y2)];
+  }
+
+  /** FS_RECTF `{ left, top, right, bottom }` from `[left, bottom, right, top]`. */
+  private writeRect(ptr: number, [l, b, r, t]: [number, number, number, number]): number {
+    this.P.setValue(ptr, l, 'float');
+    this.P.setValue(ptr + 4, t, 'float');
+    this.P.setValue(ptr + 8, r, 'float');
+    this.P.setValue(ptr + 12, b, 'float');
+    return ptr;
+  }
+
+  private setString(annot: number, key: string, value: string): void {
+    const bytes = (value.length + 1) * 2;
+    const w = this.malloc(bytes);
+    try {
+      this.P.stringToUTF16(value, w, bytes);
+      this.m.FPDFAnnot_SetStringValue(annot, key, w);
+    } finally {
+      this.free(w);
+    }
+  }
+
+  /** The annotation's index on the page for a WorkSuite id (its /NM), or `idx:<n>`; -1 when it is not there. */
+  private findAnnot(page: number, id: string): number {
+    if (id.startsWith('idx:')) {
+      const n = Number(id.slice(4));
+      return n >= 0 && n < this.m.FPDFPage_GetAnnotCount(page) ? n : -1;
+    }
+    const count = this.m.FPDFPage_GetAnnotCount(page);
+    for (let a = 0; a < count; a++) {
+      const annot = this.m.FPDFPage_GetAnnot(page, a);
+      if (!annot) continue;
+      try {
+        if (this.annotString(annot, 'NM') === id) return a;
+      } finally {
+        this.m.FPDFPage_CloseAnnot(annot);
+      }
+    }
+    return -1;
+  }
+
+  async annotations(i: number): Promise<PdfAnnotView[]> {
+    const size = this.pageSize(i);
+    const { page } = this.loadPage(i);
+    const out: PdfAnnotView[] = [];
+    const scratch = this.malloc(48);
+    try {
+      const n = Math.min(2000, this.m.FPDFPage_GetAnnotCount(page));
+      for (let a = 0; a < n; a++) {
+        const annot = this.m.FPDFPage_GetAnnot(page, a);
+        if (!annot) continue;
+        try {
+          const subtype = this.m.FPDFAnnot_GetSubtype(annot);
+          if (subtype === ANNOT.LINK || subtype === ANNOT.POPUP || subtype === ANNOT.WIDGET) continue;
+          const nm = this.annotString(annot, 'NM');
+          let kind: PdfAnnotView['kind'] = KIND_OF[subtype] ?? 'other';
+          if (subtype === 3 && this.annotString(annot, 'Subj') === 'Stamp') kind = 'stamp';
+          let rect: PdfRect = [0, 0, 0, 0];
+          if (this.m.FPDFAnnot_GetRect(annot, scratch)) {
+            const g = (k: number) => this.P.getValue(scratch + k * 4, 'float');
+            rect = this.rect(page, size, g(0), g(1), g(2), g(3), scratch + 32);
+          }
+          let color: PdfAnnotView['color'] = null;
+          // /C itself: PDFium's own FPDFAnnot_GetColor refuses once an annotation has an appearance stream.
+          if (this.m.EPDFAnnot_GetColor(annot, COLOR_STROKE, scratch, scratch + 4, scratch + 8)) {
+            color = [this.P.getValue(scratch, 'i32') & 0xff, this.P.getValue(scratch + 4, 'i32') & 0xff, this.P.getValue(scratch + 8, 'i32') & 0xff];
+          }
+          const ca = this.m.EPDFAnnot_GetOpacity(annot, scratch) ? this.P.getValue(scratch, 'i32') / 255 : 1;
+          out.push({
+            id: nm.startsWith('ws-') ? nm : `idx:${a}`,
+            page: i,
+            kind,
+            subtype,
+            rect,
+            color,
+            opacity: Math.round(Math.min(1, Math.max(0, ca)) * 100) / 100,
+            text: this.annotString(annot, 'Contents').slice(0, 10_000),
+            author: this.annotString(annot, 'T').slice(0, 200),
+            modified: pdfDate(this.annotString(annot, 'M')),
+            editable: kind !== 'other',
+          });
+        } finally {
+          this.m.FPDFPage_CloseAnnot(annot);
+        }
+      }
+    } finally {
+      this.free(scratch);
+    }
+    return out;
+  }
+
+  async textSpan(i: number, from: [number, number], to: [number, number]): Promise<TextSpan> {
+    const size = this.pageSize(i);
+    const { page, text: tp } = this.loadPage(i, true);
+    const scratch = this.malloc(64);
+    try {
+      const at = (p: [number, number]) => {
+        const [x, y] = this.toPage(page, size, p[0], p[1], scratch);
+        return this.m.FPDFText_GetCharIndexAtPos(tp, x, y, TEXT_TOLERANCE, TEXT_TOLERANCE);
+      };
+      let a = at(from);
+      let b = at(to);
+      if (a < 0 || b < 0) return { rects: [], text: '' };
+      if (a > b) [a, b] = [b, a];
+      const count = b - a + 1;
+      const rects: PdfRect[] = [];
+      const n = Math.min(400, this.m.FPDFText_CountRects(tp, a, count));
+      for (let r = 0; r < n; r++) {
+        if (this.m.FPDFText_GetRect(tp, r, scratch, scratch + 8, scratch + 16, scratch + 24)) {
+          const [l, t, rt, bt] = [this.P.getValue(scratch, 'double'), this.P.getValue(scratch + 8, 'double'), this.P.getValue(scratch + 16, 'double'), this.P.getValue(scratch + 24, 'double')];
+          rects.push(this.rect(page, size, l, t, rt, bt, scratch + 32));
+        }
+      }
+      return { rects, text: this.text(tp, a, count).replace(/\p{Cc}+/gu, ' ').slice(0, 10_000) };
+    } finally {
+      this.free(scratch);
+    }
+  }
+
+  /** Every cached page handle goes: after a change, indexes and contents may have moved. */
+  private dropPages(): void {
+    for (const h of this.pages.values()) this.closePage(h);
+    this.pages.clear();
+  }
+
+  async apply(op: EngineEditOp): Promise<PdfPageSize[]> {
+    if (!this.doc) throw new EngineError('unsupported', ENGINE_MESSAGES.unsupported);
+    try {
+      switch (op.op) {
+        case 'annot.add':
+          this.addAnnot(op);
+          break;
+        case 'annot.update':
+          this.updateAnnot(op);
+          break;
+        case 'annot.remove': {
+          const { page } = this.loadPage(op.page);
+          const idx = this.findAnnot(page, op.id);
+          if (idx < 0 || !this.m.FPDFPage_RemoveAnnot(page, idx)) throw new EngineError('unsupported', 'That annotation is no longer on the page.');
+          break;
+        }
+        case 'page.rotate':
+          for (const p of new Set(op.pages)) {
+            const { page } = this.loadPage(p);
+            this.m.FPDFPage_SetRotation(page, (this.m.FPDFPage_GetRotation(page) + op.by / 90) % 4);
+          }
+          break;
+        case 'page.delete': {
+          const pages = [...new Set(op.pages)].sort((a, b) => b - a);
+          if (pages.length >= this.sizes.length) throw new EngineError('unsupported', 'A PDF keeps at least one page.');
+          this.dropPages();
+          for (const p of pages) {
+            this.pageSize(p);
+            this.m.FPDFPage_Delete(this.doc, p);
+          }
+          break;
+        }
+        case 'page.move': {
+          const pages = [...new Set(op.pages)];
+          for (const p of pages) this.pageSize(p);
+          if (op.to + pages.length > this.sizes.length) throw new EngineError('page', ENGINE_MESSAGES.page);
+          this.dropPages();
+          const ptr = this.malloc(pages.length * 4);
+          try {
+            pages.forEach((p, k) => this.P.setValue(ptr + k * 4, p, 'i32'));
+            if (!this.m.FPDF_MovePages(this.doc, ptr, pages.length, op.to)) throw new EngineError('page', ENGINE_MESSAGES.page);
+          } finally {
+            this.free(ptr);
+          }
+          break;
+        }
+        case 'page.insertBlank': {
+          if (op.at > this.sizes.length) throw new EngineError('page', ENGINE_MESSAGES.page);
+          this.dropPages();
+          const p = this.m.FPDFPage_New(this.doc, op.at, op.size[0], op.size[1]);
+          if (!p) throw new EngineError('memory', ENGINE_MESSAGES.memory);
+          this.m.FPDF_ClosePage(p);
+          break;
+        }
+        case 'page.insertFile':
+          this.insertFile(op);
+          break;
+      }
+    } finally {
+      this.dropPages();
+    }
+    const sizes = this.refreshSizes();
+    this.checkMemory();
+    return sizes;
+  }
+
+  private addAnnot(op: Extract<EngineEditOp, { op: 'annot.add' }>): void {
+    const a = op.annot;
+    const size = this.pageSize(op.page);
+    const { page } = this.loadPage(op.page);
+    if (this.findAnnot(page, a.id) >= 0) throw new EngineError('unsupported', 'That annotation is already on the page.');
+    const annot = this.m.FPDFPage_CreateAnnot(page, SUBTYPE[a.kind]);
+    if (!annot) throw new EngineError('unsupported', 'This kind of annotation cannot be added to this page.');
+    const scratch = this.malloc(64);
+    try {
+      const [r, g, b] = a.color;
+      let box: [number, number, number, number] | null = a.rect ? this.pageRect(page, size, a.rect, scratch) : null;
+      const pad = a.width / 2 + 1;
+      if (a.rects?.length && ['highlight', 'underline', 'strikeout', 'squiggly'].includes(a.kind)) {
+        // One quadrilateral per line of text, in page space: top-left, top-right, bottom-left, bottom-right.
+        const q = this.malloc(32);
+        try {
+          for (const rr of a.rects) {
+            const [l, bt, rt, t] = this.pageRect(page, size, rr, scratch);
+            [l, t, rt, t, l, bt, rt, bt].forEach((v, k) => this.P.setValue(q + k * 4, v, 'float'));
+            this.m.FPDFAnnot_AppendAttachmentPoints(annot, q);
+            box = box ? [Math.min(box[0], l), Math.min(box[1], bt), Math.max(box[2], rt), Math.max(box[3], t)] : [l, bt, rt, t];
+          }
+        } finally {
+          this.free(q);
+        }
+      }
+      if ((a.kind === 'ink' || a.kind === 'line') && a.strokes?.length) {
+        const pts = a.strokes.map((st) => st.map((p) => this.toPage(page, size, p[0], p[1], scratch)));
+        for (const st of pts) for (const [x, y] of st) box = box ? [Math.min(box[0], x - pad), Math.min(box[1], y - pad), Math.max(box[2], x + pad), Math.max(box[3], y + pad)] : [x - pad, y - pad, x + pad, y + pad];
+        if (a.kind === 'ink') {
+          for (const st of pts) {
+            const buf = this.malloc(st.length * 8);
+            try {
+              st.forEach(([x, y], k) => {
+                this.P.setValue(buf + k * 8, x, 'float');
+                this.P.setValue(buf + k * 8 + 4, y, 'float');
+              });
+              if (this.m.FPDFAnnot_AddInkStroke(annot, buf, st.length) < 0) throw new EngineError('unsupported', 'The drawing could not be added.');
+            } finally {
+              this.free(buf);
+            }
+          }
+        } else {
+          const first = pts[0]![0]!;
+          const last = pts[0]![pts[0]!.length - 1]!;
+          const ends = this.malloc(16);
+          try {
+            this.P.setValue(ends, first[0], 'float');
+            this.P.setValue(ends + 4, first[1], 'float');
+            this.P.setValue(ends + 8, last[0], 'float');
+            this.P.setValue(ends + 12, last[1], 'float');
+            this.m.EPDFAnnot_SetLine(annot, ends, ends + 8);
+          } finally {
+            this.free(ends);
+          }
+        }
+      }
+      if (a.kind === 'note' && box) box = [box[0], box[3] - NOTE_SIZE, box[0] + NOTE_SIZE, box[3]];
+      if (!box) throw new EngineError('unsupported', 'An annotation needs a place on the page.');
+      this.m.FPDFAnnot_SetRect(annot, this.writeRect(scratch, box));
+      this.m.EPDFAnnot_SetColor(annot, COLOR_STROKE, r, g, b);
+      if (['ink', 'line', 'square', 'circle', 'stamp'].includes(a.kind)) this.m.FPDFAnnot_SetBorder(annot, 0, 0, a.width);
+      if (a.kind === 'text' || a.kind === 'stamp') {
+        this.m.EPDFAnnot_SetDefaultAppearance(annot, FONT_HELVETICA, a.fontSize ?? (a.kind === 'stamp' ? 18 : 12), r, g, b);
+        if (a.kind === 'stamp') this.setString(annot, 'Subj', 'Stamp');
+      }
+      if (a.opacity < 1) this.m.EPDFAnnot_SetOpacity(annot, Math.round(a.opacity * 255));
+      if (a.text !== undefined) this.setString(annot, 'Contents', a.kind === 'stamp' ? a.text.toUpperCase() : a.text);
+      this.setString(annot, 'NM', a.id);
+      this.setString(annot, 'T', op.author);
+      this.setString(annot, 'M', pdfDateString(op.at));
+      this.m.FPDFAnnot_SetFlags(annot, FLAG_PRINT);
+      this.m.EPDFAnnot_GenerateAppearance(annot);
+    } finally {
+      this.free(scratch);
+      this.m.FPDFPage_CloseAnnot(annot);
+    }
+  }
+
+  private updateAnnot(op: Extract<EngineEditOp, { op: 'annot.update' }>): void {
+    const size = this.pageSize(op.page);
+    const { page } = this.loadPage(op.page);
+    const idx = this.findAnnot(page, op.id);
+    if (idx < 0) throw new EngineError('unsupported', 'That annotation is no longer on the page.');
+    const annot = this.m.FPDFPage_GetAnnot(page, idx);
+    if (!annot) throw new EngineError('unsupported', 'That annotation is no longer on the page.');
+    const scratch = this.malloc(64);
+    try {
+      const subtype = this.m.FPDFAnnot_GetSubtype(annot);
+      if (!KIND_OF[subtype]) throw new EngineError('unsupported', 'This kind of annotation cannot be changed here.');
+      if (op.color) {
+        // EPDF's: FPDFAnnot_SetColor refuses once there is an appearance stream, and every annotation drawn has one.
+        this.m.EPDFAnnot_SetColor(annot, COLOR_STROKE, op.color[0], op.color[1], op.color[2]);
+        if (subtype === 3) {
+          const fs = this.m.FPDFAnnot_GetNumberValue(annot, 'FontSize', scratch) ? this.P.getValue(scratch, 'float') : 12;
+          this.m.EPDFAnnot_SetDefaultAppearance(annot, FONT_HELVETICA, fs > 0 ? fs : 12, op.color[0], op.color[1], op.color[2]);
+        }
+      }
+      if (op.opacity !== undefined) this.m.EPDFAnnot_SetOpacity(annot, Math.round(op.opacity * 255));
+      if (op.text !== undefined) this.setString(annot, 'Contents', op.text);
+      // Only boxes move: a highlight or a drawing belongs where it was made.
+      if (op.rect && [1, 3, 5, 6].includes(subtype)) this.m.FPDFAnnot_SetRect(annot, this.writeRect(scratch, this.pageRect(page, size, op.rect, scratch + 32)));
+      this.setString(annot, 'M', pdfDateString(new Date().toISOString()));
+      this.m.EPDFAnnot_GenerateAppearance(annot);
+    } finally {
+      this.free(scratch);
+      this.m.FPDFPage_CloseAnnot(annot);
+    }
+  }
+
+  private insertFile(op: Extract<EngineEditOp, { op: 'page.insertFile' }>): void {
+    if (op.at > this.sizes.length) throw new EngineError('page', ENGINE_MESSAGES.page);
+    let reader: BlockReader;
+    try {
+      reader = openReader(op.source);
+    } catch {
+      throw new EngineError('file', ENGINE_MESSAGES.file);
+    }
+    this.importReader = reader;
+    const fa = this.access(reader, 1);
+    let src = 0;
+    let idx = 0;
+    try {
+      src = this.m.FPDF_LoadCustomDocument(fa, '');
+      if (!src) throw new EngineError(this.m.FPDF_GetLastError() === FPDF_ERR.PASSWORD ? 'password' : 'format', 'That PDF could not be read, or it is protected with a password.');
+      const count = this.m.FPDF_GetPageCount(src);
+      const pages = op.pages?.length ? op.pages : Array.from({ length: count }, (_, k) => k);
+      if (pages.some((p) => p < 0 || p >= count)) throw new EngineError('page', ENGINE_MESSAGES.page);
+      idx = this.malloc(pages.length * 4);
+      pages.forEach((p, k) => this.P.setValue(idx + k * 4, p, 'i32'));
+      this.dropPages();
+      if (!this.m.FPDF_ImportPagesByIndex(this.doc, src, idx, pages.length, op.at)) throw new EngineError('format', 'Those pages could not be inserted.');
+    } finally {
+      this.free(idx);
+      if (src) this.m.FPDF_CloseDocument(src);
+      this.free(fa);
+      reader.close();
+      this.importReader = null;
+    }
+  }
+
+  private writeOut(doc: number): Uint8Array {
+    const w = this.m.PDFiumExt_OpenFileWriter();
+    if (!w) throw new EngineError('memory', ENGINE_MESSAGES.memory);
+    let out = 0;
+    try {
+      if (!this.m.PDFiumExt_SaveAsCopy(doc, w)) throw new EngineError('unknown', 'The PDF could not be written.');
+      const size = this.m.PDFiumExt_GetFileWriterSize(w);
+      out = this.malloc(size);
+      this.m.PDFiumExt_GetFileWriterData(w, out, size);
+      return this.P.HEAPU8.slice(out, out + size);
+    } finally {
+      this.free(out);
+      this.m.PDFiumExt_CloseFileWriter(w);
+    }
+  }
+
+  async save(): Promise<Uint8Array> {
+    if (!this.doc) throw new EngineError('unsupported', ENGINE_MESSAGES.unsupported);
+    this.dropPages();
+    const bytes = this.writeOut(this.doc);
+    this.checkMemory();
+    return bytes;
+  }
+
+  async extract(pages: number[]): Promise<Uint8Array> {
+    if (!this.doc) throw new EngineError('unsupported', ENGINE_MESSAGES.unsupported);
+    if (!pages.length) throw new EngineError('page', ENGINE_MESSAGES.page);
+    for (const p of pages) this.pageSize(p);
+    const out = this.m.FPDF_CreateNewDocument();
+    if (!out) throw new EngineError('memory', ENGINE_MESSAGES.memory);
+    const idx = this.malloc(pages.length * 4);
+    try {
+      pages.forEach((p, k) => this.P.setValue(idx + k * 4, p, 'i32'));
+      if (!this.m.FPDF_ImportPagesByIndex(out, this.doc, idx, pages.length, 0)) throw new EngineError('unknown', 'Those pages could not be copied.');
+      return this.writeOut(out);
+    } finally {
+      this.free(idx);
+      this.m.FPDF_CloseDocument(out);
+    }
+  }
+
+  async unload(): Promise<void> {
+    this.release();
+  }
+
   // ── close ──────────────────────────────────────────────────────────────
 
   private release(): void {
@@ -750,6 +1172,14 @@ export class PdfiumProvider implements PDFEngine {
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/** An ISO time as a PDF date, in UTC: "D:20260929174200Z". */
+export function pdfDateString(iso: string): string {
+  const d = new Date(iso);
+  const t = Number.isNaN(d.getTime()) ? new Date() : d;
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `D:${t.getUTCFullYear()}${p(t.getUTCMonth() + 1)}${p(t.getUTCDate())}${p(t.getUTCHours())}${p(t.getUTCMinutes())}${p(t.getUTCSeconds())}Z`;
 }
 
 /** "D:20260929174200+05'30'" → an ISO date where it can be read; empty otherwise. */

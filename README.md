@@ -88,8 +88,11 @@ More: [architecture](docs/ARCHITECTURE.md) · [security](docs/SECURITY.md) ·
 [requirement traceability](docs/TRACEABILITY.md) · [changelog](CHANGELOG.md)
 
 **PDF Studio** (`src/modules/pdf`, `electron/services/pdf`) opens PDFs from Files, Mail, this computer and the
-OS in tabs of their own, drawn by PDFium (WebAssembly) in a worker process per document. This version views,
-searches and prints; editing, saving and offline work come next. Its engine can be checked on a real system with
+OS in tabs of their own, drawn by PDFium (WebAssembly) in a worker process per document. It views, searches and
+prints, annotates, organises pages, and saves back to Drive (new version or copy, with the server's lock, conflicts,
+undo and recovery) or in place for a local file. PDFs from every other module (chat, tasks, HR, billing, purchasing,
+mail) open here, and Office files open in WorkSuite's editor or the installed Word, Excel or PowerPoint — never in
+the browser; the **Office** tile starts new documents and lists the recent ones. Its engine can be checked on a real system with
 `npm run build && node tests/os/pdf/check.mjs` (Linux: under `xvfb-run`).
 
 ## What is deliberately not here yet

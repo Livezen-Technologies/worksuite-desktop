@@ -5,6 +5,7 @@ import { apiGet } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
 import { bytes } from '../../core/time';
 import { toast } from '../../core/toasts';
+import { openDocument } from '../../core/open-document';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, FileBadge, Spinner, cx } from '../../components/ui';
 import type { DocList, EmployeeDoc } from './api';
@@ -48,14 +49,8 @@ export default function MyDocuments({ employeeId }: { employeeId?: number } = {}
   const d = list.data;
   const refresh = () => void qc.invalidateQueries({ queryKey: ['hr', 'docs'] });
 
-  const view_ = async (doc: EmployeeDoc) => {
-    try {
-      const r = await apiPost<{ url: string }>(`${base}/${doc.id}/link`, { disposition: 'inline' });
-      await call('app:openInBrowser', { path: `/${r.url.replace(/^\/+/, '')}` });
-    } catch (e) {
-      toast('error', errorMessage(e));
-    }
-  };
+  // Opened on this computer, not in the browser: a PDF in PDF Studio, an Office file in its own application.
+  const view_ = (doc: EmployeeDoc) => openDocument({ hrDocument: doc.id, ...(employeeId ? { hrEmployee: employeeId } : {}) }, doc.filename);
   const download = async (doc: EmployeeDoc) => {
     try {
       await call('transfers:download', { hrDocument: doc.id, ...(employeeId ? { hrEmployee: employeeId } : {}), name: doc.filename, open: false });

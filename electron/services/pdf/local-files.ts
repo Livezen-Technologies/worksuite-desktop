@@ -126,6 +126,11 @@ export class PdfLocalFiles {
     return this.handles.get(handle)?.name ?? null;
   }
 
+  /** The path behind a handle, for writing a saved PDF back (main process only; never sent to a page). */
+  path(handle: string): string | null {
+    return this.handles.get(handle)?.path ?? null;
+  }
+
   forget(): void {
     this.handles.clear();
   }

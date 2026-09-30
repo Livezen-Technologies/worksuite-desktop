@@ -1,5 +1,7 @@
 import type {
+  PdfAnnotView,
   PdfAttachmentView,
+  PdfEditOp,
   PdfDocInfo,
   PdfEngineCapabilities,
   PdfEngineErrorCode,
@@ -7,6 +9,7 @@ import type {
   PdfOutlineNode,
   PdfPageSize,
   PdfPermissions,
+  PdfRect,
   PdfSearchHit,
   PdfSearchOptions,
   PdfSecurityReport,
@@ -70,6 +73,23 @@ export interface SearchProgress {
   truncated: boolean;
 }
 
+/**
+ * A change as the engine applies it (stage D2): the journal's operation,
+ * with what only the main process knows filled in — the author and time of
+ * a new annotation (so a replay writes the same /T and /M), and the other
+ * PDF's file for pages inserted from one.
+ */
+export type EngineEditOp =
+  | Exclude<PdfEditOp, { op: 'page.insertFile' } | { op: 'annot.add' }>
+  | (Extract<PdfEditOp, { op: 'annot.add' }> & { author: string; at: string })
+  | { op: 'page.insertFile'; at: number; pages?: number[]; source: EngineFile };
+
+/** Text covered by a drag from one point to another on a page (highlight, underline, strike-out). */
+export interface TextSpan {
+  rects: PdfRect[];
+  text: string;
+}
+
 /** Cancelled when `cancelled` turns true; the engine checks between pages. */
 export interface CancelToken {
   cancelled: boolean;
@@ -86,6 +106,18 @@ export interface PDFEngine {
   attachments(): Promise<PdfAttachmentView[]>;
   /** Walks every page and the file's structure for active content, reporting as it goes. */
   scan(onProgress: (s: PdfSecurityReport) => void, cancel: CancelToken): Promise<PdfSecurityReport>;
+  // ── editing (stage D2) ──
+  /** A page's annotations WorkSuite lists (never links, form fields or popups). */
+  annotations(page: number): Promise<PdfAnnotView[]>;
+  /** Applies one change; answers every page's size afterwards (pages come and go, and turn). */
+  apply(op: EngineEditOp): Promise<PdfPageSize[]>;
+  textSpan(page: number, from: [number, number], to: [number, number]): Promise<TextSpan>;
+  /** The document as it is now, as a complete PDF file. */
+  save(): Promise<Uint8Array>;
+  /** These pages, in this order, as a new PDF file (the document itself is unchanged). */
+  extract(pages: number[]): Promise<Uint8Array>;
+  /** Closes the document but keeps the engine, to open it again (undo replays onto the opened version). */
+  unload(): Promise<void>;
   close(): Promise<void>;
 }
 

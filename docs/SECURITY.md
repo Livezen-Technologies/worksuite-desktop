@@ -232,6 +232,16 @@ Being controlled is the main process's business, never a page's:
   keeps them in main-process memory until sign-out or quit. Never persisted, logged, audited or put in an error.
 - **Print** (§14.4): pages drawn by the engine, served from memory to a hidden window with no preload, no
   JavaScript, no network, its own session and a CSP allowing only those images; nothing is written to disk.
+- **Editing** (stage D2): the renderer sends operations, never bytes; each is validated by a strict schema
+  (annotation ids `ws-…` or `idx:n`, bounded rects, strokes, text) and by the session's mode and the server's
+  permission flags before the engine applies it. The content URL of a server session is fetched without the
+  bearer token and only on the `/pdf/content/…` path; uploads carry each chunk's SHA-256. A local file is replaced
+  atomically (temporary file, fsync, rename) and only a file the person opened. Recovery snapshots are sealed
+  (AES-256-GCM) under keys derived from the database key, never written without one, and wiped at sign-out.
+- **Documents from other modules** open through the download manager: a PDF goes to PDF Studio (inside the app,
+  so it is allowed where other applications are not); anything else goes to the OS only with
+  `desktop.files.open_external`. Chat attachments are fetched by their signed `/media/{token}`, task attachments
+  by a `/d/{token}` grant the server mints for 15 minutes; the renderer names only the token or the ids.
 - **Logs and reports** (PDF-NFR-030/031, PDF-AUD-002): a failure is logged with the file's format, size, page
   count, the engine's error and the app version; opening and printing are audited with the file's id, version and
   page count. Never a name, a path, text or a password.

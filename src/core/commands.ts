@@ -38,6 +38,9 @@ export const DEFAULT_SHORTCUTS: Record<string, string> = {
   // PDF Studio (PDF Studio SRS §4.3), answered only while a PDF Studio tab is in front.
   'pdf-open': 'Mod+O',
   'pdf-save': 'Mod+S',
+  'pdf-undo': 'Mod+Z',
+  'pdf-redo': 'Mod+Shift+Z',
+  'pdf-redo-alt': 'Mod+Y',
   'pdf-print': 'Mod+P',
   'pdf-find': 'Mod+F',
   'pdf-find-advanced': 'Mod+Shift+F',

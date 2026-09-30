@@ -71,6 +71,9 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'calendar', label: 'Calendar', group: 'work', icon: 'calendar', app: 'calendar', webPath: '/calendar', surface: 'native', sidebar: 'work', order: 50, keywords: 'events meetings schedule' },
   { id: 'tasks', label: 'Tasks', group: 'work', icon: 'tasks', app: 'tasks', webPath: '/tasks', surface: 'native', sidebar: 'work', order: 60, badge: 'tasks', keywords: 'todo to-do' },
   { id: 'files', label: 'Files', group: 'work', icon: 'folder', app: 'drive', webPath: '/files', surface: 'native', sidebar: 'work', order: 70, keywords: 'drive documents folders storage' },
+  // Office: new documents, spreadsheets and presentations, templates and the recent ones (src/modules/office/OfficeHome).
+  // A part of Files (shared/access APP_PARTS), so it shows with the Drive; a document is a tab of its own, `/office/<id>`.
+  { id: 'office', label: 'Office', group: 'work', icon: 'file-text', app: 'drive', webPath: '/office', surface: 'native', order: 71, keywords: 'word excel powerpoint document spreadsheet presentation docx xlsx pptx template new write' },
   // PDF Studio: native here for everyone signed in (a PDF from this computer needs no app); a Drive file is still the
   // server's to allow. The web's `/pdf?file=<id>` links open the file here.
   { id: 'pdf', label: 'PDF Studio', group: 'work', icon: 'file-text', webPath: '/pdf', surface: 'native', order: 72, keywords: 'pdf viewer reader acrobat document open print search bookmarks' },

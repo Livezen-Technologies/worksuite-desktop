@@ -1,5 +1,5 @@
 import type { PdfEngineCapabilities, PdfEngineErrorCode, PdfSearchOptions } from '@shared/pdf';
-import { EngineError, ENGINE_MESSAGES, isEngineError, type CancelToken, type EngineFile, type PDFEngine, type RenderRequest } from './engine';
+import { EngineError, ENGINE_MESSAGES, isEngineError, type CancelToken, type EngineEditOp, type EngineFile, type PDFEngine, type RenderRequest } from './engine';
 
 /**
  * What the main process and a pdf-worker say to each other. One worker
@@ -17,6 +17,12 @@ export type WorkerRequest =
   | { id: number; op: 'outline' }
   | { id: number; op: 'links'; page: number }
   | { id: number; op: 'attachments' }
+  | { id: number; op: 'annotations'; page: number }
+  | { id: number; op: 'apply'; edit: EngineEditOp }
+  | { id: number; op: 'textSpan'; page: number; from: [number, number]; to: [number, number] }
+  | { id: number; op: 'save' }
+  | { id: number; op: 'extract'; pages: number[] }
+  | { id: number; op: 'unload' }
   | { id: number; op: 'close' };
 
 export type WorkerMessage =
@@ -94,6 +100,18 @@ export function workerHandler(engine: Promise<WorkerEngineLike>, post: (m: Worke
         return void answer(msg.id, (e) => e.links(msg.page));
       case 'attachments':
         return void answer(msg.id, (e) => e.attachments());
+      case 'annotations':
+        return void answer(msg.id, (e) => e.annotations(msg.page));
+      case 'apply':
+        return void answer(msg.id, (e) => e.apply(msg.edit));
+      case 'textSpan':
+        return void answer(msg.id, (e) => e.textSpan(msg.page, msg.from, msg.to));
+      case 'save':
+        return void answer(msg.id, (e) => e.save());
+      case 'extract':
+        return void answer(msg.id, (e) => e.extract(msg.pages));
+      case 'unload':
+        return void answer(msg.id, (e) => e.unload());
       case 'close':
         return void answer(msg.id, (e) => e.close());
       default:

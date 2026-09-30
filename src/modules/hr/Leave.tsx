@@ -6,6 +6,7 @@ import { call, errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { useTab } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
+import { openDocument } from '../../core/open-document';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { pickable, type Balance, type LeaveReq, type LeaveReview, type LeaveTypes, type Profile } from './api';
 import { addDays, dayShort, monthGrid, monthLabel, parseYmd, rangeLabel, shiftMonth, ymd } from './dates';
@@ -495,7 +496,7 @@ export function ReviewLeave({ id, onClose, onDone }: { id: number; onClose: () =
                 <div className="mt-0.5 text-[12.5px] text-ink-3">
                   {v.evidence.length
                     ? v.evidence.map((x) => (
-                        <button key={x.id} type="button" className="block font-semibold text-primary hover:underline" onClick={() => void call('app:openInBrowser', { path: `/${x.url.replace(/^\/+/, '').replace(/^https?:\/\/[^/]+\//, '')}` })}>
+                        <button key={x.id} type="button" className="block font-semibold text-primary hover:underline" onClick={() => openEvidence(x)}>
                           {x.title || x.filename}
                         </button>
                       ))
@@ -558,4 +559,14 @@ function Stat({ label, value, sub, tone }: { label: string; value: string; sub?:
       {sub ? <div className="text-[11px] text-ink-3">{sub}</div> : null}
     </div>
   );
+}
+
+/**
+ * A leave request's evidence is an employee document (`/hr/employees/{e}/documents/{id}`):
+ * opened on this computer — PDF Studio for a PDF, the installed app for the rest.
+ */
+function openEvidence(x: { url: string; title?: string | null; filename: string }): void {
+  const m = /\/hr\/employees\/(\d+)\/documents\/(\d+)/.exec(x.url);
+  if (m) void openDocument({ hrEmployee: Number(m[1]), hrDocument: Number(m[2]) }, x.filename);
+  else void call('app:openInBrowser', { path: `/${x.url.replace(/^\/+/, '').replace(/^https?:\/\/[^/]+\//, '')}` });
 }

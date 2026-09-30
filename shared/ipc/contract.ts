@@ -34,7 +34,7 @@ import {
   type DeskStatus,
 } from '../event-desk';
 import { OFFICE_EDITOR_EVENTS, OFFICE_EXPORT_TOKEN, officeCommandSchema, type ExternalApp, type OfficeLocalCopy } from '../office';
-import { pdfPrintSchema, pdfSearchOptionsSchema, pdfSourceSchema, SEARCH_MAX_QUERY, type PdfAttachmentView, type PdfBitmap, type PdfDiagnosticCheck, type PdfDriveDetails, type PdfFailureReport, type PdfLinkView, type PdfLocalPick, type PdfOutlineNode, type PdfSessionView } from '../pdf';
+import { pdfEditOpSchema, pdfPrintSchema, pdfSearchOptionsSchema, pdfSourceSchema, SEARCH_MAX_QUERY, type PdfAnnotView, type PdfAttachmentView, type PdfBitmap, type PdfDiagnosticCheck, type PdfDriveDetails, type PdfFailureReport, type PdfLinkView, type PdfLocalPick, type PdfOutlineNode, type PdfRect, type PdfSessionView } from '../pdf';
 import type { InvokeChannel } from './channels';
 import type {
   ActiveCall,
@@ -491,10 +491,14 @@ export const contract = {
         elearningMedia: z.string().regex(ELEARNING_MEDIA_TOKEN).optional(),
         /** An Office export's signed download (`POST …/office/export` → `download_url`): its token; the main process fetches `/office/exports/{token}` from the server. */
         officeExport: z.string().regex(OFFICE_EXPORT_TOKEN).optional(),
+        /** A chat attachment: the signed token of its `download_url` (`/media/{token}?download=1`). */
+        chatMedia: z.string().regex(ELEARNING_MEDIA_TOKEN).optional(),
+        /** A task's attachment: the main process asks for its short-lived link (`POST /api/tasks/{task}/attachments/{id}/link`). */
+        taskAttachment: z.object({ task: z.number().int().positive(), id: z.number().int().positive() }).optional(),
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.elearningMedia, v.officeExport].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a payment slip, an order list, an Orders report, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, an eLearning lesson file, or an Office export'),
+      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.elearningMedia, v.officeExport, v.chatMedia, v.taskAttachment].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a payment slip, an order list, an Orders report, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, an eLearning lesson file, an Office export, a chat attachment or a task attachment'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   'transfers:upload': ch(
@@ -585,6 +589,25 @@ export const contract = {
   // Paths only from a real drop, turned into paths in the preload (as files:registerDropped).
   'pdf:registerDropped': ch(z.strictObject({ paths: z.array(z.string().min(1).max(4096)).min(1).max(20) }), { session: true, rate: 5 }),
   'pdf:diagnostics': ch(none, { session: true, rate: 1 }),
+  /*
+   * Stage D2. A change is one operation (shared/pdf.ts) the main process checks
+   * against the session's mode and the server's permissions before the engine
+   * sees it; saving goes to WorkSuite (or this computer's own file) from the
+   * main process, which alone holds the file.
+   */
+  'pdf:mode': ch(z.strictObject({ session: pdfSession, mode: z.enum(['VIEW', 'ANNOTATE', 'EDIT']), takeover: z.boolean().optional() }), { session: true, rate: 5 }),
+  'pdf:edit': ch(z.strictObject({ session: pdfSession, op: pdfEditOpSchema }), { session: true, rate: 30 }),
+  'pdf:undo': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 20 }),
+  'pdf:redo': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 20 }),
+  'pdf:annotations': ch(z.strictObject({ session: pdfSession, page: pdfPage }), { session: true, rate: 200 }),
+  'pdf:textSpan': ch(
+    z.strictObject({ session: pdfSession, page: pdfPage, from: z.tuple([z.number().min(-20_000).max(20_000), z.number().min(-20_000).max(20_000)]), to: z.tuple([z.number().min(-20_000).max(20_000), z.number().min(-20_000).max(20_000)]) }),
+    { session: true, rate: 60 },
+  ),
+  'pdf:save': ch(z.strictObject({ session: pdfSession, target: z.enum(['version', 'copy']), note: z.string().max(200).optional() }), { session: true, rate: 3, sensitive: true }),
+  'pdf:resolve': ch(z.strictObject({ session: pdfSession, answer: z.enum(['keep_both', 'upload_as_new_version', 'use_cloud']) }), { session: true, rate: 3, sensitive: true }),
+  'pdf:discard': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 3 }),
+  'pdf:extract': ch(z.strictObject({ session: pdfSession, pages: z.array(pdfPage).min(1).max(10_000) }), { session: true, rate: 3 }),
 
   // SalonMate's front desk: the key it is paired with stays in the main process.
   'salon:deskPairing': ch(none, { session: true }),
@@ -967,6 +990,16 @@ export interface Outputs {
   'pdf:pickLocal': PdfLocalPick[];
   'pdf:registerDropped': { files: PdfLocalPick[]; rejected: Array<{ name: string; reason: string }> };
   'pdf:diagnostics': { checks: PdfDiagnosticCheck[]; failures: PdfFailureReport[] };
+  'pdf:mode': PdfSessionView;
+  'pdf:edit': PdfSessionView;
+  'pdf:undo': PdfSessionView;
+  'pdf:redo': PdfSessionView;
+  'pdf:annotations': PdfAnnotView[];
+  'pdf:textSpan': { rects: PdfRect[]; text: string };
+  'pdf:save': PdfSessionView;
+  'pdf:resolve': PdfSessionView;
+  'pdf:discard': PdfSessionView;
+  'pdf:extract': { saved: boolean; name: string | null };
   'salon:deskPairing': SalonDeskPairing | null;
   'salon:deskPair': { desk: SalonDeskInfo; message: string | null };
   'salon:deskForget': void;

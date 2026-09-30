@@ -18,6 +18,7 @@ import { PopMenu, below, type MenuItem } from '../files/Menu';
 import { ShareDialog } from '../files/Share';
 import { clock, convertLegacy, exportDocument, names, restoreVersion, versions, type OfficeRefusal } from './api';
 import { EditorSurface } from './EditorSurface';
+import { OfficeHome } from './OfficeHome';
 import { ConflictDialog, LocalCopyRow, externalApps, openInApp, useLocalCopies } from './local';
 import { OfficeSession, type OfficeState } from './session';
 
@@ -31,6 +32,8 @@ import { OfficeSession, type OfficeState } from './session';
  */
 export default function OfficePage({ tabId, route, active }: ModuleProps) {
   const parsed = parseOfficeRoute(route);
+  // The launcher's Office tile: new documents, templates and the recent ones.
+  if (!parsed && /^\/office\/?(?:[?#].*)?$/.test(route)) return <OfficeHome />;
   if (!parsed) return <Empty icon="file-text" title="This is not a document" hint="Open Office documents from Files." />;
   return <OfficeDocument key={parsed.fileId} tabId={tabId} fileId={parsed.fileId} requested={parsed.mode} routeName={parsed.name} active={active} />;
 }

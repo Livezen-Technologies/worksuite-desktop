@@ -146,6 +146,17 @@ export const INVOKE_CHANNELS = [
   'pdf:pickLocal',
   'pdf:registerDropped',
   'pdf:diagnostics',
+  // Stage D2: modes, changes, saving.
+  'pdf:mode',
+  'pdf:edit',
+  'pdf:undo',
+  'pdf:redo',
+  'pdf:annotations',
+  'pdf:textSpan',
+  'pdf:save',
+  'pdf:resolve',
+  'pdf:discard',
+  'pdf:extract',
 
   'salon:deskPairing',
   'salon:deskPair',

@@ -84,6 +84,11 @@ interface Live {
   samples: Array<{ at: number; bytes: number }>;
 }
 
+/** A short-lived download grant the server minted for one file (`/d/{token}`, e.g. a task's attachment). */
+export function isGrantPath(path: string): boolean {
+  return /^\/d\/[A-Za-z0-9]{16,128}$/.test(path);
+}
+
 export interface TransferDeps {
   db: Database;
   vault: () => Vault;
@@ -95,6 +100,11 @@ export interface TransferDeps {
   audit: (action: string, details: Record<string, unknown>) => void;
   /** The sink a download kept inside the app writes to, by the name it was started with. */
   sink?: (name: string) => DownloadSink | null;
+  /**
+   * Opens a finished download inside WorkSuite when it can (PDFs in PDF
+   * Studio); false leaves it to the system's own application.
+   */
+  openInApp?: (path: string) => boolean;
 }
 
 const MAX_UPLOAD = 5 * 1024 * 1024 * 1024;
@@ -310,7 +320,7 @@ export class TransferManager {
   // ── downloads ──────────────────────────────────────────────────────────
 
   async download(apiPath: string, name: string, openWhenDone: boolean, fileId: string | null, then?: (outcome: DownloadOutcome) => void): Promise<Transfer> {
-    if (!apiPath.startsWith('/api/') && !isMediaPath(apiPath) && !isOfficeExportPath(apiPath)) throw new DesktopError('IPC_VALIDATION_FAILED', 'Not a WorkSuite download.');
+    if (!apiPath.startsWith('/api/') && !isMediaPath(apiPath) && !isOfficeExportPath(apiPath) && !isGrantPath(apiPath)) throw new DesktopError('IPC_VALIDATION_FAILED', 'Not a WorkSuite download.');
     const folder = this.deps.downloadFolder();
     await mkdir(folder, { recursive: true });
     const safe = safeFileName(name);
@@ -332,7 +342,7 @@ export class TransferManager {
     this.live.set(t.id, l);
     this.persist(l);
     if (then) this.whenDone.set(t.id, then);
-    this.deps.audit('file.download', fileId ? { file_id: fileId } : { kind: isOfficeExportPath(apiPath) ? 'office-export' : apiPath.startsWith('/api/meet/') ? 'meet-recording' : apiPath.startsWith('/api/files/') ? 'file-version' : apiPath.startsWith('/api/calendar/') || apiPath.startsWith('/api/contacts/') || apiPath.startsWith('/api/data/') || apiPath.startsWith('/api/finance/export/') || /^\/api\/expense\/(reports2?\/export|runs\/|postings\/)/.test(apiPath) ? 'export' : apiPath.startsWith('/api/expense/') ? 'expense-document' : apiPath.startsWith('/api/garage/') ? 'garage-document' : isMediaPath(apiPath) ? 'elearning-lesson' : 'mail-attachment' });
+    this.deps.audit('file.download', fileId ? { file_id: fileId } : { kind: isOfficeExportPath(apiPath) ? 'office-export' : apiPath.startsWith('/api/meet/') ? 'meet-recording' : apiPath.startsWith('/api/files/') ? 'file-version' : apiPath.startsWith('/api/calendar/') || apiPath.startsWith('/api/contacts/') || apiPath.startsWith('/api/data/') || apiPath.startsWith('/api/finance/export/') || /^\/api\/expense\/(reports2?\/export|runs\/|postings\/)/.test(apiPath) ? 'export' : apiPath.startsWith('/api/expense/') ? 'expense-document' : apiPath.startsWith('/api/garage/') ? 'garage-document' : isGrantPath(apiPath) ? 'task-attachment' : isMediaPath(apiPath) ? 'media' : 'mail-attachment' });
     void this.runDownload(l);
     return { ...t };
   }
@@ -463,7 +473,7 @@ export class TransferManager {
       l.t.total = written;
       l.t.bytes = written;
       this.finish(l, 'done');
-      if (meta.openWhenDone && this.deps.canOpenFiles()) void shell.openPath(final);
+      if (meta.openWhenDone) void this.open(final).catch(() => undefined);
     } catch (e) {
       if ((l.t.state as TransferState) === 'paused' || (l.t.state as TransferState) === 'cancelled') return;
       const msg = isDesktopError(e) ? e.message : String((e as Error).message ?? e);
@@ -755,10 +765,22 @@ export class TransferManager {
   }
 
   async openFile(id: string): Promise<boolean> {
-    if (!this.deps.canOpenFiles()) throw new DesktopError('POLICY_DENIED', 'Your organization does not allow opening files in other applications.');
-    const p = await this.finishedPath(id);
-    const err = await shell.openPath(p);
-    return err === '';
+    return this.open(await this.finishedPath(id), true);
+  }
+
+  /**
+   * A downloaded file, opened where it belongs: PDFs in PDF Studio, inside
+   * the app (so the policy on other applications does not apply); anything
+   * else — Word, Excel, PowerPoint files included — in the application the
+   * system has for it, when the organization allows that.
+   */
+  private async open(path: string, strict = false): Promise<boolean> {
+    if (this.deps.openInApp?.(path)) return true;
+    if (!this.deps.canOpenFiles()) {
+      if (strict) throw new DesktopError('POLICY_DENIED', 'Your organization does not allow opening files in other applications.');
+      return false;
+    }
+    return (await shell.openPath(path)) === '';
   }
 
   async reveal(id: string): Promise<boolean> {

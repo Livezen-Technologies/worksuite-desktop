@@ -25,7 +25,7 @@ import { Composer, type ComposerHandle } from './Composer';
 import { PRESENCE } from './Details';
 import { ForwardDialog, type RoomDetail } from './NewChat';
 import { EmojiPicker, VoicePlayer } from './parts';
-import { mediaUrl, type ChatMessage, type Room } from './types';
+import { mediaUrl, openAttachment, type ChatMessage, type Room } from './types';
 
 export interface ReplyTarget {
   id: number;
@@ -462,7 +462,7 @@ function Bubble({ m, own, roomId, onReply, onForward, onEdit }: { m: ChatMessage
           voice && mediaUrl(f.url) ? (
             <VoicePlayer src={mediaUrl(f.url)!} ms={f.duration_ms} seed={m.id} own={own} />
           ) : f.preview === 'image' && src ? (
-            <button type="button" className="overflow-hidden rounded-[12px] border border-line" onClick={() => f.download_url && openLink(f.download_url)} aria-label={`Open ${f.filename}`}>
+            <button type="button" className="overflow-hidden rounded-[12px] border border-line" onClick={() => openAttachment(f, openLink)} aria-label={`Open ${f.filename}`}>
               <img src={src} alt={f.filename} loading="lazy" className="max-h-[260px] max-w-[320px] object-cover" />
             </button>
           ) : f.preview === 'video' && mediaUrl(f.url) ? (
@@ -474,7 +474,7 @@ function Bubble({ m, own, roomId, onReply, onForward, onEdit }: { m: ChatMessage
                 <b className="block truncate text-[12px] text-ink">{f.filename}</b>
                 <span className="block text-[12px] text-ink-3">{Math.max(1, Math.round(f.size / 1024))} KB{f.status !== 'ready' ? ` · ${f.status}` : ''}</span>
               </span>
-              <button type="button" onClick={() => f.download_url && openLink(f.download_url)} className="text-[12px] font-semibold text-primary hover:underline">Open</button>
+              <button type="button" onClick={() => openAttachment(f, openLink)} className="text-[12px] font-semibold text-primary hover:underline">Open</button>
             </div>
           )
         ) : null}
@@ -772,7 +772,7 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
                 voice && mediaUrl(f.url) ? (
                   <VoicePlayer src={mediaUrl(f.url)!} ms={f.duration_ms} seed={m.id} own={own} bare />
                 ) : f.preview === 'image' && src ? (
-                  <button type="button" className="block overflow-hidden rounded-[8px]" onClick={() => f.download_url && openLink(f.download_url)} aria-label={`Open ${f.filename}`}>
+                  <button type="button" className="block overflow-hidden rounded-[8px]" onClick={() => openAttachment(f, openLink)} aria-label={`Open ${f.filename}`}>
                     <img src={src} alt={f.filename} loading="lazy" className="max-h-[220px] max-w-[260px] object-cover" />
                   </button>
                 ) : f.preview === 'video' && mediaUrl(f.url) ? (
@@ -784,7 +784,7 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
                       <b className="block truncate text-[12px] text-ink">{f.filename}</b>
                       <span className="block text-[11.5px] text-ink-3">{Math.max(1, Math.round(f.size / 1024))} KB{f.status !== 'ready' ? ` · ${f.status}` : ''}</span>
                     </span>
-                    <button type="button" onClick={() => f.download_url && openLink(f.download_url)} className={cx('text-[12px] font-semibold hover:underline', accent)}>
+                    <button type="button" onClick={() => openAttachment(f, openLink)} className={cx('text-[12px] font-semibold hover:underline', accent)}>
                       Open
                     </button>
                   </div>
