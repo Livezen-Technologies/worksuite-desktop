@@ -5,6 +5,22 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-30 — 0.2.59: the App Launcher in the top bar, side panels that hide
+
+**Added**
+
+- **App Launcher button** in the top bar, beside the WorkSuite name: every
+  app you have, as tiles (the same launcher as More apps in the sidebar).
+- **Hide and show side panels**: every module's side menu — HR, Billing,
+  CRM, Sales, Inventory, Expenses, Finance, Tenders, Contacts, Tasks, Notes,
+  Drive, Mail folders, Calendars, Chat conversations and website chats,
+  eLearning (and a course's outline), Events, Garage, Hotel PMS, SalonMate
+  and Notifications — and the Tenders review and website visitor panels
+  have a handle on their edge that hides them; a narrow strip with the panel
+  icon brings them back. Each panel's choice is remembered on this computer.
+
+---
+
 ## 2026-09-30 — 0.2.58: PDF Studio editing, documents open on this computer, the Office tile
 
 PDF Studio edits (stage D2): annotations, pages, saving back to Drive as a new

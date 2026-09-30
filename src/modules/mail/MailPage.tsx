@@ -15,6 +15,7 @@ import type { ModuleProps } from '../registry';
 import { escapeHtml, mailFrameDoc, parseAddresses, sanitizeMailHtml, textToHtml } from './sanitize';
 import { Select } from '../../components/Select';
 import { openPdf } from '../pdf/open';
+import { SidePanel } from '../../components/SidePanel';
 
 /** A PDF attachment, by its type or its name. */
 const isPdf = (a: { name: string; mime: string }) => a.mime === 'application/pdf' || /\.pdf$/i.test(a.name);
@@ -126,7 +127,9 @@ export default function MailPage({ active }: ModuleProps) {
 
   return (
     <div className="flex h-full">
-      <FolderPane boxes={boxes} box={box} folder={folder} onCompose={() => setCompose({ mode: 'new' })} onPick={(b, f) => go(`/mail?box=${b}&folder=${f}`)} cacheDays={cacheDays} loading={mailboxes.isLoading} active={active} unifiedUnread={unreadCount} />
+      <SidePanel id="mail" label="the folders">
+        <FolderPane boxes={boxes} box={box} folder={folder} onCompose={() => setCompose({ mode: 'new' })} onPick={(b, f) => go(`/mail?box=${b}&folder=${f}`)} cacheDays={cacheDays} loading={mailboxes.isLoading} active={active} unifiedUnread={unreadCount} />
+      </SidePanel>
       <div className="flex w-[380px] shrink-0 flex-col border-r border-line bg-surface">
         <div className="px-4 pt-4 pb-2">
           <div className="flex items-baseline justify-between">

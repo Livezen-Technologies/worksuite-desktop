@@ -7,6 +7,7 @@ import { Spinner } from '../../components/ui';
 import type { ModuleProps } from '../registry';
 import { can, fetchDashboard, K, useCompanies, type ListView } from './api';
 import { NATIVE, TenderRail, type TenderView } from './Rail';
+import { SidePanel } from '../../components/SidePanel';
 
 /**
  * Tenders: the rail, and the screen it points at. Addressed as
@@ -99,17 +100,19 @@ export default function TendersShell(_props: ModuleProps) {
 
   return (
     <div className="flex h-full min-h-0">
-      <TenderRail
-        view={open ? null : view}
-        onPick={(v) => go(`/tenders?tab=${v}`)}
-        onNew={canManage ? () => go(`${base}&make=new`) : null}
-        counts={counts}
-        expired={dash.data?.documents.expired ?? 0}
-        org={scope}
-        companies={list}
-        onOrg={chooseOrg}
-        canSettings={canSettings}
-      />
+      <SidePanel id="tenders" label="the Tenders menu">
+        <TenderRail
+          view={open ? null : view}
+          onPick={(v) => go(`/tenders?tab=${v}`)}
+          onNew={canManage ? () => go(`${base}&make=new`) : null}
+          counts={counts}
+          expired={dash.data?.documents.expired ?? 0}
+          org={scope}
+          companies={list}
+          onOrg={chooseOrg}
+          canSettings={canSettings}
+        />
+      </SidePanel>
       <main className="min-w-0 flex-1 overflow-y-auto bg-ground scroll-thin" aria-label={open ? 'Tenders · Tender' : `Tenders · ${TITLES[view]}`}>
         <Suspense fallback={<Spinner />}>
           {open ? (

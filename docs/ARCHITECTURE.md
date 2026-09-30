@@ -141,6 +141,13 @@ renderer (src/modules/pdf)                main (electron/services/pdf)          
   dialog, the Annotate and Organize ribbons, the Comments panel). A tab with unsaved changes has a close guard
   that keeps the work for recovery.
 
+## Side panels
+
+Modules' side menus and panes are wrapped in `SidePanel` (`src/components/SidePanel.tsx`): a handle on the inner
+edge hides the panel, a 36 px strip with the panel icon shows it again, and the choice is kept per panel id in
+`localStorage` (`ws.panel.<id>`, a view preference, never data). Panels with a toggle of their own (Chat's and
+Drive's details, PDF Studio's panels) keep it.
+
 ## Opening documents from other modules
 
 A module that shows a document opens it on this computer, never in the browser. `openDocument()`

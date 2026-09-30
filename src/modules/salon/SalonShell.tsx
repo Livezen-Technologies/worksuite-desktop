@@ -12,6 +12,7 @@ import type { CheckoutResult } from './money';
 import Connect from './Connect';
 import { copyAge, deskFromCopy, optionsFromCopy, syncNow, unreachable, useCopy, useOnline, useSalonChanged, useSyncStatus, waitingLine } from './offline';
 import { DeskContext, Failed, Note, salonRoute, seedParam, type Desk, type DeskView } from './parts';
+import { SidePanel } from '../../components/SidePanel';
 
 /**
  * SalonMate's front desk, native in WorkSuite Desktop. Addressed as
@@ -151,7 +152,9 @@ export default function SalonShell(_props: ModuleProps) {
   return (
     <DeskContext.Provider value={desk}>
       <div className="flex h-full min-h-0">
-        <Rail view={view} desk={desk} />
+        <SidePanel id="salon" label="the SalonMate menu">
+          <Rail view={view} desk={desk} />
+        </SidePanel>
         <main className="min-w-0 flex-1 overflow-y-auto bg-ground scroll-thin" aria-label={`SalonMate · ${VIEWS[view].label}`}>
           <SyncBar desk={desk} view={view} />
           <Suspense fallback={<Spinner />}>

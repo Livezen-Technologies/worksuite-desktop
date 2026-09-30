@@ -11,6 +11,7 @@ import { sectionRows, useWebsiteInbox, WEBSITE, type Section, type WebsiteRow } 
 import { WebsiteLive, type OnlineVisitor } from './WebsiteLive';
 import { WebsiteThread } from './WebsiteThread';
 import { Select } from '../../../components/Select';
+import { SidePanel } from '../../../components/SidePanel';
 
 /**
  * Website chats as their own workspace (WebChatInbox): the sections down the
@@ -122,41 +123,43 @@ export function WebsiteWorkspace() {
 
   return (
     <div className="flex h-full min-w-0 text-[13px]">
-      <nav aria-label="Website chats" className="flex w-[212px] shrink-0 flex-col gap-px overflow-y-auto border-r border-line bg-surface px-2.5 py-3.5 scroll-thin">
-        <button type="button" onClick={() => go('/chat')} className="px-2 pb-2 text-left font-semibold text-primary hover:underline">‹ Back to Chat</button>
-        <b className="px-2 pb-1.5 text-[15px] text-ink">Website Chats</b>
-        <div className="mx-2 mt-2 mb-0.5 text-[10.5px] font-bold tracking-[0.6px] text-ink-3">CONVERSATIONS</div>
-        {SECTIONS.map((s) => {
-          const n = count(s.id);
-          return (
-            <button key={s.id} type="button" aria-current={section === s.id ? 'page' : undefined} onClick={() => to({ section: s.id, website: null })} className={cx('flex h-[27px] items-center rounded-[7px] px-2 text-left', section === s.id ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
-              <span className="flex-1">{s.label}</span>
-              {n ? <span className={cx('text-[11.5px] font-bold', s.id === 'missed' ? 'text-danger' : 'text-ink-2')}>{n}</span> : null}
-            </button>
-          );
-        })}
-        <div className="mx-2 mt-2 mb-0.5 text-[10.5px] font-bold tracking-[0.6px] text-ink-3">LIVE</div>
-        {[
-          ['Visitors online', visitorsOnline],
-          ['Live dashboard', null],
-        ].map(([label, n]) => (
-          <button key={label} type="button" aria-current={live && label === 'Live dashboard' ? 'page' : undefined} onClick={() => go('/chat?view=website&section=live')} className={cx('flex h-[27px] items-center rounded-[7px] px-2 text-left', live ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
-            <span className="flex-1">{label}</span>
-            {n ? <span className="text-[11.5px] font-bold text-ink-2">{n}</span> : null}
-          </button>
-        ))}
-        {ON_WEB.map((g) => (
-          <div key={g.head} className="flex flex-col gap-px">
-            <div className="mx-2 mt-2 mb-0.5 text-[10.5px] font-bold tracking-[0.6px] text-ink-3">{g.head}</div>
-            {g.items.map((i) => (
-              <button key={i.tab} type="button" title="Opens on the web" onClick={() => void call('app:openInBrowser', { path: `/website-chats?tab=${i.tab}` })} className="flex h-[27px] items-center rounded-[7px] px-2 text-left text-ink hover:bg-subtle">
-                <span className="flex-1">{i.label}</span>
-                <span className="text-[11px] text-ink-3" aria-hidden>↗</span>
+      <SidePanel id="website-chats" label="the website chat menu">
+        <nav aria-label="Website chats" className="flex w-[212px] shrink-0 flex-col gap-px overflow-y-auto border-r border-line bg-surface px-2.5 py-3.5 scroll-thin">
+          <button type="button" onClick={() => go('/chat')} className="px-2 pb-2 text-left font-semibold text-primary hover:underline">‹ Back to Chat</button>
+          <b className="px-2 pb-1.5 text-[15px] text-ink">Website Chats</b>
+          <div className="mx-2 mt-2 mb-0.5 text-[10.5px] font-bold tracking-[0.6px] text-ink-3">CONVERSATIONS</div>
+          {SECTIONS.map((s) => {
+            const n = count(s.id);
+            return (
+              <button key={s.id} type="button" aria-current={section === s.id ? 'page' : undefined} onClick={() => to({ section: s.id, website: null })} className={cx('flex h-[27px] items-center rounded-[7px] px-2 text-left', section === s.id ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
+                <span className="flex-1">{s.label}</span>
+                {n ? <span className={cx('text-[11.5px] font-bold', s.id === 'missed' ? 'text-danger' : 'text-ink-2')}>{n}</span> : null}
               </button>
-            ))}
-          </div>
-        ))}
-      </nav>
+            );
+          })}
+          <div className="mx-2 mt-2 mb-0.5 text-[10.5px] font-bold tracking-[0.6px] text-ink-3">LIVE</div>
+          {[
+            ['Visitors online', visitorsOnline],
+            ['Live dashboard', null],
+          ].map(([label, n]) => (
+            <button key={label} type="button" aria-current={live && label === 'Live dashboard' ? 'page' : undefined} onClick={() => go('/chat?view=website&section=live')} className={cx('flex h-[27px] items-center rounded-[7px] px-2 text-left', live ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
+              <span className="flex-1">{label}</span>
+              {n ? <span className="text-[11.5px] font-bold text-ink-2">{n}</span> : null}
+            </button>
+          ))}
+          {ON_WEB.map((g) => (
+            <div key={g.head} className="flex flex-col gap-px">
+              <div className="mx-2 mt-2 mb-0.5 text-[10.5px] font-bold tracking-[0.6px] text-ink-3">{g.head}</div>
+              {g.items.map((i) => (
+                <button key={i.tab} type="button" title="Opens on the web" onClick={() => void call('app:openInBrowser', { path: `/website-chats?tab=${i.tab}` })} className="flex h-[27px] items-center rounded-[7px] px-2 text-left text-ink hover:bg-subtle">
+                  <span className="flex-1">{i.label}</span>
+                  <span className="text-[11px] text-ink-3" aria-hidden>↗</span>
+                </button>
+              ))}
+            </div>
+          ))}
+        </nav>
+      </SidePanel>
       {live ? <WebsiteLive onOpenChat={(id) => go(`/chat?view=website&section=inbox&website=${id}`)} /> : null}
       <section aria-label="Conversations" className={cx('flex w-[320px] shrink-0 flex-col border-r border-line bg-surface', live && 'hidden')}>
         <div className="flex flex-col gap-2 border-b border-line p-3">

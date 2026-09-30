@@ -8,6 +8,7 @@ import { at, eGet, K, statusOf, useOnline, type EventItem, type Options, type Pa
 import { useDeskChanged, useDesks } from './desk';
 import { EventContext, NoAccess, type EventCtx } from './parts';
 import { routeOf, screenOf, type EventView, type Screen } from './routes';
+import { SidePanel } from '../../components/SidePanel';
 
 /**
  * WorkSuite Events on the desktop: the Event Desk (Events SRS §15.2 [D] —
@@ -153,67 +154,69 @@ function EventShell({ id, screen, active, goRoute, openInWindow }: { id: number;
     <EventContext.Provider value={ctx}>
       <div className="flex h-full min-h-0">
         {!bare ? (
-          <nav aria-label="Events" className="flex w-[228px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
-            <div className="flex flex-col gap-2 px-2.5 pt-3.5 pb-1">
-              <button type="button" onClick={() => goRoute('/events')} className="flex items-center gap-1 px-1 text-left text-[11.5px] font-semibold text-ink-3 hover:text-ink">
-                <Icon name="back" size={13} /> All events
-              </button>
-              <div className="flex items-center gap-2 px-1">
-                <span className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-selection text-primary">
-                  <Icon name="ticket" size={17} />
-                </span>
-                <div className="min-w-0">
-                  <b className="block truncate text-[13.5px]" title={name}>
-                    {name}
-                  </b>
-                  <span className="block truncate text-[11px] text-ink-3">{[ev.status_label, ev.start ? at(ev.start) : null].filter(Boolean).join(' · ') || ' '}</span>
-                </div>
-              </div>
-              {registered ? (
-                <div className="flex items-center gap-1.5 rounded-[8px] bg-subtle px-2 py-1 text-[11.5px] text-ink-2" title="This computer is a check-in device at the event">
-                  <Icon name="laptop" size={13} className="text-ink-3" />
-                  <span className="min-w-0 flex-1 truncate">
-                    {registered.device_name}
-                    {registered.gate_name ? ` · ${registered.gate_name}` : ''}
+          <SidePanel id="events" label="the event menu">
+            <nav aria-label="Events" className="flex w-[228px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
+              <div className="flex flex-col gap-2 px-2.5 pt-3.5 pb-1">
+                <button type="button" onClick={() => goRoute('/events')} className="flex items-center gap-1 px-1 text-left text-[11.5px] font-semibold text-ink-3 hover:text-ink">
+                  <Icon name="back" size={13} /> All events
+                </button>
+                <div className="flex items-center gap-2 px-1">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-selection text-primary">
+                    <Icon name="ticket" size={17} />
                   </span>
-                </div>
-              ) : null}
-            </div>
-            <div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto px-2.5 pb-3 scroll-thin">
-              {(['desk', 'event', 'this'] as Group[]).map((grp) => {
-                const items = (Object.keys(VIEWS) as EventView[]).filter((v) => VIEWS[v].group === grp && mayOpen(v, opts.permissions));
-                if (items.length === 0) return null;
-                return (
-                  <div key={grp} className="flex flex-col gap-px">
-                    <div className="mt-3 mb-0.5 px-2 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">{HEADINGS[grp]}</div>
-                    {items.map((v) => {
-                      const on = current === v;
-                      return (
-                        <button
-                          key={v}
-                          type="button"
-                          aria-current={on ? 'page' : undefined}
-                          onClick={() => ctx.go(v)}
-                          className={cx('relative flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
-                        >
-                          <span className={cx('absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-[3px]', on ? 'bg-primary' : 'bg-transparent')} />
-                          <Icon name={VIEWS[v].icon} size={16} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />
-                          <span className="min-w-0 flex-1 truncate">{VIEWS[v].label}</span>
-                        </button>
-                      );
-                    })}
+                  <div className="min-w-0">
+                    <b className="block truncate text-[13.5px]" title={name}>
+                      {name}
+                    </b>
+                    <span className="block truncate text-[11px] text-ink-3">{[ev.status_label, ev.start ? at(ev.start) : null].filter(Boolean).join(' · ') || ' '}</span>
                   </div>
-                );
-              })}
-              {may('events.checkin.use') ? (
-                <div className="mt-3 flex flex-col gap-px border-t border-line pt-2">
-                  <button type="button" onClick={() => ctx.openWindow('counters', `${name} · Live counters`)} className="flex h-[30px] items-center gap-[9px] rounded-[8px] px-2.5 text-left font-medium text-ink-2 hover:bg-subtle" title="The counters on a screen of their own">
-                    <Icon name="app-window" size={16} className="text-ink-3" /> Counters in a window
-                  </button>
                 </div>
-              ) : null}
-            </div>
-          </nav>
+                {registered ? (
+                  <div className="flex items-center gap-1.5 rounded-[8px] bg-subtle px-2 py-1 text-[11.5px] text-ink-2" title="This computer is a check-in device at the event">
+                    <Icon name="laptop" size={13} className="text-ink-3" />
+                    <span className="min-w-0 flex-1 truncate">
+                      {registered.device_name}
+                      {registered.gate_name ? ` · ${registered.gate_name}` : ''}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+              <div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto px-2.5 pb-3 scroll-thin">
+                {(['desk', 'event', 'this'] as Group[]).map((grp) => {
+                  const items = (Object.keys(VIEWS) as EventView[]).filter((v) => VIEWS[v].group === grp && mayOpen(v, opts.permissions));
+                  if (items.length === 0) return null;
+                  return (
+                    <div key={grp} className="flex flex-col gap-px">
+                      <div className="mt-3 mb-0.5 px-2 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">{HEADINGS[grp]}</div>
+                      {items.map((v) => {
+                        const on = current === v;
+                        return (
+                          <button
+                            key={v}
+                            type="button"
+                            aria-current={on ? 'page' : undefined}
+                            onClick={() => ctx.go(v)}
+                            className={cx('relative flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
+                          >
+                            <span className={cx('absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-[3px]', on ? 'bg-primary' : 'bg-transparent')} />
+                            <Icon name={VIEWS[v].icon} size={16} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />
+                            <span className="min-w-0 flex-1 truncate">{VIEWS[v].label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+                {may('events.checkin.use') ? (
+                  <div className="mt-3 flex flex-col gap-px border-t border-line pt-2">
+                    <button type="button" onClick={() => ctx.openWindow('counters', `${name} · Live counters`)} className="flex h-[30px] items-center gap-[9px] rounded-[8px] px-2.5 text-left font-medium text-ink-2 hover:bg-subtle" title="The counters on a screen of their own">
+                      <Icon name="app-window" size={16} className="text-ink-3" /> Counters in a window
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </nav>
+          </SidePanel>
         ) : null}
         <main className="min-w-0 flex-1 overflow-y-auto bg-ground scroll-thin" aria-label={`${name} · ${title}`}>
           {!online && view !== 'desk' ? (

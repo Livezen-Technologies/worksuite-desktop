@@ -10,6 +10,7 @@ import { IconButton, cx } from '../../components/ui';
 import { saveTenderFile } from './files';
 import { notifiedNote, reviewMessage, reviewRecipients, tellInChat, usePeople } from './people';
 import { reviewLine, type Line } from './work';
+import { SidePanel } from '../../components/SidePanel';
 
 /** A line with something on it to look at. */
 export const viewable = (l: Line) => l.files.length > 0;
@@ -156,103 +157,105 @@ export function ReviewScreen({
             <div className="flex h-full items-center justify-center p-8 text-[13px] text-ink-2">You may not take copies of tender documents, so they cannot be shown here.</div>
           )}
         </div>
-        <aside aria-label="Review" className="flex w-[340px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-surface p-4 text-[13px] scroll-thin">
-          <div className="flex flex-col gap-1">
-            <b className="text-[15px] text-ink">{line.label}</b>
-            <span className="text-[12px] text-ink-3">
-              {line.mandatory ? 'Required' : 'Optional'} · {STATUS[line.status] ?? line.status}
-            </span>
-            {line.detail ? <span className="text-ink-2">{line.detail}</span> : null}
-          </div>
-          <dl className="m-0 grid grid-cols-[92px_1fr] gap-x-2 gap-y-1.5 rounded-[10px] bg-subtle px-3 py-2.5 text-[12.5px]">
-            <dt className="text-ink-3">File</dt>
-            <dd className="m-0 break-words font-semibold text-ink">{fileName}</dd>
-            <dt className="text-ink-3">Uploaded by</dt>
-            <dd className="m-0 font-semibold text-ink">{uploader ?? (shown.uploaded_by ? 'A colleague' : 'Not recorded')}</dd>
-            <dt className="text-ink-3">Uploaded</dt>
-            <dd className="m-0 text-ink">{shown.uploaded_at ? `${dateLabel(shown.uploaded_at)} · ${relative(shown.uploaded_at)}` : '—'}</dd>
-            {owner ? (
-              <>
-                <dt className="text-ink-3">Chased by</dt>
-                <dd className="m-0 text-ink">{owner}</dd>
-              </>
-            ) : null}
-          </dl>
-          {line.files.length > 1 ? (
-            <label className="flex flex-col gap-1 text-[12px] text-ink-3">
-              Version
-              <select value={shown.id} onChange={(e) => setVersion(Number(e.target.value))} className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[13px] text-ink">
-                {line.files.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    v{f.version}
-                    {f.current ? ' (current)' : ''} · {f.name ?? 'file'}
-                    {f.uploaded_at ? ` · ${dateLabel(f.uploaded_at)}` : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-          {line.status === 'rejected' && line.rejection_reason ? (
-            <p className="m-0 rounded-[10px] bg-danger-bg px-3 py-2 text-[12.5px] text-danger">
-              Sent back{line.reviewer_name ? ` by ${line.reviewer_name}` : ''}
-              {line.reviewed_at ? ` ${relative(line.reviewed_at)}` : ''}: {line.rejection_reason}
-            </p>
-          ) : null}
-          {line.status === 'approved' ? (
-            <p className="m-0 rounded-[10px] bg-success-bg px-3 py-2 text-[12.5px] text-success">
-              Approved{line.reviewer_name ? ` by ${line.reviewer_name}` : ''}
-              {line.reviewed_at ? ` ${relative(line.reviewed_at)}` : ''}.
-            </p>
-          ) : null}
-          {older ? <p className="m-0 text-[12px] text-[#9A4A06] dark:text-warning">This is an earlier version. A decision applies to the current one.</p> : null}
-          {canApprove && reviewable(line) ? (
-            <div className="flex flex-col gap-2 border-t border-line pt-3">
-              <label className="flex flex-col gap-1 text-[12px] font-semibold text-ink-2">
-                Comment{uploader ? ` for ${uploader}` : ''}
-                <textarea
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value.slice(0, 500))}
-                  rows={4}
-                  placeholder="What is wrong with it, or anything they should know"
-                  className="resize-none rounded-[8px] border border-line bg-surface px-2.5 py-2 text-[13px] font-normal text-ink outline-none focus:border-primary"
-                />
-              </label>
-              {tellIds.length && serverTells ? (
-                <p className="m-0 flex items-start gap-1.5 text-[12px] text-ink-2">
-                  <Icon name="bell" size={13} className="mt-0.5 shrink-0 text-primary" />
-                  <span>
-                    {tellNames.join(' and ')} {tellNames.length === 1 ? 'is' : 'are'} notified of your decision, with your comment — in the bell, and on their phone and desktop.
-                  </span>
-                </p>
-              ) : null}
-              {tellIds.length ? (
-                <label className="flex items-start gap-2 text-[12.5px] text-ink-2">
-                  <input type="checkbox" checked={tell} onChange={(e) => setTell(e.target.checked)} className="mt-0.5 accent-primary" />
-                  <span>
-                    {serverTells ? `Also message ${tellNames.join(' and ')} in Team Chat` : `Tell ${tellNames.join(' and ')} in Chat`}
-                    <span className="block text-[11.5px] text-ink-3">With your comment and a link to this tender. Approving sends nothing unless you write a comment.</span>
-                  </span>
-                </label>
-              ) : null}
-              {error ? <p className="m-0 text-[12.5px] text-danger">{error}</p> : null}
-              <div className="flex gap-2">
-                {line.status !== 'approved' ? (
-                  <button type="button" disabled={busy !== null} onClick={() => void decide('approved')} className={cx(btn, 'flex-1 bg-[#1F7A4D] text-white hover:brightness-110')}>
-                    {busy === 'approve' ? 'Approving…' : 'Approve'}
-                  </button>
-                ) : null}
-                <button type="button" disabled={busy !== null} onClick={() => void decide('rejected')} className={cx(btn, 'flex-1 border border-[#F1B8A8] text-danger hover:bg-danger-bg')}>
-                  {busy === 'send' ? 'Sending back…' : uploader ? `Send back to ${uploader.split(' ')[0]}` : 'Send back'}
-                </button>
-              </div>
+        <SidePanel id="tenders-review" label="the review panel" side="right">
+          <aside aria-label="Review" className="flex w-[340px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-surface p-4 text-[13px] scroll-thin">
+            <div className="flex flex-col gap-1">
+              <b className="text-[15px] text-ink">{line.label}</b>
+              <span className="text-[12px] text-ink-3">
+                {line.mandatory ? 'Required' : 'Optional'} · {STATUS[line.status] ?? line.status}
+              </span>
+              {line.detail ? <span className="text-ink-2">{line.detail}</span> : null}
             </div>
-          ) : !canApprove ? (
-            <p className="m-0 border-t border-line pt-3 text-[12px] text-ink-3">Approving and sending back need the checklist approval permission.</p>
-          ) : null}
-          <p className="mt-auto flex items-center gap-1.5 text-[11.5px] text-ink-3">
-            <Icon name="shield-check" size={12} /> Shown inside WorkSuite: the file's own scripts and links do not run.
-          </p>
-        </aside>
+            <dl className="m-0 grid grid-cols-[92px_1fr] gap-x-2 gap-y-1.5 rounded-[10px] bg-subtle px-3 py-2.5 text-[12.5px]">
+              <dt className="text-ink-3">File</dt>
+              <dd className="m-0 break-words font-semibold text-ink">{fileName}</dd>
+              <dt className="text-ink-3">Uploaded by</dt>
+              <dd className="m-0 font-semibold text-ink">{uploader ?? (shown.uploaded_by ? 'A colleague' : 'Not recorded')}</dd>
+              <dt className="text-ink-3">Uploaded</dt>
+              <dd className="m-0 text-ink">{shown.uploaded_at ? `${dateLabel(shown.uploaded_at)} · ${relative(shown.uploaded_at)}` : '—'}</dd>
+              {owner ? (
+                <>
+                  <dt className="text-ink-3">Chased by</dt>
+                  <dd className="m-0 text-ink">{owner}</dd>
+                </>
+              ) : null}
+            </dl>
+            {line.files.length > 1 ? (
+              <label className="flex flex-col gap-1 text-[12px] text-ink-3">
+                Version
+                <select value={shown.id} onChange={(e) => setVersion(Number(e.target.value))} className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[13px] text-ink">
+                  {line.files.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      v{f.version}
+                      {f.current ? ' (current)' : ''} · {f.name ?? 'file'}
+                      {f.uploaded_at ? ` · ${dateLabel(f.uploaded_at)}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {line.status === 'rejected' && line.rejection_reason ? (
+              <p className="m-0 rounded-[10px] bg-danger-bg px-3 py-2 text-[12.5px] text-danger">
+                Sent back{line.reviewer_name ? ` by ${line.reviewer_name}` : ''}
+                {line.reviewed_at ? ` ${relative(line.reviewed_at)}` : ''}: {line.rejection_reason}
+              </p>
+            ) : null}
+            {line.status === 'approved' ? (
+              <p className="m-0 rounded-[10px] bg-success-bg px-3 py-2 text-[12.5px] text-success">
+                Approved{line.reviewer_name ? ` by ${line.reviewer_name}` : ''}
+                {line.reviewed_at ? ` ${relative(line.reviewed_at)}` : ''}.
+              </p>
+            ) : null}
+            {older ? <p className="m-0 text-[12px] text-[#9A4A06] dark:text-warning">This is an earlier version. A decision applies to the current one.</p> : null}
+            {canApprove && reviewable(line) ? (
+              <div className="flex flex-col gap-2 border-t border-line pt-3">
+                <label className="flex flex-col gap-1 text-[12px] font-semibold text-ink-2">
+                  Comment{uploader ? ` for ${uploader}` : ''}
+                  <textarea
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value.slice(0, 500))}
+                    rows={4}
+                    placeholder="What is wrong with it, or anything they should know"
+                    className="resize-none rounded-[8px] border border-line bg-surface px-2.5 py-2 text-[13px] font-normal text-ink outline-none focus:border-primary"
+                  />
+                </label>
+                {tellIds.length && serverTells ? (
+                  <p className="m-0 flex items-start gap-1.5 text-[12px] text-ink-2">
+                    <Icon name="bell" size={13} className="mt-0.5 shrink-0 text-primary" />
+                    <span>
+                      {tellNames.join(' and ')} {tellNames.length === 1 ? 'is' : 'are'} notified of your decision, with your comment — in the bell, and on their phone and desktop.
+                    </span>
+                  </p>
+                ) : null}
+                {tellIds.length ? (
+                  <label className="flex items-start gap-2 text-[12.5px] text-ink-2">
+                    <input type="checkbox" checked={tell} onChange={(e) => setTell(e.target.checked)} className="mt-0.5 accent-primary" />
+                    <span>
+                      {serverTells ? `Also message ${tellNames.join(' and ')} in Team Chat` : `Tell ${tellNames.join(' and ')} in Chat`}
+                      <span className="block text-[11.5px] text-ink-3">With your comment and a link to this tender. Approving sends nothing unless you write a comment.</span>
+                    </span>
+                  </label>
+                ) : null}
+                {error ? <p className="m-0 text-[12.5px] text-danger">{error}</p> : null}
+                <div className="flex gap-2">
+                  {line.status !== 'approved' ? (
+                    <button type="button" disabled={busy !== null} onClick={() => void decide('approved')} className={cx(btn, 'flex-1 bg-[#1F7A4D] text-white hover:brightness-110')}>
+                      {busy === 'approve' ? 'Approving…' : 'Approve'}
+                    </button>
+                  ) : null}
+                  <button type="button" disabled={busy !== null} onClick={() => void decide('rejected')} className={cx(btn, 'flex-1 border border-[#F1B8A8] text-danger hover:bg-danger-bg')}>
+                    {busy === 'send' ? 'Sending back…' : uploader ? `Send back to ${uploader.split(' ')[0]}` : 'Send back'}
+                  </button>
+                </div>
+              </div>
+            ) : !canApprove ? (
+              <p className="m-0 border-t border-line pt-3 text-[12px] text-ink-3">Approving and sending back need the checklist approval permission.</p>
+            ) : null}
+            <p className="mt-auto flex items-center gap-1.5 text-[11.5px] text-ink-3">
+              <Icon name="shield-check" size={12} /> Shown inside WorkSuite: the file's own scripts and links do not run.
+            </p>
+          </aside>
+        </SidePanel>
       </div>
     </div>
   );

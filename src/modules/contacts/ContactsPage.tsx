@@ -13,6 +13,7 @@ import { ContactDrawer } from './Drawer';
 import { EditDrawer } from './EditDrawer';
 import { ImportWizard } from './ImportWizard';
 import { Rail, VIEWS, type Place, type View } from './Rail';
+import { SidePanel } from '../../components/SidePanel';
 
 type Layout = 'card' | 'list';
 const LAYOUT_KEY = 'contacts.layout';
@@ -169,17 +170,19 @@ export default function ContactsPage(_props: ModuleProps) {
 
   return (
     <div className="flex h-full bg-ground text-[13px]">
-      <Rail
-        place={place}
-        stats={stats.data}
-        groups={groups}
-        onPlace={setPlace}
-        onNew={() => setEditing({ contact: null })}
-        onImport={canImport ? () => setImporting(true) : undefined}
-        onExport={() => setExportOpen(true)}
-        adding={addingGroup}
-        setAdding={setAddingGroup}
-      />
+      <SidePanel id="contacts" label="the Contacts menu">
+        <Rail
+          place={place}
+          stats={stats.data}
+          groups={groups}
+          onPlace={setPlace}
+          onNew={() => setEditing({ contact: null })}
+          onImport={canImport ? () => setImporting(true) : undefined}
+          onExport={() => setExportOpen(true)}
+          adding={addingGroup}
+          setAdding={setAddingGroup}
+        />
+      </SidePanel>
       <main aria-label={title} className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
         {directory ? (
           <Directory onNewGroup={newGroup} onNew={() => setEditing({ contact: null })} />

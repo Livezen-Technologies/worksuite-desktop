@@ -11,6 +11,7 @@ import type { TrackTab } from './Tracked';
 import type { BuyTab } from './Purchasing';
 import type { MakeTab } from './Manufacturing';
 import type { SetSection } from './Setup';
+import { SidePanel } from '../../components/SidePanel';
 
 /**
  * Inventory (the "Inv*" designs): the rail, and the screen it points at.
@@ -214,22 +215,24 @@ export default function InventoryShell(_props: ModuleProps) {
 
   return (
     <div className="flex h-full min-h-0">
-      <InvRail
-        view={view}
-        onPick={(v) => go(`/inventory?tab=${v}`)}
-        onOpenProduct={(id) => openProduct(id)}
-        onOpenDoc={openDoc}
-        onOpening={canAdjust ? () => start('ops') : null}
-        onSales={onSales}
-        counts={counts}
-        org={scope}
-        companies={list}
-        onOrg={chooseOrg}
-        warehouse={wh}
-        warehouses={whs}
-        onWarehouse={setWarehouse}
-        allowed={has}
-      />
+      <SidePanel id="inventory" label="the Inventory menu">
+        <InvRail
+          view={view}
+          onPick={(v) => go(`/inventory?tab=${v}`)}
+          onOpenProduct={(id) => openProduct(id)}
+          onOpenDoc={openDoc}
+          onOpening={canAdjust ? () => start('ops') : null}
+          onSales={onSales}
+          counts={counts}
+          org={scope}
+          companies={list}
+          onOrg={chooseOrg}
+          warehouse={wh}
+          warehouses={whs}
+          onWarehouse={setWarehouse}
+          allowed={has}
+        />
+      </SidePanel>
       <main className="min-w-0 flex-1 overflow-y-auto bg-ground scroll-thin" aria-label={`Inventory · ${TITLES[view]}`}>
         <Suspense fallback={<Spinner />}>
           {view === 'dash' ? (

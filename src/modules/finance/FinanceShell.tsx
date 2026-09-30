@@ -9,6 +9,7 @@ import type { ModuleProps } from '../registry';
 import { fetchCompanies, fetchDashboard, K, type Company } from './api';
 import { LoadFailed } from './parts';
 import { FinanceRail, TITLES, VIEWS, type FinanceView } from './Rail';
+import { SidePanel } from '../../components/SidePanel';
 
 /**
  * Finance: the rail, and the screen it points at. Addressed as
@@ -171,7 +172,9 @@ export default function FinanceShell(_props: ModuleProps) {
 
   return (
     <div className="flex h-full min-h-0">
-      <FinanceRail view={view} onPick={pick} company={company} companies={companies} onCompany={choose} badges={badges} />
+      <SidePanel id="finance" label="the Finance menu">
+        <FinanceRail view={view} onPick={pick} company={company} companies={companies} onCompany={choose} badges={badges} />
+      </SidePanel>
       <main className="min-w-0 flex-1 overflow-y-auto bg-ground scroll-thin" aria-label={`Finance · ${TITLES[view]}`}>
         <Suspense fallback={<Spinner />}>{body}</Suspense>
       </main>

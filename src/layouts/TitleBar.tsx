@@ -48,6 +48,8 @@ export function TitleBar() {
         <span className="text-[16px] font-bold tracking-tight">WorkSuite</span>
       </div>
 
+      {/* The App Launcher: every app this person has, as tiles. */}
+      <TopButton icon="grid" label={t('shell.apps')} onClick={() => openOverlay('launcher')} active={overlay === 'launcher'} />
 
       <button
         type="button"

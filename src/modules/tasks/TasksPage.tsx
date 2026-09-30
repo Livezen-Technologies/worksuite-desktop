@@ -17,6 +17,7 @@ import { NewTask } from './NewTask';
 import { Rail } from './Rail';
 import { TaskDetail } from './TaskDetail';
 import { Select } from '../../components/Select';
+import { SidePanel } from '../../components/SidePanel';
 
 /** The old `?filter=` links (notifications, the dashboard) in the new scopes. */
 const LEGACY: Record<string, Scope> = { mine: 'mine', today: 'today', overdue: 'overdue', active: 'all', completed: 'done', created: 'all', shared: 'shared' };
@@ -153,7 +154,9 @@ export default function TasksPage(_props: ModuleProps) {
 
   return (
     <div className="flex h-full bg-surface text-[13px]">
-      <Rail scope={scope} counts={counts} lists={lists} onScope={setScope} onNew={() => setCreating(true)} />
+      <SidePanel id="tasks" label="the Tasks menu">
+        <Rail scope={scope} counts={counts} lists={lists} onScope={setScope} onNew={() => setCreating(true)} />
+      </SidePanel>
       <main className="flex min-w-0 flex-1 flex-col">
         <div className="flex shrink-0 flex-wrap items-center gap-2 px-5 pt-4 pb-2.5">
           <div className="flex min-w-0 flex-1 flex-col">

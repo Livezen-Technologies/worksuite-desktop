@@ -7,6 +7,7 @@ import { Spinner } from '../../components/ui';
 import type { ModuleProps } from '../registry';
 import { fetchFulfilment, fetchReturns, K, useOrgs, useOverview, type Status } from './api';
 import { NATIVE, NEEDS, SalesRail, type SalesView } from './Rail';
+import { SidePanel } from '../../components/SidePanel';
 
 /**
  * Sales & Orders (the "12 · Orders (OMS)" designs): the rail, and the screen
@@ -97,18 +98,20 @@ export default function SalesShell(_props: ModuleProps) {
 
   return (
     <div className="flex h-full min-h-0">
-      <SalesRail
-        view={view}
-        status={view === 'orders' ? status : null}
-        onPick={pick}
-        onNew={() => go('/sales?tab=orders&new=1')}
-        counts={counts}
-        org={org}
-        orgs={orgs.data ?? []}
-        onOrg={chooseOrg}
-        canCreate={canCreate}
-        allowed={allowed}
-      />
+      <SidePanel id="sales" label="the Sales menu">
+        <SalesRail
+          view={view}
+          status={view === 'orders' ? status : null}
+          onPick={pick}
+          onNew={() => go('/sales?tab=orders&new=1')}
+          counts={counts}
+          org={org}
+          orgs={orgs.data ?? []}
+          onOrg={chooseOrg}
+          canCreate={canCreate}
+          allowed={allowed}
+        />
+      </SidePanel>
       <main className="min-w-0 flex-1 overflow-y-auto bg-ground scroll-thin" aria-label={`Orders · ${TITLES[view]}`}>
         <Suspense fallback={<Spinner />}>
           {view === 'dash' ? <Dashboard org={org} overview={overview} onOpen={(id) => go(`/sales?tab=orders&order=${id}`)} onList={(s) => pick('orders', s)} onPick={pick} /> : null}

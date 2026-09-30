@@ -63,7 +63,7 @@ import {
   Stethoscope, Store, Sun, Timer, Trash2, TrendingUp, TriangleAlert, Upload, UserRound, Users, Video, Wallet, Wifi, WifiOff, Wrench, X, Zap,
   SlidersHorizontal, Image, RotateCw, CircleHelp, Shield, Dices, Crop,
   Scissors,
-  Forward, PanelLeftClose, PanelLeftOpen, Mic, MicOff, VideoOff, PhoneOff, PhoneIncoming, MonitorUp, Maximize2, Camera, Film, Music, Square, AtSign, Cake, Smartphone, MapPin, Tag, List, type LucideIcon,
+  Forward, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Mic, MicOff, VideoOff, PhoneOff, PhoneIncoming, MonitorUp, Maximize2, Camera, Film, Music, Square, AtSign, Cake, Smartphone, MapPin, Tag, List, type LucideIcon,
 } from 'lucide-react';
 
 /**
@@ -85,7 +85,7 @@ const ICONS: Record<string, LucideIcon> = {
   keyboard: Keyboard, globe: Globe, disk: HardDrive, pause: Pause, play: Play, undo: RotateCcw, file: File, 'file-image': FileImage,
   'file-sheet': FileSpreadsheet, filter: Filter, more: Ellipsis, smile: Smile, timer: Timer, coffee: Coffee, eye: Eye, laptop: Laptop,
   server: Server, link: Link, history: History, zap: Zap, hash: Hash, compose: SquarePen, user: UserRound, building: Building2,
-  briefcase: Briefcase, 'list-todo': ListTodo, spinner: LoaderCircle, back: ArrowLeft, 'panel-close': PanelLeftClose, 'panel-open': PanelLeftOpen,
+  briefcase: Briefcase, 'list-todo': ListTodo, spinner: LoaderCircle, back: ArrowLeft, 'panel-close': PanelLeftClose, 'panel-open': PanelLeftOpen, 'panel-right-close': PanelRightClose, 'panel-right-open': PanelRightOpen,
   mic: Mic, 'mic-off': MicOff, 'video-off': VideoOff, 'phone-off': PhoneOff, 'phone-incoming': PhoneIncoming, 'screen-share': MonitorUp, maximize: Maximize2,
   camera: Camera, film: Film, music: Music, stop: Square, at: AtSign,
   cake: Cake, mobile: Smartphone, 'map-pin': MapPin, tag: Tag, list: List,

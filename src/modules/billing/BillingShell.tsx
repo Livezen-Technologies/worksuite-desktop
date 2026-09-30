@@ -8,6 +8,7 @@ import { Spinner, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
 import { can, closeTab, fetchDashboard, fetchInvoice, invoiceName, K, openTab, useBillingOrgs } from './api';
 import { BillRail, NATIVE, type BillView } from './Rail';
+import { SidePanel } from '../../components/SidePanel';
 
 /**
  * Billing (the "Bill*" designs): the rail, and the screen it points at.
@@ -98,22 +99,24 @@ export default function BillingShell(_props: ModuleProps) {
 
   return (
     <div className="flex h-full min-h-0">
-      <BillRail
-        view={view}
-        draftsOnly={view === 'inv' && !invoice && narrow === 'draft'}
-        onPick={(v) => go(`/billing?tab=${v}`)}
-        onDrafts={() => list('draft')}
-        onOnAccount={() => go('/billing?tab=pay&unallocated=1')}
-        onNew={() => go('/billing?tab=inv&new=1')}
-        onOpenInvoice={openInvoice}
-        onNavigate={navigate}
-        counts={counts}
-        org={org}
-        orgs={orgs.data ?? []}
-        onOrg={chooseOrg}
-        canCreate={canCreate}
-        has={has}
-      />
+      <SidePanel id="billing" label="the Billing menu">
+        <BillRail
+          view={view}
+          draftsOnly={view === 'inv' && !invoice && narrow === 'draft'}
+          onPick={(v) => go(`/billing?tab=${v}`)}
+          onDrafts={() => list('draft')}
+          onOnAccount={() => go('/billing?tab=pay&unallocated=1')}
+          onNew={() => go('/billing?tab=inv&new=1')}
+          onOpenInvoice={openInvoice}
+          onNavigate={navigate}
+          counts={counts}
+          org={org}
+          orgs={orgs.data ?? []}
+          onOrg={chooseOrg}
+          canCreate={canCreate}
+          has={has}
+        />
+      </SidePanel>
       <main className="min-w-0 flex-1 overflow-y-auto bg-ground scroll-thin" aria-label={`Billing · ${TITLES[view]}`}>
         <Suspense fallback={<Spinner />}>
           {view === 'dash' ? <Dashboard data={dash} onOpen={openInvoice} onNew={() => go('/billing?tab=inv&new=1')} onPay={() => go(`${here}&pay=1`)} onList={(s) => list(s)} canCreate={canCreate} canPay={has('billing.payment')} /> : null}

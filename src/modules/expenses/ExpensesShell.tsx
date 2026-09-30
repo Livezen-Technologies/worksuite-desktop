@@ -13,6 +13,7 @@ import { can, canAct, count, fetchAreas, fetchDashboard, fetchOrgs, fetchQueueTo
 import { Note, OneCompany, QuickBar } from './parts';
 import type { ClaimPreset } from './suppliers';
 import { ExpensesRail, GATED, ONE_COMPANY, TITLES, VIEWS, type ExpenseView } from './Rail';
+import { SidePanel } from '../../components/SidePanel';
 
 /**
  * Expenses: the rail, the quick bar, and the screen they point at. Addressed
@@ -181,17 +182,19 @@ export default function ExpensesShell(_props: ModuleProps) {
 
   return (
     <div className="flex h-full min-h-0">
-      <ExpensesRail
-        view={view}
-        onPick={(v) => onGo(v)}
-        onFile={actable.length ? startFiling : null}
-        shows={shows}
-        badges={{ approvals: counts.approvals, cards: counts.unmatchedCards }}
-        orgs={orgs}
-        selected={selected}
-        onSelect={onSelect}
-        onFavourite={(id) => void favourite(id)}
-      />
+      <SidePanel id="expenses" label="the Expenses menu">
+        <ExpensesRail
+          view={view}
+          onPick={(v) => onGo(v)}
+          onFile={actable.length ? startFiling : null}
+          shows={shows}
+          badges={{ approvals: counts.approvals, cards: counts.unmatchedCards }}
+          orgs={orgs}
+          selected={selected}
+          onSelect={onSelect}
+          onFavourite={(id) => void favourite(id)}
+        />
+      </SidePanel>
       <main className="min-w-0 flex-1 overflow-y-auto bg-ground scroll-thin" aria-label={`Expenses · ${TITLES[view]}`}>
         {d ? <QuickBar counts={counts} onGo={(v) => onGo(v)} canApprove={shows('team')} canFinance={shows('reimburse')} /> : null}
         <Suspense fallback={<Spinner />}>{body}</Suspense>

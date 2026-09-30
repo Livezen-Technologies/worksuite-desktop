@@ -7,6 +7,7 @@ import { useTab, useTabTitle } from '../../core/tab-context';
 import type { ModuleProps } from '../registry';
 import { eGet, K, useOnline, type Options } from './api';
 import { ElContext, type El, type ElView } from './parts';
+import { SidePanel } from '../../components/SidePanel';
 
 /**
  * eLearning, native in WorkSuite Desktop, over the server's `/api/elearning/v1`.
@@ -228,50 +229,52 @@ export default function ElearningShell(_props: ModuleProps) {
   return (
     <ElContext.Provider value={el}>
       <div className="flex h-full min-h-0">
-        <nav aria-label="eLearning" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
-          <div className="flex flex-col gap-2 px-2.5 pt-3.5 pb-1">
-            <div className="flex items-center gap-2 px-1">
-              <span className="grid size-8 place-items-center rounded-[10px] bg-selection text-primary">
-                <Icon name="graduation-cap" size={17} />
-              </span>
-              <div className="min-w-0">
-                <b className="block text-[13.5px]">eLearning</b>
-                <span className="block truncate text-[11px] text-ink-3">{opts.companies.find((c) => c.id === opts.org)?.name ?? ''}</span>
-              </div>
-            </div>
-            {opts.companies.length > 1 ? (
-              <Select aria-label="Company" value={scope} onChange={(e) => chooseOrg(e.target.value)} options={opts.companies.map((c) => ({ value: String(c.id), label: c.name }))} className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink" />
-            ) : null}
-          </div>
-          <div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto px-2.5 pb-3 scroll-thin">
-            {groups.map((grp) => {
-              const items = (Object.keys(VIEWS) as ElView[]).filter((v) => VIEWS[v].group === grp && VIEWS[v].show(can));
-              if (items.length === 0) return null;
-              return (
-                <div key={grp} className="flex flex-col gap-px">
-                  {HEADINGS[grp] ? <div className="mt-3 mb-0.5 px-2 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">{HEADINGS[grp]}</div> : null}
-                  {items.map((v) => {
-                    const on = current === v;
-                    const label = v === 'setup' && setupPending ? 'Finish set-up' : VIEWS[v].label;
-                    return (
-                      <button
-                        key={v}
-                        type="button"
-                        aria-current={on ? 'page' : undefined}
-                        onClick={() => el.go(v)}
-                        className={cx('relative flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
-                      >
-                        <span className={cx('absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-[3px]', on ? 'bg-primary' : 'bg-transparent')} />
-                        <Icon name={VIEWS[v].icon} size={16} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />
-                        <span className="min-w-0 flex-1 truncate">{label}</span>
-                      </button>
-                    );
-                  })}
+        <SidePanel id="elearning" label="the eLearning menu">
+          <nav aria-label="eLearning" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
+            <div className="flex flex-col gap-2 px-2.5 pt-3.5 pb-1">
+              <div className="flex items-center gap-2 px-1">
+                <span className="grid size-8 place-items-center rounded-[10px] bg-selection text-primary">
+                  <Icon name="graduation-cap" size={17} />
+                </span>
+                <div className="min-w-0">
+                  <b className="block text-[13.5px]">eLearning</b>
+                  <span className="block truncate text-[11px] text-ink-3">{opts.companies.find((c) => c.id === opts.org)?.name ?? ''}</span>
                 </div>
-              );
-            })}
-          </div>
-        </nav>
+              </div>
+              {opts.companies.length > 1 ? (
+                <Select aria-label="Company" value={scope} onChange={(e) => chooseOrg(e.target.value)} options={opts.companies.map((c) => ({ value: String(c.id), label: c.name }))} className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink" />
+              ) : null}
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto px-2.5 pb-3 scroll-thin">
+              {groups.map((grp) => {
+                const items = (Object.keys(VIEWS) as ElView[]).filter((v) => VIEWS[v].group === grp && VIEWS[v].show(can));
+                if (items.length === 0) return null;
+                return (
+                  <div key={grp} className="flex flex-col gap-px">
+                    {HEADINGS[grp] ? <div className="mt-3 mb-0.5 px-2 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">{HEADINGS[grp]}</div> : null}
+                    {items.map((v) => {
+                      const on = current === v;
+                      const label = v === 'setup' && setupPending ? 'Finish set-up' : VIEWS[v].label;
+                      return (
+                        <button
+                          key={v}
+                          type="button"
+                          aria-current={on ? 'page' : undefined}
+                          onClick={() => el.go(v)}
+                          className={cx('relative flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
+                        >
+                          <span className={cx('absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-[3px]', on ? 'bg-primary' : 'bg-transparent')} />
+                          <Icon name={VIEWS[v].icon} size={16} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />
+                          <span className="min-w-0 flex-1 truncate">{label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          </nav>
+        </SidePanel>
         <main className="min-w-0 flex-1 overflow-y-auto bg-ground scroll-thin" aria-label={`eLearning · ${title}`}>
           {!online ? (
             <div className="border-b border-line bg-warning-bg px-6 py-1.5 text-[12.5px] font-medium text-warning">
