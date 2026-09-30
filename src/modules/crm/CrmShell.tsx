@@ -4,6 +4,7 @@ import { Spinner } from '../../components/ui';
 import type { ModuleProps } from '../registry';
 import { useDashboard, useFollowUpCounts } from './api';
 import { CrmRail, NATIVE, type CrmView } from './Rail';
+import { SidePanel } from '../../components/SidePanel';
 
 /**
  * CRM (the "11 · CRM" designs): the rail, and the screen it points at.
@@ -63,18 +64,20 @@ export default function CrmShell(_props: ModuleProps) {
   const pick = (v: CrmView) => go(`/crm?tab=${v}`);
   return (
     <div className="flex h-full min-h-0">
-      <CrmRail
-        view={view}
-        onPick={pick}
-        counts={counts}
-        onNewLead={() => go('/crm?tab=leads&new=1')}
-        onOpenHit={(h) => {
-          if (h.type === 'lead') go(`/crm/leads/${h.id}`);
-          else if (h.type === 'deal') go(`/crm?tab=pipe&deal=${h.id}`);
-          else if (h.type === 'account') go(`/crm?tab=acc&account=${h.id}`);
-          else go('/crm?tab=leads');
-        }}
-      />
+      <SidePanel id="crm" label="the CRM menu">
+        <CrmRail
+          view={view}
+          onPick={pick}
+          counts={counts}
+          onNewLead={() => go('/crm?tab=leads&new=1')}
+          onOpenHit={(h) => {
+            if (h.type === 'lead') go(`/crm/leads/${h.id}`);
+            else if (h.type === 'deal') go(`/crm?tab=pipe&deal=${h.id}`);
+            else if (h.type === 'account') go(`/crm?tab=acc&account=${h.id}`);
+            else go('/crm?tab=leads');
+          }}
+        />
+      </SidePanel>
       <main className="relative flex min-w-0 flex-1 flex-col overflow-y-auto bg-ground px-[22px] py-[18px] scroll-thin">
         <Suspense fallback={<Spinner />}>
           {view === 'dash' ? <Dashboard onPick={pick} onOpenDeal={(id) => go(`/crm?tab=pipe&deal=${id}`)} onOpenLead={(id) => go(`/crm/leads/${id}`)} /> : null}

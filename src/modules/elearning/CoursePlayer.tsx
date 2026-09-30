@@ -10,6 +10,7 @@ import { eGetMeta, ePost, errorText, K, LESSON_ICON, minutes, OFFLINE, pct, when
 import { Lesson } from './Lesson';
 import { useOfflineCourses } from './offline';
 import { area, Back, Bar, EnrolPill, Field, Pill, Refusal, Rich, useEl } from './parts';
+import { SidePanel } from '../../components/SidePanel';
 
 /**
  * Taking a course (WF-02 steps 4–6, FR-DSH-04): the outline with each lesson's
@@ -51,38 +52,40 @@ export default function CoursePlayer({ id, lesson }: { id: number; lesson: numbe
 
   return (
     <div className="flex h-full min-h-0">
-      <aside aria-label="Course outline" className="flex w-[300px] shrink-0 flex-col overflow-hidden border-r border-line bg-surface">
-        <div className="flex flex-col gap-2 border-b border-line px-4 py-3">
-          <Back onClick={() => el.go('my')} label="My Learning" />
-          <button type="button" className="text-left" onClick={() => el.open.course(id)}>
-            <div className="font-mono text-[11px] font-semibold text-ink-3">{t.course.code}</div>
-            <b className="line-clamp-2 text-[14.5px] text-ink hover:text-primary">{t.course.title}</b>
-          </button>
-          <div className="flex items-center gap-2">
-            <EnrolPill status={e.status} overdue={e.overdue} />
-            <span className="flex-1" />
-            <span className="text-[12px] text-ink-3 tabular-nums">{pct(t.progress_percent)}</span>
+      <SidePanel id="elearning-outline" label="the course outline">
+        <aside aria-label="Course outline" className="flex w-[300px] shrink-0 flex-col overflow-hidden border-r border-line bg-surface">
+          <div className="flex flex-col gap-2 border-b border-line px-4 py-3">
+            <Back onClick={() => el.go('my')} label="My Learning" />
+            <button type="button" className="text-left" onClick={() => el.open.course(id)}>
+              <div className="font-mono text-[11px] font-semibold text-ink-3">{t.course.code}</div>
+              <b className="line-clamp-2 text-[14.5px] text-ink hover:text-primary">{t.course.title}</b>
+            </button>
+            <div className="flex items-center gap-2">
+              <EnrolPill status={e.status} overdue={e.overdue} />
+              <span className="flex-1" />
+              <span className="text-[12px] text-ink-3 tabular-nums">{pct(t.progress_percent)}</span>
+            </div>
+            <Bar value={t.progress_percent} label="Course progress" />
+            <span className="text-[11.5px] text-ink-3">
+              {t.lessons_done} of {t.lessons_total} lessons{e.due_at ? ` · due ${when(e.due_at)}` : ''}
+            </span>
           </div>
-          <Bar value={t.progress_percent} label="Course progress" />
-          <span className="text-[11.5px] text-ink-3">
-            {t.lessons_done} of {t.lessons_total} lessons{e.due_at ? ` · due ${when(e.due_at)}` : ''}
-          </span>
-        </div>
-        <ol className="m-0 flex min-h-0 flex-1 list-none flex-col gap-3 overflow-y-auto p-3 scroll-thin">
-          {t.sections.map((s) => (
-            <li key={s.id}>
-              <div className="px-1 pb-1 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase">{s.title}</div>
-              <ul className="m-0 flex list-none flex-col gap-px p-0">
-                {s.lessons.map((l) => (
-                  <li key={l.id}>
-                    <OutlineRow l={l} on={lesson === l.id} onOpen={() => go(l.id)} />
-                  </li>
-                ))}
-              </ul>
-            </li>
-          ))}
-        </ol>
-      </aside>
+          <ol className="m-0 flex min-h-0 flex-1 list-none flex-col gap-3 overflow-y-auto p-3 scroll-thin">
+            {t.sections.map((s) => (
+              <li key={s.id}>
+                <div className="px-1 pb-1 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase">{s.title}</div>
+                <ul className="m-0 flex list-none flex-col gap-px p-0">
+                  {s.lessons.map((l) => (
+                    <li key={l.id}>
+                      <OutlineRow l={l} on={lesson === l.id} onOpen={() => go(l.id)} />
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ol>
+        </aside>
+      </SidePanel>
       <section className="flex min-w-0 flex-1 flex-col">
         {q.data.offline ? (
           <div className="border-b border-line bg-surface px-5 py-1.5">

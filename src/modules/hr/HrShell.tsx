@@ -7,6 +7,7 @@ import { Spinner } from '../../components/ui';
 import type { ModuleProps } from '../registry';
 import { useHrCounts } from './api';
 import { can, HrRail, hrSections, NATIVE, webPathFor, type HrView } from './Rail';
+import { SidePanel } from '../../components/SidePanel';
 
 /**
  * HR ("People", the HR designs): the rail, and the screen it points at.
@@ -105,7 +106,9 @@ export default function HrShell(_props: ModuleProps) {
   const pick = (v: HrView) => go(`/hr?tab=${v}`);
   return (
     <div className="flex h-full min-h-0">
-      <HrRail view={view} onPick={pick} counts={counts} />
+      <SidePanel id="hr" label="the HR menu">
+        <HrRail view={view} onPick={pick} counts={counts} />
+      </SidePanel>
       <main className="relative flex min-w-0 flex-1 flex-col overflow-y-auto bg-ground px-[22px] py-[18px] scroll-thin">
         <Suspense fallback={<Spinner />}>
           {view === 'overview' ? <Dashboard onPick={pick} onGo={go} /> : null}

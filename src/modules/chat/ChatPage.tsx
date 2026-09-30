@@ -17,6 +17,7 @@ import { Thread } from './Thread';
 import type { Room } from './types';
 import { useWebsiteAccess, useWebsiteInbox, type WebsiteRow } from './website/api';
 import { WebsiteWorkspace } from './website/WebsiteWorkspace';
+import { SidePanel } from '../../components/SidePanel';
 
 /**
  * Chat (UI-08, FR-COM-02/03, §4.15; the "Chat · conversations, thread,
@@ -78,7 +79,9 @@ export default function ChatPage({ tabId }: ModuleProps) {
   return (
     <div className="flex h-full">
       {!mini ? (
-        <Rail rooms={all} loading={rooms.isLoading} error={rooms.error} offline={rooms.data?.offline ? rooms.data.cachedAt : null} retry={() => void rooms.refetch()} selected={room} q={q} setQ={setQ} filter={filter} setFilter={setFilter} websiteAccess={websiteAccess} onNew={() => setStarting(true)} onStarred={() => setStarred(true)} />
+        <SidePanel id="chat" label="the conversations">
+          <Rail rooms={all} loading={rooms.isLoading} error={rooms.error} offline={rooms.data?.offline ? rooms.data.cachedAt : null} retry={() => void rooms.refetch()} selected={room} q={q} setQ={setQ} filter={filter} setFilter={setFilter} websiteAccess={websiteAccess} onNew={() => setStarting(true)} onStarred={() => setStarred(true)} />
+        </SidePanel>
       ) : null}
       <div className="flex min-w-0 flex-1 bg-ground">
         {room ? (

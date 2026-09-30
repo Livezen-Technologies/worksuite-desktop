@@ -224,7 +224,8 @@ export function contentSecurityPolicy(sources: CspSources = {}): string {
   const extra = (list: Array<string | null>) => list.filter(Boolean).join(' ');
   return [
     "default-src 'self'",
-    "script-src 'self'",
+    // WebAssembly may compile (the built-in Office editor, BetterOffice); JavaScript eval and remote scripts may not.
+    "script-src 'self' 'wasm-unsafe-eval'",
     "style-src 'self' 'unsafe-inline'",
     `img-src 'self' data: blob: ${extra([server])}`.trim(),
     "font-src 'self' data:",

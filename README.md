@@ -92,7 +92,9 @@ OS in tabs of their own, drawn by PDFium (WebAssembly) in a worker process per d
 prints, annotates, organises pages, and saves back to Drive (new version or copy, with the server's lock, conflicts,
 undo and recovery) or in place for a local file. PDFs from every other module (chat, tasks, HR, billing, purchasing,
 mail) open here, and Office files open in WorkSuite's editor or the installed Word, Excel or PowerPoint — never in
-the browser; the **Office** tile starts new documents and lists the recent ones. Its engine can be checked on a real system with
+the browser; the **Office** tile starts new documents and lists the recent ones. Office files edit inside the app in
+EuroOffice (the server's Document Server) or, without one, in the built-in
+[BetterOffice](https://github.com/Livezen-Technologies/betteroffice) editor (Apache-2.0; bundled fonts OFL 1.1). Its engine can be checked on a real system with
 `npm run build && node tests/os/pdf/check.mjs` (Linux: under `xvfb-run`).
 
 ## What is deliberately not here yet

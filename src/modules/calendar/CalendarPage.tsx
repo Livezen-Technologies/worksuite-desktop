@@ -15,6 +15,7 @@ import { ImportResult, SeriesDialog, SubscribeDialog, UndoBar, type IcsReport } 
 import { EventDrawer, type Draft } from './EventDrawer';
 import { MonthGrid } from './MonthGrid';
 import { eventKey, WeekGrid } from './WeekGrid';
+import { SidePanel } from '../../components/SidePanel';
 
 const VIEWS: Array<[View, string]> = [
   ['day', 'Day'],
@@ -259,45 +260,47 @@ export default function CalendarPage(_props: ModuleProps) {
 
   return (
     <div className="relative flex h-full bg-surface text-[13px]">
-      <aside aria-label="Calendars" className="flex w-[250px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-line px-3 py-3.5 scroll-thin">
-        <button type="button" onClick={newEvent} title="New event (N)" className="flex h-[38px] shrink-0 items-center justify-center gap-1.5 rounded-[9px] bg-primary font-bold text-white hover:bg-primary-hover">
-          <Icon name="plus" size={16} /> New event
-        </button>
-        <MiniMonth month={mini} today={today} range={view === 'month' ? [] : days} selected={date} onMonth={(n) => setMini(addMonths(mini, n))} onPick={(x) => set(view === 'month' ? 'day' : view, x)} />
-        <div className="flex flex-col gap-[5px]">
-          <b className="text-[11px] tracking-[0.5px] text-ink-3">SHOW</b>
-          {categories.map((c) => (
-            <label key={c.id} className="flex items-center gap-2 text-ink">
-              <input
-                type="checkbox"
-                checked={!hidden.includes(c.id)}
-                onChange={(ev) => {
-                  const next = ev.target.checked ? hidden.filter((h) => h !== c.id) : [...hidden, c.id];
-                  setHidden(next);
-                  try {
-                    localStorage.setItem(HIDDEN_KEY, JSON.stringify(next));
-                  } catch {
-                    // Kept for this session only.
-                  }
-                }}
-                style={{ accentColor: c.color }}
-              />
-              <span className="h-[9px] w-[9px] shrink-0 rounded-[3px]" style={{ background: c.color }} />
-              <span className="min-w-0 truncate" title={c.label}>{c.label}</span>
-            </label>
-          ))}
-        </div>
-        <div className="flex flex-col gap-[5px] border-t border-line pt-2">
-          <b className="text-[11px] tracking-[0.5px] text-ink-3">TODAY</b>
-          {todayList.length === 0 ? <span className="text-[12px] text-ink-3">{todays.isLoading ? 'Loading…' : 'Nothing today'}</span> : null}
-          {todayList.slice(0, 8).map((e) => (
-            <button key={eventKey(e)} type="button" onClick={() => setDrawer({ event: e, draft: null })} className="flex gap-2 rounded-[6px] text-left text-[12px] hover:bg-subtle">
-              <span className="w-[66px] shrink-0 font-mono whitespace-nowrap text-ink-3">{e.all_day ? 'All day' : wallTimeLabel(e.start_at)}</span>
-              <span className={cx('min-w-0 truncate font-semibold', EVENT_TEXT)} style={{ ['--ev' as string]: colourOf(e) }}>{e.title}</span>
-            </button>
-          ))}
-        </div>
-      </aside>
+      <SidePanel id="calendar" label="the calendars">
+        <aside aria-label="Calendars" className="flex w-[250px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-line px-3 py-3.5 scroll-thin">
+          <button type="button" onClick={newEvent} title="New event (N)" className="flex h-[38px] shrink-0 items-center justify-center gap-1.5 rounded-[9px] bg-primary font-bold text-white hover:bg-primary-hover">
+            <Icon name="plus" size={16} /> New event
+          </button>
+          <MiniMonth month={mini} today={today} range={view === 'month' ? [] : days} selected={date} onMonth={(n) => setMini(addMonths(mini, n))} onPick={(x) => set(view === 'month' ? 'day' : view, x)} />
+          <div className="flex flex-col gap-[5px]">
+            <b className="text-[11px] tracking-[0.5px] text-ink-3">SHOW</b>
+            {categories.map((c) => (
+              <label key={c.id} className="flex items-center gap-2 text-ink">
+                <input
+                  type="checkbox"
+                  checked={!hidden.includes(c.id)}
+                  onChange={(ev) => {
+                    const next = ev.target.checked ? hidden.filter((h) => h !== c.id) : [...hidden, c.id];
+                    setHidden(next);
+                    try {
+                      localStorage.setItem(HIDDEN_KEY, JSON.stringify(next));
+                    } catch {
+                      // Kept for this session only.
+                    }
+                  }}
+                  style={{ accentColor: c.color }}
+                />
+                <span className="h-[9px] w-[9px] shrink-0 rounded-[3px]" style={{ background: c.color }} />
+                <span className="min-w-0 truncate" title={c.label}>{c.label}</span>
+              </label>
+            ))}
+          </div>
+          <div className="flex flex-col gap-[5px] border-t border-line pt-2">
+            <b className="text-[11px] tracking-[0.5px] text-ink-3">TODAY</b>
+            {todayList.length === 0 ? <span className="text-[12px] text-ink-3">{todays.isLoading ? 'Loading…' : 'Nothing today'}</span> : null}
+            {todayList.slice(0, 8).map((e) => (
+              <button key={eventKey(e)} type="button" onClick={() => setDrawer({ event: e, draft: null })} className="flex gap-2 rounded-[6px] text-left text-[12px] hover:bg-subtle">
+                <span className="w-[66px] shrink-0 font-mono whitespace-nowrap text-ink-3">{e.all_day ? 'All day' : wallTimeLabel(e.start_at)}</span>
+                <span className={cx('min-w-0 truncate font-semibold', EVENT_TEXT)} style={{ ['--ev' as string]: colourOf(e) }}>{e.title}</span>
+              </button>
+            ))}
+          </div>
+        </aside>
+      </SidePanel>
       <main className="flex min-w-0 flex-1 flex-col">
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-4 py-3">
           <button type="button" title="Jump to today (T)" onClick={() => (set(view, today), setMini(monthStart(today)))} className={btn}>Today</button>

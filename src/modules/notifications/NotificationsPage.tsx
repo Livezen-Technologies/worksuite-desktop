@@ -15,6 +15,7 @@ import { refOf } from '../chat/cards/recordLinks';
 import { RecordCard } from '../chat/cards/RecordCards';
 import { act, appOf, bulk, fetchCentre, inView, K, markAllRead, openNotice, quickActions, sectioned, SECTION_LABEL, sectionOf, snoozedLabel, visibleCategories, visibleNotices, type Notice, type View } from './api';
 import { NotifRow, SnoozeMenu } from './NotifRow';
+import { SidePanel } from '../../components/SidePanel';
 
 const NotificationSettings = lazy(() => import('./Settings'));
 
@@ -121,19 +122,21 @@ function Centre() {
 
   return (
     <div className="flex h-full min-h-0 bg-ground dark:bg-[#0A0F1E]">
-      <nav aria-label="Notification views" className="flex w-[232px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-line bg-surface px-3 py-4 scroll-thin dark:border-[#1E2848] dark:bg-[#0F1629]">
-        <h1 className="m-0 px-2 pb-3 text-[18px] font-extrabold text-ink dark:text-[#E8EBF7]">Notifications</h1>
-        {VIEWS.map((v) => (
-          <RailItem key={v.id} icon={v.icon} label={v.label} count={counts[v.id]} on={view === v.id && !category} onClick={() => pick(v.id)} />
-        ))}
-        {byCat.length ? <div className="px-2 pt-4 pb-1 text-[10.5px] font-extrabold tracking-[.8px] text-ink-3 dark:text-[#6B7496]">APPS</div> : null}
-        {byCat.map(([c, n]) => {
-          const a = appOf(c, labels);
-          return <RailItem key={c} icon={a.icon} tone={a.acc} label={a.short} count={n.unread || undefined} on={category === c} onClick={() => pick('inbox', c)} />;
-        })}
-        <span className="min-h-4 flex-1" />
-        <RailItem icon="settings" label="Settings" onClick={() => navigate('/notifications/settings')} />
-      </nav>
+      <SidePanel id="notifications" label="the notification views">
+        <nav aria-label="Notification views" className="flex w-[232px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-line bg-surface px-3 py-4 scroll-thin dark:border-[#1E2848] dark:bg-[#0F1629]">
+          <h1 className="m-0 px-2 pb-3 text-[18px] font-extrabold text-ink dark:text-[#E8EBF7]">Notifications</h1>
+          {VIEWS.map((v) => (
+            <RailItem key={v.id} icon={v.icon} label={v.label} count={counts[v.id]} on={view === v.id && !category} onClick={() => pick(v.id)} />
+          ))}
+          {byCat.length ? <div className="px-2 pt-4 pb-1 text-[10.5px] font-extrabold tracking-[.8px] text-ink-3 dark:text-[#6B7496]">APPS</div> : null}
+          {byCat.map(([c, n]) => {
+            const a = appOf(c, labels);
+            return <RailItem key={c} icon={a.icon} tone={a.acc} label={a.short} count={n.unread || undefined} on={category === c} onClick={() => pick('inbox', c)} />;
+          })}
+          <span className="min-h-4 flex-1" />
+          <RailItem icon="settings" label="Settings" onClick={() => navigate('/notifications/settings')} />
+        </nav>
+      </SidePanel>
 
       <section className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-2 border-b border-line bg-surface px-5 py-3 dark:border-[#1E2848] dark:bg-[#0F1629]">

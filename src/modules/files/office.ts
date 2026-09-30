@@ -17,8 +17,10 @@ import { extOf, type DriveFile } from './api';
 export interface OfficeRouting {
   /** The server's formats, or null while unknown. */
   types: OfficeTypes | null;
-  /** The server has no Office API: Office files open on the web, as before. */
+  /** The server has no Office API: Office files open in its EuroOffice editor (`/api/office/config`), inside the app. */
   legacy: boolean;
+  /** Still asking the server (false once it answered or failed). */
+  pending?: boolean;
 }
 
 export function useOfficeRouting(): OfficeRouting {
@@ -30,7 +32,7 @@ export function useOfficeRouting(): OfficeRouting {
     retry: false,
   });
   const legacy = q.error instanceof ApiError && q.error.status === 404;
-  return { types: q.data ?? null, legacy };
+  return { types: q.data ?? null, legacy, pending: q.isPending };
 }
 
 /**
@@ -41,6 +43,11 @@ export function useOfficeRouting(): OfficeRouting {
 export async function openOfficeTab(f: Pick<DriveFile, 'id' | 'name'>, mode: OfficeMode | null = null): Promise<void> {
   const elsewhere = await call('office:focusFile', { fileId: f.id }).catch(() => false);
   if (!elsewhere) navigate(officeRoute(f.id, { mode, name: f.name }), app.get().organizationId);
+}
+
+/** Opens an Office file in WorkSuite's built-in editor (BetterOffice): no Document Server, no installed app. */
+export function openBuiltinTab(f: Pick<DriveFile, 'id' | 'name'>): void {
+  navigate(officeRoute(f.id, { name: f.name, editor: 'builtin' }), app.get().organizationId);
 }
 
 /** What opening does for this file, by the server's formats: the Office tab, the code editor, or the web's preview. */

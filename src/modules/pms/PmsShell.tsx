@@ -11,6 +11,7 @@ import { day, errorText, K, pGet, pGetMeta, useOnline, type Options, type Proper
 import { PmsContext, SHORTCUTS, type Pms } from './parts';
 import { routeOf, screenOf, type PmsView, type Screen } from './routes';
 import { ShortcutContext, type Shortcut } from './shortcuts';
+import { SidePanel } from '../../components/SidePanel';
 
 /**
  * Hotel PMS, native in WorkSuite Desktop: the front desk, the cashier and the
@@ -254,93 +255,95 @@ export default function PmsShell({ active }: ModuleProps) {
     <PmsContext.Provider value={pms}>
       <ShortcutContext.Provider value={handlers}>
         <div className="flex h-full min-h-0">
-          <nav aria-label="Hotel PMS" className="flex w-[228px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
-            <div className="flex flex-col gap-2 px-2.5 pt-3.5 pb-1">
-              <div className="flex items-center gap-2 px-1">
-                <span className="grid size-8 place-items-center rounded-[10px] bg-selection text-primary">
-                  <Icon name="bed" size={17} />
-                </span>
-                <div className="min-w-0">
-                  <b className="block text-[13.5px]">Hotel PMS</b>
-                  <span className="block truncate text-[11px] text-ink-3">{property.name}</span>
+          <SidePanel id="pms" label="the Hotel PMS menu">
+            <nav aria-label="Hotel PMS" className="flex w-[228px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
+              <div className="flex flex-col gap-2 px-2.5 pt-3.5 pb-1">
+                <div className="flex items-center gap-2 px-1">
+                  <span className="grid size-8 place-items-center rounded-[10px] bg-selection text-primary">
+                    <Icon name="bed" size={17} />
+                  </span>
+                  <div className="min-w-0">
+                    <b className="block text-[13.5px]">Hotel PMS</b>
+                    <span className="block truncate text-[11px] text-ink-3">{property.name}</span>
+                  </div>
+                </div>
+                {list.length > 1 ? (
+                  <Select
+                    aria-label="Property"
+                    value={String(property.id)}
+                    onChange={(e) => choose(Number(e.target.value))}
+                    options={list.map((p) => ({ value: String(p.id), label: `${p.name}${p.status !== 'active' ? ` (${p.status_label.toLowerCase()})` : ''}` }))}
+                    className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink"
+                  />
+                ) : null}
+                <div className="flex items-center gap-1.5 rounded-[8px] bg-subtle px-2 py-1 text-[11.5px] text-ink-2" title="Today for the desk moves on only with the night audit">
+                  <Icon name="calendar" size={13} className="text-ink-3" />
+                  <span className="min-w-0 flex-1 truncate">
+                    Business date <b className="text-ink">{bd?.business_date ? day(bd.business_date, true) : '—'}</b>
+                  </span>
+                  {bd?.status && bd.status !== 'open' ? <span className="font-semibold text-warning">{bd.status_label}</span> : null}
+                </div>
+                {may('pms.reservation.view') ? (
+                  <form
+                    role="search"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const q = search.current?.value.trim() ?? '';
+                      if (q.length >= 2) pms.go('reservations', { q });
+                    }}
+                  >
+                    <input
+                      ref={search}
+                      type="search"
+                      aria-label="Search reservations"
+                      placeholder="Guest, confirmation, room, phone"
+                      className="h-8 w-full rounded-[8px] border border-line bg-surface px-2.5 text-[12px] text-ink outline-none placeholder:text-ink-3 focus:border-primary"
+                    />
+                  </form>
+                ) : null}
+              </div>
+              <div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto px-2.5 pb-3 scroll-thin">
+                {groups.map((grp) => {
+                  const items = (Object.keys(VIEWS) as PmsView[]).filter((v) => VIEWS[v].group === grp && mayOpen(v, opts.permissions));
+                  if (items.length === 0) return null;
+                  return (
+                    <div key={grp} className="flex flex-col gap-px">
+                      {HEADINGS[grp] ? <div className="mt-3 mb-0.5 px-2 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">{HEADINGS[grp]}</div> : null}
+                      {items.map((v) => {
+                        const on = current === v;
+                        return (
+                          <button
+                            key={v}
+                            type="button"
+                            aria-current={on ? 'page' : undefined}
+                            onClick={() => pms.go(v)}
+                            className={cx('relative flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
+                          >
+                            <span className={cx('absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-[3px]', on ? 'bg-primary' : 'bg-transparent')} />
+                            <Icon name={VIEWS[v].icon} size={16} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />
+                            <span className="min-w-0 flex-1 truncate">{VIEWS[v].label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+                <div className="mt-3 flex flex-col gap-px border-t border-line pt-2">
+                  <button type="button" onClick={() => setHelp(true)} className="flex h-[30px] items-center gap-[9px] rounded-[8px] px-2.5 text-left font-medium text-ink-2 hover:bg-subtle">
+                    <Icon name="keyboard" size={16} className="text-ink-3" /> Keyboard shortcuts
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void call('app:openInBrowser', { path: '/pms' }).catch((e) => toast('error', errorText(e)))}
+                    className="flex h-[30px] items-center gap-[9px] rounded-[8px] px-2.5 text-left font-medium text-ink-2 hover:bg-subtle"
+                    title="Rates, rooms, packages, taxes, reports, settings and the set-up wizard"
+                  >
+                    <Icon name="external" size={16} className="text-ink-3" /> Back office on the web
+                  </button>
                 </div>
               </div>
-              {list.length > 1 ? (
-                <Select
-                  aria-label="Property"
-                  value={String(property.id)}
-                  onChange={(e) => choose(Number(e.target.value))}
-                  options={list.map((p) => ({ value: String(p.id), label: `${p.name}${p.status !== 'active' ? ` (${p.status_label.toLowerCase()})` : ''}` }))}
-                  className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink"
-                />
-              ) : null}
-              <div className="flex items-center gap-1.5 rounded-[8px] bg-subtle px-2 py-1 text-[11.5px] text-ink-2" title="Today for the desk moves on only with the night audit">
-                <Icon name="calendar" size={13} className="text-ink-3" />
-                <span className="min-w-0 flex-1 truncate">
-                  Business date <b className="text-ink">{bd?.business_date ? day(bd.business_date, true) : '—'}</b>
-                </span>
-                {bd?.status && bd.status !== 'open' ? <span className="font-semibold text-warning">{bd.status_label}</span> : null}
-              </div>
-              {may('pms.reservation.view') ? (
-                <form
-                  role="search"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const q = search.current?.value.trim() ?? '';
-                    if (q.length >= 2) pms.go('reservations', { q });
-                  }}
-                >
-                  <input
-                    ref={search}
-                    type="search"
-                    aria-label="Search reservations"
-                    placeholder="Guest, confirmation, room, phone"
-                    className="h-8 w-full rounded-[8px] border border-line bg-surface px-2.5 text-[12px] text-ink outline-none placeholder:text-ink-3 focus:border-primary"
-                  />
-                </form>
-              ) : null}
-            </div>
-            <div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto px-2.5 pb-3 scroll-thin">
-              {groups.map((grp) => {
-                const items = (Object.keys(VIEWS) as PmsView[]).filter((v) => VIEWS[v].group === grp && mayOpen(v, opts.permissions));
-                if (items.length === 0) return null;
-                return (
-                  <div key={grp} className="flex flex-col gap-px">
-                    {HEADINGS[grp] ? <div className="mt-3 mb-0.5 px-2 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">{HEADINGS[grp]}</div> : null}
-                    {items.map((v) => {
-                      const on = current === v;
-                      return (
-                        <button
-                          key={v}
-                          type="button"
-                          aria-current={on ? 'page' : undefined}
-                          onClick={() => pms.go(v)}
-                          className={cx('relative flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
-                        >
-                          <span className={cx('absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-[3px]', on ? 'bg-primary' : 'bg-transparent')} />
-                          <Icon name={VIEWS[v].icon} size={16} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />
-                          <span className="min-w-0 flex-1 truncate">{VIEWS[v].label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                );
-              })}
-              <div className="mt-3 flex flex-col gap-px border-t border-line pt-2">
-                <button type="button" onClick={() => setHelp(true)} className="flex h-[30px] items-center gap-[9px] rounded-[8px] px-2.5 text-left font-medium text-ink-2 hover:bg-subtle">
-                  <Icon name="keyboard" size={16} className="text-ink-3" /> Keyboard shortcuts
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void call('app:openInBrowser', { path: '/pms' }).catch((e) => toast('error', errorText(e)))}
-                  className="flex h-[30px] items-center gap-[9px] rounded-[8px] px-2.5 text-left font-medium text-ink-2 hover:bg-subtle"
-                  title="Rates, rooms, packages, taxes, reports, settings and the set-up wizard"
-                >
-                  <Icon name="external" size={16} className="text-ink-3" /> Back office on the web
-                </button>
-              </div>
-            </div>
-          </nav>
+            </nav>
+          </SidePanel>
           <main className="min-w-0 flex-1 overflow-y-auto bg-ground scroll-thin" aria-label={`Hotel PMS · ${title}`}>
             {!online ? (
               <div role="status" className="flex items-center gap-2 border-b border-line bg-warning-bg px-6 py-1.5 text-[12.5px] font-medium text-warning">

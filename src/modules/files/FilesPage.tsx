@@ -32,6 +32,7 @@ import { officeOpenWay, openOfficeTab, useOfficeRouting } from './office';
 import { TemplateDialog } from './Templates';
 import { createDocument } from '../office/api';
 import { LocalCopiesTray, externalApps, openInApp } from '../office/local';
+import { SidePanel } from '../../components/SidePanel';
 
 type Dialog =
   | { kind: 'name'; title: string; initial: string; action: string; save: (name: string) => Promise<void> }
@@ -334,9 +335,9 @@ export default function FilesPage(_props: ModuleProps) {
       if (item.type === 'file') s.set('file', String(item.f.id));
       go(`/files?${s}`);
     },
-    // A server without the Office API: the installed Word, Excel or PowerPoint, on a
-    // tracked copy that is saved back to the Drive — never the browser.
-    office: (f, mode) => (officeRouting.legacy ? void openInApp({ id: f.id, name: f.name, folderId: f.folder_id, version: f.version ?? 0 }, 'default') : void openOfficeTab(f, mode ?? null)),
+    // Office files open in WorkSuite's editor tab: the full Office session, or on a server with only the
+    // EuroOffice editor, that editor (OfficePage decides) — never the browser. "Open in" still offers Word & co.
+    office: (f, mode) => void openOfficeTab(f, mode ?? null),
     openIn: (f, appId) => void openInApp({ id: f.id, name: f.name, folderId: f.folder_id, version: f.version ?? 0 }, appId),
     officeRouting,
     editText: (f) => setEditor({ kind: 'code', file: f }),
@@ -441,19 +442,21 @@ export default function FilesPage(_props: ModuleProps) {
   return (
     <DriveCtx.Provider value={d}>
       <div className="flex h-full bg-ground text-[13px]">
-        <Rail
-          place={place}
-          counts={treeQ.data?.counts}
-          tree={tree}
-          used={storage.data?.used ?? treeQ.data?.counts.used ?? 0}
-          quota={storage.data && !storage.data.unlimited ? storage.data.quota : null}
-          ancestors={ancestors}
-          onPlace={(p) => onPlace(p)}
-          newItems={newItems}
-          onUpload={d.upload}
-          onDrop={(e, folder) => d.drop(e, folder)}
-          canPartners={perms.includes('files.permissions.manage')}
-        />
+        <SidePanel id="files" label="the Drive menu">
+          <Rail
+            place={place}
+            counts={treeQ.data?.counts}
+            tree={tree}
+            used={storage.data?.used ?? treeQ.data?.counts.used ?? 0}
+            quota={storage.data && !storage.data.unlimited ? storage.data.quota : null}
+            ancestors={ancestors}
+            onPlace={(p) => onPlace(p)}
+            newItems={newItems}
+            onUpload={d.upload}
+            onDrop={(e, folder) => d.drop(e, folder)}
+            canPartners={perms.includes('files.permissions.manage')}
+          />
+        </SidePanel>
         {view === 'home' ? <Home onPlace={onPlace} now={now} /> : null}
         {listView ? <Explorer key={`${view}:${place.folder}:${query.get('q') ?? ''}`} place={place} active={active && !dialog && !preview && !editor} onPlace={(p) => onPlace(p)} ask={detailsAsk} initialQ={query.get('q') ?? ''} /> : null}
         {view === 'shared' ? <Shared onPlace={(p) => onPlace(p)} /> : null}

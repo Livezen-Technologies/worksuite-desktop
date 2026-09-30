@@ -227,20 +227,22 @@ export function routeParam(s: string): string {
 }
 
 /** `/office/42?mode=edit&name=Proposal.docx` — one tab per document (OO-DSK-004). */
-export function officeRoute(fileId: number, opts: { mode?: OfficeMode | null; name?: string | null } = {}): string {
+export function officeRoute(fileId: number, opts: { mode?: OfficeMode | null; name?: string | null; editor?: 'builtin' | null } = {}): string {
   const q: string[] = [];
   if (opts.mode) q.push(`mode=${opts.mode.toLowerCase()}`);
+  // WorkSuite's built-in editor (BetterOffice) rather than the Document Server's.
+  if (opts.editor) q.push(`editor=${opts.editor}`);
   if (opts.name) q.push(`name=${routeParam(opts.name.slice(0, 120))}`);
   return `/office/${fileId}${q.length ? `?${q.join('&')}` : ''}`;
 }
 
-export function parseOfficeRoute(route: string): { fileId: number; mode: OfficeMode | null; name: string | null } | null {
+export function parseOfficeRoute(route: string): { fileId: number; mode: OfficeMode | null; name: string | null; builtin: boolean } | null {
   const [path, query] = route.split('?');
   const m = /^\/office\/(\d{1,12})\/?$/.exec(path ?? '');
   if (!m) return null;
   const q = new URLSearchParams(query ?? '');
   const mode = (q.get('mode') ?? '').toUpperCase();
-  return { fileId: Number(m[1]), mode: (OFFICE_MODES as readonly string[]).includes(mode) ? (mode as OfficeMode) : null, name: q.get('name') };
+  return { fileId: Number(m[1]), mode: (OFFICE_MODES as readonly string[]).includes(mode) ? (mode as OfficeMode) : null, name: q.get('name'), builtin: q.get('editor') === 'builtin' };
 }
 
 // ── the Document Server the editor is loaded from ────────────────────────

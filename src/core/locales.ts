@@ -18,6 +18,7 @@ const en = {
   'nav.notifications': 'Notifications',
   'nav.diagnostics': 'Diagnostics',
   'shell.search': 'Search people, records, files, mail…',
+  'shell.apps': 'All apps',
   'shell.online': 'Online',
   'shell.offline': 'Offline',
   'shell.offlineWaiting': 'Offline · {n} waiting',

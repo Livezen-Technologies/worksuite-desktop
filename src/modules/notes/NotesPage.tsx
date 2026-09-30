@@ -9,6 +9,7 @@ import { VIEWS, type Notebook, type NoteCard, type Section, type Stats, type Vie
 import { NewNote } from './Dialogs';
 import { NoteEditor } from './Editor';
 import { Rail, type Place } from './Rail';
+import { SidePanel } from '../../components/SidePanel';
 
 function placeFrom(q: URLSearchParams): Place {
   const s = q.get('section');
@@ -94,7 +95,9 @@ export default function NotesPage(_props: ModuleProps) {
 
   return (
     <div className="flex h-full bg-surface text-[13px]">
-      <Rail place={place} counts={counts} notebooks={nbs} sections={secs} onPlace={setPlace} onNew={() => setCreating(true)} />
+      <SidePanel id="notes" label="the notebooks">
+        <Rail place={place} counts={counts} notebooks={nbs} sections={secs} onPlace={setPlace} onNew={() => setCreating(true)} />
+      </SidePanel>
       <section aria-label="Notes" className="flex w-[300px] shrink-0 flex-col border-r border-line">
         <div className="flex shrink-0 flex-col gap-2 border-b border-line p-3">
           <div className="flex items-center gap-2">

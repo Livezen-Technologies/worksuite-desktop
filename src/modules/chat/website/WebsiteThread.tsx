@@ -13,6 +13,7 @@ import { Avatar, Button, Chip, Empty, ErrorNote, Modal, Spinner, cx } from '../.
 import { Composer, type ComposerHandle } from '../Composer';
 import { PRIORITIES, useAgents, useCanned, useWebsiteConversation, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
 import { Select } from '../../../components/Select';
+import { SidePanel } from '../../../components/SidePanel';
 
 const control = 'h-[30px] rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink disabled:opacity-60';
 
@@ -283,63 +284,65 @@ function VisitorPanel({ v, data, online, onDone }: { v: WebsiteVisitor | null; d
   };
 
   return (
-    <aside aria-label="Visitor details" className="flex w-[292px] shrink-0 flex-col gap-2.5 overflow-y-auto border-l border-line bg-surface p-3.5 text-[12.5px] scroll-thin">
-      <b className="flex items-center gap-2 text-[14px] text-ink">Visitor details {v?.is_blocked ? <Chip tone="danger">Blocked</Chip> : null}</b>
-      {rows.filter(([, val]) => val).map(([k, val]) => (
-        <div key={k} className="flex gap-2">
-          <span className="w-24 shrink-0 text-ink-3">{k}</span>
-          <span className="min-w-0 break-words font-semibold text-ink selectable">{val}</span>
-        </div>
-      ))}
-      {journey.length ? (
-        <div className="flex flex-col gap-[5px] border-t border-line pt-2">
-          <b className="text-ink">Pages this visit</b>
-          <span className="break-words text-ink-2">
-            {journey.map((p) => (p.url ? pathOf(p.url) : (p.title ?? 'page'))).join(' → ')}
-            {online ? ' (reading now)' : ''}
-          </span>
-        </div>
-      ) : null}
-      <div className="flex flex-col gap-[5px] border-t border-line pt-2">
-        <b className="text-ink">Previous chats · {history.length}</b>
-        {history.slice(0, 5).map((h) => (
-          <span key={h.id} className="text-ink-2">
-            {h.started_at ? dateLabel(h.started_at) : 'Earlier'} · {h.status}{h.rating ? ` · rated ${h.rating}/5` : ''}{h.other_device ? ' · another device' : ''}
-          </span>
+    <SidePanel id="website-visitor" label="the visitor details" side="right">
+      <aside aria-label="Visitor details" className="flex w-[292px] shrink-0 flex-col gap-2.5 overflow-y-auto border-l border-line bg-surface p-3.5 text-[12.5px] scroll-thin">
+        <b className="flex items-center gap-2 text-[14px] text-ink">Visitor details {v?.is_blocked ? <Chip tone="danger">Blocked</Chip> : null}</b>
+        {rows.filter(([, val]) => val).map(([k, val]) => (
+          <div key={k} className="flex gap-2">
+            <span className="w-24 shrink-0 text-ink-3">{k}</span>
+            <span className="min-w-0 break-words font-semibold text-ink selectable">{val}</span>
+          </div>
         ))}
-      </div>
-      <div className="mt-auto flex flex-col gap-1.5 pt-2">
-        {support ? <button type="button" disabled={busy} onClick={() => void ticket()} className="h-8 rounded-[8px] border border-line bg-surface font-semibold text-ink hover:bg-subtle disabled:opacity-60">Raise a support ticket from this chat</button> : null}
-        {data.can?.manage && v && !v.is_blocked ? (
-          <button type="button" onClick={() => setBlocking(true)} className="h-8 rounded-[8px] border border-[#F1B8A8] bg-surface font-bold text-danger hover:bg-danger-bg">Block this visitor</button>
+        {journey.length ? (
+          <div className="flex flex-col gap-[5px] border-t border-line pt-2">
+            <b className="text-ink">Pages this visit</b>
+            <span className="break-words text-ink-2">
+              {journey.map((p) => (p.url ? pathOf(p.url) : (p.title ?? 'page'))).join(' → ')}
+              {online ? ' (reading now)' : ''}
+            </span>
+          </div>
         ) : null}
-      </div>
-      {blocking ? (
-        <Modal
-          title="Block this visitor?"
-          onClose={() => setBlocking(false)}
-          width={420}
-          footer={
-            <>
-              <Button onClick={() => setBlocking(false)}>Cancel</Button>
-              <Button
-                variant="danger"
-                onClick={() => {
-                  setBlocking(false);
-                  void websiteAction(data.conversation.id, 'block').then(
-                    () => (toast('success', 'Visitor blocked.'), onDone()),
-                    (e) => toast('error', errorMessage(e)),
-                  );
-                }}
-              >
-                Block
-              </Button>
-            </>
-          }
-        >
-          <p className="text-[13px] text-ink-2">{v?.name || v?.label || 'This visitor'} will no longer be able to start chats on your websites. You can unblock them on the web.</p>
-        </Modal>
-      ) : null}
-    </aside>
+        <div className="flex flex-col gap-[5px] border-t border-line pt-2">
+          <b className="text-ink">Previous chats · {history.length}</b>
+          {history.slice(0, 5).map((h) => (
+            <span key={h.id} className="text-ink-2">
+              {h.started_at ? dateLabel(h.started_at) : 'Earlier'} · {h.status}{h.rating ? ` · rated ${h.rating}/5` : ''}{h.other_device ? ' · another device' : ''}
+            </span>
+          ))}
+        </div>
+        <div className="mt-auto flex flex-col gap-1.5 pt-2">
+          {support ? <button type="button" disabled={busy} onClick={() => void ticket()} className="h-8 rounded-[8px] border border-line bg-surface font-semibold text-ink hover:bg-subtle disabled:opacity-60">Raise a support ticket from this chat</button> : null}
+          {data.can?.manage && v && !v.is_blocked ? (
+            <button type="button" onClick={() => setBlocking(true)} className="h-8 rounded-[8px] border border-[#F1B8A8] bg-surface font-bold text-danger hover:bg-danger-bg">Block this visitor</button>
+          ) : null}
+        </div>
+        {blocking ? (
+          <Modal
+            title="Block this visitor?"
+            onClose={() => setBlocking(false)}
+            width={420}
+            footer={
+              <>
+                <Button onClick={() => setBlocking(false)}>Cancel</Button>
+                <Button
+                  variant="danger"
+                  onClick={() => {
+                    setBlocking(false);
+                    void websiteAction(data.conversation.id, 'block').then(
+                      () => (toast('success', 'Visitor blocked.'), onDone()),
+                      (e) => toast('error', errorMessage(e)),
+                    );
+                  }}
+                >
+                  Block
+                </Button>
+              </>
+            }
+          >
+            <p className="text-[13px] text-ink-2">{v?.name || v?.label || 'This visitor'} will no longer be able to start chats on your websites. You can unblock them on the web.</p>
+          </Modal>
+        ) : null}
+      </aside>
+    </SidePanel>
   );
 }
