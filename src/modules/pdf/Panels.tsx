@@ -12,21 +12,32 @@ export type RightPanel = 'properties' | 'comments' | 'versions' | 'activity';
 
 function Tabs<T extends string>({ label, value, items, onChange }: { label: string; value: T; items: Array<{ id: T; label: string; icon: string }>; onChange: (v: T) => void }) {
   return (
-    <div role="tablist" aria-label={label} className="flex shrink-0 gap-0.5 border-b border-line px-1.5 pt-1.5">
-      {items.map((t) => (
-        <button
-          key={t.id}
-          type="button"
-          role="tab"
-          aria-selected={value === t.id}
-          title={t.label}
-          onClick={() => onChange(t.id)}
-          className={cx('flex h-8 flex-1 items-center justify-center gap-1 rounded-t-[7px] px-1.5 text-[12px] font-semibold', value === t.id ? 'bg-selection text-primary' : 'text-ink-3 hover:bg-subtle hover:text-ink')}
-        >
-          <Icon name={t.icon} size={14} />
-          <span className="truncate">{t.label}</span>
-        </button>
-      ))}
+    // A segmented control that fits the panel's width: the chosen tab shows its name, the others their icon
+    // (named by their tooltip and accessible name).
+    <div className="shrink-0 border-b border-line px-2 py-2">
+      <div role="tablist" aria-label={label} className="flex gap-0.5 rounded-[9px] bg-subtle p-0.5">
+        {items.map((t) => {
+          const on = value === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={on}
+              aria-label={t.label}
+              title={t.label}
+              onClick={() => onChange(t.id)}
+              className={cx(
+                'flex h-7 min-w-0 items-center justify-center gap-1.5 rounded-[7px] text-[12px] font-semibold transition-colors',
+                on ? 'flex-[2.2] bg-surface px-2 text-ink shadow-sm' : 'flex-1 px-1 text-ink-3 hover:bg-surface/60 hover:text-ink',
+              )}
+            >
+              <Icon name={t.icon} size={14} className={on ? 'shrink-0 text-primary' : 'shrink-0'} />
+              {on ? <span className="truncate">{t.label}</span> : null}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -167,10 +178,17 @@ export function SearchPanel({ state, pageCount, advanced, inputRef, onQuery, onO
   onPick: (i: number) => void;
 }) {
   const o = state.options;
-  const toggle = (k: keyof PdfSearchOptions, label: string) => (
-    <label className="flex items-center gap-1.5 text-[12px] text-ink-2">
-      <input type="checkbox" checked={o[k]} onChange={(e) => onOptions({ ...o, [k]: e.target.checked })} /> {label}
-    </label>
+  // Options as toggle chips that wrap to the panel's width.
+  const toggle = (k: keyof PdfSearchOptions, label: string, title?: string) => (
+    <button
+      type="button"
+      aria-pressed={o[k]}
+      title={title ?? label}
+      onClick={() => onOptions({ ...o, [k]: !o[k] })}
+      className={cx('h-6 rounded-full border px-2.5 text-[11.5px] font-semibold', o[k] ? 'border-primary bg-selection text-primary' : 'border-line text-ink-2 hover:bg-subtle')}
+    >
+      {label}
+    </button>
   );
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -186,10 +204,10 @@ export function SearchPanel({ state, pageCount, advanced, inputRef, onQuery, onO
           <Icon name="search" size={14} className="text-ink-3" />
           <input ref={inputRef} aria-label="Find in this PDF" placeholder="Find in this PDF" value={state.query} onChange={(e) => onQuery(e.target.value)} className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none" />
         </div>
-        <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+        <div className="flex flex-wrap gap-1.5" aria-label="Search options">
           {toggle('matchCase', 'Match case')}
           {toggle('wholeWord', 'Whole word')}
-          {toggle('regex', 'Regular expression')}
+          {toggle('regex', 'Regex', 'Regular expression')}
           {advanced ? toggle('comments', 'Comments') : null}
           {advanced ? toggle('bookmarks', 'Bookmarks') : null}
         </div>
