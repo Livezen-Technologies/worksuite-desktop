@@ -68,7 +68,10 @@ export function AskPanel({
   useEffect(() => () => running.current?.cancel(), []);
 
   useEffect(() => setUseTab(true), [tabRef]);
-  useEffect(() => end.current?.scrollIntoView?.({ block: 'end' }), [entries, busy]);
+  // In braces: Chromium's scrollIntoView returns a Promise, and an effect's return value is its cleanup.
+  useEffect(() => {
+    void end.current?.scrollIntoView?.({ block: 'end' });
+  }, [entries, busy]);
 
   const off = local ? null : availability.data && !availability.data.enabled ? availability.data.reason ?? 'The assistant is not switched on for you.' : null;
   const refs = [...(useTab && tabRef ? [tabRef] : []), ...files.map((f) => f.ref)];

@@ -5,6 +5,27 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-30 — 0.2.66: the AI dock no longer takes the window down
+
+"This screen stopped working — destroy_ is not a function" (or, before
+0.2.64, an empty window) on closing the AI Assistant, on opening Chat while
+it was open, and on Lock now.
+
+**Fixed**
+
+- The cause: this version of Chromium (152) returns a Promise from
+  `scrollIntoView`, `scrollTo` and `scrollBy`. The AI dock scrolled to its
+  last answer in an effect written so that it returned that Promise, and
+  React calls whatever an effect returns when it closes — so anything that
+  closed the dock (closing it, Chat taking its place, the lock screen
+  covering everything) failed. The effect no longer returns anything; the
+  lock screen's and a new order's focus effects are written the same way.
+- A lint rule now refuses an effect that returns a scroll, focus or play
+  call, or is `async`, and a test runs the dock with the DOM answering as
+  Chromium does.
+
+---
+
 ## 2026-09-30 — 0.2.65: Local AI, the lock PIN, Drive covers and Office files reach the app
 
 Twenty-two things the app could do were never connected to its windows, so
