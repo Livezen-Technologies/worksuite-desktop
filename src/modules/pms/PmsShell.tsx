@@ -10,6 +10,7 @@ import type { ModuleProps } from '../registry';
 import { day, errorText, K, pGet, pGetMeta, useOnline, type Options, type Property } from './api';
 import { PmsContext, SHORTCUTS, type Pms } from './parts';
 import { routeOf, screenOf, type PmsView, type Screen } from './routes';
+import { syncKeyEncoder } from './locks';
 import { ShortcutContext, type Shortcut } from './shortcuts';
 import { SidePanel } from '../../components/SidePanel';
 
@@ -159,6 +160,12 @@ export default function PmsShell({ active }: ModuleProps) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [active, opts, goRoute, handlers]);
+
+  // The desk's key encoder follows the property's on-site lock server on this computer (locks.ts).
+  const propertyId = property?.id ?? 0;
+  useEffect(() => {
+    if (propertyId > 0) void syncKeyEncoder(propertyId);
+  }, [propertyId]);
 
   if (properties.isLoading || (property && options.isLoading)) return <Spinner label="Opening Hotel PMS…" />;
   if (properties.error) {

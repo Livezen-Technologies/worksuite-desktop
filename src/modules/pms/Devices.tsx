@@ -6,6 +6,7 @@ import { Field, input, Section } from '../garage/parts';
 import { PageHead } from '../hr/parts';
 import { errorText } from './api';
 import { DEVICE_KINDS, DEVICE_LABEL, device, onDevicesChanged } from './devices';
+import { LockServerSection } from './LockServer';
 import { deskName, keepDeskName } from './money';
 import { usePms } from './parts';
 import { esc, printPage } from './print';
@@ -53,9 +54,10 @@ export default function Devices() {
           })}
         </ul>
         <p className="mt-3 mb-0 text-[12px] text-ink-3">
-          No vendor driver ships with WorkSuite Desktop. Keys follow the property’s door-lock system on the server (or are handed over by hand); card payments from a standalone terminal are recorded with the slip’s reference and the last four digits.
+          The key encoder is the property’s on-site lock server (Salto, Vingcard, dormakaba), set up below; TTLock is done by WorkSuite. No other vendor driver ships with WorkSuite Desktop: card payments from a standalone terminal are recorded with the slip’s reference and the last four digits.
         </p>
       </Section>
+      <LockServerSection />
       <Section title="This desk">
         <form
           className="flex items-end gap-2"

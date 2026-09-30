@@ -6,15 +6,17 @@ import { toast } from '../../core/toasts';
 import { Field, input, Section } from '../garage/parts';
 import { PageHead } from '../hr/parts';
 import AssignRoom from './Assign';
-import { codeOf, day, errorText, K, money, newKey, pGet, pPost, type CheckInScreen, type KeyResult } from './api';
+import { codeOf, day, errorText, K, money, newKey, pGet, pPost, type CheckInScreen } from './api';
 import { device, type IdScan } from './devices';
+import { finishKeys } from './Keys';
+import type { KeyAnswer } from './locks';
 import { NoAccess, occupants, Refusal, usePms, VipPill } from './parts';
 import { printCards } from './print';
 import RegistrationCardDialog from './RegistrationCard';
 import { useShortcut } from './shortcuts';
 
 interface Done {
-  stays: Array<{ stay_id: number; reservation_room_id: number; room_id: number; room_number: string; folio_id: number | null; key: KeyResult }>;
+  stays: Array<{ stay_id: number; reservation_room_id: number; room_id: number; room_number: string; folio_id: number | null; key: KeyAnswer }>;
   reservation_status: string;
 }
 
@@ -78,9 +80,8 @@ export default function CheckIn({ id }: { id: number }) {
       toast('success', r.message);
       void qc.invalidateQueries({ queryKey: K.live });
       void qc.invalidateQueries({ queryKey: K.reservation(id) });
-      // This desk's key encoder writes the cards the lock system issued (none by default).
-      const enc = device('key_encoder');
-      if (enc.available()) for (const st of r.data.stays) void enc.encode({ stayId: st.stay_id, roomNumber: st.room_number, validUntil: s.rooms.find((x) => x.reservation_room_id === st.reservation_room_id)?.departure_date ?? '', count: keys });
+      // The keys the property's lock system answered: an on-premise vendor's cards are encoded here, room by room.
+      void finishKeys(pms.property.id, r.data.stays.map((st) => ({ room: st.room_number, key: st.key })));
     } catch (e) {
       const code = codeOf(e);
       setRefusal({ text: errorText(e, 'The guest was not checked in.'), code });
