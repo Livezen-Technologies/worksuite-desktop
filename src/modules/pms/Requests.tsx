@@ -1,10 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Button, ErrorNote, Spinner, cx } from '../../components/ui';
+import { Button, ErrorNote, Modal, Spinner, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
 import { Ask, Section } from '../garage/parts';
 import { PageHead } from '../hr/parts';
 import { codeOf, errorText, K, newKey, pGet, pGetMeta, pPost, stamp, type GuestRequest, type Rack } from './api';
+import { PersonPick } from './ops';
 import { NoAccess, Refusal, usePms, VipPill } from './parts';
 
 type Req = GuestRequest & { version: number; options?: Array<{ action: string; to: string; label: string; needs: string[] }> };
@@ -14,7 +15,10 @@ type Req = GuestRequest & { version: number; options?: Array<{ action: string; t
  * — extra towels, a wake-up call, a repair — for a room; the server routes it
  * to its department with its response and completion times, and a cleaning
  * or a repair becomes the housekeeping task or maintenance issue it needs.
- * The open ones are listed with the moves the server allows this person.
+ * The open ones are listed with the moves the server allows this person;
+ * a request is given to a person (the company's directory — the server takes
+ * only someone who handles guest requests at this property) or passed to
+ * someone else while it is open.
  */
 export default function Requests({ open }: { open: number | null }) {
   const pms = usePms();
@@ -27,6 +31,8 @@ export default function Requests({ open }: { open: number | null }) {
   const rack = useQuery({ queryKey: K.rack(pid), queryFn: ({ signal }) => pGetMeta<Rack>(`/properties/${pid}/rack`, undefined, signal), enabled: manages });
   const [taking, setTaking] = useState(false);
   const [acting, setActing] = useState<{ r: Req; action: string; label: string } | null>(null);
+  const [giving, setGiving] = useState<Req | null>(null);
+  const [person, setPerson] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [key, setKey] = useState(() => newKey('request'));
@@ -36,17 +42,19 @@ export default function Requests({ open }: { open: number | null }) {
     void qc.invalidateQueries({ queryKey: ['pms', 'live', 'requests', pid] });
     if (open) void qc.invalidateQueries({ queryKey: K.request(open) });
   };
-  const act = async (r: Req, action: string, body: Record<string, string> = {}) => {
+  const act = async (r: Req, action: string, body: Record<string, string | number> = {}) => {
     setBusy(true);
     setError(null);
     try {
       const res = await pPost(`/guest-requests/${r.id}/${action}`, { version: r.version, ...body });
       toast('success', res.message);
       setActing(null);
+      setGiving(null);
       reload();
     } catch (e) {
       setError(codeOf(e) === 'conflict' || codeOf(e) === 'version_conflict' ? `${errorText(e)} It has been reloaded.` : errorText(e, 'Nothing was changed.'));
       setActing(null);
+      setGiving(null);
       reload();
     } finally {
       setBusy(false);
@@ -88,13 +96,35 @@ export default function Requests({ open }: { open: number | null }) {
           {r.guest.name} <VipPill level={r.guest.vip_level} />
         </span>
       ) : null}
-      {(r.options ?? [])
-        .filter((o) => !o.needs.includes('assignee'))
-        .map((o) => (
-          <Button key={o.action} size="sm" disabled={busy || !pms.online} onClick={() => (o.needs.includes('reason') ? setActing({ r, action: o.action, label: o.label }) : void act(r, o.action))}>
-            {o.label}
-          </Button>
-        ))}
+      {(r.options ?? []).map((o) => (
+        <Button
+          key={o.action}
+          size="sm"
+          disabled={busy || !pms.online}
+          onClick={() => {
+            if (o.action === 'assign' || o.needs.includes('assignee')) {
+              setPerson(null);
+              setGiving(r);
+            } else if (o.needs.includes('reason')) setActing({ r, action: o.action, label: o.label });
+            else void act(r, o.action);
+          }}
+        >
+          {o.action === 'assign' ? 'Assign…' : o.label}
+        </Button>
+      ))}
+      {manages && ['assigned', 'accepted', 'in_progress'].includes(r.status) ? (
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={busy || !pms.online}
+          onClick={() => {
+            setPerson(null);
+            setGiving(r);
+          }}
+        >
+          Reassign…
+        </Button>
+      ) : null}
     </li>
   );
 
@@ -135,6 +165,26 @@ export default function Requests({ open }: { open: number | null }) {
           onClose={() => setTaking(false)}
           onSubmit={(v) => void take(v)}
         />
+      ) : null}
+      {giving ? (
+        <Modal
+          title={`Give the request for room ${giving.room_number ?? '—'} to`}
+          onClose={() => setGiving(null)}
+          width={420}
+          footer={
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setGiving(null)}>
+                Cancel
+              </Button>
+              <Button variant="primary" loading={busy} disabled={!person || !pms.online} onClick={() => void act(giving, 'assign', { assigned_to: person! })}>
+                Assign
+              </Button>
+            </div>
+          }
+        >
+          <PersonPick label="Person" value={person} onChange={setPerson} />
+          <p className="mt-2 mb-0 text-[12px] text-ink-3">They must handle guest requests at this property.</p>
+        </Modal>
       ) : null}
       {acting ? <Ask title={acting.label} fields={[{ name: 'reason', label: 'Reason', required: true }]} busy={busy} onClose={() => setActing(null)} onSubmit={(v) => void act(acting.r, acting.action, v)} /> : null}
     </div>

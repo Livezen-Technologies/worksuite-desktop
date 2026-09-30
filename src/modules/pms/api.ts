@@ -1,4 +1,4 @@
-import { ApiError, apiGetMeta, request } from '../../core/api';
+import { ApiError, apiGetMeta, apiUrl, request } from '../../core/api';
 import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
 
@@ -181,7 +181,58 @@ export const K = {
   audit: (property: number) => ['pms', 'audit', property] as const,
   auditRun: (id: number) => ['pms', 'audit-run', id] as const,
   request: (id: number) => ['pms', 'request', id] as const,
+  requests: (property: number) => ['pms', 'live', 'requests', property] as const,
+  hkTask: (id: number) => ['pms', 'hk-task', id] as const,
+  hkStaff: (property: number) => ['pms', 'hk-staff', property] as const,
+  maintenance: (property: number, f: object) => ['pms', 'live', 'maintenance', property, f] as const,
+  issue: (id: number) => ['pms', 'issue', id] as const,
+  roomIssues: (id: number) => ['pms', 'room', id, 'issues'] as const,
+  lostFound: (property: number, f: object) => ['pms', 'lost-found', property, f] as const,
+  lostItem: (id: number) => ['pms', 'lost-item', id] as const,
+  folios: (property: number, status: string) => ['pms', 'folios', property, status] as const,
+  outbox: (property: number, status: string) => ['pms', 'outbox', property, status] as const,
+  kpis: (property: number, from: string, to: string) => ['pms', 'kpis', property, from, to] as const,
+  reports: (property: number) => ['pms', 'reports', property] as const,
+  report: (property: number, key: string, f: object) => ['pms', 'report', property, key, f] as const,
+  calendar: (property: number, from: string, days: number) => ['pms', 'live', 'calendar', property, from, days] as const,
+  directory: ['chat', 'directory'] as const,
 };
+
+/**
+ * A file the server answers with (a report's CSV, a guest's document): its
+ * bytes and the name it gives, through the same API proxy as every read. A
+ * refusal comes back as JSON and is thrown in the server's sentence.
+ */
+export async function pFile(path: string, query?: Query): Promise<{ bytes: Uint8Array<ArrayBuffer>; name: string | null; type: string }> {
+  let res: Response;
+  try {
+    res = await fetch(apiUrl(`${BASE}${path}`, query), { headers: { Accept: '*/*' } });
+  } catch {
+    throw new ApiError(0, 'WorkSuite Desktop could not complete the request.', 'INTERNAL');
+  }
+  const type = res.headers.get('content-type') ?? '';
+  if (!res.ok || type.includes('json')) {
+    let message = `The server answered ${res.status}.`;
+    try {
+      const j = (await res.json()) as { message?: unknown };
+      if (typeof j.message === 'string') message = j.message;
+    } catch {
+      /* not JSON */
+    }
+    throw new ApiError(res.status || 500, message, null);
+  }
+  const cd = res.headers.get('content-disposition') ?? '';
+  const name = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd)?.[1] ?? null;
+  return { bytes: new Uint8Array(await res.arrayBuffer()), name: name ? decodeURIComponent(name) : null, type };
+}
+
+/** A move the server offers on a record (`options`): the action, its words and what it needs said. */
+export interface ActionOption {
+  action: string;
+  to?: string;
+  label: string;
+  needs: string[];
+}
 
 // ── shapes, as the server sends them ─────────────────────────────────────
 
@@ -863,4 +914,211 @@ export interface GuestRequest {
   due_at: string | null;
   overdue: boolean;
   created_at: string;
+}
+
+export interface HkTaskFull extends HkTask {
+  property_id: number;
+  business_date: string;
+  assigned_to: number | null;
+  credits: number;
+  checklist: Array<{ key: string; label: string; required?: boolean; done: boolean }>;
+  notes: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  inspected_by: string | null;
+  inspected_at: string | null;
+  inspection_result: string | null;
+  version: number;
+  options?: ActionOption[];
+  primary?: string | null;
+  room?: { hk_status: string; hk_status_label: string; badge: Badge; version: number };
+}
+
+export interface HkStaff {
+  user_id: number;
+  name: string;
+  department: string | null;
+  tasks: number;
+  done: number;
+  credits: number;
+  credits_done: number;
+}
+
+export interface Restock {
+  id: number;
+  product: string | null;
+  code?: string | null;
+  quantity: number | string;
+  kind: string;
+  kind_label: string;
+  chargeable: boolean;
+  amount?: string | null;
+  currency?: string | null;
+}
+
+export interface Issue {
+  id: number;
+  property_id: number;
+  room_id: number | null;
+  room_number: string | null;
+  title: string;
+  description: string | null;
+  category: string;
+  category_label: string;
+  priority: string;
+  status: string;
+  status_label: string;
+  reported_by: string | null;
+  reported_via: string;
+  assigned_to: number | null;
+  assigned_name: string | null;
+  outage: { id: number; kind: string; kind_label: string; start_date: string; end_date: string; status: string } | null;
+  parts_used: Array<{ product_id: number | null; name: string; quantity: number | string; note: string | null; by: string | null; at: string }>;
+  photos: Array<{ id: number; url: string }>;
+  resolution: string | null;
+  business_date: string | null;
+  resolved_at: string | null;
+  closed_at: string | null;
+  created_at: string;
+  version: number;
+  options?: ActionOption[];
+}
+
+export interface IssueList {
+  items: Issue[];
+  categories: Record<string, string>;
+  statuses: string[] | Record<string, string>;
+  priorities: Record<string, string>;
+}
+
+export interface LostItem {
+  id: number;
+  property_id: number;
+  item: string;
+  description: string | null;
+  location: string | null;
+  room_id: number | null;
+  room_number: string | null;
+  found_by: string | null;
+  found_at: string | null;
+  photo: { id: number; url: string } | null;
+  storage_place: string | null;
+  guest: (ServiceCard & { id: number }) | null;
+  status: string;
+  status_label: string;
+  claimant: string | null;
+  returned_to: string | null;
+  returned_at: string | null;
+  disposed_at: string | null;
+  disposal_reason: string | null;
+  keep_until: string | null;
+  due_for_disposal: boolean;
+  version: number;
+  options?: ActionOption[];
+}
+
+export interface OutboxRow {
+  id: number;
+  topic: string;
+  ref_type: string | null;
+  ref_id: number | null;
+  status: string;
+  status_label: string;
+  attempts: number;
+  next_attempt_at: string | null;
+  last_error: string | null;
+  done_at: string | null;
+  created_at: string;
+}
+
+export interface Kpi {
+  date?: string;
+  rooms_available: number;
+  out_of_order: number;
+  house_use: number;
+  rooms_sold: number;
+  complimentary: number;
+  room_revenue: string;
+  arrivals_expected: number;
+  arrivals: number;
+  departures: number;
+  stayovers: number;
+  no_shows: number;
+  cancellations: number;
+  created: number;
+  occupancy_pct: string | number;
+  adr: string;
+  revpar: string;
+  no_show_rate: string | number;
+  cancellation_rate: string | number;
+}
+
+export interface ReportCatalogue {
+  reports: Array<{ key: string; title: string; group: string; group_label: string; filters: string[] }>;
+  groups: Labelled[] | Record<string, string>;
+  export: boolean;
+  formats: string[];
+}
+
+export interface ReportColumn {
+  key: string;
+  label: string;
+  type: 'text' | 'int' | 'money' | 'pct' | 'date' | 'datetime';
+}
+
+export interface ReportResult {
+  key: string;
+  title: string;
+  property: string;
+  period: { from: string; to: string };
+  currency: string;
+  columns: ReportColumn[];
+  rows: Array<Record<string, unknown>>;
+  totals: Record<string, unknown> | null;
+  generated_at: string;
+}
+
+export interface CalendarBar {
+  reservation_id: number;
+  reservation_room_id: number;
+  confirmation_no: string;
+  guest_name: string;
+  vip_level: string;
+  status: string;
+  status_label: string;
+  colour: string;
+  room_id: number | null;
+  room_type_id: number;
+  start: string;
+  end: string;
+  nights: number;
+  arrival_date: string;
+  departure_date: string;
+  in_house: boolean;
+  adults: number;
+  children: number;
+  version: number;
+  continues_before: boolean;
+  continues_after: boolean;
+}
+
+export interface CalendarData {
+  property_id: number;
+  from: string;
+  days: number;
+  dates: string[];
+  business_date: string;
+  rooms: Array<{ id: number; number: string; room_type_id: number; room_type: string | null; floor: string | null; building: string | null; badge: Badge }>;
+  bars: CalendarBar[];
+  unassigned: CalendarBar[];
+  outages: Array<{ id: number; room_id: number; kind: string; start: string; end: string; reason: string }>;
+  room_types: Array<{ id: number; code: string; name: string }>;
+  legend: Array<{ status: string; label: string; colour: string }>;
+}
+
+/** The server's `{key: label}` or `[{value, label}]`, as a list. */
+export function labelled(x: Labelled[] | Record<string, string> | string[] | null | undefined): Labelled[] {
+  if (!x) return [];
+  if (Array.isArray(x)) return x.map((v) => (typeof v === 'string' ? { value: v, label: nice(v) } : v));
+  return Object.entries(x).map(([value, label]) => ({ value, label }));
 }

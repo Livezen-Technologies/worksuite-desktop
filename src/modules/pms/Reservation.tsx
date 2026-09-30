@@ -5,7 +5,7 @@ import { toast } from '../../core/toasts';
 import { Ask, Section, type AskField } from '../garage/parts';
 import { PageHead } from '../hr/parts';
 import AssignRoom from './Assign';
-import { codeOf, day, errorText, K, money, newKey, pGet, pPost, stamp, type Deposit, type Payment, type ReservationView, type Stay } from './api';
+import { codeOf, day, errorText, isZero, K, money, newKey, pGet, pPost, stamp, type Deposit, type FolioShape, type Payment, type ReservationView, type Stay } from './api';
 import { PaymentDialog } from './money';
 import { Facts, Money, occupants, Refusal, ReservationPill, usePms, VipPill } from './parts';
 import { useShortcut } from './shortcuts';
@@ -274,7 +274,7 @@ export default function Reservation({ id }: { id: number }) {
         ) : null}
       </Section>
 
-      {pms.may('pms.payment.view') ? <DepositPanel reservationId={id} currency={r.currency} onChanged={reload} /> : null}
+      {pms.may('pms.payment.view') ? <DepositPanel reservationId={id} propertyId={r.property_id} confirmation={r.confirmation_no} currency={r.currency} onChanged={reload} /> : null}
 
       <Section
         title="History"
@@ -378,24 +378,35 @@ export default function Reservation({ id }: { id: number }) {
 /**
  * The reservation's deposit (§10.4): required, paid, remaining, refundable;
  * paid here (online only, with an idempotency key), waived or refunded with a
- * reason, as the server allows.
+ * reason, as the server allows — and what it holds applied to one of the
+ * reservation's open folios (`POST reservations/{id}/deposit/apply`, for
+ * `pms.payment.process`): the server takes the smaller of what is available
+ * and what the folio owes, or the amount given.
  */
-function DepositPanel({ reservationId, currency, onChanged }: { reservationId: number; currency: string; onChanged: () => void }) {
+function DepositPanel({ reservationId, propertyId, confirmation, currency, onChanged }: { reservationId: number; propertyId: number; confirmation: string; currency: string; onChanged: () => void }) {
   const pms = usePms();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: K.deposit(reservationId), queryFn: ({ signal }) => pGet<{ deposit: Deposit | null; payments: Payment[] }>(`/reservations/${reservationId}/deposit`, undefined, signal) });
   const [paying, setPaying] = useState(false);
-  const [asking, setAsking] = useState<'waive' | 'refund' | null>(null);
+  const [asking, setAsking] = useState<'waive' | 'refund' | 'apply' | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [key] = useState(() => newKey('deposit'));
   const d = q.data?.deposit ?? null;
+  const applies = !!d && !isZero(d.available) && pms.may('pms.payment.process') && pms.may('pms.folio.view');
+  const folios = useQuery({
+    queryKey: [...K.folios(propertyId, 'open'), 'of', reservationId],
+    queryFn: ({ signal }) => pGet<{ items: FolioShape[] }>(`/properties/${propertyId}/folios`, { status: 'open', q: confirmation }, signal).then((x) => x.items.filter((f) => f.reservation_id === reservationId)),
+    enabled: applies && asking === 'apply',
+  });
 
   const done = (message: string) => {
     toast('success', message);
     setPaying(false);
     setAsking(null);
     void qc.invalidateQueries({ queryKey: K.deposit(reservationId) });
+    void qc.invalidateQueries({ queryKey: ['pms', 'folios'] });
+    void qc.invalidateQueries({ queryKey: ['pms', 'folio'] });
     onChanged();
   };
   const act = async (fn: () => Promise<{ message: string }>) => {
@@ -424,6 +435,11 @@ function DepositPanel({ reservationId, currency, onChanged }: { reservationId: n
             {d?.status === 'required' ? (
               <Button size="sm" variant="ghost" disabled={!pms.online} onClick={() => setAsking('waive')}>
                 Waive
+              </Button>
+            ) : null}
+            {applies ? (
+              <Button size="sm" variant="ghost" disabled={!pms.online} onClick={() => setAsking('apply')}>
+                Apply to folio
               </Button>
             ) : null}
             {d && pms.may('pms.refund') && ['paid', 'remaining'].includes(d.status) ? (
@@ -465,7 +481,27 @@ function DepositPanel({ reservationId, currency, onChanged }: { reservationId: n
           onPay={(body) => void act(() => pPost(`/reservations/${reservationId}/deposit/payments`, body, key))}
         />
       ) : null}
-      {asking && d ? (
+      {asking === 'apply' && d ? (
+        folios.isLoading ? (
+          <Spinner />
+        ) : (folios.data ?? []).length === 0 ? (
+          <Ask title="Apply the deposit" text={folios.error ? errorText(folios.error) : 'This reservation has no open folio to apply the deposit to. A folio opens at check-in.'} fields={[]} confirm="Close" onClose={() => setAsking(null)} onSubmit={() => setAsking(null)} />
+        ) : (
+          <Ask
+            title="Apply the deposit"
+            text={`${money(d.available, d.currency)} of the deposit is available. The server applies no more than the folio owes.`}
+            fields={[
+              { name: 'folio_id', label: 'Folio', type: 'select', required: true, options: folios.data!.map((f) => ({ value: String(f.id), label: `${f.folio_no} · ${f.label} · owes ${money(f.balance, f.currency)}` })) },
+              { name: 'amount', label: 'Amount', hint: 'Blank: as much as the folio owes, up to what is available.' },
+            ]}
+            busy={busy}
+            confirm="Apply"
+            onClose={() => setAsking(null)}
+            onSubmit={(v) => void act(() => pPost(`/reservations/${reservationId}/deposit/apply`, { folio_id: Number(v.folio_id), ...(v.amount ? { amount: v.amount } : {}) }))}
+          />
+        )
+      ) : null}
+      {(asking === 'waive' || asking === 'refund') && d ? (
         <Ask
           title={asking === 'waive' ? 'Waive the deposit' : 'Refund the deposit'}
           fields={[...(asking === 'refund' ? [{ name: 'amount', label: 'Amount', hint: `Blank: all that can be refunded (${money(d.refundable, d.currency)}).` }] : []), { name: 'reason', label: 'Reason', required: true }]}

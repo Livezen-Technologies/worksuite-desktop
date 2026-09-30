@@ -15,9 +15,11 @@ import { SidePanel } from '../../components/SidePanel';
 
 /**
  * Hotel PMS, native in WorkSuite Desktop: the front desk, the cashier and the
- * night audit (PMS-DSK-001) over the server's `/api/pms/v1`. The back office
- * — rates, rooms and room types, packages, taxes, reports, settings and the
- * set-up wizard — is the web's.
+ * night audit (PMS-DSK-001) over the server's `/api/pms/v1`, with the
+ * operations beside them — housekeeping, maintenance, guest requests, lost and
+ * found — the tape chart, invoices and the reports. The back office — rates,
+ * rooms and room types, packages, taxes, settings and the set-up wizard — is
+ * the web's.
  *
  * Addresses: see `routes.ts`. The property is chosen in the rail and kept on
  * this computer; a record of another property moves the choice with it.
@@ -42,6 +44,14 @@ const NightAudit = lazy(() => import('./NightAudit'));
 const Housekeeping = lazy(() => import('./Housekeeping'));
 const Requests = lazy(() => import('./Requests'));
 const Devices = lazy(() => import('./Devices'));
+const HkTaskScreen = lazy(() => import('./HkTask'));
+const Maintenance = lazy(() => import('./Maintenance'));
+const IssueScreen = lazy(() => import('./Issue'));
+const LostFound = lazy(() => import('./LostFound'));
+const Invoices = lazy(() => import('./Invoices'));
+const Reports = lazy(() => import('./Reports'));
+const ReportScreen = lazy(() => import('./Report'));
+const Calendar = lazy(() => import('./Calendar'));
 
 type Group = 'desk' | 'bookings' | 'money' | 'overview' | 'this-desk';
 
@@ -53,21 +63,27 @@ export const VIEWS: Record<PmsView, { label: string; icon: string; group: Group;
   departures: { label: 'Departures', icon: 'logout', group: 'desk', needs: [['pms.reservation.view', 'pms.checkout']] },
   inhouse: { label: 'In house', icon: 'bed', group: 'desk', needs: [['pms.reservation.view', 'pms.checkin', 'pms.checkout']] },
   housekeeping: { label: 'Housekeeping', icon: 'sparkles', group: 'desk', needs: [[...RACK_READ, 'pms.housekeeping.view', 'pms.housekeeping.manage']] },
+  maintenance: { label: 'Maintenance', icon: 'wrench', group: 'desk', needs: [['pms.maintenance.manage', 'pms.housekeeping.view', 'pms.room.manage', 'pms.guest_request.manage', 'pms.room.view']] },
+  lostfound: { label: 'Lost & found', icon: 'archive', group: 'desk', needs: [['pms.housekeeping.view', 'pms.housekeeping.manage']] },
+  calendar: { label: 'Tape chart', icon: 'calendar', group: 'bookings', needs: [['pms.reservation.view']] },
   reservations: { label: 'Reservations', icon: 'list', group: 'bookings', needs: [['pms.reservation.view']] },
   new: { label: 'New reservation', icon: 'calendar-plus', group: 'bookings', needs: [['pms.reservation.create']] },
   walkin: { label: 'Walk-in', icon: 'user-plus', group: 'bookings', needs: [['pms.checkin'], ['pms.reservation.create']] },
   guests: { label: 'Guests', icon: 'users', group: 'bookings', needs: [['pms.guest.view']] },
   requests: { label: 'Guest requests', icon: 'concierge', group: 'bookings', needs: [['pms.guest_request.manage', 'pms.reservation.view']] },
   cashier: { label: 'Cashier', icon: 'wallet', group: 'money', needs: [['pms.cashier.open', 'pms.cashier.close', 'pms.payment.view']] },
+  invoices: { label: 'Invoices', icon: 'receipt', group: 'money', needs: [['pms.folio.view', 'pms.settings.manage']] },
   audit: { label: 'Night audit', icon: 'moon', group: 'money', needs: [['pms.night_audit.execute', 'pms.night_audit.override', 'pms.reports.view']] },
   dashboard: { label: 'Dashboard', icon: 'chart', group: 'overview', needs: [['pms.dashboard.view']] },
+  reports: { label: 'Reports & KPIs', icon: 'file-text', group: 'overview', needs: [['pms.reports.view', 'pms.dashboard.view']] },
   devices: { label: 'Desk devices', icon: 'printer', group: 'this-desk', needs: [] },
 };
 
 const HEADINGS: Record<Group, string | null> = { desk: 'Front desk', bookings: 'Reservations & guests', money: 'Cashier & close', overview: 'Overview', 'this-desk': 'This desk' };
-const ORDER: PmsView[] = ['rack', 'arrivals', 'dashboard', 'reservations', 'cashier', 'audit', 'housekeeping', 'guests', 'devices'];
+const ORDER: PmsView[] = ['rack', 'arrivals', 'dashboard', 'reservations', 'cashier', 'audit', 'housekeeping', 'maintenance', 'lostfound', 'guests', 'reports', 'devices'];
 const TITLES: Record<Exclude<Screen['kind'], 'view'>, string> = {
   reservation: 'Reservation', checkin: 'Check-in', checkout: 'Check-out', stay: 'In house', folio: 'Folio', room: 'Room', guest: 'Guest', shift: 'Cashier shift', request: 'Guest request',
+  task: 'Housekeeping task', issue: 'Maintenance issue', lost: 'Found item', report: 'Report',
 };
 
 const PROPERTY_KEY = 'pms.property';
@@ -217,6 +233,14 @@ export default function PmsShell({ active }: ModuleProps) {
         return <ShiftScreen key={`sh${screen.id}`} id={screen.id} />;
       case 'request':
         return <Requests key={`rq${screen.id}`} open={screen.id} />;
+      case 'task':
+        return <HkTaskScreen key={`t${screen.id}`} id={screen.id} />;
+      case 'issue':
+        return <IssueScreen key={`i${screen.id}`} id={screen.id} />;
+      case 'lost':
+        return <LostFound key={`l${screen.id}`} open={screen.id} />;
+      case 'report':
+        return <ReportScreen key={`rp${screen.key}`} reportKey={screen.key} />;
       default:
         break;
     }
@@ -246,6 +270,16 @@ export default function PmsShell({ active }: ModuleProps) {
         return <NightAudit />;
       case 'housekeeping':
         return <Housekeeping room={screen.kind === 'view' ? screen.room : null} />;
+      case 'maintenance':
+        return <Maintenance />;
+      case 'lostfound':
+        return <LostFound open={null} />;
+      case 'invoices':
+        return <Invoices />;
+      case 'reports':
+        return <Reports />;
+      case 'calendar':
+        return <Calendar date={date} />;
       default:
         return <Devices />;
     }
@@ -336,7 +370,7 @@ export default function PmsShell({ active }: ModuleProps) {
                     type="button"
                     onClick={() => void call('app:openInBrowser', { path: '/pms' }).catch((e) => toast('error', errorText(e)))}
                     className="flex h-[30px] items-center gap-[9px] rounded-[8px] px-2.5 text-left font-medium text-ink-2 hover:bg-subtle"
-                    title="Rates, rooms, packages, taxes, reports, settings and the set-up wizard"
+                    title="Rates, rooms, packages, taxes, settings and the set-up wizard"
                   >
                     <Icon name="external" size={16} className="text-ink-3" /> Back office on the web
                   </button>
