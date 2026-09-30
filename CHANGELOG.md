@@ -5,8 +5,20 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-09-30 — 0.2.71: a resizable conversation list in Chat
+## 2026-09-30 — 0.2.71: Chat's channel toolbar (WhatsApp in Chat) and a resizable conversation list
 
+- **A channel toolbar down the far left of Chat** (#33): Chat, Web Chat and WhatsApp, each with its unread count
+  (waiting visitors for Web Chat) and a warning dot when a WhatsApp number is not connected. Hover for the name and
+  the count. A channel is there once you have it: Web Chat if you answer website chat, WhatsApp once a number is
+  shared with you. The toolbar stays when the conversation list is hidden, and ↑ / ↓ move along it from the keyboard.
+- **WhatsApp conversations in Chat.** The list (All, Unread, Waiting, Mine; a number picker when you have more than
+  one), the conversation, and a reply box. What you type is kept per conversation, so switching channels loses
+  nothing. When a reply cannot go, it says why: you can only view that number, it is more than 24 hours since they
+  wrote (templates are sent from WhatsApp on the web), or the number is not connected. Broadcasts, templates, labels
+  and number settings stay on the web (the ↗ button).
+- **"+ Add a channel"** lists WhatsApp and Web Chat and where each stands for you. Connect a WhatsApp number by
+  scanning a QR code with its phone (needs the "connect WhatsApp numbers" permission), or link one that dropped
+  again; a Business Platform number and the website chat widget are set up on the web.
 - **Drag the right edge of Chat's conversation list** to make it wider or narrower (#34). The edge shows the resize
   cursor and a highlight on hover; the list stays between 240 px and 560 px, and never leaves the conversation less
   than about 480 px of the window. Long names and previews end in "…" at any width.

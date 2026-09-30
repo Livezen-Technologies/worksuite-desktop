@@ -19,6 +19,12 @@ import { useWebsiteAccess, useWebsiteInbox, type WebsiteRow } from './website/ap
 import { WebsiteWorkspace } from './website/WebsiteWorkspace';
 import { SidePanel } from '../../components/SidePanel';
 import { ResizeDivider, useResizableWidth } from '../../components/ResizeDivider';
+import { canOpenWeb, useCanOpen } from '../../core/access';
+import { AddChannel, type AddStep } from './channels/AddChannel';
+import { ChannelBar } from './channels/ChannelBar';
+import { buildChannels, channelOf, channelRoute, LIST_WIDTH } from './channels/channels';
+import { WhatsappChannel } from './channels/WhatsappChannel';
+import { useWaAccounts } from './channels/whatsapp';
 
 /**
  * Chat (UI-08, FR-COM-02/03, §4.15; the "Chat · conversations, thread,
@@ -27,6 +33,9 @@ import { ResizeDivider, useResizableWidth } from '../../components/ResizeDivider
  * conversation's details. A message sent offline waits in the queue and shows
  * as pending (WF-17). Website staff get the website-chat workspace under the
  * Website filter, and their open visitors in the list.
+ *
+ * Down the far left, the channel toolbar (worksuite-desktop#33): Chat, Web Chat and WhatsApp, each with its unread
+ * count, and "Add a channel". Picking one shows its conversations in the list; drafts are kept per conversation.
  */
 type Filter = 'all' | 'unread' | 'mentions' | 'archived';
 
@@ -42,9 +51,15 @@ export default function ChatPage({ tabId }: ModuleProps) {
   const { query, go, path } = useTab();
   const mini = tabId.startsWith('window-chat-mini');
   const room = roomFromRoute(query, path);
-  const website = query.get('website');
-  const workspace = query.get('view') === 'website';
+  const channel = channelOf(query);
   const websiteAccess = useWebsiteAccess();
+  const websiteOpen = useWebsiteInbox(false, websiteAccess && !mini);
+  const whatsappAccess = useCanOpen('whatsapp');
+  const wa = useWaAccounts(whatsappAccess && !mini);
+  const waAccounts = wa.data?.accounts ?? [];
+  const perms = useStore(app, (s) => s.bootstrap?.permissions);
+  const canConnect = !!perms && (perms.includes('*') || perms.includes('whatsapp.connect'));
+  const [adding, setAdding] = useState<AddStep | null>(null);
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [starting, setStarting] = useState(false);
@@ -53,7 +68,7 @@ export default function ChatPage({ tabId }: ModuleProps) {
   const rooms = useQuery({ queryKey: ['chat', 'rooms'], queryFn: ({ signal }) => apiGetMeta<{ rooms: Room[] }>('/api/chat/rooms', undefined, signal) });
   const all = (rooms.data?.data.rooms ?? []).filter((r) => r.type !== 'widget');
   const current = all.find((r) => String(r.id) === room);
-  useTabTitle(workspace || website ? null : current ? `Chat · ${current.name}` : 'Chat');
+  useTabTitle(channel !== 'chat' ? null : current ? `Chat · ${current.name}` : 'Chat');
   const me = useStore(app, (s) => s.auth?.user?.id);
   const lastKey = me ? `ws.chat.lastRoom.${me}` : null;
 
@@ -69,16 +84,16 @@ export default function ChatPage({ tabId }: ModuleProps) {
 
   // Chat opens on a conversation, never on an empty pane: the last one you had
   // open, or else the most recent.
-  const reopen = !mini && !room && !workspace && !website && rooms.isSuccess ? lastOrRecent(all, lastKey) : null;
+  const reopen = !mini && !room && channel === 'chat' && rooms.isSuccess ? lastOrRecent(all, lastKey) : null;
   useEffect(() => {
     if (reopen) go(`/chat?room=${reopen}`);
   }, [reopen, go]);
 
-  // Every website chat opens in its workspace, wherever the link came from.
-  if (workspace || website) return <WebsiteWorkspace />;
+  const channels = buildChannels({ active: channel, rooms: all, website: { access: websiteAccess, rows: websiteOpen.data?.conversations ?? [] }, whatsapp: { access: whatsappAccess, accounts: waAccounts } });
+  const connect = whatsappAccess && canConnect ? () => setAdding({ at: 'whatsapp' }) : null;
 
-  return (
-    <div className="flex h-full">
+  const chat = (
+    <div className="flex h-full min-w-0 flex-1">
       {!mini ? (
         <SidePanel id="chat" label="the conversations">
           <Rail rooms={all} loading={rooms.isLoading} error={rooms.error} offline={rooms.data?.offline ? rooms.data.cachedAt : null} retry={() => void rooms.refetch()} selected={room} q={q} setQ={setQ} filter={filter} setFilter={setFilter} websiteAccess={websiteAccess} onNew={() => setStarting(true)} onStarred={() => setStarred(true)} />
@@ -118,14 +133,40 @@ export default function ChatPage({ tabId }: ModuleProps) {
       ) : null}
     </div>
   );
-}
 
-/**
- * The conversation list's width (worksuite-desktop#34): dragged on its right edge, remembered on this computer.
- * Never so narrow that a name and its time do not fit, and never so wide that the conversation beside it has less
- * than 480px.
- */
-const LIST_WIDTH = { defaultWidth: 300, min: 240, max: () => Math.min(560, window.innerWidth - 480) };
+  return (
+    <div className="flex h-full">
+      {!mini ? <ChannelBar channels={channels} active={channel} onPick={(id) => go(channelRoute(id))} onAdd={() => setAdding({ at: 'list' })} /> : null}
+      {/* Every website chat opens in its workspace, wherever the link came from. */}
+      {channel === 'website' ? (
+        <WebsiteWorkspace />
+      ) : channel === 'whatsapp' ? (
+        whatsappAccess ? (
+          <WhatsappChannel accounts={waAccounts} loading={wa.isLoading} error={wa.error} retry={() => void wa.refetch()} onConnect={connect} onRelink={(a) => setAdding({ at: 'link', accountId: a.id, name: a.name })} />
+        ) : (
+          <div className="flex min-w-0 flex-1 bg-ground">
+            <Empty icon="lock" title="WhatsApp is not available to you" hint="Ask an administrator for access to WhatsApp." />
+          </div>
+        )
+      ) : (
+        chat
+      )}
+      {adding ? (
+        <AddChannel
+          initial={adding}
+          website={{ access: websiteAccess, canSetUp: canOpenWeb('/website-chats') }}
+          whatsapp={{ access: whatsappAccess, canConnect, accounts: waAccounts }}
+          onClose={() => setAdding(null)}
+          onConnected={() => {
+            setAdding(null);
+            toast('success', 'WhatsApp is connected.');
+            go('/chat?channel=whatsapp');
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
 
 interface RailProps {
   rooms: Room[];

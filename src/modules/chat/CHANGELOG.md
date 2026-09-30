@@ -8,6 +8,9 @@ the root CHANGELOG.md.
 
 **Added**
 
+- A channel toolbar down the far left of Chat (#33): Chat, Web Chat and WhatsApp, each with its unread (or waiting) count, a warning when a number is not connected, and "Add a channel". Picking a channel shows its conversations in the list; ↑ ↓ Home End move along it, and it stays when the list is hidden
+- WhatsApp conversations in Chat: the numbers shared with you, the list (All, Unread, Waiting, Mine, a number picker, search), the thread, and a reply box whose draft is kept per conversation. It says why a reply cannot be sent (a viewer's access, the 24-hour window, a number that is not connected)
+- "Add a channel": where WhatsApp and Web Chat stand for you; connect a WhatsApp number by QR code, or link a disconnected one again; set up the website widget or a Business Platform number on the web
 - The conversation list can be made wider or narrower by dragging its edge, or with the arrow keys once the edge is focused; it stays between 240 px and 560 px, is remembered on this computer, and a double-click (or Enter) puts it back to 300 px (#34)
 
 ## 1.0.0 — 2026-09-30
