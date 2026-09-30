@@ -10,7 +10,8 @@ import { LocalAIRuntime, type WorkerLink } from './runtime';
 const log = logger('local-ai');
 
 /**
- * Where the signed model catalog lives on WorkSuite's CDN (LAI-MOD-001). `WS_LOCAL_AI_CATALOG` points a
+ * Where the signed model catalog lives on WorkSuite's CDN (LAI-MOD-001) — asked only when the signed-in server has
+ * no catalog of its own (`/api/ai/local/catalog`, AI Studio's models) and a key is pinned below. `WS_LOCAL_AI_CATALOG` points a
  * development or staging build at another one; a packaged build uses this address only.
  */
 export const LOCAL_AI_CATALOG_URL = 'https://cdn.worksuite.app/local-ai/v1/catalog.json';
@@ -25,6 +26,8 @@ export const LOCAL_AI_CATALOG_KEYS: Record<string, string> = {};
 export interface LocalAIHostDeps {
   userData: string;
   signedIn: () => boolean;
+  /** `GET /api/ai/local/catalog` on the signed-in WorkSuite server: AI Studio's models, as files to download. */
+  serverCatalog?: () => Promise<unknown>;
   /** `ai:localChanged` to every window: models, downloads and the runtime's state. */
   changed: () => void;
 }
@@ -66,10 +69,16 @@ export function createLocalAI(deps: LocalAIHostDeps): LocalAIHost {
       deps.changed();
     }, 250);
   };
+  const keys = { ...LOCAL_AI_CATALOG_KEYS, ...dev.keys };
   const models = new LocalAIModelManager({
     root,
-    catalogUrl: () => dev.url ?? LOCAL_AI_CATALOG_URL,
-    keys: { ...LOCAL_AI_CATALOG_KEYS, ...dev.keys },
+    serverCatalog: deps.serverCatalog
+      ? () => (deps.signedIn() ? deps.serverCatalog!() : Promise.reject(new Error('Sign in to WorkSuite to see the models you can download.')))
+      : undefined,
+    // With no key pinned nothing the CDN sent could be trusted, so it is not asked: the page says on-device
+    // models are not set up, and the assistant answers through WorkSuite (AI Studio) instead.
+    catalogUrl: () => dev.url ?? (Object.keys(keys).length ? LOCAL_AI_CATALOG_URL : null),
+    keys,
     fetch: (url, init) => net.fetch(url, { ...init, cache: 'no-store' }),
     onChange: changed,
   });
@@ -88,7 +97,8 @@ export function createLocalAI(deps: LocalAIHostDeps): LocalAIHost {
   let refreshed = false;
   const refreshOnce = (): void => {
     if (refreshed) return;
-    refreshed = true;
+    // Before sign-in the server's catalog cannot be asked; the first look after it does.
+    refreshed = deps.signedIn() || !deps.serverCatalog;
     void models.refresh().catch(() => undefined);
   };
 

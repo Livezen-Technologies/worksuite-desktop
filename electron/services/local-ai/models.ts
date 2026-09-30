@@ -7,8 +7,9 @@ import { localCatalogEnvelopeSchema, localCatalogSchema, type LocalAICatalog, ty
 /**
  * LocalAIModelManager (LAI-MOD, LAI-DL, LAI-MGR), desktop.
  *
- * The catalog comes from WorkSuite's CDN as an envelope — the catalog JSON exactly as signed, and an Ed25519
- * signature by one of the keys pinned in this app — and is refused unless the signature holds and it has not
+ * The catalog comes from the signed-in WorkSuite server — AI Studio's models, each pinned by size and SHA-256 —
+ * or, from a server without one, from WorkSuite's CDN as an envelope: the catalog JSON exactly as signed, and an
+ * Ed25519 signature by one of the keys pinned in this app, refused unless the signature holds and it has not
  * expired (LAI-MOD-002). The last good one is kept for offline use. A model is downloaded from the catalog's
  * https address into `<root>/<id>/<version>/model.gguf.part`, resumed where it stopped (HTTP Range, LAI-DL-003),
  * checked against the catalog's size and SHA-256 before it is renamed into place (LAI-DL-004), and never loaded
@@ -16,6 +17,13 @@ import { localCatalogEnvelopeSchema, localCatalogSchema, type LocalAICatalog, ty
  */
 export interface ModelManagerDeps {
   root: string;
+  /**
+   * The catalog from the WorkSuite server the person is signed in to (`GET /api/ai/local/catalog`): the models
+   * the workspace offers on AI Studio, each with its file's address, size and SHA-256. Trusted as every other
+   * answer from that server is — the authenticated session — and asked before the CDN. Absent, or answering
+   * 404 (an older server, or switched off there), the CDN's signed catalog is used.
+   */
+  serverCatalog?: () => Promise<unknown>;
   catalogUrl: () => string | null;
   /** keyId → Ed25519 public key (SPKI, base64 DER). */
   keys: Record<string, string>;
@@ -60,8 +68,9 @@ export class LocalAIModelManager {
   async init(): Promise<void> {
     await mkdir(this.deps.root, { recursive: true, mode: 0o700 });
     try {
-      const raw = JSON.parse(await readFile(join(this.deps.root, 'catalog.json'), 'utf8')) as unknown;
-      this.accept(raw, false);
+      const raw = JSON.parse(await readFile(join(this.deps.root, 'catalog.json'), 'utf8')) as { source?: unknown; catalog?: unknown };
+      if (raw && raw.source === 'server') this.acceptServer(raw.catalog, false);
+      else this.accept(raw, false);
     } catch {
       /* no catalog yet */
     }
@@ -91,11 +100,52 @@ export class LocalAIModelManager {
     this.catalogError = null;
   }
 
-  /** Fetches the catalog from the CDN; on any failure the kept one stays and the reason is reported. */
+  /** A catalog from the signed-in WorkSuite server: its shape and its expiry (the server is the trust, not a key). */
+  private acceptServer(raw: unknown, fresh: boolean): void {
+    const catalog = localCatalogSchema.parse(raw);
+    if (Date.parse(catalog.expiresAt) <= this.now()) throw new Error('The model catalog has expired.');
+    this.catalog = catalog;
+    this.catalogAt = fresh ? new Date(this.now()).toISOString() : (this.catalogAt ?? catalog.issuedAt);
+    this.catalogError = null;
+  }
+
+  /**
+   * Asks the WorkSuite server for AI Studio's models. True when it answered with a catalog; false when there is
+   * none to ask or it has none (404), so the CDN is tried. Anything else is reported and the kept catalog stays.
+   */
+  private async refreshFromServer(): Promise<boolean> {
+    if (!this.deps.serverCatalog) return false;
+    let got: unknown;
+    try {
+      got = await this.deps.serverCatalog();
+    } catch (e) {
+      if ((e as { status?: unknown })?.status === 404) return false;
+      this.catalogError = e instanceof Error ? e.message : String(e);
+      return true;
+    }
+    const body = got as { catalog?: unknown; problems?: Record<string, string> };
+    try {
+      this.acceptServer(body?.catalog, true);
+      await writeFile(join(this.deps.root, 'catalog.json'), JSON.stringify({ source: 'server', catalog: body.catalog }), { mode: 0o600 });
+      const problems = Object.entries(body.problems ?? {});
+      if (!this.catalog?.models.length && problems.length) {
+        this.catalogError = `None of AI Studio's models could be found to download — ${problems.map(([n, why]) => `${n}: ${why}`).join('; ')}`;
+      }
+    } catch (e) {
+      this.catalogError = e instanceof Error ? e.message : String(e);
+    }
+    return true;
+  }
+
+  /** Fetches the catalog — from the WorkSuite server, else the CDN; on any failure the kept one stays and the reason is reported. */
   async refresh(): Promise<void> {
+    if (await this.refreshFromServer()) {
+      this.changed();
+      return;
+    }
     const url = this.deps.catalogUrl();
     if (!url) {
-      this.catalogError = 'No model catalog is set up for your organization.';
+      this.catalogError = 'Your WorkSuite server does not offer models to download yet. The assistant still answers through WorkSuite.';
       this.changed();
       return;
     }

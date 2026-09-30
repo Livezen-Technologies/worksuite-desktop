@@ -19,6 +19,7 @@ import { Select } from '../../components/Select';
 import type { ModuleProps } from '../registry';
 import { playTone } from '../calls/tones';
 import { shortcutLabel, useWriter, writerProblem } from '../ai/writer';
+import { discoverStudioModels, setStudioModels, STUDIO_KEY, studioState, testStudioModel, useStudioStatus, type StudioDiscovery } from '../ai/studio';
 
 /** Settings / profile tree (§4.9). Anything the organization's policy decides is shown locked, with the reason. */
 const SECTIONS = [
@@ -706,7 +707,117 @@ function FilesSection({ prefs }: { prefs: Preferences }) {
 const TIER_WORDS = { minimal: 'Minimal', basic: 'Basic', good: 'Good', strong: 'Strong' } as const;
 const RUNTIME_WORDS = { off: 'Off (starts when asked)', starting: 'Starting…', ready: 'Ready', loading: 'Loading the model…', busy: 'Answering…', error: 'Stopped' } as const;
 
-/** Local AI (WS-SRS-LAI): models from WorkSuite's CDN that answer on this computer, also offline. */
+/**
+ * AI Studio: the models the assistant answers with through WorkSuite (the server's connection to
+ * aistudio.livezentech.com). Anyone with `ai.view` sees the connection and may try a model; `ai.settings` may
+ * ask the hub which models this key can run and choose the ones this workspace offers.
+ */
+function AIStudioBlock() {
+  const perms = useStore(app, (s) => s.bootstrap?.permissions);
+  const has = (p: string) => !!perms && (perms.includes('*') || perms.includes(p));
+  const status = useStudioStatus(has('ai.view'));
+  const [busy, setBusy] = useState<string | null>(null);
+  const [found, setFound] = useState<StudioDiscovery | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
+  if (!has('ai.view')) return null;
+  const st = status.data;
+  const state = studioState(st);
+  const refresh = () => void queryClient.invalidateQueries({ queryKey: STUDIO_KEY });
+  const test = (m: string) => {
+    setBusy(`t:${m}`);
+    testStudioModel(m)
+      .then((r) => toast(r.ok ? 'success' : 'error', r.ok ? `${m} answers.` : `${m}: ${r.detail}`))
+      .catch((e) => toast('error', errorMessage(e)))
+      .finally(() => setBusy(null));
+  };
+  const discover = () => {
+    setBusy('discover');
+    discoverStudioModels()
+      .then((r) => {
+        setFound(r);
+        setPicked(Array.from(new Set([...r.selected.filter((m) => r.available.includes(m)), ...r.available])));
+        if (!r.available.length) toast('error', 'AI Studio has no model this key may run yet.');
+      })
+      .catch((e) => toast('error', errorMessage(e)))
+      .finally(() => setBusy(null));
+  };
+  const save = () => {
+    setBusy('save');
+    setStudioModels(picked)
+      .then(() => {
+        toast('success', picked.length === 1 ? 'The assistant offers 1 AI Studio model.' : `The assistant offers ${picked.length} AI Studio models.`);
+        setFound(null);
+        refresh();
+      })
+      .catch((e) => toast('error', errorMessage(e)))
+      .finally(() => setBusy(null));
+  };
+  return (
+    <>
+      <Row
+        label="AI Studio"
+        hint={status.error ? errorMessage(status.error) : st ? (st.connected ? 'The assistant answers with these models through WorkSuite when it is not using one on this computer.' : st.detail) : 'Checking…'}
+      >
+        <div className="flex items-center gap-2">
+          <Chip tone={state.tone}>{state.word}</Chip>
+          <Button size="sm" icon="refresh" loading={status.isFetching} onClick={refresh}>
+            Check
+          </Button>
+        </div>
+      </Row>
+      {st && st.models.length ? (
+        <div className="border-b border-line py-2">
+          {st.models.map((m) => (
+            <div key={m} className="flex items-center gap-3 py-1.5">
+              <Icon name="cpu" size={15} className="text-ink-3" />
+              <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-ink">{m}</span>
+              <Button size="sm" variant="ghost" loading={busy === `t:${m}`} onClick={() => test(m)}>
+                Test
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : st ? (
+        <p className="border-b border-line py-2.5 text-[12.5px] text-ink-3">
+          {has('ai.settings') ? 'This workspace offers no AI Studio model yet. Find the models already downloaded on AI Studio and choose which to offer.' : 'This workspace offers no AI Studio model yet. An administrator chooses them.'}
+        </p>
+      ) : null}
+      {has('ai.settings') && st?.configured ? (
+        <div className="border-b border-line py-2.5">
+          {!found ? (
+            <Button size="sm" icon="search" loading={busy === 'discover'} onClick={discover}>
+              Find models on AI Studio
+            </Button>
+          ) : (
+            <>
+              <div className="mb-1.5 text-[12.5px] font-semibold text-ink">Models this key may run — tick the ones the assistant offers</div>
+              {found.available.length ? (
+                found.available.map((m) => (
+                  <label key={m} className="flex items-center gap-2 py-1 text-[13px] text-ink">
+                    <input type="checkbox" className="accent-primary" checked={picked.includes(m)} onChange={(e) => setPicked((p) => (e.target.checked ? [...p, m] : p.filter((x) => x !== m)))} aria-label={m} />
+                    <span className="font-mono">{m}</span>
+                  </label>
+                ))
+              ) : (
+                <p className="text-[12.5px] text-ink-3">None yet. {Object.values(found.results).find((r) => !r.ok)?.detail ?? ''}</p>
+              )}
+              <div className="mt-2 flex gap-2">
+                <Button size="sm" variant="primary" disabled={!found.available.length} loading={busy === 'save'} onClick={save}>
+                  Offer these
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setFound(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+/** Local AI (WS-SRS-LAI): AI Studio's models through WorkSuite, and the same models downloaded to answer on this computer, also offline. */
 export function LocalAISection() {
   const status = useLocalAIStatus();
   const models = useLocalModels();
@@ -726,7 +837,8 @@ export function LocalAISection() {
   const chat = (models.data ?? []).filter((m) => m.model.purpose === 'chat');
   return (
     <>
-      <H title="Local AI" hint="Models that run on this computer: the assistant answers without sending anything to a server, also offline. Models come only from WorkSuite, signed and checked before they are used." />
+      <H title="Local AI" hint="The assistant answers with AI Studio's models through WorkSuite, or with one downloaded to this computer — then nothing is sent to a server, also offline. A download is checked against the file WorkSuite names before it is used." />
+      <AIStudioBlock />
       <Row
         label="This computer"
         hint={hw ? `${hw.cpuCores} cores · ${bytes(hw.memoryBytes)} memory${hw.gpu ? ` · GPU (${hw.gpu})${hw.vramBytes ? ` ${bytes(hw.vramBytes)}` : ''}` : ' · CPU only until Local AI first starts'}${hw.freeDiskBytes !== null ? ` · ${bytes(hw.freeDiskBytes)} free` : ''}` : 'Checking…'}
@@ -741,15 +853,15 @@ export function LocalAISection() {
           </Button>
         </div>
       </Row>
-      <Row label="Model catalog" hint={st?.catalogError ?? (st?.catalogAt ? `Checked ${relative(st.catalogAt)}.` : 'Not fetched yet.')}>
+      <Row label="Models to download" hint={st?.catalogError ?? (st?.catalogAt ? `AI Studio's models, from your WorkSuite server — checked ${relative(st.catalogAt)}.` : 'Not checked yet.')}>
         <Button size="sm" icon="refresh" loading={busy === 'catalog'} onClick={() => run('catalog', call('ai:localRefresh'))}>
           Check for models
         </Button>
       </Row>
 
-      <h3 className="mb-1 mt-6 text-[14px] font-bold text-ink">Models</h3>
+      <h3 className="mb-1 mt-6 text-[14px] font-bold text-ink">Models on this computer</h3>
       {models.isLoading ? <p className="text-[12.5px] text-ink-3">Loading…</p> : null}
-      {!models.isLoading && !chat.length ? <p className="text-[12.5px] text-ink-3">No models to offer yet — the catalog has none, or it could not be fetched.</p> : null}
+      {!models.isLoading && !chat.length ? <p className="text-[12.5px] text-ink-3">No models to download to this computer yet. The assistant still answers with AI Studio's models above.</p> : null}
       {chat.map((v) => {
         const m = v.model;
         const pct = m.bytes ? Math.min(100, Math.round((v.received / m.bytes) * 100)) : 0;
