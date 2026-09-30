@@ -1,6 +1,6 @@
 import { app } from '../../core/app-state';
 import { apiUrl } from '../../core/api';
-import { mediaToken, openDocument } from '../../core/open-document';
+import { isOfficeFile, mediaToken, openDocument, openInOffice } from '../../core/open-document';
 
 /** Chat shapes, as `/api/chat/rooms` and `/api/chat/messages` return them. Stamps are UTC without a zone. */
 export interface Room {
@@ -102,6 +102,8 @@ export function mediaUrl(u: string | null | undefined): string | null {
  */
 export function openAttachment(f: Pick<ChatFile, 'download_url' | 'filename'>, link: (url: string) => void): void {
   const token = mediaToken(f.download_url);
-  if (token) void openDocument({ chatMedia: token }, f.filename);
+  // A Word, Excel or PowerPoint file opens in a WorkSuite DOC / Sheet / Slides tab.
+  if (token && isOfficeFile(f.filename)) openInOffice({ kind: 'api', path: `/media/${token}?download=1`, name: f.filename });
+  else if (token) void openDocument({ chatMedia: token }, f.filename);
   else if (f.download_url) link(f.download_url);
 }

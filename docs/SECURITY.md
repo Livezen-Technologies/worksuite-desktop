@@ -238,6 +238,11 @@ Being controlled is the main process's business, never a page's:
   bearer token and only on the `/pdf/content/…` path; uploads carry each chunk's SHA-256. A local file is replaced
   atomically (temporary file, fsync, rename) and only a file the person opened. Recovery snapshots are sealed
   (AES-256-GCM) under keys derived from the database key, never written without one, and wiped at sign-out.
+- **Office files from this computer** (`office-local.ts`): the renderer holds handles only. A path comes from the
+  main process's open dialog or the OS ("Open with"), is resolved, must be a regular .docx / .xlsx / .pptx whose
+  first bytes are a ZIP package, at most 200 MB, and outside WorkSuite's data; `office:writeFile` writes only
+  over a file opened that way (atomically), `office:saveCopy` only where the person chose in the save dialog.
+  Bytes cross IPC as a checked `Uint8Array` (non-empty, within the limit; strict schemas refuse any path field).
 - **Documents from other modules** open through the download manager: a PDF goes to PDF Studio (inside the app,
   so it is allowed where other applications are not); anything else goes to the OS only with
   `desktop.files.open_external`. Chat attachments are fetched by their signed `/media/{token}`, task attachments

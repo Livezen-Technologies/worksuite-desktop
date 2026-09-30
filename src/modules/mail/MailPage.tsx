@@ -1,3 +1,4 @@
+import { isOfficeFile, openInOffice } from '../../core/open-document';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { app } from '../../core/app-state';
@@ -335,9 +336,12 @@ function MessageView({ uid, folder, mailbox, onReply, onGone }: { uid: string; f
               type="button"
               draggable
               onClick={() =>
-                // A PDF opens in PDF Studio, preview only (PDF-OPEN-004); anything else downloads and opens.
+                // A PDF opens in PDF Studio, preview only (PDF-OPEN-004); a Word, Excel or PowerPoint file in a
+                // WorkSuite DOC / Sheet / Slides tab; anything else downloads and opens.
                 isPdf(a)
                   ? openPdf({ kind: 'mail', uid: String(uid), ref: a.ref, folder, mailbox: mailbox ?? null, name: a.name }, a.name)
+                  : isOfficeFile(a.name)
+                  ? openInOffice({ kind: 'api', name: a.name, path: `/api/mail/messages/${uid}/attachments/${encodeURIComponent(a.ref)}?${new URLSearchParams({ folder, dl: '1', ...(mailbox ? { mailbox } : {}) })}` })
                   : void call('transfers:download', { mail: { uid, ref: a.ref, folder, mailbox }, name: a.name, open: true })
                       .then(() => toast('info', `Downloading ${a.name}…`))
                       .catch((e) => toast('error', errorMessage(e)))

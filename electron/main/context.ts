@@ -1,3 +1,4 @@
+import type { OfficeLocalFiles } from '../services/office-local';
 import type { QuickAsk } from '../services/quick-ask';
 import type { AiService } from '../services/ai';
 import type { WebchatRinger } from '../services/webchat-ring';
@@ -63,6 +64,8 @@ export interface AppContext {
   /** Office documents: the editor views in tabs (office-editor.ts) and copies opened in other apps (office-external.ts). */
   office: OfficeEditorHost;
   officeLocal: OfficeExternal;
+  /** Office files on this computer opened in WorkSuite DOC / Sheet / Slides tabs (office-local.ts). */
+  officeFiles: OfficeLocalFiles;
   settings: SettingsService;
   http: HttpClient;
   auth: AuthService;

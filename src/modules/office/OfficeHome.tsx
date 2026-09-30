@@ -2,7 +2,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { OfficeLocalCopy } from '@shared/office';
 import { apiGetMeta } from '../../core/api';
-import { errorMessage } from '../../core/bridge';
+import { call, errorMessage } from '../../core/bridge';
+import { openInOffice } from '../../core/open-document';
 import { relative } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
@@ -50,6 +51,14 @@ export function OfficeHome() {
   const files = officeFiles(recent.data?.data.files ?? []);
   const canCreate = !routing.legacy;
 
+  // A file on this computer: the main process's dialog, then a WorkSuite DOC / Sheet / Slides tab on its handle.
+  const openLocal = async () => {
+    try {
+      for (const f of await call('office:pickFile')) openInOffice({ kind: 'local', handle: f.handle, name: f.name });
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
   // WorkSuite's editor, inside the app (OfficePage picks the full session or the EuroOffice editor).
   const open = (f: DriveFile) => void openOfficeTab(f);
   const create = async (input: { type?: Kind; template_id?: string }) => {
@@ -92,6 +101,15 @@ export function OfficeHome() {
                 </span>
               </button>
             ))}
+            <button type="button" onClick={() => void openLocal()} className="flex items-center gap-3 rounded-[12px] border border-dashed border-line bg-surface px-4 py-3.5 text-left hover:border-primary">
+              <span className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-subtle text-ink-2">
+                <Icon name="laptop" size={18} />
+              </span>
+              <span className="min-w-0">
+                <b className="block text-[13.5px] font-semibold text-ink">Open from this computer</b>
+                <span className="block text-[11.5px] text-ink-3">.docx, .xlsx or .pptx, saved in place</span>
+              </span>
+            </button>
             <button type="button" disabled={!canCreate} onClick={() => setTemplates(true)} className="flex items-center gap-3 rounded-[12px] border border-dashed border-line bg-surface px-4 py-3.5 text-left hover:border-primary disabled:opacity-60">
               <span className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-subtle text-ink-2">
                 <Icon name="grid" size={18} />

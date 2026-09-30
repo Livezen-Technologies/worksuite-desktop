@@ -1,11 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { officeExportToken, officeRoute, parseOfficeRoute, type ExternalApp, type OfficeCollaborator, type OfficeLocalCopy, type OfficeMode } from '@shared/office';
+import { OFFICE_KIND_LABELS, officeExportToken, officeKind, officeRoute, parseOfficeDocRoute, parseOfficeRoute, type ExternalApp, type OfficeCollaborator, type OfficeLocalCopy, type OfficeMode } from '@shared/office';
 import { app, organizationName } from '../../core/app-state';
 import { call, errorMessage, on } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { useTabTitle } from '../../core/tab-context';
-import { activate, closeTab, navigate, setCloseGuard, takeCloseReason } from '../../core/tabs';
+import { activate, closeTab, navigate, recordKey, setCloseGuard, takeCloseReason } from '../../core/tabs';
 import { toast } from '../../core/toasts';
 import { ui } from '../../core/ui';
 import { Icon } from '../../components/Icon';
@@ -34,11 +34,14 @@ import { OfficeSession, type OfficeState } from './session';
  * every refusal is the server's own sentence.
  */
 export default function OfficePage({ tabId, route, active }: ModuleProps) {
+  // A document that is not a Drive file (an attachment, a file on this computer): the built-in editor.
+  const doc = parseOfficeDocRoute(route);
+  if (doc) return <BuiltinEditor key={recordKey(route)} tabKey={tabId} source={doc} routeName={doc.name} active={active} />;
   const parsed = parseOfficeRoute(route);
   // The launcher's Office tile: new documents, templates and the recent ones.
   if (!parsed && /^\/office\/?(?:[?#].*)?$/.test(route)) return <OfficeHome />;
   if (!parsed) return <Empty icon="file-text" title="This is not a document" hint="Open Office documents from Files." />;
-  if (parsed.builtin) return <BuiltinEditor key={`b${parsed.fileId}`} tabKey={tabId} fileId={parsed.fileId} routeName={parsed.name} active={active} />;
+  if (parsed.builtin) return <BuiltinEditor key={`b${parsed.fileId}`} tabKey={tabId} source={{ kind: 'drive', fileId: parsed.fileId }} routeName={parsed.name} active={active} />;
   return <OfficeTab key={parsed.fileId} tabId={tabId} fileId={parsed.fileId} requested={parsed.mode} routeName={parsed.name} active={active} />;
 }
 
@@ -200,7 +203,7 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
         <FileBadge name={name} size={30} />
         <div className="min-w-0">
           <h1 className="truncate text-[14px] font-bold text-ink" title={name}>{name}</h1>
-          {orgId ? <div className="truncate text-[11px] text-ink-3">{organizationName(orgId)}</div> : null}
+          <div className="truncate text-[11px] text-ink-3">{[officeKind(name) ? OFFICE_KIND_LABELS[officeKind(name)!] : null, orgId ? organizationName(orgId) : null].filter(Boolean).join(' · ')}</div>
         </div>
         {s.phase === 'open' ? (
           <div role="status" aria-live="polite" className="flex min-w-0 items-center gap-1.5 pl-1 text-[12px]" title={line.secondary ?? undefined}>

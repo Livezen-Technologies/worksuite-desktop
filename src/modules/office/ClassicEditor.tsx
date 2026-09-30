@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
-import type { OfficeEditorEventName, OfficeViewEvent } from '@shared/office';
+import { OFFICE_KIND_LABELS, officeKind, type OfficeEditorEventName, type OfficeViewEvent } from '@shared/office';
 import { ApiError, apiGet } from '../../core/api';
 import { app } from '../../core/app-state';
 import { call, errorMessage, on } from '../../core/bridge';
@@ -100,9 +100,9 @@ export function ClassicEditor({ tabKey, fileId, routeName, active }: { tabKey: s
   if (q.isLoading) return <Spinner label="Opening the document…" />;
   // No EuroOffice editor on this server (not set up, or not there at all): WorkSuite's built-in editor instead.
   if (q.error instanceof ApiError && (q.error.status === 503 || q.error.status === 404 || q.error.status === 501)) {
-    return <BuiltinEditor tabKey={tabKey} fileId={fileId} routeName={routeName} active={active} />;
+    return <BuiltinEditor tabKey={tabKey} source={{ kind: 'drive', fileId }} routeName={routeName} active={active} />;
   }
-  if (builtin) return <BuiltinEditor tabKey={tabKey} fileId={fileId} routeName={routeName} active={active} />;
+  if (builtin) return <BuiltinEditor tabKey={tabKey} source={{ kind: 'drive', fileId }} routeName={routeName} active={active} />;
   if (q.error || problem) {
     return (
       <div className="mx-auto flex max-w-[560px] flex-col gap-3 p-8">
@@ -123,6 +123,7 @@ export function ClassicEditor({ tabKey, fileId, routeName, active }: { tabKey: s
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex h-11 shrink-0 items-center gap-2.5 border-b border-line bg-surface px-3.5">
         <FileBadge name={name} size={26} />
+        {officeKind(name) ? <span className="shrink-0 text-[12px] font-bold text-primary">{OFFICE_KIND_LABELS[officeKind(name)!]}</span> : null}
         <b className="min-w-0 truncate text-[13.5px] font-semibold text-ink">{name}</b>
         <span className={cx('text-[12px]', state === 'editing' ? 'text-warning' : 'text-ink-3')}>
           {!cfg?.editable ? 'Read-only' : state === 'loading' ? 'Opening…' : state === 'editing' ? 'Saving…' : 'Saved to your Drive'}

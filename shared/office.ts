@@ -433,3 +433,65 @@ export function officeExportToken(downloadUrl: string): string | null {
     return null;
   }
 }
+
+// ── WorkSuite DOC / Sheet / Slides: which Office tab a file opens in ─────
+
+export type OfficeKind = 'doc' | 'sheet' | 'slides';
+
+export const OFFICE_KIND_LABELS: Record<OfficeKind, string> = { doc: 'WorkSuite DOC', sheet: 'WorkSuite Sheet', slides: 'WorkSuite Slides' };
+
+const KIND_OF: Record<string, OfficeKind> = {
+  doc: 'doc', docx: 'doc', docm: 'doc', dotx: 'doc', odt: 'doc', rtf: 'doc',
+  xls: 'sheet', xlsx: 'sheet', xlsm: 'sheet', ods: 'sheet', csv: 'sheet',
+  ppt: 'slides', pptx: 'slides', pptm: 'slides', odp: 'slides', ppsx: 'slides',
+};
+
+/** The Office tab a file opens in, by its extension; null for anything else (a PDF goes to PDF Studio). */
+export function officeKind(name: string, extension?: string | null): OfficeKind | null {
+  const e = (extension || name.split('.').pop() || '').toLowerCase();
+  return KIND_OF[e] ?? null;
+}
+
+/**
+ * An Office document that is not (yet) a Drive file, opened in a WorkSuite DOC / Sheet / Slides tab:
+ *  - `api`: bytes WorkSuite serves — a mail attachment, a tender's document, a chat attachment — by its path on
+ *    this server (`/api/…` or a signed `/media/…`), read through the app's own proxy;
+ *  - `local`: a file on this computer, by a handle the main process issued (the renderer never names a path).
+ */
+export type OfficeDocSource = { kind: 'api'; path: string; name: string } | { kind: 'local'; handle: string; name: string };
+
+const API_PATH = /^\/(api|media)\/[A-Za-z0-9._~\-/%?=&+:,]{1,1500}$/;
+const HANDLE = /^[0-9a-f-]{36}$/;
+
+export function officeDocRoute(src: OfficeDocSource): string {
+  const q = new URLSearchParams({ src: src.kind, name: src.name.slice(0, 200) });
+  if (src.kind === 'api') q.set('path', src.path);
+  else q.set('h', src.handle);
+  return `/office/doc?${q}`;
+}
+
+export function parseOfficeDocRoute(route: string): OfficeDocSource | null {
+  const [path, query] = route.split('?');
+  if (!/^\/office\/doc\/?$/.test(path ?? '')) return null;
+  const q = new URLSearchParams(query ?? '');
+  const name = (q.get('name') ?? '').replace(/[/\\]/g, '-').slice(0, 200) || 'Document';
+  if (q.get('src') === 'api') {
+    const p = q.get('path') ?? '';
+    return API_PATH.test(p) && !p.includes('..') ? { kind: 'api', path: p, name } : null;
+  }
+  if (q.get('src') === 'local') {
+    const h = q.get('h') ?? '';
+    return HANDLE.test(h) ? { kind: 'local', handle: h, name } : null;
+  }
+  return null;
+}
+
+/** A file on this computer handed to WorkSuite for an Office tab. */
+export interface OfficeLocalPick {
+  handle: string;
+  name: string;
+  size: number;
+}
+
+/** The largest Office file opened from this computer (the editors hold it in memory). */
+export const MAX_OFFICE_LOCAL_BYTES = 200 * 1024 * 1024;

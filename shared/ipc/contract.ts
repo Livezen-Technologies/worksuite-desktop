@@ -33,7 +33,7 @@ import {
   type DeskSearchHit,
   type DeskStatus,
 } from '../event-desk';
-import { OFFICE_EDITOR_EVENTS, OFFICE_EXPORT_TOKEN, officeCommandSchema, type ExternalApp, type OfficeLocalCopy } from '../office';
+import { MAX_OFFICE_LOCAL_BYTES, OFFICE_EDITOR_EVENTS, OFFICE_EXPORT_TOKEN, officeCommandSchema, type ExternalApp, type OfficeLocalCopy, type OfficeLocalPick } from '../office';
 import { pdfEditOpSchema, pdfPrintSchema, pdfSearchOptionsSchema, pdfSourceSchema, SEARCH_MAX_QUERY, type PdfAnnotView, type PdfAttachmentView, type PdfBitmap, type PdfDiagnosticCheck, type PdfDriveDetails, type PdfFailureReport, type PdfLinkView, type PdfLocalPick, type PdfOutlineNode, type PdfRect, type PdfSessionView } from '../pdf';
 import type { InvokeChannel } from './channels';
 import type {
@@ -197,6 +197,9 @@ interface ChannelSpec {
 function ch<S extends z.ZodType>(input: S, opts: Omit<ChannelSpec, 'input'> = {}): ChannelSpec & { input: S } {
   return { input, ...opts };
 }
+
+/** An Office document's bytes from the editor (a ZIP package, an OLE file, RTF or CSV), at most the local limit. */
+const officeBytes = z.instanceof(Uint8Array).refine((b) => b.byteLength > 0 && b.byteLength <= MAX_OFFICE_LOCAL_BYTES, 'The document is empty or too large.');
 
 export const contract = {
   'app:info': ch(none, { whileLocked: true }),
@@ -751,6 +754,12 @@ export const contract = {
   /** Offline (OO-OFF-020): is this file on this computer — kept by Drive sync, or a copy opened in another app. */
   'office:localAvailable': ch(z.object({ fileId: driveId }), { session: true, rate: 10 }),
   'office:openLocal': ch(z.object({ fileId: driveId, preview: z.boolean().optional() }), { session: true, rate: 3 }),
+  // WorkSuite DOC / Sheet / Slides on files from this computer (office-local.ts): handles only, never paths.
+  'office:pickFile': ch(none, { session: true, rate: 5 }),
+  'office:readFile': ch(z.strictObject({ handle: z.string().uuid() }), { session: true, rate: 20 }),
+  'office:writeFile': ch(z.strictObject({ handle: z.string().uuid(), bytes: officeBytes }), { session: true, rate: 20, sensitive: true }),
+  /** "Save a copy on this computer": the main process's save dialog, then the bytes where the person chose. */
+  'office:saveCopy': ch(z.strictObject({ name: z.string().min(1).max(255).regex(/^[^/\\]+$/), bytes: officeBytes }), { session: true, rate: 10, sensitive: true }),
 
   'offline:status': ch(none, { session: true }),
   'offline:pending': ch(none, { session: true }),
@@ -1047,6 +1056,11 @@ export interface Outputs {
   'office:revealLocal': boolean;
   'office:localAvailable': { available: boolean; synced: boolean; preview: boolean; openInApp: boolean };
   'office:openLocal': boolean;
+  'office:pickFile': OfficeLocalPick[];
+  'office:readFile': Uint8Array;
+  'office:writeFile': { size: number };
+  /** null: the dialog was cancelled. */
+  'office:saveCopy': { name: string } | null;
   'offline:status': OfflineStatus;
   'offline:pending': OfflineMutation[];
   'offline:submit': SubmitResult;
