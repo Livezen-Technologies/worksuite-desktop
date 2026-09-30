@@ -8,7 +8,7 @@ import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { dayLabel, greeting, relative, todayInZone, wallMinutes, wallTimeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
-import { toggleDock } from '../../core/ui';
+import { openAssistant } from '../../core/ui';
 import { Icon } from '../../components/Icon';
 import { Avatar, Button, Card, CountBadge, Empty, ErrorNote, FileBadge, OfflineNote, Spinner, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
@@ -163,7 +163,7 @@ export default function HomePage(_props: ModuleProps) {
           </p>
           <div className="mt-4 flex gap-2">
             {has('ai') ? (
-              <button type="button" className="rounded-[8px] bg-teal-light px-3 py-2 text-[13px] font-semibold text-navy hover:opacity-90" onClick={() => toggleDock('ai')}>
+              <button type="button" className="rounded-[8px] bg-teal-light px-3 py-2 text-[13px] font-semibold text-navy hover:opacity-90" onClick={() => openAssistant()}>
                 Ask AI
               </button>
             ) : null}

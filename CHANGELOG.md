@@ -5,6 +5,32 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-30 — The AI Assistant as a floating widget; Thinking…; About
+
+**Added**
+
+- **Settings › AI Assistant › Display mode:** the header's AI button and its drawer (as before), a **floating chat
+  widget**, or **Hidden**. The widget is an Ask AI button in the bottom-right corner of the workspace that opens the
+  same Ask, Write and Changes, with Minimize, Maximize / Restore and Close. It stays inside the workspace, never over
+  the sidebar, tabs, status bar or a side drawer. Escape minimizes it. In Hidden, the shortcut and the command palette
+  still open the assistant.
+- **One conversation, wherever it shows.** Closing or minimizing the drawer or the widget, or switching between them,
+  keeps the messages, the question being written, the files picked and an answer on its way (closing the drawer used
+  to start over). The launcher and the header button turn while an answer is coming, and count answers that arrived
+  while it was closed. **Sound for new answers** (off at first) chimes for them. **New conversation** starts afresh.
+- **Try again** under an answer that failed asks the same question again in its place.
+
+**Changed**
+
+- **Thinking…** with the AI sparkle pulsing replaces "Looking into it…", from the moment a question is sent until
+  the answer starts to show. With reduced motion the sparkle stands still. A local answer is no longer read out word
+  by word as it streams.
+- **About** names the owner in full: WorkSuite is owned and developed by Livezen Technologies LLC, © this year, with
+  worksuiteone.com opening in the default browser. The open-source notice stands on its own line. Installers carry
+  the same copyright.
+
+---
+
 ## 2026-09-30 — The lock screen unlocks on the last digit of the PIN
 
 **Changed**

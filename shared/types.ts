@@ -243,7 +243,14 @@ export interface AiPrefs {
   dockAtStart: boolean;
   /** The language Translate goes to unless another is chosen. */
   language: string;
+  /** How the assistant is reached: the header button and its drawer, a floating widget, or neither (the shortcut still opens it). */
+  display: AiDisplay;
+  /** A short sound when an answer arrives while the assistant is closed or minimised. */
+  sound: boolean;
 }
+
+export const AI_DISPLAYS = ['drawer', 'widget', 'hidden'] as const;
+export type AiDisplay = (typeof AI_DISPLAYS)[number];
 
 /** The shortcuts Quick Ask may use: ones no system or common app claims. */
 export const QUICK_ASK_SHORTCUTS = ['Alt+Space', 'Control+Alt+Space', 'CommandOrControl+Shift+Space'] as const;

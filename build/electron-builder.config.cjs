@@ -31,7 +31,7 @@ const azure = process.env.AZURE_TRUSTED_SIGNING_ACCOUNT
 module.exports = {
   appId: 'lk.worksuite.desktop',
   productName: 'WorkSuite',
-  copyright: 'Copyright © 2026 Livezen Technologies',
+  copyright: `Copyright © ${new Date().getFullYear()} Livezen Technologies LLC`,
   directories: { output: 'release/${version}', buildResources: 'build' },
   // pdfjs-dist is bundled into the renderer; its optional @napi-rs/canvas is
   // for Node only, and its one-arch binary breaks the universal mac merge.

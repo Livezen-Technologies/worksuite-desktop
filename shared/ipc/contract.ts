@@ -147,6 +147,8 @@ export const preferencesPatchSchema = z
       insert: z.boolean(),
       dockAtStart: z.boolean(),
       language: z.string().regex(/^[A-Za-z ]{2,40}$/),
+      display: z.enum(['drawer', 'widget', 'hidden']),
+      sound: z.boolean(),
     }),
   })
   .partial();
