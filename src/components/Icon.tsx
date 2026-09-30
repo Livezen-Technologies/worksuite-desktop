@@ -5,6 +5,7 @@ import {
   Type,
   Highlighter,
   ArrowDown,
+  ArrowRight,
   ArrowUp,
   ScanLine,
   Truck,
@@ -96,7 +97,7 @@ const ICONS: Record<string, LucideIcon> = {
   'graduation-cap': GraduationCap, 'book-open': BookOpen,
   ticket: Ticket, 'qr-code': QrCode,
   bed: BedDouble, bookmark: Bookmark, 'log-in': LogIn, 'badge-check': BadgeCheck, 'user-x': UserX, 'x-circle': CircleX, 'credit-card': CreditCard, 'calendar-plus': CalendarPlus, concierge: ConciergeBell,
-  'arrow-down': ArrowDown, 'arrow-up': ArrowUp, sliders: SlidersHorizontal, image: Image, 'rotate-cw': RotateCw, help: CircleHelp, shield: Shield, dice: Dices, crop: Crop, cpu: Cpu,
+  'arrow-down': ArrowDown, 'arrow-right': ArrowRight, 'arrow-up': ArrowUp, sliders: SlidersHorizontal, image: Image, 'rotate-cw': RotateCw, help: CircleHelp, shield: Shield, dice: Dices, crop: Crop, cpu: Cpu,
 };
 
 export function Icon({ name, size = 18, className, strokeWidth = 1.8, label }: { name: string; size?: number; className?: string; strokeWidth?: number; label?: string }) {

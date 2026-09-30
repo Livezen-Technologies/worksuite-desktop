@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-09-30 — 0.2.71: Chat's channel toolbar (WhatsApp in Chat), profile pictures, a resizable conversation list; AI Assistant scrolling; Local AI first-use setup and Gemma 3 4B; Office menus and Open in new window
+## 2026-09-30 — 0.2.71: Chat's channel toolbar (WhatsApp in Chat), profile pictures, a resizable conversation list; AI Assistant scrolling; Local AI first-use setup and Gemma 3 4B; Office menus and Open in new window; Meet Home and pre-join redesign
 
 - **A channel toolbar down the far left of Chat** (#33): Chat, Web Chat and WhatsApp, each with its unread count
   (waiting visitors for Web Chat) and a warning dot when a WhatsApp number is not connected. Hover for the name and
@@ -25,6 +25,19 @@ person who has to live with the change — what it does, and where it bites.
   When somebody changes their picture it changes here too, without signing out (the server announces it; pictures
   are also checked again after 15 minutes). Group conversations keep their rounded-square initials, so they never
   look like a person. WhatsApp contacts' pictures show once the server provides them; it does not fetch them yet.
+- **Meet Home, redesigned** (#67). Starting and joining come first: **New meeting** (Start now, Create a link for
+  later, Schedule in Calendar) and the code or link box with its **Join** — a code or link that is wrong says why,
+  right there. Below, upcoming meetings by day in compact cards (time, length, host, people) with **Join** only
+  when the meeting can be joined, and recent meetings and recordings in compact sections with **See all**; each row
+  has one action and a ⋯ menu for the rest (Open chat, Copy link, Copy meeting ID; Download, Rename, Delete). Empty
+  sections offer Schedule a meeting or Start a meeting. **Check camera and microphone** is on the page. Lengths read
+  "1 h 20 min"; a past meeting nobody ended no longer shows days of minutes (it shows no length).
+- **The pre-join screen, redesigned** (#69). Your camera's picture (in proportion; your avatar when it is off) with
+  microphone and camera buttons that show their state, the devices together with a live microphone level and **Test
+  speaker**, and the meeting — title, organizer, who is in it, whether you host — with **Join now**, which shows it is
+  joining and cannot be pressed twice. A blocked, missing or busy device says what to do (Open privacy settings, Try
+  again); so does a failed connection. The devices you choose, and whether the microphone and camera are on, are
+  remembered on this computer and used when you join.
 - **Office: the Editing and ⋯ menus open again** (#39). In a Word, Excel or PowerPoint document open in WorkSuite, the
   mode menu (Editing / Reviewing / Commenting / Viewing) and More (⋯) opened behind the document — the editor is a
   native view laid over the page, and covered them. Now the editor steps aside while a menu is open, and a picture of
