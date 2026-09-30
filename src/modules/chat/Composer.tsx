@@ -9,7 +9,8 @@ import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { uploadBlob } from '../../core/upload';
 import { Icon } from '../../components/Icon';
-import { Avatar, cx } from '../../components/ui';
+import { cx } from '../../components/ui';
+import { UserAvatar } from '../../components/UserAvatar';
 import { AttachMenu, CameraCapture, DrivePicker, Tray, type AttachChoice, type Staged } from './attach';
 import { KIND, type CardKind } from './cards/CardFrame';
 import { recordsIn } from './cards/recordLinks';
@@ -694,7 +695,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                   >
                     {t.type === 'user' ? (
                       <span className="relative shrink-0">
-                        <Avatar name={t.name} size={28} />
+                        <UserAvatar userId={t.id} name={t.name} size={28} />
                         <span className={cx('absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-surface', PRESENCE[state]?.dot ?? 'bg-line')} />
                       </span>
                     ) : (

@@ -10,6 +10,7 @@ import { ResizeDivider, useResizableWidth } from '../../../components/ResizeDivi
 import { Select } from '../../../components/Select';
 import { SidePanel } from '../../../components/SidePanel';
 import { Avatar, Button, Empty, ErrorNote, Spinner, cx } from '../../../components/ui';
+import { mediaUrl } from '../types';
 import { LIST_WIDTH, rememberWhatsapp } from './channels';
 import { isConnected, messageText, preview, readWa, sendWa, useWaChats, useWaThread, WA_SCOPES, type WaAccount, type WaChat, type WaMessage, type WaScope } from './whatsapp';
 
@@ -126,7 +127,7 @@ function ChatRow({ c, active, many, onOpen }: { c: WaChat; active: boolean; many
   const waiting = c.waiting_minutes !== null && c.status !== 'resolved';
   return (
     <button type="button" onClick={onOpen} aria-current={active ? 'true' : undefined} className={cx('flex w-full items-center gap-2.5 px-3.5 py-[7px] text-left', active ? 'bg-selection' : 'hover:bg-subtle')}>
-      <Avatar name={c.name} size={34} className={c.kind === 'group' ? '!rounded-[9px]' : ''} />
+      <Avatar name={c.name} size={34} src={mediaUrl(c.avatar_url)} className={c.kind === 'group' ? '!rounded-[9px]' : ''} />
       <span className="min-w-0 flex-1">
         <span className="flex gap-1.5">
           <b className={cx('flex-1 truncate text-[13px] text-ink', !c.unread && 'font-semibold')}>{c.name}</b>
@@ -175,7 +176,7 @@ function WhatsappThread({ id }: { id: string }) {
   return (
     <section aria-label={`WhatsApp with ${chat.name}`} className="flex min-w-0 flex-1 flex-col">
       <header className="flex items-center gap-2.5 border-b border-line bg-surface px-4 py-2.5">
-        <Avatar name={chat.name} size={34} />
+        <Avatar name={chat.name} size={34} src={mediaUrl(chat.avatar_url)} />
         <span className="min-w-0 flex-1">
           <b className="block truncate text-[14px] text-ink">{chat.name}</b>
           <span className="block truncate text-[12px] text-ink-3">+{chat.wa_id} · on {chat.account.name}</span>

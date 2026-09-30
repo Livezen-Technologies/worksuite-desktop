@@ -9,12 +9,13 @@ import { listStamp } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Avatar, Empty, ErrorNote, OfflineNote, Spinner, cx } from '../../components/ui';
+import { UserAvatar } from '../../components/UserAvatar';
 import type { ModuleProps } from '../registry';
 import { Details, PRESENCE } from './Details';
 import { NewChat, StarredDialog } from './NewChat';
 import { lastOrRecent, roomFromRoute } from './routes';
 import { Thread } from './Thread';
-import type { Room } from './types';
+import { roomPerson, type Room } from './types';
 import { useWebsiteAccess, useWebsiteInbox, type WebsiteRow } from './website/api';
 import { WebsiteWorkspace } from './website/WebsiteWorkspace';
 import { SidePanel } from '../../components/SidePanel';
@@ -312,7 +313,7 @@ function RoomRow({ r, active, status, onOpen }: { r: Room; active: boolean; stat
   return (
     <button type="button" onClick={onOpen} className={cx('flex w-full items-center gap-2.5 px-3.5 py-[7px] text-left', active ? 'bg-selection' : 'hover:bg-subtle')}>
       <span className="relative shrink-0">
-        <Avatar name={r.avatar_name || r.name} size={34} className={group ? '!rounded-[9px]' : ''} />
+        <UserAvatar userId={roomPerson(r)} name={r.avatar_name || r.name} size={34} className={group ? '!rounded-[9px]' : ''} />
         {st ? <span className={cx('absolute -right-px -bottom-px h-[10px] w-[10px] rounded-full border-2 border-surface', st.dot)} aria-label={st.label} title={st.label} /> : null}
       </span>
       <span className="min-w-0 flex-1">
@@ -373,7 +374,7 @@ function MyStatus() {
   return (
     <div ref={ref} className="relative flex flex-1 items-center gap-2">
       <span className="relative shrink-0">
-        <Avatar name={user?.name} size={32} />
+        <UserAvatar userId={user?.id} name={user?.name} size={32} />
         <span className={cx('absolute -right-px -bottom-px h-[10px] w-[10px] rounded-full border-2 border-surface', choice.dot)} />
       </span>
       <button type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)} className="h-[30px] flex-1 truncate rounded-[7px] border border-line px-2 text-left text-[12px] text-ink-2 hover:bg-subtle">

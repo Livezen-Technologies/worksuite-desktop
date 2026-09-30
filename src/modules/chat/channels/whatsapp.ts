@@ -43,6 +43,8 @@ export interface WaChat {
   overdue: boolean;
   account_name: string;
   assigned_name: string | null;
+  /** The contact's WhatsApp picture as a signed `/media/` address, when the server has one (it does not fetch them yet). */
+  avatar_url?: string | null;
 }
 
 export interface WaMessage {
@@ -68,6 +70,7 @@ export interface WaThread {
     unread: number;
     window: { allowed: boolean; reason: string | null };
     account: WaAccount;
+    avatar_url?: string | null;
   };
   messages: WaMessage[];
   has_more: boolean;

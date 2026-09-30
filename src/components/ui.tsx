@@ -95,13 +95,19 @@ export function initials(name: string | null | undefined): string {
   return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? '') : '')).toUpperCase();
 }
 
-export function Avatar({ name, size = 32, className, presence }: { name: string | null | undefined; size?: number; className?: string; presence?: 'online' | 'away' | 'offline' | null }) {
+/**
+ * Somebody's avatar: their picture when there is one (`src`), else their initials on a colour that is always the same
+ * for the same name. The initials sit under the picture, so they show while it loads and again if it fails.
+ */
+export function Avatar({ name, size = 32, className, presence, src }: { name: string | null | undefined; size?: number; className?: string; presence?: 'online' | 'away' | 'offline' | null; src?: string | null }) {
   const n = name ?? '?';
   let h = 0;
   for (const ch of n) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const [failed, setFailed] = useState<string | null>(null);
   return (
     <span className={cx('relative inline-flex shrink-0 items-center justify-center rounded-full font-bold', AVATAR_TONES[h % AVATAR_TONES.length], className)} style={{ width: size, height: size, fontSize: Math.max(10, size * 0.36) }} aria-hidden>
       {initials(n)}
+      {src && failed !== src ? <img src={src} alt="" draggable={false} decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(src)} className="absolute inset-0 h-full w-full rounded-[inherit] object-cover" /> : null}
       {presence ? (
         <span className={cx('absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-surface', presence === 'online' ? 'bg-success' : presence === 'away' ? 'bg-warning' : 'bg-ink-3')} />
       ) : null}

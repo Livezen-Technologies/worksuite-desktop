@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-09-30 — 0.2.71: Chat's channel toolbar (WhatsApp in Chat) and a resizable conversation list
+## 2026-09-30 — 0.2.71: Chat's channel toolbar (WhatsApp in Chat), profile pictures and a resizable conversation list
 
 - **A channel toolbar down the far left of Chat** (#33): Chat, Web Chat and WhatsApp, each with its unread count
   (waiting visitors for Web Chat) and a warning dot when a WhatsApp number is not connected. Hover for the name and
@@ -19,6 +19,12 @@ person who has to live with the change — what it does, and where it bites.
 - **"+ Add a channel"** lists WhatsApp and Web Chat and where each stands for you. Connect a WhatsApp number by
   scanning a QR code with its phone (needs the "connect WhatsApp numbers" permission), or link one that dropped
   again; a Business Platform number and the website chat widget are set up on the web.
+- **Profile pictures in Chat** (#37): people's current pictures in the conversation list, the conversation header,
+  beside their messages, in the details and member lists, the new-conversation picker and @-mentions. No picture,
+  one that will not load, or one its owner does not show you: their initials, on the colour that name always has.
+  When somebody changes their picture it changes here too, without signing out (the server announces it; pictures
+  are also checked again after 15 minutes). Group conversations keep their rounded-square initials, so they never
+  look like a person. WhatsApp contacts' pictures show once the server provides them; it does not fetch them yet.
 - **Drag the right edge of Chat's conversation list** to make it wider or narrower (#34). The edge shows the resize
   cursor and a highlight on hover; the list stays between 240 px and 560 px, and never leaves the conversation less
   than about 480 px of the window. Long names and previews end in "…" at any width.

@@ -5,9 +5,10 @@ import { errorMessage } from '../../core/bridge';
 import { useTab } from '../../core/tab-context';
 import { dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
-import { Avatar, Button, Empty, FileBadge, Spinner, cx } from '../../components/ui';
+import { Button, Empty, FileBadge, Spinner, cx } from '../../components/ui';
+import { UserAvatar } from '../../components/UserAvatar';
 import { GroupDetails, NotifySettings, type RoomDetail } from './NewChat';
-import { mediaUrl, openAttachment, type ChatFile, type ChatMessage, type Room } from './types';
+import { mediaUrl, openAttachment, roomPerson, type ChatFile, type ChatMessage, type Room } from './types';
 
 type Shared = Record<'media' | 'files' | 'links' | 'audio', Array<{ message_id: number; sender_name: string; created_at: string; file?: ChatFile; url?: string }>>;
 
@@ -49,7 +50,7 @@ export function Details({ room, onClose }: { room: Room; onClose: () => void }) 
   return (
     <aside aria-label="Conversation details" className="flex w-[300px] shrink-0 flex-col border-l border-line bg-surface">
       <div className="flex flex-col items-center gap-1.5 border-b border-line px-4 py-4">
-        <Avatar name={room.avatar_name || room.name} size={56} className={group ? '!rounded-[14px]' : ''} />
+        <UserAvatar userId={roomPerson(room)} name={room.avatar_name || room.name} size={56} className={group ? '!rounded-[14px]' : ''} />
         <b className="text-center text-[14.5px] text-ink">{room.name}</b>
         <span className="text-[12px] text-ink-3">{group ? `Group · ${members.length} members${online ? ` · ${online} online` : ''}` : 'Direct message'}</span>
         <div className="mt-1 flex gap-1.5">
@@ -75,7 +76,7 @@ export function Details({ room, onClose }: { room: Room; onClose: () => void }) 
                 return (
                   <div key={m.id} className="flex items-center gap-2.5">
                     <span className="relative">
-                      <Avatar name={m.name} size={30} />
+                      <UserAvatar userId={m.id} name={m.name} size={30} />
                       {st ? <span className={cx('absolute -right-0.5 -bottom-0.5 h-[10px] w-[10px] rounded-full border-2 border-surface', st.dot)} title={st.label} /> : null}
                     </span>
                     <span className="min-w-0 flex-1">

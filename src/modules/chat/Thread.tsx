@@ -12,7 +12,8 @@ import { useTab } from '../../core/tab-context';
 import { dayKey, dayLabel, parseTs, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
-import { Avatar, Button, ErrorNote, FileBadge, Modal, Spinner, cx, DATA_TEXT } from '../../components/ui';
+import { Button, ErrorNote, FileBadge, Modal, Spinner, cx, DATA_TEXT } from '../../components/ui';
+import { UserAvatar } from '../../components/UserAvatar';
 import { describeCard } from '../calls/log';
 import { answerCall, startCall } from '../calls/start';
 import { openMeeting } from '../meet/api';
@@ -25,7 +26,7 @@ import { Composer, type ComposerHandle } from './Composer';
 import { PRESENCE } from './Details';
 import { ForwardDialog, type RoomDetail } from './NewChat';
 import { EmojiPicker, VoicePlayer } from './parts';
-import { mediaUrl, openAttachment, type ChatMessage, type Room } from './types';
+import { mediaUrl, openAttachment, roomPerson, type ChatMessage, type Room } from './types';
 
 export interface ReplyTarget {
   id: number;
@@ -205,7 +206,7 @@ export function Thread({
       }}
     >
       <div className={cx('flex h-[58px] shrink-0 items-center gap-2.5 border-b border-line bg-surface px-4', bare && 'hidden')}>
-        <Avatar name={room?.avatar_name || room?.name} size={mini ? 30 : 36} className={group ? '!rounded-[10px]' : ''} />
+        <UserAvatar userId={roomPerson(room)} name={room?.avatar_name || room?.name} size={mini ? 30 : 36} className={group ? '!rounded-[10px]' : ''} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-[14.5px] font-bold text-ink">{room?.name ?? 'Conversation'}</div>
           <div className="truncate text-[12px] text-ink-3">{subtitle}</div>
@@ -405,7 +406,7 @@ function Bubble({ m, own, roomId, onReply, onForward, onEdit }: { m: ChatMessage
   const bubble = own ? 'rounded-[12px_4px_12px_12px] bg-primary text-white' : 'rounded-[4px_12px_12px_12px] border border-line bg-surface text-ink';
   return (
     <div className={cx('group relative mt-3 flex gap-2.5', own && 'flex-row-reverse')}>
-      {!own ? <Avatar name={m.sender_name} size={30} /> : null}
+      {!own ? <UserAvatar userId={m.sender_id} name={m.sender_name} size={30} /> : null}
       <div data-bubble className={cx('relative flex min-w-0 max-w-[560px] flex-col gap-1', own && 'items-end', carded && 'w-[440px]')}>
         {!m.deleted ? (
           <MessageMenu

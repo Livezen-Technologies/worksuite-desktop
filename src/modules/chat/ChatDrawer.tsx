@@ -10,7 +10,8 @@ import { listStamp, parseTs } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { minimiseChatDrawer, openChatDrawer, ui } from '../../core/ui';
 import { Icon } from '../../components/Icon';
-import { Avatar, Empty, ErrorNote, Spinner, cx } from '../../components/ui';
+import { Empty, ErrorNote, Spinner, cx } from '../../components/ui';
+import { UserAvatar } from '../../components/UserAvatar';
 import { resolveWebLink } from '@shared/links';
 import { APP_CATALOGUE } from '@shared/apps';
 import { appColour } from '../../core/app-look';
@@ -21,7 +22,7 @@ import { answerCall, startCall } from '../calls/start';
 import { PRESENCE } from './Details';
 import { NewChat } from './NewChat';
 import { Thread } from './Thread';
-import type { Room } from './types';
+import { roomPerson, type Room } from './types';
 
 const GLYPH: Record<Kind, [string, string]> = {
   missed: ['↙', 'text-danger'],
@@ -213,7 +214,7 @@ function Lists() {
               const group = !!room && room.type !== 'direct';
               return (
                 <div key={c.uuid} className="flex items-center gap-3 rounded-[12px] pr-2 pl-2.5">
-                  <Avatar name={room?.avatar_name || nameOf(c)} size={42} className={group ? '!rounded-[13px]' : ''} />
+                  <UserAvatar userId={roomPerson(room)} name={room?.avatar_name || nameOf(c)} size={42} className={group ? '!rounded-[13px]' : ''} />
                   <span className="flex min-w-0 flex-1 items-center gap-2 border-b border-line py-[11px]">
                     <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
                       <b className={cx('truncate text-[14px]', d.kind === 'missed' ? 'text-danger' : 'text-ink')}>{nameOf(c)}</b>
@@ -259,7 +260,7 @@ function Lists() {
               if (tab === 'Archived') {
                 return (
                   <div key={r.id} className="flex items-center gap-3 pr-2 pl-2.5">
-                    <Avatar name={r.avatar_name || r.name} size={42} className={group ? '!rounded-[13px]' : ''} />
+                    <UserAvatar userId={roomPerson(r)} name={r.avatar_name || r.name} size={42} className={group ? '!rounded-[13px]' : ''} />
                     <span className="flex min-w-0 flex-1 items-center gap-2 border-b border-line py-[11px]">
                       <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
                         <b className="truncate text-[14px] text-ink">{r.name}</b>
@@ -279,7 +280,7 @@ function Lists() {
               return (
                 <button key={r.id} type="button" onClick={() => openChatDrawer(String(r.id))} className="flex w-full items-center gap-3 rounded-[12px] px-2.5 text-left hover:bg-subtle">
                   <span className="relative shrink-0">
-                    <Avatar name={r.avatar_name || r.name} size={46} className={group ? '!rounded-[14px]' : ''} />
+                    <UserAvatar userId={roomPerson(r)} name={r.avatar_name || r.name} size={46} className={group ? '!rounded-[14px]' : ''} />
                     {st ? <span className={cx('absolute right-0 bottom-0 h-3 w-3 rounded-full border-[2.5px] border-surface', st.dot)} aria-label={st.label} /> : null}
                   </span>
                   <span className="flex min-w-0 flex-1 flex-col gap-[3px] border-b border-line py-[11px]">
@@ -366,7 +367,7 @@ function Conversation({ roomId }: { roomId: string }) {
           <Icon name="chevron-left" size={18} />
         </button>
         <span className="relative ml-0.5 shrink-0">
-          <Avatar name={room?.avatar_name || room?.name} size={36} className={room && room.type !== 'direct' ? '!rounded-[10px]' : ''} />
+          <UserAvatar userId={roomPerson(room)} name={room?.avatar_name || room?.name} size={36} className={room && room.type !== 'direct' ? '!rounded-[10px]' : ''} />
           {st ? <span className={cx('absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-surface', st.dot)} /> : null}
         </span>
         <span className="ml-1.5 flex min-w-0 flex-1 flex-col">
@@ -424,7 +425,7 @@ export function MinimisedChats() {
         return (
           <span key={id} className="group flex h-[38px] items-center gap-2 rounded-full bg-navy pr-2 pl-2 text-[12.5px] font-semibold text-white shadow-[0_8px_20px_rgb(var(--ws-shadow-rgb)/.25)]">
             <button type="button" onClick={() => openChatDrawer(id)} className="flex items-center gap-2">
-              <Avatar name={r?.avatar_name || r?.name} size={22} className={r && r.type !== 'direct' ? '!rounded-[6px]' : ''} />
+              <UserAvatar userId={roomPerson(r)} name={r?.avatar_name || r?.name} size={22} className={r && r.type !== 'direct' ? '!rounded-[6px]' : ''} />
               <span className="max-w-[140px] truncate">{r?.name ?? 'Conversation'}</span>
               {r?.unread ? <span className="rounded-[8px] bg-badge px-1.5 text-[10.5px]">{r.unread}</span> : null}
             </button>
