@@ -145,27 +145,29 @@ export function AskPanel({
           </div>
         ) : null}
         {fileError ? <p role="alert" className="text-[12px] text-danger">{fileError}</p> : null}
-        <div className="flex items-end gap-2">
+        {/* The Chat composer's box: the field and its buttons in one bordered, focus-ringed frame. */}
+        <div className={cx('relative flex items-end gap-1 rounded-[12px] border px-2 py-1.5 transition-colors', off ? 'border-line bg-subtle/60' : 'border-line bg-surface focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15')}>
+          {surface === 'assistant.panel' && rules?.localFiles ? (
+            <button type="button" onClick={() => void attach()} disabled={busy || !!off} className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle hover:text-ink disabled:opacity-50" aria-label="Ask about a file from this computer" title="Ask about a file from this computer">
+              <Icon name="paperclip" size={18} />
+            </button>
+          ) : null}
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value.slice(0, 4000))}
             onKeyDown={onKey}
-            rows={2}
+            rows={1}
             autoFocus={autoFocus}
             disabled={!!off}
             placeholder={selection ? 'Ask about the selected text' : 'Ask the assistant'}
             aria-label="Your question"
-            className="max-h-32 min-h-[44px] flex-1 resize-none rounded-[10px] border border-line bg-subtle/60 px-3 py-2 text-[13px] text-ink outline-none focus:border-primary"
+            className="bare-focus field-sizing-content max-h-40 min-h-[34px] min-w-0 flex-1 resize-none bg-transparent px-1 py-[7px] text-[13.5px] text-ink outline-none"
           />
-          {surface === 'assistant.panel' && rules?.localFiles ? (
-            <button type="button" onClick={() => void attach()} disabled={busy || !!off} className="flex h-9 w-9 items-center justify-center rounded-[8px] border border-line text-ink-2 hover:bg-subtle disabled:opacity-50" aria-label="Ask about a file from this computer" title="Ask about a file from this computer">
-              <Icon name="paperclip" size={16} />
-            </button>
-          ) : null}
-          <button type="button" onClick={() => void send()} disabled={busy || !text.trim() || !!off} className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-primary text-white hover:bg-primary-hover disabled:opacity-50" aria-label="Send">
+          <button type="button" onClick={() => void send()} disabled={busy || !text.trim() || !!off} className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] bg-primary text-white hover:bg-primary-hover disabled:bg-subtle disabled:text-ink-3" aria-label="Send" title="Send (Enter)">
             <Icon name="send" size={16} />
           </button>
         </div>
+        <div className="px-1 text-[11px] text-ink-3">Enter to send · Shift+Enter for a new line</div>
       </div>
     </div>
   );

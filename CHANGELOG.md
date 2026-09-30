@@ -27,6 +27,8 @@ person who has to live with the change — what it does, and where it bites.
   view), and **Refresh** reloads the list and spins until it has.
 - **PDF Studio's side panels**: the tabs are a segmented control that fits the panel (the chosen one named, the
   others as icons), and the search options are toggle chips.
+- **AI Assistant → Ask** uses the Chat composer's box: the question, the file button and Send in one bordered
+  field with its focus ring, and "Enter to send · Shift+Enter for a new line" under it.
 - The built-in editor is no longer offered by hand while online (the file menu's **Edit in WorkSuite
   (built-in)** and the EuroOffice header's **Built-in editor** are gone).
 
