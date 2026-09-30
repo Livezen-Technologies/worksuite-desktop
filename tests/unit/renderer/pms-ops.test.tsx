@@ -207,6 +207,29 @@ describe('housekeeping writes (§11.1–11.2)', () => {
     expect((within(dialog).getByRole('button', { name: 'Record' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it('adds a photo to the attendant’s own task, and offers none on someone else’s', async () => {
+    perms = ['pms.access', 'pms.housekeeping.view'];
+    tab.path = ['pms', 'housekeeping', 'tasks', '12'];
+    app.set({ bootstrap: { user: { id: '7', name: 'Ruwan Silva' }, permissions: ['*'] } as never });
+    extra = (p) => (p === '/api/pms/v1/housekeeping-tasks/12' ? { task: { ...TASK, photos: [{ id: 31, url: '/api/pms/v1/housekeeping-tasks/12/photos/31' }] }, history: [], restocks: [] } : undefined);
+    vi.mocked(request).mockResolvedValue(ok({ file_id: 32 }, 'Photo added.'));
+    const first = show();
+    const img = await screen.findByRole('img', { name: 'Room 102, photo' });
+    expect(img.getAttribute('src')).toContain('/api/pms/v1/housekeeping-tasks/12/photos/31');
+    const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], 'bath.jpg', { type: 'image/jpeg' });
+    fireEvent.change(screen.getByLabelText('Add a photo…'), { target: { files: [file] } });
+    await waitFor(() => expect(posted()).toContainEqual(expect.objectContaining({ method: 'POST', path: '/api/pms/v1/housekeeping-tasks/12/photos' })));
+    const body = posted().find((x) => x.path === '/api/pms/v1/housekeeping-tasks/12/photos')!.body as unknown as FormData;
+    expect(body).toBeInstanceOf(FormData);
+    expect((body.get('file') as File).name).toBe('bath.jpg');
+    first.unmount();
+
+    app.set({ bootstrap: { user: { id: '9', name: 'Other' }, permissions: ['*'] } as never });
+    show();
+    expect(await screen.findByRole('img', { name: 'Room 102, photo' })).toBeTruthy();
+    expect(screen.queryByLabelText('Add a photo…')).toBeNull();
+  });
+
   it('waits for WorkSuite: a task shows no stale copy offline', async () => {
     perms = ['pms.access', 'pms.housekeeping.view'];
     tab.path = ['pms', 'housekeeping', 'tasks', '12'];
@@ -371,6 +394,20 @@ describe('a guest: documents and a duplicate (PMS-DOC-001, PMS-DUP-003)', () => 
     await waitFor(() => expect(posted()).toContainEqual(expect.objectContaining({ path: '/api/pms/v1/guests/70/merge', body: { from_guest_id: 71, reason: 'Same passport' } })));
   });
 
+  it('saves a document through the main process where downloads are allowed, and offers no save where they are not', async () => {
+    perms = ['pms.access', 'pms.guest.view'];
+    app.set({ bootstrap: { user: { id: '7' }, permissions: ['pms.access'] } as never });
+    const first = show();
+    expect(await screen.findByText(/letter\.pdf/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    first.unmount();
+
+    app.set({ bootstrap: { user: { id: '7' }, permissions: ['pms.access', 'desktop.downloads'] } as never });
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(call).toHaveBeenCalledWith('pms:download', { file: { kind: 'guest-document', document: 5 }, name: 'letter.pdf' }));
+  });
+
   it('removes a document for whoever may edit guests, and offers no merge to those who may not', async () => {
     perms = ['pms.access', 'pms.guest.view', 'pms.guest.edit'];
     vi.mocked(request).mockResolvedValue(ok(null, 'Removed.'));
@@ -419,7 +456,7 @@ describe('reports and KPIs (§13.6–13.7)', () => {
     expect(tab.go).toHaveBeenCalledWith('/pms/reports/occupancy');
   });
 
-  it('saves the server’s CSV where the person chooses — only with the export permission and where files may be saved', async () => {
+  it('saves the server’s CSV through the download manager — only with the export permission and where files may be saved', async () => {
     tab.path = ['pms', 'reports', 'occupancy'];
     extra = (p) =>
       p === '/api/pms/v1/properties/1/reports'
@@ -429,9 +466,7 @@ describe('reports and KPIs (§13.6–13.7)', () => {
           : p === '/api/pms/v1/properties/1/room-types' || p === '/api/pms/v1/properties/1/rate-plans'
             ? { items: [] }
             : undefined;
-    const fetchMock = vi.fn(async () => new Response('date,sold\n2026-09-18,30\n', { status: 200, headers: { 'content-type': 'text/csv', 'content-disposition': 'attachment; filename="occupancy-2026-09-18.csv"' } }));
-    vi.stubGlobal('fetch', fetchMock);
-    try {
+    {
       perms = ['pms.access', 'pms.reports.view'];
       const first = show();
       expect(await screen.findByText('30')).toBeTruthy();
@@ -448,10 +483,11 @@ describe('reports and KPIs (§13.6–13.7)', () => {
       app.set({ bootstrap: { user: { id: '7' }, permissions: ['pms.access', 'desktop.downloads'] } as never });
       show();
       fireEvent.click(await screen.findByRole('button', { name: 'CSV' }));
-      await waitFor(() => expect(call).toHaveBeenCalledWith('office:saveCopy', expect.objectContaining({ name: 'occupancy-2026-09-18.csv' })));
-      expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toContain('/api/pms/v1/properties/1/reports/occupancy?from=2026-09-18&to=2026-09-18&format=csv');
-    } finally {
-      vi.unstubAllGlobals();
+      // The main process fetches it by what it is (no bytes over IPC) and checks `desktop.downloads` itself.
+      await waitFor(() =>
+        expect(call).toHaveBeenCalledWith('pms:download', { file: { kind: 'report', property: 1, report: 'occupancy', format: 'csv', query: { from: '2026-09-18', to: '2026-09-18' } }, name: 'occupancy-2026-09-18.csv' }),
+      );
+      expect(call).not.toHaveBeenCalledWith('office:saveCopy', expect.anything());
     }
   });
 });

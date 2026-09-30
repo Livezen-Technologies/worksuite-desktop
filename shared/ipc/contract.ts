@@ -14,6 +14,7 @@
  */
 import { z } from 'zod';
 import { garageDocSchema } from '../garage-docs';
+import { pmsDownloadInput } from '../pms-files';
 import { ELEARNING_MEDIA_TOKEN, elearningCourseRef, elearningDownloadInput, type OfflineCourse, type OfflineValidation } from '../elearning-offline';
 import {
   deskEventRef,
@@ -539,6 +540,11 @@ export const contract = {
       .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.elearningMedia, v.officeExport, v.chatMedia, v.taskAttachment].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a payment slip, an order list, an Orders report, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, an eLearning lesson file, an Office export, a chat attachment or a task attachment'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
+  /**
+   * Hotel PMS: a guest's document or a report's export through the download manager (shared/pms-files.ts). The
+   * main process builds the address, refuses without `desktop.downloads` (here and in the handler) and audits it.
+   */
+  'pms:download': ch(pmsDownloadInput, { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 }),
   'transfers:upload': ch(
     z.object({ handles: z.array(idString).min(1).max(200), target: uploadTargetSchema }),
     { session: true, rate: 5 },
@@ -1040,6 +1046,7 @@ export interface Outputs extends PosOutputs {
   'files:saveText': string | null;
   'transfers:list': Transfer[];
   'transfers:download': Transfer;
+  'pms:download': Transfer;
   'transfers:upload': Transfer[];
   'transfers:pause': void;
   'transfers:resume': void;

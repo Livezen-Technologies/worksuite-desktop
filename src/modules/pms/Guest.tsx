@@ -6,8 +6,8 @@ import { bytes } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Ask, ChooseFiles, DropZone, input, Section } from '../garage/parts';
 import { PageHead } from '../hr/parts';
-import { day, errorText, K, MAX_DOCUMENT, pDelete, pFile, pGet, pPost, pUpload, stamp, type GuestDocument, type GuestHit, type GuestProfile, type ReservationSummary } from './api';
-import { saveBytes, useMaySave } from './ops';
+import { day, errorText, K, MAX_DOCUMENT, pDelete, pGet, pPost, pUpload, stamp, type GuestDocument, type GuestHit, type GuestProfile, type ReservationSummary } from './api';
+import { pmsDownload, useMaySave } from './ops';
 import { Facts, Money, NoAccess, Refusal, ReservationPill, usePms, VipPill } from './parts';
 
 const IDENTITY = new Set(['passport', 'national_id', 'visa', 'driving_licence']);
@@ -64,9 +64,8 @@ export default function GuestScreen({ id }: { id: number }) {
     setBusy(true);
     setError(null);
     try {
-      const f = await pFile(`/guest-documents/${d.id}`);
-      const kept = await saveBytes(d.file_name || f.name || `document-${d.id}`, f.bytes);
-      if (kept) toast('success', `Saved as ${kept}.`);
+      const kept = await pmsDownload({ kind: 'guest-document', document: d.id }, d.file_name || `document-${d.id}`);
+      toast('success', `Saving ${kept} to your downloads folder.`);
     } catch (e) {
       setError(errorText(e, 'The document could not be saved.'));
     } finally {

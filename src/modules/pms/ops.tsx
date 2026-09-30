@@ -1,3 +1,4 @@
+import type { PmsFile } from '@shared/pms-files';
 import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { Select } from '../../components/Select';
@@ -148,9 +149,15 @@ export function useMaySave(): boolean {
   });
 }
 
-/** A file from the server saved where the person chooses (the save dialog). */
-export async function saveBytes(name: string, bytes: Uint8Array<ArrayBuffer>): Promise<string | null> {
+/**
+ * A PMS file — a guest's document, a report's export — saved on this computer
+ * through the download manager (`pms:download`): the main process builds the
+ * address from what it is, checks `desktop.downloads` itself, fetches it
+ * signed in and records it; it shows in Transfers. Answers the name it is
+ * saved under.
+ */
+export async function pmsDownload(file: PmsFile, name: string): Promise<string> {
   const safe = name.replace(/[/\\]/g, '-').slice(0, 200) || 'worksuite-file';
-  const r = await call('office:saveCopy', { name: safe, bytes });
-  return r?.name ?? null;
+  const t = await call('pms:download', { file, name: safe });
+  return t.name;
 }

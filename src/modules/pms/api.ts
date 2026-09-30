@@ -1,4 +1,4 @@
-import { ApiError, apiGetMeta, apiUrl, request } from '../../core/api';
+import { ApiError, apiGetMeta, request } from '../../core/api';
 import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
 
@@ -197,34 +197,6 @@ export const K = {
   calendar: (property: number, from: string, days: number) => ['pms', 'live', 'calendar', property, from, days] as const,
   directory: ['chat', 'directory'] as const,
 };
-
-/**
- * A file the server answers with (a report's CSV, a guest's document): its
- * bytes and the name it gives, through the same API proxy as every read. A
- * refusal comes back as JSON and is thrown in the server's sentence.
- */
-export async function pFile(path: string, query?: Query): Promise<{ bytes: Uint8Array<ArrayBuffer>; name: string | null; type: string }> {
-  let res: Response;
-  try {
-    res = await fetch(apiUrl(`${BASE}${path}`, query), { headers: { Accept: '*/*' } });
-  } catch {
-    throw new ApiError(0, 'WorkSuite Desktop could not complete the request.', 'INTERNAL');
-  }
-  const type = res.headers.get('content-type') ?? '';
-  if (!res.ok || type.includes('json')) {
-    let message = `The server answered ${res.status}.`;
-    try {
-      const j = (await res.json()) as { message?: unknown };
-      if (typeof j.message === 'string') message = j.message;
-    } catch {
-      /* not JSON */
-    }
-    throw new ApiError(res.status || 500, message, null);
-  }
-  const cd = res.headers.get('content-disposition') ?? '';
-  const name = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd)?.[1] ?? null;
-  return { bytes: new Uint8Array(await res.arrayBuffer()), name: name ? decodeURIComponent(name) : null, type };
-}
 
 /** A move the server offers on a record (`options`): the action, its words and what it needs said. */
 export interface ActionOption {
@@ -932,7 +904,13 @@ export interface HkTaskFull extends HkTask {
   options?: ActionOption[];
   primary?: string | null;
   room?: { hk_status: string; hk_status_label: string; badge: Badge; version: number };
+  /** The task's photos (`Photos::listed`), each served by `GET housekeeping-tasks/{id}/photos/{fileId}`. */
+  photos?: Array<{ id: number; url: string }>;
 }
+
+/** The server keeps up to 12 photos a record, 10 MB each (`Pms\Libraries\Photos`). */
+export const MAX_PHOTO = 10 * 1024 * 1024;
+export const MAX_PHOTOS = 12;
 
 export interface HkStaff {
   user_id: number;

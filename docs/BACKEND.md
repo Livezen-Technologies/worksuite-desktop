@@ -285,7 +285,7 @@ a fault).
 | Reservations | `GET properties/{id}/reservations?status=&page=`, `GET search?q=`, `GET reservations/{id}`, `POST reservations/{id}` (dates, ETA, requests, notes, with `version`), `POST reservations/{id}/status`, `POST reservations/{id}/cancel`, `GET reservations/{id}/history` |
 | Deposit | `GET reservations/{id}/deposit`, `POST reservations/{id}/deposit/payments`, `POST deposits/{id}/waive\|refund`, `GET properties/{id}/folios?status=open&q=<confirmation>` then `POST reservations/{id}/deposit/apply {folio_id, amount?}` |
 | New reservation | `GET availability?property_id=&arrival=&departure=&adults=&children=&rooms=&source_id=&promo_code=`, `POST properties/{id}/reservations` |
-| Guests | `GET guests?q=&org=`, `POST guests/check`, `POST guests` (`client_id`, or the details with `force`), `GET guests/{id}`, `GET guests/{id}/reservations`, `POST guests/{id}/documents` (multipart), `GET guest-documents/{id}` (the file, saved), `DELETE guest-documents/{id}`, `POST guests/{id}/merge {from_guest_id, reason}`, `POST guests/{id}/identity` (a scanned ID, confirmed) |
+| Guests | `GET guests?q=&org=`, `POST guests/check`, `POST guests` (`client_id`, or the details with `force`), `GET guests/{id}`, `GET guests/{id}/reservations`, `POST guests/{id}/documents` (multipart), `GET guest-documents/{id}` (the file, fetched by the main process's download manager through `pms:download`), `DELETE guest-documents/{id}`, `POST guests/{id}/merge {from_guest_id, reason}`, `POST guests/{id}/identity` (a scanned ID, confirmed) |
 | Check-in | `GET reservations/{id}/check-in`, `POST reservations/{id}/check-in {rooms, id_verified, guarantee_verified, override_reason, early_checkin, posting_allowed, keys, version}`, `POST stays/{id}/registration-card {document_id}` |
 | Walk-in | `GET availability` (tonight), `POST properties/{id}/walk-ins {…, payment?}` |
 | A stay | `GET stays/{id}`, `POST stays/{id}` (charges allowed, credit limit), `POST stays/{id}/move`, `POST stays/{id}/departure`, `POST stays/{id}/keys`, `POST stays/{id}/folios`, `POST stays/{id}/routing`, `DELETE routing-rules/{id}`, `POST stays/{id}/charges` |
@@ -293,18 +293,25 @@ a fault).
 | Check-out | `GET reservations/{id}/check-out`, `POST reservations/{id}/check-out {rooms, early, late_checkout, apply_deposit, transfer_ar}` |
 | Cashier | `GET properties/{id}/cashier-sessions`, `POST properties/{id}/cashier-sessions`, `GET cashier-sessions/{id}`, `POST cashier-sessions/{id}/close\|reconcile` |
 | Night audit | `GET properties/{id}/night-audit`, `POST properties/{id}/night-audit/check\|run`, `GET night-audits/{id}`, `POST night-audit-blockers/{id}/override` |
-| Housekeeping, rooms | `GET properties/{id}/housekeeping/tasks`, `POST properties/{id}/housekeeping/tasks` (idempotent), `POST properties/{id}/housekeeping/generate`, `GET properties/{id}/housekeeping/staff`, `GET housekeeping-tasks/{id}`, `POST housekeeping-tasks/{id}/{action}\|assign\|checklist`, `GET rooms/{id}`, `GET rooms/{id}/history`, `POST rooms/{id}/housekeeping {to, version, reason?}`, `POST outages/{id}/release` |
+| Housekeeping, rooms | `GET properties/{id}/housekeeping/tasks`, `POST properties/{id}/housekeeping/tasks` (idempotent), `POST properties/{id}/housekeeping/generate`, `GET properties/{id}/housekeeping/staff`, `GET housekeeping-tasks/{id}`, `POST housekeeping-tasks/{id}/{action}\|assign\|checklist`, `POST housekeeping-tasks/{id}/photos` (multipart, 10 MB, 12 a task; `GET …/photos/{file}` shown), `GET rooms/{id}`, `GET rooms/{id}/history`, `POST rooms/{id}/housekeeping {to, version, reason?}`, `POST outages/{id}/release` |
 | Restocks | `POST housekeeping-tasks/{id}/restocks`, `POST rooms/{id}/restocks` (`{items: [{product_id, quantity, kind, chargeable}]}`, idempotent); products from Inventory's `GET /api/inventory/products/lookup?q=&org_id=` |
 | Maintenance | `GET properties/{id}/maintenance?open=&category=`, `GET properties/{id}/maintenance/my`, `GET rooms/{id}/maintenance`, `POST properties/{id}/maintenance` (idempotent, `assigned_to?`, `out_of_order?`), `GET maintenance-issues/{id}`, `POST maintenance-issues/{id}/{action}`, `…/out-of-order`, `…/back-in-service`, `…/parts` (idempotent), `…/photos` (multipart) |
 | Lost and found | `GET properties/{id}/lost-found?open=&due=&q=`, `POST properties/{id}/lost-found` (idempotent), `GET lost-found/{id}`, `POST lost-found/{id}/{store\|claim\|return\|dispose}`, `POST lost-found/{id}/photo` (multipart) |
 | Requests, dashboard | `GET properties/{id}/requests?open=1`, `POST properties/{id}/requests`, `GET guest-requests/{id}`, `POST guest-requests/{id}/{action}` (`assign {assigned_to}` from the company directory, `GET /api/chat/directory`), `GET properties/{id}/dashboard` |
 | Tape chart | `GET properties/{id}/calendar?from=&days=7\|14\|30`, `POST calendar/preview`, `POST calendar/move {…, version, reason?}` |
 | Invoices | `GET properties/{id}/folios?status=settled\|transferred_ar\|closed`, `POST folios/{id}/invoice`, `GET properties/{id}/outbox?status=`, `POST outbox/{id}/retry` |
-| KPIs, reports | `GET properties/{id}/kpis?from=&to=`, `GET properties/{id}/reports`, `GET properties/{id}/reports/{key}?from=&to=&room_type_id=&source_id=&rate_plan_id=[&format=csv]`, `GET properties/{id}/room-types`, `GET properties/{id}/rate-plans` |
+| KPIs, reports | `GET properties/{id}/kpis?from=&to=`, `GET properties/{id}/reports`, `GET properties/{id}/reports/{key}?from=&to=&room_type_id=&source_id=&rate_plan_id=`, the export `…&format=csv\|xlsx\|pdf` fetched by the main process (`pms:download`), `GET properties/{id}/room-types`, `GET properties/{id}/rate-plans` |
 
 **Printed pages** (registration cards, receipts, invoices, statements, shift and night-audit reports) are laid out on
 the desktop from the server's answers (`registration-card`, `folios/{id}/document`, the shift, the audit's `report`) and
 printed through the OS dialog; the server renders none.
+
+**Files saved on this computer.** A guest's document and a report's export go through `pms:download`
+(`shared/pms-files.ts`): the page names the file (`guest-document {document}` or `report {property, report, format,
+query}`), the main process builds the `/api/pms/v1` address, refuses without `desktop.downloads` (the channel's
+permission, and again in the handler, so the organization's policy and the device's trust decide in the main process,
+not only the screen) and hands it to the download manager, which fetches it signed in into the downloads folder and
+writes `file.download {kind: pms-document|pms-report}` to the audit log. No bytes cross IPC.
 
 **Offline.** READ_CACHE covers `options`, `properties`, and per property `rack`, `arrivals`, `departures`, `in-house`,
 `business-date` and `front-desk/lists` (`shared/pms-cache.ts`). Nothing is queued: every write needs the server
@@ -516,12 +523,14 @@ server knows which till sent an order, which station a kitchen screen is and whi
 | Pairing (main process) | `GET structure?org=&branch_id=` (the terminal read back), `POST terminals/{id}/pair` → `device_key` (`rt_` + 48 hex), once; `POST terminals/{id}/revoke` on unpair when asked |
 | The shell | `GET options?org=`, `GET pos?branch_id=` (the terminal, business date, the person's cashier session, the till's policy: tenders, `offline_actions`) |
 | Floor | `GET floor?branch_id=`; `POST floor/tables/{id}/seat\|open\|free\|request-bill {…, version}`; `POST floor/sessions/{id}/move\|merge\|split {…, versions}`; `POST tables/{id}/clean\|unblock {version}` |
-| Order | `GET menu/branch/{branch}?channel=`; `POST orders {branch_id, order_type, uuid, lines, send}`; `GET orders/{id}`; `POST orders/{id}/items {lines, send, version}`; `POST orders/{id}/send\|fire\|hold\|serve\|print-kot`; `POST orders/{id}/items/{line}/void {reason, qty, version, approval_id?}` |
+| Order | `GET menu/branch/{branch}?channel=` (a combo's `combo.components`); `POST orders {branch_id, order_type, uuid, lines, send}` (a combo line carries `combo: [{component_id, item_id, variant_id?}]` for its choice components); `GET orders/{id}`; `POST orders/{id}/items {lines, send, version}`; `POST orders/{id}/send\|fire\|hold\|serve\|print-kot`; `POST orders/{id}/items/{line}/void {reason, qty, version, approval_id?}` |
+| Discounts, comps, price overrides | `POST adjustments/discount {order_id, order_item_id?, pct\|amount, reason, terminal_id, approval_id?}` (`restaurant.discount.apply`), `POST adjustments/comp {order_item_id, reason, approval_id?}` (`restaurant.comp`), `POST adjustments/price {order_item_id, unit_price, reason, approval_id?}` (`restaurant.price.override`); above the limit 403 `approval_needed` with `approval` → ask, then the same again with `approval_id`; `GET adjustments?order_id=` (for `payment.process`, `report.view` or `cashier.close`), `POST adjustments/{id}/remove {reason}` before anything is paid |
 | Approvals | `POST approvals {branch_id, action, amount, pct, reason, subject_type, subject_id, order_id, terminal_id}`; `GET approvals/{id}` (every 3 s); `POST approvals/{id}/approve {pin}` (the approver's PIN at the till); `GET approvals`, `POST approvals/{id}/approve\|reject` |
-| Bill | `GET bills/preview?order_id=`; `POST bills {order_id, mode: single\|seat\|item\|equal\|amount, count, amounts, parts}`; `POST bills/{id}/present\|void`; `POST bills/{id}/print` (`queued: false` → the returned `document.text` printed here); `POST bills/{id}/payments {tenders, terminal_id, version}` + `Idempotency-Key` (kept for every retry of one attempt) → `change_given`, `open_drawer` |
+| Bill | `GET bills/preview?order_id=`; `POST bills {order_id, mode: single\|seat\|item\|equal\|amount, count, amounts, parts}`; `POST bills/{id}/present\|void`; `POST bills/{id}/print` (`queued: false` → the returned `document.text` printed here); `POST bills/{id}/payments {tenders, terminal_id, version}` + `Idempotency-Key` (kept for every retry of one attempt) → `change_given`, `open_drawer`; `GET payments?order_id=`, `POST payments/{id}/refund {amount, reason, method, terminal_id, approval_id?}` + `Idempotency-Key` (kept until answered; `restaurant.refund`) → `open_drawer`; `POST bills/{id}/invoice {client_id?}` (a whole-order bill; the customer from `GET customers?q=`) |
+| Host stand | `GET reservations?branch_id=&date=`, `GET reservations/timeline?branch_id=&date=`, `GET reservations/availability?branch_id=&date=&time=&guests=` (free tables, or `suggestions`), `POST reservations {branch_id, date, time, guests, name, phone, occasion, special_requests, table_id?, source: phone, uuid}`, `POST reservations/{id}/confirm\|arrive\|seat\|cancel\|no_show {version, table_id, guests, table_version, reason}` as the booking's `choices` offer them (`reservation.view` / `reservation.manage`) |
 | Cashier | `GET cashier-sessions/mine`, `GET cashier-sessions/{id}` (X / Z report), `POST cashier-sessions {branch_id, terminal_id, pos_register_id, opening_float}`, `POST …/{id}/cash {direction, amount, reason, approval_id?}`, `POST …/{id}/no-sale {reason}`, `POST …/{id}/start_close`, `POST …/{id}/close {counted_cash, reason, approval_id?}` |
 | Kitchen | `GET kitchen?branch_id=&station_id=` (the terminal's station by default), `GET kitchen/expo?branch_id=`, `POST kitchen/tickets/{id}/accept\|start\|bump\|recall\|serve\|print {version}`, `POST kitchen/tickets/{id}/items/{item}/done\|undo {version}` |
-| Live | `GET live?branch_id=&after=&limit=` every 3–5 s while a floor, order, bill or kitchen screen shows, from the heartbeat's `last_seq`; `reload` → everything refreshed |
+| Live | `restaurant.live {seq, branch_id, entity, id, version, kind}` on the realtime socket (`Live::emit` → the gateway, fanned out as `realtime:event`): the screens refresh what the entity touches at once; behind it `GET live?branch_id=&after=&limit=` every 3–10 s while a screen shows (every 30 s while the socket is connected), from the heartbeat's `last_seq`; `reload` → everything refreshed |
 | Print agent (main process) | `POST print-jobs/claim {printer_ids, limit}` every 4 s for the printers mapped here, `POST print-jobs/{id}/printed\|failed {error}`; screens: `GET print-jobs?branch_id=`, `POST print-jobs/{id}/reprint` |
 | Offline (main process) | `POST sync {branch_id, ops: [{op: create_order\|add_items\|send, client_ref, data}]}` + `Idempotency-Key` per batch; `POST sync/heartbeat {queue_size, app_version, online, last_sync_at, printers}` every 30 s; the copy: `GET pos`, `GET floor`, `GET menu/branch/{id}` (every 5 min) |
 | Conflicts | `GET sync/conflicts?branch_id=&status=open`, `POST sync/conflicts/{id}/resolve {action: attach\|dismiss, table_id, guests, note}` (for `restaurant.order.cancel`) |
@@ -544,7 +553,15 @@ What the desktop cannot do because the server does not:
   (a later step). A 58 mm roll is sent the same 32 columns.
 - **Heartbeat printer states** are `online`, `offline`, `error`, `paper_out`; the agent reports `online` or `error`
   (it cannot tell paper out from other failures through the OS spooler).
-- **Realtime** (`restaurant.live` over the gateway) is not subscribed yet: the screens catch up with `live?after=`.
+- **A push does not say what the screen needs.** `restaurant.live` names the entity and id only, so the screen reads
+  the record again; the push's `payload` is empty for most entities.
+- **A tax invoice needs a CRM customer.** `bills/{id}/invoice` refuses without `client_id` unless the order has one;
+  the till looks the customer up (`GET customers?q=`) — adding a new one stays with `POST customers`
+  (`restaurant.customer.manage`), which the till does not offer yet.
+- **Combo components with modifiers.** A choice component's pick may carry `modifiers`; the till sends the pick
+  only, so a component whose item has a required modifier group is refused by the server in its own words.
+- **Refunds go back to the tender they came from.** Another method needs a manager on the server; the till always
+  sends the payment's own `method`.
 
 ## The existing API (servers without `/desktop/v1`)
 

@@ -4,6 +4,7 @@ import { Button, Card, Modal, Spinner, TextField, cx } from '../../components/ui
 import { call } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { get, K, money, newKey, refusal, write, type Bill, type Quote } from './api';
+import { InvoiceDialog, OrderPayments } from './Adjust';
 import { useT, type RKey } from './i18n';
 import { Failed, Heading, Note, ReasonField, useLive, useTill } from './parts';
 
@@ -36,6 +37,7 @@ export default function BillScreen() {
   const [mode, setMode] = useState<Mode | null>(null);
   const [paying, setPaying] = useState<Bill | null>(null);
   const [voiding, setVoiding] = useState<Bill | null>(null);
+  const [invoicing, setInvoicing] = useState<Bill | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   const q = useQuery({
@@ -48,6 +50,7 @@ export default function BillScreen() {
     void qc.invalidateQueries({ queryKey: K.bills(orderId ?? 0) });
     void qc.invalidateQueries({ queryKey: K.order(orderId ?? 0) });
     void qc.invalidateQueries({ queryKey: K.floor(till.branch) });
+    void qc.invalidateQueries({ queryKey: K.payments(orderId ?? 0) });
   };
 
   async function act(what: string, path: string, body: Record<string, unknown> = {}) {
@@ -152,6 +155,11 @@ export default function BillScreen() {
                         {t('bill.takePayment')}
                       </Button>
                     ) : null}
+                    {b.split_count === 1 && till.can('payment_process') ? (
+                      <Button size="sm" icon="receipt" disabled={till.offline} onClick={() => setInvoicing(b)}>
+                        {b.invoice_id ? t('invoice.show') : t('invoice.open')}
+                      </Button>
+                    ) : null}
                     {Number(b.paid_total) === 0 && till.can('order_edit') ? (
                       <Button size="sm" variant="ghost" onClick={() => setVoiding(b)}>
                         {t('bill.void')}
@@ -162,6 +170,7 @@ export default function BillScreen() {
               ))}
             </ul>
           </Card>
+          <OrderPayments orderId={orderId} currency={cur} onChanged={refresh} />
           <Card title={open.length ? t('bill.again') : t('bill.make')}>
             <div className="flex flex-wrap gap-1.5">
               {MODES.map((m) => (
@@ -175,6 +184,7 @@ export default function BillScreen() {
       </div>
       {mode ? <MakeBills mode={mode} quote={quote} orderId={orderId} onClose={() => setMode(null)} onDone={refresh} /> : null}
       {paying ? <TakePayment bill={paying} currency={cur} onClose={() => setPaying(null)} onDone={refresh} /> : null}
+      {invoicing ? <InvoiceDialog bill={invoicing} onClose={() => setInvoicing(null)} onDone={refresh} /> : null}
       {voiding ? <VoidBill bill={voiding} onClose={() => setVoiding(null)} onDone={refresh} /> : null}
     </div>
   );

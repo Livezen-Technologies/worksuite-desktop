@@ -81,7 +81,26 @@ export interface MenuItem {
   orderable: boolean;
   variants: Array<{ id: number; name: string; price: Money; is_default: boolean; orderable: boolean; state: string }>;
   groups: ModGroup[];
-  combo: unknown;
+  combo: Combo | null;
+}
+
+/** A combo as the branch menu has it (`Menu::combosFor`): fixed parts always, choice parts from what the waiter picks. */
+export interface Combo {
+  pricing: string;
+  discount_pct: string | null;
+  components: ComboComponent[];
+}
+
+export interface ComboComponent {
+  id: number;
+  kind: 'fixed' | 'choice' | string;
+  label: string;
+  item_id: number | null;
+  variant_id: number | null;
+  qty: string | null;
+  min_choices: number;
+  max_choices: number;
+  options: Array<{ item_id: number; variant_id: number | null; upcharge: Money }>;
 }
 
 export interface BranchMenu {
@@ -211,6 +230,8 @@ export interface Bill {
   paid_total: Money;
   balance: Money;
   printed_count: number;
+  client_id?: number | null;
+  invoice_id?: number | null;
   version: number;
   lines?: Array<{ id: number; kind: string; description: string; qty: string; amount: Money }>;
 }
@@ -350,6 +371,113 @@ export interface Approval {
   expires_at: string | null;
 }
 
+/** A discount, comp, price override (or a refund, a void…) as the server records it (`Adjustments::shape`). */
+export interface Adjustment {
+  id: number;
+  kind: string;
+  kind_label: string;
+  order_id: number | null;
+  order_item_id: number | null;
+  bill_id: number | null;
+  payment_id: number | null;
+  amount: Money;
+  pct: string | null;
+  currency: string | null;
+  reason: string;
+  requested_by_name: string | null;
+  approver_name: string | null;
+  status: string;
+  removed_at: string | null;
+  created_at: string | null;
+}
+
+/** A payment on a bill (`Payments::shape`); a refund is a payment of its own with `refund_of_id`. */
+export interface Payment {
+  id: number;
+  bill_id: number;
+  order_id: number;
+  method: string;
+  method_label: string;
+  amount: Money;
+  tendered: Money;
+  change_given: Money;
+  currency: string | null;
+  status: string;
+  status_label: string;
+  provider_ref: string | null;
+  refunded_total: Money;
+  refund_of_id: number | null;
+  created_at: string | null;
+  version: number;
+}
+
+/** A customer from CRM with the restaurant's tab (`Customers::listRow`); the phone masked unless the person manages customers. */
+export interface Customer {
+  client_id: number;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  restaurant: boolean;
+  has_allergies: boolean;
+  visits: number;
+}
+
+/** A move a booking may make now, as the server offers it to this person (`ReservationMachine::choices`). */
+export interface ReservationChoice {
+  to: string;
+  on: string;
+  label: string;
+  needs: string[];
+}
+
+export interface Reservation {
+  id: number;
+  branch_id: number;
+  area_id: number | null;
+  table_id: number | null;
+  table_code: string | null;
+  client_id: number | null;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  reserved_for: string | null;
+  ends_at: string | null;
+  local_date: string;
+  local_time: string;
+  duration_minutes: number;
+  guests: number;
+  occasion: string | null;
+  special_requests: string | null;
+  notes: string | null;
+  status: string;
+  status_label: string;
+  source: string;
+  session_id: number | null;
+  version: number;
+  choices: ReservationChoice[];
+}
+
+export interface Timeline {
+  branch_id: number;
+  date: string;
+  tables: Array<{
+    table_id: number;
+    code: string;
+    capacity: number;
+    area_id: number;
+    status: string;
+    blocks: Array<{ kind: 'reservation' | 'party'; id: number; name?: string; guests: number; from: string | null; to: string | null; status: string }>;
+  }>;
+}
+
+export interface Availability {
+  reserved_for: string | null;
+  duration_minutes: number;
+  open: boolean;
+  tables: Array<{ id: number; code: string; capacity: number; area_id: number; floor_id: number }>;
+  suggestions: Array<{ reserved_for: string; tables: number }>;
+}
+
 export interface LiveEvent {
   seq: number;
   entity: string;
@@ -455,6 +583,10 @@ export const K = {
   printJobs: (branch: number) => ['restaurant', 'print-jobs', branch] as const,
   conflicts: (branch: number) => ['restaurant', 'conflicts', branch] as const,
   approvals: ['restaurant', 'approvals'] as const,
+  adjustments: (order: number) => ['restaurant', 'adjustments', order] as const,
+  payments: (order: number) => ['restaurant', 'payments', order] as const,
+  reservations: (branch: number, date: string) => ['restaurant', 'reservations', branch, date] as const,
+  timeline: (branch: number, date: string) => ['restaurant', 'timeline', branch, date] as const,
 };
 
 /** Money as the server wrote it, with the company's currency. */

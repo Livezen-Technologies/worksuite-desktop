@@ -342,7 +342,7 @@ export class TransferManager {
     this.live.set(t.id, l);
     this.persist(l);
     if (then) this.whenDone.set(t.id, then);
-    this.deps.audit('file.download', fileId ? { file_id: fileId } : { kind: isOfficeExportPath(apiPath) ? 'office-export' : apiPath.startsWith('/api/meet/') ? 'meet-recording' : apiPath.startsWith('/api/files/') ? 'file-version' : apiPath.startsWith('/api/calendar/') || apiPath.startsWith('/api/contacts/') || apiPath.startsWith('/api/data/') || apiPath.startsWith('/api/finance/export/') || /^\/api\/expense\/(reports2?\/export|runs\/|postings\/)/.test(apiPath) ? 'export' : apiPath.startsWith('/api/expense/') ? 'expense-document' : apiPath.startsWith('/api/garage/') ? 'garage-document' : isGrantPath(apiPath) ? 'task-attachment' : isMediaPath(apiPath) ? 'media' : 'mail-attachment' });
+    this.deps.audit('file.download', fileId ? { file_id: fileId } : { kind: isOfficeExportPath(apiPath) ? 'office-export' : apiPath.startsWith('/api/meet/') ? 'meet-recording' : apiPath.startsWith('/api/files/') ? 'file-version' : apiPath.startsWith('/api/calendar/') || apiPath.startsWith('/api/contacts/') || apiPath.startsWith('/api/data/') || apiPath.startsWith('/api/finance/export/') || /^\/api\/expense\/(reports2?\/export|runs\/|postings\/)/.test(apiPath) ? 'export' : apiPath.startsWith('/api/expense/') ? 'expense-document' : apiPath.startsWith('/api/garage/') ? 'garage-document' : apiPath.startsWith('/api/pms/') ? (apiPath.includes('/reports/') ? 'pms-report' : 'pms-document') : isGrantPath(apiPath) ? 'task-attachment' : isMediaPath(apiPath) ? 'media' : 'mail-attachment' });
     void this.runDownload(l);
     return { ...t };
   }

@@ -10,14 +10,12 @@ import { Ask, ChooseFiles, input, Section } from '../garage/parts';
 import { PageHead } from '../hr/parts';
 import type { Pickable } from '../inventory/control';
 import { ProductPick } from '../inventory/pickers';
-import { day, errorText, K, newKey, pGet, pPost, pUpload, stamp, type Issue } from './api';
+import { day, errorText, K, MAX_PHOTO, newKey, pGet, pPost, pUpload, stamp, type Issue } from './api';
 import { MAINT_READ, MAINT_REPORT } from './Maintenance';
 import { ActionButtons, PersonPick, useActions } from './ops';
 import { useHasInventory } from './Restock';
 import { Facts, NoAccess, Refusal, usePms } from './parts';
 
-/** Photos the server keeps for an issue: up to 10 MB each. */
-const MAX_PHOTO = 10 * 1024 * 1024;
 
 /**
  * A maintenance issue (§11.3, `/pms/maintenance/<id>`): its lifecycle as the

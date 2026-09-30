@@ -250,6 +250,9 @@ Being controlled is the main process's business, never a page's:
   so it is allowed where other applications are not); anything else goes to the OS only with
   `desktop.files.open_external`. Chat attachments are fetched by their signed `/media/{token}`, task attachments
   by a `/d/{token}` grant the server mints for 15 minutes; the renderer names only the token or the ids.
+  Hotel PMS files (a guest's document, a report's export) go through `pms:download`: the page names the document
+  or the report, the main process builds the `/api/pms/v1` address and checks `desktop.downloads` in the handler
+  as well as on the channel, so the organization's policy and the device's trust are enforced outside the page.
 - **Logs and reports** (PDF-NFR-030/031, PDF-AUD-002): a failure is logged with the file's format, size, page
   count, the engine's error and the app version; opening and printing are audited with the file's id, version and
   page count. Never a name, a path, text or a password.

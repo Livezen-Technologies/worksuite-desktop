@@ -1,10 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Button, ErrorNote, Modal, Spinner } from '../../components/ui';
+import { apiUrl } from '../../core/api';
+import { app } from '../../core/app-state';
+import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
-import { Section } from '../garage/parts';
+import { ChooseFiles, Section } from '../garage/parts';
 import { PageHead } from '../hr/parts';
-import { day, errorText, K, pGet, pPost, stamp, type HkStaff, type HkTaskFull, type Restock } from './api';
+import { day, errorText, K, MAX_PHOTO, MAX_PHOTOS, pGet, pPost, pUpload, stamp, type HkStaff, type HkTaskFull, type Restock } from './api';
 import { ActionButtons, PersonPick, useActions } from './ops';
 import { RestockDialog } from './Restock';
 import { Facts, NoAccess, Refusal, StatusBadge, usePms, VipPill } from './parts';
@@ -20,7 +23,10 @@ interface TaskView {
  * moves the server offers this person (start, pause, complete, inspect…,
  * each asking for what it needs), the checklist ticked as the work goes,
  * the room given to an attendant (`pms.housekeeping.manage`, the server's
- * own staff list), what went into the room, and the task's history.
+ * own staff list), what went into the room, photos of the room (the
+ * attendant's own task, one nobody has yet, or any for a supervisor, while
+ * the task is open — `POST housekeeping-tasks/{id}/photos`), and the task's
+ * history.
  */
 export default function HkTask({ id }: { id: number }) {
   const pms = usePms();
@@ -33,6 +39,8 @@ export default function HkTask({ id }: { id: number }) {
   const [to, setTo] = useState<number | null>(null);
   const [restock, setRestock] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const me = useStore(app, (s) => Number(s.bootstrap?.user.id ?? 0));
   const t = q.data?.task;
   useEffect(() => {
     if (t) pms.adopt(t.property_id);
@@ -51,6 +59,24 @@ export default function HkTask({ id }: { id: number }) {
       void qc.invalidateQueries({ queryKey: K.hkTask(id) });
     } catch (e) {
       acts.setError(errorText(e, 'The checklist was not changed.'));
+    }
+  };
+  /* Who may add a photo, as the server's `Housekeeping::mayWork`: a supervisor, or the attendant on their own task or one nobody has yet. */
+  const works = manages || t.assigned_to === null || t.assigned_to === me;
+  const photos = t.photos ?? [];
+  const addPhoto = async (files: File[]) => {
+    const f = files[0];
+    if (!f) return;
+    if (f.size > MAX_PHOTO) return acts.setError(`${f.name} is larger than 10 MB.`);
+    setUploading(true);
+    acts.setError(null);
+    try {
+      toast('success', (await pUpload(`/housekeeping-tasks/${id}/photos`, f, f.name, {})).message);
+      void qc.invalidateQueries({ queryKey: K.hkTask(id) });
+    } catch (e) {
+      acts.setError(errorText(e, 'The photo was not kept.'));
+    } finally {
+      setUploading(false);
     }
   };
   const saveNote = async () => {
@@ -97,6 +123,24 @@ export default function HkTask({ id }: { id: number }) {
                   </li>
                 ))}
               </ul>
+            )}
+          </Section>
+          <Section
+            title={`Photos${photos.length ? ` · ${photos.length}` : ''}`}
+            action={
+              open && works && photos.length < MAX_PHOTOS ? (
+                <ChooseFiles multiple={false} accept="image/jpeg,image/png,image/webp,image/heic" disabled={!pms.online || uploading} label="Add a photo…" onFiles={(f) => void addPhoto(f)} />
+              ) : null
+            }
+          >
+            {photos.length === 0 ? (
+              <p className="m-0 text-[13px] text-ink-3">None.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {photos.map((p) => (
+                  <img key={p.id} src={apiUrl(p.url)} alt={`Room ${t.room_number}, photo`} className="size-24 rounded-[8px] border border-line object-cover" />
+                ))}
+              </div>
             )}
           </Section>
           <Section title="History">

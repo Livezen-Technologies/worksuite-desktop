@@ -54,6 +54,8 @@ export const restaurantLineInput = z.object({
   course: z.string().max(20).nullable().optional(),
   price: z.string().regex(/^\d{1,10}(\.\d{1,2})?$/).optional(),
   modifiers: z.array(modifierPick).max(30).optional(),
+  /** A combo's choices (`OrderLines::combo`): the item picked for each choice component; the fixed parts go with it on their own. */
+  combo: z.array(z.object({ component_id: id, item_id: id, variant_id: id.nullable().optional(), modifiers: z.array(modifierPick).max(30).optional() })).max(30).optional(),
   client_line_id: z.string().regex(REF),
 });
 export type RestaurantLineInput = z.infer<typeof restaurantLineInput>;

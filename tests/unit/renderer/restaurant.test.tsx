@@ -5,8 +5,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as CoreApi from '../../../src/core/api';
 
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), request: vi.fn() }));
-const bridge = vi.hoisted(() => ({ handle: (_c: string, _i: unknown): unknown => undefined }));
-vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(async (c: string, i: unknown) => bridge.handle(c, i)), on: () => () => undefined, isMac: false, registerDropped: vi.fn() }));
+const bridge = vi.hoisted(() => ({ handle: (_c: string, _i: unknown): unknown => undefined, listeners: new Map<string, Set<(e: unknown) => void>>() }));
+vi.mock('../../../src/core/bridge', () => ({
+  call: vi.fn(async (c: string, i: unknown) => bridge.handle(c, i)),
+  on: (c: string, fn: (e: unknown) => void) => {
+    const set = bridge.listeners.get(c) ?? new Set();
+    set.add(fn);
+    bridge.listeners.set(c, set);
+    return () => set.delete(fn);
+  },
+  isMac: false,
+  registerDropped: vi.fn(),
+}));
+const emit = (c: string, e: unknown) => bridge.listeners.get(c)?.forEach((fn) => fn(e));
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
 
 const tab = vi.hoisted(() => ({ query: new URLSearchParams(), path: ['restaurant'] as string[], go: (_r: string) => undefined as void }));
@@ -24,7 +35,7 @@ const { screenOf, routeOf } = await import('../../../src/modules/restaurant/rout
 const { resolveWebLink } = await import('../../../shared/links');
 const { APP_CATALOGUE } = await import('../../../shared/apps');
 const { MODULES } = await import('../../../src/modules/registry');
-await Promise.all(['Floor', 'Order', 'Bill', 'Kitchen', 'Connect', 'Outbox', 'Approvals', 'Cashier', 'Printers'].map((m) => import(`../../../src/modules/restaurant/${m}.tsx`)));
+await Promise.all(['Floor', 'Order', 'Bill', 'Kitchen', 'Connect', 'Outbox', 'Approvals', 'Cashier', 'Printers', 'Adjust', 'Reservations'].map((m) => import(`../../../src/modules/restaurant/${m}.tsx`)));
 
 const PAIRING = { terminal_id: 7, org_id: 17, branch_id: 3, name: 'Till 1', code: 'T1', mode: 'pos', station_id: null, area_id: null, counter_id: null, pos_register_id: 11, paired_at: '2026-09-30T09:00:00Z' };
 const CAN = ['pos_access', 'order_create', 'order_edit', 'table_manage', 'payment_process', 'kitchen_view', 'kitchen_manage', 'cashier_open'];
@@ -123,6 +134,7 @@ describe('Restaurant: where things are', () => {
     expect(screenOf(['restaurant', 'cashier', '3'], q)).toMatchObject({ view: 'cashier' });
     expect(screenOf(['restaurant'], new URLSearchParams('view=order&type=takeaway'))).toMatchObject({ view: 'order', takeaway: true, order: null });
     expect(screenOf(['restaurant'], new URLSearchParams('view=nonsense'))).toMatchObject({ view: 'floor' });
+    expect(screenOf(['restaurant', 'reservations'], q)).toMatchObject({ view: 'reservations' });
     expect(routeOf('bill', { order: 55 })).toBe('/restaurant?view=bill&order=55');
     expect(resolveWebLink('/restaurant/orders/41')).toEqual({ kind: 'tab', route: '/restaurant/orders/41', app: 'restaurant' });
   });
@@ -206,6 +218,30 @@ describe('Restaurant: the order', () => {
     expect(body.lines[0]).toMatchObject({ item_id: 30, qty: 1, notes: 'no onion', course: 'main', modifiers: [{ option_id: 82 }] });
     expect(String(body.lines[0]!.client_line_id)).toMatch(/^l-/);
     expect(body.lines[0]).not.toHaveProperty('preview');
+  });
+
+  it('takes a combo with the components chosen for it', async () => {
+    const COMBO = { id: 40, category_id: 1, kind: 'combo', name: 'Rice & curry set', description: null, price: '2500.00', open_price: false, allergens: [], course: 'main', station_id: 5, state: 'available', orderable: true, variants: [], groups: [],
+      combo: { pricing: 'fixed', discount_pct: null, components: [
+        { id: 1, kind: 'fixed', label: 'Rice', item_id: 32, variant_id: null, qty: null, min_choices: 0, max_choices: 0, options: [] },
+        { id: 2, kind: 'choice', label: 'Curry', item_id: null, variant_id: null, qty: null, min_choices: 1, max_choices: 1, options: [{ item_id: 30, variant_id: null, upcharge: '0.00' }, { item_id: 33, variant_id: null, upcharge: '300.00' }] },
+      ] } };
+    const RICE = { ...MENU.items[1]!, id: 32, name: 'Steamed rice', state: 'available', orderable: true };
+    const PRAWN = { ...MENU.items[1]!, id: 33, name: 'Prawn curry', state: 'available', orderable: true };
+    serve((m, p) => (m === 'GET' && p === '/api/restaurant/v1/menu/branch/3' ? { ...MENU, items: [...MENU.items, COMBO, RICE, PRAWN] } : m === 'POST' && p === '/api/restaurant/v1/orders/55/items' ? { order: ORDER } : undefined));
+    show(['restaurant', 'orders', '55']);
+    fireEvent.click(await screen.findByRole('button', { name: /^Rice & curry set/ }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.textContent).toContain('Steamed rice');
+    const add = within(dialog).getByRole('button', { name: /^Add · / });
+    expect(add.hasAttribute('disabled')).toBe(true);
+    fireEvent.click(within(dialog).getByRole('radio', { name: /Prawn curry/ }));
+    expect(add.textContent).toContain('2,800.00');
+    fireEvent.click(add);
+    fireEvent.click(screen.getByRole('button', { name: 'Add to the order' }));
+    await waitFor(() => expect(calls('POST', '/api/restaurant/v1/orders/55/items')).toHaveLength(1));
+    const body = (calls('POST', '/api/restaurant/v1/orders/55/items')[0]![2] as { body: { lines: Array<Record<string, unknown>> } }).body;
+    expect(body.lines[0]).toMatchObject({ item_id: 40, combo: [{ component_id: 2, item_id: 33 }] });
   });
 
   it('asks for an approval when the server says a void is above the limit, and voids again with it', async () => {
@@ -307,5 +343,222 @@ describe('Restaurant: the kitchen', () => {
     await waitFor(() => expect(calls('POST', '/api/restaurant/v1/kitchen/tickets/4/bump')).toHaveLength(1));
     expect(screen.getByRole('region', { name: 'All day' }).textContent).toContain('2');
     expect(calls('GET', '/api/restaurant/v1/kitchen')[0]![2]).toMatchObject({ query: { branch_id: 3, station_id: 5 } });
+  });
+});
+
+describe('Restaurant: discounts, comps, price overrides, refunds and invoices', () => {
+  const MONEY_CAN = { ...OPTIONS, can: { ...OPTIONS.can, discount_apply: true, comp: true, price_override: true, refund: true } };
+  const BILL = { id: 12, number: 'B-0007', order_id: 55, split_mode: 'single', split_mode_label: 'Single', split_index: 1, split_count: 1, status: 'paid', status_label: 'Paid', currency: 'LKR', subtotal: '4500.00', discount_total: '0.00', charge_total: '0.00', tax_total: '0.00', rounding: '0.00', total: '4500.00', paid_total: '4500.00', balance: '0.00', printed_count: 1, client_id: null, invoice_id: null, version: 3 };
+  const PREVIEW = { order_id: 55, quote: { currency: 'LKR', subtotal: '4500.00', discount_total: '0.00', charge_total: '0.00', tax_total: '0.00', rounding: '0.00', total: '4500.00', prices_include_tax: false, lines: [], charges: [], taxes: [] }, bills: [BILL], stale: false };
+  const PAYMENT = { id: 70, bill_id: 12, order_id: 55, method: 'cash', method_label: 'Cash', amount: '4500.00', tendered: '5000.00', change_given: '500.00', currency: 'LKR', status: 'captured', status_label: 'Received', provider_ref: null, refunded_total: '0.00', refund_of_id: null, created_at: null, version: 1 };
+
+  it('discounts a line, asks for approval above the limit and sends it again with the approval’s id', async () => {
+    let tries = 0;
+    serve((m, p, b) => {
+      if (m === 'GET' && p === '/api/restaurant/v1/options') return MONEY_CAN;
+      if (m === 'GET' && p === '/api/restaurant/v1/adjustments') return { adjustments: [], kinds: {} };
+      if (m === 'POST' && p === '/api/restaurant/v1/adjustments/discount') {
+        tries++;
+        return (b as { approval_id?: number }).approval_id === 91 ? { adjustment: { id: 5 }, bills_voided: 0, quote: null } : new ApiError(403, 'A 25% discount is above your limit of 10%.', null, { code: 'approval_needed', approval: { action: 'discount', amount: '900.00', pct: 25, order_id: 55, branch_id: 3 } });
+      }
+      if (m === 'POST' && p === '/api/restaurant/v1/approvals') return { request: { id: 91, status: 'pending' } };
+      if (m === 'GET' && p === '/api/restaurant/v1/approvals/91') return { request: { id: 91, status: 'approved', status_label: 'Approved' } };
+      return undefined;
+    });
+    show(['restaurant', 'orders', '55']);
+    fireEvent.click(await screen.findByRole('button', { name: 'Discount Chicken kottu' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Percentage off'), { target: { value: '25' } });
+    fireEvent.change(within(dialog).getByLabelText('Reason'), { target: { value: 'Regular guest' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Give the discount' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Ask for approval' }));
+    await waitFor(() => expect(tries).toBe(2));
+    const [first, second] = calls('POST', '/api/restaurant/v1/adjustments/discount').map(([, , o]) => (o as { body: Record<string, unknown> }).body);
+    expect(first).toMatchObject({ order_id: 55, order_item_id: 501, pct: 25, reason: 'Regular guest', terminal_id: 7 });
+    expect(first).not.toHaveProperty('approval_id');
+    expect(second).toMatchObject({ approval_id: 91, pct: 25 });
+    expect(calls('POST', '/api/restaurant/v1/approvals')[0]![2]).toMatchObject({ body: { action: 'discount', amount: '900.00', reason: 'Regular guest' } });
+  });
+
+  it('offers no discount, comp or price change without the permission', async () => {
+    show(['restaurant', 'orders', '55']);
+    expect(await screen.findByRole('button', { name: 'Take off or void Chicken kottu' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Discount Chicken kottu' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Make Chicken kottu complimentary' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Discount the order' })).toBeNull();
+  });
+
+  it('makes a line complimentary and overrides a price with a reason', async () => {
+    serve((m, p) => {
+      if (m === 'GET' && p === '/api/restaurant/v1/options') return MONEY_CAN;
+      if (m === 'GET' && p === '/api/restaurant/v1/adjustments') return { adjustments: [{ id: 5, kind: 'comp', kind_label: 'Complimentary item', order_id: 55, order_item_id: 501, bill_id: null, payment_id: null, amount: '3600.00', pct: null, currency: 'LKR', reason: 'Birthday', requested_by_name: 'Kasun', approver_name: null, status: 'applied', removed_at: null, created_at: null }], kinds: {} };
+      if (m === 'POST' && (p === '/api/restaurant/v1/adjustments/comp' || p === '/api/restaurant/v1/adjustments/price' || p === '/api/restaurant/v1/adjustments/5/remove')) return { adjustment: { id: 5 } };
+      return undefined;
+    });
+    show(['restaurant', 'orders', '55']);
+    fireEvent.click(await screen.findByRole('button', { name: 'Make Chicken kottu complimentary' }));
+    let dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Reason'), { target: { value: 'Birthday' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Make it complimentary' }));
+    await waitFor(() => expect(calls('POST', '/api/restaurant/v1/adjustments/comp')).toHaveLength(1));
+    expect(calls('POST', '/api/restaurant/v1/adjustments/comp')[0]![2]).toMatchObject({ body: { order_item_id: 501, reason: 'Birthday' } });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change the price of Chicken kottu' }));
+    dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('New unit price'), { target: { value: '1500' } });
+    fireEvent.change(within(dialog).getByLabelText('Reason'), { target: { value: 'Smaller portion' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Change the price' }));
+    await waitFor(() => expect(calls('POST', '/api/restaurant/v1/adjustments/price')).toHaveLength(1));
+    expect(calls('POST', '/api/restaurant/v1/adjustments/price')[0]![2]).toMatchObject({ body: { order_item_id: 501, unit_price: '1500.00', reason: 'Smaller portion' } });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    const list = await screen.findByRole('region', { name: 'Discounts and items on the house' });
+    fireEvent.click(within(list).getByRole('button', { name: 'Take back' }));
+    dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Reason'), { target: { value: 'Rang in by mistake' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Take back' }));
+    await waitFor(() => expect(calls('POST', '/api/restaurant/v1/adjustments/5/remove')).toHaveLength(1));
+    expect(calls('POST', '/api/restaurant/v1/adjustments/5/remove')[0]![2]).toMatchObject({ body: { reason: 'Rang in by mistake' } });
+  });
+
+  it('refunds a payment with one key per attempt and opens the drawer when the server says so', async () => {
+    let tries = 0;
+    serve((m, p) => {
+      if (m === 'GET' && p === '/api/restaurant/v1/options') return MONEY_CAN;
+      if (m === 'GET' && p === '/api/restaurant/v1/bills/preview') return PREVIEW;
+      if (m === 'GET' && p === '/api/restaurant/v1/payments') return { payments: [PAYMENT] };
+      if (m === 'POST' && p === '/api/restaurant/v1/payments/70/refund') {
+        tries++;
+        return tries === 1 ? new ApiError(503, 'Cannot reach WorkSuite server.', 'NETWORK_UNREACHABLE') : { refund: {}, payment: PAYMENT, open_drawer: true };
+      }
+      return undefined;
+    });
+    desk['restaurant:openDrawer'] = () => ({ ok: true, device: 'EPSON', message: 'Drawer opened.' });
+    show(['restaurant'], 'view=bill&order=55');
+    fireEvent.click(await screen.findByRole('button', { name: 'Refund…' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Amount to give back'), { target: { value: '1000' } });
+    fireEvent.change(within(dialog).getByLabelText('Reason'), { target: { value: 'Cold food' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Refund / }));
+    expect(await within(dialog).findByText('Cannot reach WorkSuite server.')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Refund / }));
+    await waitFor(() => expect(vi.mocked(call)).toHaveBeenCalledWith('restaurant:openDrawer'));
+    const [a, b] = calls('POST', '/api/restaurant/v1/payments/70/refund').map(([, , o]) => o as { headers: Record<string, string>; body: unknown });
+    expect(a!.headers['Idempotency-Key']).toBe(b!.headers['Idempotency-Key']);
+    expect(b!.body).toMatchObject({ amount: '1000.00', reason: 'Cold food', method: 'cash', terminal_id: 7 });
+  });
+
+  it('makes a tax invoice from a bill for a customer looked up at the till', async () => {
+    serve((m, p) => {
+      if (m === 'GET' && p === '/api/restaurant/v1/bills/preview') return PREVIEW;
+      if (m === 'GET' && p === '/api/restaurant/v1/payments') return { payments: [] };
+      if (m === 'GET' && p === '/api/restaurant/v1/customers') return { customers: [{ client_id: 88, name: 'Acme Lanka', phone: '07•••••123', email: null, restaurant: true, has_allergies: false, visits: 3 }] };
+      if (m === 'POST' && p === '/api/restaurant/v1/bills/12/invoice') return { invoice_id: 400, invoice_number: 'INV-0400', issued: true };
+      return undefined;
+    });
+    show(['restaurant'], 'view=bill&order=55');
+    fireEvent.click(await screen.findByRole('button', { name: 'Tax invoice…' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('button', { name: 'Make the invoice' }).hasAttribute('disabled')).toBe(true);
+    fireEvent.change(within(dialog).getByLabelText('Customer'), { target: { value: 'Acme' } });
+    fireEvent.click(await within(dialog).findByRole('button', { name: /Acme Lanka/ }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Make the invoice' }));
+    await waitFor(() => expect(calls('POST', '/api/restaurant/v1/bills/12/invoice')).toHaveLength(1));
+    expect(calls('POST', '/api/restaurant/v1/bills/12/invoice')[0]![2]).toMatchObject({ body: { client_id: 88 } });
+  });
+});
+
+describe('Restaurant: the host stand', () => {
+  const HOST = { ...OPTIONS, can: { ...OPTIONS.can, reservation_view: true, reservation_manage: true } };
+  const RESV = { id: 60, branch_id: 3, area_id: null, table_id: null, table_code: null, client_id: null, name: 'Perera', phone: '07•••••555', email: null, reserved_for: '2026-09-30T13:30:00Z', ends_at: '2026-09-30T15:00:00Z', local_date: '2026-09-30', local_time: '19:00', duration_minutes: 90, guests: 4, occasion: 'Anniversary', special_requests: null, notes: null, status: 'confirmed', status_label: 'Confirmed', source: 'phone', session_id: null, version: 2,
+    choices: [{ to: 'arrived', on: 'arrive', label: 'Arrived', needs: [] }, { to: 'seated', on: 'seat', label: 'Seated', needs: [] }, { to: 'cancelled', on: 'cancel', label: 'Cancelled', needs: ['reason'] }] };
+  const TIMELINE = { branch_id: 3, date: '2026-09-30', tables: [{ table_id: 1, code: 'A1', capacity: 4, area_id: 1, status: 'available', blocks: [{ kind: 'reservation', id: 60, name: 'Perera', guests: 4, from: '2026-09-30T13:30:00Z', to: '2026-09-30T15:00:00Z', status: 'confirmed' }] }] };
+
+  it('lists the day’s bookings with the server’s moves, and seats one at a free table', async () => {
+    serve((m, p) => {
+      if (m === 'GET' && p === '/api/restaurant/v1/options') return HOST;
+      if (m === 'GET' && p === '/api/restaurant/v1/reservations') return { reservations: [RESV] };
+      if (m === 'GET' && p === '/api/restaurant/v1/reservations/timeline') return TIMELINE;
+      if (m === 'POST' && p === '/api/restaurant/v1/reservations/60/seat') return { reservation: { ...RESV, status: 'seated' }, session_id: 41 };
+      if (m === 'POST' && p === '/api/restaurant/v1/reservations/60/cancel') return { reservation: RESV };
+      return undefined;
+    });
+    show(['restaurant', 'reservations']);
+    const row = await screen.findByRole('listitem', { name: 'Perera at 19:00' });
+    expect(row.textContent).toContain('4 guests');
+    expect(row.textContent).toContain('Anniversary');
+    expect(within(screen.getByRole('list', { name: 'Tables through the day' })).getByRole('listitem', { name: 'Table A1' }).textContent).toContain('Perera');
+    expect(screen.getByRole('navigation', { name: 'Restaurant' }).textContent).toContain('Reservations');
+
+    fireEvent.click(within(row).getByRole('button', { name: 'Seat…' }));
+    let dialog = await screen.findByRole('dialog');
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'A1 · 4' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Seat' }));
+    await waitFor(() => expect(calls('POST', '/api/restaurant/v1/reservations/60/seat')).toHaveLength(1));
+    expect(calls('POST', '/api/restaurant/v1/reservations/60/seat')[0]![2]).toMatchObject({ body: { table_id: 1, guests: 4, version: 2, table_version: 3 } });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    fireEvent.click(within(row).getByRole('button', { name: 'Cancel booking…' }));
+    dialog = await screen.findByRole('dialog');
+    const go = within(dialog).getByRole('button', { name: 'Cancel booking…' });
+    expect(go.hasAttribute('disabled')).toBe(true);
+    fireEvent.change(within(dialog).getByLabelText('Reason'), { target: { value: 'Guest called' } });
+    fireEvent.click(go);
+    await waitFor(() => expect(calls('POST', '/api/restaurant/v1/reservations/60/cancel')).toHaveLength(1));
+    expect(calls('POST', '/api/restaurant/v1/reservations/60/cancel')[0]![2]).toMatchObject({ body: { reason: 'Guest called', version: 2 } });
+  });
+
+  it('asks the server what is free before booking, and books the table chosen', async () => {
+    serve((m, p) => {
+      if (m === 'GET' && p === '/api/restaurant/v1/options') return HOST;
+      if (m === 'GET' && p === '/api/restaurant/v1/reservations') return { reservations: [] };
+      if (m === 'GET' && p === '/api/restaurant/v1/reservations/timeline') return { ...TIMELINE, tables: [] };
+      if (m === 'GET' && p === '/api/restaurant/v1/reservations/availability') return { reserved_for: '2026-09-30T14:30:00Z', duration_minutes: 90, open: true, tables: [{ id: 1, code: 'A1', capacity: 4, area_id: 1, floor_id: 1 }], suggestions: [] };
+      if (m === 'POST' && p === '/api/restaurant/v1/reservations') return { reservation: RESV };
+      return undefined;
+    });
+    show(['restaurant'], 'view=reservations');
+    fireEvent.click(await screen.findByRole('button', { name: 'Book a table' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Time'), { target: { value: '20:00' } });
+    fireEvent.change(within(dialog).getByLabelText('Guests'), { target: { value: '3' } });
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Silva' } });
+    expect(within(dialog).getByRole('button', { name: 'Book' }).hasAttribute('disabled')).toBe(true);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Check availability' }));
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'A1 · 4' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Book' }));
+    await waitFor(() => expect(calls('POST', '/api/restaurant/v1/reservations')).toHaveLength(1));
+    expect(calls('GET', '/api/restaurant/v1/reservations/availability')[0]![2]).toMatchObject({ query: { branch_id: 3, time: '20:00', guests: 3 } });
+    const body = (calls('POST', '/api/restaurant/v1/reservations')[0]![2] as { body: Record<string, unknown> }).body;
+    expect(body).toMatchObject({ branch_id: 3, time: '20:00', guests: 3, name: 'Silva', table_id: 1 });
+    expect(String(body.uuid)).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('is not in the rail without the reservation permissions', async () => {
+    show(['restaurant']);
+    await screen.findByRole('button', { name: 'Table A1 · Available' });
+    expect(screen.getByRole('navigation', { name: 'Restaurant' }).textContent).not.toContain('Reservations');
+  });
+});
+
+describe('Restaurant: live updates', () => {
+  it('refreshes what a restaurant.live push touches for this branch, and ignores other branches', async () => {
+    const { app } = await import('../../../src/core/app-state');
+    app.set({ status: { realtime: 'connected' } as never });
+    try {
+      show(['restaurant', 'orders', '55']);
+      expect(await screen.findByText('Order #0012', { selector: 'h1' })).toBeTruthy();
+      const before = calls('GET', '/api/restaurant/v1/orders/55').length;
+      emit('realtime:event', { type: 'restaurant.live', seq: 900, branch_id: 9, entity: 'order', id: 55, version: 5, kind: 'updated' });
+      emit('realtime:event', { type: 'chat.message', room_id: 1 });
+      await new Promise((r) => setTimeout(r, 20));
+      expect(calls('GET', '/api/restaurant/v1/orders/55')).toHaveLength(before);
+      emit('realtime:event', { type: 'restaurant.live', seq: 901, branch_id: 3, entity: 'order', id: 55, version: 5, kind: 'updated' });
+      await waitFor(() => expect(calls('GET', '/api/restaurant/v1/orders/55').length).toBeGreaterThan(before));
+      expect(calls('GET', '/api/restaurant/v1/live')).toHaveLength(0);
+    } finally {
+      app.set({ status: null });
+    }
   });
 });
