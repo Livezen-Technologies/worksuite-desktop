@@ -491,10 +491,14 @@ export const contract = {
         elearningMedia: z.string().regex(ELEARNING_MEDIA_TOKEN).optional(),
         /** An Office export's signed download (`POST …/office/export` → `download_url`): its token; the main process fetches `/office/exports/{token}` from the server. */
         officeExport: z.string().regex(OFFICE_EXPORT_TOKEN).optional(),
+        /** A chat attachment: the signed token of its `download_url` (`/media/{token}?download=1`). */
+        chatMedia: z.string().regex(ELEARNING_MEDIA_TOKEN).optional(),
+        /** A task's attachment: the main process asks for its short-lived link (`POST /api/tasks/{task}/attachments/{id}/link`). */
+        taskAttachment: z.object({ task: z.number().int().positive(), id: z.number().int().positive() }).optional(),
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.elearningMedia, v.officeExport].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a payment slip, an order list, an Orders report, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, an eLearning lesson file, or an Office export'),
+      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.elearningMedia, v.officeExport, v.chatMedia, v.taskAttachment].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a payment slip, an order list, an Orders report, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, an eLearning lesson file, an Office export, a chat attachment or a task attachment'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   'transfers:upload': ch(

@@ -447,6 +447,14 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       const link = await ctx.http.post<{ url: string }>(`${base}/${input.hrDocument}/link`, { disposition: 'attachment' });
       return ctx.transfers.download(`/${String(link.url).replace(/^\/+/, '')}`, input.name, !!input.open, null);
     }
+    if (input.taskAttachment) {
+      // The same for a task's attachment: a short-lived /d/{token} grant on our own server.
+      const { task, id } = input.taskAttachment;
+      const link = await ctx.http.post<{ url: string }>(`/api/tasks/${task}/attachments/${id}/link`, {});
+      const grant = /\/d\/([A-Za-z0-9]{16,128})$/.exec(String(link.url ?? ''));
+      if (!grant) throw new DesktopError('NOT_FOUND', 'The server did not give a download link for that attachment.');
+      return ctx.transfers.download(`/d/${grant[1]}`, input.name, !!input.open, null);
+    }
     const r = input.hrReport;
     const oc = input.ordersCsv;
     const rep = input.omsReport;
@@ -458,6 +466,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       ? `/office/exports/${input.officeExport}`
       : input.elearningMedia
       ? `/media/${input.elearningMedia}?download=1`
+      : input.chatMedia
+      ? `/media/${input.chatMedia}?download=1`
       : input.garageDoc
       ? garageDocPath(input.garageDoc)
       : ef

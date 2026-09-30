@@ -587,6 +587,34 @@ describe('an export downloads from our own server by its token', () => {
     expect(isOfficeExportPath('/office/exports/short')).toBe(false);
   });
 
+  it('opens a finished PDF in PDF Studio and anything else in its own application', async () => {
+    const { shell } = await import('electron');
+    const openPath = vi.mocked(shell.openPath);
+    openPath.mockClear();
+    const dir = mkdtempSync(join(tmpdir(), 'ws-open-dl-'));
+    const db = new Database(join(dir, 'db.sqlite'));
+    const vault = new Vault(Vault.generateKey());
+    const http = { url: (p: string) => `${WS}${p}`, raw: async () => new Response('%PDF-1.7', { status: 200, headers: { 'content-length': '8' } }) };
+    const inApp: string[] = [];
+    let allowed = false;
+    const t = new TransferManager({ db, vault: () => vault, http: http as never, userId: () => '2', downloadFolder: () => dir, hash: async () => ({ sha256: '', bytes: 0 }), canOpenFiles: () => allowed, audit: () => undefined, openInApp: (p) => (/\.pdf$/i.test(p) ? (inApp.push(p), true) : false) });
+    const done = (path: string, name: string) => new Promise((resolve) => void t.download(path, name, true, null, resolve));
+    // A PDF goes to PDF Studio even where other applications are not allowed.
+    await done('/d/abcdef0123456789abcd', 'Brief.pdf');
+    await vi.waitFor(() => expect(inApp).toEqual([join(dir, 'Brief.pdf')]));
+    // An Office file goes to the installed app — only when the organization allows that.
+    await done('/media/Tok3n_abc.def', 'Budget.xlsx');
+    await new Promise((r) => setTimeout(r, 10));
+    expect(openPath).not.toHaveBeenCalled();
+    allowed = true;
+    await done('/media/Tok3n_abc.def', 'Plan.docx');
+    await vi.waitFor(() => expect(openPath).toHaveBeenCalledWith(join(dir, 'Plan.docx')));
+    expect(inApp).toHaveLength(1);
+    await expect(t.download('/d/short', 'x.pdf', true, null)).rejects.toThrow(/Not a WorkSuite download/);
+    db.raw.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it('tells a service waiting for a download how it ended', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'ws-office-dl-'));
     const db = new Database(join(dir, 'db.sqlite'));

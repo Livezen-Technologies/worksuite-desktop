@@ -5,6 +5,68 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-30 — 0.2.58: PDF Studio editing, documents open on this computer, the Office tile
+
+PDF Studio edits (stage D2): annotations, pages, saving back to Drive as a new
+version or a copy, with the server's lock, conflicts, undo and recovery. Every
+module's documents now open on this computer — PDFs in PDF Studio, Word, Excel
+and PowerPoint files in WorkSuite's editor or the installed application —
+never in the browser. Office has a tile of its own.
+
+**Added**
+
+- **PDF Studio — Annotate** (PDF-ANN): highlight, underline, strike out and
+  squiggle across text (the words under the drag, found by the engine),
+  notes, text boxes, freehand drawing, rectangles, ellipses, lines and
+  stamps (Approved, Rejected, Draft, Confidential…), in six colours with a
+  width and opacity. Select, move and delete; every annotation carries its
+  author and time. The **Comments** panel lists them by page.
+- **PDF Studio — Organize** (PDF-PAGE): every page as a thumbnail; select
+  (Shift for a range, Ctrl/⌘ for more), drag into a new order, rotate,
+  delete, insert a blank page or another PDF's pages, and extract pages to a
+  new PDF.
+- **Modes and the server's lock** (PDF-EDIT, PDF-LOCK): View, Annotate and
+  Edit, as the server's session allows (`POST /api/files/{id}/pdf/sessions`);
+  Edit takes the file's lock, with **Take over** where the server offers it.
+  A heartbeat keeps the session; a lost lock says who has it and stops
+  saving to that version.
+- **Saving** (PDF-SAVE): **Save** makes a new Drive version (uploaded in
+  checked 4 MiB chunks, `POST /api/files/{id}/pdf/save`), **Save a copy**
+  another file beside it; a local PDF is saved in place (written to a
+  temporary file, synced, then renamed). When someone saved first, the
+  conflict dialog offers Keep both, Save as a new version anyway, or Use
+  theirs. Offline, a save waits on this computer and goes when WorkSuite is
+  back. The title bar says Unsaved changes / Saving… / Saved · vN / Saved on
+  this computer.
+- **Undo and redo** (Ctrl/⌘ Z, Ctrl/⌘ Shift Z or Ctrl/⌘ Y) across every
+  change since the file was opened.
+- **Recovery** (PDF-REC): unsaved work is snapshotted, sealed, on the
+  server's autosave interval and when the tab closes; opening the file again
+  offers to restore it.
+- **Office tile**: Office in the launcher and the sidebar search, with **New
+  Document / Spreadsheet / Presentation**, **From a template** (in My files,
+  opened for editing), the copies being edited in Word, Excel or PowerPoint,
+  and the Office files opened lately.
+
+**Changed**
+
+- **Documents from every module open on this computer**: a download started
+  with "open" now opens a PDF in PDF Studio (even where the organisation
+  does not allow other applications) and anything else in the application
+  the system has for it. Chat attachments, task attachments, HR documents
+  (View) and leave evidence are downloaded and opened that way instead of in
+  the browser; invoices, credit notes, receipts, purchase orders and mail
+  attachments that are PDFs open in PDF Studio.
+- **Office files on a server without WorkSuite Office** open in the
+  installed Word, Excel or PowerPoint on a tracked copy that is saved back to
+  the Drive, not in the web's editor. A type the administrator set to
+  "Preview" opens read-only in the installed application when it can be
+  downloaded.
+- A local PDF opened in PDF Studio is editable (Annotate and Edit), saved in
+  place.
+
+---
+
 ## 2026-09-29 — 0.2.57: WorkSuite Events — the Event Desk
 
 WorkSuite Events opens in its own tab for whoever has the app (and

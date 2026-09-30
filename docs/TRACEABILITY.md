@@ -107,6 +107,8 @@ BACKEND.md). The MVP items of §7 and §9, and the ones the desktop shares with 
 
 | ID | Status | Where / note |
 |---|---|---|
+| Office tile | Done | `/office` (`OfficeHome.tsx`): New Document / Spreadsheet / Presentation, From a template, copies open in other apps, recent Office files |
+| Legacy server | Done | Without the Office API an Office file opens in the installed Word / Excel / PowerPoint (`office:openExternal`, tracked copy saved back), never the browser |
 | OO-DSK-001 (MVP) | Done | Opening an Office file in Files (double-click, Enter, Open, Edit, Open read-only) opens `/office/<id>` in a WorkSuite tab with the editor; no browser window |
 | OO-DSK-002 (MVP) | Done | `OfficePage.tsx`: header with the name, the save status, presence, the mode, Share and ⋯; the Document Server's own toolbar, canvas and status bar below |
 | OO-DSK-004 | Done | One tab per document (`core/tabs.ts` record tabs); a document open in another window is brought forward there (`office:focusFile`) |
@@ -295,10 +297,13 @@ Tests: `tests/unit/renderer/pms-desk.test.tsx`, `tests/unit/renderer/pms-money.t
 | PMS-DSH-002..004 (desk) | Done | `Dashboard.tsx`: the server's widgets, each opening its list |
 | PMS-ARC-030 | Partial | `pms.*` realtime nudges refresh the rack and lists (`core/query.ts`); a 30-second re-read otherwise. Needs a server with the gateway on to prove the 2 s |
 
-## PDF Studio (WorkSuite PDF Studio SRS v1.0, stage D1 — foundation and viewer)
+## PDF Studio (WorkSuite PDF Studio SRS v1.0, stages D1 — foundation and viewer — and D2 — editing)
 
 `src/modules/pdf` (renderer), `electron/services/pdf` and `electron/workers/pdf-worker.ts` (main and engine).
-Read-only: stage D2 adds annotation, pages, saving, locks, autosave and offline. Tests:
+D2 adds annotation, pages, saving, locks, autosave, recovery and offline saves; forms, signing, OCR, redaction and
+compare are later phases (no server API yet). D2 tests: `tests/unit/electron/pdf-edit.test.ts` (the real PDFium),
+`pdf-editing.test.ts` (the service with the real engine and a fake PDF Studio server),
+`tests/unit/renderer/pdf-editing-ui.test.tsx`. Tests:
 `tests/unit/electron/pdf-engine.test.ts` (the real PDFium), `pdf-worker.test.ts` (the worker protocol, crashes,
 hangs, memory), `pdf-service.test.ts` (DesktopPDFService with a fake engine), `tests/unit/renderer/pdf-studio.test.tsx`;
 on a real system `tests/os/pdf/check.mjs` (workflow "PDF engine").
@@ -344,6 +349,18 @@ on a real system `tests/os/pdf/check.mjs` (workflow "PDF engine").
 | PDF-NFR-020 | Done | Sealed working copies and thumbnails |
 | PDF-NFR-030, 031 | Done | Failures logged (redacted) with format, size, pages, engine error, app version; the diagnostic report carries the log |
 | PDF-NFR-032 | Done | PDF Diagnostics (`pdf:diagnostics` + the window's own drawing check) |
+| PDF-EDIT (modes) | Done | View / Annotate / Edit from the server's `available_modes` and permission flags (`gates()`); local files all three |
+| PDF-ANN (annotate) | Done | Highlight, underline, strike out, squiggle (text under the drag), note, text box, ink, rectangle, ellipse, line, stamp; colour, width, opacity; select, move, delete; author and time; Comments panel |
+| PDF-PAGE (organize) | Done | Rotate, delete, reorder (drag), insert blank, insert from another PDF, extract to a new PDF |
+| PDF-SAVE | Done | New version / copy on Drive (chunked upload with SHA-256, `base_version`); local in place (atomic); Saved · vN / Unsaved / Saving / Saved on this computer |
+| PDF-LOCK | Done | Edit takes the server's lock; heartbeat; lock lost / downgraded banners; Take over where offered |
+| PDF-CONF | Done | `PDF_VERSION_CONFLICT` → Keep both / Save as new version / Use theirs |
+| PDF-UNDO | Done | Journal replay onto the base; Ctrl/⌘ Z, Ctrl/⌘ Shift Z, Ctrl/⌘ Y |
+| PDF-REC | Done | Sealed snapshots on the autosave interval and at close; offered back on open |
+| PDF-OFF (save offline) | Done | A save offline is kept and sent when WorkSuite is back (`online()`) |
+| PDF-UI-005 | Done | Closing a tab with unsaved changes keeps them for recovery and says so |
+| PDF-OPEN-001 (modules) | Done | Chat and task attachments, HR documents and leave evidence, billing and purchasing PDFs, mail: downloaded, then PDF Studio (`openInApp`) |
+| PDF-FORM, SIGN, OCR, REDACT, COMPARE | Later | Later phases; no server API |
 
 ## WorkSuite Events — the Event Desk (Events SRS §15.2 [D], §9, §8.4)
 

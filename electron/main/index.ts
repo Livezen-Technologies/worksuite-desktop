@@ -343,6 +343,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     audit: (action, details) => audit.record(sessionCtl.userId(), action, details),
     // eLearning's offline copies are kept inside the app, sealed as they arrive.
     sink: (name): DownloadSink | null => elearning.sink(name),
+    // Every module's PDFs open in PDF Studio, never in another application.
+    openInApp: (path) => {
+      if (!/\.pdf$/i.test(path)) return false;
+      handPdfs([path]);
+      return true;
+    },
   });
   // eLearning: a course's lessons kept for offline learning, as the server's manifest lists them.
   const elearning: ElearningOffline = new ElearningOffline({

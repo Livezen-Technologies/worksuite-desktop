@@ -1,5 +1,6 @@
 import { app } from '../../core/app-state';
 import { apiUrl } from '../../core/api';
+import { mediaToken, openDocument } from '../../core/open-document';
 
 /** Chat shapes, as `/api/chat/rooms` and `/api/chat/messages` return them. Stamps are UTC without a zone. */
 export interface Room {
@@ -92,4 +93,15 @@ export function mediaUrl(u: string | null | undefined): string | null {
   if (u.startsWith('/chat/files/')) return apiUrl(`/api${u}`);
   if (u.startsWith('/api/')) return apiUrl(u);
   return null;
+}
+
+/**
+ * "Open" on an attachment: downloaded and opened on this computer — a PDF in
+ * PDF Studio, a Word, Excel or PowerPoint file in its installed application —
+ * never in the browser. An address the app cannot fetch itself falls back to `link`.
+ */
+export function openAttachment(f: Pick<ChatFile, 'download_url' | 'filename'>, link: (url: string) => void): void {
+  const token = mediaToken(f.download_url);
+  if (token) void openDocument({ chatMedia: token }, f.filename);
+  else if (f.download_url) link(f.download_url);
 }

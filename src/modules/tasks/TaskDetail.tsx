@@ -8,6 +8,7 @@ import { call, errorMessage, registerDropped } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { bytes, currentZone, relative } from '../../core/time';
 import { toast } from '../../core/toasts';
+import { openDocument } from '../../core/open-document';
 import { DriveFilePicker, type DriveFileRow } from '../../components/DriveFilePicker';
 import { Icon } from '../../components/Icon';
 import { Avatar, Button, ErrorNote, FileBadge, Modal, Spinner, cx } from '../../components/ui';
@@ -423,14 +424,8 @@ function Attachments({ task, editable }: { task: Detail; editable: boolean }) {
 }
 
 function AttachmentCard({ a, taskId, removable, onPreview, onRemoved }: { a: Attachment; taskId: number; removable: boolean; onPreview: (p: { name: string; src: string }) => void; onRemoved: () => void }) {
-  const open = async () => {
-    try {
-      const r = await apiPost<{ url: string }>(`/api/tasks/${taskId}/attachments/${a.id}/link`);
-      await call('app:openExternal', { url: r.url });
-    } catch (e) {
-      toast('error', errorMessage(e));
-    }
-  };
+  // Downloaded and opened here: a PDF in PDF Studio, an Office file in Word, Excel or PowerPoint.
+  const open = () => openDocument({ taskAttachment: { task: taskId, id: a.id } }, a.name);
   const preview = async () => {
     try {
       const p = await apiGet<{ is_image: boolean; url: string | null; thumb_url: string | null }>(`/api/tasks/${taskId}/attachments/${a.id}/preview`);

@@ -138,9 +138,10 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     // Part of Files (shared/access APP_PARTS). Editing needs WorkSuite: offline the tab says so and offers the
     // copy on this computer, if there is one (§9).
     input: defineDesktopManifest({
-      id: 'office', name: 'Office document', icon: 'file-text', contractVersion: 1, desktop: { enabled: true },
+      id: 'office', name: 'Office', icon: 'file-text', contractVersion: 1, desktop: { enabled: true },
       offline: { mode: 'NONE' },
       native: ['printing'],
+      quickActions: [{ id: 'office-new', label: 'New Office document', route: '/office' }],
       fileTypes: ['docx', 'xlsx', 'pptx', 'doc', 'xls', 'ppt', 'odt', 'ods', 'odp', 'rtf', 'csv', 'docm', 'xlsm', 'pptm'],
     }),
     load: () => import('./office/OfficePage'),

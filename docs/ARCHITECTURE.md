@@ -81,7 +81,7 @@ makes documents and copies of templates through `/api/files/office/new`
 and opens them for editing. A server without the Office API keeps the old
 way (the web's editor in the browser).
 
-## PDF Studio (PDF Studio SRS, stage D1 — the viewer)
+## PDF Studio (PDF Studio SRS, stages D1 — the viewer — and D2 — editing)
 
 ```
 renderer (src/modules/pdf)                main (electron/services/pdf)                 pdf-worker × open documents
@@ -117,10 +117,43 @@ renderer (src/modules/pdf)                main (electron/services/pdf)          
   search highlights), `Workspace.tsx` (title bar, ribbon, panels, status bar, the §4.3 shortcuts through the
   shortcut registry while the tab is in front), `Panels.tsx`, `Dialogs.tsx`, `open.ts` (the hand-off other
   modules call: a tab per PDF).
-- **Seams for stage D2** (editing): the session's `mode` (VIEW) and `saveState` (read-only), the engine's
-  `annotationsWrite`/`pages`/`save` capabilities (PDFium has them: `FPDFPage_CreateAnnot`, `FPDF_ImportPages`,
-  `FPDFPage_SetRotation`, `PDFiumExt_SaveAsCopy`), the sealed working copies in `PDF/work`, and the service's
-  `policy()` for the server's policies (defaults until then).
+- **Editing (stage D2)**: every change is one `PdfEditOp` (`shared/pdf.ts`: `annot.add|update|remove`,
+  `page.rotate|delete|move|insertBlank|insertFile`), checked by zod in the contract and by the session's mode in
+  `DesktopPdfService.edit`, then applied by the engine (`apply`: PDFium's `FPDFPage_CreateAnnot`,
+  `EPDFAnnot_SetColor/SetOpacity/SetDefaultAppearance`, `FPDF_MovePages`, `FPDF_ImportPagesByIndex`,
+  `FPDFPage_SetRotation`; a stamp is a FreeText whose `Subj` is `Stamp`, since PDFium draws no appearance for
+  stamps). The session keeps the journal of ops since the base copy: undo reopens the base and replays all but the
+  last (`replay`), redo re-applies. `annotations(page)` and `textSpan(page, from, to)` (the characters under a drag,
+  for markup) are read back from the engine; the renderer never holds the document.
+- **The server's session** (`studio-api.ts`, over `/api/files/{id}/pdf/*`): `open` returns the mode, the
+  permission flags, the lock, the policy (autosave interval) and a one-time content URL; `beat` keeps it (and
+  learns of a lost lock or a downgrade), `setMode` changes mode (Edit takes the lock, `takeover` when offered).
+  `save` writes the engine's bytes (`PDFiumExt_SaveAsCopy`), uploads them in 4 MiB chunks with their SHA-256
+  (`/pdf/uploads`, reused while the bytes are the same) and commits (`/pdf/save`, `new_version` or `copy` against
+  `base_version`); `409 PDF_VERSION_CONFLICT` becomes the conflict dialog, answered with `resolve`. A local file is
+  saved in place (`writeAtomically`, after unloading the engine — Windows cannot replace an open file). Offline, a
+  save is kept as `pending` and flushed by `online()` when the connection is back.
+- **Recovery** (`recovery.ts`): the edited bytes and the session's metadata sealed under
+  `<profile>/PDF/recovery/<hash>/` with keys derived (HKDF) from the database key, on the autosave interval while
+  there are unsaved changes and when the tab closes; opening the same file offers them back. Wiped with the rest.
+- **Renderer**: `edit.ts` (tools, colours, the calls), `AnnotLayer.tsx` (a page's annotations and the tool being
+  drawn), `Organize.tsx` (the page grid), `EditUI.tsx` (mode switch, save state and controls, banners, the conflict
+  dialog, the Annotate and Organize ribbons, the Comments panel). A tab with unsaved changes has a close guard
+  that keeps the work for recovery.
+
+## Opening documents from other modules
+
+A module that shows a document opens it on this computer, never in the browser. `openDocument()`
+(`src/core/open-document.ts`) starts a `transfers:download` with `open: true` from one of the contract's named
+sources (a Drive file, a mail attachment, an HR document, a chat attachment's `/media/{token}`, a task
+attachment's `/d/{token}` grant, an invoice PDF…); the main process builds the request, and when the download
+finishes the transfer manager's `openInApp` hands a PDF to PDF Studio (`handPdfs` → `openFromOs`, a local handle
+and a `/pdf?local=` tab) and anything else to `shell.openPath` where `desktop.files.open_external` allows it.
+Office files in Files go to WorkSuite's editor (`/office/<id>`) when the server has the Office API, otherwise to
+`office:openExternal` — the installed Word, Excel or PowerPoint on a tracked copy saved back to the Drive.
+The **Office** tile (`/office`, `OfficeHome.tsx`) is part of Files (`APP_PARTS`): new documents and templates
+(`POST /api/files/office/new`), the copies open in other applications, and the recent Office files
+(`/api/drive/list?view=recent`).
 
 ## The request paths
 
