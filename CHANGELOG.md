@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-09-30 — 0.2.71: Chat's channel toolbar (WhatsApp in Chat), profile pictures, a resizable conversation list; AI Assistant scrolling; Local AI first-use setup and Gemma 3 4B; Office menus and Open in new window; Meet Home and pre-join redesign; screen sharing fixed
+## 2026-09-30 — 0.2.71: Chat's channel toolbar (WhatsApp in Chat), profile pictures, a resizable conversation list; AI Assistant scrolling; Local AI first-use setup and Gemma 3 4B; Office menus and Open in new window; Meet Home and pre-join redesign; meeting cards in Chat; screen sharing fixed
 
 - **A channel toolbar down the far left of Chat** (#33): Chat, Web Chat and WhatsApp, each with its unread count
   (waiting visitors for Web Chat) and a warning dot when a WhatsApp number is not connected. Hover for the name and
@@ -47,6 +47,13 @@ person who has to live with the change — what it does, and where it bites.
   joining and cannot be pressed twice. A blocked, missing or busy device says what to do (Open privacy settings, Try
   again); so does a failed connection. The devices you choose, and whether the microphone and camera are on, are
   remembered on this computer and used when you join.
+- **A meeting's card in Chat, polished** (#71). A Meet meeting shared in a conversation shows its name (cut short
+  when long, with the whole of it on hover), who started it and when, and whether it is **Live** (a pulsing green
+  dot) or **Ended**. It has one action: **Join** — which says it is joining and cannot be pressed twice — or
+  **Return to meeting** when you are already in it on this computer, or **View details** once it has ended: when it
+  started, how long it ran, who was in it and whether it was recorded. A meeting that was removed says so, with no
+  action. The card is smaller in the chat drawer. It needs the server's Communication 1.1.0 for the meeting's name
+  and start; an older server shows "Meeting" and the time it was shared.
 - **Office: the Editing and ⋯ menus open again** (#39). In a Word, Excel or PowerPoint document open in WorkSuite, the
   mode menu (Editing / Reviewing / Commenting / Viewing) and More (⋯) opened behind the document — the editor is a
   native view laid over the page, and covered them. Now the editor steps aside while a menu is open, and a picture of

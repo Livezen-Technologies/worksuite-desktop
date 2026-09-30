@@ -113,6 +113,26 @@ const en = {
   'lobby.scheduled': 'Scheduled {time}',
   'lobby.retry': 'Try again',
   'lobby.connection': 'WorkSuite could not reach the meeting. Check your connection, then try again.',
+
+  'card.meeting': 'Meeting',
+  'card.startedByYou': 'Started by you',
+  'card.startedBy': 'Started by {name}',
+  'card.live': 'Live',
+  'card.ended': 'Ended',
+  'card.removed': 'Removed',
+  'card.join': 'Join',
+  'card.joining': 'Joining…',
+  'card.return': 'Return to meeting',
+  'card.details': 'View details',
+  'card.detailsTitle': 'Meeting details',
+  'card.started': 'Started',
+  'card.length': 'Length',
+  'card.people': 'People',
+  'card.recording': 'Recording',
+  'card.recordingReady': 'Recorded — in Meet → Recordings',
+  'card.recordingProcessing': 'Recorded — being processed',
+  'card.noDetails': 'The details of this meeting are no longer available.',
+  'card.close': 'Close',
 } as const;
 
 export type MKey = keyof typeof en;

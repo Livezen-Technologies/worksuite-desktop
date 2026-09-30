@@ -11,6 +11,7 @@ the root CHANGELOG.md.
 - Codes and links are checked as they are entered, with the reason inline (not a Meet link, a meeting ID has 9 digits, no meeting has that ID, it has ended) (#67)
 - Check camera and microphone on Meet Home, with the same preview and device settings as the pre-join screen (#67)
 - Device problems say what to do — blocked (Open privacy settings), not found, in use by another app — with Try again; a failed connection has Try again; the chosen devices and whether the microphone and camera are on are remembered on this computer and used when joining (#69)
+- The words of a meeting's card in Chat (#71), kept with Meet's other strings
 
 **Changed**
 

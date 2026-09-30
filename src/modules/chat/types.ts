@@ -79,6 +79,9 @@ export interface ChatMessage {
   call_mode?: string | null;
   call_outcome?: string | null;
   call_duration?: number | null;
+  /** A meeting's name and when it started (worksuite-desktop#71); absent from an older server. */
+  call_title?: string | null;
+  call_started_at?: string | null;
   created_at: string;
 }
 

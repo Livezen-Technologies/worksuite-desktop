@@ -514,6 +514,8 @@ export interface ToastMessage {
 /** A call or meeting this device is in, and the window it is in (the main window's "in a call" pill). */
 export interface ActiveCall {
   windowId: number;
+  /** The call's or meeting's uuid, so a card can offer "Return to meeting". */
+  uuid?: string;
   kind: 'call' | 'meet';
   title: string;
   /** Epoch ms the window said it joined. */

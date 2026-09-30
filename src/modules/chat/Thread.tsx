@@ -14,6 +14,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, ErrorNote, FileBadge, Modal, Spinner, cx, DATA_TEXT } from '../../components/ui';
 import { UserAvatar } from '../../components/UserAvatar';
+import { MeetingCard } from './MeetingCard';
 import { describeCard } from '../calls/log';
 import { answerCall, startCall } from '../calls/start';
 import { openMeeting } from '../meet/api';
@@ -972,6 +973,12 @@ function MessageMenu({ own, named, open, setOpen, reactions, onReact, onMoreReac
 
 /** A call's card in the thread (ChatDrawer: "Missed voice call · Call back"). */
 function CallCard({ m, own, roomId, compact }: { m: ChatMessage; own: boolean; roomId: string; compact?: boolean }) {
+  // A Meet meeting has a card of its own: its name, who started it, live or ended, and one action (worksuite-desktop#71).
+  if (m.call_kind === 'meeting') return <MeetingCard m={m} own={own} roomId={roomId} compact={compact} />;
+  return <NativeCallCard m={m} own={own} roomId={roomId} compact={compact} />;
+}
+
+function NativeCallCard({ m, own, roomId, compact }: { m: ChatMessage; own: boolean; roomId: string; compact?: boolean }) {
   const d = describeCard(m, own);
   const video = m.call_mode === 'video' || m.call_kind === 'meeting';
   const act = () => {
