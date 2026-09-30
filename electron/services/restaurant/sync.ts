@@ -374,16 +374,17 @@ export class RestaurantSync {
     const r = this.row(s);
     const old = this.readCopy(s);
     const branch = s.terminal.branch_id;
-    const pos = await this.call('GET', '/pos', key, s, { query: { branch_id: branch } });
-    const floor = await this.call('GET', '/floor', key, s, { query: { branch_id: branch } }).catch((e: unknown) => {
-      /* A kitchen screen's person may not see the floor: the copy keeps what it has. */
-      if (isDesktopError(e) && (e.status === 403 || e.status === 404)) return old?.floor ?? null;
+    /* A kitchen screen's cook may not see the till or the floor: the copy keeps what it has of those. */
+    const mayNot = (had: unknown) => (e: unknown) => {
+      if (isDesktopError(e) && (e.status === 403 || e.status === 404)) return had ?? null;
       throw e;
-    });
-    let menu = old?.menu ?? null;
+    };
+    const pos = await this.call('GET', '/pos', key, s, { query: { branch_id: branch } }).catch(mayNot(old?.pos));
+    const floor = await this.call('GET', '/floor', key, s, { query: { branch_id: branch } }).catch(mayNot(old?.floor));
+    let menu: unknown = old?.menu ?? null;
     let menuAt = r?.menu_at ?? null;
     if (!menu || !menuAt || this.now() - Date.parse(menuAt) > MENU_MS) {
-      menu = await this.call('GET', `/menu/branch/${branch}`, key, s, { query: { channel: 'dine_in' } });
+      menu = await this.call('GET', `/menu/branch/${branch}`, key, s, { query: { channel: 'dine_in' } }).catch(mayNot(menu));
       menuAt = this.stamp();
     }
     const data: CopyData = { pos, menu, floor };

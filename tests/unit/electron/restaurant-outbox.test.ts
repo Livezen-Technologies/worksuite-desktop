@@ -240,6 +240,13 @@ describe('restaurant sync: the outbox, the heartbeat and the copy', () => {
     expect(sync.outbox()).toHaveLength(1);
   });
 
+  it('keeps working for a cook who may not see the till or the floor', async () => {
+    const { sync } = setup({}, (_m, path) => (path.endsWith('/pos') || path.endsWith('/floor') ? Promise.reject(new DesktopError('SERVER_ERROR', 'You do not have permission to do that', 403)) : undefined));
+    const st = await sync.sync();
+    expect(st.problem).toBeNull();
+    expect(sync.copy()).toMatchObject({ pos: null, floor: null, menu: { items: [{ name: 'Kottu' }] } });
+  });
+
   it('forgets the old terminal’s copy when unpaired, and its outbox only when asked', async () => {
     const { sync } = setup();
     await sync.sync();
