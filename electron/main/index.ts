@@ -1295,8 +1295,13 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     device: () => ({ id: device.installId(), name: device.deviceName() }),
     userName: () => sessionCtl.get().user?.name ?? '',
   });
-  // Local AI (services/local-ai, WS-SRS-LAI): models from WorkSuite's CDN, llama.cpp in the ws-local-ai process.
-  const localAI = createLocalAI({ userData: p.userData, signedIn: () => sessionCtl.isReady(), changed: () => broadcast('ai:localChanged') });
+  // Local AI (services/local-ai, WS-SRS-LAI): AI Studio's models from the signed-in server, llama.cpp in the ws-local-ai process.
+  const localAI = createLocalAI({
+    userData: p.userData,
+    signedIn: () => sessionCtl.isReady(),
+    serverCatalog: () => http.get('/api/ai/local/catalog'),
+    changed: () => broadcast('ai:localChanged'),
+  });
   app.on('will-quit', () => void localAI.stop());
   handPdfs = (paths) => void pdfStudio.openFromOs(paths);
   pdfOnline = () => pdfStudio.online();

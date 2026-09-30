@@ -5,6 +5,28 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-30 — 0.2.68: Local AI uses AI Studio's models
+
+"Local AI" showed `net::ERR_SSL_UNRECOGNIZED_NAME_ALERT` and no models: it asked for its catalog at
+`cdn.worksuite.app`, which does not serve one.
+
+**Changed**
+
+- **Models to download come from your WorkSuite server**, which makes them from the models your workspace offers
+  on AI Studio (aistudio.livezentech.com): each is the file AI Studio's nodes run, with its size and SHA-256. A
+  download that does not hash to exactly that is refused. The last list is kept for offline use. The CDN is asked
+  only if the server has no list and a signing key is pinned — so it is no longer contacted at all.
+- **Settings → Local AI → AI Studio**: whether the connection works, the models the assistant answers with, and a
+  Test button for each. An administrator (`ai.settings`) can find the models already on AI Studio and choose
+  which the workspace offers.
+- **The assistant answers either way**: with a model on this computer when one is downloaded (and always when
+  offline), or with AI Studio through WorkSuite — the switch at the top of the AI dock.
+
+**Needs** the WorkSuite server with `GET /api/ai/local/catalog`, and AI Studio's key and secret set there. An
+older server leaves Local AI as it was.
+
+---
+
 ## 2026-09-30 — 0.2.67: product pictures, and the AI dock no longer takes the window down
 
 **New: pictures on products** (needs the server's product pictures update)

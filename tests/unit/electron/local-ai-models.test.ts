@@ -145,3 +145,84 @@ describe('Local AI model manager', () => {
     s.done();
   });
 });
+
+describe('Local AI models from the WorkSuite server (AI Studio)', () => {
+  const serverCatalog = (models: object[], problems: Record<string, string> = {}, expires = '2099-01-01T00:00:00Z') => ({
+    catalog: { schema: 1, issuedAt: '2026-09-30T00:00:00Z', expiresAt: expires, models },
+    problems,
+    registry: 'https://registry.ollama.ai',
+  });
+  const aiStudioModel = (over: object = {}) => model({ id: 'llama3.2-3b', name: 'llama3.2:3b', url: 'https://registry.ollama.ai/v2/library/llama3.2/blobs/sha256:' + SHA, ...over });
+
+  function fromServer(answer: () => Promise<unknown>) {
+    const root = mkdtempSync(join(tmpdir(), 'ws-lai-'));
+    const net = cdn(envelope([model()]));
+    const m = new LocalAIModelManager({ root, serverCatalog: answer, catalogUrl: () => 'https://cdn.worksuite.test/local-ai/catalog.json', keys: { 'ws-2026': PUB }, fetch: net.fetch });
+    return { m, root, net, done: () => rmSync(root, { recursive: true, force: true }) };
+  }
+
+  it('offers the models the server resolved from AI Studio, and downloads one checked against its hash', async () => {
+    const t = fromServer(async () => serverCatalog([aiStudioModel()]));
+    await t.m.init();
+    await t.m.refresh();
+    expect(t.m.catalogState().error).toBeNull();
+    expect((await t.m.list(hw)).map((v) => v.model.id)).toEqual(['llama3.2-3b']);
+    expect(t.net.calls.some((c) => c.url.endsWith('catalog.json'))).toBe(false);
+
+    await t.m.install('llama3.2-3b');
+    expect((await t.m.list(hw))[0]!.state).toBe('installed');
+    expect(t.net.calls.at(-1)!.url).toBe('https://registry.ollama.ai/v2/library/llama3.2/blobs/sha256:' + SHA);
+    t.done();
+  });
+
+  it('refuses a file that is not the one the server named', async () => {
+    const t = fromServer(async () => serverCatalog([aiStudioModel({ sha256: 'f'.repeat(64) })]));
+    await t.m.init();
+    await t.m.refresh();
+    await t.m.install('llama3.2-3b').catch(() => undefined);
+    const v = (await t.m.list(hw))[0]!;
+    expect(v.state).not.toBe('installed');
+    expect(v.error).toBeTruthy();
+    t.done();
+  });
+
+  it('keeps what the server sent for the next start, offline', async () => {
+    const t = fromServer(async () => serverCatalog([aiStudioModel()]));
+    await t.m.init();
+    await t.m.refresh();
+    const again = new LocalAIModelManager({ root: t.root, serverCatalog: () => Promise.reject(new Error('offline')), catalogUrl: () => null, keys: {}, fetch: t.net.fetch });
+    await again.init();
+    expect((await again.list(hw)).map((v) => v.model.id)).toEqual(['llama3.2-3b']);
+    t.done();
+  });
+
+  it('falls back to the signed CDN catalog when the server has none (404)', async () => {
+    const t = fromServer(() => Promise.reject(Object.assign(new Error('Not found'), { status: 404 })));
+    await t.m.init();
+    await t.m.refresh();
+    expect((await t.m.list(hw)).map((v) => v.model.id)).toEqual(['qwen3-4b']);
+    t.done();
+  });
+
+  it('says why when AI Studio has models but none could be found to download', async () => {
+    const t = fromServer(async () => serverCatalog([], { 'private-model:7b': 'The registry has no model by this name.' }));
+    await t.m.init();
+    await t.m.refresh();
+    expect(t.m.catalogState().error).toBe("None of AI Studio's models could be found to download — private-model:7b: The registry has no model by this name.");
+    t.done();
+  });
+
+  it('refuses an expired catalog and reports a server that cannot be reached', async () => {
+    const t = fromServer(async () => serverCatalog([aiStudioModel()], {}, '2020-01-01T00:00:00Z'));
+    await t.m.init();
+    await t.m.refresh();
+    expect(t.m.catalogState().error).toBe('The model catalog has expired.');
+    t.done();
+
+    const u = fromServer(() => Promise.reject(new Error('WorkSuite could not be reached.')));
+    await u.m.init();
+    await u.m.refresh();
+    expect(u.m.catalogState().error).toBe('WorkSuite could not be reached.');
+    u.done();
+  });
+});
