@@ -2,7 +2,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useRef, type ReactNode } from 'react';
 import type { RestaurantCopy, RestaurantPairing, RestaurantStatus } from '@shared/restaurant';
 import { Button, cx } from '../../components/ui';
+import { app } from '../../core/app-state';
 import { on } from '../../core/bridge';
+import { useStore } from '../../core/store';
 import { bridge, get, K, type LiveEvent, type Options, type PosContext } from './api';
 import { useT } from './i18n';
 import { routeOf, type Screen, type View } from './routes';
@@ -74,11 +76,18 @@ function keysFor(e: LiveEvent, branch: number): ReadonlyArray<readonly unknown[]
       return [['restaurant', 'kitchen', branch], K.expo(branch), ['restaurant', 'order']];
     case 'table':
     case 'session':
-    case 'reservation':
+    case 'table_session':
+    case 'floor':
       return [K.floor(branch)];
+    case 'reservation':
+      return [K.floor(branch), ['restaurant', 'reservations', branch], ['restaurant', 'timeline', branch]];
     case 'bill':
     case 'payment':
-      return [['restaurant', 'bills'], ['restaurant', 'order'], K.floor(branch)];
+      return [['restaurant', 'bills'], ['restaurant', 'order'], ['restaurant', 'payments'], K.floor(branch)];
+    case 'adjustment':
+      return [['restaurant', 'adjustments'], ['restaurant', 'bills'], ['restaurant', 'order']];
+    case 'business_date':
+      return [K.pos(branch)];
     case 'print_job':
       return [K.printJobs(branch), ['restaurant', 'kitchen', branch]];
     case 'sync_conflict':
@@ -92,23 +101,60 @@ function keysFor(e: LiveEvent, branch: number): ReadonlyArray<readonly unknown[]
   }
 }
 
+/** The gateway's `restaurant.live` push (`Live::emit`): the same event as a `live?after=` row, with the branch. */
+interface LivePush extends LiveEvent {
+  type: string;
+  branch_id?: number;
+}
+
+/** While the realtime socket is up, the catch-up poll only covers what a push might have missed. */
+export const PUSHED_POLL_MS = 30_000;
+
+/** Refresh the queries an event touches, each once. */
+function refreshFor(qc: ReturnType<typeof useQueryClient>, events: LiveEvent[], branch: number): void {
+  const seen = new Set<string>();
+  for (const e of events) {
+    for (const k of keysFor(e, branch)) {
+      const id = JSON.stringify(k);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      void qc.invalidateQueries({ queryKey: k as unknown[] });
+    }
+  }
+}
+
 /**
- * The live floor, board and orders, kept current by catching up with the
- * server's numbered events (`GET live?after=`, RM-ARC-012) — every few
- * seconds while the screen shows, from where the terminal's heartbeat last
- * saw the branch. An event refreshes only the queries it touches; a gap too
- * old to catch up (`reload`) refreshes everything. With no starting point
- * yet, the screen's own queries are simply refreshed on the same beat.
+ * The live floor, board and orders (RM-ARC-010/012). The server pushes each
+ * change through the app's realtime socket as `restaurant.live` (the main
+ * process fans it out as `realtime:event`); an event for this branch
+ * refreshes only the queries it touches, at once. Behind it, the screen
+ * still catches up with the server's numbered events (`GET live?after=`)
+ * from where the terminal's heartbeat last saw the branch — every few
+ * seconds while the socket is down or the server runs without the gateway,
+ * every 30 s while it is up, since a push can be missed but a numbered row
+ * cannot. A gap too old to catch up (`reload`) refreshes everything. With
+ * no starting point yet, the screen's own queries are refreshed on the beat.
  */
 export function useLive(branch: number, start: number, active: boolean, every = 4_000, fallback: ReadonlyArray<readonly unknown[]> = []): void {
   const qc = useQueryClient();
   const after = useRef<number>(start);
   const fb = useRef(fallback);
+  const pushed = useStore(app, (s) => s.status?.realtime === 'connected');
+  const beat = pushed ? Math.max(every, PUSHED_POLL_MS) : every;
   useEffect(() => {
     fb.current = fallback;
     /* The heartbeat's number arrives after the screen: start from it once it is known. */
     if (after.current === 0 && start > 0) after.current = start;
   });
+
+  useEffect(() => {
+    if (!active) return;
+    return on<LivePush>('realtime:event', (e) => {
+      if (e?.type !== 'restaurant.live' || typeof e.entity !== 'string') return;
+      if (e.branch_id !== undefined && Number(e.branch_id) !== branch) return;
+      refreshFor(qc, [e], branch);
+    });
+  }, [branch, active, qc]);
 
   useEffect(() => {
     if (!active) return;
@@ -122,15 +168,7 @@ export function useLive(branch: number, start: number, active: boolean, every = 
           if (d.reload) {
             void qc.invalidateQueries({ queryKey: K.all });
           } else {
-            const seen = new Set<string>();
-            for (const e of d.events) {
-              for (const k of keysFor(e, branch)) {
-                const id = JSON.stringify(k);
-                if (seen.has(id)) continue;
-                seen.add(id);
-                void qc.invalidateQueries({ queryKey: k as unknown[] });
-              }
-            }
+            refreshFor(qc, d.events, branch);
           }
           after.current = d.last;
           again = d.more;
@@ -140,14 +178,14 @@ export function useLive(branch: number, start: number, active: boolean, every = 
       } catch {
         /* Out of reach: the next beat tries again; the screens say so themselves. */
       }
-      if (!stop) timer = setTimeout(() => void tick(), again ? 50 : every);
+      if (!stop) timer = setTimeout(() => void tick(), again ? 50 : beat);
     };
-    timer = setTimeout(() => void tick(), every);
+    timer = setTimeout(() => void tick(), beat);
     return () => {
       stop = true;
       if (timer) clearTimeout(timer);
     };
-  }, [branch, active, every, qc]);
+  }, [branch, active, beat, qc]);
 }
 
 export function Note({ tone = 'muted', children, action }: { tone?: 'muted' | 'warning' | 'danger' | 'indigo' | 'success'; children: ReactNode; action?: ReactNode }) {

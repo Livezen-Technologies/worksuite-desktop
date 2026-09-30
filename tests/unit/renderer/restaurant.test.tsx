@@ -5,8 +5,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as CoreApi from '../../../src/core/api';
 
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), request: vi.fn() }));
-const bridge = vi.hoisted(() => ({ handle: (_c: string, _i: unknown): unknown => undefined }));
-vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(async (c: string, i: unknown) => bridge.handle(c, i)), on: () => () => undefined, isMac: false, registerDropped: vi.fn() }));
+const bridge = vi.hoisted(() => ({ handle: (_c: string, _i: unknown): unknown => undefined, listeners: new Map<string, Set<(e: unknown) => void>>() }));
+vi.mock('../../../src/core/bridge', () => ({
+  call: vi.fn(async (c: string, i: unknown) => bridge.handle(c, i)),
+  on: (c: string, fn: (e: unknown) => void) => {
+    const set = bridge.listeners.get(c) ?? new Set();
+    set.add(fn);
+    bridge.listeners.set(c, set);
+    return () => set.delete(fn);
+  },
+  isMac: false,
+  registerDropped: vi.fn(),
+}));
+const emit = (c: string, e: unknown) => bridge.listeners.get(c)?.forEach((fn) => fn(e));
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
 
 const tab = vi.hoisted(() => ({ query: new URLSearchParams(), path: ['restaurant'] as string[], go: (_r: string) => undefined as void }));
@@ -528,5 +539,26 @@ describe('Restaurant: the host stand', () => {
     show(['restaurant']);
     await screen.findByRole('button', { name: 'Table A1 · Available' });
     expect(screen.getByRole('navigation', { name: 'Restaurant' }).textContent).not.toContain('Reservations');
+  });
+});
+
+describe('Restaurant: live updates', () => {
+  it('refreshes what a restaurant.live push touches for this branch, and ignores other branches', async () => {
+    const { app } = await import('../../../src/core/app-state');
+    app.set({ status: { realtime: 'connected' } as never });
+    try {
+      show(['restaurant', 'orders', '55']);
+      expect(await screen.findByText('Order #0012', { selector: 'h1' })).toBeTruthy();
+      const before = calls('GET', '/api/restaurant/v1/orders/55').length;
+      emit('realtime:event', { type: 'restaurant.live', seq: 900, branch_id: 9, entity: 'order', id: 55, version: 5, kind: 'updated' });
+      emit('realtime:event', { type: 'chat.message', room_id: 1 });
+      await new Promise((r) => setTimeout(r, 20));
+      expect(calls('GET', '/api/restaurant/v1/orders/55')).toHaveLength(before);
+      emit('realtime:event', { type: 'restaurant.live', seq: 901, branch_id: 3, entity: 'order', id: 55, version: 5, kind: 'updated' });
+      await waitFor(() => expect(calls('GET', '/api/restaurant/v1/orders/55').length).toBeGreaterThan(before));
+      expect(calls('GET', '/api/restaurant/v1/live')).toHaveLength(0);
+    } finally {
+      app.set({ status: null });
+    }
   });
 });
