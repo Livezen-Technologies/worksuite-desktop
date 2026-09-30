@@ -209,6 +209,10 @@ export const INVOKE_CHANNELS = [
   'office:revealLocal',
   'office:localAvailable',
   'office:openLocal',
+  'office:pickFile',
+  'office:readFile',
+  'office:writeFile',
+  'office:saveCopy',
 
   'offline:status',
   'offline:pending',

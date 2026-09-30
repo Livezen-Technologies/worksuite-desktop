@@ -1,4 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, nativeImage, shell, systemPreferences, type WebContents } from 'electron';
+import { basename } from 'node:path';
+import { writeAtomically } from '../services/pdf/host';
 import os from 'node:os';
 import { writeFile } from 'node:fs/promises';
 import { canOpenApp, notificationAllowed } from '@shared/access';
@@ -543,6 +545,26 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('office:localAvailable', (input) => {
     const at = ctx.officeLocal.localPath(input.fileId);
     return { available: !!at, synced: !!at?.synced, preview: !!at && process.platform === 'darwin', openInApp: !!at && ctx.session.hasPermission('desktop.files.open_external') };
+  });
+  // WorkSuite DOC / Sheet / Slides on files from this computer: the main process's own dialogs, handles to the page.
+  router.handle('office:pickFile', async (_input, c) => {
+    const win = BrowserWindow.fromWebContents(c.sender);
+    const opts: Electron.OpenDialogOptions = { title: 'Open a document', filters: [{ name: 'Word, Excel and PowerPoint', extensions: ['docx', 'xlsx', 'pptx'] }], properties: ['openFile', 'multiSelections'] };
+    const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+    if (res.canceled || !res.filePaths.length) return [];
+    const { files, rejected } = await ctx.officeFiles.register(res.filePaths);
+    if (!files.length && rejected.length) throw new DesktopError('IPC_VALIDATION_FAILED', rejected[0]!.reason);
+    return files;
+  });
+  router.handle('office:readFile', (input) => ctx.officeFiles.read(input.handle));
+  router.handle('office:writeFile', (input) => ctx.officeFiles.write(input.handle, input.bytes, writeAtomically));
+  router.handle('office:saveCopy', async (input, c) => {
+    const win = BrowserWindow.fromWebContents(c.sender);
+    const opts: Electron.SaveDialogOptions = { title: 'Save a copy', defaultPath: input.name };
+    const res = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
+    if (res.canceled || !res.filePath) return null;
+    await writeAtomically(res.filePath, input.bytes);
+    return { name: basename(res.filePath) };
   });
   router.handle('office:openLocal', async (input, c) => {
     const at = ctx.officeLocal.localPath(input.fileId);

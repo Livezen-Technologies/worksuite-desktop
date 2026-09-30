@@ -1,3 +1,4 @@
+import { isOfficeFile, openInOffice } from '../../core/open-document';
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import type { UploadTarget } from '@shared/ipc/contract';
 import type { Transfer } from '@shared/types';
@@ -182,8 +183,20 @@ export function AttachMenu({ label = 'Attach', disabled, onComputer, onDrive, sm
 
 type Source = { tenderDocument: number } | { tenderLine: { line: number; version?: number } } | { tenderLetter: { tender: number; letter: number } } | { tenderLibrary: number };
 
-/** Downloads a tender's file through the transfer manager, and opens it when asked. */
+/** Where this server serves a tender's file (the same paths the download manager fetches). */
+export function tenderFilePath(source: Source): string {
+  if ('tenderDocument' in source) return `/api/tenders/documents/${source.tenderDocument}/file`;
+  if ('tenderLine' in source) return `/api/tenders/checklist/${source.tenderLine.line}/download${source.tenderLine.version ? `?v=${source.tenderLine.version}` : ''}`;
+  if ('tenderLetter' in source) return `/api/tenders/${source.tenderLetter.tender}/letters/${source.tenderLetter.letter}/download`;
+  return `/api/tender/library/${source.tenderLibrary}/file`;
+}
+
+/**
+ * Downloads a tender's file through the transfer manager, and opens it when asked: a Word, Excel or PowerPoint
+ * file in a WorkSuite DOC / Sheet / Slides tab, anything else as the download manager opens it (PDFs in PDF Studio).
+ */
 export async function saveTenderFile(source: Source, name: string, open = false) {
+  if (open && isOfficeFile(name)) return openInOffice({ kind: 'api', path: tenderFilePath(source), name });
   try {
     await call('transfers:download', { ...source, name: name.replace(/[/\\]/g, '-').slice(0, 255) || 'document', open });
     toast('success', open ? `Opening ${name}…` : `Saving ${name} to your downloads.`);

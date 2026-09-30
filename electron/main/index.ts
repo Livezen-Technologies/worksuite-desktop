@@ -62,6 +62,8 @@ import { EventDeskPrint } from '../services/event-desk-print';
 import { OfficeEditorHost } from '../services/office-editor';
 import { OfficeExternal } from '../services/office-external';
 import { createPdfStudio } from '../services/pdf/host';
+import { OfficeLocalFiles, officePathsInArgv } from '../services/office-local';
+import { officeDocRoute } from '@shared/office';
 import { pdfPathsInArgv } from '../services/pdf/local-files';
 import { DEFAULT_PDF_POLICY } from '../services/pdf/service';
 import { Vault } from '../services/vault';
@@ -94,6 +96,9 @@ const pendingPdfs: string[] = [];
 let handPdfs: (paths: string[]) => void = (paths) => void pendingPdfs.push(...paths);
 /** PDF Studio's saves waiting for WorkSuite go when it answers again (set once PDF Studio exists). */
 let pdfOnline: () => void = () => undefined;
+/** Office files handed over before the app is running wait here, then open in WorkSuite DOC / Sheet / Slides tabs. */
+const pendingOffice: string[] = [];
+let handOffice: (paths: string[]) => void = (paths) => void pendingOffice.push(...paths);
 
 if (!app.requestSingleInstanceLock()) {
   // FR-DL-04: a second launch hands its arguments (and deep link) to the first.
@@ -138,9 +143,11 @@ function main(): void {
   // PDFs the operating system hands over ("Open with"; a file dropped on the Dock icon): PDF Studio opens each.
   app.on('open-file', (e, path) => {
     e.preventDefault();
-    handPdfs([path]);
+    if (/\.(docx|xlsx|pptx)$/i.test(path)) handOffice([path]);
+    else handPdfs([path]);
   });
   handPdfs(pdfPathsInArgv(process.argv));
+  handOffice(officePathsInArgv(process.argv));
 
   app.whenReady().then(() => start(boot, pendingLinks, (fn) => (handleLink = fn)));
 }
@@ -434,6 +441,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
   });
   office.install();
+  // Office files on this computer for WorkSuite DOC / Sheet / Slides tabs (office-local.ts): handles, never paths.
+  const officeFiles = new OfficeLocalFiles({ forbidden: () => [p.userData] });
   const officeLocal = new OfficeExternal({
     db,
     vault: getVault,
@@ -1091,6 +1100,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         transfers.wipe(uid);
         // Copies opened in other apps are no longer watched; the files stay the person's.
         officeLocal.forgetUser(uid);
+        officeFiles.forget();
         // PDF Studio's working copies and thumbnails (PDF-OFF-005).
         void pdfStudio.wipe();
       }
@@ -1217,6 +1227,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   handPdfs = (paths) => void pdfStudio.openFromOs(paths);
   pdfOnline = () => pdfStudio.online();
   if (pendingPdfs.length) handPdfs(pendingPdfs.splice(0));
+  handOffice = (paths) =>
+    void officeFiles.register(paths).then(
+      ({ files }) => {
+        for (const f of files) navigate({ route: officeDocRoute({ kind: 'local', handle: f.handle, name: f.name }), source: 'file', title: f.name });
+      },
+      (e: unknown) => log.warn('office file handed over by the system not opened', { error: String((e as Error)?.message ?? e) }),
+    );
+  if (pendingOffice.length) handOffice(pendingOffice.splice(0));
 
   const diagnostics = new DiagnosticsService({
     serverOrigin: () => auth.getServer()?.origin ?? null,
@@ -1367,6 +1385,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ai,
     office,
     officeLocal,
+    officeFiles,
     relaunch,
     quit,
     clockAttendance,
@@ -1394,6 +1413,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     const link = findDeepLinkInArgv(argv);
     const pdfs = pdfPathsInArgv(argv);
     if (pdfs.length) handPdfs(pdfs);
+    const docs = officePathsInArgv(argv);
+    if (docs.length) handOffice(docs);
     if (link) handleDeepLink(link);
     else windows.showMain();
   });

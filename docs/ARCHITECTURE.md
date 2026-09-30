@@ -152,6 +152,16 @@ from `/api/files/{id}/download` edited in the renderer by Rust engines compiled 
 open fonts (`@betteroffice/fonts`, same-origin; Google Fonts off), and saved as a new version with
 `POST /api/files/{id}/versions`. Any of them works in a detached window; the close guard saves first.
 
+**WorkSuite DOC / Sheet / Slides** (`officeKind`, `OFFICE_KIND_LABELS` in `shared/office.ts`) name the tab by
+type. A document that is not a Drive file opens at `/office/doc?src=…` (`officeDocRoute` / `parseOfficeDocRoute`)
+in the built-in editor with an `EditorSource`: `api` — a path this server serves (`/api/…` or signed `/media/…`,
+read through the app's proxy: mail attachments, tender files, chat files; `openInOffice()` in
+`src/core/open-document.ts` is what modules call) — or `local`, a handle from **OfficeFileService**
+(`electron/services/office-local.ts`: `office:pickFile`, `office:readFile`, `office:writeFile`,
+`office:saveCopy`; files from the main process's dialogs or the OS's "Open with", never a path from a page).
+**New** (`office/create.ts`): the server's Office API, else Drive's `POST /api/files/create`, else a bundled blank
+OOXML file (`office/blank/`, made by `scripts/make-blank-office.py`) uploaded with `uploadBlob`. Record tabs are keyed by `recordKey()` (`src/core/tabs.ts`), so each attachment or local file is its own tab.
+
 ## Side panels
 
 Modules' side menus and panes are wrapped in `SidePanel` (`src/components/SidePanel.tsx`): a handle on the inner

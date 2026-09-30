@@ -58,6 +58,16 @@ const newId = () => `t${Date.now().toString(36)}${(++seq).toString(36)}`;
  */
 const RECORD_TAB_APPS = new Set(['office']);
 const pathOf = (route: string) => route.split('?')[0]!.replace(/\/+$/, '');
+/**
+ * Which record a record tab shows: its path (`/office/42`), or for a document that is not a Drive file
+ * (`/office/doc?src=…`) its source too — two attachments are two documents.
+ */
+export function recordKey(route: string): string {
+  const path = pathOf(route);
+  if (path !== '/office/doc') return path;
+  const q = new URLSearchParams(route.split('?')[1] ?? '');
+  return `${path}?${q.get('src') ?? ''}:${q.get('path') ?? q.get('h') ?? ''}`;
+}
 
 /**
  * A tab that must be closed with care — an Office document with changes the
@@ -179,7 +189,7 @@ export function navigate(route: string, organizationId: string | null = null): v
   const s = tabsStore.get();
   const app = appForRoute(route);
   if (RECORD_TAB_APPS.has(app)) {
-    const same = s.tabs.find((t) => t.app === app && pathOf(t.route) === pathOf(route));
+    const same = s.tabs.find((t) => t.app === app && recordKey(t.route) === recordKey(route));
     if (same) activate(same.id);
     else openTab(route, { organizationId });
     return;

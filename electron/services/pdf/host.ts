@@ -61,7 +61,7 @@ export async function writeAtomically(path: string, bytes: Uint8Array): Promise<
     await rename(tmp, path);
   } catch (e) {
     await rm(tmp, { force: true }).catch(() => undefined);
-    throw new DesktopError('PERMISSION_DENIED', `The PDF could not be written there (${(e as NodeJS.ErrnoException).code ?? 'error'}).`);
+    throw new DesktopError('PERMISSION_DENIED', `The file could not be written there (${(e as NodeJS.ErrnoException).code ?? 'error'}).`);
   }
 }
 

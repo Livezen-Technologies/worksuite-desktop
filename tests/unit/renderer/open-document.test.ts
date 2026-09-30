@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(async () => ({})), on: () => () => undefined, errorMessage: (e: unknown) => String(e), isMac: true, platform: 'darwin' }));
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
+vi.mock('../../../src/core/tabs', async (orig) => ({ ...(await orig<object>()), navigate: vi.fn() }));
 
 import { call } from '../../../src/core/bridge';
+import { navigate } from '../../../src/core/tabs';
 import { mediaToken, openDocument } from '../../../src/core/open-document';
 import { openAttachment } from '../../../src/modules/chat/types';
 
@@ -25,8 +27,11 @@ describe('documents open on this computer, not in the browser', () => {
 
   it('opens a chat attachment by its token, and only falls back to the link without one', async () => {
     const link = vi.fn();
+    openAttachment({ filename: 'Minutes.zip', download_url: '/media/Tok3n_abcdef?download=1' }, link);
+    await vi.waitFor(() => expect(call).toHaveBeenCalledWith('transfers:download', { chatMedia: 'Tok3n_abcdef', name: 'Minutes.zip', open: true }));
+    // A Word, Excel or PowerPoint file opens in a WorkSuite DOC / Sheet / Slides tab instead.
     openAttachment({ filename: 'Budget.xlsx', download_url: '/media/Tok3n_abcdef?download=1' }, link);
-    await vi.waitFor(() => expect(call).toHaveBeenCalledWith('transfers:download', { chatMedia: 'Tok3n_abcdef', name: 'Budget.xlsx', open: true }));
+    expect(navigate).toHaveBeenCalledWith('/office/doc?src=api&name=Budget.xlsx&path=%2Fmedia%2FTok3n_abcdef%3Fdownload%3D1', null);
     expect(link).not.toHaveBeenCalled();
     openAttachment({ filename: 'old.doc', download_url: '/elsewhere/x' }, link);
     expect(link).toHaveBeenCalledWith('/elsewhere/x');

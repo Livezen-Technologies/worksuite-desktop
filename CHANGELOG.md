@@ -5,6 +5,37 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-30 — 0.2.61: WorkSuite DOC, Sheet and Slides — Office files from every module in a tab
+
+**Added**
+
+- **WorkSuite DOC / Sheet / Slides**: every Office tab says which it is (DOC for Word, ODT and RTF files, Sheet
+  for Excel, ODS and CSV, Slides for PowerPoint and ODP) in its WorkSuite-owned header.
+- **Mail, Tenders and Chat open Office files in a tab**: a .docx, .xlsx or .pptx mail attachment, tender
+  document, checklist file, letter or library file, or chat attachment opens in a WorkSuite DOC / Sheet / Slides
+  tab instead of Word, Excel or PowerPoint. Such a document has nowhere to go back to: **Save to Drive** makes it
+  a file in My files (and closing the tab with changes does the same, so nothing is lost); **Save a copy** writes
+  it where you choose.
+- **Files from this computer**: **Open from this computer** on the Office home, and .docx / .xlsx / .pptx files
+  the operating system hands over ("Open with WorkSuite"), open in a tab and **Save** writes back to the same file
+  (atomically). The page never sees a path: the main process issues a handle for a file from its own dialog or
+  from the OS, checked by its name and its first bytes, and outside WorkSuite's own data.
+- Every Office tab can **Save a copy** on this computer.
+- **Office → New works on every server**: Document, Spreadsheet and Presentation were greyed out on a server
+  without the Office API. A new file now comes from the server's Office API, else from Drive's own blank
+  documents (`POST /api/files/create`), and only on a server with neither from WorkSuite's own blank file
+  (`scripts/make-blank-office.py`) uploaded to My files — then opens in a WorkSuite DOC / Sheet / Slides tab.
+  **From a template** still needs WorkSuite Office on the server.
+
+**Changed**
+
+- Office tabs are one per document for attachments and local files too (the same attachment brings its tab
+  forward; two attachments are two tabs).
+- Older formats (.doc, .xls, .odt…) from Mail, Tenders and Chat still download and open as before; from the
+  Drive they open in EuroOffice.
+
+---
+
 ## 2026-09-30 — 0.2.60: Office documents edit inside WorkSuite — EuroOffice, or the built-in editor
 
 **Added**

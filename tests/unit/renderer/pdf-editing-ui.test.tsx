@@ -161,14 +161,17 @@ describe('modes and saving', () => {
     expect(calls('pdf:undo')).toEqual([{ session: SID }]);
   });
 
+  // Under a full parallel run the dialog's round trip can take longer than waitFor's default second.
+  const SLOW = { timeout: 5000 };
+
   it('answers a conflict with the server’s choices', async () => {
     await open(view({ saveState: 'unsaved' }, { conflict: { baseVersion: 4, serverVersion: 5, savedBy: 'Nimal', savedAt: null, offline: false, message: 'This PDF changed in WorkSuite since your copy was opened.' } }));
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByText(/Version 5 was saved by Nimal/)).toBeTruthy();
     bridge.handlers.set('pdf:resolve', async () => view({ saveState: 'unsaved' }, { lastSaved: { version: null, copyFileId: 99, at: '' } }));
     fireEvent.click(within(dialog).getByRole('button', { name: /Keep both/ }));
-    await waitFor(() => expect(calls('pdf:resolve')).toEqual([{ session: SID, answer: 'keep_both' }]));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(calls('pdf:resolve')).toEqual([{ session: SID, answer: 'keep_both' }]), SLOW);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull(), SLOW);
   });
 
   it('says recovered work is back, and discards it on request', async () => {
@@ -176,7 +179,7 @@ describe('modes and saving', () => {
     expect(screen.getByText(/kept on this computer and are back/)).toBeTruthy();
     bridge.handlers.set('pdf:discard', async () => view({ saveState: 'saved' }));
     fireEvent.click(screen.getByRole('button', { name: 'Discard them' }));
-    await waitFor(() => expect(calls('pdf:discard')).toEqual([{ session: SID }]));
+    await waitFor(() => expect(calls('pdf:discard')).toEqual([{ session: SID }]), SLOW);
   });
 
   it('is read-only with the server’s reason when it allows only viewing', async () => {

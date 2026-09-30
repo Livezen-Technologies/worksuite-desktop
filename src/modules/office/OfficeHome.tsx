@@ -2,7 +2,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { OfficeLocalCopy } from '@shared/office';
 import { apiGetMeta } from '../../core/api';
-import { errorMessage } from '../../core/bridge';
+import { call, errorMessage } from '../../core/bridge';
+import { openInOffice } from '../../core/open-document';
 import { relative } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
@@ -11,6 +12,7 @@ import { OFFICE_EXTS, type DriveFile, type DriveList } from '../files/api';
 import { openOfficeTab, useOfficeRouting } from '../files/office';
 import { TemplateDialog } from '../files/Templates';
 import { createDocument } from './api';
+import { createBlank } from './create';
 import { ConflictDialog, LocalCopyRow, useLocalCopies } from './local';
 
 type Kind = 'document' | 'spreadsheet' | 'presentation';
@@ -48,16 +50,26 @@ export function OfficeHome() {
     refetchInterval: 120_000,
   });
   const files = officeFiles(recent.data?.data.files ?? []);
-  const canCreate = !routing.legacy;
+  // Blank files can always be made (create.ts); templates need the server's Office API.
+  const canTemplate = !routing.legacy;
 
+  // A file on this computer: the main process's dialog, then a WorkSuite DOC / Sheet / Slides tab on its handle.
+  const openLocal = async () => {
+    try {
+      for (const f of await call('office:pickFile')) openInOffice({ kind: 'local', handle: f.handle, name: f.name });
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
   // WorkSuite's editor, inside the app (OfficePage picks the full session or the EuroOffice editor).
   const open = (f: DriveFile) => void openOfficeTab(f);
   const create = async (input: { type?: Kind; template_id?: string }) => {
     try {
-      const r = await createDocument({ ...input, folder_id: null });
-      toast('success', `“${r.file.name}” created in My files`);
+      // A template is the Office API's; a blank file is made by whatever the server offers (create.ts).
+      const f = input.template_id ? (await createDocument({ ...input, folder_id: null })).file : await createBlank(input.type!, null, !routing.legacy);
+      toast('success', `“${f.name}” created in My files`);
       void qc.invalidateQueries({ queryKey: ['files'] });
-      void openOfficeTab(r.file, 'EDIT');
+      void openOfficeTab(f, 'EDIT');
     } catch (e) {
       toast('error', errorMessage(e));
     }
@@ -78,7 +90,7 @@ export function OfficeHome() {
               <button
                 key={n.kind}
                 type="button"
-                disabled={!canCreate || busy !== null}
+                disabled={busy !== null}
                 onClick={() => {
                   setBusy(n.kind);
                   void create({ type: n.kind }).finally(() => setBusy(null));
@@ -92,7 +104,16 @@ export function OfficeHome() {
                 </span>
               </button>
             ))}
-            <button type="button" disabled={!canCreate} onClick={() => setTemplates(true)} className="flex items-center gap-3 rounded-[12px] border border-dashed border-line bg-surface px-4 py-3.5 text-left hover:border-primary disabled:opacity-60">
+            <button type="button" onClick={() => void openLocal()} className="flex items-center gap-3 rounded-[12px] border border-dashed border-line bg-surface px-4 py-3.5 text-left hover:border-primary">
+              <span className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-subtle text-ink-2">
+                <Icon name="laptop" size={18} />
+              </span>
+              <span className="min-w-0">
+                <b className="block text-[13.5px] font-semibold text-ink">Open from this computer</b>
+                <span className="block text-[11.5px] text-ink-3">.docx, .xlsx or .pptx, saved in place</span>
+              </span>
+            </button>
+            <button type="button" disabled={!canTemplate} title={canTemplate ? undefined : 'Templates come with WorkSuite Office on your server'} onClick={() => setTemplates(true)} className="flex items-center gap-3 rounded-[12px] border border-dashed border-line bg-surface px-4 py-3.5 text-left hover:border-primary disabled:opacity-60">
               <span className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-subtle text-ink-2">
                 <Icon name="grid" size={18} />
               </span>
@@ -102,7 +123,7 @@ export function OfficeHome() {
               </span>
             </button>
           </div>
-          {!canCreate ? <p className="mt-2 text-[12px] text-ink-3">Your WorkSuite server does not create new Office documents yet. Files you open here edit in WorkSuite’s EuroOffice editor and save back to your Drive.</p> : null}
+          <p className="mt-2 text-[12px] text-ink-3">New files go in My files and open in WorkSuite’s editor; they save back to your Drive.</p>
         </section>
 
         {copies.length ? (
