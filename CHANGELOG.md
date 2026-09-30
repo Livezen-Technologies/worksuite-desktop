@@ -5,6 +5,25 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-30 — 0.2.62: Office online in the Document Server, offline in the built-in editor
+
+**Changed**
+
+- **Online, Office files always open in the Document Server** (EuroOffice) inside a WorkSuite DOC / Sheet /
+  Slides tab. A mail attachment, tender file, chat file or file from this computer is first copied into
+  **My files → WorkSuite copies** and opens as that Drive file. A copy of a file on this computer stays linked:
+  its changes are written back to the file when the tab closes (the Document Server saves a moment later, so it
+  is written twice to be sure), or at once with **Update the file now**. If the copy cannot be made, **Edit it
+  here without the Drive** uses the built-in editor.
+- **Offline, the built-in editor (BetterOffice)**: a Drive file with a copy on this computer (a synced folder,
+  or one opened in another app) is edited on that copy, which goes to the Drive when WorkSuite is online again;
+  without one the tab says it is not on this computer. Files from this computer open there as before.
+- A server without a working Document Server still gets the built-in editor, now with a banner saying why.
+- The built-in editor is no longer offered by hand while online (the file menu's **Edit in WorkSuite
+  (built-in)** and the EuroOffice header's **Built-in editor** are gone).
+
+---
+
 ## 2026-09-30 — 0.2.61: WorkSuite DOC, Sheet and Slides — Office files from every module in a tab
 
 **Added**

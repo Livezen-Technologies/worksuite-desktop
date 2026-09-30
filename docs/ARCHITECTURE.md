@@ -159,6 +159,13 @@ read through the app's proxy: mail attachments, tender files, chat files; `openI
 `src/core/open-document.ts` is what modules call) — or `local`, a handle from **OfficeFileService**
 (`electron/services/office-local.ts`: `office:pickFile`, `office:readFile`, `office:writeFile`,
 `office:saveCopy`; files from the main process's dialogs or the OS's "Open with", never a path from a page).
+**Online or offline** (`OfficePage.tsx`, decided when the tab opens): online a Drive file opens in the Document
+Server (the full session or `ClassicEditor`, falling back to the built-in editor only when the server has no
+Document Server); a non-Drive document (`DocTab`) is copied into My files → WorkSuite copies (`office/copies.ts`,
+once per session) and the tab's route becomes that Drive file; a copy of a local file is linked to its handle and
+written back (`writeBack`, `writeBackLater`). Offline (`OfflineDocument`) a Drive file is edited in the built-in
+editor on its copy on this computer (`office:readOffline` / `office:writeOffline` over OfficeExternal's
+`localPath`: the synced file or a copy opened in another app), which sync or the copy's upload takes to the Drive.
 **New** (`office/create.ts`): the server's Office API, else Drive's `POST /api/files/create`, else a bundled blank
 OOXML file (`office/blank/`, made by `scripts/make-blank-office.py`) uploaded with `uploadBlob`. Record tabs are keyed by `recordKey()` (`src/core/tabs.ts`), so each attachment or local file is its own tab.
 

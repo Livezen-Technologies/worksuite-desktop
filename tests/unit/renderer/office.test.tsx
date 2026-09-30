@@ -516,14 +516,20 @@ describe('the Office tab', () => {
     expect(screen.getByText('Viewing')).toBeTruthy();
   });
 
-  it('offline, says editing needs a connection and offers the copy on this computer (OO-OFF-020)', async () => {
+  it('offline, edits the copy on this computer in the built-in editor, and opens no server session (OO-OFF-020)', async () => {
     app.set({ status: { network: 'OFFLINE' } as never });
-    vi.mocked(call).mockImplementation((async (ch: string) => (ch === 'office:localAvailable' ? { available: true, synced: true, preview: false, openInApp: true } : ch === 'office:localCopies' ? [] : null)) as never);
+    vi.mocked(call).mockImplementation((async (ch: string) => (ch === 'office:localAvailable' ? { available: true, synced: true, preview: false, openInApp: true } : ch === 'office:localCopies' ? [] : ch === 'office:readOffline' ? new Uint8Array([0x50, 0x4b, 3, 4]) : null)) as never);
+    mount('/office/42?name=Plan.docx');
+    await waitFor(() => expect(call).toHaveBeenCalledWith('office:readOffline', { fileId: 42 }));
+    expect(apiPost).not.toHaveBeenCalled();
+  });
+
+  it('offline, without a copy on this computer, says so', async () => {
+    app.set({ status: { network: 'OFFLINE' } as never });
+    vi.mocked(call).mockImplementation((async (ch: string) => (ch === 'office:localAvailable' ? { available: false, synced: false, preview: false, openInApp: false } : ch === 'office:localCopies' ? [] : null)) as never);
     mount('/office/42');
-    expect(await screen.findByText("You're offline. This file is available on this device.")).toBeTruthy();
-    expect(screen.getByText('WorkSuite Office editing requires a connection.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Open in External App/ }));
-    await waitFor(() => expect(call).toHaveBeenCalledWith('office:openLocal', { fileId: 42, preview: false }));
+    expect(await screen.findByText("You're offline")).toBeTruthy();
+    expect(screen.getByText(/not on this computer/)).toBeTruthy();
     expect(apiPost).not.toHaveBeenCalled();
   });
 

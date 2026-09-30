@@ -100,9 +100,9 @@ export function ClassicEditor({ tabKey, fileId, routeName, active }: { tabKey: s
   if (q.isLoading) return <Spinner label="Opening the document…" />;
   // No EuroOffice editor on this server (not set up, or not there at all): WorkSuite's built-in editor instead.
   if (q.error instanceof ApiError && (q.error.status === 503 || q.error.status === 404 || q.error.status === 501)) {
-    return <BuiltinEditor tabKey={tabKey} source={{ kind: 'drive', fileId }} routeName={routeName} active={active} />;
+    return <BuiltinEditor tabKey={tabKey} source={{ kind: 'drive', fileId }} routeName={routeName} active={active} notice="The Document Server is not available on your WorkSuite server, so this file is edited in WorkSuite’s built-in editor. It still saves to your Drive." />;
   }
-  if (builtin) return <BuiltinEditor tabKey={tabKey} source={{ kind: 'drive', fileId }} routeName={routeName} active={active} />;
+  if (builtin) return <BuiltinEditor tabKey={tabKey} source={{ kind: 'drive', fileId }} routeName={routeName} active={active} notice="The Document Server could not open this file, so it is edited in WorkSuite’s built-in editor. It still saves to your Drive." />;
   if (q.error || problem) {
     return (
       <div className="mx-auto flex max-w-[560px] flex-col gap-3 p-8">
@@ -129,11 +129,6 @@ export function ClassicEditor({ tabKey, fileId, routeName, active }: { tabKey: s
           {!cfg?.editable ? 'Read-only' : state === 'loading' ? 'Opening…' : state === 'editing' ? 'Saving…' : 'Saved to your Drive'}
         </span>
         <span className="flex-1" />
-        {cfg?.editable && betterFormat(name) ? (
-          <Button size="sm" onClick={() => setBuiltin(true)} title="Edit in WorkSuite's built-in editor (BetterOffice), without the Document Server">
-            Built-in editor
-          </Button>
-        ) : null}
         <Button size="sm" icon="external" onClick={() => void detachTab(tabKey)} title="Move this document to a window of its own">
           New window
         </Button>

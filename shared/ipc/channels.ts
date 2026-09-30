@@ -213,6 +213,8 @@ export const INVOKE_CHANNELS = [
   'office:readFile',
   'office:writeFile',
   'office:saveCopy',
+  'office:readOffline',
+  'office:writeOffline',
 
   'offline:status',
   'offline:pending',

@@ -758,6 +758,12 @@ export const contract = {
   'office:pickFile': ch(none, { session: true, rate: 5 }),
   'office:readFile': ch(z.strictObject({ handle: z.string().uuid() }), { session: true, rate: 20 }),
   'office:writeFile': ch(z.strictObject({ handle: z.string().uuid(), bytes: officeBytes }), { session: true, rate: 20, sensitive: true }),
+  /**
+   * A Drive file's copy on this computer (synced, or opened in another app) for editing offline in the built-in
+   * editor; what is written there goes back to the Drive when WorkSuite is online again (sync, or the copy's upload).
+   */
+  'office:readOffline': ch(z.strictObject({ fileId: driveId }), { session: true, rate: 20 }),
+  'office:writeOffline': ch(z.strictObject({ fileId: driveId, bytes: officeBytes }), { session: true, rate: 20, sensitive: true }),
   /** "Save a copy on this computer": the main process's save dialog, then the bytes where the person chose. */
   'office:saveCopy': ch(z.strictObject({ name: z.string().min(1).max(255).regex(/^[^/\\]+$/), bytes: officeBytes }), { session: true, rate: 10, sensitive: true }),
 
@@ -1059,6 +1065,8 @@ export interface Outputs {
   'office:pickFile': OfficeLocalPick[];
   'office:readFile': Uint8Array;
   'office:writeFile': { size: number };
+  'office:readOffline': Uint8Array;
+  'office:writeOffline': { size: number; synced: boolean };
   /** null: the dialog was cancelled. */
   'office:saveCopy': { name: string } | null;
   'offline:status': OfflineStatus;

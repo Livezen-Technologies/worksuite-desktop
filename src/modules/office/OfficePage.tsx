@@ -1,15 +1,15 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { OFFICE_KIND_LABELS, officeExportToken, officeKind, officeRoute, parseOfficeDocRoute, parseOfficeRoute, type ExternalApp, type OfficeCollaborator, type OfficeLocalCopy, type OfficeMode } from '@shared/office';
+import { OFFICE_KIND_LABELS, officeDocRoute, officeExportToken, officeKind, officeRoute, parseOfficeDocRoute, parseOfficeRoute, type OfficeDocSource, type ExternalApp, type OfficeCollaborator, type OfficeLocalCopy, type OfficeMode } from '@shared/office';
 import { app, organizationName } from '../../core/app-state';
 import { call, errorMessage, on } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { useTabTitle } from '../../core/tab-context';
-import { activate, closeTab, navigate, recordKey, setCloseGuard, takeCloseReason } from '../../core/tabs';
+import { activate, closeTab, navigate, recordKey, setCloseGuard, setRoute, takeCloseReason } from '../../core/tabs';
 import { toast } from '../../core/toasts';
 import { ui } from '../../core/ui';
 import { Icon } from '../../components/Icon';
-import { Avatar, Button, Empty, FileBadge, Modal, Spinner, TextField, cx } from '../../components/ui';
+import { Avatar, Button, Empty, ErrorNote, FileBadge, Modal, Spinner, TextField, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
 import type { DriveFile } from '../files/api';
 import type { Item } from '../files/ctx';
@@ -21,6 +21,7 @@ import { EditorSurface } from './EditorSurface';
 import { OfficeHome } from './OfficeHome';
 import { ClassicEditor } from './ClassicEditor';
 import { BuiltinEditor } from './BuiltinEditor';
+import { driveCopy, linkedLocal, writeBack, writeBackLater } from './copies';
 import { useOfficeRouting } from '../files/office';
 import { ConflictDialog, LocalCopyRow, externalApps, openInApp, useLocalCopies } from './local';
 import { OfficeSession, type OfficeState } from './session';
@@ -36,7 +37,7 @@ import { OfficeSession, type OfficeState } from './session';
 export default function OfficePage({ tabId, route, active }: ModuleProps) {
   // A document that is not a Drive file (an attachment, a file on this computer): the built-in editor.
   const doc = parseOfficeDocRoute(route);
-  if (doc) return <BuiltinEditor key={recordKey(route)} tabKey={tabId} source={doc} routeName={doc.name} active={active} />;
+  if (doc) return <DocTab key={recordKey(route)} tabId={tabId} source={doc} active={active} />;
   const parsed = parseOfficeRoute(route);
   // The launcher's Office tile: new documents, templates and the recent ones.
   if (!parsed && /^\/office\/?(?:[?#].*)?$/.test(route)) return <OfficeHome />;
@@ -51,9 +52,74 @@ export default function OfficePage({ tabId, route, active }: ModuleProps) {
  */
 function OfficeTab({ tabId, fileId, requested, routeName, active }: { tabId: string; fileId: number; requested: OfficeMode | null; routeName: string | null; active: boolean }) {
   const routing = useOfficeRouting();
+  // Decided when the tab opens: a connection lost later leaves the editor that is open alone.
+  const [offline] = useState(() => app.get().status?.network === 'OFFLINE');
+  const [link] = useState(() => linkedLocal(fileId));
+  useEffect(() => (link ? () => writeBackLater(fileId) : undefined), [fileId, link]);
+  if (offline) return <OfflineDocument tabId={tabId} fileId={fileId} routeName={routeName} active={active} />;
   if (routing.pending) return <Spinner label="Opening the document…" />;
-  if (routing.legacy) return <ClassicEditor tabKey={tabId} fileId={fileId} routeName={routeName} active={active} />;
-  return <OfficeDocument tabId={tabId} fileId={fileId} requested={requested} routeName={routeName} active={active} />;
+  const editor = routing.legacy ? <ClassicEditor tabKey={tabId} fileId={fileId} routeName={routeName} active={active} /> : <OfficeDocument tabId={tabId} fileId={fileId} requested={requested} routeName={routeName} active={active} />;
+  if (!link) return editor;
+  // A Drive copy of a file on this computer: its saves go back to that file too.
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div role="status" className="flex shrink-0 items-center gap-2 border-b border-line bg-selection px-3.5 py-1.5 text-[12px] text-ink-2">
+        <span className="min-w-0 flex-1 truncate">This is a copy in WorkSuite copies. Its changes are written back to “{link.name}” on this computer when you close it.</span>
+        <Button size="sm" onClick={() => void writeBack(fileId).then(() => toast('success', `“${link.name}” updated on this computer.`), (e) => toast('error', errorMessage(e)))}>
+          Update the file now
+        </Button>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col">{editor}</div>
+    </div>
+  );
+}
+
+/**
+ * Offline, a Drive file is edited in the built-in editor on its copy on this computer (a synced file, or one opened
+ * in another app); the copy goes back to the Drive when WorkSuite is online again. Without a copy there is nothing
+ * to edit until then.
+ */
+function OfflineDocument({ tabId, fileId, routeName, active }: { tabId: string; fileId: number; routeName: string | null; active: boolean }) {
+  const q = useQuery({ queryKey: ['office', 'offline-copy', fileId], queryFn: () => call('office:localAvailable', { fileId }), staleTime: 0, gcTime: 0 });
+  if (q.isLoading) return <Spinner label="Opening the document…" />;
+  if (!q.data?.available) {
+    return <Empty icon="cloud-off" title="You're offline" hint="This file is not on this computer, so it cannot be edited until WorkSuite is online again. Sync its folder, or open it once in an app, to have it here next time." />;
+  }
+  return (
+    <BuiltinEditor
+      tabKey={tabId}
+      source={{ kind: 'offline', fileId, name: routeName ?? 'Document' }}
+      routeName={routeName}
+      active={active}
+      notice={q.data.synced ? 'You’re offline. Editing the synced copy on this computer; it goes to your Drive when you are online again.' : 'You’re offline. Editing the copy on this computer; you can upload it to your Drive when you are online again.'}
+    />
+  );
+}
+
+/**
+ * A document that is not a Drive file. Online it is copied into My files → WorkSuite copies and this tab becomes
+ * that Drive file in the Document Server's editor; offline (or if the copy cannot be made) it is edited here in
+ * the built-in editor.
+ */
+function DocTab({ tabId, source, active }: { tabId: string; source: OfficeDocSource; active: boolean }) {
+  const [offline] = useState(() => app.get().status?.network === 'OFFLINE');
+  const [here, setHere] = useState(false);
+  const copy = useQuery({ queryKey: ['office', 'drive-copy', recordKey(officeDocRoute(source))], enabled: !offline && !here, queryFn: () => driveCopy(source), staleTime: Infinity, gcTime: 0, retry: false });
+  useEffect(() => {
+    if (copy.data) setRoute(tabId, officeRoute(copy.data.id, { name: copy.data.name }));
+  }, [copy.data, tabId]);
+  if (offline || here) return <BuiltinEditor tabKey={tabId} source={source} routeName={source.name} active={active} notice={offline ? 'You’re offline. Editing here; save it to your Drive when you are online again.' : null} />;
+  if (copy.error) {
+    return (
+      <div className="mx-auto flex max-w-[560px] flex-col gap-3 p-8">
+        <ErrorNote error={new Error(`“${source.name}” could not be copied to your Drive: ${errorMessage(copy.error)}`)} onRetry={() => void copy.refetch()} />
+        <Button className="self-start" onClick={() => setHere(true)}>
+          Edit it here without the Drive
+        </Button>
+      </div>
+    );
+  }
+  return <Spinner label={`Copying “${source.name}” to your Drive…`} />;
 }
 
 export const MODE_LABELS: Record<OfficeMode, string> = {

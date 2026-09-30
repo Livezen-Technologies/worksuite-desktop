@@ -1,4 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, nativeImage, shell, systemPreferences, type WebContents } from 'electron';
+import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { writeAtomically } from '../services/pdf/host';
 import os from 'node:os';
@@ -557,6 +558,17 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     return files;
   });
   router.handle('office:readFile', (input) => ctx.officeFiles.read(input.handle));
+  router.handle('office:readOffline', async (input) => {
+    const at = ctx.officeLocal.localPath(input.fileId);
+    if (!at) throw new DesktopError('NOT_FOUND', 'This file is not on this computer, so it cannot be edited offline.');
+    return new Uint8Array(await readFile(at.path));
+  });
+  router.handle('office:writeOffline', async (input) => {
+    const at = ctx.officeLocal.localPath(input.fileId);
+    if (!at) throw new DesktopError('NOT_FOUND', 'This file is no longer on this computer.');
+    await writeAtomically(at.path, input.bytes);
+    return { size: input.bytes.byteLength, synced: at.synced };
+  });
   router.handle('office:writeFile', (input) => ctx.officeFiles.write(input.handle, input.bytes, writeAtomically));
   router.handle('office:saveCopy', async (input, c) => {
     const win = BrowserWindow.fromWebContents(c.sender);

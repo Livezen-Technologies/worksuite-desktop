@@ -45,11 +45,6 @@ export async function openOfficeTab(f: Pick<DriveFile, 'id' | 'name'>, mode: Off
   if (!elsewhere) navigate(officeRoute(f.id, { mode, name: f.name }), app.get().organizationId);
 }
 
-/** Opens an Office file in WorkSuite's built-in editor (BetterOffice): no Document Server, no installed app. */
-export function openBuiltinTab(f: Pick<DriveFile, 'id' | 'name'>): void {
-  navigate(officeRoute(f.id, { name: f.name, editor: 'builtin' }), app.get().organizationId);
-}
-
 /** What opening does for this file, by the server's formats: the Office tab, the code editor, or the web's preview. */
 export function officeOpenWay(f: Pick<DriveFile, 'name' | 'extension'>, r: OfficeRouting): 'office' | 'code' | 'preview' | 'browser' | null {
   if (r.legacy) return 'browser';
