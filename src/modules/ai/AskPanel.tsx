@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
+import { app } from '../../core/app-state';
+import { askLocal, localReady, useLocalModels, type LocalAsk } from '../../core/local-ai';
+import { useStore } from '../../core/store';
 import { navigate } from '../../core/tabs';
 import { ActionCard } from './ActionCard';
 import { ask, assistantProblem, pickFile, useAssistant, type AskTurn, type PendingAction, type Surface } from './assistant';
@@ -10,7 +13,11 @@ interface Entry {
   text: string;
   error?: boolean;
   turn?: AskTurn;
+  /** Answered by the model on this computer. */
+  local?: boolean;
 }
+
+const LOCAL_SYSTEM = 'You are WorkSuite\'s assistant, running on this computer. Answer clearly and briefly. You cannot see the person\'s WorkSuite data or change anything; say so when a question needs it.';
 
 /**
  * Ask the assistant (WS-AI-SRS-001 FR-DSK-AI-01/02/04): the server's own
@@ -50,11 +57,20 @@ export function AskPanel({
   const [files, setFiles] = useState<{ ref: string; name: string; via: 'upload' | 'drive' }[]>([]);
   const [fileError, setFileError] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
+  // Local AI (WS-SRS-LAI): the model on this computer, when one is installed — also offline.
+  const offline = useStore(app, (s) => s.status?.network === 'OFFLINE');
+  const localModels = useLocalModels(surface === 'assistant.panel');
+  const localModel = surface === 'assistant.panel' ? localReady(localModels.data) : null;
+  const [localPick, setLocalPick] = useState<boolean | null>(null);
+  const local = !!localModel && (localPick ?? offline);
+  const [streaming, setStreaming] = useState<string | null>(null);
+  const running = useRef<LocalAsk | null>(null);
+  useEffect(() => () => running.current?.cancel(), []);
 
   useEffect(() => setUseTab(true), [tabRef]);
   useEffect(() => end.current?.scrollIntoView?.({ block: 'end' }), [entries, busy]);
 
-  const off = availability.data && !availability.data.enabled ? availability.data.reason ?? 'The assistant is not switched on for you.' : null;
+  const off = local ? null : availability.data && !availability.data.enabled ? availability.data.reason ?? 'The assistant is not switched on for you.' : null;
   const refs = [...(useTab && tabRef ? [tabRef] : []), ...files.map((f) => f.ref)];
 
   const send = async () => {
@@ -63,8 +79,26 @@ export function AskPanel({
     // A selection from another app goes with the question, fenced, as material to work on.
     const full = selection && selection.trim() && entries.length === 0 ? `${q}\n\nThe text I selected:\n"""\n${selection.trim().slice(0, 6000)}\n"""` : q;
     setText('');
-    setEntries((e) => [...e, { role: 'user', text: q }]);
+    setEntries((e) => [...e, { role: 'user', text: q, local }]);
     setBusy(true);
+    if (local) {
+      // This computer's model: the conversation so far in this mode, nothing from WorkSuite.
+      const history = entries.filter((x) => x.local && !x.error).map((x) => ({ role: x.role, content: x.text }));
+      setStreaming('');
+      const r = askLocal([{ role: 'system', content: LOCAL_SYSTEM }, ...history, { role: 'user', content: full }], (t) => setStreaming(t));
+      running.current = r;
+      try {
+        const a = await r.done;
+        setEntries((e) => [...e, { role: 'assistant', text: a.text.trim() || (a.cancelled ? 'Stopped.' : ''), local: true }]);
+      } catch (err) {
+        setEntries((e) => [...e, { role: 'assistant', text: assistantProblem(err), error: true, local: true }]);
+      } finally {
+        running.current = null;
+        setStreaming(null);
+        setBusy(false);
+      }
+      return;
+    }
     try {
       const t = await ask(full, { surface, refs, conversationId });
       setConversationId(t.conversation_id);
@@ -106,7 +140,8 @@ export function AskPanel({
           </p>
         ) : null}
         {entries.map((e, i) => <Bubble key={i} e={e} elsewhere={reviewElsewhere} />)}
-        {busy ? <p className="flex items-center gap-2 text-[12.5px] text-ink-3"><Icon name="spinner" size={14} className="animate-spin" /> Looking into it…</p> : null}
+        {streaming ? <Bubble e={{ role: 'assistant', text: streaming, local: true }} /> : null}
+        {busy && !streaming ? <p className="flex items-center gap-2 text-[12.5px] text-ink-3"><Icon name="spinner" size={14} className="animate-spin" /> Looking into it…</p> : null}
         <div ref={end} />
       </div>
 
@@ -126,7 +161,28 @@ export function AskPanel({
       ) : null}
 
       <div className="space-y-2 border-t border-line pt-3">
-        {tabRef ? (
+        {localModel ? (
+          <div role="radiogroup" aria-label="Who answers" className="flex rounded-[9px] bg-subtle p-0.5 text-[12px] font-semibold">
+            {[
+              { v: false, label: 'WorkSuite AI', icon: 'sparkles', hint: 'The server\'s assistant: sees what you can open, proposes changes.' },
+              { v: true, label: 'On this computer', icon: 'cpu', hint: `${localModel.model.name}, on this computer — nothing leaves it; it cannot see your WorkSuite data.` },
+            ].map((o) => (
+              <button
+                key={o.label}
+                type="button"
+                role="radio"
+                aria-checked={local === o.v}
+                title={o.hint}
+                disabled={busy || (!o.v && offline)}
+                onClick={() => setLocalPick(o.v)}
+                className={cx('flex h-7 flex-1 items-center justify-center gap-1.5 rounded-[7px] transition-colors disabled:opacity-50', local === o.v ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink')}
+              >
+                <Icon name={o.icon} size={13} /> {o.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {tabRef && !local ? (
           <label className="flex items-center gap-2 text-[12px] text-ink-2">
             <input type="checkbox" checked={useTab} onChange={(e) => setUseTab(e.target.checked)} />
             <span className="truncate">Use this tab{tabTitle ? `: ${tabTitle}` : ''}</span>
@@ -147,7 +203,7 @@ export function AskPanel({
         {fileError ? <p role="alert" className="text-[12px] text-danger">{fileError}</p> : null}
         {/* The Chat composer's box: the field and its buttons in one bordered, focus-ringed frame. */}
         <div className={cx('relative flex items-end gap-1 rounded-[12px] border px-2 py-1.5 transition-colors', off ? 'border-line bg-subtle/60' : 'border-line bg-surface focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15')}>
-          {surface === 'assistant.panel' && rules?.localFiles ? (
+          {surface === 'assistant.panel' && rules?.localFiles && !local ? (
             <button type="button" onClick={() => void attach()} disabled={busy || !!off} className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle hover:text-ink disabled:opacity-50" aria-label="Ask about a file from this computer" title="Ask about a file from this computer">
               <Icon name="paperclip" size={18} />
             </button>
@@ -159,15 +215,20 @@ export function AskPanel({
             rows={1}
             autoFocus={autoFocus}
             disabled={!!off}
-            placeholder={selection ? 'Ask about the selected text' : 'Ask the assistant'}
+            placeholder={selection ? 'Ask about the selected text' : local ? 'Ask the model on this computer' : 'Ask the assistant'}
             aria-label="Your question"
             className="bare-focus field-sizing-content max-h-40 min-h-[34px] min-w-0 flex-1 resize-none bg-transparent px-1 py-[7px] text-[13.5px] text-ink outline-none"
           />
+          {streaming !== null ? (
+            <button type="button" onClick={() => running.current?.cancel()} className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] border border-line text-ink hover:bg-subtle" aria-label="Stop" title="Stop">
+              <Icon name="stop" size={14} />
+            </button>
+          ) : null}
           <button type="button" onClick={() => void send()} disabled={busy || !text.trim() || !!off} className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] bg-primary text-white hover:bg-primary-hover disabled:bg-subtle disabled:text-ink-3" aria-label="Send" title="Send (Enter)">
             <Icon name="send" size={16} />
           </button>
         </div>
-        <div className="px-1 text-[11px] text-ink-3">Enter to send · Shift+Enter for a new line</div>
+        <div className="px-1 text-[11px] text-ink-3">{local ? 'On this computer · nothing is sent · ' : ''}Enter to send · Shift+Enter for a new line</div>
       </div>
     </div>
   );
@@ -191,6 +252,11 @@ function Bubble({ e, elsewhere }: { e: Entry; elsewhere?: () => void }) {
             <span key={i} title={r.error ?? undefined} className={cx('rounded-full px-2 py-0.5 text-[11px]', r.ok ? 'bg-subtle text-ink-2' : 'bg-warning-bg text-[#7A4308]')}>{r.label}</span>
           ))}
         </div>
+      ) : null}
+      {e.local ? (
+        <span className="inline-flex items-center gap-1 rounded-full bg-subtle px-2 py-0.5 text-[11px] text-ink-2">
+          <Icon name="cpu" size={11} /> On this computer
+        </span>
       ) : null}
       <p className="whitespace-pre-wrap text-[13.5px] leading-[1.55] text-ink selectable">{e.text}</p>
       {records.length ? (
