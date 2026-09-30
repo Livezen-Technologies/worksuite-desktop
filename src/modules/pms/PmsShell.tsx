@@ -15,9 +15,10 @@ import { SidePanel } from '../../components/SidePanel';
 
 /**
  * Hotel PMS, native in WorkSuite Desktop: the front desk, the cashier and the
- * night audit (PMS-DSK-001) over the server's `/api/pms/v1`. The back office
- * — rates, rooms and room types, packages, taxes, reports, settings and the
- * set-up wizard — is the web's.
+ * night audit (PMS-DSK-001) over the server's `/api/pms/v1`, with the
+ * operations beside them — housekeeping, maintenance, guest requests, lost and
+ * found. The back office — rates, rooms and room types, packages, taxes,
+ * reports, settings and the set-up wizard — is the web's.
  *
  * Addresses: see `routes.ts`. The property is chosen in the rail and kept on
  * this computer; a record of another property moves the choice with it.
@@ -42,6 +43,10 @@ const NightAudit = lazy(() => import('./NightAudit'));
 const Housekeeping = lazy(() => import('./Housekeeping'));
 const Requests = lazy(() => import('./Requests'));
 const Devices = lazy(() => import('./Devices'));
+const HkTaskScreen = lazy(() => import('./HkTask'));
+const Maintenance = lazy(() => import('./Maintenance'));
+const IssueScreen = lazy(() => import('./Issue'));
+const LostFound = lazy(() => import('./LostFound'));
 
 type Group = 'desk' | 'bookings' | 'money' | 'overview' | 'this-desk';
 
@@ -53,6 +58,8 @@ export const VIEWS: Record<PmsView, { label: string; icon: string; group: Group;
   departures: { label: 'Departures', icon: 'logout', group: 'desk', needs: [['pms.reservation.view', 'pms.checkout']] },
   inhouse: { label: 'In house', icon: 'bed', group: 'desk', needs: [['pms.reservation.view', 'pms.checkin', 'pms.checkout']] },
   housekeeping: { label: 'Housekeeping', icon: 'sparkles', group: 'desk', needs: [[...RACK_READ, 'pms.housekeeping.view', 'pms.housekeeping.manage']] },
+  maintenance: { label: 'Maintenance', icon: 'wrench', group: 'desk', needs: [['pms.maintenance.manage', 'pms.housekeeping.view', 'pms.room.manage', 'pms.guest_request.manage', 'pms.room.view']] },
+  lostfound: { label: 'Lost & found', icon: 'archive', group: 'desk', needs: [['pms.housekeeping.view', 'pms.housekeeping.manage']] },
   reservations: { label: 'Reservations', icon: 'list', group: 'bookings', needs: [['pms.reservation.view']] },
   new: { label: 'New reservation', icon: 'calendar-plus', group: 'bookings', needs: [['pms.reservation.create']] },
   walkin: { label: 'Walk-in', icon: 'user-plus', group: 'bookings', needs: [['pms.checkin'], ['pms.reservation.create']] },
@@ -65,9 +72,10 @@ export const VIEWS: Record<PmsView, { label: string; icon: string; group: Group;
 };
 
 const HEADINGS: Record<Group, string | null> = { desk: 'Front desk', bookings: 'Reservations & guests', money: 'Cashier & close', overview: 'Overview', 'this-desk': 'This desk' };
-const ORDER: PmsView[] = ['rack', 'arrivals', 'dashboard', 'reservations', 'cashier', 'audit', 'housekeeping', 'guests', 'devices'];
+const ORDER: PmsView[] = ['rack', 'arrivals', 'dashboard', 'reservations', 'cashier', 'audit', 'housekeeping', 'maintenance', 'lostfound', 'guests', 'devices'];
 const TITLES: Record<Exclude<Screen['kind'], 'view'>, string> = {
   reservation: 'Reservation', checkin: 'Check-in', checkout: 'Check-out', stay: 'In house', folio: 'Folio', room: 'Room', guest: 'Guest', shift: 'Cashier shift', request: 'Guest request',
+  task: 'Housekeeping task', issue: 'Maintenance issue', lost: 'Found item',
 };
 
 const PROPERTY_KEY = 'pms.property';
@@ -217,6 +225,12 @@ export default function PmsShell({ active }: ModuleProps) {
         return <ShiftScreen key={`sh${screen.id}`} id={screen.id} />;
       case 'request':
         return <Requests key={`rq${screen.id}`} open={screen.id} />;
+      case 'task':
+        return <HkTaskScreen key={`t${screen.id}`} id={screen.id} />;
+      case 'issue':
+        return <IssueScreen key={`i${screen.id}`} id={screen.id} />;
+      case 'lost':
+        return <LostFound key={`l${screen.id}`} open={screen.id} />;
       default:
         break;
     }
@@ -246,6 +260,10 @@ export default function PmsShell({ active }: ModuleProps) {
         return <NightAudit />;
       case 'housekeeping':
         return <Housekeeping room={screen.kind === 'view' ? screen.room : null} />;
+      case 'maintenance':
+        return <Maintenance />;
+      case 'lostfound':
+        return <LostFound open={null} />;
       default:
         return <Devices />;
     }
