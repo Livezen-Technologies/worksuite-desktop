@@ -34,6 +34,7 @@ import { createRemoteControl } from '../services/remote-control/host';
 import { DEFAULT_POLICY } from '../services/policy';
 import { Database } from '../services/db';
 import { archName, DeviceService, platformName } from '../services/device';
+import { PmsLocks } from '../services/pms-locks';
 import { createPos } from '../services/pos-ipc';
 import { SalonDesk } from '../services/salon-desk';
 import { SalonPrint } from '../services/salon-print';
@@ -423,6 +424,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       broadcast('pos:changed');
       emitStatus();
     },
+  });
+
+  // Hotel PMS door locks: the on-site lock server this front desk talks to (its secret only in the OS keystore).
+  const pmsLocks = new PmsLocks({
+    config: db,
+    secrets,
+    origin: () => auth.getServer()?.origin ?? null,
+    allowed: () => sessionCtl.isReady() && canOpenApp('pms', sessionCtl.visibleApps()),
   });
 
   // Restaurant Manager: this computer as a paired terminal — its key, menu and floor copy, outbox and print agent.
@@ -1185,6 +1194,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         pos.forgetAll();
         // The restaurant terminal this computer was: its key, copy, outbox and printer mapping.
         restaurant.forgetAll();
+        // The door-lock servers this computer's front desk talked to, and their secrets.
+        pmsLocks.wipe();
       }
       log.info('local data removed', { scope });
     },
@@ -1471,6 +1482,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   registerHandlers(router, ctx);
   pdfStudio.register(router);
   pos.register(router);
+  pmsLocks.register(router);
   restaurant.register(router);
   localAI.register(router);
   router.install();

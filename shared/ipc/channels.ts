@@ -3,6 +3,7 @@
  * process and only these can be reached from the preload. This file is plain
  * data so the sandboxed preload can import it without pulling in zod.
  */
+import { PMS_LOCKS_INVOKE_CHANNELS } from './pms-locks-channels';
 import { POS_EVENT_CHANNELS, POS_INVOKE_CHANNELS } from './pos-channels';
 
 export const INVOKE_CHANNELS = [
@@ -294,6 +295,8 @@ export const INVOKE_CHANNELS = [
   'diagnostics:services',
   // POS: the till on this computer (pos-channels.ts).
   ...POS_INVOKE_CHANNELS,
+  // Hotel PMS door locks: the on-site lock server this desk talks to (pms-locks-channels.ts).
+  ...PMS_LOCKS_INVOKE_CHANNELS,
 ] as const;
 
 export type InvokeChannel = (typeof INVOKE_CHANNELS)[number];
