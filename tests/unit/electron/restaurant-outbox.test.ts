@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({ app: { getPath: () => '/tmp', getVersion: () => '0.1.0' }, safeStorage: {} }));
 
-import type { RestaurantOutboxItem, RestaurantPairing } from '@shared/restaurant';
+import { restaurantOutboxAdd, type RestaurantOutboxItem, type RestaurantPairing } from '@shared/restaurant';
 import { DesktopError } from '../../../electron/main/errors';
 import { Database } from '../../../electron/services/db';
 import { Vault } from '../../../electron/services/vault';
@@ -37,6 +37,13 @@ function item(over: Partial<RestaurantOutboxItem> = {}): RestaurantOutboxItem {
 const line = (n: number) => ({ item_id: 3, qty: 1, client_line_id: `l-${n}` });
 
 describe('restaurant outbox: what is sent, and in which order', () => {
+  it('keeps a combo’s chosen components on a line kept offline', () => {
+    const line = { item_id: 40, qty: 1, client_line_id: 'l-1', combo: [{ component_id: 2, item_id: 33, variant_id: null }] };
+    const r = restaurantOutboxAdd.parse({ op: 'add_items', label: 'x', data: { order_id: 55, lines: [line] } });
+    expect(r.op === 'add_items' && r.data.lines[0]!.combo).toEqual([{ component_id: 2, item_id: 33, variant_id: null }]);
+    expect(() => restaurantOutboxAdd.parse({ op: 'add_items', label: 'x', data: { order_id: 55, lines: [{ ...line, combo: [{ component_id: 0, item_id: 33 }] }] } })).toThrow();
+  });
+
   it('sends waiting items in the order they were made, one batch at a time', () => {
     const many = Array.from({ length: 60 }, () => item());
     const sent = batch([...many].reverse());

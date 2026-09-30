@@ -208,6 +208,30 @@ describe('Restaurant: the order', () => {
     expect(body.lines[0]).not.toHaveProperty('preview');
   });
 
+  it('takes a combo with the components chosen for it', async () => {
+    const COMBO = { id: 40, category_id: 1, kind: 'combo', name: 'Rice & curry set', description: null, price: '2500.00', open_price: false, allergens: [], course: 'main', station_id: 5, state: 'available', orderable: true, variants: [], groups: [],
+      combo: { pricing: 'fixed', discount_pct: null, components: [
+        { id: 1, kind: 'fixed', label: 'Rice', item_id: 32, variant_id: null, qty: null, min_choices: 0, max_choices: 0, options: [] },
+        { id: 2, kind: 'choice', label: 'Curry', item_id: null, variant_id: null, qty: null, min_choices: 1, max_choices: 1, options: [{ item_id: 30, variant_id: null, upcharge: '0.00' }, { item_id: 33, variant_id: null, upcharge: '300.00' }] },
+      ] } };
+    const RICE = { ...MENU.items[1]!, id: 32, name: 'Steamed rice', state: 'available', orderable: true };
+    const PRAWN = { ...MENU.items[1]!, id: 33, name: 'Prawn curry', state: 'available', orderable: true };
+    serve((m, p) => (m === 'GET' && p === '/api/restaurant/v1/menu/branch/3' ? { ...MENU, items: [...MENU.items, COMBO, RICE, PRAWN] } : m === 'POST' && p === '/api/restaurant/v1/orders/55/items' ? { order: ORDER } : undefined));
+    show(['restaurant', 'orders', '55']);
+    fireEvent.click(await screen.findByRole('button', { name: /^Rice & curry set/ }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.textContent).toContain('Steamed rice');
+    const add = within(dialog).getByRole('button', { name: /^Add · / });
+    expect(add.hasAttribute('disabled')).toBe(true);
+    fireEvent.click(within(dialog).getByRole('radio', { name: /Prawn curry/ }));
+    expect(add.textContent).toContain('2,800.00');
+    fireEvent.click(add);
+    fireEvent.click(screen.getByRole('button', { name: 'Add to the order' }));
+    await waitFor(() => expect(calls('POST', '/api/restaurant/v1/orders/55/items')).toHaveLength(1));
+    const body = (calls('POST', '/api/restaurant/v1/orders/55/items')[0]![2] as { body: { lines: Array<Record<string, unknown>> } }).body;
+    expect(body.lines[0]).toMatchObject({ item_id: 40, combo: [{ component_id: 2, item_id: 33 }] });
+  });
+
   it('asks for an approval when the server says a void is above the limit, and voids again with it', async () => {
     let voids = 0;
     serve((m, p, b) => {

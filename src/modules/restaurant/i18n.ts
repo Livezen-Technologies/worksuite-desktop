@@ -146,6 +146,8 @@ const en = {
   'order.keptOffline': 'Kept at this till. It goes to WorkSuite, and the kitchen, when the line is back.',
   'order.notKept': 'It could not be kept.',
   'order.variant': 'Size or kind',
+  'order.chooseN': 'choose {n}',
+  'order.comboUnknown': 'Not on this menu now',
   'order.chooseOne': 'choose one',
   'order.chooseUpTo': 'up to {n}',
   'order.qty': 'Quantity',

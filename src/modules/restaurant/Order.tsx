@@ -328,6 +328,7 @@ export default function OrderScreen() {
         <ItemPicker
           item={picking}
           seat={seat}
+          menuItems={menu?.items ?? []}
           onClose={() => setPicking(null)}
           onAdd={(l) => {
             setCart([...cart, l]);
@@ -351,7 +352,7 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
 }
 
 /** An item as the waiter orders it: variant, modifiers (with the one nested level), quantity, note, course. */
-export function ItemPicker({ item, seat, onClose, onAdd }: { item: MenuItem; seat: number | null; onClose: () => void; onAdd: (l: CartLine) => void }) {
+export function ItemPicker({ item, seat, menuItems = [], onClose, onAdd }: { item: MenuItem; seat: number | null; menuItems?: MenuItem[]; onClose: () => void; onAdd: (l: CartLine) => void }) {
   const t = useT();
   const till = useTill();
   const [variant, setVariant] = useState<number | null>(item.variants.find((v) => v.is_default)?.id ?? item.variants[0]?.id ?? null);
@@ -364,6 +365,27 @@ export function ItemPicker({ item, seat, onClose, onAdd }: { item: MenuItem; sea
   const [notes, setNotes] = useState('');
   const [course, setCourse] = useState(item.course ?? '');
   const [price, setPrice] = useState('');
+  /* A combo's choice components: which of each component's options were picked (by their index). */
+  const comps = item.kind === 'combo' ? (item.combo?.components ?? []) : [];
+  const [chosen, setChosen] = useState<Record<number, number[]>>({});
+  const nameOf = (itemId: number | null, variantId: number | null) => {
+    const m = menuItems.find((x) => x.id === itemId);
+    const v = variantId ? m?.variants.find((x) => x.id === variantId) : null;
+    return m ? (v ? `${m.name} (${v.name})` : m.name) : t('order.comboUnknown');
+  };
+  const orderableOpt = (itemId: number) => menuItems.find((x) => x.id === itemId)?.orderable !== false;
+  const range = (c: (typeof comps)[number]) => {
+    const min = Math.max(1, c.min_choices);
+    return { min, max: Math.max(min, c.max_choices) };
+  };
+  const comboProblems = comps.filter((c) => c.kind !== 'fixed' && ((chosen[c.id] ?? []).length < range(c).min || (chosen[c.id] ?? []).length > range(c).max));
+  const pickComp = (c: (typeof comps)[number], idx: number) => {
+    const cur = chosen[c.id] ?? [];
+    const { max } = range(c);
+    const next = cur.includes(idx) ? cur.filter((x) => x !== idx) : max === 1 ? [idx] : [...cur, idx];
+    setChosen({ ...chosen, [c.id]: next });
+  };
+  const upcharges = comps.reduce((s, c) => s + (chosen[c.id] ?? []).reduce((a, i) => a + Number(c.options[i]?.upcharge || 0), 0), 0);
 
   const groups: Array<{ g: ModGroup; parent: number | null }> = [];
   for (const g of item.groups) {
@@ -381,7 +403,7 @@ export function ItemPicker({ item, seat, onClose, onAdd }: { item: MenuItem; sea
     setPicked({ ...picked, [g.id]: next });
   };
 
-  const unit = Number(item.open_price ? price || 0 : (item.variants.find((v) => v.id === variant)?.price ?? item.price)) + groups.reduce((s, { g }) => s + g.options.filter((o) => (picked[g.id] ?? []).includes(o.id)).reduce((a, o) => a + Number(o.price_delta || 0), 0), 0);
+  const unit = upcharges + Number(item.open_price ? price || 0 : (item.variants.find((v) => v.id === variant)?.price ?? item.price)) + groups.reduce((s, { g }) => s + g.options.filter((o) => (picked[g.id] ?? []).includes(o.id)).reduce((a, o) => a + Number(o.price_delta || 0), 0), 0);
   const count = Math.max(0.001, Math.min(999, Number(n) || 1));
 
   function add() {
@@ -394,6 +416,8 @@ export function ItemPicker({ item, seat, onClose, onAdd }: { item: MenuItem; sea
     );
     const names = groups.flatMap(({ g }) => g.options.filter((o) => (picked[g.id] ?? []).includes(o.id)).map((o) => o.name));
     const v = item.variants.find((x) => x.id === variant);
+    const combo = comps.flatMap((c) => (c.kind === 'fixed' ? [] : (chosen[c.id] ?? []).map((i) => ({ component_id: c.id, item_id: c.options[i]!.item_id, ...(c.options[i]!.variant_id ? { variant_id: c.options[i]!.variant_id } : {}) }))));
+    const comboNames = comps.flatMap((c) => (c.kind === 'fixed' ? [] : (chosen[c.id] ?? []).map((i) => nameOf(c.options[i]!.item_id, c.options[i]!.variant_id))));
     onAdd({
       item_id: item.id,
       variant_id: variant,
@@ -402,10 +426,11 @@ export function ItemPicker({ item, seat, onClose, onAdd }: { item: MenuItem; sea
       seat,
       course: course || null,
       modifiers: top,
+      ...(combo.length ? { combo } : {}),
       ...(item.open_price && price ? { price: Number(price).toFixed(2) } : {}),
       client_line_id: `l-${newId()}`,
       name: v ? `${item.name} (${v.name})` : item.name,
-      detail: [...names, notes.trim() ? `! ${notes.trim()}` : '', seat ? t('order.seatN', { n: seat }) : ''].filter(Boolean).join(' · '),
+      detail: [...comboNames, ...names, notes.trim() ? `! ${notes.trim()}` : '', seat ? t('order.seatN', { n: seat }) : ''].filter(Boolean).join(' · '),
       preview: unit * count,
     });
   }
@@ -418,7 +443,7 @@ export function ItemPicker({ item, seat, onClose, onAdd }: { item: MenuItem; sea
       footer={
         <>
           <Button onClick={onClose}>{t('common.cancel')}</Button>
-          <Button variant="primary" disabled={problems.length > 0 || (item.open_price && !(Number(price) > 0))} onClick={add}>
+          <Button variant="primary" disabled={problems.length > 0 || comboProblems.length > 0 || (item.open_price && !(Number(price) > 0))} onClick={add}>
             {t('order.addLine', { amount: money((unit * count).toFixed(2), till.currency) })}
           </Button>
         </>
@@ -447,6 +472,28 @@ export function ItemPicker({ item, seat, onClose, onAdd }: { item: MenuItem; sea
             ))}
           </fieldset>
         ) : null}
+        {comps.map((c) =>
+          c.kind === 'fixed' ? (
+            <p key={c.id} className="text-[13px] text-ink-2">
+              <span className="font-semibold text-ink">{c.label}:</span> {nameOf(c.item_id, c.variant_id)}
+              {c.qty && Number(c.qty) > 1 ? ` × ${qty(c.qty)}` : ''}
+            </p>
+          ) : (
+            <fieldset key={c.id} className="flex flex-col gap-1.5" aria-label={c.label}>
+              <legend className="mb-1 text-[12.5px] font-semibold text-ink-2">
+                {c.label} <span className="text-danger">*</span>
+                <span className="ms-1 font-normal text-ink-3">{range(c).max === 1 ? t('order.chooseOne') : range(c).min === range(c).max ? t('order.chooseN', { n: range(c).min }) : t('order.chooseUpTo', { n: range(c).max })}</span>
+              </legend>
+              {c.options.map((o, i) => (
+                <label key={`${o.item_id}-${o.variant_id ?? 0}`} className={cx('flex items-center gap-2 text-[13.5px]', !orderableOpt(o.item_id) && 'opacity-45')}>
+                  <input type={range(c).max === 1 ? 'radio' : 'checkbox'} name={`c${c.id}`} disabled={!orderableOpt(o.item_id)} checked={(chosen[c.id] ?? []).includes(i)} onChange={() => pickComp(c, i)} />
+                  <span className="flex-1">{nameOf(o.item_id, o.variant_id)}</span>
+                  {Number(o.upcharge) ? <span className="text-ink-2 tabular-nums">+{money(o.upcharge)}</span> : null}
+                </label>
+              ))}
+            </fieldset>
+          ),
+        )}
         {groups.map(({ g, parent }) => (
           <fieldset key={`${parent ?? 0}-${g.id}`} className={cx('flex flex-col gap-1.5', parent !== null && 'ms-5 border-s border-line ps-3')}>
             <legend className="mb-1 text-[12.5px] font-semibold text-ink-2">
