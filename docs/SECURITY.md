@@ -311,6 +311,15 @@ of its own:
 
 The private release key is never in this repository.
 
+## Local AI
+
+- Models come only from WorkSuite's CDN. The catalog is an Ed25519-signed envelope checked against keys pinned in
+  the app (`electron/services/local-ai/host.ts`) and refused once expired; each model file is checked against the
+  catalog's size and SHA-256 before it is renamed into place, and never loaded otherwise. The signing key is made
+  with `scripts/local-ai-catalog.mjs keygen` and never enters the repository.
+- llama.cpp runs in its own utility process with no network; windows name models by id and never see a path.
+- **On this computer** in the AI dock sends nothing off the computer and is given no WorkSuite data.
+
 ## Privacy
 
 - Logs and the diagnostic bundle are redacted (tokens, JWTs, secret query

@@ -5,6 +5,25 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-30 — 0.2.63: Local AI in Settings and the AI dock
+
+**Added**
+
+- **Settings → Local AI**: this computer (cores, memory, GPU, free space and its tier), Local AI's state with
+  **Restart**, the model catalog with **Check for models**, and the catalog's chat models — **Download** with a
+  progress bar, **Pause / Resume / Discard**, **Try again** after a failed check, and once installed **Use this
+  model**, **Check** (the file against the catalog again) and **Remove**. Models the computer's tier does not
+  cover say **May be slow here**.
+- **AI Assistant → Ask → On this computer**: with a model installed, the panel offers **WorkSuite AI** or **On
+  this computer**. On this computer the answer streams in as it is written, **Stop** ends it, nothing leaves the
+  computer, and answers carry an "On this computer" mark. It is chosen by itself while WorkSuite is offline.
+  The model does not see WorkSuite data (no tab record, no files) and changes nothing.
+- `scripts/local-ai-catalog.mjs`: `keygen` (an Ed25519 pair; the private key stays out of the repository),
+  `hash` (a model's SHA-256 and size), `sign` (checks the catalog and writes the envelope the CDN serves) and
+  `verify`.
+
+---
+
 ## 2026-09-30 — 0.2.62: Office online in the Document Server, offline in the built-in editor; lock PIN; Local AI groundwork
 
 **Added**

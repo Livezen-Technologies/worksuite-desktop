@@ -7,6 +7,8 @@ import { app, isLocked, updatePrefs } from '../../core/app-state';
 import { call, errorMessage, isMac } from '../../core/bridge';
 import { conflicts, effectiveShortcuts, prettyAccelerator, accelerator, DEFAULT_SHORTCUTS } from '../../core/commands';
 import { LANGUAGES } from '../../core/i18n';
+import { LOCAL_AI_KEY, useLocalAIStatus, useLocalModels } from '../../core/local-ai';
+import { queryClient } from '../../core/query';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { bytes, currentZone, relative } from '../../core/time';
@@ -29,6 +31,7 @@ const SECTIONS = [
   { id: 'files', label: 'Files & Sync', icon: 'folder' },
   { id: 'offline', label: 'Offline', icon: 'cloud-off' },
   { id: 'ai', label: 'AI Assistant', icon: 'sparkles' },
+  { id: 'local-ai', label: 'Local AI', icon: 'cpu' },
   { id: 'remote-control', label: 'Remote control', icon: 'screen-share' },
   { id: 'monitoring', label: 'Monitoring', icon: 'eye' },
   { id: 'about', label: 'About', icon: 'info' },
@@ -61,6 +64,7 @@ export default function SettingsPage(_props: ModuleProps) {
           {section === 'files' ? <FilesSection prefs={prefs} /> : null}
           {section === 'offline' ? <OfflineSection prefs={prefs} /> : null}
           {section === 'ai' ? <AiSection prefs={prefs} /> : null}
+          {section === 'local-ai' ? <LocalAISection /> : null}
           {section === 'remote-control' ? <RemoteControlSection /> : null}
           {section === 'monitoring' ? <Monitoring /> : null}
           {section === 'about' ? <About /> : null}
@@ -695,6 +699,127 @@ function FilesSection({ prefs }: { prefs: Preferences }) {
           </Row>
         </>
       )}
+    </>
+  );
+}
+
+const TIER_WORDS = { minimal: 'Minimal', basic: 'Basic', good: 'Good', strong: 'Strong' } as const;
+const RUNTIME_WORDS = { off: 'Off (starts when asked)', starting: 'Starting…', ready: 'Ready', loading: 'Loading the model…', busy: 'Answering…', error: 'Stopped' } as const;
+
+/** Local AI (WS-SRS-LAI): models from WorkSuite's CDN that answer on this computer, also offline. */
+export function LocalAISection() {
+  const status = useLocalAIStatus();
+  const models = useLocalModels();
+  const [busy, setBusy] = useState<string | null>(null);
+  const run = (key: string, p: Promise<unknown>, ok?: string) => {
+    setBusy(key);
+    void p
+      .then(() => {
+        if (ok) toast('success', ok);
+        void queryClient.invalidateQueries({ queryKey: LOCAL_AI_KEY });
+      })
+      .catch((e) => toast('error', errorMessage(e)))
+      .finally(() => setBusy(null));
+  };
+  const st = status.data;
+  const hw = st?.hardware;
+  const chat = (models.data ?? []).filter((m) => m.model.purpose === 'chat');
+  return (
+    <>
+      <H title="Local AI" hint="Models that run on this computer: the assistant answers without sending anything to a server, also offline. Models come only from WorkSuite, signed and checked before they are used." />
+      <Row
+        label="This computer"
+        hint={hw ? `${hw.cpuCores} cores · ${bytes(hw.memoryBytes)} memory${hw.gpu ? ` · GPU (${hw.gpu})${hw.vramBytes ? ` ${bytes(hw.vramBytes)}` : ''}` : ' · CPU only until Local AI first starts'}${hw.freeDiskBytes !== null ? ` · ${bytes(hw.freeDiskBytes)} free` : ''}` : 'Checking…'}
+      >
+        {hw ? <Chip tone={hw.tier === 'minimal' ? 'warning' : 'indigo'}>{TIER_WORDS[hw.tier]} tier</Chip> : null}
+      </Row>
+      <Row label="Local AI" hint={st?.error ?? (st?.loaded ? `Model loaded: ${chat.find((m) => m.model.id === st.loaded)?.model.name ?? st.loaded}` : 'The model loads on the first question and unloads after 10 idle minutes.')}>
+        <div className="flex items-center gap-2">
+          {st ? <Chip tone={st.runtime === 'error' ? 'danger' : st.runtime === 'off' ? 'muted' : 'success'}>{RUNTIME_WORDS[st.runtime]}</Chip> : null}
+          <Button size="sm" icon="refresh" loading={busy === 'restart'} onClick={() => run('restart', call('ai:localRestart'), 'Local AI restarted.')}>
+            Restart
+          </Button>
+        </div>
+      </Row>
+      <Row label="Model catalog" hint={st?.catalogError ?? (st?.catalogAt ? `Checked ${relative(st.catalogAt)}.` : 'Not fetched yet.')}>
+        <Button size="sm" icon="refresh" loading={busy === 'catalog'} onClick={() => run('catalog', call('ai:localRefresh'))}>
+          Check for models
+        </Button>
+      </Row>
+
+      <h3 className="mb-1 mt-6 text-[14px] font-bold text-ink">Models</h3>
+      {models.isLoading ? <p className="text-[12.5px] text-ink-3">Loading…</p> : null}
+      {!models.isLoading && !chat.length ? <p className="text-[12.5px] text-ink-3">No models to offer yet — the catalog has none, or it could not be fetched.</p> : null}
+      {chat.map((v) => {
+        const m = v.model;
+        const pct = m.bytes ? Math.min(100, Math.round((v.received / m.bytes) * 100)) : 0;
+        return (
+          <div key={m.id} className="border-b border-line py-3.5">
+            <div className="flex items-start gap-4">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2 text-[14px] font-semibold text-ink">
+                  {m.name}
+                  {v.recommended ? <Chip tone="indigo">Recommended</Chip> : null}
+                  {v.isDefault ? <Chip tone="success">Default</Chip> : null}
+                  {!v.fits ? <Chip tone="warning">May be slow here</Chip> : null}
+                </div>
+                <div className="mt-0.5 text-[12.5px] text-ink-3">
+                  {bytes(m.bytes)} · {m.quantization} · {m.contextLength.toLocaleString()} tokens · {m.license.name}
+                </div>
+                {v.error ? <div className="mt-1 text-[12.5px] text-danger">{v.error}</div> : null}
+              </div>
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                {v.state === 'available' || v.state === 'failed' ? (
+                  <Button size="sm" icon="download" loading={busy === `i:${m.id}`} onClick={() => run(`i:${m.id}`, call('ai:localInstall', { id: m.id }))}>
+                    {v.state === 'failed' ? 'Try again' : 'Download'}
+                  </Button>
+                ) : null}
+                {v.state === 'paused' ? (
+                  <>
+                    <Button size="sm" icon="play" onClick={() => run(`i:${m.id}`, call('ai:localInstall', { id: m.id }))}>
+                      Resume
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => run(`c:${m.id}`, call('ai:localCancelInstall', { id: m.id, discard: true }))}>
+                      Discard
+                    </Button>
+                  </>
+                ) : null}
+                {v.state === 'downloading' ? (
+                  <Button size="sm" icon="pause" onClick={() => run(`c:${m.id}`, call('ai:localCancelInstall', { id: m.id }))}>
+                    Pause
+                  </Button>
+                ) : null}
+                {v.state === 'verifying' ? <Chip tone="indigo">Checking the file…</Chip> : null}
+                {v.state === 'installed' ? (
+                  <>
+                    {!v.isDefault ? (
+                      <Button size="sm" loading={busy === `d:${m.id}`} onClick={() => run(`d:${m.id}`, call('ai:localSetDefault', { id: m.id }), `${m.name} answers from now on.`)}>
+                        Use this model
+                      </Button>
+                    ) : null}
+                    <Button size="sm" variant="ghost" loading={busy === `k:${m.id}`} onClick={() => run(`k:${m.id}`, call('ai:localCheck', { id: m.id }).then((ok) => toast(ok ? 'success' : 'error', ok ? 'The file is intact.' : 'The file does not match. Remove it and download it again.')))}>
+                      Check
+                    </Button>
+                    <Button size="sm" variant="ghost" icon="trash" loading={busy === `r:${m.id}`} onClick={() => run(`r:${m.id}`, call('ai:localRemove', { id: m.id }), `${m.name} removed.`)}>
+                      Remove
+                    </Button>
+                  </>
+                ) : null}
+              </div>
+            </div>
+            {v.state === 'downloading' || v.state === 'paused' ? (
+              <div className="mt-2">
+                <div className="h-1.5 overflow-hidden rounded-full bg-subtle">
+                  <div className={cx('h-full rounded-full transition-[width]', v.state === 'paused' ? 'bg-ink-3' : 'bg-primary')} style={{ width: `${pct}%` }} />
+                </div>
+                <div className="mt-1 text-[11.5px] text-ink-3">
+                  {v.state === 'paused' ? 'Paused' : 'Downloading'} · {bytes(v.received)} of {bytes(m.bytes)} ({pct}%)
+                </div>
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
     </>
   );
 }
