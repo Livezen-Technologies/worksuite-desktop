@@ -3,13 +3,11 @@ import { lazy, Suspense, useState } from 'react';
 import { Icon } from '../../components/Icon';
 import { SidePanel } from '../../components/SidePanel';
 import { Button, Modal, Spinner, cx } from '../../components/ui';
-import { app } from '../../core/app-state';
 import { call } from '../../core/bridge';
-import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
 import type { ModuleProps } from '../registry';
-import { closeDisplay, fetchOptions, fetchRegisters, forgetTill, openDisplay, PK, syncNow, unreachable, useTill, usePosChanged } from './api';
+import { closeDisplay, discountRights, fetchOptions, fetchRegisters, forgetTill, openDisplay, PK, syncNow, unreachable, useTill, usePosChanged } from './api';
 import Connect from './Connect';
 import { useT, type PosKey } from './i18n';
 import { Failed, Note, posRoute, TillContext, type PosView, type Till } from './parts';
@@ -56,7 +54,6 @@ function Counter({ active }: { active: boolean }) {
   const view: PosView = raw in VIEWS ? raw : 'register';
   useTabTitle(`POS · ${t(VIEWS[view].label)}`);
   usePosChanged();
-  const perms = useStore(app, (s) => s.bootstrap?.permissions);
 
   const till = useTill();
   const paired = !!till.data?.till && till.data.till.state !== 'revoked';
@@ -82,7 +79,6 @@ function Counter({ active }: { active: boolean }) {
     );
   }
   const session = registers.data?.session ?? null;
-  const may = (p: string) => !!perms && (perms.includes('*') || perms.includes(p));
   const ctx: Till = {
     status,
     options: options.data ?? null,
@@ -92,10 +88,8 @@ function Counter({ active }: { active: boolean }) {
     session: session && session.status === 'open' ? session : null,
     registers: registers.data?.items ?? [],
     offline,
-    discount: {
-      allowed: company?.can.discount ?? may('pos.sale.discount'),
-      ceiling: company?.can.max_discount_pct ?? null,
-    },
+    // WorkSuite's word on it, per company (`can.discount`, `max_discount_pct`, `discount_override`); none without it.
+    discount: discountRights(company?.can),
     params: query,
     go: (v, params) => goRoute(posRoute(v, params)),
   };

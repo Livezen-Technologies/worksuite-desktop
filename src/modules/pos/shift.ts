@@ -8,11 +8,12 @@ import { countBody, formatMoney, parseAmount, type CountLine } from './pricing';
  * from its own record of its sales, shown beside them. Pure, so they are tested without a screen.
  */
 
-/** What closing sends: the notes and coins counted, or one figure, and why it is different when it is. */
-export function closeBody(counts: CountLine[], counted: string, reason: string): CloseBody | { error: string } {
+/** What closing sends: the notes and coins counted, or one figure (not where the company counts note by note), and why it is different when it is. */
+export function closeBody(counts: CountLine[], counted: string, reason: string, rules: { count_to_close?: boolean } = {}): CloseBody | { error: string } {
   const piles = countBody(counts);
   const body: CloseBody = {};
   if (piles.length) body.denominations = piles;
+  else if (rules.count_to_close) return { error: 'This company counts the drawer note by note before it closes.' };
   else {
     const v = parseAmount(counted);
     if (!Number.isFinite(v) || v < 0) return { error: 'Count the drawer: the notes and coins, or what it holds.' };
@@ -22,9 +23,21 @@ export function closeBody(counts: CountLine[], counted: string, reason: string):
   return body;
 }
 
+/**
+ * Whether the difference must be explained before the drawer closes — WorkSuite's rule (`Registers::needsReason`):
+ * a cent or more out, and past the company's tolerance. Under a blind close the cashier never saw the figure, so none
+ * is asked for (and the difference is unknown here anyway).
+ */
+export function needsReason(diff: number | null, tolerance: number | null | undefined, blind: boolean): boolean {
+  if (blind || diff == null) return false;
+  return Math.abs(diff) >= 0.01 && Math.abs(diff) > (tolerance ?? 0) + 0.001;
+}
+
 export interface SalesSummary {
   count: number;
   total: number;
+  /** Given back by WorkSuite (refunds and voids), already taken off the total and the tenders. */
+  refunded: number;
   /** What each tender took, cash net of the change given. */
   byTender: Record<string, number>;
   waiting: number;
@@ -33,7 +46,7 @@ export interface SalesSummary {
 
 /** What this till sold: sales WorkSuite refused are not counted, those still on their way are. */
 export function salesSummary(sales: PosSale[]): SalesSummary {
-  const out: SalesSummary = { count: 0, total: 0, byTender: {}, waiting: 0, refused: 0 };
+  const out: SalesSummary = { count: 0, total: 0, refunded: 0, byTender: {}, waiting: 0, refused: 0 };
   for (const s of sales) {
     if (s.state === 'refused') {
       out.refused++;
@@ -44,8 +57,14 @@ export function salesSummary(sales: PosSale[]): SalesSummary {
     out.total += s.totals.total;
     for (const t of s.tenders) out.byTender[t.method] = (out.byTender[t.method] ?? 0) + t.amount;
     if (s.change_given) out.byTender.cash = (out.byTender.cash ?? 0) - s.change_given;
+    for (const r of s.returns ?? []) {
+      out.refunded += r.amount;
+      out.total -= r.amount;
+      for (const t of r.tenders) out.byTender[t.method] = (out.byTender[t.method] ?? 0) - t.amount;
+    }
   }
   out.total = Math.round(out.total * 100) / 100;
+  out.refunded = Math.round(out.refunded * 100) / 100;
   for (const k of Object.keys(out.byTender)) out.byTender[k] = Math.round(out.byTender[k]! * 100) / 100;
   return out;
 }
@@ -58,6 +77,7 @@ function salesRows(sum: SalesSummary, currency: string): PosReport['rows'] {
     { label: 'Sales total', value: formatMoney(sum.total, currency), strong: true },
   ];
   for (const [m, v] of Object.entries(sum.byTender)) rows.push({ label: `  ${METHOD[m] ?? m}`, value: formatMoney(v) });
+  if (sum.refunded) rows.push({ label: 'Refunded (in the total)', value: formatMoney(-sum.refunded) });
   if (sum.waiting) rows.push({ label: 'Not yet at WorkSuite', value: String(sum.waiting) });
   if (sum.refused) rows.push({ label: 'Refused by WorkSuite', value: String(sum.refused) });
   return rows;

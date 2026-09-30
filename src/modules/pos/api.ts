@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import type { PosCatalogue, PosCustomer, PosPrintPatch, PosPrintSettings, PosProduct, PosReport, PosSale, PosSellInput, PosTillStatus } from '@shared/pos';
+import type { PosCatalogue, PosCustomer, PosGiveBack, PosPrintPatch, PosPrintSettings, PosProduct, PosReport, PosSale, PosSellInput, PosTillStatus } from '@shared/pos';
 import { apiGet, ApiError, request } from '../../core/api';
 import { call, on } from '../../core/bridge';
 import { estimateCart, type CartLineInput, type PricedCart } from './pricing';
@@ -14,9 +14,11 @@ import { estimateCart, type CartLineInput, type PricedCart } from './pricing';
  * The till — pairing, the catalogue copy, the sales and their outbox, the printer, the customer display — is the main
  * process's (`pos:*`, electron/services/pos-ipc.ts): the till's credential never reaches this window.
  *
- * What the staff API does not have yet (a till catalogue, cart pricing, a barcode lookup, refunds and voids) is asked
- * for where WorkSuite announces it (`options.capabilities`) and otherwise done the way this server can: Inventory's
- * prices for the cart, the catalogue's preview when neither answers. See docs/BACKEND.md.
+ * What the till sells and at what price — the catalogue, a barcode lookup, the cart's price — is POS's own
+ * (`/api/pos/catalogue`, `products/lookup`, `price`, `pos.access`: a cashier needs no Inventory permission) where
+ * WorkSuite announces it (`options.capabilities`); only an older server without them has Inventory stand in. Refunds,
+ * voids, WorkSuite's receipt and e-mailing it are the till's door's (`pos:giveBack`, `pos:receipt`, `pos:email`: one
+ * of this till's sales by its receipt number, the cashier named). See docs/BACKEND.md.
  */
 const BASE = '/api/pos';
 
@@ -45,9 +47,25 @@ export interface PosCan {
   view_all: boolean;
   settings: boolean;
   terminals: boolean;
-  /** Not on every server yet: whether the person may take money off a sale, and how much. */
+  /** `pos.sale.refund` / `pos.sale.void` in this company (absent on an older server: no). */
+  refund?: boolean;
+  void?: boolean;
+  /** `pos.sale.discount`: whether the person may take money off a sale at all. */
   discount?: boolean;
+  /** `pos.sale.discount.override`: past the company's ceiling. */
+  discount_override?: boolean;
+  /** The most they may take off, in percent: null no ceiling, 0 none. */
   max_discount_pct?: number | null;
+}
+
+/** How a drawer closes in the company (the POS settings). */
+export interface PosRules {
+  /** Counted note by note: one typed figure is refused. */
+  count_to_close: boolean;
+  /** The figure the drawer should hold is not shown. */
+  blind_close: boolean;
+  /** A count this far out closes without a reason. */
+  variance_tolerance: number;
 }
 
 export interface PosCompany {
@@ -56,6 +74,7 @@ export interface PosCompany {
   currency: string;
   today: string | null;
   can: PosCan;
+  rules?: PosRules;
 }
 
 /** What WorkSuite announces it can do for a till (not on every server yet: absent means no). */
@@ -63,10 +82,18 @@ export interface PosCapabilities {
   catalogue?: boolean;
   price?: boolean;
   lookup?: boolean;
+  device_catalogue?: boolean;
+  sales?: boolean;
   refund?: boolean;
   void?: boolean;
   receipt?: boolean;
+  email?: boolean;
   email_receipt?: boolean;
+  settle?: boolean;
+  reprice?: boolean;
+  discount_rights?: boolean;
+  review?: boolean;
+  customer_display?: boolean;
 }
 
 export interface PosOptions {
@@ -171,9 +198,21 @@ export interface CloseBody {
   variance_reason?: string;
 }
 
-/** Refund or void a sale — where WorkSuite announces it (`capabilities.refund` / `.void`). */
-export async function reverseSale(ref: string, action: 'refund' | 'void', body: { reason: string; lines?: Array<{ product_id: number; quantity: number }>; method?: string }): Promise<string | null> {
-  return (await request('POST', `${BASE}/sales/${encodeURIComponent(ref)}/${action}`, { body })).message ?? null;
+/**
+ * What the signed-in person may take off a sale here: nothing without `can.discount`; up to `can.max_discount_pct`
+ * (0 is none), with no ceiling under `can.discount_override`. An older server that does not say offers no discount.
+ */
+export function discountRights(can: PosCan | null | undefined): { allowed: boolean; ceiling: number | null } {
+  if (!can?.discount) return { allowed: false, ceiling: null };
+  if (can.discount_override) return { allowed: true, ceiling: null };
+  const max = typeof can.max_discount_pct === 'number' && Number.isFinite(can.max_discount_pct) ? can.max_discount_pct : null;
+  if (max !== null && max <= 0) return { allowed: false, ceiling: null };
+  return { allowed: true, ceiling: max };
+}
+
+/** Whether a refund / void of this till's sales can be offered: the server does it, and the person may. */
+export function mayGiveBack(caps: PosCapabilities, can: PosCan | null | undefined, kind: 'refund' | 'void'): boolean {
+  return !!caps[kind] && !!can?.[kind];
 }
 
 /* ── The till (main process) ─────────────────────────────────────────── */
@@ -182,7 +221,7 @@ export const tillStatus = () => call('pos:till');
 export const pairTill = (terminal_id: number, take_over = false) => call('pos:pair', { terminal_id, take_over });
 export const forgetTill = (discard = false) => call('pos:forget', { discard });
 export const readCatalogue = () => call('pos:catalogue');
-export const refreshCatalogue = () => call('pos:catalogueRefresh');
+export const refreshCatalogue = (capable?: boolean) => call('pos:catalogueRefresh', capable === undefined ? {} : { capable });
 export const sell = (input: PosSellInput) => call('pos:sell', input);
 export const listSales = (f: { session_id?: number; since?: string; limit?: number } = {}) => call('pos:sales', f);
 export const readSale = (ref: string) => call('pos:sale', { ref });
@@ -190,7 +229,10 @@ export const syncNow = () => call('pos:syncNow');
 export const resolveSale = (ref: string, action: 'retry' | 'drop') => call('pos:resolve', { ref, action });
 export const printSettings = () => call('pos:printSettings');
 export const setPrintSettings = (p: PosPrintPatch) => call('pos:printSettingsSet', p);
-export const printReceipt = (ref: string, reprint = true) => call('pos:printReceipt', { ref, reprint });
+export const printReceipt = (ref: string, reprint = true, server = false) => call('pos:printReceipt', { ref, reprint, server });
+export const serverReceipt = (ref: string) => call('pos:receipt', { ref });
+export const giveBack = (input: PosGiveBack) => call('pos:giveBack', input);
+export const emailReceipt = (ref: string, email?: string) => call('pos:email', email ? { ref, email } : { ref });
 export const printReport = (r: PosReport) => call('pos:printReport', r);
 export const printTest = () => call('pos:printTest');
 export const openDrawer = () => call('pos:openDrawer');
@@ -248,16 +290,17 @@ export function findInCatalogue(products: PosProduct[], code: string): PosProduc
 const n = (v: unknown, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : d);
 const s = (v: unknown) => (typeof v === 'string' && v.trim() !== '' ? v : null);
 
-export async function lookupProduct(code: string, caps: PosCapabilities | undefined): Promise<PosProduct | null> {
+export async function lookupProduct(code: string, caps: PosCapabilities | undefined, org?: number | null): Promise<PosProduct | null> {
   if (caps?.lookup) {
     try {
-      const p = await apiGet<Record<string, unknown>>(`${BASE}/products/lookup`, { code });
+      const p = await apiGet<Record<string, unknown>>(`${BASE}/products/lookup`, { code, ...(org ? { org } : {}) });
       return { id: n(p.id), code: s(p.code), barcode: s(p.barcode), name: s(p.name) ?? code, unit: s(p.unit), category: s(p.category), price: n(p.price), discount_pct: n(p.discount_pct), tax_rate: n(p.tax_rate) };
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) return null;
       throw e;
     }
   }
+  // An older server without POS's lookup: Inventory's, for people who may read it.
   try {
     const r = await apiGet<{ products?: Array<Record<string, unknown>>; exact?: boolean }>('/api/inventory/products/lookup', { q: code });
     const p = r.exact ? r.products?.[0] : undefined;
@@ -280,15 +323,15 @@ export interface CartPrice {
 }
 
 /**
- * WorkSuite's price for the cart: `POST api/pos/price` where the server announces it; otherwise each line's price
- * from Inventory's price book (`GET api/inventory/price`, the quantity's band and list), added up the same way the
+ * WorkSuite's price for the cart: `POST api/pos/price` (the till's company, the cashier's discount rights) where the
+ * server announces it; only on an older server, each line's price from Inventory's price book (`GET api/inventory/price`, the quantity's band and list), added up the same way the
  * preview is. The catalogue's preview shows at once and stays when WorkSuite does not answer.
  */
 let inventoryPriceRefused = false;
 
-export async function priceCart(lines: CartLineInput[], discountPct: number, products: Map<number, PosProduct>, currency: string, ceiling: number | null, caps: PosCapabilities | undefined): Promise<PricedCart> {
+export async function priceCart(lines: CartLineInput[], discountPct: number, products: Map<number, PosProduct>, currency: string, ceiling: number | null, caps: PosCapabilities | undefined, org?: number | null): Promise<PricedCart> {
   if (caps?.price) {
-    const c = await request<Record<string, unknown>>('POST', `${BASE}/price`, { body: { lines, discount_pct: discountPct } });
+    const c = await request<Record<string, unknown>>('POST', `${BASE}/price`, { body: { lines, discount_pct: discountPct, ...(org ? { org_id: org } : {}) } });
     const d = c.data;
     return {
       currency: s(d.currency) ?? currency,
@@ -331,7 +374,7 @@ export async function priceCart(lines: CartLineInput[], discountPct: number, pro
   return e.cart;
 }
 
-export function useCartPrice(lines: CartLineInput[], discountPct: number, products: Map<number, PosProduct>, currency: string, ceiling: number | null, caps: PosCapabilities | undefined, online: boolean): CartPrice {
+export function useCartPrice(lines: CartLineInput[], discountPct: number, products: Map<number, PosProduct>, currency: string, ceiling: number | null, caps: PosCapabilities | undefined, online: boolean, org?: number | null): CartPrice {
   const estimate = useMemo(() => estimateCart(lines, products, discountPct, ceiling, currency), [lines, products, discountPct, ceiling, currency]);
   const signature = JSON.stringify([lines, discountPct]);
   const [debounced, setDebounced] = useState(signature);
@@ -341,10 +384,10 @@ export function useCartPrice(lines: CartLineInput[], discountPct: number, produc
   }, [signature]);
   const settled = debounced === signature;
   const server = useQuery<PricedCart, Error>({
-    queryKey: ['pos', 'price', debounced, currency, !!caps?.price],
+    queryKey: ['pos', 'price', debounced, currency, !!caps?.price, org ?? null],
     queryFn: () => {
       const [l, d] = JSON.parse(debounced) as [CartLineInput[], number];
-      return priceCart(l, d, products, currency, ceiling, caps);
+      return priceCart(l, d, products, currency, ceiling, caps, org);
     },
     enabled: online && lines.length > 0 && settled,
     staleTime: 60_000,

@@ -6,7 +6,7 @@ import { cashMove, closeSession, fetchSession, openDrawer, openSession, PK, prin
 import { useT } from './i18n';
 import { Choice, CountSheet, Failed, Field, MoneyLine, Note, timeOf, useTillContext } from './parts';
 import { countBody, countTotal, formatMoney, parseAmount, variance } from './pricing';
-import { closeBody, salesSummary, xReport, zReport } from './shift';
+import { closeBody, needsReason, salesSummary, xReport, zReport } from './shift';
 
 /**
  * The drawer's shift, WorkSuite's own (`/api/pos/sessions`): opening a register with its float (typed, or counted
@@ -119,9 +119,15 @@ function OpenedShift({ session, onClosed }: { session: PosSession; onClosed: (id
   const [error, setError] = useState<string | null>(null);
 
   const denominations = s.denominations ?? till.options?.denominations?.[s.currency] ?? [];
-  const counted = countTotal(toCounts(counts)) || (typed ? parseAmount(typed) : NaN);
-  const expected = s.blind ? null : (s.takings?.expected ?? null);
+  // How this company closes a drawer (`options` rules): note by note, blind, and how far out needs no reason.
+  const rules = till.company?.rules;
+  const blind = !!s.blind || !!rules?.blind_close;
+  const byNotes = !!rules?.count_to_close && denominations.length > 0;
+  const counted = countTotal(toCounts(counts)) || (typed && !byNotes ? parseAmount(typed) : NaN);
+  const expected = blind ? null : (s.takings?.expected ?? null);
   const diff = variance(Number.isFinite(counted) ? counted : null, expected);
+  const reasonNeeded = needsReason(diff, rules?.variance_tolerance, blind);
+  const tolerance = rules?.variance_tolerance ?? 0;
   const reasons = till.options?.cash_reasons?.[direction] ?? [];
 
   const refresh = () => {
@@ -148,7 +154,7 @@ function OpenedShift({ session, onClosed }: { session: PosSession; onClosed: (id
   }
 
   async function close() {
-    const body = closeBody(toCounts(counts), typed, why);
+    const body = closeBody(toCounts(counts), typed, why, { count_to_close: byNotes });
     if ('error' in body) {
       setError(body.error);
       return;
@@ -205,7 +211,7 @@ function OpenedShift({ session, onClosed }: { session: PosSession; onClosed: (id
             <MoneyLine label={t('pos.cashIn')} value={s.takings?.moved_in ?? 0} />
             <MoneyLine label={t('pos.cashOut')} value={s.takings?.moved_out ?? 0} />
             {expected != null ? <MoneyLine label={t('pos.expected')} value={expected} currency={s.currency} strong /> : null}
-            {s.blind ? <p className="mt-1 text-[12px] text-ink-3">{t('pos.blind')}</p> : null}
+            {blind ? <p className="mt-1 text-[12px] text-ink-3">{t('pos.blind')}</p> : null}
             {sum.waiting ? <p className="mt-1 text-[12px] text-warning">{t('pos.waiting', { n: sum.waiting })}</p> : null}
           </div>
         </Card>
@@ -257,19 +263,27 @@ function OpenedShift({ session, onClosed }: { session: PosSession; onClosed: (id
 
       <Card title={t('pos.closeShift')}>
         <div className="flex flex-col gap-3">
-          {s.blind ? <Note tone="indigo">{t('pos.blind')}</Note> : null}
+          {blind ? <Note tone="indigo">{t('pos.blind')}</Note> : null}
           {denominations.length ? <CountSheet values={denominations} counts={counts} onChange={setCounts} label={t('pos.countNotes')} /> : null}
           {countTotal(toCounts(counts)) > 0 ? (
             <MoneyLine label={t('pos.counted')} value={countTotal(toCounts(counts))} currency={s.currency} strong />
+          ) : byNotes ? (
+            <p className="text-[12px] text-ink-3">{t('pos.countToClose')}</p>
           ) : (
-            <TextField label={t('pos.counted')} inputMode="decimal" value={typed} onChange={(e) => setTyped(e.target.value.replace(/[^\d.,]/g, ''))} hint="Or count the notes and coins above: the company may ask for the count." />
+            <TextField label={t('pos.counted')} inputMode="decimal" value={typed} onChange={(e) => setTyped(e.target.value.replace(/[^\d.,]/g, ''))} hint="Or count the notes and coins above." />
           )}
           {diff != null ? <MoneyLine label={t('pos.variance')} value={diff} currency={s.currency} strong /> : null}
-          <TextField label={t('pos.varianceReason')} value={why} onChange={(e) => setWhy(e.target.value.slice(0, 300))} />
+          <TextField
+            label={reasonNeeded ? `${t('pos.varianceReason')} *` : t('pos.varianceReason')}
+            value={why}
+            onChange={(e) => setWhy(e.target.value.slice(0, 300))}
+            hint={!blind && tolerance > 0 ? t('pos.tolerance', { n: formatMoney(tolerance, s.currency) }) : undefined}
+            error={reasonNeeded && !why.trim() ? t('pos.reasonNeeded') : null}
+          />
           {sum.waiting ? <Note tone="warning">{t('pos.waiting', { n: sum.waiting })}: WorkSuite counts them in the drawer once they arrive.</Note> : null}
           {error ? <Note tone="danger">{error}</Note> : null}
           <div>
-            <Button variant="danger" size="lg" icon="lock" loading={busy === 'close'} disabled={till.offline || !can?.close || !Number.isFinite(counted)} onClick={() => void close()}>
+            <Button variant="danger" size="lg" icon="lock" loading={busy === 'close'} disabled={till.offline || !can?.close || !Number.isFinite(counted) || (reasonNeeded && !why.trim())} onClick={() => void close()}>
               {t('pos.closeShift')}
             </Button>
           </div>

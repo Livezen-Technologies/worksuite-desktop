@@ -41,21 +41,24 @@ export default function Register({ active }: { active: boolean }) {
     for (const [id, p] of extras) if (!m.has(id)) m.set(id, p);
     return m;
   }, [products, extras]);
-  const pct = discountPct(cart, till.discount.allowed);
+  const pct = discountPct(cart, till.discount.allowed, till.discount.ceiling);
   const currency = till.currency || catalogue.data?.currency || '';
-  const price = useCartPrice(cart.lines, pct, byId, currency, till.discount.ceiling, till.caps, !till.offline);
+  const org = till.company?.id ?? null;
+  const price = useCartPrice(cart.lines, pct, byId, currency, till.discount.ceiling, till.caps, !till.offline, org);
+  // What the server said it can do; unknown (options not read yet) tries POS's catalogue first.
+  const capable = till.options ? !!till.caps.catalogue : undefined;
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await refreshCatalogue();
+      await refreshCatalogue(capable);
       void qc.invalidateQueries({ queryKey: PK.catalogue });
     } catch (e) {
       toast('error', e instanceof Error ? e.message : 'The catalogue could not be read.');
     } finally {
       setRefreshing(false);
     }
-  }, [qc]);
+  }, [qc, capable]);
 
   // A till with no copy yet takes one as soon as WorkSuite answers.
   const asked = useRef(false);
@@ -78,7 +81,7 @@ export default function Register({ active }: { active: boolean }) {
         return;
       }
       try {
-        const p = await lookupProduct(code, till.caps);
+        const p = await lookupProduct(code, till.caps, org);
         if (!p || !p.id) {
           toast('warning', `No product has the code ${code}.`);
           return;
@@ -89,7 +92,7 @@ export default function Register({ active }: { active: boolean }) {
         toast('error', e instanceof Error ? e.message : 'WorkSuite could not look that code up.');
       }
     },
-    [byId, till.offline, till.caps],
+    [byId, till.offline, till.caps, org],
   );
   useBarcodeScanner(active && !paying && !customerOpen, (code) => void onScan(code));
 
@@ -233,7 +236,7 @@ export default function Register({ active }: { active: boolean }) {
                 {t('pos.discount')}
                 {till.discount.ceiling ? <span className="text-ink-3"> (max {till.discount.ceiling}%)</span> : null}
               </span>
-              <input inputMode="decimal" value={cart.discount} onChange={(e) => cartActions.discount(e.target.value)} aria-label={t('pos.discount')} className="h-7 w-20 rounded-[6px] border border-line bg-surface px-2 text-right tabular-nums outline-none focus:border-primary" />
+              <input inputMode="decimal" value={cart.discount} onChange={(e) => cartActions.discount(e.target.value, till.discount.ceiling)} aria-label={t('pos.discount')} className="h-7 w-20 rounded-[6px] border border-line bg-surface px-2 text-right tabular-nums outline-none focus:border-primary" />
             </label>
           ) : null}
           {price.cart ? (

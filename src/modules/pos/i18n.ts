@@ -90,6 +90,25 @@ const en = {
   'pos.pair': 'Pair',
   'pos.takeOver': 'Take it over',
   'pos.forget': 'Forget this till…',
+  'pos.countToClose': 'This company counts the drawer note by note before it closes.',
+  'pos.tolerance': 'A difference of up to {n} closes without a reason.',
+  'pos.reasonNeeded': 'Say why the count is different.',
+  'pos.email': 'E-mail receipt',
+  'pos.emailTo': 'E-mail address',
+  'pos.send': 'Send',
+  'pos.review': 'For review',
+  'pos.reviewNote': 'WorkSuite priced this sale at {total}, where the till charged {charged}. It stands, flagged for somebody to look at.',
+  'pos.serverTotal': 'WorkSuite’s total',
+  'pos.voided': 'Voided',
+  'pos.refunded': 'Refunded',
+  'pos.partRefunded': 'Part refunded',
+  'pos.refundAll': 'Everything left',
+  'pos.refundLines': 'Some items',
+  'pos.restock': 'Put the goods back in stock',
+  'pos.cashFromDrawer': '{n} in cash from the drawer',
+  'pos.refundDone': '{amount} given back.',
+  'pos.voidOnlyThisShift': 'A sale is voided in its own shift, while it is open; refund it instead.',
+  'pos.noReturns': 'Refunds and voids are not available from this WorkSuite server, or to you.',
 } as const;
 
 export type PosKey = keyof typeof en;
@@ -122,6 +141,8 @@ const si: Partial<Record<PosKey, string>> = {
   'pos.cashIn': 'මුදල් ඇතුළට',
   'pos.cashOut': 'මුදල් පිටතට',
   'pos.today': 'අද',
+  'pos.refund': 'මුදල් ආපසු',
+  'pos.voided': 'අවලංගු කළා',
 };
 
 const ta: Partial<Record<PosKey, string>> = {
@@ -152,6 +173,8 @@ const ta: Partial<Record<PosKey, string>> = {
   'pos.cashIn': 'பணம் உள்ளே',
   'pos.cashOut': 'பணம் வெளியே',
   'pos.today': 'இன்று',
+  'pos.refund': 'பணத்தைத் திருப்பு',
+  'pos.voided': 'ரத்து செய்யப்பட்டது',
 };
 
 const TABLES: Record<string, Partial<Record<PosKey, string>>> = { en, si, ta };

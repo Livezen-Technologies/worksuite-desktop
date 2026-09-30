@@ -43,18 +43,22 @@ export function setCustomer(s: CartState, c: PosCustomer | null): CartState {
   return { ...s, customer: clean && Object.keys(clean).length ? clean : null };
 }
 
-/** The discount as typed, digits and one point, at most 100. */
-export function setDiscount(s: CartState, typed: string): CartState {
+/** The discount as typed, digits and one point, at most 100 — or the cashier's ceiling (`max_discount_pct`). */
+export function setDiscount(s: CartState, typed: string, ceiling: number | null = null): CartState {
   let d = typed.replace(/[^\d.]/g, '');
   const dot = d.indexOf('.');
   if (dot >= 0) d = d.slice(0, dot + 1) + d.slice(dot + 1).replace(/\./g, '');
   d = d.slice(0, 6);
-  if (Number(d) > 100) d = '100';
+  const max = ceiling != null && ceiling > 0 ? Math.min(100, ceiling) : 100;
+  if (Number(d) > max) d = String(max);
   return { ...s, discount: d };
 }
 
-export function discountPct(s: CartState, allowed: boolean): number {
-  return allowed ? Math.min(100, Number(s.discount) || 0) : 0;
+/** The percentage off this sale carries: none where the cashier may give none, never past their ceiling. */
+export function discountPct(s: CartState, allowed: boolean, ceiling: number | null = null): number {
+  if (!allowed) return 0;
+  const max = ceiling != null && ceiling > 0 ? Math.min(100, ceiling) : 100;
+  return Math.min(max, Number(s.discount) || 0);
 }
 
 export function itemCount(s: CartState): number {
@@ -69,7 +73,7 @@ export const cartActions = {
   qty: (id: number, qty: number) => cart.set((s) => setQty(s, id, qty)),
   remove: (id: number) => cart.set((s) => removeLine(s, id)),
   customer: (c: PosCustomer | null) => cart.set((s) => setCustomer(s, c)),
-  discount: (d: string) => cart.set((s) => setDiscount(s, d)),
+  discount: (d: string, ceiling: number | null = null) => cart.set((s) => setDiscount(s, d, ceiling)),
   clear: () => cart.set(EMPTY_CART),
 };
 

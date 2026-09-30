@@ -50,7 +50,7 @@ export default function TillScreen() {
       <Card
         title="Catalogue"
         action={
-          <Button size="sm" icon="refresh" loading={busy === 'cat'} disabled={till.offline} onClick={() => void run('cat', refreshCatalogue, 'The catalogue is up to date.')}>
+          <Button size="sm" icon="refresh" loading={busy === 'cat'} disabled={till.offline} onClick={() => void run('cat', () => refreshCatalogue(till.options ? !!till.caps.catalogue : undefined), 'The catalogue is up to date.')}>
             {t('pos.refreshCatalogue')}
           </Button>
         }
