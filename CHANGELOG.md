@@ -19,6 +19,14 @@ person who has to live with the change — what it does, and where it bites.
   or one opened in another app) is edited on that copy, which goes to the Drive when WorkSuite is online again;
   without one the tab says it is not on this computer. Files from this computer open there as before.
 - A server without a working Document Server still gets the built-in editor, now with a banner saying why.
+- **Drive shows the first page of PDFs and Office files** in the grid (the server makes thumbnails for pictures
+  only): drawn on this computer once a card is on screen — PDFs by pdf.js, presentations by BetterOffice's slide
+  renderer, Word and Excel files by a hidden read-only editor — one at a time, files up to 25 MB, and kept in PDF
+  Studio's sealed thumbnail cache per file version (only where offline storage is allowed).
+- **Drive's toolbar**: **Details** now opens with nothing selected (the folder you are in, or a summary of the
+  view), and **Refresh** reloads the list and spins until it has.
+- **PDF Studio's side panels**: the tabs are a segmented control that fits the panel (the chosen one named, the
+  others as icons), and the search options are toggle chips.
 - The built-in editor is no longer offered by hand while online (the file menu's **Edit in WorkSuite
   (built-in)** and the EuroOffice header's **Built-in editor** are gone).
 

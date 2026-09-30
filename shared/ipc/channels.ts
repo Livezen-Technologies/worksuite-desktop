@@ -142,6 +142,8 @@ export const INVOKE_CHANNELS = [
   'pdf:followLink',
   'pdf:attachments',
   'pdf:details',
+  'pdf:coverGet',
+  'pdf:coverPut',
   'pdf:print',
   'pdf:pickLocal',
   'pdf:registerDropped',

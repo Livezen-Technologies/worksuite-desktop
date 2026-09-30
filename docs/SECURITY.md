@@ -243,6 +243,9 @@ Being controlled is the main process's business, never a page's:
   first bytes are a ZIP package, at most 200 MB, and outside WorkSuite's data; `office:writeFile` writes only
   over a file opened that way (atomically), `office:saveCopy` only where the person chose in the save dialog.
   Bytes cross IPC as a checked `Uint8Array` (non-empty, within the limit; strict schemas refuse any path field).
+- **Drive covers** are drawn in the window from the file's bytes (read through the proxy, never written to disk
+  in the clear) and kept only in PDF Studio's sealed thumbnail cache, under a hashed name, when offline storage is
+  allowed; `pdf:coverPut` takes only a `drive:<id>:<version>` name and a JPEG of at most 512 KB.
 - **Documents from other modules** open through the download manager: a PDF goes to PDF Studio (inside the app,
   so it is allowed where other applications are not); anything else goes to the OS only with
   `desktop.files.open_external`. Chat attachments are fetched by their signed `/media/{token}`, task attachments

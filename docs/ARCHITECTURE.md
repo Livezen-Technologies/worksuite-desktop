@@ -169,6 +169,14 @@ editor on its copy on this computer (`office:readOffline` / `office:writeOffline
 **New** (`office/create.ts`): the server's Office API, else Drive's `POST /api/files/create`, else a bundled blank
 OOXML file (`office/blank/`, made by `scripts/make-blank-office.py`) uploaded with `uploadBlob`. Record tabs are keyed by `recordKey()` (`src/core/tabs.ts`), so each attachment or local file is its own tab.
 
+## Drive covers
+
+`src/modules/files/covers.ts` draws a Drive file's first page when the server has no thumbnail (pictures only):
+pdf.js for PDFs, `slideToPng` for presentations, a hidden read-only BetterOffice editor's largest canvas for Word
+and Excel. `Tile` asks for a cover through an IntersectionObserver; drawing is serialized; results go to PDF
+Studio's sealed thumbnail cache (`pdf:coverGet` / `pdf:coverPut`, keyed `drive:<id>:<version>`, hashed on disk,
+AES-256-GCM under the database-derived key, only with offline storage allowed).
+
 ## Side panels
 
 Modules' side menus and panes are wrapped in `SidePanel` (`src/components/SidePanel.tsx`): a handle on the inner

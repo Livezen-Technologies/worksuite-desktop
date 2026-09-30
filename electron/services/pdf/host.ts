@@ -192,6 +192,15 @@ export function createPdfStudio(deps: PdfStudioDeps): PdfStudio {
     router.handle('pdf:followLink', (input, c) => service.followLink(c.sender.id, input.session, input.page, input.index));
     router.handle('pdf:attachments', (input, c) => service.attachments(c.sender.id, input.session));
     router.handle('pdf:details', (input, c) => service.details(c.sender.id, input.session));
+    // Drive covers drawn by the window, kept with PDF Studio's thumbnails (sealed; only where offline storage is allowed).
+    router.handle('pdf:coverGet', async (input) => {
+      if (!deps.desktop().diskCache) return null;
+      const img = await storage.readThumb(PdfStorage.docKey(input.id), 0);
+      return img ? new Uint8Array(img) : null;
+    });
+    router.handle('pdf:coverPut', async (input) => {
+      if (deps.desktop().diskCache) await storage.writeThumb(PdfStorage.docKey(input.id), 0, input.jpeg);
+    });
     router.handle('pdf:print', (input, c) => service.print(c.sender.id, input));
     router.handle('pdf:pickLocal', async (_input, c) => {
       const win = BrowserWindow.fromWebContents(c.sender);

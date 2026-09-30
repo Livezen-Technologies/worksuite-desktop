@@ -198,6 +198,9 @@ function ch<S extends z.ZodType>(input: S, opts: Omit<ChannelSpec, 'input'> = {}
   return { input, ...opts };
 }
 
+/** A Drive file's cover in the thumbnail cache: `drive:<file id>:<version or change time>`. */
+const coverId = z.string().regex(/^drive:\d{1,12}:[A-Za-z0-9:.\-]{1,40}$/);
+
 /** An Office document's bytes from the editor (a ZIP package, an OLE file, RTF or CSV), at most the local limit. */
 const officeBytes = z.instanceof(Uint8Array).refine((b) => b.byteLength > 0 && b.byteLength <= MAX_OFFICE_LOCAL_BYTES, 'The document is empty or too large.');
 
@@ -586,6 +589,12 @@ export const contract = {
   'pdf:followLink': ch(z.strictObject({ session: pdfSession, page: pdfPage, index: z.number().int().min(0).max(10_000) }), { session: true, rate: 5 }),
   'pdf:attachments': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 5 }),
   'pdf:details': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 5 }),
+  /**
+   * A Drive file's cover (its first page, a PDF's or an Office file's, drawn by the window) in PDF Studio's sealed
+   * thumbnail cache, by the file and the version it shows: never a name, never readable without the database key.
+   */
+  'pdf:coverGet': ch(z.strictObject({ id: coverId }), { session: true, rate: 600 }),
+  'pdf:coverPut': ch(z.strictObject({ id: coverId, jpeg: z.instanceof(Uint8Array).refine((b) => b.byteLength > 0 && b.byteLength <= 512 * 1024, 'A cover is at most 512 KB.') }), { session: true, rate: 300 }),
   'pdf:print': ch(pdfPrintSchema, { session: true, rate: 2 }),
   // The main process's open dialog; the chosen PDFs come back as handles.
   'pdf:pickLocal': ch(none, { session: true, rate: 2 }),
@@ -1001,6 +1010,8 @@ export interface Outputs {
   'pdf:followLink': { opened: boolean; reason: string | null };
   'pdf:attachments': PdfAttachmentView[];
   'pdf:details': PdfDriveDetails | null;
+  'pdf:coverGet': Uint8Array | null;
+  'pdf:coverPut': void;
   'pdf:print': { printed: boolean; pages: number; reason: string | null };
   'pdf:pickLocal': PdfLocalPick[];
   'pdf:registerDropped': { files: PdfLocalPick[]; rejected: Array<{ name: string; reason: string }> };
