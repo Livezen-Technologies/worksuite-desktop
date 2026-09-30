@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-09-30 — 0.2.71: Chat's channel toolbar (WhatsApp in Chat), profile pictures, a resizable conversation list; AI Assistant scrolling
+## 2026-09-30 — 0.2.71: Chat's channel toolbar (WhatsApp in Chat), profile pictures, a resizable conversation list; AI Assistant scrolling; Gemma 3 4B for Local AI
 
 - **A channel toolbar down the far left of Chat** (#33): Chat, Web Chat and WhatsApp, each with its unread count
   (waiting visitors for Web Chat) and a warning dot when a WhatsApp number is not connected. Hover for the name and
@@ -25,6 +25,14 @@ person who has to live with the change — what it does, and where it bites.
   When somebody changes their picture it changes here too, without signing out (the server announces it; pictures
   are also checked again after 15 minutes). Group conversations keep their rounded-square initials, so they never
   look like a person. WhatsApp contacts' pictures show once the server provides them; it does not fetch them yet.
+- **Gemma 3 4B on this computer** (#55). With a server that has it (WorkSuite Server with Ai 1.1.0), Settings →
+  Local AI lists Gemma 3 4B with its version, download size (about 2.5 GB), the memory it needs and the computers it
+  suits, and its licence — the Gemma Terms of Use, with the notice they require. **Download and set up** fetches it
+  (pause, cancel, resume where it stopped, try again), checks it against the SHA-256 the server names, then **loads
+  it and has it answer** before it says **Ready to use**; a file this computer cannot run says why and is not used.
+  **Use this model** makes it the default. The assistant offers the same setup the first time, while nothing is set
+  up here ("Not now" hides it). Which model answers is unchanged: WorkSuite AI unless you pick On this computer, and
+  On this computer when you are offline.
 - **The AI Assistant keeps the latest in view** (#50), in both WorkSuite AI and On this computer. While you are at
   the end of the conversation it follows new messages and a streaming answer as it grows, and an image that loads or
   a panel you resize no longer pushes the end behind the box. Scroll up to read and it stays there; when something

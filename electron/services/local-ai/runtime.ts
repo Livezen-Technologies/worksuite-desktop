@@ -106,6 +106,20 @@ export class LocalAIRuntime {
       }
       return;
     }
+    const probeId = (m.type === 'chunk' || m.type === 'done' || m.type === 'error') && m.id ? m.id : null;
+    const probe = probeId ? this.probes.get(probeId) : undefined;
+    if (probeId && probe) {
+      if (m.type === 'chunk') return;
+      this.probes.delete(probeId);
+      clearTimeout(probe.timer);
+      if (m.type === 'done') probe.done(m.text, m.tokens);
+      else if (m.type === 'error') probe.fail(m.message);
+      if (!this.pending.size) {
+        this.set('ready');
+        this.armIdle();
+      }
+      return;
+    }
     if (m.type === 'chunk') {
       const sender = this.pending.get(m.id);
       if (sender !== undefined) this.deps.emit(sender, { id: m.id, type: 'chunk', text: m.text });
@@ -135,6 +149,12 @@ export class LocalAIRuntime {
     }
     for (const [id, sender] of this.pending) this.deps.emit(sender, { id, type: 'error', message: 'Local AI stopped unexpectedly. Try again.' });
     this.pending.clear();
+    // A model that takes the process down while being checked is the clearest failure of all.
+    for (const [, p] of this.probes) {
+      clearTimeout(p.timer);
+      p.fail('Local AI stopped while trying the model: this computer could not run it.');
+    }
+    this.probes.clear();
     if (this.stopping) {
       this.stopping = false;
       this.set('off', null);
@@ -167,10 +187,11 @@ export class LocalAIRuntime {
     this.set('off', null);
   }
 
-  private async ensureLoaded(): Promise<void> {
-    const id = this.deps.models.defaultModel();
+  private async ensureLoaded(which?: string): Promise<void> {
+    const id = which ?? this.deps.models.defaultModel();
     const path = id ? await this.deps.models.path(id) : null;
     if (!id || !path) throw new Error('No model is installed on this computer. Choose one in Settings → Local AI.');
+    if (!which && !this.deps.models.usable(id)) throw new Error('The model on this computer is not ready to use. Check it in Settings → Local AI.');
     await this.start();
     if (this.loadedPath === path) return;
     this.set('loading');
@@ -201,6 +222,37 @@ export class LocalAIRuntime {
   cancel(id: string): void {
     if (this.pending.has(id)) this.link?.post({ type: 'cancel', id });
   }
+
+  /**
+   * The readiness check (worksuite-desktop#55): loads the model and asks it for a word. Resolves once it answered;
+   * rejects with why it could not load or answer, which is what the person reads.
+   */
+  async probe(id: string, timeoutMs = 3 * 60_000): Promise<void> {
+    if (this.idle) clearTimeout(this.idle);
+    try {
+      await this.ensureLoaded(id);
+    } catch (e) {
+      if (this.state !== 'error') this.set(this.link ? 'ready' : 'off');
+      throw e;
+    }
+    const reqId = `probe-${Math.random().toString(36).slice(2, 12)}${Date.now().toString(36)}`;
+    this.set('busy');
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.probes.delete(reqId);
+        this.link?.post({ type: 'cancel', id: reqId });
+        reject(new Error('The model loaded but did not answer in time.'));
+      }, timeoutMs);
+      this.probes.set(reqId, {
+        timer,
+        done: (text, tokens) => (tokens > 0 || text.trim() ? resolve() : reject(new Error('The model loaded but gave no answer.'))),
+        fail: (message) => reject(new Error(message)),
+      });
+      this.link!.post({ type: 'generate', req: { id: reqId, messages: [{ role: 'user', content: 'Reply with the single word: ready' }], maxTokens: 8, temperature: 0 } });
+    });
+  }
+
+  private probes = new Map<string, { timer: NodeJS.Timeout; done: (text: string, tokens: number) => void; fail: (message: string) => void }>();
 
   /** A window that goes away cancels what it asked. */
   senderGone(sender: number): void {

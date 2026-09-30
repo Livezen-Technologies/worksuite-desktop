@@ -113,6 +113,7 @@ const api = {
     localRemove: call('ai:localRemove'),
     localSetDefault: call('ai:localSetDefault'),
     localCheck: call('ai:localCheck'),
+    localTest: call('ai:localTest'),
     localAsk: call('ai:localAsk'),
     localCancel: call('ai:localCancel'),
     localRestart: call('ai:localRestart'),

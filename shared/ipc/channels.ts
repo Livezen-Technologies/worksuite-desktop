@@ -58,6 +58,7 @@ export const INVOKE_CHANNELS = [
   'ai:localRemove',
   'ai:localSetDefault',
   'ai:localCheck',
+  'ai:localTest',
   'ai:localAsk',
   'ai:localCancel',
   'ai:localRestart',

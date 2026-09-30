@@ -29,6 +29,8 @@ export const localModelSchema = z.object({
   /** Recommended for these tiers (the onboarding default). */
   recommendedFor: z.array(z.enum(LOCAL_AI_TIERS)).default([]),
   license: z.object({ id: z.string().max(40), name: z.string().max(120), url: z.string().url() }),
+  /** Notices the licence requires be shown to the person using the model (e.g. Gemma's), shown before and after download. */
+  notice: z.string().max(2000).optional(),
   languages: z.array(z.string().max(12)).max(60).default([]),
   toolCalling: z.boolean().default(false),
 });
@@ -82,6 +84,13 @@ export function tierFor(memoryBytes: number, vramBytes: number, gpu: string | fa
 
 export type LocalModelState = 'available' | 'downloading' | 'paused' | 'verifying' | 'installed' | 'failed';
 
+/**
+ * Whether an installed model has been loaded and has answered on this computer (worksuite-desktop#55): a file that
+ * matches its checksum can still be one this llama.cpp cannot run, so "Ready to use" waits for a real answer.
+ * `untested` is a model installed before the check existed; it is still offered, and can be tested.
+ */
+export type LocalModelReadiness = 'untested' | 'testing' | 'ready' | 'failed';
+
 export interface LocalModelView {
   model: LocalModel;
   state: LocalModelState;
@@ -92,6 +101,9 @@ export interface LocalModelView {
   fits: boolean;
   recommended: boolean;
   isDefault: boolean;
+  readiness: LocalModelReadiness;
+  /** Why the readiness check failed. */
+  readinessError: string | null;
 }
 
 export type LocalRuntimeState = 'off' | 'starting' | 'ready' | 'loading' | 'busy' | 'error';

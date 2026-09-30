@@ -7,6 +7,7 @@ import { askLocal, localReady, useLocalModels, type LocalAsk } from '../../core/
 import { useStore } from '../../core/store';
 import { navigate } from '../../core/tabs';
 import { ActionCard } from './ActionCard';
+import { LocalSetup } from './LocalSetup';
 import { ask, assistantProblem, pickFile, useAssistant, type AskTurn, type PendingAction, type Surface } from './assistant';
 
 interface Entry {
@@ -139,6 +140,8 @@ export function AskPanel({
       <div className="relative flex min-h-0 flex-1 flex-col">
       <div ref={view.scroller} onScroll={view.onScroll} data-testid="ai-conversation" className="min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-thin" aria-live="polite">
         <div ref={view.content} className="flex flex-col gap-3 pb-1">
+        {/* First-use Local AI setup: offered in the assistant until a model on this computer is set up (worksuite-desktop#55). */}
+        {surface === 'assistant.panel' && !localModel ? <LocalSetup /> : null}
         {entries.length === 0 && !off ? (
           <p className="text-[12.5px] text-ink-3">
             Ask about your work — tasks, mail, files, meetings, customers. The assistant sees only what you can open, and changes nothing until you confirm it.
