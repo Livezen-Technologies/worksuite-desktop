@@ -11,7 +11,7 @@ import { cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Field, input, Sheet } from '../hr/parts';
 import { PRIORITIES } from '../tasks/api';
 import { wallParts } from './api';
-import { convertedLabel, parseMinutes, POINT_MAX, saveMinutes, toFollowUp, toReminder, toTask, writeMinutes, type Context, type Converted, type Minutes, type Point } from './minutes';
+import { convertedLabel, parseMinutes, POINT_MAX, saveMinutes, toFollowUp, toReminder, toTask, writeMinutes, type Context, type Converted, type Minutes, type Point } from './minutesText';
 import { useDirectory } from './people';
 import { labelOf, MEETING_KINDS, type Meeting } from './work';
 

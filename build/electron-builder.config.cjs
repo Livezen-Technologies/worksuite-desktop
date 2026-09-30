@@ -33,7 +33,9 @@ module.exports = {
   productName: 'WorkSuite',
   copyright: 'Copyright © 2026 Livezen Technologies',
   directories: { output: 'release/${version}', buildResources: 'build' },
-  files: ['out/**', 'package.json', '!**/*.map'],
+  // pdfjs-dist is bundled into the renderer; its optional @napi-rs/canvas is
+  // for Node only, and its one-arch binary breaks the universal mac merge.
+  files: ['out/**', 'package.json', '!**/*.map', '!node_modules/@napi-rs/**'],
   extraResources: [
     { from: 'resources/tray', to: 'tray' },
     { from: 'resources/icons', to: 'icons' },
