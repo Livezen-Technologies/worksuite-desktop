@@ -426,6 +426,56 @@ What the desktop cannot do because the server does not:
 - On a `/desktop/v1` server, `links/resolve` does not know `worksuite://events/…` (`Desktop/Libraries/LinkGrammar`,
   `Links::APP_OF`): those links open without the server's record check (the tab's own requests are still checked).
 
+### Restaurant Manager — till, kitchen screen, print agent
+
+The Restaurant tab uses the server's Restaurant API, `/api/restaurant/v1` (`app/Modules/Restaurant`, stages A, B1 and
+B2 — the contract the module's README and `web-api-b1.md` / `web-api-b2.md` describe), the same one the web back
+office uses. Every route is behind `restaurant.access` (and the person needs the `restaurant` application); each verb
+checks its own permission in the company, and a record outside the person's data scope answers 404. `GET options?org=`
+→ `can` carries the person's `restaurant.*` in that company as `order_create`, `kitchen_manage`…, which the rail and the
+buttons follow. Every call names the company (`?org=`) the terminal was paired in. A refusal's `errors.code` says what
+to offer (`version_conflict` → refresh, `approval_required` / `approval_needed` with `errors.approval` → ask for the
+approval, `key_reused`, `in_progress`, `terminal`).
+
+This computer is one of the branch's **terminals**: the key `POST terminals/{id}/pair` hands over is kept by the main
+process and sent as `X-Terminal-Key` on every Restaurant call (the API proxy adds it to the screens' calls), so the
+server knows which till sent an order, which station a kitchen screen is and which printers this computer hosts.
+
+| Screen | Calls |
+|---|---|
+| Pairing (main process) | `GET structure?org=&branch_id=` (the terminal read back), `POST terminals/{id}/pair` → `device_key` (`rt_` + 48 hex), once; `POST terminals/{id}/revoke` on unpair when asked |
+| The shell | `GET options?org=`, `GET pos?branch_id=` (the terminal, business date, the person's cashier session, the till's policy: tenders, `offline_actions`) |
+| Floor | `GET floor?branch_id=`; `POST floor/tables/{id}/seat\|open\|free\|request-bill {…, version}`; `POST floor/sessions/{id}/move\|merge\|split {…, versions}`; `POST tables/{id}/clean\|unblock {version}` |
+| Order | `GET menu/branch/{branch}?channel=`; `POST orders {branch_id, order_type, uuid, lines, send}`; `GET orders/{id}`; `POST orders/{id}/items {lines, send, version}`; `POST orders/{id}/send\|fire\|hold\|serve\|print-kot`; `POST orders/{id}/items/{line}/void {reason, qty, version, approval_id?}` |
+| Approvals | `POST approvals {branch_id, action, amount, pct, reason, subject_type, subject_id, order_id, terminal_id}`; `GET approvals/{id}` (every 3 s); `POST approvals/{id}/approve {pin}` (the approver's PIN at the till); `GET approvals`, `POST approvals/{id}/approve\|reject` |
+| Bill | `GET bills/preview?order_id=`; `POST bills {order_id, mode: single\|seat\|item\|equal\|amount, count, amounts, parts}`; `POST bills/{id}/present\|void`; `POST bills/{id}/print` (`queued: false` → the returned `document.text` printed here); `POST bills/{id}/payments {tenders, terminal_id, version}` + `Idempotency-Key` (kept for every retry of one attempt) → `change_given`, `open_drawer` |
+| Cashier | `GET cashier-sessions/mine`, `GET cashier-sessions/{id}` (X / Z report), `POST cashier-sessions {branch_id, terminal_id, pos_register_id, opening_float}`, `POST …/{id}/cash {direction, amount, reason, approval_id?}`, `POST …/{id}/no-sale {reason}`, `POST …/{id}/start_close`, `POST …/{id}/close {counted_cash, reason, approval_id?}` |
+| Kitchen | `GET kitchen?branch_id=&station_id=` (the terminal's station by default), `GET kitchen/expo?branch_id=`, `POST kitchen/tickets/{id}/accept\|start\|bump\|recall\|serve\|print {version}`, `POST kitchen/tickets/{id}/items/{item}/done\|undo {version}` |
+| Live | `GET live?branch_id=&after=&limit=` every 3–5 s while a floor, order, bill or kitchen screen shows, from the heartbeat's `last_seq`; `reload` → everything refreshed |
+| Print agent (main process) | `POST print-jobs/claim {printer_ids, limit}` every 4 s for the printers mapped here, `POST print-jobs/{id}/printed\|failed {error}`; screens: `GET print-jobs?branch_id=`, `POST print-jobs/{id}/reprint` |
+| Offline (main process) | `POST sync {branch_id, ops: [{op: create_order\|add_items\|send, client_ref, data}]}` + `Idempotency-Key` per batch; `POST sync/heartbeat {queue_size, app_version, online, last_sync_at, printers}` every 30 s; the copy: `GET pos`, `GET floor`, `GET menu/branch/{id}` (every 5 min) |
+| Conflicts | `GET sync/conflicts?branch_id=&status=open`, `POST sync/conflicts/{id}/resolve {action: attach\|dismiss, table_id, guests, note}` (for `restaurant.order.cancel`) |
+
+What the desktop cannot do because the server does not:
+
+- **No offline payment by order.** The server's `sync` answers `cash_payment` with `elsewhere` ("play it back to the
+  payments route"), but a payment needs a bill id, and an order made offline has none until it is billed online. The
+  till therefore queues orders, lines and sends only; money waits for WorkSuite. An op that bills and pays an order
+  by its uuid (or `POST bills` accepting `order_uuid`) would let a cash takeaway be settled offline.
+- **The offline queue runs as the person, not the terminal.** `POST sync` needs `restaurant.order.create` and records
+  the signed-in person, so each person's queue waits for them (a shift change leaves it until they sign in again).
+- **A terminal cannot ask who it is.** There is no `GET terminals/me` by key: pairing reads the terminal from
+  `structure` first, and a station or mode changed later in the back office is seen only when paired again.
+  Re-pairing a terminal rotates its key and silently stops the computer that had it.
+- **A kitchen screen's cook needs `pos.access` for `GET pos`** (it is `pos.access` or `order.create`); without it the
+  till's context (business date, cashier session) is simply not shown there.
+- **Kitchen tickets are plain text.** The print job carries `text` (32 columns) and the fields; the agent prints the
+  text. §13.2's large type needs either an ESC/POS rendering from the server or the agent laying out the fields
+  (a later step). A 58 mm roll is sent the same 32 columns.
+- **Heartbeat printer states** are `online`, `offline`, `error`, `paper_out`; the agent reports `online` or `error`
+  (it cannot tell paper out from other failures through the OS spooler).
+- **Realtime** (`restaurant.live` over the gateway) is not subscribed yet: the screens catch up with `live?after=`.
+
 ## The existing API (servers without `/desktop/v1`)
 
 | Need | Endpoint |

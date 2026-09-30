@@ -299,6 +299,25 @@ of its own:
   process (a page cannot hand it something else to print without a dialog),
   in a hidden window with no preload, no script and no network.
 
+## Restaurant terminal (Restaurant SRS RM-PLT-003, RM-COM-003, §4.3–4.4)
+
+- **The terminal key** (`rt_` + 48 hex) is handed over once, to a person with `restaurant.device.manage`, by
+  `POST terminals/{id}/pair`. The main process makes the call (after reading the terminal back from the server's
+  structure) and keeps the key in the OS credential store (`restaurant-terminal:<server>`); no renderer, IPC answer,
+  log or diagnostic bundle carries it. The API proxy adds it as `X-Terminal-Key` to Restaurant API calls only, and
+  refuses pages pairing, `sync`, `sync/heartbeat`, `print-jobs/claim` and `print-jobs/{id}/printed|failed`
+  (`shared/restaurant.ts: RESTAURANT_MAIN_ONLY`).
+- **The copy and the outbox** (`restaurant_copy`, `restaurant_outbox`) are AES-256-GCM in the profile database, per
+  server, terminal and person; the copy only where the desktop policy lets the computer keep data offline, the
+  outbox only on a computer trusted to queue changes, and only for ops the branch allows offline. A plain sign-out
+  removes the person's copy and keeps their unsent orders; unpairing drops the terminal's copy and outbox (and,
+  when asked, revokes the key on the server); a remote wipe or "remove WorkSuite's data" removes the key, copy,
+  outbox and printer mapping.
+- **Printing** is the server's own text for a job this terminal claimed with its key, sent raw to the mapped printer
+  (the printer's name passed as an argument or in the environment, never through a shell) or laid out in a hidden
+  window with no preload, no script and no network. A page can ask for a test slip, the drawer, or a document the
+  server returned (`restaurant:printText`, printable text only), never a path or a printer the settings do not name.
+
 ## Updates (FR-UPD-01, WF-25)
 
 1. Manifest signature: Ed25519 over canonical JSON, public key pinned in

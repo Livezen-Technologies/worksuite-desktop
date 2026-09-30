@@ -338,6 +338,29 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   events and their gates (`eventsCached`, matched in `electron/main/index.ts`)
   so a desk opened offline still knows what the person may do; someone who
   loses the Events app loses their copies, and the desk does nothing for them.
+- Restaurant Manager (`modules/restaurant`, main process `electron/services/restaurant/`, rules in
+  `shared/restaurant.ts`): this computer as one of a branch's **terminals** — a till, a kitchen screen, the pass or a
+  printer host. `terminal.ts` pairs it (`POST terminals/{id}/pair`, after reading the terminal back from the
+  server's structure) and keeps the key in the OS credential store; the API proxy adds it as `X-Terminal-Key` to the
+  screens' Restaurant calls and refuses them pairing, `sync`, the heartbeat and the print agent's claim and answer.
+  `sync.ts` keeps, per server, terminal and person, a sealed copy of what the till opens with (`pos`, the branch
+  menu, the floor) and the ordered outbox (`outbox.ts`: `create_order`, `add_items`, `send` with the device's uuid,
+  `client_ref` and line ids, played back through `POST sync` with an idempotency key per batch; conflicts stay
+  marked for a manager, refusals wait for a person); every 30 s it sends the outbox, the heartbeat (queue, version,
+  the printers' state) and refreshes the copy. Its tables are made by the service (`CREATE TABLE IF NOT EXISTS`),
+  not a numbered migration. `print-agent.ts` claims the server's print jobs for the printers mapped on this
+  computer every 4 s and prints the job's text raw (ESC/POS through CUPS or the Windows spooler, as SalonMate's
+  drawer pulse) or as a page through the OS driver (SalonMate's scriptless hidden window), then answers printed or
+  failed; it also prints a bill no print route took, test slips, and opens the drawer. `index.ts` makes the three
+  and registers the `restaurant:*` channels. The renderer is a shell with a rail (`RestaurantShell.tsx`, addresses in
+  `routes.ts`, strings in its own `i18n.ts`) whose screens are lazy chunks: the floor (`Floor.tsx` — tables by area
+  in their state; seat, open, free, move, merge, split), the order (`Order.tsx` — the menu grid, an item's variant,
+  modifiers, note, seat and course; send, fire and hold by course, serve, void with a reason and an approval), the
+  bill (`Bill.tsx` — the server's quote, single or split bills, present, print, payment with several tenders and the
+  server's change), the cashier session, the kitchen and the pass (`Kitchen.tsx`), approvals, printers and what was
+  kept offline (`Outbox.tsx`, with the branch's conflicts for a manager). Screens stay current by catching up with
+  `live?after=` (`parts.tsx: useLive`); offline they read the copy and keep new orders and lines in the outbox, and
+  everything with money, a void or a table move is disabled.
 - Tabs stay mounted while recent (instant switching) and are suspended after
   the configured idle time; the tab set is saved and restored only for apps
   the user can still open.
