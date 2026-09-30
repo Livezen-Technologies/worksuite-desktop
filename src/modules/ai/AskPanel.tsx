@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
+import { useStickToBottom } from '../../components/useStickToBottom';
 import { app } from '../../core/app-state';
 import { askLocal, localReady, useLocalModels, type LocalAsk } from '../../core/local-ai';
 import { useStore } from '../../core/store';
@@ -56,7 +57,6 @@ export function AskPanel({
   const [useTab, setUseTab] = useState(true);
   const [files, setFiles] = useState<{ ref: string; name: string; via: 'upload' | 'drive' }[]>([]);
   const [fileError, setFileError] = useState<string | null>(null);
-  const end = useRef<HTMLDivElement>(null);
   // Local AI (WS-SRS-LAI): the model on this computer, when one is installed — also offline.
   const offline = useStore(app, (s) => s.status?.network === 'OFFLINE');
   const localModels = useLocalModels(surface === 'assistant.panel');
@@ -68,10 +68,8 @@ export function AskPanel({
   useEffect(() => () => running.current?.cancel(), []);
 
   useEffect(() => setUseTab(true), [tabRef]);
-  // In braces: Chromium's scrollIntoView returns a Promise, and an effect's return value is its cleanup.
-  useEffect(() => {
-    void end.current?.scrollIntoView?.({ block: 'end' });
-  }, [entries, busy]);
+  // The conversation follows new messages and a streaming answer while the reader is at the end (worksuite-desktop#50).
+  const view = useStickToBottom(`${entries.length}:${busy}:${streaming?.length ?? -1}`);
 
   const off = local ? null : availability.data && !availability.data.enabled ? availability.data.reason ?? 'The assistant is not switched on for you.' : null;
   const refs = [...(useTab && tabRef ? [tabRef] : []), ...files.map((f) => f.ref)];
@@ -83,6 +81,8 @@ export function AskPanel({
     const full = selection && selection.trim() && entries.length === 0 ? `${q}\n\nThe text I selected:\n"""\n${selection.trim().slice(0, 6000)}\n"""` : q;
     setText('');
     setEntries((e) => [...e, { role: 'user', text: q, local }]);
+    // Asking is looking at the answer: back to the end, following again, from wherever the reader had scrolled.
+    view.toEnd();
     setBusy(true);
     if (local) {
       // This computer's model: the conversation so far in this mode, nothing from WorkSuite.
@@ -136,7 +136,9 @@ export function AskPanel({
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       {off ? <p className="rounded-[10px] bg-warning-bg px-3 py-2 text-[12.5px] text-[#7A4308] dark:text-warning">{off}</p> : null}
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto scroll-thin" aria-live="polite">
+      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div ref={view.scroller} onScroll={view.onScroll} data-testid="ai-conversation" className="min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-thin" aria-live="polite">
+        <div ref={view.content} className="flex flex-col gap-3 pb-1">
         {entries.length === 0 && !off ? (
           <p className="text-[12.5px] text-ink-3">
             Ask about your work — tasks, mail, files, meetings, customers. The assistant sees only what you can open, and changes nothing until you confirm it.
@@ -145,7 +147,13 @@ export function AskPanel({
         {entries.map((e, i) => <Bubble key={i} e={e} elsewhere={reviewElsewhere} />)}
         {streaming ? <Bubble e={{ role: 'assistant', text: streaming, local: true }} /> : null}
         {busy && !streaming ? <p className="flex items-center gap-2 text-[12.5px] text-ink-3"><Icon name="spinner" size={14} className="animate-spin" /> Looking into it…</p> : null}
-        <div ref={end} />
+        </div>
+      </div>
+      {view.unseen ? (
+        <button type="button" onClick={view.toEnd} className="absolute bottom-2 left-1/2 flex h-8 -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-[12px] font-semibold text-ink shadow-md hover:bg-subtle">
+          <Icon name="arrow-down" size={14} /> Jump to latest
+        </button>
+      ) : null}
       </div>
 
       {lastAnswer && (insert || onOpen) ? (
