@@ -283,9 +283,9 @@ a fault).
 | Lists | `GET properties/{id}/arrivals?date=`, `GET properties/{id}/departures?date=`, `GET properties/{id}/in-house`, `POST properties/{id}/assign-rooms {date}`, `GET stays/{id}/registration-card` |
 | Assign a room | `GET reservation-rooms/{id}/rooms?any_type=`, `POST reservation-rooms/{id} {room_id, version, upgrade_type?, reason?}`, `POST reservations/{id}/assign` |
 | Reservations | `GET properties/{id}/reservations?status=&page=`, `GET search?q=`, `GET reservations/{id}`, `POST reservations/{id}` (dates, ETA, requests, notes, with `version`), `POST reservations/{id}/status`, `POST reservations/{id}/cancel`, `GET reservations/{id}/history` |
-| Deposit | `GET reservations/{id}/deposit`, `POST reservations/{id}/deposit/payments`, `POST deposits/{id}/waive\|refund` |
+| Deposit | `GET reservations/{id}/deposit`, `POST reservations/{id}/deposit/payments`, `POST deposits/{id}/waive\|refund`, `GET properties/{id}/folios?status=open&q=<confirmation>` then `POST reservations/{id}/deposit/apply {folio_id, amount?}` |
 | New reservation | `GET availability?property_id=&arrival=&departure=&adults=&children=&rooms=&source_id=&promo_code=`, `POST properties/{id}/reservations` |
-| Guests | `GET guests?q=&org=`, `POST guests/check`, `POST guests` (`client_id`, or the details with `force`), `GET guests/{id}`, `GET guests/{id}/reservations`, `POST guests/{id}/documents` (multipart), `POST guests/{id}/identity` (a scanned ID, confirmed) |
+| Guests | `GET guests?q=&org=`, `POST guests/check`, `POST guests` (`client_id`, or the details with `force`), `GET guests/{id}`, `GET guests/{id}/reservations`, `POST guests/{id}/documents` (multipart), `GET guest-documents/{id}` (the file, fetched by the main process's download manager through `pms:download`), `DELETE guest-documents/{id}`, `POST guests/{id}/merge {from_guest_id, reason}`, `POST guests/{id}/identity` (a scanned ID, confirmed) |
 | Check-in | `GET reservations/{id}/check-in`, `POST reservations/{id}/check-in {rooms, id_verified, guarantee_verified, override_reason, early_checkin, posting_allowed, keys, version}`, `POST stays/{id}/registration-card {document_id}` |
 | Walk-in | `GET availability` (tonight), `POST properties/{id}/walk-ins {…, payment?}` |
 | A stay | `GET stays/{id}`, `POST stays/{id}` (charges allowed, credit limit), `POST stays/{id}/move`, `POST stays/{id}/departure`, `POST stays/{id}/keys`, `POST stays/{id}/folios`, `POST stays/{id}/routing`, `DELETE routing-rules/{id}`, `POST stays/{id}/charges` |
@@ -293,12 +293,25 @@ a fault).
 | Check-out | `GET reservations/{id}/check-out`, `POST reservations/{id}/check-out {rooms, early, late_checkout, apply_deposit, transfer_ar}` |
 | Cashier | `GET properties/{id}/cashier-sessions`, `POST properties/{id}/cashier-sessions`, `GET cashier-sessions/{id}`, `POST cashier-sessions/{id}/close\|reconcile` |
 | Night audit | `GET properties/{id}/night-audit`, `POST properties/{id}/night-audit/check\|run`, `GET night-audits/{id}`, `POST night-audit-blockers/{id}/override` |
-| Housekeeping, rooms | `GET properties/{id}/housekeeping/tasks`, `GET rooms/{id}`, `GET rooms/{id}/history`, `POST outages/{id}/release` |
-| Requests, dashboard | `GET properties/{id}/requests?open=1`, `POST properties/{id}/requests`, `GET guest-requests/{id}`, `POST guest-requests/{id}/{action}`, `GET properties/{id}/dashboard` |
+| Housekeeping, rooms | `GET properties/{id}/housekeeping/tasks`, `POST properties/{id}/housekeeping/tasks` (idempotent), `POST properties/{id}/housekeeping/generate`, `GET properties/{id}/housekeeping/staff`, `GET housekeeping-tasks/{id}`, `POST housekeeping-tasks/{id}/{action}\|assign\|checklist`, `POST housekeeping-tasks/{id}/photos` (multipart, 10 MB, 12 a task; `GET …/photos/{file}` shown), `GET rooms/{id}`, `GET rooms/{id}/history`, `POST rooms/{id}/housekeeping {to, version, reason?}`, `POST outages/{id}/release` |
+| Restocks | `POST housekeeping-tasks/{id}/restocks`, `POST rooms/{id}/restocks` (`{items: [{product_id, quantity, kind, chargeable}]}`, idempotent); products from Inventory's `GET /api/inventory/products/lookup?q=&org_id=` |
+| Maintenance | `GET properties/{id}/maintenance?open=&category=`, `GET properties/{id}/maintenance/my`, `GET rooms/{id}/maintenance`, `POST properties/{id}/maintenance` (idempotent, `assigned_to?`, `out_of_order?`), `GET maintenance-issues/{id}`, `POST maintenance-issues/{id}/{action}`, `…/out-of-order`, `…/back-in-service`, `…/parts` (idempotent), `…/photos` (multipart) |
+| Lost and found | `GET properties/{id}/lost-found?open=&due=&q=`, `POST properties/{id}/lost-found` (idempotent), `GET lost-found/{id}`, `POST lost-found/{id}/{store\|claim\|return\|dispose}`, `POST lost-found/{id}/photo` (multipart) |
+| Requests, dashboard | `GET properties/{id}/requests?open=1`, `POST properties/{id}/requests`, `GET guest-requests/{id}`, `POST guest-requests/{id}/{action}` (`assign {assigned_to}` from the company directory, `GET /api/chat/directory`), `GET properties/{id}/dashboard` |
+| Tape chart | `GET properties/{id}/calendar?from=&days=7\|14\|30`, `POST calendar/preview`, `POST calendar/move {…, version, reason?}` |
+| Invoices | `GET properties/{id}/folios?status=settled\|transferred_ar\|closed`, `POST folios/{id}/invoice`, `GET properties/{id}/outbox?status=`, `POST outbox/{id}/retry` |
+| KPIs, reports | `GET properties/{id}/kpis?from=&to=`, `GET properties/{id}/reports`, `GET properties/{id}/reports/{key}?from=&to=&room_type_id=&source_id=&rate_plan_id=`, the export `…&format=csv\|xlsx\|pdf` fetched by the main process (`pms:download`), `GET properties/{id}/room-types`, `GET properties/{id}/rate-plans` |
 
 **Printed pages** (registration cards, receipts, invoices, statements, shift and night-audit reports) are laid out on
 the desktop from the server's answers (`registration-card`, `folios/{id}/document`, the shift, the audit's `report`) and
 printed through the OS dialog; the server renders none.
+
+**Files saved on this computer.** A guest's document and a report's export go through `pms:download`
+(`shared/pms-files.ts`): the page names the file (`guest-document {document}` or `report {property, report, format,
+query}`), the main process builds the `/api/pms/v1` address, refuses without `desktop.downloads` (the channel's
+permission, and again in the handler, so the organization's policy and the device's trust decide in the main process,
+not only the screen) and hands it to the download manager, which fetches it signed in into the downloads folder and
+writes `file.download {kind: pms-document|pms-report}` to the audit log. No bytes cross IPC.
 
 **Offline.** READ_CACHE covers `options`, `properties`, and per property `rack`, `arrivals`, `departures`, `in-house`,
 `business-date` and `front-desk/lists` (`shared/pms-cache.ts`). Nothing is queued: every write needs the server
@@ -324,7 +337,22 @@ What the desktop cannot do because the server does not:
   with `pms.folio.post` alone types the code.
 - **A stay's move takes the reservation's `version`**, which the stay does not carry: the desktop sends none (the
   server's claim still guards it).
-- **No staff list for guest requests**: the desktop takes and moves requests but does not assign them to a person.
+- **No staff list for guest requests or maintenance.** Only housekeeping has one (`housekeeping/staff`);
+  `properties/{id}/staff` needs `pms.settings.manage`. The desktop offers the company directory
+  (`/api/chat/directory`) and the server refuses anyone without `pms.guest_request.manage` / `pms.maintenance.manage` at
+  the property, in its own words. A `GET properties/{id}/requests/staff` and `…/maintenance/staff` (who may take it,
+  with their open work) would let the picker offer only those.
+- **An `assign` move says it needs nobody.** `GuestRequestMachine` and `MaintenanceMachine` guard `assignee` but list
+  `needs: []`, and a lost item's `claim` guards `claimant` the same way; the desktop knows to ask for a person or a
+  claimant. The options' labels are the target state's ("Assigned", "Cancelled"), not the verb.
+- **No PMS product lookup.** Restocks and parts name Inventory products; `/api/pms/v1` has no product list (the mobile
+  gateway has `pms/properties/{id}/products`), so the desktop uses Inventory's own lookup, which needs Inventory
+  (`inventory.view`). An attendant without Inventory cannot record a restock from the desktop.
+- **Folios cannot be listed by reservation.** Applying a deposit asks `properties/{id}/folios?q=<confirmation>` and
+  keeps the reservation's own; a `reservation_id` filter would say it exactly.
+- **The billing outbox is `pms.settings.manage`'s only**; finance staff who follow Billing hand-offs cannot see it.
+- **A new housekeeping task names a room from the rack**; a supervisor without any rack permission has no room list to
+  choose from (`properties/{id}/rooms` is the back office's).
 - **Check-out needs `pms.folio.view`** besides `pms.checkout` (`StaysController::checkOutScreen`).
 - On a `/desktop/v1` server, `links/resolve` does not know `worksuite://pms/…` (`Desktop/Libraries/LinkGrammar`,
   `Links::APP_OF`): those links open without the server's record check (the tab's own requests are still checked).
@@ -425,6 +453,115 @@ What the desktop cannot do because the server does not:
 - **Session doors, the counters, recent scans and review are online only**: the server has no offline copy for them.
 - On a `/desktop/v1` server, `links/resolve` does not know `worksuite://events/…` (`Desktop/Libraries/LinkGrammar`,
   `Links::APP_OF`): those links open without the server's record check (the tab's own requests are still checked).
+
+### POS — the till
+
+The POS tab makes this computer a till of WorkSuite's POS (`app/Modules/Pos`, its `README.md`). It uses the staff API
+(`/api/pos`, the signed-in person's session, the same one the web's POS pages use — `pos.access` and the per-verb
+permissions) for the drawer, what the till sells and the cart's price, and the till's own door (`/api/pos/device/*`,
+the till's `wsp_` credential from `Pos\Libraries\DeviceAuth`, no session) for its sales, the catalogue in the
+background, and refunds, voids, receipts and e-mail of its own sales. The mobile POS API (`/api/mobile/v1/pos/*`) is
+not reachable: its `mobile` filter takes only mobile access tokens (`aud=mobile`), so a desktop token is refused there.
+
+| Need | Calls |
+|---|---|
+| Pairing (main process) | `GET api/pos/setup` → `{terminals: [{id, code, name, org_id, org_name, branch_name, warehouse_id, warehouse_name, in_use, device_name}]}`; `POST api/pos/terminals/{id}/pair {device_name, device_info, app_version, take_over}` → `{token, expires_at, terminal}` (409 `in_use` without `take_over`) |
+| The till's door (main process, till credential) | `POST api/pos/device/heartbeat {app_version, pending_count}` every minute → `{terminal, server_time}`; `POST api/pos/device/sales {sales: [...]}`, at most 25 → `{results: [{ref, status: created\|duplicate\|rejected, number, message, total?, review?}]}`; 401 `reauth` → pair again, 503 → POS off, wait |
+| Shell and shift | `GET api/pos/options` (`capabilities`; per company `can` — incl. `refund`, `void`, `discount`, `discount_override`, `max_discount_pct` — and `rules {count_to_close, blind_close, variance_tolerance}`), `GET api/pos/registers`, `GET api/pos/sessions/{id}`, `POST api/pos/sessions {register_id, opening_float, denominations?, note?}`, `POST api/pos/sessions/{id}/cash {direction, amount, reason, reference?}`, `POST api/pos/sessions/{id}/close {denominations? \| counted_cash, variance_reason?}` — READ_CACHE keeps `options`, `registers`, `sessions` and `setup` |
+| Catalogue | In the background (main process, till credential, every 30 min, nobody need be signed in): `GET api/pos/device/catalogue?since_version=`; on request (the person's session): `GET api/pos/catalogue?org=&since_version=` — `{version, unchanged: true}` when current. Only where `capabilities.catalogue` is false or the call answers 404 (an older server): Inventory's `GET api/inventory/products?page=&per_page=100&include_variants=1` (needs `inventory.view`) |
+| The cart's price | `POST api/pos/price {org_id, lines: [{product_id, quantity}], discount_pct}` (`pos.sale.create`, the discount the person's to give) where `capabilities.price`; on an older server `GET api/inventory/price?product_id=&qty=&kind=sell` per line; otherwise the catalogue's preview (marked provisional) |
+| A code not in the catalogue | `GET api/pos/products/lookup?org=&code=` where `capabilities.lookup`; on an older server `GET api/inventory/products/lookup?q=` (exact match) |
+| Refund, void (main process, till credential) | `POST api/pos/device/sales/{ref}/refund {ref: <receipt>-R<n>, cashier_id, reason, lines?: [{product_id, quantity}], restock?}`, `POST …/void {ref: <receipt>-V, cashier_id, reason}` → `{refund: {ref, kind, amount, cash_out, tenders, lines, credit_note, …}, sale}` (201; 200 when the same `ref` was had) — where `capabilities.refund` / `.void` and `can.refund` / `.void` |
+| Receipt, e-mail (main process, till credential) | `GET api/pos/device/sales/{ref}/receipt` → `{receipt}` (`Receipt::data`) for a reprint, where `capabilities.receipt`; `POST api/pos/device/sales/{ref}/email {email?}` where `capabilities.email_receipt` |
+
+**A sale as the till sends it** (`electron/services/pos-outbox.ts: saleBody`): `ref` (the receipt number,
+`<TILL CODE>-<6 hex per pairing>-<000001>`), `date`, `currency`, `paid: true`, `customer {name?, phone?, email?}`,
+`lines [{description, sku, product_id, quantity, unit_price, discount_pct, tax_rate, net, tax, total}]`, `subtotal`,
+`discount`, `tax`, `total`, `cashier_id`, `note`, `session_id`, `register_id`, `tenders [{method, amount, reference?}]`,
+`change_given`, `offline` (priced from the catalogue, WorkSuite out of reach), `expected_total`, `catalogue_version`.
+WorkSuite prices it again from `product_id` and records it in the named session's drawer; a total that differs is
+answered as `total` with a `review` note, kept on the sale and shown in Sales. A sale refused while the cashier waits is
+removed from the till (nothing was sold); one refused later stays with the reason, to send again or drop.
+
+What the desktop asked of the server, now there (`claude/sweet-hamilton-46vqu8`):
+
+- ~~Capabilities in `GET api/pos/options`~~ — done: `capabilities {catalogue, price, lookup, device_catalogue, sales,
+  receipt, email, email_receipt, refund, void, settle, reprice, discount_rights, review, customer_display}`.
+- ~~Catalogue, price and lookup on the staff API and the device door~~ — done; a cashier needs no Inventory
+  permission.
+- ~~Device sales that are real sales~~ — done: priced again, into the session's drawer, stock, payment and Finance;
+  `expected_total` / `review`.
+- ~~Refund, void, e-mail~~ — done, on the staff API (by order id) and the device door (by receipt number, the cashier
+  named); the till uses the door for its own sales.
+- ~~Receipt data~~ — done: `sales/{id}/receipt`, `device/sales/{ref}/receipt` (JSON, or `?format=html&paper=`).
+- ~~Discount rights~~ — done: `can.discount`, `can.discount_override`, `can.max_discount_pct` (null no ceiling, 0 none).
+  The super-administrator-only stand-in is gone: a server that does not say offers no discount.
+- ~~Close rules~~ — done: `rules {count_to_close, blind_close, variance_tolerance}`.
+
+Still open:
+
+- On a `/desktop/v1` server, `links/resolve` does not know `worksuite://pos` or `worksuite://pos/sales/{ref}`.
+- The till's history is its own record (90 days); `GET api/pos/sales` (other tills', the review queue) is not shown yet.
+
+### Restaurant Manager — till, kitchen screen, print agent
+
+The Restaurant tab uses the server's Restaurant API, `/api/restaurant/v1` (`app/Modules/Restaurant`, stages A, B1 and
+B2 — the contract the module's README and `web-api-b1.md` / `web-api-b2.md` describe), the same one the web back
+office uses. Every route is behind `restaurant.access` (and the person needs the `restaurant` application); each verb
+checks its own permission in the company, and a record outside the person's data scope answers 404. `GET options?org=`
+→ `can` carries the person's `restaurant.*` in that company as `order_create`, `kitchen_manage`…, which the rail and the
+buttons follow. Every call names the company (`?org=`) the terminal was paired in. A refusal's `errors.code` says what
+to offer (`version_conflict` → refresh, `approval_required` / `approval_needed` with `errors.approval` → ask for the
+approval, `key_reused`, `in_progress`, `terminal`).
+
+This computer is one of the branch's **terminals**: the key `POST terminals/{id}/pair` hands over is kept by the main
+process and sent as `X-Terminal-Key` on every Restaurant call (the API proxy adds it to the screens' calls), so the
+server knows which till sent an order, which station a kitchen screen is and which printers this computer hosts.
+
+| Screen | Calls |
+|---|---|
+| Pairing (main process) | `GET structure?org=&branch_id=` (the terminal read back), `POST terminals/{id}/pair` → `device_key` (`rt_` + 48 hex), once; `POST terminals/{id}/revoke` on unpair when asked |
+| The shell | `GET options?org=`, `GET pos?branch_id=` (the terminal, business date, the person's cashier session, the till's policy: tenders, `offline_actions`) |
+| Floor | `GET floor?branch_id=`; `POST floor/tables/{id}/seat\|open\|free\|request-bill {…, version}`; `POST floor/sessions/{id}/move\|merge\|split {…, versions}`; `POST tables/{id}/clean\|unblock {version}` |
+| Order | `GET menu/branch/{branch}?channel=` (a combo's `combo.components`); `POST orders {branch_id, order_type, uuid, lines, send}` (a combo line carries `combo: [{component_id, item_id, variant_id?}]` for its choice components); `GET orders/{id}`; `POST orders/{id}/items {lines, send, version}`; `POST orders/{id}/send\|fire\|hold\|serve\|print-kot`; `POST orders/{id}/items/{line}/void {reason, qty, version, approval_id?}` |
+| Discounts, comps, price overrides | `POST adjustments/discount {order_id, order_item_id?, pct\|amount, reason, terminal_id, approval_id?}` (`restaurant.discount.apply`), `POST adjustments/comp {order_item_id, reason, approval_id?}` (`restaurant.comp`), `POST adjustments/price {order_item_id, unit_price, reason, approval_id?}` (`restaurant.price.override`); above the limit 403 `approval_needed` with `approval` → ask, then the same again with `approval_id`; `GET adjustments?order_id=` (for `payment.process`, `report.view` or `cashier.close`), `POST adjustments/{id}/remove {reason}` before anything is paid |
+| Approvals | `POST approvals {branch_id, action, amount, pct, reason, subject_type, subject_id, order_id, terminal_id}`; `GET approvals/{id}` (every 3 s); `POST approvals/{id}/approve {pin}` (the approver's PIN at the till); `GET approvals`, `POST approvals/{id}/approve\|reject` |
+| Bill | `GET bills/preview?order_id=`; `POST bills {order_id, mode: single\|seat\|item\|equal\|amount, count, amounts, parts}`; `POST bills/{id}/present\|void`; `POST bills/{id}/print` (`queued: false` → the returned `document.text` printed here); `POST bills/{id}/payments {tenders, terminal_id, version}` + `Idempotency-Key` (kept for every retry of one attempt) → `change_given`, `open_drawer`; `GET payments?order_id=`, `POST payments/{id}/refund {amount, reason, method, terminal_id, approval_id?}` + `Idempotency-Key` (kept until answered; `restaurant.refund`) → `open_drawer`; `POST bills/{id}/invoice {client_id?}` (a whole-order bill; the customer from `GET customers?q=`) |
+| Host stand | `GET reservations?branch_id=&date=`, `GET reservations/timeline?branch_id=&date=`, `GET reservations/availability?branch_id=&date=&time=&guests=` (free tables, or `suggestions`), `POST reservations {branch_id, date, time, guests, name, phone, occasion, special_requests, table_id?, source: phone, uuid}`, `POST reservations/{id}/confirm\|arrive\|seat\|cancel\|no_show {version, table_id, guests, table_version, reason}` as the booking's `choices` offer them (`reservation.view` / `reservation.manage`) |
+| Cashier | `GET cashier-sessions/mine`, `GET cashier-sessions/{id}` (X / Z report), `POST cashier-sessions {branch_id, terminal_id, pos_register_id, opening_float}`, `POST …/{id}/cash {direction, amount, reason, approval_id?}`, `POST …/{id}/no-sale {reason}`, `POST …/{id}/start_close`, `POST …/{id}/close {counted_cash, reason, approval_id?}` |
+| Kitchen | `GET kitchen?branch_id=&station_id=` (the terminal's station by default), `GET kitchen/expo?branch_id=`, `POST kitchen/tickets/{id}/accept\|start\|bump\|recall\|serve\|print {version}`, `POST kitchen/tickets/{id}/items/{item}/done\|undo {version}` |
+| Live | `restaurant.live {seq, branch_id, entity, id, version, kind}` on the realtime socket (`Live::emit` → the gateway, fanned out as `realtime:event`): the screens refresh what the entity touches at once; behind it `GET live?branch_id=&after=&limit=` every 3–10 s while a screen shows (every 30 s while the socket is connected), from the heartbeat's `last_seq`; `reload` → everything refreshed |
+| Print agent (main process) | `POST print-jobs/claim {printer_ids, limit}` every 4 s for the printers mapped here, `POST print-jobs/{id}/printed\|failed {error}`; screens: `GET print-jobs?branch_id=`, `POST print-jobs/{id}/reprint` |
+| Offline (main process) | `POST sync {branch_id, ops: [{op: create_order\|add_items\|send, client_ref, data}]}` + `Idempotency-Key` per batch; `POST sync/heartbeat {queue_size, app_version, online, last_sync_at, printers}` every 30 s; the copy: `GET pos`, `GET floor`, `GET menu/branch/{id}` (every 5 min) |
+| Conflicts | `GET sync/conflicts?branch_id=&status=open`, `POST sync/conflicts/{id}/resolve {action: attach\|dismiss, table_id, guests, note}` (for `restaurant.order.cancel`) |
+
+What the desktop cannot do because the server does not:
+
+- **No offline payment by order.** The server's `sync` answers `cash_payment` with `elsewhere` ("play it back to the
+  payments route"), but a payment needs a bill id, and an order made offline has none until it is billed online. The
+  till therefore queues orders, lines and sends only; money waits for WorkSuite. An op that bills and pays an order
+  by its uuid (or `POST bills` accepting `order_uuid`) would let a cash takeaway be settled offline.
+- **The offline queue runs as the person, not the terminal.** `POST sync` needs `restaurant.order.create` and records
+  the signed-in person, so each person's queue waits for them (a shift change leaves it until they sign in again).
+- **A terminal cannot ask who it is.** There is no `GET terminals/me` by key: pairing reads the terminal from
+  `structure` first, and a station or mode changed later in the back office is seen only when paired again.
+  Re-pairing a terminal rotates its key and silently stops the computer that had it.
+- **A kitchen screen's cook needs `pos.access` for `GET pos`** (it is `pos.access` or `order.create`); without it the
+  till's context (business date, cashier session) is simply not shown there.
+- **Kitchen tickets are plain text.** The print job carries `text` (32 columns) and the fields; the agent prints the
+  text. §13.2's large type needs either an ESC/POS rendering from the server or the agent laying out the fields
+  (a later step). A 58 mm roll is sent the same 32 columns.
+- **Heartbeat printer states** are `online`, `offline`, `error`, `paper_out`; the agent reports `online` or `error`
+  (it cannot tell paper out from other failures through the OS spooler).
+- **A push does not say what the screen needs.** `restaurant.live` names the entity and id only, so the screen reads
+  the record again; the push's `payload` is empty for most entities.
+- **A tax invoice needs a CRM customer.** `bills/{id}/invoice` refuses without `client_id` unless the order has one;
+  the till looks the customer up (`GET customers?q=`) — adding a new one stays with `POST customers`
+  (`restaurant.customer.manage`), which the till does not offer yet.
+- **Combo components with modifiers.** A choice component's pick may carry `modifiers`; the till sends the pick
+  only, so a component whose item has a required modifier group is refused by the server in its own words.
+- **Refunds go back to the tender they came from.** Another method needs a manager on the server; the till always
+  sends the payment's own `method`.
 
 ## The existing API (servers without `/desktop/v1`)
 

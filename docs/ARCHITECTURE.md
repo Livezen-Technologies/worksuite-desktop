@@ -269,7 +269,9 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   never by a path: `transfers:download` takes a typed variant (Garage's
   `garageDoc` — a check-in sheet, an estimate, a work order sheet, a delivery
   note or a report's CSV, `shared/garage-docs.ts`), and the main process
-  builds the address it fetches.
+  builds the address it fetches. Hotel PMS has a channel of its own,
+  `pms:download` (`shared/pms-files.ts`), with the same shape and the
+  `desktop.downloads` check repeated in its handler.
 - READ_CACHE is declared in a module's manifest and served by the main
   process for the prefixes in `CACHE_PREFIXES` (`electron/main/index.ts`),
   per module, so an app taken away takes its saved answers with it.
@@ -301,7 +303,18 @@ Vault-sealed, so the database file alone gives nothing to guess against.
 - Hotel PMS (`modules/pms`) is a shell with a rail (`PmsShell.tsx`) and a
   property selector; its screens are lazy chunks — the rack, the desk's
   lists, reservations, check-in and check-out, the stay with its folios, the
-  cashier and the night audit. Addresses are read in one place
+  cashier and the night audit, the operations (housekeeping tasks, rooms,
+  restocks, maintenance, lost and found, guest requests), the tape chart,
+  invoices and the reports. The operations share `ops.tsx`: a record's moves
+  as the server offers them (`options`), each asking what it `needs` and sent
+  with the record's `version`, and a people picker over the company
+  directory. A file from the server (a report's export, a guest's document)
+  leaves through its own channel, `pms:download` (`shared/pms-files.ts`): the
+  page names it by what it is, the main process builds the address, checks
+  `desktop.downloads` itself (`electron/services/pms-download.ts`) and hands
+  it to the download manager, which fetches, saves and audits it — no bytes
+  over IPC. Photos (housekeeping tasks, maintenance issues, lost items) go up
+  as multipart through the API proxy. Addresses are read in one place
   (`routes.ts`), so a deep link, a notification's link and a window's route
   open the same screen. Offline it reads the rack and lists from READ_CACHE
   (per property: `shared/pms-cache.ts`, matched by pattern in
@@ -338,6 +351,63 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   events and their gates (`eventsCached`, matched in `electron/main/index.ts`)
   so a desk opened offline still knows what the person may do; someone who
   loses the Events app loses their copies, and the desk does nothing for them.
+- POS (`modules/pos`, `electron/services/pos-*.ts`, `shared/pos.ts`): this computer as a paired till. The main
+  process holds the till: `pos-desk.ts` pairs it (`POST api/pos/terminals/{id}/pair`, the `wsp_` credential into the
+  OS keystore) and calls the till's own door with that credential (`/api/pos/device/heartbeat` every minute,
+  `/api/pos/device/sales`, and — `PosDesk.door` — the catalogue, a sale's receipt, refund, void and e-mail);
+  `pos-till.ts` keeps the catalogue copy (POS's own: through the door every half hour with nobody signed in, on the
+  staff API when a person refreshes it; Inventory's product list only on an older server; sealed in `pos_catalogue`), numbers each sale (a prefix per pairing and a
+  counter that only goes up, `pos_counters`), seals it into `pos_sales` before the cashier is answered and sends
+  the waiting ones in order, 25 a request, keyed by the receipt number so a resend is the same sale
+  (`pos-outbox.ts`: created and already-had are done, refused keep WorkSuite's reason, 401 stops for a new pairing,
+  503 waits); `pos-print.ts` prints receipts, X and Z reports as ESC/POS bytes raw to the receipt printer (or a page
+  through its driver, silently) and pulses the drawer; `pos-display.ts` opens the customer display on a second
+  monitor. All of it is one `createPos()` (`pos-ipc.ts`) registered on the router, its `pos:*` channels spread into
+  the allow-list from `shared/ipc/pos-channels.ts`. The loop runs from start-up, whoever is signed in. The renderer
+  is a shell with a rail (`PosShell.tsx`): the register (`Register.tsx` — the catalogue grid, search, a keyboard-wedge
+  scanner anywhere (`barcode.ts`), the cart (`cart.ts`) priced by WorkSuite when it answers and previewed from the
+  catalogue meanwhile (`pricing.ts`, the mobile till's arithmetic), the customer), the tender (`Tender.tsx`: cash,
+  card, transfer, wallet, split, change; offline only cash and card), the shift over the staff API (`Shift.tsx`:
+  open with a float or a count, cash in and out, close on a count, blind where the company says so, X and Z reports),
+  the till's sales with their sync state, WorkSuite's total and `review` flag, receipt, reprint (WorkSuite's receipt
+  where it has one, `serverReceiptRows`), e-mail and — where the server announces them and the person may — refund
+  (everything left or some lines) and void (in the sale's own open shift), sent by the main process through the
+  till's door with the cashier named and the till's own number for it (`<receipt>-R<n>`, `-V`), WorkSuite's answer
+  kept on the sale (`Sales.tsx`, `returns.ts`, `pos-till.ts: giveBack`), Printers and This till. Discounts follow
+  `options` `can.discount` / `max_discount_pct` / `discount_override` (`discountRights`); the close follows the
+  company's `rules` (note by note, blind, the variance tolerance). The customer display (`/pos/display`, `CustomerDisplay.tsx`) is a window of
+  the shell on the second monitor; the register tells it what to show over a same-origin `BroadcastChannel`.
+  Offline the drawer's screens read the last `/api/pos/options`, `registers` and `sessions` from READ_CACHE and wait
+  for WorkSuite to open, move cash or close; selling goes on.
+- Restaurant Manager (`modules/restaurant`, main process `electron/services/restaurant/`, rules in
+  `shared/restaurant.ts`): this computer as one of a branch's **terminals** — a till, a kitchen screen, the pass or a
+  printer host. `terminal.ts` pairs it (`POST terminals/{id}/pair`, after reading the terminal back from the
+  server's structure) and keeps the key in the OS credential store; the API proxy adds it as `X-Terminal-Key` to the
+  screens' Restaurant calls and refuses them pairing, `sync`, the heartbeat and the print agent's claim and answer.
+  `sync.ts` keeps, per server, terminal and person, a sealed copy of what the till opens with (`pos`, the branch
+  menu, the floor) and the ordered outbox (`outbox.ts`: `create_order`, `add_items`, `send` with the device's uuid,
+  `client_ref` and line ids, played back through `POST sync` with an idempotency key per batch; conflicts stay
+  marked for a manager, refusals wait for a person); every 30 s it sends the outbox, the heartbeat (queue, version,
+  the printers' state) and refreshes the copy. Its tables are made by the service (`CREATE TABLE IF NOT EXISTS`),
+  not a numbered migration. `print-agent.ts` claims the server's print jobs for the printers mapped on this
+  computer every 4 s and prints the job's text raw (ESC/POS through CUPS or the Windows spooler, as SalonMate's
+  drawer pulse) or as a page through the OS driver (SalonMate's scriptless hidden window), then answers printed or
+  failed; it also prints a bill no print route took, test slips, and opens the drawer. `index.ts` makes the three
+  and registers the `restaurant:*` channels. The renderer is a shell with a rail (`RestaurantShell.tsx`, addresses in
+  `routes.ts`, strings in its own `i18n.ts`) whose screens are lazy chunks: the floor (`Floor.tsx` — tables by area
+  in their state; seat, open, free, move, merge, split), the order (`Order.tsx` — the menu grid, an item's variant,
+  modifiers, a combo's components, note, seat and course; send, fire and hold by course, serve, void with a reason
+  and an approval; discounts, comps and price overrides in `Adjust.tsx`), the bill (`Bill.tsx` — the server's quote,
+  single or split bills, present, print, payment with several tenders and the server's change, the order's payments
+  with refunds, a tax invoice), the host stand (`Reservations.tsx` — the day's bookings with the server's moves, the
+  tables' timeline, availability and booking), the cashier session, the kitchen and the pass (`Kitchen.tsx`),
+  approvals, printers and what was kept offline (`Outbox.tsx`, with the branch's conflicts for a manager). Anything
+  above a person's limit — a void, a discount, a comp, a price, a refund — is answered `approval_needed`; `Approval`
+  asks, takes a manager's PIN here or their answer elsewhere, and the same request goes again with `approval_id`.
+  Screens stay current from the gateway's `restaurant.live` pushes (the main process fans the realtime socket out as
+  `realtime:event`; `parts.tsx: useLive` refreshes what each entity touches) with `live?after=` behind them as the
+  catch-up — every few seconds without the socket, every 30 s with it; offline they read the copy and keep new orders
+  and lines in the outbox, and everything with money, a void, a booking or a table move is disabled.
 - Tabs stay mounted while recent (instant switching) and are suspended after
   the configured idle time; the tab set is saved and restored only for apps
   the user can still open.

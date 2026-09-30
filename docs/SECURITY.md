@@ -250,6 +250,9 @@ Being controlled is the main process's business, never a page's:
   so it is allowed where other applications are not); anything else goes to the OS only with
   `desktop.files.open_external`. Chat attachments are fetched by their signed `/media/{token}`, task attachments
   by a `/d/{token}` grant the server mints for 15 minutes; the renderer names only the token or the ids.
+  Hotel PMS files (a guest's document, a report's export) go through `pms:download`: the page names the document
+  or the report, the main process builds the `/api/pms/v1` address and checks `desktop.downloads` in the handler
+  as well as on the channel, so the organization's policy and the device's trust are enforced outside the page.
 - **Logs and reports** (PDF-NFR-030/031, PDF-AUD-002): a failure is logged with the file's format, size, page
   count, the engine's error and the app version; opening and printing are audited with the file's id, version and
   page count. Never a name, a path, text or a password.
@@ -298,6 +301,59 @@ of its own:
 - **Badges** print from the server's own badge page, fetched by the main
   process (a page cannot hand it something else to print without a dialog),
   in a hidden window with no preload, no script and no network.
+
+## POS till
+
+A computer paired as a POS till holds a credential of its own (`Pos\Libraries\DeviceAuth`):
+
+- **The till credential** — `wsp_<till>_<64 hex>`, handed over once when somebody with `pos.access` pairs the
+  computer (`POST api/pos/terminals/{id}/pair`, made by the main process in `pos-desk.ts`). It is kept in the OS
+  credential store (`pos-till:<server>`), never in the database, and is sent only by the main process, only as the
+  bearer of the till's door — `/api/pos/device/heartbeat`, `sales`, `catalogue`, `products/lookup`, `price` and
+  `sales/{ref}/receipt|refund|void|email`, an allow-list checked in `PosDesk.door` (the person's access token is not
+  sent there, and the credential is sent nowhere else). No renderer, IPC answer, log, audit entry or diagnostic bundle carries it;
+  `pos:till` answers which till this is, never the secret. The API proxy refuses the pairing and the whole device door
+  to pages (`api-proxy.ts`). The server stores only its sha256 and lets it lapse after 90 idle days.
+- **Refusal** — a 401 from the device door (revoked, lapsed, paired again on another device) drops the credential at
+  once; the till keeps which till it was and its unsent sales, and sells no more until it is paired again. Pairing
+  another till is refused while sales from this one wait (they would be stranded).
+- **The till is the computer's, not a person's.** A plain sign-out keeps the credential, the catalogue copy and the
+  sales (they keep going to WorkSuite with nobody signed in); every sale names its cashier, whom WorkSuite checks
+  when it arrives (`DeviceController::cashierMay`). A refund or void through the door names the signed-in cashier
+  (none without a sign-in), whom WorkSuite asks for `pos.sale.refund` / `pos.sale.void` then; the screens offer them
+  only where `options` says the person may, online only. Cashiers change by signing out and in; "Lock the till" is the app
+  lock (password or PIN). A remote wipe, or signing out with "remove WorkSuite's data", removes the credential, the
+  catalogue, every sale (sent or not), the receipt counters and the printer settings.
+- **At rest** — the catalogue (`pos_catalogue`) and each sale (`pos_sales`: lines, customer, tenders) are AES-256-GCM
+  under the database key; only the receipt number, state, session and times are in the clear, for ordering. The
+  catalogue is written to disk only where the desktop policy allows data offline (in memory otherwise); a sale is
+  always kept once money was taken, and while WorkSuite is known to be out of reach a till whose policy forbids
+  queued changes does not sell.
+- **Receipts** go raw (ESC/POS) to the named printer through `lp -o raw` or the Windows spooler — the printer's name
+  never on a command line a shell reads — or as a page with every value escaped, printed from a hidden window with no
+  preload, no script and no network (`pos-print.ts`, `salon-print.ts`). Text is reduced to printable ASCII first, so
+  nothing on a receipt can be read by the printer as a command.
+- **The customer display** is an ordinary sandboxed window of the shell; it reads only what the register posts on a
+  same-origin `BroadcastChannel` (lines, totals, change) — no cashier, customer or drawer figures.
+
+## Restaurant terminal (Restaurant SRS RM-PLT-003, RM-COM-003, §4.3–4.4)
+
+- **The terminal key** (`rt_` + 48 hex) is handed over once, to a person with `restaurant.device.manage`, by
+  `POST terminals/{id}/pair`. The main process makes the call (after reading the terminal back from the server's
+  structure) and keeps the key in the OS credential store (`restaurant-terminal:<server>`); no renderer, IPC answer,
+  log or diagnostic bundle carries it. The API proxy adds it as `X-Terminal-Key` to Restaurant API calls only, and
+  refuses pages pairing, `sync`, `sync/heartbeat`, `print-jobs/claim` and `print-jobs/{id}/printed|failed`
+  (`shared/restaurant.ts: RESTAURANT_MAIN_ONLY`).
+- **The copy and the outbox** (`restaurant_copy`, `restaurant_outbox`) are AES-256-GCM in the profile database, per
+  server, terminal and person; the copy only where the desktop policy lets the computer keep data offline, the
+  outbox only on a computer trusted to queue changes, and only for ops the branch allows offline. A plain sign-out
+  removes the person's copy and keeps their unsent orders; unpairing drops the terminal's copy and outbox (and,
+  when asked, revokes the key on the server); a remote wipe or "remove WorkSuite's data" removes the key, copy,
+  outbox and printer mapping.
+- **Printing** is the server's own text for a job this terminal claimed with its key, sent raw to the mapped printer
+  (the printer's name passed as an argument or in the environment, never through a shell) or laid out in a hidden
+  window with no preload, no script and no network. A page can ask for a test slip, the drawer, or a document the
+  server returned (`restaurant:printText`, printable text only), never a path or a printer the settings do not name.
 
 ## Updates (FR-UPD-01, WF-25)
 

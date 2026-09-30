@@ -14,6 +14,7 @@
  */
 import { z } from 'zod';
 import { garageDocSchema } from '../garage-docs';
+import { pmsDownloadInput } from '../pms-files';
 import { ELEARNING_MEDIA_TOKEN, elearningCourseRef, elearningDownloadInput, type OfflineCourse, type OfflineValidation } from '../elearning-offline';
 import {
   deskEventRef,
@@ -34,7 +35,24 @@ import {
   type DeskStatus,
 } from '../event-desk';
 import { localRequestSchema, type LocalAIStatus, type LocalModelView } from '../local-ai';
+import {
+  restaurantOutboxAction,
+  restaurantOutboxAdd,
+  restaurantPairInput,
+  restaurantPrintPatch,
+  restaurantPrintTest,
+  restaurantPrintText,
+  restaurantUnpairInput,
+  type RestaurantCopy,
+  type RestaurantOutboxItem,
+  type RestaurantPairing,
+  type RestaurantPrintJobLog,
+  type RestaurantPrintOutcome,
+  type RestaurantPrintSettings,
+  type RestaurantStatus,
+} from '../restaurant';
 import { MAX_OFFICE_LOCAL_BYTES, OFFICE_EDITOR_EVENTS, OFFICE_EXPORT_TOKEN, officeCommandSchema, type ExternalApp, type OfficeLocalCopy, type OfficeLocalPick } from '../office';
+import { posContract, type PosOutputs } from '../pos';
 import { pdfEditOpSchema, pdfPrintSchema, pdfSearchOptionsSchema, pdfSourceSchema, SEARCH_MAX_QUERY, type PdfAnnotView, type PdfAttachmentView, type PdfBitmap, type PdfDiagnosticCheck, type PdfDriveDetails, type PdfFailureReport, type PdfLinkView, type PdfLocalPick, type PdfOutlineNode, type PdfRect, type PdfSessionView } from '../pdf';
 import type { InvokeChannel } from './channels';
 import type {
@@ -522,6 +540,11 @@ export const contract = {
       .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.elearningMedia, v.officeExport, v.chatMedia, v.taskAttachment].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a payment slip, an order list, an Orders report, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, an eLearning lesson file, an Office export, a chat attachment or a task attachment'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
+  /**
+   * Hotel PMS: a guest's document or a report's export through the download manager (shared/pms-files.ts). The
+   * main process builds the address, refuses without `desktop.downloads` (here and in the handler) and audits it.
+   */
+  'pms:download': ch(pmsDownloadInput, { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 }),
   'transfers:upload': ch(
     z.object({ handles: z.array(idString).min(1).max(200), target: uploadTargetSchema }),
     { session: true, rate: 5 },
@@ -722,6 +745,28 @@ export const contract = {
   'eventdesk:printJobs': ch(deskPrintJobsInput, { session: true, rate: 5 }),
 
   /*
+   * Restaurant Manager (shared/restaurant.ts, electron/services/restaurant): this computer as a paired terminal.
+   * The device key the server hands over at pairing stays in the main process, which also plays the offline
+   * outbox back, beats, keeps the menu and floor copy, and runs the print agent for the printers plugged in here.
+   */
+  'restaurant:pairing': ch(none, { session: true }),
+  'restaurant:pair': ch(restaurantPairInput, { session: true, rate: 2, sensitive: true }),
+  'restaurant:unpair': ch(restaurantUnpairInput, { session: true, rate: 2, sensitive: true }),
+  'restaurant:status': ch(none, { session: true, rate: 20 }),
+  'restaurant:syncNow': ch(none, { session: true, rate: 2 }),
+  'restaurant:copy': ch(none, { session: true, rate: 10 }),
+  'restaurant:outbox': ch(none, { session: true, rate: 10 }),
+  'restaurant:outboxAdd': ch(restaurantOutboxAdd, { session: true, rate: 20 }),
+  'restaurant:outboxResolve': ch(restaurantOutboxAction, { session: true, rate: 10 }),
+  'restaurant:printSettings': ch(none, { session: true }),
+  'restaurant:printSettingsSet': ch(restaurantPrintPatch, { session: true, rate: 5 }),
+  'restaurant:printJobs': ch(none, { session: true, rate: 10 }),
+  'restaurant:printNow': ch(none, { session: true, rate: 2 }),
+  'restaurant:printTest': ch(restaurantPrintTest, { session: true, rate: 2 }),
+  'restaurant:printText': ch(restaurantPrintText, { session: true, rate: 3 }),
+  'restaurant:openDrawer': ch(none, { session: true, rate: 1, sensitive: true }),
+
+  /*
    * Office documents (shared/office.ts, electron/services/office-editor.ts): a tab lays the editor's
    * isolated view over its placeholder and talks to it; the session itself is the tab's, over the API.
    * The configuration is the server's signed one, passed through untouched; the main process loads an
@@ -835,6 +880,9 @@ export const contract = {
   'diagnostics:saveBundle': ch(none, { permission: 'desktop.diagnostics.export', whileLocked: true, sensitive: true, rate: 1 }),
   'diagnostics:restartSafeMode': ch(z.object({ safe: z.boolean() }), { whileLocked: true }),
   'diagnostics:services': ch(none, { whileLocked: true }),
+
+  // POS: the till on this computer — its credential stays in the main process (shared/pos.ts, pos-ipc.ts).
+  ...posContract,
 } satisfies Record<InvokeChannel, ChannelSpec>;
 
 export type Contract = typeof contract;
@@ -904,7 +952,7 @@ export interface WindowState {
   fullScreen?: boolean;
 }
 
-export interface Outputs {
+export interface Outputs extends PosOutputs {
   'app:info': AppInfo;
   'app:quit': void;
   'app:relaunch': void;
@@ -998,6 +1046,7 @@ export interface Outputs {
   'files:saveText': string | null;
   'transfers:list': Transfer[];
   'transfers:download': Transfer;
+  'pms:download': Transfer;
   'transfers:upload': Transfer[];
   'transfers:pause': void;
   'transfers:resume': void;
@@ -1094,6 +1143,22 @@ export interface Outputs {
   'eventdesk:printSettings': DeskPrintSettings;
   'eventdesk:printSettingsSet': DeskPrintSettings;
   'eventdesk:printJobs': DeskPrintOutcome;
+  'restaurant:pairing': RestaurantPairing | null;
+  'restaurant:pair': { pairing: RestaurantPairing; message: string };
+  'restaurant:unpair': { revoked: boolean; message: string | null; dropped: number };
+  'restaurant:status': RestaurantStatus;
+  'restaurant:syncNow': RestaurantStatus;
+  'restaurant:copy': RestaurantCopy | null;
+  'restaurant:outbox': RestaurantOutboxItem[];
+  'restaurant:outboxAdd': RestaurantOutboxItem;
+  'restaurant:outboxResolve': RestaurantOutboxItem[];
+  'restaurant:printSettings': RestaurantPrintSettings;
+  'restaurant:printSettingsSet': RestaurantPrintSettings;
+  'restaurant:printJobs': RestaurantPrintJobLog[];
+  'restaurant:printNow': number;
+  'restaurant:printTest': RestaurantPrintOutcome;
+  'restaurant:printText': RestaurantPrintOutcome;
+  'restaurant:openDrawer': RestaurantPrintOutcome;
   'office:open': { viewId: string };
   'office:place': boolean;
   'office:command': boolean;

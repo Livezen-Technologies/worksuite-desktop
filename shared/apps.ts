@@ -115,6 +115,9 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'salon', label: 'SalonMate', group: 'business', icon: 'scissors', app: 'salon', perm: 'salon.view', webPath: '/salon', surface: 'native', sidebar: 'business', order: 131, keywords: 'salon hair beauty front desk walk-in check-in stylists clients bookings' },
   // A workshop's counter, board, technician terminal and parts counter: native here; check-in, estimates, QC and delivery open on the web.
   { id: 'garage', label: 'Garage', group: 'business', icon: 'wrench', app: 'garage', perm: 'garage.access', webPath: '/garage', surface: 'native', sidebar: 'business', order: 132, keywords: 'garage workshop service center vehicle car repair job card walk-in technician parts mechanic' },
+  // Restaurant Manager's till, kitchen screen and print agent: native here (this computer as a paired terminal); the back
+  // office — menu, floor design, staff, reports, day close — opens on the web. Its notifications open the floor, an order or the KDS.
+  { id: 'restaurant', label: 'Restaurant', group: 'business', icon: 'concierge', app: 'restaurant', perm: 'restaurant.access', webPath: '/restaurant', surface: 'native', sidebar: 'business', order: 132.5, keywords: 'restaurant pos point of sale till waiter cashier table floor order menu kitchen kds kot expo bill split payment cashier session print agent' },
   // A hotel's front desk, cashier and night audit: native here (the desk's computer). The server's notifications
   // (`/pms/reservations/<id>`, `/pms/folios/<id>`, `/pms/rooms/<id>`, `/pms/front-desk?arrivals=`, `/pms/night-audit`…)
   // open here; the back office — rates, rooms, packages, taxes, reports, settings — is the web's.
@@ -131,7 +134,9 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'support', label: 'Support', group: 'operations', icon: 'life-buoy', app: 'tickets', webPath: '/tickets', surface: 'browser', order: 200 },
   { id: 'assets', label: 'Assets', group: 'operations', icon: 'box', app: 'assets', webPath: '/assets', surface: 'browser', order: 210 },
   { id: 'amc', label: 'AMC & Service', group: 'operations', icon: 'wrench', app: 'amc', webPath: '/amc', surface: 'browser', order: 215 },
-  { id: 'pos', label: 'POS', group: 'operations', icon: 'store', app: 'pos', webPath: '/pos', surface: 'browser', order: 220 },
+  // A shop's till: native here (the counter PC) — pairing, the drawer's shift, selling (offline too), receipts, the drawer
+  // kick and a customer display. Tills, registers and settings are managed on the web.
+  { id: 'pos', label: 'POS', group: 'operations', icon: 'store', app: 'pos', perm: 'pos.access', webPath: '/pos', surface: 'native', sidebar: 'business', order: 220, keywords: 'pos point of sale till register checkout cashier sell sale receipt barcode drawer shift float z report' },
   { id: 'admin', label: 'Admin Center', group: 'admin', icon: 'settings-2', perm: 'users.view', webPath: '/admin', surface: 'browser', order: 500 },
   { id: 'ai', label: 'AI Assistant', group: 'admin', icon: 'sparkles', app: 'ai', webPath: '/ai', surface: 'browser', order: 510 },
 ];
