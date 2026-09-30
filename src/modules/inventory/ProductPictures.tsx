@@ -38,11 +38,10 @@ export default function ProductPictures({ productId, pending, onPending }: { pro
   const [busy, setBusy] = useState<string | null>(null);
   const [over, setOver] = useState(false);
   const pick = useRef<HTMLInputElement>(null);
-  const previews = usePreviews(productId ? NONE : pending);
 
-  const tiles: Array<{ key: string; src: string; label: string }> = productId
+  const tiles: Array<{ key: string; src: string; file?: File; label: string }> = productId
     ? (images.data ?? []).map((i) => ({ key: String(i.id), src: pictureSrc(i.url), label: i.caption ?? `Picture ${i.position + 1}` }))
-    : pending.map((f, n) => ({ key: `${n}:${f.name}`, src: previews[n] ?? '', label: f.name }));
+    : pending.map((f, n) => ({ key: `${n}:${f.name}`, src: '', file: f, label: f.name }));
   const room = PICTURE_LIMIT - tiles.length;
 
   const saved = (next: ProductImage[]) => {
@@ -166,7 +165,7 @@ export default function ProductPictures({ productId, pending, onPending }: { pro
               }}
               className="group relative aspect-square overflow-hidden rounded-[8px] border border-line bg-subtle"
             >
-              {t.src ? <img src={t.src} alt={t.label} className="size-full object-contain" draggable={false} /> : null}
+              {t.file ? <Preview file={t.file} alt={t.label} /> : <img src={t.src} alt={t.label} className="size-full object-contain" draggable={false} />}
               {n === 0 ? <span className="absolute top-1 left-1 rounded-[5px] bg-primary px-1.5 py-px text-[10.5px] font-bold text-white">Main</span> : null}
               <span className="absolute inset-x-1 bottom-1 flex justify-end gap-1 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100">
                 {n > 0 ? (
@@ -227,24 +226,21 @@ function TileButton({ label, disabled, onClick, children }: { label: string; dis
   );
 }
 
-/** One empty list, so an edit (which has no pictures waiting) does not re-run the previews every render. */
-const NONE: File[] = [];
-
-/** Object URLs for pictures not sent yet, let go when the list changes or the form closes. */
-function usePreviews(files: File[]): string[] {
-  const [urls, setUrls] = useState<string[]>([]);
+/**
+ * A picture not sent yet, from an object URL made for it and let go when the
+ * tile goes. The URL is put on the <img> directly: it is the DOM's, not state.
+ */
+function Preview({ file, alt }: { file: File; alt: string }) {
+  const img = useRef<HTMLImageElement>(null);
   useEffect(() => {
-    if (typeof URL.createObjectURL !== 'function') {
-      setUrls([]);
-      return;
-    }
-    const made = files.map((f) => URL.createObjectURL(f));
-    setUrls(made);
+    if (typeof URL.createObjectURL !== 'function' || !img.current) return;
+    const url = URL.createObjectURL(file);
+    img.current.src = url;
     return () => {
-      for (const u of made) URL.revokeObjectURL(u);
+      URL.revokeObjectURL(url);
     };
-  }, [files]);
-  return urls;
+  }, [file]);
+  return <img ref={img} alt={alt} className="size-full object-contain" draggable={false} />;
 }
 
 /**
