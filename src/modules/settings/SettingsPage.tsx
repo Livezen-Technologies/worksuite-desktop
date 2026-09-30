@@ -12,7 +12,7 @@ import { useTab, useTabTitle } from '../../core/tab-context';
 import { bytes, currentZone, relative } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
-import { Button, Chip, Switch, cx } from '../../components/ui';
+import { Button, Chip, Modal, Switch, TextField, cx } from '../../components/ui';
 import { Select } from '../../components/Select';
 import type { ModuleProps } from '../registry';
 import { playTone } from '../calls/tones';
@@ -96,7 +96,8 @@ function Row({ label, hint, children, lock }: { label: string; hint?: ReactNode;
         {hint ? <div className="mt-0.5 text-[12.5px] text-ink-3">{hint}</div> : null}
         {lock ? <div className="mt-0.5 text-[12px] text-warning">{lock.reason}</div> : null}
       </div>
-      <div className="shrink-0">{children}</div>
+      {/* Never wider than 60%: a long value wraps instead of running over the label. */}
+      <div className="min-w-0 max-w-[60%] shrink-0 break-words">{children}</div>
     </div>
   );
 }
@@ -129,8 +130,18 @@ function General() {
       <Row label="WorkSuite server" hint={server?.api === 'desktop-v1' ? 'Desktop API' : 'WorkSuite API'}>
         <span className="font-mono text-[13px] text-ink-2">{server ? new URL(server.origin).host : '—'}</span>
       </Row>
-      <Row label="Organizations">
-        <span className="text-[13px] text-ink-2">{b?.organizations.map((o) => o.name).join(', ') || '—'}</span>
+      <Row label="Organizations" hint={b?.organizations.length ? `You belong to ${b.organizations.length}.` : undefined}>
+        {b?.organizations.length ? (
+          <div className="flex flex-wrap justify-end gap-1.5">
+            {b.organizations.map((o) => (
+              <Chip key={o.id} tone="muted">
+                {o.name}
+              </Chip>
+            ))}
+          </div>
+        ) : (
+          <span className="text-[13px] text-ink-2">—</span>
+        )}
       </Row>
     </>
   );
@@ -433,7 +444,8 @@ function SecuritySection({ prefs }: { prefs: Preferences }) {
         <Select label="App lock" value={prefs.appLockMinutes} options={options} onValueChange={(v) => void updatePrefs({ appLockMinutes: v as Preferences['appLockMinutes'] })} />
       </Row>
       <Toggle k="lockOnSystemLock" prefs={prefs} label="Lock when this computer locks or sleeps" />
-      <Row label="Unlock with" hint={lockState?.biometric === 'touch-id' ? 'Your WorkSuite password or Touch ID.' : 'Your WorkSuite password. Windows Hello support is planned.'}>
+      <PinRow set={!!lockState?.pin} />
+      <Row label="Unlock with" hint={`Your WorkSuite password${lockState?.pin ? ', your PIN' : ''}${lockState?.biometric === 'touch-id' ? ' or Touch ID' : ''}.${lockState?.biometric === 'touch-id' ? '' : ' Windows Hello support is planned.'}`}>
         <Button icon="lock" onClick={() => void call('security:lock')}>
           Lock now
         </Button>
@@ -444,6 +456,96 @@ function SecuritySection({ prefs }: { prefs: Preferences }) {
         </Button>
       </Row>
     </>
+  );
+}
+
+/** A PIN for the app lock on this computer: quicker than the password, and it works offline. */
+function PinRow({ set }: { set: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  return (
+    <Row label="PIN" hint={set ? 'Unlocks WorkSuite on this computer, also offline. Five wrong tries sign you out.' : 'Set a 4 to 8 digit PIN to unlock WorkSuite on this computer, also offline.'}>
+      <div className="flex gap-2">
+        <Button icon="lock" onClick={() => setOpen(true)}>
+          {set ? 'Change PIN' : 'Set PIN'}
+        </Button>
+        {set ? (
+          <Button
+            variant="ghost"
+            loading={busy}
+            onClick={() => {
+              setBusy(true);
+              void call('security:clearPin')
+                .then(() => toast('success', 'PIN removed.'))
+                .catch((e) => toast('error', errorMessage(e)))
+                .finally(() => setBusy(false));
+            }}
+          >
+            Remove
+          </Button>
+        ) : null}
+      </div>
+      {open ? <PinDialog change={set} onClose={() => setOpen(false)} /> : null}
+    </Row>
+  );
+}
+
+function PinDialog({ change, onClose }: { change: boolean; onClose: () => void }) {
+  const [pin, setPin] = useState('');
+  const [again, setAgain] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const digits = (v: string) => v.replace(/\D/g, '').slice(0, 8);
+  const mismatch = again.length >= pin.length && again !== pin;
+  const ready = /^\d{4,8}$/.test(pin) && pin === again && !!password;
+  const save = async () => {
+    if (!ready) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await call('security:setPin', { pin, password });
+      if (!r.ok) setError(r.message);
+      else {
+        toast('success', change ? 'PIN changed.' : 'PIN set. Use it to unlock WorkSuite on this computer.');
+        onClose();
+      }
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title={change ? 'Change PIN' : 'Set a PIN'}
+      onClose={onClose}
+      width={420}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" loading={busy} disabled={!ready} onClick={() => void save()}>
+            {change ? 'Change PIN' : 'Set PIN'}
+          </Button>
+        </>
+      }
+    >
+      <form
+        className="flex flex-col gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save();
+        }}
+      >
+        <TextField label="New PIN (4–8 digits)" type="password" inputMode="numeric" autoComplete="off" autoFocus value={pin} onChange={(e) => setPin(digits(e.target.value))} />
+        <TextField label="Confirm PIN" type="password" inputMode="numeric" autoComplete="off" value={again} onChange={(e) => setAgain(digits(e.target.value))} error={mismatch ? 'The PINs do not match.' : null} />
+        <TextField label="WorkSuite password" type="password" autoComplete="current-password" hint="To check it is you." value={password} onChange={(e) => setPassword(e.target.value)} />
+        {error ? <p className="text-[12.5px] text-danger">{error}</p> : null}
+        <button type="submit" hidden />
+      </form>
+    </Modal>
   );
 }
 
@@ -529,15 +631,70 @@ function DesktopSection({ prefs }: { prefs: Preferences }) {
 }
 
 function FilesSection({ prefs }: { prefs: Preferences }) {
+  const { navigate } = useTab();
+  const sync = useStore(app, (s) => s.sync);
+  const [busy, setBusy] = useState<string | null>(null);
+  const run = (key: string, p: Promise<unknown>) => {
+    setBusy(key);
+    void p.catch((e) => toast('error', errorMessage(e))).finally(() => setBusy(null));
+  };
+  const words: Record<string, string> = { off: 'Off', idle: 'Up to date', syncing: 'Syncing…', paused: 'Paused', offline: 'Offline — waiting', error: 'Needs attention', disconnected: 'Disconnected', blocked: 'Blocked' };
+  const tone = (st: string): 'success' | 'warning' | 'danger' | 'indigo' | 'muted' => (st === 'idle' ? 'success' : st === 'syncing' ? 'indigo' : st === 'error' || st === 'blocked' || st === 'disconnected' ? 'danger' : st === 'off' ? 'muted' : 'warning');
   return (
     <>
-      <H title="Files & Sync" hint="Your WorkSuite Drive is available in Files. Keeping a WorkSuite folder on this computer in sync — selective sync, offline files, conflict handling — arrives with Drive sync." />
+      <H title="Files & Sync" hint="Your WorkSuite Drive is available in Files. Keep Drive folders on this computer in sync — they stay available offline, and changes go both ways." />
       <Row label="Downloads are saved to" hint={<span className="font-mono">{prefs.downloadFolder}</span>}>
-        <Button onClick={() => void call('files:chooseDownloadFolder')}>Change…</Button>
+        <Button onClick={() => void call('files:chooseDownloadFolder').then((p) => p && toast('success', 'Download folder changed.'))}>Change…</Button>
       </Row>
-      <Row label="WorkSuite folder" hint="Not set up — Drive sync is not part of this version.">
-        <Chip>Online only</Chip>
-      </Row>
+      {!sync ? (
+        <Row label="Drive sync" hint="Checking…">
+          <Chip>—</Chip>
+        </Row>
+      ) : !sync.available ? (
+        <Row label="Drive sync" hint={sync.reason ?? 'Drive sync is not available on this computer.'}>
+          <Chip>Online only</Chip>
+        </Row>
+      ) : (
+        <>
+          <Row label="Drive sync" hint={sync.message ?? (sync.lastSyncAt ? `Last synced ${relative(sync.lastSyncAt)}.` : sync.folders.length ? undefined : 'No folder is kept on this computer yet.')}>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Chip tone={tone(sync.state)}>{words[sync.state] ?? sync.state}</Chip>
+              {sync.state === 'disconnected' ? (
+                <Button size="sm" loading={busy === 'reconnect'} onClick={() => run('reconnect', call('sync:reconnect'))}>
+                  Reconnect
+                </Button>
+              ) : null}
+              {sync.folders.length ? (
+                <>
+                  <Button size="sm" icon="refresh" loading={busy === 'now'} disabled={sync.paused} onClick={() => run('now', call('sync:now'))}>
+                    Sync now
+                  </Button>
+                  <Button size="sm" loading={busy === 'pause'} onClick={() => run('pause', call('sync:pause', { id: null, paused: !sync.paused }))}>
+                    {sync.paused ? 'Resume' : 'Pause'}
+                  </Button>
+                </>
+              ) : null}
+            </div>
+          </Row>
+          {sync.folders.map((f) => (
+            <Row key={f.id} label={f.folderName || 'My Drive'} hint={<span className="font-mono">{f.localPath}</span>}>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Chip tone={f.error ? 'danger' : f.paused ? 'warning' : f.pending.up + f.pending.down ? 'indigo' : 'success'}>
+                  {f.error ? 'Needs attention' : f.paused ? 'Paused' : f.pending.up + f.pending.down ? `Syncing ${f.pending.up + f.pending.down}` : `${f.files} files · ${bytes(f.bytes)}`}
+                </Chip>
+                <Button size="sm" onClick={() => void call('sync:reveal', { syncFolderId: f.id })}>
+                  Show
+                </Button>
+              </div>
+            </Row>
+          ))}
+          <Row label="WorkSuite folder" hint={<span className="font-mono">{sync.defaultRoot}</span>}>
+            <Button icon="folder" onClick={() => navigate('/files?view=devices')}>
+              {sync.folders.length ? 'Manage sync…' : 'Set up sync…'}
+            </Button>
+          </Row>
+        </>
+      )}
     </>
   );
 }

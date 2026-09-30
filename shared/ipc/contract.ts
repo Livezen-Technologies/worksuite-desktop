@@ -809,6 +809,10 @@ export const contract = {
   'security:lock': ch(none, { session: true, whileLocked: true }),
   'security:unlockPassword': ch(z.object({ password: z.string().min(1).max(512) }), { whileLocked: true, rate: 1 }),
   'security:unlockBiometric': ch(none, { whileLocked: true, rate: 1 }),
+  // A PIN for the app lock on this computer: setting one takes the WorkSuite password.
+  'security:unlockPin': ch(z.strictObject({ pin: z.string().regex(/^\d{4,8}$/) }), { whileLocked: true, rate: 1 }),
+  'security:setPin': ch(z.strictObject({ pin: z.string().regex(/^\d{4,8}$/), password: z.string().min(1).max(512) }), { session: true, sensitive: true, rate: 3 }),
+  'security:clearPin': ch(none, { session: true, sensitive: true, rate: 3 }),
   'security:state': ch(none, { whileLocked: true }),
   'security:deviceInfo': ch(none, { session: true }),
   'security:activity': ch(none, { whileLocked: true, rate: 2 }),
@@ -882,6 +886,8 @@ export interface LockState {
   reason: 'timeout' | 'manual' | 'system' | null;
   since: string | null;
   biometric: 'touch-id' | null;
+  /** A PIN is set for this person on this computer. */
+  pin: boolean;
   userName: string | null;
   userEmail: string | null;
   lockMinutes: number;
@@ -1122,6 +1128,9 @@ export interface Outputs {
   'security:lock': LockState;
   'security:unlockPassword': { ok: boolean; message: string | null };
   'security:unlockBiometric': { ok: boolean; message: string | null };
+  'security:unlockPin': { ok: boolean; message: string | null };
+  'security:setPin': { ok: boolean; message: string | null };
+  'security:clearPin': LockState;
   'security:state': LockState;
   'security:deviceInfo': DeviceInfo;
   'security:activity': void;

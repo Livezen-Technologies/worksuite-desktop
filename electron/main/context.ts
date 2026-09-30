@@ -14,6 +14,7 @@ import type { DeviceService } from '../services/device';
 import type { DiagnosticsService } from '../services/diagnostics';
 import type { HttpClient } from '../services/http';
 import type { LockService } from '../services/lock';
+import type { LockPin } from '../services/lock-pin';
 import type { NotificationService } from '../services/notifications';
 import type { OfflineCache } from '../services/offline-cache';
 import type { OfflineQueue } from '../services/offline-queue';
@@ -80,6 +81,7 @@ export interface AppContext {
   sync: DriveSync;
   supervisor: ServiceSupervisor;
   lock: LockService;
+  lockPin: LockPin;
   updater: UpdaterService;
   diagnostics: DiagnosticsService;
   audit: AuditService;

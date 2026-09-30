@@ -5,7 +5,28 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-09-30 — 0.2.62: Office online in the Document Server, offline in the built-in editor
+## 2026-09-30 — 0.2.62: Office online in the Document Server, offline in the built-in editor; lock PIN; Local AI groundwork
+
+**Added**
+
+- **A PIN for the app lock** (Settings → Security → PIN): 4 to 8 digits, set or changed with your WorkSuite
+  password, and it unlocks WorkSuite on this computer — also offline, where the password cannot be checked. The
+  lock screen asks for it first when one is set (**Use password instead** is one click away). Wrong PINs count
+  with wrong passwords: five and you are signed out. Only a salted scrypt hash is kept, sealed with the
+  database key; it is removed with the rest of your data when a sign-out wipes this computer.
+- **Local AI groundwork (WS-SRS-LAI, desktop phase 0/1)** — not yet in the UI: llama.cpp (node-llama-cpp) in a
+  separate `ws-local-ai` process with a GPU-or-CPU start, crash limit and idle unload; a model manager that
+  takes models only from WorkSuite's CDN through an Ed25519-signed, expiring catalog, with resumable downloads
+  checked by size and SHA-256; and the typed `ai:local*` IPC channels. No catalog key is pinned yet, so no
+  catalog is accepted until one ships. Installers leave out node-llama-cpp's CUDA builds.
+
+**Fixed**
+
+- **Settings → Files & Sync** showed "Drive sync is not part of this version" although Drive sync is: it now
+  shows sync's state, each synced folder (files, size, Show), **Sync now**, **Pause / Resume**, **Reconnect**, and
+  **Set up sync… / Manage sync…** (Files → Devices); where sync is not allowed it says why (policy, role, device).
+- **Settings → General → Organizations** ran over its label with many organizations: they are chips that wrap
+  now, and a row's value never takes more than 60% of the width.
 
 **Changed**
 

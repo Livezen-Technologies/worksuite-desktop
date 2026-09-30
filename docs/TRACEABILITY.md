@@ -411,7 +411,7 @@ templates, gates and devices) is the web's. Tests: `tests/unit/shared/event-desk
 |---|---|---|
 | FR-SEC-01/02 | Done | Registration and 5-minute heartbeat with directives and acknowledged commands |
 | FR-SEC-03 | Done | DPAPI / Keychain / libsecret via safeStorage; no plaintext fallback |
-| FR-SEC-04/05 | Done | App lock (timeout, manual, OS lock/sleep); password or Touch ID. Windows Hello needs a native module (later) |
+| FR-SEC-04/05 | Done | App lock (timeout, manual, OS lock/sleep); password, PIN (this computer, works offline) or Touch ID. Windows Hello needs a native module (later) |
 | FR-SEC-07/08 | Done | Revoke → wipe of WorkSuite's own data only; on a desktop-v1 server the refused refresh (`DEVICE_REVOKED`) triggers it too |
 | FR-SEC-11 | Done | "Cannot reach WorkSuite server…" |
 | FR-UPD-01..05 | Done | Signed manifest, channels, minimum version screen, busy check, critical deadline with warnings; install requires signed builds |

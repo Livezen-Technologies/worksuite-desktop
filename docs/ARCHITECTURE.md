@@ -8,6 +8,7 @@
 | **Renderer** (`src/`) | React 19 UI for the shell and modules | sandboxed Chromium, no Node, talks only through `window.worksuite` |
 | **hash-worker** (`electron/workers`) | SHA-256 of files being uploaded | utility process, no network, reads only paths main names |
 | **pdf-worker** (`electron/workers`) | PDF Studio's engine: PDFium (WebAssembly) for one open document | utility process per document, no network; reads only the one file main names |
+| **local-ai-worker** (`electron/workers`) | Local AI: llama.cpp (node-llama-cpp) with the default model, GPU or CPU | one utility process, started on first request, ended after 10 idle minutes or at sign-out; no network; loads only the verified model file main names. Main (`services/local-ai/host.ts`) holds the CDN catalog and downloads; 3 crashes in 10 minutes stop it until **Restart** |
 
 Utility processes are run by the `ServiceSupervisor`: pinged every 10 s,
 restarted with exponential backoff (1 s → 5 min), marked FAILED after 5
@@ -251,6 +252,9 @@ native module). Sensitive columns — cached responses, drafts, queued
 mutations, notification text, tab state, bootstrap — are AES-256-GCM
 ciphertext; the key is in the OS credential store. `synchronous=FULL`: a draft
 or a queued change is on disk before the user is told it was saved.
+
+The app-lock PIN (`services/lock-pin.ts`) is a `config` row per person holding a salted scrypt hash, itself
+Vault-sealed, so the database file alone gives nothing to guess against.
 
 ## Renderer
 

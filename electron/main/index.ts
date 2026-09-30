@@ -41,6 +41,7 @@ import { DiagnosticsService } from '../services/diagnostics';
 import { readEnterpriseConfig } from '../services/enterprise';
 import { HttpClient, type FetchLike } from '../services/http';
 import { LockService } from '../services/lock';
+import { LockPin } from '../services/lock-pin';
 import { NotificationService, inDnd } from '../services/notifications';
 import { WebchatRinger, ringerHeight } from '../services/webchat-ring';
 import { QuickAsk } from '../services/quick-ask';
@@ -245,6 +246,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const audit = new AuditService(db, getVault, http, () => auth.getServer()?.api === 'desktop-v1');
   const supervisor = new ServiceSupervisor();
   const lock = new LockService();
+  const lockPin = new LockPin(db, getVault);
   const windows = new WindowManager(db, join(__dirname, '../preload/index.js'));
   windows.minimizeToTray = () => settings.effective().minimizeToTray;
   // A call rings only for whoever may open Chat (calls are part of it).
@@ -1104,6 +1106,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         // Copies opened in other apps are no longer watched; the files stay the person's.
         officeLocal.forgetUser(uid);
         officeFiles.forget();
+        // The app-lock PIN goes with the rest of what this computer kept for the person.
+        lockPin.clear(uid);
         // PDF Studio's working copies and thumbnails (PDF-OFF-005).
         void pdfStudio.wipe();
       }
@@ -1174,6 +1178,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   };
 
   lock.enabled = () => sessionCtl.isReady();
+  lock.hasPin = () => lockPin.has(sessionCtl.userId());
   lock.minutes = () => settings.effective().appLockMinutes;
   lock.lockOnSystemLock = () => settings.effective().lockOnSystemLock;
   lock.user = () => ({ name: sessionCtl.get().user?.name ?? null, email: sessionCtl.get().user?.email ?? null });
@@ -1371,6 +1376,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     sync,
     supervisor,
     lock,
+    lockPin,
     updater,
     diagnostics,
     audit,

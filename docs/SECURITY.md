@@ -318,6 +318,11 @@ The private release key is never in this repository.
   chooses where to save it. Nothing is uploaded.
 - Notification content follows the privacy mode and is always hidden while
   WorkSuite is locked.
+- The app lock opens with the WorkSuite password (checked by the server), Touch
+  ID, or a PIN of 4–8 digits set on this computer. Setting a PIN needs the
+  password; repeated or consecutive digits are refused; only a salted scrypt
+  hash (N=2^15) sealed by the database key is stored; wrong PINs and passwords
+  share one count, and five sign the person out. A wiping sign-out removes it.
 - Mail bodies render in a sandboxed frame with scripts, forms and remote
   images removed; links open in the browser.
 - The clipboard is read only in response to the user's paste; there is no
