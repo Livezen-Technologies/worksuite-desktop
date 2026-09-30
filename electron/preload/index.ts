@@ -1,6 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { EVENT_CHANNELS, INVOKE_CHANNELS, type EventChannel, type InvokeChannel } from '@shared/ipc/channels';
-import { POS_INVOKE_CHANNELS } from '@shared/ipc/pos-channels';
 
 /**
  * The only bridge between the sandboxed renderer and the desktop (§3.3, §8.4).
@@ -337,8 +336,30 @@ const api = {
     outboxAdd: call('salon:outboxAdd'),
     outboxResolve: call('salon:outboxResolve'),
   },
-  // POS: every `pos:x` channel as pos.x (pos-channels.ts).
-  pos: Object.fromEntries(POS_INVOKE_CHANNELS.map((c) => [c.slice(4), call(c)])),
+  // POS (pos-channels.ts): each channel under its own name, so the bridge test sees it.
+  pos: {
+    till: call('pos:till'),
+    pair: call('pos:pair'),
+    forget: call('pos:forget'),
+    catalogue: call('pos:catalogue'),
+    catalogueRefresh: call('pos:catalogueRefresh'),
+    sell: call('pos:sell'),
+    sales: call('pos:sales'),
+    sale: call('pos:sale'),
+    syncNow: call('pos:syncNow'),
+    resolve: call('pos:resolve'),
+    printSettings: call('pos:printSettings'),
+    printSettingsSet: call('pos:printSettingsSet'),
+    printReceipt: call('pos:printReceipt'),
+    receipt: call('pos:receipt'),
+    giveBack: call('pos:giveBack'),
+    email: call('pos:email'),
+    printReport: call('pos:printReport'),
+    printTest: call('pos:printTest'),
+    openDrawer: call('pos:openDrawer'),
+    displayOpen: call('pos:displayOpen'),
+    displayClose: call('pos:displayClose'),
+  },
   offline: {
     status: call('offline:status'),
     pending: call('offline:pending'),
