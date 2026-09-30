@@ -438,6 +438,37 @@ Tests: `tests/unit/electron/pos-desk.test.ts`, `pos-till.test.ts`, `pos-print.te
 | POS-DSK-8 Customer display | Done | `pos-display.ts`, `CustomerDisplay.tsx`: full screen on a second monitor, fed over a same-origin BroadcastChannel |
 | L10N | Partial | `modules/pos/i18n.ts`: English complete, Sinhala and Tamil for the till's everyday words (native review due); receipts print in Latin script |
 
+## Restaurant Manager — desktop POS, KDS and print agent (Restaurant SRS v1.0, stage C desktop)
+
+`src/modules/restaurant` (renderer), `electron/services/restaurant/` (main: `terminal.ts`, `sync.ts`, `outbox.ts`,
+`print-agent.ts`), `shared/restaurant.ts`, over the server's `/api/restaurant/v1` (`app/Modules/Restaurant`, stages A,
+B1, B2). Prices, totals, splits, change, statuses and the next moves are the server's. The back office (menu, floor
+design, staff, settings, reports, the day close, reservations) is the web's. Tests:
+`tests/unit/electron/restaurant-terminal.test.ts`, `restaurant-outbox.test.ts`, `restaurant-print.test.ts`,
+`tests/unit/renderer/restaurant.test.tsx`.
+
+| ID | Status | Where / note |
+|---|---|---|
+| RM-PLT-003 | Done | `Connect.tsx`, `terminal.ts`: pair this computer as a branch terminal; the key in the OS credential store, sent as `X-Terminal-Key`; unpair (optionally revoking) |
+| RM-POS-001..006 | Done | `Order.tsx`: the branch menu by category and search, sold-out items disabled, variants, modifier groups (required, min, max, one nested level), open prices, notes, seat and course; `GET pos` opens the till |
+| RM-POS combos | Partial | A combo is sent as its item; choosing its components' options is not offered yet |
+| RM-TBL-001..005 | Done | `Floor.tsx`: tables by floor and area in their state, party, order and next booking; seat, open, free, request the bill, move, merge, split (with lines), clean, unblock — every move with the tables' versions |
+| RM-KOT-003, §5.3 | Done | Send, fire and hold by course, serve, print the KOT again |
+| Voids (§8.6, RM-SEC-010) | Done | A line taken off, or voided after the kitchen with a reason and quantity; above the limit, `Approval` asks for one and takes a manager's PIN at the till or their answer elsewhere, then voids with the `approval_id` |
+| RM-BIL-001..003 | Done | `Bill.tsx`: `bills/preview` (the client computes no total), single, by seat, by item, equally, by amount; present, void, print and reprint (a bill no route takes is printed here from its `document.text`) |
+| RM-BIL-004 | Later | Tax invoice on request: the web's |
+| RM-PAY-003/004 | Done | Several tenders, cash handed over and the server's change, one `Idempotency-Key` per attempt kept across retries; the drawer opens when the server says so |
+| §8.5 cashier | Done | `Cashier.tsx`: open with a float on the terminal's register, cash in and out (out approved above the limit), no-sale with the drawer, the X report, close on a count with the variance (approved above the threshold) |
+| Discounts, comps, price overrides, refunds | Later | Server routes exist (`adjustments/*`, `payments/{id}/refund`); not on the desktop till yet |
+| RM-KDS-001..003 | Done | `Kitchen.tsx`: a station's tickets oldest first, coloured by the server's `tone`, ADD / VOID marks, allergy warnings, "did not print"; lines done and undone; accept, start, bump, recall, serve; all-day counts, held lines, recently bumped |
+| RM-KDS-005 | Done | `Expo`: every station's ticket per order; served when all are ready |
+| RM-ARC-012 | Done | `useLive`: `live?after=` from the heartbeat's `last_seq`, refreshing only the screens an event touches |
+| RM-ARC-020..023 | Done | `sync.ts`, `outbox.ts`: the menu and floor copy sealed; orders, lines and sends queued in order with the device's ids, played back through `sync` with an idempotency key per batch; conflicts kept and shown, and settled by a manager (`Outbox.tsx`: attach to a table or dismiss) |
+| RM-ARC-021 cash offline | Later | Needs an offline bill-and-pay op on the server (BACKEND.md) |
+| RM-ARC-030..032, RM-DSK-003 | Done | `print-agent.ts`: claims the jobs of the printers mapped here, prints raw ESC/POS or through the driver, silently, answers printed or failed (the server retries, falls back, leaves tickets to the KDS); `Printers.tsx` maps printers, test prints, the drawer, the agent's log and the branch queue with reprints |
+| RM-DSK-007 | Done | Heartbeat every 30 s: queue size, version, online, last sync, the hosted printers' state |
+| §5.7 reservations | Later | The floor shows the next booking; booking is the web's |
+
 ## Devices, security, updates (SEC, UPD)
 
 | ID | Status | Where / note |

@@ -1,3 +1,4 @@
+import { restaurantMainOnly } from '@shared/restaurant';
 import { UNREACHABLE_MESSAGE, isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { HttpClient } from './http';
@@ -107,6 +108,9 @@ export function isProxyPathAllowed(apiPath: string, method = 'GET'): boolean {
   if (m !== 'GET' && m !== 'HEAD' && /^\/api\/meet\/control\/sessions\/\d+\/files\/?$/.test(pathOnly)) return false;
   // Registering an event device answers with its key: done by the main process, never a page (the list stays readable).
   if (m !== 'GET' && m !== 'HEAD' && /^\/api\/events\/v1\/events\/\d+\/devices\/?$/.test(pathOnly)) return false;
+  // A Restaurant terminal's pairing answers with its key; its outbox playback, heartbeat and print agent run in the
+  // main process with that key (electron/services/restaurant). Reading the print queue stays open to the screens.
+  if (restaurantMainOnly(pathOnly, m)) return false;
   return !DENY.some((re) => re.test(pathOnly));
 }
 
