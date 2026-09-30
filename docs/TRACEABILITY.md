@@ -405,6 +405,30 @@ templates, gates and devices) is the web's. Tests: `tests/unit/shared/event-desk
 | §11.5 override (desk) | Done | The emergency message on every screen, typed confirmation, cleared with a reason — for `events.screen.override` |
 | Multi-window | Done | The live counters in a window of their own beside the desk (`/events/<id>/counters`, the rail's "Counters in a window"); the window shows the counters alone |
 
+## POS — the till (desktop POS, ported from the mobile till's FR-POS-01..03)
+
+`src/modules/pos` (renderer), `electron/services/pos-desk.ts`, `pos-till.ts`, `pos-outbox.ts`, `pos-print.ts`,
+`pos-display.ts`, `pos-ipc.ts` (main), `shared/pos.ts` and `shared/ipc/pos-channels.ts`, over the server's staff POS API
+(`/api/pos`) and the till's own door (`/api/pos/device/*`). Money is WorkSuite's: prices when it answers, the
+drawer's figures always; the till numbers, keeps and sends its sales. Tills, registers and settings are the web's.
+Tests: `tests/unit/electron/pos-desk.test.ts`, `pos-till.test.ts`, `pos-print.test.ts`,
+`tests/unit/renderer/pos.test.ts`, `pos-tender.test.tsx`.
+
+| ID | Status | Where / note |
+|---|---|---|
+| POS-DSK-1 Native module | Done | `shared/apps.ts` (`surface: 'native'`), `registry.ts` manifest, deep links `worksuite://pos`, `worksuite://pos/sales/{ref}` |
+| POS-DSK-2 Pairing, heartbeat | Done | `pos-desk.ts`: `terminals/{id}/pair` (take-over asked), `wsp_` credential in the OS keystore, heartbeat every minute with the queue size; 401 drops it, 503 marks POS off |
+| POS-DSK-3 Shift | Done | `Shift.tsx`: open with a float or a count, cash in/out with reasons, close on a count (blind where the company says), X report while open, Z report after; online only |
+| POS-DSK-4 Register | Done | `Register.tsx`, `Tender.tsx`: grid, search, categories, keyboard-wedge scanner anywhere, quantities, customer, discount by permission, cash/card/transfer/wallet/split with change; WorkSuite's price with the catalogue's preview |
+| POS-DSK-4 Discount rights | Partial | No `pos.sale.discount` or ceiling in the staff API yet (BACKEND.md) |
+| POS-DSK-5 Offline | Done | Versioned catalogue sealed in SQLite; local receipt numbering per pairing; ordered, idempotent outbox to `device/sales`; sync state in the shell, This till and Sales |
+| POS-DSK-5 Catalogue source | Partial | Inventory's list stands in until the server has a till catalogue on the staff API (needs `inventory.view`) |
+| POS-DSK-6 Printing | Done | `pos-print.ts`: ESC/POS raw (or the driver, silently), copies, header/footer, drawer pulse on cash, Printers settings, reprint |
+| POS-DSK-7 Sales history | Done | `Sales.tsx`: this shift / today from the till's record, receipt, reprint, send again / drop a refused sale |
+| POS-DSK-7 Refund, void | Later | Behind `options.capabilities.refund` / `.void`: lights up when the server has them |
+| POS-DSK-8 Customer display | Done | `pos-display.ts`, `CustomerDisplay.tsx`: full screen on a second monitor, fed over a same-origin BroadcastChannel |
+| L10N | Partial | `modules/pos/i18n.ts`: English complete, Sinhala and Tamil for the till's everyday words (native review due); receipts print in Latin script |
+
 ## Devices, security, updates (SEC, UPD)
 
 | ID | Status | Where / note |

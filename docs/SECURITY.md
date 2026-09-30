@@ -299,6 +299,37 @@ of its own:
   process (a page cannot hand it something else to print without a dialog),
   in a hidden window with no preload, no script and no network.
 
+## POS till
+
+A computer paired as a POS till holds a credential of its own (`Pos\Libraries\DeviceAuth`):
+
+- **The till credential** — `wsp_<till>_<64 hex>`, handed over once when somebody with `pos.access` pairs the
+  computer (`POST api/pos/terminals/{id}/pair`, made by the main process in `pos-desk.ts`). It is kept in the OS
+  credential store (`pos-till:<server>`), never in the database, and is sent only by the main process, only as the
+  bearer of `/api/pos/device/heartbeat` and `/api/pos/device/sales` (the person's access token is not sent there,
+  and the credential is sent nowhere else). No renderer, IPC answer, log, audit entry or diagnostic bundle carries it;
+  `pos:till` answers which till this is, never the secret. The API proxy refuses the pairing and the whole device door
+  to pages (`api-proxy.ts`). The server stores only its sha256 and lets it lapse after 90 idle days.
+- **Refusal** — a 401 from the device door (revoked, lapsed, paired again on another device) drops the credential at
+  once; the till keeps which till it was and its unsent sales, and sells no more until it is paired again. Pairing
+  another till is refused while sales from this one wait (they would be stranded).
+- **The till is the computer's, not a person's.** A plain sign-out keeps the credential, the catalogue copy and the
+  sales (they keep going to WorkSuite with nobody signed in); every sale names its cashier, whom WorkSuite checks
+  when it arrives (`DeviceController::cashierMay`). Cashiers change by signing out and in; "Lock the till" is the app
+  lock (password or PIN). A remote wipe, or signing out with "remove WorkSuite's data", removes the credential, the
+  catalogue, every sale (sent or not), the receipt counters and the printer settings.
+- **At rest** — the catalogue (`pos_catalogue`) and each sale (`pos_sales`: lines, customer, tenders) are AES-256-GCM
+  under the database key; only the receipt number, state, session and times are in the clear, for ordering. The
+  catalogue is written to disk only where the desktop policy allows data offline (in memory otherwise); a sale is
+  always kept once money was taken, and while WorkSuite is known to be out of reach a till whose policy forbids
+  queued changes does not sell.
+- **Receipts** go raw (ESC/POS) to the named printer through `lp -o raw` or the Windows spooler — the printer's name
+  never on a command line a shell reads — or as a page with every value escaped, printed from a hidden window with no
+  preload, no script and no network (`pos-print.ts`, `salon-print.ts`). Text is reduced to printable ASCII first, so
+  nothing on a receipt can be read by the printer as a command.
+- **The customer display** is an ordinary sandboxed window of the shell; it reads only what the register posts on a
+  same-origin `BroadcastChannel` (lines, totals, change) — no cashier, customer or drawer figures.
+
 ## Updates (FR-UPD-01, WF-25)
 
 1. Manifest signature: Ed25519 over canonical JSON, public key pinned in

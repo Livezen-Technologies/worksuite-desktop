@@ -338,6 +338,28 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   events and their gates (`eventsCached`, matched in `electron/main/index.ts`)
   so a desk opened offline still knows what the person may do; someone who
   loses the Events app loses their copies, and the desk does nothing for them.
+- POS (`modules/pos`, `electron/services/pos-*.ts`, `shared/pos.ts`): this computer as a paired till. The main
+  process holds the till: `pos-desk.ts` pairs it (`POST api/pos/terminals/{id}/pair`, the `wsp_` credential into the
+  OS keystore) and calls the till's own door with that credential (`/api/pos/device/heartbeat` every minute,
+  `/api/pos/device/sales`); `pos-till.ts` keeps the catalogue copy (WorkSuite's till catalogue where the server has
+  one, Inventory's product list otherwise; sealed in `pos_catalogue`), numbers each sale (a prefix per pairing and a
+  counter that only goes up, `pos_counters`), seals it into `pos_sales` before the cashier is answered and sends
+  the waiting ones in order, 25 a request, keyed by the receipt number so a resend is the same sale
+  (`pos-outbox.ts`: created and already-had are done, refused keep WorkSuite's reason, 401 stops for a new pairing,
+  503 waits); `pos-print.ts` prints receipts, X and Z reports as ESC/POS bytes raw to the receipt printer (or a page
+  through its driver, silently) and pulses the drawer; `pos-display.ts` opens the customer display on a second
+  monitor. All of it is one `createPos()` (`pos-ipc.ts`) registered on the router, its `pos:*` channels spread into
+  the allow-list from `shared/ipc/pos-channels.ts`. The loop runs from start-up, whoever is signed in. The renderer
+  is a shell with a rail (`PosShell.tsx`): the register (`Register.tsx` — the catalogue grid, search, a keyboard-wedge
+  scanner anywhere (`barcode.ts`), the cart (`cart.ts`) priced by WorkSuite when it answers and previewed from the
+  catalogue meanwhile (`pricing.ts`, the mobile till's arithmetic), the customer), the tender (`Tender.tsx`: cash,
+  card, transfer, wallet, split, change; offline only cash and card), the shift over the staff API (`Shift.tsx`:
+  open with a float or a count, cash in and out, close on a count, blind where the company says so, X and Z reports),
+  the till's sales with their sync state, receipt, reprint and — where the server announces them — refund and void
+  (`Sales.tsx`), Printers and This till. The customer display (`/pos/display`, `CustomerDisplay.tsx`) is a window of
+  the shell on the second monitor; the register tells it what to show over a same-origin `BroadcastChannel`.
+  Offline the drawer's screens read the last `/api/pos/options`, `registers` and `sessions` from READ_CACHE and wait
+  for WorkSuite to open, move cash or close; selling goes on.
 - Tabs stay mounted while recent (instant switching) and are suspended after
   the configured idle time; the tab set is saved and restored only for apps
   the user can still open.
