@@ -5,8 +5,9 @@ import { Button, ErrorNote, Spinner, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
 import { input } from '../garage/parts';
 import { PageHead } from '../hr/parts';
-import { day, errorText, K, money, pFile, pGet, stamp, type ReportCatalogue, type ReportColumn, type ReportResult } from './api';
-import { saveBytes, useMaySave } from './ops';
+import { day, errorText, K, money, pGet, stamp, type ReportCatalogue, type ReportColumn, type ReportResult } from './api';
+import { PMS_EXPORT_FORMATS } from '@shared/pms-files';
+import { pmsDownload, useMaySave } from './ops';
 import { NoAccess, Refusal, usePms } from './parts';
 
 const NUMERIC = ['int', 'money', 'pct'];
@@ -31,8 +32,9 @@ function cell(c: ReportColumn, v: unknown, cur: string): string {
  * One report (§13.6, `/pms/reports/<key>`): its filters, its rows and totals
  * as the server worked them out, and — for `pms.reports.export`, where the
  * organization lets files be saved on this computer — the server's CSV (and
- * the other formats it lists) saved where the person chooses. The server
- * audits every export.
+ * the other formats it lists) saved through the download manager
+ * (`pms:download`, which checks the policy in the main process). The server
+ * audits every export, and so does this computer.
  */
 export default function Report({ reportKey }: { reportKey: string }) {
   const pms = usePms();
@@ -53,15 +55,17 @@ export default function Report({ reportKey }: { reportKey: string }) {
   const entry = cat.data?.reports.find((r) => r.key === reportKey);
   const filters = entry?.filters ?? ['from', 'to'];
   const r = q.data;
-  const formats = cat.data?.export && maySave && pms.may('pms.reports.export') ? cat.data.formats : [];
+  const formats = cat.data?.export && maySave && pms.may('pms.reports.export') ? cat.data.formats.filter((x): x is (typeof PMS_EXPORT_FORMATS)[number] => (PMS_EXPORT_FORMATS as readonly string[]).includes(x)) : [];
 
   const exportAs = async (format: string) => {
     setBusy(format);
     setError(null);
     try {
-      const file = await pFile(`/properties/${pid}/reports/${reportKey}`, { ...query, format });
-      const kept = await saveBytes(file.name ?? `${reportKey}-${asked.from}${asked.to && asked.to !== asked.from ? `-to-${asked.to}` : ''}.${format}`, file.bytes);
-      if (kept) toast('success', `Saved as ${kept}.`);
+      const kept = await pmsDownload(
+        { kind: 'report', property: pid, report: reportKey, format: format as (typeof PMS_EXPORT_FORMATS)[number], query: query as Record<string, string> },
+        `${reportKey}-${asked.from}${asked.to && asked.to !== asked.from ? `-to-${asked.to}` : ''}.${format}`,
+      );
+      toast('success', `Saving ${kept} to your downloads folder.`);
     } catch (e) {
       setError(errorText(e, 'The export could not be made.'));
     } finally {

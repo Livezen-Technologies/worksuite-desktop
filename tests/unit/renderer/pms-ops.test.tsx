@@ -394,6 +394,20 @@ describe('a guest: documents and a duplicate (PMS-DOC-001, PMS-DUP-003)', () => 
     await waitFor(() => expect(posted()).toContainEqual(expect.objectContaining({ path: '/api/pms/v1/guests/70/merge', body: { from_guest_id: 71, reason: 'Same passport' } })));
   });
 
+  it('saves a document through the main process where downloads are allowed, and offers no save where they are not', async () => {
+    perms = ['pms.access', 'pms.guest.view'];
+    app.set({ bootstrap: { user: { id: '7' }, permissions: ['pms.access'] } as never });
+    const first = show();
+    expect(await screen.findByText(/letter\.pdf/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    first.unmount();
+
+    app.set({ bootstrap: { user: { id: '7' }, permissions: ['pms.access', 'desktop.downloads'] } as never });
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(call).toHaveBeenCalledWith('pms:download', { file: { kind: 'guest-document', document: 5 }, name: 'letter.pdf' }));
+  });
+
   it('removes a document for whoever may edit guests, and offers no merge to those who may not', async () => {
     perms = ['pms.access', 'pms.guest.view', 'pms.guest.edit'];
     vi.mocked(request).mockResolvedValue(ok(null, 'Removed.'));
@@ -442,7 +456,7 @@ describe('reports and KPIs (§13.6–13.7)', () => {
     expect(tab.go).toHaveBeenCalledWith('/pms/reports/occupancy');
   });
 
-  it('saves the server’s CSV where the person chooses — only with the export permission and where files may be saved', async () => {
+  it('saves the server’s CSV through the download manager — only with the export permission and where files may be saved', async () => {
     tab.path = ['pms', 'reports', 'occupancy'];
     extra = (p) =>
       p === '/api/pms/v1/properties/1/reports'
@@ -452,9 +466,7 @@ describe('reports and KPIs (§13.6–13.7)', () => {
           : p === '/api/pms/v1/properties/1/room-types' || p === '/api/pms/v1/properties/1/rate-plans'
             ? { items: [] }
             : undefined;
-    const fetchMock = vi.fn(async () => new Response('date,sold\n2026-09-18,30\n', { status: 200, headers: { 'content-type': 'text/csv', 'content-disposition': 'attachment; filename="occupancy-2026-09-18.csv"' } }));
-    vi.stubGlobal('fetch', fetchMock);
-    try {
+    {
       perms = ['pms.access', 'pms.reports.view'];
       const first = show();
       expect(await screen.findByText('30')).toBeTruthy();
@@ -471,10 +483,11 @@ describe('reports and KPIs (§13.6–13.7)', () => {
       app.set({ bootstrap: { user: { id: '7' }, permissions: ['pms.access', 'desktop.downloads'] } as never });
       show();
       fireEvent.click(await screen.findByRole('button', { name: 'CSV' }));
-      await waitFor(() => expect(call).toHaveBeenCalledWith('office:saveCopy', expect.objectContaining({ name: 'occupancy-2026-09-18.csv' })));
-      expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toContain('/api/pms/v1/properties/1/reports/occupancy?from=2026-09-18&to=2026-09-18&format=csv');
-    } finally {
-      vi.unstubAllGlobals();
+      // The main process fetches it by what it is (no bytes over IPC) and checks `desktop.downloads` itself.
+      await waitFor(() =>
+        expect(call).toHaveBeenCalledWith('pms:download', { file: { kind: 'report', property: 1, report: 'occupancy', format: 'csv', query: { from: '2026-09-18', to: '2026-09-18' } }, name: 'occupancy-2026-09-18.csv' }),
+      );
+      expect(call).not.toHaveBeenCalledWith('office:saveCopy', expect.anything());
     }
   });
 });

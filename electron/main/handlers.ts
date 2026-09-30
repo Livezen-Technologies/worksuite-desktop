@@ -17,6 +17,7 @@ import { writeBootConfig } from './boot';
 import { paths } from './paths';
 import { archName, platformName } from '../services/device';
 import { listPrinters, printHtml, printToPdf } from '../services/print';
+import { pmsDownload } from '../services/pms-download';
 import { createZip } from '../services/zip';
 import { openExternalSafely } from '../security/hardening';
 import { broadcast } from './events';
@@ -528,6 +529,11 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
           : `/api/mail/messages/${input.mail!.uid}/attachments/${encodeURIComponent(input.mail!.ref)}?${new URLSearchParams({ folder: input.mail!.folder, dl: '1', ...(input.mail!.mailbox ? { mailbox: input.mail!.mailbox } : {}) })}`;
     return ctx.transfers.download(path, input.name, !!input.open, input.fileId ?? null);
   });
+  // Hotel PMS files (shared/pms-files.ts): the address built here from what the page names; the organization's download
+  // policy checked here too, not only by the channel and the screen, so a page cannot save around it.
+  router.handle('pms:download', (input) =>
+    pmsDownload({ mayDownload: () => ctx.session.hasPermission('desktop.downloads'), download: (path, name, open, fileId) => ctx.transfers.download(path, name, open, fileId) }, input),
+  );
   // Office documents: the editor's view (office-editor.ts) and copies opened in other apps (office-external.ts).
   router.handle('office:open', (input, c) => ctx.office.open(c.sender, input));
   router.handle('office:place', (input, c) => ctx.office.place(c.sender, input.viewId, input.bounds, input.visible));

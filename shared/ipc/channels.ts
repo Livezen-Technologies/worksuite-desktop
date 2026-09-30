@@ -211,6 +211,8 @@ export const INVOKE_CHANNELS = [
   'eventdesk:printSettingsSet',
   'eventdesk:printJobs',
 
+  // Hotel PMS (shared/pms-files.ts): a guest's document or a report's export saved here, where `desktop.downloads` allows.
+  'pms:download',
   // Restaurant Manager (shared/restaurant.ts): this computer as a paired terminal, its outbox and print agent.
   'restaurant:pairing',
   'restaurant:pair',
