@@ -209,6 +209,24 @@ export const INVOKE_CHANNELS = [
   'eventdesk:printSettingsSet',
   'eventdesk:printJobs',
 
+  // Restaurant Manager (shared/restaurant.ts): this computer as a paired terminal, its outbox and print agent.
+  'restaurant:pairing',
+  'restaurant:pair',
+  'restaurant:unpair',
+  'restaurant:status',
+  'restaurant:syncNow',
+  'restaurant:copy',
+  'restaurant:outbox',
+  'restaurant:outboxAdd',
+  'restaurant:outboxResolve',
+  'restaurant:printSettings',
+  'restaurant:printSettingsSet',
+  'restaurant:printJobs',
+  'restaurant:printNow',
+  'restaurant:printTest',
+  'restaurant:printText',
+  'restaurant:openDrawer',
+
   // Office documents (shared/office.ts): the editor's view in a tab, and copies opened in other apps.
   'office:open',
   'office:place',
@@ -305,6 +323,7 @@ export const EVENT_CHANNELS = [
   'salon:changed',
   'elearning:offlineChanged',
   'eventdesk:changed',
+  'restaurant:changed',
   'office:event',
   'ai:localEvent',
   'ai:localChanged',
