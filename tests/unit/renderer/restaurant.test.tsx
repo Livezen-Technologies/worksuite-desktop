@@ -24,7 +24,7 @@ const { screenOf, routeOf } = await import('../../../src/modules/restaurant/rout
 const { resolveWebLink } = await import('../../../shared/links');
 const { APP_CATALOGUE } = await import('../../../shared/apps');
 const { MODULES } = await import('../../../src/modules/registry');
-await Promise.all(['Floor', 'Order', 'Bill', 'Kitchen', 'Connect', 'Outbox', 'Approvals', 'Cashier', 'Printers'].map((m) => import(`../../../src/modules/restaurant/${m}.tsx`)));
+await Promise.all(['Floor', 'Order', 'Bill', 'Kitchen', 'Connect', 'Outbox', 'Approvals', 'Cashier', 'Printers', 'Adjust'].map((m) => import(`../../../src/modules/restaurant/${m}.tsx`)));
 
 const PAIRING = { terminal_id: 7, org_id: 17, branch_id: 3, name: 'Till 1', code: 'T1', mode: 'pos', station_id: null, area_id: null, counter_id: null, pos_register_id: 11, paired_at: '2026-09-30T09:00:00Z' };
 const CAN = ['pos_access', 'order_create', 'order_edit', 'table_manage', 'payment_process', 'kitchen_view', 'kitchen_manage', 'cashier_open'];
@@ -307,5 +307,128 @@ describe('Restaurant: the kitchen', () => {
     await waitFor(() => expect(calls('POST', '/api/restaurant/v1/kitchen/tickets/4/bump')).toHaveLength(1));
     expect(screen.getByRole('region', { name: 'All day' }).textContent).toContain('2');
     expect(calls('GET', '/api/restaurant/v1/kitchen')[0]![2]).toMatchObject({ query: { branch_id: 3, station_id: 5 } });
+  });
+});
+
+describe('Restaurant: discounts, comps, price overrides, refunds and invoices', () => {
+  const MONEY_CAN = { ...OPTIONS, can: { ...OPTIONS.can, discount_apply: true, comp: true, price_override: true, refund: true } };
+  const BILL = { id: 12, number: 'B-0007', order_id: 55, split_mode: 'single', split_mode_label: 'Single', split_index: 1, split_count: 1, status: 'paid', status_label: 'Paid', currency: 'LKR', subtotal: '4500.00', discount_total: '0.00', charge_total: '0.00', tax_total: '0.00', rounding: '0.00', total: '4500.00', paid_total: '4500.00', balance: '0.00', printed_count: 1, client_id: null, invoice_id: null, version: 3 };
+  const PREVIEW = { order_id: 55, quote: { currency: 'LKR', subtotal: '4500.00', discount_total: '0.00', charge_total: '0.00', tax_total: '0.00', rounding: '0.00', total: '4500.00', prices_include_tax: false, lines: [], charges: [], taxes: [] }, bills: [BILL], stale: false };
+  const PAYMENT = { id: 70, bill_id: 12, order_id: 55, method: 'cash', method_label: 'Cash', amount: '4500.00', tendered: '5000.00', change_given: '500.00', currency: 'LKR', status: 'captured', status_label: 'Received', provider_ref: null, refunded_total: '0.00', refund_of_id: null, created_at: null, version: 1 };
+
+  it('discounts a line, asks for approval above the limit and sends it again with the approval’s id', async () => {
+    let tries = 0;
+    serve((m, p, b) => {
+      if (m === 'GET' && p === '/api/restaurant/v1/options') return MONEY_CAN;
+      if (m === 'GET' && p === '/api/restaurant/v1/adjustments') return { adjustments: [], kinds: {} };
+      if (m === 'POST' && p === '/api/restaurant/v1/adjustments/discount') {
+        tries++;
+        return (b as { approval_id?: number }).approval_id === 91 ? { adjustment: { id: 5 }, bills_voided: 0, quote: null } : new ApiError(403, 'A 25% discount is above your limit of 10%.', null, { code: 'approval_needed', approval: { action: 'discount', amount: '900.00', pct: 25, order_id: 55, branch_id: 3 } });
+      }
+      if (m === 'POST' && p === '/api/restaurant/v1/approvals') return { request: { id: 91, status: 'pending' } };
+      if (m === 'GET' && p === '/api/restaurant/v1/approvals/91') return { request: { id: 91, status: 'approved', status_label: 'Approved' } };
+      return undefined;
+    });
+    show(['restaurant', 'orders', '55']);
+    fireEvent.click(await screen.findByRole('button', { name: 'Discount Chicken kottu' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Percentage off'), { target: { value: '25' } });
+    fireEvent.change(within(dialog).getByLabelText('Reason'), { target: { value: 'Regular guest' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Give the discount' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Ask for approval' }));
+    await waitFor(() => expect(tries).toBe(2));
+    const [first, second] = calls('POST', '/api/restaurant/v1/adjustments/discount').map(([, , o]) => (o as { body: Record<string, unknown> }).body);
+    expect(first).toMatchObject({ order_id: 55, order_item_id: 501, pct: 25, reason: 'Regular guest', terminal_id: 7 });
+    expect(first).not.toHaveProperty('approval_id');
+    expect(second).toMatchObject({ approval_id: 91, pct: 25 });
+    expect(calls('POST', '/api/restaurant/v1/approvals')[0]![2]).toMatchObject({ body: { action: 'discount', amount: '900.00', reason: 'Regular guest' } });
+  });
+
+  it('offers no discount, comp or price change without the permission', async () => {
+    show(['restaurant', 'orders', '55']);
+    expect(await screen.findByRole('button', { name: 'Take off or void Chicken kottu' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Discount Chicken kottu' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Make Chicken kottu complimentary' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Discount the order' })).toBeNull();
+  });
+
+  it('makes a line complimentary and overrides a price with a reason', async () => {
+    serve((m, p) => {
+      if (m === 'GET' && p === '/api/restaurant/v1/options') return MONEY_CAN;
+      if (m === 'GET' && p === '/api/restaurant/v1/adjustments') return { adjustments: [{ id: 5, kind: 'comp', kind_label: 'Complimentary item', order_id: 55, order_item_id: 501, bill_id: null, payment_id: null, amount: '3600.00', pct: null, currency: 'LKR', reason: 'Birthday', requested_by_name: 'Kasun', approver_name: null, status: 'applied', removed_at: null, created_at: null }], kinds: {} };
+      if (m === 'POST' && (p === '/api/restaurant/v1/adjustments/comp' || p === '/api/restaurant/v1/adjustments/price' || p === '/api/restaurant/v1/adjustments/5/remove')) return { adjustment: { id: 5 } };
+      return undefined;
+    });
+    show(['restaurant', 'orders', '55']);
+    fireEvent.click(await screen.findByRole('button', { name: 'Make Chicken kottu complimentary' }));
+    let dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Reason'), { target: { value: 'Birthday' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Make it complimentary' }));
+    await waitFor(() => expect(calls('POST', '/api/restaurant/v1/adjustments/comp')).toHaveLength(1));
+    expect(calls('POST', '/api/restaurant/v1/adjustments/comp')[0]![2]).toMatchObject({ body: { order_item_id: 501, reason: 'Birthday' } });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change the price of Chicken kottu' }));
+    dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('New unit price'), { target: { value: '1500' } });
+    fireEvent.change(within(dialog).getByLabelText('Reason'), { target: { value: 'Smaller portion' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Change the price' }));
+    await waitFor(() => expect(calls('POST', '/api/restaurant/v1/adjustments/price')).toHaveLength(1));
+    expect(calls('POST', '/api/restaurant/v1/adjustments/price')[0]![2]).toMatchObject({ body: { order_item_id: 501, unit_price: '1500.00', reason: 'Smaller portion' } });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    const list = await screen.findByRole('region', { name: 'Discounts and items on the house' });
+    fireEvent.click(within(list).getByRole('button', { name: 'Take back' }));
+    dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Reason'), { target: { value: 'Rang in by mistake' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Take back' }));
+    await waitFor(() => expect(calls('POST', '/api/restaurant/v1/adjustments/5/remove')).toHaveLength(1));
+    expect(calls('POST', '/api/restaurant/v1/adjustments/5/remove')[0]![2]).toMatchObject({ body: { reason: 'Rang in by mistake' } });
+  });
+
+  it('refunds a payment with one key per attempt and opens the drawer when the server says so', async () => {
+    let tries = 0;
+    serve((m, p) => {
+      if (m === 'GET' && p === '/api/restaurant/v1/options') return MONEY_CAN;
+      if (m === 'GET' && p === '/api/restaurant/v1/bills/preview') return PREVIEW;
+      if (m === 'GET' && p === '/api/restaurant/v1/payments') return { payments: [PAYMENT] };
+      if (m === 'POST' && p === '/api/restaurant/v1/payments/70/refund') {
+        tries++;
+        return tries === 1 ? new ApiError(503, 'Cannot reach WorkSuite server.', 'NETWORK_UNREACHABLE') : { refund: {}, payment: PAYMENT, open_drawer: true };
+      }
+      return undefined;
+    });
+    desk['restaurant:openDrawer'] = () => ({ ok: true, device: 'EPSON', message: 'Drawer opened.' });
+    show(['restaurant'], 'view=bill&order=55');
+    fireEvent.click(await screen.findByRole('button', { name: 'Refund…' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Amount to give back'), { target: { value: '1000' } });
+    fireEvent.change(within(dialog).getByLabelText('Reason'), { target: { value: 'Cold food' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Refund / }));
+    expect(await within(dialog).findByText('Cannot reach WorkSuite server.')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Refund / }));
+    await waitFor(() => expect(vi.mocked(call)).toHaveBeenCalledWith('restaurant:openDrawer'));
+    const [a, b] = calls('POST', '/api/restaurant/v1/payments/70/refund').map(([, , o]) => o as { headers: Record<string, string>; body: unknown });
+    expect(a!.headers['Idempotency-Key']).toBe(b!.headers['Idempotency-Key']);
+    expect(b!.body).toMatchObject({ amount: '1000.00', reason: 'Cold food', method: 'cash', terminal_id: 7 });
+  });
+
+  it('makes a tax invoice from a bill for a customer looked up at the till', async () => {
+    serve((m, p) => {
+      if (m === 'GET' && p === '/api/restaurant/v1/bills/preview') return PREVIEW;
+      if (m === 'GET' && p === '/api/restaurant/v1/payments') return { payments: [] };
+      if (m === 'GET' && p === '/api/restaurant/v1/customers') return { customers: [{ client_id: 88, name: 'Acme Lanka', phone: '07•••••123', email: null, restaurant: true, has_allergies: false, visits: 3 }] };
+      if (m === 'POST' && p === '/api/restaurant/v1/bills/12/invoice') return { invoice_id: 400, invoice_number: 'INV-0400', issued: true };
+      return undefined;
+    });
+    show(['restaurant'], 'view=bill&order=55');
+    fireEvent.click(await screen.findByRole('button', { name: 'Tax invoice…' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('button', { name: 'Make the invoice' }).hasAttribute('disabled')).toBe(true);
+    fireEvent.change(within(dialog).getByLabelText('Customer'), { target: { value: 'Acme' } });
+    fireEvent.click(await within(dialog).findByRole('button', { name: /Acme Lanka/ }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Make the invoice' }));
+    await waitFor(() => expect(calls('POST', '/api/restaurant/v1/bills/12/invoice')).toHaveLength(1));
+    expect(calls('POST', '/api/restaurant/v1/bills/12/invoice')[0]![2]).toMatchObject({ body: { client_id: 88 } });
   });
 });

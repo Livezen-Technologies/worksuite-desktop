@@ -5,8 +5,9 @@ import { Button, Chip, Modal, Spinner, TextField, cx } from '../../components/ui
 import { call } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { get, getMeta, K, money, needsApproval, qty, refusal, unreachable, write, type BranchMenu, type MenuItem, type ModGroup, type Order, type OrderLine } from './api';
+import { ADJUST_PERM, AdjustDialog, OrderAdjustments, type AdjustKind } from './Adjust';
 import { Approval, type ApprovalAsk } from './Approvals';
-import { useT } from './i18n';
+import { useT, type RKey } from './i18n';
 import { Failed, Heading, Note, ReasonField, useLive, useTill } from './parts';
 
 /**
@@ -44,6 +45,7 @@ export default function OrderScreen() {
   const [guests, setGuests] = useState('2');
   const [busy, setBusy] = useState<string | null>(null);
   const [voiding, setVoiding] = useState<OrderLine | null>(null);
+  const [adjusting, setAdjusting] = useState<{ kind: AdjustKind; line: OrderLine | null } | null>(null);
   const [uuid] = useState(newId);
   const channel = takeaway ? 'takeaway' : 'dine_in';
 
@@ -215,9 +217,21 @@ export default function OrderScreen() {
                     {l.notes ? <div className="text-[12px] text-warning">! {l.notes}</div> : null}
                     <div className="text-[11.5px] text-ink-3">
                       {l.status_label}
+                      {l.comp ? ` · ${t('bill.comp')}` : ''}
                       {l.seat ? ` · ${t('order.seatN', { n: l.seat })}` : ''}
                       {l.course ? ` · ${till.options?.courses?.[l.course] ?? l.course}` : ''}
                     </div>
+                    {l.status !== 'voided' && !till.offline ? (
+                      <div className="mt-0.5 flex flex-wrap gap-x-2 text-[11.5px]">
+                        {(['discount', 'comp', 'price'] as const)
+                          .filter((k) => till.can(ADJUST_PERM[k]) && !l.comp)
+                          .map((k) => (
+                            <button key={k} type="button" aria-label={t(`adjust.${k}Aria` as RKey, { name: l.name })} onClick={() => setAdjusting({ kind: k, line: l })} className="font-semibold text-primary hover:underline">
+                              {t(`adjust.${k}Short` as RKey)}
+                            </button>
+                          ))}
+                      </div>
+                    ) : null}
                   </div>
                   <span className="text-[13px] text-ink tabular-nums">{money(l.line_total)}</span>
                   {l.status !== 'voided' && (l.choices.includes('void') || l.choices.includes('remove') || l.status === 'new') ? (
@@ -296,12 +310,18 @@ export default function OrderScreen() {
                     </Button>
                   ))
               : null}
+            {till.can('discount_apply') ? (
+              <Button icon="tag" onClick={() => setAdjusting({ kind: 'discount', line: null })}>
+                {t('adjust.discountOrderShort')}
+              </Button>
+            ) : null}
             {has('serve') ? <Button icon="check" loading={busy === 'serve'} onClick={() => void act('serve', `/orders/${order.id}/serve`, { version: order.version })}>{t('order.serve')}</Button> : null}
             <Button icon="printer" loading={busy === 'kot'} onClick={() => void act('kot', `/orders/${order.id}/print-kot`, {})}>{t('order.printKot')}</Button>
             <Button icon="banknote" onClick={() => till.go('bill', { order: order.id })}>{t('floor.bill')}</Button>
           </div>
         ) : null}
         {order && till.offline ? <Note tone="muted">{t('order.offlineExisting')}</Note> : null}
+        {order && !till.offline ? <OrderAdjustments order={order} onChanged={refresh} /> : null}
       </aside>
 
       {picking ? (
@@ -315,6 +335,7 @@ export default function OrderScreen() {
           }}
         />
       ) : null}
+      {adjusting && order ? <AdjustDialog order={order} line={adjusting.line} kind={adjusting.kind} onClose={() => setAdjusting(null)} onDone={() => { refresh(); void qc.invalidateQueries({ queryKey: K.adjustments(order.id) }); }} /> : null}
       {voiding && order ? <VoidLine order={order} line={voiding} onClose={() => setVoiding(null)} onDone={refresh} /> : null}
     </div>
   );
