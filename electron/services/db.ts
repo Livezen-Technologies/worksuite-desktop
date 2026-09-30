@@ -230,6 +230,40 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX event_desk_queue_event ON event_desk_queue(origin, event_id, user_id, seq);
   `,
+  // 6 — POS: this computer as a till. Its copy of the catalogue, per server and till; its sales — the outbox and,
+  // once sent, the history receipts are reprinted from — and each pairing's receipt counter
+  // (electron/services/pos-till.ts). They are the till's, not a person's: a sign-out keeps them, a wipe does not.
+  `
+  CREATE TABLE pos_catalogue (
+    origin TEXT NOT NULL,
+    terminal_id INTEGER NOT NULL,
+    version TEXT NOT NULL,
+    payload TEXT NOT NULL,            -- enc: products, prices, barcodes
+    fetched_at TEXT NOT NULL,
+    PRIMARY KEY (origin, terminal_id)
+  );
+
+  CREATE TABLE pos_sales (
+    ref TEXT NOT NULL,
+    origin TEXT NOT NULL,
+    terminal_id INTEGER NOT NULL,
+    seq INTEGER NOT NULL,
+    state TEXT NOT NULL,
+    session_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    item TEXT NOT NULL,               -- enc: the sale — lines, customer, tenders — and what the server said
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (origin, ref)
+  );
+  CREATE INDEX pos_sales_till ON pos_sales(origin, terminal_id, state, seq);
+
+  CREATE TABLE pos_counters (
+    origin TEXT NOT NULL,
+    prefix TEXT NOT NULL,
+    last INTEGER NOT NULL,
+    PRIMARY KEY (origin, prefix)
+  );
+  `,
 ];
 
 export type Row = Record<string, unknown>;

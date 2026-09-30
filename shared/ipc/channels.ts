@@ -3,6 +3,8 @@
  * process and only these can be reached from the preload. This file is plain
  * data so the sandboxed preload can import it without pulling in zod.
  */
+import { POS_EVENT_CHANNELS, POS_INVOKE_CHANNELS } from './pos-channels';
+
 export const INVOKE_CHANNELS = [
   'app:info',
   'app:quit',
@@ -209,6 +211,26 @@ export const INVOKE_CHANNELS = [
   'eventdesk:printSettingsSet',
   'eventdesk:printJobs',
 
+  // Hotel PMS (shared/pms-files.ts): a guest's document or a report's export saved here, where `desktop.downloads` allows.
+  'pms:download',
+  // Restaurant Manager (shared/restaurant.ts): this computer as a paired terminal, its outbox and print agent.
+  'restaurant:pairing',
+  'restaurant:pair',
+  'restaurant:unpair',
+  'restaurant:status',
+  'restaurant:syncNow',
+  'restaurant:copy',
+  'restaurant:outbox',
+  'restaurant:outboxAdd',
+  'restaurant:outboxResolve',
+  'restaurant:printSettings',
+  'restaurant:printSettingsSet',
+  'restaurant:printJobs',
+  'restaurant:printNow',
+  'restaurant:printTest',
+  'restaurant:printText',
+  'restaurant:openDrawer',
+
   // Office documents (shared/office.ts): the editor's view in a tab, and copies opened in other apps.
   'office:open',
   'office:place',
@@ -270,6 +292,8 @@ export const INVOKE_CHANNELS = [
   'diagnostics:saveBundle',
   'diagnostics:restartSafeMode',
   'diagnostics:services',
+  // POS: the till on this computer (pos-channels.ts).
+  ...POS_INVOKE_CHANNELS,
 ] as const;
 
 export type InvokeChannel = (typeof INVOKE_CHANNELS)[number];
@@ -305,10 +329,12 @@ export const EVENT_CHANNELS = [
   'salon:changed',
   'elearning:offlineChanged',
   'eventdesk:changed',
+  'restaurant:changed',
   'office:event',
   'ai:localEvent',
   'ai:localChanged',
   'office:localChanged',
+  ...POS_EVENT_CHANNELS,
 ] as const;
 
 export type EventChannel = (typeof EVENT_CHANNELS)[number];

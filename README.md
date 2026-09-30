@@ -97,13 +97,20 @@ EuroOffice (the server's Document Server) or, without one, in the built-in
 [BetterOffice](https://github.com/Livezen-Technologies/betteroffice) editor (Apache-2.0; bundled fonts OFL 1.1). Its engine can be checked on a real system with
 `npm run build && node tests/os/pdf/check.mjs` (Linux: under `xvfb-run`).
 
+**POS** (`src/modules/pos`, `electron/services/pos-*.ts`) makes a counter PC a paired till: its credential in the
+OS keystore, the drawer's shift over WorkSuite's POS API, selling from a sealed catalogue copy with a keyboard-wedge
+scanner — offline too, sales numbered here and sent in order through the till's own door — thermal receipts and the
+drawer kick (a reprint is WorkSuite's own receipt), e-mailed receipts, refunds and voids from the sales history, and a
+customer display on a second monitor. The catalogue, prices and discount rights are POS's own (no Inventory
+permission needed). What it uses on the server is in [docs/BACKEND.md](docs/BACKEND.md#pos--the-till).
+
 ## What is deliberately not here yet
 
 Phases 2–4 of the SRS, apart from Drive folder sync (Files → Sync devices)
 and multi-window docking (tabs torn off into their own windows, and one
 docked beside another; see [the changelog](CHANGELOG.md)): calls and Meet,
 the full desktop AI assistant (the dock and Quick Ask use the writing
-assistant today), the workforce-monitoring agent, POS hardware, the
+assistant today), the workforce-monitoring agent, POS hardware beyond a receipt printer and its drawer (card terminals, scales), the
 Admin Center fleet screens, kiosk mode, file-manager extensions and cloud
 placeholders. Where Phase 1 touches them, the app says
 so plainly instead of pretending (Files shows what is synced and what is online only; the AI

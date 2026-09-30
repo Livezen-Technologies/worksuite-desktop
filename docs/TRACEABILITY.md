@@ -262,14 +262,15 @@ what it answers and sends what happened. Tests: `tests/unit/renderer/elearning.t
 
 `src/modules/pms`, over the server's `/api/pms/v1` (`app/Modules/Pms`, stages A, B1 and B2). Business rules, money,
 availability and the business date are the server's; the desktop shows what it answers and sends what the desk did.
-The back office (rates, rooms, packages, taxes, reports, settings, the set-up wizard, the tape chart) is the web's.
-Tests: `tests/unit/renderer/pms-desk.test.tsx`, `tests/unit/renderer/pms-money.test.tsx`, `tests/unit/shared/pms.test.ts`.
+The back office (rates, rooms, packages, taxes, settings, the set-up wizard) is the web's.
+Tests: `tests/unit/renderer/pms-desk.test.tsx`, `tests/unit/renderer/pms-money.test.tsx`, `tests/unit/renderer/pms-ops.test.tsx`,
+`tests/unit/shared/pms.test.ts`, `tests/unit/electron/pms-download.test.ts`.
 
 | ID | Status | Where / note |
 |---|---|---|
-| PMS-DSK-001 | Partial | `PmsShell.tsx`: the front desk, cashier and night audit with the web's P1 set for those roles — rack, arrivals / departures / in house, reservations with availability, check-in, walk-in, assignment, moves, check-out, folios, postings, payments, cashier, night audit, housekeeping read, guests, guest requests, dashboard. Rates, rooms, packages, taxes, reports, settings, the wizard and the tape chart stay on the web ("Back office on the web") |
+| PMS-DSK-001 | Partial | `PmsShell.tsx`: the front desk, cashier and night audit with the web's P1 set for those roles — rack, arrivals / departures / in house, reservations with availability, check-in, walk-in, assignment, moves, check-out, folios, postings, payments, deposits (take, waive, refund, apply), cashier, night audit, housekeeping (tasks, rooms, restocks), maintenance, lost and found, guests (documents, merge), guest requests, the tape chart, invoices and the billing outbox, KPIs and reports, dashboard. Rates, rooms, packages, taxes, settings and the wizard stay on the web ("Back office on the web") |
 | PMS-DSK-002 | Partial | `devices.ts`: typed providers for the ID scanner, key encoder, card/receipt printer, signature pad, cash drawer and card terminal; "no device" providers, and the printer is `print:print` (OS dialog). No vendor driver; a driver would sit in the main process behind its own IPC, as SalonMate's printer does |
-| PMS-DSK-003 | Done | READ_CACHE for the property list, options, rack, arrivals, departures, in house (`shared/pms-cache.ts`, per property); the offline banner; every write disabled offline and never queued; balances hidden on the rack offline |
+| PMS-DSK-003 | Done | READ_CACHE for the property list, options, rack, arrivals, departures, in house (`shared/pms-cache.ts`, per property); the offline banner; every write disabled offline and never queued; balances hidden on the rack offline. The operations, the tape chart, invoices and reports are not cached: offline they say they wait for WorkSuite |
 | PMS-DSK-004 | Done | The rack, a reservation, a stay and a folio open in windows of their own (`openInWindow`, record windows) |
 | PMS-DSK-005 | Later | Cold-start and open-time targets need measuring on real hardware against a real server |
 | PMS-WEB-003 (desktop) | Done | Alt+N new reservation (and the shell's Ctrl/⌘+N), Alt+W walk-in, Alt+F search, Alt+I check in, Alt+P post charge, Alt+R/A/D/H rack and lists — `shortcuts.ts`, the rail's "Keyboard shortcuts"; on a Mac, Option+letter inside a text field is left to the field |
@@ -291,12 +292,20 @@ Tests: `tests/unit/renderer/pms-desk.test.tsx`, `tests/unit/renderer/pms-money.t
 | PMS-FOL-005 | Server | Locked lines shown as locked, never voided |
 | PMS-CHG-001 | Done | Post a charge to the stay (routed) or to a folio, idempotent |
 | PMS-PAY-001..003 | Done | Methods, pending for providers, foreign currency (converted by the server), card by token / last four only |
-| PMS-DEP-001/002 | Done | `Reservation.tsx` deposit panel: take, waive, refund; applied at check-out |
+| PMS-DEP-001/002 | Done | `Reservation.tsx` deposit panel: take, waive, refund; applied at check-out, or to one of the reservation's open folios at any time ("Apply to folio", `POST reservations/{id}/deposit/apply`, for `pms.payment.process` with `pms.folio.view`, only while the deposit holds money) |
 | PMS-INV-001..003 | Done | Settle, invoice now, to the company's account; receipt / invoice / statement printed from `GET folios/{id}/document` |
 | PMS-CSH-001/002 | Done | `Cashier.tsx`, `Shift.tsx`: open with terminal and cash, close by counting, variance approval by someone else, report |
 | PMS-NA-001..005, AC-10, AC-11 | Done | `NightAudit.tsx`: checks with counts, blockers linked and overridden with a reason, run / resume, steps, report |
-| PMS-HK-002 (desk) | Done | `Housekeeping.tsx`: statuses and the day's tasks, read only |
-| PMS-REQ-001/002 (desk) | Partial | `Requests.tsx`: take a request, move the open ones; assigning to a person is the supervisors' (no staff list for requests) |
+| PMS-HK-002, PMS-HK-003 (desk) | Done | `Housekeeping.tsx`: statuses and the day's tasks; `Room.tsx`: the room's housekeeping status moved along the server's `housekeeping_options` (a reason where the edge needs one; an edge's permission or `pms.room.manage`) |
+| PMS-HK-005, PMS-HK-006, PMS-HK-010, PMS-HK-011 (desk) | Done | `Housekeeping.tsx`, `HkTask.tsx`: each task's primary move on its card; the task screen with every move the server offers (each asking what it `needs`), the checklist ticked, a note, photos (`POST housekeeping-tasks/{id}/photos`: a supervisor, or the attendant on their own task or one nobody has, while it is open; 10 MB, 12 a task), the task given to someone from `housekeeping/staff` (`pms.housekeeping.manage`), a new task and "Make today's tasks" (`generate`) for supervisors. The board's drag and drop stays on the web and the phone |
+| PMS-HK-012, PMS-STK-002 | Done | `Restock.tsx`: what went into a room on a task (`housekeeping-tasks/{id}/restocks`) or the room alone (`rooms/{id}/restocks`), Inventory products found with Inventory's own lookup (needs Inventory), kind and "charge" per line, one idempotent press |
+| PMS-MNT-001..003, PMS-MOB-004 (desk) | Done | `Maintenance.tsx`, `Issue.tsx`: open / mine (`maintenance/my`) / all by category; a fault reported (from the list, a room, or the rack) with a technician and the room out of order at once; the lifecycle the server offers — take it, assign (people picker), start, hold, resume, resolve, reopen, close, cancel — out of order / back in service, parts (Inventory product or a name), photos; the room's issues on `Room.tsx` |
+| PMS-LNF-001 | Done | `LostFound.tsx`: items logged (a room or a place), searched, open / due for disposal; stored, claimed, returned, disposed by a supervisor with what each needs; a photo |
+| PMS-REQ-001/002 (desk) | Done | `Requests.tsx`: take a request, move the open ones, assign or reassign to a person from the company directory (the server takes only someone with `pms.guest_request.manage` at the property) |
+| PMS-DOC-001, PMS-DUP-003 | Done | `Guest.tsx`: a document added, saved on this computer through `pms:download` (the main process checks `desktop.downloads`, fetches and audits it) or removed (`pms.guest.edit`); a duplicate merged into the guest with a reason (`pms.guest.merge`) |
+| PMS-CAL-001..004 | Done | `Calendar.tsx`: the tape chart natively — rooms by nights (7, 14, 30), bars in the server's colour with the status in words, outages shaded, bookings without a room listed; a booking moved to another room or dates after the server's price impact (`calendar/preview`, then `calendar/move` with the reservation's `version`), for `pms.reservation.edit` / `pms.room.move`. No drag and drop: a bar is chosen, then moved |
+| PMS-INV-001 (desk) | Done | `Invoices.tsx`: settled / to account / closed folios with their invoice or receipt, "Invoice now"; the hand-offs to Billing and Finance (`outbox`) with a retry, for `pms.settings.manage` |
+| PMS-RPT-001, §13.7 KPIs | Done | `Reports.tsx`, `Report.tsx`: the server's KPIs (a period for `pms.reports.view`, today for the dashboard alone), the report catalogue, a report with its filters, and the server's CSV (and XLSX / PDF where it lists them) saved through `pms:download` for `pms.reports.export`; `desktop.downloads` is checked in the main process (`electron/services/pms-download.ts`), not only on the screen |
 | PMS-DSH-002..004 (desk) | Done | `Dashboard.tsx`: the server's widgets, each opening its list |
 | PMS-ARC-030 | Partial | `pms.*` realtime nudges refresh the rack and lists (`core/query.ts`); a 30-second re-read otherwise. Needs a server with the gateway on to prove the 2 s |
 
@@ -404,6 +413,63 @@ templates, gates and devices) is the web's. Tests: `tests/unit/shared/event-desk
 | EV-EVT-030 (read) | Done | `Overview.tsx`: the server's counts with what each counts, capacity, ticket money for financial viewers, the live view; `Registrations.tsx`, `Registration.tsx`, `Attendees.tsx`, `Attendee.tsx` read |
 | §11.5 override (desk) | Done | The emergency message on every screen, typed confirmation, cleared with a reason — for `events.screen.override` |
 | Multi-window | Done | The live counters in a window of their own beside the desk (`/events/<id>/counters`, the rail's "Counters in a window"); the window shows the counters alone |
+
+## POS — the till (desktop POS, ported from the mobile till's FR-POS-01..03)
+
+`src/modules/pos` (renderer), `electron/services/pos-desk.ts`, `pos-till.ts`, `pos-outbox.ts`, `pos-print.ts`,
+`pos-display.ts`, `pos-ipc.ts` (main), `shared/pos.ts` and `shared/ipc/pos-channels.ts`, over the server's staff POS API
+(`/api/pos`) and the till's own door (`/api/pos/device/*`). Money is WorkSuite's: prices when it answers, the
+drawer's figures always; the till numbers, keeps and sends its sales. Tills, registers and settings are the web's.
+Tests: `tests/unit/electron/pos-desk.test.ts`, `pos-till.test.ts`, `pos-print.test.ts`,
+`tests/unit/renderer/pos.test.ts`, `pos-tender.test.tsx`, `pos-sales.test.tsx`.
+
+| ID | Status | Where / note |
+|---|---|---|
+| POS-DSK-1 Native module | Done | `shared/apps.ts` (`surface: 'native'`), `registry.ts` manifest, deep links `worksuite://pos`, `worksuite://pos/sales/{ref}` |
+| POS-DSK-2 Pairing, heartbeat | Done | `pos-desk.ts`: `terminals/{id}/pair` (take-over asked), `wsp_` credential in the OS keystore, heartbeat every minute with the queue size; 401 drops it, 503 marks POS off |
+| POS-DSK-3 Shift | Done | `Shift.tsx`: open with a float or a count, cash in/out with reasons, close on a count (blind where the company says), X report while open, Z report after; online only |
+| POS-DSK-3 Close rules | Done | `Shift.tsx`, `shift.ts`: `rules.count_to_close` (note by note only), `rules.blind_close`, `rules.variance_tolerance` (no reason asked within it, `needsReason`) |
+| POS-DSK-4 Register | Done | `Register.tsx`, `Tender.tsx`: grid, search, categories, keyboard-wedge scanner anywhere, quantities, customer, discount by permission, cash/card/transfer/wallet/split with change; WorkSuite's price (`POST api/pos/price`, the till's company) with the catalogue's preview; codes not in the copy by `api/pos/products/lookup` |
+| POS-DSK-4 Discount rights | Done | `discountRights()` from `options` `can.discount`, `can.max_discount_pct` (typed discount capped there), `can.discount_override` (no ceiling); none where the server does not say |
+| POS-DSK-5 Offline | Done | Versioned catalogue sealed in SQLite; local receipt numbering per pairing; ordered, idempotent outbox to `device/sales`; sync state in the shell, This till and Sales |
+| POS-DSK-5 Catalogue source | Done | POS's own catalogue: through the till's door every 30 min with nobody signed in (`device/catalogue?since_version=`), on the staff API on request (`api/pos/catalogue?org=&since_version=`, `pos.access` only); Inventory's list only on an older server (`capabilities.catalogue` false, or 404) |
+| POS-DSK-6 Printing | Done | `pos-print.ts`: ESC/POS raw (or the driver, silently), copies, header/footer, drawer pulse on cash, Printers settings; a reprint is WorkSuite's receipt (`device/sales/{ref}/receipt`, `serverReceiptRows`) where `capabilities.receipt`, the till's own otherwise |
+| POS-DSK-7 Sales history | Done | `Sales.tsx`: this shift / today from the till's record, receipt, reprint, e-mail receipt (`device/sales/{ref}/email`), send again / drop a refused sale; WorkSuite's `total` and `review` flag from the sale's answer |
+| POS-DSK-7 Refund, void | Done | `Sales.tsx` `Reverse`, `pos-till.ts` `giveBack`: refund everything left or some lines (restock or not), void in the sale's own open shift, with the reason, through the till's door with the cashier named and the till's own number (`<receipt>-R<n>`, `-V`, idempotent); gated by `capabilities.refund`/`.void` and `can.refund`/`.void`, online only; WorkSuite's answer kept on the sale (tenders, cash out of the drawer — which opens — credit note) and taken off the shift's figures |
+| POS-DSK-8 Customer display | Done | `pos-display.ts`, `CustomerDisplay.tsx`: full screen on a second monitor, fed over a same-origin BroadcastChannel |
+| L10N | Partial | `modules/pos/i18n.ts`: English complete, Sinhala and Tamil for the till's everyday words (native review due); receipts print in Latin script |
+
+## Restaurant Manager — desktop POS, KDS and print agent (Restaurant SRS v1.0, stage C desktop)
+
+`src/modules/restaurant` (renderer), `electron/services/restaurant/` (main: `terminal.ts`, `sync.ts`, `outbox.ts`,
+`print-agent.ts`), `shared/restaurant.ts`, over the server's `/api/restaurant/v1` (`app/Modules/Restaurant`, stages A,
+B1, B2). Prices, totals, splits, change, statuses and the next moves are the server's. The back office (menu, floor
+design, staff, settings, reports, the day close, a booking's deposit) is the web's. Tests:
+`tests/unit/electron/restaurant-terminal.test.ts`, `restaurant-outbox.test.ts`, `restaurant-print.test.ts`,
+`tests/unit/renderer/restaurant.test.tsx`.
+
+| ID | Status | Where / note |
+|---|---|---|
+| RM-PLT-003 | Done | `Connect.tsx`, `terminal.ts`: pair this computer as a branch terminal; the key in the OS credential store, sent as `X-Terminal-Key`; unpair (optionally revoking) |
+| RM-POS-001..006 | Done | `Order.tsx`: the branch menu by category and search, sold-out items disabled, variants, modifier groups (required, min, max, one nested level), open prices, notes, seat and course; `GET pos` opens the till |
+| RM-POS combos, RM-MNU-004 | Done | `Order.tsx` ItemPicker: a combo's fixed parts listed, each choice component asked (min–max, upcharges, parts not orderable disabled), sent as the line's `combo[]`; kept on lines queued offline (`shared/restaurant.ts`). A component's own modifiers are not asked (the server refuses a required one in its words) |
+| RM-TBL-001..005 | Done | `Floor.tsx`: tables by floor and area in their state, party, order and next booking; seat, open, free, request the bill, move, merge, split (with lines), clean, unblock — every move with the tables' versions |
+| RM-KOT-003, §5.3 | Done | Send, fire and hold by course, serve, print the KOT again |
+| Voids (§8.6, RM-SEC-010) | Done | A line taken off, or voided after the kitchen with a reason and quantity; above the limit, `Approval` asks for one and takes a manager's PIN at the till or their answer elsewhere, then voids with the `approval_id` |
+| RM-BIL-001..003 | Done | `Bill.tsx`: `bills/preview` (the client computes no total), single, by seat, by item, equally, by amount; present, void, print and reprint (a bill no route takes is printed here from its `document.text`) |
+| RM-BIL-004 | Done | `Adjust.tsx` InvoiceDialog: `POST bills/{id}/invoice` for a whole-order bill, addressed to the order's customer or one looked up (`GET customers?q=`); an invoiced bill answers its invoice again. For `restaurant.payment.process`, online only |
+| RM-PAY-003/004 | Done | Several tenders, cash handed over and the server's change, one `Idempotency-Key` per attempt kept across retries; the drawer opens when the server says so |
+| §8.5 cashier | Done | `Cashier.tsx`: open with a float on the terminal's register, cash in and out (out approved above the limit), no-sale with the drawer, the X report, close on a count with the variance (approved above the threshold) |
+| RM-DSC-003/004, §8.2, §8.6 discounts, comps, price overrides | Done | `Adjust.tsx`, `Order.tsx`: a discount on the order or a line (percentage or amount), a line complimentary, a line's price overridden — each with a reason, for `discount.apply` / `comp` / `price.override`; above the limit `approval_needed` → `Approval` (manager's PIN here or their answer elsewhere) → the same request with `approval_id`. The order's discounts and comps listed and taken back (`adjustments/{id}/remove`) before anything is paid. Online only |
+| RM-RFV-001/002, §8.6 refunds | Done | `Adjust.tsx`, `Bill.tsx`: the order's payments (`GET payments?order_id=`), a received payment refunded in full or part with a reason (`restaurant.refund`), one `Idempotency-Key` per attempt kept until the server answers, the approval flow above the limit, the drawer opened when the server says so. Online only |
+| RM-KDS-001..003 | Done | `Kitchen.tsx`: a station's tickets oldest first, coloured by the server's `tone`, ADD / VOID marks, allergy warnings, "did not print"; lines done and undone; accept, start, bump, recall, serve; all-day counts, held lines, recently bumped |
+| RM-KDS-005 | Done | `Expo`: every station's ticket per order; served when all are ready |
+| RM-ARC-010, RM-ARC-012 | Done | `useLive`: the gateway's `restaurant.live` pushes (`realtime:event`, this branch only) refresh the queries each entity touches at once; `live?after=` from the heartbeat's `last_seq` stays as the catch-up — every 3–10 s without the socket, every 30 s with it |
+| RM-ARC-020..023 | Done | `sync.ts`, `outbox.ts`: the menu and floor copy sealed; orders, lines and sends queued in order with the device's ids, played back through `sync` with an idempotency key per batch; conflicts kept and shown, and settled by a manager (`Outbox.tsx`: attach to a table or dismiss) |
+| RM-ARC-021 cash offline | Later | Needs an offline bill-and-pay op on the server (BACKEND.md) |
+| RM-ARC-030..032, RM-DSK-003 | Done | `print-agent.ts`: claims the jobs of the printers mapped here, prints raw ESC/POS or through the driver, silently, answers printed or failed (the server retries, falls back, leaves tickets to the KDS); `Printers.tsx` maps printers, test prints, the drawer, the agent's log and the branch queue with reprints |
+| RM-DSK-007 | Done | Heartbeat every 30 s: queue size, version, online, last sync, the hosted printers' state |
+| §5.7 reservations (host stand) | Done | `Reservations.tsx`: the day's bookings with the server's `choices` (confirm, arrived, seat at a free table with guests and the table's version, cancel with a reason, no-show), the tables' timeline (`reservations/timeline`), a booking after `reservations/availability` (free tables, or the server's other times). `reservation.view` to see, `reservation.manage` to move; online only. Deposits and changing a booking stay on the web |
 
 ## Devices, security, updates (SEC, UPD)
 
