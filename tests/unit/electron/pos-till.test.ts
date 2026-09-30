@@ -3,12 +3,12 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('electron', () => ({ app: { getPath: () => '/tmp', getVersion: () => '0.1.0' }, safeStorage: {} }));
 
 import type { PosSale, PosSellInput } from '@shared/pos';
-import { formatReceipt, posContract } from '@shared/pos';
+import { formatReceipt, posContract, saleFlags } from '@shared/pos';
 import { DesktopError } from '../../../electron/main/errors';
 import { Database } from '../../../electron/services/db';
 import { apply, batch, nextSequence, readAnswer, saleBody, sequenceOf, type Queued } from '../../../electron/services/pos-outbox';
 import type { DeviceAnswer, PosPairing } from '../../../electron/services/pos-desk';
-import { catalogueOf, PosTill, productFromInventory, productFromPos, receiptOf, returnRef } from '../../../electron/services/pos-till';
+import { catalogueOf, doorError, PosTill, productFromInventory, productFromPos, receiptOf, returnRef } from '../../../electron/services/pos-till';
 import { Vault } from '../../../electron/services/vault';
 
 const input = (over: Partial<PosSellInput> = {}): PosSellInput => ({
@@ -67,6 +67,11 @@ describe('POS outbox rules', () => {
   it('reads the device door’s codes', () => {
     expect(readAnswer(401, { message: 'Pair again.' })).toEqual({ kind: 'reauth', message: 'Pair again.' });
     expect(readAnswer(503, null).kind).toBe('off');
+    // Where POS is switched on — WorkSuite's own sentence first, when it gives one.
+    expect(readAnswer(503, null)).toEqual({ kind: 'off', message: 'POS is switched off on WorkSuite. An administrator turns it on in Admin Centre → Apps → POS.' });
+    expect(readAnswer(503, { message: 'POS is switched off. An administrator turns it on in Admin Centre → Apps → POS.' })).toEqual({ kind: 'off', message: 'POS is switched off. An administrator turns it on in Admin Centre → Apps → POS.' });
+    expect(doorError({ status: 503, body: null }, 'x').message).toMatch(/Admin Centre → Apps → POS/);
+    expect(doorError({ status: 503, body: { message: 'Off here.' } }, 'x').message).toBe('Off here.');
     expect(readAnswer(500, null).kind).toBe('retry');
     expect(readAnswer(429, null).kind).toBe('retry');
     expect(readAnswer(413, { message: 'Too many.' })).toEqual({ kind: 'bad', message: 'Too many.' });
@@ -216,6 +221,37 @@ describe('POS till: selling, keeping and sending', () => {
     await expect(s.till.resolve(sale.ref, 'drop')).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 
+  it('keeps a sale refused for its drawer with the code, and sends it again only into the register open now', async () => {
+    let door: Door = offline;
+    const s = service({ door: (p, b) => door(p, b) });
+    const { sale } = await s.till.sell(input(), cashier);
+    const closed = 'That register was closed before this sale was made. Open a register and send the sale again, or record it on the web.';
+    door = async (p, b) => (p === 'heartbeat' ? { status: 200, body: {} } : { status: 422, body: { results: (b as { sales: Array<{ ref: string }> }).sales.map((x) => ({ ref: x.ref, status: 'rejected', code: 'drawer_closed', message: closed })) } });
+    await s.till.sync();
+    expect(s.till.sale(sale.ref)).toMatchObject({ state: 'refused', code: 'drawer_closed', message: closed, session_id: 41 });
+
+    // Without a register open here, sending it again would only be refused again.
+    await expect(s.till.resolve(sale.ref, 'retry')).rejects.toMatchObject({ code: 'CONFLICT', message: expect.stringMatching(/Open the register/) });
+
+    door = async (p, b) => (p === 'heartbeat' ? { status: 200, body: {} } : { status: 200, body: { results: (b as { sales: Array<{ ref: string }> }).sales.map((x) => ({ ref: x.ref, status: 'created', number: 'SO-4' })) } });
+    await s.till.resolve(sale.ref, 'retry', 52);
+    const last = s.sent.filter((x) => x.path === 'sales').at(-1)!.body.sales![0] as unknown as { session_id: number };
+    expect(last.session_id).toBe(52);
+    expect(s.till.sale(sale.ref)).toMatchObject({ state: 'sent', number: 'SO-4', session_id: 52, code: null });
+    expect(s.till.sales({ session_id: 52 }).map((x) => x.ref)).toEqual([sale.ref]);
+  });
+
+  it('drops a sale refused because its session is another till’s', async () => {
+    let door: Door = offline;
+    const s = service({ door: (p, b) => door(p, b) });
+    const { sale } = await s.till.sell(input(), cashier);
+    door = async (p, b) => (p === 'heartbeat' ? { status: 200, body: {} } : { status: 422, body: { results: (b as { sales: Array<{ ref: string }> }).sales.map((x) => ({ ref: x.ref, status: 'rejected', code: 'session_not_here', message: 'The register session this sale names is not at this till.' })) } });
+    await s.till.sync();
+    expect(s.till.sale(sale.ref)).toMatchObject({ state: 'refused', code: 'session_not_here' });
+    await s.till.resolve(sale.ref, 'drop');
+    expect(s.till.sale(sale.ref)).toBeNull();
+  });
+
   it('stops sending when the credential is refused, and loses nothing', async () => {
     let door: Door = offline;
     const s = service({ door: (p, b) => door(p, b) });
@@ -361,6 +397,28 @@ describe('POS till: after the sale', () => {
     const q = queued();
     const r = apply([q], [{ ref: q.sale.ref, status: 'created', number: 'SO-1', message: null, total: 880, review: 'Differs' }], 'now');
     expect(r.updated[0]!.sale).toMatchObject({ state: 'sent', server_total: 880, review: 'Differs' });
+  });
+
+  it('keeps WorkSuite’s flags on a sale — a late one, one with its payment missing — and drops codes it does not know', () => {
+    const v = readAnswer(200, { results: [{ ref: 'A', status: 'created', number: 'SO-1', review: 'Sold while register session 41 was open.', flags: ['late', 'late', 'nonsense', 3] }] });
+    expect(v).toMatchObject({ kind: 'results', results: [{ ref: 'A', flags: ['late'] }] });
+    const q = queued();
+    const r = apply([q], [{ ref: q.sale.ref, status: 'created', number: 'SO-1', message: null, review: 'Payment missing.', flags: ['payment_missing'] }], 'now');
+    expect(r.updated[0]!.sale).toMatchObject({ state: 'sent', flags: ['payment_missing'], code: null });
+    expect(saleFlags(r.updated[0]!.sale)).toEqual(['payment_missing']);
+    // An older server said only `review`: that was the price.
+    expect(saleFlags({ review: 'Differs' })).toEqual(['price_differs']);
+    expect(saleFlags({})).toEqual([]);
+    expect(readAnswer(422, { results: [{ ref: 'B', status: 'rejected', code: 'drawer_closed', message: 'No register is open here.' }] })).toEqual({
+      kind: 'results',
+      results: [{ ref: 'B', status: 'rejected', number: null, message: 'No register is open here.', code: 'drawer_closed' }],
+    });
+  });
+
+  it('reads a receipt WorkSuite recorded with its payment missing', () => {
+    const r = receiptOf({ receipt_no: 'T1-AAAAAA-000001', lines: [], totals: { total: 450 }, status: 'payment_missing', payment_missing: true });
+    expect(r).toMatchObject({ status: 'payment_missing', payment_missing: true });
+    expect(receiptOf({ receipt_no: 'T1-AAAAAA-000001', lines: [], status: 'paid' })).toMatchObject({ payment_missing: false });
   });
 
   it('refunds some lines through the door with the cashier named, under the till’s own number, and keeps the answer', async () => {

@@ -45,7 +45,7 @@ export default function TillScreen() {
         {row('Warehouse', p.terminal.warehouse_name)}
         {row('Paired', timeOf(p.paired_at))}
         {row('Receipt numbers', `${p.prefix}-000001 …`)}
-        {row('State', p.state === 'paired' ? 'Paired' : p.state === 'pos_off' ? 'POS is switched off on WorkSuite' : 'Not accepted — pair again')}
+        {row('State', p.state === 'paired' ? 'Paired' : p.state === 'pos_off' ? (s.problem ?? 'POS is switched off on WorkSuite. An administrator turns it on in Admin Centre → Apps → POS.') : 'Not accepted — pair again')}
       </Card>
       <Card
         title="Catalogue"

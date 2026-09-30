@@ -1,4 +1,4 @@
-import type { PosSale } from '@shared/pos';
+import { POS_SALE_FLAGS, type PosSale, type PosSaleFlag } from '@shared/pos';
 
 /**
  * The till's outbox, as rules with no database in them.
@@ -8,14 +8,19 @@ import type { PosSale } from '@shared/pos';
  * WorkSuite keys a till's sales by (channel, ref), so a sale sent twice — the answer lost, the app restarted mid-send
  * — is answered "already had" the second time and recorded once. The server answers each sale on its own: created,
  * already had, or refused with the reason — and, for a sale it priced again, its own `total` and a `review` note when
- * the till charged something else (kept on the sale, shown in Sales). Created and already-had are done; a refused sale stays, with WorkSuite's
- * sentence, until a person sends it again or drops it; one the server did not mention is tried again.
+ * the till charged something else (kept on the sale, shown in Sales), with the `flags` codes (`price_differs`, `payment_missing`,
+ * `late` — a sale sold while a register since closed was open, taken into it). Created and already-had are done; a refused
+ * sale stays, with WorkSuite's sentence and `code` (`drawer_closed`: no register open for it; `session_not_here`: the session
+ * it names is another till's), until a person sends it again or drops it; one the server did not mention is tried again.
  *
  * The status code says what to do with the rest (`Pos\Controllers\DeviceController`): 401 the credential is dead
  * (pair again; nothing is lost, the sales wait), 503 POS is switched off (wait), 5xx and 429 try later, any other
  * 4xx is a request the server could not read (keep the sales, say so, try later).
  */
 export const BATCH = 25;
+
+/** What the till says when WorkSuite answers 503 without its own sentence: where POS is switched on. */
+export const POS_OFF = 'POS is switched off on WorkSuite. An administrator turns it on in Admin Centre → Apps → POS.';
 
 /** A sale in the outbox and its place in the queue. */
 export interface Queued {
@@ -30,8 +35,12 @@ export interface DeviceSaleResult {
   message: string | null;
   /** WorkSuite's own total for the sale (priced again where every line named its product). */
   total?: number | null;
-  /** Set when the till's total disagreed with WorkSuite's: the sale stands, flagged for somebody to look at. */
+  /** Set when the sale is flagged for somebody to look at (a total that disagreed, a late sale…): the sale stands. */
   review?: string | null;
+  /** Why it is flagged, as codes. */
+  flags?: PosSaleFlag[];
+  /** Why it was refused, when WorkSuite said (`drawer_closed`, `session_not_here`). */
+  code?: string | null;
 }
 
 export type Verdict =
@@ -87,13 +96,18 @@ export function batch(items: Queued[], max = BATCH): Queued[] {
     .slice(0, max);
 }
 
+/** The flags WorkSuite named that this till knows, once each. */
+export function flagsOf(v: unknown[]): PosSaleFlag[] {
+  return [...new Set(v.filter((f): f is PosSaleFlag => typeof f === 'string' && (POS_SALE_FLAGS as readonly string[]).includes(f)))];
+}
+
 const text = (v: unknown, fallback: string): string => (typeof v === 'string' && v.trim() !== '' ? v : fallback);
 
 /** Read the device door's answer. */
 export function readAnswer(status: number, body: Record<string, unknown> | null): Verdict {
   const message = text(body?.message, `WorkSuite answered ${status}.`);
   if (status === 401) return { kind: 'reauth', message: text(body?.message, 'The till could not be authenticated. Pair it again.') };
-  if (status === 503) return { kind: 'off', message: text(body?.message, 'POS is switched off on WorkSuite.') };
+  if (status === 503) return { kind: 'off', message: text(body?.message, POS_OFF) };
   if ((status === 200 || status === 201 || status === 422) && Array.isArray(body?.results)) {
     const results: DeviceSaleResult[] = [];
     for (const r of body.results as unknown[]) {
@@ -107,7 +121,9 @@ export function readAnswer(status: number, body: Record<string, unknown> | null)
         number: typeof o.number === 'string' ? o.number : null,
         message: typeof o.message === 'string' ? o.message : null,
         ...(typeof o.total === 'number' && Number.isFinite(o.total) ? { total: o.total } : {}),
-        ...(typeof o.review === 'string' && o.review.trim() ? { review: o.review.trim().slice(0, 300) } : {}),
+        ...(typeof o.review === 'string' && o.review.trim() ? { review: o.review.trim().slice(0, 600) } : {}),
+        ...(Array.isArray(o.flags) ? { flags: flagsOf(o.flags) } : {}),
+        ...(typeof o.code === 'string' && /^[a-z_]{2,40}$/.test(o.code) ? { code: o.code } : {}),
       });
     }
     return { kind: 'results', results };
@@ -151,10 +167,12 @@ export function apply(sent: Queued[], results: DeviceSaleResult[], now: string):
           attempts: q.sale.attempts + 1,
           server_total: r.total ?? q.sale.server_total ?? null,
           review: r.review ?? q.sale.review ?? null,
+          ...(r.flags ? { flags: r.flags } : q.sale.flags ? { flags: q.sale.flags } : {}),
+          code: null,
         },
       });
     } else {
-      const sale: PosSale = { ...q.sale, state: 'refused', message: r.message ?? 'WorkSuite would not record this sale.', attempts: q.sale.attempts + 1 };
+      const sale: PosSale = { ...q.sale, state: 'refused', message: r.message ?? 'WorkSuite would not record this sale.', code: r.code ?? null, attempts: q.sale.attempts + 1 };
       refused.push(sale);
       updated.push({ ...q, sale });
     }

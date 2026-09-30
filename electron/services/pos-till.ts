@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
-import { formatReceipt, type PosCatalogue, type PosGiveBack, type PosProduct, type PosReturn, type PosSale, type PosSellInput, type PosServerReceipt, type PosTillStatus } from '@shared/pos';
+import { formatReceipt, POS_DRAWER_REFUSALS, type PosCatalogue, type PosGiveBack, type PosProduct, type PosReturn, type PosSale, type PosSellInput, type PosServerReceipt, type PosTillStatus } from '@shared/pos';
 import { DesktopError, isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { Database } from './db';
 import type { HttpClient } from './http';
 import type { DeviceAnswer, PosDesk } from './pos-desk';
-import { apply, batch, nextSequence, readAnswer, saleBody, sequenceOf, type Queued } from './pos-outbox';
+import { apply, batch, flagsOf, nextSequence, POS_OFF, readAnswer, saleBody, sequenceOf, type Queued } from './pos-outbox';
 import type { Vault } from './vault';
 
 const log = logger('pos-till');
@@ -38,6 +38,11 @@ const log = logger('pos-till');
  *
  * A sale WorkSuite refuses while the cashier waits was never made: it is removed and the refusal shown, the customer
  * still at the counter. One refused later (sold offline) stays, with the reason, for a person to send again or drop.
+ *
+ * No drawer, no sale: WorkSuite takes a sale only into an open register session. The register screen sells only while
+ * one is open here; a sale that reaches WorkSuite after its register closed is still taken when it was made while the
+ * register was open (`late`, flagged for review). Otherwise it is refused `drawer_closed` — or `session_not_here`, the
+ * session it names being another till's — and kept with that reason; sent again, it goes into the register open now.
  */
 const TICK_MS = 30_000;
 const BEAT_MS = 60_000;
@@ -110,6 +115,8 @@ export class PosTill {
   private lastSync: string | null = null;
   private lastBeat = 0;
   private problem: string | null = null;
+  /** WorkSuite's own sentence the last time it said POS is switched off (503), shown while it stays off. */
+  private offMessage: string | null = null;
   /** The catalogue, when the policy does not let it be kept on disk. */
   private memory = new Map<string, PosCatalogue>();
   /** When the door was last asked for the catalogue (0: not yet since start-up). */
@@ -159,7 +166,7 @@ export class PosTill {
     const caps = this.caps();
     let problem = this.problem;
     if (p?.state === 'revoked') problem = 'WorkSuite no longer accepts this till. Pair this computer again; its sales wait here until then.';
-    else if (p?.state === 'pos_off') problem = 'POS is switched off on WorkSuite. Sales wait here until it is on again.';
+    else if (p?.state === 'pos_off') problem = `${this.offMessage ?? POS_OFF} Sales wait here until it is on again.`;
     return {
       till: p ? { terminal: p.terminal, paired_at: p.paired_at, state: p.state, prefix: p.prefix } : null,
       waiting: count('waiting'),
@@ -385,14 +392,24 @@ export class PosTill {
     return s ? (this.rows(s, 'AND ref = ?', ref)[0]?.sale ?? null) : null;
   }
 
-  /** A refused sale: send it again as it is (the reason may have gone), or drop it. */
-  async resolve(ref: string, action: 'retry' | 'drop'): Promise<PosTillStatus> {
+  /**
+   * A refused sale: send it again as it is (the reason may have gone), or drop it. One refused for its drawer
+   * (`drawer_closed`, `session_not_here`) is sent into the register open at this till now (`sessionId`) — without one,
+   * WorkSuite would only refuse it again.
+   */
+  async resolve(ref: string, action: 'retry' | 'drop', sessionId?: number): Promise<PosTillStatus> {
     const s = this.scope();
     const q = s ? this.rows(s, 'AND ref = ?', ref)[0] : undefined;
     if (!s || !q) throw new DesktopError('NOT_FOUND', 'That sale is not on this till.');
     if (q.sale.state !== 'refused') throw new DesktopError('CONFLICT', 'Only a sale WorkSuite refused can be sent again or dropped.');
+    const drawer = !!q.sale.code && POS_DRAWER_REFUSALS.has(q.sale.code);
+    if (action === 'retry' && drawer && !sessionId) throw new DesktopError('CONFLICT', 'No register is open at this till. Open the register, then send the sale again.');
     if (action === 'drop') this.d.db.run('DELETE FROM pos_sales WHERE origin = ? AND ref = ?', s.origin, ref);
-    else this.save(s, { ...q, sale: { ...q.sale, state: 'waiting', message: null } });
+    else if (drawer && sessionId) {
+      const sale: PosSale = { ...q.sale, state: 'waiting', message: null, code: null, session_id: sessionId };
+      this.d.db.run('UPDATE pos_sales SET session_id = ? WHERE origin = ? AND ref = ?', sessionId, s.origin, ref);
+      this.save(s, { ...q, sale });
+    } else this.save(s, { ...q, sale: { ...q.sale, state: 'waiting', message: null, code: null } });
     this.d.changed();
     if (action === 'retry') await this.sync();
     return this.status();
@@ -456,6 +473,7 @@ export class PosTill {
       voided: shape?.voided === true || input.kind === 'void',
       ...(typeof shape?.total === 'number' ? { server_total: shape.total } : {}),
       ...(shape && 'review' in shape ? { review: str(shape.review) } : {}),
+      ...(shape && Array.isArray(shape.flags) ? { flags: flagsOf(shape.flags) } : {}),
     };
     this.save(s, { ...q, sale });
     this.d.changed();
@@ -512,6 +530,7 @@ export class PosTill {
         this.reachable = true;
         this.lastContact = this.stamp();
         if (a.status === 401 || a.status === 503) {
+          if (a.status === 503) this.offMessage = str(a.body?.message)?.slice(0, 300) ?? null;
           this.d.changed();
           return;
         }
@@ -537,6 +556,7 @@ export class PosTill {
       const v = readAnswer(answer.status, answer.body);
       if (v.kind !== 'results') {
         this.problem = v.kind === 'reauth' || v.kind === 'off' ? null : v.message;
+        if (v.kind === 'off') this.offMessage = v.message.slice(0, 300);
         if (v.kind === 'bad' || v.kind === 'retry') for (const q of send) this.save(s, { ...q, sale: { ...q.sale, attempts: q.sale.attempts + 1 } });
         break;
       }
@@ -649,6 +669,7 @@ export function receiptOf(v: unknown): PosServerReceipt | null {
     change: num(r.change),
     refunds: list(r.refunds).map((x) => ({ ref: str(x.ref) ?? '', kind: str(x.kind) ?? 'refund', amount: num(x.amount), cash: num(x.cash), reason: str(x.reason) })),
     refunded: num(r.refunded),
+    payment_missing: r.payment_missing === true || r.status === 'payment_missing',
     status: str(r.status) ?? 'paid',
     void_reason: str(r.void_reason),
     footer: str(r.footer) ?? '',
@@ -659,7 +680,7 @@ export function receiptOf(v: unknown): PosServerReceipt | null {
 export function doorError(a: DeviceAnswer, fallback: string): DesktopError {
   const message = str(a.body?.message) ?? fallback;
   if (a.status === 401) return new DesktopError('PERMISSION_DENIED', 'WorkSuite no longer accepts this till. Pair this computer again.', 401);
-  if (a.status === 503) return new DesktopError('SERVER_ERROR', 'POS is switched off on WorkSuite.', 503);
+  if (a.status === 503) return new DesktopError('SERVER_ERROR', str(a.body?.message) ?? POS_OFF, 503);
   if (a.status === 403) return new DesktopError('PERMISSION_DENIED', message, 403);
   if (a.status === 404) return new DesktopError('NOT_FOUND', message, 404);
   if (a.status === 409 || a.status === 422) return new DesktopError('CONFLICT', message, a.status);

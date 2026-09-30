@@ -12,9 +12,12 @@ import { call } from '../../core/bridge';
  *   Cash drawer         opens for a cash payment or a refund
  *   Payment terminal    charges a card and answers with the provider's reference, token and last four digits (PMS-PAY-003)
  *
- * What ships is the seam and its "no device" providers, plus the printer that
- * is the desktop's own printing (the OS dialog, `print:print`): no vendor
- * driver is included. Without a device the desk works as a desk does — the
+ * What ships is the seam and its "no device" providers, the printer that is
+ * the desktop's own printing (the OS dialog, `print:print`), and the key
+ * encoder through the property's on-site lock server — Salto (SHIP), Vingcard
+ * (Visionline, Vostio), dormakaba (Ambiance, Saflok) — driven by the main
+ * process (`electron/services/pms-locks`, `pmsLocks:*`) and registered here by
+ * `locks.ts` when this computer has a lock server for the property. Without a device the desk works as a desk does — the
  * server's door-lock provider (or keys handed over by hand), the signature on
  * the screen, the card terminal's slip typed in as a card payment with its
  * reference and last four digits.
@@ -60,6 +63,9 @@ export interface KeyJob {
   roomNumber: string | null;
   validUntil: string;
   count: number;
+  /** WorkSuite's encoder payload and its key-log job, for an on-premise lock system (`locks.ts`). */
+  payload?: unknown;
+  logId?: number;
 }
 
 export interface DeviceOutcome {

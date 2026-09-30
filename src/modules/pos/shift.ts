@@ -1,4 +1,4 @@
-import type { PosReport, PosSale } from '@shared/pos';
+import { saleFlags, type PosReport, type PosSale, type PosSaleFlag } from '@shared/pos';
 import type { CloseBody, PosMovement, PosSession } from './api';
 import { countBody, formatMoney, parseAmount, type CountLine } from './pricing';
 
@@ -7,6 +7,20 @@ import { countBody, formatMoney, parseAmount, type CountLine } from './pricing';
  * (the session: float, what moved in and out, what the drawer should hold, the variance); what this till sold comes
  * from its own record of its sales, shown beside them. Pure, so they are tested without a screen.
  */
+
+/**
+ * Which sales the history shows, as WorkSuite's review filter (`GET sales?review=1|price_differs|payment_missing|late`)
+ * reads them — here from this till's own record: every sale, those flagged at all, or those with one flag.
+ */
+export type ReviewFilter = 'all' | 'review' | PosSaleFlag;
+
+export function filterSales(sales: PosSale[], f: ReviewFilter): PosSale[] {
+  if (f === 'all') return sales;
+  return sales.filter((s) => {
+    const flags = saleFlags(s);
+    return f === 'review' ? flags.length > 0 : flags.includes(f);
+  });
+}
 
 /** What closing sends: the notes and coins counted, or one figure (not where the company counts note by note), and why it is different when it is. */
 export function closeBody(counts: CountLine[], counted: string, reason: string, rules: { count_to_close?: boolean } = {}): CloseBody | { error: string } {

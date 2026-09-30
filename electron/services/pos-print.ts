@@ -1,4 +1,4 @@
-import type { PosPrintOutcome, PosPrintPatch, PosPrintSettings, PosReport, PosSale, PosServerReceipt } from '@shared/pos';
+import { saleFlags, type PosPrintOutcome, type PosPrintPatch, type PosPrintSettings, type PosReport, type PosSale, type PosServerReceipt } from '@shared/pos';
 import { DesktopError } from '../main/errors';
 import { drawerPulse, printInWindow, sendRaw, type PrintJob, type PrintResult } from './salon-print';
 
@@ -22,8 +22,10 @@ import { drawerPulse, printInWindow, sendRaw, type PrintJob, type PrintResult } 
  * A reprint is WorkSuite's receipt (`device/sales/{ref}/receipt`: its figures after pricing an offline sale again, its
  * order and invoice numbers, refunds and a void) where the server has it; otherwise, and for the receipt printed as the
  * sale completes, the till's own record of the sale (pos-till.ts): WorkSuite's figures when it priced the cart, the
- * catalogue's preview — marked "provisional" — when it could not be reached. Settings are this computer's, filed
- * under the server (which printers are plugged in is a fact about this computer); a wipe forgets them.
+ * catalogue's preview — marked "provisional" — when it could not be reached. A sale WorkSuite recorded with its payment
+ * missing (the till sent no tenders: `status: payment_missing`) prints a "Payment missing" line for the total.
+ * Settings are this computer's, filed under the server (which printers are plugged in is a fact about this computer);
+ * a wipe forgets them.
  */
 const KEY = 'pos-print';
 
@@ -96,6 +98,7 @@ export function receiptRows(sale: PosSale, s: Pick<PosPrintSettings, 'header' | 
   rows.push({ kind: 'rule' });
   for (const t of sale.tenders) rows.push({ kind: 'pair', left: `${METHOD[t.method] ?? t.method}${t.reference ? ` (${t.reference})` : ''}`, right: money(t.amount) });
   if (sale.change_given) rows.push({ kind: 'pair', left: 'Change', right: money(sale.change_given), bold: true });
+  if (!sale.tenders.length || saleFlags(sale).includes('payment_missing')) rows.push({ kind: 'pair', left: 'Payment missing', right: money(sale.totals.total), bold: true });
   if (sale.priced_by === 'estimate') {
     rows.push({ kind: 'rule' });
     rows.push({ kind: 'text', text: 'Provisional: priced offline. WorkSuite confirms the figures.', align: 'center' });
@@ -106,7 +109,7 @@ export function receiptRows(sale: PosSale, s: Pick<PosPrintSettings, 'header' | 
   return rows;
 }
 
-const STATUS: Record<string, string> = { voided: '*** VOIDED ***', refunded: '*** REFUNDED ***', part_refunded: '*** PART REFUNDED ***' };
+const STATUS: Record<string, string> = { payment_missing: '*** PAYMENT MISSING ***', voided: '*** VOIDED ***', refunded: '*** REFUNDED ***', part_refunded: '*** PART REFUNDED ***' };
 
 /** WorkSuite's receipt for a sale (`Receipt::data`), laid out the same way; the till's header and footer around it. */
 export function serverReceiptRows(r: PosServerReceipt, s: Pick<PosPrintSettings, 'header' | 'footer'>, o: { till: string | null; reprint?: boolean } = { till: null }): ReceiptRow[] {
@@ -140,6 +143,8 @@ export function serverReceiptRows(r: PosServerReceipt, s: Pick<PosPrintSettings,
   rows.push({ kind: 'rule' });
   for (const t of r.tenders) rows.push({ kind: 'pair', left: `${t.label}${t.reference ? ` (${t.reference})` : ''}`, right: money(t.amount) });
   if (r.change) rows.push({ kind: 'pair', left: 'Change', right: money(r.change), bold: true });
+  // Nothing was taken as far as WorkSuite knows (the till sent no tenders) until Billing records the payment.
+  if (r.payment_missing || r.status === 'payment_missing') rows.push({ kind: 'pair', left: 'Payment missing', right: money(r.totals.total), bold: true });
   if (r.refunds.length) {
     rows.push({ kind: 'rule' });
     for (const x of r.refunds) rows.push({ kind: 'pair', left: `${x.kind === 'void' ? 'Void' : 'Refund'} ${x.ref}`, right: `-${money(x.amount)}` });

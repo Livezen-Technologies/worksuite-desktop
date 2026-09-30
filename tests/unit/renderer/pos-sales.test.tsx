@@ -45,7 +45,7 @@ const sale: PosSale = {
 
 const CAN: PosCan = { sell: true, open: true, close: true, cash_in: true, cash_out: true, view_all: false, settings: false, terminals: false, refund: true, void: true, discount: false };
 
-function mount(o: { caps?: PosCapabilities; can?: Partial<PosCan>; inShift?: boolean } = {}) {
+function mount(o: { caps?: PosCapabilities; can?: Partial<PosCan>; inShift?: boolean; noShift?: boolean; sales?: PosSale[]; open?: string } = {}) {
   const giveBack = vi.fn(async (input: PosGiveBack) => ({
     sale: { ...sale, returns: [] },
     refund: { ref: `${sale.ref}-R1`, kind: input.kind, status: 'done', amount: 450, cash_out: 450, tenders: [{ method: 'cash', amount: 450 }], lines: input.lines ?? [], reason: input.reason, credit_note: 'CN-4', at: null },
@@ -54,18 +54,20 @@ function mount(o: { caps?: PosCapabilities; can?: Partial<PosCan>; inShift?: boo
   const printReceipt = vi.fn(async () => ({ ok: true, printer: 'Thermal', message: 'Sent to Thermal.' }));
   const openDrawer = vi.fn(async () => ({ ok: true, printer: 'Thermal', message: 'Drawer opened.' }));
   const email = vi.fn(async () => ({ message: 'The receipt was sent.' }));
-  (window as { worksuite?: unknown }).worksuite = { platform: 'linux', pos: { sales: async () => [sale], giveBack, printReceipt, openDrawer, email }, events: { on: () => () => undefined } };
+  const resolve = vi.fn(async () => ({}));
+  const list = o.sales ?? [sale];
+  (window as { worksuite?: unknown }).worksuite = { platform: 'linux', pos: { sales: async () => list, giveBack, printReceipt, openDrawer, email, resolve }, events: { on: () => () => undefined } };
   const till: Till = {
     status: { till: null, waiting: 0, refused: 0, reachable: true, last_contact: null, last_sync: null, problem: null, can_queue: true, can_keep: true, catalogue: null },
     options: null,
     company: { id: 3, name: 'Acme', currency: 'LKR', today: null, can: { ...CAN, ...o.can } },
     caps: o.caps ?? { refund: true, void: true, receipt: true, email_receipt: true },
     currency: 'LKR',
-    session: o.inShift === false ? { ...session, id: 99 } : session,
+    session: o.noShift ? null : o.inShift === false ? { ...session, id: 99 } : session,
     registers: [],
     offline: false,
     discount: { allowed: false, ceiling: null },
-    params: new URLSearchParams(`view=sales&sale=${sale.ref}`),
+    params: new URLSearchParams(`view=sales&sale=${o.open ?? sale.ref}`),
     go: () => undefined,
   };
   render(
@@ -75,7 +77,7 @@ function mount(o: { caps?: PosCapabilities; can?: Partial<PosCan>; inShift?: boo
       </TillContext.Provider>
     </QueryClientProvider>,
   );
-  return { giveBack, printReceipt, openDrawer, email };
+  return { giveBack, printReceipt, openDrawer, email, resolve };
 }
 
 describe('Sales history: after the sale', () => {
@@ -83,7 +85,7 @@ describe('Sales history: after the sale', () => {
     mount();
     expect(await screen.findByText(/The till charged 1,000.00; WorkSuite priced it 980.00/)).toBeTruthy();
     expect(screen.getByText('WorkSuite’s total')).toBeTruthy();
-    expect(screen.getAllByText('For review').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Price differs').length).toBeGreaterThan(0);
   });
 
   it('refunds some lines with the reason, and shows how the money went back', async () => {
@@ -128,5 +130,49 @@ describe('Sales history: after the sale', () => {
     expect((screen.getByLabelText('E-mail address') as HTMLInputElement).value).toBe('nimal@example.com');
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
     await waitFor(() => expect(email).toHaveBeenCalledWith({ ref: sale.ref, email: 'nimal@example.com' }));
+  });
+});
+
+describe('Sales history: flags and refusals', () => {
+  const late: PosSale = { ...sale, ref: 'T1-AAAAAA-000002', server_total: null, review: 'Sold 2026-09-30 07:55 UTC while register session 40 was open; reached WorkSuite after it closed.', flags: ['late'] };
+  const unpaid: PosSale = { ...sale, ref: 'T1-AAAAAA-000003', server_total: null, review: 'No payment was sent with this sale.', flags: ['payment_missing'] };
+  const plainSale: PosSale = { ...sale, ref: 'T1-AAAAAA-000004', server_total: null, review: null };
+  const refused: PosSale = { ...sale, ref: 'T1-AAAAAA-000005', state: 'refused', number: null, server_total: null, review: null, code: 'drawer_closed', message: 'That register was closed before this sale was made.' };
+
+  it('shows each flag, and filters by the kind of review', async () => {
+    mount({ sales: [sale, late, unpaid, plainSale], open: late.ref });
+    expect(await screen.findByText(/Sold while a register that has since closed was open/)).toBeTruthy();
+    expect(screen.getAllByText('Late').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Payment missing').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Price differs').length).toBeGreaterThan(0);
+    expect(screen.getByText(plainSale.ref)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('radio', { name: 'To review' }));
+    expect(screen.queryByText(plainSale.ref)).toBeNull();
+    expect(screen.getByText(unpaid.ref)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Payment missing' }));
+    expect(screen.getByText(unpaid.ref)).toBeTruthy();
+    expect(screen.queryByText(sale.ref)).toBeNull();
+    expect(screen.getAllByText(late.ref)).toHaveLength(1); // only the open detail's heading
+
+    fireEvent.click(screen.getByRole('radio', { name: 'All' }));
+    expect(screen.getByText(plainSale.ref)).toBeTruthy();
+  });
+
+  it('says why a sale was refused for its drawer, and sends it again into the register open now', async () => {
+    const { resolve } = mount({ sales: [refused], open: refused.ref });
+    expect(await screen.findByText(/No register was open for this sale when it reached WorkSuite/)).toBeTruthy();
+    expect(screen.getByText(/That register was closed before this sale was made/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Send again' }));
+    await waitFor(() => expect(resolve).toHaveBeenCalledWith({ ref: refused.ref, action: 'retry', session_id: 41 }));
+  });
+
+  it('asks for the register to be opened before sending such a sale again, and lets it be dropped', async () => {
+    const { resolve } = mount({ sales: [refused], open: refused.ref, noShift: true });
+    expect(await screen.findByText('Open the register at this till to send it again.')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Send again' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Drop' }));
+    await waitFor(() => expect(resolve).toHaveBeenCalledWith({ ref: refused.ref, action: 'drop' }));
   });
 });

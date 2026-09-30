@@ -288,7 +288,8 @@ a fault).
 | Guests | `GET guests?q=&org=`, `POST guests/check`, `POST guests` (`client_id`, or the details with `force`), `GET guests/{id}`, `GET guests/{id}/reservations`, `POST guests/{id}/documents` (multipart), `GET guest-documents/{id}` (the file, fetched by the main process's download manager through `pms:download`), `DELETE guest-documents/{id}`, `POST guests/{id}/merge {from_guest_id, reason}`, `POST guests/{id}/identity` (a scanned ID, confirmed) |
 | Check-in | `GET reservations/{id}/check-in`, `POST reservations/{id}/check-in {rooms, id_verified, guarantee_verified, override_reason, early_checkin, posting_allowed, keys, version}`, `POST stays/{id}/registration-card {document_id}` |
 | Walk-in | `GET availability` (tonight), `POST properties/{id}/walk-ins {…, payment?}` |
-| A stay | `GET stays/{id}`, `POST stays/{id}` (charges allowed, credit limit), `POST stays/{id}/move`, `POST stays/{id}/departure`, `POST stays/{id}/keys`, `POST stays/{id}/folios`, `POST stays/{id}/routing`, `DELETE routing-rules/{id}`, `POST stays/{id}/charges` |
+| A stay | `GET stays/{id}`, `POST stays/{id}` (charges allowed, credit limit), `POST stays/{id}/move` (its `key` and `old_key` run on the desk's encoder), `POST stays/{id}/departure`, `POST stays/{id}/folios`, `POST stays/{id}/routing`, `DELETE routing-rules/{id}`, `POST stays/{id}/charges` |
+| Keys, door locks | `GET properties/{id}/door-locks` (the property's vendor, connection, default cards, common areas — no secrets), `POST stays/{id}/keys {action: issue\|duplicate\|cancel\|status, cards, common_areas, mobile, receiver}` → `key: {ok, status, message, log_id, mode, vendor, payload?, secret?}`, `GET stays/{id}/keys` (the key log), `POST properties/{id}/keys/read`, `POST keys/{id}/result {ok, message, card, encoder}` (the desk's report on an encoder job). Needs `pms.keys.issue` |
 | Folios | `GET folios/{id}`, `GET folios/{id}/document`, `GET properties/{id}/services`, `POST folios/{id}/charges`, `POST folio-items/{id}/void\|adjust\|transfer`, `POST folios/{id}/payments`, `POST payments/{id}/refund\|void`, `POST folios/{id}/settle\|reopen\|transfer-ar\|invoice` |
 | Check-out | `GET reservations/{id}/check-out`, `POST reservations/{id}/check-out {rooms, early, late_checkout, apply_deposit, transfer_ar}` |
 | Cashier | `GET properties/{id}/cashier-sessions`, `POST properties/{id}/cashier-sessions`, `GET cashier-sessions/{id}`, `POST cashier-sessions/{id}/close\|reconcile` |
@@ -301,6 +302,15 @@ a fault).
 | Tape chart | `GET properties/{id}/calendar?from=&days=7\|14\|30`, `POST calendar/preview`, `POST calendar/move {…, version, reason?}` |
 | Invoices | `GET properties/{id}/folios?status=settled\|transferred_ar\|closed`, `POST folios/{id}/invoice`, `GET properties/{id}/outbox?status=`, `POST outbox/{id}/retry` |
 | KPIs, reports | `GET properties/{id}/kpis?from=&to=`, `GET properties/{id}/reports`, `GET properties/{id}/reports/{key}?from=&to=&room_type_id=&source_id=&rate_plan_id=`, the export `…&format=csv\|xlsx\|pdf` fetched by the main process (`pms:download`), `GET properties/{id}/room-types`, `GET properties/{id}/rate-plans` |
+
+**Door locks.** The property's lock system is WorkSuite's (Settings → Door locks on the web, `pms_door_locks`).
+TTLock is called by the server: the answer is `mode: server` with the passcodes as `secret`, shown once. Salto, Vingcard
+and dormakaba answer `mode: encoder`, `status: pending` and `payload` — `{v: 1, log_id, vendor, connection, operation,
+property_id, stay_id, rooms, room_numbers, common_areas, valid_from, valid_until, timezone, guest_name, cards, kind,
+operator, vendor_fields, issued_at, expires_at}` — which this desk sends to the on-site lock server set up in Desk
+devices → Door-lock server and reports back. The vendors' protocol details (SHIP, Visionline / Vostio, Ambiance /
+Saflok) follow the published outlines and are to be confirmed with each vendor's specification during certification;
+each is off until configured on the server and on the desk.
 
 **Printed pages** (registration cards, receipts, invoices, statements, shift and night-audit reports) are laid out on
 the desktop from the server's answers (`registration-card`, `folios/{id}/document`, the shift, the audit's `report`) and
@@ -330,8 +340,10 @@ What the desktop cannot do because the server does not:
 - **Registration cards exist only for a stay.** FD-005's "print registration cards" for the day's arrivals before
   they arrive cannot be served; the desktop prints them for guests checked in today. The server keeps a signed card
   as an uploaded guest document; it renders no card (the desktop draws card and signature into a PNG).
-- **No card payload for a key encoder.** `POST stays/{id}/keys` answers `{ok, status, message}` from the property's
-  `DoorLockProvider`; a desk-side encoder has nothing to write. Keys are the server's door-lock integration.
+- ~~No card payload for a key encoder~~ — served since: an on-premise vendor (Salto, Vingcard, dormakaba) answers
+  `status: pending` with the encoder payload, which the desk runs on its lock server (`pmsLocks:run`) and reports with
+  `POST keys/{id}/result`. A job made on the web waits for a desk; the web's answer carries no way to fetch its
+  payload again, so the desk issues the key again from the stay (the server replaces the waiting job).
 - **Payment methods are not in `options`**; the desktop carries `PaymentMachine::METHODS` (less `deposit`).
 - **Charge codes are listed only to rate managers and reservation readers** (`GET properties/{id}/services`); a cashier
   with `pms.folio.post` alone types the code.
@@ -466,13 +478,13 @@ not reachable: its `mobile` filter takes only mobile access tokens (`aud=mobile`
 | Need | Calls |
 |---|---|
 | Pairing (main process) | `GET api/pos/setup` → `{terminals: [{id, code, name, org_id, org_name, branch_name, warehouse_id, warehouse_name, in_use, device_name}]}`; `POST api/pos/terminals/{id}/pair {device_name, device_info, app_version, take_over}` → `{token, expires_at, terminal}` (409 `in_use` without `take_over`) |
-| The till's door (main process, till credential) | `POST api/pos/device/heartbeat {app_version, pending_count}` every minute → `{terminal, server_time}`; `POST api/pos/device/sales {sales: [...]}`, at most 25 → `{results: [{ref, status: created\|duplicate\|rejected, number, message, total?, review?}]}`; 401 `reauth` → pair again, 503 → POS off, wait |
-| Shell and shift | `GET api/pos/options` (`capabilities`; per company `can` — incl. `refund`, `void`, `discount`, `discount_override`, `max_discount_pct` — and `rules {count_to_close, blind_close, variance_tolerance}`), `GET api/pos/registers`, `GET api/pos/sessions/{id}`, `POST api/pos/sessions {register_id, opening_float, denominations?, note?}`, `POST api/pos/sessions/{id}/cash {direction, amount, reason, reference?}`, `POST api/pos/sessions/{id}/close {denominations? \| counted_cash, variance_reason?}` — READ_CACHE keeps `options`, `registers`, `sessions` and `setup` |
+| The till's door (main process, till credential) | `POST api/pos/device/heartbeat {app_version, pending_count}` every minute → `{terminal, server_time}`; `POST api/pos/device/sales {sales: [...]}`, at most 25 → `{results: [{ref, status: created\|duplicate\|rejected, number, message, code?, total?, review?, flags?}]}` (`code`: `drawer_closed`, `session_not_here`; `flags`: `price_differs`, `payment_missing`, `late`); 401 `reauth` → pair again, 503 → POS off, wait (the server's sentence shown; without one, "an administrator turns it on in Admin Centre → Apps → POS") |
+| Shell and shift | `GET api/pos/options` (`capabilities`, incl. `drawer_required`, `late_sales`, `payment_missing`, `flags`; per company `can` — incl. `refund`, `void`, `discount`, `discount_override`, `max_discount_pct` — and `rules {count_to_close, blind_close, variance_tolerance}`), `GET api/pos/registers`, `GET api/pos/sessions/{id}`, `POST api/pos/sessions {register_id, opening_float, denominations?, note?}`, `POST api/pos/sessions/{id}/cash {direction, amount, reason, reference?}`, `POST api/pos/sessions/{id}/close {denominations? \| counted_cash, variance_reason?}` — READ_CACHE keeps `options`, `registers`, `sessions` and `setup` |
 | Catalogue | In the background (main process, till credential, every 30 min, nobody need be signed in): `GET api/pos/device/catalogue?since_version=`; on request (the person's session): `GET api/pos/catalogue?org=&since_version=` — `{version, unchanged: true}` when current. Only where `capabilities.catalogue` is false or the call answers 404 (an older server): Inventory's `GET api/inventory/products?page=&per_page=100&include_variants=1` (needs `inventory.view`) |
 | The cart's price | `POST api/pos/price {org_id, lines: [{product_id, quantity}], discount_pct}` (`pos.sale.create`, the discount the person's to give) where `capabilities.price`; on an older server `GET api/inventory/price?product_id=&qty=&kind=sell` per line; otherwise the catalogue's preview (marked provisional) |
 | A code not in the catalogue | `GET api/pos/products/lookup?org=&code=` where `capabilities.lookup`; on an older server `GET api/inventory/products/lookup?q=` (exact match) |
 | Refund, void (main process, till credential) | `POST api/pos/device/sales/{ref}/refund {ref: <receipt>-R<n>, cashier_id, reason, lines?: [{product_id, quantity}], restock?}`, `POST …/void {ref: <receipt>-V, cashier_id, reason}` → `{refund: {ref, kind, amount, cash_out, tenders, lines, credit_note, …}, sale}` (201; 200 when the same `ref` was had) — where `capabilities.refund` / `.void` and `can.refund` / `.void` |
-| Receipt, e-mail (main process, till credential) | `GET api/pos/device/sales/{ref}/receipt` → `{receipt}` (`Receipt::data`) for a reprint, where `capabilities.receipt`; `POST api/pos/device/sales/{ref}/email {email?}` where `capabilities.email_receipt` |
+| Receipt, e-mail (main process, till credential) | `GET api/pos/device/sales/{ref}/receipt` → `{receipt}` (`Receipt::data`, with `payment_missing` and `status: payment_missing`, printed as a "Payment missing" line) for a reprint, where `capabilities.receipt`; `POST api/pos/device/sales/{ref}/email {email?}` where `capabilities.email_receipt` |
 
 **A sale as the till sends it** (`electron/services/pos-outbox.ts: saleBody`): `ref` (the receipt number,
 `<TILL CODE>-<6 hex per pairing>-<000001>`), `date`, `currency`, `paid: true`, `customer {name?, phone?, email?}`,
@@ -483,10 +495,23 @@ WorkSuite prices it again from `product_id` and records it in the named session'
 answered as `total` with a `review` note, kept on the sale and shown in Sales. A sale refused while the cashier waits is
 removed from the till (nothing was sold); one refused later stays with the reason, to send again or drop.
 
+**No drawer, no sale** (`Pos\Libraries\Sales::admit`). WorkSuite takes a sale only into an open register session; the
+register screen starts none without one open at this till (a pick or a scan says to open the register; the cart shows
+the way there). A sale that names this till's session after it closed is still taken when its `date` falls in that
+session's open window, widened at each end by `pos_late_sale_grace_minutes` (default 10, for a till's clock a few
+minutes off) — sold offline while the drawer was open — flagged `late`; the closed count is not rewritten.
+Otherwise it is `rejected` with `code: drawer_closed` (or `session_not_here`, the session another till's) and kept with
+that code and the sentence; *Send again* sends it into the register open now (`pos:resolve {session_id}`, the sale's
+`session_id` changed on this computer) and is not offered without one; *Drop* removes it. The till always sends
+tenders, so its own sales are never `payment_missing`; a sale flagged so on the server (a till that sent none) shows
+the flag and prints "Payment missing". Sales history shows each sale's `flags` and filters them as the web's `review`
+filter does (all, to review, price differs, payment missing, late) — from the till's own record.
+
 What the desktop asked of the server, now there (`claude/sweet-hamilton-46vqu8`):
 
 - ~~Capabilities in `GET api/pos/options`~~ — done: `capabilities {catalogue, price, lookup, device_catalogue, sales,
-  receipt, email, email_receipt, refund, void, settle, reprice, discount_rights, review, customer_display}`.
+  receipt, email, email_receipt, refund, void, settle, reprice, discount_rights, review, drawer_required, late_sales,
+  payment_missing, flags, customer_display}`.
 - ~~Catalogue, price and lookup on the staff API and the device door~~ — done; a cashier needs no Inventory
   permission.
 - ~~Device sales that are real sales~~ — done: priced again, into the session's drawer, stock, payment and Finance;
@@ -501,7 +526,8 @@ What the desktop asked of the server, now there (`claude/sweet-hamilton-46vqu8`)
 Still open:
 
 - On a `/desktop/v1` server, `links/resolve` does not know `worksuite://pos` or `worksuite://pos/sales/{ref}`.
-- The till's history is its own record (90 days); `GET api/pos/sales` (other tills', the review queue) is not shown yet.
+- The till's history is its own record (90 days); `GET api/pos/sales?review=` (other tills', the server's review queue)
+  is not shown yet — the till filters its own sales by their flags.
 
 ### Restaurant Manager — till, kitchen screen, print agent
 

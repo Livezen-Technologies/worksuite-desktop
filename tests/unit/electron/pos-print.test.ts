@@ -138,6 +138,41 @@ describe('the receipt', () => {
     expect(text).toContain('---\nThank you');
   });
 
+  it('prints "Payment missing" for a sale WorkSuite recorded without its payment', () => {
+    const r: PosServerReceipt = {
+      company: { name: 'Acme Stores', address: null, phone: null, tax_number: null },
+      receipt_no: 'T1-AAAAAA-000043',
+      order_number: 'SO-2026-0101',
+      invoice_number: 'INV-78',
+      register: null,
+      cashier: 'Kasun',
+      customer: null,
+      at: '2026-09-30 13:50',
+      currency: 'LKR',
+      lines: [{ description: 'Ceylon tea', quantity: 1, unit_price: 450, discount_pct: 0, amount: 450, tax: 0, total: 450 }],
+      taxes: [],
+      totals: { subtotal: 450, discount: 0, tax: 0, total: 450 },
+      tenders: [],
+      change: 0,
+      refunds: [],
+      refunded: 0,
+      payment_missing: true,
+      status: 'payment_missing',
+      void_reason: null,
+      footer: '',
+    };
+    const text = serverReceiptRows(r, { header: '', footer: '' }, { till: null })
+      .map((x) => (x.kind === 'rule' ? '---' : x.kind === 'pair' ? `${x.left}|${x.right}` : x.text))
+      .join('\n');
+    expect(text).toContain('*** PAYMENT MISSING ***');
+    expect(text).toContain('TOTAL|LKR 450.00\n---\nPayment missing|450.00');
+    // The till's own record, flagged by WorkSuite, says the same; a paid sale does not.
+    const own = (x: PosSale) => receiptRows(x, { header: '', footer: '' }).some((row) => row.kind === 'pair' && row.left === 'Payment missing');
+    expect(own({ ...sale, flags: ['payment_missing'] })).toBe(true);
+    expect(own({ ...sale, flags: ['late'] })).toBe(false);
+    expect(own(sale)).toBe(false);
+  });
+
   it('escapes everything on the driver’s page', () => {
     const html = receiptHtml(receiptRows(sale, { header: '<b>Shop</b>', footer: '' }, { till: null }), '58mm');
     expect(html).toContain('&lt;b&gt;Shop&lt;/b&gt;');

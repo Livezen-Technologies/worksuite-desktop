@@ -1,14 +1,14 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
-import { Button, ErrorNote, Modal, Spinner, cx } from '../../components/ui';
+import { Button, ErrorNote, Modal, Spinner } from '../../components/ui';
 import { toast } from '../../core/toasts';
 import { Ask, Field, input, Section, Tabs } from '../garage/parts';
 import { PageHead } from '../hr/parts';
-import { codeOf, day, errorText, K, money, pDelete, pGet, pPost, plusDays, type Candidate, type KeyResult, type Stay } from './api';
-import { device } from './devices';
+import { codeOf, day, errorText, K, money, pDelete, pGet, pPost, plusDays, type Candidate, type Stay } from './api';
 import { ChargeDialog, FolioPanel } from './Folio';
+import { finishKeys, KeyPanel } from './Keys';
+import type { KeyAnswer } from './locks';
 import { Facts, NoAccess, occupants, Refusal, usePms, VipPill } from './parts';
 import RegistrationCardDialog from './RegistrationCard';
 import type { StayAct } from './routes';
@@ -84,26 +84,6 @@ export default function StayScreen({ id, folio, act }: { id: number; folio: numb
   const folios = s.folios ?? [];
   const current = folios.find((f) => f.id === picked) ?? folios[0] ?? null;
 
-  const keys = async (action: 'issue' | 'revoke' | 'status', count = 1) => {
-    setBusy(true);
-    setError(null);
-    try {
-      const r = await pPost<{ key: KeyResult }>(`/stays/${id}/keys`, { action, count });
-      toast(r.data.key.ok ? 'success' : 'error', r.data.key.message || r.message);
-      const enc = device('key_encoder');
-      if (action === 'issue' && r.data.key.ok && enc.available()) {
-        const out = await enc.encode({ stayId: id, roomNumber: s.room_number, validUntil: s.departure_date, count });
-        toast(out.ok ? 'success' : 'error', out.message);
-      }
-      setDialog(null);
-      reload();
-    } catch (e) {
-      setError(errorText(e, 'The lock system did not answer.'));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <div className="flex flex-col gap-4 px-6 py-5">
       <PageHead
@@ -145,15 +125,15 @@ export default function StayScreen({ id, folio, act }: { id: number; folio: numb
               Extend or shorten
             </Button>
           ) : null}
+          {pms.mayAny('pms.keys.issue', 'pms.checkin') ? (
+            <Button size="sm" icon="key" disabled={!on} onClick={() => setDialog('keys')}>
+              Keys
+            </Button>
+          ) : null}
           {pms.may('pms.checkin') ? (
-            <>
-              <Button size="sm" icon="key" disabled={!on} onClick={() => setDialog('keys')}>
-                Keys
-              </Button>
-              <Button size="sm" icon="pen" disabled={!on} onClick={() => setDialog('card')}>
-                Registration card
-              </Button>
-            </>
+            <Button size="sm" icon="pen" disabled={!on} onClick={() => setDialog('card')}>
+              Registration card
+            </Button>
           ) : null}
           {pms.may('pms.folio.adjust') ? (
             <Button size="sm" icon="sliders" disabled={!on} onClick={() => setDialog('limits')}>
@@ -268,7 +248,7 @@ export default function StayScreen({ id, folio, act }: { id: number; folio: numb
             </Button>
           }
         >
-          <KeyPanel stay={s} busy={busy} onAct={(a, n) => void keys(a, n)} />
+          <KeyPanel stay={s} onChanged={reload} />
         </Modal>
       ) : null}
       {dialog === 'limits' ? (
@@ -305,32 +285,6 @@ export default function StayScreen({ id, folio, act }: { id: number; folio: numb
   );
 }
 
-/** The key panel: the property's door-lock system asked to issue, revoke or report (PMS-KEY-002). */
-function KeyPanel({ stay, busy, onAct }: { stay: Stay; busy: boolean; onAct: (a: 'issue' | 'revoke' | 'status', count?: number) => void }) {
-  const [count, setCount] = useState(1);
-  const enc = device('key_encoder');
-  return (
-    <div className="flex flex-col gap-3 text-[13px]">
-      <p className="m-0 flex items-center gap-2">
-        <Icon name="key" size={15} className="text-ink-3" /> {stay.key_status_label ?? 'No key yet'}
-      </p>
-      <p className="m-0 text-[12px] text-ink-3">{enc.available() ? `This desk writes cards on ${enc.label}.` : enc.label}.</p>
-      <div className="flex items-center gap-2">
-        <input aria-label="How many keys" type="number" min={1} max={6} className={cx(input, 'w-20')} value={count} onChange={(e) => setCount(Math.max(1, Math.min(6, Number(e.target.value) || 1)))} />
-        <Button variant="primary" loading={busy} onClick={() => onAct('issue', count)}>
-          Issue
-        </Button>
-        <Button disabled={busy} onClick={() => onAct('status')}>
-          Ask the lock system
-        </Button>
-        <Button variant="danger" disabled={busy} onClick={() => onAct('revoke')}>
-          Revoke
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 /**
  * Moving a guest in house (PMS-MOV-001/002): the rooms free for the rest of
  * the stay, best first; another type is a complimentary or a paid upgrade; a
@@ -355,13 +309,18 @@ function MoveDialog({ stay, onClose, onDone }: { stay: Stay; onClose: () => void
     setBusy(true);
     setError(null);
     try {
-      const r = await pPost<{ price_before: string; price_after: string; old_room: { number: string } }>(`/stays/${stay.id}/move`, {
+      const r = await pPost<{ price_before: string; price_after: string; old_room: { number: string }; key?: KeyAnswer; old_key?: KeyAnswer }>(`/stays/${stay.id}/move`, {
         room_id: pick.room_id,
         reason: reason.trim(),
         ...(pick.upgrade ? { upgrade_type: upgrade } : {}),
         ...(notReady ? { override_reason: override.trim() } : {}),
       });
       toast('success', `${r.message}${r.data.price_before !== r.data.price_after ? ` The price went from ${money(r.data.price_before, stay.currency)} to ${money(r.data.price_after, stay.currency)}.` : ''}`);
+      // The key moves with the guest: the old room's cancelled, the new room's made, on this desk's encoder when it has one.
+      await finishKeys(stay.property_id, [
+        { room: r.data.old_room.number, key: r.data.old_key },
+        { room: pick.number, key: r.data.key },
+      ]);
       onDone();
     } catch (e) {
       setError({ text: errorText(e, 'The guest was not moved.'), code: codeOf(e) });

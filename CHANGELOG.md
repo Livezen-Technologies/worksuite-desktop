@@ -5,6 +5,25 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-30 — 0.2.70: Hotel PMS door locks; POS follows the new drawer and payment rules
+
+**Added**
+
+- **Hotel PMS door locks.** Desk devices → Door-lock server, per property (its password or API key in the OS keystore,
+  a connection test, card read). Keys from check-in, room move and the stay run on the hotel's on-site Salto (SHIP),
+  Vingcard (Visionline / Vostio) or dormakaba (Ambiance / Saflok) server and are reported back to WorkSuite; TTLock
+  passcodes are issued by WorkSuite and shown once. Each vendor is off until configured; the vendors' message formats
+  are confirmed during certification.
+
+**Changed**
+
+- **POS: no sale without an open register.** A tap or scan says to open the register first. A sale refused
+  `drawer_closed` or `session_not_here` keeps its reason and can be sent again into the register open now, or
+  dropped. Sales history shows and filters Late, Payment missing and Price differs, and receipts print "Payment
+  missing". "POS is switched off" now names the real switch: Admin Centre → Apps → POS.
+
+---
+
 ## 2026-09-30 — 0.2.69: a slow AI answer says so
 
 "The server answered 502." in the AI dock, on a request that makes the assistant act (an invoice for 10 Windows
