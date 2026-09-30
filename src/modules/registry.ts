@@ -245,6 +245,24 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./garage/GarageShell'),
   },
   {
+    // Restaurant Manager: the waiter's and cashier's POS (floor, order, bill, payment, cashier session), the kitchen
+    // screen and expo, and the printers, over /api/restaurant/v1 as a paired terminal (electron/services/restaurant).
+    // Offline the till reads its menu and floor copy and keeps orders, lines and sends for WorkSuite; money needs it.
+    input: defineDesktopManifest({
+      id: 'restaurant', name: 'Restaurant', icon: 'concierge', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'PARTIAL_WRITE', entities: ['order', 'order_item'] },
+      native: ['notifications', 'printing', 'hardware'],
+      windows: [{ id: 'restaurant-kitchen', route: '/restaurant?view=kitchen' }, { id: 'restaurant-expo', route: '/restaurant?view=expo' }],
+      quickActions: [
+        { id: 'restaurant-floor', label: 'Restaurant floor', route: '/restaurant?view=floor' },
+        { id: 'restaurant-takeaway', label: 'New takeaway order', route: '/restaurant?view=order&type=takeaway' },
+        { id: 'restaurant-kitchen', label: 'Kitchen screen', route: '/restaurant?view=kitchen' },
+      ],
+      deepLinks: ['restaurant', 'restaurant/orders/:id', 'restaurant/kitchen'],
+    }),
+    load: () => import('./restaurant/RestaurantShell'),
+  },
+  {
     // eLearning: My Learning, the catalogue, taking a course (a video credited by what is actually played),
     // quizzes and assignments; for the training team the courses, their builder, enrolment, grading and the
     // dashboard. Offline, My Learning, the catalogue and course outlines are the last copy; a course kept

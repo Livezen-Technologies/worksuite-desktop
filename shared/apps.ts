@@ -115,6 +115,9 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'salon', label: 'SalonMate', group: 'business', icon: 'scissors', app: 'salon', perm: 'salon.view', webPath: '/salon', surface: 'native', sidebar: 'business', order: 131, keywords: 'salon hair beauty front desk walk-in check-in stylists clients bookings' },
   // A workshop's counter, board, technician terminal and parts counter: native here; check-in, estimates, QC and delivery open on the web.
   { id: 'garage', label: 'Garage', group: 'business', icon: 'wrench', app: 'garage', perm: 'garage.access', webPath: '/garage', surface: 'native', sidebar: 'business', order: 132, keywords: 'garage workshop service center vehicle car repair job card walk-in technician parts mechanic' },
+  // Restaurant Manager's till, kitchen screen and print agent: native here (this computer as a paired terminal); the back
+  // office — menu, floor design, staff, reports, day close — opens on the web. Its notifications open the floor, an order or the KDS.
+  { id: 'restaurant', label: 'Restaurant', group: 'business', icon: 'concierge', app: 'restaurant', perm: 'restaurant.access', webPath: '/restaurant', surface: 'native', sidebar: 'business', order: 132.5, keywords: 'restaurant pos point of sale till waiter cashier table floor order menu kitchen kds kot expo bill split payment cashier session print agent' },
   // A hotel's front desk, cashier and night audit: native here (the desk's computer). The server's notifications
   // (`/pms/reservations/<id>`, `/pms/folios/<id>`, `/pms/rooms/<id>`, `/pms/front-desk?arrivals=`, `/pms/night-audit`…)
   // open here; the back office — rates, rooms, packages, taxes, reports, settings — is the web's.
