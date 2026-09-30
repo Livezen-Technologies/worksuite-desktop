@@ -306,8 +306,9 @@ A computer paired as a POS till holds a credential of its own (`Pos\Libraries\De
 - **The till credential** — `wsp_<till>_<64 hex>`, handed over once when somebody with `pos.access` pairs the
   computer (`POST api/pos/terminals/{id}/pair`, made by the main process in `pos-desk.ts`). It is kept in the OS
   credential store (`pos-till:<server>`), never in the database, and is sent only by the main process, only as the
-  bearer of `/api/pos/device/heartbeat` and `/api/pos/device/sales` (the person's access token is not sent there,
-  and the credential is sent nowhere else). No renderer, IPC answer, log, audit entry or diagnostic bundle carries it;
+  bearer of the till's door — `/api/pos/device/heartbeat`, `sales`, `catalogue`, `products/lookup`, `price` and
+  `sales/{ref}/receipt|refund|void|email`, an allow-list checked in `PosDesk.door` (the person's access token is not
+  sent there, and the credential is sent nowhere else). No renderer, IPC answer, log, audit entry or diagnostic bundle carries it;
   `pos:till` answers which till this is, never the secret. The API proxy refuses the pairing and the whole device door
   to pages (`api-proxy.ts`). The server stores only its sha256 and lets it lapse after 90 idle days.
 - **Refusal** — a 401 from the device door (revoked, lapsed, paired again on another device) drops the credential at
@@ -315,7 +316,9 @@ A computer paired as a POS till holds a credential of its own (`Pos\Libraries\De
   another till is refused while sales from this one wait (they would be stranded).
 - **The till is the computer's, not a person's.** A plain sign-out keeps the credential, the catalogue copy and the
   sales (they keep going to WorkSuite with nobody signed in); every sale names its cashier, whom WorkSuite checks
-  when it arrives (`DeviceController::cashierMay`). Cashiers change by signing out and in; "Lock the till" is the app
+  when it arrives (`DeviceController::cashierMay`). A refund or void through the door names the signed-in cashier
+  (none without a sign-in), whom WorkSuite asks for `pos.sale.refund` / `pos.sale.void` then; the screens offer them
+  only where `options` says the person may, online only. Cashiers change by signing out and in; "Lock the till" is the app
   lock (password or PIN). A remote wipe, or signing out with "remove WorkSuite's data", removes the credential, the
   catalogue, every sale (sent or not), the receipt counters and the printer settings.
 - **At rest** — the catalogue (`pos_catalogue`) and each sale (`pos_sales`: lines, customer, tenders) are AES-256-GCM

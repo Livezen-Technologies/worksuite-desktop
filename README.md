@@ -100,8 +100,9 @@ EuroOffice (the server's Document Server) or, without one, in the built-in
 **POS** (`src/modules/pos`, `electron/services/pos-*.ts`) makes a counter PC a paired till: its credential in the
 OS keystore, the drawer's shift over WorkSuite's POS API, selling from a sealed catalogue copy with a keyboard-wedge
 scanner — offline too, sales numbered here and sent in order through the till's own door — thermal receipts and the
-drawer kick, and a customer display on a second monitor. What it needs from the server is in
-[docs/BACKEND.md](docs/BACKEND.md#pos--the-till).
+drawer kick (a reprint is WorkSuite's own receipt), e-mailed receipts, refunds and voids from the sales history, and a
+customer display on a second monitor. The catalogue, prices and discount rights are POS's own (no Inventory
+permission needed). What it uses on the server is in [docs/BACKEND.md](docs/BACKEND.md#pos--the-till).
 
 ## What is deliberately not here yet
 

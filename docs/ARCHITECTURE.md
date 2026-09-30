@@ -348,8 +348,9 @@ Vault-sealed, so the database file alone gives nothing to guess against.
 - POS (`modules/pos`, `electron/services/pos-*.ts`, `shared/pos.ts`): this computer as a paired till. The main
   process holds the till: `pos-desk.ts` pairs it (`POST api/pos/terminals/{id}/pair`, the `wsp_` credential into the
   OS keystore) and calls the till's own door with that credential (`/api/pos/device/heartbeat` every minute,
-  `/api/pos/device/sales`); `pos-till.ts` keeps the catalogue copy (WorkSuite's till catalogue where the server has
-  one, Inventory's product list otherwise; sealed in `pos_catalogue`), numbers each sale (a prefix per pairing and a
+  `/api/pos/device/sales`, and — `PosDesk.door` — the catalogue, a sale's receipt, refund, void and e-mail);
+  `pos-till.ts` keeps the catalogue copy (POS's own: through the door every half hour with nobody signed in, on the
+  staff API when a person refreshes it; Inventory's product list only on an older server; sealed in `pos_catalogue`), numbers each sale (a prefix per pairing and a
   counter that only goes up, `pos_counters`), seals it into `pos_sales` before the cashier is answered and sends
   the waiting ones in order, 25 a request, keyed by the receipt number so a resend is the same sale
   (`pos-outbox.ts`: created and already-had are done, refused keep WorkSuite's reason, 401 stops for a new pairing,
@@ -362,8 +363,13 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   catalogue meanwhile (`pricing.ts`, the mobile till's arithmetic), the customer), the tender (`Tender.tsx`: cash,
   card, transfer, wallet, split, change; offline only cash and card), the shift over the staff API (`Shift.tsx`:
   open with a float or a count, cash in and out, close on a count, blind where the company says so, X and Z reports),
-  the till's sales with their sync state, receipt, reprint and — where the server announces them — refund and void
-  (`Sales.tsx`), Printers and This till. The customer display (`/pos/display`, `CustomerDisplay.tsx`) is a window of
+  the till's sales with their sync state, WorkSuite's total and `review` flag, receipt, reprint (WorkSuite's receipt
+  where it has one, `serverReceiptRows`), e-mail and — where the server announces them and the person may — refund
+  (everything left or some lines) and void (in the sale's own open shift), sent by the main process through the
+  till's door with the cashier named and the till's own number for it (`<receipt>-R<n>`, `-V`), WorkSuite's answer
+  kept on the sale (`Sales.tsx`, `returns.ts`, `pos-till.ts: giveBack`), Printers and This till. Discounts follow
+  `options` `can.discount` / `max_discount_pct` / `discount_override` (`discountRights`); the close follows the
+  company's `rules` (note by note, blind, the variance tolerance). The customer display (`/pos/display`, `CustomerDisplay.tsx`) is a window of
   the shell on the second monitor; the register tells it what to show over a same-origin `BroadcastChannel`.
   Offline the drawer's screens read the last `/api/pos/options`, `registers` and `sessions` from READ_CACHE and wait
   for WorkSuite to open, move cash or close; selling goes on.
