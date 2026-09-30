@@ -466,13 +466,13 @@ not reachable: its `mobile` filter takes only mobile access tokens (`aud=mobile`
 | Need | Calls |
 |---|---|
 | Pairing (main process) | `GET api/pos/setup` → `{terminals: [{id, code, name, org_id, org_name, branch_name, warehouse_id, warehouse_name, in_use, device_name}]}`; `POST api/pos/terminals/{id}/pair {device_name, device_info, app_version, take_over}` → `{token, expires_at, terminal}` (409 `in_use` without `take_over`) |
-| The till's door (main process, till credential) | `POST api/pos/device/heartbeat {app_version, pending_count}` every minute → `{terminal, server_time}`; `POST api/pos/device/sales {sales: [...]}`, at most 25 → `{results: [{ref, status: created\|duplicate\|rejected, number, message, total?, review?}]}`; 401 `reauth` → pair again, 503 → POS off, wait |
-| Shell and shift | `GET api/pos/options` (`capabilities`; per company `can` — incl. `refund`, `void`, `discount`, `discount_override`, `max_discount_pct` — and `rules {count_to_close, blind_close, variance_tolerance}`), `GET api/pos/registers`, `GET api/pos/sessions/{id}`, `POST api/pos/sessions {register_id, opening_float, denominations?, note?}`, `POST api/pos/sessions/{id}/cash {direction, amount, reason, reference?}`, `POST api/pos/sessions/{id}/close {denominations? \| counted_cash, variance_reason?}` — READ_CACHE keeps `options`, `registers`, `sessions` and `setup` |
+| The till's door (main process, till credential) | `POST api/pos/device/heartbeat {app_version, pending_count}` every minute → `{terminal, server_time}`; `POST api/pos/device/sales {sales: [...]}`, at most 25 → `{results: [{ref, status: created\|duplicate\|rejected, number, message, code?, total?, review?, flags?}]}` (`code`: `drawer_closed`, `session_not_here`; `flags`: `price_differs`, `payment_missing`, `late`); 401 `reauth` → pair again, 503 → POS off, wait (the server's sentence shown; without one, "an administrator turns it on in Admin Centre → Apps → POS") |
+| Shell and shift | `GET api/pos/options` (`capabilities`, incl. `drawer_required`, `late_sales`, `payment_missing`, `flags`; per company `can` — incl. `refund`, `void`, `discount`, `discount_override`, `max_discount_pct` — and `rules {count_to_close, blind_close, variance_tolerance}`), `GET api/pos/registers`, `GET api/pos/sessions/{id}`, `POST api/pos/sessions {register_id, opening_float, denominations?, note?}`, `POST api/pos/sessions/{id}/cash {direction, amount, reason, reference?}`, `POST api/pos/sessions/{id}/close {denominations? \| counted_cash, variance_reason?}` — READ_CACHE keeps `options`, `registers`, `sessions` and `setup` |
 | Catalogue | In the background (main process, till credential, every 30 min, nobody need be signed in): `GET api/pos/device/catalogue?since_version=`; on request (the person's session): `GET api/pos/catalogue?org=&since_version=` — `{version, unchanged: true}` when current. Only where `capabilities.catalogue` is false or the call answers 404 (an older server): Inventory's `GET api/inventory/products?page=&per_page=100&include_variants=1` (needs `inventory.view`) |
 | The cart's price | `POST api/pos/price {org_id, lines: [{product_id, quantity}], discount_pct}` (`pos.sale.create`, the discount the person's to give) where `capabilities.price`; on an older server `GET api/inventory/price?product_id=&qty=&kind=sell` per line; otherwise the catalogue's preview (marked provisional) |
 | A code not in the catalogue | `GET api/pos/products/lookup?org=&code=` where `capabilities.lookup`; on an older server `GET api/inventory/products/lookup?q=` (exact match) |
 | Refund, void (main process, till credential) | `POST api/pos/device/sales/{ref}/refund {ref: <receipt>-R<n>, cashier_id, reason, lines?: [{product_id, quantity}], restock?}`, `POST …/void {ref: <receipt>-V, cashier_id, reason}` → `{refund: {ref, kind, amount, cash_out, tenders, lines, credit_note, …}, sale}` (201; 200 when the same `ref` was had) — where `capabilities.refund` / `.void` and `can.refund` / `.void` |
-| Receipt, e-mail (main process, till credential) | `GET api/pos/device/sales/{ref}/receipt` → `{receipt}` (`Receipt::data`) for a reprint, where `capabilities.receipt`; `POST api/pos/device/sales/{ref}/email {email?}` where `capabilities.email_receipt` |
+| Receipt, e-mail (main process, till credential) | `GET api/pos/device/sales/{ref}/receipt` → `{receipt}` (`Receipt::data`, with `payment_missing` and `status: payment_missing`, printed as a "Payment missing" line) for a reprint, where `capabilities.receipt`; `POST api/pos/device/sales/{ref}/email {email?}` where `capabilities.email_receipt` |
 
 **A sale as the till sends it** (`electron/services/pos-outbox.ts: saleBody`): `ref` (the receipt number,
 `<TILL CODE>-<6 hex per pairing>-<000001>`), `date`, `currency`, `paid: true`, `customer {name?, phone?, email?}`,
@@ -483,10 +483,22 @@ WorkSuite prices it again from `product_id` and records it in the named session'
 answered as `total` with a `review` note, kept on the sale and shown in Sales. A sale refused while the cashier waits is
 removed from the till (nothing was sold); one refused later stays with the reason, to send again or drop.
 
+**No drawer, no sale** (`Pos\Libraries\Sales::admit`). WorkSuite takes a sale only into an open register session; the
+register screen starts none without one open at this till (a pick or a scan says to open the register; the cart shows
+the way there). A sale that names this till's session after it closed is still taken when its `date` falls in that
+session's open window — sold offline while the drawer was open — flagged `late`; the closed count is not rewritten.
+Otherwise it is `rejected` with `code: drawer_closed` (or `session_not_here`, the session another till's) and kept with
+that code and the sentence; *Send again* sends it into the register open now (`pos:resolve {session_id}`, the sale's
+`session_id` changed on this computer) and is not offered without one; *Drop* removes it. The till always sends
+tenders, so its own sales are never `payment_missing`; a sale flagged so on the server (a till that sent none) shows
+the flag and prints "Payment missing". Sales history shows each sale's `flags` and filters them as the web's `review`
+filter does (all, to review, price differs, payment missing, late) — from the till's own record.
+
 What the desktop asked of the server, now there (`claude/sweet-hamilton-46vqu8`):
 
 - ~~Capabilities in `GET api/pos/options`~~ — done: `capabilities {catalogue, price, lookup, device_catalogue, sales,
-  receipt, email, email_receipt, refund, void, settle, reprice, discount_rights, review, customer_display}`.
+  receipt, email, email_receipt, refund, void, settle, reprice, discount_rights, review, drawer_required, late_sales,
+  payment_missing, flags, customer_display}`.
 - ~~Catalogue, price and lookup on the staff API and the device door~~ — done; a cashier needs no Inventory
   permission.
 - ~~Device sales that are real sales~~ — done: priced again, into the session's drawer, stock, payment and Finance;
@@ -501,7 +513,8 @@ What the desktop asked of the server, now there (`claude/sweet-hamilton-46vqu8`)
 Still open:
 
 - On a `/desktop/v1` server, `links/resolve` does not know `worksuite://pos` or `worksuite://pos/sales/{ref}`.
-- The till's history is its own record (90 days); `GET api/pos/sales` (other tills', the review queue) is not shown yet.
+- The till's history is its own record (90 days); `GET api/pos/sales?review=` (other tills', the server's review queue)
+  is not shown yet — the till filters its own sales by their flags.
 
 ### Restaurant Manager — till, kitchen screen, print agent
 

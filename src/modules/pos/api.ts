@@ -93,6 +93,14 @@ export interface PosCapabilities {
   reprice?: boolean;
   discount_rights?: boolean;
   review?: boolean;
+  /** A sale needs an open register (refused `drawer_closed`); every server that says so means it, and so does this till. */
+  drawer_required?: boolean;
+  /** A sale made while a since-closed register was open is still taken into it, flagged `late`. */
+  late_sales?: boolean;
+  /** A till sale with no tenders is recorded unpaid and flagged `payment_missing`. */
+  payment_missing?: boolean;
+  /** Sales carry `flags` (`price_differs`, `payment_missing`, `late`). */
+  flags?: boolean;
   customer_display?: boolean;
 }
 
@@ -226,7 +234,8 @@ export const sell = (input: PosSellInput) => call('pos:sell', input);
 export const listSales = (f: { session_id?: number; since?: string; limit?: number } = {}) => call('pos:sales', f);
 export const readSale = (ref: string) => call('pos:sale', { ref });
 export const syncNow = () => call('pos:syncNow');
-export const resolveSale = (ref: string, action: 'retry' | 'drop') => call('pos:resolve', { ref, action });
+/** Send a refused sale again (into `sessionId`, the register open now, when it was refused for its drawer), or drop it. */
+export const resolveSale = (ref: string, action: 'retry' | 'drop', sessionId?: number) => call('pos:resolve', { ref, action, ...(sessionId ? { session_id: sessionId } : {}) });
 export const printSettings = () => call('pos:printSettings');
 export const setPrintSettings = (p: PosPrintPatch) => call('pos:printSettingsSet', p);
 export const printReceipt = (ref: string, reprint = true, server = false) => call('pos:printReceipt', { ref, reprint, server });

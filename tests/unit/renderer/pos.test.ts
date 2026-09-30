@@ -7,7 +7,7 @@ import { translate } from '../../../src/modules/pos/i18n';
 import { posRoute } from '../../../src/modules/pos/parts';
 import { allocate, allowedTenders, countBody, countTotal, estimateCart, quickCash, settle, settles, variance } from '../../../src/modules/pos/pricing';
 import { canStillRefund, refundable, refundLines, returned } from '../../../src/modules/pos/returns';
-import { closeBody, needsReason, salesSummary, xReport, zReport } from '../../../src/modules/pos/shift';
+import { closeBody, filterSales, needsReason, salesSummary, xReport, zReport } from '../../../src/modules/pos/shift';
 import { buildSale, remaining, tendersOf } from '../../../src/modules/pos/tender';
 import type { PosSession } from '../../../src/modules/pos/api';
 
@@ -253,5 +253,18 @@ describe('refunds and voids', () => {
     expect(mayGiveBack({ refund: true, void: true }, can, 'void')).toBe(false);
     expect(mayGiveBack({}, can, 'refund')).toBe(false);
     expect(mayGiveBack({ refund: true }, null, 'refund')).toBe(false);
+  });
+});
+
+describe('the review filter', () => {
+  const sale = (ref: string, over: Partial<PosSale> = {}) => ({ ref, review: null, ...over }) as PosSale;
+  const list = [sale('A'), sale('B', { review: 'The till charged more.' }), sale('C', { flags: ['late'], review: 'Sold late.' }), sale('D', { flags: ['payment_missing', 'price_differs'] })];
+  it('reads WorkSuite’s flags as its `review` filter does', () => {
+    const refs = (f: Parameters<typeof filterSales>[1]) => filterSales(list, f).map((s) => s.ref);
+    expect(refs('all')).toEqual(['A', 'B', 'C', 'D']);
+    expect(refs('review')).toEqual(['B', 'C', 'D']);
+    expect(refs('price_differs')).toEqual(['B', 'D']);
+    expect(refs('payment_missing')).toEqual(['D']);
+    expect(refs('late')).toEqual(['C']);
   });
 });
