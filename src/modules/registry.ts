@@ -300,6 +300,20 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./events/EventsShell'),
   },
   {
+    // POS: this computer as a paired till (its credential in the OS keystore, pos-desk.ts), the drawer's shift over
+    // /api/pos, selling from a sealed copy of the catalogue, sales numbered here and sent in order through the till's
+    // own door (pos-till.ts) — offline too — thermal receipts, the drawer kick and a customer display window.
+    input: defineDesktopManifest({
+      id: 'pos', name: 'POS', icon: 'store', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'PARTIAL_WRITE', entities: ['sale'], cache: ['/api/pos/options', '/api/pos/registers', '/api/pos/sessions/mine'] },
+      native: ['printing', 'barcode', 'hardware'],
+      windows: [{ id: 'pos-display', route: '/pos/display' }],
+      quickActions: [{ id: 'pos-register', label: 'Open the till', route: '/pos' }],
+      deepLinks: ['pos', 'pos/sales/:id'],
+    }),
+    load: () => import('./pos/PosShell'),
+  },
+  {
     input: defineDesktopManifest({
       id: 'inventory', name: 'Inventory', icon: 'package', contractVersion: 1, desktop: { enabled: true },
       offline: { mode: 'READ_CACHE', entities: ['product'], cache: ['/api/inventory/products', '/api/inventory/stock'] },

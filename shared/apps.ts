@@ -131,7 +131,9 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'support', label: 'Support', group: 'operations', icon: 'life-buoy', app: 'tickets', webPath: '/tickets', surface: 'browser', order: 200 },
   { id: 'assets', label: 'Assets', group: 'operations', icon: 'box', app: 'assets', webPath: '/assets', surface: 'browser', order: 210 },
   { id: 'amc', label: 'AMC & Service', group: 'operations', icon: 'wrench', app: 'amc', webPath: '/amc', surface: 'browser', order: 215 },
-  { id: 'pos', label: 'POS', group: 'operations', icon: 'store', app: 'pos', webPath: '/pos', surface: 'browser', order: 220 },
+  // A shop's till: native here (the counter PC) — pairing, the drawer's shift, selling (offline too), receipts, the drawer
+  // kick and a customer display. Tills, registers and settings are managed on the web.
+  { id: 'pos', label: 'POS', group: 'operations', icon: 'store', app: 'pos', perm: 'pos.access', webPath: '/pos', surface: 'native', sidebar: 'business', order: 220, keywords: 'pos point of sale till register checkout cashier sell sale receipt barcode drawer shift float z report' },
   { id: 'admin', label: 'Admin Center', group: 'admin', icon: 'settings-2', perm: 'users.view', webPath: '/admin', surface: 'browser', order: 500 },
   { id: 'ai', label: 'AI Assistant', group: 'admin', icon: 'sparkles', app: 'ai', webPath: '/ai', surface: 'browser', order: 510 },
 ];
