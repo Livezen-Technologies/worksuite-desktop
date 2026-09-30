@@ -105,6 +105,18 @@ const api = {
     rules: call('ai:rules'),
     confirm: call('ai:confirm'),
     upload: call('ai:upload'),
+    // Local AI (WS-SRS-LAI): the models on this computer, the runtime, and asking the default model.
+    localStatus: call('ai:localStatus'),
+    localModels: call('ai:localModels'),
+    localRefresh: call('ai:localRefresh'),
+    localInstall: call('ai:localInstall'),
+    localCancelInstall: call('ai:localCancelInstall'),
+    localRemove: call('ai:localRemove'),
+    localSetDefault: call('ai:localSetDefault'),
+    localCheck: call('ai:localCheck'),
+    localAsk: call('ai:localAsk'),
+    localCancel: call('ai:localCancel'),
+    localRestart: call('ai:localRestart'),
   },
   ring: {
     state: call('ring:state'),
@@ -218,6 +230,9 @@ const api = {
     links: call('pdf:links'),
     followLink: call('pdf:followLink'),
     attachments: call('pdf:attachments'),
+    // Drive's first-page covers, sealed and cached on this computer.
+    coverGet: call('pdf:coverGet'),
+    coverPut: call('pdf:coverPut'),
     details: call('pdf:details'),
     print: call('pdf:print'),
     pickLocal: call('pdf:pickLocal'),
@@ -296,6 +311,13 @@ const api = {
     revealLocal: call('office:revealLocal'),
     localAvailable: call('office:localAvailable'),
     openLocal: call('office:openLocal'),
+    // The built-in editor's files: one picked on this computer, and the offline copies.
+    pickFile: call('office:pickFile'),
+    readFile: call('office:readFile'),
+    writeFile: call('office:writeFile'),
+    saveCopy: call('office:saveCopy'),
+    readOffline: call('office:readOffline'),
+    writeOffline: call('office:writeOffline'),
   },
   salon: {
     deskPairing: call('salon:deskPairing'),
@@ -334,6 +356,10 @@ const api = {
     lock: call('security:lock'),
     unlockPassword: call('security:unlockPassword'),
     unlockBiometric: call('security:unlockBiometric'),
+    // The app lock's PIN.
+    unlockPin: call('security:unlockPin'),
+    setPin: call('security:setPin'),
+    clearPin: call('security:clearPin'),
     state: call('security:state'),
     deviceInfo: call('security:deviceInfo'),
   },

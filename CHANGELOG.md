@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-09-30 — 0.2.64: POS and Restaurant on the desktop; Hotel PMS completed
+## 2026-09-30 — 0.2.66: POS and Restaurant on the desktop; Hotel PMS completed
 
 **Added**
 
@@ -30,6 +30,55 @@ person who has to live with the change — what it does, and where it bites.
   close, out of order, parts, photos, "Mine"); lost & found; guest requests assigned to a person; guest documents
   saved or removed and duplicate guests merged; a native tape chart that moves bookings after the server's price
   preview; invoices with the Billing outbox and retry; KPIs and reports with CSV export where permitted.
+
+## 2026-09-30 — 0.2.65: Local AI, the lock PIN, Drive covers and Office files reach the app
+
+Twenty-two things the app could do were never connected to its windows, so
+each answered "WorkSuite Desktop is not available.":
+
+**Fixed**
+
+- **Settings → Local AI**: "This computer" no longer stays on Checking…, and
+  Check for models, Restart, downloading, choosing, checking and removing a
+  model, and asking it in the AI dock all reach the app.
+- **The lock screen's PIN**: setting, clearing and unlocking with it.
+- **Drive's first-page covers** are kept on this computer again instead of
+  being drawn each time.
+- **The built-in Office editor**: opening a file from this computer, saving
+  it, Save a copy, and the offline copies.
+
+A test now fails the build when a channel the contract lists is not on the
+window's bridge under its own name.
+
+Local AI still has no models to offer until WorkSuite publishes its signed
+model catalog; Check for models now says why.
+
+---
+
+## 2026-09-30 — 0.2.64: a screen that fails no longer empties the window
+
+Opening the AI Assistant, the Chat drawer or the lock screen could leave the
+window empty — only its background, nothing to click — when something in
+them failed to draw. Nothing caught the failure, so everything was taken down
+with it.
+
+**Fixed**
+
+- **The AI dock, the Chat drawer, the minimised chats and every panel over the
+  workspace** (search, apps, notifications, transfers, organisations, your
+  profile menu, the network and clock popovers) now fail on their own: the
+  panel says it stopped working and what went wrong, with **Try again**,
+  **Close** and **Copy details**. The rest of WorkSuite keeps working.
+- **The window as a whole** says what went wrong, with **Try again**, **Reload
+  window** and **Copy details**, instead of going blank.
+- **The lock screen stays locked if it fails**: a plain password form takes
+  its place, never the workspace it was covering.
+
+**Changed**
+
+- A window's errors are written to the app's log (`main.log` in the logs
+  folder — on a Mac, `~/Library/Application Support/WorkSuite/logs`), at most
+  200 per window, so a failure can be read afterwards.
 
 ---
 
