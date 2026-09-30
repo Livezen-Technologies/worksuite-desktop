@@ -10,6 +10,8 @@ import { numberedName, safeFileName } from '@shared/filename';
 import { mimeFor } from '@shared/mime';
 import { DesktopError, isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
+import { isMediaPath } from './api-proxy';
+import { OFFICE_EXPORT_TOKEN } from '@shared/office';
 import type { Database } from './db';
 import type { HttpClient } from './http';
 import type { Vault } from './vault';
@@ -52,6 +54,27 @@ interface Meta {
   openWhenDone: boolean;
   /** Inside an uploaded folder: where the server puts it, folders made as needed. */
   relativePath?: string | null;
+  /** Kept inside the app, not in the downloads folder: the name of the sink that takes the bytes (`deps.sink`). */
+  sink?: string | null;
+}
+
+/**
+ * Where a download kept inside the app goes instead of the downloads folder
+ * (eLearning's offline copies): it takes the bytes as they arrive and says
+ * how much an earlier attempt kept, so a resume asks the server from there.
+ */
+export interface DownloadSink {
+  /** Bytes already kept that this attempt can go on after (0: start again). */
+  resumeFrom(): Promise<number>;
+  /** Opened at `offset`: what `resumeFrom` said, or 0 when the server sent the whole file again. */
+  open(offset: number): Promise<SinkWriter>;
+  discard(): Promise<void>;
+}
+
+export interface SinkWriter {
+  write(b: Uint8Array): Promise<void>;
+  /** `complete`: every byte arrived (`total` of them); otherwise what arrived whole is kept for a resume. */
+  close(complete: boolean, total: number): Promise<void>;
 }
 
 interface Live {
@@ -70,9 +93,20 @@ export interface TransferDeps {
   hash: (path: string) => Promise<{ sha256: string; bytes: number }>;
   canOpenFiles: () => boolean;
   audit: (action: string, details: Record<string, unknown>) => void;
+  /** The sink a download kept inside the app writes to, by the name it was started with. */
+  sink?: (name: string) => DownloadSink | null;
 }
 
 const MAX_UPLOAD = 5 * 1024 * 1024 * 1024;
+
+/** An Office export's signed download (`/office/exports/{token}`, ten minutes, web-api §8): fetched from our own server. */
+export function isOfficeExportPath(apiPath: string): boolean {
+  const m = /^\/office\/exports\/([^/?#]+)$/.exec(apiPath);
+  return !!m && OFFICE_EXPORT_TOKEN.test(m[1]!);
+}
+
+/** How a download that someone is waiting for ended (a copy to open in another app). */
+export type DownloadOutcome = { path: string } | { error: string };
 const MAX_FOLDER_FILES = 2000;
 
 /**
@@ -134,6 +168,8 @@ export class TransferManager {
   private handles = new Map<string, Handle>();
   private live = new Map<string, Live>();
   private emitTimer: NodeJS.Timeout | null = null;
+  /** Downloads a service waits for (Office's copies for another app): told once, when they end. */
+  private whenDone = new Map<string, (outcome: DownloadOutcome) => void>();
   onChanged: (list: Transfer[]) => void = () => undefined;
 
   constructor(private readonly deps: TransferDeps) {}
@@ -192,7 +228,7 @@ export class TransferManager {
         direction: r.direction as Transfer['direction'],
         name: r.name,
         source: r.direction === 'upload' ? (m?.path ?? '') : 'WorkSuite',
-        destination: r.direction === 'download' ? (m?.finalPath ?? '') : 'WorkSuite',
+        destination: r.direction === 'download' ? (m?.sink ? 'Kept in WorkSuite for offline learning' : (m?.finalPath ?? '')) : 'WorkSuite',
         bytes: Number(r.bytes),
         total: Number(r.total),
         state: r.state as TransferState,
@@ -264,12 +300,17 @@ export class TransferManager {
     this.persist(l);
     if (state !== 'running' && state !== 'queued') this.live.delete(l.t.id);
     this.emit();
+    const then = this.whenDone.get(l.t.id);
+    if (then && (state === 'done' || state === 'failed' || state === 'cancelled')) {
+      this.whenDone.delete(l.t.id);
+      then(state === 'done' && l.meta.finalPath ? { path: l.meta.finalPath } : { error: error ?? (state === 'cancelled' ? 'The download was cancelled.' : 'The download did not finish.') });
+    }
   }
 
   // ── downloads ──────────────────────────────────────────────────────────
 
-  async download(apiPath: string, name: string, openWhenDone: boolean, fileId: string | null): Promise<Transfer> {
-    if (!apiPath.startsWith('/api/')) throw new DesktopError('IPC_VALIDATION_FAILED', 'Not a WorkSuite download.');
+  async download(apiPath: string, name: string, openWhenDone: boolean, fileId: string | null, then?: (outcome: DownloadOutcome) => void): Promise<Transfer> {
+    if (!apiPath.startsWith('/api/') && !isMediaPath(apiPath) && !isOfficeExportPath(apiPath)) throw new DesktopError('IPC_VALIDATION_FAILED', 'Not a WorkSuite download.');
     const folder = this.deps.downloadFolder();
     await mkdir(folder, { recursive: true });
     const safe = safeFileName(name);
@@ -290,13 +331,93 @@ export class TransferManager {
     const l: Live = { t, meta, abort: null, samples: [] };
     this.live.set(t.id, l);
     this.persist(l);
-    this.deps.audit('file.download', fileId ? { file_id: fileId } : { kind: apiPath.startsWith('/api/meet/') ? 'meet-recording' : apiPath.startsWith('/api/files/') ? 'file-version' : apiPath.startsWith('/api/calendar/') || apiPath.startsWith('/api/contacts/') || apiPath.startsWith('/api/data/') || apiPath.startsWith('/api/finance/export/') || /^\/api\/expense\/(reports2?\/export|runs\/|postings\/)/.test(apiPath) ? 'export' : apiPath.startsWith('/api/expense/') ? 'expense-document' : 'mail-attachment' });
+    if (then) this.whenDone.set(t.id, then);
+    this.deps.audit('file.download', fileId ? { file_id: fileId } : { kind: isOfficeExportPath(apiPath) ? 'office-export' : apiPath.startsWith('/api/meet/') ? 'meet-recording' : apiPath.startsWith('/api/files/') ? 'file-version' : apiPath.startsWith('/api/calendar/') || apiPath.startsWith('/api/contacts/') || apiPath.startsWith('/api/data/') || apiPath.startsWith('/api/finance/export/') || /^\/api\/expense\/(reports2?\/export|runs\/|postings\/)/.test(apiPath) ? 'export' : apiPath.startsWith('/api/expense/') ? 'expense-document' : apiPath.startsWith('/api/garage/') ? 'garage-document' : isMediaPath(apiPath) ? 'elearning-lesson' : 'mail-attachment' });
     void this.runDownload(l);
     return { ...t };
   }
 
+  /**
+   * A download kept inside the app (eLearning's offline copies): the same
+   * queue, progress, pause and resume as any other, but the bytes go to the
+   * named sink — never to the downloads folder — and the copy cannot be
+   * opened in another app or shown in a folder.
+   */
+  async keep(source: string, name: string, sink: string): Promise<Transfer> {
+    if (!source.startsWith('/api/') && !isMediaPath(source)) throw new DesktopError('IPC_VALIDATION_FAILED', 'Not a WorkSuite download.');
+    if (!this.deps.sink?.(sink)) throw new DesktopError('INTERNAL', 'Nothing here keeps that download.');
+    const t: Transfer = {
+      id: randomUUID(),
+      direction: 'download',
+      name: safeFileName(name),
+      source: 'WorkSuite eLearning',
+      destination: 'Kept in WorkSuite for offline learning',
+      bytes: 0,
+      total: 0,
+      state: 'queued',
+      speed: 0,
+      error: null,
+      createdAt: new Date().toISOString(),
+    };
+    const meta: Meta = { path: null, fileId: null, source, uploadId: null, target: null, chunkSize: null, totalChunks: null, sha256: null, tempPath: null, finalPath: null, openWhenDone: false, sink };
+    const l: Live = { t, meta, abort: null, samples: [] };
+    this.live.set(t.id, l);
+    this.persist(l);
+    this.deps.audit('file.download', { kind: 'elearning-offline-copy' });
+    void this.runDownload(l);
+    return { ...t };
+  }
+
+  /** A download into a sink (`keep`): resumed from what the sink already holds. */
+  private async runKept(l: Live, source: string, sinkName: string): Promise<void> {
+    const sink = this.deps.sink?.(sinkName);
+    if (!sink) return this.finish(l, 'failed', 'This copy is no longer wanted here.');
+    l.t.state = 'running';
+    l.abort = new AbortController();
+    this.emit();
+    let writer: SinkWriter | null = null;
+    let written = 0;
+    let complete = false;
+    try {
+      let offset = await sink.resumeFrom();
+      const headers: Record<string, string> = { Accept: '*/*' };
+      if (offset > 0) headers.Range = `bytes=${offset}-`;
+      const res = await this.deps.http.raw('GET', this.deps.http.url(source), { headers, signal: l.abort.signal, timeoutMs: 24 * 3600_000 });
+      // A signed address is good for an hour or so: an old one is refused, and a new manifest gives a fresh one.
+      if (res.status === 401 || res.status === 403 || res.status === 404 || res.status === 410) return this.finish(l, 'failed', 'The address for this file has expired. Download the course again to continue.');
+      if (!res.ok || !res.body) return this.finish(l, 'failed', `The server answered ${res.status}.`);
+      if (res.status !== 206) offset = 0;
+      const len = Number(res.headers.get('content-length') ?? 0);
+      l.t.total = len > 0 ? len + offset : 0;
+      writer = await sink.open(offset);
+      written = offset;
+      const reader = res.body.getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        await writer.write(value);
+        written += value.byteLength;
+        this.progress(l, written);
+      }
+      if (l.t.total > 0 && written !== l.t.total) return this.finish(l, 'failed', 'The download was incomplete. Retry to continue it.');
+      complete = true;
+      await writer.close(true, written);
+      writer = null;
+      l.t.total = written;
+      l.t.bytes = written;
+      this.finish(l, 'done');
+    } catch (e) {
+      if ((l.t.state as TransferState) === 'paused' || (l.t.state as TransferState) === 'cancelled') return;
+      this.finish(l, 'failed', isDesktopError(e) ? e.message : String((e as Error).message ?? e));
+    } finally {
+      // Interrupted: what arrived whole stays, for a resume.
+      if (writer) await writer.close(complete, written).catch(() => undefined);
+    }
+  }
+
   private async runDownload(l: Live): Promise<void> {
     const { meta } = l;
+    if (meta.sink) return meta.source ? this.runKept(l, meta.source, meta.sink) : this.finish(l, 'failed', 'Nothing to download.');
     const source = meta.source ?? (meta.fileId ? `/api/files/${encodeURIComponent(meta.fileId)}/download` : null);
     if (!source || !meta.tempPath) return this.finish(l, 'failed', 'Nothing to download.');
     l.t.state = 'running';
@@ -523,8 +644,8 @@ export class TransferManager {
       id: row.id,
       direction: row.direction as Transfer['direction'],
       name: row.name,
-      source: row.direction === 'upload' ? (meta.path ?? '') : 'WorkSuite Files',
-      destination: meta.finalPath ?? this.deps.downloadFolder(),
+      source: row.direction === 'upload' ? (meta.path ?? '') : meta.sink ? 'WorkSuite eLearning' : 'WorkSuite Files',
+      destination: meta.sink ? 'Kept in WorkSuite for offline learning' : (meta.finalPath ?? this.deps.downloadFolder()),
       bytes: Number(row.bytes),
       total: Number(row.total),
       state: row.state as TransferState,
@@ -611,6 +732,7 @@ export class TransferManager {
     l.t.state = 'cancelled';
     l.abort?.abort();
     if (l.meta.tempPath) await unlink(l.meta.tempPath).catch(() => undefined);
+    if (l.meta.sink) await this.deps.sink?.(l.meta.sink)?.discard().catch(() => undefined);
     if (l.t.direction === 'upload' && l.meta.uploadId) {
       void this.deps.http.post(`/api/uploads/${l.meta.uploadId}/abort`, {}).catch(() => undefined);
     }
@@ -620,6 +742,8 @@ export class TransferManager {
   /** Canonical path of a finished download, only if it is inside the download folder. */
   private async finishedPath(id: string): Promise<string> {
     const l = this.liveOrLoad(id);
+    // A copy kept inside the app is played there, and nowhere else.
+    if (l.meta.sink) throw new DesktopError('POLICY_DENIED', 'This copy is kept inside WorkSuite for offline learning. Open it from eLearning.');
     const p = l.meta.finalPath;
     if (!p || l.t.state !== 'done') throw new DesktopError('NOT_FOUND', 'That download has not finished.');
     const real = await realpath(p).catch(() => null);

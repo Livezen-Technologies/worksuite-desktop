@@ -1,10 +1,13 @@
 import { app, clipboard, crashReporter, dialog, globalShortcut, ipcMain, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents } from 'electron';
 import os from 'node:os';
+import { hkdfSync } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { canOpenApp, canOpenLink, canOpenRoute, notificationAllowed, visibleAppIds } from '@shared/access';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
 import { resolveWebLink } from '@shared/links';
 import { networkStatus } from '@shared/network';
+import { pmsCached } from '@shared/pms-cache';
+import { eventsCached } from '@shared/event-desk';
 import { redactUrl } from '@shared/redact';
 import type { Bootstrap, NavigateRequest, RealtimeState, ServiceHealth, StatusSnapshot } from '@shared/types';
 import { AccessWatch, NO_ACCESS } from './access';
@@ -14,7 +17,7 @@ import type { AppContext, ClockExtra } from './context';
 import { broadcast } from './events';
 import { registerHandlers } from './handlers';
 import { initLog, logger } from './log';
-import { isDesktopError } from './errors';
+import { DesktopError, isDesktopError } from './errors';
 import { buildMenu } from './menu';
 import { paths } from './paths';
 import { SessionController, syncRefusal } from './session';
@@ -52,7 +55,15 @@ import { SecureStore } from '../services/secure-store';
 import { SettingsService } from '../services/settings';
 import { DriveSync } from '../services/sync/engine';
 import { ServiceSupervisor } from '../services/supervisor';
-import { TransferManager } from '../services/transfers';
+import { TransferManager, type DownloadSink } from '../services/transfers';
+import { ElearningOffline } from '../services/elearning-offline';
+import { EventDesk } from '../services/event-desk';
+import { EventDeskPrint } from '../services/event-desk-print';
+import { OfficeEditorHost } from '../services/office-editor';
+import { OfficeExternal } from '../services/office-external';
+import { createPdfStudio } from '../services/pdf/host';
+import { pdfPathsInArgv } from '../services/pdf/local-files';
+import { DEFAULT_PDF_POLICY } from '../services/pdf/service';
 import { Vault } from '../services/vault';
 import { TrayService } from '../tray/tray';
 import { POLICY_PUBLIC_KEY, RELEASE_PUBLIC_KEY } from '../updater/keys';
@@ -77,6 +88,10 @@ if (!app.isPackaged && process.env.WS_E2E_FAKE_MEDIA) {
   app.commandLine.appendSwitch('use-fake-device-for-media-stream');
   app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 }
+
+/** PDFs handed over before PDF Studio is running wait here. */
+const pendingPdfs: string[] = [];
+let handPdfs: (paths: string[]) => void = (paths) => void pendingPdfs.push(...paths);
 
 if (!app.requestSingleInstanceLock()) {
   // FR-DL-04: a second launch hands its arguments (and deep link) to the first.
@@ -118,6 +133,12 @@ function main(): void {
   });
   const argvLink = findDeepLinkInArgv(process.argv);
   if (argvLink) pendingLinks.push(argvLink);
+  // PDFs the operating system hands over ("Open with"; a file dropped on the Dock icon): PDF Studio opens each.
+  app.on('open-file', (e, path) => {
+    e.preventDefault();
+    handPdfs([path]);
+  });
+  handPdfs(pdfPathsInArgv(process.argv));
 
   app.whenReady().then(() => start(boot, pendingLinks, (fn) => (handleLink = fn)));
 }
@@ -147,10 +168,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   // A dedicated network session for API traffic: its own cookie jar and proxy.
   const net = session.fromPartition('persist:ws-net');
-  if (enterprise.proxy && enterprise.proxy.mode !== 'system') {
-    const cfg = enterprise.proxy.mode === 'pac' ? { pacScript: enterprise.proxy.url ?? '' } : { proxyRules: enterprise.proxy.rules ?? enterprise.proxy.url ?? '', proxyBypassRules: enterprise.proxy.bypass ?? '' };
-    void net.setProxy(cfg);
-    void session.defaultSession.setProxy(cfg);
+  const proxyConfig = enterprise.proxy && enterprise.proxy.mode !== 'system' ? (enterprise.proxy.mode === 'pac' ? { pacScript: enterprise.proxy.url ?? '' } : { proxyRules: enterprise.proxy.rules ?? enterprise.proxy.url ?? '', proxyBypassRules: enterprise.proxy.bypass ?? '' }) : null;
+  if (proxyConfig) {
+    void net.setProxy(proxyConfig);
+    void session.defaultSession.setProxy(proxyConfig);
   }
   const fetchImpl: FetchLike = (url, init) => net.fetch(url, init as RequestInit);
 
@@ -309,7 +330,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     });
   const hash = (path: string) => hashWith('hash', path);
 
-  const transfers = new TransferManager({
+  const transfers: TransferManager = new TransferManager({
     db,
     vault: getVault,
     http,
@@ -318,7 +339,46 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     hash,
     canOpenFiles: () => sessionCtl.hasPermission('desktop.files.open_external'),
     audit: (action, details) => audit.record(sessionCtl.userId(), action, details),
+    // eLearning's offline copies are kept inside the app, sealed as they arrive.
+    sink: (name): DownloadSink | null => elearning.sink(name),
   });
+  // eLearning: a course's lessons kept for offline learning, as the server's manifest lists them.
+  const elearning: ElearningOffline = new ElearningOffline({
+    db,
+    vault: getVault,
+    http,
+    transfers,
+    root: join(p.profile, 'elearning'),
+    userId: () => (sessionCtl.isReady() ? sessionCtl.userId() : null),
+    allowed: () =>
+      sessionCtl.capabilities().offlineCache
+        ? { ok: true, reason: null }
+        : { ok: false, reason: 'Your organization does not allow WorkSuite data to be kept offline on this computer.' },
+    changed: () => broadcast('elearning:offlineChanged'),
+  });
+  // WorkSuite Events' desk: this computer as a check-in device at an event, its key, offline copy and queue.
+  const eventDesk = new EventDesk({
+    db,
+    vault: getVault,
+    http,
+    secrets,
+    origin: () => auth.getServer()?.origin ?? null,
+    // Nothing is sent, caught up or scanned for someone who does not have the Events app.
+    user: () => (sessionCtl.isReady() && canOpenApp('events', sessionCtl.visibleApps()) ? sessionCtl.userId() : null),
+    deviceRef: () => device.current()?.id ?? null,
+    platform: platformName() as 'windows' | 'macos' | 'linux',
+    appVersion: app.getVersion(),
+    caps: () => {
+      const c = sessionCtl.capabilities();
+      return { offlineCache: c.offlineCache, offlineQueue: c.offlineQueue };
+    },
+    notify: (n) => notifications.notify({ ...n, module: 'events', category: 'events', sender: 'Events', critical: false }),
+    changed: (eventId) => {
+      broadcast('eventdesk:changed', { event_id: eventId });
+      emitStatus();
+    },
+  });
+  const eventDeskPrint = new EventDeskPrint({ config: db, http, origin: () => auth.getServer()?.origin ?? null });
 
   // Drive sync (Phase 2): chosen Drive folders kept in step with folders here.
   const syncAllowed = (): { ok: boolean; reason: string | null } => {
@@ -349,6 +409,47 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     protectedPaths: () => [p.userData],
   });
   sync.onChanged = (s) => broadcast('sync:changed', s);
+
+  // Office documents (WorkSuite Drive — ONLYOFFICE SRS §7): the editor in a tab, isolated in a partition of
+  // its own, and copies opened in Word, Excel, PowerPoint or the default app, taken back only on request.
+  const office = new OfficeEditorHost({
+    preload: join(__dirname, '../preload/office.js'),
+    serverOrigin: () => auth.getServer()?.origin ?? null,
+    allowInsecureLocal: allowInsecure,
+    devTools: !app.isPackaged || process.argv.includes('--diagnostics-devtools'),
+    platform: process.platform,
+    // A window or the app going away with a document open: the session is ended for it (the Document Server saves anyway).
+    endSession: (fileId, sessionId) =>
+      void http.request('DELETE', `/api/files/${fileId}/office/session/${sessionId}`, { query: { reason: 'CLOSED' }, timeoutMs: 5000 }).catch(() => undefined),
+    configureSession: (ses) => {
+      if (proxyConfig) void ses.setProxy(proxyConfig);
+    },
+  });
+  office.install();
+  const officeLocal = new OfficeExternal({
+    db,
+    vault: getVault,
+    http,
+    userId: () => (sessionCtl.isReady() ? sessionCtl.userId() : null),
+    platform: process.platform,
+    home: app.getPath('home'),
+    canOpenFiles: () => sessionCtl.hasPermission('desktop.files.open_external'),
+    syncedPath: (fileId) => {
+      const at = sync.locate({ fileId });
+      return at?.isFile ? at.path : null;
+    },
+    download: async (fileId, name, then) => {
+      await transfers.download(`/api/files/${fileId}/download`, name, false, String(fileId), then);
+    },
+    uploadNew: async (path, name, folderId) => {
+      const [picked] = await transfers.register([path]);
+      if (!picked) throw new DesktopError('NOT_FOUND', 'The copy on this computer was moved or deleted.');
+      await transfers.upload([picked.handle], { kind: 'files', folderId: folderId === null ? null : String(folderId), name });
+    },
+    openPath: (path) => shell.openPath(path),
+    audit: (action, details) => audit.record(sessionCtl.userId(), action, details),
+    onChanged: (copies) => broadcast('office:localChanged', copies),
+  });
 
   let activeCall = false;
   // Updates wait while a call is on (FR-UPD); the call windows say when.
@@ -509,7 +610,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     return {
       network: networkStatus(apiReachable, realtime.getState(), realtimeDownSince),
       realtime: realtime.getState(),
-      pendingChanges: uid ? queue.pendingCount(uid) + salonSync.pending() : 0,
+      pendingChanges: uid ? queue.pendingCount(uid) + salonSync.pending() + eventDesk.pending() : 0,
       unread: counts,
       notificationsPausedUntil: notifications.pausedUntilIso(),
       services,
@@ -827,13 +928,30 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/hr/leave', 'hr'],
     ['/api/hr/approvals/pending', 'hr'],
     ['/api/files/browse', 'files'],
+    // How Drive opens each kind of Office file (web-api §6), so an Office file offline still goes to its tab.
+    ['/api/files/office/types', 'files'],
     ['/api/dashboard/home', 'home'],
     ['/api/notifications', 'notifications'],
-    // A workshop terminal opens with WorkSuite out of reach: the technician's work and the board as last seen.
+    // A workshop terminal opens with WorkSuite out of reach: the technician's work and the board as last seen,
+    // and the job cards (with their check-in, estimate, work and delivery), vehicles, customers and workshop.
     ['/api/garage/v1/options', 'garage'],
     ['/api/garage/v1/overview', 'garage'],
     ['/api/garage/v1/board', 'garage'],
     ['/api/garage/v1/my-work', 'garage'],
+    ['/api/garage/v1/jobs', 'garage'],
+    ['/api/garage/v1/vehicles', 'garage'],
+    ['/api/garage/v1/customers', 'garage'],
+    ['/api/garage/v1/workshop', 'garage'],
+    // A learner opens My Learning, the catalogue and their courses' outlines (with the lessons already opened)
+    // from the last copy; a course's lesson files kept offline are elearning-offline.ts's, not this cache's.
+    ['/api/elearning/v1/options', 'elearning'],
+    ['/api/elearning/v1/me/learning', 'elearning'],
+    ['/api/elearning/v1/me/courses', 'elearning'],
+    ['/api/elearning/v1/me/lessons', 'elearning'],
+    ['/api/elearning/v1/catalog', 'elearning'],
+    ['/api/elearning/v1/categories', 'elearning'],
+    // Hotel PMS keeps the rack and the front desk's lists per property (shared/pms-cache.ts: `pmsCached`), below;
+    // the Events tab its options, the events and their gates (shared/event-desk.ts: `eventsCached`).
   ];
   const rebuildMenu = (visible: Set<string>): void =>
     buildMenu(
@@ -865,6 +983,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       for (const module of cache.modules(b.user.id)) {
         if (!canOpenApp(module, visible) && cache.clearModule(b.user.id, module) > 0) log.info('offline data removed: app no longer available', { module });
       }
+      // Courses kept offline go with the app.
+      if (!canOpenApp('elearning', visible)) void elearning.wipeUser(b.user.id).catch((e) => log.warn('offline courses not removed', { error: String(e) }));
+      // So do an event desk's copies of the gates' tickets (scans still unsent wait, should the app come back).
+      if (!canOpenApp('events', visible)) eventDesk.signedOut(b.user.id);
     }
     emitStatus();
   };
@@ -886,12 +1008,15 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     device.extras = () => {
       const c = transfers.activeCounts();
       const s = sync.health();
-      return { pendingUp: queue.pendingCount(uid) + salonSync.pending() + c.uploads + s.pendingUp, pendingDown: c.downloads + s.pendingDown, lastError: s.lastError };
+      return { pendingUp: queue.pendingCount(uid) + salonSync.pending() + eventDesk.pending() + c.uploads + s.pendingUp, pendingDown: c.downloads + s.pendingDown, lastError: s.lastError };
     };
     sync.start(uid);
     transfers.recover();
     void queue.replay(uid);
     salonSync.start();
+    eventDesk.start();
+    // Courses kept offline: the ones whose learning ended, or whose licence ran out, go.
+    void elearning.validate().catch((e) => log.warn('offline courses not checked', { error: String(e) }));
     void audit.flush();
     void refreshAttendance();
     attendanceTimer = setInterval(() => void refreshAttendance(), 5 * 60_000);
@@ -918,12 +1043,18 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     tray.update({ quickAsk: null });
     // Torn-off windows show the person's data: they close, and come back at their next sign-in.
     windows.closeRecords();
+    // Open documents close, and their editor partitions are cleared (OO-DSK-023).
+    office.closeAll(true);
+    officeLocal.stop();
+    // Open PDFs close, and passwords remembered for the session are forgotten.
+    void pdfStudio.closeAll();
     realtime.stop();
     notifications.stop();
     device.stop();
     transfers.stopAll();
     sync.stop();
     salonSync.stop();
+    eventDesk.stop();
     if (attendanceTimer) clearInterval(attendanceTimer);
     attendanceTimer = null;
     stopPresence();
@@ -944,19 +1075,30 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       notifications.clearUser(uid);
       // The salon day's copy is cache; what the desk made waits for its maker (salon-sync.ts).
       salonSync.signedOut(uid);
+      // So is an event desk's offline copy; the scans made offline wait for the person who made them (event-desk.ts).
+      eventDesk.signedOut(uid);
       db.run('DELETE FROM tab_sessions WHERE user_id = ?', uid);
       if (scope !== 'tokens') {
         queue.wipeUser(uid, includeDrafts);
         transfers.wipe(uid);
+        // Copies opened in other apps are no longer watched; the files stay the person's.
+        officeLocal.forgetUser(uid);
+        // PDF Studio's working copies and thumbnails (PDF-OFF-005).
+        void pdfStudio.wipe();
       }
       // What Drive sync put on this computer counts as offline files (§11.2 wipe_on_revoke).
       if (scope === 'cache+offline_files') void sync.wipe(uid, false);
+      // So are the courses kept for offline learning.
+      if (scope === 'cache+offline_files') void elearning.wipeUser(uid).catch(() => undefined);
       // A remote wipe, or signing out with "remove WorkSuite's data", forgets
       // the salon desk this computer was, and its printers; a plain sign-out keeps them.
       if (includeDrafts) {
         salonDesk.forgetAll();
         salonPrint.forgetAll();
         salonSync.forgetAll();
+        // Every event this computer was a check-in device at: the keys, the copies, the queues, the badge printer.
+        eventDesk.forgetAll();
+        eventDeskPrint.forgetAll();
       }
       log.info('local data removed', { scope });
     },
@@ -1038,8 +1180,31 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     device.poke();
     sync.kick('reconnected');
     void salonSync.sync();
+    void eventDesk.sync();
+    void elearning.validate().catch(() => undefined);
     broadcast('realtime:resync');
   }
+
+  // PDF Studio (services/pdf): engine workers, working copies, its IPC. Read-only viewing in this version.
+  const pdfStudio = createPdfStudio({
+    profile: p.profile,
+    userData: p.userData,
+    http,
+    cacheKey: secrets.getStatus().persistent ? Buffer.from(hkdfSync('sha256', Buffer.from(dbKey, 'base64'), 'worksuite-pdf', 'thumbnail-cache', 32)) : null,
+    // The organisation's PDF policies (§21.2) come with the server's PDF Studio service (stage D2).
+    policy: () => DEFAULT_PDF_POLICY,
+    desktop: () => ({
+      downloads: sessionCtl.current()?.policy.downloads !== 'disabled' && sessionCtl.hasPermission('desktop.downloads'),
+      diskCache: sessionCtl.capabilities().offlineCache,
+    }),
+    audit: (action, details) => audit.record(sessionCtl.userId(), action, details),
+    signedIn: () => sessionCtl.isReady(),
+    dbCheck: () => db.integrityCheck(),
+    navigate: (req) => navigate(req),
+    appVersion: app.getVersion(),
+  });
+  handPdfs = (paths) => void pdfStudio.openFromOs(paths);
+  if (pendingPdfs.length) handPdfs(pendingPdfs.splice(0));
 
   const diagnostics = new DiagnosticsService({
     serverOrigin: () => auth.getServer()?.origin ?? null,
@@ -1078,7 +1243,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       userId: () => sessionCtl.userId(),
       cacheModuleFor: (path) => {
         const clean = path.split('?')[0]!;
-        const module = CACHE_PREFIXES.find(([prefix]) => clean === prefix || clean.startsWith(`${prefix}/`))?.[1] ?? null;
+        const module = CACHE_PREFIXES.find(([prefix]) => clean === prefix || clean.startsWith(`${prefix}/`))?.[1] ?? (pmsCached(clean) ? 'pms' : eventsCached(clean) ? 'events' : null);
         // Neither saved nor served for an app the person may not open.
         return module && canOpenApp(module, sessionCtl.visibleApps()) ? module : null;
       },
@@ -1096,6 +1261,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     }),
     // Read on each page load: the server chosen, and the media servers it announced.
     () => ({ server: auth.getServer()?.origin ?? null, media: mediaServers() }),
+    // A course's lessons kept offline, played by the app's own pages.
+    (request, path) => (path.startsWith('/elearning/') ? elearning.serve(request, path) : Promise.resolve(new Response('Not found', { status: 404 }))),
   );
 
   const pasteGestures = new Map<number, number>();
@@ -1103,6 +1270,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     // A meeting window that goes away takes its share, and any control of it, with it.
     const id = contents.id;
     contents.once('destroyed', () => {
+      pdfStudio.senderGone(id);
       remoteControl.windowGone(id);
       screenShare.forget(id);
     });
@@ -1149,6 +1317,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     salonDesk,
     salonPrint,
     salonSync,
+    elearning,
+    eventDesk,
+    eventDeskPrint,
     settings,
     http,
     auth,
@@ -1182,12 +1353,15 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     webchat,
     quickAsk,
     ai,
+    office,
+    officeLocal,
     relaunch,
     quit,
     clockAttendance,
     attendanceBreak,
   };
   registerHandlers(router, ctx);
+  pdfStudio.register(router);
   router.install();
   const missing = router.missingHandlers();
   if (missing.length) log.warn('IPC channels without handlers', { missing });
@@ -1206,6 +1380,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // ── lifecycle ──────────────────────────────────────────────────────────
   app.on('second-instance', (_e, argv) => {
     const link = findDeepLinkInArgv(argv);
+    const pdfs = pdfPathsInArgv(argv);
+    if (pdfs.length) handPdfs(pdfs);
     if (link) handleDeepLink(link);
     else windows.showMain();
   });
@@ -1217,6 +1393,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   });
   app.on('before-quit', () => {
     windows.quitting = true;
+    // The Document Server saves after the last editor leaves; the sessions are ended on the way out.
+    office.closeAll(true);
+    officeLocal.stop();
     webchat.stop();
     quickAsk.release();
     void askHelper?.then((h) => h?.stop());
@@ -1227,6 +1406,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     calls.stop();
     transfers.stopAll();
     sync.stop();
+    // What scans changed in an event desk's copy is written back before the database closes.
+    eventDesk.stop();
     supervisor.stopAll();
     realtime.stop();
     updater.stop();
@@ -1246,6 +1427,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     const uid = sessionCtl.userId();
     if (uid) void queue.replay(uid);
     void salonSync.sync();
+    void eventDesk.sync();
   });
   screen.on('display-removed', () => windows.refit());
   screen.on('display-metrics-changed', () => windows.refit());

@@ -1,5 +1,6 @@
 import { app, dialog, protocol, session, shell, type Session, type WebContents } from 'electron';
 import { logger } from '../main/log';
+import { OFFICE_SCHEME } from './office-policy';
 
 const log = logger('security');
 
@@ -18,6 +19,9 @@ export function registerPrivilegedSchemes(): void {
       scheme: APP_SCHEME,
       privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true, codeCache: true },
     },
+    // The Office editor's own page (office-policy.ts): served only inside the editor's partition, a secure
+    // origin of its own so the Document Server's frames run as a secure context.
+    { scheme: OFFICE_SCHEME, privileges: { standard: true, secure: true } },
   ]);
 }
 
@@ -128,6 +132,18 @@ export async function openExternalSafely(raw: string, parent?: Electron.BrowserW
   return true;
 }
 
+/**
+ * Where a WebContents that is not the shell may go: the Office editor's view
+ * (office-policy.ts) names its own rules — its page, and the Document
+ * Server's frames. Every other WebContents keeps the shell's.
+ */
+export type NavigationRule = (url: string, mainFrame: boolean) => boolean;
+const navigationRules = new WeakMap<WebContents, NavigationRule>();
+
+export function setNavigationRule(contents: WebContents, rule: NavigationRule): void {
+  navigationRules.set(contents, rule);
+}
+
 /** Applied to every WebContents the app creates. */
 export function hardenWebContents(contents: WebContents): void {
   contents.setWindowOpenHandler(({ url }) => {
@@ -136,19 +152,29 @@ export function hardenWebContents(contents: WebContents): void {
     return { action: 'deny' };
   });
   contents.on('will-navigate', (event, url) => {
-    if (!isTrustedShellUrl(url)) {
+    const rule = navigationRules.get(contents);
+    if (rule ? !rule(url, true) : !isTrustedShellUrl(url)) {
       event.preventDefault();
       log.warn('blocked navigation', { url: url.slice(0, 200) });
     }
   });
   contents.on('will-redirect', (event, url) => {
-    if (!isTrustedShellUrl(url)) event.preventDefault();
+    const rule = navigationRules.get(contents);
+    if (rule ? !rule(event.url, event.isMainFrame) : !isTrustedShellUrl(url)) event.preventDefault();
   });
   contents.on('will-attach-webview', (event) => {
     // <webview> is forbidden (§3.3).
     event.preventDefault();
   });
   contents.on('will-frame-navigate', (event) => {
+    const rule = navigationRules.get(contents);
+    if (rule) {
+      if (!event.isMainFrame && !rule(event.url, false)) {
+        event.preventDefault();
+        log.warn('blocked frame navigation', { url: event.url.slice(0, 200) });
+      }
+      return;
+    }
     // Subframes (mail bodies, previews) are sandboxed srcdoc/blob frames; they
     // may not navigate anywhere.
     if (!event.isMainFrame && !event.url.startsWith('about:')) event.preventDefault();

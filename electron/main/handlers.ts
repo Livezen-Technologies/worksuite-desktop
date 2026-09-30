@@ -3,6 +3,7 @@ import os from 'node:os';
 import { writeFile } from 'node:fs/promises';
 import { canOpenApp, notificationAllowed } from '@shared/access';
 import { tabRecordSchema, type TabRecord } from '@shared/ipc/contract';
+import { garageDocPath } from '@shared/garage-docs';
 import type { AppInfo, BusyReport, DetachedWindow, SyncPolicy } from '@shared/types';
 import { assertRoute, assertWebPath } from './access';
 import { DesktopError, isDesktopError } from './errors';
@@ -453,7 +454,13 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     const fc = input.financeCsv;
     const ef = input.expenseFile;
     const withOrg = (org?: number) => (org ? `?org=${org}` : '');
-    const path = ef
+    const path = input.officeExport
+      ? `/office/exports/${input.officeExport}`
+      : input.elearningMedia
+      ? `/media/${input.elearningMedia}?download=1`
+      : input.garageDoc
+      ? garageDocPath(input.garageDoc)
+      : ef
       ? ef.kind === 'claim-receipt'
         ? `/api/expense/claims2/${ef.claim}/receipt`
         : ef.kind === 'receipt'
@@ -508,6 +515,44 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
           : `/api/mail/messages/${input.mail!.uid}/attachments/${encodeURIComponent(input.mail!.ref)}?${new URLSearchParams({ folder: input.mail!.folder, dl: '1', ...(input.mail!.mailbox ? { mailbox: input.mail!.mailbox } : {}) })}`;
     return ctx.transfers.download(path, input.name, !!input.open, input.fileId ?? null);
   });
+  // Office documents: the editor's view (office-editor.ts) and copies opened in other apps (office-external.ts).
+  router.handle('office:open', (input, c) => ctx.office.open(c.sender, input));
+  router.handle('office:place', (input, c) => ctx.office.place(c.sender, input.viewId, input.bounds, input.visible));
+  router.handle('office:command', (input, c) => ctx.office.command(c.sender, input.viewId, input.command.type === 'start' && input.events ? { ...input.command, events: input.events } : input.command, input.sessionId));
+  router.handle('office:close', (input, c) => ctx.office.close(c.sender, input.viewId));
+  router.handle('office:focusFile', (input, c) => ctx.office.focusFile(c.sender, input.fileId));
+  router.handle('office:externalApps', (input) => ctx.officeLocal.apps(input.extension));
+  router.handle('office:openExternal', (input) => ctx.officeLocal.open(input));
+  router.handle('office:localCopies', () => ctx.officeLocal.list());
+  router.handle('office:uploadLocal', (input) => ctx.officeLocal.upload(input.id, input.how));
+  router.handle('office:forgetLocal', (input) => ctx.officeLocal.forget(input.id));
+  router.handle('office:revealLocal', (input) => {
+    shell.showItemInFolder(ctx.officeLocal.pathOf(input.id));
+    return true;
+  });
+  router.handle('office:localAvailable', (input) => {
+    const at = ctx.officeLocal.localPath(input.fileId);
+    return { available: !!at, synced: !!at?.synced, preview: !!at && process.platform === 'darwin', openInApp: !!at && ctx.session.hasPermission('desktop.files.open_external') };
+  });
+  router.handle('office:openLocal', async (input, c) => {
+    const at = ctx.officeLocal.localPath(input.fileId);
+    if (!at) throw new DesktopError('NOT_FOUND', 'This file is not on this computer.');
+    if (input.preview) {
+      // Quick Look shows the file without another app, and without the network (macOS).
+      const win = winOf(c.sender);
+      if (process.platform !== 'darwin' || !win) throw new DesktopError('UNSUPPORTED', 'Previewing an Office file without WorkSuite needs macOS Quick Look.');
+      win.previewFile(at.path);
+      return true;
+    }
+    if (!ctx.session.hasPermission('desktop.files.open_external')) throw new DesktopError('POLICY_DENIED', 'Your organization does not allow opening files in other applications.');
+    return (await shell.openPath(at.path)) === '';
+  });
+
+  // eLearning's offline copies (electron/services/elearning-offline.ts).
+  router.handle('elearning:offlineList', () => ctx.elearning.list());
+  router.handle('elearning:offlineDownload', (input) => ctx.elearning.download(input.courseId, input.title));
+  router.handle('elearning:offlineRemove', (input) => ctx.elearning.remove(input.courseId));
+  router.handle('elearning:offlineValidate', () => ctx.elearning.validate());
   router.handle('transfers:upload', (input, c) => {
     // A file for a remote-control session goes only from the meeting window that controls it; the shared
     // computer's own offers are chosen in the main process's dialog, never through here.
@@ -658,6 +703,28 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('salon:printTest', async (input, c) => ctx.salonPrint.test(input.paper, await installed(c.sender)));
   router.handle('salon:printPage', async (input, c) => ctx.salonPrint.page(input.html, input.paper, await installed(c.sender)));
   router.handle('salon:openDrawer', async (_i, c) => ctx.salonPrint.drawer(await installed(c.sender)));
+
+  // ── WorkSuite Events' desk ─────────────────────────────────────────────
+  // Registering at an event and a new key are done here, so the key never
+  // reaches a renderer (event-desk.ts); scans are matched against the offline
+  // copy here too. Badges print from the server's own page (event-desk-print.ts).
+  router.handle('eventdesk:list', () => ctx.eventDesk.registrations());
+  router.handle('eventdesk:status', (input) => ctx.eventDesk.status(input.event_id));
+  router.handle('eventdesk:register', (input) => ctx.eventDesk.register(input));
+  router.handle('eventdesk:rotateKey', (input) => ctx.eventDesk.rotateKey(input.event_id));
+  router.handle('eventdesk:forget', (input) => ctx.eventDesk.forget(input.event_id, input.discard === true));
+  router.handle('eventdesk:sync', async (input) => {
+    await ctx.eventDesk.sync(input.event_id);
+    return ctx.eventDesk.status(input.event_id);
+  });
+  router.handle('eventdesk:scan', (input) => ctx.eventDesk.scan(input));
+  router.handle('eventdesk:search', (input) => ctx.eventDesk.search(input.event_id, input.q, input.limit ?? 20));
+  router.handle('eventdesk:queue', (input) => ctx.eventDesk.queue(input.event_id));
+  router.handle('eventdesk:queueResolve', (input) => ctx.eventDesk.resolveItem(input.event_id, input.client_uuid, input.action));
+  router.handle('eventdesk:walkIn', (input) => ctx.eventDesk.walkIn(input));
+  router.handle('eventdesk:printSettings', () => ctx.eventDeskPrint.settings());
+  router.handle('eventdesk:printSettingsSet', async (input, c) => ctx.eventDeskPrint.update(input, await installed(c.sender)));
+  router.handle('eventdesk:printJobs', async (input, c) => ctx.eventDeskPrint.printJobs(input.event_id, input.job_ids, await installed(c.sender)));
 
   // Offline working (salon-sync.ts): the day's copy, and the outbox.
   router.handle('salon:syncStatus', () => ctx.salonSync.status());

@@ -51,6 +51,10 @@ const DENY: RegExp[] = [
   // Pairing a salon desk answers with the desk's key: it is done in the main
   // process (salon-desk.ts), so the key never reaches a renderer.
   /^\/api\/salon\/v1\/desk\/pair(\/|\?|$)/,
+  // An event desk's key is answered by a new key, and its copy and queue are made with it: this computer as a
+  // check-in device is the main process's (event-desk.ts). Registering one is refused below, by method.
+  /^\/api\/events\/v1\/devices\/\d+\/(key|heartbeat)\/?$/,
+  /^\/api\/events\/v1\/events\/\d+\/checkin\/(bootstrap|changes|sync)\/?$/,
   // The assistant (WS-AI-SRS-001 DSK-3, DSK-6): confirming a proposal is `ai:confirm`, which checks the
   // request came from the main window and audits it; a file from this computer is `ai:upload`, picked
   // there under the device policy. No page — Quick Ask's included — does either for itself.
@@ -97,6 +101,8 @@ export function isProxyPathAllowed(apiPath: string, method = 'GET'): boolean {
   if (isSharerGrant(pathOnly, apiPath)) return false;
   // Offering a file in a session is the upload manager's (files the person chose), never a page's own bytes.
   if (m !== 'GET' && m !== 'HEAD' && /^\/api\/meet\/control\/sessions\/\d+\/files\/?$/.test(pathOnly)) return false;
+  // Registering an event device answers with its key: done by the main process, never a page (the list stays readable).
+  if (m !== 'GET' && m !== 'HEAD' && /^\/api\/events\/v1\/events\/\d+\/devices\/?$/.test(pathOnly)) return false;
   return !DENY.some((re) => re.test(pathOnly));
 }
 

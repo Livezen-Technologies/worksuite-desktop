@@ -26,6 +26,8 @@ const MIME: Record<string, string> = {
 };
 
 export type ApiProxyHandler = (request: Request, apiPath: string) => Promise<Response>;
+/** What the app keeps on this computer for its own pages (eLearning's offline copies), by path under `/__local`. */
+export type LocalHandler = (request: Request, path: string) => Promise<Response>;
 
 function rendererRoot(): string {
   return resolve(join(__dirname, '../renderer'));
@@ -65,12 +67,14 @@ function corsHeaders(request: Request): Record<string, string> {
 }
 
 /**
- * app://bundle/…        → the signed renderer bundle (inside the asar).
- * app://bundle/__api/…  → the WorkSuite API, through the main process, which
- *                         adds the session's credentials. The renderer never
- *                         holds a token and never talks to the network itself.
+ * app://bundle/…          → the signed renderer bundle (inside the asar).
+ * app://bundle/__api/…    → the WorkSuite API, through the main process, which
+ *                           adds the session's credentials. The renderer never
+ *                           holds a token and never talks to the network itself.
+ * app://bundle/__local/…  → what the app keeps for its own pages (a course's
+ *                           offline lessons, decrypted as they are read).
  */
-export function registerAppProtocol(apiProxy: ApiProxyHandler, cspSources: () => CspSources = () => ({})): void {
+export function registerAppProtocol(apiProxy: ApiProxyHandler, cspSources: () => CspSources = () => ({}), local?: LocalHandler): void {
   const root = rendererRoot();
   protocol.handle('app', async (request) => {
     const url = new URL(request.url);
@@ -85,6 +89,11 @@ export function registerAppProtocol(apiProxy: ApiProxyHandler, cspSources: () =>
       const headers = new Headers(res.headers);
       for (const [k, v] of Object.entries(extra)) headers.set(k, v);
       return new Response(res.body, { status: res.status, headers });
+    }
+
+    if (url.pathname.startsWith('/__local/')) {
+      if (!local) return new Response('Not found', { status: 404 });
+      return local(request, url.pathname.slice('/__local'.length));
     }
 
     if (request.method !== 'GET') return new Response('Method not allowed', { status: 405 });

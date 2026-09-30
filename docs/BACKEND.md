@@ -144,6 +144,276 @@ specific to the desktop:
   list carries `my_role` and `my_rsvp`. The detail carries the agenda timer
   and each person's attendance and permissions.
 
+### Garage
+
+The Garage tab uses the server's Garage API, `/api/garage/v1` (`app/Modules/Garage`), the same one the web's
+`/garage` page uses. Every route is behind `garage.access`; each verb checks its own permission for the record's
+company and the person's data scope, and a job outside it answers 404. The finer grants come back in
+`GET options` → `can` (`garage.parts.issue` read as `parts_issue`), and each screen's answer carries its own `can`.
+Writes that can be pressed twice carry an `Idempotency-Key`; a refusal's `errors.code` (`odometer_reason`,
+`discount`, `setup`…) says what to ask for.
+
+| Screen | Calls |
+|---|---|
+| Shell, overview | `GET options?org=`, `GET overview` |
+| Board, jobs | `GET board`, `GET jobs?view=&q=&page=`, `POST jobs/{id}/drop {column}` |
+| Walk-in | `GET search?q=`, `POST customers` (409 with `candidates`), `POST vehicles` (409 with `duplicate`), `POST jobs` (409 with `open`; `confirm_open`) |
+| Job 360° | `GET jobs/{id}`, `POST jobs/{id}` (edit), `POST jobs/{id}/move {to}`, `POST jobs/{id}/cancel {reason, note}`, `POST jobs/{id}/notes`, `POST notes/{id}/visibility` |
+| Check-in | `GET` / `POST jobs/{id}/checkin`, `POST jobs/{id}/checkin/sign {image, signer_name, signer_relation}`, `POST jobs/{id}/checkin/complete {email, odometer_reason?}`, `POST jobs/{id}/checkin/email`, `POST jobs/{id}/media` (multipart: `file`, `subject` checkin / damage, `slot`), `DELETE media/{id}` |
+| Media | `GET media/{id}` (thumbnails, through the API proxy), `POST jobs/{id}/media` (`subject` job / inspection_item), `POST media/{id}/visibility`, `DELETE media/{id}` |
+| Inspection | `GET jobs/{id}/inspections`, `POST jobs/{id}/inspections {template_id}`, `POST inspections/{id} {items, customer_note, internal_note}`, `POST inspections/{id}/complete`, `POST recommendations/{id}/status` |
+| Diagnosis | `GET jobs/{id}/diagnosis`, `POST jobs/{id}/diagnosis {complaint}`, `POST diagnosis/{id}`, `POST jobs/{id}/dtc`, `POST jobs/{id}/diagnosis/signoff`, `GET parts?job=&q=` |
+| Estimate | `GET jobs/{id}/estimates`, `POST jobs/{id}/estimates {summary?}`, `POST estimates/{id}/lines[/{line}]`, `DELETE estimates/{id}/lines/{line}`, `POST estimates/{id}/recommendations {ids}`, `POST estimates/{id}/approve-discount`, `POST estimates/{id}/send {message, email}` (answers the link once), `POST estimates/{id}/decision {method, decisions, name, note, signature?}`, `POST estimates/{id}/changes` |
+| Work | `GET jobs/{id}/work`, `POST jobs/{id}/work-orders`, `POST work-orders/{id}`, `GET work-orders/{id}/suggest`, `POST work-orders/{id}/assign`, `POST work-orders/{id}/bay`, `POST work-orders/{id}/start\|pause\|complete\|cancel`, `POST work-orders/{id}/additional`, `POST jobs/{id}/additional/price {ids}`, `POST work-orders/{id}/labour`, `POST labour/{id}/correct`, `POST jobs/{id}/parts`, `POST jobs/{id}/removed-parts` |
+| My work, parts counter | `GET my-work`, `GET parts-queue?view=&q=`, `POST parts-scan {job, code}`, `POST parts-usage/{id}/reserve\|requisition\|issue\|used\|return\|release` |
+| Quality & delivery | `GET jobs/{id}/delivery`, `POST quality-checks/{id}/start`, `POST quality-checks/{id} {items}`, `POST quality-checks/{id}/pass\|fail`, `POST jobs/{id}/road-test`, `POST jobs/{id}/ready {items_present}`, `POST jobs/{id}/invoice`, `POST jobs/{id}/pay {amount, method, reference}`, `POST jobs/{id}/handover`, `POST customers/{id}/credit {limit, note}` |
+| Vehicles | `GET vehicles?q=&type=&page=`, `GET vehicles/{id}` (the 360°), `POST vehicles/{id}`, `POST vehicles/{id}/odometer {reading, reason?}`, `POST vehicles/{id}/transfer {client_id, note}`, `POST vehicles/{id}/notes` |
+| Customers | `GET customers?q=&page=`, `GET customers/{id}?org=`, `POST customers/{id}/prefs`, `POST customers/{id}/credit` |
+| Workshop | `GET workshop`, `GET workshop/employees?q=`, `POST workshop/{branches\|workshops\|bays\|technicians\|rates\|service-types\|models\|inspection-templates}[/{id}]`, `POST bays/{id}/status {status, note}` |
+| Set-up, settings | `GET setup`, `POST setup/steps/{key} {how}`, `POST setup/finish`; the module's settings at `GET` / `PUT /api/module-settings/garage/general?org=` |
+| Reports | `GET reports`, `GET reports/{name}?from=&to=&branch_id=` |
+
+**Documents** leave through the download manager (`transfers:download` with `garageDoc`, `shared/garage-docs.ts`),
+by what they are; the main process builds the address: `jobs/{id}/checkin/sheet`, `estimates/{id}/print`,
+`work-orders/{id}/sheet`, `jobs/{id}/delivery-note` (pages the server renders for printing, saved as `.html` and
+opened in the browser) and `reports/{name}?format=csv` (for `garage.report.export`).
+
+**Offline.** READ_CACHE covers `options`, `overview`, `board`, `my-work`, `jobs` (lists, job cards and their
+tabs), `vehicles`, `customers` and `workshop`. A timer's start or pause with WorkSuite out of reach waits in the
+offline queue with `at`, the moment it was pressed, which the server books as `OFFLINE_SYNC` (within twelve hours).
+Every other write needs the server.
+
+What the desktop cannot do because the server does not (SRS Phase 1 **M** items):
+
+- The overview has no revenue today, technicians working, appointments, technician workload, parts consumption,
+  customer updates or reminders (FR-DSH-01/02); a board card has no technician (FR-BRD-02).
+- No next-service-due on a vehicle (FR-VEH-05), and no per-vehicle inspections, parts-replaced or documents lists
+  (FR-VEH-04; they are on each job).
+- Documents are HTML pages for printing: no PDF, WhatsApp or share link for them, and no job card, inspection, QC,
+  road-test, parts-issue or warranty documents (FR-CHK-07, FR-DOC-02/03).
+- Estimates go out by email and the link; no WhatsApp sending or portal (FR-APR-01), no service packages (FR-EST-07).
+- Labour rates are by class, hourly or flat; no customer, contract, warranty or internal-fleet rates (FR-PRC-01).
+- No customer opt-out per channel (FR-REM-05) or per-branch notification switches (FR-NTF-03).
+
+### eLearning
+
+The eLearning tab uses the server's eLearning API, `/api/elearning/v1` (`app/Modules/Elearning`, phase P1 — Core
+LMS), the same one the web's `/elearning` pages use. Every route is behind `elearning.access` (and the person needs the
+`elearning` application); each verb checks its own permission — or the course staff role or HR reporting line that
+stands for it — for the record's company, and a record outside the person's reach answers 404. `GET options` → `can`
+carries every permission for the chosen company (`elearning.course.publish` read as `course_publish`) plus `manager`
+and `staff`; a course carries its own `can` (`edit`, `submit`, `publish`, `enroll`…). A refusal's `errors.code` says
+what to offer (`revision_conflict`, `not_ready` + `problems`, `setup_required`, `locked` (423), `closed`, `timed`,
+`full`, `late_blocked`, `offline_off`…). Writes that can be pressed twice carry an `Idempotency-Key` (create a course or
+category, duplicate, assign, join, start an attempt, submit an assignment).
+
+| Screen | Calls |
+|---|---|
+| Shell, set-up | `GET options?org=`, `GET setup`, `POST setup/steps/{key} {how}`, `POST setup/categories`, `POST setup/finish`; settings at `GET` / `PUT /api/module-settings/elearning/general?org=` |
+| My Learning | `GET me/learning` |
+| Catalogue | `GET catalog?q=&category_id=&level=&course_type=&max_minutes=&page=`, `GET categories`, `GET catalog/{id}`, `POST catalog/{id}/enroll`, `POST me/enrollments/{id}/withdraw` |
+| Taking a course | `GET me/courses/{id}`, `GET me/lessons/{id}` (starts it; 423 with the reason), `POST me/lessons/{id}/progress` (heartbeats: `ranges`, `position`, `pages`, `scrolled_to_end`), `POST me/lessons/{id}/complete` (MANUAL only); media at the signed `/media/{token}` addresses through the API proxy |
+| Quizzes | `GET me/assessments/{id}`, `POST me/assessments/{id}/attempts`, `GET me/attempts/{id}`, `PUT me/attempts/{id}/answers/{qid} {response}`, `POST me/attempts/{id}/submit {answers}` |
+| Assignments | `GET me/assignments/{id}`, `POST me/assignments/{id}/submissions` (JSON `{text, file_ids, draft}`, or multipart with `files[]`) |
+| Dashboard | `GET overview?org=` |
+| Categories | `GET categories?org=&archived=1`, `POST categories`, `POST categories/{id}`, `POST categories/reorder {parent_id, ids}`, `POST categories/{id}/archive\|restore\|delete` |
+| Courses | `GET courses?status=&course_type=&q=&mine=1&page=`, `GET courses/code?category_id=`, `POST courses`, `GET courses/{id}`, `POST courses/{id}` (with `revision`, `reason`), `POST courses/{id}/submit-review\|recall\|review\|publish\|suspend\|resume\|archive\|reopen\|duplicate\|delete`, `GET reviews`, `POST courses/{id}/staff`, `POST courses/{id}/staff/{staffId}/remove`, `GET courses/{id}/activity`, `GET courses/{id}/preview`, `GET lessons/{id}/preview` |
+| Builder | `GET courses/{id}/structure`, `POST courses/{id}/structure {sections, revision}`, `POST courses/{id}/sections`, `POST sections/{id}[/duplicate\|/delete]`, `POST courses/{id}/lessons`, `GET lessons/{id}`, `POST lessons/{id}[/duplicate\|/delete]` |
+| Assessments | `GET courses/{id}/assessments`, `POST courses/{id}/assessments`, `GET assessments/{id}`, `POST assessments/{id}[/delete]`, `POST assessments/{id}/questions`, `POST questions/{id}[/delete]`, `POST assessments/{id}/questions/order {ids}`, `GET assessments/{id}/attempts` |
+| Assignments (staff) | `GET courses/{id}/assignments`, `POST courses/{id}/assignments`, `POST assignments/{id}[/delete]`, `GET assignments/{id}/submissions` |
+| Enrolment | `GET courses/{id}/enrollments`, `GET enrollments?status=&overdue=1&q=`, `POST courses/{id}/enrollments/preview`, `POST courses/{id}/enrollments`, `GET enrollments/{id}`, `POST enrollments/{id}` (due date, mandatory), `POST enrollments/{id}/withdraw\|complete\|reset {reason}`, `POST enrollments/{id}/extensions`, `GET approvals`, `POST enrollments/{id}/decide`, `GET learners`, `GET learners/{userId}` |
+| Grading | `GET grading?kind=`, `GET attempts/{id}`, `POST attempts/{id}/grade`, `GET submissions/{id}`, `POST submissions/{id}/review`, `POST submissions/{id}/grade` |
+
+People and departments to assign or name as staff come from `GET /api/chat/directory` and
+`GET /api/directory/departments` (where the person may read it); the eLearning API resolves ids, e-mails and employee
+numbers itself and says who it could not.
+
+**Offline.** READ_CACHE covers `options`, `me/learning`, `me/courses` (the outlines), `me/lessons` (lessons already
+opened), `catalog` and `categories`. A heartbeat with WorkSuite out of reach waits in the offline queue (entity
+`progress`) and replays to `POST me/lessons/{id}/progress`; the server credits it against the time since the course
+was downloaded. Offline copies of a course:
+
+| Need | Endpoint |
+|---|---|
+| What a course may take offline | `GET me/courses/{id}/download-manifest` → `{course_id, version, revision, total_bytes, files:[{lesson_id, file_id, name, mime, bytes, url, protected}], license:{expires_at, encrypted}}`; 409 `offline_off` when the company keeps none. Asking starts the server's credit clock for progress played offline. |
+| Each file | its `url` (`/media/{token}`, Drive's signed address, good to the end of the next hour), fetched by the main process with `Range` to resume |
+| Which copies may stay | `POST me/downloads/validate {course_ids}` → `{courses:[{course_id, active, ended_at}]}` |
+
+The main process fetches the manifest and the files itself (the renderer names a course, never an address) and keeps
+them sealed in the profile (see ARCHITECTURE.md). A course the server does not answer `active: true` for is removed;
+so is one past `license.expires_at`, without asking. A lesson that allows downloading can also be saved to the
+downloads folder: `transfers:download` with `elearningMedia` (the token of its `file.urls.download`).
+
+What the desktop cannot do because the server does not:
+
+- **No people lookup in eLearning.** Assigning learners and naming staff use Chat's directory and the Directory's
+  departments; branches are taken by HR id only (there is no list of branches to choose from).
+- **Office documents and presentations** are served as the original file (`urls.view`), with no rendition a
+  desktop can show, so they are not shown in the app and a PAGES rule on them cannot be met from the desktop.
+- **A kept copy cannot tell it is stale** after a published course is edited in place: `me/courses/{id}` carries the
+  course `version` but not its builder `revision`, and `me/downloads/validate` says only active or not. The desktop
+  compares the version; lesson edits within a version go unnoticed until the course is downloaded again.
+- **The manifest has files only**: no captions (`tracks`), article bodies or quiz content, so captions do not play
+  offline and an article is readable offline only if it was opened before.
+- **Leaving a course** is offered for an optional, self-joined course; whether the company allows it
+  (`elearning_learner_withdraw`) is not in the course's answer, so the server may refuse.
+- A grader's view of an attempt carries option ids, not labels; the desktop reads them from the assessment's own
+  question list (a retired question version's options may show as ids).
+- On a `/desktop/v1` server, `links/resolve` does not know `worksuite://elearning/…` (`Desktop/Libraries/LinkGrammar`
+  and `Links::APP_OF`), so those links open without the server's record check (the tab's own requests are still
+  checked).
+- The server declares no Home widgets for eLearning.
+
+### Hotel PMS
+
+The Hotel PMS tab uses the server's Hotel PMS API, `/api/pms/v1` (`app/Modules/Pms`, stages A, B1 and B2), the same
+one the web's `/pms` pages use. Every route is behind `pms.access` (and the person needs the `pms` application); each
+verb checks its own permission in the record's company and property, and a record outside the person's data scope
+answers 404. `GET options?org=&property_id=` → `permissions` carries the person's `pms.*` in that company, which the
+rail and the buttons follow. A refusal's `errors.code` says what to offer (`room_not_ready` with `overridable`,
+`balance` with `folios`, `restricted` with `reasons`, `possible_duplicate` with `candidates`, `no_longer_available`,
+`early_departure`, `over_limit`, `step_failed`, `version_conflict`…). Writes that can be pressed twice carry an
+`Idempotency-Key` (a booking, a walk-in, a check-in, a check-out, a charge, a payment, a deposit, a guest, a request,
+a fault).
+
+| Screen | Calls |
+|---|---|
+| Shell | `GET properties`, `GET options?org=&property_id=` |
+| Rack | `GET properties/{id}/rack` (the whole rack, filtered here), `POST rooms/{id}/outages {kind: blocked}`, `POST properties/{id}/maintenance`, `GET properties/{id}/in-house` (the stay behind a room's guest) |
+| Lists | `GET properties/{id}/arrivals?date=`, `GET properties/{id}/departures?date=`, `GET properties/{id}/in-house`, `POST properties/{id}/assign-rooms {date}`, `GET stays/{id}/registration-card` |
+| Assign a room | `GET reservation-rooms/{id}/rooms?any_type=`, `POST reservation-rooms/{id} {room_id, version, upgrade_type?, reason?}`, `POST reservations/{id}/assign` |
+| Reservations | `GET properties/{id}/reservations?status=&page=`, `GET search?q=`, `GET reservations/{id}`, `POST reservations/{id}` (dates, ETA, requests, notes, with `version`), `POST reservations/{id}/status`, `POST reservations/{id}/cancel`, `GET reservations/{id}/history` |
+| Deposit | `GET reservations/{id}/deposit`, `POST reservations/{id}/deposit/payments`, `POST deposits/{id}/waive\|refund` |
+| New reservation | `GET availability?property_id=&arrival=&departure=&adults=&children=&rooms=&source_id=&promo_code=`, `POST properties/{id}/reservations` |
+| Guests | `GET guests?q=&org=`, `POST guests/check`, `POST guests` (`client_id`, or the details with `force`), `GET guests/{id}`, `GET guests/{id}/reservations`, `POST guests/{id}/documents` (multipart), `POST guests/{id}/identity` (a scanned ID, confirmed) |
+| Check-in | `GET reservations/{id}/check-in`, `POST reservations/{id}/check-in {rooms, id_verified, guarantee_verified, override_reason, early_checkin, posting_allowed, keys, version}`, `POST stays/{id}/registration-card {document_id}` |
+| Walk-in | `GET availability` (tonight), `POST properties/{id}/walk-ins {…, payment?}` |
+| A stay | `GET stays/{id}`, `POST stays/{id}` (charges allowed, credit limit), `POST stays/{id}/move`, `POST stays/{id}/departure`, `POST stays/{id}/keys`, `POST stays/{id}/folios`, `POST stays/{id}/routing`, `DELETE routing-rules/{id}`, `POST stays/{id}/charges` |
+| Folios | `GET folios/{id}`, `GET folios/{id}/document`, `GET properties/{id}/services`, `POST folios/{id}/charges`, `POST folio-items/{id}/void\|adjust\|transfer`, `POST folios/{id}/payments`, `POST payments/{id}/refund\|void`, `POST folios/{id}/settle\|reopen\|transfer-ar\|invoice` |
+| Check-out | `GET reservations/{id}/check-out`, `POST reservations/{id}/check-out {rooms, early, late_checkout, apply_deposit, transfer_ar}` |
+| Cashier | `GET properties/{id}/cashier-sessions`, `POST properties/{id}/cashier-sessions`, `GET cashier-sessions/{id}`, `POST cashier-sessions/{id}/close\|reconcile` |
+| Night audit | `GET properties/{id}/night-audit`, `POST properties/{id}/night-audit/check\|run`, `GET night-audits/{id}`, `POST night-audit-blockers/{id}/override` |
+| Housekeeping, rooms | `GET properties/{id}/housekeeping/tasks`, `GET rooms/{id}`, `GET rooms/{id}/history`, `POST outages/{id}/release` |
+| Requests, dashboard | `GET properties/{id}/requests?open=1`, `POST properties/{id}/requests`, `GET guest-requests/{id}`, `POST guest-requests/{id}/{action}`, `GET properties/{id}/dashboard` |
+
+**Printed pages** (registration cards, receipts, invoices, statements, shift and night-audit reports) are laid out on
+the desktop from the server's answers (`registration-card`, `folios/{id}/document`, the shift, the audit's `report`) and
+printed through the OS dialog; the server renders none.
+
+**Offline.** READ_CACHE covers `options`, `properties`, and per property `rack`, `arrivals`, `departures`, `in-house`,
+`business-date` and `front-desk/lists` (`shared/pms-cache.ts`). Nothing is queued: every write needs the server
+(PMS-DSK-003). The server's live nudges (`pms.room`, `pms.hk_task`, `pms.request` on the realtime socket) refresh the
+rack and the lists; without them they are read again every 30 seconds.
+
+What the desktop cannot do because the server does not:
+
+- **A reservation does not name its stays, and the rack's guest does not name their stay.** The desktop finds the stay
+  in `GET properties/{id}/in-house` by reservation (room) to open a folio, post a charge, move or extend from the rack or
+  a reservation. A `stays: [{id, reservation_room_id, room_number}]` on the reservation view (and `stay_id` on the
+  rack's guest) would save the call.
+- **Night-audit blockers come without their `link`.** `NightAudit::conditions()` builds one, `blockers()` drops it; the
+  desktop derives it from `ref_type`/`ref_id` (reservation, stay, folio, cashier). A pending payment (`ref_type:
+  payment`) and a night without a rate (`night`) open nothing.
+- **Registration cards exist only for a stay.** FD-005's "print registration cards" for the day's arrivals before
+  they arrive cannot be served; the desktop prints them for guests checked in today. The server keeps a signed card
+  as an uploaded guest document; it renders no card (the desktop draws card and signature into a PNG).
+- **No card payload for a key encoder.** `POST stays/{id}/keys` answers `{ok, status, message}` from the property's
+  `DoorLockProvider`; a desk-side encoder has nothing to write. Keys are the server's door-lock integration.
+- **Payment methods are not in `options`**; the desktop carries `PaymentMachine::METHODS` (less `deposit`).
+- **Charge codes are listed only to rate managers and reservation readers** (`GET properties/{id}/services`); a cashier
+  with `pms.folio.post` alone types the code.
+- **A stay's move takes the reservation's `version`**, which the stay does not carry: the desktop sends none (the
+  server's claim still guards it).
+- **No staff list for guest requests**: the desktop takes and moves requests but does not assign them to a person.
+- **Check-out needs `pms.folio.view`** besides `pms.checkout` (`StaysController::checkOutScreen`).
+- On a `/desktop/v1` server, `links/resolve` does not know `worksuite://pms/…` (`Desktop/Libraries/LinkGrammar`,
+  `Links::APP_OF`): those links open without the server's record check (the tab's own requests are still checked).
+
+### PDF Studio
+
+PDF Studio (stage D1, the viewer) uses the server's existing PDF and Drive routes; it needs nothing new. The edit
+sessions, locks, versions and policies of the server's CorePDFService (stage S) are for stage D2.
+
+| For | Calls |
+|---|---|
+| Opening a Drive PDF | `GET /api/pdf/{id}/status` first (PdfAccess "open": 404 when the file cannot be seen; its `file.version`, `lock`, `versions`, `timeline` feed the title bar and the Review panel), then `GET /api/files/{id}/download` streamed into a sealed working copy |
+| A file shared to view only | `/download` answers 403: `GET /api/drive/preview/{id}` → its `url` (`/media/<token>`, the viewer's own signed address) instead; print and download are then off |
+| A mail attachment | `GET /api/mail/messages/{uid}/attachments/{ref}?folder=&dl=1&mailbox=` (preview only) |
+| Download | `transfers:download` (`fileId`, or the mail attachment's parts), as before |
+| PDF Diagnostics | `GET /api/pdf/capabilities` (the server's PDF service answering) |
+
+The organisation's PDF Studio policies (§21.2: print, copy, export, external links, local files, Max PDF Size) are
+checked by the desktop but read defaults (everything on, links confirmed, 2 GB) until the server's PDF Studio
+service (stage S) sends them; stage D2 wires them (`DesktopPdfService`'s `policy()`). Opening
+and printing are audited on the desktop (`pdf.opened`, `pdf.printed`: source, file id, version, pages) and sent to
+`/desktop/v1/audit` where the server offers it.
+
+### WorkSuite Events — the Event Desk
+
+The Events tab uses the server's Events API, `/api/events/v1` (`app/Modules/EventManager`, stages A, B1 and B2), the
+same one the web's `/events` pages use. Every route is behind `events.access` (and the person needs the `events`
+application); each verb checks its own permission in the event's company and at the event, and a record outside the
+person's data scope answers 404 (403 when seen but not permitted). `GET options?org=` → `permissions` carries the
+person's `events.*` in that company, which the rail and the buttons follow. A refusal's `errors.code` says what to
+offer (`confirm` → the reprint's reason, `already_queued` → print the waiting job, `device_revoked` + `wipe` → wipe,
+`device_suspended`, `device_untrusted`, `device_key_missing`, `offline_off`, `not_inside`, `walkins_off`…).
+
+| Screen | Calls |
+|---|---|
+| Events, the shell | `GET events?per_page=&sort=`, `GET events/{id}`, `GET options?org=` |
+| This computer (main process) | `POST events/{id}/devices {name, gate_id, device_ref_type: desktop, device_ref_id: <sync device id>, platform, app_version}` → the key, once; `POST devices/{id}/key`; `POST devices/{id}/heartbeat {app_version, queue_size}`; `GET events/{id}/gates`, `GET events/{id}/devices` (read) |
+| Offline (main process) | `GET events/{id}/checkin/bootstrap?device_id=&after_id=&limit=` (pages of 2,000), `GET …/checkin/changes?device_id=&after=` (every 15 s), `POST …/checkin/sync {device_id, batch_uuid, cursor, queue_size, items}` |
+| The desk (main process) | `POST events/{id}/scan`, `/check-in`, `/check-out` `{code \| registration_id, gate_id, device_id, client_uuid}` — a fresh `client_uuid` each; six seconds before the desk answers from its copy |
+| Search, walk-in, payment | `GET events/{id}/checkin/search?q=`, `GET events/{id}/ticket-types`, `GET events/{id}/form`, `GET options/live`, `POST events/{id}/walk-ins` (+ `Idempotency-Key`), `GET registrations/{id}/payment`, `POST registrations/{id}/payment/take` (+ `Idempotency-Key`) |
+| Counters, recent, review | `GET events/{id}/checkin/summary` (every 10 s), `GET …/checkin/recent?device_id=`, `GET …/checkin/reconciliation?status=`, `POST reconciliation/{id}/resolve\|dismiss` |
+| Badges | `POST registrations/{id}/badge/print {device_id, printer, reason, confirm}`, `GET events/{id}/badge-prints/sheet?ids=` (printed by the main process), `POST badge-prints/{id}/printed\|failed\|dispatch\|retry\|cancel`, `GET events/{id}/badge-prints?status=&printer=`, `POST events/{id}/badge-prints/bulk`, `GET events/{id}/badge-templates`, `GET registrations/{id}/badge/prints` |
+| Program, session doors | `GET events/{id}/sessions`, `GET events/{id}/checkin/sessions`, `POST events/{id}/checkin/sessions/{sid}`, `GET sessions/{id}/registrations` |
+| Event 360, people | `GET events/{id}/overview`, `GET events/{id}/dashboard?mode=auto`, `GET events/{id}/registrations?list=&q=&page=`, `GET registrations/{id}`, `GET attendees?org=&q=`, `GET attendees/{id}` |
+| Emergency message | `GET events/{id}/screens/overrides?open=1`, `POST events/{id}/screens/override {message, targets: ALL, confirmation}`, `POST screen-overrides/{id}/clear {reason}` |
+
+**Offline.** READ_CACHE keeps `options`, the events list, the event and its gates (`shared/event-desk.ts:
+eventsCached`), so a desk opened with the line down knows what the person may do there; the desk's own copy of the
+gate's tickets and its queue are the main process's (below). Everything else waits for WorkSuite.
+
+**The key and the copy.** Registering, a new key, the heartbeat, the bootstrap, the changes and the upload are the
+main process's (the API proxy refuses them to pages): the key the server hands over is kept in the OS credential
+store, the copy and the queue encrypted in the profile. A scanned QR is matched against the copy by
+`HMAC-SHA256(text trimmed and in capitals, key)` in the main process, and judged with the server's `ScanRules`
+(`shared/event-desk.ts`, the same order and sentences). A PUBLISHED event past its start is taken as LIVE offline, as
+the server's sweep makes it every minute. `device_sequence` is one more than the last and never below the clock in
+milliseconds, so a counter that restarted is not taken for old scans.
+
+What the desktop cannot do because the server does not:
+
+- **A check-in agent needs `events.event.view`.** Every check-in route first asks whether the person sees the event
+  (`EventManagerController::sees()`, `events.event.view`), and `GET events` lists only those events: SRS §18.1's
+  Check-In Agent (`checkin.use`, `checkout.use`, `walkin.create`, `badge.print`) without it gets 404 everywhere. Give
+  desk staff the event view, or make `sees()` accept `events.checkin.use` at the event.
+- **A desktop device needs the Desktop module on the server.** Registering checks `desktop_devices` by
+  `sync_device_id`; on a server without it (the existing API only) the server refuses ("WorkSuite Desktop's device
+  registry is not installed here").
+- **Badges carry no pictures.** The badge page names the logo and the attendee's photo by Files id
+  (`data-file-id`) with no image: the event's name prints in the logo's place and no photo prints. A data URI (or an
+  address the desk may read) in `Badges::html()` would print them. A sheet of several templates is laid out at the
+  first one's size (`@page`).
+- **Photo verification** sends a Files id; the only address for it is the owner's download (`files/{id}/download`).
+  The desk shows the photo where that answers and says "not readable here" otherwise.
+- **The scans a person made offline go up as theirs only.** `checkin/sync` records whoever syncs as `recorded_by`,
+  with no per-item scanner, so the desk keeps each person's queue for them: after a shift change it waits until they
+  sign in at the desk again. A `scanned_by` per item (checked against the device's staff) would let it go at once.
+- **Switching offline check-in off also refuses the upload** (`offline_off` on `checkin/sync`): scans made offline
+  before that wait until it is on again.
+- **The offline copy has no registration form**, so a walk-in kept offline carries the standard fields (name, email,
+  phone, company); a form with other required fields or consents makes the server queue it as
+  `PROVISIONAL_WALK_IN` for review.
+- **Offline, a ticket of another gate is "not in this gate's copy"**, where online it is `ACCESS_DENIED` with the
+  gates that admit it (the copy holds the gate's tickets only, by design).
+- **No desk PIN** (EV-POR-013 "may require a PIN to leave the locked view"): the server keeps none; the desk's full
+  screen is left with Esc, as any other.
+- **Session doors, the counters, recent scans and review are online only**: the server has no offline copy for them.
+- On a `/desktop/v1` server, `links/resolve` does not know `worksuite://events/…` (`Desktop/Libraries/LinkGrammar`,
+  `Links::APP_OF`): those links open without the server's record check (the tab's own requests are still checked).
+
 ## The existing API (servers without `/desktop/v1`)
 
 | Need | Endpoint |
@@ -207,6 +477,45 @@ What the server does not give sync, and how the app copes:
   use the chunked upload instead.
 - **Deleting a folder does not take its files to the recycle bin**; the app
   deletes a Drive folder only once it is empty.
+
+## Office documents
+
+The Office tab and Files use the server's Office API (`app/Modules/EuroOffice`, on Drive's paths); the full client
+contract is kept with the server work (`office_docs/web-api.md`). Everything is decided there — the mode, what the
+person may do (`permissions`), what saving has reached — and every refusal's `errors.code` says what to offer.
+
+| Need | Calls |
+|---|---|
+| Open, reload, renew | `POST /api/files/{id}/office/session {client_type: DESKTOP_WIN\|DESKTOP_MAC\|DESKTOP_LINUX, layout: desktop, lang, mode_requested?}`, `GET …/office/config?session_id=&lang=&layout=` (a `replaced_session_id` means a new session on the new key) |
+| Keep alive, mode, close | `POST …/office/session/{sid}/heartbeat {ready_ms?}` every `heartbeat_interval_s`, `POST …/office/session/{sid}/mode {mode}`, `DELETE …/office/session/{sid}?reason=CLOSED\|ORG_SWITCH` |
+| Saving | `POST …/office/force-save {session_id, version_label?, description?}` (closing a tab; Save as version), `POST …/office/save/retry`; the save status comes in the bootstrap and every heartbeat |
+| Collaboration | presence in the heartbeat; `POST/DELETE …/office/lock` (keep to myself / release); `GET …/office/mentionable?q=`, `POST …/office/mentions {emails, action_link}` (never comment text); rename with Drive's `PUT /api/files/{id} {name}` then `POST …/office/meta` |
+| Routing, menus | `GET /api/files/office/types?org_id=` (READ_CACHE, `files`), `GET …/office/actions?client_type=` |
+| New, templates | `GET /api/files/office/templates`, `POST /api/files/office/new {type\|template_id, folder_id}` |
+| Export, convert | `POST …/office/export {target_format: pdf, destination: DOWNLOAD\|DRIVE}` — a download's `download_url` is fetched by its token as `/office/exports/{token}` from the configured server through the download manager (`transfers:download` with `officeExport`); `POST …/office/convert-legacy` |
+| Versions | Drive's `GET /api/files/{id}/versions`, `POST …/versions/{row}/restore`, `GET …/versions/{row}/download` |
+| An edited copy back | `POST /api/files/{id}/versions` (multipart `file`, `base_version`) from the main process; `409 OFFICE_VERSION_CONFLICT` with `base_version`, `server_version`, `actions`. Keep Both goes up through the upload manager as a new file |
+
+Realtime `office.*` events about an open document only trigger its heartbeat early; nothing is patched from them.
+
+What the desktop cannot do because the server does not (yet):
+
+- **The editor's @mention list is empty unless the editor sends what was typed.** `…/office/mentionable` answers
+  nothing under two characters, and ONLYOFFICE's `onRequestUsers` asks for the whole list without a search term (only
+  editors that search as you type send one). Mentions typed as an address still notify through `…/office/mentions`.
+  An empty term answering the people who can open the file (bounded) would fill the list.
+- **The bootstrap's `file` has no folder or company.** The tab is bound to the company chosen when it opened (not the
+  file's own), and a Keep Both copy made from the Office tab lands at the top of My Drive rather than beside the
+  original (from Files it goes beside it). `file.folder_id` and `file.organization_id` in the bootstrap would fix both.
+- **Only the multipart version upload checks `base_version`.** The chunked uploader (`/api/uploads/*` with
+  `replace_file_id`) does not, so an edited copy larger than the server's single-request upload limit cannot go back
+  with the conflict check; the desktop reports the server's refusal instead of falling back to an unchecked replace.
+- **`save_as_copy` and `download_working_copy`** are listed in a failed save's `actions` but have no route; the desktop
+  offers Retry only.
+- **`/api/files/office/types` answers one company's settings** (the chosen one, or the person's first): a Drive list
+  spanning companies is routed by those defaults; each file's menu asks `…/office/actions`, which is exact.
+- **No link opens a document in the desktop.** The web's "Open in Desktop App" has no `worksuite://` form for an
+  Office file, and `links/resolve` (`Desktop/Libraries/LinkGrammar`) knows none.
 
 ## Not provided yet
 

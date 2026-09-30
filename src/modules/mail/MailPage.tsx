@@ -14,6 +14,10 @@ import { VirtualList } from '../../components/VirtualList';
 import type { ModuleProps } from '../registry';
 import { escapeHtml, mailFrameDoc, parseAddresses, sanitizeMailHtml, textToHtml } from './sanitize';
 import { Select } from '../../components/Select';
+import { openPdf } from '../pdf/open';
+
+/** A PDF attachment, by its type or its name. */
+const isPdf = (a: { name: string; mime: string }) => a.mime === 'application/pdf' || /\.pdf$/i.test(a.name);
 
 /**
  * Desktop Mail, three panes (UI-07, FR-COM-01, §4.14): accounts and folders,
@@ -328,17 +332,20 @@ function MessageView({ uid, folder, mailbox, onReply, onGone }: { uid: string; f
               type="button"
               draggable
               onClick={() =>
-                void call('transfers:download', { mail: { uid, ref: a.ref, folder, mailbox }, name: a.name, open: true })
-                  .then(() => toast('info', `Downloading ${a.name}…`))
-                  .catch((e) => toast('error', errorMessage(e)))
+                // A PDF opens in PDF Studio, preview only (PDF-OPEN-004); anything else downloads and opens.
+                isPdf(a)
+                  ? openPdf({ kind: 'mail', uid: String(uid), ref: a.ref, folder, mailbox: mailbox ?? null, name: a.name }, a.name)
+                  : void call('transfers:download', { mail: { uid, ref: a.ref, folder, mailbox }, name: a.name, open: true })
+                      .then(() => toast('info', `Downloading ${a.name}…`))
+                      .catch((e) => toast('error', errorMessage(e)))
               }
               className="flex items-center gap-3 rounded-[10px] border border-line px-3 py-2 text-left hover:bg-subtle"
-              title="Download and open"
+              title={isPdf(a) ? 'Open in PDF Studio' : 'Download and open'}
             >
               <FileBadge name={a.name} />
               <span>
                 <span className="block max-w-[220px] truncate text-[13px] font-semibold text-ink">{a.name}</span>
-                <span className="block text-[11.5px] text-ink-3">{Math.max(1, Math.round(a.size / 1024))} KB · download</span>
+                <span className="block text-[11.5px] text-ink-3">{Math.max(1, Math.round(a.size / 1024))} KB · {isPdf(a) ? 'open' : 'download'}</span>
               </span>
             </button>
           ))}

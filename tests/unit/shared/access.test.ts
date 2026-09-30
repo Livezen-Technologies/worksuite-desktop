@@ -23,7 +23,8 @@ const everyday = visibleAppIds(boot(['mail', 'chat', 'calendar', 'tasks', 'notes
 
 describe('what a bootstrap allows', () => {
   it('is the everyday apps, HR and Home for somebody not set up — nothing else', () => {
-    expect([...everyday].sort()).toEqual(['calendar', 'chat', 'files', 'home', 'hr', 'mail', 'notes', 'tasks']);
+    // PDF Studio needs no app: a PDF from this computer is anyone's to read (a Drive file is still the server's to allow).
+    expect([...everyday].sort()).toEqual(['calendar', 'chat', 'files', 'home', 'hr', 'mail', 'notes', 'pdf', 'tasks']);
     expect(visibleAppIds(null).size).toBe(0);
   });
 

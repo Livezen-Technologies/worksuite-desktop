@@ -2,25 +2,26 @@ import { useQuery } from '@tanstack/react-query';
 import { lazy, Suspense, useState } from 'react';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
-import { Button, ErrorNote, Spinner, cx } from '../../components/ui';
+import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import type { ModuleProps } from '../registry';
-import { gGet, K, mayIn, type Options } from './api';
-import { GarageContext, openWeb, type Garage, type GarageView } from './parts';
+import { gGet, K, mayIn, useOnline, type Options } from './api';
+import { GarageContext, type Garage, type GarageView } from './parts';
 
 /**
  * Garage, native in WorkSuite Desktop. Addressed as
- * `/garage?view=overview|board|jobs|walkin|mywork|parts` (`&list=` for a job
- * list), a job as `?job=<id>` — what the server's notifications carry — or
- * `/garage/jobs/<id>` (the deep link). `?checkin=<id>` opens that job, whose
- * check-in is on the web for now.
+ * `/garage?view=overview|board|jobs|walkin|mywork|parts|vehicles|customers|reports|workshop|setup|settings`
+ * (`&list=` for a job list, `&customer=` for a customer), a job as `?job=<id>`
+ * (`&jt=` its tab) — what the server's notifications carry — or
+ * `/garage/jobs/<id>` (the deep link), its check-in as `?checkin=<id>`, and a
+ * vehicle as `?vehicle=<id>` or `/garage/vehicles/<id>`.
  *
- * The counter, the board, the technician's screen and the parts counter are
- * here; check-in with its photos and signature, estimates, QC and delivery,
- * vehicles, customers, reports and set-up open in WorkSuite on the web from
- * the rail and the job card.
+ * Everything the server's Garage offers is here: the counter, the board, the
+ * job card with its check-in, inspection, diagnosis, estimate, work, quality
+ * and delivery, vehicles and customers, reports, the workshop, the set-up
+ * wizard and the settings.
  */
 const Overview = lazy(() => import('./Overview'));
 const Board = lazy(() => import('./Board'));
@@ -29,23 +30,36 @@ const WalkIn = lazy(() => import('./WalkIn'));
 const MyWork = lazy(() => import('./MyWork'));
 const PartsCounter = lazy(() => import('./PartsCounter'));
 const JobCard = lazy(() => import('./JobCard'));
+const CheckIn = lazy(() => import('./CheckIn'));
+const Vehicles = lazy(() => import('./Vehicles'));
+const Vehicle360 = lazy(() => import('./Vehicle360'));
+const Customers = lazy(() => import('./Customers'));
+const Reports = lazy(() => import('./Reports'));
+const Workshop = lazy(() => import('./Workshop'));
+const Setup = lazy(() => import('./Setup'));
+const Settings = lazy(() => import('./Settings'));
 
-const VIEWS: Record<GarageView, { label: string; icon: string; perm?: string }> = {
-  overview: { label: 'Overview', icon: 'home' },
-  board: { label: 'Job board', icon: 'kanban', perm: 'garage.job.view' },
-  jobs: { label: 'Jobs', icon: 'list', perm: 'garage.job.view' },
-  walkin: { label: 'New walk-in', icon: 'user-plus', perm: 'garage.job.create' },
-  mywork: { label: 'My work', icon: 'timer' },
-  parts: { label: 'Parts counter', icon: 'package', perm: 'garage.parts.issue' },
+type Group = 'main' | 'records' | 'insight' | 'setup';
+
+const VIEWS: Record<GarageView, { label: string; icon: string; perm?: string; group: Group }> = {
+  overview: { label: 'Overview', icon: 'home', group: 'main' },
+  board: { label: 'Job board', icon: 'kanban', perm: 'garage.job.view', group: 'main' },
+  jobs: { label: 'Jobs', icon: 'list', perm: 'garage.job.view', group: 'main' },
+  walkin: { label: 'New walk-in', icon: 'user-plus', perm: 'garage.job.create', group: 'main' },
+  mywork: { label: 'My work', icon: 'timer', group: 'main' },
+  parts: { label: 'Parts counter', icon: 'package', perm: 'garage.parts.issue', group: 'main' },
+  vehicles: { label: 'Vehicles', icon: 'truck', perm: 'garage.vehicle.view', group: 'records' },
+  customers: { label: 'Customers', icon: 'users', perm: 'garage.vehicle.view', group: 'records' },
+  reports: { label: 'Reports', icon: 'chart', perm: 'garage.report.view', group: 'insight' },
+  workshop: { label: 'Workshop', icon: 'wrench', group: 'setup' },
+  setup: { label: 'Set-up wizard', icon: 'list-todo', perm: 'garage.settings.manage', group: 'setup' },
+  settings: { label: 'Settings', icon: 'settings', perm: 'garage.settings.manage', group: 'setup' },
 };
 
-/** On the web for now, from the rail. */
-const WEB: Array<{ view: string; label: string; icon: string; perm?: string }> = [
-  { view: 'vehicles', label: 'Vehicles', icon: 'truck', perm: 'garage.vehicle.view' },
-  { view: 'customers', label: 'Customers', icon: 'users', perm: 'garage.vehicle.view' },
-  { view: 'reports', label: 'Reports', icon: 'chart', perm: 'garage.report.view' },
-  { view: 'workshop', label: 'Workshop', icon: 'wrench', perm: 'garage.settings.manage' },
-];
+const HEADINGS: Record<Group, string | null> = { main: null, records: 'Customers & vehicles', insight: 'Insight', setup: 'Set up' };
+
+/** What can be opened while a company's set-up is not finished (FR-APP-04): the set-up itself, and the floor's own screens. */
+const WHILE_SETTING_UP: ReadonlySet<GarageView> = new Set<GarageView>(['setup', 'workshop', 'settings', 'mywork', 'parts']);
 
 const ORG_KEY = 'garage.org';
 const num = (v: string | null | undefined) => (v && /^\d+$/.test(v) ? Number(v) : null);
@@ -64,7 +78,7 @@ export function jobOf(path: string[], query: URLSearchParams): number | null {
   return num(query.get('job')) ?? num(query.get('checkin')) ?? (i >= 0 ? num(path[i + 1]) : null);
 }
 
-/** A vehicle a route names — its page is on the web for now. */
+/** A vehicle a route names: `?vehicle=` or `/garage/vehicles/<id>`. */
 export function vehicleOf(path: string[], query: URLSearchParams): number | null {
   const i = path.indexOf('vehicles');
   return num(query.get('vehicle')) ?? (i >= 0 ? num(path[i + 1]) : null);
@@ -73,14 +87,19 @@ export function vehicleOf(path: string[], query: URLSearchParams): number | null
 export default function GarageShell(_props: ModuleProps) {
   const { query, path, go: goRoute } = useTab();
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
+  const online = useOnline();
   const [org, setOrg] = useState(savedOrg);
   const options = useQuery({ queryKey: K.options(org), queryFn: ({ signal }) => gGet<Options>('/options', org ? { org } : undefined, signal) });
   const opts = options.data;
   const asked = (query.get('view') ?? '') as GarageView;
-  const view: GarageView = asked in VIEWS ? asked : 'overview';
-  const job = jobOf(path, query);
-  const vehicle = vehicleOf(path, query);
-  useTabTitle(job ? 'Garage · Job' : `Garage · ${VIEWS[view].label}`);
+  const checkin = num(query.get('checkin'));
+  const job = checkin ? null : jobOf(path, query);
+  const vehicle = job || checkin ? null : vehicleOf(path, query);
+  const manages = !!opts && mayIn(opts, 'garage.settings.manage', perms ?? []);
+  const pending = !!opts && !opts.setup.complete;
+  const view: GarageView = asked in VIEWS ? asked : pending && manages ? 'setup' : 'overview';
+  const title = checkin ? 'Check-in' : job ? 'Job' : vehicle ? 'Vehicle' : VIEWS[view].label;
+  useTabTitle(`Garage · ${title}`);
 
   if (options.isLoading) return <Spinner label="Opening Garage…" />;
   if (options.error || !opts) {
@@ -102,8 +121,11 @@ export default function GarageShell(_props: ModuleProps) {
     org: scope,
     options: opts,
     may,
+    online,
     go: (v, params) => goRoute(route(v, params)),
-    openJob: (id) => goRoute(id ? `${route(view)}&job=${id}` : route(view)),
+    openJob: (id, tab) => goRoute(id ? `${route(view)}&job=${id}${tab ? `&jt=${encodeURIComponent(tab)}` : ''}` : route(view)),
+    openCheckin: (id) => goRoute(`${route(view)}&checkin=${id}`),
+    openVehicle: (id) => goRoute(`${route(view)}&vehicle=${id}`),
   };
   const chooseOrg = (v: string) => {
     setOrg(v);
@@ -113,8 +135,13 @@ export default function GarageShell(_props: ModuleProps) {
       /* a convenience */
     }
   };
-  const pending = !opts.setup.complete;
-  const allowed = (perm?: string) => !perm || may(perm);
+  const allowed = (v: GarageView) => {
+    const perm = VIEWS[v].perm;
+    if (perm && !may(perm)) return false;
+    return !(pending && (v === 'walkin' || v === 'board'));
+  };
+  const record = checkin || job || vehicle;
+  const groups: Group[] = ['main', 'records', 'insight', 'setup'];
 
   return (
     <GarageContext.Provider value={g}>
@@ -135,52 +162,69 @@ export default function GarageShell(_props: ModuleProps) {
             ) : null}
           </div>
           <div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto px-2.5 pb-3 scroll-thin">
-            {(Object.keys(VIEWS) as GarageView[])
-              .filter((v) => allowed(VIEWS[v].perm) && !(pending && (v === 'walkin' || v === 'board')))
-              .map((v) => {
-                const on = !job && view === v;
-                return (
-                  <button
-                    key={v}
-                    type="button"
-                    aria-current={on ? 'page' : undefined}
-                    onClick={() => g.go(v)}
-                    className={cx('relative flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
-                  >
-                    <span className={cx('absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-[3px]', on ? 'bg-primary' : 'bg-transparent')} />
-                    <Icon name={VIEWS[v].icon} size={16} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />
-                    <span className="min-w-0 flex-1 truncate">{VIEWS[v].label}</span>
-                  </button>
-                );
-              })}
-            <div className="mt-3 mb-0.5 px-2 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">On the web</div>
-            {WEB.filter((w) => allowed(w.perm)).map((w) => (
-              <button key={w.view} type="button" onClick={() => openWeb(`/garage?view=${w.view}`)} className="flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left font-medium text-ink hover:bg-subtle">
-                <Icon name={w.icon} size={16} className="shrink-0 text-ink-3" />
-                <span className="min-w-0 flex-1 truncate">{w.label}</span>
-                <Icon name="external" size={13} className="shrink-0 text-ink-3" />
-              </button>
-            ))}
+            {groups.map((grp) => {
+              const items = (Object.keys(VIEWS) as GarageView[]).filter((v) => VIEWS[v].group === grp && allowed(v));
+              if (items.length === 0) return null;
+              return (
+                <div key={grp} className="flex flex-col gap-px">
+                  {HEADINGS[grp] ? <div className="mt-3 mb-0.5 px-2 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">{HEADINGS[grp]}</div> : null}
+                  {items.map((v) => {
+                    const on = !record && view === v;
+                    const label = v === 'setup' && pending ? 'Finish set-up' : VIEWS[v].label;
+                    return (
+                      <button
+                        key={v}
+                        type="button"
+                        aria-current={on ? 'page' : undefined}
+                        onClick={() => g.go(v)}
+                        className={cx('relative flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
+                      >
+                        <span className={cx('absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-[3px]', on ? 'bg-primary' : 'bg-transparent')} />
+                        <Icon name={VIEWS[v].icon} size={16} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />
+                        <span className="min-w-0 flex-1 truncate">{label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
           </div>
         </nav>
-        <main className="min-w-0 flex-1 overflow-y-auto bg-ground scroll-thin" aria-label={job ? 'Garage · Job' : `Garage · ${VIEWS[view].label}`}>
+        <main className="min-w-0 flex-1 overflow-y-auto bg-ground scroll-thin" aria-label={`Garage · ${title}`}>
+          {!online ? (
+            <div className="border-b border-line bg-warning-bg px-6 py-1.5 text-[12.5px] font-medium text-warning">Offline — what you see is the last copy. Changes wait until WorkSuite is back; a technician’s timer is kept and sent then.</div>
+          ) : null}
           <Suspense fallback={<Spinner />}>
-            {vehicle && !job ? (
-              <OnTheWeb title="Vehicles open on the web" text="A vehicle's history, mileage and owners are in WorkSuite on the web for now." path={`/garage?vehicle=${vehicle}`} />
+            {checkin ? (
+              <CheckIn key={`c${checkin}`} jobId={checkin} onBack={() => g.openJob(checkin, 'checkin')} />
             ) : job ? (
-              <JobCard key={job} id={job} onBack={() => g.openJob(null)} />
-            ) : pending && view !== 'mywork' && view !== 'parts' ? (
-              <SetupPending manages={may('garage.settings.manage')} />
+              <JobCard key={job} id={job} tab={query.get('jt')} onBack={() => g.openJob(null)} />
+            ) : vehicle ? (
+              <Vehicle360 key={`v${vehicle}`} id={vehicle} onBack={() => goRoute(route(view))} />
+            ) : pending && !WHILE_SETTING_UP.has(view) ? (
+              manages ? <Setup /> : <SetupPending />
             ) : view === 'board' ? (
               <Board />
             ) : view === 'jobs' ? (
               <Jobs list={query.get('list') ?? 'open'} />
             ) : view === 'walkin' ? (
-              <WalkIn />
+              <WalkIn seed={query.get('q') ?? ''} />
             ) : view === 'mywork' ? (
               <MyWork />
             ) : view === 'parts' ? (
               <PartsCounter />
+            ) : view === 'vehicles' && allowed('vehicles') ? (
+              <Vehicles />
+            ) : view === 'customers' && allowed('customers') ? (
+              <Customers open={num(query.get('customer'))} />
+            ) : view === 'reports' && allowed('reports') ? (
+              <Reports />
+            ) : view === 'workshop' ? (
+              <Workshop />
+            ) : view === 'setup' && manages ? (
+              <Setup />
+            ) : view === 'settings' && manages ? (
+              <Settings />
             ) : (
               <Overview />
             )}
@@ -191,30 +235,15 @@ export default function GarageShell(_props: ModuleProps) {
   );
 }
 
-function SetupPending({ manages }: { manages: boolean }) {
-  return (
-    <OnTheWeb
-      title="Configure your workshop before the first service job"
-      text={manages ? 'A few steps on the web: branches, workshops, bays, technicians, warehouses, labour rates and service types.' : 'Someone who manages Garage in this company is finishing the set-up. Jobs can be taken once it is done.'}
-      path={manages ? '/garage?view=setup' : null}
-      action="Start set-up"
-    />
-  );
-}
-
-function OnTheWeb({ title, text, path, action = 'Open in WorkSuite' }: { title: string; text: string; path: string | null; action?: string }) {
+/** Someone who does not set Garage up, while it is being set up. */
+function SetupPending() {
   return (
     <div className="p-6">
       <div className="flex items-start gap-3 rounded-[12px] border border-line bg-surface p-5">
         <Icon name="wrench" size={20} className="mt-0.5 text-primary" />
         <div className="min-w-0 flex-1">
-          <h1 className="m-0 text-[15px] font-bold text-ink">{title}</h1>
-          <p className="mt-1 text-[13px] text-ink-2">{text}</p>
-          {path ? (
-            <Button variant="primary" icon="external" className="mt-3" onClick={() => openWeb(path)}>
-              {action}
-            </Button>
-          ) : null}
+          <h1 className="m-0 text-[15px] font-bold text-ink">Garage is being set up</h1>
+          <p className="mt-1 mb-0 text-[13px] text-ink-2">Someone who manages Garage in this company is finishing the set-up: branches, workshops, bays, technicians, warehouses, labour rates and service types. Jobs can be taken once it is done.</p>
         </div>
       </div>
     </div>

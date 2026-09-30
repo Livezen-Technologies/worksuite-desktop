@@ -33,7 +33,7 @@ const options = (over: Partial<Options> = {}): Options => ({
 
 const garage = (over: Partial<Garage> = {}): Garage => {
   const o = options();
-  return { org: '3', options: o, may: (p) => mayIn(o, p), go: vi.fn(), openJob: vi.fn(), ...over };
+  return { org: '3', options: o, may: (p) => mayIn(o, p), go: vi.fn(), openJob: vi.fn(), openCheckin: vi.fn(), openVehicle: vi.fn(), online: true, ...over };
 };
 
 const wrap = (ui: ReactNode, g = garage()) =>
@@ -202,7 +202,7 @@ describe('Garage: the parts counter', () => {
 });
 
 describe('Garage: a job card', () => {
-  it('moves the job on with the move the server offers, and sends check-in to the web', async () => {
+  it('moves the job on with the move the server offers, and opens its check-in here', async () => {
     vi.mocked(apiGet).mockImplementation(async (path: string) =>
       path.endsWith('/work')
         ? { job_status: 'CHECKED_IN', work_orders: [], parts: [] }
@@ -213,13 +213,17 @@ describe('Garage: a job card', () => {
             checkin: null,
             history: [],
             notes: [],
-            choices: [{ to: 'CHECKED_IN', label: 'Mark checked in' }],
+            choices: [
+              { to: 'CHECKED_IN', label: 'Mark checked in' },
+              { to: 'CANCELLED', label: 'Cancelled' },
+            ],
             cancel_reasons: ['customer_declined'],
             can: { edit: true, checkin: true, cancel: true },
           },
     );
     vi.mocked(request).mockResolvedValue(ok({}, 'Checked in.'));
-    wrap(<JobCard id={40} onBack={() => undefined} />);
+    const g = garage();
+    wrap(<JobCard id={40} onBack={() => undefined} />, g);
     expect(await screen.findByText('CAB-1234')).toBeTruthy();
     expect(screen.getByText('Asked for: Full service')).toBeTruthy();
     await act(async () => {
@@ -227,8 +231,12 @@ describe('Garage: a job card', () => {
     });
     expect(vi.mocked(request).mock.calls[0]!.slice(0, 2)).toEqual(['POST', '/api/garage/v1/jobs/40/move']);
     expect(vi.mocked(request).mock.calls[0]![2]?.body).toEqual({ to: 'CHECKED_IN' });
+    // Cancelling is its own button, which asks why — never a bare move to CANCELLED.
+    expect(screen.queryByRole('button', { name: 'Cancelled' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Cancel the job' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Check in' }));
-    expect(call).toHaveBeenCalledWith('app:openInBrowser', { path: '/garage?checkin=40' });
+    expect(g.openCheckin).toHaveBeenCalledWith(40);
+    expect(call).not.toHaveBeenCalledWith('app:openInBrowser', expect.anything());
   });
 });
 

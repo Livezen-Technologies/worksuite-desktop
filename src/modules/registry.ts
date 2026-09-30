@@ -126,11 +126,36 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
   {
     input: defineDesktopManifest({
       id: 'files', name: 'Files', icon: 'folder', contractVersion: 1, desktop: { enabled: true },
-      offline: { mode: 'READ_CACHE', cache: ['/api/files/browse', '/api/drive/list', '/api/drive/tree', '/api/drive/home'] },
+      offline: { mode: 'READ_CACHE', cache: ['/api/files/browse', '/api/drive/list', '/api/drive/tree', '/api/drive/home', '/api/files/office/types'] },
       native: ['file-drop', 'printing'],
       quickActions: [{ id: 'upload', label: 'Upload File', route: '/files?upload=1' }],
     }),
     load: () => import('./files/FilesPage'),
+  },
+  {
+    // Office documents (WorkSuite Drive — ONLYOFFICE SRS §7): a Word, Excel or PowerPoint file from Drive in a
+    // tab of its own, one tab per document, the Document Server's editor in an isolated view (office-editor.ts).
+    // Part of Files (shared/access APP_PARTS). Editing needs WorkSuite: offline the tab says so and offers the
+    // copy on this computer, if there is one (§9).
+    input: defineDesktopManifest({
+      id: 'office', name: 'Office document', icon: 'file-text', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'NONE' },
+      native: ['printing'],
+      fileTypes: ['docx', 'xlsx', 'pptx', 'doc', 'xls', 'ppt', 'odt', 'ods', 'odp', 'rtf', 'csv', 'docm', 'xlsm', 'pptm'],
+    }),
+    load: () => import('./office/OfficePage'),
+  },
+  {
+    // PDF Studio (WorkSuite PDF Studio SRS, stage D1): PDFs from Drive, this computer and Mail open here, each in a
+    // tab of its own, drawn by PDFium in a worker process per document (electron/services/pdf). Read-only for now.
+    input: defineDesktopManifest({
+      id: 'pdf', name: 'PDF Studio', icon: 'file-text', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'NONE' },
+      native: ['file-drop', 'printing'],
+      quickActions: [{ id: 'pdf-open-local', label: 'Open a PDF', route: '/pdf' }],
+      fileTypes: ['pdf'],
+    }),
+    load: () => import('./pdf/PdfStudio'),
   },
   {
     input: defineDesktopManifest({
@@ -199,12 +224,17 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./salon/SalonShell'),
   },
   {
-    // Garage: the counter, the board, the technician's timer and the parts counter. The timer's
-    // start and pause wait in the offline queue with the moment they were pressed (NFR-05).
+    // Garage: the counter, the board, the job card with check-in, estimate, work, quality and delivery,
+    // vehicles, customers, reports, the workshop and its set-up. The timer's start and pause wait in the
+    // offline queue with the moment they were pressed (NFR-05); every other write needs WorkSuite.
     input: defineDesktopManifest({
       id: 'garage', name: 'Garage', icon: 'wrench', contractVersion: 1, desktop: { enabled: true },
-      offline: { mode: 'PARTIAL_WRITE', entities: ['work_order'], cache: ['/api/garage/v1/options', '/api/garage/v1/overview', '/api/garage/v1/board', '/api/garage/v1/my-work'] },
-      native: ['notifications'],
+      offline: {
+        mode: 'PARTIAL_WRITE',
+        entities: ['work_order'],
+        cache: ['/api/garage/v1/options', '/api/garage/v1/overview', '/api/garage/v1/board', '/api/garage/v1/my-work', '/api/garage/v1/jobs', '/api/garage/v1/vehicles', '/api/garage/v1/customers', '/api/garage/v1/workshop'],
+      },
+      native: ['notifications', 'camera', 'file-drop', 'printing', 'barcode'],
       quickActions: [
         { id: 'garage-walk-in', label: 'Garage Walk-in', route: '/garage?view=walkin' },
         { id: 'my-work', label: 'My Work', route: '/garage?view=mywork' },
@@ -212,6 +242,61 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
       deepLinks: ['garage/jobs/:id', 'garage/vehicles/:id'],
     }),
     load: () => import('./garage/GarageShell'),
+  },
+  {
+    // eLearning: My Learning, the catalogue, taking a course (a video credited by what is actually played),
+    // quizzes and assignments; for the training team the courses, their builder, enrolment, grading and the
+    // dashboard. Offline, My Learning, the catalogue and course outlines are the last copy; a course kept
+    // offline plays from the app's encrypted copy (elearning-offline.ts), and its progress waits in the queue.
+    input: defineDesktopManifest({
+      id: 'elearning', name: 'eLearning', icon: 'graduation-cap', contractVersion: 1, desktop: { enabled: true },
+      offline: {
+        mode: 'PARTIAL_WRITE',
+        entities: ['progress'],
+        cache: ['/api/elearning/v1/options', '/api/elearning/v1/me/learning', '/api/elearning/v1/me/courses', '/api/elearning/v1/me/lessons', '/api/elearning/v1/catalog', '/api/elearning/v1/categories'],
+      },
+      native: ['notifications'],
+      quickActions: [
+        { id: 'my-learning', label: 'My Learning', route: '/elearning?view=my' },
+        { id: 'course-catalogue', label: 'Course catalogue', route: '/elearning?view=catalog' },
+      ],
+      deepLinks: ['elearning', 'elearning/courses/:id', 'elearning/catalog/:id'],
+    }),
+    load: () => import('./elearning/ElearningShell'),
+  },
+  {
+    // Hotel PMS: the front desk (room rack, arrivals, departures, in house, check-in, walk-in, room moves, check-out),
+    // the cashier (folios, charges, payments, shifts) and the night audit, over /api/pms/v1. Offline the rack and the
+    // desk's lists are the last copy (READ_CACHE, per property — shared/pms-cache.ts); money, check-ins and new bookings
+    // wait for WorkSuite, never queued. The desk's hardware goes through the device agent seam (modules/pms/devices.ts).
+    input: defineDesktopManifest({
+      id: 'pms', name: 'Hotel PMS', icon: 'bed', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'READ_CACHE', entities: ['room', 'reservation', 'stay'], cache: ['/api/pms/v1/options', '/api/pms/v1/properties'] },
+      native: ['notifications', 'printing', 'hardware', 'file-drop'],
+      windows: [{ id: 'pms-rack', route: '/pms?view=rack' }, { id: 'pms-record', route: '/pms/reservations/:id' }],
+      quickActions: [
+        { id: 'pms-rack', label: 'Room rack', route: '/pms?view=rack' },
+        { id: 'pms-new-reservation', label: 'New hotel reservation', route: '/pms?view=new' },
+        { id: 'pms-walk-in', label: 'Hotel walk-in', route: '/pms?view=walkin' },
+      ],
+      deepLinks: ['pms', 'pms/reservations/:id', 'pms/rooms/:id'],
+    }),
+    load: () => import('./pms/PmsShell'),
+  },
+  {
+    // WorkSuite Events: the Event Desk (check-in, check-out, re-entry, scanner input, search, walk-ins, badges, live
+    // counters) and the organiser's read of an event, over /api/events/v1. This computer as a check-in device — its
+    // key, offline copy and queue — is the main process's (electron/services/event-desk.ts): offline, scans are
+    // answered from the copy with the server's rules and kept for WorkSuite. Badges print on the desk's own printer.
+    input: defineDesktopManifest({
+      id: 'events', name: 'Events', icon: 'ticket', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'PARTIAL_WRITE', entities: ['checkin', 'walk_in'], cache: ['/api/events/v1/options', '/api/events/v1/events'] },
+      native: ['notifications', 'printing', 'barcode', 'camera', 'hardware'],
+      windows: [{ id: 'events-counters', route: '/events/:id/counters' }],
+      quickActions: [{ id: 'events-desk', label: 'Event check-in desk', route: '/events' }],
+      deepLinks: ['events', 'events/:id', 'events/:id/desk', 'events/:id/counters'],
+    }),
+    load: () => import('./events/EventsShell'),
   },
   {
     input: defineDesktopManifest({

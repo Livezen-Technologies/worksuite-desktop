@@ -13,6 +13,28 @@
  *  - `rate`: calls per second allowed from one window before it is throttled.
  */
 import { z } from 'zod';
+import { garageDocSchema } from '../garage-docs';
+import { ELEARNING_MEDIA_TOKEN, elearningCourseRef, elearningDownloadInput, type OfflineCourse, type OfflineValidation } from '../elearning-offline';
+import {
+  deskEventRef,
+  deskForgetInput,
+  deskPrintJobsInput,
+  deskPrintSettingsPatch,
+  deskQueueAction,
+  deskRegisterInput,
+  deskScanInput,
+  deskSearchInput,
+  deskWalkInInput,
+  type DeskPrintOutcome,
+  type DeskPrintSettings,
+  type DeskQueueItem,
+  type DeskRegistration,
+  type DeskScanOutcome,
+  type DeskSearchHit,
+  type DeskStatus,
+} from '../event-desk';
+import { OFFICE_EDITOR_EVENTS, OFFICE_EXPORT_TOKEN, officeCommandSchema, type ExternalApp, type OfficeLocalCopy } from '../office';
+import { pdfPrintSchema, pdfSearchOptionsSchema, pdfSourceSchema, SEARCH_MAX_QUERY, type PdfAttachmentView, type PdfBitmap, type PdfDiagnosticCheck, type PdfDriveDetails, type PdfFailureReport, type PdfLinkView, type PdfLocalPick, type PdfOutlineNode, type PdfSessionView } from '../pdf';
 import type { InvokeChannel } from './channels';
 import type {
   ActiveCall,
@@ -158,6 +180,9 @@ export const uploadTargetSchema = z.discriminatedUnion('kind', [
 export type UploadTarget = z.infer<typeof uploadTargetSchema>;
 
 const syncMode = z.enum(['two_way', 'upload_only', 'download_only']);
+const pdfSession = z.string().regex(/^[0-9a-f-]{36}$/);
+const pdfPage = z.number().int().min(0).max(1_000_000);
+const pdfTicket = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 const driveId = z.number().int().positive().max(2 ** 31);
 
 interface ChannelSpec {
@@ -452,10 +477,24 @@ export const contract = {
             }),
           ])
           .optional(),
+        /**
+         * A Garage document — a job's check-in sheet, an estimate version, a work order's sheet, the
+         * delivery note — or a Garage report as a CSV (`shared/garage-docs.ts`). The main process builds
+         * the address.
+         */
+        garageDoc: garageDocSchema.optional(),
+        /**
+         * An eLearning lesson's file where the lesson allows downloading: the signed token of the
+         * address the server gave with the lesson (`file.urls.download`). The main process builds
+         * `/media/{token}?download=1`; a protected lesson has no such address to give.
+         */
+        elearningMedia: z.string().regex(ELEARNING_MEDIA_TOKEN).optional(),
+        /** An Office export's signed download (`POST …/office/export` → `download_url`): its token; the main process fetches `/office/exports/{token}` from the server. */
+        officeExport: z.string().regex(OFFICE_EXPORT_TOKEN).optional(),
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a payment slip, an order list, an Orders report, a tender document, checklist file, letter or library document, a Finance report, or an Expenses file'),
+      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.elearningMedia, v.officeExport].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a payment slip, an order list, an Orders report, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, an eLearning lesson file, or an Office export'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   'transfers:upload': ch(
@@ -508,6 +547,44 @@ export const contract = {
   'print:print': ch(z.object({ html: z.string().max(5_000_000), title: z.string().max(200), silent: z.boolean().optional(), deviceName: z.string().max(200).optional() }), { session: true, rate: 2 }),
   'print:printers': ch(none, { session: true }),
   'print:toPdf': ch(z.object({ html: z.string().max(5_000_000), title: z.string().max(200) }), { session: true, rate: 2 }),
+
+  /*
+   * PDF Studio (WorkSuite PDF Studio SRS §23.1). Unknown fields are refused,
+   * not stripped (PDF-API-003). The renderer names a session it opened, pages
+   * and tickets; files arrive as a Drive id, a mail attachment's parts or a
+   * handle the main process issued — never a path (PDF-API-001).
+   */
+  'pdf:open': ch(z.strictObject({ source: pdfSourceSchema }), { session: true, rate: 5 }),
+  'pdf:state': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 20 }),
+  // The password goes to the engine and is kept, if asked, in memory for this session only (PDF-OPEN-008, PDF-SEC-013/014).
+  'pdf:unlock': ch(z.strictObject({ session: pdfSession, password: z.string().min(1).max(1024), remember: z.boolean() }), { session: true, rate: 2, sensitive: true }),
+  'pdf:retry': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 2 }),
+  'pdf:close': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 20 }),
+  'pdf:render': ch(
+    z.strictObject({
+      session: pdfSession,
+      page: pdfPage,
+      scale: z.number().positive().max(64),
+      tile: z.strictObject({ x: z.number().int().min(0).max(1_000_000), y: z.number().int().min(0).max(1_000_000), w: z.number().int().min(1).max(4096), h: z.number().int().min(1).max(4096) }).optional(),
+      ticket: pdfTicket,
+    }),
+    { session: true, rate: 400 },
+  ),
+  'pdf:thumbnail': ch(z.strictObject({ session: pdfSession, page: pdfPage, ticket: pdfTicket }), { session: true, rate: 400 }),
+  'pdf:cancel': ch(z.strictObject({ session: pdfSession, tickets: z.array(pdfTicket).max(1000) }), { session: true, rate: 60 }),
+  'pdf:search': ch(z.strictObject({ session: pdfSession, query: z.string().min(1).max(SEARCH_MAX_QUERY), options: pdfSearchOptionsSchema }), { session: true, rate: 10 }),
+  'pdf:searchCancel': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 20 }),
+  'pdf:outline': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 10 }),
+  'pdf:links': ch(z.strictObject({ session: pdfSession, page: pdfPage }), { session: true, rate: 200 }),
+  'pdf:followLink': ch(z.strictObject({ session: pdfSession, page: pdfPage, index: z.number().int().min(0).max(10_000) }), { session: true, rate: 5 }),
+  'pdf:attachments': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 5 }),
+  'pdf:details': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 5 }),
+  'pdf:print': ch(pdfPrintSchema, { session: true, rate: 2 }),
+  // The main process's open dialog; the chosen PDFs come back as handles.
+  'pdf:pickLocal': ch(none, { session: true, rate: 2 }),
+  // Paths only from a real drop, turned into paths in the preload (as files:registerDropped).
+  'pdf:registerDropped': ch(z.strictObject({ paths: z.array(z.string().min(1).max(4096)).min(1).max(20) }), { session: true, rate: 5 }),
+  'pdf:diagnostics': ch(none, { session: true, rate: 1 }),
 
   // SalonMate's front desk: the key it is paired with stays in the main process.
   'salon:deskPairing': ch(none, { session: true }),
@@ -562,6 +639,95 @@ export const contract = {
     ]),
     { session: true, rate: 5 },
   ),
+
+  /*
+   * eLearning's offline copies (shared/elearning-offline.ts): the course's files, as the server's download
+   * manifest lists them, kept encrypted in the profile and played only inside WorkSuite; removed when the
+   * server says the learning ended, when the licence runs out, or on request.
+   */
+  'elearning:offlineList': ch(none, { session: true }),
+  'elearning:offlineDownload': ch(elearningDownloadInput, { session: true, rate: 2 }),
+  'elearning:offlineRemove': ch(elearningCourseRef, { session: true, rate: 5 }),
+  'elearning:offlineValidate': ch(none, { session: true, rate: 1 }),
+
+  /*
+   * WorkSuite Events' desk (shared/event-desk.ts, electron/services/event-desk.ts): this computer as a check-in
+   * device. The key the server hands over when it is registered stays in the main process, which also matches
+   * scans against the offline copy and keeps what was done offline for the server.
+   */
+  'eventdesk:list': ch(none, { session: true }),
+  'eventdesk:status': ch(deskEventRef, { session: true, rate: 20 }),
+  'eventdesk:register': ch(deskRegisterInput, { session: true, rate: 2, sensitive: true }),
+  'eventdesk:rotateKey': ch(deskEventRef, { session: true, rate: 1, sensitive: true }),
+  'eventdesk:forget': ch(deskForgetInput, { session: true, rate: 2, sensitive: true }),
+  'eventdesk:sync': ch(deskEventRef, { session: true, rate: 2 }),
+  'eventdesk:scan': ch(deskScanInput, { session: true, rate: 20 }),
+  'eventdesk:search': ch(deskSearchInput, { session: true, rate: 30 }),
+  'eventdesk:queue': ch(deskEventRef, { session: true, rate: 10 }),
+  'eventdesk:queueResolve': ch(deskQueueAction, { session: true, rate: 10 }),
+  'eventdesk:walkIn': ch(deskWalkInInput, { session: true, rate: 5 }),
+  // Badges go to the desk's own printer, silently when it says so; the page is the server's (event-desk-print.ts).
+  'eventdesk:printSettings': ch(none, { session: true }),
+  'eventdesk:printSettingsSet': ch(deskPrintSettingsPatch, { session: true, rate: 5 }),
+  'eventdesk:printJobs': ch(deskPrintJobsInput, { session: true, rate: 5 }),
+
+  /*
+   * Office documents (shared/office.ts, electron/services/office-editor.ts): a tab lays the editor's
+   * isolated view over its placeholder and talks to it; the session itself is the tab's, over the API.
+   * The configuration is the server's signed one, passed through untouched; the main process loads an
+   * editor only from a Document Server address it accepts (`documentServerOrigin`).
+   */
+  'office:open': ch(
+    z.object({
+      key: idString,
+      fileId: driveId,
+      sessionId: z.string().regex(/^[0-9a-f-]{36}$/),
+      organizationId: z.string().max(64).nullable(),
+      documentServerUrl: z.string().min(8).max(512),
+      apiUrl: z.string().min(8).max(1024),
+      config: z.record(z.string(), z.unknown()),
+      events: z.array(z.enum(OFFICE_EDITOR_EVENTS)).max(OFFICE_EDITOR_EVENTS.length),
+    }),
+    { session: true, rate: 5 },
+  ),
+  'office:place': ch(
+    z.object({
+      viewId: z.string().uuid(),
+      bounds: z.object({ x: z.number().finite(), y: z.number().finite(), width: z.number().finite().min(0).max(20_000), height: z.number().finite().min(0).max(20_000) }),
+      visible: z.boolean(),
+    }),
+    { session: true, rate: 120 },
+  ),
+  'office:command': ch(
+    z.object({
+      viewId: z.string().uuid(),
+      command: officeCommandSchema,
+      events: z.array(z.enum(OFFICE_EDITOR_EVENTS)).max(OFFICE_EDITOR_EVENTS.length).optional(),
+      /** A reload on a new session (reopened, or a newer version): the view's session is that one now. */
+      sessionId: z.string().regex(/^[0-9a-f-]{36}$/).optional(),
+    }),
+    { session: true, rate: 20 },
+  ),
+  'office:close': ch(z.object({ viewId: z.string().uuid() }), { session: true, rate: 20 }),
+  'office:focusFile': ch(z.object({ fileId: driveId }), { session: true, rate: 10 }),
+  'office:externalApps': ch(z.object({ extension: z.string().regex(/^[A-Za-z0-9]{0,10}$/) }), { session: true, rate: 10 }),
+  'office:openExternal': ch(
+    z.object({
+      fileId: driveId,
+      name: z.string().min(1).max(255),
+      folderId: driveId.nullable(),
+      version: z.number().int().min(0).max(2 ** 31),
+      app: z.enum(['default', 'word', 'excel', 'powerpoint']),
+    }),
+    { session: true, rate: 3, sensitive: true },
+  ),
+  'office:localCopies': ch(none, { session: true }),
+  'office:uploadLocal': ch(z.object({ id: z.string().uuid(), how: z.enum(['version', 'new_version', 'keep_both']) }), { session: true, rate: 3, sensitive: true }),
+  'office:forgetLocal': ch(z.object({ id: z.string().uuid() }), { session: true, rate: 10 }),
+  'office:revealLocal': ch(z.object({ id: z.string().uuid() }), { session: true, rate: 5 }),
+  /** Offline (OO-OFF-020): is this file on this computer — kept by Drive sync, or a copy opened in another app. */
+  'office:localAvailable': ch(z.object({ fileId: driveId }), { session: true, rate: 10 }),
+  'office:openLocal': ch(z.object({ fileId: driveId, preview: z.boolean().optional() }), { session: true, rate: 3 }),
 
   'offline:status': ch(none, { session: true }),
   'offline:pending': ch(none, { session: true }),
@@ -782,6 +948,25 @@ export interface Outputs {
   'print:print': boolean;
   'print:printers': Array<{ name: string; displayName: string; isDefault: boolean }>;
   'print:toPdf': string | null;
+  'pdf:open': PdfSessionView;
+  'pdf:state': PdfSessionView;
+  'pdf:unlock': PdfSessionView;
+  'pdf:retry': PdfSessionView;
+  'pdf:close': void;
+  'pdf:render': PdfBitmap;
+  'pdf:thumbnail': PdfBitmap;
+  'pdf:cancel': number;
+  'pdf:search': { searchId: string };
+  'pdf:searchCancel': void;
+  'pdf:outline': PdfOutlineNode[];
+  'pdf:links': PdfLinkView[];
+  'pdf:followLink': { opened: boolean; reason: string | null };
+  'pdf:attachments': PdfAttachmentView[];
+  'pdf:details': PdfDriveDetails | null;
+  'pdf:print': { printed: boolean; pages: number; reason: string | null };
+  'pdf:pickLocal': PdfLocalPick[];
+  'pdf:registerDropped': { files: PdfLocalPick[]; rejected: Array<{ name: string; reason: string }> };
+  'pdf:diagnostics': { checks: PdfDiagnosticCheck[]; failures: PdfFailureReport[] };
   'salon:deskPairing': SalonDeskPairing | null;
   'salon:deskPair': { desk: SalonDeskInfo; message: string | null };
   'salon:deskForget': void;
@@ -798,6 +983,37 @@ export interface Outputs {
   'salon:outbox': SalonOutboxItem[];
   'salon:outboxAdd': SalonOutboxItem;
   'salon:outboxResolve': SalonOutboxItem[];
+  'elearning:offlineList': OfflineCourse[];
+  'elearning:offlineDownload': OfflineCourse;
+  'elearning:offlineRemove': void;
+  'elearning:offlineValidate': OfflineValidation;
+  'eventdesk:list': DeskRegistration[];
+  'eventdesk:status': DeskStatus;
+  'eventdesk:register': { registration: DeskRegistration; message: string; reregistered: boolean };
+  'eventdesk:rotateKey': { message: string };
+  'eventdesk:forget': number;
+  'eventdesk:sync': DeskStatus;
+  'eventdesk:scan': DeskScanOutcome;
+  'eventdesk:search': DeskSearchHit[];
+  'eventdesk:queue': DeskQueueItem[];
+  'eventdesk:queueResolve': DeskQueueItem[];
+  'eventdesk:walkIn': { provisional_number: string; message: string };
+  'eventdesk:printSettings': DeskPrintSettings;
+  'eventdesk:printSettingsSet': DeskPrintSettings;
+  'eventdesk:printJobs': DeskPrintOutcome;
+  'office:open': { viewId: string };
+  'office:place': boolean;
+  'office:command': boolean;
+  'office:close': boolean;
+  'office:focusFile': boolean;
+  'office:externalApps': ExternalApp[];
+  'office:openExternal': OfficeLocalCopy;
+  'office:localCopies': OfficeLocalCopy[];
+  'office:uploadLocal': { state: 'uploaded'; version: number | null } | { state: 'conflict'; conflict: NonNullable<OfficeLocalCopy['conflict']> } | { state: 'queued' };
+  'office:forgetLocal': boolean;
+  'office:revealLocal': boolean;
+  'office:localAvailable': { available: boolean; synced: boolean; preview: boolean; openInApp: boolean };
+  'office:openLocal': boolean;
   'offline:status': OfflineStatus;
   'offline:pending': OfflineMutation[];
   'offline:submit': SubmitResult;

@@ -6,7 +6,7 @@ import { Button, IconButton, Modal, Spinner, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
 import { PageHead } from '../hr/parts';
 import { errorData, errorText, gGet, gPost, K, newKey, nice, type Customer, type VehicleBrief } from './api';
-import { Field, input, openWeb, useGarage } from './parts';
+import { Field, input, useGarage } from './parts';
 
 interface Found {
   vehicles: VehicleBrief[];
@@ -17,14 +17,14 @@ interface Found {
  * A walk-in (WF-03, §9): one search box for the plate, VIN, phone or name;
  * the vehicle and its owner, or new ones; then the job card. A vehicle that
  * already has an open job says so, and a second job card is a choice made on
- * purpose (FR-WLK-01..03). The new job opens here; its check-in — photos,
- * marks and the customer's signature — is on the web for now.
+ * purpose (FR-WLK-01..03). The new job opens on its check-in: photos,
+ * condition, marks and the customer's signature.
  */
-export default function WalkIn() {
+export default function WalkIn({ seed = '' }: { seed?: string }) {
   const g = useGarage();
   const qc = useQueryClient();
-  const [text, setText] = useState('');
-  const [q, setQ] = useState('');
+  const [text, setText] = useState(seed);
+  const [q, setQ] = useState(seed.trim());
   const [vehicle, setVehicle] = useState<VehicleBrief | null>(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [adding, setAdding] = useState<'vehicle' | 'customer' | null>(null);
@@ -137,7 +137,8 @@ export default function WalkIn() {
             void qc.invalidateQueries({ queryKey: ['garage', 'jobs'] });
             void qc.invalidateQueries({ queryKey: ['garage', 'board'] });
             void qc.invalidateQueries({ queryKey: ['garage', 'overview'] });
-            g.openJob(id);
+            if (g.may('garage.checkin.create')) g.openCheckin(id);
+            else g.openJob(id);
           }}
         />
       </div>
@@ -352,7 +353,7 @@ export function JobForm({ vehicle, customer, onClearVehicle, onClearCustomer, on
 }
 
 /** Add a customer to CRM (FR-WLK-01); a likely duplicate is answered with the candidates. */
-function NewCustomer({ seed, onClose, onPicked }: { seed: string; onClose: () => void; onPicked: (c: Customer) => void }) {
+export function NewCustomer({ seed, onClose, onPicked }: { seed: string; onClose: () => void; onPicked: (c: Customer) => void }) {
   const g = useGarage();
   const digits = seed.replace(/\D/g, '');
   const [name, setName] = useState(digits.length >= 6 ? '' : seed);
@@ -430,7 +431,7 @@ function NewCustomer({ seed, onClose, onPicked }: { seed: string; onClose: () =>
 }
 
 /** Add a vehicle (FR-VEH-01/02); the same plate or VIN already on file is answered with that vehicle. */
-function NewVehicle({ seed, customer, onClose, onPicked }: { seed: string; customer: Customer | null; onClose: () => void; onPicked: (v: VehicleBrief) => void }) {
+export function NewVehicle({ seed, customer, onClose, onPicked }: { seed: string; customer: Customer | null; onClose: () => void; onPicked: (v: VehicleBrief) => void }) {
   const g = useGarage();
   const o = g.options;
   const [f, setF] = useState({
@@ -486,7 +487,7 @@ function NewVehicle({ seed, customer, onClose, onPicked }: { seed: string; custo
         {dup ? (
           <div className="rounded-[10px] bg-warning-bg p-3 text-[13px] text-warning">
             {dup.vehicle_number} is already on file.{' '}
-            <button type="button" className="font-semibold underline" onClick={() => openWeb(`/garage?vehicle=${dup.id}`)}>
+            <button type="button" className="font-semibold underline" onClick={() => g.openVehicle(dup.id)}>
               Open it
             </button>
           </div>

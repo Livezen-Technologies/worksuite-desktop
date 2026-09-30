@@ -186,8 +186,8 @@ export function Shell() {
           void call('app:openInBrowser', { path: req.route }).catch((e) => toast('error', errorMessage(e)));
           return;
         }
-        // A torn-off window docked back: a tab of its own, or beside the open one.
-        if (req.source === 'dock') {
+        // A torn-off window docked back: a tab of its own, or beside the open one. A file the OS handed over: a tab of its own.
+        if (req.source === 'dock' || req.source === 'file') {
           insertTab(req.route, { title: req.title, side: req.side });
           return;
         }

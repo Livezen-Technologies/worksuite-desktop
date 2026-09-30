@@ -479,8 +479,8 @@ export interface NavigateRequest {
   route: string;
   newWindow?: boolean;
   organizationId?: string | null;
-  source: 'deep-link' | 'notification' | 'tray' | 'menu' | 'shortcut' | 'dock';
-  /** A window docked back into the main window (source 'dock'): its title, and whether it goes beside the open tab. */
+  source: 'deep-link' | 'notification' | 'tray' | 'menu' | 'shortcut' | 'dock' | 'file';
+  /** A window docked back into the main window (source 'dock'), or a file the OS handed over (source 'file', a tab of its own): its title, and whether it goes beside the open tab. */
   title?: string;
   side?: boolean;
 }

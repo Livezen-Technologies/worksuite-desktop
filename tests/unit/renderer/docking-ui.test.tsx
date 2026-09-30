@@ -42,6 +42,9 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  // The tab store saves on a 500 ms timer (tabs:save) that can fire after the test ends; restoring the mocks leaves
+  // `call` answering undefined, and the store's `.catch` on that would be an unhandled error in whichever test runs next.
+  mocked.mockResolvedValue(undefined as never);
   vi.unstubAllGlobals();
 });
 

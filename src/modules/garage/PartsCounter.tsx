@@ -151,7 +151,11 @@ export default function PartsCounter() {
 
 type Ask = { kind: 'used' | 'return' | 'release'; u: PartUsage } | null;
 
-function PartActions({ u, can, technicians, onChange }: { u: PartUsage; can: { issue: boolean; return: boolean; override: boolean }; technicians: { id: number; name: string }[]; onChange: () => void }) {
+/**
+ * The counter's actions on one row (WF-14, SM-06), here and on a job's Work
+ * tab. `used` is a technician's own "this much went on" (the counter's too).
+ */
+export function PartActions({ u, can, technicians, onChange }: { u: PartUsage; can: { issue: boolean; return: boolean; override: boolean; used?: boolean }; technicians: { id: number; name: string }[]; onChange: () => void }) {
   const [issuing, setIssuing] = useState(false);
   const [asking, setAsking] = useState<Ask>(null);
   const [busy, setBusy] = useState(false);
@@ -187,7 +191,7 @@ function PartActions({ u, can, technicians, onChange }: { u: PartUsage; can: { i
           Issue
         </Button>
       ) : null}
-      {can.issue && u.status === 'ISSUED' ? (
+      {(can.used ?? can.issue) && u.status === 'ISSUED' ? (
         <Button size="sm" variant="ghost" onClick={() => setAsking({ kind: 'used', u })}>
           Used
         </Button>

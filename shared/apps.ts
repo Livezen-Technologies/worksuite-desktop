@@ -71,6 +71,9 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'calendar', label: 'Calendar', group: 'work', icon: 'calendar', app: 'calendar', webPath: '/calendar', surface: 'native', sidebar: 'work', order: 50, keywords: 'events meetings schedule' },
   { id: 'tasks', label: 'Tasks', group: 'work', icon: 'tasks', app: 'tasks', webPath: '/tasks', surface: 'native', sidebar: 'work', order: 60, badge: 'tasks', keywords: 'todo to-do' },
   { id: 'files', label: 'Files', group: 'work', icon: 'folder', app: 'drive', webPath: '/files', surface: 'native', sidebar: 'work', order: 70, keywords: 'drive documents folders storage' },
+  // PDF Studio: native here for everyone signed in (a PDF from this computer needs no app); a Drive file is still the
+  // server's to allow. The web's `/pdf?file=<id>` links open the file here.
+  { id: 'pdf', label: 'PDF Studio', group: 'work', icon: 'file-text', webPath: '/pdf', surface: 'native', order: 72, keywords: 'pdf viewer reader acrobat document open print search bookmarks' },
   { id: 'crm', label: 'CRM', group: 'business', icon: 'users', app: 'crm', perm: 'crm.view', webPath: '/crm', surface: 'native', sidebar: 'business', order: 110, keywords: 'leads customers pipeline' },
   // The server's OMS: `/oms?order=` (what notifications and shares link to) opens here as `/sales?order=`.
   { id: 'sales', label: 'Sales & Orders', group: 'business', icon: 'trending-up', app: 'oms', perm: 'oms.view', webPath: '/oms', surface: 'native', sidebar: 'business', order: 120, keywords: 'orders sales order fulfilment dispatch returns' },
@@ -109,6 +112,19 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'salon', label: 'SalonMate', group: 'business', icon: 'scissors', app: 'salon', perm: 'salon.view', webPath: '/salon', surface: 'native', sidebar: 'business', order: 131, keywords: 'salon hair beauty front desk walk-in check-in stylists clients bookings' },
   // A workshop's counter, board, technician terminal and parts counter: native here; check-in, estimates, QC and delivery open on the web.
   { id: 'garage', label: 'Garage', group: 'business', icon: 'wrench', app: 'garage', perm: 'garage.access', webPath: '/garage', surface: 'native', sidebar: 'business', order: 132, keywords: 'garage workshop service center vehicle car repair job card walk-in technician parts mechanic' },
+  // A hotel's front desk, cashier and night audit: native here (the desk's computer). The server's notifications
+  // (`/pms/reservations/<id>`, `/pms/folios/<id>`, `/pms/rooms/<id>`, `/pms/front-desk?arrivals=`, `/pms/night-audit`…)
+  // open here; the back office — rates, rooms, packages, taxes, reports, settings — is the web's.
+  // WorkSuite Events' desk: check-in, scanning, walk-ins, badges and offline check-in at an event's gate, and the
+  // organiser's read of an event (Event 360, registrations, attendees, the day's program). Planning is the web's. The
+  // server's notifications (`/events/<id>`, `/events/<id>/registrations/<id>`, `/events/<id>/checkin/reconciliation`,
+  // `/events/<id>/devices`…) open here.
+  { id: 'events', label: 'Events', group: 'business', icon: 'ticket', app: 'events', perm: 'events.access', webPath: '/events', surface: 'native', sidebar: 'business', order: 134, keywords: 'events event desk check-in check in scan qr ticket gate badge print walk-in attendees registrations conference expo summit' },
+  { id: 'pms', label: 'Hotel PMS', group: 'business', icon: 'bed', app: 'pms', perm: 'pms.access', webPath: '/pms', surface: 'native', sidebar: 'business', order: 133, keywords: 'hotel pms property front desk reception room rack arrivals departures in house check-in check-out walk-in reservation booking folio cashier night audit guest housekeeping' },
+  // Learning, for everybody given eLearning: My Learning, the catalogue and taking courses; the training
+  // team's courses, builder, enrolment, grading and dashboard by permission. `/elearning/my/courses/<id>`
+  // (the server's notifications) opens the course here.
+  { id: 'elearning', label: 'eLearning', group: 'people', icon: 'graduation-cap', app: 'elearning', perm: 'elearning.access', webPath: '/elearning', surface: 'native', sidebar: 'business', order: 145, keywords: 'elearning learning lms training courses course catalogue lessons quiz quizzes assessment assignment grading enrol enrolment my learning' },
   { id: 'support', label: 'Support', group: 'operations', icon: 'life-buoy', app: 'tickets', webPath: '/tickets', surface: 'browser', order: 200 },
   { id: 'assets', label: 'Assets', group: 'operations', icon: 'box', app: 'assets', webPath: '/assets', surface: 'browser', order: 210 },
   { id: 'amc', label: 'AMC & Service', group: 'operations', icon: 'wrench', app: 'amc', webPath: '/amc', surface: 'browser', order: 215 },

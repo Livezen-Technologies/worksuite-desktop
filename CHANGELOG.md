@@ -5,6 +5,740 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-29 — 0.2.57: WorkSuite Events — the Event Desk
+
+WorkSuite Events opens in its own tab for whoever has the app (and
+`events.access`), over the server's `/api/events/v1`: the **Event Desk** —
+check-in, check-out and re-entry at a gate, scanning, search, walk-ins,
+badge printing and offline check-in (Events SRS §15.2, §9, §8.4) — and the
+organiser's read of an event. What each person sees is what the server says
+they may do in the event's company. Counts, capacity, money and every
+verdict online are the server's, shown in its own words; planning — events,
+tickets, forms, the schedule, screens, badge templates, gates and devices —
+is the web's.
+
+**Added**
+
+- **Events**: the events you reach, live ones first, and the events this
+  computer is a check-in device at.
+- **This computer at an event's gate** (EV-CHK-031..033): registered as a
+  `desktop` check-in device by its sync device id. The server hands over the
+  device key once; it is kept in the OS credential store and never reaches a
+  page, a log or the diagnostic bundle. Its state as the server sees it, a
+  new key, and stopping (never with scans still unsent, unless you say so).
+  The event's devices are listed; managing them is the web's.
+- **Event Desk Mode** (EV-POR-010..012): the event's name, a large scan area
+  that keeps the keyboard's focus — a USB or Bluetooth scanner types into it
+  and presses Enter, and so can you with a registration number — the result
+  in its colour with its icon and words (and a tone), the attendee, ticket
+  and where they are, the live counters (Inside, Checked in, today's), and
+  Search, Walk-in and Print badge. **F2 / Alt+S** search, **F3 / Alt+W**
+  walk-in, **F4 / Alt+P** print, **F6 / Alt+O** check in or out, **Enter** on
+  an empty field presses the result's button, **Esc** clears. Full screen on
+  the desk alone. The camera scans where the system reads QR codes itself
+  (macOS).
+- **Check-in, check-out and re-entry** with the server's answers (the Check
+  In button, or the gate's automatic check-in); a ticket waiting for its
+  payment offers **Take payment** (Billing's methods, with a reference) to
+  those who may.
+- **Search** (EV-CHK-050): name, number, phone, email, company or ticket;
+  arrows and Enter pick and scan.
+- **Walk-in** (EV-CHK-040..042): name, a phone or an email, the ticket, the
+  published form's fields and consents for it, the payment or its waiver, a
+  promo code — one press registers, checks in and prints the badge.
+- **Badges** (EV-BDG-010..014): printed on the desk's own printer —
+  silently when set so, at the template's size or the printer's label — from
+  the server's badge page, each reported printed or failed; the gate's
+  automatic print on check-in printed at once; a reprint asks its reason;
+  **pre-printing** by ticket, sorted by name or company, in runs of fifty;
+  the print queue; badges sent to the desk's printer by name (from a phone at
+  a door) taken while the desk is open.
+- **Offline check-in** (EV-OFF-001..013): when WorkSuite does not answer
+  within six seconds the desk answers from its copy of the gate's tickets
+  with the server's own ScanRules — the same checks in the same order, the
+  same sentences — and keeps the check-in, check-out, refused attempt or
+  walk-in (with a provisional number) for WorkSuite; they go up by
+  themselves when it answers, recorded once however often sent. The copy is
+  kept current every fifteen seconds while online; the desk warns of its own
+  second entry and says that entries at other gates show late. **To review**:
+  the server's possible duplicates and conflicts (resolve with a note,
+  dismiss with a reason) and what the server made of each offline scan.
+- **Live counters**, also in a window of their own for a second screen;
+  **recent scans** at this desk or everywhere.
+- **Today's program** and **session doors** (EV-CHK-060): a room's entrance
+  scans into its session, online; who holds a place.
+- **Event 360** read: the server's counts, each with what it counts, the
+  capacity, ticket money for financial viewers and the live view;
+  **registrations** by list, a registration with its answers and badge
+  prints, **attendees** and a profile. The **emergency message** on every
+  screen of the event, typed confirmation, for those who may raise it.
+- `worksuite://events`, `worksuite://events/<id>`, `…/<id>/desk` and
+  `…/<id>/counters`; the server's notifications (`/events/<id>`,
+  `/events/<id>/registrations/<id>`, `/events/<id>/checkin/reconciliation`,
+  `/events/<id>/devices`, `/events/<id>/schedule`…) open their screen here;
+  notices of category `events` show only to people who have the app.
+
+**Works offline**
+
+- The desk scans, checks in and out, searches (name, number, company,
+  ticket — the copy holds no email or phone) and takes walk-ins from this
+  computer's copy of the gate's tickets: hashes under the device key, name,
+  number, company, ticket, status, whether money is owed and presence — no
+  email, phone, address or amount — encrypted in the profile, per server,
+  event and person. It goes when it expires, when the event's offline
+  check-in is switched off, or when the device is revoked (with the key and
+  the queue, at once).
+- Scans made offline belong to the person who made them: another person
+  signed in at the desk sees only that they wait, and a plain sign-out keeps
+  them for their maker.
+- The person's permissions, the events and their gates are the last copy
+  (READ_CACHE), so a desk opened with the line down still scans.
+- Everything else — counters, recent scans, review, badges, payments, the
+  program, Event 360 — waits for WorkSuite.
+
+**Where it bites**
+
+- Offline check-in needs a computer the desktop policy lets keep data
+  offline and queue changes (a trusted one), and the event's offline
+  check-in switched on.
+- Desk staff need to see the event (`events.event.view`) as well as check
+  in: the server hides every event, and every check-in call, from anyone who
+  does not.
+- A desktop check-in device needs a server with WorkSuite Desktop's device
+  registry (the `/desktop/v1` API).
+- Badges print without the logo and the photo (the server's badge page names
+  them without a picture); the event's name stands in the logo's place.
+- A walk-in kept offline carries the standard fields only; a form that asks
+  for more makes the server queue it for review.
+- The camera reads QR codes only where the system does (macOS); elsewhere a
+  USB scanner or the typed number does the job.
+- Tests: the docked-workspace tests no longer leave an unhandled error for
+  the next test. The tab store saves on a 500 ms timer that could fire after a
+  test had restored its mocks, and the store's `.catch` then met `undefined`;
+  the teardown now keeps the mocked call answering with a promise.
+
+---
+
+## 2026-09-29 — 0.2.56: PDF Studio — the viewer
+
+PDFs now open inside WorkSuite, in **PDF Studio** (WorkSuite PDF Studio SRS,
+stage D1): from Files, from Mail, from this computer, or handed over by the
+operating system — each in a tab of its own. This first stage **views**:
+annotation, page tools, saving back to Drive, autosave and offline editing
+come with the next stage, and the app says so where their buttons will be.
+
+**Added**
+
+- **Opening** (§5). A PDF in Files opens in PDF Studio instead of the
+  browser; a tab already showing it comes to the front. A PDF attached to an
+  email opens for **preview only** (the original stays as it arrived; other
+  attachments still download and open). **Open a PDF…** (Ctrl/⌘ O) and
+  dropping PDFs on PDF Studio open files from this computer, read where they
+  are and never uploaded. A PDF the system hands to WorkSuite ("Open with…"
+  and choosing WorkSuite) opens in a new tab. The web's `/pdf?file=` links
+  open here too. Opening a Drive file asks WorkSuite first; nothing of the
+  file is fetched before it says yes (PDF-OPEN-010).
+- **The viewer** (§6). PDFium draws the pages — the engine inside Chrome —
+  in a separate process for each document. Only the pages on screen exist,
+  each drawn small first and sharp once scrolling stops, in tiles at high
+  zoom; a page scrolled past stops being drawn. A 2,000-page PDF opens
+  without drawing it. Single page, continuous, two pages, two pages
+  continuous; zoom 25 %–6400 %, fit width, fit page, actual size, Ctrl/⌘ +
+  wheel; full screen, presentation (one page on black, arrow keys) and read
+  mode. Page thumbnails, bookmarks (the outline), links inside the document.
+- **Find** (Ctrl/⌘ F; Ctrl/⌘ Shift F adds comments and bookmarks): match
+  case, whole word, regular expression; results stream in as pages are
+  searched, each with its page and the words around it, and are highlighted
+  on the page.
+- **Password-protected PDFs** (PDF-OPEN-008): "Enter PDF password", with
+  "Remember for this session" — kept in memory until you sign out or quit,
+  never saved, never sent.
+- **Print** (Ctrl/⌘ P, §14.4): all pages, this page or a range; fit or
+  actual size; with or without comments and form fields; standard or high
+  quality; printer, copies, orientation and two-sided in the system dialog.
+  Up to 500 pages a job.
+- **Properties, versions, activity**: the document's facts, its own security
+  settings and what was found in it; for a Drive file its versions and
+  activity, and who is editing it if someone is.
+- **Download** a Drive PDF or an attachment through the download manager.
+- **PDF Diagnostics** (Help → Diagnostics → PDF Diagnostics, or from PDF
+  Studio): the engine, its process, drawing, fonts, temporary storage,
+  WorkSuite's PDF service, the local database, printing; OCR and conversion
+  said to be later.
+- The keyboard shortcuts of §4.3 (Open, Save, Print, Find, Zoom, H for the
+  hand, V for select) go through WorkSuite's shortcut registry: Settings lists
+  them and changes them.
+
+**Safe by default** (§12.5)
+
+- Scripts in PDFs never run: the engine has none, and nothing else would run
+  them. Actions that start a program or open another file are never followed.
+  A web link asks first ("Open this link from the PDF?"); only https and mail
+  links leave the app. Embedded files are listed, never opened. A banner says
+  what was found and blocked; Properties counts it.
+- The engine runs in its own process per document, inside WebAssembly: a
+  malformed PDF can crash only that process. The tab then says so and offers
+  **Retry**; the rest of WorkSuite carries on. A document past its memory
+  ceiling (1 GB) or an engine that stops answering is ended the same way.
+- Drive files and attachments are kept while open as sealed working copies
+  (AES-256-GCM, key in memory only) in WorkSuite's own folder, removed when
+  the tab closes and at start-up; page thumbnails are cached sealed, and all
+  of it is removed with WorkSuite's data at sign-out or a remote wipe.
+- Passwords, paths, file names and document text are never logged, audited
+  or reported. Opening and printing are audited with the file's id, version
+  and page count. A failure is logged with the file's format, size and page
+  count and the engine's error — that is what a diagnostic report carries.
+
+**Where it bites**
+
+- **Read only.** Annotation, page organising, saving as a Drive version,
+  autosave, crash recovery, offline editing and edit locks arrive with the
+  next stage. Save (Ctrl/⌘ S) says so.
+- **Text cannot be selected or copied yet**; the Select tool follows links.
+- **Chat attachments** still open the way they did.
+- A Drive PDF needs WorkSuite to open; files kept offline for PDF Studio come
+  with offline editing.
+- Printing sends pages as images at 150 dpi (300 at high quality), up to 500
+  pages at a time; a printer's own PDF handling is not used.
+- **WorkSuite is not registered as a PDF handler** (the desktop claims no
+  common file types, FR-DL-06): choose it in "Open with…". Dropping a PDF on
+  the Dock icon works once macOS knows WorkSuite opens PDFs, which needs that
+  registration.
+- The engine in its own process, a 2,000-page file, a crashed worker and a
+  print job laid out from memory were tried for real on Linux (under Xvfb,
+  `tests/os/pdf/check.mjs`); the "PDF engine" workflow runs the same on
+  Windows and macOS and has not run there yet. The system print dialog and a
+  real printer have not been tried.
+
+**For administrators**
+
+- New dependency `@embedpdf/pdfium` 2.15.1 (MIT; PDFium itself BSD-3-Clause
+  and Apache-2.0), a WebAssembly build of PDFium. MuPDF was not used: it is
+  AGPL or commercial.
+- The organisation's PDF Studio policies (print, copy, export, external
+  links, local files, largest PDF) are checked everywhere they apply, but
+  read their defaults until the server's PDF Studio service sends its own
+  (all on, links ask first, 2 GB). The desktop's own `downloads` policy and
+  `desktop.downloads` permission already govern Download.
+
+---
+
+## 2026-09-29 — 0.2.55: Office documents in WorkSuite tabs
+
+Word, Excel and PowerPoint files from Drive open in a WorkSuite tab with the
+Office editor — the Document Server's own ONLYOFFICE editor, over the
+server's new Office API (WorkSuite Drive — ONLYOFFICE Office File
+Integration SRS, the desktop's MVP). No browser window, no download. What
+you may do in a document is what the server says; saving goes straight
+from the editor to Drive, never through this computer.
+
+**Added**
+
+- **Opening**: double-click (or Enter, Open) an Office file in Files and it
+  opens in a tab of its own, named after the file. Opening it again brings
+  that tab forward — in this window or the one it was torn off into —
+  instead of a second copy. What opening does is the server's choice for
+  that kind of file (edit, read, or the web's preview); the file menu adds
+  **Edit** and **Open read-only**.
+- **The tab's header**: the file's name; **Saving…** while your changes are
+  on their way, then **Saved · 14:32**, with the last WorkSuite version
+  beside it (version, time, who); **Save failed** or **Saving is delayed**
+  in the server's words, with **Retry**; who else is in it (● Samali ●
+  Ishan, editing or viewing); the **mode** — Editing, Reviewing (changes
+  tracked), Commenting, Viewing — as far as the server allows; **Share**
+  (WorkSuite's share dialog); and **⋯**: Download, Download as PDF, Save as
+  PDF to Drive, Save as version…, Version history, Open in Microsoft Word /
+  Excel / PowerPoint or the default app, Convert & Edit (DOC, XLS, PPT),
+  keep the document to yourself while you edit, reload the editor. Each
+  appears only when the server's permissions for you allow it.
+- **Read-only** documents say why, in the server's sentence ("You can view
+  this document, but you don't have permission to edit it.", "Samali is
+  editing — you can view until the lock is released."), with **Switch to
+  edit** when that becomes possible. "A newer version is available" when
+  someone uploads or restores one; you choose when to open it.
+- **Closing a tab with changes** shows "Saving changes…" and waits — ten
+  seconds at most — for them to reach the Office server, asks it to save,
+  and then closes. Switching company closes that company's documents.
+- **Version history** beside the document: download a version, restore
+  one as the current version (everyone in the document is offered it).
+- **In the editor**: rename (the file in Drive, and the title for everyone
+  in it), Share, mentions in comments (the server tells the people you
+  mention who can open the document, and offers to share it with those
+  who cannot — a mention never shares it), Edit from a read-only document.
+- **+ New → Document, Spreadsheet, Presentation** make the file on the
+  server ("Untitled Document.docx"…) and open it for editing; **From a
+  template…** lists your company's templates and WorkSuite's.
+- **Convert & Edit** for DOC, XLS and PPT: "This legacy file will be
+  converted to DOCX for editing." — a new file beside the original, which
+  stays as it is; or View Only.
+- **Open in Microsoft Word / Excel / PowerPoint** (where installed) or the
+  **default app**, from the file menu or the tab. A file Drive sync keeps
+  on this computer opens where sync keeps it, and sync takes the changes
+  back. Any other file is downloaded (it shows in Transfers) and watched:
+  when you save it there, Files and the document's tab offer **Upload as
+  new version**. If Drive has moved on meanwhile: "The cloud file changed
+  while you were editing." — **Keep Both**, **Review**, **Upload as New
+  Version** or **Cancel**. Nothing goes back without you, and nothing newer
+  is overwritten.
+
+**Works offline**
+
+- An Office file offline says so: "You're offline. This file is available
+  on this device." with **Preview** (macOS Quick Look) and **Open in
+  External App** when a copy is here — synced, or opened in another app
+  before — and "WorkSuite Office editing requires a connection." There is
+  no Office editing offline; the tab opens by itself when WorkSuite is
+  back. Files still knows how to route Office files offline (the server's
+  formats are kept with Files' offline answers).
+
+**Security**
+
+- The editor runs in a view of its own, in its own process and in an
+  in-memory storage partition per company — cleared when the company's last
+  document closes, at sign-out and when quitting. Its page can reach the
+  configured Document Server and nothing else of the network, cannot
+  navigate away, has no access to WorkSuite's API or your sign-in, and
+  talks to the app through a four-function bridge whose every message is
+  checked. Links from documents open in your browser after the usual
+  check. The editor's own "Download as" is off; documents leave through
+  the tab's Download and Export. See docs/SECURITY.md.
+- While the editor has the keyboard, its shortcuts are its own: ⌘/Ctrl+K
+  inserts a link rather than opening Search, ⌘/Ctrl+L aligns left rather
+  than locking WorkSuite. Closing and opening tabs still work.
+
+**Where it bites**
+
+- **Not yet tried against a real Document Server.** Everything here is
+  built to the server's contract and unit-tested with the editor faked;
+  loading ONLYOFFICE's editor into the desktop's own page, printing from
+  it, and co-editing with the web need a server to confirm.
+- A Document Server must be served over HTTPS for the desktop (plain HTTP
+  only on this computer, in a development build). The desktop refuses to
+  load the editor from anywhere else, with that sentence.
+- The editor's @mention list fills only as you type, and only with an
+  editor that sends what was typed; otherwise mention people by address
+  (the server needs two letters to search).
+- A menu, dialog or the command palette hides the document while it is open
+  (the editor is a native view and would cover them). Toasts and minimised
+  chats can sit under the editor.
+- A tab torn off into its own window, or docked back, opens the document
+  again there (a new session on the same document; nothing is lost).
+  Closing such a window does not wait for unsent changes the way closing a
+  tab does; the Office server keeps what it has.
+- A Keep Both copy made from the document's tab goes to the top of My
+  Drive (the server does not say which folder the document is in); from
+  Files it goes beside the original.
+- An edited copy goes back in one request, so a copy larger than the
+  server's upload limit cannot go back with the conflict check.
+- Word, Excel and PowerPoint are offered only where they are installed in
+  the usual place (macOS Applications, Windows' App Paths); Linux offers
+  the default app.
+- A server without the Office API keeps the old way: Office files open in
+  the web's editor in your browser.
+
+---
+
+## 2026-09-29 — 0.2.54: Hotel PMS at the front desk
+
+Hotel PMS opens in its own tab for whoever has the app (and `pms.access`),
+over the server's `/api/pms/v1`: the front desk, the cashier and the night
+audit of a hotel (PMS-DSK-001). What each person sees is what the server
+says they may do — the rail, the rack's quick actions, every button. Money,
+prices, availability, taxes, balances and the business date are the
+server's; the desktop writes them as they come, and shows a refusal in the
+server's own sentence. The back office — rates, rooms and room types,
+packages, taxes, reports, settings and the set-up wizard — is on the web
+("Back office on the web" in the rail).
+
+**Added**
+
+- **A property selector** in the rail (kept on this computer; a record of
+  another property moves it), with the property's **business date** — "today"
+  for the desk until the night audit moves it on.
+- **Room rack** (PMS-FD-001…005): every room by building and floor with the
+  server's status badge — colour, icon and words — the counts by status (a
+  click filters), and filters by building, floor, room type, housekeeping
+  status, VIP and due in/out. A click opens the room's quick actions as the
+  server lists them for you: new reservation, walk-in, block room (the
+  reservations on it named, to move), report a fault, view room; for an
+  occupied room also open folio, post charge, room move, check-out and extend
+  stay. The arrivals, departures and in-house lists are one click away. It
+  follows the house: the server's live nudges refresh it, and it asks again
+  every half minute.
+- **Arrivals** with each room's readiness (a number, in service, empty,
+  clean or inspected) and the guest's ID, deposit and requests; **Assign
+  rooms** for the day (VIPs first) or one room at a time from the server's
+  candidates — another type is an upgrade or a downgrade, complimentary or
+  paid. **Departures** and **In house**, with the registration cards of the
+  day's arrivals printed in one go.
+- **Check-in** (PMS-CKI-001…005, AC-06): the quick screen — rooms, readiness,
+  flagged preferences, ID and guarantee ticks, the early check-in offer,
+  cash-only, keys per room — and one button (**Alt+I**). A room that is not
+  ready is refused unless someone who may override gives a reason; the
+  server's refusal is shown as it is. Several rooms check in together or one
+  by one. Then the keys (the property's door-lock system), and the
+  **registration card**: printed, or signed on the screen (or a signature
+  pad) and kept as the guest's document.
+- **Walk-in** (PMS-WLK-001/002) on one screen: how long, what is free
+  tonight at what price (a rate not on offer says why), the guest, the room
+  (or the best ready one), a payment if there is one — checked in with one
+  press.
+- **Reservations**: the property's list by status, and **search** across the
+  properties you reach by guest name, email or phone, confirmation number,
+  channel reference or room (**Alt+F**). A reservation's page: the rooms and
+  their prices night by night, the moves the server offers you from its
+  status, cancel (the plan's fee, or waived by someone who may), change dates
+  and requests, assign rooms, the deposit (take, waive, refund), its history.
+- **New reservation** (PMS-RSV-010, AC-01, AC-03): availability for the
+  stay with every rate's price or the server's reasons, the guest found or
+  added — "Possible existing guest found" when the details match someone
+  (AC-05) — the details, and one booking per press; a restriction is booked
+  through only by someone who may, with a reason. **Alt+N** (and Ctrl/⌘+N).
+- **A guest in house**: the stay (key, ID, card, what the room may be
+  charged), **room move** (the old room goes to housekeeping; a paid or
+  complimentary upgrade; a room not ready only with the override),
+  **extend or shorten**, **keys** (issue, revoke, ask the lock system),
+  **charges to the room** and the credit limit, **split folio** and
+  **routing** of charge types to another folio.
+- **Folios** (§10): lines with their taxes, payments, totals and the tax
+  summary; **post a charge** (**Alt+P**), void a line of today, adjust or move
+  a line with a reason, **take a payment** (card by the slip's reference and
+  last four digits — never a card number), refund, void a waiting payment,
+  settle, reopen, move a company's balance to its account, raise the
+  invoice, **print** the receipt, invoice or statement.
+- **Check-out** (PMS-CKO-001…003): each room in house with its folios, the
+  mini bar still to be charged, the deposit to apply, late check-out, an
+  early departure, the company's balance to its account; the folios that
+  still owe named when the server refuses; the invoices or receipts after,
+  to print.
+- **Cashier** (§10.7): open a shift at this terminal with the opening cash,
+  what it took by method, close it by counting the drawer (a variance within
+  the property's allowance reconciles itself; beyond it someone else
+  approves it with a reason), the shift's payments, its printed report.
+- **Night audit** (§13.1, AC-10, AC-11): the business date, the checks with
+  their counts, each blocker with a way to its record and — for the general
+  manager — an override with a reason; **Run** once nothing is open, the ten
+  steps as they go, a failed step in the server's words and **Resume**; the
+  report (occupancy, ADR, RevPAR, revenue, taxes, payments, movements) on
+  screen and printed, and earlier audits.
+- **Housekeeping** as the desk reads it: every room's housekeeping status
+  beside its front-office status, and the day's cleaning tasks.
+- **Guests**: lookup across guests and CRM contacts, a guest's profile,
+  reservations and documents (identification only for people who may see
+  it), a document added from this computer.
+- **Guest requests**: take one for a room, and move the open ones on.
+- **Dashboard**: the server's widgets on the business date, each opening its
+  list.
+- **Desk devices** (PMS-DSK-002): the device agent seam — ID scanner, key
+  encoder, registration-card and receipt printer, signature pad, cash drawer,
+  card terminal — with the "no device" providers and this computer's own
+  printing for cards and receipts. No vendor driver ships.
+- **Windows** (PMS-DSK-004): the rack, a reservation, a stay or a folio in a
+  window of its own — the rack on one screen, a reservation on another.
+- `worksuite://pms`, `worksuite://pms/reservations/<id>` and
+  `worksuite://pms/rooms/<id>`; the server's notifications
+  (`/pms/reservations/<id>`, `/pms/folios/<id>`, `/pms/rooms/<id>`,
+  `/pms/front-desk?arrivals=`, `/pms/night-audit`, `/pms/cashier/<id>`,
+  `/pms/requests/<id>`…) open their screen in the tab; notices of category
+  `pms` show only to people who have the app.
+
+**Works offline** (PMS-DSK-003)
+
+- The room rack, the arrivals, departures and in-house lists, the property
+  list and its options are kept (READ_CACHE, per property) and shown with a
+  clear banner when WorkSuite cannot be reached.
+- Nothing is queued: check-ins, walk-ins, new bookings, charges, payments,
+  refunds and the night audit wait for WorkSuite, so no room or payment is
+  taken against what this computer cannot see. Money is not kept for offline
+  reading, and balances are hidden on the rack while offline.
+
+**Where it bites**
+
+- The desk's hardware is the seam only: without a vendor driver, keys follow
+  the property's door-lock system on the server (or are handed over by hand),
+  the guest signs on the screen, and a card taken on a standalone terminal is
+  recorded with the slip's reference and last four digits.
+- Registration cards print once a guest is checked in: the server's card is
+  a stay's, so cards cannot be printed ahead for the day's arrivals.
+- Check-out needs "See folios" as well as "Check guests out" (the server's
+  rule: the folios are the check-out).
+- A cashier who may post charges but not read reservations types the charge
+  code (the server lists charge codes to rate managers and reservation
+  readers).
+- On a Mac, Option+letter in a text field types its character (ñ, é…); the
+  desk's shortcuts work anywhere else on the screen.
+- The tape-chart calendar, rates, rooms, packages, taxes, reports and
+  settings are the web's.
+
+---
+
+## 2026-09-29 — 0.2.53: eLearning on the desktop
+
+eLearning opens in its own tab for whoever has the app (and
+`elearning.access`), over the server's `/api/elearning/v1` — learners take
+their courses here, and the training team builds, reviews, publishes,
+assigns and grades them here. Nothing in eLearning sends you to the web.
+What each person sees is what the server says they may do: the rail, the
+buttons and each course's actions follow its `can`.
+
+**Added**
+
+- **My Learning**: assigned, in progress, completed, overdue and waiting
+  for approval; Continue learning with Resume (the lesson you left); upcoming
+  deadlines; the quizzes and assignments still open; courses waiting for
+  approval; recommendations with the server's reason; what you completed.
+- **Course catalogue**: search by title, code, summary or category, with
+  category, level, type and length filters; a course's page with its outline,
+  what completes it and places left; **Join** (open courses), **Ask to
+  join** (courses that need approval, to your manager) or the server's
+  reason why not; take a request back.
+- **Taking a course**: the outline with each lesson's progress and, for a
+  locked lesson, why (release date, a lesson to finish first); the
+  completion rule as a checklist; Start / Resume. Lessons:
+  - **Video and audio** resume where you stopped, at 0.5×–2×, with the
+    server's captions, full screen and picture-in-picture. **Only what is
+    actually played counts**: the player reports the ranges played every 15
+    seconds and whenever playback stops; skipping ahead plays nothing, and
+    the server credits no faster than time allows (it says so when it
+    trims a claim).
+  - **Articles** count as read at the end (with the time spent, counted on
+    the server); **PDFs** count each page shown; images and documents open
+    in the app's viewer; **links** open in your browser.
+  - **Mark complete** where that is the lesson's rule; Previous / Next,
+    also **Alt+←** / **Alt+→**; **Save a copy** where the lesson allows
+    downloading (through the download manager).
+  - **Open in a window**: take the course beside your work.
+  - **Leave the course** (an optional course you joined yourself, where the
+    company allows it).
+- **Quizzes**: the rules, your attempts and the best score (as the quiz
+  shows it), start or carry on; every question type — single and multiple
+  choice, true/false, short answer, fill in the blanks, number, matching,
+  ordering (up/down, keyboard), long answer and files from Drive. Each answer
+  is saved as it is given; **the time left is the server's**; a quiz that
+  times out is submitted as it stood. Results: the score, passed or not, and
+  the answers and explanations as far as the quiz shows them. Learners never
+  receive the key before submitting.
+- **Assignments**: the brief, the due date that holds for you, attempts
+  left; hand in text and files — from Drive, or from this computer (up to
+  25 MB together) — as a draft or for grading; late work marked or refused as
+  the assignment says; grades and feedback.
+- **Kept offline** (see below): the courses on this computer.
+- **For the training team** (by permission, or as a course's instructor,
+  author or evaluator, or a line manager):
+  - **Training dashboard**: the ten KPIs (a later phase's are "Later", never
+    zero), completions over six months, learning progress, popular and
+    recently completed courses, daily learner activity, grading by
+    instructors.
+  - **Courses**: by status, type or search, or only yours; **New course**
+    with the code the server offers from the category.
+  - **A course**: its lifecycle — submit for review (with a note), recall,
+    approve or return (with a comment), publish now or later, suspend (with
+    a reason), resume, archive, reopen as a new version, duplicate, delete a
+    never-published draft — with the server's list of what stops it (every
+    problem, and the set-up when that is it). **Details** (type, level,
+    language, enrolment and visibility — later phases' choices named, not
+    offered — dates, due days, places, pass score, weighting, certificate,
+    and the **completion rule**: every or any of mandatory lessons, a
+    progress, passing an assessment, completing an assignment), saved with
+    the revision it was read at: someone else's change is offered, never
+    overwritten. **Staff**, **Activity** (the audit), **Preview as a
+    learner** (nothing recorded).
+  - **The builder**: sections and lessons **dragged** into place (or moved
+    with their arrows), across sections too, every move sent with the
+    revision; add, edit, duplicate, hide, unpublish, delete; each lesson's
+    type, file from Drive (with Drive's preparing/failed state), text, link,
+    quiz or assignment, completion rule and its settings, mandatory,
+    duration, release date, prerequisite, downloading allowed; preview.
+  - **Assessments**: settings (pass mark, timer, attempts, cooldown, what
+    counts, when answers show, shuffling, negative marking, window, due,
+    final) and questions of every type with their key, reordered; the
+    attempts. Editing a question someone answered keeps that version.
+  - **Assignments**: the brief, marks, pass score, file types and sizes,
+    attempts, late work and penalty; the submissions.
+  - **Enrolments**: a course's learners, or everyone you follow; **Assign
+    learners** by person, whole departments, branches or a list of e-mails
+    or employee numbers — previewed first (new, already there, blocked,
+    outside your reach, not found), then assigned once — with a due date,
+    mandatory and a note. An **enrolment's page**: lesson by lesson, the
+    rule's checklist, the history; due date and mandatory, **extension or
+    extra attempts**, **mark complete**, **reset**, **withdraw** (each with
+    its reason, audited).
+  - **Requests to join** (approve, or decline with a reason), **Learners**
+    (most overdue first) and a learner's courses, **Reviews** waiting for
+    you.
+  - **Grading**: the queue, oldest first, never your own work; grade a
+    quiz's answers that need a person, or a submission (take it for review,
+    score, feedback, ask for it again); changing a grade asks why. Any of them
+    opens in a window of its own.
+  - **Set-up wizard** (the fourteen default categories in one step) and
+    **Settings** (the company's eLearning settings).
+- `worksuite://elearning`, `worksuite://elearning/courses/<id>` and
+  `worksuite://elearning/catalog/<id>`; the server's notifications
+  (`/elearning/my/courses/<id>`, `/elearning/grading`, `/elearning/approvals`,
+  `/elearning/learners/<id>`…) open their screen in the tab.
+
+**Works offline**
+
+- My Learning, the catalogue, your courses' outlines and the lessons you have
+  opened show their last copy when WorkSuite cannot be reached.
+- **Courses kept for offline learning.** **Keep offline** on a course takes
+  the lesson files the server's download manifest lists through the download
+  manager (they show in Transfers, and pause and resume there) into
+  WorkSuite's own profile, encrypted, and they play from there without
+  WorkSuite. They are never saved to your downloads folder, opened in another
+  app or shown in a folder, whether or not the lesson allows downloading.
+- Progress made offline (a kept video played, an article read) waits in the
+  offline queue and is sent when WorkSuite is back; the server credits it
+  against the time since the course was downloaded.
+- Every other change needs WorkSuite: the buttons wait for it.
+
+**Where it bites**
+
+- A kept course goes when the server says the learning ended (you left or
+  were withdrawn, the course was suspended or archived, the company turned
+  offline copies off), when its licence — the course's end date — runs out
+  (online or not), when this computer's policy forbids offline data, when
+  the app is taken away, and on a sign-out that removes WorkSuite's data.
+- A kept course is checked with WorkSuite at sign-in and on reconnecting. The
+  addresses in a download manifest are good for about an hour: a download
+  that stops for longer asks for **Download again**.
+- Word, Excel and PowerPoint lessons cannot be shown inside the app (the
+  server sends the original file only); where the lesson allows downloading
+  they can be saved, and a "view the pages" rule on them cannot be met from
+  the desktop.
+- Video plays the server's browser-playable version; there is no quality
+  choice yet (the adaptive rendition needs an HLS player in the app).
+- Files from this computer for an assignment go through the desktop's API
+  proxy, 25 MB a submission; put larger ones in Drive and choose them there.
+- Offline, reading time is not counted — only reaching the end of an
+  article, the pages of a PDF and the parts of a video played are kept for
+  WorkSuite. An article with a minimum reading time completes once it is
+  read online.
+
+**Not in eLearning yet** (later phases on the server)
+
+- Certificates, live classes, learning paths and programs, compliance rules,
+  the content library and question bank, transcripts, report exports.
+
+---
+
+## 2026-09-29 — 0.2.52: all of Garage on the desktop
+
+Everything the server's Garage does now happens in the Garage tab: check-in
+with photos and the customer's signature, the inspection, diagnosis and
+estimate, the work, quality check, road test, invoice and handover, vehicles
+and customers, reports, the workshop, the set-up wizard and the settings.
+Nothing in Garage sends you to the web any more. Printed documents — the
+check-in sheet, an estimate, a work order sheet, the delivery note — and
+report exports go through the download manager and show in Transfers.
+
+**Added**
+
+- **Check-in** (opens from the job card, and straight after a walk-in for
+  whoever checks vehicles in): odometer and fuel, what the customer says,
+  what is left in the vehicle and any valuables, the condition of every area
+  with "mark the rest good", damage on the diagram, photos in their slots —
+  dropped on the window, chosen, or taken with the camera — and the
+  customer's signature last. The bar at the bottom lists what the server
+  still wants; a reading lower than the last one asks why, for someone who
+  may accept it. A change after signing clears the signature and says so.
+  Once complete: the check-in sheet (view or save), and "Email it again".
+- **The job card is a Job 360°**, with the tracker and tabs:
+  - **Check-in**: readings, condition, damage, photos and the signature.
+  - **Inspection**: start from the suggested template; each light is saved
+    as it is tapped, measurements and notes when the field is left; photos
+    per item; what the customer sees, for someone who may publish; complete,
+    then the recommendations to leave for later, decline or reopen.
+  - **Diagnosis**: a finding for every complaint (no fault found counts),
+    cause, repair, labour, urgency and parts from Inventory; fault codes as
+    read; sign-off where the company asks for it.
+  - **Estimate**: every version; labour, parts, services and other lines
+    priced by the server, with availability and who pays; recommendations in
+    one step; send (the customer's link shown once, to copy into WhatsApp);
+    discount approval; the decision given by phone, in person (signed) or by
+    email, line by line; changes asked; the next version; print.
+  - **Work**: each work order's people, bay and time; Start and Pause for
+    the technician — or, for someone who assigns work, for each technician
+    on it — Complete, Found more work, People with suggestions, Bay with a
+    slot, Cancel with a reason, and the work order sheet; parts with the
+    counter's actions; additional work priced for the customer; every labour
+    entry, with corrections that keep the original; removed parts.
+  - **Quality & delivery**: the quality check item by item, pass, or fail
+    with the work that goes back; the road test; the final review and Mark
+    ready; the invoice and payment, for people who handle money; credit
+    terms; the handover with the customer's signature, and the delivery note.
+  - **Media**: photos, videos and PDFs, dropped, chosen or from the camera;
+    shown to the customer or not; removed.
+  - **Activity**: the job's timeline.
+  - **Edit** (priority, type, promised time, advisor, what was asked for),
+    and notes that someone who may publish shows to the customer or hides.
+- **Vehicles** and the **Vehicle 360°**: the owner and earlier owners,
+  where it is now, the mileage history, the service history with the work,
+  parts, technicians, invoice and the workmanship warranty on each job,
+  insurance and warranty, photos, notes and activity. Edit, record a
+  reading, transfer to a new owner, add a note, start a new job.
+- **Customers**: CRM's customers who have a vehicle or a job here, with what
+  they owe (for people who may see money), how they like to be reached,
+  their vehicles, their service history across every vehicle, and credit
+  terms for people who manage Garage.
+- **Reports**: job aging, technician work, estimate against actual, quality
+  and rework, parts consumption, and — for people who may see money —
+  revenue and job profitability, by date and branch; CSV for people who may
+  export.
+- **Workshop**: the bay board (each bay's vehicle, job and status, set by
+  someone who assigns work), branches and their parts warehouse, the
+  technician roster from HR, labour rates, service types, makes and models,
+  and inspection templates.
+- **Set-up wizard** and **Settings** (the company's Garage settings). People
+  who manage Garage land on the wizard until the company is set up; everyone
+  else is told it is being set up.
+- **Overview**: waiting for parts, delivered today and bays available.
+
+**Changed**
+
+- **The rail** has Vehicles, Customers, Reports, Workshop, Set-up wizard and
+  Settings in the app; "On the web" is gone.
+- `worksuite://garage/vehicles/<id>` and `/garage?vehicle=<id>` open the
+  Vehicle 360°; `/garage?checkin=<id>` opens the check-in; `&jt=` picks a
+  job card's tab.
+- **A new walk-in** opens its check-in.
+
+**Fixed**
+
+- The job card offered "Cancelled" as a move beside Cancel the job; the move
+  was refused without a reason. Cancelling is now only Cancel the job, which
+  asks why.
+- The job card offered "The customer may see it" on a note to people who
+  may not publish, whose note the server then refused. It is offered to
+  people who may publish; others add staff notes.
+
+**Works offline**
+
+- Job cards (with the tabs opened), vehicles, customers and the workshop now
+  open from their last copy when WorkSuite cannot be reached, beside the
+  overview, the board and My work. A bar says the screen is the last copy.
+- Every other change needs WorkSuite: the buttons wait for it. A
+  technician's Start and Pause, on My work or the Work tab, are still kept
+  with the moment they were pressed and sent when it is back.
+
+**Where it bites**
+
+- Documents are pages WorkSuite prints, saved as `.html` and opened in your
+  browser to read or print; the server does not make PDFs of them.
+- Uploads over 25 MB cannot pass the desktop's API proxy: add long videos
+  from the web or a phone.
+
+**Not in Garage yet** (the server does not have them)
+
+- Revenue today, technicians working, today's appointments and service
+  reminders on the overview; role dashboards; the TV board.
+- Sending the check-in sheet or the estimate by WhatsApp from WorkSuite
+  (copy the estimate's link instead), and a customer portal.
+- Appointments, service packages, reminders, warranty claims, customer
+  opt-outs per channel, and the workshop calendar.
+
+---
+
 ## 2026-09-29 — 0.2.52: Tenders — meeting minutes open on Mac and Windows
 
 **Fixed**

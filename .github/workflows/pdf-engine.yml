@@ -1,0 +1,61 @@
+# PDF Studio's engine on real systems (PDF Studio SRS §3.4, §24): the built
+# pdf-worker in Electron's utility process on Windows, macOS and Linux — a
+# 2,000-page PDF against the first-page target, a 400 % tile, a cancelled
+# search, active content found, a killed worker contained, and a print job
+# laid out from memory (printed to a PDF: runners have no printer). Runs when
+# the engine, its worker or this check change.
+name: PDF engine
+
+on:
+  push:
+    paths:
+      - electron/services/pdf/**
+      - electron/workers/pdf-worker.ts
+      - shared/pdf.ts
+      - tests/os/pdf/**
+      - package-lock.json
+      - .github/workflows/pdf-engine.yml
+  pull_request:
+    paths:
+      - electron/services/pdf/**
+      - electron/workers/pdf-worker.ts
+      - shared/pdf.ts
+      - tests/os/pdf/**
+      - package-lock.json
+      - .github/workflows/pdf-engine.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pdf-engine-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  engine:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-14, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: A display
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          Xvfb :99 -screen 0 1600x900x24 -nolisten tcp &
+          sleep 1
+      - name: Check
+        run: node tests/os/pdf/check.mjs
+        env:
+          DISPLAY: ':99'
