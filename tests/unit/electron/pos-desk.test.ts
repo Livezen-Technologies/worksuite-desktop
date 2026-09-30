@@ -30,7 +30,15 @@ function desk(over: { request?: (...a: unknown[]) => Promise<unknown>; raw?: (..
   const raw = vi.fn(over.raw ?? (async () => new Response(JSON.stringify({ status: 'success', message: 'OK', terminal: { ...TERMINAL, warehouse_name: 'Back store' } }), { headers: { 'Content-Type': 'application/json' } })));
   const d = new PosDesk({
     secrets: s,
-    http: { request, raw, url: (p: string) => `https://ws.example${p}` } as never,
+    http: {
+      request,
+      raw,
+      url: (p: string, q?: Record<string, unknown>) => {
+        const u = new URL(p, 'https://ws.example');
+        for (const [k, v] of Object.entries(q ?? {})) if (v !== undefined) u.searchParams.set(k, String(v));
+        return u.toString();
+      },
+    } as never,
     origin: over.origin ?? (() => 'https://ws.example'),
     installId: () => 'install-1',
     device: () => ({ name: 'COUNTER-PC', info: 'WorkSuite Desktop on windows' }),
@@ -94,6 +102,24 @@ describe('POS till: the credential stays in the main process', () => {
     expect(JSON.parse(String(init.body))).toEqual({ app_version: 'desktop 0.2.64', pending_count: 3 });
     // The heartbeat's answer updates what the till is (its warehouse was changed on the web).
     expect(d.pairing()?.terminal.warehouse_name).toBe('Back store');
+  });
+
+  it('reads the catalogue and a sale’s receipt through the door, and sends the credential nowhere else', async () => {
+    const { d, raw } = desk();
+    await d.pair(7, false);
+    await d.door('GET', 'catalogue', { query: { since_version: 'abc' } });
+    await d.door('GET', `sales/${encodeURIComponent('T1-AAAAAA-000001')}/receipt`);
+    await d.door('POST', 'sales/T1-AAAAAA-000001/refund', { body: { ref: 'T1-AAAAAA-000001-R1', cashier_id: 5, reason: 'Broken' } });
+    const calls = raw.mock.calls as unknown as Array<[string, string, RequestInit]>;
+    expect(calls.map(([m, u]) => `${m} ${u}`)).toEqual([
+      'GET https://ws.example/api/pos/device/catalogue?since_version=abc',
+      'GET https://ws.example/api/pos/device/sales/T1-AAAAAA-000001/receipt',
+      'POST https://ws.example/api/pos/device/sales/T1-AAAAAA-000001/refund',
+    ]);
+    expect(calls[0]![2].body).toBeUndefined();
+    expect((calls[0]![2].headers as Record<string, string>)['Content-Type']).toBeUndefined();
+    expect(JSON.parse(String(calls[2]![2].body))).toMatchObject({ cashier_id: 5 });
+    for (const path of ['../terminals/7/pair', 'sales/x/../../x', 'setup', 'sales/A/delete']) await expect(d.door('GET', path)).rejects.toMatchObject({ code: 'INTERNAL' });
   });
 
   it('drops a credential the server refuses, keeping which till it was', async () => {

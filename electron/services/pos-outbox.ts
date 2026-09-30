@@ -7,7 +7,8 @@ import type { PosSale } from '@shared/pos';
  * (`{sales: [...]}`, at most `BATCH` at a time) with the till's credential. The sale's receipt number is its `ref`:
  * WorkSuite keys a till's sales by (channel, ref), so a sale sent twice — the answer lost, the app restarted mid-send
  * — is answered "already had" the second time and recorded once. The server answers each sale on its own: created,
- * already had, or refused with the reason. Created and already-had are done; a refused sale stays, with WorkSuite's
+ * already had, or refused with the reason — and, for a sale it priced again, its own `total` and a `review` note when
+ * the till charged something else (kept on the sale, shown in Sales). Created and already-had are done; a refused sale stays, with WorkSuite's
  * sentence, until a person sends it again or drops it; one the server did not mention is tried again.
  *
  * The status code says what to do with the rest (`Pos\Controllers\DeviceController`): 401 the credential is dead
@@ -27,6 +28,10 @@ export interface DeviceSaleResult {
   status: 'created' | 'duplicate' | 'rejected';
   number: string | null;
   message: string | null;
+  /** WorkSuite's own total for the sale (priced again where every line named its product). */
+  total?: number | null;
+  /** Set when the till's total disagreed with WorkSuite's: the sale stands, flagged for somebody to look at. */
+  review?: string | null;
 }
 
 export type Verdict =
@@ -96,7 +101,14 @@ export function readAnswer(status: number, body: Record<string, unknown> | null)
       const o = r as Record<string, unknown>;
       const st = o.status === 'created' || o.status === 'duplicate' || o.status === 'rejected' ? o.status : null;
       if (typeof o.ref !== 'string' || !st) continue;
-      results.push({ ref: o.ref, status: st, number: typeof o.number === 'string' ? o.number : null, message: typeof o.message === 'string' ? o.message : null });
+      results.push({
+        ref: o.ref,
+        status: st,
+        number: typeof o.number === 'string' ? o.number : null,
+        message: typeof o.message === 'string' ? o.message : null,
+        ...(typeof o.total === 'number' && Number.isFinite(o.total) ? { total: o.total } : {}),
+        ...(typeof o.review === 'string' && o.review.trim() ? { review: o.review.trim().slice(0, 300) } : {}),
+      });
     }
     return { kind: 'results', results };
   }
@@ -128,7 +140,19 @@ export function apply(sent: Queued[], results: DeviceSaleResult[], now: string):
     if (r.status === 'created' || r.status === 'duplicate') {
       if (r.status === 'created') created++;
       else duplicates++;
-      updated.push({ ...q, sale: { ...q.sale, state: 'sent', number: r.number ?? q.sale.number, message: null, sent_at: now, attempts: q.sale.attempts + 1 } });
+      updated.push({
+        ...q,
+        sale: {
+          ...q.sale,
+          state: 'sent',
+          number: r.number ?? q.sale.number,
+          message: null,
+          sent_at: now,
+          attempts: q.sale.attempts + 1,
+          server_total: r.total ?? q.sale.server_total ?? null,
+          review: r.review ?? q.sale.review ?? null,
+        },
+      });
     } else {
       const sale: PosSale = { ...q.sale, state: 'refused', message: r.message ?? 'WorkSuite would not record this sale.', attempts: q.sale.attempts + 1 };
       refused.push(sale);

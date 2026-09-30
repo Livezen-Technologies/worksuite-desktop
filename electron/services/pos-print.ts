@@ -1,4 +1,4 @@
-import type { PosPrintOutcome, PosPrintPatch, PosPrintSettings, PosReport, PosSale } from '@shared/pos';
+import type { PosPrintOutcome, PosPrintPatch, PosPrintSettings, PosReport, PosSale, PosServerReceipt } from '@shared/pos';
 import { DesktopError } from '../main/errors';
 import { drawerPulse, printInWindow, sendRaw, type PrintJob, type PrintResult } from './salon-print';
 
@@ -19,8 +19,10 @@ import { drawerPulse, printInWindow, sendRaw, type PrintJob, type PrintResult } 
  *  - `driver`: the receipt laid out as a page — every character escaped, no script, no network, the salon's hidden
  *    print window — and printed silently through the printer's own driver; the drawer is pulsed after it.
  *
- * What is printed is the till's own record of the sale (pos-till.ts): WorkSuite's figures when it priced the cart,
- * the catalogue's preview — marked "provisional" — when it could not be reached. Settings are this computer's, filed
+ * A reprint is WorkSuite's receipt (`device/sales/{ref}/receipt`: its figures after pricing an offline sale again, its
+ * order and invoice numbers, refunds and a void) where the server has it; otherwise, and for the receipt printed as the
+ * sale completes, the till's own record of the sale (pos-till.ts): WorkSuite's figures when it priced the cart, the
+ * catalogue's preview — marked "provisional" — when it could not be reached. Settings are this computer's, filed
  * under the server (which printers are plugged in is a fact about this computer); a wipe forgets them.
  */
 const KEY = 'pos-print';
@@ -99,6 +101,51 @@ export function receiptRows(sale: PosSale, s: Pick<PosPrintSettings, 'header' | 
     rows.push({ kind: 'text', text: 'Provisional: priced offline. WorkSuite confirms the figures.', align: 'center' });
   }
   const foot = lines(s.footer);
+  if (foot.length) rows.push({ kind: 'rule' });
+  for (const l of foot) rows.push({ kind: 'text', text: l, align: 'center' });
+  return rows;
+}
+
+const STATUS: Record<string, string> = { voided: '*** VOIDED ***', refunded: '*** REFUNDED ***', part_refunded: '*** PART REFUNDED ***' };
+
+/** WorkSuite's receipt for a sale (`Receipt::data`), laid out the same way; the till's header and footer around it. */
+export function serverReceiptRows(r: PosServerReceipt, s: Pick<PosPrintSettings, 'header' | 'footer'>, o: { till: string | null; reprint?: boolean } = { till: null }): ReceiptRow[] {
+  const rows: ReceiptRow[] = [];
+  const head = lines(s.header);
+  if (head.length) for (const l of head) rows.push({ kind: 'text', text: l, align: 'center', bold: rows.length === 0 });
+  else if (r.company.name) {
+    rows.push({ kind: 'text', text: r.company.name, align: 'center', bold: true });
+    for (const l of [r.company.address, r.company.phone, r.company.tax_number ? `Tax no. ${r.company.tax_number}` : null]) if (l) rows.push({ kind: 'text', text: l, align: 'center' });
+  }
+  if (o.reprint) rows.push({ kind: 'text', text: '*** COPY ***', align: 'center', bold: true });
+  if (STATUS[r.status]) rows.push({ kind: 'text', text: STATUS[r.status]!, align: 'center', bold: true });
+  rows.push({ kind: 'rule' });
+  rows.push({ kind: 'pair', left: 'Receipt', right: r.receipt_no });
+  if (r.invoice_number) rows.push({ kind: 'pair', left: 'Invoice', right: r.invoice_number });
+  else if (r.order_number) rows.push({ kind: 'pair', left: 'Order', right: r.order_number });
+  rows.push({ kind: 'pair', left: r.at ?? '', right: o.till ?? r.register ?? '' });
+  if (r.cashier) rows.push({ kind: 'pair', left: 'Cashier', right: r.cashier });
+  if (r.customer?.name) rows.push({ kind: 'pair', left: 'Customer', right: r.customer.name });
+  rows.push({ kind: 'rule' });
+  for (const l of r.lines) {
+    rows.push({ kind: 'text', text: l.description });
+    rows.push({ kind: 'pair', left: `  ${qty(l.quantity)} x ${money(l.unit_price)}${l.discount_pct ? ` -${l.discount_pct}%` : ''}`, right: money(l.amount) });
+  }
+  rows.push({ kind: 'rule' });
+  rows.push({ kind: 'pair', left: 'Subtotal', right: money(r.totals.subtotal) });
+  if (r.totals.discount) rows.push({ kind: 'pair', left: 'Discount', right: `-${money(r.totals.discount)}` });
+  if (r.taxes.length) for (const t of r.taxes) rows.push({ kind: 'pair', left: `Tax ${t.name}`, right: money(t.amount) });
+  else rows.push({ kind: 'pair', left: 'Tax', right: money(r.totals.tax) });
+  rows.push({ kind: 'pair', left: 'TOTAL', right: money(r.totals.total, r.currency), bold: true });
+  rows.push({ kind: 'rule' });
+  for (const t of r.tenders) rows.push({ kind: 'pair', left: `${t.label}${t.reference ? ` (${t.reference})` : ''}`, right: money(t.amount) });
+  if (r.change) rows.push({ kind: 'pair', left: 'Change', right: money(r.change), bold: true });
+  if (r.refunds.length) {
+    rows.push({ kind: 'rule' });
+    for (const x of r.refunds) rows.push({ kind: 'pair', left: `${x.kind === 'void' ? 'Void' : 'Refund'} ${x.ref}`, right: `-${money(x.amount)}` });
+    if (r.void_reason) rows.push({ kind: 'text', text: r.void_reason });
+  }
+  const foot = lines(s.footer || r.footer);
   if (foot.length) rows.push({ kind: 'rule' });
   for (const l of foot) rows.push({ kind: 'text', text: l, align: 'center' });
   return rows;
@@ -274,6 +321,11 @@ export class PosPrint {
   receipt(sale: PosSale, installed: string[], o: { till: string | null; reprint?: boolean; kick?: boolean }): Promise<PosPrintOutcome> {
     const s = this.settings();
     return this.out(receiptRows(sale, s, { till: o.till, reprint: o.reprint }), installed, { kick: o.kick, copies: o.reprint ? 1 : s.copies });
+  }
+
+  /** WorkSuite's receipt for a sale (a reprint). */
+  serverReceipt(r: PosServerReceipt, installed: string[], o: { till: string | null; reprint?: boolean }): Promise<PosPrintOutcome> {
+    return this.out(serverReceiptRows(r, this.settings(), o), installed, { copies: o.reprint ? 1 : this.settings().copies });
   }
 
   report(r: PosReport, installed: string[]): Promise<PosPrintOutcome> {

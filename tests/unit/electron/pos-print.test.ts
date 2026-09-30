@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({ BrowserWindow: class {} }));
 
-import type { PosSale } from '@shared/pos';
-import { COLUMNS, escpos, pairLine, plain, PosPrint, receiptHtml, receiptRows, reportRows, type ReceiptRow } from '../../../electron/services/pos-print';
+import type { PosSale, PosServerReceipt } from '@shared/pos';
+import { COLUMNS, escpos, pairLine, plain, PosPrint, receiptHtml, receiptRows, reportRows, serverReceiptRows, type ReceiptRow } from '../../../electron/services/pos-print';
 import { drawerPulse, type PrintJob } from '../../../electron/services/salon-print';
 
 const sale: PosSale = {
@@ -102,6 +102,40 @@ describe('the receipt', () => {
     const again = receiptRows({ ...sale, priced_by: 'estimate' }, { header: '', footer: '' }, { till: null, reprint: true });
     expect(again.some((r) => r.kind === 'text' && r.text === '*** COPY ***')).toBe(true);
     expect(again.some((r) => r.kind === 'text' && r.text.startsWith('Provisional'))).toBe(true);
+  });
+
+  it('lays out WorkSuite’s receipt: its figures, invoice, refunds and status', () => {
+    const r: PosServerReceipt = {
+      company: { name: 'Acme Stores', address: 'Colombo 03', phone: null, tax_number: 'VAT-1' },
+      receipt_no: 'T1-AAAAAA-000042',
+      order_number: 'SO-2026-0100',
+      invoice_number: 'INV-77',
+      register: 'Front (R1)',
+      cashier: 'Kasun',
+      customer: null,
+      at: '2026-09-30 13:45',
+      currency: 'LKR',
+      lines: [{ description: 'Ceylon tea', quantity: 2, unit_price: 440, discount_pct: 0, amount: 880, tax: 0, total: 880 }],
+      taxes: [],
+      totals: { subtotal: 880, discount: 0, tax: 0, total: 880 },
+      tenders: [{ label: 'Cash', amount: 1000, reference: null }],
+      change: 120,
+      refunds: [{ ref: 'T1-AAAAAA-000042-R1', kind: 'refund', amount: 440, cash: 440, reason: 'Damaged' }],
+      refunded: 440,
+      status: 'part_refunded',
+      void_reason: null,
+      footer: 'Thank you',
+    };
+    const text = serverReceiptRows(r, { header: '', footer: '' }, { till: 'Front till', reprint: true })
+      .map((x) => (x.kind === 'rule' ? '---' : x.kind === 'pair' ? `${x.left}|${x.right}` : x.text))
+      .join('\n');
+    expect(text).toContain('Acme Stores\nColombo 03\nTax no. VAT-1\n*** COPY ***\n*** PART REFUNDED ***');
+    expect(text).toContain('Receipt|T1-AAAAAA-000042\nInvoice|INV-77');
+    expect(text).toContain('  2 x 440.00|880.00');
+    expect(text).toContain('TOTAL|LKR 880.00');
+    expect(text).toContain('Cash|1,000.00\nChange|120.00');
+    expect(text).toContain('Refund T1-AAAAAA-000042-R1|-440.00');
+    expect(text).toContain('---\nThank you');
   });
 
   it('escapes everything on the driver’s page', () => {

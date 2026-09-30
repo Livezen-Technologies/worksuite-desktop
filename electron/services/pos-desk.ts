@@ -13,9 +13,9 @@ import type { SecureStore } from './secure-store';
  *
  * Somebody with `pos.access` pairs this computer with a till (`POST api/pos/terminals/{id}/pair`, done here, never
  * through the API proxy, which refuses it). WorkSuite answers once with `wsp_<till>_<64 hex>`, stores only its
- * sha256, and from then on the till's own door (`/api/pos/device/heartbeat`, `/api/pos/device/sales`) takes that
- * credential instead of anybody's session: a till keeps sending its sales overnight, after a power cut, with nobody
- * signed in. So it is kept in the OS credential store (secure-store.ts), filed under the server that issued it, and
+ * sha256, and from then on the till's own door (`/api/pos/device/*`: heartbeat, sales, catalogue, a sale's receipt,
+ * refund, void) takes that credential instead of anybody's session: a till keeps sending its sales overnight, after a
+ * power cut, with nobody signed in. So it is kept in the OS credential store (secure-store.ts), filed under the server that issued it, and
  * sent only by this process, only to the device door. No renderer, IPC answer, log or diagnostic bundle carries it.
  *
  * The till belongs to the computer, not to whoever is signed in: cashiers take turns at it. A plain sign-out keeps
@@ -28,6 +28,8 @@ import type { SecureStore } from './secure-store';
  */
 const PREFIX = 'pos-till:';
 const TOKEN = /^wsp_[1-9][0-9]{0,9}_[a-f0-9]{64}$/;
+/** The door's calls: its own, and one of its sales by its (URL-encoded) receipt number. */
+const DOOR = /^(heartbeat|sales|catalogue|products\/lookup|price|sales\/[A-Za-z0-9%._:-]{1,120}\/(receipt|refund|void|email))$/;
 
 type Secrets = Pick<SecureStore, 'get' | 'set' | 'delete' | 'deletePrefix'>;
 
@@ -175,12 +177,22 @@ export class PosDesk {
    * device door speaks in real codes (401 pair again, 503 POS is off, 5xx try later, 4xx show somebody).
    */
   async device(path: 'heartbeat' | 'sales', body: unknown): Promise<DeviceAnswer> {
+    return this.door('POST', path, { body });
+  }
+
+  /**
+   * Any of the door's calls (`Pos\Controllers\DeviceController`): the heartbeat and the sales, what the till sells
+   * (`catalogue`, `products/lookup`, `price`) so it refreshes with nobody signed in, and one of its own sales by its
+   * receipt number (`sales/{ref}/receipt|refund|void|email`). Nothing else is sent the credential.
+   */
+  async door(method: 'GET' | 'POST', path: string, o: { body?: unknown; query?: Record<string, string | number | undefined> } = {}): Promise<DeviceAnswer> {
+    if (!DOOR.test(path)) throw new DesktopError('INTERNAL', 'Not a call of the till’s door.');
     const s = this.read();
     if (!s?.token) throw new DesktopError('NOT_FOUND', 'This computer is not a paired till. Pair it in POS.');
-    const res = await this.d.http.raw('POST', this.d.http.url(`/api/pos/device/${path}`), {
+    const res = await this.d.http.raw(method, this.d.http.url(`/api/pos/device/${path}`, o.query), {
       auth: false,
-      headers: { Authorization: `Bearer ${s.token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(body),
+      headers: { Authorization: `Bearer ${s.token}`, Accept: 'application/json', ...(o.body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
+      ...(o.body !== undefined ? { body: JSON.stringify(o.body) } : {}),
       // A sale is sent while the cashier waits; a lost answer is harmless (the ref makes a resend the same sale).
       timeoutMs: path === 'sales' ? 12_000 : 20_000,
     });

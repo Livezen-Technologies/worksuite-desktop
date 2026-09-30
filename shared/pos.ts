@@ -153,6 +153,52 @@ export interface PosSale extends PosSellInput {
   message: string | null;
   attempts: number;
   sent_at: string | null;
+  /** What WorkSuite made the sale come to once it arrived (priced again from `product_id`), when it said. */
+  server_total?: number | null;
+  /** Why somebody should look at it — the till charged a total WorkSuite prices differently (never refused: the customer has gone). */
+  review?: string | null;
+  /** Refunds and the void WorkSuite recorded against it, as it answered them. */
+  returns?: PosReturn[];
+  voided?: boolean;
+}
+
+/** A refund or void as WorkSuite recorded it (`Returns::shape`): what went back, how, and what left the drawer. */
+export interface PosReturn {
+  /** The till's own number for it (`<receipt>-R1`, `<receipt>-V`): sent again, it is the same refund. */
+  ref: string;
+  kind: 'refund' | 'void';
+  status: string;
+  amount: number;
+  /** Cash handed back out of the drawer. */
+  cash_out: number;
+  tenders: Array<{ method: string; amount: number }>;
+  lines: Array<{ product_id: number | null; quantity: number }>;
+  reason: string | null;
+  credit_note: string | null;
+  at: string | null;
+}
+
+/** The receipt as WorkSuite recorded the sale (`Receipt::data`): its figures after pricing again, refunds, status. */
+export interface PosServerReceipt {
+  company: { name: string; address: string | null; phone: string | null; tax_number: string | null };
+  receipt_no: string;
+  order_number: string | null;
+  invoice_number: string | null;
+  register: string | null;
+  cashier: string | null;
+  customer: { name: string; email: string | null } | null;
+  at: string | null;
+  currency: string;
+  lines: Array<{ description: string; quantity: number; unit_price: number; discount_pct: number; amount: number; tax: number; total: number }>;
+  taxes: Array<{ name: string; amount: number }>;
+  totals: { subtotal: number; discount: number; tax: number; total: number };
+  tenders: Array<{ label: string; amount: number; reference: string | null }>;
+  change: number;
+  refunds: Array<{ ref: string; kind: string; amount: number; cash: number; reason: string | null }>;
+  refunded: number;
+  status: 'paid' | 'part_refunded' | 'refunded' | 'voided' | string;
+  void_reason: string | null;
+  footer: string;
 }
 
 /* ── Printing ─────────────────────────────────────────────────────────────── */
@@ -212,13 +258,28 @@ export type PosReport = z.infer<typeof posReportSchema>;
 const none = z.undefined().or(z.null()).optional();
 const ref = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,59}$/);
 
+/** A refund (every line, or the quantities named) or a void of one of this till's sales, with the reason. */
+export const posGiveBackSchema = z.strictObject({
+  ref,
+  kind: z.enum(['refund', 'void']),
+  reason: z.string().trim().min(3).max(200),
+  lines: z
+    .array(z.strictObject({ product_id: z.number().int().positive(), quantity: z.number().finite().positive().max(100_000) }))
+    .min(1)
+    .max(300)
+    .optional(),
+  restock: z.boolean().optional(),
+});
+export type PosGiveBack = z.infer<typeof posGiveBackSchema>;
+
 /** Spread into `contract` (shared/ipc/contract.ts): the same checks as every channel there. */
 export const posContract = {
   'pos:till': { input: none, session: true },
   'pos:pair': { input: z.strictObject({ terminal_id: z.number().int().positive(), take_over: z.boolean().optional() }), session: true, rate: 2, sensitive: true },
   'pos:forget': { input: z.strictObject({ discard: z.boolean().optional() }).optional(), session: true, rate: 2, sensitive: true },
   'pos:catalogue': { input: none, session: true, rate: 10 },
-  'pos:catalogueRefresh': { input: none, session: true, rate: 1 },
+  /** `capable`: what `options.capabilities.catalogue` said — false goes straight to Inventory's list (an older server). */
+  'pos:catalogueRefresh': { input: z.strictObject({ capable: z.boolean().optional() }).optional().or(z.null()), session: true, rate: 1 },
   'pos:sell': { input: posSellSchema, session: true, rate: 4, sensitive: true },
   'pos:sales': {
     input: z.strictObject({ session_id: z.number().int().positive().optional(), since: z.string().datetime().optional(), limit: z.number().int().min(1).max(500).optional() }).optional(),
@@ -230,7 +291,11 @@ export const posContract = {
   'pos:resolve': { input: z.strictObject({ ref, action: z.enum(['retry', 'drop']) }), session: true, rate: 5, sensitive: true },
   'pos:printSettings': { input: none, session: true },
   'pos:printSettingsSet': { input: posPrintPatchSchema, session: true, rate: 5 },
-  'pos:printReceipt': { input: z.strictObject({ ref, reprint: z.boolean().optional() }), session: true, rate: 3 },
+  /** `server`: print WorkSuite's receipt (`capabilities.receipt`) when it answers, the till's own otherwise. */
+  'pos:printReceipt': { input: z.strictObject({ ref, reprint: z.boolean().optional(), server: z.boolean().optional() }), session: true, rate: 3 },
+  'pos:receipt': { input: z.strictObject({ ref }), session: true, rate: 10 },
+  'pos:giveBack': { input: posGiveBackSchema, session: true, rate: 3, sensitive: true },
+  'pos:email': { input: z.strictObject({ ref, email: z.string().trim().email().max(150).optional() }), session: true, rate: 3 },
   'pos:printReport': { input: posReportSchema, session: true, rate: 2 },
   'pos:printTest': { input: none, session: true, rate: 2 },
   'pos:openDrawer': { input: none, session: true, rate: 1, sensitive: true },
@@ -252,6 +317,9 @@ export interface PosOutputs {
   'pos:printSettings': PosPrintSettings;
   'pos:printSettingsSet': PosPrintSettings;
   'pos:printReceipt': PosPrintOutcome;
+  'pos:receipt': PosServerReceipt | null;
+  'pos:giveBack': { sale: PosSale; refund: PosReturn; message: string };
+  'pos:email': { message: string };
   'pos:printReport': PosPrintOutcome;
   'pos:printTest': PosPrintOutcome;
   'pos:openDrawer': PosPrintOutcome;

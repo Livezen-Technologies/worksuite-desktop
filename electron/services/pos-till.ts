@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
-import { formatReceipt, type PosCatalogue, type PosProduct, type PosSale, type PosSellInput, type PosTillStatus } from '@shared/pos';
+import { formatReceipt, type PosCatalogue, type PosGiveBack, type PosProduct, type PosReturn, type PosSale, type PosSellInput, type PosServerReceipt, type PosTillStatus } from '@shared/pos';
 import { DesktopError, isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { Database } from './db';
 import type { HttpClient } from './http';
-import type { PosDesk } from './pos-desk';
+import type { DeviceAnswer, PosDesk } from './pos-desk';
 import { apply, batch, nextSequence, readAnswer, saleBody, sequenceOf, type Queued } from './pos-outbox';
 import type { Vault } from './vault';
 
@@ -17,11 +17,14 @@ const log = logger('pos-till');
  * THE CATALOGUE
  * ─────────────────────────────────────────────────────────────────────────────
  *
- * The products the till sells, with their barcodes and one-unit prices, are read with the signed-in person's session
- * — WorkSuite's till catalogue (`GET api/pos/catalogue?version=`, answered `{unchanged: true}` when the copy is
- * current) where the server has one, and Inventory's product list as a stand-in where it does not — and kept sealed
- * (AES-256-GCM, `pos_catalogue`) where the desktop policy lets this computer keep data offline, in memory otherwise.
- * It is a preview: the screens show WorkSuite's price for the cart whenever it answers.
+ * The products the till sells, with their barcodes and one-unit prices, are WorkSuite's till catalogue
+ * (`catalogue?since_version=`, answered `{version, unchanged: true}` when the copy is current): read through the
+ * till's own door in the background (`/api/pos/device/catalogue`, every half hour, with nobody signed in), and with
+ * the signed-in person's session when they ask (`/api/pos/catalogue`, `pos.access` — no Inventory permission).
+ * Only an older server without it (404, or `capabilities.catalogue` false) has Inventory's product list stand in,
+ * for people who may read it. The copy is kept sealed (AES-256-GCM, `pos_catalogue`) where the desktop policy lets
+ * this computer keep data offline, in memory otherwise. It is a preview: the screens show WorkSuite's price for the
+ * cart whenever it answers.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * THE SALES
@@ -41,6 +44,8 @@ const BEAT_MS = 60_000;
 const MAX_ROUNDS = 20;
 const KEEP_SENT_DAYS = 90;
 const CATALOGUE_LIMIT = 2000;
+/** How often the till's door is asked for the catalogue in the background (an unchanged one costs one short answer). */
+const CATALOGUE_MS = 30 * 60_000;
 const INVENTORY_PAGE = 100;
 
 export interface PosTillDeps {
@@ -48,7 +53,7 @@ export interface PosTillDeps {
   vault: () => Vault;
   /** The signed-in person's calls (the catalogue). */
   http: Pick<HttpClient, 'request'>;
-  desk: Pick<PosDesk, 'pairing' | 'device' | 'heartbeat'>;
+  desk: Pick<PosDesk, 'pairing' | 'device' | 'heartbeat' | 'door'>;
   origin: () => string | null;
   /** What the company's desktop policy allows this computer. */
   caps: () => { offlineCache: boolean; offlineQueue: 'allowed' | 'drafts_only' | 'disabled' };
@@ -107,6 +112,8 @@ export class PosTill {
   private problem: string | null = null;
   /** The catalogue, when the policy does not let it be kept on disk. */
   private memory = new Map<string, PosCatalogue>();
+  /** When the door was last asked for the catalogue (0: not yet since start-up). */
+  private lastCatalogue = 0;
 
   constructor(private readonly d: PosTillDeps) {}
 
@@ -196,37 +203,52 @@ export class PosTill {
     }
   }
 
-  /** Read the catalogue again from WorkSuite, with the signed-in person's session. */
-  async refreshCatalogue(): Promise<PosCatalogue> {
+  /**
+   * Read the catalogue again from WorkSuite, with the signed-in person's session. `capable` is what the server's
+   * `options.capabilities.catalogue` said: false is an older server, whose Inventory list stands in.
+   */
+  async refreshCatalogue(capable?: boolean): Promise<PosCatalogue> {
     const s = this.scope();
     if (!s) throw new DesktopError('NOT_FOUND', 'This computer is not a paired till. Pair it in POS.');
     const have = this.catalogue();
-    const c = await this.fetchCatalogue(have);
+    const c = await this.fetchCatalogue(have, capable);
     this.keepCatalogue(s, c);
     this.d.changed();
     return c;
   }
 
-  private async fetchCatalogue(have: PosCatalogue | null): Promise<PosCatalogue> {
-    const fetched_at = this.stamp();
+  /** The door's catalogue, in the background: nobody need be signed in. An older server without it is left alone. */
+  private async catalogueInBackground(s: Scope): Promise<void> {
+    if (this.now() - this.lastCatalogue < CATALOGUE_MS) return;
+    this.lastCatalogue = this.now();
+    const have = this.catalogue();
+    let a: DeviceAnswer;
     try {
-      const data = await this.d.http.request<Record<string, unknown>>('GET', '/api/pos/catalogue', { query: { version: have?.source === 'pos' ? have.version : undefined } });
-      if (data?.unchanged === true && have) return { ...have, fetched_at };
-      const cats = Array.isArray(data?.categories) ? (data.categories as Array<Record<string, unknown>>) : [];
-      const names = new Map(cats.map((c) => [str(c.id) ?? '', str(c.name) ?? ''] as const));
-      const products = (Array.isArray(data?.products) ? (data.products as Array<Record<string, unknown>>) : []).map((p) => productFromPos(p, names)).filter((p): p is PosProduct => !!p);
-      return {
-        version: str(data?.version) ?? hashOf(products),
-        fetched_at,
-        currency: str(data?.currency),
-        source: 'pos',
-        categories: [...new Set(products.map((p) => p.category).filter((c): c is string => !!c))].sort((a, b) => a.localeCompare(b)),
-        products,
-        truncated: data?.truncated === true,
-      };
+      a = await this.d.desk.door('GET', 'catalogue', { query: { since_version: have?.source === 'pos' ? have.version : undefined } });
     } catch (e) {
-      // No till catalogue on this server: Inventory's list stands in (for people who may read it).
-      if (!isDesktopError(e) || e.code !== 'NOT_FOUND') throw e;
+      log.info('pos catalogue not refreshed', { error: String((e as Error)?.message ?? e) });
+      return;
+    }
+    if (a.status !== 200 || !a.body) return;
+    const c = catalogueOf(a.body, have, this.stamp());
+    if (!c) return;
+    this.keepCatalogue(s, c);
+    this.d.changed();
+  }
+
+  private async fetchCatalogue(have: PosCatalogue | null, capable?: boolean): Promise<PosCatalogue> {
+    const fetched_at = this.stamp();
+    const org = this.d.desk.pairing()?.terminal.org_id;
+    if (capable !== false) {
+      try {
+        const data = await this.d.http.request<Record<string, unknown>>('GET', '/api/pos/catalogue', { query: { org, since_version: have?.source === 'pos' ? have.version : undefined } });
+        const c = catalogueOf(data ?? {}, have, fetched_at);
+        if (c) return c;
+        throw new DesktopError('SERVER_ERROR', 'WorkSuite answered, but not with a till catalogue this app can read.');
+      } catch (e) {
+        // No till catalogue on this (older) server: Inventory's list stands in, for people who may read it.
+        if (!isDesktopError(e) || e.code !== 'NOT_FOUND' || capable === true) throw e;
+      }
     }
     const products: PosProduct[] = [];
     let truncated = false;
@@ -376,6 +398,70 @@ export class PosTill {
     return this.status();
   }
 
+  /* ── After the sale: WorkSuite's receipt, e-mail, refunds and voids (the till's door, the cashier named) ── */
+
+  private sent(ref: string): { s: Scope; q: Queued } {
+    const s = this.scope();
+    const q = s ? this.rows(s, 'AND ref = ?', ref)[0] : undefined;
+    if (!s || !q) throw new DesktopError('NOT_FOUND', 'That sale is not on this till.');
+    if (!s.usable) throw new DesktopError('PERMISSION_DENIED', 'WorkSuite no longer accepts this till. Pair this computer again.');
+    if (q.sale.state !== 'sent') throw new DesktopError('CONFLICT', 'That sale has not reached WorkSuite yet.');
+    return { s, q };
+  }
+
+  private reached(): void {
+    this.reachable = true;
+    this.lastContact = this.stamp();
+  }
+
+  /** WorkSuite's receipt for one of this till's sales (`GET device/sales/{ref}/receipt`), or null when it has none to give. */
+  async serverReceipt(ref: string): Promise<PosServerReceipt | null> {
+    this.sent(ref);
+    const a = await this.d.desk.door('GET', `sales/${encodeURIComponent(ref)}/receipt`);
+    this.reached();
+    return a.status === 200 ? receiptOf(a.body?.receipt) : null;
+  }
+
+  /** E-mail the receipt: to the address given, else the customer's on the sale (WorkSuite's rule). */
+  async email(ref: string, email: string | undefined): Promise<{ message: string }> {
+    this.sent(ref);
+    const a = await this.d.desk.door('POST', `sales/${encodeURIComponent(ref)}/email`, { body: email ? { email } : {} });
+    this.reached();
+    if (a.status !== 200) throw doorError(a, 'WorkSuite could not e-mail the receipt.');
+    return { message: str(a.body?.message) ?? 'The receipt was e-mailed.' };
+  }
+
+  /**
+   * Refund (every line, or the quantities named) or void one of this till's sales, by its receipt number, with the
+   * cashier named — WorkSuite asks them for `pos.sale.refund` / `pos.sale.void` now. The request carries the till's own
+   * number for it (`<receipt>-R<n>`, `<receipt>-V`), so a request whose answer was lost, sent again, is the same
+   * refund. A refund's cash leaves the drawer open at this till; a void is recorded in the sale's own session, while it
+   * is open. What WorkSuite answers — the amount, the tenders it went back on, the cash out — is kept on the sale.
+   */
+  async giveBack(input: PosGiveBack, cashier: { id: number }): Promise<{ sale: PosSale; refund: PosReturn; message: string }> {
+    const { s, q } = this.sent(input.ref);
+    if (q.sale.voided) throw new DesktopError('CONFLICT', 'That sale was voided.');
+    const own = returnRef(q.sale, input.kind);
+    const body: Record<string, unknown> = { ref: own, cashier_id: cashier.id, reason: input.reason };
+    if (input.kind === 'refund' && input.lines?.length) body.lines = input.lines;
+    if (input.kind === 'refund' && input.restock === false) body.restock = false;
+    const a = await this.d.desk.door('POST', `sales/${encodeURIComponent(q.sale.ref)}/${input.kind}`, { body });
+    this.reached();
+    if (a.status !== 200 && a.status !== 201) throw doorError(a, input.kind === 'void' ? 'WorkSuite did not void the sale.' : 'WorkSuite did not refund the sale.');
+    const refund = returnOf(a.body?.refund, input.kind, own, this.stamp());
+    const shape = (a.body?.sale ?? null) as Record<string, unknown> | null;
+    const sale: PosSale = {
+      ...q.sale,
+      returns: [...(q.sale.returns ?? []).filter((r) => r.ref !== refund.ref), refund],
+      voided: shape?.voided === true || input.kind === 'void',
+      ...(typeof shape?.total === 'number' ? { server_total: shape.total } : {}),
+      ...(shape && 'review' in shape ? { review: str(shape.review) } : {}),
+    };
+    this.save(s, { ...q, sale });
+    this.d.changed();
+    return { sale, refund, message: str(a.body?.message) ?? (input.kind === 'void' ? 'The sale was voided.' : 'The refund was recorded.') };
+  }
+
   /* ── Sending ──────────────────────────────────────────────────────── */
 
   start(): void {
@@ -462,6 +548,7 @@ export class PosTill {
       progressed = true;
       if (done.created + done.duplicates + done.refused.length === 0) break;
     }
+    if (beat && this.reachable) await this.catalogueInBackground(s);
     const cutoff = new Date(this.now() - KEEP_SENT_DAYS * 86_400_000).toISOString();
     this.d.db.run("DELETE FROM pos_sales WHERE origin = ? AND terminal_id = ? AND state = 'sent' AND created_at < ?", s.origin, s.terminal, cutoff);
     this.lastSync = this.stamp();
@@ -489,4 +576,92 @@ export class PosTill {
 
 function hashOf(products: PosProduct[]): string {
   return createHash('sha256').update(JSON.stringify(products)).digest('hex').slice(0, 16);
+}
+
+/** A catalogue answer (staff API or door, the same keys), or null when it is neither a catalogue nor "unchanged". */
+export function catalogueOf(data: Record<string, unknown>, have: PosCatalogue | null, fetched_at: string): PosCatalogue | null {
+  if (data.unchanged === true) return have && have.source === 'pos' ? { ...have, fetched_at } : null;
+  if (!Array.isArray(data.products)) return null;
+  const cats = Array.isArray(data.categories) ? (data.categories as Array<Record<string, unknown>>) : [];
+  const names = new Map(cats.map((c) => [str(c.id) ?? '', str(c.name) ?? ''] as const));
+  const products = (data.products as Array<Record<string, unknown>>).map((p) => productFromPos(p, names)).filter((p): p is PosProduct => !!p);
+  return {
+    version: str(data.version) ?? hashOf(products),
+    fetched_at,
+    currency: str(data.currency),
+    source: 'pos',
+    categories: [...new Set(products.map((p) => p.category).filter((c): c is string => !!c))].sort((a, b) => a.localeCompare(b)),
+    products,
+    truncated: data.truncated === true,
+  };
+}
+
+/** The till's own number for a refund or void of a sale: the next refund's, or the sale's one void. */
+export function returnRef(sale: PosSale, kind: 'refund' | 'void'): string {
+  if (kind === 'void') return `${sale.ref}-V`;
+  return `${sale.ref}-R${(sale.returns ?? []).filter((r) => r.kind === 'refund').length + 1}`;
+}
+
+/** A refund or void as WorkSuite answered it (`Returns::shape`). */
+export function returnOf(v: unknown, kind: 'refund' | 'void', ref: string, at: string): PosReturn {
+  const r = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
+  const list = (x: unknown) => (Array.isArray(x) ? (x as Array<Record<string, unknown>>) : []);
+  const note = r.credit_note && typeof r.credit_note === 'object' ? str((r.credit_note as Record<string, unknown>).number) : null;
+  return {
+    ref: str(r.ref) ?? ref,
+    kind: r.kind === 'void' || r.kind === 'refund' ? r.kind : kind,
+    status: str(r.status) ?? 'done',
+    amount: num(r.amount),
+    cash_out: num(r.cash_out),
+    tenders: list(r.tenders).map((t) => ({ method: str(t.method) ?? 'other', amount: num(t.amount) })),
+    lines: list(r.lines).map((l) => ({ product_id: num(l.product_id) || null, quantity: num(l.quantity) })),
+    reason: str(r.reason),
+    credit_note: note,
+    at: str(r.created_at) ?? at,
+  };
+}
+
+/** WorkSuite's receipt (`Receipt::data`), or null when it is not one. */
+export function receiptOf(v: unknown): PosServerReceipt | null {
+  if (!v || typeof v !== 'object') return null;
+  const r = v as Record<string, unknown>;
+  const obj = (x: unknown) => (x && typeof x === 'object' ? (x as Record<string, unknown>) : {});
+  const list = (x: unknown) => (Array.isArray(x) ? (x as Array<Record<string, unknown>>) : []);
+  const receipt_no = str(r.receipt_no);
+  if (!receipt_no || !Array.isArray(r.lines)) return null;
+  const co = obj(r.company);
+  const t = obj(r.totals);
+  const cust = r.customer && typeof r.customer === 'object' ? obj(r.customer) : null;
+  return {
+    company: { name: str(co.name) ?? '', address: str(co.address), phone: str(co.phone), tax_number: str(co.tax_number) },
+    receipt_no,
+    order_number: str(r.order_number),
+    invoice_number: str(r.invoice_number),
+    register: str(r.register),
+    cashier: str(r.cashier),
+    customer: cust && str(cust.name) ? { name: str(cust.name)!, email: str(cust.email) } : null,
+    at: str(r.at),
+    currency: str(r.currency) ?? '',
+    lines: list(r.lines).map((l) => ({ description: str(l.description) ?? '', quantity: num(l.quantity), unit_price: num(l.unit_price), discount_pct: num(l.discount_pct), amount: num(l.amount), tax: num(l.tax), total: num(l.total) })),
+    taxes: list(r.taxes).map((x) => ({ name: str(x.name) ?? '', amount: num(x.amount) })),
+    totals: { subtotal: num(t.subtotal), discount: num(t.discount), tax: num(t.tax), total: num(t.total) },
+    tenders: list(r.tenders).map((x) => ({ label: str(x.label) ?? str(x.method) ?? '', amount: num(x.amount), reference: str(x.reference) })),
+    change: num(r.change),
+    refunds: list(r.refunds).map((x) => ({ ref: str(x.ref) ?? '', kind: str(x.kind) ?? 'refund', amount: num(x.amount), cash: num(x.cash), reason: str(x.reason) })),
+    refunded: num(r.refunded),
+    status: str(r.status) ?? 'paid',
+    void_reason: str(r.void_reason),
+    footer: str(r.footer) ?? '',
+  };
+}
+
+/** The door's refusal as an error the screens show: WorkSuite's sentence, with a code that says what it was. */
+export function doorError(a: DeviceAnswer, fallback: string): DesktopError {
+  const message = str(a.body?.message) ?? fallback;
+  if (a.status === 401) return new DesktopError('PERMISSION_DENIED', 'WorkSuite no longer accepts this till. Pair this computer again.', 401);
+  if (a.status === 503) return new DesktopError('SERVER_ERROR', 'POS is switched off on WorkSuite.', 503);
+  if (a.status === 403) return new DesktopError('PERMISSION_DENIED', message, 403);
+  if (a.status === 404) return new DesktopError('NOT_FOUND', message, 404);
+  if (a.status === 409 || a.status === 422) return new DesktopError('CONFLICT', message, a.status);
+  return new DesktopError('SERVER_ERROR', message, a.status);
 }

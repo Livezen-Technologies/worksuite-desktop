@@ -83,9 +83,9 @@ export function createPos(d: PosDeps) {
       guard();
       return till.catalogue();
     });
-    router.handle('pos:catalogueRefresh', () => {
+    router.handle('pos:catalogueRefresh', (input) => {
       guard();
-      return till.refreshCatalogue();
+      return till.refreshCatalogue(input?.capable);
     });
     router.handle('pos:sell', async (input, c) => {
       guard();
@@ -116,7 +116,33 @@ export function createPos(d: PosDeps) {
     router.handle('pos:printReceipt', async (input, c) => {
       const sale = till.sale(input.ref);
       if (!sale) throw new DesktopError('NOT_FOUND', 'That sale is not on this till.');
-      return print.receipt(sale, await installed(c.sender), { till: tillName(), reprint: input.reprint !== false });
+      const printers = await installed(c.sender);
+      const reprint = input.reprint !== false;
+      // WorkSuite's receipt where it has one (its figures, refunds, a void); the till's own record otherwise.
+      if (input.server && sale.state === 'sent') {
+        const r = await till.serverReceipt(sale.ref).catch((e: unknown) => {
+          log.info('pos server receipt unavailable, printing the till’s own', { error: String((e as Error)?.message ?? e) });
+          return null;
+        });
+        if (r) return print.serverReceipt(r, printers, { till: tillName(), reprint });
+      }
+      return print.receipt(sale, printers, { till: tillName(), reprint });
+    });
+    router.handle('pos:receipt', async (input) => {
+      guard();
+      const sale = till.sale(input.ref);
+      if (!sale || sale.state !== 'sent') return null;
+      return till.serverReceipt(sale.ref);
+    });
+    router.handle('pos:giveBack', async (input) => {
+      guard();
+      const cashier = d.cashier();
+      if (!cashier) throw new DesktopError('NOT_SIGNED_IN', 'Sign in to refund or void a sale.');
+      return till.giveBack(input, cashier);
+    });
+    router.handle('pos:email', async (input) => {
+      guard();
+      return till.email(input.ref, input.email);
     });
     router.handle('pos:printReport', async (input, c) => print.report(input, await installed(c.sender)));
     router.handle('pos:printTest', async (_i, c) => print.test(await installed(c.sender)));
