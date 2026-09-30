@@ -337,6 +337,10 @@ const api = {
     outboxResolve: call('salon:outboxResolve'),
   },
   // POS (pos-channels.ts): each channel under its own name, so the bridge test sees it.
+  // Hotel PMS files saved through the download manager; the main process checks the download policy.
+  pms: {
+    download: call('pms:download'),
+  },
   pos: {
     till: call('pos:till'),
     pair: call('pos:pair'),

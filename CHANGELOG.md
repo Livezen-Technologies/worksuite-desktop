@@ -30,6 +30,14 @@ person who has to live with the change — what it does, and where it bites.
   close, out of order, parts, photos, "Mine"); lost & found; guest requests assigned to a person; guest documents
   saved or removed and duplicate guests merged; a native tape chart that moves bookings after the server's price
   preview; invoices with the Billing outbox and retry; KPIs and reports with CSV export where permitted.
+- **Restaurant till, more**: discounts (order or line), items on the house and price overrides with a reason, taken
+  back before payment; refunds and a tax invoice from a bill; anything above a person's limit asks a manager as voids
+  do. A combo's components are chosen in the order screen. A Reservations screen at the host stand (the day's
+  bookings, a table timeline, availability, book, seat, cancel, no-show). Screens refresh on the server's live pushes,
+  with the catch-up poll as a fallback.
+- **Hotel PMS**: photos on housekeeping tasks. Guest documents and report exports go through the download manager
+  (`pms:download`), with the organisation's download policy checked in the main process — they land in Downloads and
+  show in Transfers instead of a save dialog.
 
 ## 2026-09-30 — 0.2.65: Local AI, the lock PIN, Drive covers and Office files reach the app
 
