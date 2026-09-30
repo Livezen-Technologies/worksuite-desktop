@@ -75,6 +75,9 @@ export default function Tender({
     } catch (e) {
       // WorkSuite refused the sale while the customer is here: nothing was sold; the cart stays.
       setError(e instanceof Error ? e.message : 'The sale could not be completed.');
+      // The refusal may be the drawer (`drawer_closed`: closed on the web meanwhile): read the registers again, so the
+      // register asks for one to be opened.
+      void qc.invalidateQueries({ queryKey: PK.registers });
     } finally {
       setBusy(false);
     }

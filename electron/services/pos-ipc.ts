@@ -109,7 +109,7 @@ export function createPos(d: PosDeps) {
     router.handle('pos:syncNow', () => till.sync());
     router.handle('pos:resolve', (input) => {
       guard();
-      return till.resolve(input.ref, input.action);
+      return till.resolve(input.ref, input.action, input.session_id);
     });
     router.handle('pos:printSettings', () => print.settings());
     router.handle('pos:printSettingsSet', async (input, c) => print.update(input, await installed(c.sender)));

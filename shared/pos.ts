@@ -155,12 +155,37 @@ export interface PosSale extends PosSellInput {
   sent_at: string | null;
   /** What WorkSuite made the sale come to once it arrived (priced again from `product_id`), when it said. */
   server_total?: number | null;
-  /** Why somebody should look at it — the till charged a total WorkSuite prices differently (never refused: the customer has gone). */
+  /** Why somebody should look at it — WorkSuite's sentence(s): a total it prices differently, a payment missing, a late sale (never refused: the customer has gone). */
   review?: string | null;
+  /** Why it is flagged, as WorkSuite's codes (`flags`): `price_differs`, `payment_missing`, `late`. */
+  flags?: PosSaleFlag[];
+  /** Why WorkSuite refused it, when it said (`code`): `drawer_closed`, `session_not_here`, … */
+  code?: string | null;
   /** Refunds and the void WorkSuite recorded against it, as it answered them. */
   returns?: PosReturn[];
   voided?: boolean;
 }
+
+/**
+ * Why WorkSuite flagged a sale for review (`pos_sale_books.flags`): it priced it differently (`price_differs`), the till
+ * sent no tenders so it is recorded unpaid (`payment_missing`), or it was sold while a register that has since closed
+ * was open (`late`). A flag is never a refusal: the sale stands.
+ */
+export const POS_SALE_FLAGS = ['price_differs', 'payment_missing', 'late'] as const;
+export type PosSaleFlag = (typeof POS_SALE_FLAGS)[number];
+
+/** The flags WorkSuite put on a sale; an older server said only `review`, which meant the price differed. */
+export function saleFlags(s: Pick<PosSale, 'flags' | 'review'>): PosSaleFlag[] {
+  const known = (s.flags ?? []).filter((f): f is PosSaleFlag => (POS_SALE_FLAGS as readonly string[]).includes(f));
+  return known.length ? known : s.review ? ['price_differs'] : [];
+}
+
+/**
+ * Refusals about the drawer: no register open for the sale (`drawer_closed` — none open, or the one named closed
+ * before the sale was made), or the session named is another till's (`session_not_here`). Sent again, such a sale
+ * goes into the register open at this till now.
+ */
+export const POS_DRAWER_REFUSALS: ReadonlySet<string> = new Set(['drawer_closed', 'session_not_here']);
 
 /** A refund or void as WorkSuite recorded it (`Returns::shape`): what went back, how, and what left the drawer. */
 export interface PosReturn {
@@ -196,7 +221,9 @@ export interface PosServerReceipt {
   change: number;
   refunds: Array<{ ref: string; kind: string; amount: number; cash: number; reason: string | null }>;
   refunded: number;
-  status: 'paid' | 'part_refunded' | 'refunded' | 'voided' | string;
+  /** The till sent no tenders: nothing was taken as far as WorkSuite knows (a "Payment missing" line). */
+  payment_missing?: boolean;
+  status: 'paid' | 'payment_missing' | 'part_refunded' | 'refunded' | 'voided' | string;
   void_reason: string | null;
   footer: string;
 }
@@ -288,7 +315,8 @@ export const posContract = {
   },
   'pos:sale': { input: z.strictObject({ ref }), session: true, rate: 20 },
   'pos:syncNow': { input: none, session: true, rate: 2 },
-  'pos:resolve': { input: z.strictObject({ ref, action: z.enum(['retry', 'drop']) }), session: true, rate: 5, sensitive: true },
+  /** `session_id`: a sale refused for its drawer (`POS_DRAWER_REFUSALS`) is sent again into the register open now. */
+  'pos:resolve': { input: z.strictObject({ ref, action: z.enum(['retry', 'drop']), session_id: z.number().int().positive().optional() }), session: true, rate: 5, sensitive: true },
   'pos:printSettings': { input: none, session: true },
   'pos:printSettingsSet': { input: posPrintPatchSchema, session: true, rate: 5 },
   /** `server`: print WorkSuite's receipt (`capabilities.receipt`) when it answers, the till's own otherwise. */
