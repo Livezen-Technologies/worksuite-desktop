@@ -269,7 +269,9 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   never by a path: `transfers:download` takes a typed variant (Garage's
   `garageDoc` — a check-in sheet, an estimate, a work order sheet, a delivery
   note or a report's CSV, `shared/garage-docs.ts`), and the main process
-  builds the address it fetches.
+  builds the address it fetches. Hotel PMS has a channel of its own,
+  `pms:download` (`shared/pms-files.ts`), with the same shape and the
+  `desktop.downloads` check repeated in its handler.
 - READ_CACHE is declared in a module's manifest and served by the main
   process for the prefixes in `CACHE_PREFIXES` (`electron/main/index.ts`),
   per module, so an app taken away takes its saved answers with it.
@@ -306,9 +308,13 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   invoices and the reports. The operations share `ops.tsx`: a record's moves
   as the server offers them (`options`), each asking what it `needs` and sent
   with the record's `version`, and a people picker over the company
-  directory. A file from the server (a report's CSV, a guest's document) is
-  fetched through the API proxy and saved with the save dialog, where the
-  organization allows downloads. Addresses are read in one place
+  directory. A file from the server (a report's export, a guest's document)
+  leaves through its own channel, `pms:download` (`shared/pms-files.ts`): the
+  page names it by what it is, the main process builds the address, checks
+  `desktop.downloads` itself (`electron/services/pms-download.ts`) and hands
+  it to the download manager, which fetches, saves and audits it — no bytes
+  over IPC. Photos (housekeeping tasks, maintenance issues, lost items) go up
+  as multipart through the API proxy. Addresses are read in one place
   (`routes.ts`), so a deep link, a notification's link and a window's route
   open the same screen. Offline it reads the rack and lists from READ_CACHE
   (per property: `shared/pms-cache.ts`, matched by pattern in
@@ -390,12 +396,18 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   and registers the `restaurant:*` channels. The renderer is a shell with a rail (`RestaurantShell.tsx`, addresses in
   `routes.ts`, strings in its own `i18n.ts`) whose screens are lazy chunks: the floor (`Floor.tsx` — tables by area
   in their state; seat, open, free, move, merge, split), the order (`Order.tsx` — the menu grid, an item's variant,
-  modifiers, note, seat and course; send, fire and hold by course, serve, void with a reason and an approval), the
-  bill (`Bill.tsx` — the server's quote, single or split bills, present, print, payment with several tenders and the
-  server's change), the cashier session, the kitchen and the pass (`Kitchen.tsx`), approvals, printers and what was
-  kept offline (`Outbox.tsx`, with the branch's conflicts for a manager). Screens stay current by catching up with
-  `live?after=` (`parts.tsx: useLive`); offline they read the copy and keep new orders and lines in the outbox, and
-  everything with money, a void or a table move is disabled.
+  modifiers, a combo's components, note, seat and course; send, fire and hold by course, serve, void with a reason
+  and an approval; discounts, comps and price overrides in `Adjust.tsx`), the bill (`Bill.tsx` — the server's quote,
+  single or split bills, present, print, payment with several tenders and the server's change, the order's payments
+  with refunds, a tax invoice), the host stand (`Reservations.tsx` — the day's bookings with the server's moves, the
+  tables' timeline, availability and booking), the cashier session, the kitchen and the pass (`Kitchen.tsx`),
+  approvals, printers and what was kept offline (`Outbox.tsx`, with the branch's conflicts for a manager). Anything
+  above a person's limit — a void, a discount, a comp, a price, a refund — is answered `approval_needed`; `Approval`
+  asks, takes a manager's PIN here or their answer elsewhere, and the same request goes again with `approval_id`.
+  Screens stay current from the gateway's `restaurant.live` pushes (the main process fans the realtime socket out as
+  `realtime:event`; `parts.tsx: useLive` refreshes what each entity touches) with `live?after=` behind them as the
+  catch-up — every few seconds without the socket, every 30 s with it; offline they read the copy and keep new orders
+  and lines in the outbox, and everything with money, a void, a booking or a table move is disabled.
 - Tabs stay mounted while recent (instant switching) and are suspended after
   the configured idle time; the tab set is saved and restored only for apps
   the user can still open.
