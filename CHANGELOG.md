@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-09-30 — 0.2.71: Chat's channel toolbar (WhatsApp in Chat), profile pictures, a resizable conversation list; AI Assistant scrolling; Local AI first-use setup and Gemma 3 4B; Office menus and Open in new window; Meet Home and pre-join redesign
+## 2026-09-30 — 0.2.71: Chat's channel toolbar (WhatsApp in Chat), profile pictures, a resizable conversation list; AI Assistant scrolling; Local AI first-use setup and Gemma 3 4B; Office menus and Open in new window; Meet Home and pre-join redesign; screen sharing fixed
 
 - **A channel toolbar down the far left of Chat** (#33): Chat, Web Chat and WhatsApp, each with its unread count
   (waiting visitors for Web Chat) and a warning dot when a WhatsApp number is not connected. Hover for the name and
@@ -25,6 +25,15 @@ person who has to live with the change — what it does, and where it bites.
   When somebody changes their picture it changes here too, without signing out (the server announces it; pictures
   are also checked again after 15 minutes). Group conversations keep their rounded-square initials, so they never
   look like a person. WhatsApp contacts' pictures show once the server provides them; it does not fetch them yet.
+- **Share your screen works again** (#70). The picker showed "Something went wrong" and "Nothing to share here"
+  and left Share greyed out: on a Mac with Screen Recording off, asking the system for its screens failed outright,
+  and that failure hid the permission's own message. Now screens and windows are listed separately (a window list
+  that fails leaves the screens), and the picker says one true thing: **Screen Recording is off** — with Open
+  System Settings, Restart WorkSuite (macOS applies it to a restarted app) and Check again; **the list could not be
+  made** — with what the system said and Try again; or **nothing of that kind is open**. It looks again when you
+  come back from System Settings. Screen Recording is separate from Accessibility, which only remote control needs,
+  and a meeting's picker no longer waits for that check. The quality you chose is kept. While sharing, the bar
+  still says what you are sharing, with Stop sharing in the Share menu.
 - **Meet Home, redesigned** (#67). Starting and joining come first: **New meeting** (Start now, Create a link for
   later, Schedule in Calendar) and the code or link box with its **Join** — a code or link that is wrong says why,
   right there. Below, upcoming meetings by day in compact cards (time, length, host, people) with **Join** only

@@ -471,8 +471,19 @@ export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'v
 
 /** Screens and windows offered for sharing (FR-COM-05), and whether the OS lets us capture them. */
 export interface ScreenSources {
+  /** The system's Screen Recording permission (macOS); 'granted' where the system has no such gate. */
   permission: string;
   sources: Array<{ id: string; name: string; kind: 'screen' | 'window'; thumbnail: string | null }>;
+  /**
+   * What came of asking (worksuite-desktop#70), so the picker says one true thing: `denied` — the permission is
+   * off; `failed` — the system would not list anything (with `problem`, its words); `partial` — screens listed but
+   * windows could not be (or the other way round); `ok`. Absent from an older main process.
+   */
+  state?: 'ok' | 'denied' | 'failed' | 'partial';
+  problem?: string | null;
+  /** macOS applies a changed Screen Recording permission only to a newly started app. */
+  restartMayHelp?: boolean;
+  platform?: string;
 }
 
 export interface NavigateRequest {

@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
-import { call, platform } from '../../core/bridge';
-import { Button, ErrorNote, Modal, Spinner, cx } from '../../components/ui';
+import { useEffect, useState } from 'react';
+import type { ScreenSources } from '@shared/types';
+import { call, errorMessage, platform } from '../../core/bridge';
+import { Icon } from '../../components/Icon';
+import { Button, Modal, Spinner, cx } from '../../components/ui';
 import { Select } from '../../components/Select';
 
 /** What was picked: the source, its name for "Sharing Screen 1", and whether its sound goes too. */
@@ -20,31 +22,97 @@ export interface PickerControl {
   unavailable: string | null;
 }
 
+type Quality = NonNullable<SharePick['quality']>;
+const QUALITY_KEY = 'ws.share.quality';
+const QUALITIES: Quality[] = ['auto', 'quality', 'balanced', 'performance'];
+
+function savedQuality(): Quality {
+  try {
+    const q = localStorage.getItem(QUALITY_KEY) as Quality | null;
+    return q && QUALITIES.includes(q) ? q : 'auto';
+  } catch {
+    return 'auto';
+  }
+}
+
+/**
+ * What the picker has to say (worksuite-desktop#70), one thing at a time: the list; the Screen Recording
+ * permission is off (not Accessibility, which only remote control needs); the system would not list anything; or
+ * there is genuinely nothing of this kind to share.
+ */
+export type PickerView = { kind: 'loading' } | { kind: 'denied'; restart: boolean } | { kind: 'failed'; detail: string | null; restart: boolean } | { kind: 'empty'; partial: string | null; restart: boolean } | { kind: 'list'; partial: string | null };
+
+export function pickerView(q: { isLoading: boolean; error: unknown; data?: ScreenSources }, tab: 'screen' | 'window'): PickerView {
+  if (q.isLoading) return { kind: 'loading' };
+  if (q.error) return { kind: 'failed', detail: errorMessage(q.error), restart: false };
+  const d = q.data;
+  if (!d) return { kind: 'loading' };
+  const state = d.state ?? (d.permission !== 'granted' && d.permission !== 'not-determined' ? 'denied' : 'ok');
+  if (state === 'denied') return { kind: 'denied', restart: d.platform === 'darwin' || platform === 'darwin' };
+  if (state === 'failed') return { kind: 'failed', detail: d.problem ?? null, restart: !!d.restartMayHelp };
+  const here = d.sources.filter((s) => s.kind === tab);
+  const partial = state === 'partial' ? (d.problem ?? null) : null;
+  if (!here.length) return { kind: 'empty', partial, restart: tab === 'screen' && !!d.restartMayHelp };
+  return { kind: 'list', partial };
+}
+
 /**
  * Choose what to share (FR-COM-05): a screen or one window, shown as they
  * look now. Nothing is captured until the person presses Share. Used again
  * to change what is shared without stopping. On Windows the computer's
  * sound can go with it; elsewhere the system does not allow it.
+ *
+ * The list is asked for again on Retry and whenever this window comes back
+ * into focus — after allowing Screen Recording in System Settings, say. The
+ * sharing quality is remembered.
  */
-export function ScreenPicker({ onPick, onClose, changing, control }: { onPick: (p: SharePick) => void; onClose: () => void; changing?: boolean; control?: PickerControl }) {
+export function ScreenPicker({ onPick, onClose, changing, control, inMeeting }: { onPick: (p: SharePick) => void; onClose: () => void; changing?: boolean; control?: PickerControl; inMeeting?: boolean }) {
   const [tab, setTab] = useState<'screen' | 'window'>('screen');
   const [picked, setPicked] = useState<string | null>(null);
   const [audio, setAudio] = useState(false);
-  const [quality, setQuality] = useState<NonNullable<SharePick['quality']>>('auto');
-  const [allowRequests, setAllowRequests] = useState(control?.allowRequests ?? false);
+  const [quality, setQualityState] = useState<Quality>(savedQuality);
+  // Until the person changes it, "let people ask" follows the saved default, which may arrive after the picker opens.
+  const [allowRequests, setAllowRequests] = useState<boolean | null>(null);
+  const allow = allowRequests ?? control?.allowRequests ?? false;
   const canAudio = platform === 'win32';
+  const meeting = inMeeting || !!control;
+  const q = useQuery({ queryKey: ['screen-sources'], queryFn: () => call('media:screenSources'), gcTime: 0, staleTime: 0, retry: false, refetchOnWindowFocus: 'always' });
+  const view = pickerView(q, tab);
+  const list = (q.data?.sources ?? []).filter((s) => s.kind === tab);
+
+  // Back from System Settings (or another app): look again.
+  useEffect(() => {
+    const again = () => void q.refetch();
+    window.addEventListener('focus', again);
+    return () => window.removeEventListener('focus', again);
+  }, [q]);
+
+  const setQuality = (v: Quality) => {
+    setQualityState(v);
+    try {
+      localStorage.setItem(QUALITY_KEY, v);
+    } catch {
+      /* only a convenience */
+    }
+  };
   const choose = (id: string) => {
     const s = (q.data?.sources ?? []).find((x) => x.id === id);
-    onPick({ id, name: s?.name ?? 'your screen', audio: canAudio && audio, ...(control ? { quality, allowRequests: allowRequests && !control.unavailable } : {}) });
+    if (!s) return;
+    onPick({ id, name: s.name ?? 'your screen', audio: canAudio && audio, ...(meeting ? { quality, allowRequests: allow && !!control && !control.unavailable } : {}) });
   };
-  const q = useQuery({ queryKey: ['screen-sources'], queryFn: () => call('media:screenSources'), gcTime: 0, staleTime: 0 });
-  const list = (q.data?.sources ?? []).filter((s) => s.kind === tab);
-  const blocked = q.data && q.data.permission !== 'granted' && q.data.permission !== 'not-determined';
+  const settings = () => void call('media:privacySettings', { pane: 'screen' });
+  const restart = () => void call('app:relaunch');
+  const retry = () => {
+    setPicked(null);
+    void q.refetch();
+  };
+  const pickedStill = picked && list.some((s) => s.id === picked) ? picked : null;
+
   return (
     <Modal
       title={changing ? 'Share something else' : 'Share your screen'}
       onClose={onClose}
-      width={640}
+      width={680}
       footer={
         <>
           {canAudio ? (
@@ -54,68 +122,119 @@ export function ScreenPicker({ onPick, onClose, changing, control }: { onPick: (
             </label>
           ) : null}
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={!picked} onClick={() => picked && choose(picked)}>
+          <Button variant="primary" icon="screen-share" disabled={!pickedStill} onClick={() => pickedStill && choose(pickedStill)}>
             {changing ? 'Switch' : 'Share'}
           </Button>
         </>
       }
     >
       <div className="flex flex-col gap-3">
-        <div role="tablist" aria-label="What to share" className="flex gap-1 text-[12.5px] font-semibold">
-          {(['screen', 'window'] as const).map((t) => (
-            <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={cx('rounded-full px-3 py-1', tab === t ? 'bg-ink text-surface' : 'border border-line text-ink')}>
-              {t === 'screen' ? 'Entire screen' : 'A window'}
-            </button>
-          ))}
-        </div>
-        {blocked ? (
-          <div className="rounded-[10px] border border-[#F1D9B5] bg-[#FFF9EC] px-3 py-2.5 text-[12.5px] text-[#7A3B05] dark:bg-warning-bg dark:text-warning">
-            WorkSuite is not allowed to record the screen. Allow it under Screen Recording in your system privacy settings, then reopen this.{' '}
-            <button type="button" className="font-bold underline" onClick={() => void call('media:privacySettings', { pane: 'screen' })}>
-              Open privacy settings
-            </button>
+        <div className="flex items-center gap-2">
+          <div role="tablist" aria-label="What to share" className="flex gap-1 text-[12.5px] font-semibold">
+            {(['screen', 'window'] as const).map((t) => (
+              <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={cx('rounded-full px-3 py-1', tab === t ? 'bg-ink text-surface' : 'border border-line text-ink')}>
+                {t === 'screen' ? 'Entire screen' : 'A window'}
+              </button>
+            ))}
           </div>
-        ) : null}
-        {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
-        {control && !changing ? (
+          <span className="flex-1" />
+          <button type="button" onClick={retry} disabled={q.isFetching} className="flex items-center gap-1.5 rounded-[7px] px-2 py-1 text-[12.5px] font-semibold text-primary hover:bg-selection disabled:opacity-60">
+            <Icon name="refresh" size={13} className={q.isFetching ? 'animate-spin' : ''} /> Refresh
+          </button>
+        </div>
+
+        {meeting && !changing ? (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-[10px] border border-line px-3 py-2.5 text-[12.5px] text-ink-2">
             <label className="flex items-center gap-2">
               Quality
-              <Select value={quality} onChange={(e) => setQuality(e.target.value as NonNullable<SharePick['quality']>)} className="h-7 rounded-[7px] border border-line bg-surface px-1.5 text-ink" aria-label="Sharing quality">
+              <Select value={quality} onChange={(e) => setQuality(e.target.value as Quality)} className="h-7 rounded-[7px] border border-line bg-surface px-1.5 text-ink" aria-label="Sharing quality">
                 <option value="auto">Automatic</option>
                 <option value="quality">Sharp text</option>
                 <option value="balanced">Balanced</option>
                 <option value="performance">Smooth motion</option>
               </Select>
             </label>
-            {control.unavailable ? (
-              <span className="text-ink-3">{control.unavailable}</span>
+            {!control ? (
+              <span className="text-ink-3">Checking whether others can ask to control this computer…</span>
+            ) : control.unavailable ? (
+              // Remote control's own permission (Accessibility): it never stands in the way of sharing.
+              <span className="text-ink-3">{control.unavailable} You can still share.</span>
             ) : (
               <label className="flex items-center gap-2">
-                <input type="checkbox" checked={allowRequests} onChange={(e) => setAllowRequests(e.target.checked)} className="accent-[var(--color-primary)]" />
+                <input type="checkbox" checked={allow} onChange={(e) => setAllowRequests(e.target.checked)} className="accent-[var(--color-primary)]" />
                 Let people ask to control what I share
               </label>
             )}
           </div>
         ) : null}
-        <div className="grid max-h-[360px] grid-cols-3 gap-2.5 overflow-y-auto scroll-thin" role="listbox" aria-label={tab === 'screen' ? 'Screens' : 'Windows'}>
-          {list.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              role="option"
-              aria-selected={picked === s.id}
-              onClick={() => setPicked(s.id)}
-              onDoubleClick={() => choose(s.id)}
-              className={cx('flex flex-col gap-1.5 rounded-[10px] border p-1.5 text-left', picked === s.id ? 'border-primary bg-selection' : 'border-line hover:bg-subtle')}
-            >
-              {s.thumbnail ? <img src={s.thumbnail} alt="" className="aspect-[16/10] w-full rounded-[6px] bg-subtle object-contain" /> : <span className="aspect-[16/10] w-full rounded-[6px] bg-subtle" />}
-              <span className="truncate text-[12px] font-semibold text-ink">{s.name}</span>
-            </button>
-          ))}
-          {!q.isLoading && list.length === 0 ? <p className="col-span-3 py-6 text-center text-[12.5px] text-ink-3">Nothing to share here.</p> : null}
-        </div>
+
+        {view.kind === 'loading' ? <Spinner label="Looking for screens and windows…" /> : null}
+        {view.kind === 'denied' ? (
+          <Notice tone="warn" title="WorkSuite isn’t allowed to record the screen">
+            Allow WorkSuite under <b>Screen Recording</b> in your system’s privacy settings — that is separate from Accessibility, which only remote control needs.
+            {view.restart ? ' macOS applies it once WorkSuite restarts.' : ' Then come back here; the list refreshes on its own.'}
+            <Actions>
+              <Button size="sm" variant="primary" onClick={settings}>Open System Settings</Button>
+              {view.restart ? <Button size="sm" onClick={restart}>Restart WorkSuite</Button> : null}
+              <Button size="sm" icon="refresh" onClick={retry}>Check again</Button>
+            </Actions>
+          </Notice>
+        ) : null}
+        {view.kind === 'failed' ? (
+          <Notice tone="error" title="The screens and windows could not be listed">
+            {view.restart ? 'If you have just allowed Screen Recording, WorkSuite needs to restart before macOS lets it see the screen. ' : 'Try again; if it keeps happening, restart WorkSuite. '}
+            {view.detail ? <span className="block pt-1 text-[11.5px] opacity-80">The system said: {view.detail}</span> : null}
+            <Actions>
+              <Button size="sm" variant="primary" icon="refresh" onClick={retry}>Try again</Button>
+              {view.restart ? <Button size="sm" onClick={restart}>Restart WorkSuite</Button> : null}
+              {platform === 'darwin' ? <Button size="sm" onClick={settings}>Open System Settings</Button> : null}
+            </Actions>
+          </Notice>
+        ) : null}
+        {view.kind === 'empty' || view.kind === 'list' ? (
+          <>
+            {view.partial ? (
+              <p className="flex items-center gap-1.5 text-[12px] text-[#9A4A06] dark:text-warning">
+                <Icon name="alert" size={13} /> {tab === 'screen' ? 'Windows' : 'Screens'} could not be listed this time; {tab === 'screen' ? 'screens' : 'windows'} can still be shared.
+              </p>
+            ) : null}
+            <div className="grid max-h-[380px] grid-cols-2 gap-2.5 overflow-y-auto scroll-thin sm:grid-cols-3" role="listbox" aria-label={tab === 'screen' ? 'Screens' : 'Windows'}>
+              {list.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  role="option"
+                  aria-selected={pickedStill === s.id}
+                  onClick={() => setPicked(s.id)}
+                  onDoubleClick={() => choose(s.id)}
+                  className={cx('flex flex-col gap-1.5 rounded-[10px] border p-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary', pickedStill === s.id ? 'border-primary bg-selection' : 'border-line hover:bg-subtle')}
+                >
+                  {s.thumbnail ? <img src={s.thumbnail} alt="" className="aspect-[16/10] w-full rounded-[6px] bg-subtle object-contain" /> : <span className="flex aspect-[16/10] w-full items-center justify-center rounded-[6px] bg-subtle text-ink-3"><Icon name={s.kind === 'screen' ? 'monitor' : 'app-window'} size={22} /></span>}
+                  <span className="truncate text-[12px] font-semibold text-ink">{s.name}</span>
+                </button>
+              ))}
+              {view.kind === 'empty' ? (
+                <p className="col-span-full py-6 text-center text-[12.5px] text-ink-3">
+                  {tab === 'window' ? 'No other windows are open to share. Open the one you want, then Refresh — or share the entire screen.' : view.restart ? 'No screen can be seen yet. If you have just allowed Screen Recording, restart WorkSuite.' : 'No screen could be found.'}
+                </p>
+              ) : null}
+            </div>
+          </>
+        ) : null}
       </div>
     </Modal>
   );
+}
+
+function Notice({ tone, title, children }: { tone: 'warn' | 'error'; title: string; children: React.ReactNode }) {
+  return (
+    <div role="alert" className={cx('flex flex-col gap-1 rounded-[10px] px-3.5 py-3 text-[12.5px]', tone === 'warn' ? 'border border-[#F1D9B5] bg-[#FFF9EC] text-[#7A3B05] dark:border-transparent dark:bg-warning-bg dark:text-warning' : 'bg-danger-bg text-danger')}>
+      <b className="text-[13px]">{title}</b>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+function Actions({ children }: { children: React.ReactNode }) {
+  return <div className="mt-2 flex flex-wrap gap-2">{children}</div>;
 }

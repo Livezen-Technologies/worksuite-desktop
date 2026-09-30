@@ -212,10 +212,12 @@ export function MeetRoom() {
           </>
         )}
       />
-      {picking && (picking === 'change' || !rcView.isLoading) ? (
+      {/* The picker opens at once: remote control's check (Accessibility) never holds up sharing (worksuite-desktop#70). */}
+      {picking ? (
         <ScreenPicker
           changing={picking === 'change'}
-          control={pickerControl}
+          inMeeting
+          control={pickerControl ?? (rcView.isError ? { allowRequests: false, unavailable: 'Others can’t ask to control this computer right now.' } : undefined)}
           onClose={() => setPicking(null)}
           onPick={(pick) => {
             setPicking(null);

@@ -19,6 +19,7 @@ the root CHANGELOG.md.
 
 **Fixed**
 
+- Share your screen opens at once in a meeting: it no longer waits on the remote-control check (Accessibility), which never blocks sharing; if that check fails, sharing still goes ahead without control (#70)
 - A past meeting nobody ended showed its length as days of minutes; a length is shown only between a minute and 12 hours, as hours and minutes (#67)
 
 ## 1.0.0 — 2026-09-30
