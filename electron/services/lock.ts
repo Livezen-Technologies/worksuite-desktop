@@ -14,7 +14,8 @@ const log = logger('lock');
  * content is hidden; background services (notifications, transfers, realtime)
  * keep running.
  *
- * Unlock: the WorkSuite password (checked by the server), or Touch ID on
+ * Unlock: the WorkSuite password (checked by the server), a PIN set on this
+ * computer (lock-pin.ts, works offline), or Touch ID on
  * macOS where the hardware has it. Windows Hello needs a native module
  * (see BLOCKERS.md); the button is not offered where it cannot work.
  */
@@ -24,11 +25,12 @@ export class LockService {
   private since: string | null = null;
   private lastActivity = Date.now();
   private timer: NodeJS.Timeout | null = null;
-  private failures = 0;
+  private failureCount = 0;
   onChanged: (s: LockState) => void = () => undefined;
   minutes: () => number = () => 15;
   lockOnSystemLock: () => boolean = () => true;
   enabled: () => boolean = () => false;
+  hasPin: () => boolean = () => false;
   user: () => { name: string | null; email: string | null } = () => ({ name: null, email: null });
 
   start(): void {
@@ -75,6 +77,7 @@ export class LockService {
       reason: this.reason,
       since: this.since,
       biometric: this.biometric(),
+      pin: this.hasPin(),
       userName: u.name,
       userEmail: u.email,
       lockMinutes: this.minutes(),
@@ -101,15 +104,24 @@ export class LockService {
     this.locked = false;
     this.reason = null;
     this.since = null;
-    this.failures = 0;
+    this.failureCount = 0;
     this.lastActivity = Date.now();
     this.onChanged(this.state());
     return this.state();
   }
 
-  /** Counts failed password attempts; the caller signs out after too many. */
+  /** Counts failed password and PIN attempts; the caller signs out after too many. */
   recordFailure(): number {
-    return ++this.failures;
+    return ++this.failureCount;
+  }
+
+  failures(): number {
+    return this.failureCount;
+  }
+
+  /** Something the lock screen shows changed (a PIN set or removed). */
+  changed(): void {
+    this.onChanged(this.state());
   }
 
   async unlockWithBiometric(): Promise<boolean> {
@@ -131,6 +143,6 @@ export class LockService {
       this.since = null;
       this.onChanged(this.state());
     }
-    this.failures = 0;
+    this.failureCount = 0;
   }
 }

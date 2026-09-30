@@ -5,6 +5,56 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-30 — 0.2.62: Office online in the Document Server, offline in the built-in editor; lock PIN; Local AI groundwork
+
+**Added**
+
+- **A PIN for the app lock** (Settings → Security → PIN): 4 to 8 digits, set or changed with your WorkSuite
+  password, and it unlocks WorkSuite on this computer — also offline, where the password cannot be checked. The
+  lock screen asks for it first when one is set (**Use password instead** is one click away). Wrong PINs count
+  with wrong passwords: five and you are signed out. Only a salted scrypt hash is kept, sealed with the
+  database key; it is removed with the rest of your data when a sign-out wipes this computer.
+- **Local AI groundwork (WS-SRS-LAI, desktop phase 0/1)** — not yet in the UI: llama.cpp (node-llama-cpp) in a
+  separate `ws-local-ai` process with a GPU-or-CPU start, crash limit and idle unload; a model manager that
+  takes models only from WorkSuite's CDN through an Ed25519-signed, expiring catalog, with resumable downloads
+  checked by size and SHA-256; and the typed `ai:local*` IPC channels. No catalog key is pinned yet, so no
+  catalog is accepted until one ships. Installers leave out node-llama-cpp's CUDA builds.
+
+**Fixed**
+
+- **Settings → Files & Sync** showed "Drive sync is not part of this version" although Drive sync is: it now
+  shows sync's state, each synced folder (files, size, Show), **Sync now**, **Pause / Resume**, **Reconnect**, and
+  **Set up sync… / Manage sync…** (Files → Devices); where sync is not allowed it says why (policy, role, device).
+- **Settings → General → Organizations** ran over its label with many organizations: they are chips that wrap
+  now, and a row's value never takes more than 60% of the width.
+
+**Changed**
+
+- **Online, Office files always open in the Document Server** (EuroOffice) inside a WorkSuite DOC / Sheet /
+  Slides tab. A mail attachment, tender file, chat file or file from this computer is first copied into
+  **My files → WorkSuite copies** and opens as that Drive file. A copy of a file on this computer stays linked:
+  its changes are written back to the file when the tab closes (the Document Server saves a moment later, so it
+  is written twice to be sure), or at once with **Update the file now**. If the copy cannot be made, **Edit it
+  here without the Drive** uses the built-in editor.
+- **Offline, the built-in editor (BetterOffice)**: a Drive file with a copy on this computer (a synced folder,
+  or one opened in another app) is edited on that copy, which goes to the Drive when WorkSuite is online again;
+  without one the tab says it is not on this computer. Files from this computer open there as before.
+- A server without a working Document Server still gets the built-in editor, now with a banner saying why.
+- **Drive shows the first page of PDFs and Office files** in the grid (the server makes thumbnails for pictures
+  only): drawn on this computer once a card is on screen — PDFs by pdf.js, presentations by BetterOffice's slide
+  renderer, Word and Excel files by a hidden read-only editor — one at a time, files up to 25 MB, and kept in PDF
+  Studio's sealed thumbnail cache per file version (only where offline storage is allowed).
+- **Drive's toolbar**: **Details** now opens with nothing selected (the folder you are in, or a summary of the
+  view), and **Refresh** reloads the list and spins until it has.
+- **PDF Studio's side panels**: the tabs are a segmented control that fits the panel (the chosen one named, the
+  others as icons), and the search options are toggle chips.
+- **AI Assistant → Ask** uses the Chat composer's box: the question, the file button and Send in one bordered
+  field with its focus ring, and "Enter to send · Shift+Enter for a new line" under it.
+- The built-in editor is no longer offered by hand while online (the file menu's **Edit in WorkSuite
+  (built-in)** and the EuroOffice header's **Built-in editor** are gone).
+
+---
+
 ## 2026-09-30 — 0.2.61: WorkSuite DOC, Sheet and Slides — Office files from every module in a tab
 
 **Added**

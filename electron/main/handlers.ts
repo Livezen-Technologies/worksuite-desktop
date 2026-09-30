@@ -1,4 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, nativeImage, shell, systemPreferences, type WebContents } from 'electron';
+import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { writeAtomically } from '../services/pdf/host';
 import os from 'node:os';
@@ -557,6 +558,17 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     return files;
   });
   router.handle('office:readFile', (input) => ctx.officeFiles.read(input.handle));
+  router.handle('office:readOffline', async (input) => {
+    const at = ctx.officeLocal.localPath(input.fileId);
+    if (!at) throw new DesktopError('NOT_FOUND', 'This file is not on this computer, so it cannot be edited offline.');
+    return new Uint8Array(await readFile(at.path));
+  });
+  router.handle('office:writeOffline', async (input) => {
+    const at = ctx.officeLocal.localPath(input.fileId);
+    if (!at) throw new DesktopError('NOT_FOUND', 'This file is no longer on this computer.');
+    await writeAtomically(at.path, input.bytes);
+    return { size: input.bytes.byteLength, synced: at.synced };
+  });
   router.handle('office:writeFile', (input) => ctx.officeFiles.write(input.handle, input.bytes, writeAtomically));
   router.handle('office:saveCopy', async (input, c) => {
     const win = BrowserWindow.fromWebContents(c.sender);
@@ -838,13 +850,56 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       // Its words, and not a wrong password: it would not count towards signing out.
       if (e instanceof DesktopError && e.status !== null && e.status !== 401) return { ok: false, message: e.message };
     }
-    const failures = ctx.lock.recordFailure();
-    if (failures >= 5) {
-      await ctx.session.signOut(false);
-      ctx.lock.reset();
-      return { ok: false, message: 'Too many attempts. You have been signed out.' };
+    const out = await failedUnlock();
+    return out ?? { ok: false, message: `That password is not right (${ctx.lock.failures()} of 5). If you sign in with a passkey, choose Sign out and sign in again — your drafts are kept.` };
+  });
+  // Wrong passwords and wrong PINs count together: five and the person is signed out.
+  const failedUnlock = async (): Promise<{ ok: false; message: string } | null> => {
+    if (ctx.lock.recordFailure() < 5) return null;
+    await ctx.session.signOut(false);
+    ctx.lock.reset();
+    return { ok: false, message: 'Too many attempts. You have been signed out.' };
+  };
+  router.handle('security:unlockPin', async (input) => {
+    if (!ctx.lock.isLocked()) return { ok: true, message: null };
+    const uid = ctx.session.userId();
+    if (!uid || !ctx.lockPin.has(uid)) return { ok: false, message: 'No PIN is set on this computer. Use your password.' };
+    if (ctx.lockPin.verify(uid, input.pin)) {
+      ctx.lock.unlock();
+      return { ok: true, message: null };
     }
-    return { ok: false, message: `That password is not right (${failures} of 5). If you sign in with a passkey, choose Sign out and sign in again — your drafts are kept.` };
+    const out = await failedUnlock();
+    return out ?? { ok: false, message: `That PIN is not right (${ctx.lock.failures()} of 5).` };
+  });
+  router.handle('security:setPin', async (input) => {
+    const uid = ctx.session.userId();
+    const email = ctx.session.get().user?.email;
+    if (!uid || !email) return { ok: false, message: 'Sign in again.' };
+    try {
+      if (!(await ctx.auth.verifyPassword(email, input.password))) return { ok: false, message: 'That password is not right.' };
+    } catch (e) {
+      const code = (e as DesktopError).code;
+      if (code === 'NETWORK_UNREACHABLE') return { ok: false, message: 'Setting a PIN checks your password with WorkSuite. Reconnect and try again.' };
+      if (e instanceof DesktopError && e.status !== null && e.status !== 401) return { ok: false, message: e.message };
+      return { ok: false, message: 'That password is not right.' };
+    }
+    try {
+      ctx.lockPin.set(uid, input.pin);
+    } catch (e) {
+      return { ok: false, message: (e as Error).message };
+    }
+    ctx.audit.record(uid, 'security.lock_pin_set', {});
+    ctx.lock.changed();
+    return { ok: true, message: null };
+  });
+  router.handle('security:clearPin', () => {
+    const uid = ctx.session.userId();
+    if (uid) {
+      ctx.lockPin.clear(uid);
+      ctx.audit.record(uid, 'security.lock_pin_removed', {});
+    }
+    ctx.lock.changed();
+    return ctx.lock.state();
   });
   router.handle('security:unlockBiometric', async () => {
     const ok = await ctx.lock.unlockWithBiometric();

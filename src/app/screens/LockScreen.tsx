@@ -15,17 +15,20 @@ export function LockScreen() {
   const lock = useStore(app, (s) => s.lock);
   const status = useStore(app, (s) => s.status);
   const [password, setPassword] = useState('');
+  // With a PIN set, the lock screen asks for it first; the password stays one click away.
+  const [usePin, setUsePin] = useState(!!lock?.pin);
+  const pinMode = usePin && !!lock?.pin;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
-  useEffect(() => input.current?.focus(), []);
+  useEffect(() => input.current?.focus(), [pinMode]);
 
   const unlock = async () => {
     if (!password) return;
     setBusy(true);
     setError(null);
     try {
-      const r = await call('security:unlockPassword', { password });
+      const r = pinMode ? await call('security:unlockPin', { pin: password }) : await call('security:unlockPassword', { password });
       if (!r.ok) setError(r.message);
       setPassword('');
     } catch (e) {
@@ -59,23 +62,51 @@ export function LockScreen() {
           {lock?.userName ?? ''} · {reason}
         </p>
         <label className="mt-6 w-full text-[12.5px] font-semibold text-navy-ink">
-          {t('lock.password')}
-          <input
-            ref={input}
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1.5 h-11 w-full rounded-[9px] border border-white/15 bg-navy px-3 text-[14px] text-white outline-none focus:border-brand"
-          />
+          {pinMode ? t('lock.pin') : t('lock.password')}
+          {pinMode ? (
+            <input
+              key="pin"
+              ref={input}
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              maxLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value.replace(/\D/g, ''))}
+              className="mt-1.5 h-11 w-full rounded-[9px] border border-white/15 bg-navy px-3 text-center text-[20px] tracking-[0.5em] text-white outline-none focus:border-brand"
+            />
+          ) : (
+            <input
+              key="password"
+              ref={input}
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="mt-1.5 h-11 w-full rounded-[9px] border border-white/15 bg-navy px-3 text-[14px] text-white outline-none focus:border-brand"
+            />
+          )}
         </label>
         {error ? <p className="mt-2 w-full text-[12.5px] text-[#F7A39C]">{error}</p> : null}
-        <button type="submit" disabled={busy || !password} className="mt-4 h-11 w-full rounded-[9px] bg-brand text-[14px] font-semibold hover:opacity-90 disabled:opacity-50">
+        <button type="submit" disabled={busy || (pinMode ? password.length < 4 : !password)} className="mt-4 h-11 w-full rounded-[9px] bg-brand text-[14px] font-semibold hover:opacity-90 disabled:opacity-50">
           {busy ? 'Checking…' : t('lock.unlock')}
         </button>
         {lock?.biometric === 'touch-id' ? (
           <button type="button" onClick={() => void biometric()} className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-[9px] border border-white/15 text-[14px] font-semibold hover:bg-white/5">
             <Icon name="fingerprint" size={18} /> {t('lock.touchId')}
+          </button>
+        ) : null}
+        {lock?.pin ? (
+          <button
+            type="button"
+            onClick={() => {
+              setUsePin(!pinMode);
+              setPassword('');
+              setError(null);
+            }}
+            className="mt-4 text-[13px] font-semibold text-navy-ink hover:text-white"
+          >
+            {pinMode ? t('lock.usePassword') : t('lock.usePin')}
           </button>
         ) : null}
         <button type="button" onClick={() => void call('auth:signOut', { wipe: false })} className="mt-4 text-[13px] font-semibold text-navy-ink underline hover:text-white">

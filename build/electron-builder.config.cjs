@@ -35,7 +35,10 @@ module.exports = {
   directories: { output: 'release/${version}', buildResources: 'build' },
   // pdfjs-dist is bundled into the renderer; its optional @napi-rs/canvas is
   // for Node only, and its one-arch binary breaks the universal mac merge.
-  files: ['out/**', 'package.json', '!**/*.map', '!node_modules/@napi-rs/**'],
+  // Local AI (LAI-DSK-002): node-llama-cpp's native binaries load from outside the asar; the CUDA builds
+  // (hundreds of MB) are left out — GPUs are used through Vulkan and Metal.
+  files: ['out/**', 'package.json', '!**/*.map', '!node_modules/@napi-rs/**', '!node_modules/@node-llama-cpp/*cuda*/**'],
+  asarUnpack: ['node_modules/node-llama-cpp/**', 'node_modules/@node-llama-cpp/**'],
   extraResources: [
     { from: 'resources/tray', to: 'tray' },
     { from: 'resources/icons', to: 'icons' },

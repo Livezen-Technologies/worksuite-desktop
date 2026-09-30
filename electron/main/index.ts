@@ -41,6 +41,7 @@ import { DiagnosticsService } from '../services/diagnostics';
 import { readEnterpriseConfig } from '../services/enterprise';
 import { HttpClient, type FetchLike } from '../services/http';
 import { LockService } from '../services/lock';
+import { LockPin } from '../services/lock-pin';
 import { NotificationService, inDnd } from '../services/notifications';
 import { WebchatRinger, ringerHeight } from '../services/webchat-ring';
 import { QuickAsk } from '../services/quick-ask';
@@ -62,6 +63,7 @@ import { EventDeskPrint } from '../services/event-desk-print';
 import { OfficeEditorHost } from '../services/office-editor';
 import { OfficeExternal } from '../services/office-external';
 import { createPdfStudio } from '../services/pdf/host';
+import { createLocalAI } from '../services/local-ai/host';
 import { OfficeLocalFiles, officePathsInArgv } from '../services/office-local';
 import { officeDocRoute } from '@shared/office';
 import { pdfPathsInArgv } from '../services/pdf/local-files';
@@ -244,6 +246,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const audit = new AuditService(db, getVault, http, () => auth.getServer()?.api === 'desktop-v1');
   const supervisor = new ServiceSupervisor();
   const lock = new LockService();
+  const lockPin = new LockPin(db, getVault);
   const windows = new WindowManager(db, join(__dirname, '../preload/index.js'));
   windows.minimizeToTray = () => settings.effective().minimizeToTray;
   // A call rings only for whoever may open Chat (calls are part of it).
@@ -1065,6 +1068,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     officeLocal.stop();
     // Open PDFs close, and passwords remembered for the session are forgotten.
     void pdfStudio.closeAll();
+    // Local AI's model stops; the models on this computer stay.
+    void localAI.signedOut();
     realtime.stop();
     notifications.stop();
     device.stop();
@@ -1101,6 +1106,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         // Copies opened in other apps are no longer watched; the files stay the person's.
         officeLocal.forgetUser(uid);
         officeFiles.forget();
+        // The app-lock PIN goes with the rest of what this computer kept for the person.
+        lockPin.clear(uid);
         // PDF Studio's working copies and thumbnails (PDF-OFF-005).
         void pdfStudio.wipe();
       }
@@ -1171,6 +1178,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   };
 
   lock.enabled = () => sessionCtl.isReady();
+  lock.hasPin = () => lockPin.has(sessionCtl.userId());
   lock.minutes = () => settings.effective().appLockMinutes;
   lock.lockOnSystemLock = () => settings.effective().lockOnSystemLock;
   lock.user = () => ({ name: sessionCtl.get().user?.name ?? null, email: sessionCtl.get().user?.email ?? null });
@@ -1224,6 +1232,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     device: () => ({ id: device.installId(), name: device.deviceName() }),
     userName: () => sessionCtl.get().user?.name ?? '',
   });
+  // Local AI (services/local-ai, WS-SRS-LAI): models from WorkSuite's CDN, llama.cpp in the ws-local-ai process.
+  const localAI = createLocalAI({ userData: p.userData, signedIn: () => sessionCtl.isReady(), changed: () => broadcast('ai:localChanged') });
+  app.on('will-quit', () => void localAI.stop());
   handPdfs = (paths) => void pdfStudio.openFromOs(paths);
   pdfOnline = () => pdfStudio.online();
   if (pendingPdfs.length) handPdfs(pendingPdfs.splice(0));
@@ -1301,6 +1312,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     const id = contents.id;
     contents.once('destroyed', () => {
       pdfStudio.senderGone(id);
+      localAI.senderGone(id);
       remoteControl.windowGone(id);
       screenShare.forget(id);
     });
@@ -1364,6 +1376,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     sync,
     supervisor,
     lock,
+    lockPin,
     updater,
     diagnostics,
     audit,
@@ -1393,6 +1406,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   };
   registerHandlers(router, ctx);
   pdfStudio.register(router);
+  localAI.register(router);
   router.install();
   const missing = router.missingHandlers();
   if (missing.length) log.warn('IPC channels without handlers', { missing });

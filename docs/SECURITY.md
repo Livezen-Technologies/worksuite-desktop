@@ -243,6 +243,9 @@ Being controlled is the main process's business, never a page's:
   first bytes are a ZIP package, at most 200 MB, and outside WorkSuite's data; `office:writeFile` writes only
   over a file opened that way (atomically), `office:saveCopy` only where the person chose in the save dialog.
   Bytes cross IPC as a checked `Uint8Array` (non-empty, within the limit; strict schemas refuse any path field).
+- **Drive covers** are drawn in the window from the file's bytes (read through the proxy, never written to disk
+  in the clear) and kept only in PDF Studio's sealed thumbnail cache, under a hashed name, when offline storage is
+  allowed; `pdf:coverPut` takes only a `drive:<id>:<version>` name and a JPEG of at most 512 KB.
 - **Documents from other modules** open through the download manager: a PDF goes to PDF Studio (inside the app,
   so it is allowed where other applications are not); anything else goes to the OS only with
   `desktop.files.open_external`. Chat attachments are fetched by their signed `/media/{token}`, task attachments
@@ -315,6 +318,11 @@ The private release key is never in this repository.
   chooses where to save it. Nothing is uploaded.
 - Notification content follows the privacy mode and is always hidden while
   WorkSuite is locked.
+- The app lock opens with the WorkSuite password (checked by the server), Touch
+  ID, or a PIN of 4–8 digits set on this computer. Setting a PIN needs the
+  password; repeated or consecutive digits are refused; only a salted scrypt
+  hash (N=2^15) sealed by the database key is stored; wrong PINs and passwords
+  share one count, and five sign the person out. A wiping sign-out removes it.
 - Mail bodies render in a sandboxed frame with scripts, forms and remote
   images removed; links open in the browser.
 - The clipboard is read only in response to the user's paste; there is no

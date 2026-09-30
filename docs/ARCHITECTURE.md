@@ -8,6 +8,7 @@
 | **Renderer** (`src/`) | React 19 UI for the shell and modules | sandboxed Chromium, no Node, talks only through `window.worksuite` |
 | **hash-worker** (`electron/workers`) | SHA-256 of files being uploaded | utility process, no network, reads only paths main names |
 | **pdf-worker** (`electron/workers`) | PDF Studio's engine: PDFium (WebAssembly) for one open document | utility process per document, no network; reads only the one file main names |
+| **local-ai-worker** (`electron/workers`) | Local AI: llama.cpp (node-llama-cpp) with the default model, GPU or CPU | one utility process, started on first request, ended after 10 idle minutes or at sign-out; no network; loads only the verified model file main names. Main (`services/local-ai/host.ts`) holds the CDN catalog and downloads; 3 crashes in 10 minutes stop it until **Restart** |
 
 Utility processes are run by the `ServiceSupervisor`: pinged every 10 s,
 restarted with exponential backoff (1 s → 5 min), marked FAILED after 5
@@ -159,8 +160,23 @@ read through the app's proxy: mail attachments, tender files, chat files; `openI
 `src/core/open-document.ts` is what modules call) — or `local`, a handle from **OfficeFileService**
 (`electron/services/office-local.ts`: `office:pickFile`, `office:readFile`, `office:writeFile`,
 `office:saveCopy`; files from the main process's dialogs or the OS's "Open with", never a path from a page).
+**Online or offline** (`OfficePage.tsx`, decided when the tab opens): online a Drive file opens in the Document
+Server (the full session or `ClassicEditor`, falling back to the built-in editor only when the server has no
+Document Server); a non-Drive document (`DocTab`) is copied into My files → WorkSuite copies (`office/copies.ts`,
+once per session) and the tab's route becomes that Drive file; a copy of a local file is linked to its handle and
+written back (`writeBack`, `writeBackLater`). Offline (`OfflineDocument`) a Drive file is edited in the built-in
+editor on its copy on this computer (`office:readOffline` / `office:writeOffline` over OfficeExternal's
+`localPath`: the synced file or a copy opened in another app), which sync or the copy's upload takes to the Drive.
 **New** (`office/create.ts`): the server's Office API, else Drive's `POST /api/files/create`, else a bundled blank
 OOXML file (`office/blank/`, made by `scripts/make-blank-office.py`) uploaded with `uploadBlob`. Record tabs are keyed by `recordKey()` (`src/core/tabs.ts`), so each attachment or local file is its own tab.
+
+## Drive covers
+
+`src/modules/files/covers.ts` draws a Drive file's first page when the server has no thumbnail (pictures only):
+pdf.js for PDFs, `slideToPng` for presentations, a hidden read-only BetterOffice editor's largest canvas for Word
+and Excel. `Tile` asks for a cover through an IntersectionObserver; drawing is serialized; results go to PDF
+Studio's sealed thumbnail cache (`pdf:coverGet` / `pdf:coverPut`, keyed `drive:<id>:<version>`, hashed on disk,
+AES-256-GCM under the database-derived key, only with offline storage allowed).
 
 ## Side panels
 
@@ -236,6 +252,9 @@ native module). Sensitive columns — cached responses, drafts, queued
 mutations, notification text, tab state, bootstrap — are AES-256-GCM
 ciphertext; the key is in the OS credential store. `synchronous=FULL`: a draft
 or a queued change is on disk before the user is told it was saved.
+
+The app-lock PIN (`services/lock-pin.ts`) is a `config` row per person holding a salted scrypt hash, itself
+Vault-sealed, so the database file alone gives nothing to guess against.
 
 ## Renderer
 

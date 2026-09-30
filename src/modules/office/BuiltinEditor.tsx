@@ -17,7 +17,7 @@ import { openInApp } from './local';
 const BetterEditor = lazy(() => import('./better/BetterEditor'));
 
 /** Where a built-in editor tab's document comes from, and so where Save puts it. */
-export type EditorSource = { kind: 'drive'; fileId: number } | OfficeDocSource;
+export type EditorSource = { kind: 'drive'; fileId: number } | { kind: 'offline'; fileId: number; name: string } | OfficeDocSource;
 
 interface FileInfo {
   id: number;
@@ -42,6 +42,7 @@ export async function saveVersion(fileId: number, name: string, bytes: Uint8Arra
 /** The document's bytes, from wherever the tab's source says. */
 export async function loadBytes(source: EditorSource): Promise<Uint8Array> {
   if (source.kind === 'local') return new Uint8Array(await call('office:readFile', { handle: source.handle }));
+  if (source.kind === 'offline') return new Uint8Array(await call('office:readOffline', { fileId: source.fileId }));
   const path = source.kind === 'drive' ? `/api/files/${source.fileId}/download` : source.path;
   const res = await fetch(apiUrl(path));
   if (!res.ok) throw new Error(res.status === 403 ? 'You may not download this file, so it cannot be opened here.' : `The file could not be read (${res.status}).`);
@@ -55,7 +56,7 @@ export async function loadBytes(source: EditorSource): Promise<Uint8Array> {
  * file on this computer, or — for an attachment, which has nowhere to go back to — a new file in My files. Save a
  * copy writes it where the person chooses.
  */
-export function BuiltinEditor({ tabKey, source, routeName, active }: { tabKey: string; source: EditorSource; routeName: string | null; active: boolean }) {
+export function BuiltinEditor({ tabKey, source, routeName, active, notice }: { tabKey: string; source: EditorSource; routeName: string | null; active: boolean; notice?: string | null }) {
   const qc = useQueryClient();
   const author = useStore(app, (s) => s.auth?.user?.name ?? null);
   const drive = source.kind === 'drive' ? source.fileId : null;
@@ -66,7 +67,7 @@ export function BuiltinEditor({ tabKey, source, routeName, active }: { tabKey: s
   const canEdit = source.kind !== 'drive' || !info.data?.access || info.data.access.edit !== false;
   useTabTitle(name);
 
-  const sourceKey = source.kind === 'drive' ? `d${source.fileId}` : source.kind === 'local' ? `l${source.handle}` : `a${source.path}`;
+  const sourceKey = source.kind === 'drive' ? `d${source.fileId}` : source.kind === 'offline' ? `o${source.fileId}` : source.kind === 'local' ? `l${source.handle}` : `a${source.path}`;
   const prepared = useQuery({
     queryKey: ['office', 'builtin-file', sourceKey],
     enabled: (drive === null || !!info.data) && !!format,
@@ -105,6 +106,8 @@ export function BuiltinEditor({ tabKey, source, routeName, active }: { tabKey: s
             const v = await saveVersion(source.fileId, name, bytes, base);
             setVersion(v ?? (base ? base + 1 : null));
             void qc.invalidateQueries({ queryKey: ['files'] });
+          } else if (source.kind === 'offline') {
+            await call('office:writeOffline', { fileId: source.fileId, bytes: new Uint8Array(bytes) });
           } else if (source.kind === 'local') {
             await call('office:writeFile', { handle: source.handle, bytes: new Uint8Array(bytes) });
           } else {
@@ -171,7 +174,7 @@ export function BuiltinEditor({ tabKey, source, routeName, active }: { tabKey: s
       </div>
     );
   }
-  const where = source.kind === 'drive' ? (base ? `Saved · v${base}` : 'Saved') : source.kind === 'local' ? 'Saved on this computer' : 'Not in your Drive';
+  const where = source.kind === 'drive' ? (base ? `Saved · v${base}` : 'Saved') : source.kind === 'offline' ? 'Saved on this computer · goes to your Drive when you are online' : source.kind === 'local' ? 'Saved on this computer' : 'Not in your Drive';
   const label = !canEdit ? 'Read-only' : state === 'saving' ? 'Saving…' : state === 'unsaved' ? 'Unsaved changes' : state === 'failed' ? 'Not saved' : where;
   return (
     <div className="flex h-full min-h-0 flex-col" data-active={active || undefined}>
@@ -181,7 +184,7 @@ export function BuiltinEditor({ tabKey, source, routeName, active }: { tabKey: s
         <b className="min-w-0 truncate text-[13.5px] font-semibold text-ink">{name}</b>
         <span className={cx('shrink-0 text-[12px]', state === 'failed' ? 'text-danger' : state === 'unsaved' ? 'text-warning' : 'text-ink-3')}>{label}</span>
         <span className="flex-1" />
-        {source.kind !== 'drive' ? (
+        {source.kind === 'api' || source.kind === 'local' ? (
           <Button size="sm" icon="upload" onClick={() => void saveToDrive()} title="Save this document as a new file in My files">
             Save to Drive
           </Button>
@@ -198,6 +201,7 @@ export function BuiltinEditor({ tabKey, source, routeName, active }: { tabKey: s
           </Button>
         ) : null}
       </header>
+      {notice ? <div role="status" className="shrink-0 border-b border-line bg-warning-bg px-3.5 py-1.5 text-[12px] text-ink-2">{notice}</div> : null}
       <div className="relative min-h-0 flex-1 overflow-hidden bg-white text-[#111]">
         <Suspense fallback={<Spinner label="Starting the editor…" />}>
           <BetterEditor

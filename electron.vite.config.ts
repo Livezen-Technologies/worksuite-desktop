@@ -13,7 +13,7 @@ export default defineConfig({
       rollupOptions: {
         // node:sqlite exists only with the node: prefix, which the build
         // host's builtin list may not know; it is always provided by Electron.
-        external: ['node:sqlite'],
+        external: ['node:sqlite', 'node-llama-cpp'],
         input: {
           index: resolve(__dirname, 'electron/main/index.ts'),
           // Utility processes (§3.2): hashing and other CPU work never runs on
@@ -21,6 +21,8 @@ export default defineConfig({
           'hash-worker': resolve(__dirname, 'electron/workers/hash-worker.ts'),
           // PDF Studio: one per open document, PDFium (WebAssembly) inside (§3.4, §3.5).
           'pdf-worker': resolve(__dirname, 'electron/workers/pdf-worker.ts'),
+          // Local AI (WS-SRS-LAI §3.2): llama.cpp, started on first use, away from the UI.
+          'local-ai-worker': resolve(__dirname, 'electron/workers/local-ai-worker.ts'),
         },
       },
     },
