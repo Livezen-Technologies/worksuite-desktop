@@ -24,7 +24,7 @@ const { screenOf, routeOf } = await import('../../../src/modules/restaurant/rout
 const { resolveWebLink } = await import('../../../shared/links');
 const { APP_CATALOGUE } = await import('../../../shared/apps');
 const { MODULES } = await import('../../../src/modules/registry');
-await Promise.all(['Floor', 'Order', 'Bill', 'Kitchen', 'Connect', 'Outbox', 'Approvals', 'Cashier', 'Printers', 'Adjust'].map((m) => import(`../../../src/modules/restaurant/${m}.tsx`)));
+await Promise.all(['Floor', 'Order', 'Bill', 'Kitchen', 'Connect', 'Outbox', 'Approvals', 'Cashier', 'Printers', 'Adjust', 'Reservations'].map((m) => import(`../../../src/modules/restaurant/${m}.tsx`)));
 
 const PAIRING = { terminal_id: 7, org_id: 17, branch_id: 3, name: 'Till 1', code: 'T1', mode: 'pos', station_id: null, area_id: null, counter_id: null, pos_register_id: 11, paired_at: '2026-09-30T09:00:00Z' };
 const CAN = ['pos_access', 'order_create', 'order_edit', 'table_manage', 'payment_process', 'kitchen_view', 'kitchen_manage', 'cashier_open'];
@@ -123,6 +123,7 @@ describe('Restaurant: where things are', () => {
     expect(screenOf(['restaurant', 'cashier', '3'], q)).toMatchObject({ view: 'cashier' });
     expect(screenOf(['restaurant'], new URLSearchParams('view=order&type=takeaway'))).toMatchObject({ view: 'order', takeaway: true, order: null });
     expect(screenOf(['restaurant'], new URLSearchParams('view=nonsense'))).toMatchObject({ view: 'floor' });
+    expect(screenOf(['restaurant', 'reservations'], q)).toMatchObject({ view: 'reservations' });
     expect(routeOf('bill', { order: 55 })).toBe('/restaurant?view=bill&order=55');
     expect(resolveWebLink('/restaurant/orders/41')).toEqual({ kind: 'tab', route: '/restaurant/orders/41', app: 'restaurant' });
   });
@@ -454,5 +455,78 @@ describe('Restaurant: discounts, comps, price overrides, refunds and invoices', 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Make the invoice' }));
     await waitFor(() => expect(calls('POST', '/api/restaurant/v1/bills/12/invoice')).toHaveLength(1));
     expect(calls('POST', '/api/restaurant/v1/bills/12/invoice')[0]![2]).toMatchObject({ body: { client_id: 88 } });
+  });
+});
+
+describe('Restaurant: the host stand', () => {
+  const HOST = { ...OPTIONS, can: { ...OPTIONS.can, reservation_view: true, reservation_manage: true } };
+  const RESV = { id: 60, branch_id: 3, area_id: null, table_id: null, table_code: null, client_id: null, name: 'Perera', phone: '07•••••555', email: null, reserved_for: '2026-09-30T13:30:00Z', ends_at: '2026-09-30T15:00:00Z', local_date: '2026-09-30', local_time: '19:00', duration_minutes: 90, guests: 4, occasion: 'Anniversary', special_requests: null, notes: null, status: 'confirmed', status_label: 'Confirmed', source: 'phone', session_id: null, version: 2,
+    choices: [{ to: 'arrived', on: 'arrive', label: 'Arrived', needs: [] }, { to: 'seated', on: 'seat', label: 'Seated', needs: [] }, { to: 'cancelled', on: 'cancel', label: 'Cancelled', needs: ['reason'] }] };
+  const TIMELINE = { branch_id: 3, date: '2026-09-30', tables: [{ table_id: 1, code: 'A1', capacity: 4, area_id: 1, status: 'available', blocks: [{ kind: 'reservation', id: 60, name: 'Perera', guests: 4, from: '2026-09-30T13:30:00Z', to: '2026-09-30T15:00:00Z', status: 'confirmed' }] }] };
+
+  it('lists the day’s bookings with the server’s moves, and seats one at a free table', async () => {
+    serve((m, p) => {
+      if (m === 'GET' && p === '/api/restaurant/v1/options') return HOST;
+      if (m === 'GET' && p === '/api/restaurant/v1/reservations') return { reservations: [RESV] };
+      if (m === 'GET' && p === '/api/restaurant/v1/reservations/timeline') return TIMELINE;
+      if (m === 'POST' && p === '/api/restaurant/v1/reservations/60/seat') return { reservation: { ...RESV, status: 'seated' }, session_id: 41 };
+      if (m === 'POST' && p === '/api/restaurant/v1/reservations/60/cancel') return { reservation: RESV };
+      return undefined;
+    });
+    show(['restaurant', 'reservations']);
+    const row = await screen.findByRole('listitem', { name: 'Perera at 19:00' });
+    expect(row.textContent).toContain('4 guests');
+    expect(row.textContent).toContain('Anniversary');
+    expect(within(screen.getByRole('list', { name: 'Tables through the day' })).getByRole('listitem', { name: 'Table A1' }).textContent).toContain('Perera');
+    expect(screen.getByRole('navigation', { name: 'Restaurant' }).textContent).toContain('Reservations');
+
+    fireEvent.click(within(row).getByRole('button', { name: 'Seat…' }));
+    let dialog = await screen.findByRole('dialog');
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'A1 · 4' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Seat' }));
+    await waitFor(() => expect(calls('POST', '/api/restaurant/v1/reservations/60/seat')).toHaveLength(1));
+    expect(calls('POST', '/api/restaurant/v1/reservations/60/seat')[0]![2]).toMatchObject({ body: { table_id: 1, guests: 4, version: 2, table_version: 3 } });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    fireEvent.click(within(row).getByRole('button', { name: 'Cancel booking…' }));
+    dialog = await screen.findByRole('dialog');
+    const go = within(dialog).getByRole('button', { name: 'Cancel booking…' });
+    expect(go.hasAttribute('disabled')).toBe(true);
+    fireEvent.change(within(dialog).getByLabelText('Reason'), { target: { value: 'Guest called' } });
+    fireEvent.click(go);
+    await waitFor(() => expect(calls('POST', '/api/restaurant/v1/reservations/60/cancel')).toHaveLength(1));
+    expect(calls('POST', '/api/restaurant/v1/reservations/60/cancel')[0]![2]).toMatchObject({ body: { reason: 'Guest called', version: 2 } });
+  });
+
+  it('asks the server what is free before booking, and books the table chosen', async () => {
+    serve((m, p) => {
+      if (m === 'GET' && p === '/api/restaurant/v1/options') return HOST;
+      if (m === 'GET' && p === '/api/restaurant/v1/reservations') return { reservations: [] };
+      if (m === 'GET' && p === '/api/restaurant/v1/reservations/timeline') return { ...TIMELINE, tables: [] };
+      if (m === 'GET' && p === '/api/restaurant/v1/reservations/availability') return { reserved_for: '2026-09-30T14:30:00Z', duration_minutes: 90, open: true, tables: [{ id: 1, code: 'A1', capacity: 4, area_id: 1, floor_id: 1 }], suggestions: [] };
+      if (m === 'POST' && p === '/api/restaurant/v1/reservations') return { reservation: RESV };
+      return undefined;
+    });
+    show(['restaurant'], 'view=reservations');
+    fireEvent.click(await screen.findByRole('button', { name: 'Book a table' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Time'), { target: { value: '20:00' } });
+    fireEvent.change(within(dialog).getByLabelText('Guests'), { target: { value: '3' } });
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Silva' } });
+    expect(within(dialog).getByRole('button', { name: 'Book' }).hasAttribute('disabled')).toBe(true);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Check availability' }));
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'A1 · 4' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Book' }));
+    await waitFor(() => expect(calls('POST', '/api/restaurant/v1/reservations')).toHaveLength(1));
+    expect(calls('GET', '/api/restaurant/v1/reservations/availability')[0]![2]).toMatchObject({ query: { branch_id: 3, time: '20:00', guests: 3 } });
+    const body = (calls('POST', '/api/restaurant/v1/reservations')[0]![2] as { body: Record<string, unknown> }).body;
+    expect(body).toMatchObject({ branch_id: 3, time: '20:00', guests: 3, name: 'Silva', table_id: 1 });
+    expect(String(body.uuid)).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('is not in the rail without the reservation permissions', async () => {
+    show(['restaurant']);
+    await screen.findByRole('button', { name: 'Table A1 · Available' });
+    expect(screen.getByRole('navigation', { name: 'Restaurant' }).textContent).not.toContain('Reservations');
   });
 });

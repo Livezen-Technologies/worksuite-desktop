@@ -1,15 +1,15 @@
 /**
  * Where things are in the Restaurant tab. The tab's own addresses are
- * `/restaurant?view=floor|order|bill|cashier|kitchen|expo|printers|outbox|approvals`
+ * `/restaurant?view=floor|order|bill|cashier|kitchen|expo|printers|outbox|approvals|reservations`
  * (`&order=<id>`, `&table=<id>`, `&type=takeaway`, `&station=<id>`); the
  * server's notification links (`/restaurant/orders/<id>`,
  * `/restaurant/kitchen?station=`, `/restaurant/cashier/<id>`,
- * `/restaurant/approvals?open=`) open the same screens. Read in one place, so a
+ * `/restaurant/approvals?open=`, `/restaurant/reservations`) open the same screens. Read in one place, so a
  * deep link, a notification and a window's route agree.
  */
-export type View = 'floor' | 'order' | 'bill' | 'cashier' | 'kitchen' | 'expo' | 'printers' | 'outbox' | 'approvals';
+export type View = 'floor' | 'order' | 'bill' | 'cashier' | 'kitchen' | 'expo' | 'printers' | 'outbox' | 'approvals' | 'reservations';
 
-export const VIEWS: readonly View[] = ['floor', 'order', 'bill', 'cashier', 'kitchen', 'expo', 'printers', 'outbox', 'approvals'];
+export const VIEWS: readonly View[] = ['floor', 'order', 'bill', 'cashier', 'kitchen', 'expo', 'printers', 'outbox', 'approvals', 'reservations'];
 
 export interface Screen {
   view: View;
@@ -34,6 +34,7 @@ export function screenOf(path: string[], query: URLSearchParams, mode = 'pos'): 
   if (seg === 'expo') return { ...base, view: 'expo' };
   if (seg === 'cashier') return { ...base, view: 'cashier' };
   if (seg === 'approvals') return { ...base, view: 'approvals' };
+  if (seg === 'reservations') return { ...base, view: 'reservations' };
   const v = query.get('view') as View | null;
   const local = query.get('local');
   return {

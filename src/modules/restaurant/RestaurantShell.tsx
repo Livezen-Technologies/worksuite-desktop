@@ -22,6 +22,7 @@ import { screenOf, type View } from './routes';
  *
  * Until the computer is paired it shows the pairing screen. The back office —
  * menu, floor design, staff, reports, the day close — opens on the web.
+ * The host stand (reservations) is here.
  *
  * Offline the till opens from its copy of the menu and floor (the main
  * process keeps it) and keeps new orders, lines and sends for WorkSuite;
@@ -36,6 +37,7 @@ const Expo = lazy(() => import('./Kitchen').then((m) => ({ default: m.Expo })));
 const Printers = lazy(() => import('./Printers'));
 const Outbox = lazy(() => import('./Outbox'));
 const Approvals = lazy(() => import('./Approvals'));
+const Reservations = lazy(() => import('./Reservations'));
 
 const RAIL: Record<View, { label: RKey; icon: string }> = {
   floor: { label: 'nav.floor', icon: 'grid' },
@@ -47,10 +49,11 @@ const RAIL: Record<View, { label: RKey; icon: string }> = {
   printers: { label: 'nav.printers', icon: 'printer' },
   outbox: { label: 'nav.outbox', icon: 'upload' },
   approvals: { label: 'nav.approvals', icon: 'shield-check' },
+  reservations: { label: 'nav.reservations', icon: 'calendar-clock' },
 };
 
 /** Screens that take, count or give back money, void or move a party: WorkSuite decides them, always. */
-const ONLINE_ONLY: View[] = ['bill', 'cashier', 'approvals', 'expo', 'kitchen'];
+const ONLINE_ONLY: View[] = ['bill', 'cashier', 'approvals', 'expo', 'kitchen', 'reservations'];
 
 export default function RestaurantShell(_props: ModuleProps) {
   const t = useT();
@@ -132,6 +135,8 @@ export default function RestaurantShell(_props: ModuleProps) {
               <Outbox />
             ) : screen.view === 'approvals' ? (
               <Approvals />
+            ) : screen.view === 'reservations' ? (
+              <Reservations />
             ) : (
               <Floor />
             )}
@@ -223,6 +228,7 @@ function Rail() {
       <div className="flex flex-col gap-0.5 px-2.5 pt-3.5">
         {item('floor', pos || till.can('pos_access'))}
         {item('order', pos || till.can('order_create'))}
+        {item('reservations', till.can('reservation_view') || till.can('reservation_manage'))}
         {item('cashier', till.can('cashier_open') || till.can('cashier_close'))}
         <div className="mx-1 my-1.5 border-t border-line" />
         {item('kitchen', till.can('kitchen_view') || till.can('kitchen_manage') || till.pairing.mode === 'kds')}
