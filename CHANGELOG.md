@@ -5,6 +5,34 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-09-30 — 0.2.64: POS and Restaurant on the desktop; Hotel PMS completed
+
+**Added**
+
+- **POS on the desktop** (native, no longer the browser). A counter PC is paired as a till; its credential is kept in
+  the OS keystore and sent only by the main process to the till's own door. Cashiers open, top up and close the
+  drawer (note-by-note count, blind close and the allowed difference as the company sets them) and print X and Z
+  reports. They sell from WorkSuite's catalogue kept on the computer (refreshed in the background, also with nobody
+  signed in; no Inventory access needed), with a barcode scanner, customer, discounts within the company's rights and
+  ceiling, and cash/card/split payment with change, priced by WorkSuite with an offline preview. Offline sales are
+  numbered on the till and sent in order, never twice. Receipts print on the thermal printer without a dialog and the
+  drawer opens; WorkSuite's own receipt is reprinted or e-mailed; sales can be refunded (all or chosen items) and
+  voided within their shift; sales WorkSuite priced differently are flagged for review. A second screen shows the
+  customer their cart.
+- **Restaurant Manager on the desktop** (native). The computer pairs as a terminal (key in the OS credential store,
+  sent as `X-Terminal-Key`): a waiter/cashier till with the live floor (seat, move, merge, split), order taking with
+  modifiers, seats, courses, send/fire/hold and approved voids, server-priced bills with splits, multi-tender
+  payments, change and the drawer, and cashier sessions; a kitchen display per station with the expo; and a print
+  agent that prints kitchen tickets and bills silently on this computer's printers. Offline, the till works from a
+  sealed menu and floor copy and queues orders, with conflicts shown to a manager.
+- **Hotel PMS**: apply a reservation's deposit to its open folios; housekeeping tasks moved, assigned and created, room
+  status changes and restocks with Inventory products; maintenance end to end (report, assign, start, hold, resolve,
+  close, out of order, parts, photos, "Mine"); lost & found; guest requests assigned to a person; guest documents
+  saved or removed and duplicate guests merged; a native tape chart that moves bookings after the server's price
+  preview; invoices with the Billing outbox and retry; KPIs and reports with CSV export where permitted.
+
+---
+
 ## 2026-09-30 — 0.2.63: Local AI in Settings and the AI dock
 
 **Added**
