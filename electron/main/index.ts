@@ -62,6 +62,7 @@ import { EventDeskPrint } from '../services/event-desk-print';
 import { OfficeEditorHost } from '../services/office-editor';
 import { OfficeExternal } from '../services/office-external';
 import { createPdfStudio } from '../services/pdf/host';
+import { createLocalAI } from '../services/local-ai/host';
 import { OfficeLocalFiles, officePathsInArgv } from '../services/office-local';
 import { officeDocRoute } from '@shared/office';
 import { pdfPathsInArgv } from '../services/pdf/local-files';
@@ -1065,6 +1066,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     officeLocal.stop();
     // Open PDFs close, and passwords remembered for the session are forgotten.
     void pdfStudio.closeAll();
+    // Local AI's model stops; the models on this computer stay.
+    void localAI.signedOut();
     realtime.stop();
     notifications.stop();
     device.stop();
@@ -1224,6 +1227,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     device: () => ({ id: device.installId(), name: device.deviceName() }),
     userName: () => sessionCtl.get().user?.name ?? '',
   });
+  // Local AI (services/local-ai, WS-SRS-LAI): models from WorkSuite's CDN, llama.cpp in the ws-local-ai process.
+  const localAI = createLocalAI({ userData: p.userData, signedIn: () => sessionCtl.isReady(), changed: () => broadcast('ai:localChanged') });
+  app.on('will-quit', () => void localAI.stop());
   handPdfs = (paths) => void pdfStudio.openFromOs(paths);
   pdfOnline = () => pdfStudio.online();
   if (pendingPdfs.length) handPdfs(pendingPdfs.splice(0));
@@ -1301,6 +1307,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     const id = contents.id;
     contents.once('destroyed', () => {
       pdfStudio.senderGone(id);
+      localAI.senderGone(id);
       remoteControl.windowGone(id);
       screenShare.forget(id);
     });
@@ -1393,6 +1400,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   };
   registerHandlers(router, ctx);
   pdfStudio.register(router);
+  localAI.register(router);
   router.install();
   const missing = router.missingHandlers();
   if (missing.length) log.warn('IPC channels without handlers', { missing });

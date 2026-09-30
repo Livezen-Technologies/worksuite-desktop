@@ -46,6 +46,18 @@ export const INVOKE_CHANNELS = [
   'ai:rules',
   'ai:confirm',
   'ai:upload',
+  // Local AI (WS-SRS-LAI): models on this computer, llama.cpp in the ws-local-ai process.
+  'ai:localStatus',
+  'ai:localModels',
+  'ai:localRefresh',
+  'ai:localInstall',
+  'ai:localCancelInstall',
+  'ai:localRemove',
+  'ai:localSetDefault',
+  'ai:localCheck',
+  'ai:localAsk',
+  'ai:localCancel',
+  'ai:localRestart',
   'ring:state',
   'ring:join',
   'ring:silence',
@@ -291,6 +303,8 @@ export const EVENT_CHANNELS = [
   'elearning:offlineChanged',
   'eventdesk:changed',
   'office:event',
+  'ai:localEvent',
+  'ai:localChanged',
   'office:localChanged',
 ] as const;
 

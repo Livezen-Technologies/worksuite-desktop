@@ -33,6 +33,7 @@ import {
   type DeskSearchHit,
   type DeskStatus,
 } from '../event-desk';
+import { localRequestSchema, type LocalAIStatus, type LocalModelView } from '../local-ai';
 import { MAX_OFFICE_LOCAL_BYTES, OFFICE_EDITOR_EVENTS, OFFICE_EXPORT_TOKEN, officeCommandSchema, type ExternalApp, type OfficeLocalCopy, type OfficeLocalPick } from '../office';
 import { pdfEditOpSchema, pdfPrintSchema, pdfSearchOptionsSchema, pdfSourceSchema, SEARCH_MAX_QUERY, type PdfAnnotView, type PdfAttachmentView, type PdfBitmap, type PdfDiagnosticCheck, type PdfDriveDetails, type PdfFailureReport, type PdfLinkView, type PdfLocalPick, type PdfOutlineNode, type PdfRect, type PdfSessionView } from '../pdf';
 import type { InvokeChannel } from './channels';
@@ -198,8 +199,10 @@ function ch<S extends z.ZodType>(input: S, opts: Omit<ChannelSpec, 'input'> = {}
   return { input, ...opts };
 }
 
+const localModelId = z.string().regex(/^[a-z0-9][a-z0-9._-]{1,63}$/);
+
 /** A Drive file's cover in the thumbnail cache: `drive:<file id>:<version or change time>`. */
-const coverId = z.string().regex(/^drive:\d{1,12}:[A-Za-z0-9:.\-]{1,40}$/);
+const coverId = z.string().regex(/^drive:\d{1,12}:[A-Za-z0-9:.-]{1,40}$/);
 
 /** An Office document's bytes from the editor (a ZIP package, an OLE file, RTF or CSV), at most the local limit. */
 const officeBytes = z.instanceof(Uint8Array).refine((b) => b.byteLength > 0 && b.byteLength <= MAX_OFFICE_LOCAL_BYTES, 'The document is empty or too large.');
@@ -265,6 +268,18 @@ export const contract = {
   // The assistant (WS-AI-SRS-001 DSK-3): its rules here, confirming a proposal (the main window only, audited),
   // and a file picked on this computer as context.
   'ai:rules': ch(z.object({ refresh: z.boolean().optional() }).optional(), { session: true }),
+  // Local AI (WS-SRS-LAI §18.4): typed, allow-listed, checked here; the window names models by id, never a path.
+  'ai:localStatus': ch(none, { session: true }),
+  'ai:localModels': ch(none, { session: true }),
+  'ai:localRefresh': ch(none, { session: true, rate: 6 }),
+  'ai:localInstall': ch(z.strictObject({ id: localModelId }), { session: true, rate: 10 }),
+  'ai:localCancelInstall': ch(z.strictObject({ id: localModelId, discard: z.boolean().optional() }), { session: true, rate: 20 }),
+  'ai:localRemove': ch(z.strictObject({ id: localModelId }), { session: true, rate: 10 }),
+  'ai:localSetDefault': ch(z.strictObject({ id: localModelId }), { session: true, rate: 10 }),
+  'ai:localCheck': ch(z.strictObject({ id: localModelId }), { session: true, rate: 5 }),
+  'ai:localAsk': ch(localRequestSchema, { session: true, rate: 30, sensitive: true }),
+  'ai:localCancel': ch(z.strictObject({ id: z.string().regex(/^[A-Za-z0-9-]{8,64}$/) }), { session: true, rate: 60 }),
+  'ai:localRestart': ch(none, { session: true, rate: 3 }),
   'ai:confirm': ch(z.object({ id: z.number().int().positive(), nonce: z.string().regex(/^[a-f0-9]{16,64}$/) }), { session: true, sensitive: true, rate: 5 }),
   'ai:upload': ch(none, { session: true, rate: 3 }),
   // Website chats ringing like calls (WS-WCHAT ENH-01, RING-49): the call window, the main window's bar.
@@ -945,6 +960,19 @@ export interface Outputs {
   'quickask:close': void;
   'quickask:handoff': void;
   'ai:rules': AiRules;
+  'ai:localStatus': LocalAIStatus;
+  'ai:localModels': LocalModelView[];
+  'ai:localRefresh': void;
+  /** Resolves when the download started (progress comes as `ai:localChanged`). */
+  'ai:localInstall': void;
+  'ai:localCancelInstall': void;
+  'ai:localRemove': void;
+  'ai:localSetDefault': void;
+  'ai:localCheck': boolean;
+  /** Resolves once the request is running; its text comes as `ai:localEvent`. */
+  'ai:localAsk': void;
+  'ai:localCancel': void;
+  'ai:localRestart': void;
   'ai:confirm': unknown;
   'ai:upload': AiUpload | null;
   'ring:state': WebchatRingState;
