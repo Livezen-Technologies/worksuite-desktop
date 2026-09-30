@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-09-30 — 0.2.71: Chat's channel toolbar (WhatsApp in Chat), profile pictures, a resizable conversation list; AI Assistant scrolling; Gemma 3 4B for Local AI
+## 2026-09-30 — 0.2.71: Chat's channel toolbar (WhatsApp in Chat), profile pictures, a resizable conversation list; AI Assistant scrolling; Local AI first-use setup and Gemma 3 4B
 
 - **A channel toolbar down the far left of Chat** (#33): Chat, Web Chat and WhatsApp, each with its unread count
   (waiting visitors for Web Chat) and a warning dot when a WhatsApp number is not connected. Hover for the name and
@@ -25,6 +25,14 @@ person who has to live with the change — what it does, and where it bites.
   When somebody changes their picture it changes here too, without signing out (the server announces it; pictures
   are also checked again after 15 minutes). Group conversations keep their rounded-square initials, so they never
   look like a person. WhatsApp contacts' pictures show once the server provides them; it does not fetch them yet.
+- **"Set up your AI Assistant"** (#49). The first time the assistant opens with nothing on this computer that can
+  answer, it offers the model that suits it — name, download size, the free space it needs — with **Download and Set
+  Up** and **Not Now** (asked again in a week; Settings → Local AI has it meanwhile). Space is checked first (too little
+  says how much is needed and blocks it); too little memory is a warning. The setup shows its stages — Downloading →
+  Verifying → Preparing AI → Ready — with percentage, size and time left, can be paused, cancelled, resumed and tried
+  again, and carries on with the panel closed. Errors say what to do: check the connection and resume, free up space,
+  download afresh, or test again / choose another model. Local chat is offered only once the model has loaded and
+  answered; then **"Your AI Assistant is ready to use"** and **Start Chatting**. Nothing is offered once a model works.
 - **Gemma 3 4B on this computer** (#55). With a server that has it (WorkSuite Server with Ai 1.1.0), Settings →
   Local AI lists Gemma 3 4B with its version, download size (about 2.5 GB), the memory it needs and the computers it
   suits, and its licence — the Gemma Terms of Use, with the notice they require. **Download and set up** fetches it

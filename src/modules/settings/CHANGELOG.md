@@ -8,6 +8,7 @@ the root CHANGELOG.md.
 
 **Added**
 
+- Settings → Local AI shows the time left while a model downloads (#49)
 - Settings → Local AI shows each model's version, download size, the memory and computer tier it needs, its licence (with a link) and required notice; Download and set up, Cancel during a download, Setting up… while the model is tried, Ready to use once it answered, and Test / Test again (#55)
 
 ## 1.0.0 — 2026-09-30

@@ -35,6 +35,8 @@ export interface ModelManagerDeps {
 interface Download {
   abort: AbortController;
   received: number;
+  /** [ms, bytes received] over the last 20 s, for the download's speed (worksuite-desktop#49). */
+  samples: Array<[number, number]>;
   state: Extract<LocalModelState, 'downloading' | 'verifying'>;
   done: Promise<void>;
 }
@@ -204,6 +206,7 @@ export class LocalAIModelManager {
         isDefault: this.settings.defaultModel === model.id,
         readiness: this.readiness(model),
         readinessError: this.notReady.get(model.id) ?? null,
+        bytesPerSecond: d && d.state === 'downloading' ? speed(d.samples) : null,
       });
     }
     return out;
@@ -218,7 +221,7 @@ export class LocalAIModelManager {
     this.notReady.delete(id);
     this.paused.delete(id);
     const abort = new AbortController();
-    const d: Download = { abort, received: 0, state: 'downloading', done: Promise.resolve() };
+    const d: Download = { abort, received: 0, samples: [], state: 'downloading', done: Promise.resolve() };
     d.done = this.fetchModel(m, d)
       .catch(async (e: unknown) => {
         if (abort.signal.aborted) return;
@@ -260,6 +263,9 @@ export class LocalAIModelManager {
           if (!out.write(value)) await new Promise<void>((r) => out.once('drain', () => r()));
           d.received += value.byteLength;
           if (d.received > m.bytes) throw new Error('The download is larger than the catalog says.');
+          const now = this.now();
+          const last = d.samples[d.samples.length - 1];
+          if (!last || now - last[0] >= 500) d.samples = [...d.samples.filter(([t]) => now - t <= 20_000), [now, d.received]];
           this.changed();
         }
       } finally {
@@ -365,6 +371,15 @@ export class LocalAIModelManager {
     if (!m || !(await this.installed(m))) return null;
     return join(this.dir(m), 'model.gguf');
   }
+}
+
+/** Bytes a second between the oldest and newest sample, once they are 2 s apart and something arrived. */
+export function speed(samples: Array<[number, number]>): number | null {
+  if (samples.length < 2) return null;
+  const [t0, b0] = samples[0]!;
+  const [t1, b1] = samples[samples.length - 1]!;
+  if (t1 - t0 < 2_000 || b1 <= b0) return null;
+  return Math.round((b1 - b0) / ((t1 - t0) / 1000));
 }
 
 function sha256(path: string): Promise<string> {

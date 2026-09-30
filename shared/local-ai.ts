@@ -104,6 +104,8 @@ export interface LocalModelView {
   readiness: LocalModelReadiness;
   /** Why the readiness check failed. */
   readinessError: string | null;
+  /** How fast the download has gone over the last 20 seconds, while downloading; null until it can tell. */
+  bytesPerSecond?: number | null;
 }
 
 export type LocalRuntimeState = 'off' | 'starting' | 'ready' | 'loading' | 'busy' | 'error';

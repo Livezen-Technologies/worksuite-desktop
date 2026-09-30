@@ -3,7 +3,7 @@ import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LocalAIModelManager } from '../../../electron/services/local-ai/models';
+import { LocalAIModelManager, speed } from '../../../electron/services/local-ai/models';
 import type { LocalAIHardware } from '../../../shared/local-ai';
 
 const MODEL_BYTES = readFileSync(join(__dirname, '..', '..', 'fixtures', 'local-ai', 'tiny-test.gguf'));
@@ -272,5 +272,12 @@ describe('Local AI models from the WorkSuite server (AI Studio)', () => {
     const [v] = await next.list(hw);
     expect(v!.readiness).toBe('untested');
     s.done();
+  });
+
+  it('measures how fast a download goes, once it has two seconds to go on (worksuite-desktop#49)', () => {
+    expect(speed([])).toBeNull();
+    expect(speed([[0, 0], [1_000, 5_000_000]])).toBeNull();
+    expect(speed([[0, 1_000], [1_000, 1_000], [4_000, 40_001_000]])).toBe(10_000_000);
+    expect(speed([[0, 5], [5_000, 5]])).toBeNull();
   });
 });

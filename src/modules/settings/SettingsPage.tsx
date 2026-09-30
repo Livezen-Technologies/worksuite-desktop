@@ -8,6 +8,7 @@ import { call, errorMessage, isMac } from '../../core/bridge';
 import { conflicts, effectiveShortcuts, prettyAccelerator, accelerator, DEFAULT_SHORTCUTS } from '../../core/commands';
 import { LANGUAGES } from '../../core/i18n';
 import { LOCAL_AI_KEY, useLocalAIStatus, useLocalModels } from '../../core/local-ai';
+import { secondsLeft, timeLeftLabel } from '../ai/setup';
 import { queryClient } from '../../core/query';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
@@ -953,6 +954,7 @@ export function LocalAISection() {
                 </div>
                 <div className="mt-1 text-[11.5px] text-ink-3">
                   {v.state === 'paused' ? 'Paused' : 'Downloading'} · {bytes(v.received)} of {bytes(m.bytes)} ({pct}%)
+                  {v.state === 'downloading' && secondsLeft(v) !== null ? ` · ${timeLeftLabel(secondsLeft(v))}` : ''}
                 </div>
               </div>
             ) : null}

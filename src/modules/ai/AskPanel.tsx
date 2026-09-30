@@ -66,6 +66,7 @@ export function AskPanel({
   const local = !!localModel && (localPick ?? offline);
   const [streaming, setStreaming] = useState<string | null>(null);
   const running = useRef<LocalAsk | null>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
   useEffect(() => () => running.current?.cancel(), []);
 
   useEffect(() => setUseTab(true), [tabRef]);
@@ -140,8 +141,15 @@ export function AskPanel({
       <div className="relative flex min-h-0 flex-1 flex-col">
       <div ref={view.scroller} onScroll={view.onScroll} data-testid="ai-conversation" className="min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-thin" aria-live="polite">
         <div ref={view.content} className="flex flex-col gap-3 pb-1">
-        {/* First-use Local AI setup: offered in the assistant until a model on this computer is set up (worksuite-desktop#55). */}
-        {surface === 'assistant.panel' && !localModel ? <LocalSetup /> : null}
+        {/* First-use Local AI setup: offered until a model on this computer can answer, then "ready" once (worksuite-desktop#49/#55). */}
+        {surface === 'assistant.panel' ? (
+          <LocalSetup
+            onStart={() => {
+              setLocalPick(true);
+              input.current?.focus();
+            }}
+          />
+        ) : null}
         {entries.length === 0 && !off ? (
           <p className="text-[12.5px] text-ink-3">
             Ask about your work — tasks, mail, files, meetings, customers. The assistant sees only what you can open, and changes nothing until you confirm it.
@@ -223,6 +231,7 @@ export function AskPanel({
             </button>
           ) : null}
           <textarea
+            ref={input}
             value={text}
             onChange={(e) => setText(e.target.value.slice(0, 4000))}
             onKeyDown={onKey}
