@@ -109,6 +109,21 @@ const en = {
   'pos.refundDone': '{amount} given back.',
   'pos.voidOnlyThisShift': 'A sale is voided in its own shift, while it is open; refund it instead.',
   'pos.noReturns': 'Refunds and voids are not available from this WorkSuite server, or to you.',
+  'pos.noDrawer': 'No register is open at this till, so no sale can be started. Open the register — count the float into the drawer — then sell.',
+  'pos.noDrawerShort': 'Open the register before you sell.',
+  'pos.flag.price_differs': 'Price differs',
+  'pos.flag.payment_missing': 'Payment missing',
+  'pos.flag.late': 'Late',
+  'pos.flagNote.payment_missing': 'The till sent no payment for this sale: WorkSuite recorded it unpaid, its invoice outstanding in Billing.',
+  'pos.flagNote.late': 'Sold while a register that has since closed was open: WorkSuite took it into that register, and left its closed count as it was.',
+  'pos.refusal.drawer_closed': 'No register was open for this sale when it reached WorkSuite. Open the register, then send it again — it goes into the register open now — or drop it.',
+  'pos.refusal.session_not_here': 'The register this sale names is another till’s. Send it again into the register open at this till, or drop it.',
+  'pos.retryNeedsDrawer': 'Open the register at this till to send it again.',
+  'pos.retryInto': 'Sent again, it goes into the register open now ({register}).',
+  'pos.show': 'Which sales',
+  'pos.showAll': 'All',
+  'pos.showReview': 'To review',
+  'pos.noneToReview': 'No sales to review.',
 } as const;
 
 export type PosKey = keyof typeof en;

@@ -18,6 +18,9 @@ import Tender from './Tender';
  * the keyboard's focus is, and the cart — quantities, the customer, the cashier's discount where they may give one —
  * with its price: WorkSuite's whenever it answers, the catalogue's preview meanwhile and offline (marked so). Pay opens
  * the tender. The customer display follows the cart.
+ *
+ * No drawer, no sale (WorkSuite's rule on every door, `drawer_closed`): with no register open at this till nothing can
+ * be put in the cart — a pick or a scan says to open the register, and the cart asks for it with the way there.
  */
 const SHOWN = 240;
 
@@ -45,6 +48,19 @@ export default function Register({ active }: { active: boolean }) {
   const currency = till.currency || catalogue.data?.currency || '';
   const org = till.company?.id ?? null;
   const price = useCartPrice(cart.lines, pct, byId, currency, till.discount.ceiling, till.caps, !till.offline, org);
+  const session = till.session;
+  // No drawer, no sale: nothing goes in the cart until a register is open here.
+  const add = useCallback(
+    (id: number): boolean => {
+      if (!session) {
+        toast('warning', t('pos.noDrawerShort'));
+        return false;
+      }
+      cartActions.add(id);
+      return true;
+    },
+    [session, t],
+  );
   // What the server said it can do; unknown (options not read yet) tries POS's catalogue first.
   const capable = till.options ? !!till.caps.catalogue : undefined;
 
@@ -71,9 +87,13 @@ export default function Register({ active }: { active: boolean }) {
 
   const onScan = useCallback(
     async (code: string) => {
+      if (!session) {
+        toast('warning', t('pos.noDrawerShort'));
+        return;
+      }
       const hit = findInCatalogue([...byId.values()], code);
       if (hit) {
-        cartActions.add(hit.id);
+        add(hit.id);
         return;
       }
       if (till.offline) {
@@ -87,12 +107,12 @@ export default function Register({ active }: { active: boolean }) {
           return;
         }
         setExtras((m) => new Map(m).set(p.id, p));
-        cartActions.add(p.id);
+        add(p.id);
       } catch (e) {
         toast('error', e instanceof Error ? e.message : 'WorkSuite could not look that code up.');
       }
     },
-    [byId, till.offline, till.caps, org],
+    [byId, till.offline, till.caps, org, session, add, t],
   );
   useBarcodeScanner(active && !paying && !customerOpen, (code) => void onScan(code));
 
@@ -111,7 +131,6 @@ export default function Register({ active }: { active: boolean }) {
   }, [products, q, category]);
 
   const canSell = !!till.company?.can.sell;
-  const session = till.session;
 
   return (
     <div className="flex h-full min-h-[560px]">
@@ -129,8 +148,7 @@ export default function Register({ active }: { active: boolean }) {
                   const only = filtered.length === 1 ? filtered[0] : null;
                   const hit = exact ?? only;
                   if (hit) {
-                    cartActions.add(hit.id);
-                    setQ('');
+                    if (add(hit.id)) setQ('');
                   } else void onScan(q.trim()).then(() => setQ(''));
                 }
               }}
@@ -167,7 +185,8 @@ export default function Register({ active }: { active: boolean }) {
               <button
                 key={p.id}
                 type="button"
-                onClick={() => cartActions.add(p.id)}
+                onClick={() => add(p.id)}
+                aria-disabled={!session || undefined}
                 className="flex min-h-[78px] flex-col items-start justify-between gap-1 rounded-[10px] border border-line bg-surface p-2.5 text-left transition-colors hover:border-primary/40 hover:bg-subtle"
               >
                 <span className="line-clamp-2 text-[13px] leading-tight font-semibold text-ink">{p.name}</span>
@@ -194,7 +213,17 @@ export default function Register({ active }: { active: boolean }) {
           ) : null}
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 scroll-thin">
-          {cart.lines.length === 0 ? <p className="py-8 text-center text-[13px] text-ink-3">{t('pos.cartEmpty')}</p> : null}
+          {cart.lines.length === 0 && !session ? (
+            <div className="flex flex-col items-center gap-3 py-8 text-center" role="status">
+              <Icon name="banknote" size={28} className="text-warning" />
+              <p className="text-[13.5px] font-semibold text-ink">{t('pos.noDrawer')}</p>
+              <Button variant="primary" onClick={() => till.go('shift')}>
+                {t('pos.openShift')}
+              </Button>
+            </div>
+          ) : cart.lines.length === 0 ? (
+            <p className="py-8 text-center text-[13px] text-ink-3">{t('pos.cartEmpty')}</p>
+          ) : null}
           <ul className="flex flex-col divide-y divide-line">
             {cart.lines.map((l) => {
               const p = byId.get(l.product_id);
@@ -251,9 +280,9 @@ export default function Register({ active }: { active: boolean }) {
             </div>
           ) : null}
           {price.error ? <Note tone="danger">{price.error}</Note> : null}
-          {!session ? (
+          {!session && cart.lines.length ? (
             <Note tone="warning" action={<Button size="sm" onClick={() => till.go('shift')}>{t('pos.openShift')}</Button>}>
-              {t('pos.noShift')}
+              {t('pos.noDrawer')}
             </Note>
           ) : !canSell ? (
             <Note tone="warning">You may not sell at this till (pos.sale.create).</Note>
