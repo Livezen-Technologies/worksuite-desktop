@@ -114,5 +114,9 @@ app.whenReady().then(async () => {
 writeFileSync(join(work, 'main.cjs'), main);
 const electron = createRequire(import.meta.url)('electron');
 const args = [join(work, 'main.cjs'), ...(process.platform === 'linux' ? ['--no-sandbox'] : [])];
-const res = spawnSync(electron, args, { stdio: 'inherit', env: { ...process.env, ELECTRON_RUN_AS_NODE: '' } });
+// Electron must start as itself, not as Node: the variable is removed, not emptied — on Windows an empty value still
+// counts as set, and main.cjs then ran under plain Node ("Cannot find module 'electron'").
+const env = { ...process.env };
+delete env.ELECTRON_RUN_AS_NODE;
+const res = spawnSync(electron, args, { stdio: 'inherit', env });
 process.exit(res.status ?? 1);
