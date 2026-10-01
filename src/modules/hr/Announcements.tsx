@@ -1,24 +1,38 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import { apiDelete, apiGet, apiPost } from '../../core/api';
+import { useEffect, useMemo, useState } from 'react';
+import { apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
+import { plainText } from '../../core/rich';
 import { toast } from '../../core/toasts';
-import { ErrorNote, Spinner } from '../../components/ui';
+import { ErrorNote, Spinner, cx } from '../../components/ui';
+import { Icon } from '../../components/Icon';
 import { btn, btnPrimary, Cell, Empty, Field, input, Kpi, PageHead, row, Sheet, SidePanel, StatusChip, THead } from './parts';
 import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Announcements (HrAdminSheet "Announcements"; the web's HrAnnouncements):
- * what HR has told a company, written, sent, and who has read and
- * acknowledged it. The audience is fixed when it is sent, so sending says in
- * words who it goes to before it goes.
+ * what HR has told one company, several or all of those you may publish to
+ * (worksuite-desktop#98) — written, saved as a draft, published, edited,
+ * withdrawn — and who has read and acknowledged it. Before anything goes out
+ * it says how many people it reaches, in which companies; someone in two of
+ * them gets it once.
  */
-interface Row {
+interface Company {
+  id: number;
+  name: string;
+}
+
+export interface AnnouncementRow {
   id: number;
   title: string;
+  /** A display string: one company, several, or "All companies". */
   company: string;
   org_id: number | null;
+  /** Newer servers (#98): every company it goes to, and whether that is "all you may publish to". */
+  companies?: Company[];
+  all_companies?: boolean;
+  body?: string | null;
   category: string;
   priority: string;
   status: string;
@@ -27,25 +41,83 @@ interface Row {
   publish_at: string | null;
   published_at: string | null;
   expires_at: string | null;
+  /** Whether you may change it (every company it goes to is one you may publish to). */
+  manageable?: boolean;
 }
 
 interface Report {
   stats: { notified: number; read: number; acknowledged: number };
   revision: number;
-  people: Array<{ id: number; name: string; email: string; read: boolean; acknowledged: boolean; ack_revision: number | null }>;
+  companies?: Company[];
+  people: Array<{ id: number; name: string; email: string; read: boolean; acknowledged: boolean; ack_revision: number | null; company?: string | null }>;
+}
+
+export interface Audience {
+  total: number;
+  companies: Array<{ id: number; name: string; count: number }>;
 }
 
 const when = (s: string | null) => (s ? new Date(`${s.replace(' ', 'T')}Z`).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
 const escape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const html = (text: string) =>
+  text
+    .split(/\n{2,}/)
+    .map((p) => `<p>${escape(p).replace(/\n/g, '<br>')}</p>`)
+    .join('');
+
+/** What the status is called here: a cancelled announcement was withdrawn. */
+export function statusLabel(status: string): string {
+  return status === 'cancelled' ? 'Withdrawn' : status[0]!.toUpperCase() + status.slice(1);
+}
+
+/** "Livezen", "Livezen and Asterix", "3 companies" — or all of them. */
+export function companiesLabel(r: Pick<AnnouncementRow, 'company' | 'companies' | 'all_companies'>): string {
+  if (r.all_companies) return 'All companies';
+  const c = r.companies ?? [];
+  if (!c.length) return r.company;
+  return c.length === 1 ? c[0]!.name : c.length === 2 ? `${c[0]!.name} and ${c[1]!.name}` : `${c.length} companies`;
+}
+
+/** "128 people in 2 companies". */
+export function audienceLine(a: Audience): string {
+  return `${a.total.toLocaleString()} ${a.total === 1 ? 'person' : 'people'} in ${a.companies.length} ${a.companies.length === 1 ? 'company' : 'companies'}`;
+}
+
+function useCompanies() {
+  return useQuery({ queryKey: ['hr', 'context'], queryFn: ({ signal }) => apiGet<{ organizations: Company[]; default: number | null }>('/api/hr/context', undefined, signal) });
+}
+
+/** Who it would reach, asked as the companies change (a moment after the last change). */
+function useAudience(ids: number[], all: boolean, enabled = true) {
+  const key = all ? 'all' : [...ids].sort((a, b) => a - b).join(',');
+  const [asked, setAsked] = useState(key);
+  useEffect(() => {
+    const t = setTimeout(() => setAsked(key), 300);
+    return () => clearTimeout(t);
+  }, [key]);
+  return useQuery({
+    queryKey: ['hr', 'announcement-audience', asked],
+    queryFn: ({ signal }) => apiGet<Audience>('/api/hr/announcements/audience', { org_ids: asked }, signal),
+    enabled: enabled && asked !== '',
+    retry: false,
+    staleTime: 30_000,
+  });
+}
 
 export default function Announcements() {
   const qc = useQueryClient();
-  const [writing, setWriting] = useState(false);
-  const [sending, setSending] = useState<Row | null>(null);
-  const [deleting, setDeleting] = useState<Row | null>(null);
-  const [report, setReport] = useState<Row | null>(null);
-  const q = useQuery({ queryKey: ['hr', 'announcements'], queryFn: ({ signal }) => apiGet<{ items: Row[] }>('/api/hr/announcements', undefined, signal) });
-  const refresh = () => void qc.invalidateQueries({ queryKey: ['hr', 'announcements'] });
+  const companies = useCompanies();
+  const [org, setOrg] = useState('');
+  const [writing, setWriting] = useState<AnnouncementRow | 'new' | null>(null);
+  const [sending, setSending] = useState<AnnouncementRow | null>(null);
+  const [withdrawing, setWithdrawing] = useState<AnnouncementRow | null>(null);
+  const [deleting, setDeleting] = useState<AnnouncementRow | null>(null);
+  const [report, setReport] = useState<AnnouncementRow | null>(null);
+  const q = useQuery({ queryKey: ['hr', 'announcements', org], queryFn: ({ signal }) => apiGet<{ items: AnnouncementRow[] }>('/api/hr/announcements', org ? { org } : undefined, signal) });
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: ['hr', 'announcements'] });
+    void qc.invalidateQueries({ queryKey: ['announcements'] });
+  };
   const run = async (fn: () => Promise<unknown>, done: string) => {
     try {
       await fn();
@@ -57,68 +129,95 @@ export default function Announcements() {
       return false;
     }
   };
+  const list = companies.data?.organizations ?? [];
   return (
     <div className="flex flex-col gap-3.5">
       <PageHead title="Announcements" sub="What HR has told each company, and who has read it.">
-        <button type="button" className={btnPrimary} onClick={() => setWriting(true)}>
+        {list.length > 1 ? (
+          <Select aria-label="Filter by company" value={org} onChange={(e) => setOrg(e.target.value)} className={input + ' !w-[200px]'}>
+            <option value="">All companies</option>
+            {list.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+        ) : null}
+        <button type="button" className={btnPrimary} onClick={() => setWriting('new')}>
           New announcement
         </button>
       </PageHead>
       {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
       {q.data ? (
         <div className="overflow-hidden rounded-[12px] border border-line bg-surface">
-          <THead cols={[['Title', null], ['Company', 150], ['Priority', 100], ['Acknowledgement', 130], ['Status', 110], ['Sent', 110], ['', 170]]} />
+          <THead cols={[['Title', null], ['Companies', 160], ['Priority', 100], ['Acknowledgement', 120], ['Status', 110], ['Sent', 110], ['', 230]]} />
           {q.data.items.map((r) => (
             <div key={r.id} className={row}>
-              <Cell w={null} className="font-semibold">{r.title}</Cell>
-              <Cell w={150} className="text-ink-2">{r.company}</Cell>
+              <Cell w={null} className="font-semibold">
+                {r.pinned ? <Icon name="pin" size={12} className="mr-1 inline text-ink-3" /> : null}
+                {r.title}
+              </Cell>
+              <Cell w={160} className="text-ink-2">
+                <span title={(r.companies ?? []).map((c) => c.name).join(', ') || r.company}>{companiesLabel(r)}</span>
+              </Cell>
               <Cell w={100} className="!overflow-visible">
                 <StatusChip className={r.priority === 'urgent' ? '!bg-danger-bg !text-danger' : r.priority === 'important' ? '!bg-warning-bg !text-[#9A4A06] dark:!text-warning' : '!bg-subtle !text-ink-2'}>{r.priority[0]!.toUpperCase() + r.priority.slice(1)}</StatusChip>
               </Cell>
-              <Cell w={130} className="text-ink-2">{r.requires_ack ? 'Required' : 'Not required'}</Cell>
+              <Cell w={120} className="text-ink-2">{r.requires_ack ? 'Required' : 'Not required'}</Cell>
               <Cell w={110} className="!overflow-visible">
-                <StatusChip>{r.status[0]!.toUpperCase() + r.status.slice(1)}</StatusChip>
+                <StatusChip>{statusLabel(r.status)}</StatusChip>
               </Cell>
               <Cell w={110} className="text-ink-3">{when(r.published_at)}</Cell>
-              <span className="flex w-[170px] shrink-0 justify-end gap-3 text-[12.5px] font-bold">
-                {r.status === 'draft' ? (
+              <span className="flex w-[230px] shrink-0 justify-end gap-3 text-[12.5px] font-bold">
+                {r.manageable !== false && (r.status === 'draft' || r.status === 'published') ? (
+                  <button type="button" className="text-primary hover:underline" onClick={() => setWriting(r)}>
+                    Edit
+                  </button>
+                ) : null}
+                {r.status === 'draft' && r.manageable !== false ? (
                   <button type="button" className="text-primary hover:underline" onClick={() => setSending(r)}>
-                    Send
+                    Publish
                   </button>
                 ) : (
                   <button type="button" className="text-primary hover:underline" onClick={() => setReport(r)}>
                     Who has read it
                   </button>
                 )}
-                <button type="button" className="text-danger hover:underline" onClick={() => setDeleting(r)}>
-                  Delete
-                </button>
+                {r.manageable === false ? null : r.status === 'published' ? (
+                  <button type="button" className="text-danger hover:underline" onClick={() => setWithdrawing(r)}>
+                    Withdraw
+                  </button>
+                ) : (
+                  <button type="button" className="text-danger hover:underline" onClick={() => setDeleting(r)}>
+                    Delete
+                  </button>
+                )}
               </span>
             </div>
           ))}
           {!q.data.items.length ? <Empty text="Nothing announced yet." /> : null}
         </div>
       ) : null}
-      {writing ? <Composer onClose={() => setWriting(false)} onDone={() => (setWriting(false), refresh())} /> : null}
-      {sending ? (
+      {writing && writing !== 'new' ? <EditLoader row={writing} companies={list} defaultCompany={companies.data?.default ?? null} onClose={() => setWriting(null)} onDone={() => (setWriting(null), refresh())} /> : null}
+      {writing === 'new' ? <Composer row={null} companies={list} defaultCompany={companies.data?.default ?? null} onClose={() => setWriting(null)} onDone={() => (setWriting(null), refresh())} /> : null}
+      {sending ? <PublishSheet row={sending} onClose={() => setSending(null)} onPublish={() => run(() => apiPost(`/api/hr/announcements/${sending.id}/publish`, {}), 'Published.').then((ok) => ok && setSending(null))} /> : null}
+      {withdrawing ? (
         <Sheet
-          title={`Send “${sending.title}”?`}
+          title={`Withdraw “${withdrawing.title}”?`}
           width={440}
-          onClose={() => setSending(null)}
+          onClose={() => setWithdrawing(null)}
           footer={
             <>
-              <button type="button" className={btn} onClick={() => setSending(null)}>
+              <button type="button" className={btn} onClick={() => setWithdrawing(null)}>
                 Cancel
               </button>
-              <button type="button" className={btnPrimary} onClick={() => void run(() => apiPost(`/api/hr/announcements/${sending.id}/publish`, {}), 'Sent.').then((ok) => ok && setSending(null))}>
-                Send it
+              <button type="button" className={btnPrimary + ' !bg-danger hover:!opacity-90'} onClick={() => void run(() => apiPost(`/api/hr/announcements/${withdrawing.id}/withdraw`, {}), 'Withdrawn.').then((ok) => ok && setWithdrawing(null))}>
+                Withdraw
               </button>
             </>
           }
         >
-          <span className="text-ink-2">
-            It goes to everybody in <b className="text-ink">{sending.company}</b>, who see it on their home screen{sending.requires_ack ? ' and are asked to confirm they have read it' : ''}. Who receives it is fixed once it is sent.
-          </span>
+          <span className="text-ink-2">It disappears from everybody’s home screen and its notification no longer opens it. Who read and acknowledged it stays in the report.</span>
         </Sheet>
       ) : null}
       {deleting ? (
@@ -137,7 +236,7 @@ export default function Announcements() {
             </>
           }
         >
-          <span className="text-ink-2">{deleting.status === 'published' ? 'It disappears from everybody’s home screen, and who read it is no longer shown.' : 'The draft is removed.'}</span>
+          <span className="text-ink-2">{deleting.status === 'draft' ? 'The draft is removed.' : 'It is removed, and who read it is no longer shown.'}</span>
         </Sheet>
       ) : null}
       {report ? <ReportPanel row={report} onClose={() => setReport(null)} /> : null}
@@ -145,69 +244,194 @@ export default function Announcements() {
   );
 }
 
-function Composer({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-  const ctx = useQuery({ queryKey: ['hr', 'context'], queryFn: ({ signal }) => apiGet<{ organizations: Array<{ id: number; name: string }>; default: number | null }>('/api/hr/context', undefined, signal) });
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
-  const [priority, setPriority] = useState('normal');
-  const [org, setOrg] = useState('');
-  const [ack, setAck] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const companies = ctx.data?.organizations ?? [];
-  const chosen = org || String(ctx.data?.default ?? companies[0]?.id ?? '');
-  const save = async () => {
-    setBusy(true);
-    try {
-      await apiPost('/api/hr/announcements', {
-        title: title.trim(),
-        body: body
-          .split(/\n{2,}/)
-          .map((p) => `<p>${escape(p).replace(/\n/g, '<br>')}</p>`)
-          .join(''),
-        priority,
-        org_id: Number(chosen),
-        audience_type: 'all',
-        requires_ack: ack,
-      });
-      toast('success', 'Saved as a draft. Send it when it is ready.');
-      onDone();
-    } catch (e) {
-      toast('error', errorMessage(e));
-      setBusy(false);
-    }
-  };
+/** Editing reads the whole announcement first (the list has no message); an older server without that edits from the row. */
+function EditLoader({ row: r, ...rest }: { row: AnnouncementRow; companies: Company[]; defaultCompany: number | null; onClose: () => void; onDone: () => void }) {
+  const q = useQuery({ queryKey: ['hr', 'announcement', r.id], queryFn: ({ signal }) => apiGet<AnnouncementRow>(`/api/hr/announcements/${r.id}`, undefined, signal), retry: false });
+  if (q.isLoading) return null;
+  return <Composer row={q.data ? { ...r, ...q.data } : r} {...rest} />;
+}
+
+/** Publishing says who it reaches first. */
+function PublishSheet({ row: r, onClose, onPublish }: { row: AnnouncementRow; onClose: () => void; onPublish: () => void }) {
+  const ids = (r.companies ?? []).map((c) => c.id);
+  const audience = useAudience(ids.length ? ids : r.org_id ? [r.org_id] : [], !!r.all_companies || (!ids.length && r.org_id === null));
   return (
     <Sheet
-      title="New announcement"
-      width={560}
+      title={`Publish “${r.title}”?`}
+      width={460}
       onClose={onClose}
       footer={
         <>
           <button type="button" className={btn} onClick={onClose}>
             Cancel
           </button>
-          <button type="button" disabled={busy || !title.trim() || !chosen} className={btnPrimary} onClick={() => void save()}>
-            Save draft
+          <button type="button" className={btnPrimary} onClick={onPublish}>
+            Publish Announcement
           </button>
+        </>
+      }
+    >
+      <span className="text-ink-2">
+        It goes to <b className="text-ink">{audience.data ? audienceLine(audience.data) : companiesLabel(r)}</b>, who see it on their home screen and are notified once
+        {r.requires_ack ? ', and are asked to confirm they have read it' : ''}. Who receives it is fixed once it is published.
+      </span>
+      {audience.data && audience.data.companies.length > 1 ? <AudienceBreakdown a={audience.data} /> : null}
+    </Sheet>
+  );
+}
+
+function AudienceBreakdown({ a }: { a: Audience }) {
+  return (
+    <ul className="m-0 flex list-none flex-col gap-0.5 p-0 text-[12px] text-ink-3">
+      {a.companies.map((c) => (
+        <li key={c.id} className="flex justify-between">
+          <span>{c.name}</span>
+          <span className="tabular">{c.count.toLocaleString()}</span>
+        </li>
+      ))}
+      <li className="text-[11.5px]">Someone in more than one of them is counted, and notified, once.</li>
+    </ul>
+  );
+}
+
+/**
+ * Companies to publish to (#98): search, chips for the chosen ones, how many,
+ * Select All and Clear. Choosing every one means "all I may publish to".
+ */
+export function CompanyPicker({ companies, value, onChange }: { companies: Company[]; value: number[]; onChange: (ids: number[]) => void }) {
+  const [q, setQ] = useState('');
+  const needle = q.trim().toLowerCase();
+  const shown = companies.filter((c) => !needle || c.name.toLowerCase().includes(needle));
+  const flip = (id: number) => onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id]);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex min-h-[34px] flex-wrap items-center gap-1 rounded-[8px] border border-line bg-surface p-1">
+        {value.map((id) => {
+          const c = companies.find((x) => x.id === id);
+          return c ? (
+            <span key={id} className="inline-flex items-center gap-1 rounded-full bg-selection px-2 py-0.5 text-[12px] font-semibold text-primary">
+              {c.name}
+              <button type="button" aria-label={`Remove ${c.name}`} onClick={() => flip(id)} className="rounded-full hover:bg-primary/10">
+                <Icon name="x" size={12} />
+              </button>
+            </span>
+          ) : null;
+        })}
+        <input aria-label="Search companies" value={q} onChange={(e) => setQ(e.target.value)} placeholder={value.length ? '' : 'Search companies…'} className="h-6 min-w-[120px] flex-1 bg-transparent px-1 text-[13px] text-ink outline-none" />
+      </div>
+      <div className="flex items-center gap-3 text-[12px]">
+        <span className="text-ink-3">{value.length === companies.length && companies.length ? 'All companies' : `${value.length} selected`}</span>
+        <span className="flex-1" />
+        <button type="button" className="font-semibold text-primary hover:underline disabled:opacity-40" disabled={value.length === companies.length} onClick={() => onChange(companies.map((c) => c.id))}>
+          Select All
+        </button>
+        <button type="button" className="font-semibold text-primary hover:underline disabled:opacity-40" disabled={!value.length} onClick={() => onChange([])}>
+          Clear
+        </button>
+      </div>
+      <ul role="listbox" aria-label="Companies" aria-multiselectable className="m-0 flex max-h-[150px] list-none flex-col overflow-y-auto rounded-[8px] border border-line p-1 scroll-thin">
+        {shown.map((c) => (
+          <li key={c.id} role="option" aria-selected={value.includes(c.id)}>
+            <label className="flex cursor-pointer items-center gap-2 rounded-[6px] px-1.5 py-1 text-[13px] text-ink hover:bg-subtle">
+              <Checkbox aria-label={c.name} checked={value.includes(c.id)} onChange={() => flip(c.id)} />
+              {c.name}
+            </label>
+          </li>
+        ))}
+        {!shown.length ? <li className="px-1.5 py-1 text-[12.5px] text-ink-3">No company matches.</li> : null}
+      </ul>
+    </div>
+  );
+}
+
+function Composer({ row: r, companies, defaultCompany, onClose, onDone }: { row: AnnouncementRow | null; companies: Company[]; defaultCompany: number | null; onClose: () => void; onDone: () => void }) {
+  const initialIds = useMemo(() => {
+    if (r?.all_companies) return companies.map((c) => c.id);
+    if (r?.companies?.length) return r.companies.map((c) => c.id);
+    if (r?.org_id) return [r.org_id];
+    return defaultCompany ? [defaultCompany] : companies.length === 1 ? [companies[0]!.id] : [];
+  }, [r, companies, defaultCompany]);
+  const [title, setTitle] = useState(r?.title ?? '');
+  const [body, setBody] = useState(r?.body ? plainText(r.body) : '');
+  const [bodyTouched, setBodyTouched] = useState(false);
+  const [priority, setPriority] = useState(r?.priority ?? 'normal');
+  const [ids, setIds] = useState<number[] | null>(null);
+  const [ack, setAck] = useState(r?.requires_ack ?? false);
+  const [pinned, setPinned] = useState(r?.pinned ?? false);
+  const [expires, setExpires] = useState(r?.expires_at?.slice(0, 10) ?? '');
+  const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const chosen = ids ?? initialIds;
+  const all = companies.length > 0 && chosen.length === companies.length;
+  const audience = useAudience(chosen, all, chosen.length > 0);
+  const published = r?.status === 'published';
+  const missing = !title.trim() ? 'Give it a title.' : !chosen.length ? 'Choose at least one company.' : !r && !body.trim() ? 'Write the message.' : null;
+
+  const payload = () => ({
+    title: title.trim(),
+    ...(!r || bodyTouched ? { body: html(body) } : {}),
+    priority,
+    org_ids: all ? 'all' : chosen,
+    ...(!r ? { audience_type: 'all' } : {}),
+    requires_ack: ack,
+    pinned,
+    expires_at: expires ? `${expires} 23:59:59` : null,
+  });
+  const save = async (publish: boolean) => {
+    setBusy(true);
+    try {
+      const saved = r ? await apiPut<{ id?: number }>(`/api/hr/announcements/${r.id}`, payload()) : await apiPost<{ id?: number; item?: { id: number } }>('/api/hr/announcements', payload());
+      const id = r?.id ?? (saved as { id?: number; item?: { id: number } }).id ?? (saved as { item?: { id: number } }).item?.id;
+      if (publish && id) await apiPost(`/api/hr/announcements/${id}/publish`, {});
+      toast('success', publish ? 'Published.' : published ? 'Changes saved; readers see them now.' : 'Saved as a draft. Publish it when it is ready.');
+      onDone();
+    } catch (e) {
+      toast('error', errorMessage(e));
+      setBusy(false);
+      setConfirming(false);
+    }
+  };
+  return (
+    <Sheet
+      title={r ? 'Edit announcement' : 'New announcement'}
+      width={600}
+      onClose={onClose}
+      footer={
+        <>
+          {missing ? <span className="mr-auto text-[12px] text-ink-3">{missing}</span> : null}
+          <button type="button" className={btn} onClick={onClose}>
+            Cancel
+          </button>
+          {published ? (
+            <button type="button" disabled={busy || !!missing} className={btnPrimary} onClick={() => void save(false)}>
+              Save changes
+            </button>
+          ) : (
+            <>
+              <button type="button" disabled={busy || !!missing} className={btn} onClick={() => void save(false)}>
+                Save Draft
+              </button>
+              <button type="button" disabled={busy || !!missing} className={btnPrimary} onClick={() => setConfirming(true)}>
+                Publish Announcement
+              </button>
+            </>
+          )}
         </>
       }
     >
       <Field label="Title">
         <input aria-label="Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Annual staff meeting" className={input} />
       </Field>
-      <Field label="Message">
-        <textarea aria-label="Message" value={body} onChange={(e) => setBody(e.target.value)} placeholder="Friday at 10:00 in the main hall." className={input + ' !h-[130px] resize-none py-2'} />
+      <Field label="Message" hint={r && !r.body && !bodyTouched ? 'Leave empty to keep the message as it is.' : undefined}>
+        <textarea aria-label="Message" value={body} onChange={(e) => (setBody(e.target.value), setBodyTouched(true))} placeholder="Friday at 10:00 in the main hall." className={input + ' !h-[120px] resize-none py-2'} />
       </Field>
+      <Field label="Companies">
+        <CompanyPicker companies={companies} value={chosen} onChange={setIds} />
+      </Field>
+      <p className={cx('m-0 text-[12.5px]', audience.data ? 'text-ink-2' : 'text-ink-3')} aria-live="polite">
+        {!chosen.length ? 'Choose who it is for.' : audience.data ? `Reaches ${audienceLine(audience.data)}.` : audience.isLoading ? 'Counting who it reaches…' : null}
+      </p>
       <div className="grid grid-cols-2 gap-2.5">
-        <Field label="Company">
-          <Select aria-label="Company" value={chosen} onChange={(e) => setOrg(e.target.value)} className={input}>
-            {companies.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
         <Field label="Priority">
           <Select aria-label="Priority" value={priority} onChange={(e) => setPriority(e.target.value)} className={input}>
             <option value="normal">Normal</option>
@@ -215,7 +439,16 @@ function Composer({ onClose, onDone }: { onClose: () => void; onDone: () => void
             <option value="urgent">Urgent</option>
           </Select>
         </Field>
+        <Field label="Expires" hint="Optional: it disappears after this day.">
+          <input aria-label="Expires" type="date" value={expires} onChange={(e) => setExpires(e.target.value)} className={input} />
+        </Field>
       </div>
+      <label className="flex items-start gap-2 text-[12.5px] text-ink">
+        <Checkbox aria-label="Pin it" checked={pinned} onChange={(e) => setPinned(e.target.checked)} className="mt-[2px]" />
+        <span>
+          <b>Pin it</b> <span className="text-ink-3">— kept near the top of everyone's list.</span>
+        </span>
+      </label>
       <label className="flex items-start gap-2 text-[12.5px] text-ink">
         <Checkbox aria-label="Ask everyone to acknowledge it" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-[2px]" />
         <span>
@@ -224,15 +457,42 @@ function Composer({ onClose, onDone }: { onClose: () => void; onDone: () => void
           <span className="text-ink-3">Each person confirms they have read it, and you see who has and has not.</span>
         </span>
       </label>
+      {confirming ? (
+        <div role="alertdialog" aria-label="Publish now?" className="flex flex-col gap-2 rounded-[10px] border border-primary/30 bg-selection p-3 text-[12.5px] text-ink">
+          <b>Publish to {audience.data ? audienceLine(audience.data) : `${chosen.length} ${chosen.length === 1 ? 'company' : 'companies'}`}?</b>
+          {audience.data && audience.data.companies.length > 1 ? <AudienceBreakdown a={audience.data} /> : null}
+          <span className="text-ink-2">Each person is notified once. Who receives it is fixed once it is published.</span>
+          <div className="flex justify-end gap-2">
+            <button type="button" className={btn} onClick={() => setConfirming(false)}>
+              Not yet
+            </button>
+            <button type="button" disabled={busy} className={btnPrimary} onClick={() => void save(true)}>
+              Publish now
+            </button>
+          </div>
+        </div>
+      ) : null}
     </Sheet>
   );
 }
 
-function ReportPanel({ row: r, onClose }: { row: Row; onClose: () => void }) {
-  const q = useQuery({ queryKey: ['hr', 'announcement-report', r.id], queryFn: ({ signal }) => apiGet<Report>(`/api/hr/announcements/${r.id}/report`, undefined, signal) });
+function ReportPanel({ row: r, onClose }: { row: AnnouncementRow; onClose: () => void }) {
+  const [org, setOrg] = useState('');
+  const q = useQuery({ queryKey: ['hr', 'announcement-report', r.id, org], queryFn: ({ signal }) => apiGet<Report>(`/api/hr/announcements/${r.id}/report`, org ? { org } : undefined, signal) });
   const d = q.data;
+  const choices = d?.companies ?? r.companies ?? [];
   return (
-    <SidePanel label="Who has read it" width={520} onClose={onClose} head={<b className="truncate text-ink">{r.title}</b>}>
+    <SidePanel label="Who has read it" width={540} onClose={onClose} head={<b className="truncate text-ink">{r.title}</b>}>
+      {choices.length > 1 ? (
+        <Select aria-label="Company" value={org} onChange={(e) => setOrg(e.target.value)} className={input}>
+          <option value="">All companies</option>
+          {choices.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </Select>
+      ) : null}
       {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
       {d ? (
         <>
@@ -246,7 +506,7 @@ function ReportPanel({ row: r, onClose }: { row: Row; onClose: () => void }) {
               <div key={p.id} className="flex items-center gap-2 border-b border-line/70 py-2 text-[12.5px] last:border-b-0">
                 <span className="flex min-w-0 flex-1 flex-col">
                   <b className="truncate text-ink">{p.name}</b>
-                  <span className="truncate text-[11.5px] text-ink-3">{p.email}</span>
+                  <span className="truncate text-[11.5px] text-ink-3">{[p.email, p.company].filter(Boolean).join(' · ')}</span>
                 </span>
                 <StatusChip>{p.acknowledged ? 'Acknowledged' : p.read ? 'Read' : 'Not read'}</StatusChip>
               </div>

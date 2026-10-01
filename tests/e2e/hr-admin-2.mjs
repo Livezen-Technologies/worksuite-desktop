@@ -299,8 +299,8 @@ try {
   await t.evaluate(setValue('[role="dialog"] input[aria-label="Title"]', note));
   await t.evaluate(setValue('[role="dialog"] textarea[aria-label="Message"]', 'The office is closed on Friday <for maintenance>.'));
   // The company list loads with the form; Save waits for it.
-  await t.waitFor(`[...${dialog('New announcement')}.querySelectorAll('button')].some(b => b.textContent.trim() === 'Save draft' && !b.disabled)`, 'the composer ready');
-  await t.evaluate(clickIn(dialog('New announcement'), 'Save draft'));
+  await t.waitFor(`[...${dialog('New announcement')}.querySelectorAll('button')].some(b => b.textContent.trim() === 'Save Draft' && !b.disabled)`, 'the composer ready');
+  await t.evaluate(clickIn(dialog('New announcement'), 'Save Draft'));
   await t.waitFor(has(note), 'the draft listed', 20_000);
   const ann = ((await api('me', 'GET', '/api/hr/announcements')).data?.items ?? []).find((a) => a.title === note);
   t.check('an announcement is saved as a draft', ann?.status === 'draft', JSON.stringify(ann ?? {}));

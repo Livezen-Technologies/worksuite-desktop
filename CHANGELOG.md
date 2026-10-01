@@ -42,9 +42,16 @@ person who has to live with the change — what it does, and where it bites.
   the top — urgent and pinned first — with who sent it and when; open one to read it (it is marked read) and
   **Acknowledge** where that is asked for. **See all** lists every one. A notification about an announcement opens
   it on Home; one withdrawn or expired since says it is no longer available.
+- **Announcements to several companies** (#98), in HR → Announcements: choose companies from a searchable list
+  with chips, how many are chosen, **Select All** and **Clear** (at least one is needed). Before anything goes out it
+  says how many people it reaches in which companies — someone in two of them is counted, and notified, once.
+  **Save Draft** keeps it unseen; **Publish Announcement** asks first. An announcement can be edited, given an
+  expiry date, pinned, and **withdrawn** (it disappears for everyone; who read it stays in the report). The list
+  and the read report can be narrowed to one company, and the report shows each person's company. Announcement
+  notifications reach everyone they were sent to, whether or not they have the HR app.
 - Where it bites: the Tasks page's **Due today** no longer includes tasks whose time today has already passed —
   those are **Overdue**. Grouped activity, file previews and states, and the summary's points and sources need
-  WorkSuite Dashboard 1.x with #104; an older server shows what it sends. Announcements need WorkSuite HR with #98
+  the WorkSuite Dashboard update for #104; an older server shows what it sends. Announcements need WorkSuite HR 1.1.0
   for several companies, authors and withdrawal; on a server without announcements the widget is not shown.
 
 ## 2026-10-01 — 0.2.72: A profile picture before the workspace; calendar entries open their record; search on the server's index
