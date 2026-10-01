@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-10-01 — 0.2.72: A profile picture before the workspace; calendar entries open their record
+## 2026-10-01 — 0.2.72: A profile picture before the workspace; calendar entries open their record; search on the server's index
 
 - **Add your profile picture** (#46). When the server requires a profile picture and your account has none, the app
   shows this screen after sign-in instead of the workspace: on your first sign-in, and again if your picture is
@@ -29,6 +29,15 @@ person who has to live with the change — what it does, and where it bites.
   open the Projects or Assets list as they did. Asset licences and audits belong to no single asset and open the
   register. Your own leave request, opened from the calendar, is highlighted in HR → Leave rather than opening the
   approver's review, which would refuse you.
+
+- **Search answers from the server's new search index** (#57, with WorkSuite Search 1.1.0). Results come back
+  ranked — an exact name or number first — with the words marked wherever they start a word (Sinhala and Tamil
+  vowel signs included) and, where the match was in the content, a snippet showing why, in the list and the
+  preview. Filter by **When** (past week, month, year), **Mine**, and **Company** when you belong to more than
+  one; choosing a group (Tab) now asks the server for that group, and gets more of it. While the server is still
+  building its index, a line says so and which apps are searched the slower way meanwhile, so an empty answer is
+  not read as "nothing there". When your access changes, results found under the old access are dropped.
+- Where it bites: an older server sends none of this, and search works as before. Offline search is unchanged.
 
 ## 2026-10-01 — 0.2.71: Chat's channel toolbar (WhatsApp in Chat), profile pictures, a resizable conversation list; AI Assistant scrolling; Local AI first-use setup and Gemma 3 4B; Office menus and Open in new window; Meet Home and pre-join redesign; meeting cards in Chat; screen sharing fixed
 
