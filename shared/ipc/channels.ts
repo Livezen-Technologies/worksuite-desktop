@@ -14,6 +14,11 @@ export const INVOKE_CHANNELS = [
   'app:openInBrowser',
   'app:setDockIcon',
 
+  'guest:pending',
+  'guest:open',
+  'guest:info',
+  'guest:join',
+  'guest:signIn',
   'auth:state',
   'auth:setServer',
   'auth:signIn',
@@ -327,6 +332,7 @@ export type InvokeChannel = (typeof INVOKE_CHANNELS)[number];
 
 /** Events the main process pushes to renderers. */
 export const EVENT_CHANNELS = [
+  'guest:destination',
   'auth:changed',
   'session:changed',
   'status:changed',

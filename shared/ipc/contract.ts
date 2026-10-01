@@ -1,3 +1,4 @@
+import type { GuestMeetInfo, GuestMeetToken } from '../guest-meet';
 /**
  * The typed IPC contract (§3.4, §8.4, WF-05).
  *
@@ -270,6 +271,11 @@ export const contract = {
   /** macOS: the Dock icon with the unread count painted on (the renderer draws it; see core/dock-badge). */
   'app:setDockIcon': ch(z.object({ png: z.string().regex(/^data:image\/png;base64,[A-Za-z0-9+/=]+$/).max(4_000_000) }), { whileLocked: true, rate: 30 }),
 
+  'guest:pending': ch(none),
+  'guest:open': ch(z.object({ input: z.string().trim().min(1).max(2048), server: z.string().max(512).optional() }), { rate: 2 }),
+  'guest:info': ch(none, { rate: 2 }),
+  'guest:join': ch(z.object({ name: z.string().trim().min(1).max(40).regex(/^[^\p{C}]+$/u), pass: z.string().max(128).optional() }), { rate: 2 }),
+  'guest:signIn': ch(none),
   'auth:state': ch(none, { whileLocked: true }),
   'auth:setServer': ch(z.object({ url: z.string().min(3).max(512) }), { rate: 2 }),
   'auth:signIn': ch(z.object({ email: z.string().min(1).max(254), password: z.string().min(1).max(512) }), { rate: 2 }),
@@ -1063,6 +1069,11 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'app:openExternal': boolean;
   'app:openInBrowser': boolean;
   'app:setDockIcon': boolean;
+  'guest:pending': { input: string; server?: string } | null;
+  'guest:open': { id: number };
+  'guest:info': GuestMeetInfo;
+  'guest:join': GuestMeetToken;
+  'guest:signIn': void;
   'auth:state': AuthState;
   'auth:setServer': AuthState;
   'auth:signIn': AuthState;

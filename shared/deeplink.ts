@@ -45,6 +45,7 @@ interface RouteRule {
 const SEGMENT = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
 export const DEEP_LINK_RULES: RouteRule[] = [
+  { pattern: 'meet/:id', module: 'meet', route: (p) => `/meet/${p.id}` },
   { pattern: 'home', module: 'home', route: () => '/home' },
   { pattern: 'mail', module: 'mail', route: () => '/mail' },
   { pattern: 'mail/:id', module: 'mail', route: (p) => `/mail/${p.id}` },
@@ -156,7 +157,7 @@ export function parseDeepLink(raw: string, extraRules: RouteRule[] = []): DeepLi
 /** Finds a worksuite:// URL in a process argv (Windows/Linux second launch). */
 export function findDeepLinkInArgv(argv: readonly string[]): string | null {
   for (const arg of argv) {
-    if (typeof arg === 'string' && arg.toLowerCase().startsWith('worksuite:')) return arg;
+    if (typeof arg === 'string' && (arg.toLowerCase().startsWith('worksuite:') || /^https:\/\/[^/]+\/meet\/[0-9a-f-]{36}(?:[?#]|$)/i.test(arg))) return arg;
   }
   return null;
 }

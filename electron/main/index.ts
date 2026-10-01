@@ -1,3 +1,4 @@
+import { GuestMeetService } from '../services/guest-meet';
 import { app, clipboard, crashReporter, dialog, globalShortcut, ipcMain, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents } from 'electron';
 import os from 'node:os';
 import { hkdfSync } from 'node:crypto';
@@ -14,7 +15,7 @@ import { AccessWatch, NO_ACCESS } from './access';
 import { applyAutostart, startedHidden } from './autostart';
 import { evaluateBoot, markCleanExit, markRunning, clearCrashes, writeBootConfig } from './boot';
 import type { AppContext, ClockExtra } from './context';
-import { broadcast } from './events';
+import { broadcast, guestWindowIds } from './events';
 import { registerHandlers } from './handlers';
 import { initLog, logger } from './log';
 import { DesktopError, isDesktopError } from './errors';
@@ -193,6 +194,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   const settings = new SettingsService(db);
   /** Media servers (LiveKit) the WorkSuite server announced; allowed in the page's CSP. */
+  let pendingGuest: { input: string; server?: string } | null = null;
+  const guests = new GuestMeetService({ fetch: fetchImpl, server: () => auth.getServer()?.origin ?? null });
   const mediaServers = (): string[] => db.getConfig<string[]>('media_servers') ?? [];
   const clientHeaders = (): Record<string, string> => {
     const h: Record<string, string> = { 'X-WS-Client': `worksuite-desktop/${app.getVersion()} (${platformName()}; ${archName()})` };
@@ -692,6 +695,17 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         return;
       }
       void sessionCtl.completePasskey(code, state);
+      return;
+    }
+    const meeting = /^worksuite:\/\/meet\/([0-9a-f-]{36})(?:[?#]|$)/i.exec(url);
+    if ((meeting && !sessionCtl.isReady()) || /^https:\/\/[^/]+\/meet\//i.test(url)) {
+      const destination = { input: meeting ? meeting[1]! : url, server: meeting ? new URL(url).searchParams.get('server') ?? undefined : undefined };
+      pendingGuest = destination;
+      void openGuest(destination.input, destination.server).then(() => { pendingGuest = null; }, (e) => {
+        const main = windows.showMain();
+        main.webContents.send('guest:destination', destination);
+        broadcast('toast', { kind: 'error', text: String(e.message) });
+      });
       return;
     }
     const parsed = parseDeepLink(url);
@@ -1454,7 +1468,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       },
     }),
     // Read on each page load: the server chosen, and the media servers it announced.
-    () => ({ server: auth.getServer()?.origin ?? null, media: mediaServers() }),
+    () => ({ server: auth.getServer()?.origin ?? null, media: [...mediaServers(), ...guests.media] }),
     // A course's lessons kept offline, played by the app's own pages.
     (request, path) =>
       path.startsWith('/elearning/')
@@ -1481,6 +1495,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   });
 
   const router = new IpcRouter(ipcMain, {
+    isGuestSender: (id) => guests.isGuest(id),
     isTrustedSender: (event) => {
       const frame = event.senderFrame;
       if (!frame || frame.parent !== null) return false; // main frame only; no iframes
@@ -1571,6 +1586,24 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   pmsLocks.register(router);
   restaurant.register(router);
   localAI.register(router);
+  const openGuest = async (input: string, server?: string) => {
+    const info = await guests.prepare(input, server);
+    const w = windows.open('meet', `/guest-meet/${info.uuid}?server=${encodeURIComponent(info.origin)}`, info.title ?? 'WorkSuite Meet · Guest');
+    const senderId = w.webContents.id;
+    guests.bind(senderId, info);
+    guestWindowIds.add(senderId);
+    w.once('closed', () => { guests.forget(senderId); guestWindowIds.delete(senderId); });
+    pendingGuest = null;
+    return { id: w.id };
+  };
+  router.handle('guest:pending', () => pendingGuest);
+  router.handle('guest:open', (input) => openGuest(input.input, input.server));
+  router.handle('guest:info', (_input, c) => guests.info(c.sender.id));
+  router.handle('guest:join', (input, c) => guests.join(c.sender.id, input.name, input.pass));
+  router.handle('guest:signIn', (_input, c) => { windows.showMain(); BrowserWindow.fromWebContents(c.sender)?.close(); });
+  session.defaultSession.webRequest.onBeforeRequest({ urls: ['app://bundle/__api/*', 'app://bundle/__local/*'] }, (details, callback) => {
+    callback({ cancel: details.webContentsId !== undefined && guests.isGuest(details.webContentsId) });
+  });
   router.install();
   const missing = router.missingHandlers();
   if (missing.length) log.warn('IPC channels without handlers', { missing });

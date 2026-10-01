@@ -57,6 +57,7 @@ const api = {
     openInBrowser: call('app:openInBrowser'),
     setDockIcon: call('app:setDockIcon'),
   },
+  guest: { pending: call('guest:pending'), open: call('guest:open'), info: call('guest:info'), join: call('guest:join'), signIn: call('guest:signIn') },
   auth: {
     state: call('auth:state'),
     setServer: call('auth:setServer'),

@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.4.0 — 2026-10-01
+
+**Added**
+
+- Join desktop meetings as a guest, with device checks, passcode and host admission, scoped guest permissions, reconnection, guest chat, and post-meeting actions (#85).
+
 ## 1.3.0 — 2026-10-01
 
 **Added**

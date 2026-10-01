@@ -1,4 +1,5 @@
-import { Suspense, useEffect, useState } from 'react';
+import { isGuestMeetingHash } from '@shared/guest-meet';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import type { ToastMessage } from '@shared/types';
 import { app } from '../core/app-state';
 import { hasDesktop, on } from '../core/bridge';
@@ -18,6 +19,8 @@ import { WindowRoot } from './WindowRoot';
 import { RemoteControlWindow } from './RemoteControlWindow';
 import { WebchatRingWindow } from '../modules/chat/website/Ringing';
 import { QuickAskWindow } from './QuickAskWindow';
+
+const GuestMeeting = lazy(() => import('../modules/meet/GuestMeeting').then((module) => ({ default: module.GuestMeeting })));
 
 /**
  * Top level: which screen this window shows, from the session stage.
@@ -42,6 +45,7 @@ export function App() {
   if (!hasDesktop()) {
     return <div className="flex h-full items-center justify-center p-8 text-center text-ink-2">WorkSuite Desktop's interface runs inside the desktop app.</div>;
   }
+  if (isGuestMeetingHash(hash)) return <Suspense fallback={<Spinner />}><GuestMeeting /></Suspense>;
   if (!ready || !auth) return <Spinner label="Starting WorkSuite…" className="h-full" />;
   // Remote control's prompt and bar: above everything else, and never behind the lock screen — stopping control must always work.
   if (hash.startsWith('#/rc/')) return <RemoteControlWindow hash={hash} />;
