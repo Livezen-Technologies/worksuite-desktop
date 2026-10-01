@@ -8,6 +8,8 @@ import { ModuleBoundary, Spinner, IconButton, cx } from '../components/ui';
 import { useWindowBarHidden } from './windowChrome';
 import { WINDOW_DRAG } from '../core/dock-drag';
 import { Icon } from '../components/Icon';
+import { guardWindowClose } from '../core/closeGuard';
+import { flushDrafts } from '../core/drafts';
 
 /**
  * Secondary windows (FR-NAV-05/09): a record, a mini chat, a call or a
@@ -22,11 +24,13 @@ import { Icon } from '../components/Icon';
  * where it has moved to, so it opens there again at the next start.
  */
 const PINNABLE = new Set(['chat-mini', 'timer', 'call', 'video-call']);
+// A conversation in its own window can go back to the main window (#103).
+const TO_MAIN = new Set(['chat-mini']);
 export function WindowRoot({ hash }: { hash: string }) {
   const [kind, qs] = hash.replace('#/window/', '').split('?') as [string, string | undefined];
   const initial = new URLSearchParams(qs ?? '').get('route') ?? '/home';
   const [route, setRoute] = useState(initial);
-  const [pinned, setPinned] = useState(kind === 'chat-mini');
+  const [pinned, setPinned] = useState(false);
   const [named, setNamed] = useState<string | null>(null);
   const [windowId, setWindowId] = useState<number | null>(null);
   const dockable = kind === 'record';
@@ -46,6 +50,9 @@ export function WindowRoot({ hash }: { hash: string }) {
       () => undefined,
     );
   }, []);
+
+  // Closing waits for a draft to be saved or a picture to finish going up (#103).
+  useEffect(() => guardWindowClose(), []);
 
   const title = named ?? mod?.manifest.name ?? 'WorkSuite';
 
@@ -82,6 +89,15 @@ export function WindowRoot({ hash }: { hash: string }) {
             <IconButton icon="layout-side" label="Dock beside the main window's tab" className="no-drag text-navy-ink hover:bg-white/10 hover:text-white" onClick={() => void call('windows:dock', { side: true })} size={15} />
             <IconButton icon="panel-close" label="Dock to main window" className="no-drag text-navy-ink hover:bg-white/10 hover:text-white" onClick={() => void call('windows:dock', {})} size={15} />
           </>
+        ) : null}
+        {TO_MAIN.has(kind) ? (
+          <IconButton
+            icon="maximize"
+            label="Open in main app"
+            className="no-drag text-navy-ink hover:bg-white/10 hover:text-white"
+            onClick={() => void flushDrafts().then(() => call('windows:toMain', {}))}
+            size={15}
+          />
         ) : null}
         {PINNABLE.has(kind) ? (
           <IconButton

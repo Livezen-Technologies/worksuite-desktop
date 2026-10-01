@@ -89,6 +89,7 @@ const api = {
     state: call('windows:state'),
     detach: call('windows:detach'),
     dock: call('windows:dock'),
+    toMain: call('windows:toMain'),
     adopt: call('windows:adopt'),
     describe: call('windows:describe'),
     restoreDetached: call('windows:restoreDetached'),

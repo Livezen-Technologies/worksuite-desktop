@@ -5,6 +5,20 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-01 — 0.2.73: Chats in windows of their own
+
+- **Chats open in windows of their own** (#103). **Open in new window** in a conversation's header — in Chat and in
+  the chat drawer — opens it in its own window, with the system's own minimise, maximise and close. Several can be
+  open at once; each new one opens a step away from the last so none hides another, and opening a conversation
+  that already has a window brings that window forward (restoring it if minimised). What you had typed goes with
+  it. **Open in main app** in the window's title bar shows the conversation in the main window and closes the
+  window. A window is no longer kept above everything else by default; the pin in its title bar does that, and a
+  call's chat still starts on top. Windows remember their size and place, and come back onto a connected screen.
+- Where it bites: closing a chat window saves the draft first, and waits for a pasted picture or voice message
+  still going up (the window minimises meanwhile, then closes); files picked from disk always carried on without
+  the window. Signing out closes every chat window (and every other secondary window) at once; locking WorkSuite
+  hides them behind the lock screen as before.
+
 ## 2026-10-01 — 0.2.72: A profile picture before the workspace; calendar entries open their record; search on the server's index
 
 - **Add your profile picture** (#46). When the server requires a profile picture and your account has none, the app

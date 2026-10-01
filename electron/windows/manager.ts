@@ -97,6 +97,8 @@ export class WindowManager {
   private records = new Map<number, { route: string; title: string }>();
   private recordsTimer: NodeJS.Timeout | null = null;
   quitting = false;
+  /** Windows being closed for the person (sign-out, access gone): nothing in them may hold the close. */
+  private readonly forced = new Set<number>();
   /** The torn-off windows changed (opened, moved, navigated, closed): remember them for the next start. */
   onRecordsChanged: (windows: DetachedWindow[]) => void = () => undefined;
   minimizeToTray: () => boolean = () => true;
@@ -396,8 +398,14 @@ export class WindowManager {
     if (ring && mac) win.setWindowButtonVisibility(false);
     this.kinds.set(win.id, kind);
     const id = win.id;
+    // A chat window holds its close while a draft is saved or a picture finishes
+    // going up (#103); quitting, signing out and losing access close it anyway.
+    win.webContents.on('will-prevent-unload', (e) => {
+      if (this.quitting || this.forced.has(id)) e.preventDefault();
+    });
     win.on('closed', () => {
       this.kinds.delete(id);
+      this.forced.delete(id);
       this.compactFrom.delete(id);
       const t = this.saveTimers.get(id);
       if (t) clearTimeout(t);
@@ -473,6 +481,8 @@ export class WindowManager {
       // One mini chat per conversation, one Meet per meeting, one call at a
       // time: focus the one already open.
       if ((k === kind && w.webContents.getURL().endsWith(hash)) || (k && CALL_KINDS.has(k) && CALL_KINDS.has(kind))) {
+        // Minimised, it comes back as it was (#103).
+        if (w.isMinimized()) w.restore();
         w.show();
         w.focus();
         return w;
@@ -480,10 +490,34 @@ export class WindowManager {
       // A newer ring replaces an older one.
       if (k === 'ring' && kind === 'ring') w.close();
     }
-    if (kind !== 'record') return this.create(kind, { hash, title, alwaysOnTop: alwaysOnTop ?? kind !== 'meet' });
+    if (kind !== 'record') return this.create(kind, { hash, title, alwaysOnTop: alwaysOnTop ?? kind !== 'meet', bounds: this.cascade(kind) });
     const win = this.create(kind, { hash, title, alwaysOnTop: false, bounds: this.recordPlace(place) });
     this.trackRecord(win, route, title ?? '');
     return win;
+  }
+
+  /**
+   * Several chat windows open at once (#103): each new one opens where the last
+   * one was left, stepped down and right past the ones already there, so none
+   * hides another — and still on a screen that is connected.
+   */
+  private cascade(kind: WindowKind): Rectangle | null {
+    if (kind !== 'chat-mini') return null;
+    const open = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && this.kinds.get(w.id) === kind).map((w) => w.getBounds());
+    if (!open.length) return null;
+    const primary = screen.getPrimaryDisplay();
+    const size = SIZES[kind];
+    const base = this.loadLayout(kind)?.bounds ?? {
+      x: primary.workArea.x + Math.round((primary.workArea.width - size.width) / 2),
+      y: primary.workArea.y + Math.round((primary.workArea.height - size.height) / 2),
+      width: size.width,
+      height: size.height,
+    };
+    let at = { ...base };
+    for (let i = 1; i <= open.length + 1 && open.some((b) => Math.abs(b.x - at.x) < 8 && Math.abs(b.y - at.y) < 8); i++) {
+      at = { ...base, x: base.x + 28 * i, y: base.y + 28 * i };
+    }
+    return fitToDisplays(at, screen.getAllDisplays(), primary);
   }
 
   // ── multi-window docking (FR-NAV-05/07) ─────────────────────────────────
@@ -554,7 +588,10 @@ export class WindowManager {
     for (const id of [...this.records.keys()]) {
       this.records.delete(id);
       const w = BrowserWindow.fromId(id);
-      if (w && !w.isDestroyed()) w.close();
+      if (w && !w.isDestroyed()) {
+        this.forced.add(id);
+        w.close();
+      }
     }
   }
 
@@ -647,6 +684,7 @@ export class WindowManager {
       if (this.kinds.get(w.id) === 'main') continue;
       const route = windowRoute(w.webContents.getURL());
       if (route !== null && refuse(route)) {
+        this.forced.add(w.id);
         w.close();
         n++;
       }

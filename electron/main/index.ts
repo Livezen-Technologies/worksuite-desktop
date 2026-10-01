@@ -1196,6 +1196,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     tray.update({ quickAsk: null });
     // Torn-off windows show the person's data: they close, and come back at their next sign-in.
     windows.closeRecords();
+    // So do chat windows and every other secondary window with someone's content in it (#103).
+    windows.closeWhere(() => true);
     // Open documents close, and their editor partitions are cleared (OO-DSK-023).
     office.closeAll(true);
     officeLocal.stop();

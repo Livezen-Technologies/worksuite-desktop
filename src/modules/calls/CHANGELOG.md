@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.1.1 — 2026-10-01
+
+- A call's chat opens through the shared chat-window path, saving the draft first (#103).
+
 ## 1.1.0 — 2026-10-01
 
 - A meeting invitation rings like a call (worksuite-desktop#79): meet.ring opens Meet's ring screen once per invitation, never for a meeting this computer is in, only when Meet may open; a missed one is asked for on start and after reconnecting.

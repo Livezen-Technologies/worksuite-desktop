@@ -67,6 +67,7 @@ export const INVOKE_CHANNELS = [
   'ring:silence',
   'windows:detach',
   'windows:dock',
+  'windows:toMain',
   'windows:adopt',
   'windows:describe',
   'windows:restoreDetached',

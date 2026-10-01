@@ -5,6 +5,7 @@ import { app } from '../../core/app-state';
 import { apiGet, apiPost, request } from '../../core/api';
 import { call, errorMessage, registerDropped } from '../../core/bridge';
 import { useDraft } from '../../core/drafts';
+import { holdWhileSending } from '../../core/closeGuard';
 import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { uploadBlob } from '../../core/upload';
@@ -214,7 +215,9 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
     void qc.invalidateQueries({ queryKey: ['chat', 'rooms'] });
   };
 
-  const sendBlob = async (s: BlobItem, extra: Extra | null) => {
+  // Held, so closing a chat window waits for it (#103).
+  const sendBlob = (s: BlobItem, extra: Extra | null) => holdWhileSending(sendBlobNow(s, extra));
+  const sendBlobNow = async (s: BlobItem, extra: Extra | null) => {
     const update = (patch: Partial<BlobItem>) => setStaged((list) => list.map((x) => (x.key === s.key && x.kind === 'blob' ? { ...x, ...patch } : x)));
     update({ state: 'sending', progress: 0, error: null, extra });
     if (site) {
@@ -363,7 +366,8 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
     }
   };
 
-  const sendVoice = async (blob: Blob, ms: number) => {
+  const sendVoice = (blob: Blob, ms: number) => holdWhileSending(sendVoiceNow(blob, ms));
+  const sendVoiceNow = async (blob: Blob, ms: number) => {
     setRecording(false);
     const ext = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm';
     try {
