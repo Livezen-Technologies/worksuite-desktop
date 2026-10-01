@@ -6,7 +6,8 @@ import { dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { Button, Modal, Spinner, Switch, TextField, cx } from '../../components/ui';
-import { ROLE_LABEL, type MeetRole, type RoomActivity, type RoomSettings, type RoomSettingsView } from './api';
+import { DEFAULT_ROOM_SETTINGS, ROLE_LABEL, type MeetRole, type RoomActivity, type RoomSettings, type RoomSettingsView } from './api';
+import { useMeetT, type MKey } from './i18n';
 import { meet } from './session';
 
 /**
@@ -66,6 +67,18 @@ const LABELS: Record<keyof RoomSettings, string> = {
   chat: 'Who can chat',
   record: 'Who can record',
   transcripts: 'Who can see transcripts and minutes',
+  qa: 'Q&A',
+  qa_anonymous: 'Let people ask anonymously',
+  polls: 'Polls',
+  raise_hand: 'Raise hand',
+};
+
+/** Q&A, polls and raised hands (worksuite-desktop#92): their names and hints in the meeting's language. */
+const TRANSLATED: Partial<Record<keyof RoomSettings, { label: MKey; hint?: MKey }>> = {
+  qa: { label: 'act.setting.qa', hint: 'act.setting.qaHint' },
+  qa_anonymous: { label: 'act.setting.qaAnonymous' },
+  polls: { label: 'act.setting.polls' },
+  raise_hand: { label: 'act.setting.raiseHand', hint: 'act.setting.raiseHandHint' },
 };
 
 const HINTS: Partial<Record<keyof RoomSettings, string>> = {
@@ -78,18 +91,24 @@ const HINTS: Partial<Record<keyof RoomSettings, string>> = {
  * meeting, each change is saved as it is made.
  */
 export function RoomSettingsFields({ value, onChange, disabled }: { value: RoomSettings; onChange: (patch: Partial<RoomSettings>) => void; disabled?: boolean }) {
+  const t = useMeetT();
   return (
     <div className="flex flex-col gap-2.5 text-[12.5px]">
       {(Object.keys(LABELS) as Array<keyof RoomSettings>).map((key) => {
-        const v = value[key];
+        // A setting an older server does not send reads as its default.
+        const v = value[key] ?? DEFAULT_ROOM_SETTINGS[key];
+        const tr = TRANSLATED[key];
+        const label = tr ? t(tr.label) : LABELS[key];
+        const hint = tr?.hint ? t(tr.hint) : HINTS[key];
         if (typeof v === 'boolean') {
           return (
             <div key={key} className="flex items-start gap-2.5">
               <span className="flex min-w-0 flex-1 flex-col">
-                <b className="text-ink">{LABELS[key]}</b>
-                {HINTS[key] ? <span className="text-[11.5px] text-ink-3">{HINTS[key]}</span> : null}
+                <b className="text-ink">{label}</b>
+                {hint ? <span className="text-[11.5px] text-ink-3">{hint}</span> : null}
               </span>
-              <Switch checked={v} disabled={disabled} label={LABELS[key]} onChange={(on) => onChange({ [key]: on })} />
+              {/* Anonymous questions mean nothing with Q&A off. */}
+              <Switch checked={v} disabled={disabled || (key === 'qa_anonymous' && value.qa === false)} label={label} onChange={(on) => onChange({ [key]: on })} />
             </div>
           );
         }

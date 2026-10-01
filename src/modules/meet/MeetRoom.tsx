@@ -29,6 +29,9 @@ import { StartTranscriptionDialog } from './TranscriptControls';
 import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
 import { Whiteboard } from './Whiteboard';
+import { HandQueue, PollsPanel, QaPanel } from './Activities';
+import { useMeetT } from './i18n';
+import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 
 /** 00:24:10 — how long the meeting has been going. */
@@ -49,6 +52,7 @@ export function MeetRoom() {
   useSyncExternalStore(pointers.subscribe, pointers.snapshot);
   useSyncExternalStore(remote.subscribe, remote.snapshot);
   const ui = useSyncExternalStore(callUi.subscribe, callUi.get);
+  const t = useMeetT();
   const [picking, setPicking] = useState<'start' | 'change' | null>(null);
   const [ending, setEnding] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -62,7 +66,17 @@ export function MeetRoom() {
   const lp = room.localParticipant;
   const info = meet.info!;
   const participants: Participant[] = [lp, ...meet.present];
-  const people = participants.map((p) => personOf(p, p === lp, { host: p === lp ? meet.isHost : roleOf(p) === 'host', guest: isGuest(p) }));
+  // A raised hand shows on the tile with its place in the queue (#92).
+  const handOn = (p: Participant) => {
+    const h = meet.handOf(p);
+    return h ? { position: h.position, label: `${t('act.handUp')} · ${h.position}` } : null;
+  };
+  const people = participants.map((p) => personOf(p, p === lp, { host: p === lp ? meet.isHost : roleOf(p) === 'host', guest: isGuest(p), hand: handOn(p) }));
+  // Q&A, polls and raised hands (#92): what each is waiting on — a live poll I have not voted in, hands up for the hosts.
+  const acts = meet.activities;
+  const handsOn = meet.settings.raise_hand !== false;
+  const pollsWaiting = meet.settings.polls !== false ? (acts?.polls.filter((p) => p.status === 'live' && p.my_choices === null).length ?? 0) : 0;
+  const openQuestions = meet.canManage ? (acts?.questions.filter((q) => q.status === 'open' && !q.hidden).length ?? 0) : 0;
   const started = info.started_at ? parseTs(info.started_at).getTime() : meet.joinedAt;
   const clock = started ? hms(now - started) : '';
   const waiting = meet.waiting;
@@ -116,6 +130,16 @@ export function MeetRoom() {
       : meet.mayPresent
         ? { id: 'share', icon: 'screen-share', label: 'Share your screen', onClick: () => setPicking('start') }
         : { id: 'share', icon: 'screen-share', label: 'Only presenters can share — ask the host', disabled: true },
+    // Raising a hand never turns the microphone on: the host gives the floor.
+    {
+      id: 'hand',
+      icon: 'hand',
+      label: meet.myHand ? t('act.lowerHand') : handsOn ? t('act.raiseHand') : t('act.handsOff'),
+      tone: meet.myHand ? 'active' : undefined,
+      disabled: !acts || (!handsOn && !meet.myHand),
+      badge: meet.canManage ? acts?.hands.length : undefined,
+      onClick: () => void meet.raiseHand(!meet.myHand),
+    },
     { id: 'chat', icon: 'chat', label: panelOn('Chat') ? 'Hide chat' : 'Chat', tone: panelOn('Chat') ? 'active' : undefined, onClick: () => callUi.togglePanel('Chat') },
     { id: 'people', icon: 'users', label: 'People', tone: panelOn('People') ? 'active' : undefined, badge: meet.canManage ? waiting.length : undefined, onClick: () => callUi.togglePanel('People') },
     { id: 'board', icon: 'board', label: ui.boardOnStage ? 'Take the board off the stage' : 'Whiteboard', tone: ui.boardOnStage || panelOn('Board') ? 'active' : undefined, onClick: () => (ui.boardOnStage ? callUi.set({ boardOnStage: false }) : callUi.togglePanel('Board')) },
@@ -141,6 +165,8 @@ export function MeetRoom() {
     ...(meet.canManage ? [{ label: meet.locked ? 'Unlock the meeting' : 'Lock the meeting', hint: meet.locked ? undefined : 'No one new can join', icon: 'lock', onClick: () => void meet.lock(!meet.locked) }] : []),
     { label: 'Room settings', icon: 'settings', onClick: () => callUi.togglePanel('Settings') },
     { label: ui.boardOnStage ? 'Board back to the panel' : 'Whiteboard on stage', icon: 'board', onClick: () => callUi.set({ boardOnStage: !ui.boardOnStage, ...(ui.boardOnStage ? {} : { panelOpen: false }) }) },
+    { label: t('act.qa'), icon: 'help', onClick: () => callUi.togglePanel('Q&A') },
+    { label: t('act.polls'), icon: 'chart', onClick: () => callUi.togglePanel('Polls') },
     { label: 'Notes & minutes', icon: 'file', onClick: () => callUi.togglePanel('Notes') },
     { label: 'Files', icon: 'paperclip', onClick: () => callUi.togglePanel('Files') },
     { label: 'Meeting details', icon: 'info', onClick: () => callUi.togglePanel('Info') },
@@ -238,6 +264,8 @@ export function MeetRoom() {
               <Empty icon="chat" title="This meeting has no chat" />
             ),
           },
+          { id: 'Q&A', label: t('act.qa'), badge: openQuestions || undefined, content: <QaPanel /> },
+          { id: 'Polls', label: t('act.polls'), badge: pollsWaiting || undefined, content: <PollsPanel /> },
           {
             id: 'Board',
             label: 'Board',
@@ -304,6 +332,7 @@ export function MeetRoom() {
 }
 
 function PeoplePanel() {
+  const t = useMeetT();
   const [menu, setMenu] = useState<string | null>(null);
   const [transfer, setTransfer] = useState<{ id: number; name: string } | null>(null);
   const [adding, setAdding] = useState(false);
@@ -331,6 +360,7 @@ function PeoplePanel() {
           ))}
         </div>
       ) : null}
+      <HandQueue />
       <div className="flex items-center">
         <b className="flex-1 text-ink">In the meeting · {present.length}</b>
         {meet.mayInvite ? (
@@ -342,6 +372,7 @@ function PeoplePanel() {
       {present.map((p) => {
         const self = p === room.localParticipant;
         const role = self ? meet.role : roleOf(p);
+        const hand = meet.handOf(p);
         const uid = userIdOf(p);
         const state = p.isSpeaking ? 'Speaking' : !p.isMicrophoneEnabled ? 'Muted' : '';
         const name = p.name || 'Guest';
@@ -363,6 +394,12 @@ function PeoplePanel() {
               <span className="flex items-center gap-1.5">
                 <RoleBadge role={role} guest={isGuest(p)} />
                 {isGuest(p) ? <span className="text-[11px] text-ink-3">by link</span> : null}
+                {hand ? (
+                  <span role="img" aria-label={`${t('act.handUp')} · ${hand.position}`} title={t('act.handUp')} className="flex items-center gap-0.5 rounded-full bg-[#FFF4E0] px-1.5 py-px text-[10.5px] font-bold text-[#9A5B00] dark:bg-[#3A2A10] dark:text-[#F6C77A]">
+                    <Icon name="hand" size={11} />
+                    {hand.position}
+                  </span>
+                ) : null}
               </span>
             </span>
             <span className={cx('text-[11.5px] font-semibold', p.isSpeaking ? 'text-success' : 'text-ink-3')}>{state}</span>

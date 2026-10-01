@@ -4,7 +4,9 @@ import { toast } from '../../core/toasts';
 import { call, errorMessage, on } from '../../core/bridge';
 import { CLEAN_AUDIO, pauseOn, shareOn } from '../calls/session';
 import type { SharePick } from '../calls/ScreenPicker';
-import { DEFAULT_ROOM_SETTINGS, may, type MeetInfo, type MeetRole, type RoomSettings, type Sfu } from './api';
+import { DEFAULT_ROOM_SETTINGS, may, type MeetActivities, type MeetInfo, type MeetRole, type RaisedHand, type RoomSettings, type Sfu } from './api';
+import { mt } from './i18n';
+import { playOnce } from '../calls/tones';
 import type { RemoteControlView } from '@shared/types';
 import { pointers } from './remote/pointers';
 import { app } from '../../core/app-state';
@@ -68,6 +70,23 @@ export function isGuest(p: Participant): boolean {
   return p.identity.startsWith('g-');
 }
 
+/** Who a connection is in Q&A, polls and raised hands: `u12` for a person signed in, on any connection of theirs; a guest by their identity. */
+export function handKey(p: Participant): string {
+  const id = userIdOf(p);
+  return id ? `u${id}` : p.identity;
+}
+
+/** A change to the meeting's Q&A, polls or hands, as the server tells the room (`meet.control`, and topic `meet.activity`). */
+interface ActivityEvent {
+  what?: string;
+  action?: string;
+  who?: string;
+  name?: string;
+  question?: string;
+  by_host?: boolean;
+  poll?: number;
+}
+
 /** `GET /api/meet/{uuid}/record/status` (worksuite-desktop#68). */
 export interface RecordStatus {
   cloud: { id?: number; status: string; started_at: string | null; by: { id: number; name: string } | null } | null;
@@ -117,6 +136,12 @@ export class MeetSession {
   liveTx: LiveTranscriber | null = null;
   /** The meeting record the notes and transcripts are kept on, once known. */
   recordId: number | null = null;
+  /** Q&A, polls and raised hands (worksuite-desktop#92), as the server says; null until read, and from an older server. */
+  activities: MeetActivities | null = null;
+  private actReading = false;
+  private actAgain = false;
+  /** The last change told, so one that arrives by both routes is told once. */
+  private lastNotice: { key: string; at: number } | null = null;
 
   subscribe = (fn: () => void): (() => void) => {
     this.listeners.add(fn);
@@ -280,6 +305,8 @@ export class MeetSession {
         }
         refresh();
       })
+      // Back after a dropped connection: Q&A, polls and hands may have moved on meanwhile.
+      .on(RoomEvent.Reconnected, () => void this.refreshActivities())
       .on(RoomEvent.ParticipantConnected, (p) => {
         // Somebody waiting only because no host was in, and the room has no waiting room: let them in as I arrive.
         if (this.canManage && !this.settings.waiting_room && metaOf(p).door === 'no_host') void this.admit(p);
@@ -296,6 +323,17 @@ export class MeetSession {
         // Viewers' pointers and annotations over a shared screen: painted, never injected.
         if (topic === 'rc.pointer') {
           if (p) pointers.receive(payload, { identity: p.identity, name: p.name });
+          return;
+        }
+        // Q&A, polls and hands changed (#92): from the server only (no sender), never from another participant.
+        if (topic === 'meet.activity') {
+          if (!p) {
+            try {
+              this.onActivity(JSON.parse(new TextDecoder().decode(payload)) as ActivityEvent);
+            } catch {
+              /* not an activity message */
+            }
+          }
           return;
         }
         if (topic !== 'wb') return;
@@ -338,7 +376,9 @@ export class MeetSession {
     // Roles and settings changed by someone else reach everyone in the meeting at once (`meet.control`, what: roles).
     this.offRoles = on<{ type?: string; meeting?: string; what?: string }>('realtime:event', (e) => {
       if (e?.type !== 'meet.control' || e.meeting !== this.uuid) return;
-      if (e.what === 'roles') void this.reload();
+      if (e.what === 'roles') void this.reload().then(() => this.refreshActivities());
+      // Q&A, polls and raised hands (#92): the server keeps them; read them again.
+      if (e.what === 'qa' || e.what === 'polls' || e.what === 'hands') this.onActivity(e as ActivityEvent);
       // Somebody started or stopped transcribing (#81): everybody is told while it is on.
       if (e.what === 'transcript') {
         const ev = e as { on?: boolean; by?: string; language?: string };
@@ -401,6 +441,7 @@ export class MeetSession {
     this.phase = 'in';
     void this.refreshRecording();
     void this.refreshTranscribing();
+    void this.refreshActivities();
     if (!this.recTimer) this.recTimer = setInterval(() => void this.refreshRecording(), 20_000);
     // The main window shows "in a meeting" and brings this window back.
     void call('calls:active', { uuid: this.uuid, kind: 'meet', title: this.info?.title || 'Meeting' }).catch(() => undefined);
@@ -703,6 +744,95 @@ export class MeetSession {
     this.changed();
   }
 
+  // ── Q&A, polls and raised hands (worksuite-desktop#92) ─────────────────────
+
+  /** The whole state again: on entering, after reconnecting, and whenever the room is told something changed. */
+  async refreshActivities(): Promise<void> {
+    if (!this.uuid) return;
+    if (this.actReading) {
+      this.actAgain = true;
+      return;
+    }
+    this.actReading = true;
+    try {
+      this.activities = await apiGet<MeetActivities>(`/api/meet/${this.uuid}/activities`);
+    } catch {
+      // An older server, or not let in yet: nothing to show.
+    } finally {
+      this.actReading = false;
+    }
+    this.changed();
+    if (this.actAgain) {
+      this.actAgain = false;
+      await this.refreshActivities();
+    }
+  }
+
+  /** One change. The server checks who may, and answers with the state after it. */
+  private async activity(run: () => Promise<MeetActivities>): Promise<boolean> {
+    try {
+      this.activities = await run();
+      this.changed();
+      return true;
+    } catch (e) {
+      toast('error', errorMessage(e));
+      void this.refreshActivities();
+      return false;
+    }
+  }
+
+  private actPost(path: string, body?: unknown): Promise<boolean> {
+    return this.activity(() => apiPost<MeetActivities>(`/api/meet/${this.uuid}/${path}`, body));
+  }
+
+  ask = (text: string, anonymous: boolean) => this.actPost('qa', { text, anonymous });
+  /** Upvote a question, or take the upvote back. */
+  upvote = (id: number) => this.actPost(`qa/${id}/vote`);
+  answer = (id: number, answered: boolean, answer?: string) => this.actPost(`qa/${id}/answer`, answer === undefined ? { answered } : { answered, answer });
+  hideQuestion = (id: number, hidden: boolean) => this.actPost(`qa/${id}/hide`, { hidden });
+  createPoll = (poll: { question: string; kind: 'single' | 'multiple'; options: string[]; anonymous: boolean }) => this.actPost('polls', poll);
+  launchPoll = (id: number) => this.actPost(`polls/${id}/launch`);
+  closePoll = (id: number) => this.actPost(`polls/${id}/close`);
+  sharePoll = (id: number, shared: boolean) => this.actPost(`polls/${id}/share`, { shared });
+  deletePoll = (id: number) => this.activity(() => apiDelete<MeetActivities>(`/api/meet/${this.uuid}/polls/${id}`));
+  votePoll = (id: number, choices: number[]) => this.actPost(`polls/${id}/vote`, { choices });
+  /** Raise or lower my hand. Only the hand: the microphone stays as it is. */
+  raiseHand = (up: boolean) => this.actPost(up ? 'hands/raise' : 'hands/lower');
+  /** A host or co-host lowering somebody's hand. */
+  lowerHandOf = (who: string) => this.actPost('hands/lower', { who });
+  lowerAllHands = () => this.actPost('hands/lower-all');
+
+  get myHand(): boolean {
+    return !!this.activities?.hands.some((h) => h.mine);
+  }
+
+  /** Their raised hand and its place in the queue (1 is first), or null. */
+  handOf(p: Participant): (RaisedHand & { position: number }) | null {
+    const key = handKey(p);
+    const hands = this.activities?.hands ?? [];
+    const at = hands.findIndex((h) => h.who === key);
+    return at < 0 ? null : { ...hands[at]!, position: at + 1 };
+  }
+
+  /** Something changed in the meeting's Q&A, polls or hands: told to whoever it concerns, then read again. */
+  onActivity(e: ActivityEvent): void {
+    const key = `${e.what}:${e.action}:${e.who ?? ''}:${e.poll ?? ''}`;
+    const now = Date.now();
+    const repeat = this.lastNotice?.key === key && now - this.lastNotice.at < 3_000;
+    this.lastNotice = { key, at: now };
+    const mine = this.room ? handKey(this.room.localParticipant) : (this.activities?.me.who ?? '');
+    if (!repeat && e.what === 'hands') {
+      // The hosts are told a hand went up, with a sound: the queue is in the People panel.
+      if (e.action === 'raised' && this.canManage && e.who !== mine) {
+        toast('info', mt('act.handRaisedBy', { name: e.name || 'Someone' }));
+        playOnce('hand', 0.8);
+      }
+      if ((e.action === 'lowered' && e.by_host && e.who === mine) || (e.action === 'lowered_all' && this.myHand && !this.canManage)) toast('info', mt('act.handLoweredByHost'));
+    }
+    if (!repeat && e.what === 'polls' && e.action === 'launched' && !this.canManage && e.question) toast('info', mt('act.pollLaunched', { question: e.question }));
+    void this.refreshActivities();
+  }
+
   async endForAll(): Promise<void> {
     this.farewell = 'You ended the meeting for everyone.';
     await this.host('end-all');
@@ -746,6 +876,7 @@ export class MeetSession {
   private teardown(): void {
     this.offRoles?.();
     this.offRoles = null;
+    this.activities = null;
     // Leaving while transcribing here: what was said so far is finished and kept.
     if (this.liveTx) void this.stopTranscription();
     // Leaving while recording here: the recording stops, and is finished and uploaded in the background.

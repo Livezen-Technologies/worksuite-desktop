@@ -53,6 +53,12 @@ export interface RoomSettings {
   record: 'host' | 'hosts';
   /** Who sees the meeting's transcripts and minutes. */
   transcripts: 'participants' | 'hosts';
+  /** Q&A, polls and raised hands (worksuite-desktop#92); missing from an older server, which has none of them. */
+  qa?: boolean;
+  /** Askers may leave their name off a question. */
+  qa_anonymous?: boolean;
+  polls?: boolean;
+  raise_hand?: boolean;
 }
 
 export const DEFAULT_ROOM_SETTINGS: RoomSettings = {
@@ -64,6 +70,10 @@ export const DEFAULT_ROOM_SETTINGS: RoomSettings = {
   chat: 'everyone',
   record: 'host',
   transcripts: 'participants',
+  qa: true,
+  qa_anonymous: true,
+  polls: true,
+  raise_hand: true,
 };
 
 /** `GET/PUT /api/meet/{uuid}/settings`. */
@@ -94,6 +104,70 @@ export const may = {
   chat: (r: MeetRole, s: RoomSettings) => (s.chat === 'off' ? false : s.chat === 'hosts' ? r === 'host' || r === 'cohost' : true),
   transcripts: (r: MeetRole, s: RoomSettings) => s.transcripts === 'participants' || r === 'host' || r === 'cohost',
 };
+
+/**
+ * Q&A, polls and raised hands (worksuite-desktop#92): `GET /api/meet/{uuid}/activities`.
+ * The server keeps them and decides who sees what; every change it is told of
+ * comes back as the whole state.
+ */
+export interface MeetQuestion {
+  id: number;
+  text: string;
+  anonymous: boolean;
+  /** Null when asked anonymously, for everybody but the host and co-hosts. */
+  author: string | null;
+  author_id: number | null;
+  guest: boolean | null;
+  mine: boolean;
+  status: 'open' | 'answered';
+  answer: string | null;
+  answered_by: string | null;
+  answered_at: string | null;
+  /** Only the host and co-hosts are sent hidden questions. */
+  hidden: boolean;
+  votes: number;
+  voted: boolean;
+  created_at: string | null;
+}
+
+export interface MeetPoll {
+  id: number;
+  question: string;
+  kind: 'single' | 'multiple';
+  options: string[];
+  anonymous: boolean;
+  status: 'draft' | 'live' | 'closed';
+  shared: boolean;
+  /** How many have voted: everybody sees it while the poll is live. */
+  voters: number;
+  /** What I chose, once I have voted. */
+  my_choices: number[] | null;
+  /** The count per option: the hosts', and everybody's once shared. */
+  results: number[] | null;
+  /** Who chose what: the hosts', and never on an anonymous poll. */
+  ballots?: Array<{ name: string; choices: number[] }>;
+  created_at?: string | null;
+  launched_at?: string | null;
+  closed_at?: string | null;
+}
+
+export interface RaisedHand {
+  /** `u12` for a person signed in, the guest's identity for a guest. */
+  who: string;
+  user_id: number | null;
+  name: string;
+  raised_at: string;
+  mine: boolean;
+}
+
+export interface MeetActivities {
+  enabled: { qa: boolean; qa_anonymous: boolean; polls: boolean; raise_hand: boolean };
+  me: { who: string; name: string; manages: boolean; guest: boolean };
+  questions: MeetQuestion[];
+  polls: MeetPoll[];
+  /** First raised first. */
+  hands: RaisedHand[];
+}
 
 export interface Created extends MeetInfo {
   code: string;

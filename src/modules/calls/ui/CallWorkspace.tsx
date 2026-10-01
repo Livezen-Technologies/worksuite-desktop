@@ -340,7 +340,18 @@ function Big({ p }: { p: CallPerson }) {
         {p.name}
         {!p.micOn ? ' · muted' : ''}
       </span>
+      {p.hand ? <HandBadge hand={p.hand} className="absolute top-3 left-3" /> : null}
     </div>
+  );
+}
+
+/** A raised hand on a tile, with its place in the queue. */
+function HandBadge({ hand, className }: { hand: NonNullable<CallPerson['hand']>; className?: string }) {
+  return (
+    <span role="img" aria-label={hand.label} title={hand.label} className={cx('flex items-center gap-0.5 rounded-[6px] bg-[#F6C177] px-1.5 py-0.5 text-[10.5px] font-bold text-[#3A2A10]', className)}>
+      <Icon name="hand" size={12} />
+      {hand.position}
+    </span>
   );
 }
 
@@ -358,7 +369,12 @@ export function Tile({ p, className }: { p: CallPerson; className?: string }) {
           <Icon name="mic-off" size={13} />
         </span>
       ) : null}
-      {p.screen ? <span className="absolute top-1.5 left-1.5 rounded-[6px] bg-[rgba(59,91,219,.85)] px-1.5 py-0.5 text-[10.5px] font-bold">Sharing</span> : null}
+      {p.screen || p.hand ? (
+        <span className="absolute top-1.5 left-1.5 flex items-center gap-1">
+          {p.hand ? <HandBadge hand={p.hand} /> : null}
+          {p.screen ? <span className="rounded-[6px] bg-[rgba(59,91,219,.85)] px-1.5 py-0.5 text-[10.5px] font-bold">Sharing</span> : null}
+        </span>
+      ) : null}
     </div>
   );
 }

@@ -18,11 +18,12 @@ import { openRelatedLabel, providerLabel, RSVP_LABEL, typeLabel, type AgendaItem
 import { Select } from '../../components/Select';
 import { MinutesEditor } from './minutes/MinutesEditor';
 import { TranscriptsTab } from './transcripts/TranscriptsTab';
+import { QaPollsTab } from './QaPollsTab';
 import { latestTranscriptText } from './transcripts/material';
 import { useInvitationAnswer } from '../calendar/conflicts';
 import type { ChatMessage } from '../chat/types';
 
-const TABS = ['Summary', 'Agenda', 'People', 'Minutes', 'Transcripts', 'Files', 'Board', 'Activity'] as const;
+const TABS = ['Summary', 'Agenda', 'People', 'Minutes', 'Transcripts', 'Q&A & Polls', 'Files', 'Board', 'Activity'] as const;
 const TAB_LABEL: Partial<Record<(typeof TABS)[number], string>> = { Minutes: 'Notes & Minutes' };
 type Tab = (typeof TABS)[number];
 
@@ -151,6 +152,7 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
             {tab === 'People' ? <PeopleTab d={d} canEdit={canEdit} act={act} /> : null}
             {tab === 'Minutes' ? <MinutesTab d={d} /> : null}
             {tab === 'Transcripts' ? <TranscriptsTab d={d} /> : null}
+            {tab === 'Q&A & Polls' ? <QaPollsTab d={d} /> : null}
             {tab === 'Files' ? <FilesTab d={d} act={act} /> : null}
             {tab === 'Board' ? <BoardTab uuid={m.meet_uuid} /> : null}
             {tab === 'Activity' ? <ActivityTab id={m.id} /> : null}
