@@ -67,7 +67,10 @@ function acceptList(limits: Pictures['limits'] | undefined): string {
   return (limits?.types ?? ['jpg', 'png', 'webp']).flatMap((t) => [...(t === 'jpg' ? ['.jpg', '.jpeg'] : [`.${t}`]), mime[t] ?? '']).filter(Boolean).join(',');
 }
 
-export function PictureEditor({ tab, onTab, onClose, style }: { tab: EditorTab; onTab: (t: EditorTab) => void; onClose: () => void; style?: Partial<AvatarStyle> | null }) {
+/** A picture made here and handed back unsent, for a screen that sends it itself (the required-picture screen, #46). */
+export type PickPicture = (image: Blob, made?: AvatarStyle) => void;
+
+export function PictureEditor({ tab, onTab, onClose, style, onPick }: { tab: EditorTab; onTab: (t: EditorTab) => void; onClose: () => void; style?: Partial<AvatarStyle> | null; onPick?: PickPicture }) {
   const pics = usePictures();
   const can = abilities(pics.data);
   const [busy, setBusy] = useState(false);
@@ -106,9 +109,9 @@ export function PictureEditor({ tab, onTab, onClose, style }: { tab: EditorTab; 
         {tabs.length === 0 ? (
           <p className="m-0 px-6 py-10 text-center text-[13px] text-ink-3">Your organisation does not let you change your picture.</p>
         ) : shown === 'photo' ? (
-          <PhotoTab pics={pics.data} busy={busy} setBusy={setBusy} onClose={onClose} />
+          <PhotoTab pics={pics.data} busy={busy} setBusy={setBusy} onClose={onClose} onPick={onPick} />
         ) : (
-          <AvatarTab pics={pics.data} busy={busy} setBusy={setBusy} onClose={onClose} start={style ?? null} />
+          <AvatarTab pics={pics.data} busy={busy} setBusy={setBusy} onClose={onClose} start={style ?? null} onPick={onPick} />
         )}
       </section>
     </div>
@@ -143,7 +146,7 @@ function Footer({ left, busy, onClose, onSave, saveLabel, canSave }: { left: str
   );
 }
 
-function PhotoTab({ pics, busy, setBusy, onClose }: { pics: Pictures | undefined; busy: boolean; setBusy: (b: boolean) => void; onClose: () => void }) {
+function PhotoTab({ pics, busy, setBusy, onClose, onPick }: { pics: Pictures | undefined; busy: boolean; setBusy: (b: boolean) => void; onClose: () => void; onPick?: PickPicture }) {
   const me = useMe();
   const saved = useSaved(onClose);
   const input = useRef<HTMLInputElement>(null);
@@ -246,7 +249,10 @@ function PhotoTab({ pics, busy, setBusy, onClose }: { pics: Pictures | undefined
       draw(ctx, img, w, h, crop, STAGE, OUT, as === 'image/jpeg' ? '#ffffff' : undefined);
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, as, 0.92));
       if (!blob) throw new Error('This computer could not draw the picture.');
-      await saved(await sendPicture(blob), 'Profile picture');
+      if (onPick) {
+        onPick(blob);
+        onClose();
+      } else await saved(await sendPicture(blob), 'Profile picture');
     } catch (e) {
       toast('error', errorMessage(e));
     } finally {
@@ -354,7 +360,7 @@ function PhotoTab({ pics, busy, setBusy, onClose }: { pics: Pictures | undefined
           <ReviewNote pics={pics} />
         </div>
       </div>
-      <Footer left={`${types} · up to ${Math.round((limits?.max_bytes ?? 8 * 1048576) / 1048576)} MB`} busy={busy} onClose={onClose} onSave={() => void save()} saveLabel="Save photo" canSave={!!crop && !failed} />
+      <Footer left={`${types} · up to ${Math.round((limits?.max_bytes ?? 8 * 1048576) / 1048576)} MB`} busy={busy} onClose={onClose} onSave={() => void save()} saveLabel={onPick ? 'Use photo' : 'Save photo'} canSave={!!crop && !failed} />
     </>
   );
 }
@@ -378,7 +384,7 @@ function Segmented<T extends string>({ label, value, options, onChange }: { labe
   );
 }
 
-function AvatarTab({ pics, busy, setBusy, onClose, start }: { pics: Pictures | undefined; busy: boolean; setBusy: (b: boolean) => void; onClose: () => void; start: Partial<AvatarStyle> | null }) {
+function AvatarTab({ pics, busy, setBusy, onClose, start, onPick }: { pics: Pictures | undefined; busy: boolean; setBusy: (b: boolean) => void; onClose: () => void; start: Partial<AvatarStyle> | null; onPick?: PickPicture }) {
   const me = useMe();
   const saved = useSaved(onClose);
   const [style, setStyle] = useState<AvatarStyle>(() => normalise(start ?? { look: pics?.policy?.default_look ?? 'initials' }, me?.name ?? ''));
@@ -388,7 +394,11 @@ function AvatarTab({ pics, busy, setBusy, onClose, start }: { pics: Pictures | u
   const save = async () => {
     setBusy(true);
     try {
-      await saved(await sendPicture(await avatarPng(style), style), 'Avatar');
+      const image = await avatarPng(style);
+      if (onPick) {
+        onPick(image, style);
+        onClose();
+      } else await saved(await sendPicture(image, style), 'Avatar');
     } catch (e) {
       toast('error', errorMessage(e));
     } finally {

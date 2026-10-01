@@ -5,6 +5,46 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-01 — 0.2.72: A profile picture before the workspace; calendar entries open their record; search on the server's index
+
+- **Add your profile picture** (#46). When the server requires a profile picture and your account has none, the app
+  shows this screen after sign-in instead of the workspace: on your first sign-in, and again if your picture is
+  removed. **Upload Picture** opens the picture editor (move, zoom and turn it inside the round frame); an avatar
+  can be made instead where the organisation allows it. The picture shows as it will look, and goes up only on
+  **Save and Continue**; if that fails it says why and offers **Try again**. **Sign Out** is the only other way on.
+  The supported types, the largest size and the smallest picture are listed under the preview.
+- Where it bites: the server decides (WorkSuite Users 1.1.0, *Require a profile picture*, on by default). An older
+  server never asks. A picture waiting for an administrator's review counts, so nobody is held here. Started
+  offline from the copy kept on this computer, the app does not ask: nothing could be sent anyway.
+
+- **Calendar entries open the record they are about** (#64). A task, meeting, tender, subscription renewal, leave
+  request, project date or asset date opens a summary — title, type, date and time, status — with a button that
+  says what it opens (**Open Task**, **View Tender**, **Open Subscription**, **Open Leave Request**, **Open
+  Project**, **Open Asset**…) and goes to that record, not to the app's list. Tenders and subscriptions now open in
+  their own tabs (they went to the browser, or nowhere). Projects and assets open on the web, at that project or
+  asset. If the record was deleted, or is no longer shared with you, since the calendar loaded, the summary says so
+  instead of opening. Works from Day, Week, Month, the all-day row and the Today list; Tab and Enter open entries;
+  Escape closes the summary; the calendar keeps its day, view and filters when you come back.
+- Where it bites: exact project and asset links need WorkSuite Calendar 1.1.0 on the server; before that, those
+  open the Projects or Assets list as they did. Asset licences and audits belong to no single asset and open the
+  register. Your own leave request, opened from the calendar, is highlighted in HR → Leave rather than opening the
+  approver's review, which would refuse you.
+
+- **Search answers from the server's new search index** (#57, with WorkSuite Search 1.1.0). Results come back
+  ranked — an exact name or number first — with the words marked wherever they start a word (Sinhala and Tamil
+  vowel signs included) and, where the match was in the content, a snippet showing why, in the list and the
+  preview. Filter by **When** (past week, month, year), **Mine**, and **Company** when you belong to more than
+  one; choosing a group (Tab) now asks the server for that group, and gets more of it. While the server is still
+  building its index, a line says so and which apps are searched the slower way meanwhile, so an empty answer is
+  not read as "nothing there". When your access changes, results found under the old access are dropped.
+- Where it bites: an older server sends none of this, and search works as before. Offline search is unchanged.
+
+- **The Mac build packages again.** The universal (Intel + Apple silicon) merge stopped at Local AI's native
+  libraries, which come one package per Mac and are the same file in both halves; the builder is now told so.
+- **Security: PDFs are shown with pdf.js 6.3** (was 5.7). pdf.js 5.6–6.2 could run a crafted PDF's script when it
+  was opened (GHSA-hq66-cqwq-w95j, high). The file viewer and Drive's PDF covers are the two places it is used;
+  nothing else about them changed.
+
 ## 2026-10-01 — 0.2.71: Chat's channel toolbar (WhatsApp in Chat), profile pictures, a resizable conversation list; AI Assistant scrolling; Local AI first-use setup and Gemma 3 4B; Office menus and Open in new window; Meet Home and pre-join redesign; meeting cards in Chat; screen sharing fixed
 
 - **A channel toolbar down the far left of Chat** (#33): Chat, Web Chat and WhatsApp, each with its unread count

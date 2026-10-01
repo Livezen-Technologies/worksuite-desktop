@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { canOpenApp, canOpenLink, canOpenRoute } from '@shared/access';
 import { resolveWebLink } from '@shared/links';
@@ -50,7 +50,59 @@ export interface Item {
   window?: () => void;
   /** A web link to copy. */
   link?: string;
+  /** The words the server matched, to mark wherever they start a word; else the title is marked where the query is. */
+  words?: string[];
+  /** Why content matched: the text around it (#57). */
+  snippet?: string;
 }
+
+/**
+ * `text` cut into runs, each word that begins with one of `words` marked whole
+ * (#57) — as the server matched them, `+word*`. Letters, signs and digits make a
+ * word, so a Sinhala or Tamil vowel sign stays inside the one it belongs to.
+ */
+export function markWords(text: string, words: string[]): Array<{ text: string; match: boolean }> {
+  const list = [...new Set(words.map((w) => w.trim().toLowerCase()).filter(Boolean))].sort((a, b) => b.length - a.length);
+  if (!text || !list.length) return text ? [{ text, match: false }] : [];
+  const esc = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])(?:${list.map(esc).join('|')})[\\p{L}\\p{M}\\p{N}]*`, 'giu');
+  const out: Array<{ text: string; match: boolean }> = [];
+  let at = 0;
+  for (const m of text.matchAll(re)) {
+    const i = m.index ?? 0;
+    if (i > at) out.push({ text: text.slice(at, i), match: false });
+    out.push({ text: m[0], match: true });
+    at = i + m[0].length;
+  }
+  if (at < text.length) out.push({ text: text.slice(at), match: false });
+  return out;
+}
+
+const MARK = 'rounded-[3px] bg-[#FFF1B8] px-px text-[#151A2D] dark:bg-[#5A4712] dark:text-[#FFE9A8]';
+
+function Marked({ text, words }: { text: string; words: string[] }) {
+  return (
+    <>
+      {markWords(text, words).map((p, i) =>
+        p.match ? (
+          <mark key={i} className={MARK}>
+            {p.text}
+          </mark>
+        ) : (
+          <span key={i}>{p.text}</span>
+        ),
+      )}
+    </>
+  );
+}
+
+/** How far back "When" looks, in days; 0 is any time. */
+const WHEN: Array<{ days: number; label: string }> = [
+  { days: 0, label: 'Any time' },
+  { days: 7, label: 'Past week' },
+  { days: 30, label: 'Past month' },
+  { days: 365, label: 'Past year' },
+];
 
 /** The title cut round the first match, for the highlight. */
 export function splitMatch(text: string, q: string): { a: string; m: string; b: string } {
@@ -102,7 +154,16 @@ const CREATE: Array<{ id: string; label: string; app: string; route: string; ico
 
 interface ServerGroup {
   group: string;
-  items: Array<{ id: number | string; title: string; subtitle: string | null; route: string; at: string | null }>;
+  key?: string;
+  items: Array<{ id: number | string; title: string; subtitle: string | null; route: string; at: string | null; snippet?: string | null }>;
+}
+
+/** `/api/search/global`; `terms`, `index` and `companies` come from servers with the search index (#57). */
+interface ServerAnswer {
+  results: ServerGroup[];
+  terms?: string[];
+  index?: { state: 'ready' | 'building'; progress: number; building: string[] } | null;
+  companies?: Array<{ id: number; name: string }>;
 }
 
 export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
@@ -131,10 +192,37 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
     return () => clearTimeout(h);
   }, [term]);
 
+  // Filters the server applies (#57): the group in view, how recent, whose, which company.
+  // The date is worked out when "When" is chosen, so the search does not move with the clock as it renders.
+  const [when, setWhen] = useState<{ days: number; from: string | null }>({ days: 0, from: null });
+  const days = when.days;
+  const setDays = (d: number) => setWhen({ days: d, from: d ? new Date(Date.now() - d * 86_400_000).toISOString().slice(0, 10) : null });
+  const [mine, setMine] = useState(false);
+  const [company, setCompany] = useState(0);
+  const params = useMemo(
+    () => ({
+      q: debounced,
+      ...(scope !== 'All' && scope !== 'Apps' && scope !== 'Offline results' ? { types: scope } : {}),
+      ...(when.from ? { from: when.from } : {}),
+      ...(mine ? { owner: 'me' } : {}),
+      ...(company ? { company } : {}),
+    }),
+    [debounced, scope, when.from, mine, company],
+  );
+  const filtered = days > 0 || mine || company > 0;
+
+  // Access changed — a role removed, a company left — arrives as a new bootstrap: what was found under the old
+  // access is dropped, not shown. (The server checks access on every search; this is the cache in this window.)
+  const qc = useQueryClient();
+  const firstApps = useRef(apps);
+  useEffect(() => {
+    if (apps !== firstApps.current) void qc.invalidateQueries({ queryKey: ['search'] });
+  }, [apps, qc]);
+
   const online = network !== 'OFFLINE';
   const server = useQuery({
-    queryKey: ['search', debounced],
-    queryFn: ({ signal }) => apiGet<{ results: ServerGroup[] }>('/api/search/global', { q: debounced }, signal),
+    queryKey: ['search', params],
+    queryFn: ({ signal }) => apiGet<ServerAnswer>('/api/search/global', params, signal),
     enabled: !commandMode && online && debounced.length >= 2,
     staleTime: 15_000,
     retry: false,
@@ -193,6 +281,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
     }
     if (!lower) return out;
     if (scope === 'All') for (const a of apps) if (appLabel(a).toLowerCase().includes(lower) || (a.keywords ?? '').includes(lower)) out.push(appItem(a, 'Apps'));
+    const words = server.data?.terms ?? [];
     for (const g of server.data?.results ?? []) {
       const look = groupLook(g.group);
       for (const it of g.items) {
@@ -205,6 +294,8 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
           group: g.group,
           title: it.title,
           subtitle: it.subtitle ?? undefined,
+          snippet: it.snippet ?? undefined,
+          words: words.length ? words : undefined,
           at: relative(it.at),
           colour: look.colour,
           icon: look.icon,
@@ -237,6 +328,8 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
   const selected = Math.min(sel, Math.max(0, shown.length - 1));
   const cur = idle ? undefined : shown[selected];
   const fetching = server.isFetching || offline.isFetching;
+  const index = server.data?.index ?? null;
+  const building = index?.state === 'building';
   const waiting = !commandMode && term.length >= 2 && (debounced !== term || fetching) && shown.length === 0;
 
   useEffect(() => {
@@ -347,6 +440,31 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
                 </button>
               );
             })}
+            <span className="flex-1" />
+            {online ? (
+              <>
+                <select aria-label="When" value={days} onChange={(e) => (setDays(Number(e.target.value)), setSel(0))} className="h-[30px] shrink-0 rounded-full border border-line bg-surface px-2.5 text-[12.5px] font-semibold text-ink-2">
+                  {WHEN.map((w) => (
+                    <option key={w.days} value={w.days}>
+                      {w.label}
+                    </option>
+                  ))}
+                </select>
+                {(server.data?.companies?.length ?? 0) > 1 ? (
+                  <select aria-label="Company" value={company} onChange={(e) => (setCompany(Number(e.target.value)), setSel(0))} className="h-[30px] max-w-[180px] shrink-0 rounded-full border border-line bg-surface px-2.5 text-[12.5px] font-semibold text-ink-2">
+                    <option value={0}>All companies</option>
+                    {server.data!.companies!.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+                <button type="button" role="switch" aria-checked={mine} onClick={() => (setMine(!mine), setSel(0))} className={cx('flex h-[30px] shrink-0 items-center rounded-full border px-3 text-[12.5px] font-semibold', mine ? 'border-primary bg-selection text-primary' : 'border-line bg-surface text-ink-2')}>
+                  Mine
+                </button>
+              </>
+            ) : null}
           </div>
         ) : null}
         <div className="flex min-h-0 flex-1">
@@ -433,16 +551,27 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
                     aria-selected={on}
                     onClick={() => setSel(i)}
                     onDoubleClick={() => run(it)}
-                    className={cx('flex w-full items-center gap-3 rounded-[10px] px-3 text-left', it.subtitle ? 'h-[54px]' : 'h-11', on ? 'bg-selection shadow-[inset_3px_0_0_var(--color-primary)]' : 'hover:bg-subtle')}
+                    className={cx('flex w-full items-center gap-3 rounded-[10px] px-3 text-left', it.snippet ? 'min-h-[54px] py-2' : it.subtitle ? 'h-[54px]' : 'h-11', on ? 'bg-selection shadow-[inset_3px_0_0_var(--color-primary)]' : 'hover:bg-subtle')}
                   >
                     <AppTile icon={it.icon} colour={it.colour} size={32} iconSize={16} />
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span className="truncate text-[13.5px] font-semibold text-ink">
-                        {sp.a}
-                        {sp.m ? <mark className="rounded-[3px] bg-[#FFF1B8] px-px text-[#151A2D] dark:bg-[#5A4712] dark:text-[#FFE9A8]">{sp.m}</mark> : null}
-                        {sp.b}
+                        {it.words ? (
+                          <Marked text={it.title} words={it.words} />
+                        ) : (
+                          <>
+                            {sp.a}
+                            {sp.m ? <mark className={MARK}>{sp.m}</mark> : null}
+                            {sp.b}
+                          </>
+                        )}
                       </span>
                       {it.subtitle ? <span className="truncate text-[12px] text-ink-3">{it.subtitle}</span> : null}
+                      {it.snippet ? (
+                        <span className="line-clamp-2 text-[12px] text-ink-2">
+                          <Marked text={it.snippet} words={it.words ?? []} />
+                        </span>
+                      ) : null}
                     </span>
                     {it.at ? <span className="shrink-0 text-[11.5px] whitespace-nowrap text-ink-3">{it.at}</span> : null}
                     {it.hint ? <Kbd>{it.hint}</Kbd> : null}
@@ -474,9 +603,13 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
                     ? 'Search starts at two characters.'
                     : commandMode
                       ? 'No command matches. Try “new” or an app name.'
-                      : scope !== 'All'
-                        ? `Nothing in ${scope}. Try searching all apps.`
-                        : 'Check the spelling, or try a name, subject or file type.'}
+                      : building
+                        ? 'The search index is still being built, so this may not be everything. Try again shortly.'
+                        : scope !== 'All'
+                          ? `Nothing in ${scope}. Try searching all apps.`
+                          : filtered
+                            ? 'Nothing matches with these filters. Try fewer.'
+                            : 'Check the spelling, or try a name, subject or file type.'}
                 </span>
                 {scope !== 'All' && !commandMode ? (
                   <button type="button" onClick={() => (setScope('All'), setSel(0))} className="mt-1.5 h-[34px] rounded-[9px] border border-line bg-surface px-3.5 text-[12.5px] font-semibold text-primary">
@@ -503,6 +636,11 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
                 </span>
               </div>
               <b className="text-[16px] leading-[1.35] text-ink selectable">{cur.title}</b>
+              {cur.snippet ? (
+                <p className="m-0 rounded-[10px] border border-line bg-surface p-3 text-[12.5px] leading-[1.55] text-ink-2 selectable">
+                  <Marked text={cur.snippet} words={cur.words ?? []} />
+                </p>
+              ) : null}
               {cur.subtitle && !cur.ext && !cur.subtitle.startsWith('Opens') && cur.subtitle !== 'Desktop app' ? (
                 <p className="m-0 rounded-[10px] border border-line bg-surface p-3 text-[12.5px] leading-[1.55] text-ink-2 selectable">{cur.subtitle}</p>
               ) : null}
@@ -536,6 +674,11 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
           ) : null}
         </div>
         {!online && !commandMode ? <div className="shrink-0 border-t border-line bg-warning-bg px-[18px] py-2 text-[12px] font-semibold text-warning">Offline — showing results saved on this computer.</div> : null}
+        {online && !commandMode && !idle && building ? (
+          <div role="status" className="shrink-0 border-t border-line bg-warning-bg px-[18px] py-2 text-[12px] font-semibold text-warning">
+            Search is still indexing ({Math.round((index?.progress ?? 0) * 100)}%). {index!.building.join(', ')} {index!.building.length === 1 ? 'is' : 'are'} searched the slower way meanwhile{filtered ? ', and the filters skip them' : ''}.
+          </div>
+        ) : null}
         <div className="flex h-[42px] shrink-0 items-center gap-4 border-t border-line px-[18px] text-[11.5px] text-ink-3">
           <span className="flex items-center gap-[5px]">
             <Kbd>↑</Kbd>

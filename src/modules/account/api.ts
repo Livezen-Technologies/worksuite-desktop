@@ -44,7 +44,8 @@ export interface Picture {
 export interface Pictures {
   items: Picture[];
   limits: { max_bytes: number; extensions: string[]; types?: string[]; min_side: number };
-  policy?: { moderation: boolean; default_look: 'initials' | 'abstract' | 'illustrated' };
+  /** `required`: a picture is needed before the workspace opens (#46); absent from older servers. */
+  policy?: { moderation: boolean; default_look: 'initials' | 'abstract' | 'illustrated'; required?: boolean };
   can?: { upload: boolean; avatar: boolean; edit: boolean; delete: boolean; skip_review: boolean };
   visibility?: { mode: VisibilityMode; orgs: number[]; companies: Array<{ id: number; name: string }>; teams: Array<{ id: number; name: string }> };
 }

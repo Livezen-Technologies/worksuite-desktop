@@ -173,7 +173,7 @@ function PdfView({ blob, name, onPage }: { blob: Blob; name: string; onPage?: (p
     })();
     return () => {
       gone = true;
-      void loaded?.destroy();
+      void loaded?.loadingTask.destroy();
     };
   }, [blob]);
 

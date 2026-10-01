@@ -205,8 +205,12 @@ describe('the workspace (§4)', () => {
     expect(getCommand('pdf-find')).toBeTruthy();
     expect(getCommand('pdf-print')).toBeTruthy();
     expect(getCommand('pdf-open')).toBeTruthy();
-    act(() => getCommand('pdf-save')!.run());
-    expect(toast).toHaveBeenCalledWith('info', expect.stringMatching(/Viewing only/));
+    // The command acts on the workspace's latest state, which is set by an effect after the render that shows it;
+    // under load the first press can come before that, so it is pressed until the read-only answer comes.
+    await waitFor(() => {
+      act(() => getCommand('pdf-save')!.run());
+      expect(toast).toHaveBeenCalledWith('info', expect.stringMatching(/Viewing only/));
+    });
   });
 
   it('shows the password prompt and sends the password with "remember for this session"', async () => {

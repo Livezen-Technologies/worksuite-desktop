@@ -36,6 +36,8 @@ export interface PublicUser {
   locale?: string | null;
   time_format?: string | null;
   week_start?: number | null;
+  /** Servers since worksuite Users 1.1.0 (#46). */
+  picture_required?: boolean | null;
 }
 
 export interface SignInPayload {
@@ -101,6 +103,7 @@ export function toUserSummary(u: PublicUser): UserSummary {
     organizationName: orgName,
     timeFormat: u.time_format ?? null,
     weekStart: typeof u.week_start === 'number' ? u.week_start : null,
+    pictureRequired: u.picture_required === true,
   };
 }
 

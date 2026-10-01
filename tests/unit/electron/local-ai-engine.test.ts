@@ -30,10 +30,9 @@ describe('Local AI engine (llama.cpp, in-process)', () => {
 
   it('stops when cancelled, keeping what came so far', async () => {
     const ac = new AbortController();
-    let n = 0;
-    const r = await engine.generate({ id: 'req-00000002', messages: [{ role: 'user', content: 'Tell me a long story' }], maxTokens: 400 }, () => {
-      if (++n === 5) ac.abort();
-    }, ac.signal);
+    // Stopped at the first piece, chosen greedily: a random-weight model sampled at the default temperature
+    // sometimes ended its answer before a fifth piece came, so the stop was never asked for (CI, 2026-10-01).
+    const r = await engine.generate({ id: 'req-00000002', messages: [{ role: 'user', content: 'Tell me a long story' }], maxTokens: 400, temperature: 0 }, () => ac.abort(), ac.signal);
     expect(r.cancelled).toBe(true);
     expect(r.tokens).toBeLessThan(400);
   }, 60_000);
