@@ -10,6 +10,7 @@ import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';
 import { DEFAULT_ROOM_SETTINGS, type RoomSettings } from '../meet/api';
 import { RoomSettingsFields } from '../meet/RoomRoles';
+import { checkConflicts, ConflictFlag, useConflictGate, type ConflictQuery } from '../calendar/conflicts';
 
 /** A person's part in the meeting, as the record keeps it: co-hosts run the Meet room with the organiser (#82). */
 const PART: Array<['required' | 'host' | 'presenter', string]> = [
@@ -83,6 +84,18 @@ export function ScheduleDialog({ onClose, online, onCreated }: { onClose: () => 
     enabled: needsRoom && !!start && !!end && end > start,
     retry: false,
   });
+  // Who is free then (worksuite-desktop#99): busy or free for everybody, what it is only for you.
+  const conflictQuery: ConflictQuery = { start, end, timezone: currentZone(), user_ids: people.map((p) => p.id), recur_freq: repeat === 'none' ? null : repeat, recur_interval: 1 };
+  const availability = useQuery({
+    queryKey: ['calendar', 'conflicts', 'check', start, end, repeat, people.map((p) => p.id).join(',')],
+    queryFn: () => checkConflicts(conflictQuery),
+    enabled: !!start && !!end && end > start,
+    staleTime: 15_000,
+    retry: false,
+  });
+  const busyOf = (uid: number) => availability.data?.people.find((x) => x.user_id === uid);
+  const mine = (availability.data?.conflicts ?? []).filter((c) => !people.some((p) => p.id === c.user_id));
+  const gate = useConflictGate('Schedule anyway');
   const needle = q.trim().toLowerCase();
   const matches = needle ? (directory.data?.users ?? []).filter((u) => !people.some((p) => p.id === u.id) && (u.name.toLowerCase().includes(needle) || (u.email ?? '').toLowerCase().includes(needle))).slice(0, 6) : [];
   const emails = guests.split(/[\s,;]+/).map((e) => e.trim()).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
@@ -136,7 +149,7 @@ export function ScheduleDialog({ onClose, online, onCreated }: { onClose: () => 
             Add to Calendar and send invitations
           </label>
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" loading={busy} disabled={!title.trim() || !start || !end || end <= start || (isOnline && paste && !link.trim())} onClick={() => void save()}>
+          <Button variant="primary" loading={busy} disabled={!title.trim() || !start || !end || end <= start || (isOnline && paste && !link.trim())} onClick={() => void gate.guard(conflictQuery, save)}>
             {invite ? 'Schedule & invite' : 'Schedule'}
           </Button>
         </>
@@ -222,6 +235,12 @@ export function ScheduleDialog({ onClose, online, onCreated }: { onClose: () => 
             <input value={address} onChange={(e) => setAddress(e.target.value)} className={field} />
           </label>
         ) : null}
+        {mine.length ? (
+          <div className="flex items-center gap-2 text-[12.5px] text-ink-2">
+            <ConflictFlag conflicts={mine} />
+            <span>You have something else then.</span>
+          </div>
+        ) : null}
         <div className="relative flex flex-col gap-1.5">
           <b className="text-[12.5px] text-ink">People</b>
           <div className="flex flex-wrap items-center gap-1.5 rounded-[8px] border border-line bg-surface p-1.5">
@@ -229,6 +248,11 @@ export function ScheduleDialog({ onClose, online, onCreated }: { onClose: () => 
               <span key={p.id} className="flex items-center gap-1 rounded-full bg-selection py-0.5 pr-2 pl-1 text-[12px] font-semibold text-primary">
                 <Avatar name={p.name} size={18} />
                 {p.name}
+                {busyOf(p.id)?.busy ? (
+                  <span title="They have something else then. What it is stays theirs." className="rounded-full bg-warning-bg px-1.5 text-[10.5px] font-bold text-warning">
+                    {busyOf(p.id)!.tentative_only ? 'Maybe busy' : 'Busy'}
+                  </span>
+                ) : null}
                 {builtin ? (
                   <button
                     type="button"
@@ -288,6 +312,7 @@ export function ScheduleDialog({ onClose, online, onCreated }: { onClose: () => 
         </label>
         {error ? <div className="rounded-[8px] bg-danger-bg px-3 py-2 text-[12.5px] text-danger" role="alert">{error}</div> : null}
       </div>
+      {gate.dialog}
     </Modal>
   );
 }

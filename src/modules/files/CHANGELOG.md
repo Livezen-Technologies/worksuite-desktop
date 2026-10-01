@@ -4,6 +4,31 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.0 — 2026-10-01
+
+**Added**
+
+- One transfer queue for every upload and download in the app, two at a time by default (worksuite-desktop#94):
+  - The rest wait their turn in the order they were added, and the next starts when one finishes, is paused, is cancelled or fails.
+  - The Transfers panel has Active (progress, speed, time left), Queued (place in line) and Completed & failed sections, and a summary such as "2 transferring · 8 queued".
+  - Pause, Resume, Cancel and Retry for each file, plus Pause all and Resume all. Resuming or retrying goes back into the queue.
+  - A temporary failure is tried again a few times, each try later than the last, without holding a slot.
+  - The queue survives a lost connection and a restart, and partial transfers carry on from where they stopped.
+  - A transfer is never started twice, and an upload that already reached the server is not sent again.
+  - Clear finished removes only finished entries.
+- Drive › Settings, also in Settings › Files & Sync (worksuite-desktop#95). It applies to this computer, says so, and has Reset to defaults:
+  - **Transfers:** how many at once in total, with optional upload and download limits within it. Changes apply at once: lowering the limit lets the running ones finish.
+  - **Bandwidth:** upload and download caps, Unlimited or Custom in KB/s or MB/s, shared by every transfer going that way.
+  - **Connection:** pause and resume all, resume automatically after reconnecting, and what to do on a metered connection.
+  - **Downloads:** the download folder, or ask where to save each time, and the default answer to a name conflict (Ask, Keep both, Skip, Replace).
+  - **Storage & Sync:** Drive quota, local cache and offline files. The cache can be cleared without touching any file, pending upload or offline file, and synced folders are managed from here.
+  - **Notifications:** for finished and failed transfers.
+  - These settings do not change account storage or server file-size limits.
+
+**Fixed**
+
+- Escape closes the Share dialog wherever the keyboard is, and the dialog takes the keyboard when it opens. Over a document, the keyboard was still in the editor (worksuite-desktop#42).
+
 ## 1.1.2 — 2026-10-01
 
 **Changed**

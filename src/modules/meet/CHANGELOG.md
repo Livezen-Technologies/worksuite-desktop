@@ -4,6 +4,13 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.0 — 2026-10-01
+
+**Added**
+
+- recording status you can follow (worksuite-desktop#89). States: Recording, Finalizing, Queued, Processing, Uploading to Drive, Ready to play, Paused and Failed. Downloading and Downloaded are tracked apart from playback. Progress, size and time left are shown when measured, and an animated bar when they are not. Separate badges say Saved locally, Saved to Drive and Ready to play.
+- actions on a recording: Try again, Pause, Resume, Cancel transfer, Play, Open in Drive and Show the file. Status follows you across modules and survives a restart. A transfer paused by a lost connection, a full disk or a full Drive says so. A stuck step says what to do instead of spinning. You are notified when a recording is ready or fails. Ready to play appears only after the video is checked as complete. Cancelling or a failure never deletes the local recording.
+
 ## 1.2.0 — 2026-10-01
 
 - Meeting roles (worksuite-desktop#82): Host, Co-host, Presenter and Participant badges; name co-hosts and presenters, hand the host role on, leave as host with a hand-over or end for everyone; Room settings tab (name, passcode, lock, who can join, waiting room, join before host, who can present, invite, chat, record and see transcripts) with the meeting's activity; share and record offered only when allowed.

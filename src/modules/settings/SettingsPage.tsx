@@ -25,6 +25,7 @@ import { shortcutLabel, useWriter, writerProblem } from '../ai/writer';
 import { ModuleAccess } from '../ai/ModuleAccess';
 import { discoverStudioModels, setStudioModels, STUDIO_KEY, studioState, testStudioModel, useStudioStatus, type StudioDiscovery } from '../ai/studio';
 import { Checkbox } from '../../components/Checkbox';
+import { DriveSettings } from '../files/DriveSettings';
 
 /** Settings / profile tree (§4.9). Anything the organization's policy decides is shown locked, with the reason. */
 const SECTIONS = [
@@ -68,7 +69,7 @@ export default function SettingsPage(_props: ModuleProps) {
           {section === 'security' ? <SecuritySection prefs={prefs} /> : null}
           {section === 'devices' ? <Devices /> : null}
           {section === 'desktop' ? <DesktopSection prefs={prefs} /> : null}
-          {section === 'files' ? <FilesSection prefs={prefs} /> : null}
+          {section === 'files' ? <FilesSection /> : null}
           {section === 'offline' ? <OfflineSection prefs={prefs} /> : null}
           {section === 'ai' ? <AiSection prefs={prefs} /> : null}
           {section === 'local-ai' ? <LocalAISection /> : null}
@@ -680,7 +681,7 @@ function DesktopSection({ prefs }: { prefs: Preferences }) {
   );
 }
 
-function FilesSection({ prefs }: { prefs: Preferences }) {
+function FilesSection() {
   const { navigate } = useTab();
   const sync = useStore(app, (s) => s.sync);
   const [busy, setBusy] = useState<string | null>(null);
@@ -693,9 +694,6 @@ function FilesSection({ prefs }: { prefs: Preferences }) {
   return (
     <>
       <H title="Files & Sync" hint="Your WorkSuite Drive is available in Files. Keep Drive folders on this computer in sync — they stay available offline, and changes go both ways." />
-      <Row label="Downloads are saved to" hint={<span className="font-mono">{prefs.downloadFolder}</span>}>
-        <Button onClick={() => void call('files:chooseDownloadFolder').then((p) => p && toast('success', 'Download folder changed.'))}>Change…</Button>
-      </Row>
       {!sync ? (
         <Row label="Drive sync" hint="Checking…">
           <Chip>—</Chip>
@@ -745,6 +743,15 @@ function FilesSection({ prefs }: { prefs: Preferences }) {
           </Row>
         </>
       )}
+      {/* The same settings as Drive › Settings: transfers, bandwidth, storage and their notifications. */}
+      <div className="mt-8" id="drive-settings">
+        <DriveSettings embedded />
+      </div>
+      <div className="mt-2">
+        <Button size="sm" variant="ghost" icon="external" onClick={() => navigate('/files?view=settings')}>
+          Open in Drive
+        </Button>
+      </div>
     </>
   );
 }

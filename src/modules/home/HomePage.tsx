@@ -6,7 +6,7 @@ import { call, errorMessage } from '../../core/bridge';
 import { t } from '../../core/i18n';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
-import { dayLabel, greeting, relative, todayInZone, wallMinutes, wallTimeLabel } from '../../core/time';
+import { dateLabel, dayLabel, greeting, relative, timeLabel, todayInZone, wallMinutes, wallTimeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { openAssistant } from '../../core/ui';
 import { Icon } from '../../components/Icon';
@@ -16,6 +16,7 @@ import type { CalendarEvent } from '../calendar/api';
 import type { Task } from '../tasks/api';
 import { CARDS, dueToday as dueTodayOf, loadLayout, meetingsToday, mergeTasks, move, saveLayout, todaysWork, toggle, type CardId, type Layout } from './today';
 import { Checkbox } from '../../components/Checkbox';
+import { ConflictFlag, useWaitingInvitations, type WaitingInvitation } from '../calendar/conflicts';
 
 /**
  * Home — the desktop shell's dashboard (UI-04, §4.13). Every widget comes
@@ -75,6 +76,8 @@ export default function HomePage(_props: ModuleProps) {
     queryFn: () => apiGetMeta<{ events: CalendarEvent[] }>('/api/calendar/events', { from: today, to: today }),
     enabled: has('calendar'),
   });
+  // Invitations waiting for your answer, flagged when they overlap something you have (worksuite-desktop#99).
+  const invitations = useWaitingInvitations(has('calendar') || has('meetings'));
   const approvals = useQuery({
     queryKey: ['hr', 'approvals'],
     queryFn: () => apiGet<{ count: number; items: Approval[] }>('/api/hr/approvals/pending'),
@@ -107,9 +110,10 @@ export default function HomePage(_props: ModuleProps) {
             <TodayCalendar loading={events.isLoading} events={events.data?.data.events ?? []} />
           </Card>
     ) : null,
-    waiting: has('hr') && approvals.data ? (
-          <Card title={t('home.waiting')} action={approvals.data.count ? <span className="rounded-full bg-warning-bg px-2 py-0.5 text-[12px] font-semibold text-warning">{approvals.data.count} approvals</span> : null} className="min-h-[300px]">
-            <WaitingForMe items={approvals.data.items} onOpen={openLink} />
+    waiting: (has('hr') && approvals.data) || invitations.data?.length ? (
+          <Card title={t('home.waiting')} action={approvals.data?.count ? <span className="rounded-full bg-warning-bg px-2 py-0.5 text-[12px] font-semibold text-warning">{approvals.data.count} approvals</span> : null} className="min-h-[300px]">
+            {invitations.data?.length ? <WaitingInvitations items={invitations.data} onOpen={openLink} /> : null}
+            {has('hr') && approvals.data && (approvals.data.items.length || !invitations.data?.length) ? <WaitingForMe items={approvals.data.items} onOpen={openLink} /> : null}
           </Card>
     ) : null,
     activity: has('activity') ? (
@@ -360,6 +364,27 @@ function TodayCalendar({ events, loading }: { events: CalendarEvent[]; loading: 
         </Button>
       ) : null}
     </div>
+  );
+}
+
+/** Invitations to answer, the ones that clash flagged. */
+function WaitingInvitations({ items, onOpen }: { items: WaitingInvitation[]; onOpen: (link: string) => void }) {
+  return (
+    <ul className="mb-3 flex flex-col gap-3">
+      {items.slice(0, 4).map((i) => (
+        <li key={`${i.source}:${i.id}`} className="flex items-center gap-3">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <div className="truncate text-[14px] font-semibold text-ink">Invitation · {i.title}</div>
+            <div className="truncate text-[12.5px] text-ink-3">{dateLabel(i.start_at)} · {timeLabel(i.start_at)}</div>
+            {i.conflicts.length ? <ConflictFlag conflicts={i.conflicts} className="self-start" /> : null}
+          </div>
+          <Button size="sm" onClick={() => onOpen(i.link)}>
+            Answer
+          </Button>
+        </li>
+      ))}
+      {items.length > 4 ? <CountBadge n={items.length - 4} tone="muted" /> : null}
+    </ul>
   );
 }
 

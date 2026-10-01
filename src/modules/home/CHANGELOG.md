@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.1.0 — 2026-10-01
+
+**Added**
+
+- Waiting for me lists the invitations awaiting your answer, each flagged when it overlaps something you already have (worksuite-desktop#99).
+
 ## 1.0.2 — 2026-10-01
 
 **Changed**

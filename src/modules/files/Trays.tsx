@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { transferSummary } from '@shared/transfers';
 import { app } from '../../core/app-state';
 import { apiDelete, apiGet, apiPost } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
@@ -52,13 +53,14 @@ export function UploadTray() {
             <div className="flex gap-2">
               <b className="min-w-0 flex-1 truncate font-semibold text-ink" title={t.name}>{t.name}</b>
               <span className={cx('shrink-0', t.state === 'done' ? 'text-success' : t.state === 'failed' ? 'text-danger' : 'text-ink-2')}>
-                {t.state === 'done' ? 'Done' : t.state === 'failed' ? 'Failed' : t.state === 'queued' ? 'Starting…' : t.state === 'paused' ? 'Paused' : `${Math.round(pct)}%`}
+                {t.state === 'done' ? 'Done' : t.state === 'failed' ? 'Failed' : t.state === 'queued' ? (t.retryAt ? 'Trying again soon' : t.position ? `Queued · #${t.position}` : 'Queued') : t.state === 'paused' ? 'Paused' : `${Math.round(pct)}%`}
               </span>
             </div>
             {bar(pct, t.state === 'done' ? 'bg-success' : t.state === 'failed' ? 'bg-danger' : 'bg-primary')}
           </div>
         );
       })}
+      {running.length ? <div className="text-[11.5px] text-ink-3" data-upload-summary>{transferSummary(all)}</div> : null}
       {folders.size ? <div className="text-[11.5px] text-ink-3">A folder keeps its structure in the Drive.</div> : null}
     </section>
   );

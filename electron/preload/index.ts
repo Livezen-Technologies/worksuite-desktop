@@ -166,6 +166,8 @@ const api = {
     discard: call('meetrec:discard'),
     reveal: call('meetrec:reveal'),
     chooseFolder: call('meetrec:chooseFolder'),
+    open: call('meetrec:open'),
+    downloads: call('meetrec:downloads'),
   },
   stt: {
     status: call('stt:status'),
@@ -206,6 +208,9 @@ const api = {
     open: call('transfers:open'),
     reveal: call('transfers:reveal'),
     clearFinished: call('transfers:clearFinished'),
+    pauseAll: call('transfers:pauseAll'),
+    resumeAll: call('transfers:resumeAll'),
+    resetSettings: call('transfers:resetSettings'),
   },
   sync: {
     status: call('sync:status'),

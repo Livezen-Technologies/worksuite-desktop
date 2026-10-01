@@ -17,6 +17,7 @@ import { MonthGrid } from './MonthGrid';
 import { eventKey, WeekGrid } from './WeekGrid';
 import { SidePanel } from '../../components/SidePanel';
 import { Checkbox } from '../../components/Checkbox';
+import { checkConflicts, conflictLine } from './conflicts';
 
 const VIEWS: Array<[View, string]> = [
   ['day', 'Day'],
@@ -181,6 +182,9 @@ export default function CalendarPage(_props: ModuleProps) {
           },
         });
       }
+      // Moved onto something else: said, with Undo just there, rather than asked first (worksuite-desktop#99).
+      const now = await checkConflicts({ start: s1, end: e1, all_day: e.all_day, ...(e.source === 'businessmeeting' ? { meeting_id: Number(e.id) } : /^\d+$/.test(String(e.id)) ? { event_id: Number(e.id) } : {}) }).catch(() => null);
+      if (now?.conflicts.length) toast('info', `Schedule conflict: this now overlaps ${now.conflicts.length === 1 ? conflictLine(now.conflicts[0]!) : `${now.conflicts.length} other commitments`}. Undo is in the bar below.`, undefined, 8000);
     } catch (err) {
       // A refused move is usually a clash (a meeting room), and says so.
       toast('error', errorMessage(err));

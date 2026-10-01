@@ -98,6 +98,8 @@ export const INVOKE_CHANNELS = [
   'meetrec:discard',
   'meetrec:reveal',
   'meetrec:chooseFolder',
+  'meetrec:open',
+  'meetrec:downloads',
   'stt:status',
   'stt:chooseModel',
   'stt:removeModel',
@@ -131,6 +133,9 @@ export const INVOKE_CHANNELS = [
   'transfers:open',
   'transfers:reveal',
   'transfers:clearFinished',
+  'transfers:pauseAll',
+  'transfers:resumeAll',
+  'transfers:resetSettings',
 
   'sync:status',
   'sync:devices',

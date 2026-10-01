@@ -12,6 +12,7 @@ import { MeetingDetail } from './MeetingDetail';
 import { ScheduleDialog } from './ScheduleDialog';
 import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';
+import { useInvitationAnswer } from '../calendar/conflicts';
 
 type Tab = 'dashboard' | 'mine' | 'invitations' | 'rooms' | 'recurring';
 const TABS: Array<[Tab, string]> = [
@@ -185,23 +186,36 @@ function Invitations({ onOpen, compact }: { onOpen: (id: number) => void; compac
       <h2 className="text-[15px] font-bold text-ink">Awaiting your answer</h2>
       {list.isLoading ? <Spinner /> : null}
       {!list.isLoading && !rows.length ? <p className="text-ink-3">{compact ? 'Nothing waiting on you.' : 'You have answered every invitation.'}</p> : null}
-      {rows.map((m) => {
-        const [time, day] = whenParts(m.start_at);
-        return (
-          <div key={m.id} className="flex flex-col gap-1.5 border-b border-line pb-2.5 last:border-0">
-            <button type="button" onClick={() => onOpen(m.id)} className="text-left font-bold text-ink hover:underline">{m.title}</button>
-            <span className="text-[12px] text-ink-3">{day} · {time} · {m.where || providerLabel(m)}{m.organizer ? ` · from ${m.organizer}` : ''}</span>
-            <div className="flex gap-1.5">
-              {(['accepted', 'tentative', 'declined'] as Rsvp[]).map((r) => (
-                <button key={r} type="button" disabled={answer.isPending} onClick={() => answer.mutate({ id: m.id, rsvp: r })} className={cx('h-7 rounded-[7px] px-2.5 text-[12px] font-semibold', r === 'accepted' ? 'bg-primary text-white' : 'border border-line text-ink hover:bg-subtle')}>
-                  {RSVP_LABEL[r]}
-                </button>
-              ))}
-            </div>
-          </div>
-        );
-      })}
+      {rows.map((m) => (
+        <InvitationRow key={m.id} m={m} busy={answer.isPending} onOpen={onOpen} send={(rsvp) => answer.mutateAsync({ id: m.id, rsvp })} />
+      ))}
     </section>
+  );
+}
+
+/** An invitation waiting for your answer, flagged when it overlaps something you already have (worksuite-desktop#99). */
+function InvitationRow({ m, busy, onOpen, send }: { m: Meeting; busy: boolean; onOpen: (id: number) => void; send: (rsvp: Rsvp) => Promise<unknown> }) {
+  const invitation = useInvitationAnswer('meeting', m.id, (r) => send(r as Rsvp));
+  const [time, day] = whenParts(m.start_at);
+  return (
+    <div className="flex flex-col gap-1.5 border-b border-line pb-2.5 last:border-0">
+      <button type="button" onClick={() => onOpen(m.id)} className="text-left font-bold text-ink hover:underline">{m.title}</button>
+      <span className="text-[12px] text-ink-3">{day} · {time} · {m.where || providerLabel(m)}{m.organizer ? ` · from ${m.organizer}` : ''}</span>
+      {invitation.flag ? <span className="flex">{invitation.flag}</span> : null}
+      <div className="flex flex-wrap gap-1.5">
+        {(['accepted', 'tentative', 'declined'] as Rsvp[]).map((r) => (
+          <button key={r} type="button" disabled={busy} onClick={() => invitation.answer(r)} className={cx('h-7 rounded-[7px] px-2.5 text-[12px] font-semibold', r === 'accepted' ? 'bg-primary text-white' : 'border border-line text-ink hover:bg-subtle')}>
+            {RSVP_LABEL[r]}
+          </button>
+        ))}
+        {invitation.propose ? (
+          <button type="button" onClick={invitation.propose} className="h-7 px-1 text-[12px] font-semibold text-primary hover:underline">
+            Propose new time
+          </button>
+        ) : null}
+      </div>
+      {invitation.dialogs}
+    </div>
   );
 }
 

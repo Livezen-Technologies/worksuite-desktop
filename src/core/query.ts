@@ -29,7 +29,7 @@ const QUIET_CHAT_EVENTS = /^chat\.(typing\.|presence$|call\.)/;
 export function wireQueryInvalidation(): void {
   on('realtime:resync', () => void queryClient.invalidateQueries());
   on('organization:changed', () => void queryClient.invalidateQueries());
-  on<{ type: string; room_id?: number; conversation_id?: number }>('realtime:event', (e) => {
+  on<{ type: string; room_id?: number; conversation_id?: number; event?: string }>('realtime:event', (e) => {
     if (WEBSITE_EVENTS.has(e.type)) {
       void queryClient.invalidateQueries({ queryKey: ['website', 'inbox'] });
       if (e.conversation_id !== undefined) void queryClient.invalidateQueries({ queryKey: ['website', 'conversation', String(e.conversation_id)] });
@@ -40,6 +40,10 @@ export function wireQueryInvalidation(): void {
       if (e.room_id !== undefined) void queryClient.invalidateQueries({ queryKey: ['chat', 'messages', String(e.room_id)] });
     }
     if (e.type === 'notification') void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    // Something shared with this person, or their access changed: Shared with me and Drive's lists show it now (worksuite-desktop#16).
+    if (e.type === 'notification' && typeof e.event === 'string' && /^files\.(shared|access_changed|access_revoked)$/.test(e.event)) {
+      for (const k of ['shared', 'list', 'home', 'access']) void queryClient.invalidateQueries({ queryKey: ['files', k] });
+    }
     if (e.type === 'activity.new') void queryClient.invalidateQueries({ queryKey: ['home'] });
     if (e.type === 'hr.attendance.changed') void queryClient.invalidateQueries({ queryKey: ['hr'] });
     // Hotel PMS's live nudges (`pms.room`, `pms.hk_task`, `pms.request`): the rack and the desk's lists ask again (PMS-ARC-030).

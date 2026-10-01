@@ -163,12 +163,14 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
   }, []);
   const [moving, setMoving] = useState(false);
   const [conflict, setConflict] = useState<OfficeLocalCopy | null>(null);
+  // The editor's own Share (and a mention's offer to share), counted: each opens Share over the document.
+  const [shareAsked, setShareAsked] = useState(0);
   const [apps, setApps] = useState<ExternalApp[]>([]);
   const [orgId] = useState(() => app.get().organizationId);
   const [session] = useState(
     () =>
       new OfficeSession(fileId, requested, {
-        share: () => setDialog('share'),
+        share: () => setShareAsked((n) => n + 1),
         renamed: () => void qc.invalidateQueries({ queryKey: ['files'] }),
         notice: (kind, text, action) => toast(kind, text, action),
         isOffline: () => app.get().status?.network === 'OFFLINE',
@@ -231,7 +233,8 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
     if (stillTimer.current) clearTimeout(stillTimer.current);
     stillTimer.current = null;
     const shot = snapshot.current ? await Promise.race([snapshot.current(), new Promise<null>((r) => setTimeout(() => r(null), 250))]) : null;
-    setStill(shot);
+    // No new picture (the editor is already hidden): the one showing stays.
+    setStill((was) => shot ?? was);
     open();
   };
   // The picture goes once the editor is back; a moment later, so there is no blank between the two.
@@ -243,6 +246,23 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
       setStill(null);
     }, 250);
   };
+  /**
+   * Share and the other dialogs over the editor (worksuite-desktop#42): the same picture as a menu's, so the document
+   * stays in view, dimmed, behind the dialog rather than a blank. Moving from one dialog to the next (Share → Secure
+   * link) keeps it; closing the last brings the editor back as it was, and focused.
+   */
+  const showDialog = (d: Dialog) => (dialog ? setDialog(d) : void openMenu(() => setDialog(d)));
+  const closeDialog = () => menuClosed(() => setDialog(null));
+  useEffect(() => {
+    if (shareAsked) void openMenu(() => setDialog('share'));
+  }, [shareAsked]);
+  // A dialog opened from a menu keeps the menu's picture: the editor is already hidden, so there is no new one to take.
+  useEffect(() => {
+    if (dialog && stillTimer.current) {
+      clearTimeout(stillTimer.current);
+      stillTimer.current = null;
+    }
+  }, [dialog]);
 
   /**
    * Open in a new window (worksuite-desktop#39): the document moves to a window of its own, signed in as the same
@@ -356,7 +376,7 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
           <span className="rounded-[8px] border border-line px-2.5 py-1 text-[12.5px] font-semibold text-ink-2">{MODE_LABELS[s.mode]}</span>
         ) : null}
         {p?.share ? (
-          <Button size="sm" variant="primary" icon="users" aria-label="Share" title="Share" className="shrink-0" onClick={() => setDialog('share')}>
+          <Button size="sm" variant="primary" icon="users" aria-label="Share" title="Share" className="shrink-0" onClick={() => showDialog('share')}>
             <span className="max-lg:hidden">Share</span>
           </Button>
         ) : null}
@@ -419,7 +439,7 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
                 <Spinner label="Saving changes…" />
               </div>
             ) : null}
-            {(covered || dialog || conflict) && active && !s.closing ? (
+            {(covered || ((dialog || conflict) && !still)) && active && !s.closing ? (
               <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center text-[12.5px] text-ink-3">The document is behind this window.</div>
             ) : null}
           </div>
@@ -437,11 +457,11 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
           items={MODE_ORDER.filter((m) => s.availableModes.includes(m)).map((m) => ({ label: MODE_LABELS[m], strong: m === s.mode, icon: m === s.mode ? 'check' : undefined, run: () => void session.setMode(m) }))}
         />
       ) : null}
-      {dialog === 'share' ? <ShareDialog item={item} onClose={() => setDialog(null)} onSecureLink={() => setDialog('secure')} onPublicLink={() => setDialog('link')} onSendToChat={() => setDialog('chat')} /> : null}
-      {dialog === 'secure' ? <SecureLinkDialog file={asDriveFile()} onClose={() => setDialog(null)} onAll={() => (setDialog(null), navigate('/files?view=links'))} /> : null}
-      {dialog === 'link' ? <LinkDialog item={item} onClose={() => setDialog(null)} /> : null}
-      {dialog === 'chat' ? <SendToChatDialog item={item} onClose={() => setDialog(null)} onOpenChat={(room) => navigate(`/chat?room=${room}`)} /> : null}
-      {dialog === 'version' ? <SaveVersionDialog onClose={() => setDialog(null)} onSave={(label, description) => session.saveVersion(label, description)} /> : null}
+      {dialog === 'share' ? <ShareDialog item={item} onClose={closeDialog} onSecureLink={() => setDialog('secure')} onPublicLink={() => setDialog('link')} onSendToChat={() => setDialog('chat')} /> : null}
+      {dialog === 'secure' ? <SecureLinkDialog file={asDriveFile()} onClose={closeDialog} onAll={() => (closeDialog(), navigate('/files?view=links'))} /> : null}
+      {dialog === 'link' ? <LinkDialog item={item} onClose={closeDialog} /> : null}
+      {dialog === 'chat' ? <SendToChatDialog item={item} onClose={closeDialog} onOpenChat={(room) => navigate(`/chat?room=${room}`)} /> : null}
+      {dialog === 'version' ? <SaveVersionDialog onClose={closeDialog} onSave={(label, description) => session.saveVersion(label, description)} /> : null}
       {s.convertAsk ? (
         <ConvertDialog
           refusal={s.convertAsk}

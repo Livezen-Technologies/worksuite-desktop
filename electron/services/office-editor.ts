@@ -278,7 +278,12 @@ export class OfficeEditorHost {
     const z = owner.getZoomFactor() || 1;
     const r = { x: Math.round(bounds.x * z), y: Math.round(bounds.y * z), width: Math.max(0, Math.round(bounds.width * z)), height: Math.max(0, Math.round(bounds.height * z)) };
     l.view.setBounds(r);
-    l.view.setVisible(visible && r.width > 0 && r.height > 0);
+    const was = l.view.getVisible();
+    const now = visible && r.width > 0 && r.height > 0;
+    l.view.setVisible(now);
+    // Back from behind a dialog or menu of the page, in a window somebody is using: typing goes on in the document
+    // (worksuite-desktop#42).
+    if (!was && now && !l.win.isDestroyed() && l.win.isFocused()) l.view.webContents.focus();
     return true;
   }
 

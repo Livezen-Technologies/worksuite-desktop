@@ -27,7 +27,8 @@ import { UploadTray, UrlDownloads } from './Trays';
 import { Shared } from './Shared';
 import { Companies, Duplicates, Links, Notifications, Storage, Trash } from './Views';
 import { SyncDevices } from './SyncDevices';
-import { UploadConflicts, type ConflictChoice, type UploadConflict } from './UploadConflicts';
+import { UploadConflicts, autoChoices, type ConflictChoice, type UploadConflict } from './UploadConflicts';
+import { DriveSettings } from './DriveSettings';
 import { officeOpenWay, openOfficeTab, useOfficeRouting } from './office';
 import { TemplateDialog } from './Templates';
 import { createDocument } from '../office/api';
@@ -55,7 +56,7 @@ const DOCS: Array<[string, string, string, string]> = [
 ];
 const DOC_TONE: Record<string, string> = { docx: TONE.document!, xlsx: TONE.spreadsheet!, pptx: TONE.presentation!, txt: TONE.other!, md: TONE.other! };
 /** Views that are pages of their own rather than a list of files. */
-const PAGES: View[] = ['home', 'shared', 'trash', 'storage', 'duplicates', 'links', 'notifications', 'companies', 'devices'];
+const PAGES: View[] = ['home', 'shared', 'trash', 'storage', 'duplicates', 'links', 'notifications', 'companies', 'devices', 'settings'];
 
 function placeFrom(q: URLSearchParams): Place {
   const f = q.get('folder');
@@ -166,6 +167,9 @@ export default function FilesPage(_props: ModuleProps) {
           () => [],
         );
       }
+      // Drive › Settings may answer for every clash (keep both, skip, replace) instead of asking.
+      const how = app.get().prefs?.drive.conflict ?? 'ask';
+      if (conflicts.length && how !== 'ask') return await sendUploads(picked, conflicts, autoChoices(conflicts, how), folder);
       if (conflicts.length) return setClash({ picked, conflicts, folder });
       await sendUploads(picked, [], [], folder);
     } catch (e) {
@@ -433,6 +437,23 @@ export default function FilesPage(_props: ModuleProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ask]);
 
+  // /files?file=<id>: a file named from elsewhere — a meeting recording, a notification — shown in its folder, and
+  // with &play=1 opened as well, in the player for a video (worksuite-desktop#89).
+  const fileParam = query.get('file');
+  const playParam = query.get('play') === '1';
+  const openedFile = useRef<string | null>(null);
+  useEffect(() => {
+    if (!fileParam || !/^\d+$/.test(fileParam) || openedFile.current === fileParam) return;
+    openedFile.current = fileParam;
+    void apiGet<DriveFile>(`/api/files/${fileParam}`)
+      .then((f) => {
+        onPlace(f.folder_id ? { view: 'folder', folder: f.folder_id } : { view: 'home', folder: null });
+        if (playParam) d.open({ type: 'file', f });
+      })
+      .catch((e) => toast('error', errorMessage(e)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileParam]);
+
   const view = place.view;
   const listView = !PAGES.includes(view);
   // /files?view=devices&sync=<folder id>: "Sync to this computer" from a folder's menu or details.
@@ -466,6 +487,7 @@ export default function FilesPage(_props: ModuleProps) {
         {view === 'links' ? <Links /> : null}
         {view === 'notifications' ? <Notifications /> : null}
         {view === 'companies' ? <Companies /> : null}
+        {view === 'settings' ? <DriveSettings /> : null}
         {view === 'devices' ? <SyncDevices tree={tree} ask={syncAsk} onAsked={() => go('/files?view=devices')} /> : null}
       </div>
       {preview ? <Preview files={preview.files} start={preview.index} onClose={() => setPreview(null)} /> : null}

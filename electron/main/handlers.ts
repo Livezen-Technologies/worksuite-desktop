@@ -1,12 +1,13 @@
 import { app, BrowserWindow, clipboard, dialog, nativeImage, shell, systemPreferences, type WebContents } from 'electron';
 import { readFile } from 'node:fs/promises';
-import { basename } from 'node:path';
+import { basename, join } from 'node:path';
 import { writeAtomically } from '../services/pdf/host';
 import os from 'node:os';
 import { writeFile } from 'node:fs/promises';
 import { canOpenApp, notificationAllowed } from '@shared/access';
 import { tabRecordSchema, type TabRecord } from '@shared/ipc/contract';
 import { garageDocPath } from '@shared/garage-docs';
+import { safeFileName } from '@shared/filename';
 import type { AppInfo, BusyReport, DetachedWindow, SyncPolicy } from '@shared/types';
 import { assertRoute, assertWebPath } from './access';
 import { DesktopError, isDesktopError } from './errors';
@@ -441,6 +442,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('meetrec:retry', (input) => ctx.meetRecorder.retry(input.id));
   router.handle('meetrec:discard', (input) => ctx.meetRecorder.discard(input.id));
   router.handle('meetrec:reveal', (input) => ctx.meetRecorder.reveal(input.id));
+  router.handle('meetrec:open', (input) => ctx.meetRecorder.openLocal(input.id));
+  router.handle('meetrec:downloads', () => ctx.meetRecorder.downloads());
   router.handle('meetrec:chooseFolder', async (_i, c) => {
     const w = winOf(c.sender);
     const opts: Electron.OpenDialogOptions = { title: 'Choose where meeting recordings are saved', defaultPath: ctx.settings.effective().meetRecording.localFolder, properties: ['openDirectory', 'createDirectory'] };
@@ -474,12 +477,22 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   });
   router.handle('files:registerDropped', (input) => ctx.transfers.register(input.paths));
   router.handle('transfers:list', () => ctx.transfers.list());
-  router.handle('transfers:download', async (input) => {
+  router.handle('transfers:download', async (input, c) => {
+    // Drive › Settings › Ask where to save each time: the place comes from this process's own dialog, never the page.
+    let saveAs: string | undefined;
+    if (!input.open && ctx.settings.effective().drive.askWhereToSave) {
+      const w = winOf(c.sender);
+      const opts: Electron.SaveDialogOptions = { title: 'Save as', defaultPath: join(ctx.settings.effective().downloadFolder, safeFileName(input.name)) };
+      const res = w ? await dialog.showSaveDialog(w, opts) : await dialog.showSaveDialog(opts);
+      if (res.canceled || !res.filePath) throw new DesktopError('CANCELLED', 'The download was cancelled.');
+      saveAs = res.filePath;
+    }
+    const download = (path: string, fileId: string | null) => (saveAs ? ctx.transfers.download(path, input.name, !!input.open, fileId, undefined, saveAs) : ctx.transfers.download(path, input.name, !!input.open, fileId));
     if (input.hrDocument) {
       // A one-time link, asked for at the moment of downloading (it expires).
       const base = input.hrEmployee ? `/api/hr/employees/${input.hrEmployee}/documents` : '/api/hr/me/documents';
       const link = await ctx.http.post<{ url: string }>(`${base}/${input.hrDocument}/link`, { disposition: 'attachment' });
-      return ctx.transfers.download(`/${String(link.url).replace(/^\/+/, '')}`, input.name, !!input.open, null);
+      return download(`/${String(link.url).replace(/^\/+/, '')}`, null);
     }
     if (input.taskAttachment) {
       // The same for a task's attachment: a short-lived /d/{token} grant on our own server.
@@ -487,7 +500,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       const link = await ctx.http.post<{ url: string }>(`/api/tasks/${task}/attachments/${id}/link`, {});
       const grant = /\/d\/([A-Za-z0-9]{16,128})$/.exec(String(link.url ?? ''));
       if (!grant) throw new DesktopError('NOT_FOUND', 'The server did not give a download link for that attachment.');
-      return ctx.transfers.download(`/d/${grant[1]}`, input.name, !!input.open, null);
+      return download(`/d/${grant[1]}`, null);
     }
     const r = input.hrReport;
     const oc = input.ordersCsv;
@@ -561,7 +574,11 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
           : input.version
             ? `/api/files/${input.version.fileId}/versions/${input.version.versionId}/download`
           : `/api/mail/messages/${input.mail!.uid}/attachments/${encodeURIComponent(input.mail!.ref)}?${new URLSearchParams({ folder: input.mail!.folder, dl: '1', ...(input.mail!.mailbox ? { mailbox: input.mail!.mailbox } : {}) })}`;
-    return ctx.transfers.download(path, input.name, !!input.open, input.fileId ?? null);
+    const t = await download(path, input.fileId ?? null);
+    // A Meet recording's download is shown on the recording itself, also after a restart (worksuite-desktop#89).
+    const rec = input.recording ?? input.forRecording;
+    if (rec) ctx.meetRecorder.rememberDownload(rec, t.id);
+    return t;
   });
   // Hotel PMS files (shared/pms-files.ts): the address built here from what the page names; the organization's download
   // policy checked here too, not only by the channel and the screen, so a page cannot save around it.
@@ -653,6 +670,9 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('transfers:open', (input) => ctx.transfers.openFile(input.id));
   router.handle('transfers:reveal', (input) => ctx.transfers.reveal(input.id));
   router.handle('transfers:clearFinished', () => ctx.transfers.clearFinished());
+  router.handle('transfers:pauseAll', () => ctx.transfers.pauseAll());
+  router.handle('transfers:resumeAll', () => ctx.transfers.resumeAll());
+  router.handle('transfers:resetSettings', () => ({ preferences: ctx.settings.resetDrive(), locks: ctx.settings.locks() }));
 
   // ── Drive sync ─────────────────────────────────────────────────────────
   router.handle('sync:status', () => ctx.sync.status());

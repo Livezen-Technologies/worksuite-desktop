@@ -23,6 +23,15 @@ export interface UploadConflict {
 
 export type ConflictChoice = { how: 'replace'; fileId: number } | { how: 'both'; name: string } | { how: 'skip' };
 
+/**
+ * Drive › Settings' answer for every clash, without asking: keep both, skip,
+ * or replace — and a file this person may not change is kept alongside
+ * instead of replaced, as when asked.
+ */
+export function autoChoices(conflicts: UploadConflict[], how: 'both' | 'skip' | 'replace'): ConflictChoice[] {
+  return conflicts.map((x) => (how === 'replace' && x.can_replace ? { how: 'replace', fileId: x.file_id } : how === 'skip' ? { how: 'skip' } : { how: 'both', name: x.free_name }));
+}
+
 export function UploadConflicts({ conflicts, folderName, onDone, onCancel }: {
   conflicts: UploadConflict[];
   folderName: string;

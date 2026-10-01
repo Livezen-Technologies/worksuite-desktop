@@ -233,6 +233,46 @@ export interface Preferences {
   ai: AiPrefs;
   /** Meet › Recording (worksuite-desktop#68). */
   meetRecording: MeetRecordingPrefs;
+  /** Drive › Settings: transfers, bandwidth and what this computer keeps (worksuite-desktop#95). */
+  drive: DrivePrefs;
+}
+
+/** A bandwidth cap: off (Unlimited) or a number of KB/s or MB/s, kept as the person typed it. */
+export interface BandwidthLimit {
+  on: boolean;
+  value: number;
+  unit: 'KB' | 'MB';
+}
+
+/**
+ * Drive › Settings (worksuite-desktop#95), saved on this computer only: how many files move at once, how fast,
+ * what happens on a metered connection, where downloads go, what an upload does with a name already taken,
+ * and which transfers say so when they end. They govern transfers this app makes; they never change the
+ * account's storage or the server's file-size limits.
+ */
+export interface DrivePrefs {
+  /** Files moving at once, uploads and downloads together (1–6). */
+  maxConcurrent: number;
+  /** At most this many of them uploads (null: no separate limit). */
+  maxUploads: number | null;
+  /** At most this many of them downloads (null: no separate limit). */
+  maxDownloads: number | null;
+  /** The combined speed of every upload at once. */
+  uploadLimit: BandwidthLimit;
+  /** The combined speed of every download at once. */
+  downloadLimit: BandwidthLimit;
+  /** A transfer cut off by the network or a busy server is tried again by itself, a few times. */
+  autoRetry: boolean;
+  /** When the connection comes back, transfers it interrupted carry on by themselves. */
+  autoResume: boolean;
+  /** On a metered connection: carry on as usual, one file at a time, or wait. */
+  metered: 'normal' | 'limit' | 'pause';
+  /** Ask for a place and name for each download instead of using the download folder. */
+  askWhereToSave: boolean;
+  /** An upload whose name is already in the folder. */
+  conflict: 'ask' | 'both' | 'skip' | 'replace';
+  notifyComplete: boolean;
+  notifyFailed: boolean;
 }
 
 /**
@@ -446,6 +486,16 @@ export interface Transfer {
   speed: number;
   error: string | null;
   createdAt: string;
+  /** While it waits for a free slot: its place in the queue, 1 being next. */
+  position?: number | null;
+  /** Waiting to be tried again after a temporary failure: when. */
+  retryAt?: string | null;
+  /** Times it has been tried again by itself after a temporary failure. */
+  attempts?: number;
+  /** While it runs: when bytes last moved, so one that has stopped moving can be told from one that is slow (worksuite-desktop#89). */
+  movedAt?: string | null;
+  /** Waiting in the queue because the connection is lost, or a metered connection is set to wait. */
+  held?: 'connection' | 'metered' | null;
 }
 
 export interface OfflineMutation {
@@ -945,6 +995,10 @@ export interface LocalRecording {
   deleteAfter: string | null;
   /** Recovered after WorkSuite closed while it was recording. */
   recovered: boolean;
+  /** When it entered the step it is in (worksuite-desktop#89): a step that goes on far too long is said to be stuck. */
+  stepAt?: string | null;
+  /** Its upload in the transfer queue, while there is one: its progress, Pause, Resume and Cancel are the queue's. */
+  transferId?: string | null;
 }
 
 /** What a piece of speech said, when, and whether it was unclear (worksuite-desktop#81). */

@@ -11,12 +11,15 @@ import { toast } from '../../core/toasts';
 import { Button, Chip, Empty, ErrorNote, FileBadge, Modal, Spinner, cx } from '../../components/ui';
 import { useNow } from '../calls/parts';
 import { openMeeting } from '../meet/api';
+import { RecordingStatusView } from '../meet/RecordingStatus';
+import { serverRecordingStatus } from '@shared/recording-status';
 import type { Stroke } from '../meet/session';
 import { providerLabel, RSVP_LABEL, typeLabel, type AgendaItem, type Detail, type Person, type Rsvp } from './api';
 import { Select } from '../../components/Select';
 import { MinutesEditor } from './minutes/MinutesEditor';
 import { TranscriptsTab } from './transcripts/TranscriptsTab';
 import { latestTranscriptText } from './transcripts/material';
+import { useInvitationAnswer } from '../calendar/conflicts';
 import type { ChatMessage } from '../chat/types';
 
 const TABS = ['Summary', 'Agenda', 'People', 'Minutes', 'Transcripts', 'Files', 'Board', 'Activity'] as const;
@@ -73,6 +76,8 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
       refresh();
     }
   };
+  // Your answer, when it is an invitation still waiting: accepting one that overlaps something asks first (#99).
+  const invitation = useInvitationAnswer('meeting', id, (r) => act(() => apiPost(`/api/meetings/${id}/rsvp`, { rsvp: r })));
 
   if (q.isLoading) return <Spinner />;
   if (q.error || !q.data) return <div className="p-6"><ErrorNote error={q.error} onRetry={() => void q.refetch()} /></div>;
@@ -145,12 +150,19 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
                 <b className="text-ink">Your answer</b>
                 <div className="flex gap-1.5">
                   {(['accepted', 'tentative', 'declined'] as Rsvp[]).map((r) => (
-                    <button key={r} type="button" aria-pressed={mine.rsvp === r} onClick={() => void act(() => apiPost(`/api/meetings/${m.id}/rsvp`, { rsvp: r }))} className={cx('h-8 flex-1 rounded-[8px] text-[12px] font-semibold', mine.rsvp === r ? 'bg-primary text-white' : 'border border-line text-ink hover:bg-subtle')}>
+                    <button key={r} type="button" aria-pressed={mine.rsvp === r} onClick={() => invitation.answer(r)} className={cx('h-8 flex-1 rounded-[8px] text-[12px] font-semibold', mine.rsvp === r ? 'bg-primary text-white' : 'border border-line text-ink hover:bg-subtle')}>
                       {RSVP_LABEL[r]}
                     </button>
                   ))}
                 </div>
+                {invitation.flag}
+                {invitation.propose ? (
+                  <button type="button" onClick={invitation.propose} className="self-start text-[12px] font-semibold text-primary hover:underline">
+                    Propose new time
+                  </button>
+                ) : null}
                 <span className="text-[12px] text-ink-3">Answers: {rsvps.accepted ?? 0} going · {rsvps.tentative ?? 0} maybe · {rsvps.no_response ?? 0} awaiting</span>
+                {invitation.dialogs}
               </section>
             ) : (
               <section className="flex flex-col gap-1 rounded-[12px] border border-line bg-surface p-3.5">
@@ -401,16 +413,17 @@ function FilesTab({ d, act }: { d: Detail; act: Act }) {
         <div className="flex flex-col gap-1.5 rounded-[10px] border border-line p-2.5">
           <b className="text-ink">Your recordings</b>
           {d.recordings.map((r) => (
-            <div key={r.id} className="flex items-center gap-2 text-[12.5px]">
-              <span className="min-w-0 flex-1 truncate text-ink">{r.title}</span>
-              <span className={cx('font-semibold', r.status === 'ready' ? 'text-success' : r.status === 'failed' ? 'text-danger' : 'text-ink-3')} title={r.error ?? undefined}>
-                {{ recording: 'Recording…', processing: 'Processing…', uploading: 'Uploading…', ready: 'Ready', failed: 'Failed' }[r.status] ?? r.status}
-              </span>
-              {r.drive_file_id ? (
-                <button type="button" onClick={() => navigate(`/files?file=${r.drive_file_id}`)} className="font-semibold text-primary hover:underline">
-                  Open in Drive
-                </button>
-              ) : null}
+            // The same status, words and actions as in Meet (worksuite-desktop#89).
+            <div key={r.id} className="flex flex-col gap-1 text-[12.5px]">
+              <span className="min-w-0 truncate text-ink">{r.title}</span>
+              <RecordingStatusView
+                compact
+                status={serverRecordingStatus(r)}
+                on={{
+                  ...(r.drive_file_id ? { play: () => navigate(`/files?file=${r.drive_file_id}&play=1`), openInDrive: () => navigate(`/files?file=${r.drive_file_id}`) } : {}),
+                  retry: () => void act(() => apiPost(`/api/meet/recordings/${r.id}/retry`), 'Trying again.'),
+                }}
+              />
             </div>
           ))}
           <span className="text-[11.5px] text-ink-3">In your Drive, shared with nobody until you share them.</span>

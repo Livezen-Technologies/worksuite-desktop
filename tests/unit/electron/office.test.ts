@@ -66,6 +66,10 @@ const fake = vi.hoisted(() => {
       closed: false,
       ignoreMenu: null as boolean | null,
       zoom: 1,
+      focused: 0,
+      focus() {
+        this.focused++;
+      },
       mainFrame: { parent: null, url: '' },
       capturePage: async () => ({ isEmpty: () => false, toJPEG: (q: number) => Buffer.from(`jpeg-${q}`) }),
       on(ev: string, fn: Handler) {
@@ -120,7 +124,7 @@ const fake = vi.hoisted(() => {
     }
     setBackgroundColor() {}
   }
-  const windows = new Map<unknown, { children: unknown[]; closed: Handler[]; focused: number; contentView: { addChildView: (v: unknown) => void; removeChildView: (v: unknown) => void }; isDestroyed: () => boolean; isMinimized: () => boolean; restore: () => void; show: () => void; focus: () => void; once: (e: string, fn: Handler) => void }>();
+  const windows = new Map<unknown, { children: unknown[]; closed: Handler[]; focused: number; inUse: boolean; isFocused: () => boolean; contentView: { addChildView: (v: unknown) => void; removeChildView: (v: unknown) => void }; isDestroyed: () => boolean; isMinimized: () => boolean; restore: () => void; show: () => void; focus: () => void; once: (e: string, fn: Handler) => void }>();
   function windowFor(owner: unknown) {
     let w = windows.get(owner);
     if (!w) {
@@ -130,6 +134,10 @@ const fake = vi.hoisted(() => {
         children,
         closed,
         focused: 0,
+        inUse: true,
+        isFocused() {
+          return this.inUse;
+        },
         contentView: { addChildView: (v) => children.push(v), removeChildView: (v) => children.splice(children.indexOf(v), 1) },
         isDestroyed: () => false,
         isMinimized: () => false,
@@ -387,6 +395,25 @@ describe('the editor host (OO-DSK-001/020/022)', () => {
     expect(await host.snapshot(owner() as never, viewId)).toBeNull();
     host.place(w as never, viewId, { x: 0, y: 0, width: 800, height: 600 }, false);
     expect(await host.snapshot(w as never, viewId)).toBeNull();
+  });
+
+  it('gives the editor the keyboard back when it comes out from behind a dialog, in a window in use (worksuite-desktop#42)', () => {
+    const w = owner();
+    const { viewId } = host.open(w as never, spec());
+    const box = { x: 0, y: 0, width: 800, height: 600 };
+    host.place(w as never, viewId, box, true);
+    const wc = lastView().webContents;
+    const before = wc.focused;
+    host.place(w as never, viewId, box, true);
+    expect(wc.focused).toBe(before);
+    host.place(w as never, viewId, box, false);
+    host.place(w as never, viewId, box, true);
+    expect(wc.focused).toBe(before + 1);
+    // Not when somebody is in another window: that would take the keyboard from them.
+    fake.windowFor(w).inUse = false;
+    host.place(w as never, viewId, box, false);
+    host.place(w as never, viewId, box, true);
+    expect(wc.focused).toBe(before + 1);
   });
 
   it('gives the editor the keyboard shortcuts it owns', () => {

@@ -10,6 +10,7 @@ import { DesktopError, isDesktopError } from '../main/errors';
 import type { Database } from './db';
 import type { HttpClient } from './http';
 import type { TransferManager } from './transfers';
+import { videoProblem } from './video-check';
 import { withDuration } from './webm-duration';
 
 const log = logger('meet-recorder');
@@ -35,7 +36,14 @@ export interface MeetRecorderDeps {
   userId: () => string | null;
   /** Free bytes where a recording would be written. */
   freeSpace?: (dir: string) => Promise<number | null>;
+  /** Tells the person when a recording made here is ready to play, or has failed (worksuite-desktop#89). */
+  notify?: (r: LocalRecording, how: 'ready' | 'failed') => void;
+  /** Opens a file in the system's own application. */
+  openPath?: (path: string) => Promise<string>;
 }
+
+/** Downloads of Meet recordings kept per person, by recording: the newest few. */
+const MAX_DOWNLOADS = 100;
 
 /** A file name from a meeting's title and when it started: nothing a file system refuses. */
 export function recordingFileName(title: string, at: Date, ext: string): string {
@@ -74,6 +82,30 @@ export class MeetRecorder {
     return uid ? `meet-recordings:${uid}` : null;
   }
 
+  private downloadsKey(): string | null {
+    const uid = this.deps.userId();
+    return uid ? `meet-recording-downloads:${uid}` : null;
+  }
+
+  /**
+   * A Meet recording's download (worksuite-desktop#89): which transfer has it, kept so the recording shows
+   * Downloading and then Downloaded — with Open and Show in folder — wherever it is listed, also after a restart.
+   */
+  rememberDownload(recordingId: number, transferId: string): void {
+    const key = this.downloadsKey();
+    if (!key) return;
+    const all = { ...(this.deps.db.getConfig<Record<string, string>>(key) ?? {}) };
+    delete all[String(recordingId)];
+    all[String(recordingId)] = transferId;
+    const keep = Object.entries(all).slice(-MAX_DOWNLOADS);
+    this.deps.db.setConfig(key, Object.fromEntries(keep));
+  }
+
+  downloads(): Record<string, string> {
+    const key = this.downloadsKey();
+    return key ? (this.deps.db.getConfig<Record<string, string>>(key) ?? {}) : {};
+  }
+
   private load(): void {
     const uid = this.deps.userId();
     if (this.loadedFor === uid) return;
@@ -99,7 +131,12 @@ export class MeetRecorder {
 
   list(): LocalRecording[] {
     this.load();
-    return this.entries.map(({ path: _p, transferId, ...view }) => ({ ...view, uploaded: view.state === 'uploading' && transferId ? (this.deps.transfers.uploadStatus(transferId)?.bytes ?? view.uploaded) : view.uploaded }));
+    return this.entries.map(({ path: _p, transferId, ...view }) => ({
+      ...view,
+      stepAt: view.stepAt ?? (view.state === 'recording' ? view.startedAt : view.endedAt),
+      transferId: transferId ?? null,
+      uploaded: view.state === 'uploading' && transferId ? (this.deps.transfers.uploadStatus(transferId)?.bytes ?? view.uploaded) : view.uploaded,
+    }));
   }
 
   /** Being finished or uploaded: what quitting would pause. */
@@ -119,8 +156,14 @@ export class MeetRecorder {
   }
 
   private set(e: Entry, patch: Partial<Entry>, now = true): void {
+    // When each step began, so one that goes on far too long can be said to be stuck (worksuite-desktop#89).
+    if (patch.state && patch.state !== e.state) patch = { ...patch, stepAt: new Date().toISOString() };
     Object.assign(e, patch);
     this.save(now);
+  }
+
+  private view(e: Entry): LocalRecording {
+    return this.list().find((x) => x.id === e.id) ?? { ...e };
   }
 
   /** Tell the server a step; it keeps the meeting's list and tells the others. Never stops the recording. */
@@ -169,6 +212,7 @@ export class MeetRecorder {
       driveFileId: null,
       deleteAfter: null,
       recovered: false,
+      stepAt: now.toISOString(),
       path: join(check.folder, `${name}.part`),
       transferId: null,
     };
@@ -243,6 +287,12 @@ export class MeetRecorder {
         } else await rename(e.path, final);
         this.set(e, { path: final, fileName: basename(final), bytes: (await stat(final)).size });
       }
+      // Ready to play means it plays (worksuite-desktop#89): a file that is not a whole video is not sent at all.
+      const problem = await videoProblem(e.path);
+      if (problem) {
+        this.fail(e, 'processing', `${problem} The file is kept on this computer; Show the file to look at it.`);
+        return;
+      }
       await this.upload(e);
     } catch (err) {
       this.fail(e, 'processing', `The recording could not be finished on this computer: ${(err as Error).message}. It is kept; try again.`);
@@ -265,7 +315,9 @@ export class MeetRecorder {
 
   private await(e: Entry, transferId: string): void {
     this.deps.transfers.whenUploaded(transferId, (out) => {
-      if ('error' in out) this.fail(e, 'uploading', `The upload stopped: ${out.error}. It continues from where it was when you try again.`);
+      // Cancelled by the person: nothing to tell them, and the recording stays on this computer.
+      if ('error' in out && this.deps.transfers.uploadStatus(transferId)?.state === 'cancelled') this.fail(e, 'uploading', 'The upload was cancelled. The recording is kept on this computer; Try again to upload it.', false);
+      else if ('error' in out) this.fail(e, 'uploading', `The upload stopped: ${out.error}. It continues from where it was when you try again.`);
       else if (!out.fileId) this.fail(e, 'uploading', 'The file reached WorkSuite, but WorkSuite did not say where it is. Try again.');
       else void this.register(e, Number(out.fileId));
     });
@@ -285,16 +337,19 @@ export class MeetRecorder {
       this.set(e, { state: 'ready', driveFileId: fileId, error: null, failedAt: null, transferId: null, deleteAfter: keep === '7' || keep === '30' ? new Date(Date.now() + Number(keep) * DAY).toISOString() : null });
       if (keep === 'delete') await this.removeLocal(e);
       log.info('local recording in Drive', { id: e.id, fileId });
+      this.deps.notify?.(this.view(e), 'ready');
     } catch (err) {
       this.set(e, { driveFileId: fileId });
       this.fail(e, 'registering', `The recording is in your Drive, but the meeting could not be told: ${(err as Error).message}. Try again.`);
     }
   }
 
-  private fail(e: Entry, at: NonNullable<LocalRecording['failedAt']>, message: string): void {
+  /** A step failed. The local file is never touched here: whatever went wrong, the recording stays recoverable. */
+  private fail(e: Entry, at: NonNullable<LocalRecording['failedAt']>, message: string, tellPerson = true): void {
     log.warn('local recording step failed', { id: e.id, at, error: message });
     this.set(e, { state: 'failed', failedAt: at, error: message });
     void this.tell(e, 'failed', { error: message }).catch(() => undefined);
+    if (tellPerson) this.deps.notify?.(this.view(e), 'failed');
   }
 
   /** Try a failed step again, from where it stopped. */
@@ -327,6 +382,15 @@ export class MeetRecorder {
   reveal(id: string): void {
     const e = this.entry(id);
     if (e.fileName) shell.showItemInFolder(e.path);
+  }
+
+  /** Play the copy on this computer in the system's player — only once it is a whole file, never one being written. */
+  async openLocal(id: string): Promise<boolean> {
+    const e = this.entry(id);
+    if (!e.fileName || e.state === 'recording' || e.path.endsWith('.part')) throw new DesktopError('NOT_FOUND', 'There is no finished copy of this recording on this computer.');
+    const failed = await (this.deps.openPath ?? ((p: string) => shell.openPath(p)))(e.path);
+    if (failed) throw new DesktopError('NOT_FOUND', 'The recording could not be opened. It may have been moved or deleted.');
+    return true;
   }
 
   private async removeLocal(e: Entry): Promise<void> {

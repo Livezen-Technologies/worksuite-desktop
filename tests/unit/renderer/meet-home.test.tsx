@@ -205,6 +205,47 @@ describe('Meet Home', () => {
     expect([...menu.querySelectorAll('[role="menuitem"]')].map((b) => b.textContent)).toEqual(['Download', 'Rename', 'Delete']);
   });
 
+  it('says how each recording stands: its upload in the queue, a stuck one, a download apart from Ready to play (#89)', async () => {
+    const t0 = new Date().toISOString();
+    vi.mocked(call).mockImplementation((async (channel: string) => {
+      if (channel === 'meetrec:list') {
+        return [{ id: 'r1', meeting: UUID, title: 'Here', state: 'uploading', error: null, failedAt: null, bytes: 200, uploaded: 0, startedAt: t0, endedAt: t0, durationMs: 1000, fileName: 'Here.webm', driveFileId: null, deleteAfter: null, recovered: false, stepAt: t0, transferId: 'up1' }];
+      }
+      if (channel === 'meetrec:downloads') return { '1': 'dl1' };
+      return null;
+    }) as never);
+    const xfer = { source: '', destination: '', speed: 0, error: null, createdAt: t0, movedAt: t0 };
+    app.set({ transfers: [{ ...xfer, id: 'up1', direction: 'upload', name: 'Here.webm', bytes: 100, total: 200, state: 'running' }, { ...xfer, id: 'dl1', direction: 'download', name: 'Board.mp4', bytes: 9, total: 9, state: 'done' }] } as never);
+    serve({
+      recordings: [
+        { id: 1, title: 'Board', created_at: at(-60), ready: true, size: 9, status: 'ready', method: 'cloud', drive_file_id: 41, playable: true },
+        { id: 2, title: 'Stuck one', created_at: at(-120), ready: false, size: null, status: 'processing', method: 'cloud', stalled: true, guidance: 'Ask your administrator to check the recording service.' },
+      ],
+    });
+    home();
+    const card = await screen.findByRole('region', { name: 'Recordings' });
+    // Recorded here: uploading, measured, with the queue's own Pause and Cancel transfer.
+    await within(card).findByText('Uploading to Drive');
+    expect(within(card).getByRole('progressbar', { name: 'Uploading to Drive' }).getAttribute('aria-valuenow')).toBe('50');
+    fireEvent.click(within(card).getByRole('button', { name: 'Pause' }));
+    expect(call).toHaveBeenCalledWith('transfers:pause', { id: 'up1' });
+    fireEvent.click(within(card).getByRole('button', { name: 'Cancel transfer' }));
+    expect(call).toHaveBeenCalledWith('transfers:cancel', { id: 'up1' });
+    // Ready to play, in Drive, and separately downloaded here, with Open and Show in folder.
+    await within(card).findByText('Board');
+    expect(within(card).getByText('Ready to play')).toBeTruthy();
+    expect(within(card).getByText('Saved to Drive')).toBeTruthy();
+    expect(within(card).getByText('Downloaded')).toBeTruthy();
+    fireEvent.click(within(card).getByRole('button', { name: 'Show in folder' }));
+    expect(call).toHaveBeenCalledWith('transfers:reveal', { id: 'dl1' });
+    fireEvent.click(within(card).getByRole('button', { name: 'Play Board' }));
+    expect(nav).toHaveBeenCalledWith('/files?file=41&play=1');
+    // A stuck one says what to do instead of moving for ever.
+    expect(within(card).getByRole('alert').textContent).toBe('Ask your administrator to check the recording service.');
+    expect((within(card).getByRole('button', { name: 'Play Stuck one' }) as HTMLButtonElement).disabled).toBe(true);
+    app.set({ transfers: [] } as never);
+  });
+
   it('checks the camera and microphone from here', async () => {
     serve({});
     home();
