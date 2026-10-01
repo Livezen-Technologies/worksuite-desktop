@@ -8,6 +8,7 @@ the root CHANGELOG.md.
 
 **Added**
 
+- One assistant (#53): the model on this computer answers when one is installed, and WorkSuite AI answers when it cannot (no model, a failure, or files and the tab, which only WorkSuite AI reads) and online fallback is allowed. The WorkSuite AI / On this computer switch is gone. A quiet "Processing locally" or "Using online AI" says which, and each answer is marked. What was said on this computer goes along when online AI takes over. A local run that already ran a WorkSuite function is never repeated online, and a module that is off or a missing permission is an answer, not a reason to go online. With neither available, it says why and offers Local AI's setup or Try again
 - Local AI can use WorkSuite module functions (#51) — read data such as today's sales and prepare changes such as an invoice, which WorkSuite runs as you and you confirm on a card; it asks for missing details, links the records, and explains a module that is off, a missing permission or a function that is not there
 
 **Changed**

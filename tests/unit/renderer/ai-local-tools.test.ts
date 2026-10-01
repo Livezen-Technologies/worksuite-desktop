@@ -21,7 +21,7 @@ describe('the assistant session with Local AI and module functions (worksuite-de
     vi.mocked(apiPost).mockResolvedValue({ ok: true, pending_action: draft, links: [{ label: 'Acme', url: '/billing?customer=4' }] } as never);
     const s = createAskSession();
     s.store.set({ text: 'Create an invoice for Acme, Rs 1,200' });
-    await s.send({ surface: 'assistant.panel', refs: [], local: true, localTools: { tools: [tool], allow: () => null, off: [] } });
+    await s.send({ surface: 'assistant.panel', refs: [], local: true, online: false, localTools: { tools: [tool], allow: () => null, off: [] } });
     expect(vi.mocked(apiPost)).toHaveBeenCalledWith('/api/ai/tools/billing.create_invoice/run', { arguments: { customer: 'Acme', amount: 1200 }, engine: 'local' });
     const answer = s.store.get().entries.at(-1)!;
     expect(answer.local).toBe(true);
@@ -35,7 +35,7 @@ describe('the assistant session with Local AI and module functions (worksuite-de
     vi.mocked(apiPost).mockResolvedValue({ conversation_id: 1, ok: true, reply: 'Hi', error: null, sources: [], tool_runs: [] } as never);
     const s = createAskSession();
     s.store.set({ text: 'Hello' });
-    await s.send({ surface: 'assistant.panel', refs: [], local: false, moduleAccess: { read: ['crm'], write: ['crm', 'sales'] } });
+    await s.send({ surface: 'assistant.panel', refs: [], local: false, online: true, moduleAccess: { read: ['crm'], write: ['crm', 'sales'] } });
     expect(vi.mocked(apiPost)).toHaveBeenLastCalledWith('/api/ai/assist/chat', expect.objectContaining({ module_access: { off_read: ['crm'], off_write: ['crm', 'sales'] } }));
   });
 });

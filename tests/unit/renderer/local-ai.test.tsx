@@ -70,15 +70,16 @@ describe('Local AI in the windows', () => {
     expect(localReady([{ ...MODEL, state: 'downloading' }])).toBeNull();
   });
 
-  it('lets the Ask panel answer on this computer', async () => {
+  it('answers on this computer by default, with no mode to choose and wording that says so (worksuite-desktop#53)', async () => {
     render(
       <QueryClientProvider client={new QueryClient()}>
         <AskPanel surface="assistant.panel" />
       </QueryClientProvider>,
     );
-    const localOpt = await screen.findByRole('radio', { name: /On this computer/ });
-    fireEvent.click(localOpt);
-    expect(localOpt.getAttribute('aria-checked')).toBe('true');
+    await waitFor(() => expect(screen.getByTestId('ai-mode').textContent).toContain('Processing locally'));
+    expect(screen.queryByRole('radio')).toBeNull();
+    expect(screen.queryByRole('radiogroup')).toBeNull();
+    expect(screen.queryByText(/nothing is sent/)).toBeNull();
     fireEvent.change(screen.getByLabelText('Your question'), { target: { value: 'What is 2+2?' } });
     fireEvent.click(screen.getByLabelText('Send'));
     await waitFor(() => expect(asked).not.toBeNull());
@@ -89,6 +90,6 @@ describe('Local AI in the windows', () => {
     expect(screen.getByLabelText('Stop')).toBeTruthy();
     act(() => emit('ai:localEvent', { id: asked!.id, type: 'done', text: 'Four.', tokens: 2, ms: 5, cancelled: false } satisfies LocalAIEvent));
     await waitFor(() => expect(screen.queryByLabelText('Stop')).toBeNull());
-    expect(screen.getAllByText('On this computer').length).toBeGreaterThan(0);
+    expect(screen.getByText('Processed locally')).toBeTruthy();
   });
 });

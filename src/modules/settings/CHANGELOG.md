@@ -8,6 +8,7 @@ the root CHANGELOG.md.
 
 **Added**
 
+- Settings › AI Assistant › Allow online fallback (#53): on by default, it explains that the question and the content needed are sent to WorkSuite AI when the model on this computer cannot answer. Off, nothing leaves the computer
 - Settings › AI Assistant › Module Access (#51) — per module, Read data and Create or update for WorkSuite AI and Local AI; administrators set the organization's limit under For everyone
 
 **Changed**

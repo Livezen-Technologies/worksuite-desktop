@@ -253,6 +253,11 @@ export interface AiPrefs {
    * what the organization and the person's own permissions allow, never widen it.
    */
   moduleAccess: AiModuleAccessPrefs;
+  /**
+   * Allow online fallback (worksuite-desktop#53): when the model on this computer is missing, fails, or cannot do what
+   * was asked, WorkSuite AI answers instead — the question and the context it needs are then sent to it.
+   */
+  onlineFallback: boolean;
 }
 
 /** The two assistants Module Access is set for: the server's, and the model on this computer. */

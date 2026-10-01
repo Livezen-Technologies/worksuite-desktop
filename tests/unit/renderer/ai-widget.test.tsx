@@ -18,7 +18,7 @@ const { assistantSession, createAskSession } = await import('../../../src/module
 const { AiDock, useAssistantAlerts, useAssistantFollowsDisplay } = await import('../../../src/app/overlays/AiDock');
 const { AiWidget } = await import('../../../src/app/overlays/AiWidget');
 
-const AI: Preferences['ai'] = { quickAsk: true, shortcut: 'Alt+Space', insert: true, dockAtStart: false, language: 'Sinhala', display: 'widget', sound: false, moduleAccess: { worksuite: {}, local: {} } };
+const AI: Preferences['ai'] = { quickAsk: true, shortcut: 'Alt+Space', insert: true, dockAtStart: false, language: 'Sinhala', display: 'widget', sound: false, moduleAccess: { worksuite: {}, local: {} }, onlineFallback: true };
 const setAi = (patch: Partial<Preferences['ai']>) => app.set((s) => ({ prefs: { ...(s.prefs ?? {}), ai: { ...AI, ...(s.prefs?.ai ?? {}), ...patch } } as Preferences }));
 
 const turn = (reply: string): AskTurn => ({ ok: true, reply, conversation_id: 4, tool_runs: [], sources: [], pending_actions: [] }) as unknown as AskTurn;
@@ -52,14 +52,14 @@ describe('one conversation, kept outside the panels (#61)', () => {
     session.onUnseen(heard);
     vi.mocked(ask).mockResolvedValueOnce(turn('Two tasks are due.'));
     session.store.set({ text: 'What is due?' });
-    await session.send({ surface: 'assistant.panel', refs: [], local: false });
+    await session.send({ surface: 'assistant.panel', refs: [], local: false, online: true });
     expect(session.store.get().unread).toBe(1);
     expect(heard).toHaveBeenCalledTimes(1);
     const close = session.view();
     expect(session.store.get().unread).toBe(0);
     vi.mocked(ask).mockResolvedValueOnce(turn('And one meeting.'));
     session.store.set({ text: 'Anything else?' });
-    await session.send({ surface: 'assistant.panel', refs: [], local: false });
+    await session.send({ surface: 'assistant.panel', refs: [], local: false, online: true });
     expect(session.store.get().unread).toBe(0);
     expect(heard).toHaveBeenCalledTimes(1);
     close();
@@ -71,7 +71,7 @@ describe('one conversation, kept outside the panels (#61)', () => {
     let answer: (t: AskTurn) => void = () => undefined;
     vi.mocked(ask).mockImplementationOnce(() => new Promise<AskTurn>((r) => (answer = r)));
     session.store.set({ text: 'What is due?' });
-    const sent = session.send({ surface: 'assistant.panel', refs: [], local: false });
+    const sent = session.send({ surface: 'assistant.panel', refs: [], local: false, online: true });
     session.reset();
     expect(session.store.get().entries).toHaveLength(1);
     answer(turn('Two tasks.'));
@@ -197,7 +197,7 @@ describe('the sound for new answers (#61)', () => {
     const unseen = async (reply: string) => {
       vi.mocked(ask).mockResolvedValueOnce(turn(reply));
       assistantSession.store.set({ text: 'Anything due?' });
-      await act(() => assistantSession.send({ surface: 'assistant.panel', refs: [], local: false }));
+      await act(() => assistantSession.send({ surface: 'assistant.panel', refs: [], local: false, online: true }));
     };
     await unseen('Nothing.');
     expect(made).not.toHaveBeenCalled();

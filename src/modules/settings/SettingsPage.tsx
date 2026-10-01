@@ -429,6 +429,16 @@ function AiSection({ prefs }: { prefs: Preferences }) {
           onValueChange={(v) => set({ display: v })}
         />
       </Row>
+      <Row
+        label="Allow online fallback"
+        hint={
+          a.onlineFallback
+            ? 'The assistant answers on this computer when a model is installed. When it cannot (no model, a failure, or files and tabs, which only WorkSuite AI reads), WorkSuite AI answers instead, and your question and the content it needs are sent to it. Your permissions and Module Access apply either way.'
+            : 'Only the model on this computer answers, and nothing you ask leaves it. Without one, or for files and tabs, the assistant says it cannot help.'
+        }
+      >
+        <Switch label="Allow online fallback" checked={a.onlineFallback ?? true} onChange={(v) => set({ onlineFallback: v })} />
+      </Row>
       <Row label="Sound for new answers" hint="A short chime when an answer arrives while the assistant is closed or minimized.">
         <Switch label="Sound for new answers" checked={a.sound} onChange={(v) => set({ sound: v })} />
       </Row>

@@ -153,6 +153,7 @@ export const preferencesPatchSchema = z
         worksuite: z.record(z.string().regex(/^[a-z][a-z0-9_]{0,31}$/), z.object({ read: z.boolean(), write: z.boolean() })),
         local: z.record(z.string().regex(/^[a-z][a-z0-9_]{0,31}$/), z.object({ read: z.boolean(), write: z.boolean() })),
       }),
+      onlineFallback: z.boolean(),
     }),
   })
   .partial();
