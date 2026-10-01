@@ -535,6 +535,29 @@ describe('the Office tab', () => {
       await waitFor(() => expect(still()).toBeNull());
     });
 
+    it('picking a mode in the Editing menu switches to it and the button says so (worksuite-desktop#40)', async () => {
+      serve();
+      const post = vi.mocked(apiPost).getMockImplementation()!;
+      vi.mocked(apiPost).mockImplementation(async (path: string, body?: unknown) => (path.endsWith('/mode') ? boot({ mode: (body as { mode: OfficeBootstrap['mode'] }).mode }) : post(path, body)) as never);
+      mount('/office/42?name=Proposal.docx');
+      await waitFor(() => expect(vi.mocked(call).mock.calls.some(([ch]) => ch === 'office:open')).toBe(true));
+      fireEvent.click(await screen.findByRole('button', { name: /Editing/ }));
+      const menu = await screen.findByRole('menu', { name: 'Mode' });
+      fireEvent.click([...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((b) => b.textContent === 'Reviewing (changes tracked)')!);
+      await waitFor(() => expect(vi.mocked(apiPost)).toHaveBeenCalledWith(expect.stringMatching(/\/mode$/), { mode: 'REVIEW' }));
+      expect(await screen.findByRole('button', { name: /Reviewing/ })).toBeTruthy();
+      expect(screen.queryByRole('menu')).toBeNull();
+    });
+
+    it('the Editing menu offers only the modes the document permissions allow (worksuite-desktop#40)', async () => {
+      serve({ mode: 'COMMENT', available_modes: ['COMMENT', 'VIEW'], permissions: { ...all, edit: false } });
+      mount('/office/42?name=Proposal.docx');
+      await waitFor(() => expect(vi.mocked(call).mock.calls.some(([ch]) => ch === 'office:open')).toBe(true));
+      fireEvent.click(await screen.findByRole('button', { name: /Commenting/ }));
+      const menu = await screen.findByRole('menu', { name: 'Mode' });
+      expect([...menu.querySelectorAll('[role="menuitem"]')].map((b) => b.textContent)).toEqual(['Commenting', 'Viewing']);
+    });
+
     it('More actions opens over the editor, closes on a click outside, and offers only what the permissions allow', async () => {
       serve({ permissions: { ...all, export: false, convert: false, version_history: false } });
       mount('/office/42?name=Proposal.docx');
