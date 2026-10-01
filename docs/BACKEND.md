@@ -155,6 +155,32 @@ specific to the desktop:
     on the data channel, topic `wb`.
   The waiting room is LiveKit metadata (`{waiting: true}`, no publish
   grant), not a server list.
+  - Roles and room settings (worksuite-desktop#82). Every connection's
+    metadata is `{role, host, cohost, waiting, door, uid}`, where `role` is
+    host, cohost, presenter or participant, and `door` is `waiting_room`,
+    `no_host` (join before host is off) or null. The token's
+    `canPublishSources` leaves out the screen when the person may not
+    present. No token can update its own metadata, so roles come only from
+    the server, and are restored on every new connection.
+  - `GET /{uuid}` adds `role`, `host_id`, `cohosts`, `presenters`,
+    `locked` and `room_settings`.
+  - `POST /{uuid}/cohosts {user_id}` and `DELETE /{uuid}/cohosts/{id}` are
+    for the host, in any call.
+  - `POST /{uuid}/presenters {user_id}` and `DELETE /{uuid}/presenters/{id}`
+    are for hosts and co-hosts.
+  - `POST /{uuid}/host {user_id}` hands the host role on. The previous host
+    stays as a co-host.
+  - `POST /{uuid}/handover {user_id?}` is used when the host leaves. It
+    picks a co-host in the call. With nobody to pick, it answers 409 with
+    `errors: {needs_replacement, candidates: [{id, name}]}`.
+  - `GET|PUT /{uuid}/settings` reads and writes `{title, passcode, locked,
+    access, waiting_room, join_before_host, present, invite, chat, record,
+    transcripts}`. Writes are for hosts and co-hosts.
+  - `GET /{uuid}/activity` lists role and settings changes, for hosts and
+    co-hosts.
+  - Each change pushes `meet.control` with `what: roles`.
+  - `POST /api/meet/schedule` and `POST|PUT /api/meetings` take
+    `room_settings`.
 - **Meetings:** `/api/meetings/*`, behind the `meeting.*` permissions. The
   list carries `my_role` and `my_rsvp`. The detail carries the agenda timer
   and each person's attendance and permissions.

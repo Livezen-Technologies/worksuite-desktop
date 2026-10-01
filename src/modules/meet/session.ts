@@ -1,9 +1,10 @@
 import { DisconnectReason, Room, RoomEvent, Track, VideoPresets, type Participant, type RemoteParticipant } from 'livekit-client';
-import { ApiError, apiGet, apiPost, apiPut } from '../../core/api';
+import { ApiError, apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
+import { toast } from '../../core/toasts';
 import { call, errorMessage, on } from '../../core/bridge';
 import { CLEAN_AUDIO, pauseOn, shareOn } from '../calls/session';
 import type { SharePick } from '../calls/ScreenPicker';
-import type { MeetInfo, Sfu } from './api';
+import { DEFAULT_ROOM_SETTINGS, may, type MeetInfo, type MeetRole, type RoomSettings, type Sfu } from './api';
 import type { RemoteControlView } from '@shared/types';
 import { pointers } from './remote/pointers';
 
@@ -28,12 +29,34 @@ export interface Stroke {
 
 type Board = { t: 'stroke'; s: Stroke } | { t: 'clear' };
 
-export function metaOf(p: Participant): { host?: boolean; waiting?: boolean } {
+/** What the server says about a connection: its role, and whether it waits at the door (and why). */
+export interface Meta {
+  role?: MeetRole;
+  host?: boolean;
+  cohost?: boolean;
+  waiting?: boolean;
+  door?: 'waiting_room' | 'no_host' | null;
+  uid?: number | null;
+}
+
+export function metaOf(p: Participant): Meta {
   try {
-    return p.metadata ? (JSON.parse(p.metadata) as { host?: boolean; waiting?: boolean }) : {};
+    return p.metadata ? (JSON.parse(p.metadata) as Meta) : {};
   } catch {
     return {};
   }
+}
+
+/** A connection's role; an older server only says host or co-host. */
+export function roleOf(p: Participant): MeetRole {
+  const m = metaOf(p);
+  return m.role ?? (m.host ? 'host' : m.cohost ? 'cohost' : 'participant');
+}
+
+/** The WorkSuite user behind a connection (`u12-ab3f` → 12), or 0 for a guest. */
+export function userIdOf(p: Participant): number {
+  const m = /^u(\d+)-/.exec(p.identity);
+  return m ? Number(m[1]) : 0;
 }
 
 export function isGuest(p: Participant): boolean {
@@ -68,6 +91,7 @@ export class MeetSession {
   private audio = new Set<HTMLMediaElement>();
   private wants = { mic: true, cam: true };
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private offRoles: (() => void) | null = null;
 
   subscribe = (fn: () => void): (() => void) => {
     this.listeners.add(fn);
@@ -81,8 +105,46 @@ export class MeetSession {
     for (const fn of this.listeners) fn();
   }
 
+  /**
+   * My role now: what my connection carries (it changes during the meeting),
+   * else what the meeting said when it loaded. Never decided here — the
+   * server sets both.
+   */
+  get role(): MeetRole {
+    const lp = this.room?.localParticipant;
+    if (lp && metaOf(lp).role) return roleOf(lp);
+    return this.info?.role ?? (this.info?.is_host ? 'host' : this.info?.is_cohost ? 'cohost' : 'participant');
+  }
+
   get isHost(): boolean {
-    return !!this.info?.is_host;
+    return this.role === 'host';
+  }
+
+  /** Host or co-host: admits, removes, mutes, locks, names presenters and changes the room settings. */
+  get canManage(): boolean {
+    return may.manage(this.role);
+  }
+
+  get settings(): RoomSettings {
+    return { ...DEFAULT_ROOM_SETTINGS, ...this.info?.room_settings };
+  }
+
+  get mayPresent(): boolean {
+    return may.present(this.role, this.settings);
+  }
+
+  get mayRecord(): boolean {
+    return may.record(this.role, this.settings);
+  }
+
+  get mayInvite(): boolean {
+    return may.invite(this.role, this.settings);
+  }
+
+  /** Why we are waiting at the door, as the server put it. */
+  get door(): 'waiting_room' | 'no_host' | null {
+    const lp = this.room?.localParticipant;
+    return lp ? (metaOf(lp).door ?? (metaOf(lp).waiting ? 'waiting_room' : null)) : null;
   }
 
   get canPublish(): boolean {
@@ -108,7 +170,7 @@ export class MeetSession {
     this.changed();
     try {
       this.info = await apiGet<MeetInfo>(`/api/meet/${uuid}`);
-      const pub = await apiGet<{ locked: boolean }>(`/api/meet/${uuid}/public`).catch(() => ({ locked: false }));
+      const pub = this.info.locked !== undefined ? { locked: this.info.locked } : await apiGet<{ locked: boolean }>(`/api/meet/${uuid}/public`).catch(() => ({ locked: false }));
       this.locked = !!pub.locked;
       this.phase = this.info.ended ? 'ended' : 'lobby';
       if (this.info.ended) this.farewell = 'This meeting has ended.';
@@ -148,7 +210,11 @@ export class MeetSession {
     room
       .on(RoomEvent.ParticipantConnected, refresh)
       .on(RoomEvent.ParticipantDisconnected, refresh)
-      .on(RoomEvent.ParticipantMetadataChanged, refresh)
+      .on(RoomEvent.ParticipantMetadataChanged, (_prev, p) => {
+        // My role changed (made co-host or presenter, handed the host role, or it was taken back): the lists and settings follow.
+        if (p === room.localParticipant) void this.reload();
+        refresh();
+      })
       .on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
         this.lastSpeaker = speakers.find((p) => !p.isLocal)?.identity ?? this.lastSpeaker;
         refresh();
@@ -180,7 +246,15 @@ export class MeetSession {
       .on(RoomEvent.ParticipantPermissionsChanged, (_prev, p) => {
         // Admitted: the door opens and our devices go on.
         if (p === room.localParticipant && this.phase === 'waiting' && this.canPublish) void this.enter();
+        // No longer allowed to present: the media server has already stopped the screen; say so.
+        if (p === room.localParticipant && room.localParticipant.isScreenShareEnabled && !this.mayPresentNow()) {
+          void this.share(null).then(() => this.note('Only presenters can share their screen now. Ask the host to make you a presenter.'));
+        }
         refresh();
+      })
+      .on(RoomEvent.ParticipantConnected, (p) => {
+        // Somebody waiting only because no host was in, and the room has no waiting room: let them in as I arrive.
+        if (this.canManage && !this.settings.waiting_room && metaOf(p).door === 'no_host') void this.admit(p);
       })
       .on(RoomEvent.DataReceived, (payload, p, _kind, topic) => {
         // Remote control: relayed to the main process as it came. The key, and the decision, are there.
@@ -232,11 +306,45 @@ export class MeetSession {
       return;
     }
     void this.loadBoard();
+    this.offRoles?.();
+    // Roles and settings changed by someone else reach everyone in the meeting at once (`meet.control`, what: roles).
+    this.offRoles = on<{ type?: string; meeting?: string; what?: string }>('realtime:event', (e) => {
+      if (e?.type === 'meet.control' && e.what === 'roles' && e.meeting === this.uuid) void this.reload();
+    });
     if (this.canPublish) await this.enter();
     else {
       this.phase = 'waiting';
       this.changed();
     }
+  }
+
+  /** The meeting's roles and settings again, after somebody changed them. */
+  async reload(): Promise<void> {
+    if (!this.uuid) return;
+    try {
+      const info = await apiGet<MeetInfo>(`/api/meet/${this.uuid}`);
+      this.info = { ...this.info, ...info };
+      if (info.locked !== undefined) this.locked = info.locked;
+      this.changed();
+    } catch {
+      /* the next change tries again */
+    }
+  }
+
+  /** Whether my connection may publish a screen now — what the media server granted. */
+  private mayPresentNow(): boolean {
+    const sources = this.room?.localParticipant.permissions?.canPublishSources;
+    return !sources?.length || sources.includes(3 /* TrackSource.SCREEN_SHARE */);
+  }
+
+  /** People in the meeting who are signed in, with their roles: for choosing a co-host, presenter or new host. */
+  get people(): Array<{ id: number; name: string; role: MeetRole }> {
+    const seen = new Map<number, { id: number; name: string; role: MeetRole }>();
+    for (const p of this.present) {
+      const id = userIdOf(p);
+      if (id && !seen.has(id)) seen.set(id, { id, name: p.name || 'Someone', role: roleOf(p) });
+    }
+    return [...seen.values()];
   }
 
   private async enter(): Promise<void> {
@@ -367,6 +475,48 @@ export class MeetSession {
     this.changed();
   }
 
+  /** Roles (worksuite-desktop#82): the server checks who may; these only ask. */
+  private async roles(run: () => Promise<unknown>, done: string): Promise<boolean> {
+    try {
+      await run();
+      await this.reload();
+      this.note(null);
+      toast('success', done);
+      return true;
+    } catch (e) {
+      this.note(errorMessage(e));
+      return false;
+    }
+  }
+
+  cohost = (userId: number, on: boolean) =>
+    this.roles(() => (on ? apiPost(`/api/meet/${this.uuid}/cohosts`, { user_id: userId }) : apiDelete(`/api/meet/${this.uuid}/cohosts/${userId}`)), on ? 'Co-host added.' : 'Co-host removed.');
+
+  presenter = (userId: number, on: boolean) =>
+    this.roles(() => (on ? apiPost(`/api/meet/${this.uuid}/presenters`, { user_id: userId }) : apiDelete(`/api/meet/${this.uuid}/presenters/${userId}`)), on ? 'Presenter added.' : 'Presenter removed.');
+
+  /** Hand the host role to somebody; I stay on as a co-host. */
+  transferHost = (userId: number) => this.roles(() => apiPost(`/api/meet/${this.uuid}/host`, { user_id: userId }), 'Host changed. You are now a co-host.');
+
+  /**
+   * Leave, and the meeting goes on: the host role passes to the person
+   * chosen, else to a co-host. With nobody to pass it to, the server names
+   * the people who could take it, and nothing happens until one is chosen.
+   */
+  async leaveAsHost(userId?: number): Promise<{ left: true } | { left: false; candidates: Array<{ id: number; name: string }>; error?: string }> {
+    try {
+      await apiPost(`/api/meet/${this.uuid}/handover`, userId ? { user_id: userId } : {});
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) {
+        const d = (e.data ?? {}) as { candidates?: Array<{ id: number; name: string }> };
+        return { left: false, candidates: d.candidates ?? [] };
+      }
+      return { left: false, candidates: [], error: errorMessage(e) };
+    }
+    await this.leave();
+    return { left: true };
+  }
+
   admit = (p: Participant) => this.host('admit', { identity: p.identity });
   remove = (p: Participant) => this.host('remove', { identity: p.identity });
   mute = (p: Participant) => this.host('mute', { identity: p.identity });
@@ -414,6 +564,8 @@ export class MeetSession {
   }
 
   private teardown(): void {
+    this.offRoles?.();
+    this.offRoles = null;
     void call('calls:active', { uuid: null, kind: 'meet' }).catch(() => undefined);
     pointers.reset();
     void this.shareEnded();

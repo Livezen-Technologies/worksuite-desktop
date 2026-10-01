@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.0 — 2026-10-01
+
+- Scheduling a meeting on the built-in Meet sets its room settings and passcode, and each person's part (attendee, co-host, presenter) (worksuite-desktop#82).
+
 ## 1.1.0 — 2026-10-01
 
 **Added**

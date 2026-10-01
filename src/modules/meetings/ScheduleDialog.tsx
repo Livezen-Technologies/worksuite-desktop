@@ -8,6 +8,15 @@ import { Avatar, Button, Modal, cx } from '../../components/ui';
 import { TYPES } from './api';
 import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';
+import { DEFAULT_ROOM_SETTINGS, type RoomSettings } from '../meet/api';
+import { RoomSettingsFields } from '../meet/RoomRoles';
+
+/** A person's part in the meeting, as the record keeps it: co-hosts run the Meet room with the organiser (#82). */
+const PART: Array<['required' | 'host' | 'presenter', string]> = [
+  ['required', 'Attendee'],
+  ['host', 'Co-host'],
+  ['presenter', 'Presenter'],
+];
 
 const WHERE: Array<[string, string]> = [
   ['online', 'Online'],
@@ -53,7 +62,10 @@ export function ScheduleDialog({ onClose, online, onCreated }: { onClose: () => 
   const [link, setLink] = useState('');
   const [roomId, setRoomId] = useState<number | ''>('');
   const [address, setAddress] = useState('');
-  const [people, setPeople] = useState<Array<{ id: number; name: string }>>([]);
+  const [people, setPeople] = useState<Array<{ id: number; name: string; role: 'required' | 'host' | 'presenter' }>>([]);
+  const [roomSettings, setRoomSettings] = useState<RoomSettings>(DEFAULT_ROOM_SETTINGS);
+  const [passcode, setPasscode] = useState('');
+  const [roomOpen, setRoomOpen] = useState(false);
   const [q, setQ] = useState('');
   const [guests, setGuests] = useState('');
   const [agenda, setAgenda] = useState('');
@@ -63,6 +75,7 @@ export function ScheduleDialog({ onClose, online, onCreated }: { onClose: () => 
   const isOnline = where === 'online' || where === 'hybrid';
   const needsRoom = where === 'room' || where === 'hybrid';
   const paste = PROVIDERS.find(([k]) => k === provider)?.[2] ?? false;
+  const builtin = isOnline && provider === 'builtin';
   const directory = useQuery({ queryKey: ['chat', 'directory'], queryFn: ({ signal }) => apiGet<{ users: Array<{ id: number; name: string; email?: string }> }>('/api/chat/directory', undefined, signal), staleTime: 5 * 60_000 });
   const rooms = useQuery({
     queryKey: ['meetings', 'rooms-available', start, end],
@@ -92,7 +105,8 @@ export function ScheduleDialog({ onClose, online, onCreated }: { onClose: () => 
         online_url: isOnline && paste ? link.trim() : undefined,
         room_id: needsRoom && roomId ? roomId : undefined,
         address: where === 'customer' || where === 'external' ? address.trim() || undefined : undefined,
-        participants: [...people.map((p) => ({ user_id: p.id, role: 'required' })), ...emails.map((e) => ({ email: e, role: 'required' }))],
+        participants: [...people.map((p) => ({ user_id: p.id, role: p.role })), ...emails.map((e) => ({ email: e, role: 'required' }))],
+        room_settings: builtin ? { ...roomSettings, ...(passcode ? { passcode } : {}) } : undefined,
         agenda: agenda.split('\n').map((l) => l.trim()).filter(Boolean).map((t) => ({ title: t.slice(0, 190) })),
         skip_invitations: !invite,
       });
@@ -215,6 +229,17 @@ export function ScheduleDialog({ onClose, online, onCreated }: { onClose: () => 
               <span key={p.id} className="flex items-center gap-1 rounded-full bg-selection py-0.5 pr-2 pl-1 text-[12px] font-semibold text-primary">
                 <Avatar name={p.name} size={18} />
                 {p.name}
+                {builtin ? (
+                  <button
+                    type="button"
+                    title="Change their part: attendee, co-host or presenter"
+                    aria-label={`${p.name}: ${PART.find(([k]) => k === p.role)![1]}. Change`}
+                    onClick={() => setPeople(people.map((x) => (x.id === p.id ? { ...x, role: PART[(PART.findIndex(([k]) => k === x.role) + 1) % PART.length]![0] } : x)))}
+                    className="rounded-full bg-surface px-1.5 text-[10.5px] font-bold text-ink-2 hover:text-ink"
+                  >
+                    {PART.find(([k]) => k === p.role)![1]}
+                  </button>
+                ) : null}
                 <button type="button" aria-label={`Remove ${p.name}`} onClick={() => setPeople(people.filter((x) => x.id !== p.id))} className="ml-0.5 text-ink-3 hover:text-ink">×</button>
               </span>
             ))}
@@ -223,7 +248,7 @@ export function ScheduleDialog({ onClose, online, onCreated }: { onClose: () => 
           {matches.length ? (
             <div className="absolute top-full right-0 left-0 z-10 mt-1 rounded-[10px] border border-line bg-surface py-1 shadow-xl">
               {matches.map((u) => (
-                <button key={u.id} type="button" onClick={() => (setPeople([...people, { id: u.id, name: u.name }]), setQ(''))} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-ink hover:bg-subtle">
+                <button key={u.id} type="button" onClick={() => (setPeople([...people, { id: u.id, name: u.name, role: 'required' }]), setQ(''))} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-ink hover:bg-subtle">
                   <Avatar name={u.name} size={22} /> {u.name}
                   {u.email ? <span className="text-[11.5px] text-ink-3">{u.email}</span> : null}
                 </button>
@@ -231,6 +256,26 @@ export function ScheduleDialog({ onClose, online, onCreated }: { onClose: () => 
             </div>
           ) : null}
         </div>
+        {builtin ? (
+          <div className="rounded-[10px] border border-line">
+            <button type="button" aria-expanded={roomOpen} onClick={() => setRoomOpen(!roomOpen)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] font-semibold text-ink">
+              <span className="flex-1">Meet room settings</span>
+              <span className="font-normal text-ink-3">{roomOpen ? 'Hide' : 'Waiting room, passcode, who can present, chat and record'}</span>
+            </button>
+            {roomOpen ? (
+              <div className="flex flex-col gap-3 border-t border-line p-3">
+                <label className={label}>
+                  <span>
+                    Passcode <span className="font-normal text-ink-3">Optional. Letters and numbers, up to 12.</span>
+                  </span>
+                  <input value={passcode} maxLength={12} onChange={(e) => setPasscode(e.target.value.replace(/[^A-Za-z0-9]/g, ''))} className={field} />
+                </label>
+                <RoomSettingsFields value={roomSettings} onChange={(patch) => setRoomSettings({ ...roomSettings, ...patch })} />
+                <p className="text-[11.5px] text-ink-3">Co-hosts and presenters are chosen on each person above. You can change all of this during the meeting.</p>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         <label className={label}>
           External guests
           <input value={guests} onChange={(e) => setGuests(e.target.value)} placeholder="someone@client.com, …" className={field} />

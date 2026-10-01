@@ -20,7 +20,8 @@ import { remote } from './remote/controller';
 import { RemoteControlLayer } from './remote/ControllerSurface';
 import { PointerLayer } from './remote/PointerLayer';
 import { pointers } from './remote/pointers';
-import { isGuest, meet, metaOf } from './session';
+import { isGuest, meet, roleOf, userIdOf } from './session';
+import { HostLeaveDialog, RoleBadge, RoomSettingsPanel, TransferHostDialog } from './RoomRoles';
 import { Whiteboard } from './Whiteboard';
 import { Select } from '../../components/Select';
 
@@ -44,12 +45,13 @@ export function MeetRoom() {
   const ui = useSyncExternalStore(callUi.subscribe, callUi.get);
   const [picking, setPicking] = useState<'start' | 'change' | null>(null);
   const [ending, setEnding] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const now = useNow();
   const room = meet.room!;
   const lp = room.localParticipant;
   const info = meet.info!;
   const participants: Participant[] = [lp, ...meet.present];
-  const people = participants.map((p) => personOf(p, p === lp, { host: metaOf(p).host || (p === lp && meet.isHost), guest: isGuest(p) }));
+  const people = participants.map((p) => personOf(p, p === lp, { host: p === lp ? meet.isHost : roleOf(p) === 'host', guest: isGuest(p) }));
   const started = info.started_at ? parseTs(info.started_at).getTime() : meet.joinedAt;
   const clock = started ? hms(now - started) : '';
   const waiting = meet.waiting;
@@ -100,15 +102,19 @@ export function MeetRoom() {
             { label: 'Stop sharing', icon: 'stop', danger: true, onClick: () => void meet.share(null) },
           ],
         }
-      : { id: 'share', icon: 'screen-share', label: 'Share your screen', onClick: () => setPicking('start') },
+      : meet.mayPresent
+        ? { id: 'share', icon: 'screen-share', label: 'Share your screen', onClick: () => setPicking('start') }
+        : { id: 'share', icon: 'screen-share', label: 'Only presenters can share — ask the host', disabled: true },
     { id: 'chat', icon: 'chat', label: panelOn('Chat') ? 'Hide chat' : 'Chat', tone: panelOn('Chat') ? 'active' : undefined, onClick: () => callUi.togglePanel('Chat') },
-    { id: 'people', icon: 'users', label: 'People', tone: panelOn('People') ? 'active' : undefined, badge: meet.isHost ? waiting.length : undefined, onClick: () => callUi.togglePanel('People') },
+    { id: 'people', icon: 'users', label: 'People', tone: panelOn('People') ? 'active' : undefined, badge: meet.canManage ? waiting.length : undefined, onClick: () => callUi.togglePanel('People') },
     { id: 'board', icon: 'board', label: ui.boardOnStage ? 'Take the board off the stage' : 'Whiteboard', tone: ui.boardOnStage || panelOn('Board') ? 'active' : undefined, onClick: () => (ui.boardOnStage ? callUi.set({ boardOnStage: false }) : callUi.togglePanel('Board')) },
   ];
   const more: MenuEntry[] = [
     // Reachable even when their screen is not on the stage (the board is, or the floating card).
     ...(remote.session ? [{ label: 'Release control', hint: `Of ${remote.session.sharer.name}'s computer`, icon: 'stop', danger: true, onClick: () => void remote.release() }] : []),
-    ...(meet.isHost ? [{ label: room.isRecording ? 'Stop recording' : 'Record the meeting', icon: room.isRecording ? 'stop' : 'film', onClick: () => void meet.record(!room.isRecording) }] : []),
+    ...(meet.mayRecord ? [{ label: room.isRecording ? 'Stop recording' : 'Record the meeting', icon: room.isRecording ? 'stop' : 'film', onClick: () => void meet.record(!room.isRecording) }] : []),
+    ...(meet.canManage ? [{ label: meet.locked ? 'Unlock the meeting' : 'Lock the meeting', hint: meet.locked ? undefined : 'No one new can join', icon: 'lock', onClick: () => void meet.lock(!meet.locked) }] : []),
+    { label: 'Room settings', icon: 'settings', onClick: () => callUi.togglePanel('Settings') },
     { label: ui.boardOnStage ? 'Board back to the panel' : 'Whiteboard on stage', icon: 'board', onClick: () => callUi.set({ boardOnStage: !ui.boardOnStage, ...(ui.boardOnStage ? {} : { panelOpen: false }) }) },
     { label: 'Files', icon: 'paperclip', onClick: () => callUi.togglePanel('Files') },
     { label: 'Meeting details', icon: 'info', onClick: () => callUi.togglePanel('Info') },
@@ -116,7 +122,7 @@ export function MeetRoom() {
   ];
 
   const alerts =
-    meet.error || (meet.isHost && waiting.length) ? (
+    meet.error || (meet.canManage && waiting.length) ? (
       <>
         {meet.error ? (
           <div className="flex items-center gap-2 rounded-[10px] bg-[#3A1A14] px-3 py-2 text-[12.5px] text-[#FFD2C4]" role="alert">
@@ -124,7 +130,7 @@ export function MeetRoom() {
             <button type="button" onClick={() => meet.note(null)} className="font-bold" aria-label="Dismiss">×</button>
           </div>
         ) : null}
-        {meet.isHost && waiting.length ? (
+        {meet.canManage && waiting.length ? (
           <div className="flex items-center gap-2 rounded-[10px] bg-[#16254F]/95 px-3 py-2 text-[12.5px] shadow-lg">
             <span className="flex-1">
               <b>{waiting.length === 1 ? waiting[0]!.name || 'Someone' : `${waiting.length} people`}</b> {waiting.length === 1 ? 'is' : 'are'} waiting to join
@@ -169,13 +175,19 @@ export function MeetRoom() {
         alerts={alerts}
         board={ui.boardOnStage ? <Whiteboard stage /> : null}
         tabs={[
-          { id: 'People', label: 'People', badge: meet.isHost ? waiting.length : undefined, content: <PeoplePanel /> },
+          { id: 'People', label: 'People', badge: meet.canManage ? waiting.length : undefined, content: <PeoplePanel /> },
           {
             id: 'Chat',
             label: 'Chat',
             content: info.room_id ? (
               <div className="flex h-full flex-col">
-                <span className="border-b border-line px-3 py-2 text-[11.5px] text-ink-3">Meeting chat · saved to the meeting's conversation</span>
+                <span className="border-b border-line px-3 py-2 text-[11.5px] text-ink-3">
+                  {meet.settings.chat === 'off'
+                    ? 'The host has turned chat off in this meeting.'
+                    : meet.settings.chat === 'hosts' && !meet.canManage
+                      ? 'Only the host and co-hosts can write here.'
+                      : "Meeting chat · saved to the meeting's conversation"}
+                </span>
                 <div className="min-h-0 flex-1">
                   <Thread roomId={String(info.room_id)} room={undefined} mini bare rooms={[]} />
                 </div>
@@ -200,10 +212,16 @@ export function MeetRoom() {
           },
           { id: 'Files', label: 'Files', content: <FilesPanel roomId={info.room_id} /> },
           { id: 'Info', label: 'Info', content: <InfoPanel /> },
+          { id: 'Settings', label: 'Settings', content: <RoomSettingsPanel /> },
         ]}
         buttons={buttons}
         more={more}
-        end={{ label: 'Leave the meeting', onClick: () => void meet.leave(), menu: meet.isHost ? [{ label: 'End for everyone', icon: 'phone-off', danger: true, onClick: () => setEnding(true) }] : undefined }}
+        end={{
+          label: 'Leave the meeting',
+          // The host leaving hands the meeting on, or ends it: never leaves it with no one to run it.
+          onClick: () => (meet.isHost && meet.present.length ? setLeaving(true) : void meet.leave()),
+          menu: meet.isHost ? [{ label: 'End for everyone', icon: 'phone-off', danger: true, onClick: () => setEnding(true) }] : undefined,
+        }}
         status={sharing ? (paused ? `Sharing ${meet.shareLabel ?? 'your screen'} — paused` : `You are sharing ${meet.shareLabel ?? 'your screen'}${controlNote}${viewerNote}`) : null}
         screenLayer={(sharer) => (
           <>
@@ -225,6 +243,7 @@ export function MeetRoom() {
           }}
         />
       ) : null}
+      {leaving ? <HostLeaveDialog onClose={() => setLeaving(false)} onEndAll={() => setEnding(true)} /> : null}
       {ending ? (
         <Modal title="End the meeting for everyone?" onClose={() => setEnding(false)} width={420} footer={<><Button onClick={() => setEnding(false)}>Cancel</Button><Button variant="danger" onClick={() => (setEnding(false), void meet.endForAll())}>End for all</Button></>}>
           <p className="text-[13px] text-ink-2">Everyone is disconnected{room.isRecording ? ' and the recording stops' : ''}. The meeting cannot be joined again.</p>
@@ -236,12 +255,15 @@ export function MeetRoom() {
 
 function PeoplePanel() {
   const [menu, setMenu] = useState<string | null>(null);
+  const [transfer, setTransfer] = useState<{ id: number; name: string } | null>(null);
   const room = meet.room!;
   const present: Participant[] = [room.localParticipant, ...meet.present];
   const link = 'text-[12px] font-semibold text-primary hover:underline';
+  const item = 'block w-full px-3 py-1.5 text-left hover:bg-subtle disabled:opacity-50';
+  const settings = meet.settings;
   return (
     <div className="flex flex-col gap-3 p-3.5 text-[12.5px]">
-      {meet.isHost && meet.waiting.length ? (
+      {meet.canManage && meet.waiting.length ? (
         <div className="flex flex-col gap-2 rounded-[10px] border border-[#F1D9B5] bg-[#FFF9EC] p-2.5 dark:bg-warning-bg">
           <div className="flex items-center gap-2">
             <b className="flex-1 text-ink">Waiting to join · {meet.waiting.length}</b>
@@ -263,23 +285,41 @@ function PeoplePanel() {
       </div>
       {present.map((p) => {
         const self = p === room.localParticipant;
-        const host = metaOf(p).host || (self && meet.isHost);
+        const role = self ? meet.role : roleOf(p);
+        const uid = userIdOf(p);
         const state = p.isSpeaking ? 'Speaking' : !p.isMicrophoneEnabled ? 'Muted' : '';
+        const name = p.name || 'Guest';
+        // What I may do to them: the server checks again.
+        const entries: Array<{ label: string; onClick: () => void; danger?: boolean; disabled?: boolean }> = [];
+        if (!self && meet.canManage) {
+          entries.push({ label: 'Mute', disabled: !p.isMicrophoneEnabled, onClick: () => void meet.mute(p) });
+          if (uid && meet.isHost && role !== 'host') entries.push(role === 'cohost' ? { label: 'Remove as co-host', onClick: () => void meet.cohost(uid, false) } : { label: 'Make co-host', onClick: () => void meet.cohost(uid, true) });
+          if (uid && (role === 'participant' || role === 'presenter'))
+            entries.push(role === 'presenter' ? { label: 'Remove as presenter', onClick: () => void meet.presenter(uid, false) } : { label: settings.present === 'presenters' ? 'Make presenter (can share)' : 'Make presenter', onClick: () => void meet.presenter(uid, true) });
+          if (uid && meet.isHost) entries.push({ label: 'Make host…', onClick: () => setTransfer({ id: uid, name }) });
+          if (role !== 'host') entries.push({ label: 'Remove from the meeting', danger: true, onClick: () => void meet.remove(p) });
+        }
         return (
           <div key={p.identity} className="relative flex items-center gap-2.5">
             <CallAvatar name={p.name || p.identity} size={30} />
             <span className="flex min-w-0 flex-1 flex-col">
-              <b className="truncate text-ink">{self ? `${p.name || 'You'} (you)` : p.name || 'Guest'}</b>
-              <span className="text-[11px] text-ink-3">{host ? 'Host' : isGuest(p) ? 'Guest · by link' : 'Member'}</span>
+              <b className="truncate text-ink">{self ? `${p.name || 'You'} (you)` : name}</b>
+              <span className="flex items-center gap-1.5">
+                <RoleBadge role={role} guest={isGuest(p)} />
+                {isGuest(p) ? <span className="text-[11px] text-ink-3">by link</span> : null}
+              </span>
             </span>
             <span className={cx('text-[11.5px] font-semibold', p.isSpeaking ? 'text-success' : 'text-ink-3')}>{state}</span>
-            {meet.isHost && !self ? (
+            {entries.length ? (
               <>
-                <button type="button" aria-label={`Actions for ${p.name || 'this person'}`} onClick={() => setMenu(menu === p.identity ? null : p.identity)} className="h-7 w-7 rounded-[7px] text-ink-2 hover:bg-subtle">⋯</button>
+                <button type="button" aria-label={`Actions for ${name}`} aria-haspopup="menu" aria-expanded={menu === p.identity} onClick={() => setMenu(menu === p.identity ? null : p.identity)} className="h-7 w-7 rounded-[7px] text-ink-2 hover:bg-subtle">⋯</button>
                 {menu === p.identity ? (
-                  <div role="menu" className="absolute top-8 right-0 z-10 w-40 rounded-[10px] border border-line bg-surface py-1 shadow-xl">
-                    <button type="button" role="menuitem" disabled={!p.isMicrophoneEnabled} onClick={() => (setMenu(null), void meet.mute(p))} className="block w-full px-3 py-1.5 text-left hover:bg-subtle disabled:opacity-50">Mute</button>
-                    <button type="button" role="menuitem" onClick={() => (setMenu(null), void meet.remove(p))} className="block w-full px-3 py-1.5 text-left text-danger hover:bg-subtle">Remove from the meeting</button>
+                  <div role="menu" className="absolute top-8 right-0 z-10 w-52 rounded-[10px] border border-line bg-surface py-1 shadow-xl">
+                    {entries.map((e) => (
+                      <button key={e.label} type="button" role="menuitem" disabled={e.disabled} onClick={() => (setMenu(null), e.onClick())} className={cx(item, e.danger && 'text-danger')}>
+                        {e.label}
+                      </button>
+                    ))}
                   </div>
                 ) : null}
               </>
@@ -287,6 +327,7 @@ function PeoplePanel() {
           </div>
         );
       })}
+      {transfer ? <TransferHostDialog person={transfer} onClose={() => setTransfer(null)} /> : null}
     </div>
   );
 }
@@ -349,7 +390,7 @@ function InfoPanel() {
       ))}
       <b className="text-ink">Share via</b>
       <ShareRow text={text} m={{ uuid: info.uuid, title: info.title }} onChat={() => setChat(true)} copy={copy} />
-      {meet.isHost ? (
+      {meet.canManage ? (
         <label className="flex flex-col gap-1">
           <b className="text-ink">Access</b>
           <Select value={meet.locked ? 'locked' : 'ask'} onChange={(e) => void meet.lock(e.target.value === 'locked')} className="h-9 rounded-[8px] border border-line bg-surface px-2 text-ink">

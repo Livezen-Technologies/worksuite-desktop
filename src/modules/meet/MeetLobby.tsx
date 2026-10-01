@@ -82,7 +82,7 @@ export function MeetLobby() {
 
           {waiting ? (
             <div role="status" className="flex items-center gap-2 rounded-[10px] border border-[#F1D9B5] bg-[#FFF9EC] px-3.5 py-3 font-semibold text-[#7A3B05] dark:border-transparent dark:bg-warning-bg dark:text-warning">
-              <Icon name="spinner" size={15} className="animate-spin" /> {t('lobby.waiting')}
+              <Icon name="spinner" size={15} className="animate-spin" /> {meet.door === 'no_host' ? t('lobby.waitingForHost') : t('lobby.waiting')}
             </div>
           ) : null}
           {meet.error && !busy ? (

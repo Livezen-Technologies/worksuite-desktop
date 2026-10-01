@@ -25,7 +25,75 @@ export interface MeetInfo {
   /** Hosts only. */
   passcode?: string | null;
   code?: string | null;
+  /** Roles and room settings (worksuite-desktop#82); missing from an older server. */
+  role?: MeetRole;
+  is_cohost?: boolean;
+  can_manage?: boolean;
+  host_id?: number;
+  cohosts?: number[];
+  presenters?: number[];
+  locked?: boolean;
+  room_settings?: RoomSettings;
 }
+
+/** Host runs the meeting; co-hosts run the room with them; presenters may share; participants take part. */
+export type MeetRole = 'host' | 'cohost' | 'presenter' | 'participant';
+
+export const ROLE_LABEL: Record<MeetRole, string> = { host: 'Host', cohost: 'Co-host', presenter: 'Presenter', participant: 'Participant' };
+
+/** A meeting's room settings, as the server keeps them (`MeetRoom::DEFAULTS`). */
+export interface RoomSettings {
+  /** Who may come in: anyone with the link (guests too), people signed in to WorkSuite, or only the people invited. */
+  access: 'anyone' | 'signed_in' | 'invited';
+  waiting_room: boolean;
+  join_before_host: boolean;
+  present: 'everyone' | 'presenters';
+  invite: 'everyone' | 'hosts';
+  chat: 'everyone' | 'hosts' | 'off';
+  record: 'host' | 'hosts';
+  /** Who sees the meeting's transcripts and minutes. */
+  transcripts: 'participants' | 'hosts';
+}
+
+export const DEFAULT_ROOM_SETTINGS: RoomSettings = {
+  access: 'anyone',
+  waiting_room: true,
+  join_before_host: true,
+  present: 'everyone',
+  invite: 'everyone',
+  chat: 'everyone',
+  record: 'host',
+  transcripts: 'participants',
+};
+
+/** `GET/PUT /api/meet/{uuid}/settings`. */
+export interface RoomSettingsView {
+  title: string;
+  locked: boolean;
+  has_passcode: boolean;
+  passcode?: string | null;
+  settings: RoomSettings;
+  can_edit: boolean;
+}
+
+/** A role or settings change, in the meeting's activity. */
+export interface RoomActivity {
+  id: number;
+  action: string;
+  description: string;
+  by: { id: number; name: string } | null;
+  at: string;
+}
+
+/** What a role may do in a room with these settings — the server decides; this only shows the right controls. */
+export const may = {
+  manage: (r: MeetRole) => r === 'host' || r === 'cohost',
+  present: (r: MeetRole, s: RoomSettings) => s.present === 'everyone' || r !== 'participant',
+  record: (r: MeetRole, s: RoomSettings) => r === 'host' || (r === 'cohost' && s.record === 'hosts'),
+  invite: (r: MeetRole, s: RoomSettings) => s.invite === 'everyone' || r === 'host' || r === 'cohost',
+  chat: (r: MeetRole, s: RoomSettings) => (s.chat === 'off' ? false : s.chat === 'hosts' ? r === 'host' || r === 'cohost' : true),
+  transcripts: (r: MeetRole, s: RoomSettings) => s.transcripts === 'participants' || r === 'host' || r === 'cohost',
+};
 
 export interface Created extends MeetInfo {
   code: string;
@@ -37,6 +105,9 @@ export interface Sfu {
   token: string;
   identity: string;
   is_host: boolean;
+  role?: MeetRole;
+  /** Why we wait at the door: to be admitted, or until a host is in. Null: straight in. */
+  door?: 'waiting_room' | 'no_host' | null;
 }
 
 export interface HistoryRow {
