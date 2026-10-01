@@ -131,6 +131,9 @@ export const INVOKE_CHANNELS = [
   'transfers:open',
   'transfers:reveal',
   'transfers:clearFinished',
+  'transfers:pauseAll',
+  'transfers:resumeAll',
+  'transfers:resetSettings',
 
   'sync:status',
   'sync:devices',

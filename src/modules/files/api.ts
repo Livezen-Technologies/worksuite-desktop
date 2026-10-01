@@ -142,7 +142,7 @@ export type View =
   | 'home' | 'folder' | 'recent' | 'starred' | 'shared' | 'my_shares' | 'trash' | 'large' | 'duplicates' | 'storage'
   | 'today' | 'yesterday' | 'week' | 'month'
   | 'image' | 'pdf' | 'document' | 'spreadsheet' | 'presentation' | 'video' | 'audio' | 'archive' | 'code' | 'design'
-  | 'links' | 'notifications' | 'companies' | 'devices';
+  | 'links' | 'notifications' | 'companies' | 'devices' | 'settings';
 
 export const TITLES: Record<View, string> = {
   home: 'Home',
@@ -173,6 +173,7 @@ export const TITLES: Record<View, string> = {
   notifications: 'Drive notifications',
   companies: 'Sharing between companies',
   devices: 'Sync devices',
+  settings: 'Drive settings',
 };
 
 export const EMPTY: Partial<Record<View, string>> = {
@@ -195,7 +196,7 @@ export const GROUPS: Array<{ id: string; label: string; hint?: string; icon: str
 ];
 
 export const LIST_VIEWS: View[] = ['recent', 'starred', 'my_shares', 'large', 'today', 'yesterday', 'week', 'month', 'image', 'pdf', 'document', 'spreadsheet', 'presentation', 'video', 'audio', 'archive', 'code', 'design'];
-export const ALL_VIEWS: View[] = ['home', 'folder', 'shared', 'trash', 'duplicates', 'storage', 'links', 'notifications', 'companies', 'devices', ...LIST_VIEWS];
+export const ALL_VIEWS: View[] = ['home', 'folder', 'shared', 'trash', 'duplicates', 'storage', 'links', 'notifications', 'companies', 'devices', 'settings', ...LIST_VIEWS];
 
 /* ---- What a file is ---- */
 

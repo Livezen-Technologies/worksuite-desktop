@@ -177,9 +177,10 @@ export function Rail({
             {item('trash', 'Recycle bin', 'trash', counts?.trash)}
           </>
         ) : null}
-        {head('set', 'Settings', (canPartners ? 3 : 2) + (syncOn ? 1 : 0))}
+        {head('set', 'Settings', (canPartners ? 4 : 3) + (syncOn ? 1 : 0))}
         {!shut.set ? (
           <>
+            {item('settings', 'Drive settings', 'settings')}
             {syncOn ? item('devices', 'Sync devices', 'laptop') : null}
             {item('links', 'Secure links', 'link')}
             {item('notifications', 'Drive notifications', 'bell')}

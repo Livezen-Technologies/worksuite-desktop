@@ -1,6 +1,7 @@
 import { app } from 'electron';
 import { join } from 'node:path';
 import type { DesktopPolicy, Preferences, PreferenceLock } from '@shared/types';
+import { defaultDrivePrefs, normalizeDrivePrefs } from '@shared/transfers';
 import type { Database } from './db';
 import { stricterPrivacy } from './policy';
 
@@ -50,6 +51,7 @@ export function defaultPreferences(): Preferences {
     webchatRinging: { window: true, duringDnd: 'card', shortcut: true, volume: 80 },
     ai: { quickAsk: true, shortcut: process.platform === 'darwin' ? 'Alt+Space' : 'Control+Alt+Space', insert: true, dockAtStart: false, language: 'Sinhala', display: 'drawer', sound: false, moduleAccess: { worksuite: {}, local: {} }, onlineFallback: true },
     meetRecording: { method: 'cloud', quality: '720p', layout: 'grid', folder: 'Meeting Recordings', localFolder: join(videos, 'WorkSuite Recordings'), keepLocal: '7' },
+    drive: defaultDrivePrefs(),
   };
 }
 
@@ -67,7 +69,7 @@ export class SettingsService {
     const stored = db.getConfig<Partial<Preferences>>('preferences') ?? {};
     const defaults = defaultPreferences();
     // The AI settings are one object: one saved before a field was added takes that field's default.
-    this.prefs = { ...defaults, ...stored, ai: { ...defaults.ai, ...stored.ai }, meetRecording: { ...defaults.meetRecording, ...stored.meetRecording } };
+    this.prefs = { ...defaults, ...stored, ai: { ...defaults.ai, ...stored.ai }, meetRecording: { ...defaults.meetRecording, ...stored.meetRecording }, drive: normalizeDrivePrefs(stored.drive) };
   }
 
   setPolicy(policy: DesktopPolicy | null): void {
@@ -116,10 +118,18 @@ export class SettingsService {
   update(patch: Partial<Preferences>): Preferences {
     // Recording settings arrive a field at a time; the rest of them stays.
     const meetRecording = patch.meetRecording ? { ...this.prefs.meetRecording, ...patch.meetRecording } : this.prefs.meetRecording;
-    this.prefs = { ...this.prefs, ...patch, meetRecording };
+    // So do Drive's: a change to one of them leaves the others as they were.
+    const drive = patch.drive ? normalizeDrivePrefs({ ...this.prefs.drive, ...patch.drive }) : this.prefs.drive;
+    this.prefs = { ...this.prefs, ...patch, meetRecording, drive };
     this.db.setConfig('preferences', this.prefs);
     this.emit();
     return this.effective();
+  }
+
+  /** Drive › Settings › Reset to defaults: the transfer settings and the download folder as they were at first. */
+  resetDrive(): Preferences {
+    const d = defaultPreferences();
+    return this.update({ drive: d.drive, downloadFolder: d.downloadFolder });
   }
 
   onChange(fn: (p: Preferences) => void): () => void {

@@ -180,6 +180,7 @@ function setup(over: Partial<Server> = {}) {
     canOpenFiles: () => true,
     audit: () => undefined,
     sink: (name) => offline.sink(name),
+    retryDelay: () => 5,
   });
   offline = new ElearningOffline({
     db,
@@ -270,6 +271,8 @@ describe('a course kept offline', () => {
 
   it('resumes an interrupted file from its last whole chunk, asking the server for the rest only', async () => {
     const { server, offline, transfers } = setup({ files: new Map([['/media/tokVideo123', video], ['/media/tokGuide123', guide]]), manifest: manifest(), cutAt: CHUNK + 100 });
+    // Retried by hand here; the queue's own retries are the next test's.
+    transfers.configure({ ...transfers.config(), autoRetry: false });
     await offline.download(12, 'Cyber basics');
     await vi.waitFor(() => expect(offline.list()[0]?.files[0]?.state).toBe('failed'));
     const failed = transfers.list().find((t) => t.state === 'failed')!;
@@ -278,6 +281,13 @@ describe('a course kept offline', () => {
     expect(server.asked).toContain(`/media/tokVideo123 bytes=${CHUNK}-`);
     const back = await offline.serve(new Request('app://x'), '/elearning/12/40');
     expect((await consume(back.body)).equals(video)).toBe(true);
+  });
+
+  it('an interrupted file is tried again by itself, from its last whole chunk', async () => {
+    const { server, offline } = setup({ files: new Map([['/media/tokVideo123', video], ['/media/tokGuide123', guide]]), manifest: manifest(), cutAt: CHUNK + 100 });
+    await offline.download(12, 'Cyber basics');
+    await vi.waitFor(() => expect(offline.list()[0]?.state).toBe('ready'));
+    expect(server.asked).toContain(`/media/tokVideo123 bytes=${CHUNK}-`);
   });
 
   it('keeps what it has when asked again, and drops what the course no longer lists', async () => {

@@ -1,15 +1,14 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
-import type { Transfer } from '@shared/types';
 import { app, organizationName } from '../../core/app-state';
 import { call, errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { navigate } from '../../core/tabs';
 import { closeOverlay, openOverlay } from '../../core/ui';
-import { bytes, duration, relative } from '../../core/time';
+import { bytes, relative } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
-import { Button, Empty, IconButton, cx } from '../../components/ui';
+import { Button, Empty, cx } from '../../components/ui';
 import { UserPicture, useMe } from '../../components/UserPicture';
 import { apiGet, apiPost } from '../../core/api';
 import { useMfa } from '../../modules/account/api';
@@ -19,82 +18,8 @@ import { Popover, PopoverHeader } from './Popover';
 /** The bell's drawer is the Notifications module's (NotifDrawer). */
 export { NotifDrawer as NotificationCenter } from '../../modules/notifications/Drawer';
 
-/** Transfer Center (FR-XFR-03, UI-12): uploads and downloads with progress, speed, ETA and controls. */
-export function TransferCenter() {
-  const transfers = useStore(app, (s) => s.transfers);
-  const active = transfers.filter((t) => t.state === 'running' || t.state === 'queued' || t.state === 'paused');
-  const done = transfers.filter((t) => !active.includes(t)).slice(0, 30);
-  return (
-    <Popover label="Transfers" width={440} offset={112}>
-      <PopoverHeader
-        title="Transfers"
-        action={
-          done.length ? (
-            <Button size="sm" variant="ghost" onClick={() => void call('transfers:clearFinished')}>
-              Clear finished
-            </Button>
-          ) : undefined
-        }
-      />
-      <div className="min-h-0 flex-1 overflow-y-auto scroll-thin">
-        {transfers.length === 0 ? <Empty icon="transfers" title="No transfers" hint="Downloads and uploads from every app appear here." /> : null}
-        {active.length ? <Group title="In progress" items={active} /> : null}
-        {done.length ? <Group title="Recent" items={done} /> : null}
-      </div>
-    </Popover>
-  );
-}
-
-function Group({ title, items }: { title: string; items: Transfer[] }) {
-  return (
-    <section>
-      <h3 className="px-4 pt-3 pb-1 text-[11px] font-bold uppercase tracking-wide text-ink-3">{title}</h3>
-      {items.map((t) => (
-        <TransferRow key={t.id} t={t} />
-      ))}
-    </section>
-  );
-}
-
-function TransferRow({ t }: { t: Transfer }) {
-  const pct = t.total > 0 ? Math.min(100, Math.round((t.bytes / t.total) * 100)) : 0;
-  const eta = t.speed > 0 && t.total > 0 ? duration((t.total - t.bytes) / t.speed) : null;
-  const act = (ch: 'transfers:pause' | 'transfers:resume' | 'transfers:cancel' | 'transfers:retry' | 'transfers:open' | 'transfers:reveal') => call(ch, { id: t.id }).catch((e) => toast('error', errorMessage(e)));
-  return (
-    <div className="flex items-center gap-3 px-4 py-2.5">
-      <Icon name={t.direction === 'upload' ? 'upload' : 'download'} size={17} className={t.direction === 'upload' ? 'text-primary' : 'text-teal'} />
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-[13px] font-semibold text-ink">{t.name}</div>
-        {t.state === 'running' || t.state === 'paused' ? (
-          <>
-            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-subtle">
-              <div className={cx('h-full rounded-full', t.state === 'paused' ? 'bg-ink-3' : 'bg-primary')} style={{ width: `${pct}%` }} />
-            </div>
-            <div className="mt-0.5 font-mono text-[11px] text-ink-3">
-              {bytes(t.bytes)} / {bytes(t.total)} {t.state === 'paused' ? '· paused' : `· ${bytes(t.speed)}/s${eta ? ` · ${eta} left` : ''}`}
-            </div>
-          </>
-        ) : (
-          <div className={cx('text-[11.5px]', t.state === 'failed' ? 'text-danger' : 'text-ink-3')}>
-            {t.state === 'done' ? `${bytes(t.total)} · ${t.direction === 'upload' ? 'uploaded' : 'saved'}` : t.state === 'failed' ? (t.error ?? 'Failed') : t.state}
-          </div>
-        )}
-      </div>
-      <div className="flex shrink-0 gap-0.5">
-        {t.state === 'running' ? <IconButton icon="pause" label="Pause" size={15} onClick={() => void act('transfers:pause')} /> : null}
-        {t.state === 'paused' ? <IconButton icon="play" label="Resume" size={15} onClick={() => void act('transfers:resume')} /> : null}
-        {t.state === 'failed' ? <IconButton icon="refresh" label="Retry" size={15} onClick={() => void act('transfers:retry')} /> : null}
-        {t.state === 'done' && t.direction === 'download' ? (
-          <>
-            <IconButton icon="external" label="Open" size={15} onClick={() => void act('transfers:open')} />
-            <IconButton icon="folder-open" label="Show in folder" size={15} onClick={() => void act('transfers:reveal')} />
-          </>
-        ) : null}
-        {t.state === 'running' || t.state === 'paused' || t.state === 'queued' ? <IconButton icon="x" label="Cancel" size={15} onClick={() => void act('transfers:cancel')} /> : null}
-      </div>
-    </div>
-  );
-}
+/** Transfer Center (FR-XFR-03, UI-12): its own file. */
+export { TransferCenter } from './TransferCenter';
 
 /**
  * The account menu (AcctMenu), from your picture in the title bar: who you

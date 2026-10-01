@@ -115,6 +115,8 @@ export const tabRecordSchema = z.object({
 });
 export type TabRecord = z.infer<typeof tabRecordSchema>;
 
+const bandwidthLimitSchema = z.object({ on: z.boolean(), value: z.number().positive().max(1_000_000), unit: z.enum(['KB', 'MB']) });
+
 export const preferencesPatchSchema = z
   .object({
     startWithOs: z.boolean(),
@@ -165,6 +167,21 @@ export const preferencesPatchSchema = z
       layout: z.enum(['grid', 'speaker', 'screen']),
       folder: z.string().min(1).max(120).regex(/^[^\\/\p{C}]+$/u),
       keepLocal: z.enum(['keep', 'delete', '7', '30']),
+    }).partial(),
+    // Drive › Settings (worksuite-desktop#95). The download folder is not here either: only its dialog sets it.
+    drive: z.object({
+      maxConcurrent: z.number().int().min(1).max(6),
+      maxUploads: z.number().int().min(1).max(6).nullable(),
+      maxDownloads: z.number().int().min(1).max(6).nullable(),
+      uploadLimit: bandwidthLimitSchema,
+      downloadLimit: bandwidthLimitSchema,
+      autoRetry: z.boolean(),
+      autoResume: z.boolean(),
+      metered: z.enum(['normal', 'limit', 'pause']),
+      askWhereToSave: z.boolean(),
+      conflict: z.enum(['ask', 'both', 'skip', 'replace']),
+      notifyComplete: z.boolean(),
+      notifyFailed: z.boolean(),
     }).partial(),
   })
   .partial();
@@ -627,6 +644,9 @@ export const contract = {
   'transfers:open': ch(z.object({ id: idString }), { session: true, permission: 'desktop.files.open_external' }),
   'transfers:reveal': ch(z.object({ id: idString }), { session: true }),
   'transfers:clearFinished': ch(none, { session: true }),
+  'transfers:pauseAll': ch(none, { session: true }),
+  'transfers:resumeAll': ch(none, { session: true }),
+  'transfers:resetSettings': ch(none, { session: true }),
 
   /*
    * Drive sync. The renderer names Drive folders and this app's own ids; a
@@ -1148,6 +1168,9 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'transfers:open': boolean;
   'transfers:reveal': boolean;
   'transfers:clearFinished': void;
+  'transfers:pauseAll': void;
+  'transfers:resumeAll': void;
+  'transfers:resetSettings': { preferences: Preferences; locks: PreferenceLock[] };
   'sync:status': SyncStatus;
   'sync:devices': { devices: SyncDevice[]; policy: SyncPolicy | null; thisDevice: number | null };
   'sync:deviceAction': void;

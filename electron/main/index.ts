@@ -60,7 +60,7 @@ import { DriveSync } from '../services/sync/engine';
 import { ServiceSupervisor } from '../services/supervisor';
 import { MeetRecorder } from '../services/meet-recorder';
 import { SpeechService } from '../services/speech';
-import { TransferManager, type DownloadSink } from '../services/transfers';
+import { TransferManager, queueConfig, type DownloadSink } from '../services/transfers';
 import { ElearningOffline } from '../services/elearning-offline';
 import { EventDesk } from '../services/event-desk';
 import { EventDeskPrint } from '../services/event-desk-print';
@@ -204,11 +204,15 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const auth = new AuthService(db, secrets, fetchImpl, clientHeaders);
 
   let apiReachable = true;
+  // Set once the transfer manager exists (below); the server can drop out before then.
+  let transfersOnline: (ok: boolean) => void = () => undefined;
   let reachabilityProbe: NodeJS.Timeout | null = null;
   const onReachability = (ok: boolean): void => {
     if (ok === apiReachable) return;
     apiReachable = ok;
     log.info(ok ? 'server reachable again' : 'server unreachable');
+    // Nothing new starts while the server is out of reach; what it interrupted carries on when it is back.
+    transfersOnline(ok);
     emitStatus();
     if (ok) {
       if (reachabilityProbe) clearInterval(reachabilityProbe);
@@ -369,7 +373,26 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       handPdfs([path]);
       return true;
     },
+    // Drive › Settings › Notifications: a transfer the person started says when it has finished or failed.
+    notify: (t, how) => {
+      const d = settings.effective().drive;
+      if (how === 'done' ? !d.notifyComplete : !d.notifyFailed) return;
+      const what = t.direction === 'upload' ? 'Upload' : 'Download';
+      notifications.notify({
+        id: `transfer:${t.id}:${how}`,
+        module: 'transfers',
+        title: how === 'done' ? `${what} finished` : `${what} failed`,
+        body: how === 'done' ? t.name : `${t.name}: ${t.error ?? 'it did not finish.'}`,
+        sender: null,
+        link: null,
+        critical: false,
+      });
+    },
   });
+  // Drive › Settings (worksuite-desktop#95): limits, caps and retries apply as soon as they change, without a restart.
+  transfers.configure(queueConfig(settings.effective().drive));
+  settings.onChange((prefs) => transfers.configure(queueConfig(prefs.drive)));
+  transfersOnline = (ok) => transfers.setOnline(ok);
   // Meetings recorded on this computer (worksuite-desktop#68): written, finished and uploaded here, in the background.
   const meetRecorder = new MeetRecorder({
     db,
