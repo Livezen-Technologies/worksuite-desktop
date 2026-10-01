@@ -17,6 +17,7 @@ import { Select } from '../../components/Select';
 import { MinutesEditor } from './minutes/MinutesEditor';
 import { TranscriptsTab } from './transcripts/TranscriptsTab';
 import { latestTranscriptText } from './transcripts/material';
+import { useInvitationAnswer } from '../calendar/conflicts';
 import type { ChatMessage } from '../chat/types';
 
 const TABS = ['Summary', 'Agenda', 'People', 'Minutes', 'Transcripts', 'Files', 'Board', 'Activity'] as const;
@@ -73,6 +74,8 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
       refresh();
     }
   };
+  // Your answer, when it is an invitation still waiting: accepting one that overlaps something asks first (#99).
+  const invitation = useInvitationAnswer('meeting', id, (r) => act(() => apiPost(`/api/meetings/${id}/rsvp`, { rsvp: r })));
 
   if (q.isLoading) return <Spinner />;
   if (q.error || !q.data) return <div className="p-6"><ErrorNote error={q.error} onRetry={() => void q.refetch()} /></div>;
@@ -145,12 +148,19 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
                 <b className="text-ink">Your answer</b>
                 <div className="flex gap-1.5">
                   {(['accepted', 'tentative', 'declined'] as Rsvp[]).map((r) => (
-                    <button key={r} type="button" aria-pressed={mine.rsvp === r} onClick={() => void act(() => apiPost(`/api/meetings/${m.id}/rsvp`, { rsvp: r }))} className={cx('h-8 flex-1 rounded-[8px] text-[12px] font-semibold', mine.rsvp === r ? 'bg-primary text-white' : 'border border-line text-ink hover:bg-subtle')}>
+                    <button key={r} type="button" aria-pressed={mine.rsvp === r} onClick={() => invitation.answer(r)} className={cx('h-8 flex-1 rounded-[8px] text-[12px] font-semibold', mine.rsvp === r ? 'bg-primary text-white' : 'border border-line text-ink hover:bg-subtle')}>
                       {RSVP_LABEL[r]}
                     </button>
                   ))}
                 </div>
+                {invitation.flag}
+                {invitation.propose ? (
+                  <button type="button" onClick={invitation.propose} className="self-start text-[12px] font-semibold text-primary hover:underline">
+                    Propose new time
+                  </button>
+                ) : null}
                 <span className="text-[12px] text-ink-3">Answers: {rsvps.accepted ?? 0} going · {rsvps.tentative ?? 0} maybe · {rsvps.no_response ?? 0} awaiting</span>
+                {invitation.dialogs}
               </section>
             ) : (
               <section className="flex flex-col gap-1 rounded-[12px] border border-line bg-surface p-3.5">

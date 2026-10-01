@@ -12,6 +12,7 @@ import { createMeeting, openMeeting } from '../meet/api';
 import { categoryOf, CATEGORIES, colourOf, dayOf, destinationOf, REMINDERS, SWATCHES, toInput, type CalendarEvent, type EventDetail } from './api';
 import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';
+import { useConflictGate, useInvitationAnswer } from './conflicts';
 
 export interface Draft {
   start: string;
@@ -198,6 +199,23 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
     void qc.invalidateQueries({ queryKey: ['calendar'] });
   };
   const participants = detail.data?.participants ?? [];
+  // Schedule conflicts (worksuite-desktop#99): checked before saving, for you and everybody on the event; and an
+  // invitation waiting for your answer says what it overlaps, and asks before you accept it.
+  const gate = useConflictGate('Save anyway');
+  const eventId = id !== null && /^\d+$/.test(String(id)) ? Number(id) : null;
+  const conflictQuery = () => {
+    const b = body();
+    return {
+      start: b.start,
+      end: b.end,
+      all_day: b.all_day,
+      event_id: eventId ?? undefined,
+      user_ids: [...participants.map((p) => p.user_id), ...invite.map((x) => x.id)],
+      recur_freq: b.recur_freq,
+      recur_until: b.recur_until,
+    };
+  };
+
   const taken = new Set(participants.map((p) => p.user_id));
   const needle = q.trim().toLowerCase();
   const matches = needle ? (directory.data?.users ?? []).filter((u) => !taken.has(u.id) && !invite.some((x) => x.id === u.id) && u.name.toLowerCase().includes(needle)).slice(0, 6) : [];
@@ -262,6 +280,7 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
       refresh();
     }
   };
+  const invitation = useInvitationAnswer('event', e?.invited && !owner ? eventId : null, (v) => act(() => apiPost(`/api/calendar/events/${id}/rsvp`, { status: v })));
 
   const notes = async () => {
     try {
@@ -293,7 +312,7 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
           ) : null}
           <span className="flex-1" />
           <Button onClick={onClose}>{editable ? 'Cancel' : 'Close'}</Button>
-          {editable ? <Button variant="primary" loading={busy} disabled={!start} onClick={() => void save()}>Save</Button> : null}
+          {editable ? <Button variant="primary" loading={busy} disabled={!start} onClick={() => void gate.guard(conflictQuery(), save)}>Save</Button> : null}
         </>
       }
     >
@@ -433,12 +452,15 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
         <div className="flex items-center gap-1.5">
           <b className="w-[110px] text-ink">Your response</b>
           {RSVP.map(([v, l]) => (
-            <button key={v} type="button" aria-pressed={e.my_rsvp === v} onClick={() => void act(() => apiPost(`/api/calendar/events/${id}/rsvp`, { status: v }))} className={cx('h-[30px] rounded-[7px] px-3 font-semibold', e.my_rsvp === v ? 'bg-success text-white' : 'border border-line text-ink hover:bg-subtle')}>
+            <button key={v} type="button" aria-pressed={e.my_rsvp === v} onClick={() => invitation.answer(v)} className={cx('h-[30px] rounded-[7px] px-3 font-semibold', e.my_rsvp === v ? 'bg-success text-white' : 'border border-line text-ink hover:bg-subtle')}>
               {l}
             </button>
           ))}
+          {invitation.flag}
         </div>
       ) : null}
+      {gate.dialog}
+      {invitation.dialogs}
       {id && notesApp ? (
         <div className="flex flex-col gap-1.5 rounded-[10px] bg-subtle px-3 py-2.5">
           <b className="text-ink">Meeting notes</b>

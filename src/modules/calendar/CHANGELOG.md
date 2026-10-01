@@ -4,6 +4,13 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.0 — 2026-10-01
+
+**Added**
+
+- schedule conflicts (worksuite-desktop#99). Saving an event checks it for you and everyone on it, including each occurrence of a repeating one. When it overlaps something, a Schedule Conflict dialog shows what: a title and time where you may see it, otherwise Busy. It offers View conflict, Choose another time and Save anyway. An invitation waiting for your answer shows what it overlaps, and Accept asks first.
+- dragging an event onto something else says so, with Undo in the bar.
+
 ## 1.1.1 — 2026-10-01
 
 **Changed**

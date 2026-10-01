@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.0 — 2026-10-01
+
+**Added**
+
+- schedule conflicts (worksuite-desktop#99). Schedule a meeting marks each person Busy or Maybe busy at that time, without saying what they have, and warns you of your own clash. It checks again before saving, with Schedule anyway. Invitations awaiting your answer are flagged when they clash. Accepting one asks first and offers Propose new time, which tells the organiser the time you suggest; the meeting itself does not move.
+
 ## 1.2.0 — 2026-10-01
 
 - Scheduling a meeting on the built-in Meet sets its room settings and passcode, and each person's part (attendee, co-host, presenter) (worksuite-desktop#82).
