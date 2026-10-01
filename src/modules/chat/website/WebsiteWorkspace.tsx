@@ -122,7 +122,7 @@ export function WebsiteWorkspace() {
   }, [section, selected]);
 
   return (
-    <div className="flex h-full min-w-0 text-[13px]">
+    <div className="flex h-full min-w-0 flex-1 text-[13px]">
       <SidePanel id="website-chats" label="the website chat menu">
         <nav aria-label="Website chats" className="flex w-[212px] shrink-0 flex-col gap-px overflow-y-auto border-r border-line bg-surface px-2.5 py-3.5 scroll-thin">
           <button type="button" onClick={() => go('/chat')} className="px-2 pb-2 text-left font-semibold text-primary hover:underline">‹ Back to Chat</button>

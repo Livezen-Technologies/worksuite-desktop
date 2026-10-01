@@ -358,7 +358,7 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   from the server's sheet on the desk's printer (`event-desk-print.ts`).
   The renderer's `modules/events` is a shell with a rail per event
   (`EventsShell.tsx`, addresses in `routes.ts`) whose screens are lazy
-  chunks: the desk (`Desk.tsx` — the scan field keeps the keyboard's focus,
+  chunks: the desk (`DeskScreen.tsx` — the scan field keeps the keyboard's focus,
   so a USB scanner types into it), search, walk-in, payment, the live
   counters (also a window of their own), recent scans, the review queue, the
   program and session doors, badges, and the organiser's read of Event 360,
@@ -383,8 +383,8 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   the allow-list from `shared/ipc/pos-channels.ts`. The loop runs from start-up, whoever is signed in. The renderer
   is a shell with a rail (`PosShell.tsx`): the register (`Register.tsx` — the catalogue grid, search, a keyboard-wedge
   scanner anywhere (`barcode.ts`), the cart (`cart.ts`) priced by WorkSuite when it answers and previewed from the
-  catalogue meanwhile (`pricing.ts`, the mobile till's arithmetic), the customer), the tender (`Tender.tsx`: cash,
-  card, transfer, wallet, split, change; offline only cash and card), the shift over the staff API (`Shift.tsx`:
+  catalogue meanwhile (`pricing.ts`, the mobile till's arithmetic), the customer), the tender (`TenderPanel.tsx`: cash,
+  card, transfer, wallet, split, change; offline only cash and card), the shift over the staff API (`ShiftScreen.tsx`:
   open with a float or a count, cash in and out, close on a count, blind where the company says so, X and Z reports),
   the till's sales with their sync state, WorkSuite's total and `review` flag, receipt, reprint (WorkSuite's receipt
   where it has one, `serverReceiptRows`), e-mail and — where the server announces them and the person may — refund

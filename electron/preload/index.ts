@@ -113,6 +113,7 @@ const api = {
     localRemove: call('ai:localRemove'),
     localSetDefault: call('ai:localSetDefault'),
     localCheck: call('ai:localCheck'),
+    localTest: call('ai:localTest'),
     localAsk: call('ai:localAsk'),
     localCancel: call('ai:localCancel'),
     localRestart: call('ai:localRestart'),
@@ -299,6 +300,7 @@ const api = {
   office: {
     open: call('office:open'),
     place: call('office:place'),
+    snapshot: call('office:snapshot'),
     command: call('office:command'),
     close: call('office:close'),
     focusFile: call('office:focusFile'),

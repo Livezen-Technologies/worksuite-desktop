@@ -3,7 +3,7 @@ import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LocalAIModelManager } from '../../../electron/services/local-ai/models';
+import { LocalAIModelManager, speed } from '../../../electron/services/local-ai/models';
 import type { LocalAIHardware } from '../../../shared/local-ai';
 
 const MODEL_BYTES = readFileSync(join(__dirname, '..', '..', 'fixtures', 'local-ai', 'tiny-test.gguf'));
@@ -224,5 +224,60 @@ describe('Local AI models from the WorkSuite server (AI Studio)', () => {
     await u.m.refresh();
     expect(u.m.catalogState().error).toBe('WorkSuite could not be reached.');
     u.done();
+  });
+
+  it('keeps what the readiness check found, across restarts, and forgets it when the model goes (worksuite-desktop#55)', async () => {
+    const s = manager(envelope([model({ notice: 'Provided under the Example Terms.' })]));
+    await s.m.init();
+    await s.m.refresh();
+    await s.m.install('qwen3-4b');
+    let [v] = await s.m.list(hw);
+    expect(v!.state).toBe('installed');
+    expect(v!.readiness).toBe('untested');
+    expect(v!.model.notice).toBe('Provided under the Example Terms.');
+    s.m.testStarted('qwen3-4b');
+    [v] = await s.m.list(hw);
+    expect(v!.readiness).toBe('testing');
+    expect(s.m.usable('qwen3-4b')).toBe(false);
+    await s.m.testEnded('qwen3-4b', 'error loading model: unknown architecture');
+    [v] = await s.m.list(hw);
+    expect(v!.readiness).toBe('failed');
+    expect(v!.readinessError).toBe('error loading model: unknown architecture');
+    expect(s.m.usable('qwen3-4b')).toBe(false);
+    await s.m.testEnded('qwen3-4b', null);
+    [v] = await s.m.list(hw);
+    expect(v!.readiness).toBe('ready');
+    expect(s.m.usable('qwen3-4b')).toBe(true);
+    // Remembered: a restart does not test it again.
+    const again = new LocalAIModelManager({ root: s.root, catalogUrl: () => 'https://cdn.worksuite.test/local-ai/catalog.json', keys: { 'ws-2026': PUB }, fetch: s.net.fetch });
+    await again.init();
+    [v] = await again.list(hw);
+    expect(v!.readiness).toBe('ready');
+    await again.remove('qwen3-4b');
+    await again.install('qwen3-4b');
+    [v] = await again.list(hw);
+    expect(v!.readiness).toBe('untested');
+    s.done();
+  });
+
+  it('a new version of a model is tested again', async () => {
+    const s = manager(envelope([model()]));
+    await s.m.init();
+    await s.m.refresh();
+    await s.m.install('qwen3-4b');
+    await s.m.testEnded('qwen3-4b', null);
+    const next = new LocalAIModelManager({ root: s.root, catalogUrl: () => 'https://cdn.worksuite.test/local-ai/catalog.json', keys: { 'ws-2026': PUB }, fetch: cdn(envelope([model({ version: '2' })])).fetch });
+    await next.init();
+    await next.refresh();
+    const [v] = await next.list(hw);
+    expect(v!.readiness).toBe('untested');
+    s.done();
+  });
+
+  it('measures how fast a download goes, once it has two seconds to go on (worksuite-desktop#49)', () => {
+    expect(speed([])).toBeNull();
+    expect(speed([[0, 0], [1_000, 5_000_000]])).toBeNull();
+    expect(speed([[0, 1_000], [1_000, 1_000], [4_000, 40_001_000]])).toBe(10_000_000);
+    expect(speed([[0, 5], [5_000, 5]])).toBeNull();
   });
 });

@@ -387,7 +387,7 @@ templates, gates and devices) is the web's. Tests: `tests/unit/shared/event-desk
 | ID | Status | Where / note |
 |---|---|---|
 | EV-POR-010 | Done | `EventsShell.tsx`: check-in desk, walk-in registration, badge printing, scanner input, fast search, offline check-in, local printing, the operations view (Event 360, live counters) |
-| EV-POR-011 | Done | `Desk.tsx`: the event's name, a large scan area, Inside and Checked in, Search / Walk-in / Print badge, online or offline with what waits; full screen on the desk alone |
+| EV-POR-011 | Done | `DeskScreen.tsx`: the event's name, a large scan area, Inside and Checked in, Search / Walk-in / Print badge, online or offline with what waits; full screen on the desk alone |
 | EV-POR-012 | Done | Scanner input has the focus (a stray key goes to it); F2 / Alt+S search, F3 / Alt+W walk-in, F4 / Alt+P print, F6 / Alt+O in or out, Enter on an empty field presses the result's button, Esc clears |
 | EV-POR-013 | Later | "May require a PIN" to leave the desk: the server keeps no desk PIN (BACKEND.md) |
 | EV-CHK-001..003 | Done | Scan (USB/HID scanner as a keyboard, typed registration number, the camera where the system reads QR codes — `camera.tsx`, `BarcodeDetector`, macOS), the server's verdict with a Check In button or the gate's automatic check-in |
@@ -427,10 +427,10 @@ Tests: `tests/unit/electron/pos-desk.test.ts`, `pos-till.test.ts`, `pos-print.te
 |---|---|---|
 | POS-DSK-1 Native module | Done | `shared/apps.ts` (`surface: 'native'`), `registry.ts` manifest, deep links `worksuite://pos`, `worksuite://pos/sales/{ref}` |
 | POS-DSK-2 Pairing, heartbeat | Done | `pos-desk.ts`: `terminals/{id}/pair` (take-over asked), `wsp_` credential in the OS keystore, heartbeat every minute with the queue size; 401 drops it, 503 marks POS off (the server's sentence; else "Admin Centre → Apps → POS") |
-| POS-DSK-3 Shift | Done | `Shift.tsx`: open with a float or a count, cash in/out with reasons, close on a count (blind where the company says), X report while open, Z report after; online only |
-| POS-DSK-3 Close rules | Done | `Shift.tsx`, `shift.ts`: `rules.count_to_close` (note by note only), `rules.blind_close`, `rules.variance_tolerance` (no reason asked within it, `needsReason`) |
-| POS-DSK-4 Register | Done | `Register.tsx`, `Tender.tsx`: grid, search, categories, keyboard-wedge scanner anywhere, quantities, customer, discount by permission, cash/card/transfer/wallet/split with change; WorkSuite's price (`POST api/pos/price`, the till's company) with the catalogue's preview; codes not in the copy by `api/pos/products/lookup` |
-| POS-DSK-4 No drawer, no sale | Done | `Register.tsx`: nothing goes in the cart without a register open at this till (a pick or scan says to open it; the cart offers "Open the register"); `Tender.tsx` reads the registers again after a refusal. Server rule `drawer_closed` on every door (`capabilities.drawer_required`) |
+| POS-DSK-3 Shift | Done | `ShiftScreen.tsx`: open with a float or a count, cash in/out with reasons, close on a count (blind where the company says), X report while open, Z report after; online only |
+| POS-DSK-3 Close rules | Done | `ShiftScreen.tsx`, `shift.ts`: `rules.count_to_close` (note by note only), `rules.blind_close`, `rules.variance_tolerance` (no reason asked within it, `needsReason`) |
+| POS-DSK-4 Register | Done | `Register.tsx`, `TenderPanel.tsx`: grid, search, categories, keyboard-wedge scanner anywhere, quantities, customer, discount by permission, cash/card/transfer/wallet/split with change; WorkSuite's price (`POST api/pos/price`, the till's company) with the catalogue's preview; codes not in the copy by `api/pos/products/lookup` |
+| POS-DSK-4 No drawer, no sale | Done | `Register.tsx`: nothing goes in the cart without a register open at this till (a pick or scan says to open it; the cart offers "Open the register"); `TenderPanel.tsx` reads the registers again after a refusal. Server rule `drawer_closed` on every door (`capabilities.drawer_required`) |
 | POS-DSK-4 Discount rights | Done | `discountRights()` from `options` `can.discount`, `can.max_discount_pct` (typed discount capped there), `can.discount_override` (no ceiling); none where the server does not say |
 | POS-DSK-5 Offline | Done | Versioned catalogue sealed in SQLite; local receipt numbering per pairing; ordered, idempotent outbox to `device/sales`; sync state in the shell, This till and Sales |
 | POS-DSK-5 Catalogue source | Done | POS's own catalogue: through the till's door every 30 min with nobody signed in (`device/catalogue?since_version=`), on the staff API on request (`api/pos/catalogue?org=&since_version=`, `pos.access` only); Inventory's list only on an older server (`capabilities.catalogue` false, or 404) |

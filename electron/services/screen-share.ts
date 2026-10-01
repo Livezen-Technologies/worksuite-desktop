@@ -1,4 +1,4 @@
-import { desktopCapturer, systemPreferences, webContents, type Session } from 'electron';
+import { BrowserWindow, desktopCapturer, systemPreferences, webContents, type Session } from 'electron';
 import type { ScreenSources } from '@shared/types';
 import { logger } from '../main/log';
 
@@ -30,17 +30,56 @@ export class ScreenShare {
   /** A source picked by this process rather than the person (a controller switching screens). */
   private chosenHere = new Map<number, string>();
 
-  constructor(private readonly trusted: (url: string) => boolean) {}
+  constructor(
+    private readonly trusted: (url: string) => boolean,
+    /** The capturer (a test gives its own), and this app's own windows' media ids, which are never offered. */
+    private readonly capturer: Pick<typeof desktopCapturer, 'getSources'> = desktopCapturer,
+    private readonly ownSources: () => string[] = () => BrowserWindow.getAllWindows().map((w) => { try { return w.getMediaSourceId(); } catch { return ''; } }).filter(Boolean),
+  ) {}
 
+  /**
+   * The screens and windows to choose from, and — when there are none — why (worksuite-desktop#70). Screens and
+   * windows are asked for separately, so a window list the system refuses does not take the screens with it; a
+   * Screen Recording permission that is off is said as that, not as an error. Only this process's own windows are
+   * left out. What is logged is counts and the system's error, never names or pictures.
+   */
   async sources(): Promise<ScreenSources> {
-    const permission = process.platform === 'darwin' ? systemPreferences.getMediaAccessStatus('screen') : 'granted';
-    const list = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 320, height: 200 }, fetchWindowIcons: false });
-    return {
+    const platform = process.platform;
+    const permission = platform === 'darwin' ? this.permission() : 'granted';
+    if (permission === 'denied' || permission === 'restricted') {
+      log.info('screen sources: permission off', { permission });
+      return { permission, sources: [], state: 'denied', problem: null, restartMayHelp: true, platform };
+    }
+    const ask = (types: Array<'screen' | 'window'>) => this.capturer.getSources({ types, thumbnailSize: { width: 320, height: 200 }, fetchWindowIcons: false });
+    const [screens, windows] = await Promise.allSettled([ask(['screen']), ask(['window'])]);
+    const own = new Set(this.ownSources());
+    const shape = (list: Electron.DesktopCapturerSource[], kind: 'screen' | 'window') =>
+      list
+        .filter((s) => s.name && !own.has(s.id) && !(kind === 'window' && s.name === 'WorkSuite'))
+        .map((s) => ({ id: s.id, name: s.name, kind, thumbnail: s.thumbnail && !s.thumbnail.isEmpty() ? s.thumbnail.toDataURL() : null }));
+    const sources = [...(screens.status === 'fulfilled' ? shape(screens.value, 'screen') : []), ...(windows.status === 'fulfilled' ? shape(windows.value, 'window') : [])];
+    const why = (r: PromiseSettledResult<unknown>) => (r.status === 'rejected' ? (r.reason instanceof Error ? r.reason.message : String(r.reason)) : null);
+    const failed = [why(screens), why(windows)].filter(Boolean) as string[];
+    const state: ScreenSources['state'] = failed.length === 2 ? 'failed' : failed.length ? 'partial' : 'ok';
+    // No screen at all on a Mac is the permission not yet in effect: macOS applies it to a newly started app.
+    const restartMayHelp = platform === 'darwin' && (state === 'failed' || !sources.some((x) => x.kind === 'screen'));
+    log.info('screen sources', {
+      platform,
       permission,
-      sources: list
-        .filter((s) => s.name && s.name !== 'WorkSuite')
-        .map((s) => ({ id: s.id, name: s.name, kind: s.id.startsWith('screen:') ? ('screen' as const) : ('window' as const), thumbnail: s.thumbnail.isEmpty() ? null : s.thumbnail.toDataURL() })),
-    };
+      state,
+      screens: screens.status === 'fulfilled' ? screens.value.length : -1,
+      windows: windows.status === 'fulfilled' ? windows.value.length : -1,
+      error: failed[0] ?? null,
+    });
+    return { permission, sources, state, problem: failed[0] ?? null, restartMayHelp, platform };
+  }
+
+  private permission(): string {
+    try {
+      return systemPreferences.getMediaAccessStatus('screen');
+    } catch {
+      return 'unknown';
+    }
   }
 
   /**

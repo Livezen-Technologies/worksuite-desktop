@@ -1,22 +1,33 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import qrcode from 'qrcode-generator';
 import { useCanOpen } from '../../core/access';
-import { apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
+import { ApiError, apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
 import { app } from '../../core/app-state';
 import { call, errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
-import { bytes, dateLabel, dayKey, parseTs, relative, timeLabel, todayInZone } from '../../core/time';
+import { bytes, dateLabel, listStamp, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
-import { Button, Empty, ErrorNote, Modal, Spinner, cx } from '../../components/ui';
+import { Icon } from '../../components/Icon';
+import { Button, ErrorNote, Modal, Spinner, cx } from '../../components/ui';
 import type { Room } from '../chat/types';
 import { useNow } from '../calls/parts';
+import { PopMenu, below, type MenuItem } from '../files/Menu';
 import { ScheduleDialog } from '../meetings/ScheduleDialog';
-import { createMeeting, formatCode, invitation, openMeeting, parseMeetingInput, resolveCode, type Created, type HistoryRow, type Recording, type UpcomingRow } from './api';
+import { createMeeting, formatCode, invitation, openMeeting, resolveCode, type Created, type HistoryRow, type Recording, type UpcomingRow } from './api';
+import { DeviceSettings, Preview, useMeetDevices } from './devices';
+import { byDay, checkMeetingInput, dayHeading, historyJoinable, lengthLabel, meetingMinutes, scheduledMinutes, upcomingJoinable } from './home';
+import { useMeetT, type MKey } from './i18n';
 
-/** WorkSuite Meet — home (MeetHome): start, join, what is coming up, what happened, recordings. */
+/**
+ * WorkSuite Meet — home (worksuite-desktop#67): starting and joining first — New meeting (start now, a link for
+ * later, schedule in Calendar) and a code or link box with its Join — then what is coming up, what happened and
+ * the recordings, each compact with See all. A row has one action (Join, when the meeting can be joined) and a ⋯
+ * menu for the rest. Camera and microphone are checked before any meeting, from here or the pre-join screen.
+ */
 export function MeetHome() {
+  const t = useMeetT();
   useTabTitle('Meet');
   const { navigate } = useTab();
   const me = useStore(app, (s) => s.auth?.user?.name ?? null);
@@ -24,170 +35,303 @@ export function MeetHome() {
   // Meetings (details, scheduling) and Chat (a meeting's conversation) are other apps: offered only to whoever has them.
   const meetings = useCanOpen('meetings');
   const chat = useCanOpen('chat');
-  const [menu, setMenu] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [code, setCode] = useState('');
+  const [codeError, setCodeError] = useState<MKey | null>(null);
   const [created, setCreated] = useState<Created | null>(null);
   const [scheduling, setScheduling] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [busy, setBusy] = useState<'new' | 'join' | null>(null);
   const upcoming = useQuery({ queryKey: ['meet', 'upcoming'], queryFn: ({ signal }) => apiGet<{ meetings: UpcomingRow[] }>('/api/meet/upcoming', undefined, signal), refetchInterval: 60_000 });
   const history = useQuery({ queryKey: ['meet', 'history'], queryFn: ({ signal }) => apiGet<{ meetings: HistoryRow[] }>('/api/meet/history', undefined, signal) });
   const canSchedule = perms.includes('*') || perms.includes('meeting.schedule');
   const now = useNow(60_000);
 
-  const run = async (fn: () => Promise<void>) => {
-    setBusy(true);
+  const run = async (what: 'new' | 'join', fn: () => Promise<void>) => {
+    setBusy(what);
     try {
       await fn();
     } catch (e) {
       toast('error', errorMessage(e));
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
-  const instant = () => run(async () => {
-    setMenu(false);
-    const m = await createMeeting({ title: 'Instant meeting' });
-    await openMeeting(m.uuid, m.title);
-  });
-  const later = () => run(async () => {
-    setMenu(false);
-    setCreated(await createMeeting({ later: true, title: `${me ? `${me.split(' ')[0]}'s` : 'A'} meeting` }));
-  });
-  const join = () => run(async () => {
-    const what = parseMeetingInput(code);
+  const instant = () =>
+    run('new', async () => {
+      const m = await createMeeting({ title: 'Instant meeting' });
+      await openMeeting(m.uuid, m.title);
+    });
+  const later = () => run('new', async () => setCreated(await createMeeting({ later: true, title: `${me ? `${me.split(' ')[0]}'s` : 'A'} meeting` })));
+  const join = async () => {
+    const what = checkMeetingInput(code);
     if (!what) return;
-    const uuid = 'uuid' in what ? what.uuid : (await resolveCode(what.code)).uuid;
-    await openMeeting(uuid);
-    setCode('');
-  });
+    if ('error' in what) return setCodeError(what.error);
+    setCodeError(null);
+    setBusy('join');
+    try {
+      let uuid: string;
+      if ('uuid' in what) uuid = what.uuid;
+      else {
+        const r = await resolveCode(what.code);
+        if (r.ended) return setCodeError('err.ended');
+        uuid = r.uuid;
+      }
+      await openMeeting(uuid);
+      setCode('');
+    } catch (e) {
+      if (e instanceof ApiError && (e.status === 404 || e.status === 422)) setCodeError('err.noSuchCode');
+      else toast('error', errorMessage(e));
+    } finally {
+      setBusy(null);
+    }
+  };
 
-  const live = (upcoming.data?.meetings ?? []).filter((u) => (history.data?.meetings ?? []).some((h) => h.uuid === u.uuid && h.status === 'live'));
+  const liveIds = new Set((history.data?.meetings ?? []).filter((h) => h.status === 'live').map((h) => h.uuid));
+  const newItems: MenuItem[] = [
+    { label: t('home.startNow'), hint: t('home.startNowHint'), icon: 'video', run: () => void instant() },
+    { label: t('home.later'), hint: t('home.laterHint'), icon: 'link', run: () => void later() },
+    ...(meetings ? [{ label: t('home.schedule'), hint: canSchedule ? t('home.scheduleHint') : t('home.scheduleNoPermission'), icon: 'calendar', disabled: !canSchedule, run: () => setScheduling(true) }] : []),
+  ];
+
   return (
     <div className="h-full overflow-y-auto scroll-thin">
-      <main className="grid min-h-full gap-7 px-9 py-7 text-[13px] [grid-template-columns:1fr_1.1fr]">
-        <div className="flex flex-col gap-[18px]">
-          <span className="text-[12px] font-bold tracking-[0.7px] text-teal">WORKSUITE MEET</span>
-          <h1 className="text-[34px] leading-[1.2] font-bold tracking-[-0.6px] text-ink">Video meetings for your team</h1>
-          <p className="text-[14px] leading-[1.6] text-ink-2">Start now, schedule for later, or join with a code. Meetings open in their own window with screen share, recording, whiteboard and chat.</p>
-          <div className="relative flex items-center gap-2.5">
-            <button type="button" aria-haspopup="menu" aria-expanded={menu} disabled={busy} onClick={() => setMenu(!menu)} className="h-11 shrink-0 rounded-[10px] bg-primary px-[18px] text-[14px] font-bold text-white hover:bg-primary-hover">
-              New meeting ⌄
-            </button>
-            <form
-              className="flex min-w-0 flex-1 gap-2.5"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void join();
-              }}
-            >
-              <input value={code} onChange={(e) => setCode(e.target.value)} aria-label="Meeting code or link" placeholder="Enter a code or meeting link" className="h-11 min-w-0 flex-1 rounded-[10px] border border-line bg-surface px-3 text-[14px] text-ink outline-none focus:border-primary" />
-              <button type="submit" disabled={busy || !code.trim()} className="h-11 rounded-[10px] border border-primary px-4 font-bold text-primary hover:bg-selection disabled:opacity-50">
-                Join
+      <main className="mx-auto flex max-w-[1240px] flex-col gap-5 px-5 py-6 text-[13px] sm:px-8 lg:py-7">
+        <section className="grid items-center gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+          <div className="flex min-w-0 flex-col gap-3.5">
+            <span className="text-[12px] font-bold tracking-[0.7px] text-teal uppercase">{t('home.eyebrow')}</span>
+            <h1 className="text-[30px] leading-[1.15] font-bold tracking-[-0.6px] text-ink sm:text-[34px]">{t('home.title')}</h1>
+            <p className="text-[14.5px] leading-[1.55] text-ink-2">{t('home.subtitle')}</p>
+            <div className="mt-1 flex flex-wrap items-start gap-2.5">
+              <button
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={!!menu}
+                disabled={busy === 'new'}
+                onClick={(e) => setMenu(below(e.currentTarget, 'left', 320))}
+                className="flex h-11 shrink-0 items-center gap-1.5 rounded-[10px] bg-primary px-[18px] text-[14px] font-bold text-white hover:bg-primary-hover disabled:opacity-70"
+              >
+                {busy === 'new' ? <Icon name="spinner" size={16} className="animate-spin" /> : <Icon name="video" size={16} />}
+                {t('home.new')}
+                <Icon name="chevron-down" size={15} />
               </button>
-            </form>
-            {menu ? (
-              <div role="menu" aria-label="New meeting" className="absolute top-12 left-0 z-20 flex w-[360px] flex-col rounded-[12px] border border-line bg-surface p-1.5 shadow-[0_14px_36px_rgb(var(--ws-shadow-rgb)/.18)]">
-                <MenuItem title="Start an instant meeting" hint="Join now and invite people from inside" onClick={() => void instant()} />
-                <MenuItem title="Create a meeting for later" hint="Get a link and code to share" onClick={() => void later()} />
-                {meetings ? <MenuItem title="Schedule a meeting" hint={canSchedule ? 'Invite people; it shows in Calendar' : 'Needs the "Schedule meetings" permission'} disabled={!canSchedule} onClick={() => (setMenu(false), setScheduling(true))} /> : null}
-              </div>
-            ) : null}
-          </div>
-          <Recordings />
-        </div>
-        <div className="flex flex-col gap-4">
-          <section className="flex flex-col gap-2.5 rounded-[12px] border border-line bg-surface px-[18px] py-4">
-            <div className="flex items-center">
-              <h2 className="flex-1 text-[15px] font-bold text-ink">Upcoming</h2>
-              {meetings ? <button type="button" onClick={() => navigate('/meetings')} className="text-[12px] font-semibold text-primary hover:underline">All meetings</button> : null}
-            </div>
-            {upcoming.isLoading ? <Spinner /> : upcoming.error ? <ErrorNote error={upcoming.error} onRetry={() => void upcoming.refetch()} /> : null}
-            {!upcoming.isLoading && !upcoming.data?.meetings.length ? <p className="py-2 text-ink-3">Nothing scheduled.</p> : null}
-            {(upcoming.data?.meetings ?? []).slice(0, 6).map((u) => {
-              const isLive = live.some((l) => l.uuid === u.uuid);
-              const soon = parseTs(u.scheduled_at).getTime() - now < 15 * 60_000;
-              const day = dayKey(parseTs(u.scheduled_at));
-              return (
-                <div key={u.uuid} className={cx('flex items-center gap-3 rounded-[10px] px-3 py-2.5', isLive ? 'bg-selection' : 'bg-subtle')}>
-                  <span className="w-[74px] shrink-0 font-mono text-[12px] font-semibold text-primary">{day === todayInZone() ? timeLabel(u.scheduled_at) : `${dateLabel(u.scheduled_at).replace(/, \d{4}$/, '')}`}</span>
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <b className="truncate text-ink">{u.title || 'Meeting'}</b>
-                    <span className="truncate text-[11.5px] text-ink-3">{isLive ? 'Now · Meet' : `${u.people} invited`}{u.host_name && !u.is_host ? ` · ${u.host_name}` : ''}</span>
-                  </span>
-                  {isLive ? <span className="rounded-[10px] bg-danger-bg px-2 py-0.5 text-[11px] font-bold text-danger">Live now</span> : null}
-                  <span className="text-[11px] font-semibold text-ink-2">{u.is_host ? 'You host' : 'Invited'}</span>
-                  {isLive || soon || !u.record_id || !meetings ? (
-                    <button type="button" onClick={() => void openMeeting(u.uuid, u.title)} className={cx('h-[30px] rounded-[7px] px-3 text-[12px] font-bold', isLive || soon ? 'bg-primary text-white' : 'border border-line bg-surface text-ink')}>
-                      Join
-                    </button>
-                  ) : (
-                    <button type="button" onClick={() => navigate(`/meetings?meeting=${u.record_id}`)} className="h-[30px] rounded-[7px] border border-line bg-surface px-3 text-[12px] font-bold text-ink">
-                      Details
-                    </button>
-                  )}
+              <form
+                className="flex min-w-[260px] flex-1 flex-col gap-1"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void join();
+                }}
+              >
+                <div className="flex gap-2.5">
+                  <label className={cx('flex h-11 min-w-0 flex-1 items-center gap-2 rounded-[10px] border bg-surface px-3 text-ink-3 focus-within:border-primary', codeError ? 'border-danger' : 'border-line')}>
+                    <Icon name="link" size={15} />
+                    <input
+                      value={code}
+                      onChange={(e) => {
+                        setCode(e.target.value);
+                        setCodeError(null);
+                      }}
+                      aria-label={t('home.codeLabel')}
+                      aria-invalid={!!codeError}
+                      aria-describedby={codeError ? 'meet-code-error' : undefined}
+                      placeholder={t('home.codePlaceholder')}
+                      className="min-w-0 flex-1 bg-transparent text-[14px] text-ink outline-none"
+                    />
+                  </label>
+                  <button type="submit" disabled={busy === 'join' || !code.trim()} className="h-11 shrink-0 rounded-[10px] border border-primary px-4 text-[14px] font-bold text-primary hover:bg-selection disabled:opacity-50">
+                    {busy === 'join' ? t('home.joining') : t('home.join')}
+                  </button>
                 </div>
-              );
-            })}
-          </section>
-          <section className="flex flex-col gap-2 rounded-[12px] border border-line bg-surface px-[18px] py-4">
-            <h2 className="text-[15px] font-bold text-ink">Recent</h2>
-            {history.isLoading ? <Spinner /> : history.error ? <ErrorNote error={history.error} onRetry={() => void history.refetch()} /> : null}
-            {!history.isLoading && !history.data?.meetings.length ? <p className="py-2 text-ink-3">No meetings yet.</p> : null}
-            {(history.data?.meetings ?? []).slice(0, 8).map((h) => (
-              <RecentRow key={h.uuid} h={h} onChat={chat ? (id) => navigate(`/chat?room=${id}`) : undefined} />
+                {codeError ? (
+                  <p id="meet-code-error" role="alert" className="flex items-center gap-1.5 text-[12.5px] text-danger">
+                    <Icon name="alert" size={13} /> {t(codeError)}
+                  </p>
+                ) : null}
+              </form>
+            </div>
+            <button type="button" onClick={() => setChecking(true)} className="flex items-center gap-1.5 self-start rounded-[7px] px-1 py-0.5 text-[13px] font-semibold text-primary hover:underline">
+              <Icon name="settings" size={14} /> {t('home.checkDevices')}
+            </button>
+          </div>
+          <figure className="hidden flex-col items-center gap-2 lg:flex">
+            <Illustration />
+            <figcaption className="text-[13px] text-ink-2">{t('home.tagline')}</figcaption>
+          </figure>
+        </section>
+
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+          <Card title={t('home.upcoming')} action={meetings ? { label: t('home.allMeetings'), run: () => navigate('/meetings') } : undefined}>
+            {upcoming.isLoading ? <Spinner /> : upcoming.error ? <ErrorNote error={upcoming.error} onRetry={() => void upcoming.refetch()} /> : null}
+            {upcoming.isSuccess && !upcoming.data.meetings.length ? (
+              <EmptyState icon="calendar" title={t('home.nothingScheduled')} hint={t('home.nothingScheduledHint')} action={meetings && canSchedule ? { label: t('home.scheduleMeeting'), run: () => setScheduling(true) } : undefined} />
+            ) : null}
+            {byDay((upcoming.data?.meetings ?? []).slice(0, 6)).map((g) => (
+              <div key={g.day} className="flex flex-col">
+                <span className="pt-1 pb-1.5 text-[12px] font-semibold text-ink-3">{dayHeading(g.rows[0]!.scheduled_at, { today: t('home.today'), tomorrow: t('home.tomorrow') })}</span>
+                {g.rows.map((u) => (
+                  <UpcomingCard key={u.uuid} u={u} live={liveIds.has(u.uuid)} joinable={upcomingJoinable(u, now, liveIds.has(u.uuid))} onDetails={meetings && u.record_id ? () => navigate(`/meetings?meeting=${u.record_id}`) : undefined} />
+                ))}
+              </div>
             ))}
-          </section>
+          </Card>
+          <RecentCard history={history} onChat={chat ? (id) => navigate(`/chat?room=${id}`) : undefined} onStart={() => void instant()} />
         </div>
+        <Recordings />
       </main>
+      {menu ? <PopMenu at={menu} width={320} items={newItems} label={t('home.new')} onClose={() => setMenu(null)} /> : null}
       {created ? <CreatedDialog m={created} host={me} onClose={() => setCreated(null)} /> : null}
       {scheduling ? <ScheduleDialog onClose={() => setScheduling(false)} online /> : null}
+      {checking ? <DeviceCheck name={me ?? ''} onClose={() => setChecking(false)} /> : null}
     </div>
   );
 }
 
-function MenuItem({ title, hint, onClick, disabled }: { title: string; hint: string; onClick: () => void; disabled?: boolean }) {
+function Card({ title, action, children }: { title: string; action?: { label: string; run: () => void }; children: ReactNode }) {
   return (
-    <button type="button" role="menuitem" disabled={disabled} onClick={onClick} className="flex flex-col gap-0.5 rounded-[8px] px-3 py-2.5 text-left hover:bg-selection disabled:opacity-50">
-      <b className="text-ink">{title}</b>
-      <span className="text-[12px] text-ink-3">{hint}</span>
-    </button>
+    <section aria-label={title} className="flex min-w-0 flex-col gap-1 rounded-[14px] border border-line bg-surface px-4 py-3.5 sm:px-5">
+      <div className="flex items-center gap-2 pb-1">
+        <h2 className="flex-1 text-[15.5px] font-bold text-ink">{title}</h2>
+        {action ? (
+          <button type="button" onClick={action.run} className="flex items-center gap-0.5 rounded-[6px] px-1 text-[12.5px] font-semibold text-primary hover:underline">
+            {action.label} <Icon name="chevron-right" size={14} />
+          </button>
+        ) : null}
+      </div>
+      {children}
+    </section>
   );
 }
 
-function minutes(h: HistoryRow): string | null {
-  if (!h.started_at || !h.ended_at) return null;
-  const m = Math.round((parseTs(h.ended_at).getTime() - parseTs(h.started_at).getTime()) / 60_000);
-  return m > 0 ? `${m} min` : null;
+function EmptyState({ icon, title, hint, action }: { icon: string; title: string; hint: string; action?: { label: string; run: () => void } }) {
+  return (
+    <div className="flex items-center gap-3 rounded-[10px] bg-subtle px-3.5 py-3">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] bg-surface text-ink-3">
+        <Icon name={icon} size={17} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <b className="block text-[13px] text-ink">{title}</b>
+        <span className="text-[12px] text-ink-3">{hint}</span>
+      </span>
+      {action ? (
+        <button type="button" onClick={action.run} className="h-8 shrink-0 rounded-[8px] border border-line bg-surface px-3 text-[12.5px] font-semibold text-ink hover:bg-subtle">
+          {action.label}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function IconTile({ icon }: { icon: string }) {
+  return (
+    <span aria-hidden className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-line bg-subtle text-ink-2">
+      <Icon name={icon} size={17} />
+    </span>
+  );
+}
+
+function UpcomingCard({ u, live, joinable, onDetails }: { u: UpcomingRow; live: boolean; joinable: boolean; onDetails?: () => void }) {
+  const t = useMeetT();
+  const length = lengthLabel(scheduledMinutes(u));
+  return (
+    <div className={cx('flex items-center gap-3 border-t border-line py-2.5', live && 'rounded-[10px] border-transparent bg-selection px-2')}>
+      <IconTile icon="calendar" />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <b className="truncate text-[13.5px] text-ink">{u.title || 'Meeting'}</b>
+        <span className="truncate text-[12px] text-ink-3">
+          {[timeLabel(u.scheduled_at), length, u.is_host ? t('home.youHost') : u.host_name ? t('home.hostedBy', { name: u.host_name }) : null].filter(Boolean).join(' · ')}
+        </span>
+      </span>
+      {u.people ? (
+        <span className="hidden shrink-0 items-center gap-1 rounded-full bg-subtle px-2 py-0.5 text-[11.5px] font-semibold text-ink-2 sm:flex" title={t('home.invited', { n: u.people })}>
+          <Icon name="users" size={12} /> {u.people}
+        </span>
+      ) : null}
+      {live ? <span className="shrink-0 rounded-full bg-danger-bg px-2 py-0.5 text-[11px] font-bold text-danger">{t('home.liveNow')}</span> : null}
+      {joinable ? (
+        <button type="button" onClick={() => void openMeeting(u.uuid, u.title)} className="h-9 shrink-0 rounded-[9px] bg-primary px-4 text-[13px] font-bold text-white hover:bg-primary-hover">
+          {t('home.join')}
+        </button>
+      ) : onDetails ? (
+        <button type="button" onClick={onDetails} className="h-9 shrink-0 rounded-[9px] border border-line px-3 text-[12.5px] font-semibold text-ink hover:bg-subtle">
+          {t('home.openDetails')}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function RecentCard({ history, onChat, onStart }: { history: ReturnType<typeof useQuery<{ meetings: HistoryRow[] }>>; onChat?: (roomId: number) => void; onStart: () => void }) {
+  const t = useMeetT();
+  const [all, setAll] = useState(false);
+  const rows = history.data?.meetings ?? [];
+  const shown = all ? rows : rows.slice(0, 4);
+  return (
+    <Card title={t('home.recent')} action={rows.length > 4 ? { label: all ? t('home.showFewer') : t('home.seeAll'), run: () => setAll(!all) } : undefined}>
+      {history.isLoading ? <Spinner /> : history.error ? <ErrorNote error={history.error} onRetry={() => void history.refetch()} /> : null}
+      {history.isSuccess && !rows.length ? <EmptyState icon="video" title={t('home.noRecent')} hint={t('home.noRecentHint')} action={{ label: t('home.startMeeting'), run: onStart }} /> : null}
+      {shown.map((h) => (
+        <RecentRow key={h.uuid} h={h} onChat={onChat} />
+      ))}
+    </Card>
+  );
+}
+
+/** The words under a past meeting: when, how long (when that can be told), how many, and how it stands. */
+export function recentMeta(h: HistoryRow, t: ReturnType<typeof useMeetT>): string {
+  const n = h.people.length;
+  return [
+    listStamp(h.started_at ?? h.created_at),
+    lengthLabel(meetingMinutes(h.started_at, h.ended_at)),
+    n ? (n === 1 ? t('home.person') : t('home.people', { n })) : null,
+    h.status === 'live' ? t('home.liveNow') : h.status === 'not_started' ? t('home.notStarted') : null,
+    h.recording ? t('home.recorded') : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }
 
 function RecentRow({ h, onChat }: { h: HistoryRow; onChat?: (roomId: number) => void }) {
-  const meta = [
-    relative(h.started_at ?? h.created_at),
-    minutes(h),
-    h.people.length ? `${h.people.length} ${h.people.length === 1 ? 'person' : 'people'}` : null,
-    h.status === 'live' ? 'live now' : h.status === 'not_started' ? 'not started' : null,
-    h.recording ? 'recorded' : null,
-  ].filter(Boolean);
+  const t = useMeetT();
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const joinable = historyJoinable(h);
+  const chat = h.room_id && onChat ? () => onChat(h.room_id!) : null;
+  const copy = (value: string, done: string) => void navigator.clipboard.writeText(value).then(() => toast('success', done));
+  const items: MenuItem[] = [
+    ...(chat && joinable ? [{ label: t('home.openChat'), icon: 'chat', run: chat }] : []),
+    { label: t('home.copyLink'), icon: 'link', run: () => copy(h.join_url, t('home.linkCopied')) },
+    ...(h.code ? [{ label: t('home.copyCode'), icon: 'copy', run: () => copy(h.code!, t('home.codeCopied')) }] : []),
+  ];
+  const title = h.title || 'Meeting';
   return (
-    <div className="flex items-center gap-2.5 border-b border-line py-[7px] last:border-0">
+    <div className="flex items-center gap-3 border-t border-line py-2.5">
+      <IconTile icon={h.status === 'live' ? 'video' : 'calendar'} />
       <span className="flex min-w-0 flex-1 flex-col">
-        <b className="truncate text-ink">{h.title || 'Meeting'}</b>
-        <span className="truncate text-[11.5px] text-ink-3">{meta.join(' · ')}</span>
+        <b className="truncate text-[13.5px] text-ink">{title}</b>
+        <span className="truncate text-[12px] text-ink-3">{recentMeta(h, t)}</span>
       </span>
-      <span className="flex shrink-0 gap-2 text-[12px] font-semibold text-primary">
-        {h.status !== 'ended' ? <button type="button" className="hover:underline" onClick={() => void openMeeting(h.uuid, h.title)}>Join</button> : null}
-        {h.room_id && onChat ? <button type="button" className="hover:underline" onClick={() => onChat(h.room_id!)}>Open chat</button> : null}
-        <button type="button" className="hover:underline" onClick={() => void navigator.clipboard.writeText(h.join_url).then(() => toast('success', 'Meeting link copied.'))}>
-          Copy meeting link
+      {joinable ? (
+        <button type="button" onClick={() => void openMeeting(h.uuid, h.title)} className="h-8 shrink-0 rounded-[8px] bg-primary px-3.5 text-[12.5px] font-bold text-white hover:bg-primary-hover">
+          {t('home.join')}
         </button>
-      </span>
+      ) : chat ? (
+        <button type="button" aria-label={t('home.openChat')} title={t('home.openChat')} onClick={chat} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle hover:text-ink">
+          <Icon name="chat" size={16} />
+        </button>
+      ) : null}
+      <button type="button" aria-label={t('home.moreFor', { title })} title={t('home.moreFor', { title })} aria-haspopup="menu" aria-expanded={!!menu} onClick={(e) => setMenu(below(e.currentTarget, 'right', 220))} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle hover:text-ink">
+        <Icon name="more-vertical" size={16} />
+      </button>
+      {menu ? <PopMenu at={menu} width={220} items={items} label={t('home.moreFor', { title })} onClose={() => setMenu(null)} /> : null}
     </div>
   );
 }
 
 function Recordings() {
+  const t = useMeetT();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['meet', 'recordings'], queryFn: ({ signal }) => apiGet<{ recordings: Recording[] }>('/api/meet/recordings', undefined, signal), refetchInterval: 60_000 });
+  const [all, setAll] = useState(false);
+  const [menu, setMenu] = useState<{ at: { x: number; y: number }; r: Recording } | null>(null);
   const [renaming, setRenaming] = useState<Recording | null>(null);
   const [deleting, setDeleting] = useState<Recording | null>(null);
   const [title, setTitle] = useState('');
@@ -195,29 +339,58 @@ function Recordings() {
   const rename = useMutation({ mutationFn: (r: Recording) => apiPut(`/api/meet/recordings/${r.id}`, { title }), onSuccess: () => (setRenaming(null), refresh()), onError: (e) => toast('error', errorMessage(e)) });
   const remove = useMutation({ mutationFn: (r: Recording) => apiDelete(`/api/meet/recordings/${r.id}`), onSuccess: () => (setDeleting(null), refresh(), toast('success', 'Recording deleted.')), onError: (e) => toast('error', errorMessage(e)) });
   const download = (r: Recording) => void call('transfers:download', { recording: r.id, name: `${(r.title || 'Meeting recording').replace(/[\\/:*?"<>|]/g, '-').slice(0, 200)}.mp4` }).catch((e) => toast('error', errorMessage(e)));
+  const rows = q.data?.recordings ?? [];
+  const shown = all ? rows : rows.slice(0, 3);
   return (
-    <section className="mt-auto flex flex-col gap-2 rounded-[12px] border border-line bg-surface px-[18px] py-4">
-      <div className="flex items-center">
-        <h2 className="flex-1 text-[15px] font-bold text-ink">Recordings</h2>
-        <span className="text-[12px] text-ink-3">Only you can see your recordings</span>
-      </div>
+    <Card title={t('home.recordings')} action={rows.length > 3 ? { label: all ? t('home.showFewer') : t('home.seeAll'), run: () => setAll(!all) } : undefined}>
       {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
-      {!q.isLoading && !q.data?.recordings.length ? <Empty icon="video" title="No recordings" hint="Record a meeting you host from its controls." /> : null}
-      {(q.data?.recordings ?? []).map((r) => (
-        <div key={r.id} className="flex items-center gap-2.5 border-b border-line py-2 last:border-0">
-          <span className="h-[34px] w-14 shrink-0 rounded-[6px] bg-[#D8E4F6] dark:bg-selection" aria-hidden />
-          <span className="flex min-w-0 flex-1 flex-col">
-            <b className="truncate text-ink">{r.title || 'Meeting recording'}</b>
-            <span className="text-[11.5px] text-ink-3">{dateLabel(r.created_at)}{r.size ? ` · ${bytes(r.size)}` : ''}</span>
-          </span>
-          <span className={cx('text-[11.5px] font-bold', r.ready ? 'text-success' : 'text-[#9A4A06] dark:text-warning')}>{r.ready ? 'Ready' : 'Processing'}</span>
-          <span className="flex shrink-0 gap-1.5 text-[12px] font-semibold text-primary">
-            <button type="button" className="hover:underline" onClick={() => (setTitle(r.title), setRenaming(r))}>Rename</button>·
-            <button type="button" className="hover:underline disabled:opacity-50" disabled={!r.ready} onClick={() => download(r)}>Download</button>·
-            <button type="button" className="text-danger hover:underline" onClick={() => setDeleting(r)}>Delete</button>
-          </span>
-        </div>
-      ))}
+      {q.isSuccess && !rows.length ? <EmptyState icon="video" title={t('home.noRecordings')} hint={t('home.noRecordingsHint')} /> : null}
+      {rows.length ? (
+        <>
+          <div className="grid gap-3 pt-1 sm:grid-cols-2 xl:grid-cols-3">
+            {shown.map((r) => {
+              const name = r.title || 'Meeting recording';
+              return (
+                <div key={r.id} className="flex min-w-0 items-center gap-3 rounded-[12px] border border-line p-2.5">
+                  <button
+                    type="button"
+                    disabled={!r.ready}
+                    aria-label={`${t('home.download')} ${name}`}
+                    title={r.ready ? t('home.download') : t('home.processing')}
+                    onClick={() => download(r)}
+                    className="relative flex h-[60px] w-[96px] shrink-0 items-center justify-center overflow-hidden rounded-[9px] bg-[#D8E4F6] text-[#24365F] disabled:cursor-default dark:bg-selection dark:text-ink"
+                  >
+                    <Icon name={r.ready ? 'play' : 'clock'} size={20} />
+                  </button>
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <b className="truncate text-[13.5px] text-ink">{name}</b>
+                    <span className="truncate text-[12px] text-ink-3">{[dateLabel(r.created_at).replace(/, \d{4}$/, ''), r.size ? bytes(r.size) : null].filter(Boolean).join(' · ')}</span>
+                    {!r.ready ? <span className="text-[11.5px] font-bold text-[#9A4A06] dark:text-warning">{t('home.processing')}</span> : null}
+                  </span>
+                  <button type="button" aria-label={t('home.moreFor', { title: name })} title={t('home.moreFor', { title: name })} aria-haspopup="menu" onClick={(e) => setMenu({ at: below(e.currentTarget, 'right', 200), r })} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle hover:text-ink">
+                    <Icon name="more-vertical" size={16} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <span className="pt-1.5 text-[11.5px] text-ink-3">{t('home.onlyYou')}</span>
+        </>
+      ) : null}
+      {menu ? (
+        <PopMenu
+          at={menu.at}
+          width={200}
+          label={t('home.moreFor', { title: menu.r.title || 'Meeting recording' })}
+          onClose={() => setMenu(null)}
+          items={[
+            { label: t('home.download'), icon: 'download', disabled: !menu.r.ready, run: () => download(menu.r) },
+            { label: t('home.rename'), icon: 'compose', run: () => (setTitle(menu.r.title), setRenaming(menu.r)) },
+            { sep: true },
+            { label: t('home.delete'), icon: 'trash', danger: true, run: () => setDeleting(menu.r) },
+          ]}
+        />
+      ) : null}
       {renaming ? (
         <Modal title="Rename recording" onClose={() => setRenaming(null)} width={420} footer={<><Button onClick={() => setRenaming(null)}>Cancel</Button><Button variant="primary" loading={rename.isPending} disabled={!title.trim()} onClick={() => rename.mutate(renaming)}>Save</Button></>}>
           <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} aria-label="Recording name" maxLength={190} className="h-9 w-full rounded-[8px] border border-line bg-surface px-2.5 text-[13px] text-ink outline-none focus:border-primary" />
@@ -228,7 +401,47 @@ function Recordings() {
           <p className="text-[13px] text-ink-2">“{deleting.title}” is deleted for good. It cannot be recovered.</p>
         </Modal>
       ) : null}
-    </section>
+    </Card>
+  );
+}
+
+/** "Check camera and microphone": the same preview and settings as the pre-join screen; the choice is remembered. */
+function DeviceCheck({ name, onClose }: { name: string; onClose: () => void }) {
+  const t = useMeetT();
+  const d = useMeetDevices(true);
+  return (
+    <Modal title={t('dev.checkTitle')} onClose={onClose} width={640} footer={<Button variant="primary" onClick={onClose}>{t('dev.done')}</Button>}>
+      <div className="flex flex-col gap-3">
+        <p className="text-[12.5px] text-ink-3">{t('dev.checkHint')}</p>
+        <Preview d={d} name={name} />
+        <DeviceSettings d={d} />
+      </div>
+    </Modal>
+  );
+}
+
+/** A light drawing of a meeting in progress, in the theme's colours. */
+function Illustration() {
+  return (
+    <svg viewBox="0 0 420 250" role="img" aria-hidden className="h-auto w-full max-w-[440px]">
+      <path d="M40 200 C10 120 70 40 140 60 C120 20 200 10 210 60" fill="none" stroke="var(--color-teal)" strokeOpacity=".35" strokeWidth="14" strokeLinecap="round" />
+      <ellipse cx="360" cy="190" rx="44" ry="70" fill="var(--color-primary)" opacity=".18" transform="rotate(25 360 190)" />
+      <rect x="70" y="30" width="290" height="190" rx="18" fill="var(--color-surface)" stroke="var(--color-line)" strokeWidth="2" />
+      <circle cx="92" cy="50" r="4" fill="var(--color-ink-3)" />
+      <circle cx="106" cy="50" r="4" fill="var(--color-ink-3)" />
+      <circle cx="120" cy="50" r="4" fill="var(--color-ink-3)" />
+      {[0, 1, 2].map((i) => (
+        <g key={i} transform={`translate(${84 + i * 90} 66)`}>
+          <rect width="82" height="92" rx="10" fill="var(--color-primary)" opacity={0.18 + i * 0.1} />
+          <circle cx="41" cy="38" r="15" fill="var(--color-surface)" opacity=".9" />
+          <path d="M16 92 C18 66 64 66 66 92 Z" fill="var(--color-surface)" opacity=".9" />
+        </g>
+      ))}
+      <circle cx="176" cy="190" r="13" fill="var(--color-subtle)" stroke="var(--color-line)" />
+      <circle cx="215" cy="190" r="13" fill="var(--color-subtle)" stroke="var(--color-line)" />
+      <circle cx="254" cy="190" r="13" fill="var(--color-danger)" />
+      <rect x="248" y="188" width="12" height="4" rx="2" fill="#fff" />
+    </svg>
   );
 }
 

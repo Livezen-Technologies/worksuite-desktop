@@ -7,7 +7,7 @@
 //
 // It checks: the worker starts; a 2,000-page PDF opens and its first page is
 // drawn within the SRS target (PDF-NFR-002, 3 s); a 400 % tile far into it;
-// a search streams and cancels; active content is found; a killed worker
+// a search streams and cancels (on a 20,000-page PDF, which outlasts one progress report); active content is found; a killed worker
 // fails its tab's requests without taking the app down (PDF-NFR-010); and a
 // three-page print job comes out as three sheets.
 import { spawnSync } from 'node:child_process';
@@ -66,11 +66,16 @@ app.whenReady().then(async () => {
     const t2 = Date.now();
     const tile = await engine.render({ page: 1500, scale: 4 * 96 / 72 * 2, tile: { x: 2048, y: 2048, w: 1024, h: 1024 }, annotations: true, order: 'rgba' });
     check('a 400 % tile far into it', tile.width === 1024 && tile.data.length === 1024 * 1024 * 4, (Date.now() - t2) + ' ms');
+    // The worker reports a search every 150 ms. A fast computer (an Apple silicon runner) searched all 2,000 pages
+    // before the first report, leaving nothing to cancel; ten times as many outlast it, so the cancel lands mid-way.
+    await engine.close();
+    const searcher = start();
+    await searcher.engine.open(file('search.pdf', makePdf({ pages: 20000 })), null);
     const token = { cancelled: false };
     let pages = 0;
-    await engine.search('needle', { matchCase: false, wholeWord: false, regex: false, comments: false, bookmarks: false }, (p) => { pages = p.pagesDone; token.cancelled = true; }, token);
-    check('a search streams, and stops when cancelled', pages > 0 && pages < 2000, pages + ' pages searched');
-    await engine.close();
+    await searcher.engine.search('needle', { matchCase: false, wholeWord: false, regex: false, comments: false, bookmarks: false }, (p) => { pages = p.pagesDone; token.cancelled = true; }, token);
+    check('a search streams, and stops when cancelled', pages > 0 && pages < 20000, pages + ' of 20,000 pages searched');
+    await searcher.engine.close();
 
     const risky = start();
     await risky.engine.open(file('risky.pdf', makePdf({ pages: 2, javascript: true, launch: true, uri: 'https://example.com' })), null);
@@ -109,5 +114,9 @@ app.whenReady().then(async () => {
 writeFileSync(join(work, 'main.cjs'), main);
 const electron = createRequire(import.meta.url)('electron');
 const args = [join(work, 'main.cjs'), ...(process.platform === 'linux' ? ['--no-sandbox'] : [])];
-const res = spawnSync(electron, args, { stdio: 'inherit', env: { ...process.env, ELECTRON_RUN_AS_NODE: '' } });
+// Electron must start as itself, not as Node: the variable is removed, not emptied — on Windows an empty value still
+// counts as set, and main.cjs then ran under plain Node ("Cannot find module 'electron'").
+const env = { ...process.env };
+delete env.ELECTRON_RUN_AS_NODE;
+const res = spawnSync(electron, args, { stdio: 'inherit', env });
 process.exit(res.status ?? 1);

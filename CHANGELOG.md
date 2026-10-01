@@ -5,6 +5,95 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-01 — 0.2.71: Chat's channel toolbar (WhatsApp in Chat), profile pictures, a resizable conversation list; AI Assistant scrolling; Local AI first-use setup and Gemma 3 4B; Office menus and Open in new window; Meet Home and pre-join redesign; meeting cards in Chat; screen sharing fixed
+
+- **A channel toolbar down the far left of Chat** (#33): Chat, Web Chat and WhatsApp, each with its unread count
+  (waiting visitors for Web Chat) and a warning dot when a WhatsApp number is not connected. Hover for the name and
+  the count. A channel is there once you have it: Web Chat if you answer website chat, WhatsApp once a number is
+  shared with you. The toolbar stays when the conversation list is hidden, and ↑ / ↓ move along it from the keyboard.
+- **WhatsApp conversations in Chat.** The list (All, Unread, Waiting, Mine; a number picker when you have more than
+  one), the conversation, and a reply box. What you type is kept per conversation, so switching channels loses
+  nothing. When a reply cannot go, it says why: you can only view that number, it is more than 24 hours since they
+  wrote (templates are sent from WhatsApp on the web), or the number is not connected. Broadcasts, templates, labels
+  and number settings stay on the web (the ↗ button).
+- **"+ Add a channel"** lists WhatsApp and Web Chat and where each stands for you. Connect a WhatsApp number by
+  scanning a QR code with its phone (needs the "connect WhatsApp numbers" permission), or link one that dropped
+  again; a Business Platform number and the website chat widget are set up on the web.
+- **Profile pictures in Chat** (#37): people's current pictures in the conversation list, the conversation header,
+  beside their messages, in the details and member lists, the new-conversation picker and @-mentions. No picture,
+  one that will not load, or one its owner does not show you: their initials, on the colour that name always has.
+  When somebody changes their picture it changes here too, without signing out (the server announces it; pictures
+  are also checked again after 15 minutes). Group conversations keep their rounded-square initials, so they never
+  look like a person. WhatsApp contacts' pictures show once the server provides them; it does not fetch them yet.
+- **Share your screen works again** (#70). The picker showed "Something went wrong" and "Nothing to share here"
+  and left Share greyed out: on a Mac with Screen Recording off, asking the system for its screens failed outright,
+  and that failure hid the permission's own message. Now screens and windows are listed separately (a window list
+  that fails leaves the screens), and the picker says one true thing: **Screen Recording is off** — with Open
+  System Settings, Restart WorkSuite (macOS applies it to a restarted app) and Check again; **the list could not be
+  made** — with what the system said and Try again; or **nothing of that kind is open**. It looks again when you
+  come back from System Settings. Screen Recording is separate from Accessibility, which only remote control needs,
+  and a meeting's picker no longer waits for that check. The quality you chose is kept. While sharing, the bar
+  still says what you are sharing, with Stop sharing in the Share menu.
+- **Meet Home, redesigned** (#67). Starting and joining come first: **New meeting** (Start now, Create a link for
+  later, Schedule in Calendar) and the code or link box with its **Join** — a code or link that is wrong says why,
+  right there. Below, upcoming meetings by day in compact cards (time, length, host, people) with **Join** only
+  when the meeting can be joined, and recent meetings and recordings in compact sections with **See all**; each row
+  has one action and a ⋯ menu for the rest (Open chat, Copy link, Copy meeting ID; Download, Rename, Delete). Empty
+  sections offer Schedule a meeting or Start a meeting. **Check camera and microphone** is on the page. Lengths read
+  "1 h 20 min"; a past meeting nobody ended no longer shows days of minutes (it shows no length).
+- **The pre-join screen, redesigned** (#69). Your camera's picture (in proportion; your avatar when it is off) with
+  microphone and camera buttons that show their state, the devices together with a live microphone level and **Test
+  speaker**, and the meeting — title, organizer, who is in it, whether you host — with **Join now**, which shows it is
+  joining and cannot be pressed twice. A blocked, missing or busy device says what to do (Open privacy settings, Try
+  again); so does a failed connection. The devices you choose, and whether the microphone and camera are on, are
+  remembered on this computer and used when you join.
+- **A meeting's card in Chat, polished** (#71). A Meet meeting shared in a conversation shows its name (cut short
+  when long, with the whole of it on hover), who started it and when, and whether it is **Live** (a pulsing green
+  dot) or **Ended**. It has one action: **Join** — which says it is joining and cannot be pressed twice — or
+  **Return to meeting** when you are already in it on this computer, or **View details** once it has ended: when it
+  started, how long it ran, who was in it and whether it was recorded. A meeting that was removed says so, with no
+  action. The card is smaller in the chat drawer. It needs the server's Communication 1.1.0 for the meeting's name
+  and start; an older server shows "Meeting" and the time it was shared.
+- **Office: the Editing and ⋯ menus open again** (#39). In a Word, Excel or PowerPoint document open in WorkSuite, the
+  mode menu (Editing / Reviewing / Commenting / Viewing) and More (⋯) opened behind the document — the editor is a
+  native view laid over the page, and covered them. Now the editor steps aside while a menu is open, and a picture of
+  it taken just before stays in its place, so the document does not vanish. The menus keep to the window, move with
+  ↑ ↓, and close with Escape or a click elsewhere; they offer only what your access allows.
+- **Office: Open in new window**, beside Share and ⋯, moves the document to a window of its own, as you, with the
+  same access. Changes still on their way to the Office server go first ("Saving changes…"); if the last save failed
+  it says so, with Retry, and leaves the document where it is. In a narrow window the header stays on one line (Share
+  becomes its icon; who else is in the document is hidden).
+- **"Set up your AI Assistant"** (#49). The first time the assistant opens with nothing on this computer that can
+  answer, it offers the model that suits it — name, download size, the free space it needs — with **Download and Set
+  Up** and **Not Now** (asked again in a week; Settings → Local AI has it meanwhile). Space is checked first (too little
+  says how much is needed and blocks it); too little memory is a warning. The setup shows its stages — Downloading →
+  Verifying → Preparing AI → Ready — with percentage, size and time left, can be paused, cancelled, resumed and tried
+  again, and carries on with the panel closed. Errors say what to do: check the connection and resume, free up space,
+  download afresh, or test again / choose another model. Local chat is offered only once the model has loaded and
+  answered; then **"Your AI Assistant is ready to use"** and **Start Chatting**. Nothing is offered once a model works.
+- **Gemma 3 4B on this computer** (#55). With a server that has it (WorkSuite Server with Ai 1.1.0), Settings →
+  Local AI lists Gemma 3 4B with its version, download size (about 2.5 GB), the memory it needs and the computers it
+  suits, and its licence — the Gemma Terms of Use, with the notice they require. **Download and set up** fetches it
+  (pause, cancel, resume where it stopped, try again), checks it against the SHA-256 the server names, then **loads
+  it and has it answer** before it says **Ready to use**; a file this computer cannot run says why and is not used.
+  **Use this model** makes it the default. The assistant offers the same setup the first time, while nothing is set
+  up here ("Not now" hides it). Which model answers is unchanged: WorkSuite AI unless you pick On this computer, and
+  On this computer when you are offline.
+- **The AI Assistant keeps the latest in view** (#50), in both WorkSuite AI and On this computer. While you are at
+  the end of the conversation it follows new messages and a streaming answer as it grows, and an image that loads or
+  a panel you resize no longer pushes the end behind the box. Scroll up to read and it stays there; when something
+  new arrives below, **Jump to latest** appears. Scrolling back down, Jump to latest, or sending a message follows
+  again. Only the conversation scrolls: the header, the WorkSuite AI / On this computer switch and the box stay put,
+  in Quick Ask too.
+- **Drag the right edge of Chat's conversation list** to make it wider or narrower (#34). The edge shows the resize
+  cursor and a highlight on hover; the list stays between 240 px and 560 px, and never leaves the conversation less
+  than about 480 px of the window. Long names and previews end in "…" at any width.
+- **The width is remembered** on this computer, across restarts. A double-click on the edge puts it back to 300 px.
+- **From the keyboard:** Tab to the edge, then ← / → (Shift for bigger steps), Home / End for the narrowest and
+  widest, Enter for the default.
+
+---
+
 ## 2026-10-01 — Drive Home: less empty space, easier to find things
 
 **Changed**

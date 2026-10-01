@@ -21,7 +21,7 @@ import { Failed, Note, posRoute, TillContext, type PosView, type Till } from './
  * sales to send; opening and closing the drawer, and cash in and out, wait for WorkSuite.
  */
 const Register = lazy(() => import('./Register'));
-const Shift = lazy(() => import('./Shift'));
+const Shift = lazy(() => import('./ShiftScreen'));
 const Sales = lazy(() => import('./Sales'));
 const Printers = lazy(() => import('./Printers'));
 const TillScreen = lazy(() => import('./TillScreen'));

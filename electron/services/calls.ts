@@ -133,7 +133,7 @@ export class CallService {
 
   /** What this device is in, for the main window's "in a call" pill. */
   list(): ActiveCall[] {
-    return [...this.active.entries()].map(([windowId, a]) => ({ windowId, kind: a.kind, title: a.title, since: a.since }));
+    return [...this.active.entries()].map(([windowId, a]) => ({ windowId, uuid: a.uuid, kind: a.kind, title: a.title, since: a.since }));
   }
 
   private changed(): void {

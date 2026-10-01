@@ -4,6 +4,13 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.0 — 2026-10-01
+
+**Added**
+
+- Settings → Local AI shows the time left while a model downloads (#49)
+- Settings → Local AI shows each model's version, download size, the memory and computer tier it needs, its licence (with a link) and required notice; Download and set up, Cancel during a download, Setting up… while the model is tried, Ready to use once it answered, and Test / Test again (#55)
+
 ## 1.1.0 — 2026-09-30
 
 **Added**

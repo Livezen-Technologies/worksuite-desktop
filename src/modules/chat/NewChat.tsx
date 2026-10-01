@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { apiGet, apiPost, apiPut, request } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
-import { Avatar, Button, Modal, Spinner, cx } from '../../components/ui';
+import { Button, Modal, Spinner, cx } from '../../components/ui';
+import { UserAvatar } from '../../components/UserAvatar';
 import type { ChatMessage, Room } from './types';
 import { Select } from '../../components/Select';
 
@@ -95,7 +96,7 @@ export function NewChat({ onClose, onOpened }: { onClose: () => void; onOpened: 
           {list.map((p) => (
             <label key={p.id} className="flex cursor-pointer items-center gap-2.5 rounded-[8px] px-1 py-1.5 hover:bg-subtle">
               <input type={group ? 'checkbox' : 'radio'} name="new-chat-person" checked={picked.includes(p.id)} onChange={() => toggle(p.id)} className="accent-[var(--color-primary)]" aria-label={p.name} />
-              <Avatar name={p.name} size={28} />
+              <UserAvatar userId={p.id} name={p.name} size={28} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13px] font-bold text-ink">{p.name}</span>
                 {p.email ? <span className="block truncate text-[11.5px] text-ink-3">{p.email}</span> : null}
@@ -289,7 +290,7 @@ export function GroupDetails({ roomId, onClose, onLeft }: { roomId: number; onCl
           <div className="flex max-h-64 flex-col gap-2 overflow-y-auto scroll-thin">
             {d.members.map((m) => (
               <div key={m.id} className="flex items-center gap-2.5">
-                <Avatar name={m.name} size={28} />
+                <UserAvatar userId={m.id} name={m.name} size={28} />
                 <b className="flex-1 truncate text-[13px] text-ink">{m.name}</b>
                 <span className="text-[11px] font-bold text-ink-2 capitalize">{m.role === 'member' ? '' : m.role}</span>
                 {m.can && (m.can.make_admin || m.can.remove_admin || m.can.make_owner || m.can.remove) ? (

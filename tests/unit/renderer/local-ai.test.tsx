@@ -11,7 +11,7 @@ const MODEL: LocalModelView = {
     id: 'qwen3-4b', version: '1', name: 'Qwen3 4B', family: 'qwen3', purpose: 'chat', url: 'https://cdn.worksuite.test/q.gguf', sha256: 'a'.repeat(64), bytes: 2_500_000_000,
     quantization: 'Q4_K_M', contextLength: 32768, minMemoryBytes: 4e9, tiers: ['good'], recommendedFor: ['good'], license: { id: 'Apache-2.0', name: 'Apache 2.0', url: 'https://www.apache.org/licenses/LICENSE-2.0' }, languages: [], toolCalling: false,
   },
-  state: 'installed', received: 0, error: null, fits: true, recommended: true, isDefault: true,
+  state: 'installed', received: 0, error: null, fits: true, recommended: true, isDefault: true, readiness: 'ready', readinessError: null,
 };
 let asked: { id: string; messages: { role: string; content: string }[] } | null = null;
 const call = vi.fn(async (channel: string, input?: unknown) => {

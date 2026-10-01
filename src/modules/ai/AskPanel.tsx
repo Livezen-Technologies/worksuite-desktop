@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
+import { useStickToBottom } from '../../components/useStickToBottom';
 import { app } from '../../core/app-state';
 import { t } from '../../core/i18n';
 import { localReady, useLocalModels } from '../../core/local-ai';
 import { useStore } from '../../core/store';
 import { navigate } from '../../core/tabs';
 import { ActionCard } from './ActionCard';
+import { LocalSetup } from './LocalSetup';
 import { useAssistant, type PendingAction, type Surface } from './assistant';
 import { createAskSession, type AskEntry, type AskSession } from './session';
 
@@ -53,7 +55,7 @@ export function AskPanel({
   const st = useStore(session.store, (s) => s);
   const { entries, text, busy, streaming, useTab, files, fileError } = st;
   const set = session.store.set;
-  const end = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
   // Local AI (WS-SRS-LAI): the model on this computer, when one is installed — also offline.
   const offline = useStore(app, (s) => s.status?.network === 'OFFLINE');
   const localModels = useLocalModels(surface === 'assistant.panel');
@@ -67,15 +69,18 @@ export function AskPanel({
   useEffect(() => {
     if (session.store.get().tabRef !== (tabRef ?? null)) set({ useTab: true, tabRef: tabRef ?? null });
   }, [tabRef, session, set]);
-  // In braces: Chromium's scrollIntoView returns a Promise, and an effect's return value is its cleanup.
-  useEffect(() => {
-    void end.current?.scrollIntoView?.({ block: 'end' });
-  }, [entries, busy]);
+  // The conversation follows new messages and a streaming answer while the reader is at the end (worksuite-desktop#50).
+  const { scroller, content, unseen, toEnd, onScroll } = useStickToBottom(`${entries.length}:${busy}:${streaming?.length ?? -1}`);
 
   const off = local ? null : availability.data && !availability.data.enabled ? availability.data.reason ?? 'The assistant is not switched on for you.' : null;
   const refs = [...(useTab && tabRef ? [tabRef] : []), ...files.map((f) => f.ref)];
 
-  const send = () => session.send({ surface, refs, local, selection });
+  const send = () => {
+    if (!text.trim() || busy) return Promise.resolve();
+    // Asking is looking at the answer: back to the end, following again, from wherever the reader had scrolled.
+    toEnd();
+    return session.send({ surface, refs, local, selection });
+  };
   const attach = () => session.attach();
 
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -91,7 +96,18 @@ export function AskPanel({
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       {off ? <p className="rounded-[10px] bg-warning-bg px-3 py-2 text-[12.5px] text-[#7A4308] dark:text-warning">{off}</p> : null}
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto scroll-thin" aria-live="polite">
+      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div ref={scroller} onScroll={onScroll} data-testid="ai-conversation" className="min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-thin" aria-live="polite">
+        <div ref={content} className="flex flex-col gap-3 pb-1">
+        {/* First-use Local AI setup: offered until a model on this computer can answer, then "ready" once (worksuite-desktop#49/#55). */}
+        {surface === 'assistant.panel' ? (
+          <LocalSetup
+            onStart={() => {
+              set({ localPick: true });
+              input.current?.focus();
+            }}
+          />
+        ) : null}
         {entries.length === 0 && !off ? (
           <p className="text-[12.5px] text-ink-3">
             Ask about your work — tasks, mail, files, meetings, customers. The assistant sees only what you can open, and changes nothing until you confirm it.
@@ -113,7 +129,13 @@ export function AskPanel({
             {t('ai.thinking')}
           </p>
         ) : null}
-        <div ref={end} />
+        </div>
+      </div>
+      {unseen ? (
+        <button type="button" onClick={toEnd} className="absolute bottom-2 left-1/2 flex h-8 -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-[12px] font-semibold text-ink shadow-md hover:bg-subtle">
+          <Icon name="arrow-down" size={14} /> Jump to latest
+        </button>
+      ) : null}
       </div>
 
       {lastAnswer && (insert || onOpen) ? (
@@ -180,6 +202,7 @@ export function AskPanel({
             </button>
           ) : null}
           <textarea
+            ref={input}
             value={text}
             onChange={(e) => set({ text: e.target.value.slice(0, 4000) })}
             onKeyDown={onKey}

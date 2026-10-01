@@ -8,6 +8,7 @@ import { call, errorMessage, isMac } from '../../core/bridge';
 import { conflicts, effectiveShortcuts, prettyAccelerator, accelerator, DEFAULT_SHORTCUTS } from '../../core/commands';
 import { LANGUAGES } from '../../core/i18n';
 import { LOCAL_AI_KEY, useLocalAIStatus, useLocalModels } from '../../core/local-ai';
+import { secondsLeft, timeLeftLabel } from '../ai/setup';
 import { queryClient } from '../../core/query';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
@@ -901,14 +902,29 @@ export function LocalAISection() {
                   {!v.fits ? <Chip tone="warning">May be slow here</Chip> : null}
                 </div>
                 <div className="mt-0.5 text-[12.5px] text-ink-3">
-                  {bytes(m.bytes)} · {m.quantization} · {m.contextLength.toLocaleString()} tokens · {m.license.name}
+                  Version {m.version} · {bytes(m.bytes)} download · {m.quantization} · {m.contextLength.toLocaleString()} tokens
                 </div>
+                <div className="mt-0.5 text-[12.5px] text-ink-3">
+                  Needs about {bytes(m.minMemoryBytes)} of memory · {TIER_WORDS[m.tiers[0] ?? 'strong']} tier computers and up
+                  {hw ? (v.fits ? ' · suits this computer' : ` · this computer has ${bytes(Math.max(hw.memoryBytes, hw.vramBytes))}`) : ''}
+                </div>
+                <div className="mt-0.5 text-[12.5px] text-ink-3">
+                  Licence:{' '}
+                  <button type="button" className="text-primary hover:underline" onClick={() => void call('app:openExternal', { url: m.license.url })}>
+                    {m.license.name}
+                  </button>
+                  {v.state === 'available' || v.state === 'failed' ? ' — by downloading it you accept its terms.' : null}
+                </div>
+                {m.notice ? <p className="mt-1.5 rounded-[8px] bg-subtle px-2.5 py-1.5 text-[11.5px] leading-[1.5] text-ink-2">{m.notice}</p> : null}
                 {v.error ? <div className="mt-1 text-[12.5px] text-danger">{v.error}</div> : null}
+                {v.state === 'installed' && v.readiness === 'failed' ? (
+                  <div className="mt-1 text-[12.5px] text-danger">It downloaded and matches its checksum, but did not answer on this computer: {v.readinessError}</div>
+                ) : null}
               </div>
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                 {v.state === 'available' || v.state === 'failed' ? (
                   <Button size="sm" icon="download" loading={busy === `i:${m.id}`} onClick={() => run(`i:${m.id}`, call('ai:localInstall', { id: m.id }))}>
-                    {v.state === 'failed' ? 'Try again' : 'Download'}
+                    {v.state === 'failed' ? 'Try again' : 'Download and set up'}
                   </Button>
                 ) : null}
                 {v.state === 'paused' ? (
@@ -922,14 +938,26 @@ export function LocalAISection() {
                   </>
                 ) : null}
                 {v.state === 'downloading' ? (
-                  <Button size="sm" icon="pause" onClick={() => run(`c:${m.id}`, call('ai:localCancelInstall', { id: m.id }))}>
-                    Pause
-                  </Button>
+                  <>
+                    <Button size="sm" icon="pause" onClick={() => run(`c:${m.id}`, call('ai:localCancelInstall', { id: m.id }))}>
+                      Pause
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => run(`c:${m.id}`, call('ai:localCancelInstall', { id: m.id, discard: true }))}>
+                      Cancel
+                    </Button>
+                  </>
                 ) : null}
                 {v.state === 'verifying' ? <Chip tone="indigo">Checking the file…</Chip> : null}
-                {v.state === 'installed' ? (
+                {v.state === 'installed' && v.readiness === 'testing' ? <Chip tone="indigo">Setting up…</Chip> : null}
+                {v.state === 'installed' && v.readiness === 'ready' ? <Chip tone="success">Ready to use</Chip> : null}
+                {v.state === 'installed' && (v.readiness === 'failed' || v.readiness === 'untested') ? (
+                  <Button size="sm" loading={busy === `t:${m.id}`} onClick={() => run(`t:${m.id}`, call('ai:localTest', { id: m.id }).then((ok) => toast(ok ? 'success' : 'error', ok ? `${m.name} is ready to use.` : `${m.name} did not answer on this computer.`)))}>
+                    {v.readiness === 'failed' ? 'Test again' : 'Test'}
+                  </Button>
+                ) : null}
+                {v.state === 'installed' && v.readiness !== 'testing' ? (
                   <>
-                    {!v.isDefault ? (
+                    {!v.isDefault && v.readiness !== 'failed' ? (
                       <Button size="sm" loading={busy === `d:${m.id}`} onClick={() => run(`d:${m.id}`, call('ai:localSetDefault', { id: m.id }), `${m.name} answers from now on.`)}>
                         Use this model
                       </Button>
@@ -951,6 +979,7 @@ export function LocalAISection() {
                 </div>
                 <div className="mt-1 text-[11.5px] text-ink-3">
                   {v.state === 'paused' ? 'Paused' : 'Downloading'} · {bytes(v.received)} of {bytes(m.bytes)} ({pct}%)
+                  {v.state === 'downloading' && secondsLeft(v) !== null ? ` · ${timeLeftLabel(secondsLeft(v))}` : ''}
                 </div>
               </div>
             ) : null}

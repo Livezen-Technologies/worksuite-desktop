@@ -28,9 +28,25 @@ export function useLocalModels(enabled = true) {
   return useQuery<LocalModelView[]>({ queryKey: [...LOCAL_AI_KEY, 'models'], queryFn: () => call('ai:localModels'), enabled: enabled && hasDesktop(), staleTime: 5_000 });
 }
 
-/** A model is installed and chosen: Local AI can answer. */
+/**
+ * A model is installed, chosen, and not failing (or still in) its readiness check: Local AI can answer. A model
+ * installed before the check existed (`untested`) still answers, as it did.
+ */
 export function localReady(models: LocalModelView[] | undefined): LocalModelView | null {
-  return models?.find((m) => m.isDefault && m.state === 'installed') ?? null;
+  return models?.find((m) => m.isDefault && m.state === 'installed' && m.readiness !== 'failed' && m.readiness !== 'testing') ?? null;
+}
+
+/**
+ * The model first-use setup offers (worksuite-desktop#55): nothing is set up yet, and the catalog has a chat model
+ * that suits this computer — the one recommended for it, else Gemma 3 4B, else the smallest that fits, else the smallest.
+ */
+export function suggestedModel(models: LocalModelView[] | undefined): LocalModelView | null {
+  const chat = (models ?? []).filter((m) => m.model.purpose === 'chat');
+  if (!chat.length || chat.some((m) => m.state === 'installed')) return null;
+  const fitting = chat.filter((m) => m.fits);
+  const smallest = (list: LocalModelView[]) => [...list].sort((a, b) => a.model.bytes - b.model.bytes)[0];
+  // Nothing fits: still offer the smallest, with the warning that it will be slow, rather than nothing at all.
+  return fitting.find((m) => m.recommended) ?? fitting.find((m) => m.model.family === 'gemma3' && /4b/i.test(m.model.name)) ?? smallest(fitting) ?? smallest(chat) ?? null;
 }
 
 export interface LocalMessage {

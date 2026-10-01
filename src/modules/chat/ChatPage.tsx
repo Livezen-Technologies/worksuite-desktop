@@ -9,15 +9,23 @@ import { listStamp } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Avatar, Empty, ErrorNote, OfflineNote, Spinner, cx } from '../../components/ui';
+import { UserAvatar } from '../../components/UserAvatar';
 import type { ModuleProps } from '../registry';
 import { Details, PRESENCE } from './Details';
 import { NewChat, StarredDialog } from './NewChat';
 import { lastOrRecent, roomFromRoute } from './routes';
 import { Thread } from './Thread';
-import type { Room } from './types';
+import { roomPerson, type Room } from './types';
 import { useWebsiteAccess, useWebsiteInbox, type WebsiteRow } from './website/api';
 import { WebsiteWorkspace } from './website/WebsiteWorkspace';
 import { SidePanel } from '../../components/SidePanel';
+import { ResizeDivider, useResizableWidth } from '../../components/ResizeDivider';
+import { canOpenWeb, useCanOpen } from '../../core/access';
+import { AddChannel, type AddStep } from './channels/AddChannel';
+import { ChannelBar } from './channels/ChannelBar';
+import { buildChannels, channelOf, channelRoute, LIST_WIDTH } from './channels/channels';
+import { WhatsappChannel } from './channels/WhatsappChannel';
+import { useWaAccounts } from './channels/whatsapp';
 
 /**
  * Chat (UI-08, FR-COM-02/03, §4.15; the "Chat · conversations, thread,
@@ -26,6 +34,9 @@ import { SidePanel } from '../../components/SidePanel';
  * conversation's details. A message sent offline waits in the queue and shows
  * as pending (WF-17). Website staff get the website-chat workspace under the
  * Website filter, and their open visitors in the list.
+ *
+ * Down the far left, the channel toolbar (worksuite-desktop#33): Chat, Web Chat and WhatsApp, each with its unread
+ * count, and "Add a channel". Picking one shows its conversations in the list; drafts are kept per conversation.
  */
 type Filter = 'all' | 'unread' | 'mentions' | 'archived';
 
@@ -41,9 +52,15 @@ export default function ChatPage({ tabId }: ModuleProps) {
   const { query, go, path } = useTab();
   const mini = tabId.startsWith('window-chat-mini');
   const room = roomFromRoute(query, path);
-  const website = query.get('website');
-  const workspace = query.get('view') === 'website';
+  const channel = channelOf(query);
   const websiteAccess = useWebsiteAccess();
+  const websiteOpen = useWebsiteInbox(false, websiteAccess && !mini);
+  const whatsappAccess = useCanOpen('whatsapp');
+  const wa = useWaAccounts(whatsappAccess && !mini);
+  const waAccounts = wa.data?.accounts ?? [];
+  const perms = useStore(app, (s) => s.bootstrap?.permissions);
+  const canConnect = !!perms && (perms.includes('*') || perms.includes('whatsapp.connect'));
+  const [adding, setAdding] = useState<AddStep | null>(null);
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [starting, setStarting] = useState(false);
@@ -52,7 +69,7 @@ export default function ChatPage({ tabId }: ModuleProps) {
   const rooms = useQuery({ queryKey: ['chat', 'rooms'], queryFn: ({ signal }) => apiGetMeta<{ rooms: Room[] }>('/api/chat/rooms', undefined, signal) });
   const all = (rooms.data?.data.rooms ?? []).filter((r) => r.type !== 'widget');
   const current = all.find((r) => String(r.id) === room);
-  useTabTitle(workspace || website ? null : current ? `Chat · ${current.name}` : 'Chat');
+  useTabTitle(channel !== 'chat' ? null : current ? `Chat · ${current.name}` : 'Chat');
   const me = useStore(app, (s) => s.auth?.user?.id);
   const lastKey = me ? `ws.chat.lastRoom.${me}` : null;
 
@@ -68,16 +85,16 @@ export default function ChatPage({ tabId }: ModuleProps) {
 
   // Chat opens on a conversation, never on an empty pane: the last one you had
   // open, or else the most recent.
-  const reopen = !mini && !room && !workspace && !website && rooms.isSuccess ? lastOrRecent(all, lastKey) : null;
+  const reopen = !mini && !room && channel === 'chat' && rooms.isSuccess ? lastOrRecent(all, lastKey) : null;
   useEffect(() => {
     if (reopen) go(`/chat?room=${reopen}`);
   }, [reopen, go]);
 
-  // Every website chat opens in its workspace, wherever the link came from.
-  if (workspace || website) return <WebsiteWorkspace />;
+  const channels = buildChannels({ active: channel, rooms: all, website: { access: websiteAccess, rows: websiteOpen.data?.conversations ?? [] }, whatsapp: { access: whatsappAccess, accounts: waAccounts } });
+  const connect = whatsappAccess && canConnect ? () => setAdding({ at: 'whatsapp' }) : null;
 
-  return (
-    <div className="flex h-full">
+  const chat = (
+    <div className="flex h-full min-w-0 flex-1">
       {!mini ? (
         <SidePanel id="chat" label="the conversations">
           <Rail rooms={all} loading={rooms.isLoading} error={rooms.error} offline={rooms.data?.offline ? rooms.data.cachedAt : null} retry={() => void rooms.refetch()} selected={room} q={q} setQ={setQ} filter={filter} setFilter={setFilter} websiteAccess={websiteAccess} onNew={() => setStarting(true)} onStarred={() => setStarred(true)} />
@@ -112,6 +129,39 @@ export default function ChatPage({ tabId }: ModuleProps) {
           onShow={(id) => {
             setStarred(false);
             go(`/chat?room=${id}`);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+
+  return (
+    <div className="flex h-full">
+      {!mini ? <ChannelBar channels={channels} active={channel} onPick={(id) => go(channelRoute(id))} onAdd={() => setAdding({ at: 'list' })} /> : null}
+      {/* Every website chat opens in its workspace, wherever the link came from. */}
+      {channel === 'website' ? (
+        <WebsiteWorkspace />
+      ) : channel === 'whatsapp' ? (
+        whatsappAccess ? (
+          <WhatsappChannel accounts={waAccounts} loading={wa.isLoading} error={wa.error} retry={() => void wa.refetch()} onConnect={connect} onRelink={(a) => setAdding({ at: 'link', accountId: a.id, name: a.name })} />
+        ) : (
+          <div className="flex min-w-0 flex-1 bg-ground">
+            <Empty icon="lock" title="WhatsApp is not available to you" hint="Ask an administrator for access to WhatsApp." />
+          </div>
+        )
+      ) : (
+        chat
+      )}
+      {adding ? (
+        <AddChannel
+          initial={adding}
+          website={{ access: websiteAccess, canSetUp: canOpenWeb('/website-chats') }}
+          whatsapp={{ access: whatsappAccess, canConnect, accounts: waAccounts }}
+          onClose={() => setAdding(null)}
+          onConnected={() => {
+            setAdding(null);
+            toast('success', 'WhatsApp is connected.');
+            go('/chat?channel=whatsapp');
           }}
         />
       ) : null}
@@ -167,10 +217,12 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
     ['Direct', visible.filter((r) => !r.pinned && r.type === 'direct')],
     ['Groups & channels', visible.filter((r) => !r.pinned && r.type !== 'direct')],
   ];
+  const list = useResizableWidth('chat.list', LIST_WIDTH);
   const visitors = websiteAccess && filter === 'all' ? (web.data?.conversations ?? []).filter((c) => !needle || (c.visitor_name ?? c.label).toLowerCase().includes(needle)).slice(0, 6) : [];
 
   return (
-    <aside aria-label="Conversations" className="flex w-[300px] shrink-0 flex-col border-r border-line bg-surface">
+    <aside aria-label="Conversations" className="relative flex shrink-0 flex-col border-r border-line bg-surface" style={{ width: list.width }}>
+      <ResizeDivider state={list} label="Resize the conversation list" />
       <div className="flex flex-col gap-2 px-3 pt-3 pb-2">
         <div className="flex items-center gap-2">
           <MyStatus />
@@ -261,7 +313,7 @@ function RoomRow({ r, active, status, onOpen }: { r: Room; active: boolean; stat
   return (
     <button type="button" onClick={onOpen} className={cx('flex w-full items-center gap-2.5 px-3.5 py-[7px] text-left', active ? 'bg-selection' : 'hover:bg-subtle')}>
       <span className="relative shrink-0">
-        <Avatar name={r.avatar_name || r.name} size={34} className={group ? '!rounded-[9px]' : ''} />
+        <UserAvatar userId={roomPerson(r)} name={r.avatar_name || r.name} size={34} className={group ? '!rounded-[9px]' : ''} />
         {st ? <span className={cx('absolute -right-px -bottom-px h-[10px] w-[10px] rounded-full border-2 border-surface', st.dot)} aria-label={st.label} title={st.label} /> : null}
       </span>
       <span className="min-w-0 flex-1">
@@ -322,7 +374,7 @@ function MyStatus() {
   return (
     <div ref={ref} className="relative flex flex-1 items-center gap-2">
       <span className="relative shrink-0">
-        <Avatar name={user?.name} size={32} />
+        <UserAvatar userId={user?.id} name={user?.name} size={32} />
         <span className={cx('absolute -right-px -bottom-px h-[10px] w-[10px] rounded-full border-2 border-surface', choice.dot)} />
       </span>
       <button type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)} className="h-[30px] flex-1 truncate rounded-[7px] border border-line px-2 text-left text-[12px] text-ink-2 hover:bg-subtle">

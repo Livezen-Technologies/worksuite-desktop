@@ -26,7 +26,7 @@ const { fieldShows } = await import('../../../src/modules/events/WalkIn');
 const { resolveWebLink } = await import('../../../shared/links');
 const { parseDeepLink } = await import('../../../shared/deeplink');
 const { categoryVisible } = await import('../../../shared/access');
-await Promise.all(['Desk', 'Setup', 'Overview', 'Registrations', 'SearchPanel', 'Counters', 'Review'].map((m) => import(`../../../src/modules/events/${m}.tsx`)));
+await Promise.all(['DeskScreen', 'Setup', 'Overview', 'Registrations', 'SearchPanel', 'Counters', 'Review'].map((m) => import(`../../../src/modules/events/${m}.tsx`)));
 
 const EVENT = { id: 7, org_id: 5, code: 'TS26', name: 'Tech Summit', summary: null, type_label: 'Conference', delivery_mode: 'PHYSICAL', status: 'LIVE', status_label: 'Live', registration_state_label: null, display_label: 'Live', timezone: 'Asia/Colombo', start: { utc: '2026-10-20T03:30:00Z', local: '2026-10-20 09:00', date: '2026-10-20', time: '09:00', zone: 'Asia/Colombo' }, end: null, capacity: 500, version: 3 };
 const AGENT = ['events.access', 'events.event.view', 'events.checkin.use', 'events.checkout.use', 'events.walkin.create', 'events.badge.print'];

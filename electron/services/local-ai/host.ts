@@ -94,6 +94,26 @@ export function createLocalAI(deps: LocalAIHostDeps): LocalAIHost {
     onChange: changed,
   });
 
+  /**
+   * The readiness check (worksuite-desktop#55): a model that downloaded and matched its checksum is loaded and asked
+   * for a word before it is shown as ready — a file this llama.cpp cannot run fails here, with its reason, rather
+   * than on the person's first question.
+   */
+  const test = async (id: string): Promise<boolean> => {
+    if (!(await models.path(id))) return false;
+    models.testStarted(id);
+    try {
+      await runtime.probe(id);
+      await models.testEnded(id, null);
+      return true;
+    } catch (e) {
+      const why = e instanceof Error ? e.message : String(e);
+      log.warn('local ai model did not pass its readiness check', { id, error: why });
+      await models.testEnded(id, why);
+      return false;
+    }
+  };
+
   let refreshed = false;
   const refreshOnce = (): void => {
     if (refreshed) return;
@@ -120,8 +140,12 @@ export function createLocalAI(deps: LocalAIHostDeps): LocalAIHost {
       });
       router.handle('ai:localInstall', async (input) => {
         await ready;
-        // The download goes on after this answers; its progress and outcome come as `ai:localChanged`.
-        void models.install(input.id).catch((e) => log.warn('local ai model not installed', { id: input.id, error: String(e) }));
+        // The download goes on after this answers; its progress and outcome come as `ai:localChanged`. Once it is in
+        // place and matches, it is loaded and tried before it shows as ready.
+        void models
+          .install(input.id)
+          .then(() => test(input.id))
+          .catch((e) => log.warn('local ai model not installed', { id: input.id, error: String(e) }));
       });
       router.handle('ai:localCancelInstall', (input) => models.cancel(input.id, !!input.discard));
       router.handle('ai:localRemove', async (input) => {
@@ -130,6 +154,10 @@ export function createLocalAI(deps: LocalAIHostDeps): LocalAIHost {
       });
       router.handle('ai:localSetDefault', (input) => models.setDefault(input.id));
       router.handle('ai:localCheck', (input) => models.check(input.id));
+      router.handle('ai:localTest', async (input) => {
+        await ready;
+        return test(input.id);
+      });
       router.handle('ai:localAsk', async (input, c) => {
         await ready;
         await runtime.ask(c.sender.id, input);

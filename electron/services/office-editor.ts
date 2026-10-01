@@ -282,6 +282,20 @@ export class OfficeEditorHost {
     return true;
   }
 
+  /**
+   * A picture of the editor as it is (worksuite-desktop#39), for the page to show in its place while a menu of the
+   * page's is open: the view is native and would cover the menu, so it is hidden meanwhile, and the picture keeps
+   * the document on screen rather than a blank. Only to the page the editor belongs to; null when there is nothing
+   * to show.
+   */
+  async snapshot(owner: WebContents, viewId: string): Promise<string | null> {
+    const l = this.mine(owner, viewId);
+    if (!l || l.view.webContents.isDestroyed() || !l.view.getVisible()) return null;
+    const img = await l.view.webContents.capturePage().catch(() => null);
+    if (!img || img.isEmpty()) return null;
+    return `data:image/jpeg;base64,${img.toJPEG(72).toString('base64')}`;
+  }
+
   command(owner: WebContents, viewId: string, cmd: OfficeCommand & { events?: OfficeEditorEventName[] }, sessionId?: string): boolean {
     const l = this.mine(owner, viewId);
     if (!l) return false;

@@ -58,6 +58,7 @@ export const INVOKE_CHANNELS = [
   'ai:localRemove',
   'ai:localSetDefault',
   'ai:localCheck',
+  'ai:localTest',
   'ai:localAsk',
   'ai:localCancel',
   'ai:localRestart',
@@ -235,6 +236,7 @@ export const INVOKE_CHANNELS = [
   // Office documents (shared/office.ts): the editor's view in a tab, and copies opened in other apps.
   'office:open',
   'office:place',
+  'office:snapshot',
   'office:command',
   'office:close',
   'office:focusFile',

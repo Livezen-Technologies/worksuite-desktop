@@ -537,6 +537,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   // Office documents: the editor's view (office-editor.ts) and copies opened in other apps (office-external.ts).
   router.handle('office:open', (input, c) => ctx.office.open(c.sender, input));
   router.handle('office:place', (input, c) => ctx.office.place(c.sender, input.viewId, input.bounds, input.visible));
+  router.handle('office:snapshot', (input, c) => ctx.office.snapshot(c.sender, input.viewId));
   router.handle('office:command', (input, c) => ctx.office.command(c.sender, input.viewId, input.command.type === 'start' && input.events ? { ...input.command, events: input.events } : input.command, input.sessionId));
   router.handle('office:close', (input, c) => ctx.office.close(c.sender, input.viewId));
   router.handle('office:focusFile', (input, c) => ctx.office.focusFile(c.sender, input.fileId));

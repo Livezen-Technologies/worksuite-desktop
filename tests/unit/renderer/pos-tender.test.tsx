@@ -6,7 +6,7 @@ import type { PosSellInput } from '@shared/pos';
 import type { PosSession } from '../../../src/modules/pos/api';
 import { TillContext, type Till } from '../../../src/modules/pos/parts';
 import { estimateCart } from '../../../src/modules/pos/pricing';
-import Tender from '../../../src/modules/pos/Tender';
+import Tender from '../../../src/modules/pos/TenderPanel';
 
 afterEach(() => {
   cleanup();

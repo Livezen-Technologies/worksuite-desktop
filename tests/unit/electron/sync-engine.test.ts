@@ -74,7 +74,9 @@ async function syncing(folderName = 'Tenders', mode: 'two_way' | 'upload_only' |
   return { ...s, folder, bids, a, b, root, at };
 }
 
-describe('Drive sync — end to end against a Drive', () => {
+// Whole syncs against a Drive in memory, on disk: well under a second each here, but one took over the default 5 s
+// on a busy CI runner (run 36820596258).
+describe('Drive sync — end to end against a Drive', { timeout: 20_000 }, () => {
   it('brings a Drive folder down, into ~/WorkSuite Drive/<name>, and then has nothing left to do', async () => {
     const { sync, at, drive, root, home } = await syncing();
     expect(root.endsWith(join('home', 'WorkSuite Drive', 'Tenders'))).toBe(true);

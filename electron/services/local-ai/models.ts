@@ -2,7 +2,7 @@ import { createHash, createPublicKey, verify as verifySignature } from 'node:cry
 import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, readFile, rename, rm, stat, statfs, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { localCatalogEnvelopeSchema, localCatalogSchema, type LocalAICatalog, type LocalAIHardware, type LocalModel, type LocalModelState, type LocalModelView } from '@shared/local-ai';
+import { localCatalogEnvelopeSchema, localCatalogSchema, type LocalAICatalog, type LocalAIHardware, type LocalModel, type LocalModelReadiness, type LocalModelState, type LocalModelView } from '@shared/local-ai';
 
 /**
  * LocalAIModelManager (LAI-MOD, LAI-DL, LAI-MGR), desktop.
@@ -35,6 +35,8 @@ export interface ModelManagerDeps {
 interface Download {
   abort: AbortController;
   received: number;
+  /** [ms, bytes received] over the last 20 s, for the download's speed (worksuite-desktop#49). */
+  samples: Array<[number, number]>;
   state: Extract<LocalModelState, 'downloading' | 'verifying'>;
   done: Promise<void>;
 }
@@ -48,7 +50,10 @@ export class LocalAIModelManager {
   private downloads = new Map<string, Download>();
   private failures = new Map<string, string>();
   private paused = new Set<string>();
-  private settings: { defaultModel: string | null } = { defaultModel: null };
+  /** `ready`: the models (id → the version) that loaded and answered here, so a restart does not test them again. */
+  private settings: { defaultModel: string | null; ready: Record<string, string> } = { defaultModel: null, ready: {} };
+  private testing = new Set<string>();
+  private notReady = new Map<string, string>();
 
   constructor(private readonly deps: ModelManagerDeps) {}
 
@@ -75,8 +80,11 @@ export class LocalAIModelManager {
       /* no catalog yet */
     }
     try {
-      const s = JSON.parse(await readFile(join(this.deps.root, 'settings.json'), 'utf8')) as { defaultModel?: unknown };
+      const s = JSON.parse(await readFile(join(this.deps.root, 'settings.json'), 'utf8')) as { defaultModel?: unknown; ready?: unknown };
       this.settings.defaultModel = typeof s.defaultModel === 'string' ? s.defaultModel : null;
+      if (s.ready && typeof s.ready === 'object') {
+        for (const [id, v] of Object.entries(s.ready as Record<string, unknown>)) if (typeof v === 'string') this.settings.ready[id] = v;
+      }
     } catch {
       /* defaults */
     }
@@ -188,7 +196,18 @@ export class LocalAIModelManager {
       const part = d ? d.received : await this.partial(model);
       const state: LocalModelState = d ? d.state : isInstalled ? 'installed' : this.failures.has(model.id) ? 'failed' : part > 0 ? 'paused' : 'available';
       const fits = !hw || (model.tiers.includes(hw.tier) && model.minMemoryBytes <= Math.max(hw.memoryBytes, hw.vramBytes));
-      out.push({ model, state, received: state === 'installed' ? model.bytes : part, error: this.failures.get(model.id) ?? null, fits, recommended: !!hw && model.recommendedFor.includes(hw.tier), isDefault: this.settings.defaultModel === model.id });
+      out.push({
+        model,
+        state,
+        received: state === 'installed' ? model.bytes : part,
+        error: this.failures.get(model.id) ?? null,
+        fits,
+        recommended: !!hw && model.recommendedFor.includes(hw.tier),
+        isDefault: this.settings.defaultModel === model.id,
+        readiness: this.readiness(model),
+        readinessError: this.notReady.get(model.id) ?? null,
+        bytesPerSecond: d && d.state === 'downloading' ? speed(d.samples) : null,
+      });
     }
     return out;
   }
@@ -199,9 +218,10 @@ export class LocalAIModelManager {
     const running = this.downloads.get(id);
     if (running) return running.done;
     this.failures.delete(id);
+    this.notReady.delete(id);
     this.paused.delete(id);
     const abort = new AbortController();
-    const d: Download = { abort, received: 0, state: 'downloading', done: Promise.resolve() };
+    const d: Download = { abort, received: 0, samples: [], state: 'downloading', done: Promise.resolve() };
     d.done = this.fetchModel(m, d)
       .catch(async (e: unknown) => {
         if (abort.signal.aborted) return;
@@ -243,6 +263,9 @@ export class LocalAIModelManager {
           if (!out.write(value)) await new Promise<void>((r) => out.once('drain', () => r()));
           d.received += value.byteLength;
           if (d.received > m.bytes) throw new Error('The download is larger than the catalog says.');
+          const now = this.now();
+          const last = d.samples[d.samples.length - 1];
+          if (!last || now - last[0] >= 500) d.samples = [...d.samples.filter(([t]) => now - t <= 20_000), [now, d.received]];
           this.changed();
         }
       } finally {
@@ -277,8 +300,44 @@ export class LocalAIModelManager {
   async remove(id: string): Promise<void> {
     await this.cancel(id, true);
     this.failures.delete(id);
+    this.notReady.delete(id);
+    delete this.settings.ready[id];
     if (this.settings.defaultModel === id) await this.setDefault(null);
+    else await this.saveSettings();
     this.changed();
+  }
+
+  private readiness(m: Pick<LocalModel, 'id' | 'version'>): LocalModelReadiness {
+    if (this.testing.has(m.id)) return 'testing';
+    if (this.notReady.has(m.id)) return 'failed';
+    return this.settings.ready[m.id] === m.version ? 'ready' : 'untested';
+  }
+
+  /** The readiness check has started (the runtime is loading the model and asking it for a word). */
+  testStarted(id: string): void {
+    this.testing.add(id);
+    this.notReady.delete(id);
+    this.changed();
+  }
+
+  /** How the readiness check ended: null when the model answered, else why it could not. */
+  async testEnded(id: string, problem: string | null): Promise<void> {
+    this.testing.delete(id);
+    const m = this.catalog?.models.find((x) => x.id === id);
+    if (problem === null && m) {
+      this.settings.ready[id] = m.version;
+      this.notReady.delete(id);
+    } else {
+      delete this.settings.ready[id];
+      this.notReady.set(id, problem ?? 'The model could not be checked.');
+    }
+    await this.saveSettings();
+    this.changed();
+  }
+
+  /** Whether a model may answer: installed, and not failing (or still in) its readiness check. */
+  usable(id: string): boolean {
+    return !this.testing.has(id) && !this.notReady.has(id);
   }
 
   /** Checks an installed model's file against the catalog again (LAI-MGR-004). */
@@ -294,8 +353,12 @@ export class LocalAIModelManager {
   async setDefault(id: string | null): Promise<void> {
     if (id) this.find(id);
     this.settings.defaultModel = id;
-    await writeFile(join(this.deps.root, 'settings.json'), JSON.stringify(this.settings), { mode: 0o600 });
+    await this.saveSettings();
     this.changed();
+  }
+
+  private async saveSettings(): Promise<void> {
+    await writeFile(join(this.deps.root, 'settings.json'), JSON.stringify(this.settings), { mode: 0o600 });
   }
 
   defaultModel(): string | null {
@@ -308,6 +371,15 @@ export class LocalAIModelManager {
     if (!m || !(await this.installed(m))) return null;
     return join(this.dir(m), 'model.gguf');
   }
+}
+
+/** Bytes a second between the oldest and newest sample, once they are 2 s apart and something arrived. */
+export function speed(samples: Array<[number, number]>): number | null {
+  if (samples.length < 2) return null;
+  const [t0, b0] = samples[0]!;
+  const [t1, b1] = samples[samples.length - 1]!;
+  if (t1 - t0 < 2_000 || b1 <= b0) return null;
+  return Math.round((b1 - b0) / ((t1 - t0) / 1000));
 }
 
 function sha256(path: string): Promise<string> {

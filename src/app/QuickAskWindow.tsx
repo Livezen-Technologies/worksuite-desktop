@@ -64,7 +64,8 @@ export function QuickAskWindow() {
             Esc to close
           </button>
         </div>
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 scroll-thin">
+        {/* Ask scrolls its own conversation and keeps its box in place (worksuite-desktop#50); Rewrite scrolls as a page. */}
+        <div className={cx('flex min-h-0 flex-1 flex-col p-4', !(ctx && mode === 'ask') && 'overflow-y-auto scroll-thin')}>
           {ctx ? (
             <div role="tablist" aria-label="What Quick Ask does" className="mb-3 flex w-fit gap-1 rounded-[9px] bg-subtle p-1">
               {tab('ask', 'Ask')}

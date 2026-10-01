@@ -91,10 +91,12 @@ describe('WorkerEngine ⇄ pdf-worker, with PDFium', () => {
 
   it('cancels a search between pages', async () => {
     const { ch } = inProcess(Promise.resolve(new PdfiumProvider(pdfium)));
-    // In one process the "worker" shares the test's thread, so it cannot answer pings while it opens 4,000 pages.
+    // In one process the "worker" shares the test's thread, so it cannot answer pings while it opens 40,000 pages.
+    // It reports every 150 ms; a fast CI runner searched all of 4,000 before the first report (run 36820596258),
+    // leaving nothing to cancel. Ten times as many outlast that; the cancel lands on the first report.
     const w = new WorkerEngine(ch, { ...fast, hungMs: 30_000 });
     const big = join(dir, 'big.pdf');
-    const bytes = makePdf({ pages: 4000 });
+    const bytes = makePdf({ pages: 40000 });
     writeFileSync(big, bytes);
     await w.open({ kind: 'plain', path: big, size: bytes.length }, null);
     const token = { cancelled: false };
@@ -104,9 +106,9 @@ describe('WorkerEngine ⇄ pdf-worker, with PDFium', () => {
       token.cancelled = true;
     }, token);
     expect(pages).toBeGreaterThan(0);
-    expect(pages).toBeLessThan(4000);
+    expect(pages).toBeLessThan(40000);
     await w.close();
-  });
+  }, 20_000);
 });
 
 describe('WorkerEngine: a worker that fails never takes the app with it (PDF-NFR-010, PDF-ARCH-013)', () => {

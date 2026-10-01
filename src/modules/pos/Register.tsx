@@ -11,7 +11,7 @@ import { publish } from './display';
 import { useT } from './i18n';
 import { MoneyLine, Note, useTillContext } from './parts';
 import { formatMoney } from './pricing';
-import Tender from './Tender';
+import Tender from './TenderPanel';
 
 /**
  * The register: the products (the catalogue copy, searched as you type, by category), a scanner's barcodes wherever

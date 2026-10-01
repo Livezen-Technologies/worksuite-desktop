@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { emptyEditState, emptySecurity, type PdfEditState, type PdfSessionView } from '../../../shared/pdf';
 
 // PDF Studio re-renders whole after each answer from the main process: under a full parallel run that can take more
-// than testing-library's default second (seen on "offers the modes…" and "undoes from the title bar…").
+// than testing-library's default second (seen on "offers the modes…" and "undoes from the title bar…"). See also open().
 configure({ asyncUtilTimeout: 5000 });
 
 /**
@@ -90,6 +90,9 @@ async function open(v: PdfSessionView) {
   bridge.handlers.set('pdf:state', async () => v);
   render(<PdfStudio tabId="t1" route="/pdf?file=12" active />);
   await screen.findByText('Tender.pdf');
+  // The name is on screen at the commit; the effects after it (the shortcuts' handlers, which see the opened PDF) may
+  // run a moment later on a busy machine. Let them run, so a command called next acts on this PDF, not on none.
+  await act(async () => undefined);
 }
 
 beforeEach(() => {

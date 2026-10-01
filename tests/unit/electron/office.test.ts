@@ -67,6 +67,7 @@ const fake = vi.hoisted(() => {
       ignoreMenu: null as boolean | null,
       zoom: 1,
       mainFrame: { parent: null, url: '' },
+      capturePage: async () => ({ isEmpty: () => false, toJPEG: (q: number) => Buffer.from(`jpeg-${q}`) }),
       on(ev: string, fn: Handler) {
         handlers.set(ev, [...(handlers.get(ev) ?? []), fn]);
         return this;
@@ -113,6 +114,9 @@ const fake = vi.hoisted(() => {
     }
     setVisible(v: boolean) {
       this.visible = v;
+    }
+    getVisible() {
+      return this.visible;
     }
     setBackgroundColor() {}
   }
@@ -375,6 +379,16 @@ describe('the editor host (OO-DSK-001/020/022)', () => {
     expect(host.command(owner() as never, viewId, { type: 'showMessage', message: 'hi' })).toBe(false);
   });
 
+  it('takes a picture of the editor for its own page only, and none while it is hidden (worksuite-desktop#39)', async () => {
+    const w = owner();
+    const { viewId } = host.open(w as never, spec());
+    host.place(w as never, viewId, { x: 0, y: 0, width: 800, height: 600 }, true);
+    expect(await host.snapshot(w as never, viewId)).toBe(`data:image/jpeg;base64,${Buffer.from('jpeg-72').toString('base64')}`);
+    expect(await host.snapshot(owner() as never, viewId)).toBeNull();
+    host.place(w as never, viewId, { x: 0, y: 0, width: 800, height: 600 }, false);
+    expect(await host.snapshot(w as never, viewId)).toBeNull();
+  });
+
   it('gives the editor the keyboard shortcuts it owns', () => {
     host.open(owner() as never, spec());
     const wc = lastView().webContents;
@@ -611,6 +625,7 @@ describe('an export downloads from our own server by its token', () => {
     await vi.waitFor(() => expect(openPath).toHaveBeenCalledWith(join(dir, 'Plan.docx')));
     expect(inApp).toHaveLength(1);
     await expect(t.download('/d/short', 'x.pdf', true, null)).rejects.toThrow(/Not a WorkSuite download/);
+    t.stopAll();
     db.raw.close();
     rmSync(dir, { recursive: true, force: true });
   });
@@ -624,7 +639,10 @@ describe('an export downloads from our own server by its token', () => {
     const outcome = await new Promise((resolve) => void t.download('/office/exports/AbC123_-.xyz', 'Proposal.pdf', false, null, resolve));
     expect(outcome).toEqual({ path: join(dir, 'Proposal.pdf') });
     await expect(t.download('/elsewhere/x', 'x', false, null)).rejects.toThrow(/Not a WorkSuite download/);
+    // As the app does on quitting: stop transfers, then close the database. Nothing may read it afterwards.
+    t.stopAll();
     db.raw.close();
+    await new Promise((r) => setTimeout(r, 300));
     rmSync(dir, { recursive: true, force: true });
   });
 });

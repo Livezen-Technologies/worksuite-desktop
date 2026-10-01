@@ -1,15 +1,15 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { OFFICE_KIND_LABELS, officeDocRoute, officeExportToken, officeKind, officeRoute, parseOfficeDocRoute, parseOfficeRoute, type OfficeDocSource, type ExternalApp, type OfficeCollaborator, type OfficeLocalCopy, type OfficeMode } from '@shared/office';
 import { app, organizationName } from '../../core/app-state';
 import { call, errorMessage, on } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { useTabTitle } from '../../core/tab-context';
-import { activate, closeTab, navigate, recordKey, setCloseGuard, setRoute, takeCloseReason } from '../../core/tabs';
+import { activate, closeTab, detachTab, navigate, recordKey, setCloseGuard, setRoute, tabsStore, takeCloseReason } from '../../core/tabs';
 import { toast } from '../../core/toasts';
 import { ui } from '../../core/ui';
 import { Icon } from '../../components/Icon';
-import { Avatar, Button, Empty, ErrorNote, FileBadge, Modal, Spinner, TextField, cx } from '../../components/ui';
+import { Avatar, Button, Empty, ErrorNote, FileBadge, IconButton, Modal, Spinner, TextField, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
 import type { DriveFile } from '../files/api';
 import type { Item } from '../files/ctx';
@@ -152,6 +152,16 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
   const [panel, setPanel] = useState<'versions' | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [modeMenu, setModeMenu] = useState<{ x: number; y: number } | null>(null);
+  // While a menu of this page is open the editor (a native view, which would cover it) is hidden, and a picture of
+  // it taken just before stands in (worksuite-desktop#39).
+  const [still, setStill] = useState<string | null>(null);
+  const snapshot = useRef<(() => Promise<string | null>) | null>(null);
+  // The picture's removal after a menu closes: cancelled by the next menu (whose picture it would take away) and on leaving.
+  const stillTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (stillTimer.current) clearTimeout(stillTimer.current);
+  }, []);
+  const [moving, setMoving] = useState(false);
   const [conflict, setConflict] = useState<OfficeLocalCopy | null>(null);
   const [apps, setApps] = useState<ExternalApp[]>([]);
   const [orgId] = useState(() => app.get().organizationId);
@@ -212,7 +222,46 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
   const p = boot?.permissions;
   const line = saveLine(s);
   const others = s.collaborators.filter((c) => String(c.user.id) !== String(me));
-  const editorShown = active && !covered && !dialog && !conflict && !s.convertAsk && !s.closing && s.phase === 'open' && !s.editorProblem;
+  const editorShown = active && !covered && !dialog && !conflict && !menu && !modeMenu && !s.convertAsk && !s.closing && s.phase === 'open' && !s.editorProblem;
+  // Only a tab in this window's strip can move to a window of its own; a window already is one.
+  const inStrip = useStore(tabsStore, (x) => x.tabs.some((t) => t.id === tabId));
+
+  /** Opens a menu over the editor: the picture first, then the menu (a slow picture does not hold the menu up). */
+  const openMenu = async (open: () => void) => {
+    if (stillTimer.current) clearTimeout(stillTimer.current);
+    stillTimer.current = null;
+    const shot = snapshot.current ? await Promise.race([snapshot.current(), new Promise<null>((r) => setTimeout(() => r(null), 250))]) : null;
+    setStill(shot);
+    open();
+  };
+  // The picture goes once the editor is back; a moment later, so there is no blank between the two.
+  const menuClosed = (close: () => void) => {
+    close();
+    if (stillTimer.current) clearTimeout(stillTimer.current);
+    stillTimer.current = setTimeout(() => {
+      stillTimer.current = null;
+      setStill(null);
+    }, 250);
+  };
+
+  /**
+   * Open in a new window (worksuite-desktop#39): the document moves to a window of its own, signed in as the same
+   * person with the same access. Changes on their way to the Office server go first — "Saving changes…" shows while
+   * they do — and a document whose last save failed is not moved until it is saved.
+   */
+  const openInNewWindow = async () => {
+    if (s.save?.state === 'save_failed') {
+      toast('error', 'The last save failed. Save it again before opening it in a new window, so nothing is left behind.', p?.edit ? { label: 'Retry', run: () => void session.retrySave() } : undefined);
+      return;
+    }
+    setMoving(true);
+    const ok = await detachTab(tabId);
+    if (!ok) {
+      setMoving(false);
+      session.store.set({ closing: false });
+      toast('error', 'The document could not be opened in a new window. It is still open here.');
+    }
+  };
 
   const asDriveFile = (): DriveFile => ({ id: fileId, name, size: boot?.file.size ?? 0 }) as DriveFile;
   const item: Item = { type: 'file', f: asDriveFile() };
@@ -282,10 +331,24 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
           </div>
         ) : null}
         <div className="flex-1" />
-        {others.length ? <Presence people={others} /> : null}
+        {others.length ? (
+          <span className="max-md:hidden">
+            <Presence people={others} />
+          </span>
+        ) : null}
         {s.lock?.type === 'EXCLUSIVE_EDIT' && s.lock.mine ? <span className="rounded-full bg-selection px-2 py-0.5 text-[11px] font-semibold text-primary">Only you are editing</span> : null}
         {boot && s.phase === 'open' && s.availableModes.length > 1 ? (
-          <button type="button" aria-haspopup="menu" disabled={s.busy} onClick={(e) => setModeMenu(below(e.currentTarget, 'right', 240))} className="flex h-8 items-center gap-1.5 rounded-[8px] border border-line px-2.5 text-[12.5px] font-semibold text-ink hover:bg-subtle disabled:opacity-50">
+          <button
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={!!modeMenu}
+            disabled={s.busy}
+            onClick={(e) => {
+              const at = below(e.currentTarget, 'right', 240);
+              void openMenu(() => setModeMenu(at));
+            }}
+            className="flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] border border-line px-2.5 text-[12.5px] font-semibold whitespace-nowrap text-ink hover:bg-subtle disabled:opacity-50"
+          >
             {s.mode ? MODE_LABELS[s.mode] : 'Mode'}
             <Icon name="chevron-down" size={13} />
           </button>
@@ -293,10 +356,26 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
           <span className="rounded-[8px] border border-line px-2.5 py-1 text-[12.5px] font-semibold text-ink-2">{MODE_LABELS[s.mode]}</span>
         ) : null}
         {p?.share ? (
-          <Button size="sm" variant="primary" icon="users" onClick={() => setDialog('share')}>Share</Button>
+          <Button size="sm" variant="primary" icon="users" aria-label="Share" title="Share" className="shrink-0" onClick={() => setDialog('share')}>
+            <span className="max-lg:hidden">Share</span>
+          </Button>
+        ) : null}
+        {inStrip && boot && s.phase === 'open' ? (
+          <IconButton icon="app-window" label="Open in new window" size={16} disabled={moving || s.closing} className="shrink-0 border border-line" onClick={() => void openInNewWindow()} />
         ) : null}
         {menuItems.length ? (
-          <button type="button" aria-label="More actions" onClick={(e) => setMenu(below(e.currentTarget, 'right'))} className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-line text-ink-2 hover:bg-subtle">
+          <button
+            type="button"
+            aria-label="More actions"
+            title="More actions"
+            aria-haspopup="menu"
+            aria-expanded={!!menu}
+            onClick={(e) => {
+              const at = below(e.currentTarget, 'right');
+              void openMenu(() => setMenu(at));
+            }}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-line text-ink-2 hover:bg-subtle"
+          >
             <Icon name="more" size={16} />
           </button>
         ) : null}
@@ -333,7 +412,7 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
               </div>
             ) : null}
             <div className={cx('flex min-h-0 flex-1', s.editorProblem && 'hidden')}>
-              <EditorSurface session={session} tabKey={tabId} organizationId={orgId} visible={editorShown} />
+              <EditorSurface session={session} tabKey={tabId} organizationId={orgId} visible={editorShown} still={still} snapshotRef={snapshot} />
             </div>
             {s.closing ? (
               <div className="absolute inset-0 z-10 flex items-center justify-center bg-ground/90">
@@ -348,13 +427,13 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
         {panel === 'versions' ? <VersionsPanel fileId={fileId} name={name} canRestore={!!p?.restore_version || s.phase !== 'open'} canDownload={p ? p.download : true} onClose={() => setPanel(null)} onRestored={() => session.poke()} /> : null}
       </div>
 
-      {menu ? <PopMenu at={menu} items={menuItems} label={`Actions — ${name}`} onClose={() => setMenu(null)} /> : null}
+      {menu ? <PopMenu at={menu} items={menuItems} label={`Actions — ${name}`} onClose={() => menuClosed(() => setMenu(null))} /> : null}
       {modeMenu ? (
         <PopMenu
           at={modeMenu}
           width={240}
           label="Mode"
-          onClose={() => setModeMenu(null)}
+          onClose={() => menuClosed(() => setModeMenu(null))}
           items={MODE_ORDER.filter((m) => s.availableModes.includes(m)).map((m) => ({ label: MODE_LABELS[m], strong: m === s.mode, icon: m === s.mode ? 'check' : undefined, run: () => void session.setMode(m) }))}
         />
       ) : null}

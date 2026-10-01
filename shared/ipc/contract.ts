@@ -298,6 +298,8 @@ export const contract = {
   'ai:localRemove': ch(z.strictObject({ id: localModelId }), { session: true, rate: 10 }),
   'ai:localSetDefault': ch(z.strictObject({ id: localModelId }), { session: true, rate: 10 }),
   'ai:localCheck': ch(z.strictObject({ id: localModelId }), { session: true, rate: 5 }),
+  /** Loads an installed model and asks it for a word: resolves true once it answered (worksuite-desktop#55). */
+  'ai:localTest': ch(z.strictObject({ id: localModelId }), { session: true, rate: 5 }),
   'ai:localAsk': ch(localRequestSchema, { session: true, rate: 30, sensitive: true }),
   'ai:localCancel': ch(z.strictObject({ id: z.string().regex(/^[A-Za-z0-9-]{8,64}$/) }), { session: true, rate: 60 }),
   'ai:localRestart': ch(none, { session: true, rate: 3 }),
@@ -796,6 +798,8 @@ export const contract = {
     }),
     { session: true, rate: 120 },
   ),
+  /** A picture of the editor, shown in its place while a menu over it is open (worksuite-desktop#39). */
+  'office:snapshot': ch(z.object({ viewId: z.string().uuid() }), { session: true, rate: 30 }),
   'office:command': ch(
     z.object({
       viewId: z.string().uuid(),
@@ -1029,6 +1033,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'ai:localRemove': void;
   'ai:localSetDefault': void;
   'ai:localCheck': boolean;
+  'ai:localTest': boolean;
   /** Resolves once the request is running; its text comes as `ai:localEvent`. */
   'ai:localAsk': void;
   'ai:localCancel': void;
@@ -1167,6 +1172,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'restaurant:openDrawer': RestaurantPrintOutcome;
   'office:open': { viewId: string };
   'office:place': boolean;
+  'office:snapshot': string | null;
   'office:command': boolean;
   'office:close': boolean;
   'office:focusFile': boolean;

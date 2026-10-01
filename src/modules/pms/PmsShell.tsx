@@ -44,7 +44,7 @@ const ShiftScreen = lazy(() => import('./Shift'));
 const NightAudit = lazy(() => import('./NightAudit'));
 const Housekeeping = lazy(() => import('./Housekeeping'));
 const Requests = lazy(() => import('./Requests'));
-const Devices = lazy(() => import('./Devices'));
+const Devices = lazy(() => import('./DevicesScreen'));
 const HkTaskScreen = lazy(() => import('./HkTask'));
 const Maintenance = lazy(() => import('./Maintenance'));
 const IssueScreen = lazy(() => import('./Issue'));
