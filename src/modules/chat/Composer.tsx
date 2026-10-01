@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { useEffect, useImperativeHandle, useRef, useState, type Ref, type ReactNode } from 'react';
 import type { PickedFile } from '@shared/ipc/contract';
 import { app } from '../../core/app-state';
@@ -21,7 +21,11 @@ import { mentionQuery } from './mentions';
 import { EmojiPicker, VoiceRecorder } from './parts';
 import { typingLine } from './typing';
 import type { ReplyTarget } from './Thread';
-import { matchReplies, refuseForVisitor, savedReplyQuery, type SavedReply } from './website/profile';
+import type { ChatMessage } from './types';
+import { refuseForVisitor, savedReplyQuery, type SavedReply } from './website/profile';
+import { inSlashMenu, SlashMenu, type SlashMenuHandle } from './SlashMenu';
+import { useChatSavedReplies, type RepliesState, type Turn } from './replies';
+import type { WebsiteConversation } from './website/api';
 
 /**
  * The website channel (WS-WCHAT ENH-02, RDC-01/02): the same composer, for a
@@ -93,6 +97,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const [pick, setPick] = useState(0);
   const [slash, setSlash] = useState<{ start: number; word: string } | null>(null);
   const picked = useRef<Target[]>([]);
+  const slashMenu = useRef<SlashMenuHandle>(null);
   const root = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const typingAt = useRef(0);
@@ -411,15 +416,29 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
     if (s.kind === 'disk' && s.transfer) void call('transfers:cancel', { id: s.transfer }).catch(() => undefined);
   };
 
-  const replyOptions = site && slash ? matchReplies(site.replies, slash.word) : [];
-  /** A saved reply takes the place of the "/word" typed for it. */
-  const insertReply = (r: SavedReply) => {
-    const caret = input.current?.selectionStart ?? text.length;
-    const start = slash ? slash.start : caret;
-    setText(`${text.slice(0, start)}${r.body}${text.slice(caret)}`);
-    setSlash(null);
-    focus(start + r.body.length);
+  // The "/" menu (worksuite-desktop#32): a website conversation's saved replies are the website chat's.
+  const chatReplies = useChatSavedReplies(!site && slash !== null);
+  const replies: RepliesState = site ? { state: 'ready', replies: site.replies } : chatReplies;
+  const me = useStore(app, (s) => s.bootstrap?.user?.id ?? null);
+  const myName = useStore(app, (s) => s.bootstrap?.user?.name ?? 'Me');
+  /** The conversation as a suggestion reads it: what this composer's thread has loaded, oldest first. */
+  const conversation = (): Turn[] => {
+    if (site) {
+      const c = qc.getQueryData<WebsiteConversation>(['website', 'conversation', String(site.conversationId)]);
+      return (c?.messages ?? []).filter((m) => m.from === 'visitor' || m.from === 'agent').map((m) => ({ mine: m.from === 'agent', name: m.from === 'agent' ? (m.agent ?? myName) : (c?.visitor?.name ?? 'Visitor'), text: m.body ?? '' }));
+    }
+    const pages = qc.getQueryData<InfiniteData<{ messages: ChatMessage[] }>>(['chat', 'messages', roomId])?.pages ?? [];
+    return [...pages].reverse().flatMap((p) => p.messages).filter((m) => !m.deleted).map((m) => ({ mine: String(m.sender_id) === String(me), name: m.sender_name, text: m.message ?? '' }));
   };
+  /** What the menu picked takes the place of the "/word" typed for it, and stays in the box until sent. */
+  const insertSlash = (body: string) => {
+    const start = slash ? slash.start : (input.current?.selectionStart ?? text.length);
+    const end = slash ? slash.start + 1 + slash.word.length : start;
+    setText(`${text.slice(0, start)}${body}${text.slice(end)}`);
+    setSlash(null);
+    focus(start + body.length);
+  };
+  const insertReply = (r: SavedReply) => insertSlash(r.body);
 
   const insert = (e: string) => {
     const el = input.current;
@@ -447,10 +466,10 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const hint = editing
     ? 'Enter to save · Esc to cancel'
     : site
-      ? 'Enter to send · Shift + Enter for a new line · / for saved replies'
+      ? 'Enter to send · Shift + Enter for a new line · / for saved and suggested replies'
       : urgent
       ? 'Urgent: reaches people who only want priority notifications'
-      : `Enter to send · Shift + Enter for a new line${group ? ' · @ to mention' : ''} · Paste a WorkSuite link to share it as a card`;
+      : `Enter to send · Shift + Enter for a new line${group ? ' · @ to mention' : ''} · / for replies`;
 
 
   const attachBtn = !editing ? (
@@ -476,39 +495,21 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                 onChange={(e) => {
                   setText(e.target.value);
                   if (!editing) onTyped();
-                  if (site) {
-                    setSlash(savedReplyQuery(e.target.value, e.target.selectionStart ?? e.target.value.length));
-                    setPick(0);
-                  }
+                  if (!editing) setSlash(savedReplyQuery(e.target.value, e.target.selectionStart ?? e.target.value.length));
                   if (group) {
                     const q = mentionQuery(e.target.value, e.target.selectionStart ?? e.target.value.length);
                     setAsking(q ? { ...q, left: leftOf(e.target, q.start) } : null);
                     setPick(0);
                   }
                 }}
-                onBlur={() => {
+                onBlur={(e) => {
                   stopTyping();
                   setAsking(null);
-                  setSlash(null);
+                  // Into the "/" menu (its search, its suggestions): it stays open.
+                  if (!inSlashMenu(e.relatedTarget)) setSlash(null);
                 }}
                 onKeyDown={(e) => {
-                  if (slash && replyOptions.length) {
-                    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-                      e.preventDefault();
-                      setPick((pick + (e.key === 'ArrowDown' ? 1 : replyOptions.length - 1)) % replyOptions.length);
-                      return;
-                    }
-                    if (e.key === 'Enter' || e.key === 'Tab') {
-                      e.preventDefault();
-                      insertReply(replyOptions[Math.min(pick, replyOptions.length - 1)]!);
-                      return;
-                    }
-                    if (e.key === 'Escape') {
-                      e.preventDefault();
-                      setSlash(null);
-                      return;
-                    }
-                  }
+                  if (slash && slashMenu.current?.onKey(e)) return;
                   if (asking && options.length) {
                     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
                       e.preventDefault();
@@ -618,31 +619,16 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       ) : null;
   // A visitor's widget shows a WorkSuite link as a link, never as a card.
   const detected = !editing && !site ? recordsIn(text, origin) : [];
-  const repliesEl = site && slash && replyOptions.length ? (
-        <div role="listbox" aria-label="Saved replies" className={cx('absolute bottom-full left-3 z-40 mb-1 flex max-h-[320px] flex-col rounded-[12px] border border-line bg-surface shadow-[0_12px_32px_rgb(var(--ws-shadow-rgb)/.18)]', compact ? 'w-[260px]' : 'w-[340px]')}>
-          <div className="px-2.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-ink-3">SAVED REPLIES</div>
-          <div className="min-h-0 flex-1 overflow-y-auto p-1 scroll-thin">
-            {replyOptions.map((r, i) => (
-              <button
-                key={r.id}
-                type="button"
-                role="option"
-                aria-selected={i === pick}
-                onMouseDown={(e) => e.preventDefault()}
-                onMouseEnter={() => setPick(i)}
-                onClick={() => insertReply(r)}
-                className={cx('flex w-full flex-col rounded-[8px] px-2 py-1.5 text-left', i === pick ? 'bg-selection' : 'hover:bg-subtle')}
-              >
-                <span className="truncate text-[12.5px] font-semibold text-ink">
-                  {r.title}
-                  {r.shortcut ? <span className="ml-2 font-mono text-[11.5px] font-normal text-ink-3">/{r.shortcut}</span> : null}
-                </span>
-                <span className="truncate text-[11.5px] text-ink-3">{r.body}</span>
-              </button>
-            ))}
-          </div>
-          <div className="border-t border-line px-2.5 py-1.5 text-[11px] text-ink-3">↑↓ to move · Enter to insert · Esc to close</div>
-        </div>
+  const repliesEl = slash && !editing ? (
+        <SlashMenu
+          ref={slashMenu}
+          word={slash.word}
+          replies={replies}
+          context={conversation}
+          onInsert={insertSlash}
+          onClose={() => (setSlash(null), focus())}
+          compact={compact}
+        />
       ) : null;
   // The first six saved replies as chips above the box (RDC-03).
   const chipsEl = site && site.replies.length && !editing ? (
@@ -737,6 +723,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
         {barEl}
         {detectedEl}
         {mentionsEl}
+        {repliesEl}
         {menu === 'emoji' ? <EmojiPicker className="absolute bottom-full left-2.5 mb-2" onPick={insert} onClose={() => setMenu(null)} /> : null}
         <div className="flex items-end gap-2">
           <div

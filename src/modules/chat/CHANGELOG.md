@@ -4,7 +4,11 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
-## 1.2.1 — 2026-10-01
+## 1.3.0 — 2026-10-01
+
+**Added**
+
+- type / in the message box for Load saved replies (searchable) and Suggest reply (from the conversation, with Local AI or the workspace's assistant); what is picked goes into the box to edit and is sent only when you send it — in Team Chat, website chats and WhatsApp (#32)
 
 **Changed**
 

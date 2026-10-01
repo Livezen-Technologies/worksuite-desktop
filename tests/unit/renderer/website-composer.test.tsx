@@ -83,7 +83,7 @@ describe('the website thread on the shared composer (RDC-01/02)', () => {
     expect(items.some((t) => t.startsWith('Document'))).toBe(true);
     expect(items.some((t) => t.startsWith('Image'))).toBe(true);
     expect(items.some((t) => /Video|Audio|Drive|Voice/.test(t))).toBe(false);
-    expect(screen.getByText(/for saved replies/)).toBeTruthy();
+    expect(screen.getByText(/for saved and suggested replies/)).toBeTruthy();
   });
 
   it('shows the first saved replies as chips, and "/" finds one that Enter inserts', () => {
@@ -91,10 +91,10 @@ describe('the website thread on the shared composer (RDC-01/02)', () => {
     expect(screen.getByRole('button', { name: 'Education discount' })).toBeTruthy();
     const box = screen.getByRole('textbox', { name: 'Message' }) as HTMLTextAreaElement;
     fireEvent.change(box, { target: { value: 'Hello! /edu', selectionStart: 11 } });
-    expect(screen.getByRole('listbox', { name: 'Saved replies' })).toBeTruthy();
+    expect(screen.getByRole('listbox', { name: 'Quick actions' })).toBeTruthy();
     fireEvent.keyDown(box, { key: 'Enter' });
     expect(box.value).toBe('Hello! Schools get 20% off the first year.');
-    expect(screen.queryByRole('listbox', { name: 'Saved replies' })).toBeNull();
+    expect(screen.queryByRole('listbox', { name: 'Quick actions' })).toBeNull();
   });
 
   it('sends a reply through the outbox to the widget reply, and tells the visitor it is typing', async () => {

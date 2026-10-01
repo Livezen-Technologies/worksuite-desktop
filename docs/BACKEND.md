@@ -130,6 +130,21 @@ specific to the desktop:
   - `POST /api/chat/voicemail` leaves a voice message.
   The main process ends a call whose window closes, because a page's beacon
   carries no credentials.
+- **The composer's "/" menu** (worksuite-desktop#32) needs two things the
+  server does not have yet:
+  - `GET /api/chat/saved-replies` → `{ replies: [{ id, shortcut, title, body }] }`,
+    the saved replies the person may use in Team Chat and WhatsApp (website
+    conversations keep using `/api/chat/widget-admin/canned`). Until it
+    exists (404) or for someone without access (403), the menu shows an
+    empty state.
+  - Suggest reply uses Local AI when a model is ready on the computer.
+    Otherwise it uses the writing assistant, only if
+    `GET /api/ai/write/actions` lists a `reply` action:
+    `POST /api/ai/write {action: 'reply', text}`, where `text` is the
+    conversation's last messages, one `Name: message` line each (the
+    person's own lines marked `(me)`). It answers `{ text }` with up to three
+    replies, one per line, numbered `1.` to `3.`.
+  Nothing is sent by either: what is picked goes into the box.
 - **Meet:**
   - `/api/meet/*` covers create, schedule, resolve, history, upcoming and
     recordings;
