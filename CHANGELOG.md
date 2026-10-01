@@ -5,6 +5,27 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-01 — Chat attachments open in a preview
+
+**Added**
+
+- **Clicking an attachment in Chat opens it over the conversation**, in a message, in the Details panel's Media,
+  Files and Audio tabs, and in Web Chat:
+  - **Pictures:** zoom (−, +, Fit), rotate, full screen, and ‹ › (or ← →) through the conversation's pictures, or the
+    Media tab's.
+  - **Video and sound:** play, seek and volume.
+  - **CSV:** a table, the first 1,000 rows.
+  - **Text files:** shown as text, readable and scrollable.
+  - **Everything shows** the file's name, type and size, with **Download** (saved, not opened) and **Open in app**.
+    A file with no preview, or larger than 2 MB for CSV and text, offers those two instead.
+  - **Loading, errors and retry:** each preview shows that it's loading, says what went wrong (including "You no
+    longer have access to this file."), and offers Try again.
+  - **Closing** (Esc, or Back) returns to the same place in the conversation, on the attachment that was clicked.
+- A **PDF** still opens in PDF Studio (pages, zoom, search). A **Word, Excel or PowerPoint** file still opens in a
+  WorkSuite DOC, Sheet or Slides tab.
+
+---
+
 ## 2026-09-30 — The AI Assistant as a floating widget; Thinking…; About
 
 **Added**

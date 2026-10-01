@@ -7,7 +7,8 @@ import { dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Avatar, Button, Empty, FileBadge, Spinner, cx } from '../../components/ui';
 import { GroupDetails, NotifySettings, type RoomDetail } from './NewChat';
-import { mediaUrl, openAttachment, type ChatFile, type ChatMessage, type Room } from './types';
+import { openChatAttachment } from './AttachmentViewer';
+import { mediaUrl, type ChatFile, type ChatMessage, type Room } from './types';
 
 type Shared = Record<'media' | 'files' | 'links' | 'audio', Array<{ message_id: number; sender_name: string; created_at: string; file?: ChatFile; url?: string }>>;
 
@@ -95,7 +96,7 @@ export function Details({ room, onClose }: { room: Room; onClose: () => void }) 
               {shared.data.media.map((x) => {
                 const src = mediaUrl(x.file?.thumb_url ?? x.file?.url);
                 return src ? (
-                  <button key={x.message_id} type="button" onClick={() => x.file && openAttachment(x.file, openLink)} className="h-[78px] overflow-hidden rounded-[8px] bg-subtle" aria-label={x.file?.filename ?? 'Media'}>
+                  <button key={x.message_id} type="button" onClick={() => x.file && openChatAttachment(x.file, openLink, shared.data?.media.flatMap((y) => (y.file ? [y.file] : [])))} className="h-[78px] overflow-hidden rounded-[8px] bg-subtle" aria-label={x.file?.filename ?? 'Media'}>
                     <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />
                   </button>
                 ) : null;
@@ -106,7 +107,7 @@ export function Details({ room, onClose }: { room: Room; onClose: () => void }) 
         {tab === 'Files' || tab === 'Audio' ? (
           shared.isLoading ? <Spinner /> : (shared.data?.[tab === 'Files' ? 'files' : 'audio'] ?? []).length ? (
             (shared.data?.[tab === 'Files' ? 'files' : 'audio'] ?? []).map((x) => (
-              <button key={x.message_id} type="button" onClick={() => x.file && openAttachment(x.file, openLink)} className="flex w-full items-center gap-2.5 border-b border-line py-2 text-left">
+              <button key={x.message_id} type="button" onClick={() => x.file && openChatAttachment(x.file, openLink)} className="flex w-full items-center gap-2.5 border-b border-line py-2 text-left">
                 <FileBadge name={x.file?.filename ?? 'file'} size={30} />
                 <span className="min-w-0 flex-1">
                   <b className="block truncate text-ink">{x.file?.filename}</b>

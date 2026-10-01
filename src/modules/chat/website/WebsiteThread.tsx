@@ -14,6 +14,7 @@ import { Composer, type ComposerHandle } from '../Composer';
 import { PRIORITIES, useAgents, useCanned, useWebsiteConversation, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
 import { Select } from '../../../components/Select';
 import { SidePanel } from '../../../components/SidePanel';
+import { openChatAttachment } from '../AttachmentViewer';
 
 const control = 'h-[30px] rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink disabled:opacity-60';
 
@@ -217,6 +218,12 @@ function Controls({ data, row, me, canReply, onDone }: { data: WebsiteConversati
   );
 }
 
+/** A visitor's or agent's file opens in the attachment preview, through the app (#38). */
+function openWebsiteFile(f: NonNullable<WebsiteMessage['file']>, openLink: (url: string) => void): void {
+  const url = f.url.startsWith('/chat/') ? `/api${f.url}` : f.url;
+  openChatAttachment({ filename: f.filename, mime: f.mime, size: f.size, is_image: f.is_image, url, download_url: url }, openLink);
+}
+
 function Message({ m }: { m: WebsiteMessage }) {
   const { openLink } = useTab();
   // "Nuwan joined the chat": a notice, not something anybody said.
@@ -235,7 +242,7 @@ function Message({ m }: { m: WebsiteMessage }) {
         <div className={cx('flex items-center gap-2 rounded-[10px] border border-line bg-surface px-2.5 py-2 text-[12px]', ours ? 'self-end' : 'self-start')}>
           <b className="max-w-[220px] truncate text-ink">{m.file.filename}</b>
           <span className="text-ink-3">{bytes(m.file.size)} ·</span>
-          <button type="button" className="font-semibold text-primary hover:underline" onClick={() => m.file && openLink(m.file.url.startsWith('/chat/') ? `/api${m.file.url}` : m.file.url)}>Open</button>
+          <button type="button" className="font-semibold text-primary hover:underline" onClick={() => m.file && openWebsiteFile(m.file, openLink)}>Open</button>
         </div>
       ) : null}
     </>

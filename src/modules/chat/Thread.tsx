@@ -25,7 +25,8 @@ import { Composer, type ComposerHandle } from './Composer';
 import { PRESENCE } from './Details';
 import { ForwardDialog, type RoomDetail } from './NewChat';
 import { EmojiPicker, VoicePlayer } from './parts';
-import { mediaUrl, openAttachment, type ChatMessage, type Room } from './types';
+import { AttachmentGallery, openChatAttachment, useAttachmentGallery } from './AttachmentViewer';
+import { mediaUrl, type ChatMessage, type Room } from './types';
 
 export interface ReplyTarget {
   id: number;
@@ -102,6 +103,8 @@ export function Thread({
   const pending = useQuery({ queryKey: ['offline', 'pending'], queryFn: () => call('offline:pending') });
   const mine = (pending.data ?? []).filter((m: OfflineMutation) => m.module === 'chat' && m.entityId === roomId && m.state !== 'DONE');
   const messages = useMemo(() => [...(msgs.data?.pages ?? [])].reverse().flatMap((p) => p.messages), [msgs.data]);
+  // The conversation's pictures, oldest first: ‹ › in the attachment preview goes through them (#38).
+  const pictures = useMemo(() => messages.flatMap((m) => (m.file && !m.deleted && m.file.preview === 'image' ? [m.file] : [])), [messages]);
 
   // Mark the room read while it is on screen.
   useEffect(() => {
@@ -279,6 +282,7 @@ export function Thread({
           </div>
         ) : null}
         {msgs.isLoading ? <Spinner /> : msgs.error ? <ErrorNote error={msgs.error} onRetry={() => void msgs.refetch()} /> : null}
+        <AttachmentGallery.Provider value={pictures}>
         {messages.map((m, i) => {
           const header = days[i];
           const prev = messages[i - 1];
@@ -302,6 +306,7 @@ export function Thread({
             </div>
           );
         })}
+        </AttachmentGallery.Provider>
         {mine.map((p) => (
           <div key={p.id} className="mt-3 flex flex-col items-end gap-1">
             <div className={cx('max-w-[520px] border border-dashed border-[#8C9AD3] bg-[#DDE3F7] text-ink dark:bg-selection', drawer ? 'max-w-[84%] rounded-[10px] px-2.5 py-1.5 text-[13px]' : 'rounded-[12px_4px_12px_12px] px-[13px] py-[9px] text-[13.5px]')}>{p.label.replace(/^Message: /, '')}</div>
@@ -364,6 +369,7 @@ export function Thread({
 type Card = { kind: string; available?: boolean; why?: string; heading?: string; name?: string; owner?: string; who?: string; what?: string; link?: string };
 
 function Bubble({ m, own, roomId, onReply, onForward, onEdit }: { m: ChatMessage & { starred?: boolean; pinned?: unknown; card?: Card | null }; own: boolean; roomId: string; onReply: (r: ReplyTarget) => void; onForward: (m: ChatMessage) => void; onEdit: (m: ChatMessage) => void }) {
+  const gallery = useAttachmentGallery();
   const qc = useQueryClient();
   const { openLink } = useTab();
   const visible = useVisibleIds();
@@ -462,7 +468,7 @@ function Bubble({ m, own, roomId, onReply, onForward, onEdit }: { m: ChatMessage
           voice && mediaUrl(f.url) ? (
             <VoicePlayer src={mediaUrl(f.url)!} ms={f.duration_ms} seed={m.id} own={own} />
           ) : f.preview === 'image' && src ? (
-            <button type="button" className="overflow-hidden rounded-[12px] border border-line" onClick={() => openAttachment(f, openLink)} aria-label={`Open ${f.filename}`}>
+            <button type="button" className="overflow-hidden rounded-[12px] border border-line" onClick={() => openChatAttachment(f, openLink, gallery)} aria-label={`Open ${f.filename}`}>
               <img src={src} alt={f.filename} loading="lazy" className="max-h-[260px] max-w-[320px] object-cover" />
             </button>
           ) : f.preview === 'video' && mediaUrl(f.url) ? (
@@ -474,7 +480,7 @@ function Bubble({ m, own, roomId, onReply, onForward, onEdit }: { m: ChatMessage
                 <b className="block truncate text-[12px] text-ink">{f.filename}</b>
                 <span className="block text-[12px] text-ink-3">{Math.max(1, Math.round(f.size / 1024))} KB{f.status !== 'ready' ? ` · ${f.status}` : ''}</span>
               </span>
-              <button type="button" onClick={() => openAttachment(f, openLink)} className="text-[12px] font-semibold text-primary hover:underline">Open</button>
+              <button type="button" onClick={() => openChatAttachment(f, openLink, gallery)} className="text-[12px] font-semibold text-primary hover:underline">Open</button>
             </div>
           )
         ) : null}
@@ -623,6 +629,7 @@ function useDismiss(open: boolean, box: React.RefObject<HTMLElement | null>, clo
  * opens upward when the message is down by the message box.
  */
 function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForward, onEdit }: { m: ChatMessage & { starred?: boolean; pinned?: unknown; card?: Card | null }; own: boolean; group: boolean; first: boolean; roomId: string; roomName: string; onReply: (r: ReplyTarget) => void; onForward: (m: ChatMessage) => void; onEdit: (m: ChatMessage) => void }) {
+  const gallery = useAttachmentGallery();
   const qc = useQueryClient();
   const { openLink } = useTab();
   const visible = useVisibleIds();
@@ -772,7 +779,7 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
                 voice && mediaUrl(f.url) ? (
                   <VoicePlayer src={mediaUrl(f.url)!} ms={f.duration_ms} seed={m.id} own={own} bare />
                 ) : f.preview === 'image' && src ? (
-                  <button type="button" className="block overflow-hidden rounded-[8px]" onClick={() => openAttachment(f, openLink)} aria-label={`Open ${f.filename}`}>
+                  <button type="button" className="block overflow-hidden rounded-[8px]" onClick={() => openChatAttachment(f, openLink, gallery)} aria-label={`Open ${f.filename}`}>
                     <img src={src} alt={f.filename} loading="lazy" className="max-h-[220px] max-w-[260px] object-cover" />
                   </button>
                 ) : f.preview === 'video' && mediaUrl(f.url) ? (
@@ -784,7 +791,7 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
                       <b className="block truncate text-[12px] text-ink">{f.filename}</b>
                       <span className="block text-[11.5px] text-ink-3">{Math.max(1, Math.round(f.size / 1024))} KB{f.status !== 'ready' ? ` · ${f.status}` : ''}</span>
                     </span>
-                    <button type="button" onClick={() => openAttachment(f, openLink)} className={cx('text-[12px] font-semibold hover:underline', accent)}>
+                    <button type="button" onClick={() => openChatAttachment(f, openLink, gallery)} className={cx('text-[12px] font-semibold hover:underline', accent)}>
                       Open
                     </button>
                   </div>
