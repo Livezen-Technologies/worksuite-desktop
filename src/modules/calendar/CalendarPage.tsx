@@ -10,7 +10,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, OfflineNote, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
-import { addMonths, CATEGORIES, categoryOf, colourOf, dayOf, endOf, minutesOf, monthGrid, monthLabel, monthStart, naive, nowWall, rangeLabel, shifted, step, viewRange, type CalendarEvent, type EventDetail, type View, EVENT_TEXT } from './api';
+import { addMonths, CATEGORIES, entryCategory, colourOf, dayOf, endOf, minutesOf, monthGrid, monthLabel, monthStart, naive, nowWall, rangeLabel, shifted, step, viewRange, type CalendarEvent, type EventDetail, type View, EVENT_TEXT } from './api';
 import { ImportResult, SeriesDialog, SubscribeDialog, UndoBar, type IcsReport } from './Dialogs';
 import { EventDrawer, type Draft } from './EventDrawer';
 import { MonthGrid } from './MonthGrid';
@@ -85,7 +85,7 @@ export default function CalendarPage(_props: ModuleProps) {
   // A category of an app the person was not given is not listed, and its entries (a cached feed's) not drawn.
   const visible = useVisibleIds();
   const categories = CATEGORIES.filter((c) => !c.apps || c.apps.some((a) => canOpenApp(a, visible)));
-  const shows = (e: CalendarEvent) => !hidden.includes(categoryOf(e.source)) && categories.some((c) => c.id === categoryOf(e.source));
+  const shows = (e: CalendarEvent) => !hidden.includes(entryCategory(e)) && categories.some((c) => c.id === entryCategory(e));
   const [mini, setMini] = useState(monthStart(date));
   const [drawer, setDrawer] = useState<{ event: CalendarEvent | null; draft: Draft | null } | null>(null);
   const [series, setSeries] = useState<Change | null>(null);

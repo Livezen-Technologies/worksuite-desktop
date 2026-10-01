@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.1 — 2026-10-01
+
+- Tender meetings are their own filter and colour, with Open Tender beside Open Meeting when the server sends the link (#100 groundwork); invitation conflicts are re-checked as instants (#99).
+
 ## 1.3.0 — 2026-10-01
 
 - Schedule conflicts asked before a drag or resize moves anything; overlapping entries flagged on Week, Day and Month; Choose another time returns to the times; duplicates and people whose availability is unknown are said (#99).

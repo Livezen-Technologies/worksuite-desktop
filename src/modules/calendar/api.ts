@@ -46,6 +46,13 @@ export interface CalendarEvent {
   /** A milestone's or sprint's project; a repair's, loan's or warranty's asset. */
   project_id?: number | null;
   asset_id?: number | null;
+  /**
+   * A meeting scheduled from a record (#100, #101): a tender, a lead, a customer or a supplier. `label`, `link` and
+   * `open_label` only when the reader may open that record; `kind_label` ("Tender Meeting") always.
+   */
+  source_type?: string | null;
+  source_kind?: string | null;
+  related?: { kind_label: string; label: string | null; link: string | null; open_label: string | null } | null;
 }
 
 export interface Participant {
@@ -68,6 +75,8 @@ export interface EventDetail extends CalendarEvent {
 export const CATEGORIES: Array<{ id: string; label: string; color: string; sources: (s: string) => boolean; apps?: string[] }> = [
   { id: 'events', label: 'Events', color: '#0E7C86', sources: (s) => s === 'event' },
   { id: 'meetings', label: 'Meetings', color: '#23349E', sources: (s) => s === 'meeting' || s === 'businessmeeting', apps: ['meet', 'meetings'] },
+  // A meeting of a tender (#100): a meeting, filtered apart; never the tender's closing date, which is "Tender closing".
+  { id: 'tendermeetings', label: 'Tender meetings', color: '#8A4B08', sources: () => false, apps: ['meet', 'meetings', 'tenders'] },
   { id: 'tasks', label: 'Tasks', color: '#9A4A06', sources: (s) => s === 'task', apps: ['tasks'] },
   { id: 'leave', label: 'Your leave', color: '#6B3FB5', sources: (s) => s === 'leave' },
   { id: 'holidays', label: 'Public holidays', color: '#B42318', sources: (s) => s === 'holiday' },
@@ -117,6 +126,12 @@ export function clashingKeys(events: CalendarEvent[], key: (e: CalendarEvent) =>
   return out;
 }
 
+/** An entry's category: by its source, except that a tender's meetings are their own (#100). */
+export function entryCategory(e: Pick<CalendarEvent, 'source' | 'source_type'>): string {
+  if (e.source === 'businessmeeting' && e.source_type === 'tender') return 'tendermeetings';
+  return categoryOf(e.source);
+}
+
 export function categoryOf(source: string): string {
   return CATEGORIES.find((c) => c.sources(source))?.id ?? 'events';
 }
@@ -136,7 +151,7 @@ export const EVENT_TEXT = 'text-[color:var(--ev)] dark:text-[color:color-mix(in_
 
 export function colourOf(e: CalendarEvent): string {
   if (e.source === 'event' && e.color && /^#[0-9a-f]{6}$/i.test(e.color)) return e.color;
-  return CATEGORIES.find((c) => c.sources(e.source))?.color ?? '#23349E';
+  return CATEGORIES.find((c) => c.id === entryCategory(e))?.color ?? '#23349E';
 }
 
 export const SWATCHES = ['#23349E', '#0E7C86', '#1F7A4D', '#B45309', '#6B3FB5', '#B42318'];
@@ -269,6 +284,17 @@ function openLabel(e: CalendarEvent): string {
   if (e.source.startsWith('project_')) return e.project_id ? 'Open Project' : 'Open Projects';
   if (e.source.startsWith('asset_')) return e.asset_id ? 'Open Asset' : 'Open Assets';
   return 'Open';
+}
+
+/** The record a meeting was scheduled from, when the reader may open it (#100, #101): "Open Tender", "Open Lead"… */
+export function relatedOf(e: CalendarEvent): Destination | null {
+  const r = e.related;
+  if (!r?.link) return null;
+  const t = resolveWebLink(r.link);
+  const label = r.open_label ?? 'Open Related Record';
+  if (t.kind === 'tab') return { route: t.route, label };
+  if (t.kind === 'browser') return { web: t.path, label: `${label} ↗` };
+  return null;
 }
 
 export function destinationOf(e: CalendarEvent): Destination | null {

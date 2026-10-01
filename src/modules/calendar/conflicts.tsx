@@ -323,7 +323,9 @@ export function useInvitationAnswer(source: 'meeting' | 'event', id: number | nu
   // Accepting asks again (what is in the calendar may have changed since the list was read); unanswered, the list's own answer stands.
   const answer = async (rsvp: string) => {
     if (rsvp !== 'accepted' || !waiting || id === null) return void Promise.resolve(send(rsvp)).then(again);
-    const now = await checkConflicts({ start: waiting.start_at, end: waiting.end_at, ...(source === 'meeting' ? { meeting_id: id } : { event_id: id }) }).catch(() => null);
+    // The list's times are instants (UTC, written without a zone); said as such, or the server would read them on the WorkSuite clock.
+    const instant = (s: string) => (/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : `${s.replace(' ', 'T')}Z`);
+    const now = await checkConflicts({ start: instant(waiting.start_at), end: instant(waiting.end_at), ...(source === 'meeting' ? { meeting_id: id } : { event_id: id }) }).catch(() => null);
     const result = now && Array.isArray(now.conflicts) ? now : { conflicts: waiting.conflicts, duplicates: [], people: [] };
     if (!result.conflicts.length) return void Promise.resolve(send(rsvp)).then(again);
     setFresh(result);

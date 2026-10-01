@@ -168,7 +168,7 @@ describe('answering an invitation that clashes (worksuite-desktop#99)', () => {
     await waitFor(() => expect(screen.queryByText(/Overlaps/)).toBeNull());
     fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
     expect(await screen.findByText('Schedule conflict')).toBeTruthy();
-    expect(api.apiPost).toHaveBeenCalledWith('/api/calendar/conflicts', expect.objectContaining({ meeting_id: 12, start: waiting.start_at }));
+    expect(api.apiPost).toHaveBeenCalledWith('/api/calendar/conflicts', expect.objectContaining({ meeting_id: 12, start: '2027-03-10T09:00:00Z' }));
     expect(send).not.toHaveBeenCalled();
     unmount();
 

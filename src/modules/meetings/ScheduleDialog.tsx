@@ -5,7 +5,7 @@ import { errorMessage } from '../../core/bridge';
 import { currentZone } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Avatar, Button, Modal, cx } from '../../components/ui';
-import { TYPES } from './api';
+import { TYPES, type MeetingPreset } from './api';
 import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';
 import { DEFAULT_ROOM_SETTINGS, type RoomSettings } from '../meet/api';
@@ -50,10 +50,10 @@ export function nextSlot(mins: number, now = Date.now()): string {
  * Schedule a meeting (MeetingSchedule). The times are typed on this
  * computer's clock and sent with its zone; the server stores the instants.
  */
-export function ScheduleDialog({ onClose, online, onCreated }: { onClose: () => void; online?: boolean; onCreated?: (id: number) => void }) {
+export function ScheduleDialog({ onClose, online, onCreated, preset }: { onClose: () => void; online?: boolean; onCreated?: (id: number) => void; preset?: MeetingPreset }) {
   const qc = useQueryClient();
-  const [title, setTitle] = useState('');
-  const [type, setType] = useState('internal');
+  const [title, setTitle] = useState(preset?.title ?? '');
+  const [type, setType] = useState(preset?.type ?? 'internal');
   const [priority, setPriority] = useState('normal');
   const [start, setStart] = useState(() => nextSlot(30));
   const [end, setEnd] = useState(() => nextSlot(90));
@@ -123,6 +123,8 @@ export function ScheduleDialog({ onClose, online, onCreated }: { onClose: () => 
         room_settings: builtin ? { ...roomSettings, ...(passcode ? { passcode } : {}) } : undefined,
         agenda: agenda.split('\n').map((l) => l.trim()).filter(Boolean).map((t) => ({ title: t.slice(0, 190) })),
         skip_invitations: !invite,
+        // Scheduled from a record (#100, #101): linked to it, and logged on its timeline by the server.
+        ...(preset ? { source_type: preset.source_type, source_id: preset.source_id, source_kind: preset.source_kind, client_id: preset.client_id } : {}),
       });
       toast('success', invite ? 'Meeting scheduled and everyone invited.' : 'Meeting scheduled.');
       void qc.invalidateQueries({ queryKey: ['meetings'] });
@@ -157,6 +159,12 @@ export function ScheduleDialog({ onClose, online, onCreated }: { onClose: () => 
       }
     >
       <div className="flex max-h-[62vh] flex-col gap-3 overflow-y-auto pr-1 scroll-thin">
+        {preset ? (
+          <p className="m-0 flex items-center gap-1.5 rounded-[8px] bg-selection px-2.5 py-1.5 text-[12.5px] text-primary">
+            <span className="font-semibold">Related to</span> {preset.label}
+            <span className="text-ink-3">· it appears on the record's timeline. Guests invited by email get the invitation only, not the record.</span>
+          </p>
+        ) : null}
         <label className={label}>
           Title
           <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} maxLength={190} className={field} />

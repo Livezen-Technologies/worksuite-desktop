@@ -14,7 +14,7 @@ import { Icon } from '../../components/Icon';
 import { Avatar, Button, Chip, OfflineNote, cx } from '../../components/ui';
 import { Checkbox } from '../../components/Checkbox';
 import type { ModuleProps } from '../registry';
-import { CATEGORIES, categoryOf, destinationOf, type CalendarEvent } from '../calendar/api';
+import { CATEGORIES, destinationOf, entryCategory, type CalendarEvent } from '../calendar/api';
 import { ConflictFlag, useWaitingInvitations, type WaitingInvitation } from '../calendar/conflicts';
 import { openMeeting } from '../meet/api';
 import { dueOf, type Task } from '../tasks/api';
@@ -498,8 +498,7 @@ function Agenda({ events, canMeet, onOpen }: { events: CalendarEvent[]; canMeet:
         const end = e.end_at ? wallMinutes(e.end_at) : wallMinutes(e.start_at) + 60;
         const live = !e.all_day && wallMinutes(e.start_at) <= now + 10 && end >= now;
         const past = !e.all_day && end < now;
-        const related = (e as CalendarEvent & { related?: { kind_label?: string | null } | null }).related;
-        const kind = related?.kind_label ?? CATEGORIES.find((c) => c.id === categoryOf(e.source))?.label.replace(/s$/, '') ?? 'Event';
+        const kind = e.related?.kind_label ?? CATEGORIES.find((c) => c.id === entryCategory(e))?.label.replace(/s$/, '') ?? 'Event';
         const join = e.source === 'meeting' && e.uuid ? (canMeet ? () => void openMeeting(e.uuid!, e.title) : null) : e.join_url ? () => void call('app:openExternal', { url: e.join_url! }) : null;
         return (
           <li key={`${e.source}:${e.id}:${e.start_at}`} className={cx('flex items-center gap-2.5 rounded-[8px] px-2 py-1.5', live ? 'bg-selection' : 'hover:bg-subtle', past && 'opacity-60')}>

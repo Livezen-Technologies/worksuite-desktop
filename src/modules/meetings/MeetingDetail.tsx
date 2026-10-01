@@ -14,7 +14,7 @@ import { openMeeting } from '../meet/api';
 import { RecordingStatusView } from '../meet/RecordingStatus';
 import { serverRecordingStatus } from '@shared/recording-status';
 import type { Stroke } from '../meet/session';
-import { providerLabel, RSVP_LABEL, typeLabel, type AgendaItem, type Detail, type Person, type Rsvp } from './api';
+import { openRelatedLabel, providerLabel, RSVP_LABEL, typeLabel, type AgendaItem, type Detail, type Person, type Rsvp } from './api';
 import { Select } from '../../components/Select';
 import { MinutesEditor } from './minutes/MinutesEditor';
 import { TranscriptsTab } from './transcripts/TranscriptsTab';
@@ -51,7 +51,7 @@ function mmss(s: number): string {
 
 export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }) {
   const qc = useQueryClient();
-  const { navigate, query } = useTab();
+  const { navigate, query, openLink } = useTab();
   const me = useStore(app, (s) => (s.auth?.user?.id ? Number(s.auth.user.id) : null));
   // Its conversation is in Chat and its video call in Meet: each offered only to whoever has that app.
   const canChat = useCanOpen('chat');
@@ -103,6 +103,7 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-[22px] font-bold text-ink">{m.title}</h1>
               <Chip tone="indigo">{typeLabel(m.type)}</Chip>
+              {m.source ? <Chip tone="teal">{m.source.kind_label}{m.source.label ? ` · ${m.source.label}` : ''}</Chip> : null}
               {m.priority === 'high' || m.priority === 'urgent' ? <Chip tone="danger">{m.priority === 'urgent' ? 'Urgent' : 'High priority'}</Chip> : null}
               {m.live_status === 'ongoing' ? <Chip tone="danger">Happening now</Chip> : m.live_status === 'cancelled' ? <Chip>Cancelled</Chip> : m.live_status === 'completed' ? <Chip tone="success">Completed</Chip> : null}
             </div>
@@ -111,6 +112,12 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
               {m.project ? ` · Project: ${m.project}` : ''}
             </span>
           </div>
+          {m.source?.can_open && m.source.link ? (
+            // The record it is about (#100, #101) — offered only to someone who may open it.
+            <button type="button" className={btn} onClick={() => openLink(m.source!.link!)}>
+              {openRelatedLabel(m.source)}
+            </button>
+          ) : null}
           {d.chat?.room_id && canChat ? <button type="button" className={btn} onClick={() => navigate(`/chat?room=${d.chat!.room_id}`)}>Open in Chat</button> : null}
           {canEdit ? <button type="button" className={btn} title="Opens on the web" onClick={() => void call('app:openInBrowser', { path: `/meetings?meeting=${m.id}` })}>Edit ↗</button> : null}
           {canEdit && m.live_status !== 'cancelled' && m.live_status !== 'completed' ? (
