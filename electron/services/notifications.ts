@@ -21,6 +21,9 @@ const log = logger('notifications');
  * is locked) → the OS adapter.
  */
 
+/** How far back a notification the realtime push missed is still worth popping up. */
+const MISSED_WINDOW_MS = 15 * 60_000;
+
 interface ServerNotification {
   id: string | number;
   type?: string | null;
@@ -122,6 +125,8 @@ const MODULE_LABELS: Record<string, string> = {
 
 export class NotificationService {
   private shown: string[] = [];
+  /** Whether the list has been read once since sign-in: what was there then is not news. */
+  private listed = false;
   private pausedUntil: number | null = null;
   /** The website-chat call window is showing: a ringing chat needs no toast as well. */
   ringerShowing: () => boolean = () => false;
@@ -150,10 +155,13 @@ export class NotificationService {
 
   start(userId: string): void {
     this.userId = userId;
+    this.listed = false;
     void this.refreshList();
     void this.refreshCounts();
     this.pollTimer = setInterval(() => {
       void this.refreshCounts();
+      // The list too, so one the realtime push missed (asleep, reconnecting) still pops up (worksuite-desktop#16).
+      void this.refreshList(true);
     }, 60_000);
     this.pollTimer.unref?.();
     // Mail has no realtime events; its unread count is polled, gently — the
@@ -256,13 +264,27 @@ export class NotificationService {
     }
   }
 
-  async refreshList(): Promise<{ items: NotificationItem[]; unread: number }> {
+  /**
+   * The list from the server. With `announce`, an unread one this app has not shown yet, from the last few minutes,
+   * pops up as it would have from the realtime push: the push is the fast way, this is the one that does not miss.
+   */
+  async refreshList(announce = false): Promise<{ items: NotificationItem[]; unread: number }> {
     if (!this.userId) return { items: [], unread: 0 };
     try {
       const data = await this.http.get<{ items?: ServerNotification[]; unread?: number }>('/api/notifications');
-      const items = (data.items ?? []).map(mapServerNotification);
+      const raw = data.items ?? [];
+      const items = raw.map(mapServerNotification);
       this.unread.notifications = Number(data.unread ?? items.filter((i) => !i.read).length);
       this.cache(items);
+      if (announce && this.listed) {
+        const since = Date.now() - MISSED_WINDOW_MS;
+        raw.forEach((n, k) => {
+          const i = items[k]!;
+          if (i.read || this.shown.includes(i.id) || Date.parse(i.createdAt) < since) return;
+          this.notify({ id: i.id, module: i.module, category: n.category ?? null, title: i.title, body: i.body, sender: null, link: i.link, critical: n.priority === 'critical' || n.priority === 'emergency' || n.level === 'critical' || n.level === 'emergency' });
+        });
+      }
+      this.listed = true;
       // Anything already on the server is not "new": never pop a toast for it.
       for (const i of items) this.remember(i.id);
       this.onChanged();
@@ -345,7 +367,7 @@ export class NotificationService {
           link,
           critical: e.priority === 'critical' || e.priority === 'emergency' || e.level === 'critical' || e.level === 'emergency',
         });
-        void this.refreshList();
+        void this.refreshList(true);
         break;
       }
       case 'chat.message': {
