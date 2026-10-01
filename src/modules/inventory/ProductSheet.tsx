@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { DescriptionEditor } from '../../components/DescriptionEditor';
 import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
@@ -65,7 +66,7 @@ export default function ProductSheet({
       </Sheet>
     );
   }
-  return <Form id={id} org={org} companies={companies} canCost={canCost} initial={draftOf(existing.data?.product)} locked={!!existing.data?.stock_locked} onClose={onClose} onSaved={onSaved} onManageCategories={onManageCategories} />;
+  return <Form key={id ?? 'new'} id={id} org={org} companies={companies} canCost={canCost} initial={draftOf(existing.data?.product)} locked={!!existing.data?.stock_locked} onClose={onClose} onSaved={onSaved} onManageCategories={onManageCategories} />;
 }
 
 function Form({
@@ -97,6 +98,15 @@ function Form({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [pending, setPending] = useState<File[]>([]);
+  const [discard, setDiscard] = useState(false);
+  const dirty = JSON.stringify(d) !== JSON.stringify(initial) || pending.length > 0 || company !== (org || (companies.length === 1 ? String(companies[0]!.id) : ''));
+  const close = () => { if (saving) return; if (dirty) setDiscard(true); else onClose(); };
+  useEffect(() => {
+    if (!dirty) return;
+    const guard = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', guard);
+    return () => window.removeEventListener('beforeunload', guard);
+  }, [dirty]);
   const scope = id ? org : company;
   const cats = useQuery({
     queryKey: K.categories(scope),
@@ -157,10 +167,10 @@ function Form({
       title={id ? 'Edit product' : 'New product'}
       side
       width={600}
-      onClose={onClose}
+      onClose={close}
       footer={
         <>
-          <button type="button" className={btn} onClick={onClose}>
+          <button type="button" className={btn} onClick={close}>
             Cancel
           </button>
           <button type="button" className={btnPrimary} disabled={saving} onClick={() => void save()}>
@@ -337,9 +347,10 @@ function Form({
           Pictures
           <ProductPictures productId={id} pending={pending} onPending={setPending} />
         </div>
-        <Field label="Description">
-          <textarea className={input + ' !h-[76px] py-2'} value={d.description} onChange={(e) => set('description', e.target.value)} aria-label="Description" />
-        </Field>
+        <div className="flex flex-col gap-1">
+          <span className="text-[12.5px] font-semibold text-ink">Description</span>
+          <DescriptionEditor initial={initial.description} onChange={(html) => set('description', html)} />
+        </div>
         {error ? (
           <span role="alert" className="rounded-[8px] bg-danger-bg px-3 py-2 text-[12.5px] font-semibold text-danger">
             {error}
@@ -347,6 +358,14 @@ function Form({
         ) : null}
         <button type="submit" hidden />
       </form>
+      {discard ? <div onKeyDown={(e) => e.stopPropagation()}>
+        <Sheet title="Discard unsaved changes?" onClose={() => setDiscard(false)} footer={<>
+          <button type="button" className={btn} autoFocus onClick={() => setDiscard(false)}>Keep editing</button>
+          <button type="button" className={btnPrimary} onClick={onClose}>Discard changes</button>
+        </>}>
+          <p className="text-[13px] text-ink-2">Your product changes have not been saved.</p>
+        </Sheet>
+      </div> : null}
     </Sheet>
   );
 }

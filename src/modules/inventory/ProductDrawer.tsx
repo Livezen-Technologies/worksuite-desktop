@@ -1,3 +1,4 @@
+import { DescriptionView } from '../../components/DescriptionEditor';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { useCanOpen } from '../../core/access';
@@ -257,7 +258,7 @@ function Overview({ d, onOpenProduct }: { d: ProductDetail; onOpenProduct: (id: 
             ]}
           />
         </div>
-        {p.description ? <p className="m-0 text-[12.5px] whitespace-pre-line text-ink-2">{p.description}</p> : null}
+        {p.description ? <DescriptionView value={p.description} /> : null}
       </Block>
       {d.prices.length ? (
         <Block title="Price lists">
