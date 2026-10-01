@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.1.1 — 2026-10-01
+
+**Fixed**
+
+- Share opens over the document rather than in front of a blank grey page (worksuite-desktop#42). A picture of the editor taken as it opens stays behind the dimmed dialog, as it does for the menus. Moving on to a secure or public link keeps it. Closing with Done, × or Escape brings the same editor back with its changes, selection and scroll as they were, and typing goes on in the document. The editor's own Share and a mention's offer to share do the same, as does Save as version.
+
 ## 1.1.0 — 2026-09-30
 
 **Added**

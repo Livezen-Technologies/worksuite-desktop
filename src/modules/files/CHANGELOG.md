@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.1.3 — 2026-10-01
+
+**Fixed**
+
+- Escape closes the Share dialog wherever the keyboard is, and the dialog takes the keyboard when it opens. Over a document, the keyboard was still in the editor (worksuite-desktop#42).
+
 ## 1.1.2 — 2026-10-01
 
 **Changed**

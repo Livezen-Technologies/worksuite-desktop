@@ -535,6 +535,24 @@ describe('the Office tab', () => {
       await waitFor(() => expect(still()).toBeNull());
     });
 
+    it('Share opens over the document, which stays in view behind it; Escape brings the editor back (worksuite-desktop#42)', async () => {
+      serve();
+      mount('/office/42?name=Proposal.docx');
+      await waitFor(() => expect(vi.mocked(call).mock.calls.some(([ch]) => ch === 'office:open')).toBe(true));
+      fireEvent.click(await screen.findByRole('button', { name: 'Share' }));
+      expect(await screen.findByRole('dialog', { name: /Share “Proposal\.docx”/ })).toBeTruthy();
+      expect(vi.mocked(call)).toHaveBeenCalledWith('office:snapshot', { viewId: VIEW });
+      expect(still()).not.toBeNull();
+      expect(screen.queryByText('The document is behind this window.')).toBeNull();
+      // Escape closes it from anywhere, the keyboard having been in the editor until a moment ago.
+      expect(document.activeElement?.getAttribute('role')).toBe('dialog');
+      fireEvent.keyDown(document.body, { key: 'Escape' });
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      await waitFor(() => expect(still()).toBeNull());
+      // The same session: nothing was opened again.
+      expect(vi.mocked(call).mock.calls.filter(([ch]) => ch === 'office:open')).toHaveLength(1);
+    });
+
     it('picking a mode in the Editing menu switches to it and the button says so (worksuite-desktop#40)', async () => {
       serve();
       const post = vi.mocked(apiPost).getMockImplementation()!;

@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useCanOpen } from '../../core/access';
 import { app } from '../../core/app-state';
 import { apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
@@ -140,10 +140,25 @@ export function ShareDialog({ item, onClose, onSecureLink, onPublicLink, onSendT
   const inheritedRefused = (a?.inherited ?? []).filter((g) => g.effect === 'deny');
   const noun = item.type === 'folder' ? 'Folder · everything inside inherits this access' : 'File';
   const webLink = `${origin}/files?${item.type === 'folder' ? `folder=${item.f.id}` : `file=${item.f.id}`}`;
+  // Escape closes it wherever the keyboard is (over a document, it was in the editor until a moment ago), and the
+  // dialog takes the keyboard when it opens (worksuite-desktop#42).
+  const box = useRef<HTMLDivElement>(null);
+  const close = useRef(onClose);
+  useEffect(() => {
+    close.current = onClose;
+  });
+  useEffect(() => {
+    if (!box.current?.contains(document.activeElement)) box.current?.focus();
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !e.defaultPrevented) close.current();
+    };
+    window.addEventListener('keydown', esc);
+    return () => window.removeEventListener('keydown', esc);
+  }, []);
 
   return (
     <div className="no-drag fixed inset-0 z-50 flex items-center justify-center bg-[#0B1020]/50 p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-labelledby="shTitle" onKeyDown={(e) => e.key === 'Escape' && onClose()} className="animate-in flex max-h-full w-[820px] flex-col rounded-[14px] border border-line bg-surface text-[13px] shadow-2xl">
+      <div ref={box} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="shTitle" className="animate-in outline-none flex max-h-full w-[820px] flex-col rounded-[14px] border border-line bg-surface text-[13px] shadow-2xl">
         <div className="flex items-center gap-3 border-b border-line px-5 py-3.5">
           <span className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-selection text-primary"><Icon name={item.type === 'folder' ? 'folder' : 'file'} size={18} /></span>
           <div className="flex min-w-0 flex-1 flex-col">
