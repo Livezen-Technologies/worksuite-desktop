@@ -127,6 +127,7 @@ export const INVOKE_CHANNELS = [
   'transfers:list',
   'transfers:download',
   'transfers:upload',
+  'transfers:prepareMedia',
   'transfers:pause',
   'transfers:resume',
   'transfers:cancel',

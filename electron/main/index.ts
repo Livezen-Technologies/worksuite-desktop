@@ -1457,7 +1457,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     () => ({ server: auth.getServer()?.origin ?? null, media: mediaServers() }),
     // A course's lessons kept offline, played by the app's own pages.
     (request, path) =>
-      path.startsWith('/elearning/')
+      path.startsWith('/chat-media/')
+        ? (sessionCtl.isReady() ? transfers.serveMediaPreview(request, path) : Promise.resolve(new Response('Not found', { status: 404 })))
+        : path.startsWith('/elearning/')
         ? elearning.serve(request, path)
         : // The speech model, for the speech page only (worksuite-desktop#81).
           path === '/speech/model.bin'

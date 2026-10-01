@@ -483,6 +483,9 @@ export interface Transfer {
   bytes: number;
   total: number;
   state: TransferState;
+  /** Chat upload lifecycle; completion means the attachment message was confirmed. */
+  phase?: 'preparing' | 'uploading' | 'processing' | 'waiting' | 'sending';
+  chat?: { roomId: string; clientMessageId: string; caption?: string; voice?: boolean; durationMs?: number };
   speed: number;
   error: string | null;
   createdAt: string;
