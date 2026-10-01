@@ -20,7 +20,7 @@ export interface Ringback {
   toggle: () => void;
 }
 
-const GRADIENT = 'radial-gradient(120% 70% at 50% 25%, #23407A 0%, #13224A 45%, #0B1530 100%)';
+const GRADIENT = 'radial-gradient(120% 70% at 50% 25%, var(--ws-call-glow, #23407A) 0%, var(--ws-call-mid, #13224A) 45%, var(--ws-call-base, #0B1530) 100%)';
 
 export function VoiceWindow({
   name,

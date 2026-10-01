@@ -1,3 +1,4 @@
+import { applyDarkProfile } from '@shared/theme-profiles';
 import type { InputOf, LockState } from '@shared/ipc/contract';
 import type { AppInfo, AuthState, Bootstrap, Preferences, PreferenceLock, StatusSnapshot, SyncStatus, Transfer, UpdateStatus } from '@shared/types';
 import { grantOf } from '@shared/access';
@@ -54,6 +55,7 @@ function applyTheme(prefs: Preferences | null): void {
   const dark = theme === 'dark' || (theme === 'system' && !!media?.matches);
   const root = document.documentElement;
   root.dataset.theme = dark ? 'dark' : 'light';
+  applyDarkProfile(root, prefs?.darkColorProfile, dark);
   root.dataset.density = prefs?.density ?? 'comfortable';
   app.set({ resolvedTheme: dark ? 'dark' : 'light' });
 }

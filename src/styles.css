@@ -2,8 +2,8 @@
 
 /*
  * WorkSuite Desktop visual language (§4.12).
- * The shell (title bar, sidebar, lock screen) stays navy in both themes; the
- * workspace follows Light / Dark / System (FR-SHL-06).
+ * Light / Dark / System appearance and shared dark profile tokens (#73).
+ * The shell and workspace use the same profile in every renderer window.
  */
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
@@ -13,6 +13,7 @@
   --ws-navy-3: #22335f;
   --ws-navy-ink: #c9d1ea;
   --ws-indigo: #23349e;
+  --ws-on-primary: #ffffff;
   --ws-indigo-hover: #16236e;
   --ws-brand: #3b5bdb;
   --ws-teal: #0e7c86;
@@ -238,7 +239,7 @@ textarea,
 }
 /* On dark it sits below the surface colour, so bubbles, pills and cards read as raised off it. */
 [data-theme='dark'] .chat-wallpaper {
-  background-color: #0a0f22;
+  background-color: var(--ws-chat-ground, #0a0f22);
   background-image: radial-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px);
 }
 
@@ -370,3 +371,149 @@ textarea,
     background-color: var(--ws-subtle);
   }
 }
+
+/* Bright accents remain legible both as text and as filled controls. */
+[data-theme='dark'] :is(.bg-primary.text-white, .dark\:bg-primary.text-white) {
+  color: var(--ws-on-primary);
+}
+
+/* Older window chrome uses fixed navy utilities. New profiles adapt those utilities
+ * here; Blue retains their original colors, and semantic status colors stay distinct. */
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="accent-[#7FA2FF]"]
+) { accent-color: var(--ws-indigo); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[rgba(59,91,219,.85)]"]
+) { background-color: color-mix(in srgb, var(--ws-brand) 85%, transparent); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[rgba(7,12,26,.6)]"]
+) { background-color: color-mix(in srgb, var(--ws-ground) 60%, transparent); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[rgba(11,18,38,.7)]"]
+) { background-color: color-mix(in srgb, var(--ws-ground) 70%, transparent); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[rgba(11,18,38,.72)]"]
+) { background-color: color-mix(in srgb, var(--ws-ground) 72%, transparent); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[rgba(11,18,38,.8)]"]
+) { background-color: color-mix(in srgb, var(--ws-ground) 80%, transparent); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[rgba(11,18,38,.82)]"],
+  [class~="bg-[rgba(7,12,26,.82)]"]
+) { background-color: color-mix(in srgb, var(--ws-ground) 82%, transparent); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[rgba(11,18,38,.85)]"]
+) { background-color: color-mix(in srgb, var(--ws-ground) 85%, transparent); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[rgba(7,12,26,.88)]"]
+) { background-color: color-mix(in srgb, var(--ws-ground) 88%, transparent); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[rgba(7,12,26,.9)]"]
+) { background-color: color-mix(in srgb, var(--ws-ground) 90%, transparent); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[rgba(15,27,61,.12)]"]
+) { background-color: color-mix(in srgb, var(--ws-navy) 12%, transparent); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[rgba(15,27,61,.32)]"]
+) { background-color: color-mix(in srgb, var(--ws-navy) 32%, transparent); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[rgba(15,27,61,.38)]"]
+) { background-color: color-mix(in srgb, var(--ws-navy) 38%, transparent); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[rgba(15,27,61,.42)]"]
+) { background-color: color-mix(in srgb, var(--ws-navy) 42%, transparent); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[rgba(15,27,61,.45)]"]
+) { background-color: color-mix(in srgb, var(--ws-navy) 45%, transparent); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[rgba(15,27,61,.88)]"]
+) { background-color: color-mix(in srgb, var(--ws-navy) 88%, transparent); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[rgba(15,27,61,.92)]"]
+) { background-color: color-mix(in srgb, var(--ws-navy) 92%, transparent); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[rgba(15,27,61,.95)]"]
+) { background-color: color-mix(in srgb, var(--ws-navy) 95%, transparent); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[#16254F]/95"]
+) { background-color: color-mix(in srgb, var(--ws-navy-2) 95%, transparent); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[#3B5BDB]"]
+) { background-color: var(--ws-brand); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[#070C1A]"],
+  [class~="bg-[#0B1226]"],
+  [class~="bg-[#0D1424]"]
+) { background-color: var(--ws-ground); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[#7FA2FF]"]
+) { background-color: var(--ws-indigo); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[#1E2C57]"]
+) { background-color: var(--ws-line); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[#0F1B3D]"],
+  [class~="dark:bg-[#0F1B3D]"]
+) { background-color: var(--ws-navy); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[#16254F]"]
+) { background-color: var(--ws-navy-2); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[#22305C]"],
+  [class~="bg-[#24365F]"],
+  [class~="bg-[#2A3A66]"]
+) { background-color: var(--ws-navy-3); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[#1E3A5F]"],
+  [class~="bg-[#D8E4F6]"],
+  [class~="dark:bg-[#1C2A5E]"],
+  [class~="dark:bg-[#26366E]"]
+) { background-color: var(--ws-selection); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="bg-[#E9ECF4]"]
+) { background-color: var(--ws-subtle); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="border-[#1E2C57]"],
+  [class~="border-[#2A3A66]"],
+  [class~="border-[#8C9AD3]"],
+  [class~="dark:border-[#1E2C57]"],
+  [class~="dark:border-[#2A3A66]"]
+) { border-color: var(--ws-line); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="border-[#13224A]"]
+) { border-color: var(--ws-navy-2); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="dark:text-[#AFC0FF]"],
+  [class~="dark:text-[#B4C3FF]"],
+  [class~="text-[#BFD7FF]"]
+) { color: var(--ws-indigo); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="dark:text-[#E6ECFA]"],
+  [class~="text-[#E6ECFA]"]
+) { color: var(--ws-ink); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="text-[#AFC0E8]"],
+  [class~="text-[#C3CEEA]"],
+  [class~="text-[#C9D3EE]"],
+  [class~="text-[#C9D5F5]"]
+) { color: var(--ws-ink-2); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="text-[#8FA0CC]"],
+  [class~="text-[#8FA6E0]"]
+) { color: var(--ws-ink-3); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="hover:bg-[rgba(11,18,38,.95)]"]:hover
+) { background-color: color-mix(in srgb, var(--ws-ground) 95%, transparent); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="hover:bg-[rgba(22,37,79,.95)]"]:hover
+) { background-color: color-mix(in srgb, var(--ws-navy-2) 95%, transparent); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="hover:bg-[#4C6BE6]"]:hover
+) { background-color: color-mix(in srgb, var(--ws-brand) 85%, black); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="hover:bg-[#2B3C70]"]:hover,
+  [class~="hover:bg-[#344777]"]:hover
+) { background-color: var(--ws-navy-3); }
+[data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
+  [class~="hover:border-[#3B4E85]"]:hover
+) { border-color: var(--ws-line); }

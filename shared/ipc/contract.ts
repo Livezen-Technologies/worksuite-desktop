@@ -1,3 +1,4 @@
+import { DARK_PROFILE_IDS } from '../theme-profiles';
 /**
  * The typed IPC contract (§3.4, §8.4, WF-05).
  *
@@ -124,6 +125,7 @@ export const preferencesPatchSchema = z
     minimizeToTray: z.boolean(),
     restoreTabs: z.boolean(),
     theme: z.enum(['system', 'light', 'dark']),
+    darkColorProfile: z.enum(DARK_PROFILE_IDS),
     density: z.enum(['comfortable', 'compact']),
     hardwareAcceleration: z.boolean(),
     notificationSounds: z.boolean(),
