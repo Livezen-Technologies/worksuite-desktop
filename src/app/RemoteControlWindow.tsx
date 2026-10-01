@@ -5,6 +5,7 @@ import { apiPost } from '../core/api';
 import { bytes } from '../core/time';
 import { Button, Spinner, cx } from '../components/ui';
 import { Select } from '../components/Select';
+import { Checkbox } from '../components/Checkbox';
 
 /**
  * Remote control's own windows, which the main process opens above
@@ -173,7 +174,7 @@ function ConsentWindow() {
 function Check({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
     <label className="flex items-center gap-2">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="accent-[var(--color-primary)]" />
+      <Checkbox checked={checked} onChange={(e) => onChange(e.target.checked)} />
       {label}
     </label>
   );

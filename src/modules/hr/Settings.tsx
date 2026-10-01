@@ -12,6 +12,7 @@ import { btn, btnPrimary, Empty, Field, input, PageHead, Panel, Seg, Sheet } fro
 import { can } from './Rail';
 import { ModuleSettingsForm } from '../../components/ModuleSettingsForm';
 import { Select } from '../../components/Select';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * HR settings (HrAdminSheet "Settings"; the web's ModuleSettings for HR):
@@ -159,7 +160,7 @@ function LeaveTypeSheet({ t, onClose, onDone }: { t: FullType | null; onClose: (
   };
   const box = (label: string, v: boolean, set: (b: boolean) => void) => (
     <label className="flex items-center gap-2 text-[12.5px] font-semibold text-ink">
-      <input type="checkbox" aria-label={label} checked={v} onChange={(e) => set(e.target.checked)} className="accent-primary" />
+      <Checkbox aria-label={label} checked={v} onChange={(e) => set(e.target.checked)} />
       {label}
     </label>
   );

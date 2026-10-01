@@ -9,6 +9,7 @@ import type { LogsResponse, Sheet as TimesheetRow, TimeLog } from './api';
 import { addDays, dayShort, hoursLabel, monthLabel, parseYmd, rangeLabel, weekDays, weekStart, ymd } from './dates';
 import { btn, btnPrimary, Cell, Empty, Field, input, Kpi, PageHead, Panel, row, Seg, Sheet, StatusChip, THead } from './parts';
 import { Select } from '../../components/Select';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Timesheet (HrTimesheet): what I worked on — day, week or month — as work
@@ -278,7 +279,7 @@ function WorkLog({ log, onDate, onClose, onDone }: { log: TimeLog | null; onDate
         </Field>
       </div>
       <label className="flex items-center gap-2 font-semibold text-ink">
-        <input type="checkbox" checked={billable} onChange={(e) => setBillable(e.target.checked)} className="accent-[var(--color-primary)]" />
+        <Checkbox checked={billable} onChange={(e) => setBillable(e.target.checked)} />
         Billable
       </label>
     </Sheet>

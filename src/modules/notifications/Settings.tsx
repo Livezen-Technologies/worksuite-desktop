@@ -16,6 +16,7 @@ import { K as AccountK } from '../account/api';
 import { Card, SettingRow } from '../account/parts';
 import { computerZone, useZones } from '../account/regional';
 import { appOf } from './api';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Notification settings (NotifSettings): which kinds of notification reach
@@ -154,13 +155,12 @@ export default function NotificationSettings() {
                         const live = c.master && (c.id === DESKTOP ? prefs.notificationsEnabled : c.usable);
                         return (
                           <td key={c.id} className="px-2 py-2.5 text-center">
-                            <input
-                              type="checkbox"
+                            <Checkbox
                               aria-label={`${cat.label}: ${c.label}`}
                               checked={cell(cat.key, c.id) && live}
                               disabled={!live}
                               onChange={(e) => setCell(cat.key, c.id, e.target.checked)}
-                              className={cx('h-4 w-4 accent-primary', !live && 'opacity-40')}
+                              className={cx(!live && 'opacity-40')}
                             />
                           </td>
                         );

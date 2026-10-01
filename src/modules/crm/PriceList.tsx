@@ -11,6 +11,7 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Field, input, PageHead, Sheet } from '../hr/parts';
 import type { Product } from './api';
 import { crmCan, moneyFull } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Price list (CrmPriceList): the catalogue quotes pick from — the products
@@ -54,7 +55,7 @@ export default function PriceList() {
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search the price list" aria-label="Search the price list" className="bare-focus min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-3" />
         </label>
         <label className="flex items-center gap-2 text-[12.5px] font-semibold text-ink-2">
-          <input type="checkbox" checked={retired} onChange={(e) => setRetired(e.target.checked)} className="accent-primary" />
+          <Checkbox checked={retired} onChange={(e) => setRetired(e.target.checked)} />
           Show retired
         </label>
       </div>

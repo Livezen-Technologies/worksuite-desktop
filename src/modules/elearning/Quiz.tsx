@@ -6,6 +6,7 @@ import { Button, ErrorNote, Modal, Spinner, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
 import { clock, eGet, ePost, ePut, errorText, K, newKey, OFFLINE, pct, refusalCode, when, type Answer, type Attempt, type AttemptQuestion, type MyAssessment } from './api';
 import { area, Back, input, Pill, Refusal, Rich, Section, useEl } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * A quiz (§5.12, WF-11). Before an attempt: the rules, the attempts so far and
@@ -366,8 +367,7 @@ export function Question({ q, value, disabled, onAnswer }: { q: AttemptQuestion;
         <div className="flex flex-col gap-1" aria-label="Choose all that apply">
           {(q.options ?? []).map((o) => (
             <label key={o.id} className={cx('flex items-center gap-2 rounded-[8px] border px-3 py-2 text-[13px]', set.has(o.id) ? 'border-primary bg-selection' : 'border-line', disabled ? 'opacity-80' : 'cursor-pointer hover:bg-subtle')}>
-              <input
-                type="checkbox"
+              <Checkbox
                 disabled={disabled}
                 checked={set.has(o.id)}
                 onChange={() => {

@@ -14,6 +14,7 @@ import { Pill } from '../inventory/parts';
 import { K, type Company } from './api';
 import { fetchLibrary, filterLibrary, KA, LIBRARY_KINDS, libraryBody, libraryDraft, libraryKind, removeLibraryDoc, removeLibraryDocs, saveLibraryDoc, type LibraryDoc, type LibraryDraft, type LibraryFilter } from './admin';
 import { saveTenderFile } from './files';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * The company's own documents — registration, tax clearance, audited
@@ -98,7 +99,7 @@ export default function Library({ org, companies, canManage }: { org: string; co
         {rows.length ? (
           rows.map((d) => (
             <div key={d.id} data-library={d.id} className={cx('flex items-center gap-3 border-b border-line/60 px-3.5 py-2.5 text-[12.5px] last:border-b-0', picked.includes(d.id) && 'bg-[#F4F6FE] dark:bg-selection/40')}>
-              {canManage ? <input type="checkbox" aria-label={`Choose ${d.name}`} checked={picked.includes(d.id)} onChange={() => setPicked((p) => (p.includes(d.id) ? p.filter((x) => x !== d.id) : [...p, d.id]))} className="accent-primary" /> : null}
+              {canManage ? <Checkbox aria-label={`Choose ${d.name}`} checked={picked.includes(d.id)} onChange={() => setPicked((p) => (p.includes(d.id) ? p.filter((x) => x !== d.id) : [...p, d.id]))} /> : null}
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="flex flex-wrap items-center gap-1.5">
                   <b className="text-[13px] text-ink">{d.name}</b>

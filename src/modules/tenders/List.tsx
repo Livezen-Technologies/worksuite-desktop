@@ -9,6 +9,7 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet } from '../hr/parts';
 import { bulkTenders, fetchList, K, moneyList, money, NOT_IN_BULK, PER_PAGE, presetOf, PRIORITIES, SORTS, STAGE_GROUPS, useOwners, VIEWS, type Band, type BulkAction, type Filters, type ListView, type StageDef, type TenderRow } from './api';
 import { Left, OutcomePill, PriorityPill, Score, StagePill } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * A tender list: one of the rail's presets, with its filters on screen to be
@@ -123,11 +124,11 @@ export default function List({ view, org, stages, bands, canManage, onOpen }: { 
         />
         <Select<string> aria-label="Closing" value={f.closing} onValueChange={(v) => set({ closing: v })} options={CLOSING.map(([value, label]) => ({ value, label }))} className={input + ' !w-[160px]'} />
         <label className="flex items-center gap-1.5 font-semibold text-ink">
-          <input type="checkbox" checked={f.following} onChange={(e) => set({ following: e.target.checked })} className="accent-primary" />
+          <Checkbox checked={f.following} onChange={(e) => set({ following: e.target.checked })} />
           Following
         </label>
         <label className="flex items-center gap-1.5 font-semibold text-ink">
-          <input type="checkbox" checked={f.unscored} onChange={(e) => set({ unscored: e.target.checked })} className="accent-primary" />
+          <Checkbox checked={f.unscored} onChange={(e) => set({ unscored: e.target.checked })} />
           Not scored
         </label>
         <Select<string> aria-label="Sort" value={f.sort} onValueChange={(v) => set({ sort: v })} options={SORTS.map(([value, label]) => ({ value, label: `Sort: ${label}` }))} className={input + ' !w-[170px]'} />
@@ -192,12 +193,11 @@ export default function List({ view, org, stages, bands, canManage, onOpen }: { 
       ) : (
         <div className="overflow-hidden rounded-[12px] border border-line bg-surface">
           <div className="flex items-center gap-2.5 border-b border-line bg-ground px-3.5 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase">
-            <input
-              type="checkbox"
+            <Checkbox
               aria-label="Choose every tender on this page"
               checked={allOnPage}
+              indeterminate={!allOnPage && rows.some((r) => chosen.includes(r.id))}
               onChange={() => setChosen(allOnPage ? chosen.filter((c) => !rows.some((r) => r.id === c)) : [...new Set([...chosen, ...rows.map((r) => r.id)])])}
-              className="accent-primary"
             />
             <span className="min-w-0 flex-1">Tender</span>
             <span className="w-[140px] shrink-0">Stage</span>
@@ -291,7 +291,7 @@ function Row({ r, bands, chosen, onChoose, onOpen }: { r: TenderRow; bands: Band
   const decided = r.outcome !== 'open';
   return (
     <div data-tender={r.id} className={cx('flex items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] last:border-b-0 hover:bg-subtle/60', chosen && 'bg-[#F4F6FE] dark:bg-selection/40')}>
-      <input type="checkbox" aria-label={`Choose ${r.title}`} checked={chosen} onChange={onChoose} className="accent-primary" />
+      <Checkbox aria-label={`Choose ${r.title}`} checked={chosen} onChange={onChoose} />
       <button type="button" aria-label={`Open ${r.title}`} onClick={onOpen} className="flex min-w-0 flex-1 flex-col text-left">
         <span className="flex min-w-0 items-center gap-1.5">
           {r.following ? <Icon name="eye" size={13} className="shrink-0 text-primary" /> : null}

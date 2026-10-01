@@ -21,6 +21,7 @@ import type { ModuleProps } from '../registry';
 import { playTone } from '../calls/tones';
 import { shortcutLabel, useWriter, writerProblem } from '../ai/writer';
 import { discoverStudioModels, setStudioModels, STUDIO_KEY, studioState, testStudioModel, useStudioStatus, type StudioDiscovery } from '../ai/studio';
+import { Checkbox } from '../../components/Checkbox';
 
 /** Settings / profile tree (§4.9). Anything the organization's policy decides is shown locked, with the reason. */
 const SECTIONS = [
@@ -820,7 +821,7 @@ function AIStudioBlock() {
               {found.available.length ? (
                 found.available.map((m) => (
                   <label key={m} className="flex items-center gap-2 py-1 text-[13px] text-ink">
-                    <input type="checkbox" className="accent-primary" checked={picked.includes(m)} onChange={(e) => setPicked((p) => (e.target.checked ? [...p, m] : p.filter((x) => x !== m)))} aria-label={m} />
+                    <Checkbox checked={picked.includes(m)} onChange={(e) => setPicked((p) => (e.target.checked ? [...p, m] : p.filter((x) => x !== m)))} aria-label={m} />
                     <span className="font-mono">{m}</span>
                   </label>
                 ))

@@ -11,6 +11,7 @@ import {
   type CheckinScreen, type CheckinState, type JobView,
 } from './api';
 import { Ask, ChooseFiles, DocActions, DropZone, Field, input, Section, SignaturePad, Thumb, ToneNote, useGarage } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 type Draft = Pick<CheckinState, 'odometer' | 'fuel_level' | 'accessories' | 'valuables' | 'complaints' | 'conditions' | 'marks'> & {
   estimated_handover_at: string;
@@ -508,7 +509,7 @@ export default function CheckIn({ jobId, onBack }: { jobId: number; onBack: () =
               )}
             </div>
             <label className="flex items-center gap-1.5 text-[12.5px] text-ink-2">
-              <input type="checkbox" checked={email} onChange={(e) => setEmail(e.target.checked)} /> Email the customer a copy
+              <Checkbox checked={email} onChange={(e) => setEmail(e.target.checked)} /> Email the customer a copy
             </label>
             <Button variant="primary" loading={completing} disabled={(data.missing.length > 0 && !dirty) || !g.online} onClick={() => void complete()}>
               Complete check-in

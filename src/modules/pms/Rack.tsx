@@ -8,6 +8,7 @@ import { Ask } from '../garage/parts';
 import { PageHead } from '../hr/parts';
 import { errorText, K, money, newKey, pGet, pGetMeta, pPost, type Rack as RackData, type RackAction, type RackRoom, type Stay } from './api';
 import { Refusal, StatusBadge, usePms, VipPill } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /** The display filters of PMS-FD-003, applied to the rack as the server drew it. */
 export interface RackFilter {
@@ -120,7 +121,7 @@ export default function Rack({ room }: { room: number | null }) {
         <Select aria-label="Housekeeping" value={f.hk} onChange={(e) => set({ hk: e.target.value })} options={[{ value: '', label: 'Any housekeeping' }, ...pms.options.housekeeping_statuses.map((s) => ({ value: s.value, label: s.label }))]} className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12px]" />
         <Select aria-label="Due" value={f.due} onChange={(e) => set({ due: e.target.value as RackFilter['due'] })} options={[{ value: '', label: 'Due in or out' }, { value: 'in', label: 'Due in' }, { value: 'out', label: 'Due out' }]} className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12px]" />
         <label className="flex items-center gap-1.5 text-[12.5px] text-ink-2">
-          <input type="checkbox" checked={f.vip} onChange={(e) => set({ vip: e.target.checked })} /> VIPs
+          <Checkbox checked={f.vip} onChange={(e) => set({ vip: e.target.checked })} /> VIPs
         </label>
         {JSON.stringify(f) !== JSON.stringify(NO_FILTER) ? (
           <Button size="sm" variant="ghost" onClick={() => setF(NO_FILTER)}>

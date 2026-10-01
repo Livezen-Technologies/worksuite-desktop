@@ -6,6 +6,7 @@ import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner } from '../../components/ui';
 import { btn, btnPrimary, Cell, Empty, Field, input, Kpi, PageHead, row, Sheet, SidePanel, StatusChip, THead } from './parts';
 import { Select } from '../../components/Select';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Announcements (HrAdminSheet "Announcements"; the web's HrAnnouncements):
@@ -216,7 +217,7 @@ function Composer({ onClose, onDone }: { onClose: () => void; onDone: () => void
         </Field>
       </div>
       <label className="flex items-start gap-2 text-[12.5px] text-ink">
-        <input type="checkbox" aria-label="Ask everyone to acknowledge it" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-[2px] accent-primary" />
+        <Checkbox aria-label="Ask everyone to acknowledge it" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-[2px]" />
         <span>
           <b>Ask everyone to acknowledge it</b>
           <br />

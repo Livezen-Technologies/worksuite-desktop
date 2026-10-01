@@ -9,6 +9,7 @@ import { btn, btnPrimary, btnSmall, Field, input, PageHead, Sheet } from '../hr/
 import { Pill } from './parts';
 import { pick } from './pickers';
 import { addAttributeValue, attributeValues, createAttribute, createUnit, deleteAttribute, deleteBrand, deleteUnit, fetchAttributes, fetchBrands, fetchUnits, KS, saveBrand, UNIT_KINDS, unitBody, type Brand, type UnitDraft } from './admin';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Brands & units (InvLookups): the words products are described with —
@@ -268,7 +269,7 @@ function BrandSheet({ org, brand, onClose, onDone }: { org: string; brand: Brand
         </Field>
         {brand ? (
           <label className="flex items-center gap-2 text-[13px] text-ink">
-            <input type="checkbox" checked={f.archived} onChange={(e) => setF({ ...f, archived: e.target.checked })} /> Archived — kept on its products, not offered for new ones
+            <Checkbox checked={f.archived} onChange={(e) => setF({ ...f, archived: e.target.checked })} /> Archived — kept on its products, not offered for new ones
           </label>
         ) : null}
         {brand?.product_count ? <span className="text-[12px] text-ink-3">{brand.product_count.toLocaleString()} products carry it, so it can be archived but not deleted.</span> : null}
@@ -413,7 +414,7 @@ function AttributeSheet({ org, onClose, onDone }: { org: string; onClose: () => 
               <textarea className={input + ' !h-[80px] py-1.5'} value={f.values} onChange={(e) => setF({ ...f, values: e.target.value })} aria-label="Values" placeholder={'Small\nMedium\nLarge'} />
             </Field>
             <label className="flex items-center gap-2 text-[13px] text-ink">
-              <input type="checkbox" checked={f.variants} onChange={(e) => setF({ ...f, variants: e.target.checked })} /> Makes variants — one product for each value
+              <Checkbox checked={f.variants} onChange={(e) => setF({ ...f, variants: e.target.checked })} /> Makes variants — one product for each value
             </label>
           </>
         ) : null}

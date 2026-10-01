@@ -12,6 +12,7 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Caps, Field, input, PageHead, Sheet, SidePanel } from '../hr/parts';
 import type { Account, Product, Quote, QuoteLine } from './api';
 import { crmCan, money, moneyFull } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Quotes (CrmQuotes, CrmQuoteSheet): the list with what is out in each
@@ -89,7 +90,7 @@ export default function Quotes({ openId, creating, onOpen, onNew, onCloseNew }: 
         </label>
         <Select label="Status" value={status} onValueChange={(v) => (setStatus(v), setPage(1))} options={[{ value: '', label: 'Any status' }, ...STATUSES.map(([v, l]) => ({ value: v, label: l }))]} />
         <label className="flex items-center gap-2 text-[12.5px] font-semibold text-ink-2">
-          <input type="checkbox" checked={mine} onChange={(e) => (setMine(e.target.checked), setPage(1))} className="accent-primary" />
+          <Checkbox checked={mine} onChange={(e) => (setMine(e.target.checked), setPage(1))} />
           Mine only
         </label>
       </div>

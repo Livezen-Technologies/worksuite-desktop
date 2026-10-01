@@ -185,6 +185,21 @@ edge hides the panel, a 36 px strip with the panel icon shows it again, and the 
 `localStorage` (`ws.panel.<id>`, a view preference, never data). Panels with a toggle of their own (Chat's and
 Drive's details, PDF Studio's panels) keep it.
 
+## Checkboxes
+
+Every checkbox is `Checkbox` (`src/components/Checkbox.tsx`); a bare `<input type="checkbox">` fails
+`tests/unit/renderer/checkbox.test.tsx`. It is the native input with our look (`.ws-checkbox` in `src/styles.css`),
+so focus, Space, labels, form values and screen-reader state come from the platform. It takes every input prop, plus:
+
+- `indeterminate` — for a Select-all box when only some rows are chosen. Clicking it chooses them all.
+- `invalid` — a validation error: red border and `aria-invalid`.
+- `size="lg"` — 20 px, for touch-first screens (Salon's check-in). Otherwise 16 px everywhere; a click lands
+  6 px beyond the box, so compact rows keep their height.
+- `color` — a different accent, e.g. a calendar category's colour.
+
+Clicks, double-clicks and Space on the box do not reach the element around it, so ticking a row never opens it.
+Size and colour come from the component; pass only layout classes (margins, opacity) in `className`.
+
 ## Opening documents from other modules
 
 A module that shows a document opens it on this computer, never in the browser. `openDocument()`

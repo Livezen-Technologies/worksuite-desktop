@@ -11,6 +11,7 @@ import { Avatar, Button, Chip, Modal, Spinner, cx } from '../../components/ui';
 import { createMeeting, openMeeting } from '../meet/api';
 import { categoryOf, CATEGORIES, colourOf, dayOf, destinationOf, REMINDERS, SWATCHES, toInput, type CalendarEvent, type EventDetail } from './api';
 import { Select } from '../../components/Select';
+import { Checkbox } from '../../components/Checkbox';
 
 export interface Draft {
   start: string;
@@ -314,7 +315,7 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
         </div>
       </div>
       <label className="flex items-center gap-2 text-ink">
-        <input type="checkbox" checked={allDay} disabled={!editable} onChange={(ev) => setAllDay(ev.target.checked)} className="accent-[var(--color-primary)]" />
+        <Checkbox checked={allDay} disabled={!editable} onChange={(ev) => setAllDay(ev.target.checked)} />
         All day
       </label>
       <div className="flex gap-2">

@@ -12,6 +12,7 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Caps, Field, input, PageHead, Sheet, SidePanel } from '../hr/parts';
 import { useOwners } from './Leads';
 import { crmCan } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Lead intake (CrmIntake, CrmIntakeSheet): web forms that post leads here —
@@ -252,7 +253,7 @@ function SourceEditor({ source, fields, orgId, onClose, onSaved }: { source: Sou
           <Select label="Owner" value={owner} onValueChange={setOwner} options={[{ value: '', label: 'Nobody (unassigned)' }, ...(owners.data?.owners ?? []).map((o) => ({ value: String(o.id), label: o.name }))]} />
         </Field>
         <label className="flex items-center gap-2 text-[13px] text-ink">
-          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="accent-primary" />
+          <Checkbox checked={active} onChange={(e) => setActive(e.target.checked)} />
           Accepting submissions
         </label>
         <div className="flex flex-col gap-1.5">

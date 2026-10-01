@@ -14,6 +14,7 @@ import { can, K, money } from './api';
 import { bulkDecide, CK, clean, fetchCategories, fetchClaims, KIND_WORD, nextPage, selectionTotal, STATUSES, type ClaimFilters, type ClaimRow, type ClaimScope } from './claim-data';
 import { StatusPill, words } from './parts';
 import type { ScreenProps } from './Rail';
+import { Checkbox } from '../../components/Checkbox';
 
 const ClaimPanel = lazy(() => import('./ClaimPanel'));
 
@@ -165,7 +166,7 @@ export default function Claims({ org, orgs, onGo, scope, openClaim }: ScreenProp
           <input type="date" aria-label="Claims up to this date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className={cx(input, '!w-[150px]')} />
         </span>
         <label className="flex items-center gap-1.5 text-[12.5px] font-semibold text-ink">
-          <input type="checkbox" checked={flagged} onChange={(e) => setFlagged(e.target.checked)} className="h-3.5 w-3.5 accent-primary" />
+          <Checkbox checked={flagged} onChange={(e) => setFlagged(e.target.checked)} />
           Flagged only
         </label>
         {anyFilter ? (
@@ -216,12 +217,11 @@ export default function Claims({ org, orgs, onGo, scope, openClaim }: ScreenProp
         <div className="min-w-[860px]">
           <div className="flex items-center gap-2.5 border-b border-line bg-ground px-3.5 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase">
             {bulk ? (
-              <input
-                type="checkbox"
+              <Checkbox
                 aria-label="Select every claim shown"
                 checked={rows.length > 0 && chosen.length === rows.length}
+                indeterminate={chosen.length > 0 && chosen.length < rows.length}
                 onChange={(e) => setPicked(e.target.checked ? new Set(rows.map((r) => r.id)) : new Set())}
-                className="h-3.5 w-3.5 shrink-0 accent-primary"
               />
             ) : null}
             <span className="min-w-0 flex-1">Claim</span>
@@ -319,7 +319,7 @@ function Row({ c, person, bulk, checked, open, onCheck, onOpen }: { c: ClaimRow;
   const paidIn = c.currency && c.base_currency && c.currency !== c.base_currency;
   return (
     <div className={cx('flex items-center gap-2.5 border-b border-line/60 px-3.5 py-[9px] text-[13px] last:border-b-0 hover:bg-subtle', (open || checked) && 'bg-selection')}>
-      {bulk ? <input type="checkbox" aria-label={`Select ${c.claim_no ?? 'claim'}`} checked={checked} onChange={(e) => onCheck(e.target.checked)} className="h-3.5 w-3.5 shrink-0 accent-primary" /> : null}
+      {bulk ? <Checkbox aria-label={`Select ${c.claim_no ?? 'claim'}`} checked={checked} onChange={(e) => onCheck(e.target.checked)} /> : null}
       <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="flex items-center gap-1.5">

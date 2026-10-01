@@ -20,6 +20,7 @@ import { when, type Directory } from './NewTask';
 import { PeoplePanel, ReviewPanel, usePeople } from './People';
 import { RichEditor, RichView } from './RichText';
 import { Select } from '../../components/Select';
+import { Checkbox } from '../../components/Checkbox';
 
 const aside = 'h-8 w-full min-w-0 rounded-[7px] border border-line bg-surface px-1.5 text-[13px] text-ink outline-none focus:border-primary disabled:bg-transparent disabled:text-ink-2';
 
@@ -273,7 +274,7 @@ function Checklist({ task, editable, onChanged }: { task: Detail; editable: bool
       </div>
       {items.map((i) => (
         <div key={i.id} className="group flex items-center gap-2.5 py-0.5">
-          <input type="checkbox" checked={i.done} disabled={!editable} onChange={() => act(() => apiPut(`/api/tasks/${task.id}/checklist/${i.id}`, { done: !i.done }))} aria-label={i.title} className="h-4 w-4 accent-[#1F7A4D]" />
+          <Checkbox checked={i.done} disabled={!editable} onChange={() => act(() => apiPut(`/api/tasks/${task.id}/checklist/${i.id}`, { done: !i.done }))} aria-label={i.title} />
           {renaming?.id === i.id ? (
             <input
               autoFocus

@@ -28,6 +28,7 @@ import {
   type PaymentDetail,
 } from './more';
 import { money, StatusChip } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Payments (BillPayments, BillPaymentSheet): money received and money given
@@ -84,7 +85,7 @@ export default function Payments({ org, openId, onlyUnallocated, onOpen, onOpenI
         <input value={q} onChange={(e) => reset(() => setQ(e.target.value))} placeholder="Search reference or customer" aria-label="Search payments" className={input + ' !w-[260px]'} />
         <Select<string> aria-label="Method" value={method} onValueChange={(v) => reset(() => setMethod(v))} options={[{ value: '', label: 'Any method' }, ...METHODS.map((m) => ({ value: m.id, label: m.label })), { value: 'offset', label: 'Offset' }]} className={input + ' !w-[170px]'} />
         <label className="flex items-center gap-1.5 font-semibold text-ink">
-          <input type="checkbox" checked={unallocated} onChange={(e) => reset(() => setUnallocated(e.target.checked))} className="accent-primary" />
+          <Checkbox checked={unallocated} onChange={(e) => reset(() => setUnallocated(e.target.checked))} />
           Unallocated only
         </label>
       </div>

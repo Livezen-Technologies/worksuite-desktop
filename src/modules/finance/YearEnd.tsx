@@ -34,6 +34,7 @@ import {
 } from './close';
 import { Caps, ConfirmSheet, GoRow, LoadFailed, Notice, ReasonSheet } from './parts';
 import type { FinanceView, ScreenProps } from './Rail';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Year-end close.
@@ -371,7 +372,7 @@ function Checklist({ tasks, locked, busy, onGo, onSet }: { tasks: CloseTask[]; l
         const off = locked || busy !== '';
         return (
           <div key={t.id} className="flex items-start gap-3 border-b border-line/60 px-4 py-2.5 last:border-b-0">
-            <input type="checkbox" aria-label={t.title} checked={done} disabled={off} onChange={() => onSet(t, done ? 'open' : 'done')} className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-primary)]" />
+            <Checkbox aria-label={t.title} checked={done} disabled={off} onChange={() => onSet(t, done ? 'open' : 'done')} className="mt-0.5" />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="flex flex-wrap items-center gap-1.5">
                 <span className={cx('text-[13px] font-semibold', done || skipped ? 'text-ink-3 line-through' : 'text-ink')}>{t.title}</span>

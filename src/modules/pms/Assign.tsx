@@ -6,6 +6,7 @@ import { toast } from '../../core/toasts';
 import { input } from '../garage/parts';
 import { codeOf, errorText, K, pGet, pPost, type Candidate } from './api';
 import { Refusal } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Choosing a room for one room of a reservation (PMS-ASG-001/002): the
@@ -68,7 +69,7 @@ export default function AssignRoom({ lineId, version, what, current, onClose, on
     >
       <div className="flex flex-col gap-3">
         <label className="flex items-center gap-2 text-[12.5px] text-ink-2">
-          <input type="checkbox" checked={any} onChange={(e) => {
+          <Checkbox checked={any} onChange={(e) => {
               setAny(e.target.checked);
               setPick(null);
             }} /> Show other room types (upgrade or downgrade)

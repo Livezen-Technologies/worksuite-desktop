@@ -7,6 +7,7 @@ import type { SalonOutboxAction, SalonOutboxItem } from '@shared/types';
 import { clockAt, longDay, shortDay, STATEMENT, todayAt } from './api';
 import { CHOICE_LABEL, resolveChange, SK, syncNow, useOutbox } from './offline';
 import { Failed, Note, Person, useDesk } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Changes to send (OFF-06…08): what the counter did while WorkSuite was out of
@@ -273,7 +274,7 @@ function Edit({ item, busy, onClose, onSave }: { item: SalonOutboxItem; busy: bo
     body = (
       <>
         <label className="flex cursor-pointer items-start gap-3 rounded-[10px] bg-selection px-3.5 py-3">
-          <input type="checkbox" checked={ticked} onChange={(e) => setTicked(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--color-primary)]" />
+          <Checkbox size="lg" checked={ticked} onChange={(e) => setTicked(e.target.checked)} className="mt-0.5" />
           <span className="text-[14px] font-bold text-ink">{STATEMENT}</span>
         </label>
         <label className="flex flex-col gap-1.5">

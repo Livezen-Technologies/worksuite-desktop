@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { amount, lineNet, searchItems, type InvoiceLine, type Item, type Tax } from './api';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * An invoice's lines (BillInvoiceEditor, BillNewInvoice): what is charged for,
@@ -217,7 +218,7 @@ function TaxPicker({ label, taxes, chosen, readOnly, onChange }: { label: string
                 const yes = chosen.includes(t.id);
                 return (
                   <label key={t.id} role="option" aria-selected={yes} className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-[12.5px] text-ink hover:bg-subtle">
-                    <input type="checkbox" checked={yes} onChange={() => onChange(yes ? chosen.filter((x) => x !== t.id) : [...chosen, t.id])} className="accent-primary" />
+                    <Checkbox checked={yes} onChange={() => onChange(yes ? chosen.filter((x) => x !== t.id) : [...chosen, t.id])} />
                     <span className="min-w-0 flex-1 truncate">{t.name}</span>
                     <span className="text-ink-3 tabular-nums">
                       {Number(t.rate)}%{t.is_compound ? ' · compound' : ''}

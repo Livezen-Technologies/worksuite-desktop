@@ -11,6 +11,7 @@ import { ActionCard } from './ActionCard';
 import { LocalSetup } from './LocalSetup';
 import { useAssistant, type PendingAction, type Surface } from './assistant';
 import { createAskSession, type AskEntry, type AskSession } from './session';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Ask the assistant (WS-AI-SRS-001 FR-DSK-AI-01/02/04): the server's own
@@ -177,7 +178,7 @@ export function AskPanel({
         ) : null}
         {tabRef && !local ? (
           <label className="flex items-center gap-2 text-[12px] text-ink-2">
-            <input type="checkbox" checked={useTab} onChange={(e) => set({ useTab: e.target.checked })} />
+            <Checkbox checked={useTab} onChange={(e) => set({ useTab: e.target.checked })} />
             <span className="truncate">Use this tab{tabTitle ? `: ${tabTitle}` : ''}</span>
           </label>
         ) : null}

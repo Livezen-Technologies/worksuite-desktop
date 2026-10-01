@@ -12,6 +12,7 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, Field, input, PageHead, Sheet } from '../hr/parts';
 import type { FollowUp, FollowUpList, FollowUpOptions } from './api';
 import { crmCan } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Follow-ups (CrmFollowUps): what is due today, late, to come, done or called
@@ -65,7 +66,7 @@ export default function FollowUps({ onOpenLead }: { onOpenLead: (id: number) => 
         <span className="flex-1" />
         {can?.view_all ? (
           <label className="flex items-center gap-1.5 text-[13px] font-semibold text-ink">
-            <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} className="accent-primary" />
+            <Checkbox checked={all} onChange={(e) => setAll(e.target.checked)} />
             Everybody’s
           </label>
         ) : null}
@@ -212,7 +213,7 @@ function HowItWent({ f, options, onClose, onDone }: { f: FollowUp; options: Foll
       ) : (
         <>
           <label className="flex items-center gap-2 font-semibold text-ink">
-            <input type="checkbox" checked={next} onChange={(e) => setNext(e.target.checked)} className="accent-primary" />
+            <Checkbox checked={next} onChange={(e) => setNext(e.target.checked)} />
             Set the next follow-up
           </label>
           {next ? (

@@ -16,6 +16,7 @@ import { RecordCard } from '../chat/cards/RecordCards';
 import { act, appOf, bulk, fetchCentre, inView, K, markAllRead, openNotice, quickActions, sectioned, SECTION_LABEL, sectionOf, snoozedLabel, visibleCategories, visibleNotices, type Notice, type View } from './api';
 import { NotifRow, SnoozeMenu } from './NotifRow';
 import { SidePanel } from '../../components/SidePanel';
+import { Checkbox } from '../../components/Checkbox';
 
 const NotificationSettings = lazy(() => import('./Settings'));
 
@@ -154,15 +155,11 @@ function Centre() {
         </div>
 
         <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line bg-surface px-5 text-[12.5px] dark:border-[#1E2848] dark:bg-[#0F1629]" aria-label="Selection">
-          <input
-            type="checkbox"
+          <Checkbox
             aria-label="Select all shown"
             checked={items.length > 0 && picked.length === items.length}
-            ref={(el) => {
-              if (el) el.indeterminate = picked.length > 0 && picked.length < items.length;
-            }}
+            indeterminate={picked.length > 0 && picked.length < items.length}
             onChange={(e) => setChecked(e.target.checked ? new Set(items.map((n) => n.id)) : new Set())}
-            className="h-3.5 w-3.5 accent-primary"
           />
           {picked.length ? (
             <>

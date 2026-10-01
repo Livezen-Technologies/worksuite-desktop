@@ -9,6 +9,7 @@ import { Choice, Note, SyncChip, timeOf, useTillContext } from './parts';
 import { formatMoney, parseAmount } from './pricing';
 import { canStillRefund, refundable, refundLines, returned } from './returns';
 import { filterSales, salesSummary, type ReviewFilter } from './shift';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * The till's sales — this shift's, or today's — from its own record (sealed on this computer): where each stands on
@@ -380,7 +381,7 @@ export function Reverse({ sale, action, onClose }: { sale: PosSale; action: 'ref
               </ul>
             ) : null}
             <label className="flex items-center gap-2 text-[13px] text-ink-2">
-              <input type="checkbox" checked={restock} onChange={(e) => setRestock(e.target.checked)} /> {t('pos.restock')}
+              <Checkbox checked={restock} onChange={(e) => setRestock(e.target.checked)} /> {t('pos.restock')}
             </label>
           </>
         ) : null}

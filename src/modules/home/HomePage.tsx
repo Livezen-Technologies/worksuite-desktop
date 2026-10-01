@@ -15,6 +15,7 @@ import type { ModuleProps } from '../registry';
 import type { CalendarEvent } from '../calendar/api';
 import type { Task } from '../tasks/api';
 import { CARDS, dueToday as dueTodayOf, loadLayout, meetingsToday, mergeTasks, move, saveLayout, todaysWork, toggle, type CardId, type Layout } from './today';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Home — the desktop shell's dashboard (UI-04, §4.13). Every widget comes
@@ -243,7 +244,7 @@ function Customize({ layout, onChange, onClose }: { layout: Layout; onChange: (l
       <ul className="m-0 flex list-none flex-col gap-1 p-0">
         {layout.order.map((id, i) => (
           <li key={id} className="flex items-center gap-2 rounded-[8px] px-1.5 py-1 hover:bg-subtle">
-            <input type="checkbox" aria-label={`Show ${label(id)}`} checked={!layout.hidden.includes(id)} onChange={() => onChange(toggle(layout, id))} className="accent-primary" />
+            <Checkbox aria-label={`Show ${label(id)}`} checked={!layout.hidden.includes(id)} onChange={() => onChange(toggle(layout, id))} />
             <span className={cx('min-w-0 flex-1 text-[13px]', layout.hidden.includes(id) ? 'text-ink-3' : 'text-ink')}>{label(id)}</span>
             <button type="button" aria-label={`Move ${label(id)} up`} disabled={i === 0} onClick={() => onChange(move(layout, id, -1))} className="rounded p-1 text-ink-2 hover:bg-line disabled:opacity-30">
               <Icon name="arrow-up" size={14} />
@@ -319,7 +320,7 @@ function TodaysWork({ tasks, today, loading, error }: { tasks: Task[]; today: st
         const overdue = !done && task.due_date !== null && task.due_date < today;
         return (
           <li key={task.id} className="flex items-start gap-3">
-            <input type="checkbox" checked={done} onChange={() => complete.mutate(task)} className="mt-0.5 h-[18px] w-[18px] shrink-0 accent-[var(--ws-indigo)]" aria-label={`Mark “${task.title}” ${done ? 'not done' : 'done'}`} />
+            <Checkbox checked={done} onChange={() => complete.mutate(task)} className="mt-0.5" aria-label={`Mark “${task.title}” ${done ? 'not done' : 'done'}`} />
             <div className="min-w-0">
               <div className={cx('text-[14px] font-semibold', done ? 'text-ink-3 line-through' : 'text-ink')}>{task.title}</div>
               <div className={cx('text-[12.5px]', overdue ? 'text-danger' : 'text-ink-3')}>

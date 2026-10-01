@@ -9,6 +9,7 @@ import { ADJUST_PERM, AdjustDialog, OrderAdjustments, type AdjustKind } from './
 import { Approval, type ApprovalAsk } from './Approvals';
 import { useT, type RKey } from './i18n';
 import { Failed, Heading, Note, ReasonField, useLive, useTill } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * The order screen (RM-POS-001..006, §5.3): the branch's menu by category,
@@ -486,7 +487,11 @@ export function ItemPicker({ item, seat, menuItems = [], onClose, onAdd }: { ite
               </legend>
               {c.options.map((o, i) => (
                 <label key={`${o.item_id}-${o.variant_id ?? 0}`} className={cx('flex items-center gap-2 text-[13.5px]', !orderableOpt(o.item_id) && 'opacity-45')}>
-                  <input type={range(c).max === 1 ? 'radio' : 'checkbox'} name={`c${c.id}`} disabled={!orderableOpt(o.item_id)} checked={(chosen[c.id] ?? []).includes(i)} onChange={() => pickComp(c, i)} />
+                  {range(c).max === 1 ? (
+                    <input type="radio" name={`c${c.id}`} disabled={!orderableOpt(o.item_id)} checked={(chosen[c.id] ?? []).includes(i)} onChange={() => pickComp(c, i)} />
+                  ) : (
+                    <Checkbox name={`c${c.id}`} disabled={!orderableOpt(o.item_id)} checked={(chosen[c.id] ?? []).includes(i)} onChange={() => pickComp(c, i)} />
+                  )}
                   <span className="flex-1">{nameOf(o.item_id, o.variant_id)}</span>
                   {Number(o.upcharge) ? <span className="text-ink-2 tabular-nums">+{money(o.upcharge)}</span> : null}
                 </label>
@@ -502,7 +507,11 @@ export function ItemPicker({ item, seat, menuItems = [], onClose, onAdd }: { ite
             </legend>
             {g.options.map((o) => (
               <label key={o.id} className={cx('flex items-center gap-2 text-[13.5px]', !o.orderable && 'opacity-45')}>
-                <input type={g.max === 1 ? 'radio' : 'checkbox'} name={`g${g.id}`} disabled={!o.orderable} checked={(picked[g.id] ?? []).includes(o.id)} onChange={() => toggle(g, o.id)} />
+                {g.max === 1 ? (
+                  <input type="radio" name={`g${g.id}`} disabled={!o.orderable} checked={(picked[g.id] ?? []).includes(o.id)} onChange={() => toggle(g, o.id)} />
+                ) : (
+                  <Checkbox name={`g${g.id}`} disabled={!o.orderable} checked={(picked[g.id] ?? []).includes(o.id)} onChange={() => toggle(g, o.id)} />
+                )}
                 <span className="flex-1">{o.name}</span>
                 {Number(o.price_delta) ? <span className="text-ink-2 tabular-nums">+{money(o.price_delta)}</span> : null}
               </label>

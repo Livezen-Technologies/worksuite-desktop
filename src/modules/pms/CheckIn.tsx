@@ -14,6 +14,7 @@ import { NoAccess, occupants, Refusal, usePms, VipPill } from './parts';
 import { printCards } from './print';
 import RegistrationCardDialog from './RegistrationCard';
 import { useShortcut } from './shortcuts';
+import { Checkbox } from '../../components/Checkbox';
 
 interface Done {
   stays: Array<{ stay_id: number; reservation_room_id: number; room_id: number; room_number: string; folio_id: number | null; key: KeyAnswer }>;
@@ -163,10 +164,8 @@ export default function CheckIn({ id }: { id: number }) {
               const on = chosen.has(r.reservation_room_id);
               return (
                 <li key={r.reservation_room_id} className={cx('flex flex-wrap items-start gap-3 rounded-[10px] border px-3 py-2', on ? 'border-primary/50' : 'border-line')}>
-                  <input
-                    type="checkbox"
-                    aria-label={`Check in ${r.room_type ?? 'room'} ${r.line_no}`}
-                    className="mt-1"
+                  <Checkbox
+                    aria-label={`Check in ${r.room_type ?? 'room'} ${r.line_no}`} className="mt-1"
                     checked={on}
                     disabled={r.due_today === false}
                     onChange={(e) => {
@@ -208,7 +207,7 @@ export default function CheckIn({ id }: { id: number }) {
       <Section title="Checks">
         <div className="flex flex-col gap-2 text-[13px]">
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={idOk || s.id_verified} disabled={s.id_verified} onChange={(e) => setIdOk(e.target.checked)} />
+            <Checkbox checked={idOk || s.id_verified} disabled={s.id_verified} onChange={(e) => setIdOk(e.target.checked)} />
             {s.id_verified ? 'The guest’s identification is verified on file.' : `The guest’s ID has been checked${s.id_required ? ' (required here)' : ''}`}
             {scanner.available() && !s.id_verified ? (
               <Button
@@ -226,18 +225,18 @@ export default function CheckIn({ id }: { id: number }) {
             ) : null}
           </label>
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={guaranteeOk} onChange={(e) => setGuaranteeOk(e.target.checked)} />
+            <Checkbox checked={guaranteeOk} onChange={(e) => setGuaranteeOk(e.target.checked)} />
             Guarantee checked ({s.guarantee_type === 'none' ? 'none on the booking' : s.guarantee_type}
             {s.deposit ? `; deposit ${s.deposit.status}, ${money(s.deposit.paid, pms.property.currency)} of ${money(s.deposit.required, pms.property.currency)}` : ''})
           </label>
           {s.early_checkin.offered ? (
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked={early} onChange={(e) => setEarly(e.target.checked)} />
+              <Checkbox checked={early} onChange={(e) => setEarly(e.target.checked)} />
               Early check-in before {s.early_checkin.check_in_time}: charge {s.early_checkin.name} ({money(s.early_checkin.price, pms.property.currency)})
             </label>
           ) : null}
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={cashOnly} onChange={(e) => setCashOnly(e.target.checked)} />
+            <Checkbox checked={cashOnly} onChange={(e) => setCashOnly(e.target.checked)} />
             Cash only — no charges to the room from the outlets
           </label>
           <label className="flex items-center gap-2">

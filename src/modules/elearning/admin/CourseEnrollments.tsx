@@ -6,6 +6,7 @@ import { toast } from '../../../core/toasts';
 import { eGet, ePost, errorText, K, newKey, pct, toUtc, when, type Course, type Enrollment, type Paged, type Person, type Preview } from '../api';
 import { area, Bar, EnrolPill, Field, input, Refusal, useEl } from '../parts';
 import { useDepartments, usePeople } from './people';
+import { Checkbox } from '../../../components/Checkbox';
 
 const STATUSES = [
   { value: '', label: 'Every status' },
@@ -41,7 +42,7 @@ export function EnrollmentTable({ path, fixed, showCourse }: { path: string; fix
         <input aria-label="Search learners" placeholder="Learner or course" value={typed} onChange={(e) => setTyped(e.target.value)} className={`${input} max-w-[240px]`} />
         <Select aria-label="Status" value={status} onChange={(e) => (setStatus(e.target.value), setPage(1))} options={STATUSES} className="h-9 min-w-[160px] rounded-[8px] border border-line bg-surface px-2 text-[13px]" />
         <label className="flex items-center gap-1.5 text-[12.5px] text-ink-2">
-          <input type="checkbox" checked={overdue} onChange={(e) => (setOverdue(e.target.checked), setPage(1))} /> Overdue only
+          <Checkbox checked={overdue} onChange={(e) => (setOverdue(e.target.checked), setPage(1))} /> Overdue only
         </label>
         <Button type="submit" icon="search">
           Search
@@ -260,7 +261,7 @@ function AssignDialog({ course, onClose }: { course: Course; onClose: () => void
               <div className="flex max-h-[140px] flex-col gap-0.5 overflow-y-auto rounded-[8px] border border-line p-2 text-[12.5px] scroll-thin">
                 {departments.data.map((d) => (
                   <label key={d.id} className="flex items-center gap-2">
-                    <input type="checkbox" checked={chosen.department_ids.includes(d.id)} onChange={(e) => changed(() => setChosen((c) => ({ ...c, department_ids: e.target.checked ? [...c.department_ids, d.id] : c.department_ids.filter((x) => x !== d.id) })))} /> {d.name}
+                    <Checkbox checked={chosen.department_ids.includes(d.id)} onChange={(e) => changed(() => setChosen((c) => ({ ...c, department_ids: e.target.checked ? [...c.department_ids, d.id] : c.department_ids.filter((x) => x !== d.id) })))} /> {d.name}
                   </label>
                 ))}
               </div>

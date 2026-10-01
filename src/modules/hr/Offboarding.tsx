@@ -9,6 +9,7 @@ import { ProgressBar } from './onboardingParts';
 import { EVENT_WORDS, FOLLOWS, stamp, type ExitInterview, type HandoverItem, type OffCase, type OffDepartment, type OffItem, type OffListItem } from './offboardingParts';
 import { btn, btnPrimary, Cell, Empty, Field, input, PageHead, Panel, row, Seg, Sheet, SidePanel, StatusChip, THead } from './parts';
 import { Select } from '../../components/Select';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Offboarding (HrOffboarding; the web's Offboarding): everyone leaving, and
@@ -370,7 +371,7 @@ export function ExitInterviewPanel({ caseId, ei, write }: { caseId: number; ei: 
                   const cur = (answers[q.id] as string[]) ?? [];
                   return (
                     <label key={o} className="flex items-center gap-1.5">
-                      <input type="checkbox" checked={cur.includes(o)} onChange={(e) => setAnswers((p) => ({ ...p, [q.id]: e.target.checked ? [...cur, o] : cur.filter((x) => x !== o) }))} className="accent-primary" />
+                      <Checkbox checked={cur.includes(o)} onChange={(e) => setAnswers((p) => ({ ...p, [q.id]: e.target.checked ? [...cur, o] : cur.filter((x) => x !== o) }))} />
                       {o}
                     </label>
                   );
@@ -479,7 +480,7 @@ export function HandoverPanel({ c, write }: { c: OffCase; write: Write }) {
         <Panel title={`Their open work — ${work.length}`} bodyClassName="flex flex-col gap-1 px-3.5 py-2.5">
           {work.map((w) => (
             <label key={`${w.kind}:${w.id}`} className="flex items-center gap-2 text-[12.5px] text-ink">
-              <input type="checkbox" checked={!!picked[`${w.kind}:${w.id}`]} onChange={(e) => setPicked((p) => ({ ...p, [`${w.kind}:${w.id}`]: e.target.checked }))} className="accent-primary" />
+              <Checkbox checked={!!picked[`${w.kind}:${w.id}`]} onChange={(e) => setPicked((p) => ({ ...p, [`${w.kind}:${w.id}`]: e.target.checked }))} />
               <span className="truncate">
                 {w.kindLabel} · {w.label}
                 {w.detail ? <span className="text-ink-3"> · {w.detail}</span> : null}
@@ -684,10 +685,10 @@ function AddItem({ c, onClose, onSave }: { c: OffCase; onClose: () => void; onSa
         <input aria-label="Details" value={description} onChange={(e) => setDescription(e.target.value)} className={input} />
       </Field>
       <label className="flex items-center gap-2 text-[12.5px] text-ink">
-        <input type="checkbox" checked={mandatory} onChange={(e) => setMandatory(e.target.checked)} className="accent-primary" /> Must be done before sign-off
+        <Checkbox checked={mandatory} onChange={(e) => setMandatory(e.target.checked)} /> Must be done before sign-off
       </label>
       <label className="flex items-center gap-2 text-[12.5px] text-ink">
-        <input type="checkbox" checked={evidence} onChange={(e) => setEvidence(e.target.checked)} className="accent-primary" /> Needs evidence attached
+        <Checkbox checked={evidence} onChange={(e) => setEvidence(e.target.checked)} /> Needs evidence attached
       </label>
     </Sheet>
   );

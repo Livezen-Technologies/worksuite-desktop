@@ -8,6 +8,7 @@ import { dayLong } from './dates';
 import { btn, btnPrimary, Empty, Field, humanise, input, PageHead, Panel, Sheet, StatusChip } from './parts';
 import { Events, lastDay, Trail, type ResEvent, type ResignationShape, type Round } from './resignationParts';
 import { Select } from '../../components/Select';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * My resignation (HrSelfService "My resignation"; the web's MyResignation):
@@ -203,13 +204,13 @@ function Draft({ m, onSaved }: { m: Mine; onSaved: (d: Mine) => void }) {
       </Field>
       {m.rule?.allow_early_release ? (
         <label className="flex items-center gap-2 text-[12.5px] text-ink">
-          <input type="checkbox" checked={early} onChange={(e) => setEarly(e.target.checked)} className="accent-primary" />
+          <Checkbox checked={early} onChange={(e) => setEarly(e.target.checked)} />
           Ask for early release — to leave before the notice runs out
         </label>
       ) : null}
       {m.terms ? (
         <label className="flex items-start gap-2 text-[12.5px] text-ink">
-          <input type="checkbox" aria-label="I accept the resignation terms" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} className="mt-[2px] accent-primary" />
+          <Checkbox aria-label="I accept the resignation terms" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} className="mt-[2px]" />
           <span>
             I have read and agree to these resignation{' '}
             <button type="button" className="font-semibold text-primary hover:underline" onClick={() => setTerms(true)}>

@@ -8,6 +8,7 @@ import { Field, input, Section } from '../garage/parts';
 import { errorText } from './api';
 import { doorLocks, lockServer, readCard, syncKeyEncoder, type KeyDone } from './locks';
 import { usePms } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 const ENCODER_VENDORS = ['salto', 'vingcard', 'dormakaba'];
 const SECRET_LABEL: Record<LockConnection, string> = {
@@ -158,7 +159,7 @@ function LockServerForm({ pid, label, vendor, connection, spec, here, onSaved }:
         </Field>
       </div>
       <label className="mt-2 flex items-center gap-2 text-[13px]">
-        <input type="checkbox" checked={form.tls} disabled={!mayManage} onChange={(e) => set('tls', e.target.checked)} /> TLS on the link
+        <Checkbox checked={form.tls} disabled={!mayManage} onChange={(e) => set('tls', e.target.checked)} /> TLS on the link
       </label>
       {here && !here.persistent ? <p className="text-[12px] text-warning">This computer has no keystore: the password is kept until WorkSuite Desktop quits.</p> : null}
       {problem && mayManage ? <p className="text-[12px] text-ink-3">{problem}</p> : null}

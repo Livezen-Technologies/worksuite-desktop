@@ -14,6 +14,7 @@ import { Lines, blankLine, toSend, type EditLine } from './Lines';
 import { createProfile, deleteProfile, fetchProfile, fetchProfiles, FREQUENCIES, frequencyLabel, KB, profileState, runProfile, updateProfile, type Profile } from './more';
 import { StatusChip } from './parts';
 import { Facts, Section } from './Payments';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Recurring billing (BillRecurring): a template and a schedule. Each run
@@ -519,7 +520,7 @@ function NewProfile({ org, onClose }: { org: string; onClose: (id?: number) => v
         <Lines lines={lines} onChange={setLines} taxes={taxes.data ?? []} currency="" defaultTaxes={(taxes.data ?? []).filter((t) => t.is_default).map((t) => t.id)} />
       </div>
       <label className="flex items-start gap-2 text-[12.5px] text-ink">
-        <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} className="mt-0.5 accent-primary" />
+        <Checkbox checked={auto} onChange={(e) => setAuto(e.target.checked)} className="mt-0.5" />
         <span>
           <b>Issue automatically</b>
           <span className="block text-ink-3">Off by default. When on, the schedule numbers and issues invoices with nobody reviewing them.</span>

@@ -8,6 +8,7 @@ import { codeOf, day, errorData, errorText, isZero, K, money, newKey, pGet, pPos
 import { FolioPanel } from './Folio';
 import { Money, NoAccess, Refusal, usePms, VipPill } from './parts';
 import { folioDocumentHtml, printPage, type FolioDocument } from './print';
+import { Checkbox } from '../../components/Checkbox';
 
 interface Result {
   stays: Array<{ stay_id: number; room_id: number; room_dirty: boolean; task_id: number | null; key: { ok: boolean; message: string } | null }>;
@@ -149,8 +150,7 @@ export default function CheckOut({ id }: { id: number }) {
           title={
             <span className="flex flex-wrap items-center gap-2">
               {s.stays.length > 1 ? (
-                <input
-                  type="checkbox"
+                <Checkbox
                   aria-label={`Check out room ${x.room_number}`}
                   checked={rooms.has(x.reservation_room_id)}
                   onChange={(e) => {
@@ -196,22 +196,22 @@ export default function CheckOut({ id }: { id: number }) {
         <div className="flex flex-col gap-2 text-[13px]">
           {s.deposit ? (
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked={deposit} onChange={(e) => setApplyDeposit(e.target.checked)} /> Apply the deposit ({money(s.deposit.available, s.deposit.currency)} available)
+              <Checkbox checked={deposit} onChange={(e) => setApplyDeposit(e.target.checked)} /> Apply the deposit ({money(s.deposit.available, s.deposit.currency)} available)
             </label>
           ) : null}
           {s.late_checkout.offered ? (
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked={late} onChange={(e) => setLate(e.target.checked)} /> Late check-out: charge {s.late_checkout.name} ({money(s.late_checkout.price, pms.property.currency)})
+              <Checkbox checked={late} onChange={(e) => setLate(e.target.checked)} /> Late check-out: charge {s.late_checkout.name} ({money(s.late_checkout.price, pms.property.currency)})
             </label>
           ) : null}
           {anyEarly || early ? (
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked readOnly /> An early departure: the nights to come are given back
+              <Checkbox checked readOnly /> An early departure: the nights to come are given back
             </label>
           ) : null}
           {pms.may('pms.folio.adjust') ? (
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked={toAr} onChange={(e) => setToAr(e.target.checked)} /> Move a company’s balance to its account (city ledger)
+              <Checkbox checked={toAr} onChange={(e) => setToAr(e.target.checked)} /> Move a company’s balance to its account (city ledger)
             </label>
           ) : null}
         </div>

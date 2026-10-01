@@ -14,6 +14,7 @@ import { openMeeting } from '../meet/api';
 import type { Stroke } from '../meet/session';
 import { providerLabel, RSVP_LABEL, typeLabel, type AgendaItem, type Detail, type Person, type Rsvp } from './api';
 import { Select } from '../../components/Select';
+import { Checkbox } from '../../components/Checkbox';
 
 const TABS = ['Summary', 'Agenda', 'People', 'Minutes', 'Files', 'Board', 'Activity'] as const;
 type Tab = (typeof TABS)[number];
@@ -378,7 +379,7 @@ function MinutesTab({ d, canEdit, act }: { d: Detail; canEdit: boolean; act: Act
       {!d.action_items.length ? <p className="text-ink-3">No actions yet.</p> : null}
       {d.action_items.map((a) => (
         <label key={a.id} className="flex items-center gap-2.5">
-          <input type="checkbox" disabled={!!a.task_id || !canEdit} checked={!!a.task_id || picked.includes(a.id)} onChange={() => setPicked(picked.includes(a.id) ? picked.filter((x) => x !== a.id) : [...picked, a.id])} className="accent-[var(--color-primary)]" />
+          <Checkbox disabled={!!a.task_id || !canEdit} checked={!!a.task_id || picked.includes(a.id)} onChange={() => setPicked(picked.includes(a.id) ? picked.filter((x) => x !== a.id) : [...picked, a.id])} />
           <span className={cx('flex-1 text-ink', a.status === 'done' && 'line-through opacity-60')}>{a.title}</span>
           <span className="text-[12px] text-ink-3">{[a.assignee, a.due_date ? dateLabel(a.due_date) : null, a.task_id ? 'task' : null].filter(Boolean).join(' · ')}</span>
           {canEdit && !a.task_id ? <button type="button" aria-label={`Remove ${a.title}`} onClick={() => void act(() => apiDelete(`/api/meetings/${id}/actions/${a.id}`))} className="text-ink-3 hover:text-danger">×</button> : null}

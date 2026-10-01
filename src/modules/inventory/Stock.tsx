@@ -5,6 +5,7 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { Empty, input, PageHead } from '../hr/parts';
 import { fetchStock, K, num, PER_PAGE, qty, stampWords, whole, type StockFilters, type StockRow, type Warehouse } from './api';
 import { minWidth } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * The stock overview (InvStock): a line per product — per product and
@@ -71,7 +72,7 @@ export default function Stock({
         />
         <Select aria-label="Which stock" value={filter} onValueChange={setFilter} options={FILTERS} className="h-[34px] w-[200px] rounded-[8px] border border-line bg-surface px-2.5 text-[13px] font-medium text-ink" />
         <label className="flex items-center gap-1.5 font-semibold text-ink">
-          <input type="checkbox" checked={zero} onChange={(e) => setZero(e.target.checked)} className="accent-primary" />
+          <Checkbox checked={zero} onChange={(e) => setZero(e.target.checked)} />
           Show zero
         </label>
         <span className="ml-auto text-[12.5px] text-ink-3" data-stock-summary>

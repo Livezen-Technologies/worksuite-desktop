@@ -6,6 +6,7 @@ import { Button, ErrorNote, Modal, Spinner, Switch } from '../../../components/u
 import { toast } from '../../../core/toasts';
 import { eGet, ePost, errorText, K, pct, toLocalInput, toUtc, when, type AssessmentCard, type Course, type QType, type StaffAssessment, type StaffQuestion } from '../api';
 import { area, Field, input, Pill, Refusal, RichField, Section, useEl } from '../parts';
+import { Checkbox } from '../../../components/Checkbox';
 
 export const QTYPES: Array<{ value: QType; label: string }> = [
   { value: 'SINGLE', label: 'Single choice' },
@@ -457,7 +458,7 @@ function QuestionForm({ assessmentId, q, onClose, onSaved }: { assessmentId: num
             <span className="text-[12.5px] font-semibold text-ink-2">{type === 'MATCHING' ? 'Pairs' : type === 'ORDERING' ? 'Items, in the right order' : 'Options — mark the right one' + (type === 'MULTIPLE' ? 's' : '')}</span>
             {f.options.map((o, i) => (
               <div key={i} className="flex items-center gap-2">
-                {choice ? <input type={type === 'SINGLE' ? 'radio' : 'checkbox'} name="right" aria-label={`Option ${i + 1} is right`} checked={o.is_correct} onChange={(e) => opt(i, { is_correct: e.target.checked })} /> : <span className="w-5 text-[12px] text-ink-3 tabular-nums">{i + 1}.</span>}
+                {choice && type === 'SINGLE' ? <input type="radio" name="right" aria-label={`Option ${i + 1} is right`} checked={o.is_correct} onChange={(e) => opt(i, { is_correct: e.target.checked })} /> : choice ? <Checkbox name="right" aria-label={`Option ${i + 1} is right`} checked={o.is_correct} onChange={(e) => opt(i, { is_correct: e.target.checked })} /> : <span className="w-5 text-[12px] text-ink-3 tabular-nums">{i + 1}.</span>}
                 <input aria-label={`Option ${i + 1}`} className={input} value={o.label} onChange={(e) => opt(i, { label: e.target.value })} maxLength={1000} />
                 {type === 'MATCHING' ? <input aria-label={`Matches ${i + 1}`} placeholder="matches…" className={input} value={o.match_label} onChange={(e) => opt(i, { match_label: e.target.value })} maxLength={1000} /> : null}
                 <button type="button" aria-label="Remove" className="text-ink-3 hover:text-danger" onClick={() => set('options', f.options.filter((_, j) => j !== i))}>

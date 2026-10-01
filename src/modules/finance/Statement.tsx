@@ -26,6 +26,7 @@ import {
 } from './banking';
 import { LoadFailed, Notice, ReasonSheet } from './parts';
 import type { FinanceView } from './Rail';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * One bank account's statement: what the bank says happened, beside the
@@ -283,13 +284,12 @@ export default function Statement({ company, accountId, onBack, onGo }: { compan
           <div className="flex items-center gap-2.5 border-b border-line bg-ground px-3.5 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase">
             {mayImport ? (
               <span className="flex w-[18px] shrink-0">
-                <input
-                  type="checkbox"
+                <Checkbox
                   aria-label="Choose every unmatched line shown"
                   disabled={!open.length}
                   checked={allPicked}
+                  indeterminate={!allPicked && open.some((t) => picked.has(String(t.id)))}
                   onChange={() => setPicked(allPicked ? new Set() : new Set(open.map((t) => String(t.id))))}
-                  className="h-3.5 w-3.5 accent-[var(--color-primary)]"
                 />
               </span>
             ) : null}
@@ -308,7 +308,7 @@ export default function Statement({ company, accountId, onBack, onGo }: { compan
               <div key={id} className={cx('flex items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[13px] last:border-b-0', picked.has(id) && 'bg-selection')}>
                 {mayImport ? (
                   <span className="flex w-[18px] shrink-0">
-                    {unmatched ? <input type="checkbox" aria-label={`Choose the line of ${shortDate(t.txn_date)}`} checked={picked.has(id)} onChange={() => toggle(id)} className="h-3.5 w-3.5 accent-[var(--color-primary)]" /> : null}
+                    {unmatched ? <Checkbox aria-label={`Choose the line of ${shortDate(t.txn_date)}`} checked={picked.has(id)} onChange={() => toggle(id)} /> : null}
                   </span>
                 ) : null}
                 <span className="w-[96px] shrink-0 text-ink-2 tabular-nums">{shortDate(t.txn_date)}</span>

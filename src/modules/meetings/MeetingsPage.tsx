@@ -11,6 +11,7 @@ import { providerLabel, RSVP_LABEL, TYPE_COLOUR, TYPES, typeLabel, type Can, typ
 import { MeetingDetail } from './MeetingDetail';
 import { ScheduleDialog } from './ScheduleDialog';
 import { Select } from '../../components/Select';
+import { Checkbox } from '../../components/Checkbox';
 
 type Tab = 'dashboard' | 'mine' | 'invitations' | 'rooms' | 'recurring';
 const TABS: Array<[Tab, string]> = [
@@ -224,7 +225,7 @@ function MyActions({ onOpen }: { onOpen: (id: number) => void }) {
       {!q.isLoading && !rows.length ? <p className="text-ink-3">Nothing assigned to you.</p> : null}
       {rows.map((a) => (
         <label key={a.id} className="flex items-start gap-2">
-          <input type="checkbox" disabled={!a.task_id} title={a.task_id ? 'Mark done' : 'The organiser closes this one'} onChange={() => a.task_id && void done(a.task_id, a.title)} className="mt-0.5 accent-[var(--color-primary)]" />
+          <Checkbox disabled={!a.task_id} title={a.task_id ? 'Mark done' : 'The organiser closes this one'} onChange={() => a.task_id && void done(a.task_id, a.title)} className="mt-0.5" />
           <span className="flex min-w-0 flex-col">
             <b className="text-ink">{a.title}</b>
             <button type="button" onClick={() => onOpen(a.meeting_id)} className="text-left text-[11.5px] text-ink-3 hover:underline">

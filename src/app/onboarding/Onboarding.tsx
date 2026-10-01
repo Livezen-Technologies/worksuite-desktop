@@ -6,6 +6,7 @@ import { t } from '../../core/i18n';
 import { useStore } from '../../core/store';
 import { Icon } from '../../components/Icon';
 import { Button, TextField, cx } from '../../components/ui';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Welcome, server selection, sign-in and two-step verification (UI-01,
@@ -430,7 +431,7 @@ function ChoiceCard({ selected, onClick, title, hint }: { selected: boolean; onC
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <label className="mb-3 flex cursor-pointer items-center gap-3 rounded-[10px] border border-line px-4 py-3 text-[14px] text-ink hover:bg-subtle">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="h-4 w-4 accent-[var(--ws-indigo)]" />
+      <Checkbox checked={checked} onChange={(e) => onChange(e.target.checked)} />
       {label}
     </label>
   );

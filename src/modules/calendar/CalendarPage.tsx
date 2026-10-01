@@ -16,6 +16,7 @@ import { EventDrawer, type Draft } from './EventDrawer';
 import { MonthGrid } from './MonthGrid';
 import { eventKey, WeekGrid } from './WeekGrid';
 import { SidePanel } from '../../components/SidePanel';
+import { Checkbox } from '../../components/Checkbox';
 
 const VIEWS: Array<[View, string]> = [
   ['day', 'Day'],
@@ -270,8 +271,7 @@ export default function CalendarPage(_props: ModuleProps) {
             <b className="text-[11px] tracking-[0.5px] text-ink-3">SHOW</b>
             {categories.map((c) => (
               <label key={c.id} className="flex items-center gap-2 text-ink">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={!hidden.includes(c.id)}
                   onChange={(ev) => {
                     const next = ev.target.checked ? hidden.filter((h) => h !== c.id) : [...hidden, c.id];
@@ -282,7 +282,7 @@ export default function CalendarPage(_props: ModuleProps) {
                       // Kept for this session only.
                     }
                   }}
-                  style={{ accentColor: c.color }}
+                  color={c.color}
                 />
                 <span className="h-[9px] w-[9px] shrink-0 rounded-[3px]" style={{ background: c.color }} />
                 <span className="min-w-0 truncate" title={c.label}>{c.label}</span>

@@ -8,6 +8,7 @@ import { toast } from '../../core/toasts';
 import { bridge, get, K, refusal, write, type PrintJob, type Structure } from './api';
 import { useT } from './i18n';
 import { Failed, Heading, Note, useTill } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * The printers this computer hosts (RM-DSK-003, §4.4): which printer on this
@@ -150,7 +151,7 @@ export default function Printers() {
                 </div>
                 {m.mode === 'escpos' ? (
                   <label className="flex items-center gap-2 text-[12.5px] text-ink-2">
-                    <input type="checkbox" checked={m.cut} disabled={!m.device} onChange={(e) => setMap(p.id, { cut: e.target.checked })} /> {t('printers.cut')}
+                    <Checkbox checked={m.cut} disabled={!m.device} onChange={(e) => setMap(p.id, { cut: e.target.checked })} /> {t('printers.cut')}
                   </label>
                 ) : null}
                 {gone ? <span className="text-[12px] font-semibold text-warning">{t('printers.gone', { name: m.device ?? '' })}</span> : null}

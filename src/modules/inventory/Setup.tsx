@@ -26,6 +26,7 @@ import {
   type WarehouseDraft,
   type WarehouseRow,
 } from './admin';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Settings (InvSettings): Inventory's own rules and document numbering, and
@@ -149,7 +150,7 @@ function Rules() {
             list.filter((s) => s.type === 'bool'),
             (s) => (
               <label className="flex cursor-pointer items-start gap-2.5">
-                <input type="checkbox" className="mt-0.5" disabled={!editable} checked={!!val(s)} onChange={(e) => setDraft({ ...draft, [s.key]: e.target.checked })} aria-label={s.label} />
+                <Checkbox className="mt-0.5" disabled={!editable} checked={!!val(s)} onChange={(e) => setDraft({ ...draft, [s.key]: e.target.checked })} aria-label={s.label} />
                 <span className="flex flex-col gap-0.5">
                   <b className="text-[13px] text-ink">{s.label}</b>
                   {s.note ? <span className="text-[12px] leading-snug text-ink-3">{s.note}</span> : null}
@@ -481,10 +482,10 @@ function WarehouseSheet({ org, row, onClose, onSaved }: { org: string; row: Ware
           </Field>
         </div>
         <label className="flex items-center gap-2 text-[13px] text-ink">
-          <input type="checkbox" checked={d.isDefault} onChange={(e) => setD({ ...d, isDefault: e.target.checked })} /> The default warehouse for this company
+          <Checkbox checked={d.isDefault} onChange={(e) => setD({ ...d, isDefault: e.target.checked })} /> The default warehouse for this company
         </label>
         <label className="flex items-start gap-2 text-[13px] text-ink">
-          <input type="checkbox" className="mt-0.5" checked={d.allowNegative} onChange={(e) => setD({ ...d, allowNegative: e.target.checked })} />
+          <Checkbox className="mt-0.5" checked={d.allowNegative} onChange={(e) => setD({ ...d, allowNegative: e.target.checked })} />
           <span>
             Stock may go below zero here
             <span className="block text-[12px] text-ink-3">Nearly always a receipt somebody forgot to post. Off is safer.</span>

@@ -7,6 +7,7 @@ import { Button, Modal, Spinner, cx } from '../../components/ui';
 import { UserAvatar } from '../../components/UserAvatar';
 import type { ChatMessage, Room } from './types';
 import { Select } from '../../components/Select';
+import { Checkbox } from '../../components/Checkbox';
 
 interface Person {
   id: number;
@@ -95,7 +96,7 @@ export function NewChat({ onClose, onOpened }: { onClose: () => void; onOpened: 
           {people.isLoading ? <Spinner /> : null}
           {list.map((p) => (
             <label key={p.id} className="flex cursor-pointer items-center gap-2.5 rounded-[8px] px-1 py-1.5 hover:bg-subtle">
-              <input type={group ? 'checkbox' : 'radio'} name="new-chat-person" checked={picked.includes(p.id)} onChange={() => toggle(p.id)} className="accent-[var(--color-primary)]" aria-label={p.name} />
+              {group ? <Checkbox name="new-chat-person" checked={picked.includes(p.id)} onChange={() => toggle(p.id)} aria-label={p.name} /> : <input type="radio" name="new-chat-person" checked={picked.includes(p.id)} onChange={() => toggle(p.id)} className="accent-[var(--color-primary)]" aria-label={p.name} />}
               <UserAvatar userId={p.id} name={p.name} size={28} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13px] font-bold text-ink">{p.name}</span>
@@ -149,7 +150,7 @@ export function ForwardDialog({ m, rooms, onClose }: { m: ChatMessage; rooms: Ro
         <div className="max-h-60 overflow-y-auto scroll-thin">
           {list.map((r) => (
             <label key={r.id} className="flex cursor-pointer items-center gap-2.5 px-1 py-1.5">
-              <input type="checkbox" checked={picked.includes(r.id)} onChange={() => setPicked((c) => (c.includes(r.id) ? c.filter((x) => x !== r.id) : [...c, r.id]))} className="accent-[var(--color-primary)]" aria-label={r.name} />
+              <Checkbox checked={picked.includes(r.id)} onChange={() => setPicked((c) => (c.includes(r.id) ? c.filter((x) => x !== r.id) : [...c, r.id]))} aria-label={r.name} />
               <b className="flex-1 truncate text-[13px] text-ink">{r.name}</b>
               <span className="text-[11.5px] text-ink-3">{r.type === 'direct' ? 'Direct' : 'Group'}</span>
             </label>
@@ -219,7 +220,7 @@ export function NotifySettings({ room, onClose }: { room: Room | undefined; onCl
         <b className="text-[13px] text-ink">{title}</b>
         {hint ? <span className="text-[12px] text-ink-3">{hint}</span> : null}
       </span>
-      <input type="checkbox" checked={!!q.data?.[key]} disabled={!q.data} onChange={(e) => void save({ [key]: e.target.checked })} className="h-[18px] w-[18px] accent-[var(--color-primary)]" />
+      <Checkbox checked={!!q.data?.[key]} disabled={!q.data} onChange={(e) => void save({ [key]: e.target.checked })} />
     </label>
   );
   return (

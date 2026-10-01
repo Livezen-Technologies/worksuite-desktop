@@ -11,6 +11,7 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, Empty, input, PageHead, Sheet } from '../hr/parts';
 import { assignees, BULK_STATUSES, bulk, bulkAssign, fetchOrders, K, PRIORITIES, SOURCE, statusOf, type ListFilters, type Order } from './api';
 import { moneyFull, PaymentPill, PriorityPill, StatusPill } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 const OrderDrawer = lazy(() => import('./OrderDrawer'));
 const NewOrder = lazy(() => import('./NewOrder'));
@@ -117,7 +118,7 @@ export default function Orders({ org, status, openId, creating, canCreate, onOpe
           ))}
         </Select>
         <label className="flex items-center gap-1.5 text-[12.5px] font-semibold text-ink">
-          <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} className="h-3.5 w-3.5 accent-primary" />
+          <Checkbox checked={mine} onChange={(e) => setMine(e.target.checked)} />
           Mine
         </label>
         <span className="flex-1" />
@@ -174,12 +175,11 @@ export default function Orders({ org, status, openId, creating, canCreate, onOpe
 
       <div className="overflow-hidden rounded-[12px] border border-line bg-surface">
         <div className="flex items-center gap-2.5 border-b border-line bg-ground px-3.5 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase">
-          <input
-            type="checkbox"
+          <Checkbox
             aria-label="Select every order shown"
             checked={rows.length > 0 && chosen.length === rows.length}
+            indeterminate={chosen.length > 0 && chosen.length < rows.length}
             onChange={(e) => setPicked(e.target.checked ? new Set(rows.map((r) => r.id)) : new Set())}
-            className="h-3.5 w-3.5 accent-primary"
           />
           <span className="w-[180px]">Order</span>
           <span className="w-[150px]">Status</span>
@@ -255,7 +255,7 @@ function Row({ o, checked, open, onCheck, onOpen }: { o: Order; checked: boolean
   return (
     <div data-order={o.id} className={cx('relative flex items-center gap-2.5 border-b border-line/70 px-3.5 py-2 text-[12.5px] last:border-b-0', open ? 'bg-selection' : checked ? 'bg-[#F4F6FE] dark:bg-[#141D38]' : 'hover:bg-subtle')}>
       <button type="button" onClick={onOpen} className="absolute inset-0" aria-label={`Open ${o.number}`} />
-      <input type="checkbox" aria-label={`Select ${o.number}`} checked={checked} onChange={(e) => onCheck(e.target.checked)} className="relative z-10 h-3.5 w-3.5 accent-primary" />
+      <Checkbox aria-label={`Select ${o.number}`} checked={checked} onChange={(e) => onCheck(e.target.checked)} className="relative z-10" />
       <span className="flex w-[180px] min-w-0 flex-col">
         <b className="truncate text-ink">{o.number}</b>
         <span className="truncate text-[11.5px] text-ink-3">{o.client ?? 'No customer'}</span>

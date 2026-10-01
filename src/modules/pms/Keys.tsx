@@ -8,6 +8,7 @@ import { day, errorText, pGet, pPost, type Stay } from './api';
 import { device } from './devices';
 import { doorLocks, finishKey, type KeyAnswer, type KeyDone, type KeyLogRow } from './locks';
 import { usePms } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 type Action = 'issue' | 'duplicate' | 'cancel' | 'status';
 
@@ -80,7 +81,7 @@ export function KeyPanel({ stay, onChanged }: { stay: Stay; onChanged: () => voi
             </label>
             {lock?.vendor === 'ttlock' ? (
               <label className="flex items-center gap-1.5">
-                <input type="checkbox" checked={mobile} onChange={(e) => setMobile(e.target.checked)} /> App key
+                <Checkbox checked={mobile} onChange={(e) => setMobile(e.target.checked)} /> App key
               </label>
             ) : null}
             {mobile ? <input aria-label="The guest’s TTLock account" placeholder="The guest’s TTLock account" className={cx(input, 'w-52')} value={receiver} onChange={(e) => setReceiver(e.target.value)} /> : null}
@@ -89,7 +90,7 @@ export function KeyPanel({ stay, onChanged }: { stay: Stay; onChanged: () => voi
             <div className="flex flex-wrap gap-3 text-[12px]">
               {(lock?.common_areas ?? []).map((a) => (
                 <label key={a.code} className="flex items-center gap-1">
-                  <input type="checkbox" checked={chosen.includes(a.code)} onChange={(e) => area(a.code, e.target.checked)} /> {a.name}
+                  <Checkbox checked={chosen.includes(a.code)} onChange={(e) => area(a.code, e.target.checked)} /> {a.name}
                 </label>
               ))}
             </div>

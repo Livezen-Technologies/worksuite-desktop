@@ -37,6 +37,7 @@ import {
 import { AdvancePanel, ApproveSheet, touch } from './Advances';
 import { Blocks, Warnings } from './parts';
 import type { ScreenProps } from './Rail';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Everything waiting on this person.
@@ -261,7 +262,7 @@ export default function Approvals({ org, orgs, onGo }: ScreenProps) {
             <div className="flex items-center gap-2.5 border-b border-line bg-ground px-3.5 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase">
               {mayDecide ? (
                 <span className="shrink-0" style={{ width: W.check }}>
-                  <input type="checkbox" aria-label="Choose every item shown" checked={allPicked} disabled={!rows.length} onChange={pickAll} className="h-3.5 w-3.5 accent-[var(--color-primary)]" />
+                  <Checkbox aria-label="Choose every item shown" checked={allPicked} indeterminate={!allPicked && chosen.length > 0} disabled={!rows.length} onChange={pickAll} />
                 </span>
               ) : null}
               <span className="min-w-0 flex-1">Item</span>
@@ -284,7 +285,7 @@ export default function Approvals({ org, orgs, onGo }: ScreenProps) {
                 <div key={r.key} className={cx('flex items-start gap-2.5 border-b border-line/60 px-3.5 py-2.5 text-[13px] last:border-b-0', picked.has(r.key) && 'bg-selection')}>
                   {mayDecide ? (
                     <span className="shrink-0 pt-0.5" style={{ width: W.check }}>
-                      <input type="checkbox" aria-label={`Choose ${r.ref}`} checked={picked.has(r.key)} onChange={() => toggle(r.key)} className="h-3.5 w-3.5 accent-[var(--color-primary)]" />
+                      <Checkbox aria-label={`Choose ${r.ref}`} checked={picked.has(r.key)} onChange={() => toggle(r.key)} />
                     </span>
                   ) : null}
                   <span className="flex min-w-0 flex-1 flex-col gap-1">
