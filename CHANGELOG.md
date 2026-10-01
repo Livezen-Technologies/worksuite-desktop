@@ -14,6 +14,11 @@ person who has to live with the change — what it does, and where it bites.
   it. **Open in main app** in the window's title bar shows the conversation in the main window and closes the
   window. A window is no longer kept above everything else by default; the pin in its title bar does that, and a
   call's chat still starts on top. Windows remember their size and place, and come back onto a connected screen.
+- Where it bites: closing a chat window saves the draft first, and waits for a pasted picture or voice message
+  still going up (the window minimises meanwhile, then closes); files picked from disk always carried on without
+  the window. Signing out closes every chat window (and every other secondary window) at once; locking WorkSuite
+  hides them behind the lock screen as before.
+
 - **Schedule conflicts, finished** (#99). Dragging or stretching an entry onto something else now asks first —
   **Move anyway** or leave it where it was — instead of moving it and warning afterwards. Day, Week and Month flag
   the entries that overlap another of your commitments (⚠); the same meeting seen twice (as a meeting and as a
@@ -21,11 +26,6 @@ person who has to live with the change — what it does, and where it bites.
   Accepting an invitation asks the server again rather than trusting the list, so something added since is caught.
   A meeting cancelled or moved refreshes the calendar and its warnings. Saving something that is already in your
   calendar says so; people whose availability cannot be checked are named.
-
-- Where it bites: closing a chat window saves the draft first, and waits for a pasted picture or voice message
-  still going up (the window minimises meanwhile, then closes); files picked from disk always carried on without
-  the window. Signing out closes every chat window (and every other secondary window) at once; locking WorkSuite
-  hides them behind the lock screen as before.
 
 ## 2026-10-01 — 0.2.72: A profile picture before the workspace; calendar entries open their record; search on the server's index
 
