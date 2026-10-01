@@ -66,6 +66,7 @@ import {
 } from './admin';
 import { Organizations } from './Organizations';
 import type { ExpenseView, ScreenProps } from './Rail';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Expenses' settings, as the web draws them: the standard settings shell's
@@ -307,7 +308,7 @@ function CompanyRules({ orgId, mayAdmin }: { orgId: number; mayAdmin: boolean })
         <Check label="Every claim must name a cost centre" checked={v.requireCostCentre} disabled={off} onChange={(on) => set({ requireCostCentre: on })} />
         <Check label="Every claim must be charged to a project" checked={v.requireProject} disabled={off} onChange={(on) => set({ requireProject: on })} />
         <label className="flex items-start gap-2 rounded-[10px] border border-[#F5D48A] bg-[#FFF8E6] px-3 py-2.5 text-[12.5px] text-[#7A3B05] dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
-          <input type="checkbox" aria-label="Let people approve their own claims" checked={v.allowSelfApproval} disabled={off} onChange={(e) => set({ allowSelfApproval: e.target.checked })} className="mt-0.5 accent-primary" />
+          <Checkbox aria-label="Let people approve their own claims" checked={v.allowSelfApproval} disabled={off} onChange={(e) => set({ allowSelfApproval: e.target.checked })} className="mt-0.5" />
           <span className="flex flex-col gap-0.5">
             <b>Let people approve their own claims</b>
             <span>Off by default, and worth leaving off. With it on, an approval chain that lands on the claimant is an approval by the claimant — a receipt rather than a control.</span>
@@ -355,7 +356,7 @@ function CompanyRules({ orgId, mayAdmin }: { orgId: number; mayAdmin: boolean })
 function Check({ label, checked, disabled, onChange }: { label: string; checked: boolean; disabled?: boolean; onChange: (on: boolean) => void }) {
   return (
     <label className="flex items-center gap-2 text-[13px] font-medium text-ink">
-      <input type="checkbox" aria-label={label} checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} className="accent-primary" />
+      <Checkbox aria-label={label} checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
       {label}
     </label>
   );

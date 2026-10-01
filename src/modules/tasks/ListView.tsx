@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { cx } from '../../components/ui';
 import { dueOf, priorityOf, progressOf, STATUSES, type DueGroup, type Status, type Task, type TaskList } from './api';
 import { Select } from '../../components/Select';
+import { Checkbox } from '../../components/Checkbox';
 
 const GROUPS: Array<{ id: DueGroup | 'done'; label: string; tone: string }> = [
   { id: 'overdue', label: 'OVERDUE', tone: 'text-danger' },
@@ -84,7 +85,7 @@ export function ListView({ tasks, lists, me, today, now, completed, selected, ca
               const list = t.list_id ? lists.get(t.list_id) : undefined;
               return (
                 <div key={t.id} role="row" aria-selected={selected === t.id} className={cx('grid items-center gap-2 border-b border-line/60 px-5 py-[7px] text-[13px]', selected === t.id ? 'bg-selection' : 'hover:bg-subtle/60')} style={{ gridTemplateColumns: COLS }}>
-                  <input type="checkbox" checked={done} disabled={!canChangeStatus} onChange={() => onToggle(t)} aria-label={`${done ? 'Reopen' : 'Complete'} ${t.title}`} className="h-4 w-4 accent-[#1F7A4D]" />
+                  <Checkbox checked={done} disabled={!canChangeStatus} onChange={() => onToggle(t)} aria-label={`${done ? 'Reopen' : 'Complete'} ${t.title}`} />
                   <button type="button" onClick={() => onOpen(t)} className={cx('min-w-0 truncate text-left font-semibold hover:underline', done ? 'text-ink-3 line-through' : 'text-ink')} title={t.title}>
                     {t.title}
                   </button>

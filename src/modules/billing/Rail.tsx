@@ -97,7 +97,7 @@ export function BillRail({ view, draftsOnly, onPick, onDrafts, onOnAccount, onNe
           </Select>
         ) : null}
         {canCreate ? (
-          <button type="button" onClick={onNew} className="flex h-[38px] items-center justify-center gap-1.5 rounded-[9px] bg-primary font-bold text-white hover:bg-primary-hover">
+          <button type="button" data-guide="billing.new-invoice" onClick={onNew} className="flex h-[38px] items-center justify-center gap-1.5 rounded-[9px] bg-primary font-bold text-white hover:bg-primary-hover">
             <Icon name="plus" size={16} /> New invoice
           </button>
         ) : null}

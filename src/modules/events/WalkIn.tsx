@@ -8,6 +8,7 @@ import { eGet, ePost, errorText, fieldErrors, K, money, newKey, nice, type FormF
 import { printQueued } from './badge';
 import { DK, deskWalkIn, useDeskStatus } from './desk';
 import { Refusal, useEvent } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * "+ Walk-In" (EV-CHK-040..042, §9.5): the person's name, a phone or an
@@ -223,7 +224,7 @@ export default function WalkIn({ deviceId, gateId, onClose, onDone }: { deviceId
             )}
             {may('events.registration.approve') ? (
               <label className="flex items-center gap-2 text-[12.5px] text-ink-2">
-                <input type="checkbox" checked={waive !== null} onChange={(e) => { setWaive(e.target.checked ? '' : null); if (e.target.checked) setPay(null); }} /> Waive the payment
+                <Checkbox checked={waive !== null} onChange={(e) => { setWaive(e.target.checked ? '' : null); if (e.target.checked) setPay(null); }} /> Waive the payment
                 {waive !== null ? <input autoFocus value={waive} onChange={(e) => setWaive(e.target.value)} placeholder="Why" className="h-8 min-w-0 flex-1 rounded-[8px] border border-line bg-surface px-2 text-[12.5px] outline-none focus:border-primary" /> : null}
               </label>
             ) : null}
@@ -233,7 +234,7 @@ export default function WalkIn({ deviceId, gateId, onClose, onDone }: { deviceId
 
         {!offline && may('events.badge.print') ? (
           <label className="flex items-center gap-2 text-[13px] text-ink">
-            <input type="checkbox" checked={print} onChange={(e) => setPrint(e.target.checked)} /> Print the badge here
+            <Checkbox checked={print} onChange={(e) => setPrint(e.target.checked)} /> Print the badge here
           </label>
         ) : null}
         {error ? <Refusal text={error} /> : null}
@@ -257,7 +258,7 @@ function Field({ f, value, onChange, error }: { f: FormField; value: Answers[str
     case 'CONSENT':
       control = (
         <label className="flex items-start gap-2 text-[12.5px] font-normal text-ink">
-          <input type="checkbox" checked={value === true} onChange={(e) => onChange(e.target.checked)} className="mt-0.5" />
+          <Checkbox checked={value === true} onChange={(e) => onChange(e.target.checked)} className="mt-0.5" />
           <span>{f.consent?.text ?? f.label}</span>
         </label>
       );

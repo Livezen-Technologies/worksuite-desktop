@@ -10,6 +10,7 @@ import { btn, btnPrimary, Field, input, PageHead, Sheet } from '../hr/parts';
 import { Pill } from '../inventory/parts';
 import { archiveAccount, BEHAVIOURS, can, COSTABLE, createAccount, fetchAccounts, flattenAccounts, K, refusal, setBehaviour, TYPES, type Account, type Company } from './api';
 import { ConfirmSheet, LoadFailed } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * The chart of accounts, as the tree it is.
@@ -225,7 +226,7 @@ function NewAccount({ company, flat, onClose, onDone }: { company: Company; flat
         </Select>
       </Field>
       <label className="flex items-start gap-2 text-[13px]">
-        <input type="checkbox" checked={f.postable} onChange={(e) => setF({ ...f, postable: e.target.checked })} className="mt-0.5 h-4 w-4 accent-[var(--color-primary)]" />
+        <Checkbox checked={f.postable} onChange={(e) => setF({ ...f, postable: e.target.checked })} className="mt-0.5" />
         <span>
           <span className="font-semibold text-ink">Entries can be posted to it</span>
           <span className="block text-[11.5px] text-ink-3">Turn this off for a heading. Posting to a heading and to its children double-counts it in every report.</span>

@@ -44,6 +44,7 @@ import {
 } from './money';
 import { Note, StatusPill } from './parts';
 import type { ScreenProps } from './Rail';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Paying people back, and handing the figures to accounting.
@@ -174,7 +175,7 @@ function Runs({ orgId, orgs, onGo }: ScreenProps & { orgId: number }) {
             return (
               <div key={p.user_id} className="border-b border-line/70 px-3.5 py-2.5 last:border-b-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  {may ? <input type="checkbox" className="accent-primary" checked={every} aria-label={`Every claim of ${p.name}`} onChange={(e) => toggle(ids, e.target.checked)} /> : null}
+                  {may ? <Checkbox checked={every} indeterminate={!every && ids.some((id) => chosen.has(id))} aria-label={`Every claim of ${p.name}`} onChange={(e) => toggle(ids, e.target.checked)} /> : null}
                   <b className="text-[13px] text-ink">{p.name}</b>
                   <span className="text-[12px] text-ink-3">{plural(p.count, 'claim', 'claims')}</span>
                   <b className="text-[13px] text-ink tabular-nums">{money(p.total, cur)}</b>
@@ -186,7 +187,7 @@ function Runs({ orgId, orgs, onGo }: ScreenProps & { orgId: number }) {
                 <div className="mt-1 flex flex-col">
                   {p.claims.map((c) => (
                     <label key={c.id} className="flex items-center gap-2.5 rounded-[7px] px-1.5 py-1 text-[12.5px] hover:bg-subtle">
-                      {may ? <input type="checkbox" className="accent-primary" checked={chosen.has(c.id)} onChange={(e) => toggle([c.id], e.target.checked)} /> : null}
+                      {may ? <Checkbox checked={chosen.has(c.id)} onChange={(e) => toggle([c.id], e.target.checked)} /> : null}
                       <button type="button" className="w-[110px] shrink-0 truncate text-left font-mono text-[11.5px] text-primary hover:underline" title="Open the claim" onClick={(e) => (e.preventDefault(), onGo('organization', `&claim=${c.id}`))}>
                         {c.claim_no}
                       </button>

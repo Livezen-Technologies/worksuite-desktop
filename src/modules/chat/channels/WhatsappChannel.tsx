@@ -11,6 +11,9 @@ import { Select } from '../../../components/Select';
 import { SidePanel } from '../../../components/SidePanel';
 import { Avatar, Button, Empty, ErrorNote, Spinner, cx } from '../../../components/ui';
 import { mediaUrl } from '../types';
+import { useChatSavedReplies, type Turn } from '../replies';
+import { inSlashMenu, SlashMenu, type SlashMenuHandle } from '../SlashMenu';
+import { savedReplyQuery } from '../website/profile';
 import { LIST_WIDTH, rememberWhatsapp } from './channels';
 import { isConnected, messageText, preview, readWa, sendWa, useWaChats, useWaThread, WA_SCOPES, type WaAccount, type WaChat, type WaMessage, type WaScope } from './whatsapp';
 
@@ -188,7 +191,7 @@ function WhatsappThread({ id }: { id: string }) {
         {!data.messages.length ? <Empty icon="phone" title="No messages yet" /> : null}
         {data.messages.map((m) => <Bubble key={m.id} m={m} />)}
       </div>
-      <WhatsappComposer chatId={chat.id} name={chat.name} refusal={refusal} onSent={() => void qc.invalidateQueries({ queryKey: ['whatsapp'] })} />
+      <WhatsappComposer chatId={chat.id} name={chat.name} messages={data.messages} refusal={refusal} onSent={() => void qc.invalidateQueries({ queryKey: ['whatsapp'] })} />
     </section>
   );
 }
@@ -230,10 +233,26 @@ function Bubble({ m }: { m: WaMessage }) {
 }
 
 /** The reply box. What is typed is kept per conversation, so switching channel or conversation loses nothing. */
-function WhatsappComposer({ chatId, name, refusal, onSent }: { chatId: number; name: string; refusal: string | null; onSent: () => void }) {
+function WhatsappComposer({ chatId, name, messages, refusal, onSent }: { chatId: number; name: string; messages: WaMessage[]; refusal: string | null; onSent: () => void }) {
   const draft = useDraft<string>('whatsapp', `chat:${chatId}`, '');
   const [sending, setSending] = useState(false);
   const text = draft.value;
+  // The "/" menu (worksuite-desktop#32): saved replies and suggestions, into the box, never sent by themselves.
+  const [slash, setSlash] = useState<{ start: number; word: string } | null>(null);
+  const slashMenu = useRef<SlashMenuHandle>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
+  const replies = useChatSavedReplies(slash !== null);
+  const conversation = (): Turn[] => messages.map((m) => ({ mine: m.direction === 'out', name: m.direction === 'out' ? (m.sender_name ?? 'Me') : name, text: messageText(m) }));
+  const insertSlash = (body: string) => {
+    const start = slash?.start ?? text.length;
+    const end = slash ? slash.start + 1 + slash.word.length : start;
+    draft.setValue(`${text.slice(0, start)}${body}${text.slice(end)}`);
+    setSlash(null);
+    requestAnimationFrame(() => {
+      input.current?.focus();
+      input.current?.setSelectionRange(start + body.length, start + body.length);
+    });
+  };
 
   const send = async () => {
     const body = text.trim();
@@ -256,6 +275,7 @@ function WhatsappComposer({ chatId, name, refusal, onSent }: { chatId: number; n
     }
   };
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (slash && slashMenu.current?.onKey(e)) return;
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       void send();
@@ -265,14 +285,29 @@ function WhatsappComposer({ chatId, name, refusal, onSent }: { chatId: number; n
   return (
     <div className="border-t border-line bg-surface px-4 py-3">
       {refusal ? <p role="status" className="mb-2 rounded-[8px] bg-subtle p-2 text-[12px] text-ink-2">{refusal}</p> : null}
-      <div className="flex items-end gap-2">
+      <div className="relative flex items-end gap-2">
+        {slash ? (
+          <SlashMenu
+            ref={slashMenu}
+            word={slash.word}
+            replies={replies}
+            context={conversation}
+            onInsert={insertSlash}
+            onClose={() => (setSlash(null), input.current?.focus())}
+          />
+        ) : null}
         <textarea
+          ref={input}
           value={text}
-          onChange={(e) => draft.setValue(e.target.value)}
+          onChange={(e) => {
+            draft.setValue(e.target.value);
+            setSlash(savedReplyQuery(e.target.value, e.target.selectionStart ?? e.target.value.length));
+          }}
+          onBlur={(e) => !inSlashMenu(e.relatedTarget) && setSlash(null)}
           onKeyDown={onKeyDown}
           rows={Math.min(6, Math.max(1, text.split('\n').length))}
           maxLength={4000}
-          placeholder={`Message ${name} on WhatsApp`}
+          placeholder={`Message ${name} on WhatsApp · / for replies`}
           aria-label={`Message ${name} on WhatsApp`}
           className="min-h-[38px] flex-1 resize-none rounded-[10px] border border-line bg-ground px-3 py-2 text-[13px] text-ink outline-none focus:border-primary"
         />

@@ -14,6 +14,7 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Caps, Empty, Field, Grid, input, Seg, Sheet, SidePanel } from '../hr/parts';
 import { approve, assign, assignees, cancel, confirm, fetchOrder, fetchTimeline, K, mayInvoice, movesFor, raiseInvoice, reject, submit, transition, type Move, type OrderDetail } from './api';
 import { moneyFull, PaymentPill, PriorityPill, StatusPill } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * One order (OmsOrderDrawer + OmsOrderSheet): the facts, the money and the
@@ -572,7 +573,7 @@ function ShareSheet({ o, how, onClose }: { o: OrderDetail; how: 'email' | 'whats
       ) : null}
       {s && allowed && (how === 'email' || how === 'whatsapp') && s.printable ? (
         <label className="flex items-center gap-2 text-[12.5px] font-semibold text-ink">
-          <input type="checkbox" checked={attach} onChange={(e) => setAttach(e.target.checked)} className="h-3.5 w-3.5 accent-primary" />
+          <Checkbox checked={attach} onChange={(e) => setAttach(e.target.checked)} />
           Attach the PDF
         </label>
       ) : null}

@@ -12,6 +12,7 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Caps, Field, input, PageHead, Sheet, SidePanel } from '../hr/parts';
 import type { FollowUpOptions, Lead, LeadDetail, Owner, TimelineEntry } from './api';
 import { crmCan, LeadStatus, money, moneyFull, Rating } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Leads (CrmLeads, CrmLeadDrawer, CrmLeadExtras): the list with its four
@@ -158,7 +159,7 @@ export default function Leads({ openId, creating, onOpen, onNew, onCreated, onCl
 
       <div className="flex min-h-0 flex-col overflow-hidden rounded-[12px] border border-line bg-surface">
         <div className="flex shrink-0 items-center gap-2.5 border-b border-line bg-[#F7F8FB] px-3.5 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
-          <input type="checkbox" aria-label="Select all" disabled={!canManage} checked={all} onChange={() => setSelected(all ? new Set() : new Set(rows.map((r) => r.id)))} className="accent-primary" />
+          <Checkbox aria-label="Select all" disabled={!canManage} checked={all} indeterminate={!all && rows.some((r) => selected.has(r.id))} onChange={() => setSelected(all ? new Set() : new Set(rows.map((r) => r.id)))} />
           <span className="w-[210px] shrink-0">Lead</span>
           <span className="w-[140px] shrink-0">Company</span>
           <span className="w-[120px] shrink-0">Score</span>
@@ -172,7 +173,7 @@ export default function Leads({ openId, creating, onOpen, onNew, onCreated, onCl
           {list.isLoading ? <Spinner /> : list.error ? <ErrorNote error={list.error} onRetry={() => void list.refetch()} /> : null}
           {rows.map((r) => (
             <div key={r.id} data-lead={r.id} className={cx('flex cursor-pointer items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] hover:bg-subtle', selected.has(r.id) && 'bg-[#F4F6FE] dark:bg-selection/40', openId === r.id && 'bg-selection')} onClick={() => onOpen(r.id)}>
-              <input type="checkbox" aria-label={`Select ${r.name}`} disabled={!canManage} checked={selected.has(r.id)} onClick={(e) => e.stopPropagation()} onChange={() => toggle(r.id)} className="accent-primary" />
+              <Checkbox aria-label={`Select ${r.name}`} disabled={!canManage} checked={selected.has(r.id)} onClick={(e) => e.stopPropagation()} onChange={() => toggle(r.id)} />
               <span className="flex w-[210px] min-w-0 shrink-0 flex-col">
                 <b className="truncate text-ink">{r.name}</b>
                 <span className="truncate text-[11.5px] text-ink-3">{r.email ?? r.job_title ?? r.phone ?? ''}</span>
@@ -674,7 +675,7 @@ function Convert({ lead, onClose, onDone }: { lead: Lead; onClose: () => void; o
     >
       <p className="m-0 text-[12.5px] text-ink-2">This creates an account and a contact from the lead. If an account with the same name already exists it is reused rather than duplicated, and the lead’s activity moves onto it.</p>
       <label className="flex items-center gap-2 text-[13px] font-semibold text-ink">
-        <input type="checkbox" checked={withDeal} onChange={(e) => setWithDeal(e.target.checked)} className="accent-primary" />
+        <Checkbox checked={withDeal} onChange={(e) => setWithDeal(e.target.checked)} />
         Also open a deal
       </label>
       {withDeal ? (

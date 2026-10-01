@@ -7,6 +7,7 @@ import { toast } from '../../../core/toasts';
 import { errorText, FUEL_LABEL, gGet, gPost, K, money, newKey, nice, qty, when, type DeliveryView, type QualityCheck } from '../api';
 import { Ask, DocActions, Field, input, Section, SignaturePad, ToneNote, useGarage } from '../parts';
 import { Pill } from '../../inventory/parts';
+import { Checkbox } from '../../../components/Checkbox';
 
 const RESULT_ON: Record<string, string> = { PASS: 'border-success bg-success text-white', FAIL: 'border-danger bg-danger text-white', NA: 'border-ink-3 bg-ink-3 text-white' };
 const QC_TONE: Record<string, 'blue' | 'amber' | 'red' | 'green' | 'grey'> = { PENDING: 'grey', IN_PROGRESS: 'blue', PASSED: 'green', FAILED: 'red', REWORK_REQUIRED: 'red' };
@@ -213,7 +214,7 @@ function FailCheck({ check, d, onClose, onDone }: { check: QualityCheck; d: Deli
             .filter((w) => w.status === 'COMPLETED')
             .map((w) => (
               <label key={w.id} className="flex items-center gap-2 text-[13px]">
-                <input type="checkbox" checked={wos.includes(w.id)} onChange={(e) => setWos(e.target.checked ? [...wos, w.id] : wos.filter((x) => x !== w.id))} />
+                <Checkbox checked={wos.includes(w.id)} onChange={(e) => setWos(e.target.checked ? [...wos, w.id] : wos.filter((x) => x !== w.id))} />
                 {w.code} · {w.work_type}
                 {w.technicians[0] ? <span className="text-[12px] text-ink-3">({w.technicians[0].name})</span> : null}
               </label>
@@ -333,10 +334,10 @@ function RoadTestForm({ d, jobId, onClose, onDone }: { d: DeliveryView; jobId: n
           <input className={input} aria-label="Route" value={route} onChange={(e) => setRoute(e.target.value)} />
         </Field>
         <label className="flex items-center gap-2 text-[13px]">
-          <input type="checkbox" checked={fixed} onChange={(e) => setFixed(e.target.checked)} /> The customer's complaint is fixed
+          <Checkbox checked={fixed} onChange={(e) => setFixed(e.target.checked)} /> The customer's complaint is fixed
         </label>
         <label className="flex items-center gap-2 text-[13px]">
-          <input type="checkbox" checked={verified} onChange={(e) => setVerified(e.target.checked)} /> The repair is verified on the road
+          <Checkbox checked={verified} onChange={(e) => setVerified(e.target.checked)} /> The repair is verified on the road
         </label>
         <Field label="New issue found">
           <textarea className={cx(input, 'h-auto py-2')} rows={2} aria-label="New issue found" value={issue} onChange={(e) => setIssue(e.target.value)} />
@@ -348,7 +349,7 @@ function RoadTestForm({ d, jobId, onClose, onDone }: { d: DeliveryView; jobId: n
               .filter((w) => w.status === 'COMPLETED')
               .map((w) => (
                 <label key={w.id} className="flex items-center gap-2 text-[13px]">
-                  <input type="checkbox" checked={wos.includes(w.id)} onChange={(e) => setWos(e.target.checked ? [...wos, w.id] : wos.filter((x) => x !== w.id))} /> {w.code} · {w.work_type}
+                  <Checkbox checked={wos.includes(w.id)} onChange={(e) => setWos(e.target.checked ? [...wos, w.id] : wos.filter((x) => x !== w.id))} /> {w.code} · {w.work_type}
                 </label>
               ))}
             <span className="text-[12px] text-ink-3">Or raise additional work from the Work tab for something new.</span>
@@ -393,7 +394,7 @@ function ReviewSection({ d, jobId, onChange }: { d: DeliveryView; jobId: number;
         ))}
       </ul>
       <label className="mt-3 flex items-start gap-2 text-[13px]">
-        <input type="checkbox" className="mt-1" checked={present} onChange={(e) => setPresent(e.target.checked)} />
+        <Checkbox className="mt-1" checked={present} onChange={(e) => setPresent(e.target.checked)} />
         <span>
           The customer's items are present
           <span className="block text-[12px] text-ink-3">{items?.detail}</span>
@@ -702,14 +703,14 @@ function HandoverForm({ d, jobId, onClose, onDone }: { d: DeliveryView; jobId: n
             <div className="flex flex-wrap gap-3">
               {d.accessories.map((a) => (
                 <label key={a} className="flex items-center gap-1.5 text-[13px]">
-                  <input type="checkbox" checked={items.includes(a)} onChange={(e) => setItems(e.target.checked ? [...items, a] : items.filter((x) => x !== a))} /> {a}
+                  <Checkbox checked={items.includes(a)} onChange={(e) => setItems(e.target.checked ? [...items, a] : items.filter((x) => x !== a))} /> {a}
                 </label>
               ))}
             </div>
           </div>
         ) : null}
         <label className="flex items-center gap-2 text-[13px]">
-          <input type="checkbox" checked={returned} onChange={(e) => setReturned(e.target.checked)} /> Removed parts the customer keeps are returned
+          <Checkbox checked={returned} onChange={(e) => setReturned(e.target.checked)} /> Removed parts the customer keeps are returned
         </label>
         <Field label="Notes">
           <input className={input} aria-label="Handover notes" value={notes} onChange={(e) => setNotes(e.target.value)} />

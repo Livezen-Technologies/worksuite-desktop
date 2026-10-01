@@ -95,7 +95,7 @@ export function CrmRail({ view, onPick, onNewLead, onOpenHit, counts }: { view: 
   return (
     <nav aria-label="CRM" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
       <div className="flex flex-col gap-2 px-2.5 pt-3.5 pb-1">
-        <button type="button" onClick={onNewLead} className="flex h-[38px] items-center justify-center gap-1.5 rounded-[9px] bg-primary font-bold text-white hover:bg-primary-hover">
+        <button type="button" data-guide="crm.new-lead" onClick={onNewLead} className="flex h-[38px] items-center justify-center gap-1.5 rounded-[9px] bg-primary font-bold text-white hover:bg-primary-hover">
           <Icon name="plus" size={16} /> New lead
         </button>
         <CrmSearch onOpen={onOpenHit} />

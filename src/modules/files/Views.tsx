@@ -13,6 +13,7 @@ import { PopMenu, below, type MenuItem } from './Menu';
 import type { Place } from './Rail';
 import { FileIcon } from './Thumb';
 import { Select } from '../../components/Select';
+import { Checkbox } from '../../components/Checkbox';
 
 const page = 'flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto bg-surface px-7 py-5 scroll-thin';
 const th = 'text-[11px] font-bold tracking-[0.4px] text-ink-2';
@@ -353,7 +354,7 @@ export function Notifications() {
         <div className="flex max-w-[520px] flex-col gap-2.5 rounded-[12px] border border-line p-4 text-[13px]">
           {TOPICS.map(([t, l]) => (
             <label key={t} className="flex items-center gap-2.5 text-ink">
-              <input type="checkbox" checked={q.data.topics[t] !== false} onChange={(e) => void set(t, e.target.checked)} className="accent-[var(--color-primary)]" />
+              <Checkbox checked={q.data.topics[t] !== false} onChange={(e) => void set(t, e.target.checked)} />
               {l}
             </label>
           ))}

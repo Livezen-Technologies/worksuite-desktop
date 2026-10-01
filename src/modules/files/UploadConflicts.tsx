@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { bytes, relative } from '../../core/time';
 import { Button, FileBadge, Modal } from '../../components/ui';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * A file being uploaded has the name of one already in the folder: replace it
@@ -91,7 +92,7 @@ export function UploadConflicts({ conflicts, folderName, onDone, onCancel }: {
         </ul>
         {left > 0 ? (
           <label className="flex items-center gap-2 text-[12.5px] text-ink">
-            <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
+            <Checkbox checked={all} onChange={(e) => setAll(e.target.checked)} />
             Do the same for the other {left} {left === 1 ? 'file' : 'files'} with a name already here
           </label>
         ) : null}

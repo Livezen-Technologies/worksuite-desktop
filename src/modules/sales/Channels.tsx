@@ -29,6 +29,7 @@ import {
   type ChannelKind,
   type SyncRun,
 } from './manage';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Sales channels (OmsChannelSheet): where orders come from. Every kind the
@@ -295,7 +296,7 @@ function ChannelPanel({ id, org, can, onClose }: { id: number; org: string; can:
               ))}
               {can.edit ? (
                 <label className="flex items-center gap-2 pt-1 font-semibold text-ink">
-                  <input type="checkbox" checked={c.enabled} onChange={(e) => void save({ enabled: e.target.checked })} className="accent-primary" />
+                  <Checkbox checked={c.enabled} onChange={(e) => void save({ enabled: e.target.checked })} />
                   Use this channel
                 </label>
               ) : null}
@@ -335,7 +336,7 @@ function ChannelPanel({ id, org, can, onClose }: { id: number; org: string; can:
               )}
               {can.edit && c.kind === 'woocommerce' ? (
                 <label className="flex items-start gap-2 border-t border-line/60 pt-3 text-[13px] font-semibold text-ink">
-                  <input type="checkbox" checked={c.auto_sync} onChange={(e) => void save({ auto_sync: e.target.checked })} className="mt-0.5 accent-primary" />
+                  <Checkbox checked={c.auto_sync} onChange={(e) => void save({ auto_sync: e.target.checked })} className="mt-0.5" />
                   <span>
                     Make orders from the shop's webhook as they arrive
                     <span className="block text-[11.5px] font-medium text-ink-3">Off, deliveries are still logged but no order is made from them. Sync now works either way.</span>

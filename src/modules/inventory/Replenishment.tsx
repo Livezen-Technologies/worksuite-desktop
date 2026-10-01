@@ -7,6 +7,7 @@ import { btnPrimary, Empty, PageHead } from '../hr/parts';
 import { num, qty, type Warehouse } from './api';
 import { fetchReplenishment, KI, raiseRequests } from './insight';
 import { minWidth } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Replenishment (InvReplenishment): what is below its minimum, soonest to
@@ -85,7 +86,7 @@ export default function Replenishment({ org, warehouse, warehouses, canPurchase,
                 </div>
                 {items.map((i) => (
                   <label key={`${i.product_id}-${i.warehouse_id}`} data-reorder={i.product_id} className="flex cursor-pointer items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] last:border-b-0 hover:bg-subtle/60">
-                    <span className="flex w-[28px] shrink-0 justify-center">{canPurchase ? <input type="checkbox" checked={picked.includes(i.product_id)} onChange={() => toggle(i.product_id)} aria-label={`Pick ${i.name}`} /> : null}</span>
+                    <span className="flex w-[28px] shrink-0 justify-center">{canPurchase ? <Checkbox checked={picked.includes(i.product_id)} onChange={() => toggle(i.product_id)} aria-label={`Pick ${i.name}`} /> : null}</span>
                     <span className="flex min-w-0 flex-1 flex-col">
                       <b className="truncate text-ink">{i.name}</b>
                       {i.code ? <span className="truncate text-[11px] text-ink-3">{i.code}</span> : null}

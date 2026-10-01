@@ -31,6 +31,7 @@ import {
   type CurrencyRow,
   type Mode,
 } from './more';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Billing settings (BillSettings, BillSettingsSheet): numbering, money,
@@ -252,7 +253,7 @@ function Taxes({ may }: { may: boolean }) {
           </div>
           {f.kind === 'sales' ? (
             <label className="flex items-start gap-2 text-[12.5px] text-ink">
-              <input type="checkbox" checked={f.is_compound} onChange={(e) => setF({ ...f, is_compound: e.target.checked })} className="mt-0.5 accent-primary" />
+              <Checkbox checked={f.is_compound} onChange={(e) => setF({ ...f, is_compound: e.target.checked })} className="mt-0.5" />
               <span>
                 <b>Compound</b>
                 <span className="block text-ink-3">Charged on the line plus the simple taxes on it.</span>
@@ -260,7 +261,7 @@ function Taxes({ may }: { may: boolean }) {
             </label>
           ) : (
             <label className="flex items-start gap-2 text-[12.5px] text-ink">
-              <input type="checkbox" checked={f.is_default} onChange={(e) => setF({ ...f, is_default: e.target.checked })} className="mt-0.5 accent-primary" />
+              <Checkbox checked={f.is_default} onChange={(e) => setF({ ...f, is_default: e.target.checked })} className="mt-0.5" />
               <span>
                 <b>Apply to every invoice</b>
                 <span className="block text-ink-3">Withheld from each invoice's total by the customer.</span>
@@ -449,7 +450,7 @@ function Modes({ may, org }: { may: boolean; org: string }) {
             <textarea aria-label="Instructions" value={editing.instructions ?? ''} onChange={(e) => setEditing({ ...editing, instructions: e.target.value })} className={input + ' !h-[64px] resize-none py-2'} />
           </Field>
           <label className="flex items-center gap-2 font-semibold text-ink">
-            <input type="checkbox" checked={editing.is_active ?? true} onChange={(e) => setEditing({ ...editing, is_active: e.target.checked })} className="accent-primary" />
+            <Checkbox checked={editing.is_active ?? true} onChange={(e) => setEditing({ ...editing, is_active: e.target.checked })} />
             Active
           </label>
         </Sheet>
@@ -545,7 +546,7 @@ function Currencies({ may }: { may: boolean }) {
               <input aria-label="Decimals" type="number" min={0} max={4} value={editing.decimals ?? 2} onChange={(e) => setEditing({ ...editing, decimals: Math.max(0, Math.min(4, Number(e.target.value) || 0)) })} className={input} />
             </Field>
             <label className="flex items-center gap-2 self-end pb-2 font-semibold text-ink">
-              <input type="checkbox" checked={editing.is_active ?? true} onChange={(e) => setEditing({ ...editing, is_active: e.target.checked })} className="accent-primary" />
+              <Checkbox checked={editing.is_active ?? true} onChange={(e) => setEditing({ ...editing, is_active: e.target.checked })} />
               Active
             </label>
           </div>

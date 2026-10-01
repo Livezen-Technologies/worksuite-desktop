@@ -11,6 +11,7 @@ import { day, errorText, K, MAX_PHOTO, MAX_PHOTOS, pGet, pPost, pUpload, stamp, 
 import { ActionButtons, PersonPick, useActions } from './ops';
 import { RestockDialog } from './Restock';
 import { Facts, NoAccess, Refusal, StatusBadge, usePms, VipPill } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 interface TaskView {
   task: HkTaskFull & { flags?: HkTaskFull['flags'] & { guest?: { name: string | null; vip_level: string | null; special_requirements?: string | null } | null } };
@@ -116,7 +117,7 @@ export default function HkTask({ id }: { id: number }) {
                 {t.checklist.map((c) => (
                   <li key={c.key}>
                     <label className="flex items-center gap-2">
-                      <input type="checkbox" checked={c.done} disabled={!working || !pms.online} onChange={(e) => void tick(c.key, e.target.checked)} />
+                      <Checkbox checked={c.done} disabled={!working || !pms.online} onChange={(e) => void tick(c.key, e.target.checked)} />
                       {c.label}
                       {c.required === false ? <span className="text-[11.5px] text-ink-3">(optional)</span> : null}
                     </label>

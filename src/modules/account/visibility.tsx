@@ -6,6 +6,7 @@ import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { cx } from '../../components/ui';
 import { K, useRefreshMe, type Pictures, type VisibilityMode } from './api';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Who sees your picture: everyone in your companies, your teams, or the
@@ -76,7 +77,7 @@ export function VisibilityCards({ value, canEdit }: { value: Visibility; canEdit
             const off = mode !== 'organizations';
             return (
               <label key={c.id} className={cx('flex items-center gap-2 text-[13px]', off ? 'text-ink-3' : 'text-ink')}>
-                <input type="checkbox" disabled={off} checked={!off && orgs.includes(c.id)} onChange={(e) => void save('organizations', e.target.checked ? [...orgs, c.id] : orgs.filter((o) => o !== c.id))} className="accent-primary" />
+                <Checkbox disabled={off} checked={!off && orgs.includes(c.id)} onChange={(e) => void save('organizations', e.target.checked ? [...orgs, c.id] : orgs.filter((o) => o !== c.id))} />
                 {c.name}
               </label>
             );

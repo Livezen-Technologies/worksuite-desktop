@@ -7,6 +7,7 @@ import { toast } from '../../core/toasts';
 import { answered, attemptKey, atLeast, checkIn, fetchVisit, K, refusal, shortDay, STATEMENT, type Allergy, type CheckInExtra, type Gate, type PatchTest, type Visit } from './api';
 import { keep, SK, syncNow } from './offline';
 import { firstName, SEVERITY_TONE, servicesOf, severityLabel, stylistsOf } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Checking a client in (D05), and the allergy panel in front of it.
@@ -219,7 +220,7 @@ export function AllergyGate({
 
         {needsAck ? (
           <label className="flex cursor-pointer items-start gap-3 rounded-[10px] bg-selection px-3.5 py-3">
-            <input type="checkbox" checked={ticked} onChange={(e) => setTicked(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--color-primary)]" />
+            <Checkbox size="lg" checked={ticked} onChange={(e) => setTicked(e.target.checked)} className="mt-0.5" />
             <span className="text-[14px] font-bold text-ink">{statement}</span>
           </label>
         ) : null}

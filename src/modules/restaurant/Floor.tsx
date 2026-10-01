@@ -5,6 +5,7 @@ import { toast } from '../../core/toasts';
 import { get, getMeta, K, money, refusal, write, type Floor as FloorData, type FloorTable, type Order } from './api';
 import { useT } from './i18n';
 import { Failed, Heading, Note, ReasonField, TABLE_TONE, useLive, useTill } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * The live floor (RM-TBL-001..005): every table the person's scope reaches,
@@ -285,7 +286,7 @@ function TablePanel({ table, all, onClose, onChanged }: { table: FloorTable; all
                       .filter((l) => l.parent_id === null && l.status !== 'voided')
                       .map((l) => (
                         <label key={l.id} className="flex items-center gap-2 text-[13px] text-ink">
-                          <input type="checkbox" checked={lines.includes(l.id)} onChange={() => toggle(lines, setLines, l.id)} />
+                          <Checkbox checked={lines.includes(l.id)} onChange={() => toggle(lines, setLines, l.id)} />
                           {l.qty.replace(/\.0+$/, '')} × {l.name}
                         </label>
                       ))}

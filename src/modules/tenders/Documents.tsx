@@ -11,6 +11,7 @@ import { Pill } from '../inventory/parts';
 import { K, type DocAccess, type TenderDoc } from './api';
 import { AttachMenu, saveTenderFile, Uploading, useDropZone, useTenderUploads } from './files';
 import { addDocuments, DOC_KINDS, docKindLabel, removeDocument, replaceDocument, updateDocument } from './work';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * The tender's documents: the buyer's notice and specification, our bid,
@@ -205,7 +206,7 @@ function EditDoc({ doc, onClose, onSaved }: { doc: TenderDoc; onClose: () => voi
         <input aria-label="Note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} className={input} />
       </Field>
       <label className="flex items-center gap-2 text-[12.5px] font-semibold text-ink">
-        <input type="checkbox" checked={final} onChange={(e) => setFinal(e.target.checked)} className="accent-primary" />
+        <Checkbox checked={final} onChange={(e) => setFinal(e.target.checked)} />
         The final version
       </label>
       {error ? <p className="m-0 text-[12.5px] text-danger">{error}</p> : null}

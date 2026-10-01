@@ -33,7 +33,7 @@ function world(opts: { selected?: string; copies?: boolean; primary?: string } =
   return { clip, helper, sent, get text() { return text; }, get restored() { return restoredItems; } };
 }
 
-const prefs: AiPrefs = { quickAsk: true, shortcut: 'Alt+Space', insert: true, dockAtStart: false, language: 'Sinhala', display: 'drawer', sound: false };
+const prefs: AiPrefs = { quickAsk: true, shortcut: 'Alt+Space', insert: true, dockAtStart: false, language: 'Sinhala', display: 'drawer', sound: false, moduleAccess: { worksuite: {}, local: {} }, onlineFallback: true };
 function make(w: ReturnType<typeof world>, platform: NodeJS.Platform, helper: Injector | null = w.helper, over: Partial<{ allowed: boolean; register: boolean }> = {}) {
   const shown = vi.fn();
   const hidden = vi.fn();

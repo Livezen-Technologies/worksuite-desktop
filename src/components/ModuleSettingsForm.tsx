@@ -6,6 +6,7 @@ import { toast } from '../core/toasts';
 import { btn, btnPrimary, Field, input, Panel } from '../modules/hr/parts';
 import { Select } from './Select';
 import { ErrorNote, Spinner } from './ui';
+import { Checkbox } from './Checkbox';
 
 /**
  * A module's general (or advanced) settings, drawn from the server's own
@@ -139,7 +140,7 @@ function SettingField({ f, value, error, disabled, changed, onChange, custom }: 
     return (
       <div className="flex flex-col gap-1 text-[12.5px]">
         <label className="flex items-center gap-2 font-semibold text-ink">
-          <input type="checkbox" aria-label={f.label} checked={value === '1'} disabled={disabled} onChange={(e) => onChange(e.target.checked ? '1' : '0')} className="accent-primary" />
+          <Checkbox aria-label={f.label} checked={value === '1'} disabled={disabled} onChange={(e) => onChange(e.target.checked ? '1' : '0')} />
           {label}
         </label>
         {hint ? <span className="text-[11.5px] text-ink-3">{hint}</span> : null}
@@ -153,7 +154,7 @@ function SettingField({ f, value, error, disabled, changed, onChange, custom }: 
         <div className="flex flex-wrap gap-x-3 gap-y-1 rounded-[8px] border border-line px-2.5 py-2 font-medium">
           {(f.options ?? []).map((o) => (
             <label key={o.value} className="flex items-center gap-1.5">
-              <input type="checkbox" checked={chosen.includes(o.value)} disabled={disabled} onChange={(e) => onChange((e.target.checked ? [...chosen, o.value] : chosen.filter((c) => c !== o.value)).join(','))} className="accent-primary" />
+              <Checkbox checked={chosen.includes(o.value)} disabled={disabled} onChange={(e) => onChange((e.target.checked ? [...chosen, o.value] : chosen.filter((c) => c !== o.value)).join(','))} />
               {o.label}
             </label>
           ))}

@@ -20,6 +20,7 @@ import { UnlockPrompt } from './Dialogs';
 import { Select } from '../../components/Select';
 import { SYNC_WORDS, useSyncAvailable, useSyncLookup } from './sync';
 import type { SyncItemState } from '@shared/types';
+import { Checkbox } from '../../components/Checkbox';
 
 type Layout = 'list' | 'grid';
 const LAYOUT_KEY = 'files.layout';
@@ -419,7 +420,7 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
             <div role="table" aria-label="Files" className="text-[13px]">
               <div role="row" className={cx('sticky top-0 z-[1] grid items-center border-y border-line bg-ground px-6 py-[7px] text-[11px] font-bold tracking-[0.4px] text-ink-2', cols)}>
                 <span>
-                  <input type="checkbox" aria-label="Select all" checked={items.length > 0 && selected.size === items.length} onChange={(e) => setSelected(e.target.checked ? new Set(items_()) : new Set())} className="h-4 w-4 accent-[var(--color-primary)]" />
+                  <Checkbox aria-label="Select all" checked={items.length > 0 && selected.size === items.length} indeterminate={selected.size > 0 && selected.size < items.length} onChange={(e) => setSelected(e.target.checked ? new Set(items_()) : new Set())} />
                 </span>
                 <span role="columnheader">NAME</span>
                 <span role="columnheader">{folderView ? 'OWNER' : 'LOCATION'}</span>
@@ -447,7 +448,7 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
                     className={cx('grid cursor-default items-center border-b border-line/70 px-6 py-1.5 select-none', cols, on ? 'bg-selection' : 'hover:bg-ground', isFolder && dragOver === item.f.id && 'outline-2 -outline-offset-2 outline-primary')}
                   >
                     <span onClick={(e) => e.stopPropagation()}>
-                      <input type="checkbox" aria-label={`Select ${item.f.name}`} checked={on} onChange={() => toggle(item)} className="h-4 w-4 accent-[var(--color-primary)]" />
+                      <Checkbox aria-label={`Select ${item.f.name}`} checked={on} onChange={() => toggle(item)} />
                     </span>
                     <span role="cell" className="flex min-w-0 items-center gap-2.5">
                       {isFolder ? <FolderIcon color={item.f.color} locked={item.f.is_locked} /> : <FileIcon f={item.f} />}
@@ -568,7 +569,7 @@ function SelectionBar({ items, size, onClear }: { items: Item[]; size: number; o
   return (
     <div role="toolbar" aria-label="Selection" className="mx-6 mb-2 flex h-[42px] shrink-0 items-center gap-1 rounded-[10px] bg-[#0F1B3D] pr-2 pl-3.5 text-[12.5px] font-semibold text-white">
       <span className="mr-2.5">{items.length} selected{size ? ` · ${bytes(size)}` : ''}</span>
-      {one && can(one.f.access, 'share') ? <button type="button" className={btn} onClick={() => d.share(one)}>Share…</button> : null}
+      {one && can(one.f.access, 'share') ? <button type="button" data-guide="files.share" className={btn} onClick={() => d.share(one)}>Share…</button> : null}
       {all('move') ? <button type="button" className={btn} onClick={() => d.move(items, 'move')}>Move…</button> : null}
       {files.length === items.length && all('download') ? <button type="button" className={btn} onClick={() => d.move(items, 'copy')}>Copy to…</button> : null}
       {files.length && files.every((f) => can(f.access, 'download')) ? <button type="button" className={btn} onClick={() => d.download(files)}>Download</button> : null}

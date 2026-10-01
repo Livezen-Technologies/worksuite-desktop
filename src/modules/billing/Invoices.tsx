@@ -9,6 +9,7 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet } from '../hr/parts';
 import { amount, bulkInvoices, fetchInvoices, invoiceName, K, PER_PAGE, SORTS, STATUS, STATUSES, type Invoice, type ListFilters } from './api';
 import { money, StatusChip } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Invoices (BillInvoices): the list, with the per-status tallies over every
@@ -100,7 +101,7 @@ export default function Invoices({ org, narrow, outstanding, currency, canCreate
         <input value={q} onChange={(e) => reset(() => setQ(e.target.value))} placeholder="Search number, customer, PO" aria-label="Search invoices" className={input + ' !w-[240px]'} />
         <Select<string> aria-label="Status" value={status} onValueChange={(v) => reset(() => setStatus(v))} options={[{ value: '', label: 'Any status' }, ...STATUSES.map((s) => ({ value: s, label: STATUS[s].label }))]} className={input + ' !w-[130px]'} />
         <label className="flex items-center gap-1.5 font-semibold text-ink">
-          <input type="checkbox" checked={unpaid} onChange={(e) => reset(() => setUnpaid(e.target.checked))} className="accent-primary" />
+          <Checkbox checked={unpaid} onChange={(e) => reset(() => setUnpaid(e.target.checked))} />
           Unpaid only
         </label>
         <Select<string> aria-label="Sort" value={sort} onValueChange={(v) => reset(() => setSort(v))} options={SORTS.map((s) => ({ value: s.id, label: `Sort: ${s.label}` }))} className={input + ' !w-[170px]'} />
@@ -138,7 +139,7 @@ export default function Invoices({ org, narrow, outstanding, currency, canCreate
       ) : (
         <div className="overflow-hidden rounded-[12px] border border-line bg-surface">
           <div className="flex items-center gap-2.5 border-b border-line bg-ground px-3.5 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase">
-            {canIssue ? <input type="checkbox" aria-label="Choose every invoice on this page" checked={allOnPage} onChange={() => setChosen(allOnPage ? chosen.filter((c) => !rows.some((r) => r.id === c)) : [...new Set([...chosen, ...rows.map((r) => r.id)])])} className="accent-primary" /> : null}
+            {canIssue ? <Checkbox aria-label="Choose every invoice on this page" checked={allOnPage} indeterminate={!allOnPage && rows.some((r) => chosen.includes(r.id))} onChange={() => setChosen(allOnPage ? chosen.filter((c) => !rows.some((r) => r.id === c)) : [...new Set([...chosen, ...rows.map((r) => r.id)])])} /> : null}
             <span className="w-[130px] shrink-0">Invoice</span>
             <span className="min-w-0 flex-1">Customer</span>
             <span className="w-[120px] shrink-0">Status</span>
@@ -201,7 +202,7 @@ function Row({ r, chosen, canChoose, onChoose, onOpen }: { r: Invoice; chosen: b
   const late = r.status === 'overdue' || r.days_overdue > 0;
   return (
     <div data-invoice={r.id} className={cx('flex items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] last:border-b-0 hover:bg-subtle/60', chosen && 'bg-[#F4F6FE] dark:bg-selection/40')}>
-      {canChoose ? <input type="checkbox" aria-label={`Choose ${invoiceName(r)}`} checked={chosen} onChange={onChoose} className="accent-primary" /> : null}
+      {canChoose ? <Checkbox aria-label={`Choose ${invoiceName(r)}`} checked={chosen} onChange={onChoose} /> : null}
       <button type="button" aria-label={`Open ${invoiceName(r)}`} onClick={onOpen} className="flex w-[130px] shrink-0 flex-col text-left">
         <b className={cx('truncate', draft ? 'text-ink-3' : 'text-ink')}>{draft ? 'Draft' : r.number}</b>
         {r.project || r.po_number ? <span className="truncate text-[11.5px] text-ink-3">{r.project ?? `PO ${r.po_number}`}</span> : null}

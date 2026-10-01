@@ -8,6 +8,7 @@ import { Icon } from '../../components/Icon';
 import { Button, Spinner, cx } from '../../components/ui';
 import { can, type DriveFile } from './api';
 import { ADJUSTMENTS, BLANK, LOOKS, isBlank, outputSize, outputType, render, summary, turned, type Adjustment, type Look, type Recipe } from './imaging';
+import { Checkbox } from '../../components/Checkbox';
 
 interface Opened {
   file: { id: number; name: string; version: number; extension: string | null; size: number };
@@ -480,7 +481,7 @@ function ResizePanel({ base, value, lock, setLock, onChange }: { base: { w: numb
         </label>
       </div>
       <label className="flex items-center gap-2 text-ink">
-        <input type="checkbox" checked={lock} onChange={(e) => setLock(e.target.checked)} className="accent-[var(--color-primary)]" />
+        <Checkbox checked={lock} onChange={(e) => setLock(e.target.checked)} />
         Keep the proportions
       </label>
       <div className="flex flex-wrap gap-1.5">

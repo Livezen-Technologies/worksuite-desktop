@@ -6,6 +6,7 @@ import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, Empty, Field, input, Kpi, PageHead, Panel, Seg, Sheet, StatusChip } from './parts';
 import { Select } from '../../components/Select';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Attendance devices (HrAdminSheet "Devices"; the web's Devices):
@@ -276,10 +277,10 @@ function Setup({ d, onChanged }: { d: Device; onChanged: () => void }) {
           <input aria-label="The device's clock is on" value={f.timezone} onChange={(e) => setF({ ...f, timezone: e.target.value })} placeholder="Asia/Colombo" className={input} />
         </Field>
         <label className="flex items-center gap-2 text-[12.5px] text-ink">
-          <input type="checkbox" checked={f.require_https} onChange={(e) => setF({ ...f, require_https: e.target.checked })} className="accent-primary" /> Require HTTPS from this device
+          <Checkbox checked={f.require_https} onChange={(e) => setF({ ...f, require_https: e.target.checked })} /> Require HTTPS from this device
         </label>
         <label className="flex items-center gap-2 text-[12.5px] text-ink">
-          <input type="checkbox" checked={f.is_active} onChange={(e) => setF({ ...f, is_active: e.target.checked })} className="accent-primary" /> Accept data from this device
+          <Checkbox checked={f.is_active} onChange={(e) => setF({ ...f, is_active: e.target.checked })} /> Accept data from this device
         </label>
         <button type="button" className={btnPrimary + ' self-end'} onClick={() => void save()}>
           Save
@@ -430,7 +431,7 @@ function RawLog({ d }: { d: Device }) {
   return (
     <div className="flex flex-col gap-1.5">
       <label className="flex items-center gap-2 text-[12.5px] text-ink">
-        <input type="checkbox" checked={failures} onChange={(e) => setFailures(e.target.checked)} className="accent-primary" /> Failures only
+        <Checkbox checked={failures} onChange={(e) => setFailures(e.target.checked)} /> Failures only
       </label>
       {(q.data?.logs ?? []).map((l) => (
         <details key={l.id} className={cx('rounded-[8px] border px-2.5 py-1.5 text-[12px]', l.ok ? 'border-line' : 'border-danger/40')}>

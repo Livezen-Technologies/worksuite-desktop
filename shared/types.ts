@@ -249,7 +249,30 @@ export interface AiPrefs {
   display: AiDisplay;
   /** A short sound when an answer arrives while the assistant is closed or minimised. */
   sound: boolean;
+  /**
+   * Settings › AI Assistant › Module Access (worksuite-desktop#51): what this person lets each assistant use, per
+   * module. A module missing here follows the default (on, as far as the organization allows). It can only narrow
+   * what the organization and the person's own permissions allow, never widen it.
+   */
+  moduleAccess: AiModuleAccessPrefs;
+  /**
+   * Allow online fallback (worksuite-desktop#53): when the model on this computer is missing, fails, or cannot do what
+   * was asked, WorkSuite AI answers instead — the question and the context it needs are then sent to it.
+   */
+  onlineFallback: boolean;
 }
+
+/** The two assistants Module Access is set for: the server's, and the model on this computer. */
+export const AI_ENGINES = ['worksuite', 'local'] as const;
+export type AiEngine = (typeof AI_ENGINES)[number];
+
+/** Read Data, and Create or Update Records (always previewed and confirmed). */
+export interface AiModuleToggle {
+  read: boolean;
+  write: boolean;
+}
+
+export type AiModuleAccessPrefs = Record<AiEngine, Record<string, AiModuleToggle>>;
 
 export const AI_DISPLAYS = ['drawer', 'widget', 'hidden'] as const;
 export type AiDisplay = (typeof AI_DISPLAYS)[number];
@@ -645,6 +668,11 @@ export interface RemoteControlSupport {
   reason: string | null;
   /** macOS: Accessibility, which injecting needs. Elsewhere 'not_required'. */
   accessibility: 'granted' | 'denied' | 'not_required';
+  /**
+   * macOS, access still off after System Settings was opened from WorkSuite (worksuite-desktop#47): the entry there
+   * may be an earlier version's, or macOS needs WorkSuite reopened.
+   */
+  accessibilityHint?: 'restart' | null;
   /** The computer's policy lets it be controlled at all (the server still decides each time). */
   policyAllows: boolean;
 }

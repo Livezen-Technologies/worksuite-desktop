@@ -8,6 +8,7 @@ import { PageHead } from '../hr/parts';
 import { day, errorText, K, newKey, pGet, pGetMeta, pPost, pUpload, stamp, type LostItem, type Rack } from './api';
 import { ActionButtons, useActions } from './ops';
 import { Facts, NoAccess, Refusal, usePms, VipPill } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /** What each move of a found item needs said (the server's `LostFoundMachine`; a claim is guarded by a claimant). */
 const MORE: Record<string, Array<{ name: string; label: string; required?: boolean; hint?: string }>> = {
@@ -143,10 +144,10 @@ export default function LostFound({ open }: { open: number | null }) {
       <div className="flex flex-wrap items-center gap-2">
         <input aria-label="Search items" placeholder="Item or description" value={text} onChange={(e) => setText(e.target.value)} className={`${input} w-56`} />
         <label className="flex items-center gap-1.5 text-[12.5px]">
-          <input type="checkbox" checked={f.open === '1'} onChange={(e) => setF({ ...f, open: e.target.checked ? '1' : '' })} /> Open only
+          <Checkbox checked={f.open === '1'} onChange={(e) => setF({ ...f, open: e.target.checked ? '1' : '' })} /> Open only
         </label>
         <label className="flex items-center gap-1.5 text-[12.5px]">
-          <input type="checkbox" checked={f.due === '1'} onChange={(e) => setF({ ...f, due: e.target.checked ? '1' : '' })} /> Due for disposal
+          <Checkbox checked={f.due === '1'} onChange={(e) => setF({ ...f, due: e.target.checked ? '1' : '' })} /> Due for disposal
         </label>
       </div>
       {!pms.online ? (

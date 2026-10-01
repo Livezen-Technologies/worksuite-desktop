@@ -7,6 +7,7 @@ import { ErrorNote, Spinner } from '../../components/ui';
 import { btn, btnPrimary, Field, input, Sheet } from '../hr/parts';
 import ProductPictures, { sendPictures } from './ProductPictures';
 import { bodyOf, COSTING, createProduct, draftOf, fetchBrands, fetchCategories, fetchProduct, fetchUnits, K, KINDS, TRACKING, treeOf, updateProduct, type Company, type ProductDraft } from './api';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * A new product, or an edit of one (InvProductSheet). The code is generated
@@ -270,7 +271,7 @@ function Form({
         {stockable ? (
           <>
             <label className="flex items-center gap-2 text-[12.5px] font-semibold text-ink">
-              <input type="checkbox" checked={d.is_stocked} onChange={(e) => set('is_stocked', e.target.checked)} className="accent-primary" aria-label="Held in stock" />
+              <Checkbox checked={d.is_stocked} onChange={(e) => set('is_stocked', e.target.checked)} aria-label="Held in stock" />
               Held in stock — counted on shelves, moved in and out
             </label>
             {d.is_stocked ? (

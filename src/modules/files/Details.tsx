@@ -11,6 +11,7 @@ import { fileMenu, folderMenu, useDrive, type Item } from './ctx';
 import { PopMenu, below, type MenuItem } from './Menu';
 import { FolderIcon, Tile } from './Thumb';
 import { SYNC_WORDS, hereLabel, revealLabel, useSyncAvailable, useSyncLookup } from './sync';
+import { Checkbox } from '../../components/Checkbox';
 
 type Tab = 'details' | 'activity' | 'comments' | 'versions' | 'access';
 
@@ -311,7 +312,7 @@ function Notify({ type, id }: { type: string; id: number }) {
       <span className="text-ink-3">Notify me about</span>
       {TOPICS.map(([t, l]) => (
         <label key={t} className="flex items-center gap-2 text-ink">
-          <input type="checkbox" checked={!!q.data.topics?.[t]?.on} onChange={(e) => void set(t, e.target.checked)} className="accent-[var(--color-primary)]" />
+          <Checkbox checked={!!q.data.topics?.[t]?.on} onChange={(e) => void set(t, e.target.checked)} />
           {l}
         </label>
       ))}

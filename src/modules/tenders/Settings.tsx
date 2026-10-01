@@ -11,6 +11,7 @@ import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Panel, Seg, S
 import { Pill } from '../inventory/parts';
 import { K, type Company } from './api';
 import { deleteRule, fetchRules, fetchRuns, fetchSources, KA, OPERATOR_WORDS, operatorsFor, rescoreOpen, ruleBody, ruleDraft, ruleSentence, saveRule, toggledRuleBody, type Factor, type Rule, type RuleDraft } from './admin';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Tenders' settings, for those who may change them: the scoring rules that
@@ -229,7 +230,7 @@ function RuleSheet({ rule, factors, org, companies, next, onClose, onSaved }: { 
         </Field>
       </div>
       <label className="flex items-center gap-2 text-[12.5px] font-semibold text-ink">
-        <input type="checkbox" checked={d.enabled} onChange={(e) => setD({ ...d, enabled: e.target.checked })} className="accent-primary" />
+        <Checkbox checked={d.enabled} onChange={(e) => setD({ ...d, enabled: e.target.checked })} />
         On
       </label>
       <p className="m-0 rounded-[9px] bg-subtle px-3 py-2 text-[12px] text-ink-2">

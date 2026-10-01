@@ -7,6 +7,7 @@ import { input } from '../garage/parts';
 import { PageHead } from '../hr/parts';
 import { codeOf, day, errorText, K, money, pGet, plusDays, pPost, type CalendarBar, type CalendarData } from './api';
 import { NoAccess, Refusal, usePms } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 const SPANS = [7, 14, 30] as const;
 const ROOM_W = 110;
@@ -290,7 +291,7 @@ function MoveBooking({ bar, data, onClose }: { bar: CalendarBar; data: CalendarD
         ) : null}
         {otherType ? (
           <label className="col-span-2 flex items-center gap-2">
-            <input type="checkbox" checked={complimentary} onChange={(e) => setComplimentary(e.target.checked)} /> Complimentary (keep the booked type’s price)
+            <Checkbox checked={complimentary} onChange={(e) => setComplimentary(e.target.checked)} /> Complimentary (keep the booked type’s price)
           </label>
         ) : null}
         {dates ? (

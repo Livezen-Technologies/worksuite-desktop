@@ -4,6 +4,7 @@ import { apiGetMeta } from '../core/api';
 import { bytes } from '../core/time';
 import { Icon } from './Icon';
 import { Button, ErrorNote, FileBadge, Modal, Spinner, cx } from './ui';
+import { Checkbox } from './Checkbox';
 
 export interface DriveEntry {
   id: number | string;
@@ -69,7 +70,7 @@ export function DriveFilePicker({ title, confirmLabel, busy, onChoose, onClose }
             const on = chosen.some((x) => x.id === f.id);
             return (
               <label key={`f${f.id}`} className={cx('flex cursor-pointer items-center gap-2.5 border-b border-line/60 px-3 py-2 text-[13px]', on ? 'bg-selection' : 'hover:bg-subtle')}>
-                <input type="checkbox" checked={on} onChange={() => toggle(f)} className="accent-[var(--color-primary)]" aria-label={f.name} />
+                <Checkbox checked={on} onChange={() => toggle(f)} aria-label={f.name} />
                 <FileBadge name={f.name} size={26} />
                 <span className="min-w-0 flex-1 truncate text-ink">{f.name}</span>
                 <span className="shrink-0 text-[12px] text-ink-3">{bytes(f.size)}</span>

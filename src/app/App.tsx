@@ -9,6 +9,7 @@ import { Shell } from '../layouts/Shell';
 import { Spinner } from '../components/ui';
 import { Onboarding, SetupWizard } from './onboarding/Onboarding';
 import { Toasts } from './overlays/Toasts';
+import { ShowMeHost } from '../modules/ai/help/ShowMe';
 import { LockScreen } from './screens/LockScreen';
 import { AddPictureScreen } from './screens/AddPictureScreen';
 import { LockBoundary } from './Boundaries';
@@ -66,6 +67,7 @@ export function App() {
         body
       )}
       <Toasts />
+      <ShowMeHost />
     </Suspense>
   );
 }

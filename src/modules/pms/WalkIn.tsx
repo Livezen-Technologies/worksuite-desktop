@@ -10,6 +10,7 @@ import GuestPick, { type PickedGuest } from './GuestPick';
 import { deskName, METHODS, PROVIDER_METHODS, useMyShift } from './money';
 import { OfferList, type Pick } from './NewReservation';
 import { Money, NoAccess, Refusal, usePms } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * The walk-in (PMS-WLK-001/002): a guest at the desk with no booking, taken on
@@ -153,12 +154,12 @@ export default function WalkIn({ room }: { room: number | null }) {
             </Field>
           </div>
           <label className="mt-3 flex items-center gap-2 text-[13px]">
-            <input type="checkbox" checked={idOk} onChange={(e) => setIdOk(e.target.checked)} /> The guest’s ID has been checked
+            <Checkbox checked={idOk} onChange={(e) => setIdOk(e.target.checked)} /> The guest’s ID has been checked
           </label>
           {pms.may('pms.payment.process') ? (
             <div className="mt-3 flex flex-col gap-2 rounded-[10px] border border-line px-3 py-2">
               <label className="flex items-center gap-2 text-[13px] font-semibold">
-                <input type="checkbox" checked={pay.on} onChange={(e) => setPay({ ...pay, on: e.target.checked, amount: pay.amount || pick.rate.total })} /> Take a payment now
+                <Checkbox checked={pay.on} onChange={(e) => setPay({ ...pay, on: e.target.checked, amount: pay.amount || pick.rate.total })} /> Take a payment now
               </label>
               {pay.on ? (
                 <div className="grid grid-cols-2 gap-2 md:grid-cols-4">

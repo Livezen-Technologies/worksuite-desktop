@@ -8,6 +8,7 @@ import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { btn, btnPrimary, Field, input, SidePanel } from '../hr/parts';
 import { amount, fetchBankAccounts, K, METHODS, recordPayment, searchCustomers, useBillingOrgs, type Customer, type InvoiceDetail } from './api';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Record a payment (BillPaymentSheet, BillInvoiceIssued): money that has
@@ -145,7 +146,7 @@ export default function RecordPayment({ invoice, org, onClose }: { invoice?: Inv
       </Field>
       {!invoice ? (
         <label className="flex items-start gap-2 text-[12.5px] text-ink">
-          <input type="checkbox" checked={oldestFirst} onChange={(e) => setOldestFirst(e.target.checked)} className="mt-0.5 accent-primary" />
+          <Checkbox checked={oldestFirst} onChange={(e) => setOldestFirst(e.target.checked)} className="mt-0.5" />
           <span>
             <b>Settle the oldest invoices first.</b>
             <span className="block text-ink-3">Leave this off to hold the money on account and decide later.</span>

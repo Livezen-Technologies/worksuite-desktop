@@ -4,6 +4,7 @@ import { call, errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, Modal, Spinner } from '../../components/ui';
+import { Checkbox } from '../../components/Checkbox';
 
 /** PDF-OPEN-008: "Enter PDF password", with "Remember for this session" (memory only; never saved). */
 export function PasswordPrompt({ view, onDone }: { view: PdfSessionView; onDone: (v: PdfSessionView) => void }) {
@@ -49,7 +50,7 @@ export function PasswordPrompt({ view, onDone }: { view: PdfSessionView; onDone:
       />
       {view.password?.wrong ? <p role="alert" className="text-[12.5px] text-danger">That password is not right. Try again.</p> : null}
       <label className="flex items-center gap-2 text-[12.5px] text-ink-2">
-        <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+        <Checkbox checked={remember} onChange={(e) => setRemember(e.target.checked)} />
         Remember for this session
       </label>
       <p className="text-[11.5px] leading-[1.45] text-ink-3">The password stays on this computer, in memory, until you sign out or quit — never saved, never sent to WorkSuite.</p>
@@ -133,9 +134,9 @@ export function PrintDialog({ view, page, onClose }: { view: PdfSessionView; pag
             <legend className="mb-1 text-[12px] font-bold uppercase tracking-wide text-ink-3">On the paper</legend>
             <label className="flex items-center gap-2 text-[13px] text-ink"><input type="radio" name="pdf-print-fit" checked={fit === 'fit'} onChange={() => setFit('fit')} /> Fit to the paper</label>
             <label className="flex items-center gap-2 text-[13px] text-ink"><input type="radio" name="pdf-print-fit" checked={fit === 'actual'} onChange={() => setFit('actual')} /> Actual size</label>
-            <label className="flex items-center gap-2 text-[13px] text-ink"><input type="checkbox" checked={annotations} onChange={(e) => setAnnotations(e.target.checked)} /> Include comments and form fields</label>
+            <label className="flex items-center gap-2 text-[13px] text-ink"><Checkbox checked={annotations} onChange={(e) => setAnnotations(e.target.checked)} /> Include comments and form fields</label>
             <label className="flex items-center gap-2 text-[13px] text-ink">
-              <input type="checkbox" checked={quality === 'high'} disabled={view.permissions?.printHighQuality === false} onChange={(e) => setQuality(e.target.checked ? 'high' : 'standard')} /> High quality (slower)
+              <Checkbox checked={quality === 'high'} disabled={view.permissions?.printHighQuality === false} onChange={(e) => setQuality(e.target.checked ? 'high' : 'standard')} /> High quality (slower)
             </label>
           </fieldset>
           <p className="text-[12px] text-ink-3">Printer, copies, orientation and two-sided printing are chosen in the next window.</p>

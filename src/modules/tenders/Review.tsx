@@ -11,6 +11,7 @@ import { saveTenderFile } from './files';
 import { notifiedNote, reviewMessage, reviewRecipients, tellInChat, usePeople } from './people';
 import { reviewLine, type Line } from './work';
 import { SidePanel } from '../../components/SidePanel';
+import { Checkbox } from '../../components/Checkbox';
 
 /** A line with something on it to look at. */
 export const viewable = (l: Line) => l.files.length > 0;
@@ -229,7 +230,7 @@ export function ReviewScreen({
                 ) : null}
                 {tellIds.length ? (
                   <label className="flex items-start gap-2 text-[12.5px] text-ink-2">
-                    <input type="checkbox" checked={tell} onChange={(e) => setTell(e.target.checked)} className="mt-0.5 accent-primary" />
+                    <Checkbox checked={tell} onChange={(e) => setTell(e.target.checked)} className="mt-0.5" />
                     <span>
                       {serverTells ? `Also message ${tellNames.join(' and ')} in Team Chat` : `Tell ${tellNames.join(' and ')} in Chat`}
                       <span className="block text-[11.5px] text-ink-3">With your comment and a link to this tender. Approving sends nothing unless you write a comment.</span>

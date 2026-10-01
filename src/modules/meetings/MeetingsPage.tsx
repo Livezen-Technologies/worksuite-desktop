@@ -11,6 +11,7 @@ import { providerLabel, RSVP_LABEL, TYPE_COLOUR, TYPES, typeLabel, type Can, typ
 import { MeetingDetail } from './MeetingDetail';
 import { ScheduleDialog } from './ScheduleDialog';
 import { Select } from '../../components/Select';
+import { Checkbox } from '../../components/Checkbox';
 
 type Tab = 'dashboard' | 'mine' | 'invitations' | 'rooms' | 'recurring';
 const TABS: Array<[Tab, string]> = [
@@ -62,7 +63,7 @@ export default function MeetingsPage(_props: ModuleProps) {
           <h1 className="flex-1 text-[22px] font-bold text-ink">Meetings</h1>
           <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search meetings" placeholder="Search…" className="h-9 w-64 rounded-[8px] border border-line bg-surface px-2.5 text-ink outline-none focus:border-primary" />
           {dash.data?.can.schedule ? (
-            <button type="button" onClick={() => setScheduling(true)} className="h-9 rounded-[8px] bg-primary px-3.5 font-bold text-white hover:bg-primary-hover">
+            <button type="button" data-guide="meetings.schedule" onClick={() => setScheduling(true)} className="h-9 rounded-[8px] bg-primary px-3.5 font-bold text-white hover:bg-primary-hover">
               Schedule a meeting
             </button>
           ) : null}
@@ -224,7 +225,7 @@ function MyActions({ onOpen }: { onOpen: (id: number) => void }) {
       {!q.isLoading && !rows.length ? <p className="text-ink-3">Nothing assigned to you.</p> : null}
       {rows.map((a) => (
         <label key={a.id} className="flex items-start gap-2">
-          <input type="checkbox" disabled={!a.task_id} title={a.task_id ? 'Mark done' : 'The organiser closes this one'} onChange={() => a.task_id && void done(a.task_id, a.title)} className="mt-0.5 accent-[var(--color-primary)]" />
+          <Checkbox disabled={!a.task_id} title={a.task_id ? 'Mark done' : 'The organiser closes this one'} onChange={() => a.task_id && void done(a.task_id, a.title)} className="mt-0.5" />
           <span className="flex min-w-0 flex-col">
             <b className="text-ink">{a.title}</b>
             <button type="button" onClick={() => onOpen(a.meeting_id)} className="text-left text-[11.5px] text-ink-3 hover:underline">

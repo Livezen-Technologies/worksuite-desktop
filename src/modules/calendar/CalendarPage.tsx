@@ -16,6 +16,7 @@ import { EventDrawer, type Draft } from './EventDrawer';
 import { MonthGrid } from './MonthGrid';
 import { eventKey, WeekGrid } from './WeekGrid';
 import { SidePanel } from '../../components/SidePanel';
+import { Checkbox } from '../../components/Checkbox';
 
 const VIEWS: Array<[View, string]> = [
   ['day', 'Day'],
@@ -262,7 +263,7 @@ export default function CalendarPage(_props: ModuleProps) {
     <div className="relative flex h-full bg-surface text-[13px]">
       <SidePanel id="calendar" label="the calendars">
         <aside aria-label="Calendars" className="flex w-[250px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-line px-3 py-3.5 scroll-thin">
-          <button type="button" onClick={newEvent} title="New event (N)" className="flex h-[38px] shrink-0 items-center justify-center gap-1.5 rounded-[9px] bg-primary font-bold text-white hover:bg-primary-hover">
+          <button type="button" data-guide="calendar.new-event" onClick={newEvent} title="New event (N)" className="flex h-[38px] shrink-0 items-center justify-center gap-1.5 rounded-[9px] bg-primary font-bold text-white hover:bg-primary-hover">
             <Icon name="plus" size={16} /> New event
           </button>
           <MiniMonth month={mini} today={today} range={view === 'month' ? [] : days} selected={date} onMonth={(n) => setMini(addMonths(mini, n))} onPick={(x) => set(view === 'month' ? 'day' : view, x)} />
@@ -270,8 +271,7 @@ export default function CalendarPage(_props: ModuleProps) {
             <b className="text-[11px] tracking-[0.5px] text-ink-3">SHOW</b>
             {categories.map((c) => (
               <label key={c.id} className="flex items-center gap-2 text-ink">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={!hidden.includes(c.id)}
                   onChange={(ev) => {
                     const next = ev.target.checked ? hidden.filter((h) => h !== c.id) : [...hidden, c.id];
@@ -282,7 +282,7 @@ export default function CalendarPage(_props: ModuleProps) {
                       // Kept for this session only.
                     }
                   }}
-                  style={{ accentColor: c.color }}
+                  color={c.color}
                 />
                 <span className="h-[9px] w-[9px] shrink-0 rounded-[3px]" style={{ background: c.color }} />
                 <span className="min-w-0 truncate" title={c.label}>{c.label}</span>

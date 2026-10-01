@@ -6,6 +6,7 @@ import { toast } from '../../../core/toasts';
 import { errorText, gGet, gPost, K, span, when, type DiagnosisView, type Finding } from '../api';
 import { PartPicker } from '../MyWork';
 import { Ask, Field, input, LightPill, Section, ToneNote, useGarage } from '../parts';
+import { Checkbox } from '../../../components/Checkbox';
 
 /** While a finding may still be written: the job has not gone past its estimate. */
 const OPEN_STATUSES = ['CHECKED_IN', 'INSPECTION', 'DIAGNOSIS', 'ESTIMATE_PREPARATION'];
@@ -271,7 +272,7 @@ function FindingForm({ jobId, finding, onClose, onSaved }: { jobId: number; find
     >
       <div className="flex flex-col gap-3">
         <label className="flex items-center gap-2 text-[13px] font-medium">
-          <input type="checkbox" checked={noFault} onChange={(e) => setNoFault(e.target.checked)} /> No fault found
+          <Checkbox checked={noFault} onChange={(e) => setNoFault(e.target.checked)} /> No fault found
         </label>
         <Field label={noFault ? 'What was checked' : 'Finding *'}>
           <textarea className={cx(input, 'h-auto py-2')} rows={2} aria-label="Finding" value={text} onChange={(e) => setText(e.target.value)} />

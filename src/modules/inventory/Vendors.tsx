@@ -14,6 +14,7 @@ import { archiveVendor, checkDuplicates, fetchVendor, fetchVendorRecords, fetchV
 import { minWidth, Pill } from './parts';
 import { pick } from './pickers';
 import { PoChip } from './Purchasing';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Vendors (InvVendors, InvVendorRecord, InvVendorForm): who the business
@@ -73,7 +74,7 @@ export default function Vendors({
         <Select aria-label="Vendor status" value={status} onValueChange={setStatus} options={[{ value: '', label: 'Any status' }, ...VENDOR_STATUSES]} className={pick + ' !w-[150px]'} />
         <Select aria-label="Vendor type" value={type} onValueChange={setType} options={[{ value: '', label: 'Any type' }, ...VENDOR_TYPES]} className={pick + ' !w-[170px]'} />
         <label className="flex items-center gap-1.5 font-semibold text-ink">
-          <input type="checkbox" checked={favourites} onChange={(e) => setFavourites(e.target.checked)} className="accent-primary" />
+          <Checkbox checked={favourites} onChange={(e) => setFavourites(e.target.checked)} />
           Favourites
         </label>
       </div>

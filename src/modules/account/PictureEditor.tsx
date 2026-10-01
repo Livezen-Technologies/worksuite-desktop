@@ -12,6 +12,7 @@ import { avatarPng, avatarSvg, BACKGROUNDS, LOOKS, normalise, svgUrl, TONES, typ
 import { MAX_ZOOM, clamp, draw, exportType, initial, minScale, rotate, transform, type Crop } from './crop';
 import { Note } from './parts';
 import { VisibilitySelect } from './visibility';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Edit profile picture (AcctPhoto, AcctAvatar): a photo moved, zoomed and
@@ -442,7 +443,7 @@ function AvatarTab({ pics, busy, setBusy, onClose, start, onPick }: { pics: Pict
               </label>
               {style.look === 'abstract' ? (
                 <label className="mb-2 flex items-center gap-2 text-[12.5px] font-semibold text-ink">
-                  <input type="checkbox" checked={style.showInitials !== false} onChange={(e) => set({ showInitials: e.target.checked })} className="accent-primary" />
+                  <Checkbox checked={style.showInitials !== false} onChange={(e) => set({ showInitials: e.target.checked })} />
                   Show them over the pattern
                 </label>
               ) : null}

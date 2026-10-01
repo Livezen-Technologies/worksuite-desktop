@@ -6,6 +6,7 @@ import { Field, input } from '../garage/parts';
 import { errorText, K, money, pGet, type Shift } from './api';
 import { device } from './devices';
 import { Refusal, usePms } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /** How a guest pays (the server's `PaymentMachine::METHODS`, less "deposit", which is money moved, not taken). */
 export const METHODS: Array<{ value: string; label: string }> = [
@@ -150,7 +151,7 @@ export function PaymentDialog({ title, currency, owed, busy, error, onClose, onP
               <input aria-label="Reference" className={input} value={ref} onChange={(e) => setRef(e.target.value)} placeholder="Approval code from the slip" />
             </Field>
             <label className="flex items-center gap-2 text-[12.5px] text-ink-2">
-              <input type="checkbox" checked={pending} onChange={(e) => setPending(e.target.checked)} /> The provider has not confirmed it yet (it stays waiting until it does)
+              <Checkbox checked={pending} onChange={(e) => setPending(e.target.checked)} /> The provider has not confirmed it yet (it stays waiting until it does)
             </label>
           </>
         ) : null}

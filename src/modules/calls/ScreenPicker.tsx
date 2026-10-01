@@ -5,6 +5,7 @@ import { call, errorMessage, platform } from '../../core/bridge';
 import { Icon } from '../../components/Icon';
 import { Button, Modal, Spinner, cx } from '../../components/ui';
 import { Select } from '../../components/Select';
+import { Checkbox } from '../../components/Checkbox';
 
 /** What was picked: the source, its name for "Sharing Screen 1", and whether its sound goes too. */
 export interface SharePick {
@@ -117,7 +118,7 @@ export function ScreenPicker({ onPick, onClose, changing, control, inMeeting }: 
         <>
           {canAudio ? (
             <label className="mr-auto flex items-center gap-2 text-[12.5px] text-ink-2">
-              <input type="checkbox" checked={audio} onChange={(e) => setAudio(e.target.checked)} className="accent-[var(--color-primary)]" />
+              <Checkbox checked={audio} onChange={(e) => setAudio(e.target.checked)} />
               Share the computer's sound
             </label>
           ) : null}
@@ -161,7 +162,7 @@ export function ScreenPicker({ onPick, onClose, changing, control, inMeeting }: 
               <span className="text-ink-3">{control.unavailable} You can still share.</span>
             ) : (
               <label className="flex items-center gap-2">
-                <input type="checkbox" checked={allow} onChange={(e) => setAllowRequests(e.target.checked)} className="accent-[var(--color-primary)]" />
+                <Checkbox checked={allow} onChange={(e) => setAllowRequests(e.target.checked)} />
                 Let people ask to control what I share
               </label>
             )}

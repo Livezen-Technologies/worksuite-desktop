@@ -5,6 +5,7 @@ import { Button, ErrorNote, Modal, Spinner, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
 import { errorText, fromLocalInput, FUEL_LABEL, gGet, gPost, K, lateBy, money, newKey, nice, partCounts, span, toLocalInput, when, type JobView, type WorkView } from './api';
 import { DocActions, Field, input, PartPill, PriorityPill, Section, StatusPill, Tabs, Thumb, ToneNote, Tracker, useGarage, WorkPill } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 const InspectionTab = lazy(() => import('./job/Inspection'));
 const DiagnosisTab = lazy(() => import('./job/Diagnosis'));
@@ -338,7 +339,7 @@ export default function JobCard({ id, onBack, tab: asked }: { id: number; onBack
                     <div className="flex items-center gap-2">
                       {publish ? (
                         <label className="flex flex-1 items-center gap-1.5 text-[12.5px] text-ink-2">
-                          <input type="checkbox" checked={toCustomer} onChange={(e) => setToCustomer(e.target.checked)} /> The customer may see it
+                          <Checkbox checked={toCustomer} onChange={(e) => setToCustomer(e.target.checked)} /> The customer may see it
                         </label>
                       ) : (
                         <span className="flex-1 text-[12px] text-ink-3">Staff only.</span>

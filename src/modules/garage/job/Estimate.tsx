@@ -7,6 +7,7 @@ import { AVAILABILITY_LABEL, codeOf, errorText, gDelete, gGet, gPost, K, money, 
 import { PartPicker } from '../MyWork';
 import { Ask, DocActions, Field, input, LightPill, Section, SignaturePad, ToneNote, useGarage } from '../parts';
 import { Pill } from '../../inventory/parts';
+import { Checkbox } from '../../../components/Checkbox';
 
 const DECISION_WORD: Record<string, string> = { PROPOSED: '', APPROVED: 'Approved', REJECTED: 'Rejected', DEFERRED: 'Later' };
 const DECISION_TONE: Record<string, string> = { APPROVED: 'text-success', REJECTED: 'text-danger', DEFERRED: 'text-warning' };
@@ -521,7 +522,7 @@ function AddRecommendations({ d, est, onClose, onSaved }: { d: EstimatesView; es
         {open.map((r) => (
           <li key={r.id}>
             <label className="flex items-start gap-2 text-[13px]">
-              <input type="checkbox" className="mt-1" checked={ids.includes(r.id)} onChange={(e) => setIds(e.target.checked ? [...ids, r.id] : ids.filter((x) => x !== r.id))} />
+              <Checkbox className="mt-1" checked={ids.includes(r.id)} onChange={(e) => setIds(e.target.checked ? [...ids, r.id] : ids.filter((x) => x !== r.id))} />
               <span>
                 <LightPill value={r.priority} /> {r.description}
                 <span className="block text-[11.5px] text-ink-3">
@@ -577,7 +578,7 @@ function SendEstimate({ est, onClose, onSent, onRefused }: { est: EstimateVersio
           <textarea className={cx(input, 'h-auto py-2')} rows={3} aria-label="Message to the customer" value={message} onChange={(e) => setMessage(e.target.value)} />
         </Field>
         <label className="flex items-center gap-2 text-[13px]">
-          <input type="checkbox" checked={email} onChange={(e) => setEmail(e.target.checked)} /> Email the link to the customer
+          <Checkbox checked={email} onChange={(e) => setEmail(e.target.checked)} /> Email the link to the customer
         </label>
       </div>
     </Modal>

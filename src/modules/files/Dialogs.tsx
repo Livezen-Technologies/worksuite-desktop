@@ -11,6 +11,7 @@ import { flatten, tree as loadTree, type DriveFile, type DriveFolder } from './a
 import { forgetPassword, rememberPassword } from './locks';
 import type { Item } from './ctx';
 import { Select } from '../../components/Select';
+import { Checkbox } from '../../components/Checkbox';
 
 const input = 'h-9 w-full rounded-[8px] border border-line bg-surface px-2.5 text-[13px] text-ink outline-none focus:border-primary';
 const label = 'flex flex-col gap-[5px] text-[13px] font-semibold text-ink';
@@ -313,7 +314,7 @@ export function SecureLinkDialog({ file, onClose, onAll }: { file: DriveFile; on
           </label>
         </div>
         <label className="flex items-start gap-2.5">
-          <input type="checkbox" checked={ipOn} disabled={!!url} onChange={(e) => setIpOn(e.target.checked)} className="mt-0.5 accent-[var(--color-primary)]" />
+          <Checkbox checked={ipOn} disabled={!!url} onChange={(e) => setIpOn(e.target.checked)} className="mt-0.5" />
           <span className="flex flex-1 flex-col gap-1">
             <b className="text-ink">Lock to IP addresses</b>
             {ipOn ? <input value={ips} disabled={!!url} onChange={(e) => setIps(e.target.value)} placeholder="112.134.0.0/16, 203.0.113.5" aria-label="Allowed IP addresses" className={input} /> : <span className="text-[12px] text-ink-3">Only these networks can open it.</span>}

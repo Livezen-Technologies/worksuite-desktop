@@ -13,6 +13,7 @@ import { offerFor, pauseText, type ControlSession, type RemoteFile, type Share }
 import { remote, type Prompts, type Waiting } from './controller';
 import { buttonName, pointOn, wheelDelta } from './input';
 import { platformName, specialKeys } from './specialKeys';
+import { Checkbox } from '../../../components/Checkbox';
 
 /**
  * Remote control over another person's shared screen, in the meeting window
@@ -265,7 +266,7 @@ function KeysMenu({ sharer, platform, active, onDone }: { sharer: string; platfo
           <p key={n}>{n}</p>
         ))}
         <label className="flex items-center gap-2 pt-1 text-[#E6ECFA]">
-          <input type="checkbox" checked={remote.textMode} onChange={(e) => remote.setTextMode(e.target.checked)} className="accent-[#3B5BDB]" />
+          <Checkbox checked={remote.textMode} onChange={(e) => remote.setTextMode(e.target.checked)} />
           Type as text (for Sinhala, Tamil, Arabic and other layouts)
         </label>
         <p>Keyboard: {remote.textMode ? 'text' : "physical keys · the sharer's layout decides"}</p>

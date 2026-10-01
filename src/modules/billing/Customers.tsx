@@ -12,6 +12,7 @@ import { agingParts, amount } from './api';
 import { fetchCustomer, fetchCustomers, frequencyLabel, KB } from './more';
 import { money, StatusChip } from './parts';
 import { Section } from './Payments';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Customers (BillCustomers): who owes what, largest first — outstanding,
@@ -39,7 +40,7 @@ export default function Customers({ org, openId, onOpen, onOpenInvoice, onOpenPa
       <div className="flex items-center gap-2">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search customers" aria-label="Search customers" className={input + ' !w-[260px]'} />
         <label className="flex items-center gap-1.5 font-semibold text-ink">
-          <input type="checkbox" checked={owing} onChange={(e) => setOwing(e.target.checked)} className="accent-primary" />
+          <Checkbox checked={owing} onChange={(e) => setOwing(e.target.checked)} />
           Owing only
         </label>
       </div>

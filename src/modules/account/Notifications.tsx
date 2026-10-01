@@ -11,6 +11,7 @@ import { input } from '../hr/parts';
 import { K, useHasApp } from './api';
 import { Card, Head, Note, SettingRow } from './parts';
 import { computerZone, useZones } from './regional';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Notifications (my account's): whether anything reaches me, by which
@@ -174,13 +175,11 @@ function Server() {
                 const checked = cats[cat.key]?.[c.channel] ?? true;
                 return (
                   <span key={c.channel} className="flex w-[64px] justify-center">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       aria-label={`${cat.label} by ${c.label}`}
                       checked={checked}
                       disabled={!enabled || !on(p[c.channel])}
                       onChange={(e) => commit({ categories: { ...cats, [cat.key]: { ...(cats[cat.key] ?? {}), [c.channel]: e.target.checked } } })}
-                      className="h-4 w-4 accent-primary"
                     />
                   </span>
                 );

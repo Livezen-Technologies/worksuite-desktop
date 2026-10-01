@@ -12,6 +12,7 @@ import { useNow } from '../calls/parts';
 import { K } from './api';
 import { MinutesSheet, MinutesView } from './Minutes';
 import { addMeeting, deleteMeeting, fetchMeetings, K2, labelOf, MEETING_KINDS, meetingBody, meetingDraft, MODES, updateMeeting, type Meeting, type MeetingDraft } from './work';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * The buyer's meetings: pre-bid, site visits, clarifications and the opening.
@@ -181,14 +182,14 @@ function MeetingSheet({ tenderId, meeting, onClose, onSaved }: { tenderId: numbe
         </Field>
       </div>
       <label className="flex items-center gap-2 text-[12.5px] font-semibold text-ink">
-        <input type="checkbox" checked={d.mandatory} onChange={(e) => setD({ ...d, mandatory: e.target.checked })} className="accent-primary" />
+        <Checkbox checked={d.mandatory} onChange={(e) => setD({ ...d, mandatory: e.target.checked })} />
         Attendance is mandatory
       </label>
       {meeting ? (
         <>
           <div className="grid grid-cols-2 gap-2.5">
             <label className="flex items-center gap-2 pt-5 text-[12.5px] font-semibold text-ink">
-              <input type="checkbox" checked={d.attended} onChange={(e) => setD({ ...d, attended: e.target.checked })} className="accent-primary" />
+              <Checkbox checked={d.attended} onChange={(e) => setD({ ...d, attended: e.target.checked })} />
               We attended
             </label>
             <Field label="Who went">

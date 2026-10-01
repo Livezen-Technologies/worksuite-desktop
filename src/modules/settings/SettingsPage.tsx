@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { categoryVisible } from '@shared/access';
 import { QUICK_ASK_SHORTCUTS, type AiDisplay, type Preferences } from '@shared/types';
 import { useCanOpen, useVisibleIds } from '../../core/access';
@@ -20,7 +20,9 @@ import { Select } from '../../components/Select';
 import type { ModuleProps } from '../registry';
 import { playTone } from '../calls/tones';
 import { shortcutLabel, useWriter, writerProblem } from '../ai/writer';
+import { ModuleAccess } from '../ai/ModuleAccess';
 import { discoverStudioModels, setStudioModels, STUDIO_KEY, studioState, testStudioModel, useStudioStatus, type StudioDiscovery } from '../ai/studio';
+import { Checkbox } from '../../components/Checkbox';
 
 /** Settings / profile tree (§4.9). Anything the organization's policy decides is shown locked, with the reason. */
 const SECTIONS = [
@@ -427,6 +429,18 @@ function AiSection({ prefs }: { prefs: Preferences }) {
           onValueChange={(v) => set({ display: v })}
         />
       </Row>
+      <Row
+        label="Allow online fallback"
+        hint={
+          a.onlineFallback
+            ? 'The assistant answers on this computer when a model is installed. When it cannot (no model, a failure, or files and tabs, which only WorkSuite AI reads), WorkSuite AI answers instead, and your question and the content it needs are sent to it. Your permissions and Module Access apply either way.'
+            : 'Only the model on this computer answers, and nothing you ask leaves it. Without one, or for files and tabs, the assistant says it cannot help.'
+        }
+      >
+        <span data-guide="settings.online-fallback" className="inline-flex">
+          <Switch label="Allow online fallback" checked={a.onlineFallback ?? true} onChange={(v) => set({ onlineFallback: v })} />
+        </span>
+      </Row>
       <Row label="Sound for new answers" hint="A short chime when an answer arrives while the assistant is closed or minimized.">
         <Switch label="Sound for new answers" checked={a.sound} onChange={(v) => set({ sound: v })} />
       </Row>
@@ -458,6 +472,7 @@ function AiSection({ prefs }: { prefs: Preferences }) {
         <p className="mt-4 text-[12.5px] text-ink-3">To read your selection in other apps, and to insert into them, WorkSuite needs System Settings › Privacy &amp; Security › Accessibility. Without it Quick Ask uses what you copied last.</p>
       ) : null}
       <p className="mt-2 text-[12.5px] text-ink-3">Files from this computer, summaries of WorkSuite files and actions waiting for your confirmation arrive when the assistant's desktop service does.</p>
+      <ModuleAccess prefs={a.moduleAccess ?? { worksuite: {}, local: {} }} onChange={(moduleAccess) => set({ moduleAccess })} />
     </>
   );
 }
@@ -497,7 +512,7 @@ function PinRow({ set }: { set: boolean }) {
   return (
     <Row label="PIN" hint={set ? 'Unlocks WorkSuite on this computer, also offline. Five wrong tries sign you out.' : 'Set a 4 to 8 digit PIN to unlock WorkSuite on this computer, also offline.'}>
       <div className="flex gap-2">
-        <Button icon="lock" onClick={() => setOpen(true)}>
+        <Button data-guide="settings.set-pin" icon="lock" onClick={() => setOpen(true)}>
           {set ? 'Change PIN' : 'Set PIN'}
         </Button>
         {set ? (
@@ -820,7 +835,7 @@ function AIStudioBlock() {
               {found.available.length ? (
                 found.available.map((m) => (
                   <label key={m} className="flex items-center gap-2 py-1 text-[13px] text-ink">
-                    <input type="checkbox" className="accent-primary" checked={picked.includes(m)} onChange={(e) => setPicked((p) => (e.target.checked ? [...p, m] : p.filter((x) => x !== m)))} aria-label={m} />
+                    <Checkbox checked={picked.includes(m)} onChange={(e) => setPicked((p) => (e.target.checked ? [...p, m] : p.filter((x) => x !== m)))} aria-label={m} />
                     <span className="font-mono">{m}</span>
                   </label>
                 ))
@@ -923,7 +938,7 @@ export function LocalAISection() {
               </div>
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                 {v.state === 'available' || v.state === 'failed' ? (
-                  <Button size="sm" icon="download" loading={busy === `i:${m.id}`} onClick={() => run(`i:${m.id}`, call('ai:localInstall', { id: m.id }))}>
+                  <Button data-guide="settings.local-ai-download" size="sm" icon="download" loading={busy === `i:${m.id}`} onClick={() => run(`i:${m.id}`, call('ai:localInstall', { id: m.id }))}>
                     {v.state === 'failed' ? 'Try again' : 'Download and set up'}
                   </Button>
                 ) : null}
@@ -1027,9 +1042,42 @@ export function methodLabel(method: string | null): string {
   return method === 'sendinput' ? 'Windows input (SendInput, through PowerShell)' : method === 'cgevent' ? 'macOS events (CGEvent, through osascript)' : method === 'xdotool' ? 'xdotool (X11)' : 'None';
 }
 
-function RemoteControlSection() {
+/** A fresh remote-control state, in place of any older answer still on its way. */
+async function fresh(next: Awaited<ReturnType<typeof call<'rc:recheck'>>>): Promise<void> {
+  await queryClient.cancelQueries({ queryKey: ['rc-state'] });
+  queryClient.setQueryData(['rc-state'], next);
+}
+
+export function RemoteControlSection() {
   const q = useQuery({ queryKey: ['rc-state'], queryFn: () => call('rc:state'), refetchInterval: 5_000 });
   const v = q.data;
+  const [checking, setChecking] = useState(false);
+  // Asks macOS again (worksuite-desktop#47): on opening this screen, on coming back to WorkSuite from System
+  // Settings, and on Check again — not only on the five-second refresh. A refresh still on its way is called off
+  // first, so an older answer never lands on top of the new one.
+  useEffect(() => {
+    const ask = () => void call('rc:recheck').then(fresh, () => undefined);
+    ask();
+    const back = () => {
+      if (document.visibilityState === 'visible') ask();
+    };
+    window.addEventListener('focus', back);
+    document.addEventListener('visibilitychange', back);
+    return () => {
+      window.removeEventListener('focus', back);
+      document.removeEventListener('visibilitychange', back);
+    };
+  }, []);
+  const recheck = async () => {
+    setChecking(true);
+    try {
+      await fresh(await call('rc:recheck'));
+    } catch (e) {
+      toast('error', errorMessage(e));
+    } finally {
+      setChecking(false);
+    }
+  };
   const set = async (value: boolean) => {
     try {
       await call('rc:setAllowRequests', { value });
@@ -1050,10 +1098,32 @@ function RemoteControlSection() {
           {works ? 'This computer can be controlled when you allow it' : 'This computer can be shared, but not controlled'}
         </div>
         {!works ? <p className="mt-1.5 text-ink-2">{!s.policyAllows ? "Your organization's policy for this computer doesn't allow it." : s.reason}</p> : s.reason ? <p className="mt-1.5 text-ink-2">{s.reason}</p> : null}
-        {s.accessibility === 'denied' ? (
-          <Button className="mt-2.5" size="sm" onClick={() => void call('media:privacySettings', { pane: 'accessibility' })}>
-            Open Accessibility settings
-          </Button>
+        {s.accessibility === 'granted' ? (
+          <p className="mt-1.5 flex items-center gap-1.5 text-ink-2" data-testid="rc-accessibility">
+            <Icon name="check" size={14} className="text-success" /> Accessibility access enabled
+          </p>
+        ) : null}
+        {s.accessibility === 'denied' && s.accessibilityHint === 'restart' ? (
+          <p className="mt-1.5 text-ink-2" data-testid="rc-accessibility-hint">
+            If WorkSuite is already switched on there, macOS may be holding an entry from an earlier version of WorkSuite. Select WorkSuite in the list,
+            remove it with −, add it again with +, then choose Check again. If it still reads as off, quit WorkSuite and open it again: some versions of
+            macOS apply the change only then.
+          </p>
+        ) : null}
+        {s.accessibility !== 'not_required' ? (
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            {s.accessibility === 'denied' ? (
+              <Button size="sm" onClick={() => void call('media:privacySettings', { pane: 'accessibility' })}>
+                Open Accessibility settings
+              </Button>
+            ) : null}
+            <Button size="sm" variant="ghost" icon="refresh" loading={checking} onClick={() => void recheck()}>
+              Check again
+            </Button>
+          </div>
+        ) : null}
+        {s.accessibility !== 'not_required' ? (
+          <p className="mt-2 text-[12px] text-ink-3">Accessibility only lets WorkSuite take input. Nobody controls this computer until you approve their request, each time.</p>
         ) : null}
       </div>
       <Row label="Let people ask to control my screen" hint="The starting choice each time you share; you can change it in the share picker.">

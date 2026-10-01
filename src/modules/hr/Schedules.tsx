@@ -7,6 +7,7 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { pickable, type EmployeeRow } from './api';
 import { dayLong, ymd } from './dates';
 import { btn, btnPrimary, Empty, Field, input, PageHead, Panel, Seg, Sheet, SidePanel, StatusChip } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Work schedules (HrSchedules; the web's WorkSchedules): the company's
@@ -304,7 +305,7 @@ function EditorForm({ s, weekdays, onClose, onSaved }: { s: (Summary & { version
           return (
             <div key={d.weekday} className="flex items-center gap-2">
               <label className="flex w-[70px] items-center gap-1.5 font-semibold text-ink">
-                <input type="checkbox" aria-label={`${weekdays[String(d.weekday)] ?? SHORT[d.weekday]} is a working day`} checked={d.on} onChange={(e) => setDay(d.weekday, { on: e.target.checked })} className="accent-primary" />
+                <Checkbox aria-label={`${weekdays[String(d.weekday)] ?? SHORT[d.weekday]} is a working day`} checked={d.on} onChange={(e) => setDay(d.weekday, { on: e.target.checked })} />
                 {SHORT[d.weekday]}
               </label>
               <input type="time" aria-label={`${SHORT[d.weekday]} starts`} value={d.a} disabled={!d.on} onChange={(e) => setDay(d.weekday, { a: e.target.value })} className={input + ' !w-[110px]'} />
@@ -333,7 +334,7 @@ function EditorForm({ s, weekdays, onClose, onSaved }: { s: (Summary & { version
             <input type="time" aria-label="Break starts" value={b.a} onChange={(e) => setBreaks((all) => all.map((x, j) => (j === i ? { ...x, a: e.target.value } : x)))} className={input + ' !w-[110px]'} />
             <input type="time" aria-label="Break ends" value={b.b} onChange={(e) => setBreaks((all) => all.map((x, j) => (j === i ? { ...x, b: e.target.value } : x)))} className={input + ' !w-[110px]'} />
             <label className="flex items-center gap-1 text-[12.5px] text-ink">
-              <input type="checkbox" checked={b.paid} onChange={(e) => setBreaks((all) => all.map((x, j) => (j === i ? { ...x, paid: e.target.checked } : x)))} className="accent-primary" /> paid
+              <Checkbox checked={b.paid} onChange={(e) => setBreaks((all) => all.map((x, j) => (j === i ? { ...x, paid: e.target.checked } : x)))} /> paid
             </label>
             <button type="button" aria-label="Remove break" className="text-[12px] font-semibold text-danger hover:underline" onClick={() => setBreaks((all) => all.filter((_, j) => j !== i))}>
               Remove
@@ -362,7 +363,7 @@ function EditorForm({ s, weekdays, onClose, onSaved }: { s: (Summary & { version
         </Field>
         <Field label="Flexible hours">
           <label className="flex h-[34px] items-center gap-2 font-medium text-ink">
-            <input type="checkbox" aria-label="Flexible" checked={flexible} onChange={(e) => setFlexible(e.target.checked)} className="accent-primary" /> Flexible
+            <Checkbox aria-label="Flexible" checked={flexible} onChange={(e) => setFlexible(e.target.checked)} /> Flexible
           </label>
         </Field>
       </div>
@@ -457,7 +458,7 @@ function Assign({ s, departments, onClose, onDone }: { s: Summary; departments: 
       <div className="flex max-h-[360px] flex-col overflow-y-auto rounded-[9px] border border-line scroll-thin">
         {shown.map((o) => (
           <label key={o.id} className="flex items-center gap-2 border-b border-line/70 px-3 py-[7px] text-[12.5px] text-ink last:border-b-0">
-            <input type="checkbox" checked={picked.has(o.id)} onChange={(e) => setPicked((p) => { const n = new Set(p); if (e.target.checked) n.add(o.id); else n.delete(o.id); return n; })} className="accent-primary" />
+            <Checkbox checked={picked.has(o.id)} onChange={(e) => setPicked((p) => { const n = new Set(p); if (e.target.checked) n.add(o.id); else n.delete(o.id); return n; })} />
             {o.name}
           </label>
         ))}

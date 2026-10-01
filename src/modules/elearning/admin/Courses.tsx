@@ -6,6 +6,7 @@ import { toast } from '../../../core/toasts';
 import { PageHead } from '../../hr/parts';
 import { eGet, ePost, errorText, K, labelOf, newKey, refusal, when, type Category, type Course, type CourseCard, type Paged } from '../api';
 import { CourseStatusPill, Field, input, Refusal, useEl } from '../parts';
+import { Checkbox } from '../../../components/Checkbox';
 
 const PER = 50;
 
@@ -48,7 +49,7 @@ export default function Courses() {
         <Select aria-label="Status" value={status} onChange={(e) => (setStatus(e.target.value), setPage(1))} options={[{ value: '', label: 'Every status' }, ...o.statuses.map((s) => ({ value: s.value, label: s.label })), { value: 'DRAFT,REVIEW,APPROVED', label: 'Not yet published' }]} className="h-9 min-w-[150px] rounded-[8px] border border-line bg-surface px-2 text-[13px]" />
         <Select aria-label="Type" value={type} onChange={(e) => (setType(e.target.value), setPage(1))} options={[{ value: '', label: 'Any type' }, ...o.course_types.map((t) => ({ value: t.value, label: t.label }))]} className="h-9 min-w-[150px] rounded-[8px] border border-line bg-surface px-2 text-[13px]" />
         <label className="flex items-center gap-1.5 text-[12.5px] text-ink-2">
-          <input type="checkbox" checked={mine} onChange={(e) => (setMine(e.target.checked), setPage(1))} /> Mine only
+          <Checkbox checked={mine} onChange={(e) => (setMine(e.target.checked), setPage(1))} /> Mine only
         </label>
         <Button type="submit" icon="search">
           Search

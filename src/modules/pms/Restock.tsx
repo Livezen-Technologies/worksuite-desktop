@@ -9,6 +9,7 @@ import type { Pickable } from '../inventory/control';
 import { ProductPick } from '../inventory/pickers';
 import { errorText, newKey, pPost } from './api';
 import { Refusal, usePms } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /** What went into a room, by kind (the server's `Restocks::KINDS`). */
 export const RESTOCK_KINDS: Array<{ value: string; label: string }> = [
@@ -92,7 +93,7 @@ export function RestockDialog({ path, room, onClose, onDone }: { path: string; r
               <input aria-label={`Quantity ${i + 1}`} inputMode="decimal" value={l.quantity} onChange={(e) => set(i, { quantity: e.target.value })} className={input} />
               <Select aria-label={`Kind ${i + 1}`} value={l.kind} options={RESTOCK_KINDS} onChange={(e) => set(i, { kind: e.target.value, chargeable: e.target.value === 'minibar' ? true : l.chargeable })} className={input} />
               <label className="flex items-center gap-1 text-[12px] text-ink-2" title="Charged to the guest's folio at the product's price">
-                <input type="checkbox" checked={l.chargeable} onChange={(e) => set(i, { chargeable: e.target.checked })} /> Charge
+                <Checkbox checked={l.chargeable} onChange={(e) => set(i, { chargeable: e.target.checked })} /> Charge
               </label>
               <Button size="sm" variant="ghost" icon="trash" aria-label={`Remove item ${i + 1}`} disabled={lines.length === 1} onClick={() => setLines((ls) => ls.filter((_, k) => k !== i))} />
             </div>

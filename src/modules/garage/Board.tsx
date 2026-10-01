@@ -6,6 +6,7 @@ import { toast } from '../../core/toasts';
 import { PageHead } from '../hr/parts';
 import { errorText, gGet, gPost, K, nice, type BoardColumn } from './api';
 import { JobCardView, useGarage } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * The job board (FR-BRD-01..05). A card dropped on another column asks the
@@ -61,7 +62,7 @@ export default function Board() {
         ) : null}
         <Select aria-label="Priority" value={priority} onChange={(e) => setPriority(e.target.value)} options={[{ value: '', label: 'Any priority' }, ...g.options.priorities.map((p) => ({ value: p, label: nice(p) }))]} className="h-8 w-36 rounded-[8px] border border-line bg-surface px-2 text-[12.5px]" />
         <label className="flex items-center gap-1.5 text-[12.5px] text-ink-2">
-          <input type="checkbox" checked={overdue} onChange={(e) => setOverdue(e.target.checked)} /> Overdue only
+          <Checkbox checked={overdue} onChange={(e) => setOverdue(e.target.checked)} /> Overdue only
         </label>
         <IconButton icon="refresh" label="Refresh" onClick={() => void board.refetch()} />
       </PageHead>

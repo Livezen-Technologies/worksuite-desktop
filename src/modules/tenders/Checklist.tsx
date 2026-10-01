@@ -15,6 +15,7 @@ import { ReviewScreen } from './Review';
 import { notifiedNote, reviewMessage, reviewRecipients, tellInChat, usePeople } from './people';
 import { AttachMenu, saveTenderFile, UploadBar, Uploading, uploadsFor, useDropZone, useTenderUploads, type LiveUpload } from './files';
 import { addLine, applyPack, attachToLine, bulkLines, fetchChecklist, filterLines, K2, LINE_STATUS, lineChanges, lineDraft, removeLine, reviewLine, sectionsOf, updateLine, type Line, type LineDraft, type LineFilter } from './work';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * The bid pack as a checklist: what the buyer asked for, section by section in
@@ -174,12 +175,11 @@ export default function Checklist({ id, org, canManage, canApprove, can }: { id:
           <section key={`${s.name}-${si}`} aria-label={s.name} className="overflow-hidden rounded-[12px] border border-line bg-surface">
             <div className="flex items-center gap-2 border-b border-line bg-ground px-3.5 py-2">
               {choosable ? (
-                <input
-                  type="checkbox"
+                <Checkbox
                   aria-label={`Choose every line in ${s.name}`}
                   checked={s.lines.every((l) => picked.includes(l.id))}
+                  indeterminate={s.lines.some((l) => picked.includes(l.id)) && !s.lines.every((l) => picked.includes(l.id))}
                   onChange={(e) => setPicked((p) => (e.target.checked ? [...new Set([...p, ...s.lines.map((l) => l.id)])] : p.filter((x) => !s.lines.some((l) => l.id === x))))}
-                  className="accent-primary"
                 />
               ) : null}
               <b className="text-[11.5px] font-bold tracking-[.4px] text-ink-3 uppercase">{s.name}</b>
@@ -279,7 +279,7 @@ function LineRow({
       className={cx('flex flex-col gap-1 border-b border-line/60 px-3.5 py-2.5 text-[12.5px] last:border-b-0', chosen && 'bg-[#F4F6FE] dark:bg-selection/40', zone.over && 'bg-selection outline-2 -outline-offset-2 outline-primary outline-dashed')}
     >
       <div className="flex items-start gap-2.5">
-        {onChoose ? <input type="checkbox" aria-label={`Choose ${l.label}`} checked={chosen} onChange={onChoose} className="mt-1 accent-primary" /> : null}
+        {onChoose ? <Checkbox aria-label={`Choose ${l.label}`} checked={chosen} onChange={onChoose} className="mt-1" /> : null}
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="flex flex-wrap items-center gap-1.5">
             <b className="text-[13px] text-ink">{l.label}</b>
@@ -436,7 +436,7 @@ function LineSheet({ tenderId, org, line, onClose, onSaved }: { tenderId: number
           <input aria-label="Section" value={d.section} onChange={set('section')} maxLength={120} placeholder="B. Eligibility" className={input} />
         </Field>
         <label className="flex items-center gap-2 pt-5 text-[12.5px] font-semibold text-ink">
-          <input type="checkbox" checked={d.mandatory} onChange={(e) => setD({ ...d, mandatory: e.target.checked })} className="accent-primary" />
+          <Checkbox checked={d.mandatory} onChange={(e) => setD({ ...d, mandatory: e.target.checked })} />
           Required — the bid cannot go out without it
         </label>
       </div>
@@ -529,7 +529,7 @@ function SendBackSheet({ tenderId, line, nameOf, serverTells, onClose, onSaved }
       ) : null}
       {tellIds.length ? (
         <label className="flex items-start gap-2 text-[12.5px] text-ink-2">
-          <input type="checkbox" checked={tell} onChange={(e) => setTell(e.target.checked)} className="mt-0.5 accent-primary" />
+          <Checkbox checked={tell} onChange={(e) => setTell(e.target.checked)} className="mt-0.5" />
           <span>
             {serverTells ? `Also message ${tellNames.join(' and ')} in Team Chat` : `Tell ${tellNames.join(' and ')} in Chat`}
             <span className="block text-[11.5px] text-ink-3">With what is wrong and a link to this tender.</span>

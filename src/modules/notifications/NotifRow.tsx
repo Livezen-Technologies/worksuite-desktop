@@ -6,6 +6,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { act, appOf, K, openNotice, quickActions, snoozeChoices, snoozedLabel, type Notice } from './api';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * One notification, as the drawer and the centre list it (NotifDrawer): its
@@ -55,12 +56,11 @@ export function NotifRow({ n, labels, selected, onSelect, checked, onCheck, onOp
       )}
     >
       {onCheck ? (
-        <input
-          type="checkbox"
+        <Checkbox
           aria-label={`Select “${n.title}”`}
           checked={!!checked}
           onChange={(e) => onCheck(e.target.checked)}
-          className={cx('absolute top-[13px] left-[6px] z-10 h-3.5 w-3.5 accent-primary', checked ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100')}
+          className={cx('absolute top-[13px] left-[6px] z-10', checked ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100')}
         />
       ) : null}
       {!n.read && !checked ? <span className={cx('absolute top-[25px] left-2 h-[7px] w-[7px] rounded-full bg-primary dark:bg-[#6C8CFF]', onCheck && 'group-hover:opacity-0')} aria-label="Unread" /> : null}

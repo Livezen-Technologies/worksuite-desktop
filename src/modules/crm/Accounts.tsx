@@ -13,6 +13,7 @@ import { btn, btnPrimary, btnSmall, Caps, Field, input, PageHead, Sheet, SidePan
 import type { Account, AccountDetail } from './api';
 import { TimelineList, useOwners } from './Leads';
 import { crmCan, money, moneyFull, stageColour } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Accounts (CrmAccounts, CrmAccountSheet): the customers, prospects and
@@ -87,7 +88,7 @@ export default function Accounts({ openId, creating, onOpen, onNew, onCloseNew, 
         </label>
         <Select label="Type" value={type} onValueChange={setType} options={[{ value: '', label: 'Any type' }, ...TYPES.map(([v, l]) => ({ value: v, label: l }))]} />
         <label className="flex items-center gap-2 text-[12.5px] font-semibold text-ink-2">
-          <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} className="accent-primary" />
+          <Checkbox checked={mine} onChange={(e) => setMine(e.target.checked)} />
           Mine only
         </label>
       </div>
@@ -497,7 +498,7 @@ function AddContact({ accountId, onClose, onDone }: { accountId: number; onClose
           <input value={f.phone} onChange={set('phone')} aria-label="Contact phone" className={input} />
         </Field>
         <label className="flex items-center gap-2 text-[13px] text-ink">
-          <input type="checkbox" checked={primary} onChange={(e) => setPrimary(e.target.checked)} className="accent-primary" />
+          <Checkbox checked={primary} onChange={(e) => setPrimary(e.target.checked)} />
           The main contact for this account
         </label>
       </div>

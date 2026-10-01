@@ -13,6 +13,7 @@ import { Facts, NoAccess, occupants, Refusal, usePms, VipPill } from './parts';
 import RegistrationCardDialog from './RegistrationCard';
 import type { StayAct } from './routes';
 import { useShortcut } from './shortcuts';
+import { Checkbox } from '../../components/Checkbox';
 
 const CHARGE_TYPES = ['room', 'fnb', 'minibar', 'laundry', 'spa', 'transport', 'telephone', 'banquet', 'package', 'fee', 'other'];
 const CHARGE_LABEL: Record<string, string> = { room: 'Room', fnb: 'Food & beverage', minibar: 'Mini bar', laundry: 'Laundry', spa: 'Spa', transport: 'Transport', telephone: 'Telephone', banquet: 'Banquet', package: 'Package', fee: 'Fees', other: 'Other' };
@@ -425,8 +426,7 @@ function RouteDialog({ stay, busy, onClose, onSave }: { stay: Stay; busy: boolea
           <legend className="mb-1 text-[12.5px] font-semibold text-ink-2">Charges</legend>
           {CHARGE_TYPES.map((c) => (
             <label key={c} className="flex items-center gap-2">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={types.has(c)}
                 onChange={(e) => {
                   const next = new Set(types);
@@ -448,7 +448,7 @@ function RouteDialog({ stay, busy, onClose, onSave }: { stay: Stay; busy: boolea
           </Field>
         </div>
         <label className="flex items-center gap-2 text-[13px]">
-          <input type="checkbox" checked={whole} onChange={(e) => setWhole(e.target.checked)} /> For every room of the reservation
+          <Checkbox checked={whole} onChange={(e) => setWhole(e.target.checked)} /> For every room of the reservation
         </label>
       </div>
     </Modal>

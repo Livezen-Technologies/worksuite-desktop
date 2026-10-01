@@ -27,6 +27,7 @@ import {
   type NoteType,
 } from '../../modules/hr/attendance';
 import { Popover } from './Popover';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Clock in / clock out in the title bar (ClockIn), for anybody linked to an
@@ -350,7 +351,7 @@ export function ClockPopover() {
             />
             {needReason ? <Location required reason={reason} setReason={setReason} skips={policy?.location_skips_30d ?? 0} /> : null}
             <label className="flex cursor-pointer items-center gap-2 text-[12.5px] font-semibold text-ink">
-              <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="h-[18px] w-[18px] accent-[var(--color-primary)]" />I confirm that I am clocking out.
+              <Checkbox checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />I confirm that I am clocking out.
             </label>
             <span className="-mt-1.5 text-[11.5px] text-ink-3">Today’s hours are recorded when you confirm.</span>
             <div className="flex gap-2">

@@ -7,6 +7,7 @@ import { errorText, fromLocalInput, gGet, gPost, K, newKey, nice, PAUSE_LABEL, p
 import { AskForPart, PauseTimer, RaiseAdditional } from '../MyWork';
 import { PartActions } from '../PartsCounter';
 import { Ask, DocActions, Field, input, LightPill, PartPill, Section, useGarage, WorkPill } from '../parts';
+import { Checkbox } from '../../../components/Checkbox';
 
 const OPEN_JOB = ['APPROVED', 'WAITING_PARTS', 'READY_TO_START', 'IN_PROGRESS', 'PAUSED', 'ADDITIONAL_APPROVAL_REQUIRED'];
 
@@ -99,7 +100,7 @@ export default function WorkTab({ jobId, onChange, onEstimate }: { jobId: number
             {additional.map((a) => (
               <li key={a.id} className="flex items-start gap-2 py-2">
                 {can.price && a.status === 'RAISED' ? (
-                  <input type="checkbox" className="mt-1" aria-label={`Price ${a.finding}`} checked={pick.includes(a.id)} onChange={(e) => setPick(e.target.checked ? [...pick, a.id] : pick.filter((x) => x !== a.id))} />
+                  <Checkbox className="mt-1" aria-label={`Price ${a.finding}`} checked={pick.includes(a.id)} onChange={(e) => setPick(e.target.checked ? [...pick, a.id] : pick.filter((x) => x !== a.id))} />
                 ) : null}
                 <div className="min-w-0 flex-1">
                   <p className="m-0 flex flex-wrap items-center gap-1.5 text-[13px]">

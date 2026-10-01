@@ -6,6 +6,7 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, Empty, input, PageHead } from '../hr/parts';
 import { fetchCategories, fetchProducts, K, num, PER_PAGE, pictureSrc, qty, trackingLabel, treeOf, whole, type Company, type Product, type ProductFilters } from './api';
 import { minWidth, Pill } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 const NewCategory = lazy(() => import('./Categories').then((m) => ({ default: m.NewCategory })));
 
@@ -114,7 +115,7 @@ export default function Products({
           className="h-[34px] w-[190px] rounded-[8px] border border-line bg-surface px-2.5 text-[13px] font-medium text-ink"
         />
         <label className="flex items-center gap-1.5 font-semibold text-ink">
-          <input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} className="accent-primary" />
+          <Checkbox checked={archived} onChange={(e) => setArchived(e.target.checked)} />
           Archived
         </label>
       </div>

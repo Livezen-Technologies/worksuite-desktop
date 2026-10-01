@@ -7,6 +7,7 @@ import { toast } from '../../core/toasts';
 import { Avatar, Button, Modal, cx } from '../../components/ui';
 import { TYPES } from './api';
 import { Select } from '../../components/Select';
+import { Checkbox } from '../../components/Checkbox';
 
 const WHERE: Array<[string, string]> = [
   ['online', 'Online'],
@@ -117,7 +118,7 @@ export function ScheduleDialog({ onClose, online, onCreated }: { onClose: () => 
       footer={
         <>
           <label className="mr-auto flex items-center gap-2 text-[12.5px] text-ink">
-            <input type="checkbox" checked={invite} onChange={(e) => setInvite(e.target.checked)} className="accent-[var(--color-primary)]" />
+            <Checkbox checked={invite} onChange={(e) => setInvite(e.target.checked)} />
             Add to Calendar and send invitations
           </label>
           <Button onClick={onClose}>Cancel</Button>

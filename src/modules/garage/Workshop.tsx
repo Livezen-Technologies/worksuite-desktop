@@ -7,6 +7,7 @@ import { PageHead } from '../hr/parts';
 import { Pill } from '../inventory/parts';
 import { errorText, gGet, gPost, K, money, nice, type Bay, type Branch, type InspectionTemplate, type Technician, type TemplateItem, type WorkshopData } from './api';
 import { Ask, Field, input, Section, Tabs, useGarage, type AskField } from './parts';
+import { Checkbox } from '../../components/Checkbox';
 
 export type WorkshopTab = 'branches' | 'bays' | 'technicians' | 'rates' | 'services' | 'models' | 'inspections';
 
@@ -687,7 +688,7 @@ function AddTechnician({ d, onClose, onDone }: { d: WorkshopData; onClose: () =>
             <Select aria-label="Rate class" value={rate} onChange={(e) => setRate(e.target.value)} options={Array.from(new Set(['general', ...d.rates.map((r) => r.rate_class)])).map((r) => ({ value: r, label: r }))} className={input} />
           </Field>
           <label className="flex h-9 items-center gap-2 text-[13px]">
-            <input type="checkbox" checked={lead} onChange={(e) => setLead(e.target.checked)} /> Lead technician
+            <Checkbox checked={lead} onChange={(e) => setLead(e.target.checked)} /> Lead technician
           </label>
         </div>
       </div>

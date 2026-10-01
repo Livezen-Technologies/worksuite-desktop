@@ -10,6 +10,7 @@ import { Button, ErrorNote, Spinner, cx } from '../../components/ui';
 import type { ItemAccess, Level } from './api';
 import type { Item } from './ctx';
 import { Select } from '../../components/Select';
+import { Checkbox } from '../../components/Checkbox';
 
 type PType = 'user' | 'group' | 'department' | 'role' | 'organization';
 interface Principal {
@@ -215,7 +216,7 @@ export function ShareDialog({ item, onClose, onSecureLink, onPublicLink, onSendT
                     </button>
                     {picked?.id === r.id && picked.type === r.type ? (
                       <label className="flex shrink-0 items-center gap-1.5 text-[12px] text-ink-2">
-                        <input type="checkbox" checked={noDownload} onChange={(e) => setNoDownload(e.target.checked)} className="accent-[var(--color-primary)]" />
+                        <Checkbox checked={noDownload} onChange={(e) => setNoDownload(e.target.checked)} />
                         No download
                       </label>
                     ) : null}
@@ -273,7 +274,7 @@ export function ShareDialog({ item, onClose, onSecureLink, onPublicLink, onSendT
                     ))}
                     {!inherited.length ? <span className="text-ink-3">Nothing comes from above.</span> : null}
                     <label className="flex items-center gap-2 text-ink">
-                      <input type="checkbox" checked={a.item.inherits} disabled={!a.may.manage || busy} onChange={(e) => void run(() => apiPut(`${base}/inheritance`, { inherit: e.target.checked, copy: !e.target.checked }), e.target.checked ? 'Access from the folder above applies again' : 'Access from above stopped; it was copied here')} className="accent-[var(--color-primary)]" />
+                      <Checkbox checked={a.item.inherits} disabled={!a.may.manage || busy} onChange={(e) => void run(() => apiPut(`${base}/inheritance`, { inherit: e.target.checked, copy: !e.target.checked }), e.target.checked ? 'Access from the folder above applies again' : 'Access from above stopped; it was copied here')} />
                       Inherit access from the folder above
                     </label>
                   </>

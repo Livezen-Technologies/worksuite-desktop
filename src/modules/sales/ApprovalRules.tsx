@@ -10,6 +10,7 @@ import { ErrorNote, Spinner } from '../../components/ui';
 import { btn, btnPrimary, Field, input, PageHead, Sheet } from '../hr/parts';
 import { useOrgs } from './api';
 import { fetchRules, KM, removeRule, ruleLine, saveRule, type Rule } from './manage';
+import { Checkbox } from '../../components/Checkbox';
 
 /**
  * Approval rules (OmsApprovalRules): when an order is submitted, every
@@ -137,7 +138,7 @@ export default function ApprovalRules({ org }: { org: string }) {
               <input aria-label="Approver needs" value={e.permission ?? 'oms.orders.approve'} onChange={(ev) => setEditing({ ...e, permission: ev.target.value.trim() })} className={input + ' !w-[280px] font-mono'} />
             </Field>
             <label className="mb-[22px] flex h-[34px] items-center gap-1.5 font-semibold text-ink">
-              <input type="checkbox" checked={e.is_active ?? true} onChange={(ev) => setEditing({ ...e, is_active: ev.target.checked })} className="accent-primary" />
+              <Checkbox checked={e.is_active ?? true} onChange={(ev) => setEditing({ ...e, is_active: ev.target.checked })} />
               Active
             </label>
             <span className="flex-1" />
