@@ -204,7 +204,7 @@ function InvitationRow({ m, busy, onOpen, send }: { m: Meeting; busy: boolean; o
       {invitation.flag ? <span className="flex">{invitation.flag}</span> : null}
       <div className="flex flex-wrap gap-1.5">
         {(['accepted', 'tentative', 'declined'] as Rsvp[]).map((r) => (
-          <button key={r} type="button" disabled={busy} onClick={() => invitation.answer(r)} className={cx('h-7 rounded-[7px] px-2.5 text-[12px] font-semibold', r === 'accepted' ? 'bg-primary text-white' : 'border border-line text-ink hover:bg-subtle')}>
+          <button key={r} type="button" disabled={busy} onClick={() => void invitation.answer(r)} className={cx('h-7 rounded-[7px] px-2.5 text-[12px] font-semibold', r === 'accepted' ? 'bg-primary text-white' : 'border border-line text-ink hover:bg-subtle')}>
             {RSVP_LABEL[r]}
           </button>
         ))}

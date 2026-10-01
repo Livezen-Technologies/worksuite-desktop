@@ -22,6 +22,8 @@ const nav = vi.hoisted(() => ({ navigate: vi.fn() }));
 vi.mock('../../../src/core/tabs', () => nav);
 vi.mock('../../../src/core/app-state', () => ({ app: { get: () => ({ auth: { user: { id: '5' } } }), subscribe: () => () => undefined } }));
 
+import { toast } from '../../../src/core/toasts';
+import { clashingKeys, type CalendarEvent } from '../../../src/modules/calendar/api';
 import { ConflictFlag, useConflictGate, useInvitationAnswer, type Conflict, type WaitingInvitation } from '../../../src/modules/calendar/conflicts';
 
 afterEach(cleanup);
@@ -36,8 +38,8 @@ const wrap = (ui: React.ReactNode) => render(<QueryClientProvider client={new Qu
 const mine: Conflict = { user_id: 5, source: 'meeting', id: 9, title: 'Budget review', busy_only: false, start_at: '2027-03-10 09:30:00', end_at: '2027-03-10 10:30:00', all_day: false, status: 'accepted', tentative: false };
 const theirs: Conflict = { user_id: 7, source: 'event', id: 0, title: null, busy_only: true, start_at: '2027-03-10 09:15:00', end_at: '2027-03-10 09:45:00', all_day: false, status: 'organizer', tentative: false };
 
-function Saver({ save }: { save: () => void }) {
-  const gate = useConflictGate('Save anyway');
+function Saver({ save, another }: { save: () => void; another?: () => void }) {
+  const gate = useConflictGate('Save anyway', another);
   return (
     <>
       <button type="button" onClick={() => void gate.guard({ start: '2027-03-10 09:00', end: '2027-03-10 10:00', user_ids: [7] }, save)}>
@@ -77,6 +79,27 @@ describe('warning before saving (worksuite-desktop#99)', () => {
     expect(save).toHaveBeenCalledTimes(1);
   });
 
+  it('Choose another time goes back to the times; people whose time is unknown are named', async () => {
+    api.apiPost.mockResolvedValue({ conflicts: [mine], duplicates: [], people: [], checked: 1, unknown: [{ user_id: 40, name: 'Guest Rao' }] });
+    const save = vi.fn();
+    const another = vi.fn();
+    wrap(<Saver save={save} another={another} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Availability could not be checked for Guest Rao.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Choose another time' }));
+    expect(another).toHaveBeenCalledTimes(1);
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('a duplicate alone is no conflict: saved, and said', async () => {
+    api.apiPost.mockResolvedValue({ conflicts: [], duplicates: [{ ...mine, title: 'Planning' }], people: [], checked: 1 });
+    const save = vi.fn();
+    wrap(<Saver save={save} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(toast).toHaveBeenCalledWith('info', 'This is already in the calendar once (Planning): it is not counted twice.');
+  });
+
   it('never holds a save up when the server cannot be asked', async () => {
     api.apiPost.mockRejectedValue(new Error('offline'));
     const save = vi.fn();
@@ -93,10 +116,10 @@ function Invitation({ send }: { send: (r: string) => void }) {
   return (
     <>
       {inv.flag}
-      <button type="button" onClick={() => inv.answer('accepted')}>
+      <button type="button" onClick={() => void inv.answer('accepted')}>
         Accept
       </button>
-      <button type="button" onClick={() => inv.answer('declined')}>
+      <button type="button" onClick={() => void inv.answer('declined')}>
         Decline
       </button>
       {inv.dialogs}
@@ -107,7 +130,7 @@ function Invitation({ send }: { send: (r: string) => void }) {
 describe('answering an invitation that clashes (worksuite-desktop#99)', () => {
   it('is flagged, asks before accepting, and offers to propose another time', async () => {
     api.apiGet.mockResolvedValue({ invitations: [waiting] });
-    api.apiPost.mockResolvedValue({ proposed: {} });
+    api.apiPost.mockImplementation(async (url: string) => (url === '/api/calendar/conflicts' ? { conflicts: [mine], duplicates: [], people: [], checked: 1 } : { proposed: {} }));
     const send = vi.fn();
     wrap(<Invitation send={send} />);
     expect(await screen.findByText(/Overlaps “Budget review”/)).toBeTruthy();
@@ -130,9 +153,31 @@ describe('answering an invitation that clashes (worksuite-desktop#99)', () => {
     const send = vi.fn();
     wrap(<Invitation send={send} />);
     await waitFor(() => expect(api.apiGet).toHaveBeenCalled());
+    api.apiPost.mockResolvedValue({ conflicts: [], duplicates: [], people: [], checked: 1 });
     fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
-    expect(send).toHaveBeenCalledWith('accepted');
+    await waitFor(() => expect(send).toHaveBeenCalledWith('accepted'));
     expect(screen.queryByText('Schedule conflict')).toBeNull();
+  });
+
+  it('asks afresh when accepting: something added since the list was read is caught, something gone is not asked about', async () => {
+    api.apiGet.mockResolvedValue({ invitations: [{ ...waiting, conflicts: [] }] });
+    api.apiPost.mockResolvedValue({ conflicts: [mine], duplicates: [], people: [], checked: 1 });
+    const send = vi.fn();
+    const { unmount } = wrap(<Invitation send={send} />);
+    await waitFor(() => expect(api.apiGet).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByText(/Overlaps/)).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
+    expect(await screen.findByText('Schedule conflict')).toBeTruthy();
+    expect(api.apiPost).toHaveBeenCalledWith('/api/calendar/conflicts', expect.objectContaining({ meeting_id: 12, start: waiting.start_at }));
+    expect(send).not.toHaveBeenCalled();
+    unmount();
+
+    api.apiGet.mockResolvedValue({ invitations: [waiting] });
+    api.apiPost.mockResolvedValue({ conflicts: [], duplicates: [], people: [], checked: 1 });
+    wrap(<Invitation send={send} />);
+    expect(await screen.findByText(/Overlaps “Budget review”/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
+    await waitFor(() => expect(send).toHaveBeenCalledWith('accepted'));
   });
 });
 
@@ -144,5 +189,32 @@ describe('the conflict flag', () => {
     expect(screen.getByRole('note').textContent).toContain('Overlaps 2 other commitments');
     rerender(<ConflictFlag conflicts={[{ ...mine, tentative: true, status: 'tentative' }]} />);
     expect(screen.getByRole('note').textContent).toContain('(tentative)');
+  });
+});
+
+describe('flags on the calendar grid (worksuite-desktop#99)', () => {
+  const ev = (over: Partial<CalendarEvent>): CalendarEvent => ({ source: 'event', id: 1, title: 'A', color: null, start_at: '2027-03-10 09:00:00', end_at: '2027-03-10 10:00:00', all_day: false, editable: true, ...over });
+  const key = (e: CalendarEvent) => `${e.source}:${e.id}`;
+
+  it('flags overlapping events and meetings, not ones that only touch, are declined, cancelled or all day', () => {
+    const keys = clashingKeys(
+      [
+        ev({ id: 1 }),
+        ev({ source: 'businessmeeting', id: 2, title: 'B', start_at: '2027-03-10 09:30:00', end_at: '2027-03-10 10:30:00' }),
+        ev({ id: 3, title: 'C', start_at: '2027-03-10 10:30:00', end_at: '2027-03-10 11:00:00' }),
+        ev({ id: 4, title: 'D', start_at: '2027-03-10 09:15:00', my_rsvp: 'declined' }),
+        ev({ id: 5, title: 'E', status: 'cancelled' }),
+        ev({ id: 6, title: 'F', all_day: true }),
+        ev({ source: 'task', id: 7, title: 'Task due' }),
+      ],
+      key,
+    );
+    expect([...keys].sort()).toEqual(['businessmeeting:2', 'event:1']);
+  });
+
+  it('the same meeting seen twice is not a clash with itself', () => {
+    const same = [ev({ id: 1, title: 'Planning', meeting_uuid: 'u1' }), ev({ source: 'meeting', id: 'u1', title: 'Meet: Planning', meeting_uuid: 'u1' }), ev({ source: 'businessmeeting', id: 10, title: 'planning ' })];
+    expect(clashingKeys(same, key).size).toBe(0);
+    expect([...clashingKeys([...same, ev({ id: 11, title: 'Lunch', start_at: '2027-03-10 09:45:00' })], key)].sort()).toEqual(['businessmeeting:10', 'event:1', 'event:11', 'meeting:u1']);
   });
 });

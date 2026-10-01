@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { canOpenRoute, canOpenWebPath } from '@shared/access';
 import { useCanOpen, useVisibleIds } from '../../core/access';
 import { ApiError, apiDelete, apiGet, apiGetMeta, apiPost, apiPut } from '../../core/api';
@@ -201,7 +201,8 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
   const participants = detail.data?.participants ?? [];
   // Schedule conflicts (worksuite-desktop#99): checked before saving, for you and everybody on the event; and an
   // invitation waiting for your answer says what it overlaps, and asks before you accept it.
-  const gate = useConflictGate('Save anyway');
+  const startField = useRef<HTMLInputElement>(null);
+  const gate = useConflictGate('Save anyway', () => startField.current?.focus());
   const eventId = id !== null && /^\d+$/.test(String(id)) ? Number(id) : null;
   const conflictQuery = () => {
     const b = body();
@@ -333,7 +334,7 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
       <div className="grid grid-cols-2 gap-2">
         <label className={label}>
           Start
-          <input type={allDay ? 'date' : 'datetime-local'} value={allDay ? start.slice(0, 10) : start} onChange={(ev) => setStart(ev.target.value)} disabled={!editable} className={field} />
+          <input ref={startField} type={allDay ? 'date' : 'datetime-local'} value={allDay ? start.slice(0, 10) : start} onChange={(ev) => setStart(ev.target.value)} disabled={!editable} className={field} />
         </label>
         <label className={label}>
           End
@@ -452,7 +453,7 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
         <div className="flex items-center gap-1.5">
           <b className="w-[110px] text-ink">Your response</b>
           {RSVP.map(([v, l]) => (
-            <button key={v} type="button" aria-pressed={e.my_rsvp === v} onClick={() => invitation.answer(v)} className={cx('h-[30px] rounded-[7px] px-3 font-semibold', e.my_rsvp === v ? 'bg-success text-white' : 'border border-line text-ink hover:bg-subtle')}>
+            <button key={v} type="button" aria-pressed={e.my_rsvp === v} onClick={() => void invitation.answer(v)} className={cx('h-[30px] rounded-[7px] px-3 font-semibold', e.my_rsvp === v ? 'bg-success text-white' : 'border border-line text-ink hover:bg-subtle')}>
               {l}
             </button>
           ))}

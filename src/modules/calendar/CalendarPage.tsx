@@ -17,7 +17,7 @@ import { MonthGrid } from './MonthGrid';
 import { eventKey, WeekGrid } from './WeekGrid';
 import { SidePanel } from '../../components/SidePanel';
 import { Checkbox } from '../../components/Checkbox';
-import { checkConflicts, conflictLine } from './conflicts';
+import { ConflictDialog, checkConflicts, type ConflictResult } from './conflicts';
 
 const VIEWS: Array<[View, string]> = [
   ['day', 'Day'],
@@ -89,6 +89,7 @@ export default function CalendarPage(_props: ModuleProps) {
   const [mini, setMini] = useState(monthStart(date));
   const [drawer, setDrawer] = useState<{ event: CalendarEvent | null; draft: Draft | null } | null>(null);
   const [series, setSeries] = useState<Change | null>(null);
+  const [clash, setClash] = useState<{ c: Change; result: ConflictResult } | null>(null);
   const [undo, setUndo] = useState<{ label: string; run: () => Promise<unknown> } | null>(null);
   const [dialog, setDialog] = useState<'subscribe' | null>(null);
   const [report, setReport] = useState<{ name: string; report: IcsReport } | null>(null);
@@ -182,9 +183,6 @@ export default function CalendarPage(_props: ModuleProps) {
           },
         });
       }
-      // Moved onto something else: said, with Undo just there, rather than asked first (worksuite-desktop#99).
-      const now = await checkConflicts({ start: s1, end: e1, all_day: e.all_day, ...(e.source === 'businessmeeting' ? { meeting_id: Number(e.id) } : /^\d+$/.test(String(e.id)) ? { event_id: Number(e.id) } : {}) }).catch(() => null);
-      if (now?.conflicts.length) toast('info', `Schedule conflict: this now overlaps ${now.conflicts.length === 1 ? conflictLine(now.conflicts[0]!) : `${now.conflicts.length} other commitments`}. Undo is in the bar below.`, undefined, 8000);
     } catch (err) {
       // A refused move is usually a clash (a meeting room), and says so.
       toast('error', errorMessage(err));
@@ -193,16 +191,28 @@ export default function CalendarPage(_props: ModuleProps) {
     }
   };
 
-  const change = (c: Change) => {
-    if (offline) return toast('info', 'You are offline. Changes can be made when you are back.');
+  const proceed = (c: Change) => {
     if (c.e.source === 'event' && c.e.recurring && c.e.occurrence_date) return setSeries(c);
     void apply(c, 'single');
   };
-  const onMove = (e: CalendarEvent, dDays: number, dMin: number) => change({ e, dStart: dDays * 1440 + dMin, dEnd: dDays * 1440 + dMin, kind: 'move' });
+  // Asked before anything moves (worksuite-desktop#99): onto something else, the person chooses; nothing is moved meanwhile.
+  const change = async (c: Change) => {
+    if (offline) return toast('info', 'You are offline. Changes can be made when you are back.');
+    const { e } = c;
+    const result = await checkConflicts({
+      start: shifted(e.start_at, c.dStart),
+      end: shifted(endOf(e), c.dEnd),
+      all_day: e.all_day,
+      ...(e.source === 'businessmeeting' ? { meeting_id: Number(e.id) } : /^\d+$/.test(String(e.id)) ? { event_id: Number(e.id) } : {}),
+    }).catch(() => null);
+    if (result?.conflicts.length) return setClash({ c, result });
+    proceed(c);
+  };
+  const onMove = (e: CalendarEvent, dDays: number, dMin: number) => void change({ e, dStart: dDays * 1440 + dMin, dEnd: dDays * 1440 + dMin, kind: 'move' });
   const onResize = (e: CalendarEvent, dMin: number) => {
     const at = (s: string) => Date.parse(`${s.replace(' ', 'T').slice(0, 16)}Z`);
     if ((at(endOf(e)) - at(e.start_at)) / 60_000 + dMin < 15) return;
-    change({ e, dStart: 0, dEnd: dMin, kind: 'resize' });
+    void change({ e, dStart: 0, dEnd: dMin, kind: 'resize' });
   };
 
   const runUndo = async () => {
@@ -244,7 +254,7 @@ export default function CalendarPage(_props: ModuleProps) {
     if (!active) return;
     const onKey = (ev: KeyboardEvent) => {
       const t = ev.target as HTMLElement | null;
-      if (ev.metaKey || ev.ctrlKey || ev.altKey || drawer || series || dialog || report) return;
+      if (ev.metaKey || ev.ctrlKey || ev.altKey || drawer || series || clash || dialog || report) return;
       if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
       const k = ev.key.toLowerCase();
       if (k === 't') set(view, today);
@@ -362,6 +372,7 @@ export default function CalendarPage(_props: ModuleProps) {
           onCancel={() => setSeries(null)}
         />
       ) : null}
+      {clash ? <ConflictDialog result={clash.result} action={clash.c.kind === 'move' ? 'Move anyway' : 'Change anyway'} onContinue={() => proceed(clash.c)} onClose={() => setClash(null)} /> : null}
       {undo ? <UndoBar label={undo.label} onUndo={() => void runUndo()} onGone={dropUndo} /> : null}
       {dialog === 'subscribe' ? <SubscribeDialog onClose={() => setDialog(null)} /> : null}
       {report ? <ImportResult name={report.name} report={report.report} onClose={() => setReport(null)} /> : null}

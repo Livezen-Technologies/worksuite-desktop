@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { wallTimeLabel } from '../../core/time';
 import { cx } from '../../components/ui';
-import { colourOf, dayOf, layoutDay, minutesOf, movable, nowWall, type CalendarEvent, EVENT_TONE } from './api';
+import { clashingKeys, colourOf, dayOf, layoutDay, minutesOf, movable, nowWall, type CalendarEvent, EVENT_TONE } from './api';
 
 const HOUR = 52;
 const SNAP = 15;
@@ -40,6 +40,7 @@ export function WeekGrid({ days, events, today, readOnly, onOpen, onCreate, onMo
   const [now, setNow] = useState(() => nowWall());
   const allDay = events.filter((e) => e.all_day);
   const timed = events.filter((e) => !e.all_day);
+  const clashes = useMemo(() => clashingKeys(events, eventKey), [events]);
 
   useEffect(() => {
     const t = setInterval(() => setNow(nowWall()), 60_000);
@@ -165,10 +166,13 @@ export function WeekGrid({ days, events, today, readOnly, onOpen, onCreate, onMo
                           borderLeft: `3px solid ${c}`,
                           transform: dragging?.dDays ? `translateX(${dragging.dDays * dragging.colW}px)` : undefined,
                         }}
-                        title={`${e.title} · ${wallTimeLabel(e.start_at)}`}
-                        aria-label={`${e.title}, ${wallTimeLabel(e.start_at)}`}
+                        title={`${e.title} · ${wallTimeLabel(e.start_at)}${clashes.has(eventKey(e)) ? ' · Overlaps another commitment' : ''}`}
+                        aria-label={`${e.title}, ${wallTimeLabel(e.start_at)}${clashes.has(eventKey(e)) ? ', overlaps another commitment' : ''}`}
                       >
-                        <b className="truncate text-[11.5px] leading-tight">{e.title}</b>
+                        <b className="flex min-w-0 items-center gap-1 text-[11.5px] leading-tight">
+                          {clashes.has(eventKey(e)) ? <span aria-hidden data-clash="" className="shrink-0 text-warning">⚠</span> : null}
+                          <span className="truncate">{e.title}</span>
+                        </b>
                         <span className="truncate text-[10.5px]">{wallTimeLabel(e.start_at)}{e.location ? ` · ${e.location}` : e.subtitle ? ` · ${e.subtitle}` : ''}</span>
                         {can ? (
                           <span

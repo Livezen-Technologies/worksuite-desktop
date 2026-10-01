@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { apiGet, apiPost } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
 import { currentZone } from '../../core/time';
@@ -95,7 +95,8 @@ export function ScheduleDialog({ onClose, online, onCreated }: { onClose: () => 
   });
   const busyOf = (uid: number) => availability.data?.people.find((x) => x.user_id === uid);
   const mine = (availability.data?.conflicts ?? []).filter((c) => !people.some((p) => p.id === c.user_id));
-  const gate = useConflictGate('Schedule anyway');
+  const startField = useRef<HTMLInputElement>(null);
+  const gate = useConflictGate('Schedule anyway', () => startField.current?.focus());
   const needle = q.trim().toLowerCase();
   const matches = needle ? (directory.data?.users ?? []).filter((u) => !people.some((p) => p.id === u.id) && (u.name.toLowerCase().includes(needle) || (u.email ?? '').toLowerCase().includes(needle))).slice(0, 6) : [];
   const emails = guests.split(/[\s,;]+/).map((e) => e.trim()).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
@@ -178,7 +179,7 @@ export function ScheduleDialog({ onClose, online, onCreated }: { onClose: () => 
           </label>
           <label className={label}>
             Starts
-            <input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} className={field} />
+            <input ref={startField} type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} className={field} />
           </label>
           <label className={label}>
             Ends

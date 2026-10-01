@@ -65,7 +65,11 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
   const [reason, setReason] = useState('');
   const q = useQuery({ queryKey: ['meetings', 'detail', id], queryFn: ({ signal }) => apiGet<Detail>(`/api/meetings/${id}`, undefined, signal), refetchInterval: 30_000 });
   useTabTitle(q.data ? `Meeting · ${q.data.meeting.title}` : 'Meeting');
-  const refresh = () => void qc.invalidateQueries({ queryKey: ['meetings'] });
+  // A cancelled or moved meeting no longer overlaps anything: the calendar and its conflict answers are read again (#99).
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: ['meetings'] });
+    void qc.invalidateQueries({ queryKey: ['calendar'] });
+  };
   const act = async (fn: () => Promise<unknown>, done?: string) => {
     try {
       await fn();
@@ -150,7 +154,7 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
                 <b className="text-ink">Your answer</b>
                 <div className="flex gap-1.5">
                   {(['accepted', 'tentative', 'declined'] as Rsvp[]).map((r) => (
-                    <button key={r} type="button" aria-pressed={mine.rsvp === r} onClick={() => invitation.answer(r)} className={cx('h-8 flex-1 rounded-[8px] text-[12px] font-semibold', mine.rsvp === r ? 'bg-primary text-white' : 'border border-line text-ink hover:bg-subtle')}>
+                    <button key={r} type="button" aria-pressed={mine.rsvp === r} onClick={() => void invitation.answer(r)} className={cx('h-8 flex-1 rounded-[8px] text-[12px] font-semibold', mine.rsvp === r ? 'bg-primary text-white' : 'border border-line text-ink hover:bg-subtle')}>
                       {RSVP_LABEL[r]}
                     </button>
                   ))}

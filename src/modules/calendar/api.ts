@@ -78,6 +78,45 @@ export const CATEGORIES: Array<{ id: string; label: string; color: string; sourc
   { id: 'renewals', label: 'Subscription renewals', color: '#B83280', sources: (s) => s === 'subscription', apps: ['expenses'] },
 ];
 
+/**
+ * Which of the shown entries overlap another of your commitments (worksuite-desktop#99), so the grid can flag them:
+ * timed events and meetings you have not declined and that are not cancelled. The same meeting seen twice — as a
+ * meeting and as a calendar invitation (one meeting link, or the same title at the same time) — is one commitment,
+ * not a clash with itself. Returns the keys (as `key` makes them) of the entries that overlap.
+ */
+export function clashingKeys(events: CalendarEvent[], key: (e: CalendarEvent) => string): Set<string> {
+  const at = (s: string) => Date.parse(`${s.replace(' ', 'T').slice(0, 16)}Z`);
+  const firm = events
+    .filter((e) => !e.all_day && (e.source === 'event' || e.source === 'meeting' || e.source === 'businessmeeting'))
+    .filter((e) => e.status !== 'cancelled' && e.my_rsvp !== 'declined' && e.my_rsvp !== 'rejected')
+    .map((e) => {
+      const from = at(e.start_at);
+      const to = e.end_at ? at(e.end_at) : from + 3_600_000;
+      return { e, from, to: Math.max(to, from + 60_000), uuid: e.meeting_uuid ?? null, same: `${e.title.trim().toLowerCase()}|${from}|${to}` };
+    })
+    .sort((a, b) => a.from - b.from);
+  // One commitment seen several ways is one group: by a shared meeting link, or the same title at the same time.
+  const group = firm.map((_, i) => i);
+  const root = (i: number): number => (group[i] === i ? i : (group[i] = root(group[i]!)));
+  for (let i = 0; i < firm.length; i++) {
+    for (let j = i + 1; j < firm.length; j++) {
+      const a = firm[i]!;
+      const b = firm[j]!;
+      if ((a.uuid && a.uuid === b.uuid) || a.same === b.same) group[root(j)] = root(i);
+    }
+  }
+  const out = new Set<string>();
+  for (let i = 0; i < firm.length; i++) {
+    const a = firm[i]!;
+    for (let j = i + 1; j < firm.length && firm[j]!.from < a.to; j++) {
+      if (root(i) === root(j)) continue;
+      out.add(key(a.e));
+      out.add(key(firm[j]!.e));
+    }
+  }
+  return out;
+}
+
 export function categoryOf(source: string): string {
   return CATEGORIES.find((c) => c.sources(source))?.id ?? 'events';
 }
