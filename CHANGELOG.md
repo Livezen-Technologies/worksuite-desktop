@@ -39,6 +39,8 @@ person who has to live with the change — what it does, and where it bites.
   not read as "nothing there". When your access changes, results found under the old access are dropped.
 - Where it bites: an older server sends none of this, and search works as before. Offline search is unchanged.
 
+- **The Mac build packages again.** The universal (Intel + Apple silicon) merge stopped at Local AI's native
+  libraries, which come one package per Mac and are the same file in both halves; the builder is now told so.
 - **Security: PDFs are shown with pdf.js 6.3** (was 5.7). pdf.js 5.6–6.2 could run a crafted PDF's script when it
   was opened (GHSA-hq66-cqwq-w95j, high). The file viewer and Drive's PDF covers are the two places it is used;
   nothing else about them changed.

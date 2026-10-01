@@ -62,6 +62,10 @@ module.exports = {
 
   mac: {
     category: 'public.app-category.business',
+    // The universal merge refuses a Mach-O file that is the same in the x64 and arm64 builds unless it is named
+    // here. node-llama-cpp ships each Mac's binaries as their own package (mac-arm64-metal, mac-x64), installed in
+    // both builds and loaded by the one that matches at run time, so they are one-arch files carried in both.
+    x64ArchFiles: '**/node_modules/{node-llama-cpp,@node-llama-cpp}/**',
     target: [
       { target: 'dmg', arch: ['universal'] },
       { target: 'zip', arch: ['universal'] },
