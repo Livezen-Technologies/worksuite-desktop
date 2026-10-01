@@ -24,7 +24,10 @@ import type { ReplyTarget } from './Thread';
 import type { ChatMessage } from './types';
 import { refuseForVisitor, savedReplyQuery, type SavedReply } from './website/profile';
 import { inSlashMenu, SlashMenu, type SlashMenuHandle } from './SlashMenu';
-import { useChatSavedReplies, type RepliesState, type Turn } from './replies';
+import { transcript, useChatSavedReplies, type RepliesState, type Turn } from './replies';
+import { AiTextDialog } from '../ai/AiTextDialog';
+import { AiMenuButton } from '../ai/AiMenuButton';
+import { WRITING_TASKS, type TextTask } from '../ai/textTools';
 import type { WebsiteConversation } from './website/api';
 
 /**
@@ -96,6 +99,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const [asking, setAsking] = useState<{ start: number; word: string; left: number } | null>(null);
   const [pick, setPick] = useState(0);
   const [slash, setSlash] = useState<{ start: number; word: string } | null>(null);
+  const [ai, setAi] = useState<{ task: TextTask; title: string } | null>(null);
   const picked = useRef<Target[]>([]);
   const slashMenu = useRef<SlashMenuHandle>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -566,6 +570,37 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                   <Icon name="warning" size={compact ? 15 : 17} />
                 </button>
               ) : null;
+  // AI tools (worksuite-desktop#53): the draft rewritten, a reply suggested, the conversation summarised — shown first,
+  // used only when the person chooses.
+  const aiItems = [
+    { label: 'Suggest a reply', icon: 'reply', run: () => setAi({ task: 'reply', title: 'Suggested reply' }) },
+    { label: 'Summarise the conversation', icon: 'file-text', run: () => setAi({ task: 'summarize', title: site ? 'Summary of this chat' : `Summary of ${roomName}` }) },
+    { sep: true as const },
+    ...WRITING_TASKS.map((w) => ({ label: w.label, disabled: !text.trim(), run: () => setAi({ task: w.task, title: w.label }) })),
+  ];
+  const aiBtn = !editing ? <AiMenuButton compact items={aiItems} className={cx(tool, '!font-normal')} /> : null;
+  const aiEl = ai ? (
+        <AiTextDialog
+          title={ai.title}
+          task={ai.task}
+          input={() => (ai.task === 'reply' || ai.task === 'summarize' ? transcript(conversation(), ai.task === 'summarize' ? 60 : 20) : text)}
+          actions={
+            ai.task === 'summarize'
+              ? [{ label: 'Copy', icon: 'copy', primary: true, run: (t) => void navigator.clipboard.writeText(t).then(() => toast('success', 'Summary copied.')) }]
+              : [
+                {
+                  label: ai.task === 'reply' ? 'Put in the message box' : 'Replace my message',
+                  primary: true,
+                  run: (t) => {
+                    setText(t);
+                    focus(t.length);
+                  },
+                },
+              ]
+          }
+          onClose={() => setAi(null)}
+        />
+      ) : null;
   const emojiBtn = (
               <button type="button" aria-label="Emoji" title="Emoji" aria-pressed={menu === 'emoji'} onClick={() => setMenu(menu === 'emoji' ? null : 'emoji')} className={cx(tool, menu === 'emoji' && '!bg-selection !text-primary')}>
                 <Icon name="smile" size={compact ? 16 : 18} />
@@ -739,6 +774,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
               ) : (
                 <>
                   {emojiBtn}
+                  {aiBtn}
                   {field}
                   {urgentBtn}
                   {shareBtn}
@@ -765,6 +801,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
           )}
         </div>
         {modalsEl}
+        {aiEl}
       </div>
     );
   }
@@ -800,6 +837,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
               {attachBtn}
               {field}
               {urgentBtn}
+              {aiBtn}
               {emojiBtn}
               {sendBtn}
             </>
@@ -808,6 +846,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       </div>
       {!compact && !recording ? <div className={cx('px-1 text-[11px]', urgent && !editing ? 'font-semibold text-danger' : 'text-ink-3')}>{hint}</div> : null}
       {modalsEl}
+      {aiEl}
     </div>
   );
 }

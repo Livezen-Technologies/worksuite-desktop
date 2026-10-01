@@ -9,6 +9,7 @@ the root CHANGELOG.md.
 **Added**
 
 - type / in the message box for Load saved replies (searchable) and Suggest reply (from the conversation, with Local AI or the workspace's assistant); what is picked goes into the box to edit and is sent only when you send it — in Team Chat, website chats and WhatsApp (#32)
+- AI tools in the message box (#53), for Team Chat and website chats: Suggest a reply, Summarise the conversation, Improve writing, Make shorter, Make professional, Fix spelling and grammar. They use the model on this computer first and online AI only when allowed. The result is shown to check and edit first, then put in the box (never sent by itself) or copied
 
 **Changed**
 

@@ -15,6 +15,9 @@ import type { Stroke } from '../meet/session';
 import { providerLabel, RSVP_LABEL, typeLabel, type AgendaItem, type Detail, type Person, type Rsvp } from './api';
 import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';
+import { AiTextDialog } from '../ai/AiTextDialog';
+import { parseMinutes } from '../ai/textTools';
+import type { ChatMessage } from '../chat/types';
 
 const TABS = ['Summary', 'Agenda', 'People', 'Minutes', 'Files', 'Board', 'Activity'] as const;
 type Tab = (typeof TABS)[number];
@@ -357,6 +360,35 @@ function MinutesTab({ d, canEdit, act }: { d: Detail; canEdit: boolean; act: Act
   const [picked, setPicked] = useState<number[]>(() => d.action_items.filter((a) => !a.task_id).map((a) => a.id));
   const [action, setAction] = useState('');
   const final = !!d.minutes?.finalised_at;
+  // Minutes drafted with AI (worksuite-desktop#53): from the agenda, notes and actions, and the meeting's chat when
+  // it has one. The draft is shown first; used, it fills Summary and Decisions (saved with Save notes) and adds the
+  // actions it lists.
+  const [drafting, setDrafting] = useState<string | null>(null);
+  const [gathering, setGathering] = useState(false);
+  const draftMinutes = async () => {
+    setGathering(true);
+    let chat = '';
+    try {
+      if (d.chat?.room_id && d.chat.member) {
+        const r = await apiGet<{ messages: ChatMessage[] }>('/api/chat/messages', { room_id: d.chat.room_id });
+        chat = r.messages.filter((x) => !x.deleted && x.message?.trim() && x.type !== 'system').slice(-80).map((x) => `${x.sender_name}: ${x.message!.replace(/\s+/g, ' ').trim()}`).join('\n');
+      }
+    } catch {
+      // Without the chat the agenda and notes still make minutes.
+    } finally {
+      setGathering(false);
+    }
+    setDrafting(minutesMaterial(d, { summary, decisions, notes }, chat));
+  };
+  const applyDraft = async (text: string) => {
+    const m = parseMinutes(text);
+    if (m.summary) setSummary(m.summary);
+    if (m.decisions.length) setDecisions(m.decisions.map((x) => `- ${x}`).join('\n'));
+    const fresh = m.actions.filter((t) => !d.action_items.some((a) => a.title.trim().toLowerCase() === t.toLowerCase()));
+    for (const title of fresh) await apiPost(`/api/meetings/${id}/actions`, { title: title.slice(0, 255), priority: 'normal', status: 'open' }).catch(() => undefined);
+    if (fresh.length) await act(async () => undefined, `Added ${fresh.length} action${fresh.length === 1 ? '' : 's'}.`);
+    toast('info', 'The draft is in the minutes. Check it, then choose Save notes.');
+  };
   const area = 'rounded-[8px] border border-line bg-surface px-2.5 py-2 text-[13px] text-ink outline-none focus:border-primary disabled:bg-subtle';
   const save = useMutation({
     mutationFn: (finalise: boolean) => apiPut(`/api/meetings/${id}/minutes`, { summary, decisions, notes, finalise }),
@@ -368,7 +400,21 @@ function MinutesTab({ d, canEdit, act }: { d: Detail; canEdit: boolean; act: Act
       <div className="flex items-center gap-2">
         <h2 className="flex-1 text-[15px] font-bold text-ink">Minutes</h2>
         {final ? <Chip tone="success">Final · {dateLabel(d.minutes!.finalised_at)}</Chip> : null}
+        {canEdit && !final ? (
+          <Button size="sm" icon="sparkles" loading={gathering} onClick={() => void draftMinutes()} title="Draft the minutes from the agenda, notes and the meeting's chat">
+            Draft minutes with AI
+          </Button>
+        ) : null}
       </div>
+      {drafting !== null ? (
+        <AiTextDialog
+          title="Draft minutes"
+          task="minutes"
+          input={() => drafting}
+          actions={[{ label: 'Use in the minutes', primary: true, run: (t) => applyDraft(t) }]}
+          onClose={() => setDrafting(null)}
+        />
+      ) : null}
       <b className="text-ink">Decisions</b>
       <textarea value={decisions} disabled={!canEdit || final} onChange={(e) => setDecisions(e.target.value)} rows={3} className={area} />
       <b className="text-ink">Discussion summary</b>
@@ -502,4 +548,23 @@ function ActivityTab({ id }: { id: number }) {
       {!q.isLoading && !q.data?.activity.length ? <p className="text-ink-3">Nothing yet.</p> : null}
     </>
   );
+}
+
+/** What minutes are drafted from (worksuite-desktop#53): the meeting, who came, the agenda and its notes, what is written so far, and its chat. */
+export function minutesMaterial(d: Detail, written: { summary: string; decisions: string; notes: string }, chat: string): string {
+  const m = d.meeting;
+  const came = d.participants.filter((p) => p.attendance === 'present' || p.attendance === 'attended' || (p.attended_minutes ?? 0) > 0).map((p) => p.name);
+  const lines = [
+    `Meeting: ${m.title}`,
+    m.start_at ? `When: ${dateLabel(m.start_at)} ${timeLabel(m.start_at)}` : null,
+    `Participants: ${(came.length ? came : d.participants.map((p) => p.name)).join(', ') || 'not recorded'}`,
+    m.description ? `Purpose: ${m.description}` : null,
+    d.agenda.length ? `Agenda:\n${d.agenda.map((a, i) => `${i + 1}. ${a.title}${a.presenter ? ` (${a.presenter})` : ''}${a.notes?.trim() ? `\n   Notes: ${a.notes.trim()}` : ''}`).join('\n')}` : null,
+    written.decisions.trim() ? `Decisions noted so far:\n${written.decisions.trim()}` : null,
+    written.summary.trim() ? `Summary written so far:\n${written.summary.trim()}` : null,
+    written.notes.trim() ? `Notes:\n${written.notes.trim()}` : null,
+    d.action_items.length ? `Actions already recorded:\n${d.action_items.map((a) => `- ${a.title}${a.assignee ? ` (${a.assignee})` : ''}`).join('\n')}` : null,
+    chat ? `The meeting's chat:\n${chat}` : null,
+  ];
+  return lines.filter(Boolean).join('\n\n');
 }

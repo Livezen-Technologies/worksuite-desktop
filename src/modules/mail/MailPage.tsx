@@ -17,6 +17,9 @@ import { escapeHtml, mailFrameDoc, parseAddresses, sanitizeMailHtml, textToHtml 
 import { Select } from '../../components/Select';
 import { openPdf } from '../pdf/open';
 import { SidePanel } from '../../components/SidePanel';
+import { AiTextDialog } from '../ai/AiTextDialog';
+import { AiMenuButton } from '../ai/AiMenuButton';
+import { WRITING_TASKS, type TextTask } from '../ai/textTools';
 
 /** A PDF attachment, by its type or its name. */
 const isPdf = (a: { name: string; mime: string }) => a.mime === 'application/pdf' || /\.pdf$/i.test(a.name);
@@ -264,6 +267,7 @@ interface ComposeSeed {
 
 function MessageView({ uid, folder, mailbox, onReply, onGone }: { uid: string; folder: string; mailbox: string | null; onReply: (s: ComposeSeed) => void; onGone: () => void }) {
   const qc = useQueryClient();
+  const [summary, setSummary] = useState(false);
   const { openInWindow, route } = useTab();
   const q = useQuery({
     queryKey: ['mail', 'message', mailbox, folder, uid],
@@ -302,6 +306,9 @@ function MessageView({ uid, folder, mailbox, onReply, onGone }: { uid: string; f
         <Button onClick={() => onReply({ mode: 'reply', to: m.from_email, subject: re(m.subject), quote, inReplyTo: m.message_id, mailbox })}>Reply</Button>
         <Button onClick={() => onReply({ mode: 'reply_all', to: [m.from_email, ...m.to].join(', '), cc: m.cc.join(', '), subject: re(m.subject), quote, inReplyTo: m.message_id, mailbox })}>Reply all</Button>
         <Button onClick={() => onReply({ mode: 'forward', subject: /^fwd?:/i.test(m.subject) ? m.subject : `Fwd: ${m.subject}`, quote, mailbox })}>Forward</Button>
+        <Button icon="sparkles" onClick={() => setSummary(true)} title="Summarise this email with AI">
+          Summarise
+        </Button>
         <div className="flex-1" />
         {q.data?.offline ? <OfflineNote cachedAt={q.data.cachedAt} /> : null}
         <IconButton icon={m.is_starred ? 'flag' : 'flag'} label={m.is_starred ? 'Remove flag' : 'Flag'} active={m.is_starred} onClick={() => void act(m.is_starred ? 'unstar' : 'star')} />
@@ -327,6 +334,15 @@ function MessageView({ uid, folder, mailbox, onReply, onGone }: { uid: string; f
         </div>
         {clean.blockedImages > 0 ? <div className="mt-3 rounded-[8px] bg-subtle px-3 py-1.5 text-[12px] text-ink-2">{clean.blockedImages} remote image{clean.blockedImages === 1 ? ' was' : 's were'} blocked to protect your privacy.</div> : null}
       </div>
+      {summary ? (
+        <AiTextDialog
+          title="Summary of this email"
+          task="summarize"
+          input={() => `From: ${m.from_name} <${m.from_email}>\nTo: ${m.to.join(', ')}\nSubject: ${m.subject}\nDate: ${dateLabel(m.created_at)}\n\n${plainText(clean.html)}`}
+          actions={[{ label: 'Copy', icon: 'copy', primary: true, run: (t) => void navigator.clipboard.writeText(t).then(() => toast('success', 'Summary copied.')) }]}
+          onClose={() => setSummary(false)}
+        />
+      ) : null}
       <iframe title="Message" sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={mailFrameDoc(clean.html)} className="mx-5 mt-3 min-h-0 flex-1 rounded-[8px] border-0 bg-white" />
       {m.attachments.length ? (
         <div className="flex flex-wrap gap-2 border-t border-line px-6 py-3">
@@ -370,6 +386,14 @@ function Compose({ seed, boxes, defaultBox, onClose }: { seed: ComposeSeed; boxe
   const [showCc, setShowCc] = useState(!!seed.cc);
   const v = draft.value;
   const set = (patch: Partial<typeof v>) => draft.setValue({ ...v, ...patch });
+  // AI writing tools (worksuite-desktop#53) work on what the person wrote, never on the quoted email below it.
+  const [ai, setAi] = useState<{ task: TextTask; title: string } | null>(null);
+  const [own, quoted] = splitQuote(v.body, seed.quote);
+  const original = seed.quote ? unquote(seed.quote) : '';
+  const aiItems = [
+    ...(original && seed.mode !== 'forward' ? [{ label: 'Draft a reply', icon: 'reply', run: () => setAi({ task: 'reply', title: 'Draft a reply' }) }] : []),
+    ...WRITING_TASKS.map((w) => ({ label: w.label, disabled: !own.trim(), run: () => setAi({ task: w.task, title: w.label }) })),
+  ];
   const send = async () => {
     setSending(true);
     setError(null);
@@ -443,6 +467,23 @@ function Compose({ seed, boxes, defaultBox, onClose }: { seed: ComposeSeed; boxe
           </div>
         ) : null}
         <TextField label="Subject" value={v.subject} onChange={(e) => set({ subject: e.target.value })} />
+        <div className="-mb-1 flex items-center gap-2">
+          <AiMenuButton items={aiItems} label="Write with AI" />
+          <span className="text-[11.5px] text-ink-3">{own.trim() ? 'Works on what you wrote; the quoted email is left as it is.' : original ? 'Draft a reply from the email below, or write and then improve it.' : 'Write something, then improve it.'}</span>
+        </div>
+        {ai ? (
+          <AiTextDialog
+            title={ai.title}
+            task={ai.task}
+            input={() =>
+              ai.task === 'reply'
+                ? `Subject: ${v.subject}\n\nThe email I am replying to:\n${original}${own.trim() ? `\n\nWhat I want to say (my notes):\n${own.trim()}` : ''}`
+                : own.trim()
+            }
+            actions={[{ label: own.trim() ? 'Replace my text' : 'Use this', primary: true, run: (t) => set({ body: joinQuote(t, quoted) }) }]}
+            onClose={() => setAi(null)}
+          />
+        ) : null}
         <textarea value={v.body} onChange={(e) => set({ body: e.target.value })} aria-label="Message" rows={14} autoFocus={!!v.to} className="min-h-[260px] rounded-[8px] border border-line bg-surface p-3 text-[13.5px] leading-relaxed text-ink outline-none focus:border-primary" />
         {error ? <ErrorNote error={error} /> : null}
         <p className="text-[12px] text-ink-3">Attachments and formatting are available in WorkSuite Mail on the web; the desktop composer sends plain text for now.</p>
@@ -451,3 +492,28 @@ function Compose({ seed, boxes, defaultBox, onClose }: { seed: ComposeSeed; boxe
   );
 }
 
+/** An email's text, without its markup. */
+function plainText(html: string): string {
+  return new DOMParser().parseFromString(html, 'text/html').body.textContent?.replace(/\n{3,}/g, '\n\n').trim() ?? '';
+}
+
+/** The person's own words and the quoted email below them (worksuite-desktop#53). */
+export function splitQuote(body: string, quote?: string): [string, string] {
+  if (quote && body.endsWith(quote)) return [body.slice(0, body.length - quote.length), quote];
+  const m = /\n\nOn [^\n]* wrote:\n>/.exec(body);
+  return m ? [body.slice(0, m.index), body.slice(m.index)] : [body, ''];
+}
+
+export function joinQuote(own: string, quoted: string): string {
+  return quoted ? `${own.trimEnd()}${quoted}` : own;
+}
+
+/** The quoted email as plain lines. */
+export function unquote(quote: string): string {
+  return quote
+    .replace(/^\s+/, '')
+    .split('\n')
+    .map((l) => l.replace(/^> ?/, ''))
+    .join('\n')
+    .trim();
+}
