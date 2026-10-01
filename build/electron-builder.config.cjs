@@ -63,9 +63,11 @@ module.exports = {
   mac: {
     category: 'public.app-category.business',
     // The universal merge refuses a Mach-O file that is the same in the x64 and arm64 builds unless it is named
-    // here. node-llama-cpp ships each Mac's binaries as their own package (mac-arm64-metal, mac-x64), installed in
-    // both builds and loaded by the one that matches at run time, so they are one-arch files carried in both.
-    x64ArchFiles: '**/node_modules/{node-llama-cpp,@node-llama-cpp}/**',
+    // here. node-llama-cpp and @reflink ship each Mac's binaries as their own package (mac-arm64-metal, mac-x64;
+    // reflink-darwin-arm64, -x64), installed in both builds and loaded by the one that matches at run time, so
+    // they are one-arch files carried in both. (These are the lockfile's only darwin-only packages besides
+    // @napi-rs, which is left out above.)
+    x64ArchFiles: '**/node_modules/{node-llama-cpp,@node-llama-cpp,@reflink}/**',
     target: [
       { target: 'dmg', arch: ['universal'] },
       { target: 'zip', arch: ['universal'] },
