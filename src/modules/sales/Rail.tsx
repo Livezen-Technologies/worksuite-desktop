@@ -83,7 +83,7 @@ export function SalesRail({ view, status, onPick, onNew, counts, org, orgs, onOr
     <nav aria-label="Orders" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
       <div className="flex flex-col gap-2 px-2.5 pt-3.5 pb-1">
         {canCreate ? (
-          <button type="button" onClick={onNew} className="flex h-[38px] items-center justify-center gap-1.5 rounded-[9px] bg-primary font-bold text-white hover:bg-primary-hover">
+          <button type="button" data-guide="sales.new-order" onClick={onNew} className="flex h-[38px] items-center justify-center gap-1.5 rounded-[9px] bg-primary font-bold text-white hover:bg-primary-hover">
             <Icon name="plus" size={16} /> New order
           </button>
         ) : null}

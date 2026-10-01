@@ -229,7 +229,7 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
           <button type="button" aria-label="Starred messages" title="Starred messages" onClick={onStarred} className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-line text-ink-2 hover:bg-subtle">
             <Icon name="star" size={15} />
           </button>
-          <button type="button" aria-label="New conversation" title="New conversation" onClick={onNew} className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-primary text-white hover:bg-primary-hover">
+          <button type="button" data-guide="chat.new" aria-label="New conversation" title="New conversation" onClick={onNew} className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-primary text-white hover:bg-primary-hover">
             <Icon name="plus" size={17} />
           </button>
         </div>

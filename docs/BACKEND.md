@@ -743,6 +743,24 @@ Access keeps the person's choices for later.
 The person's own choices (Settings › AI Assistant › Module Access, "For me") are kept on the computer in
 `preferences.ai.moduleAccess`, and can only narrow what the server allows.
 
+## Help & Guide and support requests (worksuite-desktop#54)
+
+The AI Assistant answers "how do I…" questions from guides that ship with each version of the desktop
+(`src/modules/ai/help/catalog.ts`), so nothing on the server is needed to answer them. Two optional endpoints
+collect what the guides cannot answer. A server without them still works: the desktop keeps going without feedback,
+and offers to copy a support request instead of sending it.
+
+- **`POST /api/ai/help/feedback {guide, question, helpful, version}`** records "Was this helpful?" for a guide.
+  `question` is what the person typed, or null when they picked the guide from the list. No answer is needed.
+- **`POST /api/desktop/support {kind: 'support'|'issue', subject, body, details}`** sends a Contact Support or
+  Report an Issue request to WorkSuite support for the person's organization.
+  - `details` holds `version`, `platform` and `os`, each null when the person left them out, plus `screen` (the
+    route) and `language`.
+  - The person reads and edits all of it before it is sent.
+  - The endpoint answers `{reference}`, and the desktop shows that reference.
+  - It is not the company helpdesk (`/api/tickets`), which needs the "Reply to tickets" permission and serves the
+    company's own customers.
+
 ## Not provided yet
 
 - `monitoring_policy` is always `null`, and every `feature_flags` entry is

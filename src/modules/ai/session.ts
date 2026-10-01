@@ -14,6 +14,13 @@ export interface AskEntry {
   fallback?: string;
   /** Online AI was needed and could not be used: offer Local AI's setup beside Try again. */
   needsSetup?: boolean;
+  /** Help & Guide (worksuite-desktop#54): answered with this guide from the app, and others that also match. */
+  guide?: string;
+  others?: string[];
+  /** A how-to question no guide covers: say so and offer the assistant anyway, or support. */
+  noGuide?: boolean;
+  /** The question a guide or noGuide entry answers. */
+  question?: string;
   /** A failed answer: what to send again for Try again. */
   retry?: { full: string; opts: SendOptions };
 }
@@ -60,6 +67,8 @@ export interface SendOptions {
   localTools?: { tools: AiTool[]; allow: (t: AiTool) => string | null; off: string[] };
   /** WorkSuite AI: the modules this person switched off (Settings › AI Assistant › Module Access). */
   moduleAccess?: { read: string[]; write: string[] };
+  /** Said to the model before the question: the guide being followed, that instructions are wanted, the language. */
+  context?: string;
 }
 
 const LOCAL_SYSTEM = 'You are WorkSuite\'s assistant, running on this computer. Answer clearly and briefly. You cannot see the person\'s WorkSuite data or change anything right now (WorkSuite\'s module functions need a connection, and the modules turned on in Settings › AI Assistant › Module Access); say so when a question needs it.';
@@ -91,7 +100,12 @@ export function carriedOver(before: AskEntry[]): string {
  */
 export interface AskSession {
   store: Store<AskState>;
-  send(opts: SendOptions): Promise<void>;
+  /** Asks the question in the box — or `question`, when given (Ask the assistant anyway). */
+  send(opts: SendOptions, question?: string): Promise<void>;
+  /** A how-to question answered with a guide from the app, no model asked (worksuite-desktop#54). */
+  showGuide(question: string | null, guide: string, text: string, others?: string[]): void;
+  /** A how-to question no guide covers. */
+  noGuide(question: string): void;
   /** Asks the question whose answer failed again, in place of the failure. */
   retry(): Promise<void>;
   /** Stops a local answer (the model on this computer); a server answer cannot be called back. */
@@ -200,15 +214,27 @@ export function createAskSession(): AskSession {
     }
   };
 
-  const send = async (opts: SendOptions) => {
+  const send = async (opts: SendOptions, question?: string) => {
     const s = store.get();
-    const q = s.text.trim();
+    const q = (question ?? s.text).trim();
     if (!q || s.busy) return;
     const { selection } = opts;
     // A selection from another app goes with the question, fenced, as material to work on.
-    const full = selection && selection.trim() && s.entries.length === 0 ? `${q}\n\nThe text I selected:\n"""\n${selection.trim().slice(0, 6000)}\n"""` : q;
-    store.set({ text: '', entries: [...s.entries, { role: 'user', text: q }] });
+    const asked = selection && selection.trim() && s.entries.length === 0 ? `${q}\n\nThe text I selected:\n"""\n${selection.trim().slice(0, 6000)}\n"""` : q;
+    const full = opts.context ? `${opts.context}\n\nQuestion: ${asked}` : asked;
+    store.set({ text: question === undefined ? '' : s.text, entries: [...s.entries, { role: 'user', text: q }] });
     await run(full, opts, s.entries);
+  };
+
+  // The guide's own text is the entry's text: what a follow-up question is answered from, here or online.
+  const showGuide = (question: string | null, guide: string, text: string, others: string[] = []) => {
+    store.set((s) => ({
+      text: question ? '' : s.text,
+      entries: [...s.entries, ...(question ? [{ role: 'user' as const, text: question }] : []), { role: 'assistant' as const, text, guide, others, question: question ?? undefined }],
+    }));
+  };
+  const noGuide = (question: string) => {
+    store.set((s) => ({ text: '', entries: [...s.entries, { role: 'user', text: question }, { role: 'assistant', text: '', noGuide: true, question }] }));
   };
 
   const retry = async () => {
@@ -224,6 +250,8 @@ export function createAskSession(): AskSession {
   return {
     store,
     send,
+    showGuide,
+    noGuide,
     retry,
     cancel: () => running?.cancel(),
     async attach() {

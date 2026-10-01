@@ -15,7 +15,7 @@ import { useWriter, write, writerProblem, WRITER_MAX, type WriterInfo } from './
  * Online, a tool uses the writing assistant's own action when the server offers it (`improve`, `shorten`,
  * `professional`, `grammar`, `reply`, `summarize`, `minutes`), and otherwise asks the AI Assistant.
  */
-export type TextTask = 'improve' | 'shorten' | 'professional' | 'grammar' | 'reply' | 'summarize' | 'minutes';
+export type TextTask = 'improve' | 'shorten' | 'professional' | 'grammar' | 'reply' | 'summarize' | 'minutes' | 'translate';
 
 export const WRITING_TASKS: Array<{ task: Extract<TextTask, 'improve' | 'shorten' | 'professional' | 'grammar'>; label: string }> = [
   { task: 'improve', label: 'Improve writing' },
@@ -32,6 +32,7 @@ const INSTRUCTIONS: Record<TextTask, string> = {
   grammar: 'Correct the spelling, grammar and punctuation of the text. Change nothing else.',
   reply: 'Write the reply the person (marked "me") could send next. Write it as them, in the language and tone of the conversation, short and ready to send, with no greeting line unless the conversation uses one.',
   summarize: 'Summarise the conversation for someone who missed it, in a few short bullet points: what it is about, what was decided, and what is still open or who is doing what next.',
+  translate: 'Translate the text into the language named on its first line, and return only the translation of the rest. Keep every word inside “ ” exactly as it is written: those are names on screen. Keep the numbering and line breaks.',
   minutes:
     'Write the minutes of the meeting from the material below. Use exactly these three headings, each on its own line, and nothing before them:\nSUMMARY:\n(a short paragraph)\nDECISIONS:\n(one decision per line starting with "- ", or "- None")\nACTIONS:\n(one action per line starting with "- ", with the person and due date when they are known, or "- None")',
 };

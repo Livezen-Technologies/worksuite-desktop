@@ -148,7 +148,7 @@ export function ExpensesRail({
       <div className="flex flex-col gap-2 px-2.5 pt-3.5 pb-1">
         <OrgSwitcher orgs={orgs} selected={selected} onSelect={onSelect} onFavourite={onFavourite} />
         {onFile ? (
-          <button type="button" onClick={onFile} className="flex h-8 items-center justify-center gap-1.5 rounded-[8px] bg-primary text-[12.5px] font-bold text-white hover:bg-primary-hover">
+          <button type="button" data-guide="expenses.file" onClick={onFile} className="flex h-8 items-center justify-center gap-1.5 rounded-[8px] bg-primary text-[12.5px] font-bold text-white hover:bg-primary-hover">
             <Icon name="plus" size={14} /> File an expense
           </button>
         ) : null}

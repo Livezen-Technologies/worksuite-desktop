@@ -569,7 +569,7 @@ function SelectionBar({ items, size, onClear }: { items: Item[]; size: number; o
   return (
     <div role="toolbar" aria-label="Selection" className="mx-6 mb-2 flex h-[42px] shrink-0 items-center gap-1 rounded-[10px] bg-[#0F1B3D] pr-2 pl-3.5 text-[12.5px] font-semibold text-white">
       <span className="mr-2.5">{items.length} selected{size ? ` · ${bytes(size)}` : ''}</span>
-      {one && can(one.f.access, 'share') ? <button type="button" className={btn} onClick={() => d.share(one)}>Share…</button> : null}
+      {one && can(one.f.access, 'share') ? <button type="button" data-guide="files.share" className={btn} onClick={() => d.share(one)}>Share…</button> : null}
       {all('move') ? <button type="button" className={btn} onClick={() => d.move(items, 'move')}>Move…</button> : null}
       {files.length === items.length && all('download') ? <button type="button" className={btn} onClick={() => d.move(items, 'copy')}>Copy to…</button> : null}
       {files.length && files.every((f) => can(f.access, 'download')) ? <button type="button" className={btn} onClick={() => d.download(files)}>Download</button> : null}

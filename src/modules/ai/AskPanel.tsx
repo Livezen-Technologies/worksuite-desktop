@@ -3,16 +3,19 @@ import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { useStickToBottom } from '../../components/useStickToBottom';
 import { app } from '../../core/app-state';
-import { t } from '../../core/i18n';
+import { LANGUAGES, t, useLanguage } from '../../core/i18n';
 import { localReady, useLocalModels } from '../../core/local-ai';
 import { useStore } from '../../core/store';
-import { navigate } from '../../core/tabs';
+import { navigate, tabsStore } from '../../core/tabs';
 import { ActionCard } from './ActionCard';
 import { LocalSetup } from './LocalSetup';
 import { useAssistant, type PendingAction, type Surface } from './assistant';
 import { createAskSession, type AskEntry, type AskSession } from './session';
 import { effective, personalOff, toolAllowed, useLocalTools, useOrgAccess } from './tools';
 import { Checkbox } from '../../components/Checkbox';
+import { GUIDES } from './help/catalog';
+import { findGuides, guideText, isHowTo, moduleOf, suggestions, type Guide } from './help/guides';
+import { GuideCard, guideById, HelpPanel, NoGuideCard, SupportDialog, type SupportKind } from './help/HelpUi';
 
 /**
  * Ask the assistant (WS-AI-SRS-001 FR-DSK-AI-01/02/04): the server's own
@@ -109,12 +112,53 @@ export function AskPanel({
   // Where the next answer comes from: files and the tab are read online.
   const viaLocal = local && refs.length === 0;
 
+  // Help & Guide (worksuite-desktop#54): the app the person is in, their language, and the support dialog.
+  const screen = useStore(tabsStore, (s) => s.tabs.find((x) => x.id === s.activeId)?.route ?? null);
+  const module = moduleOf(screen);
+  const language = useLanguage();
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [support, setSupport] = useState<{ kind: SupportKind; question?: string } | null>(null);
+  const languageNote = language !== 'en' ? ` Answer in ${(LANGUAGES.find((l) => l.id === language)?.label ?? language).replace(/^.*\((.*)\)$/, '$1')}.` : '';
+  const base = () => ({ surface, refs, local, online, onlineWhy, selection, localTools, moduleAccess: personalOff(accessPrefs, 'worksuite') });
+  const openGuide = (g: Guide, question: string | null = null) => {
+    toEnd();
+    setHelpOpen(false);
+    session.showGuide(question, g.id, guideText(g));
+  };
+
   const send = () => {
-    if (!text.trim() || busy) return Promise.resolve();
+    const q = text.trim();
+    if (!q || busy) return Promise.resolve();
     // Asking is looking at the answer: back to the end, following again, from wherever the reader had scrolled.
     toEnd();
-    return session.send({ surface, refs, local, online, onlineWhy, selection, localTools, moduleAccess: personalOff(accessPrefs, 'worksuite') });
+    // How to do something, not a request to do it: the checked guide of this version answers, no model asked.
+    if (isHowTo(q) && refs.length === 0) {
+      const found = findGuides(GUIDES, q, module);
+      if (found.length) {
+        session.showGuide(q, found[0]!.id, guideText(found[0]!), found.slice(1).map((g) => g.id));
+        return Promise.resolve();
+      }
+      session.noGuide(q);
+      return Promise.resolve();
+    }
+    // A follow-up while a guide is open: answered from that guide, by the model here first.
+    const lastGuide = guideById([...entries].reverse().find((e) => e.role === 'assistant' && !e.error)?.guide);
+    const context = lastGuide
+      ? `The person is following this WorkSuite guide and asks a follow-up question. Answer from the guide, use the names on screen exactly as written in “ ”, and say so if the guide does not cover it. Do not do anything for them.${languageNote}\n${guideText(lastGuide)}`
+      : languageNote
+        ? languageNote.trim()
+        : undefined;
+    return session.send({ ...base(), context });
   };
+  /** No guide covers it: the assistant explains in general terms, and is told this is not a request to act. */
+  const askAnyway = (question: string) =>
+    session.send(
+      {
+        ...base(),
+        context: `The person is asking how to do something in WorkSuite. They want instructions, not for you to do it: explain the steps in general terms, name the permission it may need, and do not take any action. Say that these steps are not from a checked WorkSuite guide.${languageNote}`,
+      },
+      question,
+    );
   const attach = () => session.attach();
 
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -153,13 +197,31 @@ export function AskPanel({
             onStart={() => input.current?.focus()}
           />
         ) : null}
+        {helpOpen ? <HelpPanel module={module} onOpenGuide={(g) => openGuide(g)} onSupport={(kind) => setSupport({ kind })} onClose={() => setHelpOpen(false)} /> : null}
         {entries.length === 0 && !off ? (
-          <p className="text-[12.5px] text-ink-3">
-            Ask about your work — tasks, mail, files, meetings, customers. The assistant sees only what you can open, and changes nothing until you confirm it.
-          </p>
+          <div className="space-y-2">
+            <p className="text-[12.5px] text-ink-3">
+              Ask about your work — tasks, mail, files, meetings, customers — or how to do something in WorkSuite. The assistant sees only what you can open, and changes nothing until you confirm it.
+            </p>
+            {!helpOpen ? (
+              <div className="flex flex-wrap gap-1.5" aria-label="Suggested guides">
+                {suggestions(GUIDES, module, 3).map((g) => (
+                  <button key={g.id} type="button" onClick={() => openGuide(g)} className="rounded-full border border-line px-2.5 py-1 text-[12px] font-semibold text-ink hover:bg-subtle">
+                    {g.title}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
         ) : null}
         {entries.map((e, i) => (
-          <Bubble key={i} e={e} elsewhere={reviewElsewhere} onRetry={e.retry && i === entries.length - 1 && !busy ? () => void session.retry() : undefined} onSetup={surface === 'assistant.panel' ? () => navigate('/settings/local-ai') : undefined} />
+          e.guide && guideById(e.guide) ? (
+            <GuideCard key={i} guide={guideById(e.guide)!} question={e.question} others={(e.others ?? []).map(guideById).filter((g): g is Guide => !!g)} onOpenGuide={(g) => openGuide(g)} onSupport={(kind, q) => setSupport({ kind, question: q })} />
+          ) : e.noGuide ? (
+            <NoGuideCard key={i} question={e.question ?? ''} onAsk={!busy && (local || online) ? () => void askAnyway(e.question ?? '') : undefined} onSupport={(kind, q) => setSupport({ kind, question: q })} />
+          ) : (
+            <Bubble key={i} e={e} elsewhere={reviewElsewhere} onRetry={e.retry && i === entries.length - 1 && !busy ? () => void session.retry() : undefined} onSetup={surface === 'assistant.panel' ? () => navigate('/settings/local-ai') : undefined} />
+          )
         ))}
         {/* A growing answer is not read out word by word: the whole one is, once it lands. */}
         {streaming ? (
@@ -252,6 +314,9 @@ export function AskPanel({
             <Icon name={viaLocal ? 'cpu' : 'sparkles'} size={11} className="mr-1 inline align-[-1px]" />
             {viaLocal ? (localTools ? 'Processing locally · WorkSuite data from the server' : 'Processing locally') : 'Using online AI'} · Enter to send
           </span>
+          <button type="button" onClick={() => setHelpOpen(!helpOpen)} aria-expanded={helpOpen} className="flex shrink-0 items-center gap-1 font-semibold text-ink-2 hover:text-ink">
+            <Icon name="help" size={12} /> Help &amp; Guide
+          </button>
           {given && entries.length > 0 && !busy ? (
             <button type="button" onClick={() => session.reset()} className="shrink-0 font-semibold text-ink-2 hover:text-ink">
               New conversation
@@ -259,6 +324,7 @@ export function AskPanel({
           ) : null}
         </div>
       </div>
+      {support ? <SupportDialog kind={support.kind} question={support.question} screen={screen} onClose={() => setSupport(null)} /> : null}
     </div>
   );
 }

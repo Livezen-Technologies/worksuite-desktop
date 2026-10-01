@@ -19,7 +19,7 @@ export function Rail({ scope, counts, lists, onScope, onNew }: { scope: Scope; c
 
   return (
     <nav aria-label="Task views and lists" className="flex w-[220px] shrink-0 flex-col gap-px overflow-y-auto border-r border-line bg-surface px-2.5 py-3.5 scroll-thin">
-      <button type="button" onClick={onNew} title="New task (N)" className="mb-2.5 flex h-[38px] shrink-0 items-center justify-center gap-1.5 rounded-[9px] bg-primary font-bold text-white hover:bg-primary-hover">
+      <button type="button" data-guide="tasks.new-task" onClick={onNew} title="New task (N)" className="mb-2.5 flex h-[38px] shrink-0 items-center justify-center gap-1.5 rounded-[9px] bg-primary font-bold text-white hover:bg-primary-hover">
         <Icon name="plus" size={16} /> New task
       </button>
       {SCOPES.map((s) => (

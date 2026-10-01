@@ -197,7 +197,7 @@ function FolderPane({ boxes, box, folder, onCompose, onPick, cacheDays, loading,
   return (
     <div className="flex w-[250px] shrink-0 flex-col border-r border-line bg-surface">
       <div className="p-4">
-        <Button variant="primary" size="lg" icon="plus" className="w-full" onClick={onCompose}>
+        <Button data-guide="mail.compose" variant="primary" size="lg" icon="plus" className="w-full" onClick={onCompose}>
           Compose
         </Button>
       </div>

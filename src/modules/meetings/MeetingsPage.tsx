@@ -63,7 +63,7 @@ export default function MeetingsPage(_props: ModuleProps) {
           <h1 className="flex-1 text-[22px] font-bold text-ink">Meetings</h1>
           <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search meetings" placeholder="Search…" className="h-9 w-64 rounded-[8px] border border-line bg-surface px-2.5 text-ink outline-none focus:border-primary" />
           {dash.data?.can.schedule ? (
-            <button type="button" onClick={() => setScheduling(true)} className="h-9 rounded-[8px] bg-primary px-3.5 font-bold text-white hover:bg-primary-hover">
+            <button type="button" data-guide="meetings.schedule" onClick={() => setScheduling(true)} className="h-9 rounded-[8px] bg-primary px-3.5 font-bold text-white hover:bg-primary-hover">
               Schedule a meeting
             </button>
           ) : null}

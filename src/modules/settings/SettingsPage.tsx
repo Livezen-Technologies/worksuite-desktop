@@ -437,7 +437,9 @@ function AiSection({ prefs }: { prefs: Preferences }) {
             : 'Only the model on this computer answers, and nothing you ask leaves it. Without one, or for files and tabs, the assistant says it cannot help.'
         }
       >
-        <Switch label="Allow online fallback" checked={a.onlineFallback ?? true} onChange={(v) => set({ onlineFallback: v })} />
+        <span data-guide="settings.online-fallback" className="inline-flex">
+          <Switch label="Allow online fallback" checked={a.onlineFallback ?? true} onChange={(v) => set({ onlineFallback: v })} />
+        </span>
       </Row>
       <Row label="Sound for new answers" hint="A short chime when an answer arrives while the assistant is closed or minimized.">
         <Switch label="Sound for new answers" checked={a.sound} onChange={(v) => set({ sound: v })} />
@@ -510,7 +512,7 @@ function PinRow({ set }: { set: boolean }) {
   return (
     <Row label="PIN" hint={set ? 'Unlocks WorkSuite on this computer, also offline. Five wrong tries sign you out.' : 'Set a 4 to 8 digit PIN to unlock WorkSuite on this computer, also offline.'}>
       <div className="flex gap-2">
-        <Button icon="lock" onClick={() => setOpen(true)}>
+        <Button data-guide="settings.set-pin" icon="lock" onClick={() => setOpen(true)}>
           {set ? 'Change PIN' : 'Set PIN'}
         </Button>
         {set ? (
@@ -936,7 +938,7 @@ export function LocalAISection() {
               </div>
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                 {v.state === 'available' || v.state === 'failed' ? (
-                  <Button size="sm" icon="download" loading={busy === `i:${m.id}`} onClick={() => run(`i:${m.id}`, call('ai:localInstall', { id: m.id }))}>
+                  <Button data-guide="settings.local-ai-download" size="sm" icon="download" loading={busy === `i:${m.id}`} onClick={() => run(`i:${m.id}`, call('ai:localInstall', { id: m.id }))}>
                     {v.state === 'failed' ? 'Try again' : 'Download and set up'}
                   </Button>
                 ) : null}

@@ -263,7 +263,7 @@ export default function CalendarPage(_props: ModuleProps) {
     <div className="relative flex h-full bg-surface text-[13px]">
       <SidePanel id="calendar" label="the calendars">
         <aside aria-label="Calendars" className="flex w-[250px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-line px-3 py-3.5 scroll-thin">
-          <button type="button" onClick={newEvent} title="New event (N)" className="flex h-[38px] shrink-0 items-center justify-center gap-1.5 rounded-[9px] bg-primary font-bold text-white hover:bg-primary-hover">
+          <button type="button" data-guide="calendar.new-event" onClick={newEvent} title="New event (N)" className="flex h-[38px] shrink-0 items-center justify-center gap-1.5 rounded-[9px] bg-primary font-bold text-white hover:bg-primary-hover">
             <Icon name="plus" size={16} /> New event
           </button>
           <MiniMonth month={mini} today={today} range={view === 'month' ? [] : days} selected={date} onMonth={(n) => setMini(addMonths(mini, n))} onPick={(x) => set(view === 'month' ? 'day' : view, x)} />
