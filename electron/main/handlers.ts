@@ -449,6 +449,13 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     ctx.settings.update({ meetRecording: { ...ctx.settings.effective().meetRecording, localFolder: res.filePaths[0] } });
     return res.filePaths[0];
   });
+  // Speech to text on this computer (worksuite-desktop#81).
+  router.handle('stt:status', () => ctx.speech.status());
+  router.handle('stt:chooseModel', (_i, c) => ctx.speech.chooseModel(winOf(c.sender) ?? null));
+  router.handle('stt:removeModel', () => ctx.speech.removeModel());
+  router.handle('stt:transcribe', async (input) => ({ segments: await ctx.speech.transcribe(input.wav, input.language) }));
+  router.handle('speech:ready', (input, c) => ctx.speech.onReady(c.sender.id, input));
+  router.handle('speech:result', (input, c) => ctx.speech.onResult(c.sender.id, input));
   router.handle('files:chooseDownloadFolder', async (_i, c) => {
     const w = winOf(c.sender);
     const opts: Electron.OpenDialogOptions = { title: 'Choose where downloads are saved', defaultPath: ctx.settings.effective().downloadFolder, properties: ['openDirectory', 'createDirectory'] };
@@ -515,6 +522,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       ? `/api/share/oms/${input.orderPdf}/pdf`
       : input.minutesExport
       ? `/api/meetings/${input.minutesExport.meeting}/minutes/export?format=${input.minutesExport.format}`
+      : input.transcriptExport
+      ? `/api/meetings/transcripts/${input.transcriptExport.id}/export?format=${input.transcriptExport.format}`
       : input.tenderDocument
       ? `/api/tenders/documents/${input.tenderDocument}/file`
       : tl

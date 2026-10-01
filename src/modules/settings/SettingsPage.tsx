@@ -12,6 +12,7 @@ import { secondsLeft, timeLeftLabel } from '../ai/setup';
 import { queryClient } from '../../core/query';
 import { useStore } from '../../core/store';
 import { RecordingSettings } from '../meet/RecordingSettings';
+import { SpeechModelSettings } from '../meet/SpeechModel';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { bytes, currentZone, relative } from '../../core/time';
 import { toast } from '../../core/toasts';
@@ -883,6 +884,8 @@ export function LocalAISection() {
     <>
       <H title="Local AI" hint="The assistant answers with AI Studio's models through WorkSuite, or with one downloaded to this computer — then nothing is sent to a server, also offline. A download is checked against the file WorkSuite names before it is used." />
       <AIStudioBlock />
+      <h3 className="mt-2 mb-2 text-[14px] font-bold text-ink">Speech — meeting transcripts</h3>
+      <SpeechModelSettings />
       <Row
         label="This computer"
         hint={hw ? `${hw.cpuCores} cores · ${bytes(hw.memoryBytes)} memory${hw.gpu ? ` · GPU (${hw.gpu})${hw.vramBytes ? ` ${bytes(hw.vramBytes)}` : ''}` : ' · CPU only until Local AI first starts'}${hw.freeDiskBytes !== null ? ` · ${bytes(hw.freeDiskBytes)} free` : ''}` : 'Checking…'}
@@ -1047,6 +1050,8 @@ function MeetSection() {
       <H title="Meet" hint="Meetings on this computer." />
       <h3 className="mt-2 mb-3 text-[14px] font-bold text-ink">Recording</h3>
       <RecordingSettings />
+      <h3 className="mt-6 mb-3 text-[14px] font-bold text-ink">Transcription</h3>
+      <SpeechModelSettings />
     </>
   );
 }

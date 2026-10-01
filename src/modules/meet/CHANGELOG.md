@@ -18,6 +18,13 @@ the root CHANGELOG.md.
   - The local copy is deleted only after Drive's copy is checked, and then only as chosen.
   - Failures say what went wrong, with Try again.
   - Recordings are linked from the meeting's details and Meet Home, and are private to their owner in Drive.
+- Transcription (worksuite-desktop#81):
+  - Start transcription in English, Sinhala or Tamil. It is transcribed on this computer with a whisper.cpp speech model (Settings › Local AI or Meet › Transcription), and online only when local cannot and Allow online fallback is on.
+  - Everybody in the meeting sees it is on and who started it.
+  - Each person's words carry their name; a guest without one is an unidentified speaker. Unclear speech is marked.
+  - You can choose to email the transcript automatically after the meeting, to chosen people.
+  - Stopping, or leaving, keeps what was said.
+  - Recordings in Meet Home lead to their transcripts.
 
 ## 1.1.1 — 2026-10-01
 

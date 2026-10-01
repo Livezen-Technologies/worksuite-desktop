@@ -59,6 +59,8 @@ import type { InvokeChannel } from './channels';
 import type {
   ActiveCall,
   LocalRecording,
+  SpeechSegment,
+  SpeechStatus,
   AiRules,
   AiUpload,
   AppInfo,
@@ -387,6 +389,27 @@ export const contract = {
   'meetrec:chooseFolder': ch(none, { session: true, rate: 3 }),
 
   /*
+   * Speech to text on this computer (worksuite-desktop#81). A meeting's window asks; the hidden speech page, loaded
+   * with the person's whisper.cpp model, answers through the main process. Pieces are 16 kHz mono WAV.
+   */
+  'stt:status': ch(none, { session: true }),
+  'stt:chooseModel': ch(none, { session: true, rate: 3 }),
+  'stt:removeModel': ch(none, { session: true, rate: 3 }),
+  'stt:transcribe': ch(
+    z.object({ wav: z.instanceof(Uint8Array).refine((b) => b.byteLength > 44 && b.byteLength <= 12 * 1024 * 1024, 'A piece is at most 12 MB.'), language: z.enum(['en', 'si', 'ta', 'auto']) }),
+    { session: true, rate: 120 },
+  ),
+  'speech:ready': ch(z.object({ ok: z.boolean(), error: z.string().max(500).optional() }), { session: true, rate: 10 }),
+  'speech:result': ch(
+    z.object({
+      id: z.string().uuid(),
+      segments: z.array(z.object({ start_ms: z.number().int().min(0), end_ms: z.number().int().min(0), text: z.string().max(4000), uncertain: z.boolean() })).max(1000).optional(),
+      error: z.string().max(500).optional(),
+    }),
+    { session: true, rate: 240 },
+  ),
+
+  /*
    * Meet remote control on this computer (WS-MEET-ENH-01). The meeting window
    * says when it shares and relays what arrives on the data channel; it never
    * holds a key. Answering a request comes only from the consent window, and
@@ -501,6 +524,8 @@ export const contract = {
         orderPdf: z.number().int().positive().optional(),
         /** A meeting's minutes as PDF or Word (worksuite-desktop#80); the server checks who may read them. */
         minutesExport: z.object({ meeting: z.number().int().positive(), format: z.enum(['pdf', 'docx']) }).optional(),
+        /** A meeting transcript as TXT or PDF (worksuite-desktop#81); the server checks who may read it. */
+        transcriptExport: z.object({ id: z.number().int().positive(), format: z.enum(['txt', 'pdf']) }).optional(),
         /** An invoice as its PDF, on its company's letterhead (the server's share of it). */
         invoicePdf: z.number().int().positive().optional(),
         /** A bank slip attached to a payment (Billing › Payments). */
@@ -583,7 +608,7 @@ export const contract = {
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.minutesExport, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.elearningMedia, v.officeExport, v.chatMedia, v.taskAttachment].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, the minutes of a meeting, a payment slip, an order list, an Orders report, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, an eLearning lesson file, an Office export, a chat attachment or a task attachment'),
+      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.minutesExport, v.transcriptExport, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.elearningMedia, v.officeExport, v.chatMedia, v.taskAttachment].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, the minutes or a transcript of a meeting, a payment slip, an order list, an Orders report, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, an eLearning lesson file, an Office export, a chat attachment or a task attachment'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   /**
@@ -1035,6 +1060,12 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'meetrec:discard': void;
   'meetrec:reveal': void;
   'meetrec:chooseFolder': string | null;
+  'stt:status': SpeechStatus;
+  'stt:chooseModel': SpeechStatus;
+  'stt:removeModel': SpeechStatus;
+  'stt:transcribe': { segments: SpeechSegment[] };
+  'speech:ready': void;
+  'speech:result': void;
   'rc:state': RemoteControlView;
   'rc:recheck': RemoteControlView;
   'rc:setAllowRequests': RemoteControlView;

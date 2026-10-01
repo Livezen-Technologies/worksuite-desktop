@@ -9,6 +9,9 @@ import type { RemoteControlView } from '@shared/types';
 import { pointers } from './remote/pointers';
 import { app } from '../../core/app-state';
 import { LocalRecorder } from './recorder';
+import { LiveTranscriber } from './transcribe/live';
+import type { SpeechLanguage } from './transcribe/engine';
+import type { AutoEmail, Transcript } from '../meetings/transcripts/api';
 
 /**
  * One Meet meeting, in its window (MeetLobby → MeetRoom). Like a call, kept
@@ -108,6 +111,12 @@ export class MeetSession {
   /** This computer's own recording of the meeting, while it records. */
   localRec: LocalRecorder | null = null;
   private recTimer: ReturnType<typeof setInterval> | null = null;
+  /** The meeting's live transcription, when one is on (worksuite-desktop#81): whoever started it, and in what language. */
+  transcribing: { id: number | null; by: string | null; language: string | null } | null = null;
+  /** This computer's own transcribing of the meeting, while it does. */
+  liveTx: LiveTranscriber | null = null;
+  /** The meeting record the notes and transcripts are kept on, once known. */
+  recordId: number | null = null;
 
   subscribe = (fn: () => void): (() => void) => {
     this.listeners.add(fn);
@@ -330,6 +339,13 @@ export class MeetSession {
     this.offRoles = on<{ type?: string; meeting?: string; what?: string }>('realtime:event', (e) => {
       if (e?.type !== 'meet.control' || e.meeting !== this.uuid) return;
       if (e.what === 'roles') void this.reload();
+      // Somebody started or stopped transcribing (#81): everybody is told while it is on.
+      if (e.what === 'transcript') {
+        const ev = e as { on?: boolean; by?: string; language?: string };
+        this.transcribing = ev.on ? { id: this.transcribing?.id ?? null, by: ev.by ?? null, language: ev.language ?? null } : null;
+        if (ev.by && ev.by !== app.get().auth?.user?.name) toast('info', ev.on ? `${ev.by} started transcribing this meeting. What is said is being written down.` : `${ev.by} stopped transcribing this meeting.`);
+        this.changed();
+      }
       // Somebody started or stopped recording (#68): everybody is told, and the badge follows.
       if (e.what === 'recording') {
         const ev = e as { on?: boolean; by?: string; local?: boolean };
@@ -384,6 +400,7 @@ export class MeetSession {
     this.joinedAt = this.joinedAt ?? Date.now();
     this.phase = 'in';
     void this.refreshRecording();
+    void this.refreshTranscribing();
     if (!this.recTimer) this.recTimer = setInterval(() => void this.refreshRecording(), 20_000);
     // The main window shows "in a meeting" and brings this window back.
     void call('calls:active', { uuid: this.uuid, kind: 'meet', title: this.info?.title || 'Meeting' }).catch(() => undefined);
@@ -625,6 +642,67 @@ export class MeetSession {
 
   record = (on: boolean) => (on ? this.startRecording() : this.stopRecording());
 
+  // ── transcription (worksuite-desktop#81) ─────────────────────────────────
+
+  /** The meeting record the transcript goes on: made the first time its host or a co-host needs it. */
+  async meetingRecord(): Promise<number> {
+    if (this.recordId) return this.recordId;
+    const r = await apiPost<{ id: number }>('/api/meetings/for-meet', { uuid: this.uuid });
+    this.recordId = r.id;
+    return r.id;
+  }
+
+  /** Whether a live transcription is on (somebody joining late is told too). */
+  async refreshTranscribing(): Promise<void> {
+    try {
+      const id = await this.meetingRecord();
+      const r = await apiGet<{ transcripts: Transcript[] }>(`/api/meetings/${id}/transcripts`);
+      const live = r.transcripts.find((t) => t.source === 'live' && t.status === 'active');
+      this.transcribing = live ? { id: live.id, by: null, language: live.language } : this.liveTx ? this.transcribing : null;
+      this.changed();
+    } catch {
+      // No record yet, or not allowed to see transcripts: nothing to show.
+    }
+  }
+
+  get mayTranscribe(): boolean {
+    return this.canManage || this.mayRecord;
+  }
+
+  async startTranscription(language: SpeechLanguage, autoEmail: AutoEmail | null): Promise<void> {
+    if (!this.room || this.liveTx) return;
+    try {
+      const id = await this.meetingRecord();
+      const t = await apiPost<Transcript>(`/api/meetings/${id}/transcripts`, { source: 'live', language, auto_email: autoEmail ?? undefined });
+      const tx = new LiveTranscriber(this.room, t.id, language, () => this.changed());
+      this.liveTx = tx;
+      this.transcribing = { id: t.id, by: app.get().auth?.user?.name ?? null, language };
+      tx.start();
+      toast('success', 'Transcribing. Everybody in the meeting is told.');
+    } catch (e) {
+      this.note(`Transcription did not start: ${errorMessage(e)}`);
+    }
+    this.changed();
+  }
+
+  async stopTranscription(): Promise<void> {
+    const tx = this.liveTx;
+    const id = this.transcribing?.id;
+    this.liveTx = null;
+    this.changed();
+    if (tx) await tx.stop();
+    if (id) {
+      try {
+        await apiPost(`/api/meetings/transcripts/${id}/finish`, { status: 'ready' });
+        toast('success', 'Transcription stopped. The transcript is in the meeting\'s details, to review.');
+      } catch (e) {
+        this.note(`The transcript could not be finished: ${errorMessage(e)}`);
+      }
+    }
+    this.transcribing = null;
+    this.changed();
+  }
+
   async endForAll(): Promise<void> {
     this.farewell = 'You ended the meeting for everyone.';
     await this.host('end-all');
@@ -668,6 +746,8 @@ export class MeetSession {
   private teardown(): void {
     this.offRoles?.();
     this.offRoles = null;
+    // Leaving while transcribing here: what was said so far is finished and kept.
+    if (this.liveTx) void this.stopTranscription();
     // Leaving while recording here: the recording stops, and is finished and uploaded in the background.
     const local = this.localRec;
     this.localRec = null;

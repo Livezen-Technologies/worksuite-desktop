@@ -25,6 +25,7 @@ import { HostLeaveDialog, RoleBadge, RoomSettingsPanel, TransferHostDialog } fro
 import { AddPeopleDialog, Invitations } from './InvitePeople';
 import { MeetNotes } from './MeetNotes';
 import { RecordingSettings } from './RecordingSettings';
+import { StartTranscriptionDialog } from './TranscriptControls';
 import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
 import { Whiteboard } from './Whiteboard';
@@ -52,6 +53,7 @@ export function MeetRoom() {
   const [ending, setEnding] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [recSettings, setRecSettings] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
   const rec = meet.recording;
   const recPrefs = useStore(app, (s) => s.prefs?.meetRecording);
   const recordHint = recPrefs ? `${recPrefs.method === 'local' ? 'On this computer' : 'On the server'} · ${{ grid: 'grid', speaker: 'speaker', screen: 'shared screen' }[recPrefs.layout]} · ${recPrefs.quality}` : undefined;
@@ -130,6 +132,12 @@ export function MeetRoom() {
           { label: 'Recording settings…', icon: 'settings', onClick: () => setRecSettings(true) },
         ]
       : []),
+    // Transcription (#81): whoever runs the meeting or may record it.
+    ...(meet.liveTx
+      ? [{ label: 'Stop transcription', hint: 'The transcript is kept in the meeting’s details', icon: 'stop', danger: true, onClick: () => void meet.stopTranscription() }]
+      : meet.mayTranscribe && !meet.transcribing
+        ? [{ label: 'Start transcription…', hint: 'English, Sinhala or Tamil', icon: 'file-text', onClick: () => setTranscribing(true) }]
+        : []),
     ...(meet.canManage ? [{ label: meet.locked ? 'Unlock the meeting' : 'Lock the meeting', hint: meet.locked ? undefined : 'No one new can join', icon: 'lock', onClick: () => void meet.lock(!meet.locked) }] : []),
     { label: 'Room settings', icon: 'settings', onClick: () => callUi.togglePanel('Settings') },
     { label: ui.boardOnStage ? 'Board back to the panel' : 'Whiteboard on stage', icon: 'board', onClick: () => callUi.set({ boardOnStage: !ui.boardOnStage, ...(ui.boardOnStage ? {} : { panelOpen: false }) }) },
@@ -140,12 +148,17 @@ export function MeetRoom() {
   ];
 
   const alerts =
-    meet.error || (meet.canManage && waiting.length) ? (
+    meet.error || meet.liveTx?.error || (meet.canManage && waiting.length) ? (
       <>
         {meet.error ? (
           <div className="flex items-center gap-2 rounded-[10px] bg-[#3A1A14] px-3 py-2 text-[12.5px] text-[#FFD2C4]" role="alert">
             <span className="flex-1">{meet.error}</span>
             <button type="button" onClick={() => meet.note(null)} className="font-bold" aria-label="Dismiss">×</button>
+          </div>
+        ) : null}
+        {meet.liveTx?.error ? (
+          <div className="flex items-center gap-2 rounded-[10px] bg-[#3A2A10] px-3 py-2 text-[12.5px] text-[#F6C77A]" role="status">
+            <span className="flex-1">{meet.liveTx.error} Transcription carries on with what is said next.</span>
           </div>
         ) : null}
         {meet.canManage && waiting.length ? (
@@ -180,6 +193,12 @@ export function MeetRoom() {
                 <span className="h-2 w-2 animate-pulse rounded-full bg-[#E0522F]" />
                 Recording{rec.since ? ` ${hms(now - rec.since)}` : ''}
                 {rec.local ? <span className="font-semibold text-[#FFD2C4]">· on {rec.mine ? 'this computer' : 'a computer'}</span> : null}
+              </span>
+            ) : null}
+            {meet.transcribing ? (
+              <span role="status" title={meet.transcribing.by ? `Transcribed by ${meet.transcribing.by}` : 'What is said is being transcribed'} className="flex items-center gap-1.5 rounded-full bg-[#1E3A5F] px-2 py-0.5 text-[11.5px] font-bold text-[#BFD7FF]">
+                <span className="h-2 w-2 rounded-full bg-[#5B9BFF]" />
+                Transcribing{meet.liveTx?.pending ? ` · ${meet.liveTx.pending} in progress` : ''}
               </span>
             ) : null}
             {meet.locked ? <span className="rounded-full bg-[#2A3A66] px-2 py-0.5 text-[11.5px] font-semibold">Locked</span> : null}
@@ -267,6 +286,7 @@ export function MeetRoom() {
           }}
         />
       ) : null}
+      {transcribing ? <StartTranscriptionDialog onClose={() => setTranscribing(false)} /> : null}
       {recSettings ? (
         <Modal title="Recording settings" onClose={() => setRecSettings(false)} width={560} footer={<Button variant="primary" onClick={() => setRecSettings(false)}>Done</Button>}>
           <RecordingSettings compact />

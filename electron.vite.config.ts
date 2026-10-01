@@ -1,9 +1,42 @@
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { defineConfig } from 'electron-vite';
+import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
 const shared = { '@shared': resolve(__dirname, 'shared') };
+
+/**
+ * Meeting transcripts on this computer (worksuite-desktop#81): whisper.cpp built for the web. Its script starts its
+ * own threads from its own address (`new URL('shout.wasm.js', import.meta.url)`), so it is copied as it is to a fixed
+ * place beside the speech page rather than bundled under a hashed name.
+ */
+const SHOUT = resolve(__dirname, 'node_modules/@transcribe/shout/src/shout');
+const SHOUT_FILES = ['shout.wasm.js', 'shout.wasm_no-simd.js'];
+function speechEngine(): Plugin {
+  return {
+    name: 'worksuite-speech-engine',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        // The speech page is cross-origin isolated, as the app's own protocol serves it (app-protocol.ts).
+        if (req.url?.startsWith('/speech')) {
+          res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+          res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+        }
+        const name = req.url?.match(/^\/speech\/(shout\.wasm(?:_no-simd)?\.js)(?:\?|$)/)?.[1];
+        if (!name) return next();
+        res.setHeader('Content-Type', 'text/javascript');
+        res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+        res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+        res.end(readFileSync(resolve(SHOUT, name)));
+      });
+    },
+    generateBundle() {
+      for (const name of SHOUT_FILES) this.emitFile({ type: 'asset', fileName: `speech/${name}`, source: readFileSync(resolve(SHOUT, name)) });
+    },
+  };
+}
 
 export default defineConfig({
   main: {
@@ -43,10 +76,11 @@ export default defineConfig({
   renderer: {
     root: resolve(__dirname, 'src'),
     resolve: { alias: { ...shared, '@': resolve(__dirname, 'src') } },
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), speechEngine()],
     build: {
       outDir: resolve(__dirname, 'out/renderer'),
-      rollupOptions: { input: resolve(__dirname, 'src/index.html') },
+      // The speech page is its own: isolated (for whisper.cpp's threads), hidden, and only for transcribing.
+      rollupOptions: { input: { index: resolve(__dirname, 'src/index.html'), speech: resolve(__dirname, 'src/speech.html') } },
     },
   },
 });

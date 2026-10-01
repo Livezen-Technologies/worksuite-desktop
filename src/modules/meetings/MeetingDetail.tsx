@@ -15,9 +15,11 @@ import type { Stroke } from '../meet/session';
 import { providerLabel, RSVP_LABEL, typeLabel, type AgendaItem, type Detail, type Person, type Rsvp } from './api';
 import { Select } from '../../components/Select';
 import { MinutesEditor } from './minutes/MinutesEditor';
+import { TranscriptsTab } from './transcripts/TranscriptsTab';
+import { latestTranscriptText } from './transcripts/material';
 import type { ChatMessage } from '../chat/types';
 
-const TABS = ['Summary', 'Agenda', 'People', 'Minutes', 'Files', 'Board', 'Activity'] as const;
+const TABS = ['Summary', 'Agenda', 'People', 'Minutes', 'Transcripts', 'Files', 'Board', 'Activity'] as const;
 const TAB_LABEL: Partial<Record<(typeof TABS)[number], string>> = { Minutes: 'Notes & Minutes' };
 type Tab = (typeof TABS)[number];
 
@@ -46,12 +48,16 @@ function mmss(s: number): string {
 
 export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }) {
   const qc = useQueryClient();
-  const { navigate } = useTab();
+  const { navigate, query } = useTab();
   const me = useStore(app, (s) => (s.auth?.user?.id ? Number(s.auth.user.id) : null));
   // Its conversation is in Chat and its video call in Meet: each offered only to whoever has that app.
   const canChat = useCanOpen('chat');
   const canMeet = useCanOpen('meet');
-  const [tab, setTab] = useState<Tab>('Agenda');
+  // A link may name the tab: `?tab=Transcripts`, or a transcript (`?transcript=`, from a transcript's email — #81).
+  const [tab, setTab] = useState<Tab>(() => {
+    const asked = query.get('tab') ?? (query.get('transcript') ? 'Transcripts' : null);
+    return (TABS as readonly string[]).includes(asked ?? '') ? (asked as Tab) : 'Agenda';
+  });
   const [cancelling, setCancelling] = useState(false);
   const [reason, setReason] = useState('');
   const q = useQuery({ queryKey: ['meetings', 'detail', id], queryFn: ({ signal }) => apiGet<Detail>(`/api/meetings/${id}`, undefined, signal), refetchInterval: 30_000 });
@@ -128,6 +134,7 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
             {tab === 'Agenda' ? <AgendaTab d={d} canEdit={canEdit || !!mine?.permissions?.edit_agenda} act={act} /> : null}
             {tab === 'People' ? <PeopleTab d={d} canEdit={canEdit} act={act} /> : null}
             {tab === 'Minutes' ? <MinutesTab d={d} /> : null}
+            {tab === 'Transcripts' ? <TranscriptsTab d={d} /> : null}
             {tab === 'Files' ? <FilesTab d={d} act={act} /> : null}
             {tab === 'Board' ? <BoardTab uuid={m.meet_uuid} /> : null}
             {tab === 'Activity' ? <ActivityTab id={m.id} /> : null}
@@ -363,7 +370,9 @@ function MinutesTab({ d }: { d: Detail }) {
       const r = await apiGet<{ messages: ChatMessage[] }>('/api/chat/messages', { room_id: d.chat.room_id }).catch(() => ({ messages: [] as ChatMessage[] }));
       chat = r.messages.filter((x) => !x.deleted && x.message?.trim() && x.type !== 'system').slice(-80).map((x) => `${x.sender_name}: ${x.message!.replace(/\s+/g, ' ').trim()}`).join('\n');
     }
-    return [agenda, chat ? `The meeting's chat:\n${chat}` : ''].filter(Boolean).join('\n\n');
+    // The transcript, when there is one, is what the minutes are best drafted from (worksuite-desktop#81).
+    const transcript = await latestTranscriptText(d.meeting.id);
+    return [agenda, transcript ? `The meeting's transcript:\n${transcript}` : '', chat ? `The meeting's chat:\n${chat}` : ''].filter(Boolean).join('\n\n');
   };
   return <MinutesEditor meetingId={d.meeting.id} material={material} />;
 }

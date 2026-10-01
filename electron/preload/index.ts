@@ -167,6 +167,16 @@ const api = {
     reveal: call('meetrec:reveal'),
     chooseFolder: call('meetrec:chooseFolder'),
   },
+  stt: {
+    status: call('stt:status'),
+    chooseModel: call('stt:chooseModel'),
+    removeModel: call('stt:removeModel'),
+    transcribe: call('stt:transcribe'),
+  },
+  speech: {
+    ready: call('speech:ready'),
+    result: call('speech:result'),
+  },
   rc: {
     state: call('rc:state'),
     recheck: call('rc:recheck'),

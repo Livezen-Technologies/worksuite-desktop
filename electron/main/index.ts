@@ -59,6 +59,7 @@ import { SettingsService } from '../services/settings';
 import { DriveSync } from '../services/sync/engine';
 import { ServiceSupervisor } from '../services/supervisor';
 import { MeetRecorder } from '../services/meet-recorder';
+import { SpeechService } from '../services/speech';
 import { TransferManager, type DownloadSink } from '../services/transfers';
 import { ElearningOffline } from '../services/elearning-offline';
 import { EventDesk } from '../services/event-desk';
@@ -378,6 +379,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     userId: () => (sessionCtl.isReady() ? sessionCtl.userId() : null),
   });
   meetRecorder.onChanged = (list) => broadcast('meetrec:changed', list);
+  // Speech to text on this computer (worksuite-desktop#81): whisper.cpp in a hidden page, with the person's model.
+  const speech = new SpeechService({ dir: join(p.profile, 'LocalAI', 'speech'), preload: join(__dirname, '../preload/index.js') });
   // eLearning: a course's lessons kept for offline learning, as the server's manifest lists them.
   const elearning: ElearningOffline = new ElearningOffline({
     db,
@@ -1417,7 +1420,13 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     // Read on each page load: the server chosen, and the media servers it announced.
     () => ({ server: auth.getServer()?.origin ?? null, media: mediaServers() }),
     // A course's lessons kept offline, played by the app's own pages.
-    (request, path) => (path.startsWith('/elearning/') ? elearning.serve(request, path) : Promise.resolve(new Response('Not found', { status: 404 }))),
+    (request, path) =>
+      path.startsWith('/elearning/')
+        ? elearning.serve(request, path)
+        : // The speech model, for the speech page only (worksuite-desktop#81).
+          path === '/speech/model.bin'
+          ? speech.serveModel()
+          : Promise.resolve(new Response('Not found', { status: 404 })),
   );
 
   const pasteGestures = new Map<number, number>();
@@ -1488,6 +1497,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     queue,
     transfers,
     meetRecorder,
+    speech,
     sync,
     supervisor,
     lock,
@@ -1569,6 +1579,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     if (statusTimer) clearTimeout(statusTimer);
     statusTimer = null;
     calls.stop();
+    speech.stop();
     transfers.stopAll();
     sync.stop();
     // What scans changed in an event desk's copy is written back before the database closes.

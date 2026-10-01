@@ -114,6 +114,12 @@ export function registerAppProtocol(apiProxy: ApiProxyHandler, cspSources: () =>
         headers['Cross-Origin-Opener-Policy'] = 'same-origin';
         headers['Referrer-Policy'] = 'no-referrer';
       }
+      // The speech page (worksuite-desktop#81) is cross-origin isolated, so whisper.cpp can share memory between its
+      // threads. Only it: the rest of the app embeds things isolation would refuse.
+      if (url.pathname === '/speech.html' || url.pathname.startsWith('/speech/')) {
+        headers['Cross-Origin-Embedder-Policy'] = 'require-corp';
+        headers['Cross-Origin-Resource-Policy'] = 'same-origin';
+      }
       return new Response(body, { status: 200, headers });
     } catch (e) {
       if (!app.isPackaged) log.debug('bundle file missing', { path: url.pathname, error: String(e) });

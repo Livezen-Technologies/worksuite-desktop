@@ -7,6 +7,7 @@ the root CHANGELOG.md.
 ## 1.4.0 — 2026-10-01
 
 - Settings › Meet › Recording (worksuite-desktop#68): how meetings are recorded from this computer — on the server or here, quality, layout, the Drive folder, where local recordings are saved and how long the local copy is kept.
+- Speech model for meeting transcripts, in Settings › Local AI and Settings › Meet › Transcription (worksuite-desktop#81): add, change or remove a whisper.cpp model so transcripts are made on this computer.
 
 ## 1.3.0 — 2026-10-01
 

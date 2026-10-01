@@ -4,6 +4,7 @@ import { errorMessage } from '../../core/bridge';
 import { Button, Empty, Spinner } from '../../components/ui';
 import type { ChatMessage } from '../chat/types';
 import { MinutesEditor } from '../meetings/minutes/MinutesEditor';
+import { latestTranscriptText } from '../meetings/transcripts/material';
 import { meet } from './session';
 
 /**
@@ -33,11 +34,12 @@ export function MeetNotes() {
   }
   // The meeting's chat is part of what the minutes are drafted from.
   const material = async () => {
+    // The transcript first, when there is one (worksuite-desktop#81), then the meeting's chat.
+    const transcript = await latestTranscriptText(q.data!.id);
     const roomId = meet.info?.room_id;
-    if (!roomId) return '';
-    const r = await apiGet<{ messages: ChatMessage[] }>('/api/chat/messages', { room_id: roomId });
+    const r = roomId ? await apiGet<{ messages: ChatMessage[] }>('/api/chat/messages', { room_id: roomId }).catch(() => ({ messages: [] as ChatMessage[] })) : { messages: [] as ChatMessage[] };
     const chat = r.messages.filter((x) => !x.deleted && x.message?.trim() && x.type !== 'system').slice(-80).map((x) => `${x.sender_name}: ${x.message!.replace(/\s+/g, ' ').trim()}`).join('\n');
-    return chat ? `The meeting's chat:\n${chat}` : '';
+    return [transcript ? `The meeting's transcript:\n${transcript}` : '', chat ? `The meeting's chat:\n${chat}` : ''].filter(Boolean).join('\n\n');
   };
   return <MinutesEditor meetingId={q.data.id} compact material={material} />;
 }

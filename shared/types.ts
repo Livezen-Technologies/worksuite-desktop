@@ -946,3 +946,16 @@ export interface LocalRecording {
   /** Recovered after WorkSuite closed while it was recording. */
   recovered: boolean;
 }
+
+/** What a piece of speech said, when, and whether it was unclear (worksuite-desktop#81). */
+export interface SpeechSegment {
+  start_ms: number;
+  end_ms: number;
+  text: string;
+  uncertain: boolean;
+}
+
+/** Whether this computer can transcribe on its own, and if not why. */
+export interface SpeechStatus {
+  local: { ready: boolean; model: { name: string; size: number } | null; why: string | null };
+}

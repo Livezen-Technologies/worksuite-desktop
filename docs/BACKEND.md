@@ -229,6 +229,29 @@ specific to the desktop:
     - `POST /api/meetings/for-meet {uuid}` gives the record of a Meet
       meeting.
     - Saves are pushed as `meeting.minutes {meeting_id, section, rev}`.
+  - Transcripts (worksuite-desktop#81):
+    - `GET|POST /{id}/transcripts {source: live|recording, language:
+      en|si|ta, recording_id?, auto_email?}`.
+    - `GET /transcripts/{t}` returns the transcript with `segments: [{start_ms,
+      end_ms, speaker ('' = unidentified), text, uncertain}]`.
+    - `POST /transcripts/{t}/segments {segments, progress?, engine?}` is for
+      the transcriber.
+    - `POST /transcripts/{t}/finish {status: ready|failed|cancelled}` ends
+      it. The automatic email goes once, on ready.
+    - `PUT /transcripts/{t} {segments, base_version}` saves corrections; 409
+      on another version.
+    - `GET /transcripts/{t}/recipients` returns `{recipients: [{allowed,
+      why}], formats}`.
+    - `POST /transcripts/{t}/email {participant_ids, subject, message,
+      format}` returns `{deliveries, skipped}`.
+    - `GET /transcripts/{t}/deliveries` lists deliveries;
+      `POST .../deliveries/{d}/retry` retries one.
+    - `GET /transcripts/{t}/export?format=txt|pdf`.
+    - A live transcription pushes `meet.control {what: transcript, on, by,
+      language}` to the meeting.
+  - Online speech to text (when the computer cannot, and the AI settings
+    allow): `GET /api/ai/speech/status` and `POST /api/ai/speech/transcribe`
+    (multipart `audio` WAV, `language`) return segments with `uncertain`.
 
 ### Garage
 

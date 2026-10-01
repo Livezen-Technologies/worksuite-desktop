@@ -16,6 +16,13 @@ the root CHANGELOG.md.
   - The organiser chooses who can see and edit the minutes, finalises them, and shares them with the people chosen.
   - Minutes can be copied, or exported to PDF or Word.
 - Your recordings of a meeting held on Meet are listed under Files, with their state and Open in Drive (worksuite-desktop#68).
+- Transcripts tab (worksuite-desktop#81):
+  - Shows transcripts made during the meeting and from its recordings.
+  - Generate transcript for a recording runs on this computer first, with progress, Cancel and Try again.
+  - Review a transcript, and correct speakers, text and unclear marks; corrections are saved on the version read.
+  - Copy, or export as TXT or PDF.
+  - Email transcript: only to people who may see it, with an editable subject and message. Send it as a link, PDF or TXT as sharing allows, after a preview and a confirmation. Each delivery's status is shown, with Retry.
+  - Generate with AI drafts the minutes from the transcript.
 
 ## 1.1.0 — 2026-10-01
 

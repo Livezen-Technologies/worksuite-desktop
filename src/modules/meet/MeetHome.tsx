@@ -471,6 +471,19 @@ function Recordings() {
           items={[
             { label: t('home.download'), icon: 'download', disabled: !menu.r.ready, run: () => download(menu.r) },
             ...(menu.r.drive_file_id ? [{ label: 'Open in Drive', icon: 'folder', run: () => navigate(`/files?file=${menu.r.drive_file_id}`) }] : []),
+            // Its transcripts (worksuite-desktop#81) are in the meeting's details: made from here, read and emailed there.
+            ...(menu.r.meeting_uuid && menu.r.ready
+              ? [
+                  {
+                    label: 'Transcripts…',
+                    icon: 'file-text',
+                    run: () =>
+                      void apiPost<{ id: number }>('/api/meetings/for-meet', { uuid: menu.r.meeting_uuid })
+                        .then((r) => navigate(`/meetings?meeting=${r.id}&tab=Transcripts`))
+                        .catch((e) => toast('error', errorMessage(e))),
+                  },
+                ]
+              : []),
             { label: t('home.rename'), icon: 'compose', run: () => (setTitle(menu.r.title), setRenaming(menu.r)) },
             { sep: true },
             { label: t('home.delete'), icon: 'trash', danger: true, run: () => setDeleting(menu.r) },
