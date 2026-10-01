@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, useRef, type ReactNode } from 'react';
 import { categoryVisible } from '@shared/access';
 import { QUICK_ASK_SHORTCUTS, type AiDisplay, type Preferences } from '@shared/types';
 import { useCanOpen, useVisibleIds } from '../../core/access';
@@ -1078,32 +1078,37 @@ export function RemoteControlSection() {
   const q = useQuery({ queryKey: ['rc-state'], queryFn: () => call('rc:state'), refetchInterval: 5_000 });
   const v = q.data;
   const [checking, setChecking] = useState(false);
-  // Asks macOS again (worksuite-desktop#47): on opening this screen, on coming back to WorkSuite from System
-  // Settings, and on Check again — not only on the five-second refresh. A refresh still on its way is called off
-  // first, so an older answer never lands on top of the new one.
+  const generation = useRef(0);
+  const [verifyError, setVerifyError] = useState(false);
+  const recheck = async () => {
+    const request = ++generation.current;
+    setChecking(true);
+    setVerifyError(false);
+    try {
+      await queryClient.cancelQueries({ queryKey: ['rc-state'] });
+      const next = await call('rc:recheck');
+      if (request === generation.current) await fresh(next);
+    } catch {
+      if (request === generation.current) setVerifyError(true);
+    } finally {
+      if (request === generation.current) setChecking(false);
+    }
+  };
   useEffect(() => {
-    const ask = () => void call('rc:recheck').then(fresh, () => undefined);
-    ask();
-    const back = () => {
-      if (document.visibilityState === 'visible') ask();
-    };
+    let mounted = true;
+    queueMicrotask(() => { if (mounted) void recheck(); });
+    const back = () => { if (document.visibilityState === 'visible') void recheck(); };
     window.addEventListener('focus', back);
     document.addEventListener('visibilitychange', back);
     return () => {
+      mounted = false;
+      // The ref is a request counter, not a DOM node. Invalidate outstanding replies.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      generation.current++;
       window.removeEventListener('focus', back);
       document.removeEventListener('visibilitychange', back);
     };
   }, []);
-  const recheck = async () => {
-    setChecking(true);
-    try {
-      await fresh(await call('rc:recheck'));
-    } catch (e) {
-      toast('error', errorMessage(e));
-    } finally {
-      setChecking(false);
-    }
-  };
   const set = async (value: boolean) => {
     try {
       await call('rc:setAllowRequests', { value });
@@ -1112,30 +1117,36 @@ export function RemoteControlSection() {
       toast('error', errorMessage(e));
     }
   };
-  if (!v) return <H title="Remote control" />;
+  if (!v) return <>
+    <H title="Remote control" />
+    <p className="text-ink-2">{checking ? 'Checking Accessibility access…' : 'Unable to verify Accessibility access'}</p>
+    <Button size="sm" variant="ghost" loading={checking} onClick={() => void recheck()}>Check again</Button>
+  </>;
   const s = v.support;
-  const works = s.available && s.policyAllows;
+  const pending = checking || s.accessibility === 'checking';
+  const unknown = verifyError || s.accessibility === 'unknown';
+  const works = s.available && s.policyAllows && !pending && !unknown;
   return (
     <>
       <H title="Remote control" hint="When you share your screen in a meeting, others can ask to use your mouse and keyboard. Nothing happens until you allow it, on this computer, each time." />
-      <div className={cx('mb-4 rounded-[12px] border p-4 text-[13.5px]', works ? 'border-line bg-surface' : 'border-[#F1D9B5] bg-[#FFF9EC] dark:bg-warning-bg')}>
+      <div className={cx('mb-4 rounded-[12px] border p-4 text-[13.5px]', works || pending || unknown ? 'border-line bg-surface' : 'border-[#F1D9B5] bg-[#FFF9EC] dark:bg-warning-bg')}>
         <div className="flex items-center gap-2 font-semibold text-ink">
-          <Icon name={works ? 'shield-check' : 'warning'} size={17} className={works ? 'text-success' : 'text-warning'} />
-          {works ? 'This computer can be controlled when you allow it' : 'This computer can be shared, but not controlled'}
+          <Icon name={pending || unknown ? 'refresh' : works ? 'shield-check' : 'warning'} size={17} className={works ? 'text-success' : 'text-warning'} />
+          {pending ? 'Checking Accessibility access…' : unknown ? 'Unable to verify Accessibility access' : works ? 'This computer can be controlled when you allow it' : 'This computer can be shared, but not controlled'}
         </div>
-        {!works ? <p className="mt-1.5 text-ink-2">{!s.policyAllows ? "Your organization's policy for this computer doesn't allow it." : s.reason}</p> : s.reason ? <p className="mt-1.5 text-ink-2">{s.reason}</p> : null}
-        {s.accessibility === 'granted' ? (
+        {!works && !pending && !unknown ? <p className="mt-1.5 text-ink-2">{!s.policyAllows ? "Your organization's policy for this computer doesn't allow it." : s.reason}</p> : works && s.reason ? <p className="mt-1.5 text-ink-2">{s.reason}</p> : null}
+        {!pending && !unknown && s.accessibility === 'granted' ? (
           <p className="mt-1.5 flex items-center gap-1.5 text-ink-2" data-testid="rc-accessibility">
             <Icon name="check" size={14} className="text-success" /> Accessibility access enabled
           </p>
         ) : null}
-        {s.accessibility === 'denied' && s.accessibilityHint === 'restart' ? (
+        {!pending && !unknown && s.accessibility === 'denied' && s.accessibilityHint === 'restart' ? (
           <p className="mt-1.5 text-ink-2" data-testid="rc-accessibility-hint">
-            If WorkSuite is already switched on there, macOS may be holding an entry from an earlier version of WorkSuite. Select WorkSuite in the list,
-            remove it with −, add it again with +, then choose Check again. If it still reads as off, quit WorkSuite and open it again: some versions of
-            macOS apply the change only then.
+            The running app reports access, but its input helper reports permission required. Quit WorkSuite and open it again, then check again. Use the running copy of WorkSuite in Accessibility settings if multiple copies are installed.
           </p>
         ) : null}
+        {!pending && !unknown && s.accessibility === 'denied' ? <p className="mt-1.5 text-ink-2">Permission required</p> : null}
+        {unknown ? <p className="mt-1.5 text-ink-2">The permission check did not complete. Check again to retry.</p> : null}
         {s.accessibility !== 'not_required' ? (
           <div className="mt-2.5 flex flex-wrap gap-2">
             {s.accessibility === 'denied' ? (

@@ -1,3 +1,4 @@
+import { accessibilityDiagnostics } from '../services/remote-control/accessibility-diagnostics';
 import { app, clipboard, crashReporter, dialog, globalShortcut, ipcMain, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents } from 'electron';
 import os from 'node:os';
 import { hkdfSync } from 'node:crypto';
@@ -1418,6 +1419,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     secureStorage: () => secrets.getStatus(),
     policy: () => sessionCtl.current()?.policy ?? null,
     deviceInfo: () => device.info(secrets.getStatus()),
+    accessibility: accessibilityDiagnostics,
     settings: () => settings.effective(),
     offline: () => {
       const uid = sessionCtl.userId();

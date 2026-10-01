@@ -27,6 +27,7 @@ export interface DiagnosticsDeps {
   secureStorage: () => { available: boolean; backend: string; persistent: boolean };
   policy: () => unknown;
   deviceInfo: () => unknown;
+  accessibility?: () => Promise<unknown>;
   settings: () => unknown;
   offline: () => unknown;
   crashes: () => unknown;
@@ -161,6 +162,7 @@ export class DiagnosticsService {
       { name: 'manifest.json', data: json(manifest) },
       { name: 'health.json', data: json(checks) },
       { name: 'device.json', data: json(this.deps.deviceInfo()) },
+      ...(this.deps.accessibility ? [{ name: 'accessibility.json', data: json(await this.deps.accessibility()) }] : []),
       { name: 'policy.json', data: json(this.deps.policy()) },
       { name: 'settings.json', data: json(this.deps.settings()) },
       { name: 'offline.json', data: json(this.deps.offline()) },

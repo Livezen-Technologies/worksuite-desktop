@@ -42,12 +42,12 @@ export const accessibility = new AccessibilityCheck({
 
 function support(policy: DesktopPolicy): RemoteControlSupport {
   const ax = accessibility.state();
-  const s = inputSupport({ accessibility: ax.status !== 'denied' });
+  const s = inputSupport({ accessibility: ax.status === 'granted' || ax.status === 'not_required' });
   return {
     available: s.available,
     method: s.method,
     displayServer: s.displayServer,
-    reason: s.reason,
+    reason: ax.status === 'unknown' ? 'Unable to verify Accessibility access. Check again to retry.' : ax.status === 'checking' ? 'Checking Accessibility access…' : s.reason,
     accessibility: ax.status,
     accessibilityHint: ax.hint,
     policyAllows: policy.remote_control_host !== 'disabled',

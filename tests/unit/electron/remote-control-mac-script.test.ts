@@ -23,13 +23,14 @@ interface Posted {
   w2?: number;
 }
 
-function runScript(lines: string[], opts: { clock?: number[]; scroll2?: boolean; ownPid?: number; windows?: Array<Record<string, unknown>> } = {}) {
+function runScript(lines: string[], opts: { trusted?: boolean; clock?: number[]; scroll2?: boolean; ownPid?: number; windows?: Array<Record<string, unknown>> } = {}) {
   const posted: Posted[] = [];
   const said: string[] = [];
   const typed: string[] = [];
   const data = (b: Buffer) => ({ bytes: b, length: b.length, base64EncodedStringWithOptions: () => ({ js: b.toString('base64') }) });
   let stdin: Buffer | null = Buffer.from(lines.map((l) => `${l}\n`).join(''), 'utf8');
   const bridge = Object.assign((s: string) => ({ js: String(s), dataUsingEncoding: () => data(Buffer.from(String(s), 'utf8')) }), {
+    CGPreflightPostEventAccess: () => opts.trusted !== false,
     NSUTF8StringEncoding: 4,
     NSFileHandle: {
       fileHandleWithStandardOutput: { writeData: (d: { bytes: Buffer }) => said.push(d.bytes.toString('utf8').trimEnd()) },
@@ -78,6 +79,11 @@ const lines = (actions: InputAction[]) => protocolLines(actions, 'darwin');
 const click = (down: boolean): InputAction => ({ t: 'button', button: 'left', down });
 
 describe('the macOS helper script', () => {
+  it('does not become ready or post input after permission is revoked', () => {
+    const result = runScript(['m 300 200', 'k 0 1'], { trusted: false });
+    expect(result.said).toEqual(['permission-denied']);
+    expect(result.posted).toEqual([]);
+  });
   it('says ready, and answers the app’s questions', () => {
     const { said } = runScript(['?1 ack', '?2 rect 51', '?3 rect 99', '?4 at 500 400', '?5 at 500 10', '?6 at 1200 400', '?7 fg']);
     expect(said[0]).toBe('ready');
