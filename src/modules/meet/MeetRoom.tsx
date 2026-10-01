@@ -23,6 +23,7 @@ import { pointers } from './remote/pointers';
 import { isGuest, meet, roleOf, userIdOf } from './session';
 import { HostLeaveDialog, RoleBadge, RoomSettingsPanel, TransferHostDialog } from './RoomRoles';
 import { AddPeopleDialog, Invitations } from './InvitePeople';
+import { MeetNotes } from './MeetNotes';
 import { Whiteboard } from './Whiteboard';
 import { Select } from '../../components/Select';
 
@@ -117,6 +118,7 @@ export function MeetRoom() {
     ...(meet.canManage ? [{ label: meet.locked ? 'Unlock the meeting' : 'Lock the meeting', hint: meet.locked ? undefined : 'No one new can join', icon: 'lock', onClick: () => void meet.lock(!meet.locked) }] : []),
     { label: 'Room settings', icon: 'settings', onClick: () => callUi.togglePanel('Settings') },
     { label: ui.boardOnStage ? 'Board back to the panel' : 'Whiteboard on stage', icon: 'board', onClick: () => callUi.set({ boardOnStage: !ui.boardOnStage, ...(ui.boardOnStage ? {} : { panelOpen: false }) }) },
+    { label: 'Notes & minutes', icon: 'file', onClick: () => callUi.togglePanel('Notes') },
     { label: 'Files', icon: 'paperclip', onClick: () => callUi.togglePanel('Files') },
     { label: 'Meeting details', icon: 'info', onClick: () => callUi.togglePanel('Info') },
     { label: 'Copy join link', icon: 'link', onClick: copyLink },
@@ -211,6 +213,7 @@ export function MeetRoom() {
               <Whiteboard />
             ),
           },
+          { id: 'Notes', label: 'Notes', content: <MeetNotes /> },
           { id: 'Files', label: 'Files', content: <FilesPanel roomId={info.room_id} /> },
           { id: 'Info', label: 'Info', content: <InfoPanel /> },
           { id: 'Settings', label: 'Settings', content: <RoomSettingsPanel /> },

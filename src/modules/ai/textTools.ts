@@ -34,7 +34,7 @@ const INSTRUCTIONS: Record<TextTask, string> = {
   summarize: 'Summarise the conversation for someone who missed it, in a few short bullet points: what it is about, what was decided, and what is still open or who is doing what next.',
   translate: 'Translate the text into the language named on its first line, and return only the translation of the rest. Keep every word inside “ ” exactly as it is written: those are names on screen. Keep the numbering and line breaks.',
   minutes:
-    'Write the minutes of the meeting from the material below. Use exactly these three headings, each on its own line, and nothing before them:\nSUMMARY:\n(a short paragraph)\nDECISIONS:\n(one decision per line starting with "- ", or "- None")\nACTIONS:\n(one action per line starting with "- ", with the person and due date when they are known, or "- None")',
+    'Write the minutes of the meeting from the material below. Use exactly these four headings, each on its own line, and nothing before them:\nAGENDA:\n(the items that were covered, one per line starting with "- ", or "- None")\nSUMMARY:\n(what was discussed, a short paragraph)\nDECISIONS:\n(one decision per line starting with "- ", or "- None")\nACTIONS:\n(one action per line as "- what | who | when", with when as YYYY-MM-DD, or "- None")\nUse only what the material says. Never invent a decision, a person or a date: when the material does not say who or when, leave that part empty, as in "- Send the plan | |".',
 };
 
 const ONLY = 'Return only the result, with no introduction or explanation.';
@@ -56,15 +56,23 @@ export function cleanAnswer(text: string): string {
 }
 
 export interface Minutes {
+  /** The items covered, when the draft lists them. */
+  agenda: string[];
   summary: string;
   decisions: string[];
   actions: string[];
 }
 
+/** One drafted action, `what | who | when`: who and when only as the draft gives them, never guessed. */
+export function parseAction(line: string): { title: string; owner: string | null; due: string | null } {
+  const [title = '', owner = '', due = ''] = line.split('|').map((x) => x.trim());
+  return { title, owner: owner || null, due: /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : null };
+}
+
 /** The three parts of drafted minutes; anything without headings is taken as the summary. */
 export function parseMinutes(text: string): Minutes {
   const part = (name: string) => {
-    const m = new RegExp(`(?:^|\\n)\\s*\\**${name}\\**\\s*:\\**\\s*\\n?([\\s\\S]*?)(?=\\n\\s*\\**(?:SUMMARY|DECISIONS|ACTIONS)\\**\\s*:|$)`, 'i').exec(text);
+    const m = new RegExp(`(?:^|\\n)\\s*\\**${name}\\**\\s*:\\**\\s*\\n?([\\s\\S]*?)(?=\\n\\s*\\**(?:AGENDA|SUMMARY|DISCUSSION|DECISIONS|ACTIONS)\\**\\s*:|$)`, 'i').exec(text);
     return m ? m[1]!.trim() : null;
   };
   const list = (s: string | null) =>
@@ -72,8 +80,8 @@ export function parseMinutes(text: string): Minutes {
       .split('\n')
       .map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim())
       .filter((l) => l && !/^none\.?$/i.test(l));
-  const summary = part('SUMMARY');
-  return { summary: summary ?? cleanAnswer(text), decisions: list(part('DECISIONS')), actions: list(part('ACTIONS')) };
+  const summary = part('SUMMARY') ?? part('DISCUSSION');
+  return { agenda: list(part('AGENDA')), summary: summary ?? cleanAnswer(text), decisions: list(part('DECISIONS')), actions: list(part('ACTIONS')) };
 }
 
 export type Engine = 'local' | 'online';

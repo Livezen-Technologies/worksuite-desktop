@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useCanOpen } from '../../core/access';
-import { apiDelete, apiGet, apiPost, apiPut, request } from '../../core/api';
+import { apiGet, apiPost, apiPut, request } from '../../core/api';
 import { app } from '../../core/app-state';
 import { call, errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
@@ -14,12 +14,11 @@ import { openMeeting } from '../meet/api';
 import type { Stroke } from '../meet/session';
 import { providerLabel, RSVP_LABEL, typeLabel, type AgendaItem, type Detail, type Person, type Rsvp } from './api';
 import { Select } from '../../components/Select';
-import { Checkbox } from '../../components/Checkbox';
-import { AiTextDialog } from '../ai/AiTextDialog';
-import { parseMinutes } from '../ai/textTools';
+import { MinutesEditor } from './minutes/MinutesEditor';
 import type { ChatMessage } from '../chat/types';
 
 const TABS = ['Summary', 'Agenda', 'People', 'Minutes', 'Files', 'Board', 'Activity'] as const;
+const TAB_LABEL: Partial<Record<(typeof TABS)[number], string>> = { Minutes: 'Notes & Minutes' };
 type Tab = (typeof TABS)[number];
 
 const MAY: Array<[string, string]> = [
@@ -119,7 +118,7 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
         <div role="tablist" className="flex border-b border-line">
           {TABS.map((t) => (
             <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={cx('h-10 px-3', tab === t ? 'font-bold text-primary shadow-[inset_0_-2px_0_var(--color-primary)]' : 'font-medium text-ink-2')}>
-              {t}
+              {TAB_LABEL[t] ?? t}
             </button>
           ))}
         </div>
@@ -128,7 +127,7 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
             {tab === 'Summary' ? <SummaryTab d={d} /> : null}
             {tab === 'Agenda' ? <AgendaTab d={d} canEdit={canEdit || !!mine?.permissions?.edit_agenda} act={act} /> : null}
             {tab === 'People' ? <PeopleTab d={d} canEdit={canEdit} act={act} /> : null}
-            {tab === 'Minutes' ? <MinutesTab d={d} canEdit={canEdit || !!mine?.permissions?.edit_minutes} act={act} /> : null}
+            {tab === 'Minutes' ? <MinutesTab d={d} /> : null}
             {tab === 'Files' ? <FilesTab d={d} act={act} /> : null}
             {tab === 'Board' ? <BoardTab uuid={m.meet_uuid} /> : null}
             {tab === 'Activity' ? <ActivityTab id={m.id} /> : null}
@@ -352,115 +351,21 @@ function PeopleTab({ d, canEdit, act }: { d: Detail; canEdit: boolean; act: Act 
   );
 }
 
-function MinutesTab({ d, canEdit, act }: { d: Detail; canEdit: boolean; act: Act }) {
-  const id = d.meeting.id;
-  const [summary, setSummary] = useState(d.minutes?.summary ?? '');
-  const [decisions, setDecisions] = useState(d.minutes?.decisions ?? '');
-  const [notes, setNotes] = useState(d.minutes?.notes ?? '');
-  const [picked, setPicked] = useState<number[]>(() => d.action_items.filter((a) => !a.task_id).map((a) => a.id));
-  const [action, setAction] = useState('');
-  const final = !!d.minutes?.finalised_at;
-  // Minutes drafted with AI (worksuite-desktop#53): from the agenda, notes and actions, and the meeting's chat when
-  // it has one. The draft is shown first; used, it fills Summary and Decisions (saved with Save notes) and adds the
-  // actions it lists.
-  const [drafting, setDrafting] = useState<string | null>(null);
-  const [gathering, setGathering] = useState(false);
-  const draftMinutes = async () => {
-    setGathering(true);
+/**
+ * Notes & Minutes (worksuite-desktop#80): the shared editor, drafted from the agenda and the meeting's chat as well
+ * as what is written.
+ */
+function MinutesTab({ d }: { d: Detail }) {
+  const material = async () => {
+    const agenda = d.agenda.length ? `Agenda items:\n${d.agenda.map((a, i) => `${i + 1}. ${a.title}${a.notes ? ` — ${a.notes}` : ''}`).join('\n')}` : '';
     let chat = '';
-    try {
-      if (d.chat?.room_id && d.chat.member) {
-        const r = await apiGet<{ messages: ChatMessage[] }>('/api/chat/messages', { room_id: d.chat.room_id });
-        chat = r.messages.filter((x) => !x.deleted && x.message?.trim() && x.type !== 'system').slice(-80).map((x) => `${x.sender_name}: ${x.message!.replace(/\s+/g, ' ').trim()}`).join('\n');
-      }
-    } catch {
-      // Without the chat the agenda and notes still make minutes.
-    } finally {
-      setGathering(false);
+    if (d.chat?.room_id && d.chat.member) {
+      const r = await apiGet<{ messages: ChatMessage[] }>('/api/chat/messages', { room_id: d.chat.room_id }).catch(() => ({ messages: [] as ChatMessage[] }));
+      chat = r.messages.filter((x) => !x.deleted && x.message?.trim() && x.type !== 'system').slice(-80).map((x) => `${x.sender_name}: ${x.message!.replace(/\s+/g, ' ').trim()}`).join('\n');
     }
-    setDrafting(minutesMaterial(d, { summary, decisions, notes }, chat));
+    return [agenda, chat ? `The meeting's chat:\n${chat}` : ''].filter(Boolean).join('\n\n');
   };
-  const applyDraft = async (text: string) => {
-    const m = parseMinutes(text);
-    if (m.summary) setSummary(m.summary);
-    if (m.decisions.length) setDecisions(m.decisions.map((x) => `- ${x}`).join('\n'));
-    const fresh = m.actions.filter((t) => !d.action_items.some((a) => a.title.trim().toLowerCase() === t.toLowerCase()));
-    for (const title of fresh) await apiPost(`/api/meetings/${id}/actions`, { title: title.slice(0, 255), priority: 'normal', status: 'open' }).catch(() => undefined);
-    if (fresh.length) await act(async () => undefined, `Added ${fresh.length} action${fresh.length === 1 ? '' : 's'}.`);
-    toast('info', 'The draft is in the minutes. Check it, then choose Save notes.');
-  };
-  const area = 'rounded-[8px] border border-line bg-surface px-2.5 py-2 text-[13px] text-ink outline-none focus:border-primary disabled:bg-subtle';
-  const save = useMutation({
-    mutationFn: (finalise: boolean) => apiPut(`/api/meetings/${id}/minutes`, { summary, decisions, notes, finalise }),
-    onSuccess: (_r, finalise) => toast('success', finalise ? 'Minutes finalised.' : 'Notes saved.'),
-    onError: (e) => toast('error', errorMessage(e)),
-  });
-  return (
-    <>
-      <div className="flex items-center gap-2">
-        <h2 className="flex-1 text-[15px] font-bold text-ink">Minutes</h2>
-        {final ? <Chip tone="success">Final · {dateLabel(d.minutes!.finalised_at)}</Chip> : null}
-        {canEdit && !final ? (
-          <Button size="sm" icon="sparkles" loading={gathering} onClick={() => void draftMinutes()} title="Draft the minutes from the agenda, notes and the meeting's chat">
-            Draft minutes with AI
-          </Button>
-        ) : null}
-      </div>
-      {drafting !== null ? (
-        <AiTextDialog
-          title="Draft minutes"
-          task="minutes"
-          input={() => drafting}
-          actions={[{ label: 'Use in the minutes', primary: true, run: (t) => applyDraft(t) }]}
-          onClose={() => setDrafting(null)}
-        />
-      ) : null}
-      <b className="text-ink">Decisions</b>
-      <textarea value={decisions} disabled={!canEdit || final} onChange={(e) => setDecisions(e.target.value)} rows={3} className={area} />
-      <b className="text-ink">Discussion summary</b>
-      <textarea value={summary} disabled={!canEdit || final} onChange={(e) => setSummary(e.target.value)} rows={3} className={area} />
-      <b className="text-ink">Notes</b>
-      <textarea value={notes} disabled={!canEdit || final} onChange={(e) => setNotes(e.target.value)} rows={3} className={area} />
-      <b className="text-ink">Actions</b>
-      {!d.action_items.length ? <p className="text-ink-3">No actions yet.</p> : null}
-      {d.action_items.map((a) => (
-        <label key={a.id} className="flex items-center gap-2.5">
-          <Checkbox disabled={!!a.task_id || !canEdit} checked={!!a.task_id || picked.includes(a.id)} onChange={() => setPicked(picked.includes(a.id) ? picked.filter((x) => x !== a.id) : [...picked, a.id])} />
-          <span className={cx('flex-1 text-ink', a.status === 'done' && 'line-through opacity-60')}>{a.title}</span>
-          <span className="text-[12px] text-ink-3">{[a.assignee, a.due_date ? dateLabel(a.due_date) : null, a.task_id ? 'task' : null].filter(Boolean).join(' · ')}</span>
-          {canEdit && !a.task_id ? <button type="button" aria-label={`Remove ${a.title}`} onClick={() => void act(() => apiDelete(`/api/meetings/${id}/actions/${a.id}`))} className="text-ink-3 hover:text-danger">×</button> : null}
-        </label>
-      ))}
-      {canEdit ? (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!action.trim()) return;
-            const title = action.trim();
-            setAction('');
-            void act(() => apiPost(`/api/meetings/${id}/actions`, { title, priority: 'normal', status: 'open' }));
-          }}
-        >
-          <input value={action} onChange={(e) => setAction(e.target.value)} aria-label="Add an action" placeholder="Add an action" className="h-9 w-full rounded-[8px] border border-dashed border-line bg-surface px-2.5 text-ink outline-none focus:border-primary" />
-        </form>
-      ) : null}
-      {canEdit ? (
-        <div className="flex flex-wrap gap-2 pt-1">
-          <Button disabled={!picked.filter((x) => d.action_items.some((a) => a.id === x && !a.task_id)).length} onClick={() => void act(() => apiPost(`/api/meetings/${id}/actions/bulk-task`, { ids: picked }), 'Tasks created.')}>
-            Create actions as tasks
-          </Button>
-          {!final ? (
-            <>
-              <Button loading={save.isPending} onClick={() => save.mutate(false)}>Save notes</Button>
-              <Button variant="primary" onClick={() => save.mutate(true)}>Finalise minutes</Button>
-            </>
-          ) : (
-            <Button onClick={() => void act(() => apiPost(`/api/meetings/${id}/summary`), 'Minutes emailed to everyone.')}>Email the minutes</Button>
-          )}
-        </div>
-      ) : null}
-    </>
-  );
+  return <MinutesEditor meetingId={d.meeting.id} material={material} />;
 }
 
 function FilesTab({ d, act }: { d: Detail; act: Act }) {

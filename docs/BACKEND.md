@@ -196,6 +196,21 @@ specific to the desktop:
 - **Meetings:** `/api/meetings/*`, behind the `meeting.*` permissions. The
   list carries `my_role` and `my_rsvp`. The detail carries the agenda timer
   and each person's attendance and permissions.
+  - Notes & Minutes (worksuite-desktop#80):
+    - `GET /{id}/minutes` returns `{meeting, people, sections, revs, edited,
+      finalised_at, shared_at, actions, access, can}`.
+    - `PUT /{id}/minutes/sections/{agenda|discussion|decisions} {html,
+      base_rev}` saves one section. It answers 409 with `errors: {conflict,
+      html, rev, edited}`; the app never overwrites without the person
+      choosing.
+    - `PUT /{id}/minutes/access {view: participants|editors, edit:
+      hosts|chosen|participants}`.
+    - `POST /{id}/minutes/finalise {reopen?}`.
+    - `POST /{id}/minutes/share {participant_ids, note?}`.
+    - `GET /{id}/minutes/export?format=pdf|docx`.
+    - `POST /api/meetings/for-meet {uuid}` gives the record of a Meet
+      meeting.
+    - Saves are pushed as `meeting.minutes {meeting_id, section, rev}`.
 
 ### Garage
 

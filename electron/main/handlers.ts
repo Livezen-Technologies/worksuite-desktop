@@ -496,6 +496,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       ? `/api/finance/export/${fc.report}${fc.lines ? '/transactions' : ''}?${new URLSearchParams({ company: String(fc.company), from: fc.from, to: fc.to, ...(fc.currency ? { currency: fc.currency } : {}) })}`
       : input.orderPdf
       ? `/api/share/oms/${input.orderPdf}/pdf`
+      : input.minutesExport
+      ? `/api/meetings/${input.minutesExport.meeting}/minutes/export?format=${input.minutesExport.format}`
       : input.tenderDocument
       ? `/api/tenders/documents/${input.tenderDocument}/file`
       : tl
