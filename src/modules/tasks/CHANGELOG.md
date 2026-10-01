@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.1.0 — 2026-10-01
+
+- Upcoming view (due in the next week); Due today no longer includes what is already overdue; Home reads the same tasks as the Tasks page (#104).
+
 ## 1.0.1 — 2026-10-01
 
 **Changed**

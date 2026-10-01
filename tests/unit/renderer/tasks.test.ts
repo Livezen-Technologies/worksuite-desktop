@@ -85,7 +85,7 @@ describe('the views and their counts', () => {
 
   it('counts what is still open in each', () => {
     const shared = [task({ id: 10, owner_id: 2, assignee_id: 2 }), task({ id: 11, status: 'done' })];
-    expect(counts(all, shared, lists, 7, TODAY, NOW)).toEqual({ all: 3, mine: 2, today: 1, overdue: 1, shared: 1, 'list:3': 2 });
+    expect(counts(all, shared, lists, 7, TODAY, NOW)).toEqual({ all: 3, mine: 2, today: 1, overdue: 1, upcoming: 0, shared: 1, 'list:3': 2 });
   });
 
   it('takes progress from the checklist when there is one', () => {

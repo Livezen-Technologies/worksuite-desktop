@@ -10,6 +10,7 @@ import { toast } from '../../core/toasts';
 import { ErrorNote, OfflineNote, Spinner, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
 import { createTask, patchTask } from './actions';
+import { ALL_TASKS } from './queries';
 import { counts as countOf, inScope, isOpen, plainText, PRIORITIES, SCOPES, STATUSES, type Priority, type Scope, type Status, type Task, type TaskList } from './api';
 import { BoardView } from './BoardView';
 import { ListView } from './ListView';
@@ -20,7 +21,7 @@ import { Select } from '../../components/Select';
 import { SidePanel } from '../../components/SidePanel';
 
 /** The old `?filter=` links (notifications, the dashboard) in the new scopes. */
-const LEGACY: Record<string, Scope> = { mine: 'mine', today: 'today', overdue: 'overdue', active: 'all', completed: 'done', created: 'all', shared: 'shared' };
+const LEGACY: Record<string, Scope> = { mine: 'mine', today: 'today', overdue: 'overdue', upcoming: 'upcoming', active: 'all', completed: 'done', created: 'all', shared: 'shared' };
 const field = 'h-[34px] rounded-[8px] border border-line bg-surface px-2 text-[13px] text-ink outline-none focus:border-primary';
 
 /** The time, a minute at a time: what is overdue changes while the page is open. */
@@ -63,7 +64,7 @@ export default function TasksPage(_props: ModuleProps) {
   const [assignee, setAssignee] = useState<'any' | 'me' | string>('any');
   const [priority, setPriority] = useState<'any' | Priority>('any');
 
-  const all = useQuery({ queryKey: ['tasks', 'all'], queryFn: ({ signal }) => apiGetMeta<{ tasks: Task[] }>('/api/tasks', undefined, signal), refetchInterval: 20_000 });
+  const all = useQuery({ ...ALL_TASKS, refetchInterval: 20_000 });
   const shared = useQuery({ queryKey: ['tasks', 'shared'], queryFn: ({ signal }) => apiGetMeta<{ tasks: Task[] }>('/api/tasks', { filter: 'shared' }, signal), refetchInterval: 60_000 });
   const listsQ = useQuery({ queryKey: ['tasks', 'lists'], queryFn: ({ signal }) => apiGetMeta<{ lists: TaskList[] }>('/api/task-lists', undefined, signal) });
   const tasks = useMemo(() => all.data?.data.tasks ?? [], [all.data]);

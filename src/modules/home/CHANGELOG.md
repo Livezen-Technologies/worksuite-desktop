@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.0 — 2026-10-01
+
+- Home modernised: compact header with company filter, clickable summary cards with compact counts, Due today/Overdue/Upcoming apart, an agenda with Join and Open, Waiting for me with approvals, invitations and acknowledgements, an Announcements widget and reader, grouped activity, files without temporary artifacts, a short grounded summary, widgets that load and retry on their own, resizable and draggable with Reset Layout (#104, #98).
+
 ## 1.1.0 — 2026-10-01
 
 **Added**

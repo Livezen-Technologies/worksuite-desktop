@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Fragment, useState, type ReactNode } from 'react';
-import { app, organizationName } from '../../core/app-state';
+import { app } from '../../core/app-state';
 import { ApiError, apiGet, apiGetMeta, apiPost } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
 import { t } from '../../core/i18n';
@@ -9,26 +9,47 @@ import { useTab, useTabTitle } from '../../core/tab-context';
 import { dateLabel, dayLabel, greeting, relative, timeLabel, todayInZone, wallMinutes, wallTimeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { openAssistant } from '../../core/ui';
+import { useCanOpen } from '../../core/access';
 import { Icon } from '../../components/Icon';
-import { Avatar, Button, Card, CountBadge, Empty, ErrorNote, FileBadge, OfflineNote, Spinner, cx } from '../../components/ui';
-import type { ModuleProps } from '../registry';
-import type { CalendarEvent } from '../calendar/api';
-import type { Task } from '../tasks/api';
-import { CARDS, dueToday as dueTodayOf, loadLayout, meetingsToday, mergeTasks, move, saveLayout, todaysWork, toggle, type CardId, type Layout } from './today';
+import { Avatar, Button, Chip, OfflineNote, cx } from '../../components/ui';
 import { Checkbox } from '../../components/Checkbox';
+import type { ModuleProps } from '../registry';
+import { CATEGORIES, categoryOf, destinationOf, type CalendarEvent } from '../calendar/api';
 import { ConflictFlag, useWaitingInvitations, type WaitingInvitation } from '../calendar/conflicts';
+import { openMeeting } from '../meet/api';
+import { dueOf, type Task } from '../tasks/api';
+import { ALL_TASKS } from '../tasks/queries';
+import { FileIcon } from '../files/Thumb';
+import { isJunkFile } from '../files/api';
+import { AllAnnouncements, AnnouncementReader, AnnouncementRows, forCompany, ranked, toAcknowledge, useMyAnnouncements } from './Announcements';
+import { HeaderLink, Widget } from './Widget';
+import { CARDS, DEFAULT_LAYOUT, compactCount, loadLayout, meetingsToday, move, place, resize, saveLayout, sizeOf, taskBuckets, toggle, type CardId, type Layout } from './today';
 
 /**
- * Home — the desktop shell's dashboard (UI-04, §4.13). Every widget comes
- * from a module the user can open; one they cannot is simply absent
- * (FR-REG-06).
+ * Home — the desktop shell's dashboard (UI-04, §4.13; modernised in #104).
+ * Every widget comes from a module the person can open; one they cannot is
+ * simply absent (FR-REG-06). Each widget asks for its own data and says for
+ * itself when it is loading or failed, with Retry, so nothing waits on the
+ * slowest. The counts at the top are the lengths of the lists they open.
  */
-interface Dashboard {
+export interface Dashboard {
   user: { name: string };
   stats: { my_tasks: number; tasks_overdue: number; unread_mail: number; unread_chats: number; notifications_unread: number };
-  pending_tasks: Array<{ id: number; title: string; status: string; priority: string; due_date: string | null; overdue: boolean }>;
-  recent_files: Array<{ id: number; name: string; extension: string; size: number; location: string; at: string }>;
-  activity: Array<{ id: number; description: string | null; user: string | null; at: string }>;
+  recent_files: Array<{
+    id: number;
+    name: string;
+    extension: string;
+    size: number;
+    location: string;
+    at: string;
+    /** Newer servers (#104): a type to show, a preview, and whether it is still being processed. */
+    kind?: string | null;
+    mime?: string | null;
+    thumbnail?: string | null;
+    status?: 'ready' | 'processing' | 'failed' | null;
+  }>;
+  /** Grouped by the server on newer versions (#104): `count` updates of one kind by one person, as one line. */
+  activity: Array<{ id: number; description: string | null; user: string | null; at: string; count?: number; link?: string | null; module?: string | null }>;
 }
 
 interface Approval {
@@ -41,42 +62,43 @@ interface Approval {
   link: string;
 }
 
+interface Summary {
+  total: number;
+  digest: { text: string | null; reason: string | null; points?: Array<{ text: string; link: string | null }>; sources?: Array<{ label: string; link: string }> };
+}
+
+/** Transfer parts and the like are not activity (#104): a line per chunk of an upload says nothing. */
+const NOISE = /\b(chunk|part \d+ of \d+|upload(ed)? part|transfer part)\b/i;
+
 export default function HomePage(_props: ModuleProps) {
   useTabTitle(t('nav.home'));
-  const { navigate, openLink } = useTab();
+  const { navigate, openLink, query, go } = useTab();
   const user = useStore(app, (s) => s.auth?.user);
   const orgId = useStore(app, (s) => s.organizationId);
+  const orgs = useStore(app, (s) => s.bootstrap?.organizations ?? []);
   const apps = useStore(app, (s) => s.apps);
   const status = useStore(app, (s) => s.status);
   const has = (id: string) => apps.some((a) => a.id === id);
+  const meet = useCanOpen('meet');
   const today = todayInZone();
   const [newOpen, setNewOpen] = useState(false);
   const [customizing, setCustomizing] = useState(false);
   const [layout, setLayoutState] = useState<Layout>(() => loadLayout(user?.id));
+  // The company the dashboard is about: the one you work in, or all of yours. Home's own filter — it does not switch the app.
+  const [company, setCompany] = useState<string | null>(orgId);
   const setLayout = (l: Layout) => {
     setLayoutState(l);
     saveLayout(user?.id, l);
   };
 
   const dash = useQuery({ queryKey: ['home', 'dashboard'], queryFn: () => apiGetMeta<Dashboard>('/api/dashboard/home') });
-  const tasks = useQuery({
-    queryKey: ['tasks', 'today', orgId],
-    // Yours, and those you were added to afterwards — which only `shared` returns (QA-014).
-    queryFn: async () => {
-      const [mine, shared] = await Promise.all([
-        apiGetMeta<{ tasks: Task[] }>('/api/tasks', { filter: 'active', org: orgId }),
-        apiGetMeta<{ tasks: Task[] }>('/api/tasks', { filter: 'shared' }).catch(() => null),
-      ]);
-      return { ...mine, data: { tasks: mergeTasks(mine.data.tasks ?? [], shared?.data.tasks ?? []) } };
-    },
-    enabled: has('tasks'),
-  });
+  // The Tasks page's own request: the counts here are the lengths of the lists they open.
+  const tasks = useQuery({ ...ALL_TASKS, enabled: has('tasks') });
   const events = useQuery({
     queryKey: ['calendar', today, today],
     queryFn: () => apiGetMeta<{ events: CalendarEvent[] }>('/api/calendar/events', { from: today, to: today }),
     enabled: has('calendar'),
   });
-  // Invitations waiting for your answer, flagged when they overlap something you have (worksuite-desktop#99).
   const invitations = useWaitingInvitations(has('calendar') || has('meetings'));
   const approvals = useQuery({
     queryKey: ['hr', 'approvals'],
@@ -84,126 +106,203 @@ export default function HomePage(_props: ModuleProps) {
     enabled: has('hr'),
     retry: false,
   });
-  const summary = useQuery({
-    queryKey: ['home', 'summary'],
-    queryFn: () => apiGet<{ total: number; digest: { text: string | null; reason: string | null } }>('/api/dashboard/summary'),
-    retry: false,
-    staleTime: 10 * 60_000,
-  });
+  const announcements = useMyAnnouncements();
+  const summary = useQuery({ queryKey: ['home', 'summary'], queryFn: () => apiGet<Summary>('/api/dashboard/summary'), retry: false, staleTime: 10 * 60_000 });
 
-  const dueToday = dueTodayOf(tasks.data?.data.tasks ?? [], today);
-  const meetings = meetingsToday(events.data?.data.events ?? []);
-  // Unread counts only of the apps the person has: someone without Mail is not told about mail.
+  const reading = Number(query.get('announcement') ?? 0) || null;
+  const readingAll = query.get('announcements') === 'all';
+
+  const inCompany = (o: number | null | undefined) => company === null || o === null || o === undefined || String(o) === company;
+  const myTasks = (tasks.data?.data.tasks ?? []).filter((x) => inCompany(x.org_id));
+  const buckets = taskBuckets(myTasks, today);
+  const agenda = events.data?.data.events ?? [];
+  const meetings = meetingsToday(agenda);
+  // Announcements: an older server without them, or one refusing, has no widget rather than an error.
+  const noAnnouncements = announcements.error instanceof ApiError && (announcements.error.status === 404 || announcements.error.forbidden);
+  const notices = ranked(forCompany(announcements.data ?? [], company));
+  const acks = toAcknowledge(notices);
+  const approvalItems = has('hr') ? (approvals.data?.items ?? []) : [];
+  const waitingCount = (has('hr') ? (approvals.data?.count ?? 0) : 0) + (invitations.data?.length ?? 0) + acks.length;
   const unreadChat = has('chat') ? (status?.unread.chat ?? 0) : 0;
   const unreadMail = has('mail') ? (status?.unread.mail ?? 0) : 0;
-  const unread = unreadChat + unreadMail;
   const offlineAt = dash.data?.offline ? dash.data.cachedAt : null;
+  const activity = (dash.data?.data.activity ?? []).filter((a) => !NOISE.test(a.description ?? ''));
+  const files = (dash.data?.data.recent_files ?? []).filter((f) => !isJunkFile(f.name));
+  const onPlace = (moved: CardId, before: CardId) => setLayout(place(layout, moved, before));
+  const common = (id: CardId) => ({ id, size: sizeOf(layout, id), onPlace });
 
   const cards: Record<CardId, ReactNode> = {
     work: has('tasks') ? (
-          <Card title={t('home.todaysWork')} action={<LinkButton onClick={() => navigate('/tasks')}>All tasks</LinkButton>} className="min-h-[300px]">
-            <TodaysWork loading={tasks.isLoading} error={tasks.error} tasks={todaysWork(tasks.data?.data.tasks ?? [], today).slice(0, 8)} today={today} />
-          </Card>
+      <Widget
+        {...common('work')}
+        title={t('home.todaysWork')}
+        icon="tasks"
+        count={buckets.overdue.length + buckets.today.length}
+        countTone={buckets.overdue.length ? 'danger' : 'indigo'}
+        action={<HeaderLink onClick={() => navigate('/tasks')}>All tasks</HeaderLink>}
+        loading={tasks.isLoading}
+        error={tasks.error}
+        onRetry={() => void tasks.refetch()}
+        empty={buckets.overdue.length + buckets.today.length + buckets.upcoming.length === 0 ? <><Icon name="check-circle" size={15} /> Nothing due. Enjoy the calm.</> : null}
+      >
+        <TaskSections buckets={buckets} today={today} onMore={(scope) => navigate(`/tasks?scope=${scope}`)} />
+      </Widget>
     ) : null,
     calendar: has('calendar') ? (
-          <Card title={t('home.calendar')} action={<span className="text-[13px] text-ink-3">Today</span>} className="min-h-[300px]">
-            <TodayCalendar loading={events.isLoading} events={events.data?.data.events ?? []} />
-          </Card>
+      <Widget
+        {...common('calendar')}
+        title="Agenda"
+        icon="calendar"
+        count={agenda.length}
+        action={<HeaderLink onClick={() => navigate('/calendar')}>Calendar</HeaderLink>}
+        loading={events.isLoading}
+        error={events.error}
+        onRetry={() => void events.refetch()}
+        empty={agenda.length === 0 ? <><Icon name="calendar" size={15} /> Nothing scheduled today.</> : null}
+      >
+        <Agenda events={agenda} canMeet={meet} onOpen={(route) => navigate(route)} />
+      </Widget>
     ) : null,
-    waiting: (has('hr') && approvals.data) || invitations.data?.length ? (
-          <Card title={t('home.waiting')} action={approvals.data?.count ? <span className="rounded-full bg-warning-bg px-2 py-0.5 text-[12px] font-semibold text-warning">{approvals.data.count} approvals</span> : null} className="min-h-[300px]">
-            {invitations.data?.length ? <WaitingInvitations items={invitations.data} onOpen={openLink} /> : null}
-            {has('hr') && approvals.data && (approvals.data.items.length || !invitations.data?.length) ? <WaitingForMe items={approvals.data.items} onOpen={openLink} /> : null}
-          </Card>
-    ) : null,
+    waiting: (
+      <Widget
+        {...common('waiting')}
+        title={t('home.waiting')}
+        icon="inbox"
+        count={waitingCount}
+        countTone="warning"
+        loading={(has('hr') && approvals.isLoading) || invitations.isLoading}
+        error={has('hr') && approvals.error && !(approvals.error instanceof ApiError && approvals.error.forbidden) ? approvals.error : null}
+        onRetry={() => void approvals.refetch()}
+        empty={waitingCount === 0 ? <><Icon name="check-circle" size={15} /> Nothing waiting for you.</> : null}
+      >
+        <div className="flex flex-col gap-3">
+          {invitations.data?.length ? <WaitingInvitations items={invitations.data} onOpen={openLink} /> : null}
+          {acks.length ? <AnnouncementRows items={acks} onOpen={(id) => go(`/home?announcement=${id}`)} limit={3} /> : null}
+          {approvalItems.length ? <WaitingForMe items={approvalItems} onOpen={openLink} /> : null}
+        </div>
+      </Widget>
+    ),
+    announcements: noAnnouncements ? null : (
+      <Widget
+        {...common('announcements')}
+        title="Announcements"
+        icon="megaphone"
+        count={notices.filter((a) => !a.read).length}
+        countTone="indigo"
+        action={notices.length ? <HeaderLink onClick={() => go('/home?announcements=all')}>See all</HeaderLink> : null}
+        loading={announcements.isLoading}
+        error={announcements.error}
+        onRetry={() => void announcements.refetch()}
+        empty={notices.length === 0 ? <><Icon name="megaphone" size={15} /> No announcements.</> : null}
+      >
+        <AnnouncementRows items={notices} onOpen={(id) => go(`/home?announcement=${id}`)} />
+      </Widget>
+    ),
     activity: has('activity') ? (
-        <Card title={t('home.activity')} className="min-h-[260px]">
-          {dash.isLoading ? <Spinner /> : dash.error ? <ErrorNote error={dash.error} onRetry={() => void dash.refetch()} /> : null}
-          {(dash.data?.data.activity ?? []).length === 0 && !dash.isLoading ? <Empty icon="activity" title="Nothing new" /> : null}
-          <ul className="flex flex-col gap-3">
-            {(dash.data?.data.activity ?? []).slice(0, 5).map((a) => (
-              <li key={a.id} className="flex gap-3">
-                <Avatar name={a.user ?? 'WorkSuite'} size={32} />
-                <div className="min-w-0">
-                  <div className="text-[13.5px] text-ink">
-                    {a.user ? <span className="font-semibold">{a.user} </span> : null}
+      <Widget
+        {...common('activity')}
+        title={t('home.activity')}
+        icon="history"
+        loading={dash.isLoading}
+        error={dash.error}
+        onRetry={() => void dash.refetch()}
+        empty={activity.length === 0 ? <><Icon name="activity" size={15} /> Nothing new.</> : null}
+      >
+        <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
+          {activity.slice(0, 6).map((a) => (
+            <li key={a.id}>
+              <button type="button" disabled={!a.link} onClick={() => a.link && openLink(a.link)} className="flex w-full gap-2.5 rounded-[8px] text-left enabled:hover:bg-subtle">
+                <Avatar name={a.user ?? 'WorkSuite'} size={28} />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px] text-ink">
+                    {a.user ? <b>{a.user} </b> : null}
                     {a.description}
-                  </div>
-                  <div className="text-[12.5px] text-ink-3">{relative(a.at)}</div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </Card>
+                    {a.count && a.count > 1 ? <span className="ml-1 rounded-full bg-subtle px-1.5 text-[11px] font-bold text-ink-2" title={`${a.count} updates`}>×{compactCount(a.count)}</span> : null}
+                  </span>
+                  <span className="block text-[12px] text-ink-3">{relative(a.at)}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </Widget>
     ) : null,
     files: has('files') ? (
-          <Card title={t('home.files')} action={<LinkButton onClick={() => navigate('/files')}>Open Drive</LinkButton>} className="min-h-[260px]">
-            <ul className="flex flex-col gap-2">
-              {(dash.data?.data.recent_files ?? []).slice(0, 5).map((f) => (
-                <li key={f.id}>
-                  <button type="button" className="flex w-full items-center gap-3 rounded-[8px] p-1 text-left hover:bg-subtle" onClick={() => navigate(`/files?file=${f.id}`)}>
-                    <FileBadge name={f.name} />
-                    <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-ink">{f.name}</span>
-                    <span className="text-[12px] text-ink-3">{relative(f.at)}</span>
-                  </button>
-                </li>
-              ))}
-              {!dash.isLoading && (dash.data?.data.recent_files ?? []).length === 0 ? <Empty icon="folder" title="No recent files" /> : null}
-            </ul>
-          </Card>
+      <Widget
+        {...common('files')}
+        title={t('home.files')}
+        icon="folder"
+        action={<HeaderLink onClick={() => navigate('/files')}>Open Drive</HeaderLink>}
+        loading={dash.isLoading}
+        error={dash.error}
+        onRetry={() => void dash.refetch()}
+        empty={files.length === 0 ? <><Icon name="folder" size={15} /> No recent files.</> : null}
+      >
+        <ul className="m-0 flex list-none flex-col gap-1 p-0">
+          {files.slice(0, 6).map((f) => (
+            <li key={f.id}>
+              <button type="button" className="flex w-full items-center gap-2.5 rounded-[8px] p-1 text-left hover:bg-subtle" onClick={() => navigate(`/files?file=${f.id}`)}>
+                <FileIcon f={{ id: f.id, name: f.name, extension: f.extension, has_thumb: !!f.thumbnail }} size={32} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-semibold text-ink" title={f.name}>{f.name}</span>
+                  <span className="block truncate text-[12px] text-ink-3">{[f.kind ?? f.extension.toUpperCase(), f.location, relative(f.at)].filter(Boolean).join(' · ')}</span>
+                </span>
+                {f.status === 'processing' ? <Chip tone="warning">Processing</Chip> : f.status === 'failed' ? <Chip tone="danger">Failed</Chip> : null}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </Widget>
     ) : null,
     summary: (
-        <section className="flex min-h-[260px] flex-col rounded-[12px] bg-navy p-5 text-white">
-          <h2 className="flex items-center gap-2 text-[15px] font-bold">
-            <Icon name="sparkles" size={17} className="text-teal-light" /> {t('home.summary')}
-          </h2>
-          <p className="mt-3 flex-1 text-[13.5px] leading-relaxed text-navy-ink">
-            {summary.isLoading
-              ? 'Preparing your summary…'
-              : summary.data?.digest.text
-                ? summary.data.digest.text
-                : summary.error instanceof ApiError && summary.error.forbidden
-                  ? 'Your daily summary is built from the company wall, which is not enabled for you.'
-                  : (summary.data?.digest.reason ?? `${dueToday.length} task${dueToday.length === 1 ? '' : 's'} due today, ${meetings.length} meeting${meetings.length === 1 ? '' : 's'} and ${unread} unread message${unread === 1 ? '' : 's'}.`)}
-          </p>
-          <div className="mt-4 flex gap-2">
-            {has('ai') ? (
-              <button type="button" className="rounded-[8px] bg-teal-light px-3 py-2 text-[13px] font-semibold text-navy hover:opacity-90" onClick={() => openAssistant()}>
-                Ask AI
-              </button>
-            ) : null}
-            <button type="button" className="rounded-[8px] border border-white/20 px-3 py-2 text-[13px] font-semibold hover:bg-white/10" onClick={() => navigate('/notifications')}>
-              What's new
-            </button>
-          </div>
-        </section>
+      <Widget
+        {...common('summary')}
+        title={t('home.summary')}
+        icon="sparkles"
+        tone="navy"
+        action={has('ai') ? <HeaderLink light onClick={() => openAssistant()}>Ask AI</HeaderLink> : null}
+        loading={summary.isLoading}
+      >
+        <DailySummary summary={summary.data} error={summary.error} facts={{ today: buckets.today.length, overdue: buckets.overdue.length, meetings: meetings.length, unread: unreadChat + unreadMail, waiting: waitingCount }} onOpen={openLink} onNew={() => navigate('/notifications')} />
+      </Widget>
     ),
   };
 
+  const shown = layout.order.filter((id) => !layout.hidden.includes(id) && cards[id]);
+
   return (
-    <div className="h-full overflow-y-auto px-8 py-7 scroll-thin">
+    <div className="h-full overflow-y-auto px-4 py-5 sm:px-6 lg:px-8 scroll-thin">
       <div className="mx-auto max-w-[1500px]">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="text-[14px] text-ink-3">
-              {dayLabel(today)} · {organizationName(orgId)}
-            </div>
-            <h1 className="mt-1 text-[28px] font-bold tracking-tight text-ink">
+        <header className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-[22px] font-bold tracking-tight text-ink">
               {greeting()}, {user?.name.split(' ')[0] ?? ''}
             </h1>
+            <div className="text-[13px] text-ink-3">{dayLabel(today)}</div>
           </div>
-          <div className="relative flex items-center gap-2">
+          <div className="relative flex flex-wrap items-center gap-2">
             {offlineAt ? <OfflineNote cachedAt={offlineAt} /> : null}
-            <Button size="lg" onClick={() => setCustomizing((v) => !v)} aria-haspopup="dialog" aria-expanded={customizing}>
+            {orgs.length > 1 ? (
+              <select aria-label="Company" value={company ?? ''} onChange={(e) => setCompany(e.target.value || null)} className="h-9 max-w-[220px] rounded-[8px] border border-line bg-surface px-2 text-[13px] text-ink">
+                <option value="">All companies</option>
+                {orgs.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            <Button onClick={() => setCustomizing((v) => !v)} aria-haspopup="dialog" aria-expanded={customizing} icon="sliders">
               Customize
             </Button>
             {customizing ? <Customize layout={layout} onChange={setLayout} onClose={() => setCustomizing(false)} /> : null}
-            <Button size="lg" variant="primary" icon="plus" onClick={() => setNewOpen((v) => !v)} aria-haspopup="menu" aria-expanded={newOpen}>
+            <Button variant="primary" icon="plus" onClick={() => setNewOpen((v) => !v)} aria-haspopup="menu" aria-expanded={newOpen}>
               New
             </Button>
             {newOpen ? (
-              <div className="animate-in absolute top-12 right-0 z-20 w-[200px] rounded-[10px] border border-line bg-surface p-1 shadow-xl" role="menu" onMouseLeave={() => setNewOpen(false)}>
+              <div className="animate-in absolute top-11 right-0 z-20 w-[200px] rounded-[10px] border border-line bg-surface p-1 shadow-xl" role="menu" onMouseLeave={() => setNewOpen(false)}>
                 {has('tasks') ? <NewItem icon="tasks" label="Task" onClick={() => navigate('/tasks?new=1')} /> : null}
+                {has('calendar') ? <NewItem icon="calendar-plus" label="Event" onClick={() => navigate('/calendar?new=1')} /> : null}
                 {has('mail') ? <NewItem icon="mail" label="Email" onClick={() => navigate('/mail?compose=1')} /> : null}
                 {has('crm') ? <NewItem icon="users" label="Lead" onClick={() => navigate('/crm?new=1')} /> : null}
                 {has('files') ? <NewItem icon="upload" label="Upload file" onClick={() => navigate('/files?upload=1')} /> : null}
@@ -211,36 +310,43 @@ export default function HomePage(_props: ModuleProps) {
               </div>
             ) : null}
           </div>
+        </header>
+
+        <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6">
+          {has('tasks') ? (
+            <>
+              <Counter label="Due today" n={buckets.today.length} icon="tasks" tone="indigo" loading={tasks.isLoading} onClick={() => navigate('/tasks?scope=today')} />
+              <Counter label="Overdue" n={buckets.overdue.length} icon="alert" tone="red" loading={tasks.isLoading} onClick={() => navigate('/tasks?scope=overdue')} />
+              <Counter label="Upcoming" n={buckets.upcoming.length} icon="clock" tone="teal" loading={tasks.isLoading} onClick={() => navigate('/tasks?scope=upcoming')} />
+            </>
+          ) : null}
+          {has('calendar') ? <Counter label={t('home.meetings')} n={meetings.length} icon="video" tone="teal" loading={events.isLoading} onClick={() => navigate(has('meetings') ? '/meetings' : '/calendar')} /> : null}
+          <Counter label="Waiting for me" n={waitingCount} icon="inbox" tone="amber" onClick={() => document.querySelector('[data-card="waiting"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} />
+          {has('chat') || has('mail') ? <Counter label={t('home.unread')} n={unreadChat + unreadMail} icon="chat" tone="red" onClick={() => navigate(has('chat') && (unreadChat >= unreadMail || !has('mail')) ? '/chat' : '/mail')} /> : null}
         </div>
 
-        <div className="mt-6 flex flex-wrap gap-3">
-          {has('tasks') ? <Counter label={t('home.tasksDue')} n={dueToday.length} tone="indigo" onClick={() => navigate('/tasks?filter=today')} /> : null}
-          {has('calendar') ? <Counter label={t('home.meetings')} n={meetings.length} tone="teal" onClick={() => navigate(has('meetings') ? '/meetings' : '/calendar')} /> : null}
-          {has('hr') && approvals.data ? <Counter label={t('home.approvals')} n={approvals.data.count} tone="amber" onClick={() => navigate('/hr?tab=approvals')} /> : null}
-          {has('chat') || has('mail') ? <Counter label={t('home.unread')} n={unread} tone="red" onClick={() => navigate(has('chat') && (unreadChat >= unreadMail || !has('mail')) ? '/chat' : '/mail')} /> : null}
-        </div>
-
-        <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-3">
-          {layout.order.filter((id) => !layout.hidden.includes(id) && cards[id]).map((id) => (
+        <div className="mt-4 grid grid-cols-1 items-start gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+          {shown.map((id) => (
             <Fragment key={id}>{cards[id]}</Fragment>
           ))}
         </div>
       </div>
+      {reading ? <AnnouncementReader id={reading} onClose={() => go('/home')} /> : null}
+      {readingAll ? <AllAnnouncements items={notices} onOpen={(id) => go(`/home?announcement=${id}`)} onClose={() => go('/home')} /> : null}
     </div>
   );
 }
 
 /**
- * Which cards Home shows, and in what order (QA-015: the button opened
- * Settings › Preferences, which has nothing about Home). Kept on this computer
- * for this person.
+ * Which cards Home shows, in what order and how wide (QA-015, #104). Kept on
+ * this computer for this person; Reset Layout puts it back as it came.
  */
 function Customize({ layout, onChange, onClose }: { layout: Layout; onChange: (l: Layout) => void; onClose: () => void }) {
   const label = (id: CardId) => CARDS.find((c) => c.id === id)?.label ?? id;
   return (
-    <div role="dialog" aria-label="Customize Home" className="animate-in absolute top-12 right-24 z-20 w-[300px] rounded-[12px] border border-line bg-surface p-3 shadow-xl" onKeyDown={(e) => e.key === 'Escape' && onClose()}>
+    <div role="dialog" aria-label="Customize Home" className="animate-in absolute top-11 right-24 z-20 w-[330px] rounded-[12px] border border-line bg-surface p-3 shadow-xl" onKeyDown={(e) => e.key === 'Escape' && onClose()}>
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-[13px] font-bold text-ink">Cards on Home</span>
+        <span className="text-[13px] font-bold text-ink">Widgets on Home</span>
         <button type="button" onClick={onClose} className="text-[12.5px] font-semibold text-primary hover:underline">
           Done
         </button>
@@ -250,6 +356,16 @@ function Customize({ layout, onChange, onClose }: { layout: Layout; onChange: (l
           <li key={id} className="flex items-center gap-2 rounded-[8px] px-1.5 py-1 hover:bg-subtle">
             <Checkbox aria-label={`Show ${label(id)}`} checked={!layout.hidden.includes(id)} onChange={() => onChange(toggle(layout, id))} />
             <span className={cx('min-w-0 flex-1 text-[13px]', layout.hidden.includes(id) ? 'text-ink-3' : 'text-ink')}>{label(id)}</span>
+            <button
+              type="button"
+              aria-label={`Make ${label(id)} ${sizeOf(layout, id) === 'wide' ? 'normal width' : 'wide'}`}
+              aria-pressed={sizeOf(layout, id) === 'wide'}
+              title={sizeOf(layout, id) === 'wide' ? 'Wide' : 'Normal'}
+              onClick={() => onChange(resize(layout, id, sizeOf(layout, id) === 'wide' ? 'normal' : 'wide'))}
+              className={cx('rounded px-1.5 py-0.5 text-[11px] font-semibold', sizeOf(layout, id) === 'wide' ? 'bg-selection text-primary' : 'text-ink-3 hover:bg-line')}
+            >
+              {sizeOf(layout, id) === 'wide' ? 'Wide' : 'Normal'}
+            </button>
             <button type="button" aria-label={`Move ${label(id)} up`} disabled={i === 0} onClick={() => onChange(move(layout, id, -1))} className="rounded p-1 text-ink-2 hover:bg-line disabled:opacity-30">
               <Icon name="arrow-up" size={14} />
             </button>
@@ -259,7 +375,12 @@ function Customize({ layout, onChange, onClose }: { layout: Layout; onChange: (l
           </li>
         ))}
       </ul>
-      <p className="mt-2 mb-0 text-[11.5px] text-ink-3">Cards for apps you don't have stay hidden. Kept on this computer.</p>
+      <div className="mt-2 flex items-center gap-2">
+        <p className="m-0 flex-1 text-[11.5px] text-ink-3">Drag a widget by its handle to move it. Widgets for apps you don't have stay hidden.</p>
+        <Button size="sm" onClick={() => onChange(DEFAULT_LAYOUT)}>
+          Reset Layout
+        </Button>
+      </div>
     </div>
   );
 }
@@ -272,26 +393,57 @@ function NewItem({ icon, label, onClick }: { icon: string; label: string; onClic
   );
 }
 
-function LinkButton({ children, onClick }: { children: string; onClick: () => void }) {
-  return (
-    <button type="button" onClick={onClick} className="text-[13px] font-semibold text-primary underline hover:no-underline">
-      {children}
-    </button>
-  );
-}
-
-function Counter({ label, n, tone, onClick }: { label: string; n: number; tone: 'indigo' | 'teal' | 'amber' | 'red'; onClick: () => void }) {
+/** A summary card: what it counts, compactly (the exact number on hover), and the list it opens. */
+export function Counter({ label, n, icon, tone, onClick, loading }: { label: string; n: number; icon: string; tone: 'indigo' | 'teal' | 'amber' | 'red'; onClick: () => void; loading?: boolean }) {
   const tones = { indigo: 'bg-selection text-primary', teal: 'bg-teal/10 text-teal', amber: 'bg-warning-bg text-warning', red: 'bg-danger-bg text-badge' };
   return (
-    <button type="button" onClick={onClick} className="flex items-center gap-3 rounded-[10px] border border-line bg-surface px-4 py-3 text-[14px] font-semibold text-ink hover:border-primary/40">
-      {label}
-      <span className={cx('min-w-[28px] rounded-full px-2 py-0.5 text-center text-[13px] font-bold tabular', tones[tone])}>{n}</span>
+    <button type="button" onClick={onClick} aria-label={`${label}: ${n}`} className="flex min-w-0 items-center gap-2.5 rounded-[10px] border border-line bg-surface px-3 py-2.5 text-left hover:border-primary/40">
+      <span className={cx('flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px]', tones[tone])}>
+        <Icon name={icon} size={16} />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[18px] leading-tight font-bold text-ink tabular" title={n.toLocaleString()}>
+          {loading ? '–' : compactCount(n)}
+        </span>
+        <span className="block truncate text-[12px] text-ink-3">{label}</span>
+      </span>
     </button>
   );
 }
 
-function TodaysWork({ tasks, today, loading, error }: { tasks: Task[]; today: string; loading: boolean; error: unknown }) {
+/** Overdue, due today and upcoming, apart, each with a way to the whole list. */
+function TaskSections({ buckets, today, onMore }: { buckets: ReturnType<typeof taskBuckets>; today: string; onMore: (scope: 'overdue' | 'today' | 'upcoming') => void }) {
+  const sections: Array<{ id: 'overdue' | 'today' | 'upcoming'; label: string; items: Task[]; tone: string }> = [
+    { id: 'overdue', label: 'Overdue', items: buckets.overdue, tone: 'text-danger' },
+    { id: 'today', label: 'Due today', items: buckets.today, tone: 'text-primary' },
+    { id: 'upcoming', label: 'Upcoming', items: buckets.upcoming, tone: 'text-ink-2' },
+  ];
+  return (
+    <div className="flex flex-col gap-3">
+      {sections
+        .filter((s) => s.items.length)
+        .map((s) => (
+          <section key={s.id} aria-label={s.label}>
+            <div className="mb-1 flex items-center gap-2 text-[11px] font-bold tracking-[0.5px] uppercase">
+              <span className={s.tone}>{s.label}</span>
+              <span className="text-ink-3" title={String(s.items.length)}>{compactCount(s.items.length)}</span>
+              <span className="flex-1" />
+              {s.items.length > 4 ? (
+                <button type="button" onClick={() => onMore(s.id)} className="text-[11.5px] font-semibold tracking-normal text-primary normal-case hover:underline">
+                  View all
+                </button>
+              ) : null}
+            </div>
+            <TaskRows tasks={s.items.slice(0, 4)} today={today} />
+          </section>
+        ))}
+    </div>
+  );
+}
+
+function TaskRows({ tasks, today }: { tasks: Task[]; today: string }) {
   const qc = useQueryClient();
+  const { navigate } = useTab();
   const complete = useMutation({
     mutationFn: async (task: Task) => {
       const done = task.status !== 'done';
@@ -314,23 +466,17 @@ function TodaysWork({ tasks, today, loading, error }: { tasks: Task[]; today: st
     },
     onError: (e) => toast('error', errorMessage(e)),
   });
-  if (loading) return <Spinner />;
-  if (error) return <ErrorNote error={error} />;
-  if (tasks.length === 0) return <Empty icon="check-circle" title="Nothing due today" hint="Enjoy the calm." />;
   return (
-    <ul className="flex flex-col gap-3">
+    <ul className="m-0 flex list-none flex-col gap-1 p-0">
       {tasks.map((task) => {
-        const done = task.status === 'done';
-        const overdue = !done && task.due_date !== null && task.due_date < today;
+        const due = dueOf(task, today);
         return (
-          <li key={task.id} className="flex items-start gap-3">
-            <Checkbox checked={done} onChange={() => complete.mutate(task)} className="mt-0.5" aria-label={`Mark “${task.title}” ${done ? 'not done' : 'done'}`} />
-            <div className="min-w-0">
-              <div className={cx('text-[14px] font-semibold', done ? 'text-ink-3 line-through' : 'text-ink')}>{task.title}</div>
-              <div className={cx('text-[12.5px]', overdue ? 'text-danger' : 'text-ink-3')}>
-                {task.org_name ?? 'Tasks'} · {done ? 'done' : overdue ? `overdue ${Math.max(1, Math.round((Date.parse(today) - Date.parse(task.due_date!)) / 86_400_000))} day(s)` : task.status.replace('_', ' ')}
-              </div>
-            </div>
+          <li key={task.id} className="flex items-center gap-2.5">
+            <Checkbox checked={task.status === 'done'} onChange={() => complete.mutate(task)} aria-label={`Mark “${task.title}” done`} />
+            <button type="button" onClick={() => navigate(`/tasks?task=${task.id}`)} className="flex min-w-0 flex-1 items-baseline gap-2 text-left">
+              <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink">{task.title}</span>
+              <span className={cx('shrink-0 text-[12px]', due.tone === 'overdue' ? 'text-danger' : 'text-ink-3')}>{due.label}</span>
+            </button>
           </li>
         );
       })}
@@ -338,31 +484,103 @@ function TodaysWork({ tasks, today, loading, error }: { tasks: Task[]; today: st
   );
 }
 
-function TodayCalendar({ events, loading }: { events: CalendarEvent[]; loading: boolean }) {
+/** Today in order: time, what kind of entry, and its actions — open the record, join the meeting. */
+function Agenda({ events, canMeet, onOpen }: { events: CalendarEvent[]; canMeet: boolean; onOpen: (route: string) => void }) {
   const [now] = useState(() => {
     const d = new Date();
     return d.getHours() * 60 + d.getMinutes();
   });
-  if (loading) return <Spinner />;
-  if (events.length === 0) return <Empty icon="calendar" title="Nothing scheduled today" />;
-  const current = events.find((e) => !e.all_day && wallMinutes(e.start_at) <= now + 10 && (e.end_at ? wallMinutes(e.end_at) : wallMinutes(e.start_at) + 60) >= now && e.join_url);
+  const sorted = [...events].sort((a, b) => Number(b.all_day) - Number(a.all_day) || wallMinutes(a.start_at) - wallMinutes(b.start_at));
   return (
-    <div className="flex h-full flex-col gap-2.5">
-      {events.slice(0, 5).map((e) => (
-        <div key={`${e.source}:${e.id}:${e.start_at}`} className={cx('flex gap-4 rounded-[10px] px-4 py-3', e === current ? 'bg-selection' : 'bg-subtle')}>
-          <span className="w-[56px] shrink-0 font-mono text-[13px] font-semibold text-primary">{e.all_day ? 'All day' : wallTimeLabel(e.start_at)}</span>
-          <span className="min-w-0">
-            <span className="block truncate text-[14px] font-semibold text-ink">{e.title}</span>
-            <span className="block truncate text-[12.5px] text-ink-3">{e.location ?? (e.source === 'meeting' ? 'WorkSuite Meet' : e.source)}</span>
-          </span>
+    <ul className="m-0 flex list-none flex-col gap-1 p-0">
+      {sorted.slice(0, 7).map((e) => {
+        const to = destinationOf(e);
+        const end = e.end_at ? wallMinutes(e.end_at) : wallMinutes(e.start_at) + 60;
+        const live = !e.all_day && wallMinutes(e.start_at) <= now + 10 && end >= now;
+        const past = !e.all_day && end < now;
+        const related = (e as CalendarEvent & { related?: { kind_label?: string | null } | null }).related;
+        const kind = related?.kind_label ?? CATEGORIES.find((c) => c.id === categoryOf(e.source))?.label.replace(/s$/, '') ?? 'Event';
+        const join = e.source === 'meeting' && e.uuid ? (canMeet ? () => void openMeeting(e.uuid!, e.title) : null) : e.join_url ? () => void call('app:openExternal', { url: e.join_url! }) : null;
+        return (
+          <li key={`${e.source}:${e.id}:${e.start_at}`} className={cx('flex items-center gap-2.5 rounded-[8px] px-2 py-1.5', live ? 'bg-selection' : 'hover:bg-subtle', past && 'opacity-60')}>
+            <span className="w-[52px] shrink-0 text-[12.5px] font-semibold text-primary tabular">{e.all_day ? 'All day' : wallTimeLabel(e.start_at)}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[13px] font-semibold text-ink">{e.title}</span>
+              <span className="block truncate text-[12px] text-ink-3">{[kind, e.location].filter(Boolean).join(' · ')}</span>
+            </span>
+            {join && !past ? (
+              <Button size="sm" variant={live ? 'primary' : 'secondary'} icon="video" onClick={join}>
+                Join
+              </Button>
+            ) : null}
+            {to?.route ? (
+              <button type="button" aria-label={`${to.label}: ${e.title}`} title={to.label} onClick={() => onOpen(to.route!)} className="shrink-0 rounded-[6px] p-1 text-ink-2 hover:bg-line">
+                <Icon name="chevron-right" size={15} />
+              </button>
+            ) : to?.web ? (
+              <button type="button" aria-label={`${to.label}: ${e.title}`} title={to.label} onClick={() => void call('app:openInBrowser', { path: to.web! })} className="shrink-0 rounded-[6px] p-1 text-ink-2 hover:bg-line">
+                <Icon name="external" size={14} />
+              </button>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/**
+ * The summary (#104): short, made of what you can open — each point goes to
+ * where it comes from — and nothing guessed about you. A server that sends no
+ * points gets the facts Home already has.
+ */
+function DailySummary({ summary, error, facts, onOpen, onNew }: { summary?: Summary; error: unknown; facts: { today: number; overdue: number; meetings: number; unread: number; waiting: number }; onOpen: (link: string) => void; onNew: () => void }) {
+  const points = summary?.digest.points?.filter((p) => p.text) ?? [];
+  const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
+  const fallback = [
+    facts.overdue ? `${plural(facts.overdue, 'task')} overdue` : null,
+    `${plural(facts.today, 'task')} due today`,
+    `${plural(facts.meetings, 'meeting')} today`,
+    facts.waiting ? `${facts.waiting} waiting for you` : null,
+    facts.unread ? `${plural(facts.unread, 'unread message')}` : null,
+  ].filter(Boolean);
+  return (
+    <div className="flex flex-col gap-2 text-[13px] leading-relaxed text-navy-ink">
+      {points.length ? (
+        <ul className="m-0 flex list-disc flex-col gap-1 pl-4">
+          {points.slice(0, 5).map((p, i) => (
+            <li key={i}>
+              {p.link ? (
+                <button type="button" onClick={() => onOpen(p.link!)} className="text-left text-white hover:underline">
+                  {p.text}
+                </button>
+              ) : (
+                p.text
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : summary?.digest.text ? (
+        <p className="m-0 line-clamp-5">{summary.digest.text}</p>
+      ) : (
+        <p className="m-0">{fallback.join(', ')}.</p>
+      )}
+      {summary?.digest.sources?.length ? (
+        <div className="flex flex-wrap items-center gap-1.5 text-[11.5px]">
+          <span>From:</span>
+          {summary.digest.sources.slice(0, 4).map((s) => (
+            <button key={s.link} type="button" onClick={() => onOpen(s.link)} className="rounded-full bg-white/10 px-2 py-0.5 text-white hover:bg-white/20">
+              {s.label}
+            </button>
+          ))}
         </div>
-      ))}
-      <div className="flex-1" />
-      {current?.join_url ? (
-        <Button variant="primary" size="lg" icon="video" onClick={() => void call('app:openExternal', { url: current.join_url! })}>
-          Join {current.title}
-        </Button>
       ) : null}
+      {!summary && error && !(error instanceof ApiError && error.forbidden) ? <p className="m-0 text-[12px]">The summary could not be prepared; these are today's numbers.</p> : null}
+      <div>
+        <button type="button" className="rounded-[8px] border border-white/20 px-2.5 py-1 text-[12.5px] font-semibold text-white hover:bg-white/10" onClick={onNew}>
+          What's new
+        </button>
+      </div>
     </div>
   );
 }
@@ -370,12 +588,15 @@ function TodayCalendar({ events, loading }: { events: CalendarEvent[]; loading: 
 /** Invitations to answer, the ones that clash flagged. */
 function WaitingInvitations({ items, onOpen }: { items: WaitingInvitation[]; onOpen: (link: string) => void }) {
   return (
-    <ul className="mb-3 flex flex-col gap-3">
+    <ul className="m-0 flex list-none flex-col gap-2 p-0">
       {items.slice(0, 4).map((i) => (
-        <li key={`${i.source}:${i.id}`} className="flex items-center gap-3">
+        <li key={`${i.source}:${i.id}`} className="flex items-center gap-2.5">
+          <Icon name="calendar-check" size={16} className="shrink-0 text-ink-3" />
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <div className="truncate text-[14px] font-semibold text-ink">Invitation · {i.title}</div>
-            <div className="truncate text-[12.5px] text-ink-3">{dateLabel(i.start_at)} · {timeLabel(i.start_at)}</div>
+            <div className="truncate text-[13px] font-semibold text-ink">Invitation · {i.title}</div>
+            <div className="truncate text-[12px] text-ink-3">
+              {dateLabel(i.start_at)} · {timeLabel(i.start_at)}
+            </div>
             {i.conflicts.length ? <ConflictFlag conflicts={i.conflicts} className="self-start" /> : null}
           </div>
           <Button size="sm" onClick={() => onOpen(i.link)}>
@@ -383,7 +604,6 @@ function WaitingInvitations({ items, onOpen }: { items: WaitingInvitation[]; onO
           </Button>
         </li>
       ))}
-      {items.length > 4 ? <CountBadge n={items.length - 4} tone="muted" /> : null}
     </ul>
   );
 }
@@ -403,16 +623,16 @@ function WaitingForMe({ items, onOpen }: { items: Approval[]; onOpen: (link: str
       setBusy(null);
     }
   };
-  if (items.length === 0) return <Empty icon="check-circle" title="Nothing waiting for you" />;
   return (
-    <ul className="flex flex-col gap-3">
+    <ul className="m-0 flex list-none flex-col gap-2 p-0">
       {items.slice(0, 5).map((a) => (
-        <li key={`${a.kind}:${a.id}`} className="flex items-center gap-3">
+        <li key={`${a.kind}:${a.id}`} className="flex items-center gap-2.5">
+          <Icon name="check-check" size={16} className="shrink-0 text-ink-3" />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[14px] font-semibold text-ink">
+            <div className="truncate text-[13px] font-semibold text-ink">
               {a.what} · {a.who}
             </div>
-            <div className="truncate text-[12.5px] text-ink-3">{a.when}</div>
+            <div className="truncate text-[12px] text-ink-3">{a.when}</div>
           </div>
           {a.kind === 'leave' && a.as !== 'responsible' ? (
             <>
@@ -430,7 +650,6 @@ function WaitingForMe({ items, onOpen }: { items: Approval[]; onOpen: (link: str
           )}
         </li>
       ))}
-      {items.length > 5 ? <CountBadge n={items.length - 5} tone="muted" /> : null}
     </ul>
   );
 }

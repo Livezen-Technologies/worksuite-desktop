@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-10-01 — 0.2.73: Chats in windows of their own; schedule conflicts asked before moving
+## 2026-10-01 — 0.2.73: Chats in windows of their own; schedule conflicts asked before moving; a modern Home with announcements
 
 - **Chats open in windows of their own** (#103). **Open in new window** in a conversation's header — in Chat and in
   the chat drawer — opens it in its own window, with the system's own minimise, maximise and close. Several can be
@@ -26,6 +26,26 @@ person who has to live with the change — what it does, and where it bites.
   Accepting an invitation asks the server again rather than trusting the list, so something added since is caught.
   A meeting cancelled or moved refreshes the calendar and its warnings. Saving something that is already in your
   calendar says so; people whose availability cannot be checked are named.
+
+- **Home, modernised** (#104). A compact header — greeting, date, a company filter, **Customize** and **New**. The
+  cards along the top are buttons and count exactly what they open: **Due today**, **Overdue** and **Upcoming**
+  (the next week) are now apart, as are meetings, what is waiting for you and unread messages; big numbers are
+  shortened (1.2K) with the exact number on hover. **Agenda** lists today with the kind of each entry (a meeting, a
+  task, a *Tender Meeting*…), **Join** for meetings and a way to the record. **Waiting for me** gathers approvals,
+  meeting invitations you have not answered and announcements to acknowledge. **Recent files** show a preview
+  where there is one, the type and whether the file is still being processed, and leave out temporary upload
+  pieces; **Activity** shows a run of similar updates as one line (×12) rather than one per upload part. The daily
+  summary is a few short points, each going to where it came from. Every widget loads on its own, says when it
+  failed and offers **Retry**. **Customize** shows, hides, reorders and widens widgets (or drag one by its handle
+  onto another), and **Reset Layout** puts it all back. The page narrows to one column in a small window.
+- **Announcements on Home** (#98). The **Announcements** widget shows those sent to you for the company chosen at
+  the top — urgent and pinned first — with who sent it and when; open one to read it (it is marked read) and
+  **Acknowledge** where that is asked for. **See all** lists every one. A notification about an announcement opens
+  it on Home; one withdrawn or expired since says it is no longer available.
+- Where it bites: the Tasks page's **Due today** no longer includes tasks whose time today has already passed —
+  those are **Overdue**. Grouped activity, file previews and states, and the summary's points and sources need
+  WorkSuite Dashboard 1.x with #104; an older server shows what it sends. Announcements need WorkSuite HR with #98
+  for several companies, authors and withdrawal; on a server without announcements the widget is not shown.
 
 ## 2026-10-01 — 0.2.72: A profile picture before the workspace; calendar entries open their record; search on the server's index
 

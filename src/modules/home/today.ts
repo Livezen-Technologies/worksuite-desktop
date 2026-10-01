@@ -1,5 +1,5 @@
 import type { CalendarEvent } from '../calendar/api';
-import { dueOf, isOpen, type Task } from '../tasks/api';
+import { dueOf, inScope, isOpen, type Task } from '../tasks/api';
 
 /**
  * What Home counts as today's work, and how it lays its cards out.
@@ -37,36 +37,76 @@ export function meetingsToday(events: CalendarEvent[]): CalendarEvent[] {
   return events.filter((e) => !e.all_day && (e.source === 'meeting' || e.source === 'businessmeeting' || !!e.meeting_uuid || !!e.join_url));
 }
 
-// ── the cards, and Customize (QA-015) ──────────────────────────────────
+/**
+ * Due today, overdue and upcoming, apart (#104) — by the Tasks page's own views, so a count on Home is the length of
+ * the list it opens. `me` only matters to views that ask whose a task is; these do not.
+ */
+export function taskBuckets(tasks: Task[], today: string, now = Date.now()): { today: Task[]; overdue: Task[]; upcoming: Task[] } {
+  const of = (scope: 'today' | 'overdue' | 'upcoming') => tasks.filter((t) => inScope(t, scope, 0, today, now));
+  const byDue = (a: Task, b: Task) => (dueOf(a, today, now).day ?? '~').localeCompare(dueOf(b, today, now).day ?? '~') || (a.due_at ?? '~').localeCompare(b.due_at ?? '~');
+  return { today: of('today').sort(byDue), overdue: of('overdue').sort(byDue), upcoming: of('upcoming').sort(byDue) };
+}
 
-export type CardId = 'work' | 'calendar' | 'waiting' | 'activity' | 'files' | 'summary';
+/** A count that fits a card: 1,234 → "1.2K". The exact number goes in the tooltip. */
+export function compactCount(n: number): string {
+  if (Math.abs(n) < 1000) return String(n);
+  return new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(n);
+}
+
+// ── the cards, and Customize (QA-015, #104) ─────────────────────────────
+
+export type CardId = 'work' | 'calendar' | 'waiting' | 'announcements' | 'activity' | 'files' | 'summary';
 
 export const CARDS: Array<{ id: CardId; label: string }> = [
   { id: 'work', label: "Today's work" },
-  { id: 'calendar', label: 'Calendar' },
+  { id: 'calendar', label: 'Agenda' },
   { id: 'waiting', label: 'Waiting for me' },
+  { id: 'announcements', label: 'Announcements' },
   { id: 'activity', label: 'Activity' },
   { id: 'files', label: 'Recent files' },
   { id: 'summary', label: 'Daily summary' },
 ];
 
+/** Normal is one column of the grid; wide takes two (where there are two). */
+export type CardSize = 'normal' | 'wide';
+
 export interface Layout {
   order: CardId[];
   hidden: CardId[];
+  /** The cards made wide; every other card is normal. */
+  wide: CardId[];
 }
 
-export const DEFAULT_LAYOUT: Layout = { order: CARDS.map((c) => c.id), hidden: [] };
+export const DEFAULT_LAYOUT: Layout = { order: CARDS.map((c) => c.id), hidden: [], wide: [] };
 
 const known = new Set<string>(CARDS.map((c) => c.id));
+const ids = (raw: unknown): CardId[] => [...new Set((Array.isArray(raw) ? raw : []).filter((x): x is CardId => typeof x === 'string' && known.has(x)))];
 
 /** A saved layout, made whole: unknown cards dropped, new ones added at the end. */
 export function normalise(raw: unknown): Layout {
-  const r = (raw && typeof raw === 'object' ? raw : {}) as { order?: unknown; hidden?: unknown };
-  const order = (Array.isArray(r.order) ? r.order : []).filter((x): x is CardId => typeof x === 'string' && known.has(x));
-  const unique = [...new Set(order)];
+  const r = (raw && typeof raw === 'object' ? raw : {}) as { order?: unknown; hidden?: unknown; wide?: unknown };
+  const unique = ids(r.order);
   for (const c of CARDS) if (!unique.includes(c.id)) unique.push(c.id);
-  const hidden = [...new Set((Array.isArray(r.hidden) ? r.hidden : []).filter((x): x is CardId => typeof x === 'string' && known.has(x)))];
-  return { order: unique, hidden };
+  return { order: unique, hidden: ids(r.hidden), wide: ids(r.wide) };
+}
+
+export function sizeOf(l: Layout, id: CardId): CardSize {
+  return l.wide.includes(id) ? 'wide' : 'normal';
+}
+
+export function resize(l: Layout, id: CardId, size: CardSize): Layout {
+  const wide = l.wide.filter((x) => x !== id);
+  return { ...l, wide: size === 'wide' ? [...wide, id] : wide };
+}
+
+/** Drag-and-drop: the card goes where the other one is. */
+export function place(l: Layout, id: CardId, before: CardId): Layout {
+  if (id === before) return l;
+  const order = l.order.filter((x) => x !== id);
+  const at = order.indexOf(before);
+  if (at < 0) return l;
+  order.splice(at, 0, id);
+  return { ...l, order };
 }
 
 export function move(l: Layout, id: CardId, by: -1 | 1): Layout {
