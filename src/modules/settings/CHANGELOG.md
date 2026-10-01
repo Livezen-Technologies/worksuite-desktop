@@ -8,12 +8,16 @@ the root CHANGELOG.md.
 
 **Added**
 
-- Settings › AI Assistant › Allow online fallback (#53): on by default, it explains that the question and the content needed are sent to WorkSuite AI when the model on this computer cannot answer. Off, nothing leaves the computer
+- Settings › AI Assistant › Allow online fallback (#52): on by default, it explains that the question and the content needed are sent to WorkSuite AI when the model on this computer cannot answer. Off, nothing leaves the computer
 - Settings › AI Assistant › Module Access (#51) — per module, Read data and Create or update for WorkSuite AI and Local AI; administrators set the organization's limit under For everyone
 
 **Changed**
 
 - checkboxes use the shared WorkSuite checkbox — one size, the brand colour with a clear tick, a partly-chosen state on Select all, and ticking a row no longer opens it (#58)
+
+**Fixed**
+
+- Settings › Remote control no longer says "This computer can be shared, but not controlled" once macOS Accessibility is on (#47). Access is asked again on opening the screen, on coming back from System Settings, and with Check again. It is also asked of the helper that injects the input. "Accessibility access enabled" shows when it is on. When it still reads as off after a visit to System Settings, the screen explains removing an earlier version's entry or reopening WorkSuite, instead of asking again. Granting it never starts a session: each request still needs your approval
 
 ## 1.2.0 — 2026-10-01
 

@@ -666,6 +666,11 @@ export interface RemoteControlSupport {
   reason: string | null;
   /** macOS: Accessibility, which injecting needs. Elsewhere 'not_required'. */
   accessibility: 'granted' | 'denied' | 'not_required';
+  /**
+   * macOS, access still off after System Settings was opened from WorkSuite (worksuite-desktop#47): the entry there
+   * may be an earlier version's, or macOS needs WorkSuite reopened.
+   */
+  accessibilityHint?: 'restart' | null;
   /** The computer's policy lets it be controlled at all (the server still decides each time). */
   policyAllows: boolean;
 }

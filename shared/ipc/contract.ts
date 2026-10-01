@@ -362,6 +362,8 @@ export const contract = {
    * works while WorkSuite is locked: stopping is never harder than starting.
    */
   'rc:state': ch(none, { session: true, whileLocked: true }),
+  /** Asks macOS again whether WorkSuite may take input (Check again; back from System Settings — worksuite-desktop#47). */
+  'rc:recheck': ch(none, { session: true, rate: 20 }),
   'rc:setAllowRequests': ch(z.object({ value: z.boolean() }), { session: true, rate: 5 }),
   'rc:shareStarted': ch(
     z.object({
@@ -991,6 +993,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'calls:active': void;
   'calls:list': ActiveCall[];
   'rc:state': RemoteControlView;
+  'rc:recheck': RemoteControlView;
   'rc:setAllowRequests': RemoteControlView;
   'rc:shareStarted': { shareId: number; controlOffered: boolean; why: string | null };
   'rc:shareChanged': void;

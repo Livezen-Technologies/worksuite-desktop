@@ -18,6 +18,7 @@ import { paths } from './paths';
 import { archName, platformName } from '../services/device';
 import { listPrinters, printHtml, printToPdf } from '../services/print';
 import { pmsDownload } from '../services/pms-download';
+import { accessibility } from '../services/remote-control/host';
 import { createZip } from '../services/zip';
 import { openExternalSafely } from '../security/hardening';
 import { broadcast } from './events';
@@ -112,6 +113,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     // Fixed addresses of the OS's own privacy panes; nothing from the page.
     const mac = { microphone: 'Privacy_Microphone', camera: 'Privacy_Camera', screen: 'Privacy_ScreenCapture', accessibility: 'Privacy_Accessibility' } as const;
     const win = { microphone: 'privacy-microphone', camera: 'privacy-webcam', screen: 'privacy', accessibility: 'privacy' } as const;
+    if (process.platform === 'darwin' && input.pane === 'accessibility') accessibility.openedSettings();
     if (process.platform === 'darwin') await shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${mac[input.pane]}`);
     else if (process.platform === 'win32') await shell.openExternal(`ms-settings:${win[input.pane]}`);
   });
@@ -131,6 +133,10 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   };
   const rc = ctx.remoteControl;
   router.handle('rc:state', () => rc.view());
+  router.handle('rc:recheck', async () => {
+    await accessibility.refresh();
+    return rc.view();
+  });
   router.handle('rc:setAllowRequests', (input) => rc.setAllowRequests(input.value));
   router.handle('rc:shareStarted', async (input, c) => {
     fromMeeting(c.sender);

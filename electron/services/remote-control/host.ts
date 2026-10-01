@@ -6,6 +6,7 @@ import type { Database } from '../db';
 import type { HttpClient } from '../http';
 import type { ScreenShare } from '../screen-share';
 import type { TransferManager } from '../transfers';
+import { AccessibilityCheck, askHelper } from './accessibility';
 import { createInjector, inputSupport } from './input';
 import { RemoteControlService, type Display } from './service';
 
@@ -31,16 +32,24 @@ export interface HostDeps {
 
 const LOCAL_INPUT = new Set(['mouseDown', 'keyDown', 'rawKeyDown', 'gestureTap', 'touchStart']);
 
+/** macOS Accessibility, asked of the app and of the helper that injects input (worksuite-desktop#47). */
+export const accessibility = new AccessibilityCheck({
+  platform: process.platform,
+  appTrusted: () => systemPreferences.isTrustedAccessibilityClient(false),
+  helperTrusted: () => askHelper(),
+  now: () => Date.now(),
+});
+
 function support(policy: DesktopPolicy): RemoteControlSupport {
-  const mac = process.platform === 'darwin';
-  const trusted = mac ? systemPreferences.isTrustedAccessibilityClient(false) : true;
-  const s = inputSupport({ accessibility: trusted });
+  const ax = accessibility.state();
+  const s = inputSupport({ accessibility: ax.status !== 'denied' });
   return {
     available: s.available,
     method: s.method,
     displayServer: s.displayServer,
     reason: s.reason,
-    accessibility: mac ? (trusted ? 'granted' : 'denied') : 'not_required',
+    accessibility: ax.status,
+    accessibilityHint: ax.hint,
     policyAllows: policy.remote_control_host !== 'disabled',
   };
 }

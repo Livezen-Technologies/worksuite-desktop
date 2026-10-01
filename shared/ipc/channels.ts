@@ -91,6 +91,7 @@ export const INVOKE_CHANNELS = [
   'calls:focus',
 
   'rc:state',
+  'rc:recheck',
   'rc:setAllowRequests',
   'rc:shareStarted',
   'rc:shareChanged',

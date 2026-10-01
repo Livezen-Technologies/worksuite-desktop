@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { categoryVisible } from '@shared/access';
 import { QUICK_ASK_SHORTCUTS, type AiDisplay, type Preferences } from '@shared/types';
 import { useCanOpen, useVisibleIds } from '../../core/access';
@@ -1040,9 +1040,42 @@ export function methodLabel(method: string | null): string {
   return method === 'sendinput' ? 'Windows input (SendInput, through PowerShell)' : method === 'cgevent' ? 'macOS events (CGEvent, through osascript)' : method === 'xdotool' ? 'xdotool (X11)' : 'None';
 }
 
-function RemoteControlSection() {
+/** A fresh remote-control state, in place of any older answer still on its way. */
+async function fresh(next: Awaited<ReturnType<typeof call<'rc:recheck'>>>): Promise<void> {
+  await queryClient.cancelQueries({ queryKey: ['rc-state'] });
+  queryClient.setQueryData(['rc-state'], next);
+}
+
+export function RemoteControlSection() {
   const q = useQuery({ queryKey: ['rc-state'], queryFn: () => call('rc:state'), refetchInterval: 5_000 });
   const v = q.data;
+  const [checking, setChecking] = useState(false);
+  // Asks macOS again (worksuite-desktop#47): on opening this screen, on coming back to WorkSuite from System
+  // Settings, and on Check again — not only on the five-second refresh. A refresh still on its way is called off
+  // first, so an older answer never lands on top of the new one.
+  useEffect(() => {
+    const ask = () => void call('rc:recheck').then(fresh, () => undefined);
+    ask();
+    const back = () => {
+      if (document.visibilityState === 'visible') ask();
+    };
+    window.addEventListener('focus', back);
+    document.addEventListener('visibilitychange', back);
+    return () => {
+      window.removeEventListener('focus', back);
+      document.removeEventListener('visibilitychange', back);
+    };
+  }, []);
+  const recheck = async () => {
+    setChecking(true);
+    try {
+      await fresh(await call('rc:recheck'));
+    } catch (e) {
+      toast('error', errorMessage(e));
+    } finally {
+      setChecking(false);
+    }
+  };
   const set = async (value: boolean) => {
     try {
       await call('rc:setAllowRequests', { value });
@@ -1063,10 +1096,32 @@ function RemoteControlSection() {
           {works ? 'This computer can be controlled when you allow it' : 'This computer can be shared, but not controlled'}
         </div>
         {!works ? <p className="mt-1.5 text-ink-2">{!s.policyAllows ? "Your organization's policy for this computer doesn't allow it." : s.reason}</p> : s.reason ? <p className="mt-1.5 text-ink-2">{s.reason}</p> : null}
-        {s.accessibility === 'denied' ? (
-          <Button className="mt-2.5" size="sm" onClick={() => void call('media:privacySettings', { pane: 'accessibility' })}>
-            Open Accessibility settings
-          </Button>
+        {s.accessibility === 'granted' ? (
+          <p className="mt-1.5 flex items-center gap-1.5 text-ink-2" data-testid="rc-accessibility">
+            <Icon name="check" size={14} className="text-success" /> Accessibility access enabled
+          </p>
+        ) : null}
+        {s.accessibility === 'denied' && s.accessibilityHint === 'restart' ? (
+          <p className="mt-1.5 text-ink-2" data-testid="rc-accessibility-hint">
+            If WorkSuite is already switched on there, macOS may be holding an entry from an earlier version of WorkSuite. Select WorkSuite in the list,
+            remove it with −, add it again with +, then choose Check again. If it still reads as off, quit WorkSuite and open it again: some versions of
+            macOS apply the change only then.
+          </p>
+        ) : null}
+        {s.accessibility !== 'not_required' ? (
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            {s.accessibility === 'denied' ? (
+              <Button size="sm" onClick={() => void call('media:privacySettings', { pane: 'accessibility' })}>
+                Open Accessibility settings
+              </Button>
+            ) : null}
+            <Button size="sm" variant="ghost" icon="refresh" loading={checking} onClick={() => void recheck()}>
+              Check again
+            </Button>
+          </div>
+        ) : null}
+        {s.accessibility !== 'not_required' ? (
+          <p className="mt-2 text-[12px] text-ink-3">Accessibility only lets WorkSuite take input. Nobody controls this computer until you approve their request, each time.</p>
         ) : null}
       </div>
       <Row label="Let people ask to control my screen" hint="The starting choice each time you share; you can change it in the share picker.">
