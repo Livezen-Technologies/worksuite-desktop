@@ -43,11 +43,25 @@ export function Tile({ f, height = 112 }: { f: Pick<DriveFile, 'id' | 'name' | '
     );
   }
   return (
-    <span ref={attach} className={cx('flex w-full items-center justify-center text-[13px] font-bold tracking-[0.5px]', TONE[kind] ?? TONE.other)} style={{ height }}>
+    <span ref={attach} data-placeholder={kind} className={cx('flex w-full flex-col items-center justify-center gap-1 text-[12px] font-bold tracking-[0.5px]', TONE[kind] ?? TONE.other)} style={{ height }}>
+      <Icon name={KIND_ICON[kind] ?? 'file'} size={Math.max(18, Math.round(height * 0.3))} strokeWidth={1.75} />
       {tagOf(f.name, f.extension)}
     </span>
   );
 }
+
+const KIND_ICON: Record<string, string> = {
+  image: 'file-image',
+  pdf: 'file-text',
+  document: 'file-text',
+  spreadsheet: 'file-sheet',
+  presentation: 'board',
+  video: 'film',
+  audio: 'audio-lines',
+  archive: 'archive',
+  code: 'file-code',
+  design: 'pen',
+};
 
 /** A file's cover, asked for once its card is on screen. */
 function useCover(f: DriveFile | null): { attach: (el: HTMLElement | null) => void; url: string | null } {

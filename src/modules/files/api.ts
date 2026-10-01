@@ -186,12 +186,12 @@ export const EMPTY: Partial<Record<View, string>> = {
   month: 'Nothing has changed this month.',
 };
 
-/** The rail's combined "Find by type or date" entries, each a row of chips. */
-export const GROUPS: Array<{ id: string; label: string; icon: string; views: View[] }> = [
+/** The rail's Filters (by type or date): short labels, the full list in `hint` (the tooltip). */
+export const GROUPS: Array<{ id: string; label: string; hint?: string; icon: string; views: View[] }> = [
   { id: 'images', label: 'Images', icon: 'file-image', views: ['image'] },
-  { id: 'docs', label: 'PDFs, documents, sheets, slides', icon: 'file-text', views: ['pdf', 'document', 'spreadsheet', 'presentation'] },
-  { id: 'media', label: 'Video, audio, archives, code', icon: 'film', views: ['video', 'audio', 'archive', 'code', 'design'] },
-  { id: 'dates', label: 'Today, this week, this month', icon: 'calendar', views: ['today', 'yesterday', 'week', 'month'] },
+  { id: 'docs', label: 'Documents', hint: 'PDFs, documents, spreadsheets and presentations', icon: 'file-text', views: ['pdf', 'document', 'spreadsheet', 'presentation'] },
+  { id: 'media', label: 'Media and other files', hint: 'Video, audio, archives, code and design files', icon: 'film', views: ['video', 'audio', 'archive', 'code', 'design'] },
+  { id: 'dates', label: 'By date', hint: 'Today, yesterday, this week, this month', icon: 'calendar', views: ['today', 'yesterday', 'week', 'month'] },
 ];
 
 export const LIST_VIEWS: View[] = ['recent', 'starred', 'my_shares', 'large', 'today', 'yesterday', 'week', 'month', 'image', 'pdf', 'document', 'spreadsheet', 'presentation', 'video', 'audio', 'archive', 'code', 'design'];
@@ -237,6 +237,15 @@ export const TONE: Record<string, string> = {
   design: 'bg-[#F1EAFB] text-[#6B3FB5] dark:bg-subtle dark:text-[#B69CF0]',
   other: 'bg-[#F1F2F6] text-[#4A5168] dark:bg-subtle dark:text-ink-2',
 };
+
+/**
+ * A file nobody means to open: one still downloading (.part, .crdownload…), an editor's temporary or lock file
+ * (~$Report.docx, .~lock.Report.docx#, .swp) or the system's own (.DS_Store, Thumbs.db). Home leaves them out (#41).
+ */
+export function isJunkFile(name: string): boolean {
+  const n = name.trim();
+  return /\.(part|partial|crdownload|download|tmp|temp|swp|swo)$/i.test(n) || /^~\$/.test(n) || /^\.~lock\./i.test(n) || /^\./.test(n) || /^(thumbs\.db|desktop\.ini)$/i.test(n) || /~$/.test(n);
+}
 
 export function tagOf(name: string, ext?: string | null): string {
   return extOf(name, ext).slice(0, 4).toUpperCase() || 'FILE';

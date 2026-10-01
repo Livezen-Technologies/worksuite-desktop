@@ -5,6 +5,33 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-01 — Drive Home: less empty space, easier to find things
+
+**Changed**
+
+- **One compact header** with search, **New** and **Upload**. The banner that repeated Upload and New folder is gone.
+- **Continue working and Recently opened** fit the number of files. Up to three show as compact rows, and more as
+  tiles. Each shows six at most, with See all for the rest. Recently opened says when you opened a file, not when it
+  last changed.
+- **Shared by link** lists each file once, even with several links, and keeps two files with the same name apart.
+  Each file says who can open it (anybody with the link, with the password, or named people), and has **Copy link**
+  and **Manage**.
+- **Starred folders** are compact cards, six at most.
+- **The Drive sidebar's filters** read **Documents**, **Media and other files** and **By date**. Hover over one for
+  its full list. The storage and sync lines no longer get cut off.
+- **Narrow windows:** the page fits without clipping. The header wraps, and Starred folders and Shared by link stack.
+
+**Added**
+
+- **Downloads in progress and leftovers are left out:** `.part` and `.crdownload` downloads, temporary and lock
+  files (`~$…`, `.~lock…`, `.tmp`) and system files (`.DS_Store`, `Thumbs.db`) no longer appear in Home's sections.
+- **No more blank cards:** a file without a picture shows its kind's icon over its type.
+- **A ⋯ button on every Home file** opens its actions (preview, share, download, star) and **Open containing
+  folder**, from the keyboard as well as by right-clicking.
+- **While Home loads**, each section shows its shape. Each one says when it's empty, and an error offers Try again.
+
+---
+
 ## 2026-10-01 — Chat attachments open in a preview
 
 **Added**

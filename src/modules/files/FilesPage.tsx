@@ -457,7 +457,7 @@ export default function FilesPage(_props: ModuleProps) {
             canPartners={perms.includes('files.permissions.manage')}
           />
         </SidePanel>
-        {view === 'home' ? <Home onPlace={onPlace} now={now} /> : null}
+        {view === 'home' ? <Home onPlace={onPlace} now={now} newItems={newItems} /> : null}
         {listView ? <Explorer key={`${view}:${place.folder}:${query.get('q') ?? ''}`} place={place} active={active && !dialog && !preview && !editor} onPlace={(p) => onPlace(p)} ask={detailsAsk} initialQ={query.get('q') ?? ''} /> : null}
         {view === 'shared' ? <Shared onPlace={(p) => onPlace(p)} /> : null}
         {view === 'trash' ? <Trash /> : null}
