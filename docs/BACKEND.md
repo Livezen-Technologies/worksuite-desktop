@@ -181,6 +181,18 @@ specific to the desktop:
   - Each change pushes `meet.control` with `what: roles`.
   - `POST /api/meet/schedule` and `POST|PUT /api/meetings` take
     `room_settings`.
+  - Ringing people into a meeting that is on (worksuite-desktop#79):
+    - `GET /{uuid}/invitable` lists `{id, name, avatar, status, in_call,
+      pending}`.
+    - `POST /{uuid}/ring {user_ids}` and `GET /{uuid}/rings` give each
+      ring's `state`: ringing, accepted, joined, declined, no_answer,
+      cancelled or unavailable, plus `retry_in`.
+    - `DELETE /{uuid}/rings/{id}` cancels a ring.
+    - For the person rung: `meet.ring {ring_id, uuid, title,
+      inviter_name, silent, expires_in}` and `meet.ring.stopped {ring_id}`.
+      `GET /api/meet/rings/ringing` serves a device that missed the event,
+      and `POST /api/meet/rings/{id}/answer {answer: accept|decline}`
+      sends the answer.
 - **Meetings:** `/api/meetings/*`, behind the `meeting.*` permissions. The
   list carries `my_role` and `my_rsvp`. The detail carries the agenda timer
   and each person's attendance and permissions.

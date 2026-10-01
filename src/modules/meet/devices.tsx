@@ -70,9 +70,11 @@ export function present(id: string, list: MediaDeviceInfo[]): string {
  * The devices, the preview and the meter, while `active`. Changes are remembered as they are made; `prefs` is what
  * to join with.
  */
-export function useMeetDevices(active: boolean, opts: { camAllowed?: boolean } = {}) {
+export function useMeetDevices(active: boolean, opts: { camAllowed?: boolean; startOff?: boolean } = {}) {
   const [prefs, setPrefs] = useState<DevicePrefs>(() => {
     const p = readPrefs();
+    // Off for this join only: what is remembered stays as it was until the person changes it here.
+    if (opts.startOff) return { ...p, mic: false, cam: false };
     return opts.camAllowed === false ? { ...p, cam: false } : p;
   });
   const [devices, setDevices] = useState<Devices>({ audioinput: [], videoinput: [], audiooutput: [] });

@@ -7,6 +7,7 @@ the root CHANGELOG.md.
 ## 1.2.0 — 2026-10-01
 
 - Meeting roles (worksuite-desktop#82): Host, Co-host, Presenter and Participant badges; name co-hosts and presenters, hand the host role on, leave as host with a hand-over or end for everyone; Room settings tab (name, passcode, lock, who can join, waiting room, join before host, who can present, invite, chat, record and see transcripts) with the meeting's activity; share and record offered only when allowed.
+- Inviting people into a meeting that is on (worksuite-desktop#79): Add people in the People panel (search, pictures, availability, several at once) and Invite & Ring; each invitation shows Ringing, Joined, Declined, No answer or Unavailable, with Cancel and Ring again after a short wait. The person rung gets an always-on-top invitation with Accept and Decline that rings by their notification and Do not disturb settings, stops on every device once answered, cancelled, timed out or the meeting ends, and opens the meeting with the microphone and camera off.
 
 ## 1.1.1 — 2026-10-01
 

@@ -170,9 +170,10 @@ export function formatCode(code: string | null | undefined): string {
 }
 
 /** Open a meeting in its window (one window per meeting). */
-export async function openMeeting(uuid: string, title?: string | null): Promise<void> {
+/** Open a meeting in its window. `quiet`: its join screen starts with the microphone and camera off (an accepted ring). */
+export async function openMeeting(uuid: string, title?: string | null, opts: { quiet?: boolean } = {}): Promise<void> {
   if (!UUID.test(uuid)) return;
-  await call('windows:open', { kind: 'meet', route: `/meet/${uuid}`, title: title ?? 'WorkSuite Meet', alwaysOnTop: false });
+  await call('windows:open', { kind: 'meet', route: `/meet/${uuid}${opts.quiet ? '?quiet=1' : ''}`, title: title ?? 'WorkSuite Meet', alwaysOnTop: false });
 }
 
 export async function resolveCode(code: string): Promise<{ uuid: string; title: string | null; ended: boolean }> {

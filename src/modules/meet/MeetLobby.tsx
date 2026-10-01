@@ -7,6 +7,7 @@ import { cx } from '../../components/ui';
 import { DeviceSettings, Preview, useMeetDevices } from './devices';
 import { useMeetT } from './i18n';
 import { meet } from './session';
+import { useTab } from '../../core/tab-context';
 
 /**
  * Ready to join? (worksuite-desktop#69): the camera's picture on the left with the microphone and camera switches,
@@ -21,7 +22,9 @@ export function MeetLobby() {
   const waiting = meet.phase === 'waiting';
   const joining = meet.phase === 'joining';
   // The devices are let go while joining, so the meeting can take them.
-  const d = useMeetDevices(!waiting && !joining, { camAllowed: info.mode !== 'audio' });
+  // Joining from an accepted invitation (`?quiet=1`, worksuite-desktop#79): nothing switches on by itself.
+  const quiet = useTab().query.get('quiet') === '1';
+  const d = useMeetDevices(!waiting && !joining, { camAllowed: info.mode !== 'audio', startOff: quiet });
   const [passcode, setPasscode] = useState('');
   const [sent, setSent] = useState(false);
   const others = info.joined_count;

@@ -92,6 +92,8 @@ export class MeetSession {
   private wants = { mic: true, cam: true };
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private offRoles: (() => void) | null = null;
+  /** Bumped when the meeting's invitations change, so the list is read again. */
+  ringsVersion = 0;
 
   subscribe = (fn: () => void): (() => void) => {
     this.listeners.add(fn);
@@ -309,7 +311,13 @@ export class MeetSession {
     this.offRoles?.();
     // Roles and settings changed by someone else reach everyone in the meeting at once (`meet.control`, what: roles).
     this.offRoles = on<{ type?: string; meeting?: string; what?: string }>('realtime:event', (e) => {
-      if (e?.type === 'meet.control' && e.what === 'roles' && e.meeting === this.uuid) void this.reload();
+      if (e?.type !== 'meet.control' || e.meeting !== this.uuid) return;
+      if (e.what === 'roles') void this.reload();
+      // Somebody was rung in, answered or was cancelled (#79): the invitations are read again.
+      if (e.what === 'rings') {
+        this.ringsVersion++;
+        this.changed();
+      }
     });
     if (this.canPublish) await this.enter();
     else {

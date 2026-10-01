@@ -6,6 +6,7 @@ import { Button, Empty, Spinner } from '../../components/ui';
 import { openMeeting } from './api';
 import { MeetHome } from './MeetHome';
 import { MeetLobby } from './MeetLobby';
+import { MeetRingScreen } from './MeetRingScreen';
 import { MeetRoom } from './MeetRoom';
 import { meet } from './session';
 
@@ -16,7 +17,9 @@ import { meet } from './session';
  */
 export default function MeetPage({ tabId }: ModuleProps) {
   const { path, go } = useTab();
-  const uuid = path[1] ?? null;
+  // `/meet/ring?…` is the window ringing somebody into a meeting (worksuite-desktop#79), not a meeting.
+  const ringing = path[1] === 'ring';
+  const uuid = ringing ? null : (path[1] ?? null);
   const inWindow = tabId.startsWith('window-meet');
 
   useEffect(() => {
@@ -26,6 +29,7 @@ export default function MeetPage({ tabId }: ModuleProps) {
     }
   }, [inWindow, uuid, go]);
 
+  if (ringing) return <MeetRingScreen />;
   if (inWindow && uuid) return <MeetingWindow uuid={uuid} />;
   return <MeetHome />;
 }

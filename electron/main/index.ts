@@ -253,7 +253,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const windows = new WindowManager(db, join(__dirname, '../preload/index.js'));
   windows.minimizeToTray = () => settings.effective().minimizeToTray;
   // A call rings only for whoever may open Chat (calls are part of it).
-  const calls = new CallService(windows, http, () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('calls', sessionCtl.visibleApps()));
+  const calls = new CallService(
+    windows,
+    http,
+    () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('calls', sessionCtl.visibleApps()),
+    () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('meet', sessionCtl.visibleApps()),
+  );
   const screenShare = new ScreenShare(isTrustedShellUrl);
   screenShare.install(session.defaultSession);
   // Meet remote control on this computer (WS-MEET-ENH-01): the share, consent, grant and input live here.

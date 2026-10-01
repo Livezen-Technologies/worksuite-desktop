@@ -22,6 +22,7 @@ import { PointerLayer } from './remote/PointerLayer';
 import { pointers } from './remote/pointers';
 import { isGuest, meet, roleOf, userIdOf } from './session';
 import { HostLeaveDialog, RoleBadge, RoomSettingsPanel, TransferHostDialog } from './RoomRoles';
+import { AddPeopleDialog, Invitations } from './InvitePeople';
 import { Whiteboard } from './Whiteboard';
 import { Select } from '../../components/Select';
 
@@ -256,6 +257,7 @@ export function MeetRoom() {
 function PeoplePanel() {
   const [menu, setMenu] = useState<string | null>(null);
   const [transfer, setTransfer] = useState<{ id: number; name: string } | null>(null);
+  const [adding, setAdding] = useState(false);
   const room = meet.room!;
   const present: Participant[] = [room.localParticipant, ...meet.present];
   const link = 'text-[12px] font-semibold text-primary hover:underline';
@@ -282,6 +284,11 @@ function PeoplePanel() {
       ) : null}
       <div className="flex items-center">
         <b className="flex-1 text-ink">In the meeting · {present.length}</b>
+        {meet.mayInvite ? (
+          <button type="button" onClick={() => setAdding(true)} className="flex h-7 items-center gap-1 rounded-[7px] bg-primary px-2.5 text-[12px] font-bold text-white hover:bg-primary-hover">
+            + Add people
+          </button>
+        ) : null}
       </div>
       {present.map((p) => {
         const self = p === room.localParticipant;
@@ -327,7 +334,9 @@ function PeoplePanel() {
           </div>
         );
       })}
+      <Invitations />
       {transfer ? <TransferHostDialog person={transfer} onClose={() => setTransfer(null)} /> : null}
+      {adding ? <AddPeopleDialog onClose={() => setAdding(false)} /> : null}
     </div>
   );
 }
