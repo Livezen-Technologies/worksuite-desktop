@@ -625,6 +625,7 @@ describe('an export downloads from our own server by its token', () => {
     await vi.waitFor(() => expect(openPath).toHaveBeenCalledWith(join(dir, 'Plan.docx')));
     expect(inApp).toHaveLength(1);
     await expect(t.download('/d/short', 'x.pdf', true, null)).rejects.toThrow(/Not a WorkSuite download/);
+    t.stopAll();
     db.raw.close();
     rmSync(dir, { recursive: true, force: true });
   });
@@ -638,7 +639,10 @@ describe('an export downloads from our own server by its token', () => {
     const outcome = await new Promise((resolve) => void t.download('/office/exports/AbC123_-.xyz', 'Proposal.pdf', false, null, resolve));
     expect(outcome).toEqual({ path: join(dir, 'Proposal.pdf') });
     await expect(t.download('/elsewhere/x', 'x', false, null)).rejects.toThrow(/Not a WorkSuite download/);
+    // As the app does on quitting: stop transfers, then close the database. Nothing may read it afterwards.
+    t.stopAll();
     db.raw.close();
+    await new Promise((r) => setTimeout(r, 300));
     rmSync(dir, { recursive: true, force: true });
   });
 });

@@ -804,6 +804,9 @@ export class TransferManager {
   }
 
   stopAll(): void {
+    // A change notice still on its way would read the database after it closes (quitting, signing out).
+    if (this.emitTimer) clearTimeout(this.emitTimer);
+    this.emitTimer = null;
     for (const l of this.live.values()) {
       if (l.t.state === 'running') {
         l.t.state = 'paused';
