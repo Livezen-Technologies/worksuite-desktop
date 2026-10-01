@@ -147,6 +147,13 @@ export interface Recording {
   created_at: string;
   ready: boolean;
   size: number | null;
+  /** Where and how far (worksuite-desktop#68); missing from an older server. */
+  method?: 'cloud' | 'local';
+  status?: 'recording' | 'processing' | 'uploading' | 'ready' | 'failed';
+  error?: string | null;
+  drive_file_id?: number | null;
+  duration?: number | null;
+  meeting_uuid?: string | null;
 }
 
 const UUID = /^[A-Za-z0-9-]{8,64}$/;

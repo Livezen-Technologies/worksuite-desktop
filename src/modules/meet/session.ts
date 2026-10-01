@@ -7,6 +7,8 @@ import type { SharePick } from '../calls/ScreenPicker';
 import { DEFAULT_ROOM_SETTINGS, may, type MeetInfo, type MeetRole, type RoomSettings, type Sfu } from './api';
 import type { RemoteControlView } from '@shared/types';
 import { pointers } from './remote/pointers';
+import { app } from '../../core/app-state';
+import { LocalRecorder } from './recorder';
 
 /**
  * One Meet meeting, in its window (MeetLobby → MeetRoom). Like a call, kept
@@ -63,6 +65,13 @@ export function isGuest(p: Participant): boolean {
   return p.identity.startsWith('g-');
 }
 
+/** `GET /api/meet/{uuid}/record/status` (worksuite-desktop#68). */
+export interface RecordStatus {
+  cloud: { id?: number; status: string; started_at: string | null; by: { id: number; name: string } | null } | null;
+  local: Array<{ id: number; started_at: string | null; by: { id: number; name: string } }>;
+  may_record?: boolean;
+}
+
 export class MeetSession {
   phase: MeetPhase = 'loading';
   uuid = '';
@@ -94,6 +103,11 @@ export class MeetSession {
   private offRoles: (() => void) | null = null;
   /** Bumped when the meeting's invitations change, so the list is read again. */
   ringsVersion = 0;
+  /** Who is recording the meeting, as the server says (worksuite-desktop#68). */
+  rec: RecordStatus | null = null;
+  /** This computer's own recording of the meeting, while it records. */
+  localRec: LocalRecorder | null = null;
+  private recTimer: ReturnType<typeof setInterval> | null = null;
 
   subscribe = (fn: () => void): (() => void) => {
     this.listeners.add(fn);
@@ -229,7 +243,10 @@ export class MeetSession {
         if (pub.source === Track.Source.ScreenShare && !this.switching) void this.shareEnded();
         refresh();
       })
-      .on(RoomEvent.RecordingStatusChanged, refresh)
+      .on(RoomEvent.RecordingStatusChanged, () => {
+        void this.refreshRecording();
+        refresh();
+      })
       .on(RoomEvent.TrackSubscribed, (track) => {
         if (track.kind === Track.Kind.Audio) {
           const el = track.attach();
@@ -313,6 +330,12 @@ export class MeetSession {
     this.offRoles = on<{ type?: string; meeting?: string; what?: string }>('realtime:event', (e) => {
       if (e?.type !== 'meet.control' || e.meeting !== this.uuid) return;
       if (e.what === 'roles') void this.reload();
+      // Somebody started or stopped recording (#68): everybody is told, and the badge follows.
+      if (e.what === 'recording') {
+        const ev = e as { on?: boolean; by?: string; local?: boolean };
+        if (ev.by && ev.by !== app.get().auth?.user?.name) toast('info', `${ev.by} ${ev.on ? 'started' : 'stopped'} recording this meeting${ev.on && ev.local ? ' on their computer' : ''}.`);
+        void this.refreshRecording();
+      }
       // Somebody was rung in, answered or was cancelled (#79): the invitations are read again.
       if (e.what === 'rings') {
         this.ringsVersion++;
@@ -360,6 +383,8 @@ export class MeetSession {
     if (!lp) return;
     this.joinedAt = this.joinedAt ?? Date.now();
     this.phase = 'in';
+    void this.refreshRecording();
+    if (!this.recTimer) this.recTimer = setInterval(() => void this.refreshRecording(), 20_000);
     // The main window shows "in a meeting" and brings this window back.
     void call('calls:active', { uuid: this.uuid, kind: 'meet', title: this.info?.title || 'Meeting' }).catch(() => undefined);
     this.changed();
@@ -529,7 +554,76 @@ export class MeetSession {
   remove = (p: Participant) => this.host('remove', { identity: p.identity });
   mute = (p: Participant) => this.host('mute', { identity: p.identity });
   lock = (locked: boolean) => this.host('lock', { locked }, () => (this.locked = locked));
-  record = (on: boolean) => this.host(on ? 'record/start' : 'record/stop');
+  // ── recording (worksuite-desktop#68) ─────────────────────────────────────
+
+  /** What the server knows of the meeting's recordings now. */
+  async refreshRecording(): Promise<void> {
+    if (!this.uuid) return;
+    try {
+      this.rec = await apiGet<RecordStatus>(`/api/meet/${this.uuid}/record/status`);
+    } catch {
+      // An older server: the room's own flag is all there is.
+      this.rec = null;
+    }
+    this.changed();
+  }
+
+  /** Recording, here or on the server, and since when — for the badge and its clock. */
+  get recording(): { since: number | null; mine: boolean; local: boolean; who: string[] } | null {
+    if (this.localRec?.id) return { since: this.localRec.startedAt, mine: true, local: true, who: [] };
+    const cloud = this.rec?.cloud;
+    const locals = this.rec?.local ?? [];
+    if (cloud || locals.length || this.room?.isRecording) {
+      const since = cloud?.started_at ? Date.parse(`${cloud.started_at.replace(' ', 'T')}${/Z|[+-]\d\d:?\d\d$/.test(cloud.started_at) ? '' : 'Z'}`) : null;
+      return { since, mine: false, local: !cloud && locals.length > 0, who: [...(cloud?.by ? [cloud.by.name] : []), ...locals.map((l) => l.by.name)] };
+    }
+    return null;
+  }
+
+  /** Start recording as Settings › Meet › Recording says: on the server, or on this computer. */
+  async startRecording(): Promise<void> {
+    const prefs = app.get().prefs?.meetRecording ?? { method: 'cloud', quality: '720p', layout: 'grid', folder: 'Meeting Recordings' };
+    try {
+      if (prefs.method === 'local' && this.room) {
+        const rec = new LocalRecorder(this.room, { layout: prefs.layout, quality: prefs.quality, speaker: () => this.lastSpeaker, onError: (m) => this.note(m) });
+        this.localRec = rec;
+        this.changed();
+        try {
+          await rec.start(this.uuid, this.info?.title || 'Meeting');
+        } catch (e) {
+          this.localRec = null;
+          throw e;
+        }
+        toast('success', 'Recording on this computer. It is saved as it goes, and uploaded to your Drive when you stop.');
+      } else {
+        await apiPost(`/api/meet/${this.uuid}/record/start`, { layout: prefs.layout, quality: prefs.quality, folder: prefs.folder });
+        toast('success', 'Recording started. It goes to your Drive when it stops.');
+      }
+    } catch (e) {
+      this.note(`The recording did not start: ${errorMessage(e)}`);
+    }
+    await this.refreshRecording();
+  }
+
+  async stopRecording(): Promise<void> {
+    const local = this.localRec;
+    try {
+      if (local) {
+        this.localRec = null;
+        this.changed();
+        await local.stop();
+        toast('success', 'Recording stopped. It is being finished and uploaded to your Drive — you can leave the meeting.');
+      } else {
+        await apiPost(`/api/meet/${this.uuid}/record/stop`);
+        toast('success', 'Recording stopped. It is being finished and saved to your Drive.');
+      }
+    } catch (e) {
+      this.note(`The recording did not stop: ${errorMessage(e)}`);
+    }
+    await this.refreshRecording();
+  }
+
+  record = (on: boolean) => (on ? this.startRecording() : this.stopRecording());
 
   async endForAll(): Promise<void> {
     this.farewell = 'You ended the meeting for everyone.';
@@ -574,6 +668,13 @@ export class MeetSession {
   private teardown(): void {
     this.offRoles?.();
     this.offRoles = null;
+    // Leaving while recording here: the recording stops, and is finished and uploaded in the background.
+    const local = this.localRec;
+    this.localRec = null;
+    if (local) void local.stop();
+    if (this.recTimer) clearInterval(this.recTimer);
+    this.recTimer = null;
+    this.rec = null;
     void call('calls:active', { uuid: null, kind: 'meet' }).catch(() => undefined);
     pointers.reset();
     void this.shareEnded();

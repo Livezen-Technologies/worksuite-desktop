@@ -1,16 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import qrcode from 'qrcode-generator';
 import { useCanOpen } from '../../core/access';
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
 import { app } from '../../core/app-state';
-import { call, errorMessage } from '../../core/bridge';
+import { call, errorMessage, on } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { bytes, dateLabel, listStamp, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, ErrorNote, Modal, Spinner, cx } from '../../components/ui';
+import type { LocalRecording } from '@shared/types';
 import type { Room } from '../chat/types';
 import { useNow } from '../calls/parts';
 import { PopMenu, below, type MenuItem } from '../files/Menu';
@@ -326,10 +327,43 @@ function RecentRow({ h, onChat }: { h: HistoryRow; onChat?: (roomId: number) => 
   );
 }
 
+/** A recording's steps, in words (worksuite-desktop#68). */
+const STEP_LABEL: Record<string, string> = { recording: 'Recording…', processing: 'Processing…', uploading: 'Uploading…', ready: 'Ready', failed: 'Failed' };
+const STEPS = ['recording', 'processing', 'uploading', 'ready'] as const;
+
+function Steps({ state }: { state: string }) {
+  const at = STEPS.indexOf(state as (typeof STEPS)[number]);
+  return (
+    <ol aria-label="Steps" className="flex items-center gap-1 text-[10.5px] font-semibold">
+      {STEPS.map((s, i) => (
+        <li key={s} aria-current={i === at ? 'step' : undefined} className={cx('rounded-full px-1.5 py-px', i < at ? 'bg-success-bg text-success' : i === at ? 'bg-primary/15 text-primary' : 'bg-subtle text-ink-3')}>
+          {STEP_LABEL[s]!.replace('…', '')}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function Recordings() {
   const t = useMeetT();
   const qc = useQueryClient();
-  const q = useQuery({ queryKey: ['meet', 'recordings'], queryFn: ({ signal }) => apiGet<{ recordings: Recording[] }>('/api/meet/recordings', undefined, signal), refetchInterval: 60_000 });
+  const { navigate } = useTab();
+  const q = useQuery({
+    queryKey: ['meet', 'recordings'],
+    queryFn: ({ signal }) => apiGet<{ recordings: Recording[] }>('/api/meet/recordings', undefined, signal),
+    // Faster while one is still being finished, so it shows Ready soon after it is.
+    refetchInterval: (query) => (query.state.data?.recordings.some((r) => r.status && r.status !== 'ready' && r.status !== 'failed') ? 10_000 : 60_000),
+  });
+  // Recordings made on this computer, step by step (worksuite-desktop#68).
+  const local = useQuery({ queryKey: ['meet', 'local-recordings'], queryFn: () => call('meetrec:list'), staleTime: Infinity });
+  useEffect(
+    () =>
+      on<LocalRecording[]>('meetrec:changed', (list) => {
+        qc.setQueryData(['meet', 'local-recordings'], list);
+        if (list.some((r) => r.state === 'ready')) void qc.invalidateQueries({ queryKey: ['meet', 'recordings'] });
+      }),
+    [qc],
+  );
   const [all, setAll] = useState(false);
   const [menu, setMenu] = useState<{ at: { x: number; y: number }; r: Recording } | null>(null);
   const [renaming, setRenaming] = useState<Recording | null>(null);
@@ -337,35 +371,86 @@ function Recordings() {
   const [title, setTitle] = useState('');
   const refresh = () => void qc.invalidateQueries({ queryKey: ['meet', 'recordings'] });
   const rename = useMutation({ mutationFn: (r: Recording) => apiPut(`/api/meet/recordings/${r.id}`, { title }), onSuccess: () => (setRenaming(null), refresh()), onError: (e) => toast('error', errorMessage(e)) });
-  const remove = useMutation({ mutationFn: (r: Recording) => apiDelete(`/api/meet/recordings/${r.id}`), onSuccess: () => (setDeleting(null), refresh(), toast('success', 'Recording deleted.')), onError: (e) => toast('error', errorMessage(e)) });
-  const download = (r: Recording) => void call('transfers:download', { recording: r.id, name: `${(r.title || 'Meeting recording').replace(/[\\/:*?"<>|]/g, '-').slice(0, 200)}.mp4` }).catch((e) => toast('error', errorMessage(e)));
+  const remove = useMutation({ mutationFn: (r: Recording) => apiDelete(`/api/meet/recordings/${r.id}`), onSuccess: () => (setDeleting(null), refresh(), toast('success', 'Recording removed.')), onError: (e) => toast('error', errorMessage(e)) });
+  const fileName = (r: Recording) => `${(r.title || 'Meeting recording').replace(/[\\/:*?"<>|]/g, '-').slice(0, 200)}.mp4`;
+  const download = (r: Recording) =>
+    void (r.drive_file_id ? call('transfers:download', { fileId: String(r.drive_file_id), name: fileName(r) }) : call('transfers:download', { recording: r.id, name: fileName(r) })).catch((e) => toast('error', errorMessage(e)));
+  const localAct = (fn: () => Promise<unknown>) => void fn().catch((e) => toast('error', errorMessage(e)));
   const rows = q.data?.recordings ?? [];
+  const working = (local.data ?? []).filter((r) => r.state !== 'ready');
   const shown = all ? rows : rows.slice(0, 3);
   return (
     <Card title={t('home.recordings')} action={rows.length > 3 ? { label: all ? t('home.showFewer') : t('home.seeAll'), run: () => setAll(!all) } : undefined}>
+      {working.length ? (
+        <div className="flex flex-col gap-2 pb-2">
+          {working.map((r) => (
+            <div key={r.id} className="flex flex-col gap-1.5 rounded-[12px] border border-line p-2.5">
+              <div className="flex items-center gap-2">
+                <Icon name={r.state === 'failed' ? 'alert' : 'laptop'} size={16} className={r.state === 'failed' ? 'text-danger' : 'text-ink-3'} />
+                <b className="min-w-0 flex-1 truncate text-[13.5px] text-ink">{r.title}</b>
+                <span className="text-[12px] text-ink-3">On this computer{r.bytes ? ` · ${bytes(r.bytes)}` : ''}</span>
+              </div>
+              <Steps state={r.state === 'failed' ? (r.failedAt === 'registering' ? 'uploading' : (r.failedAt ?? 'processing')) : r.state} />
+              {r.state === 'uploading' && r.bytes ? (
+                <div className="h-1.5 overflow-hidden rounded-full bg-subtle" role="progressbar" aria-label="Uploaded" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((r.uploaded / r.bytes) * 100)}>
+                  <div className="h-full bg-primary" style={{ width: `${Math.min(100, (r.uploaded / r.bytes) * 100)}%` }} />
+                </div>
+              ) : null}
+              {r.recovered && r.state !== 'failed' ? <span className="text-[12px] text-ink-2">WorkSuite closed while this was recording. What was recorded until then is kept and is being finished.</span> : null}
+              {r.state === 'failed' ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="min-w-0 flex-1 text-[12px] text-danger" role="alert">
+                    {r.error}
+                  </span>
+                  <Button size="sm" variant="primary" onClick={() => localAct(() => call('meetrec:retry', { id: r.id }))}>
+                    Try again
+                  </Button>
+                  {r.fileName ? (
+                    <Button size="sm" onClick={() => localAct(() => call('meetrec:reveal', { id: r.id }))}>
+                      Show the file
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ))}
+          <span className="text-[11.5px] text-ink-3">Finishing and uploading go on in the background while you work. Quitting WorkSuite pauses them until you open it again.</span>
+        </div>
+      ) : null}
       {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
-      {q.isSuccess && !rows.length ? <EmptyState icon="video" title={t('home.noRecordings')} hint={t('home.noRecordingsHint')} /> : null}
+      {q.isSuccess && !rows.length && !working.length ? <EmptyState icon="video" title={t('home.noRecordings')} hint={t('home.noRecordingsHint')} /> : null}
       {rows.length ? (
         <>
           <div className="grid gap-3 pt-1 sm:grid-cols-2 xl:grid-cols-3">
             {shown.map((r) => {
               const name = r.title || 'Meeting recording';
+              const status = r.status ?? (r.ready ? 'ready' : 'processing');
               return (
                 <div key={r.id} className="flex min-w-0 items-center gap-3 rounded-[12px] border border-line p-2.5">
                   <button
                     type="button"
                     disabled={!r.ready}
                     aria-label={`${t('home.download')} ${name}`}
-                    title={r.ready ? t('home.download') : t('home.processing')}
+                    title={r.ready ? t('home.download') : STEP_LABEL[status]}
                     onClick={() => download(r)}
                     className="relative flex h-[60px] w-[96px] shrink-0 items-center justify-center overflow-hidden rounded-[9px] bg-[#D8E4F6] text-[#24365F] disabled:cursor-default dark:bg-selection dark:text-ink"
                   >
-                    <Icon name={r.ready ? 'play' : 'clock'} size={20} />
+                    <Icon name={r.ready ? 'play' : status === 'failed' ? 'alert' : 'clock'} size={20} />
                   </button>
                   <span className="flex min-w-0 flex-1 flex-col">
                     <b className="truncate text-[13.5px] text-ink">{name}</b>
-                    <span className="truncate text-[12px] text-ink-3">{[dateLabel(r.created_at).replace(/, \d{4}$/, ''), r.size ? bytes(r.size) : null].filter(Boolean).join(' · ')}</span>
-                    {!r.ready ? <span className="text-[11.5px] font-bold text-[#9A4A06] dark:text-warning">{t('home.processing')}</span> : null}
+                    <span className="truncate text-[12px] text-ink-3">{[dateLabel(r.created_at).replace(/, \d{4}$/, ''), r.size ? bytes(r.size) : null, r.method === 'local' ? 'Recorded on a computer' : null].filter(Boolean).join(' · ')}</span>
+                    {status === 'failed' ? (
+                      <span className="text-[11.5px] font-bold text-danger" title={r.error ?? undefined}>
+                        Failed{r.error ? ` — ${r.error}` : ''}
+                      </span>
+                    ) : status !== 'ready' ? (
+                      <span className="text-[11.5px] font-bold text-[#9A4A06] dark:text-warning">{status === 'processing' ? t('home.processing') : (STEP_LABEL[status] ?? t('home.processing'))}</span>
+                    ) : r.drive_file_id ? (
+                      <button type="button" onClick={() => navigate(`/files?file=${r.drive_file_id}`)} className="self-start text-[11.5px] font-bold text-primary hover:underline">
+                        In your Drive ›
+                      </button>
+                    ) : null}
                   </span>
                   <button type="button" aria-label={t('home.moreFor', { title: name })} title={t('home.moreFor', { title: name })} aria-haspopup="menu" onClick={(e) => setMenu({ at: below(e.currentTarget, 'right', 200), r })} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle hover:text-ink">
                     <Icon name="more-vertical" size={16} />
@@ -385,6 +470,7 @@ function Recordings() {
           onClose={() => setMenu(null)}
           items={[
             { label: t('home.download'), icon: 'download', disabled: !menu.r.ready, run: () => download(menu.r) },
+            ...(menu.r.drive_file_id ? [{ label: 'Open in Drive', icon: 'folder', run: () => navigate(`/files?file=${menu.r.drive_file_id}`) }] : []),
             { label: t('home.rename'), icon: 'compose', run: () => (setTitle(menu.r.title), setRenaming(menu.r)) },
             { sep: true },
             { label: t('home.delete'), icon: 'trash', danger: true, run: () => setDeleting(menu.r) },
@@ -397,8 +483,10 @@ function Recordings() {
         </Modal>
       ) : null}
       {deleting ? (
-        <Modal title="Delete this recording?" onClose={() => setDeleting(null)} width={420} footer={<><Button onClick={() => setDeleting(null)}>Cancel</Button><Button variant="danger" loading={remove.isPending} onClick={() => remove.mutate(deleting)}>Delete</Button></>}>
-          <p className="text-[13px] text-ink-2">“{deleting.title}” is deleted for good. It cannot be recovered.</p>
+        <Modal title="Remove this recording?" onClose={() => setDeleting(null)} width={420} footer={<><Button onClick={() => setDeleting(null)}>Cancel</Button><Button variant="danger" loading={remove.isPending} onClick={() => remove.mutate(deleting)}>Remove</Button></>}>
+          <p className="text-[13px] text-ink-2">
+            {deleting.drive_file_id ? `“${deleting.title}” is removed from this list. The copy in your Drive stays — delete it there if you no longer need it.` : `“${deleting.title}” is deleted for good. It cannot be recovered.`}
+          </p>
         </Modal>
       ) : null}
     </Card>

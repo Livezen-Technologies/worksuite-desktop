@@ -58,6 +58,7 @@ import { SecureStore } from '../services/secure-store';
 import { SettingsService } from '../services/settings';
 import { DriveSync } from '../services/sync/engine';
 import { ServiceSupervisor } from '../services/supervisor';
+import { MeetRecorder } from '../services/meet-recorder';
 import { TransferManager, type DownloadSink } from '../services/transfers';
 import { ElearningOffline } from '../services/elearning-offline';
 import { EventDesk } from '../services/event-desk';
@@ -368,6 +369,15 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       return true;
     },
   });
+  // Meetings recorded on this computer (worksuite-desktop#68): written, finished and uploaded here, in the background.
+  const meetRecorder = new MeetRecorder({
+    db,
+    http,
+    transfers,
+    prefs: () => settings.effective().meetRecording,
+    userId: () => (sessionCtl.isReady() ? sessionCtl.userId() : null),
+  });
+  meetRecorder.onChanged = (list) => broadcast('meetrec:changed', list);
   // eLearning: a course's lessons kept for offline learning, as the server's manifest lists them.
   const elearning: ElearningOffline = new ElearningOffline({
     db,
@@ -845,6 +855,22 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       if (choice !== 0) return;
       void remoteControl.shutdown('stopped');
     }
+    // A recording on this computer, or one still being finished or uploaded (worksuite-desktop#68): quitting pauses it.
+    const rec = meetRecorder.pending();
+    if (rec.recording || rec.working) {
+      const choice = dialog.showMessageBoxSync({
+        type: 'warning',
+        buttons: ['Quit anyway', 'Keep WorkSuite open'],
+        defaultId: 1,
+        cancelId: 1,
+        title: 'Quit WorkSuite?',
+        message: rec.recording ? 'A meeting is being recorded on this computer.' : 'A meeting recording is still being finished and uploaded.',
+        detail: rec.recording
+          ? 'Quitting stops the recording. What was recorded so far is kept, finished and uploaded the next time you open WorkSuite.'
+          : 'Quitting pauses it. It carries on from where it was the next time you open WorkSuite. Closing windows does not stop it — only quitting does.',
+      });
+      if (choice !== 0) return;
+    }
     windows.quitting = true;
     // Leave any call first, so the other side is not left talking to nobody.
     void Promise.race([calls.endAll(), new Promise((r) => setTimeout(r, 2_000))]).finally(() => app.quit());
@@ -1099,6 +1125,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     };
     sync.start(uid);
     transfers.recover();
+    // Recordings carry on from where they were: a recording cut off by a crash is finished, uploads continue.
+    void meetRecorder.recover().catch(() => undefined);
     void queue.replay(uid);
     salonSync.start();
     eventDesk.start();
@@ -1459,6 +1487,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     cache,
     queue,
     transfers,
+    meetRecorder,
     sync,
     supervisor,
     lock,

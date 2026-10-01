@@ -369,6 +369,7 @@ function MinutesTab({ d }: { d: Detail }) {
 }
 
 function FilesTab({ d, act }: { d: Detail; act: Act }) {
+  const { navigate } = useTab();
   const input = useRef<HTMLInputElement>(null);
   const upload = (files: FileList | null) => {
     for (const f of Array.from(files ?? [])) {
@@ -387,6 +388,25 @@ function FilesTab({ d, act }: { d: Detail; act: Act }) {
         upload(e.dataTransfer.files);
       }}
     >
+      {d.recordings?.length ? (
+        <div className="flex flex-col gap-1.5 rounded-[10px] border border-line p-2.5">
+          <b className="text-ink">Your recordings</b>
+          {d.recordings.map((r) => (
+            <div key={r.id} className="flex items-center gap-2 text-[12.5px]">
+              <span className="min-w-0 flex-1 truncate text-ink">{r.title}</span>
+              <span className={cx('font-semibold', r.status === 'ready' ? 'text-success' : r.status === 'failed' ? 'text-danger' : 'text-ink-3')} title={r.error ?? undefined}>
+                {{ recording: 'Recording…', processing: 'Processing…', uploading: 'Uploading…', ready: 'Ready', failed: 'Failed' }[r.status] ?? r.status}
+              </span>
+              {r.drive_file_id ? (
+                <button type="button" onClick={() => navigate(`/files?file=${r.drive_file_id}`)} className="font-semibold text-primary hover:underline">
+                  Open in Drive
+                </button>
+              ) : null}
+            </div>
+          ))}
+          <span className="text-[11.5px] text-ink-3">In your Drive, shared with nobody until you share them.</span>
+        </div>
+      ) : null}
       <h2 className="text-[15px] font-bold text-ink">Files</h2>
       {!d.files.length ? <Empty icon="file" title="No files yet" hint="Drag files here or upload them." /> : null}
       {d.files.map((f) => (

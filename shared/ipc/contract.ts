@@ -58,6 +58,7 @@ import { pdfEditOpSchema, pdfPrintSchema, pdfSearchOptionsSchema, pdfSourceSchem
 import type { InvokeChannel } from './channels';
 import type {
   ActiveCall,
+  LocalRecording,
   AiRules,
   AiUpload,
   AppInfo,
@@ -155,6 +156,14 @@ export const preferencesPatchSchema = z
       }),
       onlineFallback: z.boolean(),
     }),
+    // The local folder is not here: only the main process's folder dialog sets it.
+    meetRecording: z.object({
+      method: z.enum(['cloud', 'local']),
+      quality: z.enum(['720p', '1080p']),
+      layout: z.enum(['grid', 'speaker', 'screen']),
+      folder: z.string().min(1).max(120).regex(/^[^\\/\p{C}]+$/u),
+      keepLocal: z.enum(['keep', 'delete', '7', '30']),
+    }).partial(),
   })
   .partial();
 
@@ -353,6 +362,29 @@ export const contract = {
     { session: true, rate: 10 },
   ),
   'calls:list': ch(none, { session: true }),
+
+  /*
+   * Meetings recorded on this computer (worksuite-desktop#68). The meeting's window records and hands the pieces
+   * over; this process writes, finishes and uploads them. A page never names a path: the folder is chosen with the
+   * dialog here, and recordings are named by their id.
+   */
+  'meetrec:preflight': ch(none, { session: true, rate: 10 }),
+  'meetrec:start': ch(
+    z.object({
+      meeting: z.string().regex(/^[A-Za-z0-9-]{8,64}$/),
+      title: z.string().max(190),
+      layout: z.enum(['grid', 'speaker', 'screen']),
+      mime: z.string().regex(/^video\/(webm|mp4)(;[A-Za-z0-9=,.\s-]{0,80})?$/),
+    }),
+    { session: true, rate: 4 },
+  ),
+  'meetrec:chunk': ch(z.object({ id: z.string().uuid(), data: z.instanceof(Uint8Array).refine((b) => b.byteLength > 0 && b.byteLength <= 16 * 1024 * 1024, 'A piece is at most 16 MB.') }), { session: true, whileLocked: true, rate: 120 }),
+  'meetrec:stop': ch(z.object({ id: z.string().uuid(), durationMs: z.number().int().min(0).max(24 * 3600 * 1000) }), { session: true, whileLocked: true, rate: 10 }),
+  'meetrec:list': ch(none, { session: true }),
+  'meetrec:retry': ch(z.object({ id: z.string().uuid() }), { session: true, rate: 10 }),
+  'meetrec:discard': ch(z.object({ id: z.string().uuid() }), { session: true, rate: 10 }),
+  'meetrec:reveal': ch(z.object({ id: z.string().uuid() }), { session: true, rate: 10 }),
+  'meetrec:chooseFolder': ch(none, { session: true, rate: 3 }),
 
   /*
    * Meet remote control on this computer (WS-MEET-ENH-01). The meeting window
@@ -994,6 +1026,15 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'media:privacySettings': void;
   'calls:active': void;
   'calls:list': ActiveCall[];
+  'meetrec:preflight': { folder: string; free: number | null; ok: boolean; why: string | null };
+  'meetrec:start': { id: string };
+  'meetrec:chunk': void;
+  'meetrec:stop': void;
+  'meetrec:list': LocalRecording[];
+  'meetrec:retry': void;
+  'meetrec:discard': void;
+  'meetrec:reveal': void;
+  'meetrec:chooseFolder': string | null;
   'rc:state': RemoteControlView;
   'rc:recheck': RemoteControlView;
   'rc:setAllowRequests': RemoteControlView;

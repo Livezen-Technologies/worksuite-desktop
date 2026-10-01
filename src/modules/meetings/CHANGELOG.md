@@ -15,6 +15,7 @@ the root CHANGELOG.md.
   - Generate with AI drafts from what is written, the agenda and the chat, and never invents decisions, owners or dates.
   - The organiser chooses who can see and edit the minutes, finalises them, and shares them with the people chosen.
   - Minutes can be copied, or exported to PDF or Word.
+- Your recordings of a meeting held on Meet are listed under Files, with their state and Open in Drive (worksuite-desktop#68).
 
 ## 1.1.0 — 2026-10-01
 

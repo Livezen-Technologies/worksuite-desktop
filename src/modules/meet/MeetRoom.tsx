@@ -24,6 +24,9 @@ import { isGuest, meet, roleOf, userIdOf } from './session';
 import { HostLeaveDialog, RoleBadge, RoomSettingsPanel, TransferHostDialog } from './RoomRoles';
 import { AddPeopleDialog, Invitations } from './InvitePeople';
 import { MeetNotes } from './MeetNotes';
+import { RecordingSettings } from './RecordingSettings';
+import { app } from '../../core/app-state';
+import { useStore } from '../../core/store';
 import { Whiteboard } from './Whiteboard';
 import { Select } from '../../components/Select';
 
@@ -48,6 +51,10 @@ export function MeetRoom() {
   const [picking, setPicking] = useState<'start' | 'change' | null>(null);
   const [ending, setEnding] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const [recSettings, setRecSettings] = useState(false);
+  const rec = meet.recording;
+  const recPrefs = useStore(app, (s) => s.prefs?.meetRecording);
+  const recordHint = recPrefs ? `${recPrefs.method === 'local' ? 'On this computer' : 'On the server'} · ${{ grid: 'grid', speaker: 'speaker', screen: 'shared screen' }[recPrefs.layout]} · ${recPrefs.quality}` : undefined;
   const now = useNow();
   const room = meet.room!;
   const lp = room.localParticipant;
@@ -114,7 +121,15 @@ export function MeetRoom() {
   const more: MenuEntry[] = [
     // Reachable even when their screen is not on the stage (the board is, or the floating card).
     ...(remote.session ? [{ label: 'Release control', hint: `Of ${remote.session.sharer.name}'s computer`, icon: 'stop', danger: true, onClick: () => void remote.release() }] : []),
-    ...(meet.mayRecord ? [{ label: room.isRecording ? 'Stop recording' : 'Record the meeting', icon: room.isRecording ? 'stop' : 'film', onClick: () => void meet.record(!room.isRecording) }] : []),
+    // Recording (#68): started as Settings › Meet › Recording says; stopped by whoever may record.
+    ...(meet.mayRecord
+      ? [
+          rec && (rec.mine || meet.rec?.cloud || room.isRecording)
+            ? { label: 'Stop recording', hint: rec.mine ? 'It is finished and uploaded to your Drive after' : undefined, icon: 'stop', danger: true, onClick: () => void meet.stopRecording() }
+            : { label: 'Record the meeting', hint: recordHint, icon: 'film', onClick: () => void meet.startRecording() },
+          { label: 'Recording settings…', icon: 'settings', onClick: () => setRecSettings(true) },
+        ]
+      : []),
     ...(meet.canManage ? [{ label: meet.locked ? 'Unlock the meeting' : 'Lock the meeting', hint: meet.locked ? undefined : 'No one new can join', icon: 'lock', onClick: () => void meet.lock(!meet.locked) }] : []),
     { label: 'Room settings', icon: 'settings', onClick: () => callUi.togglePanel('Settings') },
     { label: ui.boardOnStage ? 'Board back to the panel' : 'Whiteboard on stage', icon: 'board', onClick: () => callUi.set({ boardOnStage: !ui.boardOnStage, ...(ui.boardOnStage ? {} : { panelOpen: false }) }) },
@@ -156,10 +171,15 @@ export function MeetRoom() {
         clock={clock}
         badges={
           <>
-            {room.isRecording ? (
-              <span className="flex items-center gap-1.5 rounded-full bg-[#3A1A14] px-2 py-0.5 text-[11.5px] font-bold text-[#FFB4A2]">
-                <span className="h-2 w-2 rounded-full bg-[#E0522F]" />
-                Recording
+            {rec ? (
+              <span
+                role="status"
+                title={rec.mine ? (rec.local ? 'You are recording this meeting on this computer' : 'You are recording this meeting') : rec.who.length ? `Recorded by ${rec.who.join(', ')}` : 'This meeting is being recorded'}
+                className="flex items-center gap-1.5 rounded-full bg-[#3A1A14] px-2 py-0.5 text-[11.5px] font-bold text-[#FFB4A2]"
+              >
+                <span className="h-2 w-2 animate-pulse rounded-full bg-[#E0522F]" />
+                Recording{rec.since ? ` ${hms(now - rec.since)}` : ''}
+                {rec.local ? <span className="font-semibold text-[#FFD2C4]">· on {rec.mine ? 'this computer' : 'a computer'}</span> : null}
               </span>
             ) : null}
             {meet.locked ? <span className="rounded-full bg-[#2A3A66] px-2 py-0.5 text-[11.5px] font-semibold">Locked</span> : null}
@@ -247,10 +267,16 @@ export function MeetRoom() {
           }}
         />
       ) : null}
+      {recSettings ? (
+        <Modal title="Recording settings" onClose={() => setRecSettings(false)} width={560} footer={<Button variant="primary" onClick={() => setRecSettings(false)}>Done</Button>}>
+          <RecordingSettings compact />
+          {rec?.mine ? <p className="mt-3 text-[12px] text-ink-3">Changes apply to the next recording.</p> : null}
+        </Modal>
+      ) : null}
       {leaving ? <HostLeaveDialog onClose={() => setLeaving(false)} onEndAll={() => setEnding(true)} /> : null}
       {ending ? (
         <Modal title="End the meeting for everyone?" onClose={() => setEnding(false)} width={420} footer={<><Button onClick={() => setEnding(false)}>Cancel</Button><Button variant="danger" onClick={() => (setEnding(false), void meet.endForAll())}>End for all</Button></>}>
-          <p className="text-[13px] text-ink-2">Everyone is disconnected{room.isRecording ? ' and the recording stops' : ''}. The meeting cannot be joined again.</p>
+          <p className="text-[13px] text-ink-2">Everyone is disconnected{rec ? ' and the recording stops — it is still finished and saved to Drive' : ''}. The meeting cannot be joined again.</p>
         </Modal>
       ) : null}
     </>

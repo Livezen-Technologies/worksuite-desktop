@@ -156,6 +156,17 @@ const api = {
     list: call('calls:list'),
     focus: call('calls:focus'),
   },
+  meetrec: {
+    preflight: call('meetrec:preflight'),
+    start: call('meetrec:start'),
+    chunk: call('meetrec:chunk'),
+    stop: call('meetrec:stop'),
+    list: call('meetrec:list'),
+    retry: call('meetrec:retry'),
+    discard: call('meetrec:discard'),
+    reveal: call('meetrec:reveal'),
+    chooseFolder: call('meetrec:chooseFolder'),
+  },
   rc: {
     state: call('rc:state'),
     recheck: call('rc:recheck'),

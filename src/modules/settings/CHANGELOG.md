@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.4.0 — 2026-10-01
+
+- Settings › Meet › Recording (worksuite-desktop#68): how meetings are recorded from this computer — on the server or here, quality, layout, the Drive folder, where local recordings are saved and how long the local copy is kept.
+
 ## 1.3.0 — 2026-10-01
 
 **Added**

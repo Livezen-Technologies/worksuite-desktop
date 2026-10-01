@@ -181,6 +181,24 @@ specific to the desktop:
   - Each change pushes `meet.control` with `what: roles`.
   - `POST /api/meet/schedule` and `POST|PUT /api/meetings` take
     `room_settings`.
+  - Recording (worksuite-desktop#68):
+    - `POST /{uuid}/record/start {layout: grid|speaker|screen, quality:
+      720p|1080p, folder}` starts the server's recording; `record/stop`
+      stops it.
+    - `GET /{uuid}/record/status` returns `{cloud: {started_at, by} | null,
+      local: [{by, started_at}], may_record}`. Cloud state comes from the
+      media server's egress.
+    - `POST /{uuid}/recordings/local {client_id, action:
+      start|stop|uploading|ready|failed, file_id?}` tracks a recording made
+      on a desktop, keyed by its id.
+    - `POST /api/meet/recordings/folder {name}` gives the recorder's Drive
+      folder.
+    - `GET /api/meet/recordings` rows carry `method, status, error,
+      drive_file_id, duration`.
+    - Each start and stop pushes `meet.control {what: recording, on, by,
+      local?}` to the meeting.
+    - `meet:recordings`, run every minute, files completed cloud recordings
+      in the owner's Drive.
   - Ringing people into a meeting that is on (worksuite-desktop#79):
     - `GET /{uuid}/invitable` lists `{id, name, avatar, status, in_call,
       pending}`.
