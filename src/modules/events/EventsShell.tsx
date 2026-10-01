@@ -22,7 +22,7 @@ import { SidePanel } from '../../components/SidePanel';
  * Addresses: see `routes.ts`. What each person sees follows their `events.*`
  * permissions in the event's company (`GET options?org=`).
  */
-const Desk = lazy(() => import('./Desk'));
+const Desk = lazy(() => import('./DeskScreen'));
 const Counters = lazy(() => import('./Counters'));
 const Setup = lazy(() => import('./Setup'));
 const Review = lazy(() => import('./Review'));
