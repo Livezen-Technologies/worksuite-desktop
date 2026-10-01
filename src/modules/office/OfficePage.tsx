@@ -156,6 +156,11 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
   // it taken just before stands in (worksuite-desktop#39).
   const [still, setStill] = useState<string | null>(null);
   const snapshot = useRef<(() => Promise<string | null>) | null>(null);
+  // The picture's removal after a menu closes: cancelled by the next menu (whose picture it would take away) and on leaving.
+  const stillTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (stillTimer.current) clearTimeout(stillTimer.current);
+  }, []);
   const [moving, setMoving] = useState(false);
   const [conflict, setConflict] = useState<OfficeLocalCopy | null>(null);
   const [apps, setApps] = useState<ExternalApp[]>([]);
@@ -223,6 +228,8 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
 
   /** Opens a menu over the editor: the picture first, then the menu (a slow picture does not hold the menu up). */
   const openMenu = async (open: () => void) => {
+    if (stillTimer.current) clearTimeout(stillTimer.current);
+    stillTimer.current = null;
     const shot = snapshot.current ? await Promise.race([snapshot.current(), new Promise<null>((r) => setTimeout(() => r(null), 250))]) : null;
     setStill(shot);
     open();
@@ -230,7 +237,11 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
   // The picture goes once the editor is back; a moment later, so there is no blank between the two.
   const menuClosed = (close: () => void) => {
     close();
-    setTimeout(() => setStill(null), 250);
+    if (stillTimer.current) clearTimeout(stillTimer.current);
+    stillTimer.current = setTimeout(() => {
+      stillTimer.current = null;
+      setStill(null);
+    }, 250);
   };
 
   /**

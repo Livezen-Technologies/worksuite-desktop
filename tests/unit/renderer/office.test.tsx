@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OfficeBootstrap, OfficeHeartbeat } from '../../../shared/office';
@@ -548,6 +548,23 @@ describe('the Office tab', () => {
       expect(still()).not.toBeNull();
       fireEvent.mouseDown(document.querySelector('.fixed.inset-0')!);
       await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    });
+
+    it('keeps the picture under a menu opened just after another closed', async () => {
+      serve();
+      mount('/office/42?name=Proposal.docx');
+      await waitFor(() => expect(vi.mocked(call).mock.calls.some(([ch]) => ch === 'office:open')).toBe(true));
+      fireEvent.click(await screen.findByRole('button', { name: /Editing/ }));
+      await screen.findByRole('menu', { name: 'Mode' });
+      fireEvent.keyDown(window, { key: 'Escape' });
+      await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+      // Within the closed menu's 250 ms: its clearing of the picture must not take the new menu's away.
+      fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
+      await screen.findByRole('menu', { name: /Actions — Proposal\.docx/ });
+      await act(() => new Promise((r) => setTimeout(r, 400)));
+      expect(still()).not.toBeNull();
+      fireEvent.keyDown(window, { key: 'Escape' });
+      await waitFor(() => expect(still()).toBeNull());
     });
 
     it('Open in new window moves the document to a window of its own', async () => {
