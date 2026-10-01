@@ -20,6 +20,7 @@ import { Select } from '../../components/Select';
 import type { ModuleProps } from '../registry';
 import { playTone } from '../calls/tones';
 import { shortcutLabel, useWriter, writerProblem } from '../ai/writer';
+import { ModuleAccess } from '../ai/ModuleAccess';
 import { discoverStudioModels, setStudioModels, STUDIO_KEY, studioState, testStudioModel, useStudioStatus, type StudioDiscovery } from '../ai/studio';
 import { Checkbox } from '../../components/Checkbox';
 
@@ -459,6 +460,7 @@ function AiSection({ prefs }: { prefs: Preferences }) {
         <p className="mt-4 text-[12.5px] text-ink-3">To read your selection in other apps, and to insert into them, WorkSuite needs System Settings › Privacy &amp; Security › Accessibility. Without it Quick Ask uses what you copied last.</p>
       ) : null}
       <p className="mt-2 text-[12.5px] text-ink-3">Files from this computer, summaries of WorkSuite files and actions waiting for your confirmation arrive when the assistant's desktop service does.</p>
+      <ModuleAccess prefs={a.moduleAccess ?? { worksuite: {}, local: {} }} onChange={(moduleAccess) => set({ moduleAccess })} />
     </>
   );
 }

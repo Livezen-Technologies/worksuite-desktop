@@ -11,6 +11,7 @@ import { ActionCard } from './ActionCard';
 import { LocalSetup } from './LocalSetup';
 import { useAssistant, type PendingAction, type Surface } from './assistant';
 import { createAskSession, type AskEntry, type AskSession } from './session';
+import { effective, personalOff, toolAllowed, useLocalTools, useOrgAccess } from './tools';
 import { Checkbox } from '../../components/Checkbox';
 
 /**
@@ -62,6 +63,17 @@ export function AskPanel({
   const localModels = useLocalModels(surface === 'assistant.panel');
   const localModel = surface === 'assistant.panel' ? localReady(localModels.data) : null;
   const local = !!localModel && (st.localPick ?? offline);
+  // Module Access (worksuite-desktop#51): what each assistant may use, the organization's ceiling and this person's choice.
+  const accessPrefs = useStore(app, (s) => s.prefs?.ai.moduleAccess);
+  const org = useOrgAccess(surface === 'assistant.panel' && !offline);
+  const tools = useLocalTools(!!localModel && !offline);
+  const localTools = local && !offline && tools.data?.length
+    ? {
+        tools: tools.data,
+        allow: (t: Parameters<typeof toolAllowed>[0]) => toolAllowed(t, org.data, accessPrefs),
+        off: (org.data?.modules ?? []).filter((m) => !effective(m, 'local', accessPrefs).read).map((m) => `${m.label} (${effective(m, 'local', accessPrefs).readWhy})`),
+      }
+    : undefined;
   // A private conversation ends with the panel, and a local answer with it; a shared one carries on.
   useEffect(() => (own ? () => own.cancel() : undefined), [own]);
   // Showing the conversation reads what arrived while it was hidden.
@@ -80,7 +92,7 @@ export function AskPanel({
     if (!text.trim() || busy) return Promise.resolve();
     // Asking is looking at the answer: back to the end, following again, from wherever the reader had scrolled.
     toEnd();
-    return session.send({ surface, refs, local, selection });
+    return session.send({ surface, refs, local, selection, localTools, moduleAccess: local ? undefined : personalOff(accessPrefs, 'worksuite') });
   };
   const attach = () => session.attach();
 
@@ -159,7 +171,14 @@ export function AskPanel({
           <div role="radiogroup" aria-label="Who answers" className="flex rounded-[9px] bg-subtle p-0.5 text-[12px] font-semibold">
             {[
               { v: false, label: 'WorkSuite AI', icon: 'sparkles', hint: 'The server\'s assistant: sees what you can open, proposes changes.' },
-              { v: true, label: 'On this computer', icon: 'cpu', hint: `${localModel.model.name}, on this computer — nothing leaves it; it cannot see your WorkSuite data.` },
+              {
+                v: true,
+                label: 'On this computer',
+                icon: 'cpu',
+                hint: localTools
+                  ? `${localModel.model.name}, on this computer. Your questions are answered here; the WorkSuite data it reads and the changes it prepares come from WorkSuite, as you, for the modules turned on in Module Access.`
+                  : `${localModel.model.name}, on this computer — nothing leaves it; it cannot see your WorkSuite data.`,
+              },
             ].map((o) => (
               <button
                 key={o.label}
@@ -224,7 +243,7 @@ export function AskPanel({
           </button>
         </div>
         <div className="flex items-center gap-2 px-1 text-[11px] text-ink-3">
-          <span className="min-w-0 flex-1">{local ? 'On this computer · nothing is sent · ' : ''}Enter to send · Shift+Enter for a new line</span>
+          <span className="min-w-0 flex-1">{local ? (localTools ? 'On this computer · module data from WorkSuite · ' : 'On this computer · nothing is sent · ') : ''}Enter to send · Shift+Enter for a new line</span>
           {given && entries.length > 0 && !busy ? (
             <button type="button" onClick={() => session.reset()} className="shrink-0 font-semibold text-ink-2 hover:text-ink">
               New conversation

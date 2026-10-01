@@ -4,7 +4,11 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
-## 1.2.1 — 2026-10-01
+## 1.3.0 — 2026-10-01
+
+**Added**
+
+- Local AI can use WorkSuite module functions (#51) — read data such as today's sales and prepare changes such as an invoice, which WorkSuite runs as you and you confirm on a card; it asks for missing details, links the records, and explains a module that is off, a missing permission or a function that is not there
 
 **Changed**
 

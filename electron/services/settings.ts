@@ -41,7 +41,7 @@ export function defaultPreferences(): Preferences {
     shortcuts: {},
     backgroundServices: { notifications: true, realtime: true },
     webchatRinging: { window: true, duringDnd: 'card', shortcut: true, volume: 80 },
-    ai: { quickAsk: true, shortcut: process.platform === 'darwin' ? 'Alt+Space' : 'Control+Alt+Space', insert: true, dockAtStart: false, language: 'Sinhala', display: 'drawer', sound: false },
+    ai: { quickAsk: true, shortcut: process.platform === 'darwin' ? 'Alt+Space' : 'Control+Alt+Space', insert: true, dockAtStart: false, language: 'Sinhala', display: 'drawer', sound: false, moduleAccess: { worksuite: {}, local: {} } },
   };
 }
 

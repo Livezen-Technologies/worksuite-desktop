@@ -45,13 +45,15 @@ export interface AskTurn {
 }
 
 /** One question to the assistant. `refs` are records it may read, as the person asking. */
-export function ask(text: string, opts: { surface: Surface; refs?: string[]; conversationId?: number | null }): Promise<AskTurn> {
+export function ask(text: string, opts: { surface: Surface; refs?: string[]; conversationId?: number | null; moduleAccess?: { read: string[]; write: string[] } }): Promise<AskTurn> {
   return apiPost<AskTurn>('/api/ai/assist/chat', {
     text,
     surface: opts.surface,
     refs: opts.refs ?? [],
     conversation_id: opts.conversationId ?? undefined,
     use_context: (opts.refs ?? []).length > 0,
+    // Modules this person switched off for WorkSuite AI (worksuite-desktop#51): it uses none of their functions.
+    ...(opts.moduleAccess ? { module_access: { off_read: opts.moduleAccess.read, off_write: opts.moduleAccess.write } } : {}),
   });
 }
 

@@ -707,6 +707,42 @@ What the desktop cannot do because the server does not (yet):
 - **No link opens a document in the desktop.** The web's "Open in Desktop App" has no `worksuite://` form for an
   Office file, and `links/resolve` (`Desktop/Libraries/LinkGrammar`) knows none.
 
+## AI module functions (worksuite-desktop#51)
+
+Local AI (the model on the computer) can read WorkSuite data and prepare changes. The model only decides which
+function to call; **the server runs it**, as the signed-in person, with their company, role and record permissions.
+Enabling a module for an assistant never grants access the person does not already have. None of this exists on the
+server yet. The desktop treats a 404 as "not offered yet": Local AI then answers without WorkSuite data, and Module
+Access keeps the person's choices for later.
+
+- **`GET /api/ai/module-access`** →
+  `{ can_manage, modules: [{ key, label, supports: {read, write}, worksuite: {read, write}, local: {read, write}, denied? }] }`.
+  - `worksuite` and `local` are the organization's ceiling for each assistant.
+  - `supports` says whether the module has read or write functions at all.
+  - `denied` is a sentence for a person who cannot open the module.
+  - `can_manage` is true for administrators.
+- **`PUT /api/ai/module-access {modules: [{key, worksuite, local}]}`** (administrators only; 403 otherwise) saves the
+  ceiling and answers the new state. It applies to the next question.
+- **`GET /api/ai/tools?engine=local`** → `{ tools: [{ name, module, kind: 'read'|'write', label, description, parameters }] }`.
+  - It lists only the functions this person may use with Local AI now (their permissions and the organization's
+    ceiling).
+  - `parameters` is a JSON Schema object; `name` matches `^[a-z][a-z0-9_.]{0,63}$`.
+- **`POST /api/ai/tools/{name}/run {arguments, engine: 'local'}`** →
+  `{ ok, data?, pending_action?, missing?: [{name, label}], links?: [{label, url}], error?, code? }`.
+  - **A read** answers `data`: compact, already limited to what the person can see, a few KB at most.
+  - **A write never applies anything.** It answers either `missing` (the required details still to ask for) or a
+    `pending_action` in the same shape as `/api/ai/assist/chat`'s. The person confirms that action through the
+    existing `ai:confirm` / `POST /api/ai/pending/{id}/confirm` path. Success is reported only after it has run.
+  - **A refusal** answers `ok: false` with a sentence in `error`: module off, permission missing, unsupported.
+  - `links` are the records the result is about.
+  - The server records every run and every confirmed change in the activity history, marked as made with Local AI.
+- **WorkSuite AI** gets the person's own choices with each question: `/api/ai/assist/chat` takes
+  `module_access: {off_read: [module], off_write: [module]}`. The server's assistant must not use those modules'
+  functions, on top of the organization's ceiling.
+
+The person's own choices (Settings › AI Assistant › Module Access, "For me") are kept on the computer in
+`preferences.ai.moduleAccess`, and can only narrow what the server allows.
+
 ## Not provided yet
 
 - `monitoring_policy` is always `null`, and every `feature_flags` entry is

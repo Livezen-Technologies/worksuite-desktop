@@ -18,7 +18,7 @@ const { assistantSession, createAskSession } = await import('../../../src/module
 const { AiDock, useAssistantAlerts, useAssistantFollowsDisplay } = await import('../../../src/app/overlays/AiDock');
 const { AiWidget } = await import('../../../src/app/overlays/AiWidget');
 
-const AI: Preferences['ai'] = { quickAsk: true, shortcut: 'Alt+Space', insert: true, dockAtStart: false, language: 'Sinhala', display: 'widget', sound: false };
+const AI: Preferences['ai'] = { quickAsk: true, shortcut: 'Alt+Space', insert: true, dockAtStart: false, language: 'Sinhala', display: 'widget', sound: false, moduleAccess: { worksuite: {}, local: {} } };
 const setAi = (patch: Partial<Preferences['ai']>) => app.set((s) => ({ prefs: { ...(s.prefs ?? {}), ai: { ...AI, ...(s.prefs?.ai ?? {}), ...patch } } as Preferences }));
 
 const turn = (reply: string): AskTurn => ({ ok: true, reply, conversation_id: 4, tool_runs: [], sources: [], pending_actions: [] }) as unknown as AskTurn;

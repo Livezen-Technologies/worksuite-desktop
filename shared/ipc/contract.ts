@@ -149,6 +149,10 @@ export const preferencesPatchSchema = z
       language: z.string().regex(/^[A-Za-z ]{2,40}$/),
       display: z.enum(['drawer', 'widget', 'hidden']),
       sound: z.boolean(),
+      moduleAccess: z.object({
+        worksuite: z.record(z.string().regex(/^[a-z][a-z0-9_]{0,31}$/), z.object({ read: z.boolean(), write: z.boolean() })),
+        local: z.record(z.string().regex(/^[a-z][a-z0-9_]{0,31}$/), z.object({ read: z.boolean(), write: z.boolean() })),
+      }),
     }),
   })
   .partial();

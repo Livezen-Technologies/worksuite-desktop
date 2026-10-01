@@ -1,6 +1,7 @@
-import { askLocal, type LocalAsk } from '../../core/local-ai';
+import { askLocal } from '../../core/local-ai';
 import { createStore, type Store } from '../../core/store';
 import { ask, assistantProblem, pickFile, type AskTurn, type Surface } from './assistant';
+import { runLocalAgent, toolsSystem, type AiTool } from './tools';
 
 export interface AskEntry {
   role: 'user' | 'assistant';
@@ -46,9 +47,13 @@ export interface SendOptions {
   local: boolean;
   /** Quick Ask: the text selected in the other app, sent with the first question only. */
   selection?: string;
+  /** Local AI with module functions (worksuite-desktop#51): what it may call, and why a call is refused. */
+  localTools?: { tools: AiTool[]; allow: (t: AiTool) => string | null; off: string[] };
+  /** WorkSuite AI: the modules this person switched off (Settings › AI Assistant › Module Access). */
+  moduleAccess?: { read: string[]; write: string[] };
 }
 
-const LOCAL_SYSTEM = 'You are WorkSuite\'s assistant, running on this computer. Answer clearly and briefly. You cannot see the person\'s WorkSuite data or change anything; say so when a question needs it.';
+const LOCAL_SYSTEM = 'You are WorkSuite\'s assistant, running on this computer. Answer clearly and briefly. You cannot see the person\'s WorkSuite data or change anything right now (WorkSuite\'s module functions need a connection, and the modules turned on in Settings › AI Assistant › Module Access); say so when a question needs it.';
 
 const fresh = (): AskState => ({ entries: [], conversationId: null, text: '', busy: false, streaming: null, useTab: true, tabRef: null, files: [], fileError: null, localPick: null, unread: 0, viewers: 0 });
 
@@ -75,7 +80,7 @@ export interface AskSession {
 
 export function createAskSession(): AskSession {
   const store = createStore<AskState>(fresh());
-  let running: LocalAsk | null = null;
+  let running: { cancel(): void } | null = null;
   const unseen = new Set<(entry: AskEntry) => void>();
 
   const answered = (entry: AskEntry) => {
@@ -92,9 +97,25 @@ export function createAskSession(): AskSession {
       // This computer's model: the conversation so far in this mode, nothing from WorkSuite.
       const history = before.filter((x) => x.local && !x.error).map((x) => ({ role: x.role, content: x.text }));
       store.set({ streaming: '' });
-      const r = askLocal([{ role: 'system', content: LOCAL_SYSTEM }, ...history, { role: 'user', content: full }], (t) => store.set({ streaming: t }));
-      running = r;
+      const lt = opts.localTools;
       try {
+        if (lt?.tools.length) {
+          // With WorkSuite's module functions: the model decides, WorkSuite runs them as the person.
+          const system = toolsSystem(lt.tools, lt.off, new Date().toDateString());
+          const a = await runLocalAgent({
+            messages: [{ role: 'system', content: system }, ...history, { role: 'user', content: full }],
+            tools: lt.tools,
+            allow: lt.allow,
+            ask: (m, onText) => askLocal(m, onText),
+            onText: (t) => store.set({ streaming: t }),
+            onCancelSet: (c) => (running = { cancel: c }),
+          });
+          const turn: AskTurn = { conversation_id: null, ok: true, reply: a.text, error: null, sources: a.sources, tool_runs: a.tools, pending_actions: a.actions };
+          answered({ role: 'assistant', text: a.text || (a.cancelled ? 'Stopped.' : ''), local: true, turn });
+          return;
+        }
+        const r = askLocal([{ role: 'system', content: LOCAL_SYSTEM }, ...history, { role: 'user', content: full }], (t) => store.set({ streaming: t }));
+        running = r;
         const a = await r.done;
         answered({ role: 'assistant', text: a.text.trim() || (a.cancelled ? 'Stopped.' : ''), local: true });
       } catch (err) {
@@ -106,7 +127,7 @@ export function createAskSession(): AskSession {
       return;
     }
     try {
-      const t = await ask(full, { surface: opts.surface, refs: opts.refs, conversationId: store.get().conversationId });
+      const t = await ask(full, { surface: opts.surface, refs: opts.refs, conversationId: store.get().conversationId, moduleAccess: opts.moduleAccess });
       store.set({ conversationId: t.conversation_id });
       answered(t.ok ? { role: 'assistant', text: t.reply ?? '', turn: t } : { role: 'assistant', text: t.error ?? 'The assistant could not answer just now.', error: true, retry });
     } catch (err) {
