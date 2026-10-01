@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { wallTimeLabel } from '../../core/time';
 import { cx } from '../../components/ui';
+import type { Draft } from './EventDrawer';
+import { SelectionHint, useCalendarSelection } from './selection';
 import { clashingKeys, colourOf, dayOf, layoutDay, minutesOf, movable, nowWall, type CalendarEvent, EVENT_TONE } from './api';
 
 const HOUR = 52;
@@ -27,13 +29,16 @@ export function WeekGrid({ days, events, today, readOnly, onOpen, onCreate, onMo
   events: CalendarEvent[];
   today: string;
   onOpen: (e: CalendarEvent) => void;
-  onCreate: (ymd: string, minutes: number, allDay?: boolean) => void;
+  onCreate: (draft: Draft) => void;
   onMove: (e: CalendarEvent, dDays: number, dMinutes: number) => void;
   onResize: (e: CalendarEvent, dMinutes: number) => void;
   readOnly?: boolean;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
+  const allDayRow = useRef<HTMLDivElement>(null);
+  const timedSelection = useCalendarSelection({ root: body, scroll: scroller, disabled: readOnly, onSelect: onCreate });
+  const dateSelection = useCalendarSelection({ root: allDayRow, scroll: allDayRow, allDay: true, disabled: readOnly, onSelect: onCreate });
   const [drag, setDrag] = useState<Drag | null>(null);
   // The click that ends a drag is not a request to open the entry.
   const dragged = useRef(false);
@@ -82,7 +87,7 @@ export function WeekGrid({ days, events, today, readOnly, onOpen, onCreate, onMo
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="relative flex min-h-0 flex-1 flex-col">
       <div className="grid shrink-0 border-b border-line" style={{ gridTemplateColumns: `${GUTTER}px repeat(${days.length}, minmax(0, 1fr))` }}>
         <span />
         {days.map((d) => {
@@ -95,10 +100,10 @@ export function WeekGrid({ days, events, today, readOnly, onOpen, onCreate, onMo
           );
         })}
       </div>
-      <div className="grid min-h-[40px] shrink-0 border-b border-line" style={{ gridTemplateColumns: `${GUTTER}px repeat(${days.length}, minmax(0, 1fr))` }}>
+      <div ref={allDayRow} className="grid min-h-[40px] shrink-0 select-none border-b border-line" style={{ gridTemplateColumns: `${GUTTER}px repeat(${days.length}, minmax(0, 1fr))` }}>
         <span className="px-1 py-1.5 text-[10.5px] text-ink-3">All day</span>
         {days.map((d) => (
-          <div key={d} className="flex min-w-0 flex-col gap-[3px] border-l border-line p-1" onDoubleClick={() => onCreate(d, 9 * 60, true)}>
+          <div key={d} data-select-date={d} className={cx('flex min-w-0 touch-none flex-col gap-[3px] border-l border-line p-1', dateSelection.selection && d >= dateSelection.selection.from && d <= dateSelection.selection.to && 'bg-selection ring-2 ring-primary/40 ring-inset')} onPointerDown={(ev) => dateSelection.begin(ev, d)}>
             {allDay.filter((e) => dayOf(e.start_at) <= d && dayOf(e.end_at ?? e.start_at) >= d).map((e) => (
               <button key={eventKey(e)} type="button" onClick={() => onOpen(e)} className="truncate rounded-[5px] px-1.5 py-0.5 text-left text-[10.5px] font-bold text-white" style={{ background: colourOf(e) }} title={e.title}>
                 {e.title}
@@ -128,13 +133,14 @@ export function WeekGrid({ days, events, today, readOnly, onOpen, onCreate, onMo
               return (
                 <div
                   key={d}
-                  className="relative border-l border-line"
-                  onClick={(ev) => {
-                    if (ev.target !== ev.currentTarget) return;
-                    const y = ev.clientY - ev.currentTarget.getBoundingClientRect().top;
-                    onCreate(d, Math.floor((y / HOUR) * 60 / 30) * 30);
-                  }}
+                  data-select-date={d}
+                  className="relative touch-none select-none border-l border-line"
+                  onPointerDown={(ev) => timedSelection.begin(ev, d)}
                 >
+                  {timedSelection.selection?.from === d ? (
+                    <div className="pointer-events-none absolute right-0 left-0 z-20 rounded bg-selection ring-2 ring-primary/60 ring-inset" style={{ top: timedSelection.selection.start / 60 * HOUR, height: (timedSelection.selection.end - timedSelection.selection.start) / 60 * HOUR }}>
+                    </div>
+                  ) : null}
                   {items.map(({ e, start: from, end, col, cols }) => {
                     const dragging = drag?.key === eventKey(e) && drag.moved ? drag : null;
                     const top = ((from + (dragging?.mode === 'move' ? dragging.dMin : 0)) / 60) * HOUR;
@@ -198,6 +204,7 @@ export function WeekGrid({ days, events, today, readOnly, onOpen, onCreate, onMo
           </div>
         </div>
       </div>
+      {timedSelection.selection || dateSelection.selection ? <div className="pointer-events-none absolute right-1 bottom-1 left-1 z-30"><SelectionHint selection={(timedSelection.selection ?? dateSelection.selection)!} /></div> : null}
     </div>
   );
 }

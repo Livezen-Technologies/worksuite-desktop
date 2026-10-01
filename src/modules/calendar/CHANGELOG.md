@@ -4,6 +4,13 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.4.0 — 2026-10-01
+
+**Added**
+
+- Drag across empty slots in Day or Week to choose an event's start and end, snapped to 15 minutes. The highlighted range says both times, the duration, and the displayed timezone. Releasing opens New Event with those times; nothing is created until Save (#63).
+- Drag across Month dates or the All Day row to draft a multi-day, all-day event. Calendar edges scroll during selection; Escape, pointer cancellation, losing focus, or losing creation access discards the selection. Existing event dragging and the New event button/keyboard shortcut remain available.
+
 ## 1.3.1 — 2026-10-01
 
 - Tender meetings are their own filter and colour, with Open Tender beside Open Meeting when the server sends the link (#100 groundwork); invitation conflicts are re-checked as instants (#99).

@@ -3,6 +3,8 @@ import { cx } from '../../components/ui';
 import { useMemo, useRef, useState } from 'react';
 import { clashingKeys, colourOf, dayDiff, dayOf, minutesOf, monthGrid, movable, type CalendarEvent } from './api';
 import { eventKey } from './WeekGrid';
+import type { Draft } from './EventDrawer';
+import { SelectionHint, useCalendarSelection } from './selection';
 
 const WEEKDAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 const SHOWN = 3;
@@ -17,7 +19,7 @@ export function MonthGrid({ anchor, events, today, readOnly, onOpen, onCreate, o
   events: CalendarEvent[];
   today: string;
   onOpen: (e: CalendarEvent) => void;
-  onCreate: (ymd: string, minutes: number, allDay?: boolean) => void;
+  onCreate: (draft: Draft) => void;
   onDay: (ymd: string) => void;
   onMove: (e: CalendarEvent, dDays: number, dMinutes: number) => void;
   readOnly?: boolean;
@@ -26,6 +28,8 @@ export function MonthGrid({ anchor, events, today, readOnly, onOpen, onCreate, o
   const dragging = useRef<CalendarEvent | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const clashes = useMemo(() => clashingKeys(events, eventKey), [events]);
+  const root = useRef<HTMLDivElement>(null);
+  const { selection, begin } = useCalendarSelection({ root, scroll: root, allDay: true, disabled: readOnly, onSelect: onCreate });
   const days = monthGrid(anchor);
   const can = (e: CalendarEvent) => !readOnly && movable(e);
   const grab = (e: CalendarEvent) => ({
@@ -46,19 +50,20 @@ export function MonthGrid({ anchor, events, today, readOnly, onOpen, onCreate, o
       .filter((e) => dayOf(e.start_at) <= d && dayOf(e.end_at ?? e.start_at) >= d && (e.all_day || dayOf(e.start_at) === d))
       .sort((a, b) => Number(b.all_day) - Number(a.all_day) || minutesOf(a.start_at) - minutesOf(b.start_at));
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="relative flex min-h-0 flex-1 flex-col">
       <div className="grid shrink-0 grid-cols-7 border-b border-line">
         {WEEKDAYS.map((w) => <span key={w} className="py-2 text-center text-[11px] font-bold text-ink-3">{w}</span>)}
       </div>
-      <div className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6">
+      <div ref={root} className="grid min-h-0 flex-1 select-none grid-cols-7 overflow-auto" style={{ gridTemplateRows: 'repeat(6, minmax(100px, 1fr))' }}>
         {days.map((d) => {
           const list = on(d);
           return (
             <div
               key={d}
               data-day={d}
-              className={cx('flex min-h-0 flex-col gap-[3px] overflow-hidden border-r border-b border-line p-1', d.slice(0, 7) !== month && 'bg-subtle/60', over === d && 'bg-selection ring-2 ring-primary/40 ring-inset')}
-              onDoubleClick={(ev) => ev.target === ev.currentTarget && onCreate(d, 9 * 60)}
+              data-select-date={d}
+              className={cx('flex min-h-0 touch-none flex-col gap-[3px] overflow-hidden border-r border-b border-line p-1', d.slice(0, 7) !== month && 'bg-subtle/60', (over === d || (selection && d >= selection.from && d <= selection.to)) && 'bg-selection ring-2 ring-primary/40 ring-inset')}
+              onPointerDown={(ev) => begin(ev, d)}
               onDragOver={(ev) => {
                 if (!dragging.current) return;
                 ev.preventDefault();
@@ -98,6 +103,7 @@ export function MonthGrid({ anchor, events, today, readOnly, onOpen, onCreate, o
           );
         })}
       </div>
+      {selection ? <div className="pointer-events-none absolute right-1 bottom-1 left-1 z-30"><SelectionHint selection={selection} /></div> : null}
     </div>
   );
 }
