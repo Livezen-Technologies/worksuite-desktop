@@ -5,6 +5,18 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-01 — 0.2.72: A profile picture before the workspace
+
+- **Add your profile picture** (#46). When the server requires a profile picture and your account has none, the app
+  shows this screen after sign-in instead of the workspace: on your first sign-in, and again if your picture is
+  removed. **Upload Picture** opens the picture editor (move, zoom and turn it inside the round frame); an avatar
+  can be made instead where the organisation allows it. The picture shows as it will look, and goes up only on
+  **Save and Continue**; if that fails it says why and offers **Try again**. **Sign Out** is the only other way on.
+  The supported types, the largest size and the smallest picture are listed under the preview.
+- Where it bites: the server decides (WorkSuite Users 1.1.0, *Require a profile picture*, on by default). An older
+  server never asks. A picture waiting for an administrator's review counts, so nobody is held here. Started
+  offline from the copy kept on this computer, the app does not ask: nothing could be sent anyway.
+
 ## 2026-10-01 — 0.2.71: Chat's channel toolbar (WhatsApp in Chat), profile pictures, a resizable conversation list; AI Assistant scrolling; Local AI first-use setup and Gemma 3 4B; Office menus and Open in new window; Meet Home and pre-join redesign; meeting cards in Chat; screen sharing fixed
 
 - **A channel toolbar down the far left of Chat** (#33): Chat, Web Chat and WhatsApp, each with its unread count
