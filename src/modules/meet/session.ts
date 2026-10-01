@@ -1,11 +1,17 @@
 import { DisconnectReason, Room, RoomEvent, Track, VideoPresets, type Participant, type RemoteParticipant } from 'livekit-client';
-import { ApiError, apiGet, apiPost, apiPut } from '../../core/api';
+import { ApiError, apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
+import { toast } from '../../core/toasts';
 import { call, errorMessage, on } from '../../core/bridge';
 import { CLEAN_AUDIO, pauseOn, shareOn } from '../calls/session';
 import type { SharePick } from '../calls/ScreenPicker';
-import type { MeetInfo, Sfu } from './api';
+import { DEFAULT_ROOM_SETTINGS, may, type MeetInfo, type MeetRole, type RoomSettings, type Sfu } from './api';
 import type { RemoteControlView } from '@shared/types';
 import { pointers } from './remote/pointers';
+import { app } from '../../core/app-state';
+import { LocalRecorder } from './recorder';
+import { LiveTranscriber } from './transcribe/live';
+import type { SpeechLanguage } from './transcribe/engine';
+import type { AutoEmail, Transcript } from '../meetings/transcripts/api';
 
 /**
  * One Meet meeting, in its window (MeetLobby → MeetRoom). Like a call, kept
@@ -28,16 +34,45 @@ export interface Stroke {
 
 type Board = { t: 'stroke'; s: Stroke } | { t: 'clear' };
 
-export function metaOf(p: Participant): { host?: boolean; waiting?: boolean } {
+/** What the server says about a connection: its role, and whether it waits at the door (and why). */
+export interface Meta {
+  role?: MeetRole;
+  host?: boolean;
+  cohost?: boolean;
+  waiting?: boolean;
+  door?: 'waiting_room' | 'no_host' | null;
+  uid?: number | null;
+}
+
+export function metaOf(p: Participant): Meta {
   try {
-    return p.metadata ? (JSON.parse(p.metadata) as { host?: boolean; waiting?: boolean }) : {};
+    return p.metadata ? (JSON.parse(p.metadata) as Meta) : {};
   } catch {
     return {};
   }
 }
 
+/** A connection's role; an older server only says host or co-host. */
+export function roleOf(p: Participant): MeetRole {
+  const m = metaOf(p);
+  return m.role ?? (m.host ? 'host' : m.cohost ? 'cohost' : 'participant');
+}
+
+/** The WorkSuite user behind a connection (`u12-ab3f` → 12), or 0 for a guest. */
+export function userIdOf(p: Participant): number {
+  const m = /^u(\d+)-/.exec(p.identity);
+  return m ? Number(m[1]) : 0;
+}
+
 export function isGuest(p: Participant): boolean {
   return p.identity.startsWith('g-');
+}
+
+/** `GET /api/meet/{uuid}/record/status` (worksuite-desktop#68). */
+export interface RecordStatus {
+  cloud: { id?: number; status: string; started_at: string | null; by: { id: number; name: string } | null } | null;
+  local: Array<{ id: number; started_at: string | null; by: { id: number; name: string } }>;
+  may_record?: boolean;
 }
 
 export class MeetSession {
@@ -68,6 +103,20 @@ export class MeetSession {
   private audio = new Set<HTMLMediaElement>();
   private wants = { mic: true, cam: true };
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private offRoles: (() => void) | null = null;
+  /** Bumped when the meeting's invitations change, so the list is read again. */
+  ringsVersion = 0;
+  /** Who is recording the meeting, as the server says (worksuite-desktop#68). */
+  rec: RecordStatus | null = null;
+  /** This computer's own recording of the meeting, while it records. */
+  localRec: LocalRecorder | null = null;
+  private recTimer: ReturnType<typeof setInterval> | null = null;
+  /** The meeting's live transcription, when one is on (worksuite-desktop#81): whoever started it, and in what language. */
+  transcribing: { id: number | null; by: string | null; language: string | null } | null = null;
+  /** This computer's own transcribing of the meeting, while it does. */
+  liveTx: LiveTranscriber | null = null;
+  /** The meeting record the notes and transcripts are kept on, once known. */
+  recordId: number | null = null;
 
   subscribe = (fn: () => void): (() => void) => {
     this.listeners.add(fn);
@@ -81,8 +130,46 @@ export class MeetSession {
     for (const fn of this.listeners) fn();
   }
 
+  /**
+   * My role now: what my connection carries (it changes during the meeting),
+   * else what the meeting said when it loaded. Never decided here — the
+   * server sets both.
+   */
+  get role(): MeetRole {
+    const lp = this.room?.localParticipant;
+    if (lp && metaOf(lp).role) return roleOf(lp);
+    return this.info?.role ?? (this.info?.is_host ? 'host' : this.info?.is_cohost ? 'cohost' : 'participant');
+  }
+
   get isHost(): boolean {
-    return !!this.info?.is_host;
+    return this.role === 'host';
+  }
+
+  /** Host or co-host: admits, removes, mutes, locks, names presenters and changes the room settings. */
+  get canManage(): boolean {
+    return may.manage(this.role);
+  }
+
+  get settings(): RoomSettings {
+    return { ...DEFAULT_ROOM_SETTINGS, ...this.info?.room_settings };
+  }
+
+  get mayPresent(): boolean {
+    return may.present(this.role, this.settings);
+  }
+
+  get mayRecord(): boolean {
+    return may.record(this.role, this.settings);
+  }
+
+  get mayInvite(): boolean {
+    return may.invite(this.role, this.settings);
+  }
+
+  /** Why we are waiting at the door, as the server put it. */
+  get door(): 'waiting_room' | 'no_host' | null {
+    const lp = this.room?.localParticipant;
+    return lp ? (metaOf(lp).door ?? (metaOf(lp).waiting ? 'waiting_room' : null)) : null;
   }
 
   get canPublish(): boolean {
@@ -108,7 +195,7 @@ export class MeetSession {
     this.changed();
     try {
       this.info = await apiGet<MeetInfo>(`/api/meet/${uuid}`);
-      const pub = await apiGet<{ locked: boolean }>(`/api/meet/${uuid}/public`).catch(() => ({ locked: false }));
+      const pub = this.info.locked !== undefined ? { locked: this.info.locked } : await apiGet<{ locked: boolean }>(`/api/meet/${uuid}/public`).catch(() => ({ locked: false }));
       this.locked = !!pub.locked;
       this.phase = this.info.ended ? 'ended' : 'lobby';
       if (this.info.ended) this.farewell = 'This meeting has ended.';
@@ -148,7 +235,11 @@ export class MeetSession {
     room
       .on(RoomEvent.ParticipantConnected, refresh)
       .on(RoomEvent.ParticipantDisconnected, refresh)
-      .on(RoomEvent.ParticipantMetadataChanged, refresh)
+      .on(RoomEvent.ParticipantMetadataChanged, (_prev, p) => {
+        // My role changed (made co-host or presenter, handed the host role, or it was taken back): the lists and settings follow.
+        if (p === room.localParticipant) void this.reload();
+        refresh();
+      })
       .on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
         this.lastSpeaker = speakers.find((p) => !p.isLocal)?.identity ?? this.lastSpeaker;
         refresh();
@@ -161,7 +252,10 @@ export class MeetSession {
         if (pub.source === Track.Source.ScreenShare && !this.switching) void this.shareEnded();
         refresh();
       })
-      .on(RoomEvent.RecordingStatusChanged, refresh)
+      .on(RoomEvent.RecordingStatusChanged, () => {
+        void this.refreshRecording();
+        refresh();
+      })
       .on(RoomEvent.TrackSubscribed, (track) => {
         if (track.kind === Track.Kind.Audio) {
           const el = track.attach();
@@ -180,7 +274,15 @@ export class MeetSession {
       .on(RoomEvent.ParticipantPermissionsChanged, (_prev, p) => {
         // Admitted: the door opens and our devices go on.
         if (p === room.localParticipant && this.phase === 'waiting' && this.canPublish) void this.enter();
+        // No longer allowed to present: the media server has already stopped the screen; say so.
+        if (p === room.localParticipant && room.localParticipant.isScreenShareEnabled && !this.mayPresentNow()) {
+          void this.share(null).then(() => this.note('Only presenters can share their screen now. Ask the host to make you a presenter.'));
+        }
         refresh();
+      })
+      .on(RoomEvent.ParticipantConnected, (p) => {
+        // Somebody waiting only because no host was in, and the room has no waiting room: let them in as I arrive.
+        if (this.canManage && !this.settings.waiting_room && metaOf(p).door === 'no_host') void this.admit(p);
       })
       .on(RoomEvent.DataReceived, (payload, p, _kind, topic) => {
         // Remote control: relayed to the main process as it came. The key, and the decision, are there.
@@ -232,6 +334,30 @@ export class MeetSession {
       return;
     }
     void this.loadBoard();
+    this.offRoles?.();
+    // Roles and settings changed by someone else reach everyone in the meeting at once (`meet.control`, what: roles).
+    this.offRoles = on<{ type?: string; meeting?: string; what?: string }>('realtime:event', (e) => {
+      if (e?.type !== 'meet.control' || e.meeting !== this.uuid) return;
+      if (e.what === 'roles') void this.reload();
+      // Somebody started or stopped transcribing (#81): everybody is told while it is on.
+      if (e.what === 'transcript') {
+        const ev = e as { on?: boolean; by?: string; language?: string };
+        this.transcribing = ev.on ? { id: this.transcribing?.id ?? null, by: ev.by ?? null, language: ev.language ?? null } : null;
+        if (ev.by && ev.by !== app.get().auth?.user?.name) toast('info', ev.on ? `${ev.by} started transcribing this meeting. What is said is being written down.` : `${ev.by} stopped transcribing this meeting.`);
+        this.changed();
+      }
+      // Somebody started or stopped recording (#68): everybody is told, and the badge follows.
+      if (e.what === 'recording') {
+        const ev = e as { on?: boolean; by?: string; local?: boolean };
+        if (ev.by && ev.by !== app.get().auth?.user?.name) toast('info', `${ev.by} ${ev.on ? 'started' : 'stopped'} recording this meeting${ev.on && ev.local ? ' on their computer' : ''}.`);
+        void this.refreshRecording();
+      }
+      // Somebody was rung in, answered or was cancelled (#79): the invitations are read again.
+      if (e.what === 'rings') {
+        this.ringsVersion++;
+        this.changed();
+      }
+    });
     if (this.canPublish) await this.enter();
     else {
       this.phase = 'waiting';
@@ -239,11 +365,43 @@ export class MeetSession {
     }
   }
 
+  /** The meeting's roles and settings again, after somebody changed them. */
+  async reload(): Promise<void> {
+    if (!this.uuid) return;
+    try {
+      const info = await apiGet<MeetInfo>(`/api/meet/${this.uuid}`);
+      this.info = { ...this.info, ...info };
+      if (info.locked !== undefined) this.locked = info.locked;
+      this.changed();
+    } catch {
+      /* the next change tries again */
+    }
+  }
+
+  /** Whether my connection may publish a screen now — what the media server granted. */
+  private mayPresentNow(): boolean {
+    const sources = this.room?.localParticipant.permissions?.canPublishSources;
+    return !sources?.length || sources.includes(3 /* TrackSource.SCREEN_SHARE */);
+  }
+
+  /** People in the meeting who are signed in, with their roles: for choosing a co-host, presenter or new host. */
+  get people(): Array<{ id: number; name: string; role: MeetRole }> {
+    const seen = new Map<number, { id: number; name: string; role: MeetRole }>();
+    for (const p of this.present) {
+      const id = userIdOf(p);
+      if (id && !seen.has(id)) seen.set(id, { id, name: p.name || 'Someone', role: roleOf(p) });
+    }
+    return [...seen.values()];
+  }
+
   private async enter(): Promise<void> {
     const lp = this.room?.localParticipant;
     if (!lp) return;
     this.joinedAt = this.joinedAt ?? Date.now();
     this.phase = 'in';
+    void this.refreshRecording();
+    void this.refreshTranscribing();
+    if (!this.recTimer) this.recTimer = setInterval(() => void this.refreshRecording(), 20_000);
     // The main window shows "in a meeting" and brings this window back.
     void call('calls:active', { uuid: this.uuid, kind: 'meet', title: this.info?.title || 'Meeting' }).catch(() => undefined);
     this.changed();
@@ -367,11 +525,183 @@ export class MeetSession {
     this.changed();
   }
 
+  /** Roles (worksuite-desktop#82): the server checks who may; these only ask. */
+  private async roles(run: () => Promise<unknown>, done: string): Promise<boolean> {
+    try {
+      await run();
+      await this.reload();
+      this.note(null);
+      toast('success', done);
+      return true;
+    } catch (e) {
+      this.note(errorMessage(e));
+      return false;
+    }
+  }
+
+  cohost = (userId: number, on: boolean) =>
+    this.roles(() => (on ? apiPost(`/api/meet/${this.uuid}/cohosts`, { user_id: userId }) : apiDelete(`/api/meet/${this.uuid}/cohosts/${userId}`)), on ? 'Co-host added.' : 'Co-host removed.');
+
+  presenter = (userId: number, on: boolean) =>
+    this.roles(() => (on ? apiPost(`/api/meet/${this.uuid}/presenters`, { user_id: userId }) : apiDelete(`/api/meet/${this.uuid}/presenters/${userId}`)), on ? 'Presenter added.' : 'Presenter removed.');
+
+  /** Hand the host role to somebody; I stay on as a co-host. */
+  transferHost = (userId: number) => this.roles(() => apiPost(`/api/meet/${this.uuid}/host`, { user_id: userId }), 'Host changed. You are now a co-host.');
+
+  /**
+   * Leave, and the meeting goes on: the host role passes to the person
+   * chosen, else to a co-host. With nobody to pass it to, the server names
+   * the people who could take it, and nothing happens until one is chosen.
+   */
+  async leaveAsHost(userId?: number): Promise<{ left: true } | { left: false; candidates: Array<{ id: number; name: string }>; error?: string }> {
+    try {
+      await apiPost(`/api/meet/${this.uuid}/handover`, userId ? { user_id: userId } : {});
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) {
+        const d = (e.data ?? {}) as { candidates?: Array<{ id: number; name: string }> };
+        return { left: false, candidates: d.candidates ?? [] };
+      }
+      return { left: false, candidates: [], error: errorMessage(e) };
+    }
+    await this.leave();
+    return { left: true };
+  }
+
   admit = (p: Participant) => this.host('admit', { identity: p.identity });
   remove = (p: Participant) => this.host('remove', { identity: p.identity });
   mute = (p: Participant) => this.host('mute', { identity: p.identity });
   lock = (locked: boolean) => this.host('lock', { locked }, () => (this.locked = locked));
-  record = (on: boolean) => this.host(on ? 'record/start' : 'record/stop');
+  // ── recording (worksuite-desktop#68) ─────────────────────────────────────
+
+  /** What the server knows of the meeting's recordings now. */
+  async refreshRecording(): Promise<void> {
+    if (!this.uuid) return;
+    try {
+      this.rec = await apiGet<RecordStatus>(`/api/meet/${this.uuid}/record/status`);
+    } catch {
+      // An older server: the room's own flag is all there is.
+      this.rec = null;
+    }
+    this.changed();
+  }
+
+  /** Recording, here or on the server, and since when — for the badge and its clock. */
+  get recording(): { since: number | null; mine: boolean; local: boolean; who: string[] } | null {
+    if (this.localRec?.id) return { since: this.localRec.startedAt, mine: true, local: true, who: [] };
+    const cloud = this.rec?.cloud;
+    const locals = this.rec?.local ?? [];
+    if (cloud || locals.length || this.room?.isRecording) {
+      const since = cloud?.started_at ? Date.parse(`${cloud.started_at.replace(' ', 'T')}${/Z|[+-]\d\d:?\d\d$/.test(cloud.started_at) ? '' : 'Z'}`) : null;
+      return { since, mine: false, local: !cloud && locals.length > 0, who: [...(cloud?.by ? [cloud.by.name] : []), ...locals.map((l) => l.by.name)] };
+    }
+    return null;
+  }
+
+  /** Start recording as Settings › Meet › Recording says: on the server, or on this computer. */
+  async startRecording(): Promise<void> {
+    const prefs = app.get().prefs?.meetRecording ?? { method: 'cloud', quality: '720p', layout: 'grid', folder: 'Meeting Recordings' };
+    try {
+      if (prefs.method === 'local' && this.room) {
+        const rec = new LocalRecorder(this.room, { layout: prefs.layout, quality: prefs.quality, speaker: () => this.lastSpeaker, onError: (m) => this.note(m) });
+        this.localRec = rec;
+        this.changed();
+        try {
+          await rec.start(this.uuid, this.info?.title || 'Meeting');
+        } catch (e) {
+          this.localRec = null;
+          throw e;
+        }
+        toast('success', 'Recording on this computer. It is saved as it goes, and uploaded to your Drive when you stop.');
+      } else {
+        await apiPost(`/api/meet/${this.uuid}/record/start`, { layout: prefs.layout, quality: prefs.quality, folder: prefs.folder });
+        toast('success', 'Recording started. It goes to your Drive when it stops.');
+      }
+    } catch (e) {
+      this.note(`The recording did not start: ${errorMessage(e)}`);
+    }
+    await this.refreshRecording();
+  }
+
+  async stopRecording(): Promise<void> {
+    const local = this.localRec;
+    try {
+      if (local) {
+        this.localRec = null;
+        this.changed();
+        await local.stop();
+        toast('success', 'Recording stopped. It is being finished and uploaded to your Drive — you can leave the meeting.');
+      } else {
+        await apiPost(`/api/meet/${this.uuid}/record/stop`);
+        toast('success', 'Recording stopped. It is being finished and saved to your Drive.');
+      }
+    } catch (e) {
+      this.note(`The recording did not stop: ${errorMessage(e)}`);
+    }
+    await this.refreshRecording();
+  }
+
+  record = (on: boolean) => (on ? this.startRecording() : this.stopRecording());
+
+  // ── transcription (worksuite-desktop#81) ─────────────────────────────────
+
+  /** The meeting record the transcript goes on: made the first time its host or a co-host needs it. */
+  async meetingRecord(): Promise<number> {
+    if (this.recordId) return this.recordId;
+    const r = await apiPost<{ id: number }>('/api/meetings/for-meet', { uuid: this.uuid });
+    this.recordId = r.id;
+    return r.id;
+  }
+
+  /** Whether a live transcription is on (somebody joining late is told too). */
+  async refreshTranscribing(): Promise<void> {
+    try {
+      const id = await this.meetingRecord();
+      const r = await apiGet<{ transcripts: Transcript[] }>(`/api/meetings/${id}/transcripts`);
+      const live = r.transcripts.find((t) => t.source === 'live' && t.status === 'active');
+      this.transcribing = live ? { id: live.id, by: null, language: live.language } : this.liveTx ? this.transcribing : null;
+      this.changed();
+    } catch {
+      // No record yet, or not allowed to see transcripts: nothing to show.
+    }
+  }
+
+  get mayTranscribe(): boolean {
+    return this.canManage || this.mayRecord;
+  }
+
+  async startTranscription(language: SpeechLanguage, autoEmail: AutoEmail | null): Promise<void> {
+    if (!this.room || this.liveTx) return;
+    try {
+      const id = await this.meetingRecord();
+      const t = await apiPost<Transcript>(`/api/meetings/${id}/transcripts`, { source: 'live', language, auto_email: autoEmail ?? undefined });
+      const tx = new LiveTranscriber(this.room, t.id, language, () => this.changed());
+      this.liveTx = tx;
+      this.transcribing = { id: t.id, by: app.get().auth?.user?.name ?? null, language };
+      tx.start();
+      toast('success', 'Transcribing. Everybody in the meeting is told.');
+    } catch (e) {
+      this.note(`Transcription did not start: ${errorMessage(e)}`);
+    }
+    this.changed();
+  }
+
+  async stopTranscription(): Promise<void> {
+    const tx = this.liveTx;
+    const id = this.transcribing?.id;
+    this.liveTx = null;
+    this.changed();
+    if (tx) await tx.stop();
+    if (id) {
+      try {
+        await apiPost(`/api/meetings/transcripts/${id}/finish`, { status: 'ready' });
+        toast('success', 'Transcription stopped. The transcript is in the meeting\'s details, to review.');
+      } catch (e) {
+        this.note(`The transcript could not be finished: ${errorMessage(e)}`);
+      }
+    }
+    this.transcribing = null;
+    this.changed();
+  }
 
   async endForAll(): Promise<void> {
     this.farewell = 'You ended the meeting for everyone.';
@@ -414,6 +744,17 @@ export class MeetSession {
   }
 
   private teardown(): void {
+    this.offRoles?.();
+    this.offRoles = null;
+    // Leaving while transcribing here: what was said so far is finished and kept.
+    if (this.liveTx) void this.stopTranscription();
+    // Leaving while recording here: the recording stops, and is finished and uploaded in the background.
+    const local = this.localRec;
+    this.localRec = null;
+    if (local) void local.stop();
+    if (this.recTimer) clearInterval(this.recTimer);
+    this.recTimer = null;
+    this.rec = null;
     void call('calls:active', { uuid: null, kind: 'meet' }).catch(() => undefined);
     pointers.reset();
     void this.shareEnded();

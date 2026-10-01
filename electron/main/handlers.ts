@@ -432,6 +432,30 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     if (res.canceled || !res.filePaths[0]) return [];
     return ctx.transfers.register(res.filePaths);
   });
+  // Meetings recorded on this computer (worksuite-desktop#68).
+  router.handle('meetrec:preflight', () => ctx.meetRecorder.preflight());
+  router.handle('meetrec:start', (input) => ctx.meetRecorder.start(input));
+  router.handle('meetrec:chunk', (input) => ctx.meetRecorder.chunk(input.id, input.data));
+  router.handle('meetrec:stop', (input) => ctx.meetRecorder.stop(input.id, input.durationMs));
+  router.handle('meetrec:list', () => ctx.meetRecorder.list());
+  router.handle('meetrec:retry', (input) => ctx.meetRecorder.retry(input.id));
+  router.handle('meetrec:discard', (input) => ctx.meetRecorder.discard(input.id));
+  router.handle('meetrec:reveal', (input) => ctx.meetRecorder.reveal(input.id));
+  router.handle('meetrec:chooseFolder', async (_i, c) => {
+    const w = winOf(c.sender);
+    const opts: Electron.OpenDialogOptions = { title: 'Choose where meeting recordings are saved', defaultPath: ctx.settings.effective().meetRecording.localFolder, properties: ['openDirectory', 'createDirectory'] };
+    const res = w ? await dialog.showOpenDialog(w, opts) : await dialog.showOpenDialog(opts);
+    if (res.canceled || !res.filePaths[0]) return null;
+    ctx.settings.update({ meetRecording: { ...ctx.settings.effective().meetRecording, localFolder: res.filePaths[0] } });
+    return res.filePaths[0];
+  });
+  // Speech to text on this computer (worksuite-desktop#81).
+  router.handle('stt:status', () => ctx.speech.status());
+  router.handle('stt:chooseModel', (_i, c) => ctx.speech.chooseModel(winOf(c.sender) ?? null));
+  router.handle('stt:removeModel', () => ctx.speech.removeModel());
+  router.handle('stt:transcribe', async (input) => ({ segments: await ctx.speech.transcribe(input.wav, input.language) }));
+  router.handle('speech:ready', (input, c) => ctx.speech.onReady(c.sender.id, input));
+  router.handle('speech:result', (input, c) => ctx.speech.onResult(c.sender.id, input));
   router.handle('files:chooseDownloadFolder', async (_i, c) => {
     const w = winOf(c.sender);
     const opts: Electron.OpenDialogOptions = { title: 'Choose where downloads are saved', defaultPath: ctx.settings.effective().downloadFolder, properties: ['openDirectory', 'createDirectory'] };
@@ -496,6 +520,10 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       ? `/api/finance/export/${fc.report}${fc.lines ? '/transactions' : ''}?${new URLSearchParams({ company: String(fc.company), from: fc.from, to: fc.to, ...(fc.currency ? { currency: fc.currency } : {}) })}`
       : input.orderPdf
       ? `/api/share/oms/${input.orderPdf}/pdf`
+      : input.minutesExport
+      ? `/api/meetings/${input.minutesExport.meeting}/minutes/export?format=${input.minutesExport.format}`
+      : input.transcriptExport
+      ? `/api/meetings/transcripts/${input.transcriptExport.id}/export?format=${input.transcriptExport.format}`
       : input.tenderDocument
       ? `/api/tenders/documents/${input.tenderDocument}/file`
       : tl

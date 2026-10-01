@@ -105,6 +105,7 @@ const en = {
   'lobby.askToJoin': 'Ask to join',
   'lobby.joining': 'Joining…',
   'lobby.waiting': 'Waiting for the host to let you in…',
+  'lobby.waitingForHost': 'Waiting for the host to start the meeting…',
   'lobby.cancel': 'Cancel',
   'lobby.settingsUsed': 'Your microphone and camera settings will be used when you join.',
   'lobby.hostNote': 'You let people in and can record.',

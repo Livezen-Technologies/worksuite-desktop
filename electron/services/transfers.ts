@@ -180,6 +180,8 @@ export class TransferManager {
   private emitTimer: NodeJS.Timeout | null = null;
   /** Downloads a service waits for (Office's copies for another app): told once, when they end. */
   private whenDone = new Map<string, (outcome: DownloadOutcome) => void>();
+  /** Uploads a service waits for (a meeting recording): told once, when they end. */
+  private uploadDone = new Map<string, (outcome: { fileId: string | null } | { error: string }) => void>();
   onChanged: (list: Transfer[]) => void = () => undefined;
 
   constructor(private readonly deps: TransferDeps) {}
@@ -310,6 +312,11 @@ export class TransferManager {
     this.persist(l);
     if (state !== 'running' && state !== 'queued') this.live.delete(l.t.id);
     this.emit();
+    const up = this.uploadDone.get(l.t.id);
+    if (up && (state === 'done' || state === 'failed' || state === 'cancelled')) {
+      this.uploadDone.delete(l.t.id);
+      up(state === 'done' ? { fileId: l.meta.fileId } : { error: error ?? (state === 'cancelled' ? 'The upload was cancelled.' : 'The upload did not finish.') });
+    }
     const then = this.whenDone.get(l.t.id);
     if (then && (state === 'done' || state === 'failed' || state === 'cancelled')) {
       this.whenDone.delete(l.t.id);
@@ -342,7 +349,7 @@ export class TransferManager {
     this.live.set(t.id, l);
     this.persist(l);
     if (then) this.whenDone.set(t.id, then);
-    this.deps.audit('file.download', fileId ? { file_id: fileId } : { kind: isOfficeExportPath(apiPath) ? 'office-export' : apiPath.startsWith('/api/meet/') ? 'meet-recording' : apiPath.startsWith('/api/files/') ? 'file-version' : apiPath.startsWith('/api/calendar/') || apiPath.startsWith('/api/contacts/') || apiPath.startsWith('/api/data/') || apiPath.startsWith('/api/finance/export/') || /^\/api\/expense\/(reports2?\/export|runs\/|postings\/)/.test(apiPath) ? 'export' : apiPath.startsWith('/api/expense/') ? 'expense-document' : apiPath.startsWith('/api/garage/') ? 'garage-document' : apiPath.startsWith('/api/pms/') ? (apiPath.includes('/reports/') ? 'pms-report' : 'pms-document') : isGrantPath(apiPath) ? 'task-attachment' : isMediaPath(apiPath) ? 'media' : 'mail-attachment' });
+    this.deps.audit('file.download', fileId ? { file_id: fileId } : { kind: isOfficeExportPath(apiPath) ? 'office-export' : apiPath.startsWith('/api/meetings/') ? 'meeting-minutes' : apiPath.startsWith('/api/meet/') ? 'meet-recording' : apiPath.startsWith('/api/files/') ? 'file-version' : apiPath.startsWith('/api/calendar/') || apiPath.startsWith('/api/contacts/') || apiPath.startsWith('/api/data/') || apiPath.startsWith('/api/finance/export/') || /^\/api\/expense\/(reports2?\/export|runs\/|postings\/)/.test(apiPath) ? 'export' : apiPath.startsWith('/api/expense/') ? 'expense-document' : apiPath.startsWith('/api/garage/') ? 'garage-document' : apiPath.startsWith('/api/pms/') ? (apiPath.includes('/reports/') ? 'pms-report' : 'pms-document') : isGrantPath(apiPath) ? 'task-attachment' : isMediaPath(apiPath) ? 'media' : 'mail-attachment' });
     void this.runDownload(l);
     return { ...t };
   }
@@ -518,6 +525,48 @@ export class TransferManager {
       void this.runUpload(l);
     }
     return out;
+  }
+
+  /**
+   * Upload a file this process made itself — a meeting recording (worksuite-desktop#68). No handle: the path is
+   * this process's own. Resumable like any other upload, also after a restart (`resume`).
+   */
+  async uploadOwn(path: string, name: string, target: UploadTarget): Promise<string> {
+    const st = await stat(path);
+    const t: Transfer = {
+      id: randomUUID(),
+      direction: 'upload',
+      name,
+      source: path,
+      destination: 'WorkSuite Files',
+      bytes: 0,
+      total: st.size,
+      state: 'queued',
+      speed: 0,
+      error: null,
+      createdAt: new Date().toISOString(),
+    };
+    const meta: Meta = { path, fileId: null, uploadId: null, target, chunkSize: null, totalChunks: null, sha256: null, tempPath: null, finalPath: null, openWhenDone: false, relativePath: null };
+    const l: Live = { t, meta, abort: null, samples: [] };
+    this.live.set(t.id, l);
+    this.persist(l);
+    void this.runUpload(l);
+    return t.id;
+  }
+
+  /** How an upload stands, and the Drive file it made — after a restart too. Null when it is gone. */
+  uploadStatus(id: string): { state: TransferState; fileId: string | null; error: string | null; bytes: number; total: number } | null {
+    try {
+      const l = this.liveOrLoad(id);
+      return { state: l.t.state, fileId: l.meta.fileId, error: l.t.error, bytes: l.t.bytes, total: l.t.total };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Told once, when an upload ends: the file it made, or why not. */
+  whenUploaded(id: string, then: (outcome: { fileId: string | null } | { error: string }) => void): void {
+    this.uploadDone.set(id, then);
   }
 
   private async runUpload(l: Live): Promise<void> {

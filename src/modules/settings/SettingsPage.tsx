@@ -11,6 +11,8 @@ import { LOCAL_AI_KEY, useLocalAIStatus, useLocalModels } from '../../core/local
 import { secondsLeft, timeLeftLabel } from '../ai/setup';
 import { queryClient } from '../../core/query';
 import { useStore } from '../../core/store';
+import { RecordingSettings } from '../meet/RecordingSettings';
+import { SpeechModelSettings } from '../meet/SpeechModel';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { bytes, currentZone, relative } from '../../core/time';
 import { toast } from '../../core/toasts';
@@ -36,6 +38,7 @@ const SECTIONS = [
   { id: 'offline', label: 'Offline', icon: 'cloud-off' },
   { id: 'ai', label: 'AI Assistant', icon: 'sparkles' },
   { id: 'local-ai', label: 'Local AI', icon: 'cpu' },
+  { id: 'meet', label: 'Meet', icon: 'video' },
   { id: 'remote-control', label: 'Remote control', icon: 'screen-share' },
   { id: 'monitoring', label: 'Monitoring', icon: 'eye' },
   { id: 'about', label: 'About', icon: 'info' },
@@ -69,6 +72,7 @@ export default function SettingsPage(_props: ModuleProps) {
           {section === 'offline' ? <OfflineSection prefs={prefs} /> : null}
           {section === 'ai' ? <AiSection prefs={prefs} /> : null}
           {section === 'local-ai' ? <LocalAISection /> : null}
+          {section === 'meet' ? <MeetSection /> : null}
           {section === 'remote-control' ? <RemoteControlSection /> : null}
           {section === 'monitoring' ? <Monitoring /> : null}
           {section === 'about' ? <About /> : null}
@@ -880,6 +884,8 @@ export function LocalAISection() {
     <>
       <H title="Local AI" hint="The assistant answers with AI Studio's models through WorkSuite, or with one downloaded to this computer — then nothing is sent to a server, also offline. A download is checked against the file WorkSuite names before it is used." />
       <AIStudioBlock />
+      <h3 className="mt-2 mb-2 text-[14px] font-bold text-ink">Speech — meeting transcripts</h3>
+      <SpeechModelSettings />
       <Row
         label="This computer"
         hint={hw ? `${hw.cpuCores} cores · ${bytes(hw.memoryBytes)} memory${hw.gpu ? ` · GPU (${hw.gpu})${hw.vramBytes ? ` ${bytes(hw.vramBytes)}` : ''}` : ' · CPU only until Local AI first starts'}${hw.freeDiskBytes !== null ? ` · ${bytes(hw.freeDiskBytes)} free` : ''}` : 'Checking…'}
@@ -1033,6 +1039,19 @@ function OfflineSection({ prefs }: { prefs: Preferences }) {
           Clear saved data
         </Button>
       </div>
+    </>
+  );
+}
+
+/** Settings › Meet (worksuite-desktop#68): how meetings are recorded from this computer. */
+function MeetSection() {
+  return (
+    <>
+      <H title="Meet" hint="Meetings on this computer." />
+      <h3 className="mt-2 mb-3 text-[14px] font-bold text-ink">Recording</h3>
+      <RecordingSettings />
+      <h3 className="mt-6 mb-3 text-[14px] font-bold text-ink">Transcription</h3>
+      <SpeechModelSettings />
     </>
   );
 }

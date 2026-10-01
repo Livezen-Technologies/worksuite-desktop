@@ -11,7 +11,7 @@ vi.mock('electron', () => ({
 }));
 
 import { mediaServersOf } from '../../../electron/services/bootstrap';
-import { CallService, ringRoute } from '../../../electron/services/calls';
+import { CallService, meetRingRoute, ringRoute } from '../../../electron/services/calls';
 
 const ringing = { uuid: '3f0c9a8e-1b2c-4d5e-8f90-a1b2c3d4e5f6', room_id: 42, caller_name: "Samali O'Neil Perera", room_name: 'Garage module — design', mode: 'video', silent: false, expires_in: 44 };
 
@@ -74,6 +74,50 @@ describe('incoming calls', () => {
     calls.setActive(win as never, null);
     closed!();
     expect(post).not.toHaveBeenCalled();
+  });
+});
+
+describe('meeting invitations (worksuite-desktop#79)', () => {
+  const invite = { ring_id: 31, uuid: ringing.uuid, title: 'Design review', inviter_name: 'Kumari', silent: true, expires_in: 40 };
+
+  it('opens Meet’s ring screen with who is inviting to what', () => {
+    const route = meetRingRoute(invite)!;
+    expect(route.startsWith('/meet/ring?')).toBe(true);
+    const q = new URLSearchParams(route.split('?')[1]);
+    expect(q.get('ring')).toBe('31');
+    expect(q.get('title')).toBe('Design review');
+    expect(q.get('name')).toBe('Kumari');
+    expect(q.get('silent')).toBe('1');
+    expect(meetRingRoute({ ...invite, ring_id: 0 })).toBeNull();
+    expect(meetRingRoute({ ...invite, uuid: '../x' })).toBeNull();
+  });
+
+  it('rings once per invitation, never for a meeting this computer is in, and only when Meet may open', () => {
+    const open = vi.fn();
+    let meetAllowed = false;
+    const calls = new CallService({ open } as never, { get: vi.fn(), post: vi.fn() } as never, () => true, () => meetAllowed);
+    calls.handle({ type: 'meet.ring', ...invite } as never);
+    expect(open).not.toHaveBeenCalled();
+    meetAllowed = true;
+    calls.handle({ type: 'meet.ring', ...invite } as never);
+    calls.handle({ type: 'meet.ring', ...invite } as never);
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open.mock.calls[0]![0]).toBe('ring');
+
+    calls.setActive({ id: 3, once: vi.fn() } as never, 'aaaaaaaa-1b2c-4d5e-8f90-a1b2c3d4e5f6', { kind: 'meet', title: 'x' });
+    calls.handle({ type: 'meet.ring', ...invite, ring_id: 32, uuid: 'aaaaaaaa-1b2c-4d5e-8f90-a1b2c3d4e5f6' } as never);
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks for a ring it may have missed, from an older server too', async () => {
+    const get = vi.fn().mockImplementation((path: string) => (path === '/api/meet/rings/ringing' ? Promise.resolve(invite) : Promise.resolve(null)));
+    const open = vi.fn();
+    const calls = new CallService({ open } as never, { get, post: vi.fn() } as never, () => true);
+    await calls.check();
+    expect(open).toHaveBeenCalledWith('ring', expect.stringContaining('/meet/ring?'), expect.any(String), true);
+
+    const failing = new CallService({ open: vi.fn() } as never, { get: vi.fn().mockRejectedValue(new Error('404')), post: vi.fn() } as never, () => true);
+    await expect(failing.check()).resolves.toBeUndefined();
   });
 });
 

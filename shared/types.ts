@@ -231,6 +231,28 @@ export interface Preferences {
   webchatRinging: WebchatRingPrefs;
   /** The AI Assistant on this computer (Settings › AI Assistant). */
   ai: AiPrefs;
+  /** Meet › Recording (worksuite-desktop#68). */
+  meetRecording: MeetRecordingPrefs;
+}
+
+/**
+ * How meetings are recorded from this computer (Settings › Meet › Recording, worksuite-desktop#68).
+ *
+ * `cloud`: the WorkSuite media server records the room. `local`: this computer records what the meeting shows and
+ * sounds like, finishes the file here and uploads it to the host's Drive in the background. Either way the
+ * recording goes to `folder` in the recorder's own Drive, shared with nobody by being made.
+ */
+export interface MeetRecordingPrefs {
+  method: 'cloud' | 'local';
+  quality: '720p' | '1080p';
+  /** The room as a grid, the person speaking large, or a shared screen large. */
+  layout: 'grid' | 'speaker' | 'screen';
+  /** The Drive folder (one level, in the recorder's Drive). */
+  folder: string;
+  /** Where a local recording is written: chosen with a dialog in the main process, never typed by a page. */
+  localFolder: string;
+  /** The local copy once the upload is verified: kept, deleted at once, or deleted after 7 or 30 days. */
+  keepLocal: 'keep' | 'delete' | '7' | '30';
 }
 
 /** The AI Assistant's desktop settings (AI Assistant — Web + Desktop UIs, Settings). */
@@ -893,4 +915,47 @@ export interface SalonPrintOutcome {
   printer: string | null;
   silent: boolean;
   message: string;
+}
+
+/** A meeting recorded on this computer, through its steps (worksuite-desktop#68). */
+export type LocalRecordingState = 'recording' | 'processing' | 'uploading' | 'ready' | 'failed';
+
+export interface LocalRecording {
+  id: string;
+  /** The meeting's uuid. */
+  meeting: string;
+  title: string;
+  state: LocalRecordingState;
+  /** What went wrong, in a sentence, with what to do. */
+  error: string | null;
+  /** The step Retry starts again from. */
+  failedAt: 'recording' | 'processing' | 'uploading' | 'registering' | null;
+  /** Written so far. */
+  bytes: number;
+  /** Uploaded so far, while uploading. */
+  uploaded: number;
+  startedAt: string;
+  endedAt: string | null;
+  durationMs: number | null;
+  /** The file's name in the local folder, while it is kept. */
+  fileName: string | null;
+  /** The copy in the recorder's Drive, once there and checked. */
+  driveFileId: number | null;
+  /** When the local copy will be deleted, when the retention setting says so. */
+  deleteAfter: string | null;
+  /** Recovered after WorkSuite closed while it was recording. */
+  recovered: boolean;
+}
+
+/** What a piece of speech said, when, and whether it was unclear (worksuite-desktop#81). */
+export interface SpeechSegment {
+  start_ms: number;
+  end_ms: number;
+  text: string;
+  uncertain: boolean;
+}
+
+/** Whether this computer can transcribe on its own, and if not why. */
+export interface SpeechStatus {
+  local: { ready: boolean; model: { name: string; size: number } | null; why: string | null };
 }

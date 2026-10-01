@@ -58,6 +58,8 @@ import { SecureStore } from '../services/secure-store';
 import { SettingsService } from '../services/settings';
 import { DriveSync } from '../services/sync/engine';
 import { ServiceSupervisor } from '../services/supervisor';
+import { MeetRecorder } from '../services/meet-recorder';
+import { SpeechService } from '../services/speech';
 import { TransferManager, type DownloadSink } from '../services/transfers';
 import { ElearningOffline } from '../services/elearning-offline';
 import { EventDesk } from '../services/event-desk';
@@ -253,7 +255,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const windows = new WindowManager(db, join(__dirname, '../preload/index.js'));
   windows.minimizeToTray = () => settings.effective().minimizeToTray;
   // A call rings only for whoever may open Chat (calls are part of it).
-  const calls = new CallService(windows, http, () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('calls', sessionCtl.visibleApps()));
+  const calls = new CallService(
+    windows,
+    http,
+    () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('calls', sessionCtl.visibleApps()),
+    () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('meet', sessionCtl.visibleApps()),
+  );
   const screenShare = new ScreenShare(isTrustedShellUrl);
   screenShare.install(session.defaultSession);
   // Meet remote control on this computer (WS-MEET-ENH-01): the share, consent, grant and input live here.
@@ -363,6 +370,17 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       return true;
     },
   });
+  // Meetings recorded on this computer (worksuite-desktop#68): written, finished and uploaded here, in the background.
+  const meetRecorder = new MeetRecorder({
+    db,
+    http,
+    transfers,
+    prefs: () => settings.effective().meetRecording,
+    userId: () => (sessionCtl.isReady() ? sessionCtl.userId() : null),
+  });
+  meetRecorder.onChanged = (list) => broadcast('meetrec:changed', list);
+  // Speech to text on this computer (worksuite-desktop#81): whisper.cpp in a hidden page, with the person's model.
+  const speech = new SpeechService({ dir: join(p.profile, 'LocalAI', 'speech'), preload: join(__dirname, '../preload/index.js') });
   // eLearning: a course's lessons kept for offline learning, as the server's manifest lists them.
   const elearning: ElearningOffline = new ElearningOffline({
     db,
@@ -840,6 +858,22 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       if (choice !== 0) return;
       void remoteControl.shutdown('stopped');
     }
+    // A recording on this computer, or one still being finished or uploaded (worksuite-desktop#68): quitting pauses it.
+    const rec = meetRecorder.pending();
+    if (rec.recording || rec.working) {
+      const choice = dialog.showMessageBoxSync({
+        type: 'warning',
+        buttons: ['Quit anyway', 'Keep WorkSuite open'],
+        defaultId: 1,
+        cancelId: 1,
+        title: 'Quit WorkSuite?',
+        message: rec.recording ? 'A meeting is being recorded on this computer.' : 'A meeting recording is still being finished and uploaded.',
+        detail: rec.recording
+          ? 'Quitting stops the recording. What was recorded so far is kept, finished and uploaded the next time you open WorkSuite.'
+          : 'Quitting pauses it. It carries on from where it was the next time you open WorkSuite. Closing windows does not stop it — only quitting does.',
+      });
+      if (choice !== 0) return;
+    }
     windows.quitting = true;
     // Leave any call first, so the other side is not left talking to nobody.
     void Promise.race([calls.endAll(), new Promise((r) => setTimeout(r, 2_000))]).finally(() => app.quit());
@@ -1094,6 +1128,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     };
     sync.start(uid);
     transfers.recover();
+    // Recordings carry on from where they were: a recording cut off by a crash is finished, uploads continue.
+    void meetRecorder.recover().catch(() => undefined);
     void queue.replay(uid);
     salonSync.start();
     eventDesk.start();
@@ -1384,7 +1420,13 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     // Read on each page load: the server chosen, and the media servers it announced.
     () => ({ server: auth.getServer()?.origin ?? null, media: mediaServers() }),
     // A course's lessons kept offline, played by the app's own pages.
-    (request, path) => (path.startsWith('/elearning/') ? elearning.serve(request, path) : Promise.resolve(new Response('Not found', { status: 404 }))),
+    (request, path) =>
+      path.startsWith('/elearning/')
+        ? elearning.serve(request, path)
+        : // The speech model, for the speech page only (worksuite-desktop#81).
+          path === '/speech/model.bin'
+          ? speech.serveModel()
+          : Promise.resolve(new Response('Not found', { status: 404 })),
   );
 
   const pasteGestures = new Map<number, number>();
@@ -1454,6 +1496,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     cache,
     queue,
     transfers,
+    meetRecorder,
+    speech,
     sync,
     supervisor,
     lock,
@@ -1535,6 +1579,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     if (statusTimer) clearTimeout(statusTimer);
     statusTimer = null;
     calls.stop();
+    speech.stop();
     transfers.stopAll();
     sync.stop();
     // What scans changed in an event desk's copy is written back before the database closes.

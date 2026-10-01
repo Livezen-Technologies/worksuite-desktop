@@ -12,6 +12,13 @@ export function defaultPreferences(): Preferences {
   } catch {
     downloads = 'WorkSuite';
   }
+  // Local meeting recordings (worksuite-desktop#68): the system's Videos folder, else beside the downloads.
+  let videos = '';
+  try {
+    videos = app.getPath('videos');
+  } catch {
+    videos = downloads;
+  }
   return {
     startWithOs: true,
     startMinimized: false,
@@ -42,6 +49,7 @@ export function defaultPreferences(): Preferences {
     backgroundServices: { notifications: true, realtime: true },
     webchatRinging: { window: true, duringDnd: 'card', shortcut: true, volume: 80 },
     ai: { quickAsk: true, shortcut: process.platform === 'darwin' ? 'Alt+Space' : 'Control+Alt+Space', insert: true, dockAtStart: false, language: 'Sinhala', display: 'drawer', sound: false, moduleAccess: { worksuite: {}, local: {} }, onlineFallback: true },
+    meetRecording: { method: 'cloud', quality: '720p', layout: 'grid', folder: 'Meeting Recordings', localFolder: join(videos, 'WorkSuite Recordings'), keepLocal: '7' },
   };
 }
 
@@ -59,7 +67,7 @@ export class SettingsService {
     const stored = db.getConfig<Partial<Preferences>>('preferences') ?? {};
     const defaults = defaultPreferences();
     // The AI settings are one object: one saved before a field was added takes that field's default.
-    this.prefs = { ...defaults, ...stored, ai: { ...defaults.ai, ...stored.ai } };
+    this.prefs = { ...defaults, ...stored, ai: { ...defaults.ai, ...stored.ai }, meetRecording: { ...defaults.meetRecording, ...stored.meetRecording } };
   }
 
   setPolicy(policy: DesktopPolicy | null): void {
@@ -106,7 +114,9 @@ export class SettingsService {
   }
 
   update(patch: Partial<Preferences>): Preferences {
-    this.prefs = { ...this.prefs, ...patch };
+    // Recording settings arrive a field at a time; the rest of them stays.
+    const meetRecording = patch.meetRecording ? { ...this.prefs.meetRecording, ...patch.meetRecording } : this.prefs.meetRecording;
+    this.prefs = { ...this.prefs, ...patch, meetRecording };
     this.db.setConfig('preferences', this.prefs);
     this.emit();
     return this.effective();

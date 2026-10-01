@@ -36,6 +36,30 @@ export function ringRoute(r: Partial<Ringing> | null | undefined): string | null
   return `/calls/ring?${Object.entries(q).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')}`;
 }
 
+/** What `meet.ring` and `GET /api/meet/rings/ringing` carry: somebody ringing this person into a meeting (worksuite-desktop#79). */
+export interface MeetRinging {
+  ring_id: number;
+  uuid: string;
+  title?: string | null;
+  inviter_name?: string | null;
+  silent?: boolean;
+  expires_in?: number;
+}
+
+/** The ring window's route for a meeting invitation (Meet's own screen); null when the payload is not one. */
+export function meetRingRoute(r: Partial<MeetRinging> | null | undefined): string | null {
+  if (!r || typeof r.uuid !== 'string' || !UUID.test(r.uuid) || !Number.isInteger(Number(r.ring_id)) || Number(r.ring_id) <= 0) return null;
+  const q: Record<string, string> = {
+    ring: String(Number(r.ring_id)),
+    uuid: r.uuid,
+    name: String(r.inviter_name ?? 'Someone').slice(0, 120),
+    title: String(r.title ?? 'Meeting').slice(0, 160),
+    silent: r.silent ? '1' : '0',
+    expires: String(Math.max(1, Math.min(60, Number(r.expires_in ?? 45) || 45))),
+  };
+  return `/meet/ring?${Object.entries(q).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')}`;
+}
+
 /**
  * Chat calls in the shell (FR-COM): an incoming call opens its own small
  * always-on-top window wherever the person is, and a call window that closes
@@ -54,10 +78,13 @@ export class CallService {
     private readonly http: HttpClient,
     /** Signed in, not locked: a ring may show who is calling. */
     private readonly canRing: () => boolean,
+    /** The same, for a meeting invitation: Meet is the app it opens. */
+    private readonly canRingMeet: () => boolean = canRing,
   ) {}
 
   handle(e: RealtimeEvent): void {
     if (e.type === 'chat.call.ringing') this.ring(e as unknown as Ringing);
+    else if (e.type === 'meet.ring') this.ringMeet(e as unknown as MeetRinging);
   }
 
   private pollTimer: NodeJS.Timeout | null = null;
@@ -82,15 +109,42 @@ export class CallService {
     this.pollTimer = null;
   }
 
-  /** On start and after a reconnect: a call that rang while we were away. */
+  /** On start and after a reconnect: a call — or a meeting invitation — that rang while we were away. */
   async check(): Promise<void> {
-    if (!this.canRing()) return;
-    try {
-      const r = await this.http.get<Ringing | null>('/api/chat/calls/ringing');
-      if (r) this.ring(r);
-    } catch (e) {
-      log.debug('ringing check failed', { error: String(e) });
+    if (this.canRing()) {
+      try {
+        const r = await this.http.get<Ringing | null>('/api/chat/calls/ringing');
+        if (r) this.ring(r);
+      } catch (e) {
+        log.debug('ringing check failed', { error: String(e) });
+      }
     }
+    if (this.canRingMeet()) {
+      try {
+        const r = await this.http.get<MeetRinging | null>('/api/meet/rings/ringing');
+        if (r) this.ringMeet(r);
+      } catch (e) {
+        // An older server has no meeting rings.
+        log.debug('meeting ring check failed', { error: String(e) });
+      }
+    }
+  }
+
+  /**
+   * Somebody rings this person into a meeting that is on. Once per ring; not
+   * for a meeting this device is already in. Stopping it — answered here or
+   * on another device, cancelled, given up, the meeting ended — is the ring
+   * window's, which hears `meet.ring.stopped`.
+   */
+  ringMeet(r: MeetRinging): void {
+    const route = meetRingRoute(r);
+    if (!route || !this.canRingMeet()) return;
+    const key = `meet-ring-${r.ring_id}`;
+    const now = Date.now();
+    for (const [u, at] of this.rung) if (now - at > 120_000) this.rung.delete(u);
+    if (this.rung.has(key) || [...this.active.values()].some((a) => a.uuid === r.uuid)) return;
+    this.rung.set(key, now);
+    this.windows.open('ring', route, 'Invitation to a WorkSuite meeting', true);
   }
 
   ring(r: Ringing): void {

@@ -4,6 +4,26 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.0 — 2026-10-01
+
+- Scheduling a meeting on the built-in Meet sets its room settings and passcode, and each person's part (attendee, co-host, presenter) (worksuite-desktop#82).
+- Notes & Minutes (worksuite-desktop#80), in the meeting's details and in the meeting itself:
+  - The title, date and participants are at the top.
+  - Agenda, Discussion and Decisions are formatted text that saves itself (Saving…, Saved, or Couldn't save with Retry).
+  - Several people can write at once: a section changed by somebody else meanwhile is never overwritten. You choose Keep both, Use theirs or Replace with mine.
+  - Action items have owners and due dates, and become linked tasks once reviewed.
+  - Generate with AI drafts from what is written, the agenda and the chat, and never invents decisions, owners or dates.
+  - The organiser chooses who can see and edit the minutes, finalises them, and shares them with the people chosen.
+  - Minutes can be copied, or exported to PDF or Word.
+- Your recordings of a meeting held on Meet are listed under Files, with their state and Open in Drive (worksuite-desktop#68).
+- Transcripts tab (worksuite-desktop#81):
+  - Shows transcripts made during the meeting and from its recordings.
+  - Generate transcript for a recording runs on this computer first, with progress, Cancel and Try again.
+  - Review a transcript, and correct speakers, text and unclear marks; corrections are saved on the version read.
+  - Copy, or export as TXT or PDF.
+  - Email transcript: only to people who may see it, with an editable subject and message. Send it as a link, PDF or TXT as sharing allows, after a preview and a confirmation. Each delivery's status is shown, with Retry.
+  - Generate with AI drafts the minutes from the transcript.
+
 ## 1.1.0 — 2026-10-01
 
 **Added**

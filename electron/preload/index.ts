@@ -156,6 +156,27 @@ const api = {
     list: call('calls:list'),
     focus: call('calls:focus'),
   },
+  meetrec: {
+    preflight: call('meetrec:preflight'),
+    start: call('meetrec:start'),
+    chunk: call('meetrec:chunk'),
+    stop: call('meetrec:stop'),
+    list: call('meetrec:list'),
+    retry: call('meetrec:retry'),
+    discard: call('meetrec:discard'),
+    reveal: call('meetrec:reveal'),
+    chooseFolder: call('meetrec:chooseFolder'),
+  },
+  stt: {
+    status: call('stt:status'),
+    chooseModel: call('stt:chooseModel'),
+    removeModel: call('stt:removeModel'),
+    transcribe: call('stt:transcribe'),
+  },
+  speech: {
+    ready: call('speech:ready'),
+    result: call('speech:result'),
+  },
   rc: {
     state: call('rc:state'),
     recheck: call('rc:recheck'),

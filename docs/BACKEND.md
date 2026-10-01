@@ -155,9 +155,103 @@ specific to the desktop:
     on the data channel, topic `wb`.
   The waiting room is LiveKit metadata (`{waiting: true}`, no publish
   grant), not a server list.
+  - Roles and room settings (worksuite-desktop#82). Every connection's
+    metadata is `{role, host, cohost, waiting, door, uid}`, where `role` is
+    host, cohost, presenter or participant, and `door` is `waiting_room`,
+    `no_host` (join before host is off) or null. The token's
+    `canPublishSources` leaves out the screen when the person may not
+    present. No token can update its own metadata, so roles come only from
+    the server, and are restored on every new connection.
+  - `GET /{uuid}` adds `role`, `host_id`, `cohosts`, `presenters`,
+    `locked` and `room_settings`.
+  - `POST /{uuid}/cohosts {user_id}` and `DELETE /{uuid}/cohosts/{id}` are
+    for the host, in any call.
+  - `POST /{uuid}/presenters {user_id}` and `DELETE /{uuid}/presenters/{id}`
+    are for hosts and co-hosts.
+  - `POST /{uuid}/host {user_id}` hands the host role on. The previous host
+    stays as a co-host.
+  - `POST /{uuid}/handover {user_id?}` is used when the host leaves. It
+    picks a co-host in the call. With nobody to pick, it answers 409 with
+    `errors: {needs_replacement, candidates: [{id, name}]}`.
+  - `GET|PUT /{uuid}/settings` reads and writes `{title, passcode, locked,
+    access, waiting_room, join_before_host, present, invite, chat, record,
+    transcripts}`. Writes are for hosts and co-hosts.
+  - `GET /{uuid}/activity` lists role and settings changes, for hosts and
+    co-hosts.
+  - Each change pushes `meet.control` with `what: roles`.
+  - `POST /api/meet/schedule` and `POST|PUT /api/meetings` take
+    `room_settings`.
+  - Recording (worksuite-desktop#68):
+    - `POST /{uuid}/record/start {layout: grid|speaker|screen, quality:
+      720p|1080p, folder}` starts the server's recording; `record/stop`
+      stops it.
+    - `GET /{uuid}/record/status` returns `{cloud: {started_at, by} | null,
+      local: [{by, started_at}], may_record}`. Cloud state comes from the
+      media server's egress.
+    - `POST /{uuid}/recordings/local {client_id, action:
+      start|stop|uploading|ready|failed, file_id?}` tracks a recording made
+      on a desktop, keyed by its id.
+    - `POST /api/meet/recordings/folder {name}` gives the recorder's Drive
+      folder.
+    - `GET /api/meet/recordings` rows carry `method, status, error,
+      drive_file_id, duration`.
+    - Each start and stop pushes `meet.control {what: recording, on, by,
+      local?}` to the meeting.
+    - `meet:recordings`, run every minute, files completed cloud recordings
+      in the owner's Drive.
+  - Ringing people into a meeting that is on (worksuite-desktop#79):
+    - `GET /{uuid}/invitable` lists `{id, name, avatar, status, in_call,
+      pending}`.
+    - `POST /{uuid}/ring {user_ids}` and `GET /{uuid}/rings` give each
+      ring's `state`: ringing, accepted, joined, declined, no_answer,
+      cancelled or unavailable, plus `retry_in`.
+    - `DELETE /{uuid}/rings/{id}` cancels a ring.
+    - For the person rung: `meet.ring {ring_id, uuid, title,
+      inviter_name, silent, expires_in}` and `meet.ring.stopped {ring_id}`.
+      `GET /api/meet/rings/ringing` serves a device that missed the event,
+      and `POST /api/meet/rings/{id}/answer {answer: accept|decline}`
+      sends the answer.
 - **Meetings:** `/api/meetings/*`, behind the `meeting.*` permissions. The
   list carries `my_role` and `my_rsvp`. The detail carries the agenda timer
   and each person's attendance and permissions.
+  - Notes & Minutes (worksuite-desktop#80):
+    - `GET /{id}/minutes` returns `{meeting, people, sections, revs, edited,
+      finalised_at, shared_at, actions, access, can}`.
+    - `PUT /{id}/minutes/sections/{agenda|discussion|decisions} {html,
+      base_rev}` saves one section. It answers 409 with `errors: {conflict,
+      html, rev, edited}`; the app never overwrites without the person
+      choosing.
+    - `PUT /{id}/minutes/access {view: participants|editors, edit:
+      hosts|chosen|participants}`.
+    - `POST /{id}/minutes/finalise {reopen?}`.
+    - `POST /{id}/minutes/share {participant_ids, note?}`.
+    - `GET /{id}/minutes/export?format=pdf|docx`.
+    - `POST /api/meetings/for-meet {uuid}` gives the record of a Meet
+      meeting.
+    - Saves are pushed as `meeting.minutes {meeting_id, section, rev}`.
+  - Transcripts (worksuite-desktop#81):
+    - `GET|POST /{id}/transcripts {source: live|recording, language:
+      en|si|ta, recording_id?, auto_email?}`.
+    - `GET /transcripts/{t}` returns the transcript with `segments: [{start_ms,
+      end_ms, speaker ('' = unidentified), text, uncertain}]`.
+    - `POST /transcripts/{t}/segments {segments, progress?, engine?}` is for
+      the transcriber.
+    - `POST /transcripts/{t}/finish {status: ready|failed|cancelled}` ends
+      it. The automatic email goes once, on ready.
+    - `PUT /transcripts/{t} {segments, base_version}` saves corrections; 409
+      on another version.
+    - `GET /transcripts/{t}/recipients` returns `{recipients: [{allowed,
+      why}], formats}`.
+    - `POST /transcripts/{t}/email {participant_ids, subject, message,
+      format}` returns `{deliveries, skipped}`.
+    - `GET /transcripts/{t}/deliveries` lists deliveries;
+      `POST .../deliveries/{d}/retry` retries one.
+    - `GET /transcripts/{t}/export?format=txt|pdf`.
+    - A live transcription pushes `meet.control {what: transcript, on, by,
+      language}` to the meeting.
+  - Online speech to text (when the computer cannot, and the AI settings
+    allow): `GET /api/ai/speech/status` and `POST /api/ai/speech/transcribe`
+    (multipart `audio` WAV, `language`) return segments with `uncertain`.
 
 ### Garage
 

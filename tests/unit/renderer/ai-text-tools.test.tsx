@@ -21,7 +21,7 @@ vi.mock('../../../src/core/local-ai', async (orig) => ({
 import { apiGet, apiPost } from '../../../src/core/api';
 import { askLocal } from '../../../src/core/local-ai';
 import { AiTextDialog } from '../../../src/modules/ai/AiTextDialog';
-import { cleanAnswer, localPrompt, onlineText, parseMinutes, runText } from '../../../src/modules/ai/textTools';
+import { cleanAnswer, localPrompt, onlineText, parseAction, parseMinutes, runText } from '../../../src/modules/ai/textTools';
 import { joinQuote, splitQuote, unquote } from '../../../src/modules/mail/MailPage';
 import { minutesMaterial } from '../../../src/modules/meetings/MeetingDetail';
 import type { Detail } from '../../../src/modules/meetings/api';
@@ -68,10 +68,18 @@ describe('AI text tools: local first, online when it must (worksuite-desktop#53)
 
   it('reads drafted minutes into summary, decisions and actions', () => {
     const m = parseMinutes('SUMMARY:\nWe reviewed Q3.\n\nDECISIONS:\n- Budget approved\n- Hire one designer\nACTIONS:\n- Asha: send the plan by Friday\n- None');
-    expect(m).toEqual({ summary: 'We reviewed Q3.', decisions: ['Budget approved', 'Hire one designer'], actions: ['Asha: send the plan by Friday'] });
-    expect(parseMinutes('Just a paragraph.')).toEqual({ summary: 'Just a paragraph.', decisions: [], actions: [] });
+    expect(m).toEqual({ agenda: [], summary: 'We reviewed Q3.', decisions: ['Budget approved', 'Hire one designer'], actions: ['Asha: send the plan by Friday'] });
+    expect(parseMinutes('Just a paragraph.')).toEqual({ agenda: [], summary: 'Just a paragraph.', decisions: [], actions: [] });
     expect(parseMinutes('**SUMMARY:** Quick sync.\n**DECISIONS:**\n- None\n**ACTIONS:**\n1. Ben to call Acme').actions).toEqual(['Ben to call Acme']);
     expect(cleanAnswer('"Sure, see you then."')).toBe('Sure, see you then.');
+    // Minutes in sections (worksuite-desktop#80): the agenda, and actions whose owner and date are never guessed.
+    const s = parseMinutes('AGENDA:\n- Q3 numbers\n- Hiring\nSUMMARY:\nWe met.\nDECISIONS:\n- None\nACTIONS:\n- Send the plan | Asha | 2026-10-09\n- Call Acme | |\n- Book a room | Ben | next week');
+    expect(s.agenda).toEqual(['Q3 numbers', 'Hiring']);
+    expect(s.actions.map(parseAction)).toEqual([
+      { title: 'Send the plan', owner: 'Asha', due: '2026-10-09' },
+      { title: 'Call Acme', owner: null, due: null },
+      { title: 'Book a room', owner: 'Ben', due: null },
+    ]);
   });
 });
 

@@ -21,6 +21,8 @@ import type { OfflineQueue } from '../services/offline-queue';
 import type { SecureStore } from '../services/secure-store';
 import type { SettingsService } from '../services/settings';
 import type { ServiceSupervisor } from '../services/supervisor';
+import type { MeetRecorder } from '../services/meet-recorder';
+import type { SpeechService } from '../services/speech';
 import type { TransferManager } from '../services/transfers';
 import type { DriveSync } from '../services/sync/engine';
 import type { RealtimeService } from '../services/realtime';
@@ -78,6 +80,10 @@ export interface AppContext {
   cache: OfflineCache;
   queue: OfflineQueue;
   transfers: TransferManager;
+  /** Meetings recorded on this computer (worksuite-desktop#68). */
+  meetRecorder: MeetRecorder;
+  /** Speech to text on this computer (worksuite-desktop#81). */
+  speech: SpeechService;
   sync: DriveSync;
   supervisor: ServiceSupervisor;
   lock: LockService;

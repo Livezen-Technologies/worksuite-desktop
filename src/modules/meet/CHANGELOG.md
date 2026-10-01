@@ -4,6 +4,28 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.0 — 2026-10-01
+
+- Meeting roles (worksuite-desktop#82): Host, Co-host, Presenter and Participant badges; name co-hosts and presenters, hand the host role on, leave as host with a hand-over or end for everyone; Room settings tab (name, passcode, lock, who can join, waiting room, join before host, who can present, invite, chat, record and see transcripts) with the meeting's activity; share and record offered only when allowed.
+- Inviting people into a meeting that is on (worksuite-desktop#79): Add people in the People panel (search, pictures, availability, several at once) and Invite & Ring; each invitation shows Ringing, Joined, Declined, No answer or Unavailable, with Cancel and Ring again after a short wait. The person rung gets an always-on-top invitation with Accept and Decline that rings by their notification and Do not disturb settings, stops on every device once answered, cancelled, timed out or the meeting ends, and opens the meeting with the microphone and camera off.
+- Notes tab in the meeting (worksuite-desktop#80): the meeting's Notes & Minutes, written during the call; a meeting started in Meet gets its meeting record the first time its host or a co-host opens Notes, so the minutes stay in the meeting's details.
+- Recording, fixed and extended (worksuite-desktop#68):
+  - Start and Stop Recording follow what the media server actually does. A badge shows the elapsed time to everyone, and everyone is told when a recording starts and stops.
+  - Settings › Meet › Recording (also in the meeting) chooses the method, the quality, the layout (grid, speaker, shared screen), the Drive folder (default Meeting Recordings), where local recordings are saved, and how long the local copy is kept.
+  - Record Locally on This Device draws the meeting in the chosen layout with everybody's sound. Before starting it checks the microphone and the free disk space.
+  - The recording is written to disk as it goes. It is finished on this computer, then uploaded to your Drive in the background. Meet Home shows each step: Recording, Processing, Uploading, Ready.
+  - You can leave the meeting while it finishes. An interrupted upload continues after a restart without making a second file. A recording cut off by a crash is kept and finished.
+  - The local copy is deleted only after Drive's copy is checked, and then only as chosen.
+  - Failures say what went wrong, with Try again.
+  - Recordings are linked from the meeting's details and Meet Home, and are private to their owner in Drive.
+- Transcription (worksuite-desktop#81):
+  - Start transcription in English, Sinhala or Tamil. It is transcribed on this computer with a whisper.cpp speech model (Settings › Local AI or Meet › Transcription), and online only when local cannot and Allow online fallback is on.
+  - Everybody in the meeting sees it is on and who started it.
+  - Each person's words carry their name; a guest without one is an unidentified speaker. Unclear speech is marked.
+  - You can choose to email the transcript automatically after the meeting, to chosen people.
+  - Stopping, or leaving, keeps what was said.
+  - Recordings in Meet Home lead to their transcripts.
+
 ## 1.1.1 — 2026-10-01
 
 **Changed**
