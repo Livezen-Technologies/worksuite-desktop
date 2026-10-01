@@ -57,7 +57,10 @@ export default function Leave() {
   const [mode, setMode] = useState<'list' | 'calendar'>('list');
   const [month, setMonth] = useState(() => ymd(new Date()).slice(0, 7));
   const [asking, setAsking] = useState(query.get('new') === '1');
-  const [reviewing, setReviewing] = useState<number | null>(Number(query.get('leave')) || null);
+  const [reviewing, setReviewing] = useState<number | null>(null);
+  // `?leave=` — from a notification, or a leave day on the calendar (#64).
+  const linked = Number(query.get('leave')) || null;
+  const [linkSeen, setLinkSeen] = useState(false);
   const [sendBack, setSendBack] = useState<LeaveReq | null>(null);
   // The server sends these rows as they are stored: numbers arrive as strings.
   const list = useQuery({ queryKey: ['hr', 'leave-requests'], queryFn: ({ signal }) => apiGet<LeaveReq[]>('/api/hr/leave/requests', undefined, signal).then((rows) => rows.map(normaliseLeave)) });
@@ -66,7 +69,17 @@ export default function Leave() {
   const holidays = useQuery({ queryKey: ['hr', 'holidays', month.slice(0, 4)], queryFn: ({ signal }) => apiGet<{ holidays: Array<{ on_date: string; name: string }> }>('/api/hr/holidays', { year: month.slice(0, 4) }, signal), enabled: can(perms, 'hr.view') && mode === 'calendar', retry: false });
   const myEmp = me.data?.employee?.id;
   const all = list.data ?? [];
-  const shown = all.filter((r) => filter === 'all' || (filter === 'pending' ? r.status === 'pending' || r.status === 'needs_resubmission' : r.status === filter));
+  const shown = all.filter((r) => r.id === linked || filter === 'all' || (filter === 'pending' ? r.status === 'pending' || r.status === 'needs_resubmission' : r.status === filter));
+  /*
+   * A linked request opens its review — for whoever reviews it. The person who
+   * asked for it is not an approver, and the review would refuse them, so their
+   * own request is shown highlighted in the list instead, with its status and
+   * Withdraw. One that is not in the list at all has gone, and says so.
+   */
+  const linkedRow = linked ? all.find((r) => r.id === linked) : undefined;
+  const linkedGone = linked !== null && !linkSeen && list.isSuccess && !linkedRow;
+  const linkedOwn = !!linkedRow && linkedRow.employee_id === myEmp && !linkedRow.can_decide;
+  const reviewId = reviewing ?? (linked !== null && !linkSeen && list.isSuccess && linkedRow && !linkedOwn ? linked : null);
   const refresh = () => void qc.invalidateQueries({ queryKey: ['hr'] });
 
   const act = async (path: string, done: string, body: Record<string, unknown> = {}) => {
@@ -103,6 +116,7 @@ export default function Leave() {
         ))}
       </div>
       {list.isLoading ? <Spinner /> : list.error ? <ErrorNote error={list.error} onRetry={() => void list.refetch()} /> : null}
+      {linkedGone ? <p role="alert" className="m-0 rounded-[10px] bg-warning-bg px-3.5 py-2.5 text-[13px] text-warning">That leave request is not available. It may have been withdrawn or deleted, or you no longer have access to it.</p> : null}
       {list.data && mode === 'list' ? (
         <div className="overflow-hidden rounded-[12px] border border-line bg-surface">
           {!shown.length ? <Empty text={filter === 'pending' ? 'Nothing is waiting.' : 'Nothing here.'} /> : null}
@@ -111,7 +125,7 @@ export default function Leave() {
             const coverMe = String(r.responsible_person_id ?? '') === String(userId) && r.responsible_status === 'pending' && r.status === 'pending';
             const note = [r.status === 'needs_resubmission' && r.resubmit_note ? `Needs changes: ${r.resubmit_note}` : null, r.responsible_status === 'declined' && r.responsible_note ? `Cover declined: ${r.responsible_note}` : null, coverMe ? 'You were asked to cover this.' : null].filter(Boolean).join(' · ');
             return (
-              <div key={r.id} className="flex items-center gap-3 border-b border-line/70 px-3.5 py-[11px] last:border-b-0">
+              <div key={r.id} ref={r.id === linked && !linkSeen ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined} aria-current={r.id === linked && !linkSeen ? 'true' : undefined} className={cx('flex items-center gap-3 border-b border-line/70 px-3.5 py-[11px] last:border-b-0', r.id === linked && !linkSeen && 'bg-selection')}>
                 <Initials name={r.employee_name} size={34} />
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="flex flex-wrap items-center gap-1.5">
@@ -162,7 +176,7 @@ export default function Leave() {
       ) : null}
       {list.data && mode === 'calendar' ? <LeaveCalendar month={month} setMonth={setMonth} requests={all.filter((r) => r.status === 'approved' || r.status === 'pending')} holidays={holidays.data?.holidays ?? []} onOpen={(r) => (r.can_decide ? setReviewing(r.id) : undefined)} /> : null}
       {asking ? <RequestLeave onClose={closeAsk} onDone={() => (closeAsk(), refresh())} /> : null}
-      {reviewing ? <ReviewLeave id={reviewing} onClose={() => (setReviewing(null), query.get('leave') ? go('/hr?tab=leave') : undefined)} onDone={() => (setReviewing(null), refresh())} /> : null}
+      {reviewId ? <ReviewLeave id={reviewId} onClose={() => (setReviewing(null), setLinkSeen(true), query.get('leave') ? go('/hr?tab=leave') : undefined)} onDone={() => (setReviewing(null), setLinkSeen(true), refresh())} /> : null}
       {sendBack ? <SendBack r={sendBack} onClose={() => setSendBack(null)} onDone={() => (setSendBack(null), refresh())} /> : null}
     </div>
   );

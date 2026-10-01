@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-10-01 — 0.2.72: A profile picture before the workspace
+## 2026-10-01 — 0.2.72: A profile picture before the workspace; calendar entries open their record
 
 - **Add your profile picture** (#46). When the server requires a profile picture and your account has none, the app
   shows this screen after sign-in instead of the workspace: on your first sign-in, and again if your picture is
@@ -16,6 +16,19 @@ person who has to live with the change — what it does, and where it bites.
 - Where it bites: the server decides (WorkSuite Users 1.1.0, *Require a profile picture*, on by default). An older
   server never asks. A picture waiting for an administrator's review counts, so nobody is held here. Started
   offline from the copy kept on this computer, the app does not ask: nothing could be sent anyway.
+
+- **Calendar entries open the record they are about** (#64). A task, meeting, tender, subscription renewal, leave
+  request, project date or asset date opens a summary — title, type, date and time, status — with a button that
+  says what it opens (**Open Task**, **View Tender**, **Open Subscription**, **Open Leave Request**, **Open
+  Project**, **Open Asset**…) and goes to that record, not to the app's list. Tenders and subscriptions now open in
+  their own tabs (they went to the browser, or nowhere). Projects and assets open on the web, at that project or
+  asset. If the record was deleted, or is no longer shared with you, since the calendar loaded, the summary says so
+  instead of opening. Works from Day, Week, Month, the all-day row and the Today list; Tab and Enter open entries;
+  Escape closes the summary; the calendar keeps its day, view and filters when you come back.
+- Where it bites: exact project and asset links need WorkSuite Calendar 1.1.0 on the server; before that, those
+  open the Projects or Assets list as they did. Asset licences and audits belong to no single asset and open the
+  register. Your own leave request, opened from the calendar, is highlighted in HR → Leave rather than opening the
+  approver's review, which would refuse you.
 
 ## 2026-10-01 — 0.2.71: Chat's channel toolbar (WhatsApp in Chat), profile pictures, a resizable conversation list; AI Assistant scrolling; Local AI first-use setup and Gemma 3 4B; Office menus and Open in new window; Meet Home and pre-join redesign; meeting cards in Chat; screen sharing fixed
 
