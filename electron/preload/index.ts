@@ -206,6 +206,9 @@ const api = {
     open: call('transfers:open'),
     reveal: call('transfers:reveal'),
     clearFinished: call('transfers:clearFinished'),
+    pauseAll: call('transfers:pauseAll'),
+    resumeAll: call('transfers:resumeAll'),
+    resetSettings: call('transfers:resetSettings'),
   },
   sync: {
     status: call('sync:status'),

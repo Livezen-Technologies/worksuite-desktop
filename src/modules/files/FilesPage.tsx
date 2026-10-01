@@ -27,7 +27,8 @@ import { UploadTray, UrlDownloads } from './Trays';
 import { Shared } from './Shared';
 import { Companies, Duplicates, Links, Notifications, Storage, Trash } from './Views';
 import { SyncDevices } from './SyncDevices';
-import { UploadConflicts, type ConflictChoice, type UploadConflict } from './UploadConflicts';
+import { UploadConflicts, autoChoices, type ConflictChoice, type UploadConflict } from './UploadConflicts';
+import { DriveSettings } from './DriveSettings';
 import { officeOpenWay, openOfficeTab, useOfficeRouting } from './office';
 import { TemplateDialog } from './Templates';
 import { createDocument } from '../office/api';
@@ -55,7 +56,7 @@ const DOCS: Array<[string, string, string, string]> = [
 ];
 const DOC_TONE: Record<string, string> = { docx: TONE.document!, xlsx: TONE.spreadsheet!, pptx: TONE.presentation!, txt: TONE.other!, md: TONE.other! };
 /** Views that are pages of their own rather than a list of files. */
-const PAGES: View[] = ['home', 'shared', 'trash', 'storage', 'duplicates', 'links', 'notifications', 'companies', 'devices'];
+const PAGES: View[] = ['home', 'shared', 'trash', 'storage', 'duplicates', 'links', 'notifications', 'companies', 'devices', 'settings'];
 
 function placeFrom(q: URLSearchParams): Place {
   const f = q.get('folder');
@@ -166,6 +167,9 @@ export default function FilesPage(_props: ModuleProps) {
           () => [],
         );
       }
+      // Drive › Settings may answer for every clash (keep both, skip, replace) instead of asking.
+      const how = app.get().prefs?.drive.conflict ?? 'ask';
+      if (conflicts.length && how !== 'ask') return await sendUploads(picked, conflicts, autoChoices(conflicts, how), folder);
       if (conflicts.length) return setClash({ picked, conflicts, folder });
       await sendUploads(picked, [], [], folder);
     } catch (e) {
@@ -466,6 +470,7 @@ export default function FilesPage(_props: ModuleProps) {
         {view === 'links' ? <Links /> : null}
         {view === 'notifications' ? <Notifications /> : null}
         {view === 'companies' ? <Companies /> : null}
+        {view === 'settings' ? <DriveSettings /> : null}
         {view === 'devices' ? <SyncDevices tree={tree} ask={syncAsk} onAsked={() => go('/files?view=devices')} /> : null}
       </div>
       {preview ? <Preview files={preview.files} start={preview.index} onClose={() => setPreview(null)} /> : null}
