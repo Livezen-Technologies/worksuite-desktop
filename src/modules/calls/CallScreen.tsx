@@ -6,6 +6,7 @@ import { toast } from '../../core/toasts';
 import { cx } from '../../components/ui';
 import { formatClock, VoiceRecorder } from '../chat/parts';
 import { Thread } from '../chat/Thread';
+import { openChatWindow } from '../chat/window';
 import { CallAvatar, Pill, useNow } from './parts';
 import { ScreenPicker } from './ScreenPicker';
 import { session, type CallParams } from './session';
@@ -83,7 +84,7 @@ export function CallScreen() {
   })() as [string, string];
   useTabTitle(s.phase === 'connected' ? `Call in progress · ${name}` : video ? 'Video call' : 'Voice call');
 
-  const openChat = () => void call('windows:open', { kind: 'chat-mini', route: `/chat?room=${roomId}`, title: name ?? 'Chat', alwaysOnTop: true });
+  const openChat = () => void openChatWindow(roomId, name ?? 'Chat', { onTop: true });
   const muted = lp ? !lp.isMicrophoneEnabled : false;
   const camera = lp?.isCameraEnabled ?? false;
   const sharing = lp?.isScreenShareEnabled ?? false;

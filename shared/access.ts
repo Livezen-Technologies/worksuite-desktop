@@ -155,5 +155,7 @@ export function categoryVisible(category: string | null | undefined, visible: Vi
  */
 export function notificationAllowed(n: { module?: string | null; category?: string | null; link?: string | null }, visible: VisibleApps): boolean {
   if (!canOpenLink(n.link, visible)) return false;
+  // An announcement is HR's, but it is for everyone it was sent to, HR app or not (worksuite-desktop#98).
+  if (n.link && /^\/announcements\/?(\?|$)/.test(n.link)) return true;
   return categoryVisible(n.category, visible) && categoryVisible(n.module, visible);
 }

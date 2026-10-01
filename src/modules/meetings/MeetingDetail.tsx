@@ -14,7 +14,7 @@ import { openMeeting } from '../meet/api';
 import { RecordingStatusView } from '../meet/RecordingStatus';
 import { serverRecordingStatus } from '@shared/recording-status';
 import type { Stroke } from '../meet/session';
-import { providerLabel, RSVP_LABEL, typeLabel, type AgendaItem, type Detail, type Person, type Rsvp } from './api';
+import { openRelatedLabel, providerLabel, RSVP_LABEL, typeLabel, type AgendaItem, type Detail, type Person, type Rsvp } from './api';
 import { Select } from '../../components/Select';
 import { MinutesEditor } from './minutes/MinutesEditor';
 import { TranscriptsTab } from './transcripts/TranscriptsTab';
@@ -51,7 +51,7 @@ function mmss(s: number): string {
 
 export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }) {
   const qc = useQueryClient();
-  const { navigate, query } = useTab();
+  const { navigate, query, openLink } = useTab();
   const me = useStore(app, (s) => (s.auth?.user?.id ? Number(s.auth.user.id) : null));
   // Its conversation is in Chat and its video call in Meet: each offered only to whoever has that app.
   const canChat = useCanOpen('chat');
@@ -65,7 +65,11 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
   const [reason, setReason] = useState('');
   const q = useQuery({ queryKey: ['meetings', 'detail', id], queryFn: ({ signal }) => apiGet<Detail>(`/api/meetings/${id}`, undefined, signal), refetchInterval: 30_000 });
   useTabTitle(q.data ? `Meeting · ${q.data.meeting.title}` : 'Meeting');
-  const refresh = () => void qc.invalidateQueries({ queryKey: ['meetings'] });
+  // A cancelled or moved meeting no longer overlaps anything: the calendar and its conflict answers are read again (#99).
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: ['meetings'] });
+    void qc.invalidateQueries({ queryKey: ['calendar'] });
+  };
   const act = async (fn: () => Promise<unknown>, done?: string) => {
     try {
       await fn();
@@ -99,6 +103,7 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-[22px] font-bold text-ink">{m.title}</h1>
               <Chip tone="indigo">{typeLabel(m.type)}</Chip>
+              {m.source ? <Chip tone="teal">{m.source.kind_label}{m.source.label ? ` · ${m.source.label}` : ''}</Chip> : null}
               {m.priority === 'high' || m.priority === 'urgent' ? <Chip tone="danger">{m.priority === 'urgent' ? 'Urgent' : 'High priority'}</Chip> : null}
               {m.live_status === 'ongoing' ? <Chip tone="danger">Happening now</Chip> : m.live_status === 'cancelled' ? <Chip>Cancelled</Chip> : m.live_status === 'completed' ? <Chip tone="success">Completed</Chip> : null}
             </div>
@@ -107,6 +112,12 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
               {m.project ? ` · Project: ${m.project}` : ''}
             </span>
           </div>
+          {m.source?.can_open && m.source.link ? (
+            // The record it is about (#100, #101) — offered only to someone who may open it.
+            <button type="button" className={btn} onClick={() => openLink(m.source!.link!)}>
+              {openRelatedLabel(m.source)}
+            </button>
+          ) : null}
           {d.chat?.room_id && canChat ? <button type="button" className={btn} onClick={() => navigate(`/chat?room=${d.chat!.room_id}`)}>Open in Chat</button> : null}
           {canEdit ? <button type="button" className={btn} title="Opens on the web" onClick={() => void call('app:openInBrowser', { path: `/meetings?meeting=${m.id}` })}>Edit ↗</button> : null}
           {canEdit && m.live_status !== 'cancelled' && m.live_status !== 'completed' ? (
@@ -150,7 +161,7 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
                 <b className="text-ink">Your answer</b>
                 <div className="flex gap-1.5">
                   {(['accepted', 'tentative', 'declined'] as Rsvp[]).map((r) => (
-                    <button key={r} type="button" aria-pressed={mine.rsvp === r} onClick={() => invitation.answer(r)} className={cx('h-8 flex-1 rounded-[8px] text-[12px] font-semibold', mine.rsvp === r ? 'bg-primary text-white' : 'border border-line text-ink hover:bg-subtle')}>
+                    <button key={r} type="button" aria-pressed={mine.rsvp === r} onClick={() => void invitation.answer(r)} className={cx('h-8 flex-1 rounded-[8px] text-[12px] font-semibold', mine.rsvp === r ? 'bg-primary text-white' : 'border border-line text-ink hover:bg-subtle')}>
                       {RSVP_LABEL[r]}
                     </button>
                   ))}

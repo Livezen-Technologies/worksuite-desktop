@@ -1,6 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { call } from './bridge';
 
+// Saves still waiting out their debounce, so a draft can be written now —
+// before the same conversation opens in another window (#103), which reads it.
+const pending = new Map<string, () => Promise<void>>();
+
+export function hasPendingDrafts(): boolean {
+  return pending.size > 0;
+}
+
+/** Writes every draft still waiting to be saved, and resolves once they are. */
+export async function flushDrafts(): Promise<void> {
+  const saves = [...pending.values()];
+  pending.clear();
+  await Promise.all(saves.map((save) => save()));
+}
+
 /**
  * Draft recovery (FR-OFF-07, NFR-REL-02): an editor's content is saved,
  * encrypted, within a second of the last change (well inside the five-second
@@ -39,9 +54,15 @@ export function useDraft<T>(module: string, context: string, initial: T): {
       latest.current = v;
       setValueState(v);
       if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => {
-        void call('offline:saveDraft', { module, context, content: latest.current }).catch(() => undefined);
-      }, 800);
+      const key = `${module}\u0000${context}`;
+      const save = () => {
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = null;
+        pending.delete(key);
+        return call('offline:saveDraft', { module, context, content: latest.current }).then(() => undefined, () => undefined);
+      };
+      pending.set(key, save);
+      timer.current = setTimeout(() => { void save(); }, 800);
     },
     [module, context],
   );
@@ -50,6 +71,7 @@ export function useDraft<T>(module: string, context: string, initial: T): {
     () => () => {
       if (timer.current) {
         clearTimeout(timer.current);
+        pending.delete(`${module}\u0000${context}`);
         void call('offline:saveDraft', { module, context, content: latest.current }).catch(() => undefined);
       }
     },
@@ -59,6 +81,7 @@ export function useDraft<T>(module: string, context: string, initial: T): {
   const clear = useCallback(async () => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
+    pending.delete(`${module}\u0000${context}`);
     await call('offline:deleteDraft', { module, context }).catch(() => undefined);
     setRestored(false);
   }, [module, context]);

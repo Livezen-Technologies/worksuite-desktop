@@ -11,6 +11,49 @@ export interface Can {
 
 export type Rsvp = 'no_response' | 'accepted' | 'declined' | 'tentative';
 
+/**
+ * The record a meeting was scheduled from (worksuite-desktop#100, #101): a
+ * tender, a lead, a customer or a supplier. `label` and `link` are there only
+ * for someone who may open that record (`can_open`); everyone sees what kind
+ * of meeting it is.
+ */
+export interface MeetingSource {
+  type: 'tender' | 'crm_lead' | 'crm_account' | 'crm_deal' | 'vendor' | string;
+  id: number;
+  kind: string | null;
+  kind_label: string;
+  label: string | null;
+  link: string | null;
+  can_open: boolean;
+}
+
+/** The "Related to" filter of the Meetings list, as the server takes it (`source=`). */
+export const SOURCE_FILTERS: Array<[string, string]> = [
+  ['', 'Anything'],
+  ['tender', 'Tender'],
+  ['crm', 'CRM'],
+  ['crm_lead', 'Lead'],
+  ['crm_account', 'Customer'],
+  ['vendor', 'Supplier'],
+];
+
+/** "Open Tender", "Open Lead"… — what the button to the related record says. */
+export function openRelatedLabel(s: Pick<MeetingSource, 'type'>): string {
+  return s.type === 'tender' ? 'Open Tender' : s.type === 'crm_lead' ? 'Open Lead' : s.type === 'crm_account' ? 'Open Customer' : s.type === 'crm_deal' ? 'Open Deal' : s.type === 'vendor' ? 'Open Supplier' : 'Open Related Record';
+}
+
+/** What scheduling from a record fills in (ScheduleDialog's `preset`). */
+export interface MeetingPreset {
+  title?: string;
+  type?: string;
+  source_type: MeetingSource['type'];
+  source_id: number;
+  source_kind?: string;
+  client_id?: number;
+  /** Shown in the dialog: "Lead · Acme Corp". */
+  label: string;
+}
+
 export interface Meeting {
   id: number;
   meeting_no: string;
@@ -44,6 +87,8 @@ export interface Meeting {
   accepted?: number;
   my_role?: string | null;
   my_rsvp?: Rsvp | null;
+  /** Newer servers (#100, #101): the record it was scheduled from. */
+  source?: MeetingSource | null;
 }
 
 export interface Person {

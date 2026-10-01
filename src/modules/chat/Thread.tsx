@@ -15,6 +15,7 @@ import { Icon } from '../../components/Icon';
 import { Button, ErrorNote, FileBadge, Modal, Spinner, cx, DATA_TEXT } from '../../components/ui';
 import { UserAvatar } from '../../components/UserAvatar';
 import { MeetingCard } from './MeetingCard';
+import { openChatWindow } from './window';
 import { describeCard } from '../calls/log';
 import { answerCall, startCall } from '../calls/start';
 import { openMeeting } from '../meet/api';
@@ -236,7 +237,7 @@ export function Thread({
             <Icon name="panel-open" size={15} />
           </button>
         ) : (
-          <button type="button" aria-label="Pop out" title="Pop out" onClick={() => void call('windows:open', { kind: 'chat-mini', route: `/chat?room=${roomId}`, title: room?.name, alwaysOnTop: true })} className={cx(headerBtn, mini && 'hidden')}>
+          <button type="button" aria-label="Open in new window" title="Open in new window" onClick={() => void openChatWindow(roomId, room?.name)} className={cx(headerBtn, mini && 'hidden')}>
             <Icon name="external" size={15} />
           </button>
         )}

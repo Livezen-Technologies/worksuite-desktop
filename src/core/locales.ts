@@ -78,7 +78,7 @@ const en = {
   'home.calendar': 'Calendar',
   'home.waiting': 'Waiting for me',
   'home.activity': 'Activity',
-  'home.files': 'Files',
+  'home.files': 'Recent files',
   'home.summary': 'Daily summary',
 } as const;
 

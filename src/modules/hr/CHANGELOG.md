@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.1.0 — 2026-10-01
+
+- Announcements to several companies or all you may publish to: searchable company picker with chips, Select All and Clear, the audience said before publishing, Save Draft and Publish Announcement, edit, expiry, pinned, withdraw, a company filter on the list and the report (#98).
+
 ## 1.0.2 — 2026-10-01
 
 **Changed**

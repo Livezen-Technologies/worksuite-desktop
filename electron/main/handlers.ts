@@ -10,6 +10,7 @@ import { garageDocPath } from '@shared/garage-docs';
 import { safeFileName } from '@shared/filename';
 import type { AppInfo, BusyReport, DetachedWindow, SyncPolicy } from '@shared/types';
 import { assertRoute, assertWebPath } from './access';
+import { windowRoute } from '../windows/manager';
 import { DesktopError, isDesktopError } from './errors';
 import type { AppContext } from './context';
 import type { IpcRouter } from '../ipc/router';
@@ -351,6 +352,15 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     if (!w || !r) throw new DesktopError('IPC_FORBIDDEN_SENDER', 'Only a torn-off window docks.');
     ctx.navigate({ route: r.route, title: r.title || undefined, side: !!input?.side, source: 'dock' });
     w.close();
+  });
+  // "Open in Main App" (#103): the main window opens what a secondary window shows — its own route, read from
+  // the window's address, never from the page — and the secondary window closes unless asked to stay.
+  router.handle('windows:toMain', (input, c) => {
+    const w = winOf(c.sender);
+    const route = w ? windowRoute(w.webContents.getURL()) : null;
+    if (!w || !route || w === ctx.windows.getMain()) throw new DesktopError('IPC_FORBIDDEN_SENDER', 'Only a secondary window opens in the main app.');
+    ctx.navigate({ route, source: 'window' });
+    if (!input?.keep) w.close();
   });
   // A torn-off window dragged onto the main window's tabs: the main window takes it in.
   router.handle('windows:adopt', (input, c) => {

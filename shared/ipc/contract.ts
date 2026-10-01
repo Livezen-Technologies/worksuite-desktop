@@ -348,6 +348,8 @@ export const contract = {
     { session: true, rate: 4 },
   ),
   'windows:dock': ch(z.object({ side: z.boolean().optional() }).optional(), { session: true, rate: 4 }),
+  // "Open in Main App" in a chat window (#103): the main window opens what this one shows, and this one closes.
+  'windows:toMain': ch(z.object({ keep: z.boolean().optional() }).optional(), { session: true, rate: 4 }),
   'windows:adopt': ch(z.object({ windowId: z.number().int().positive() }), { session: true, rate: 4 }),
   'windows:describe': ch(z.object({ route, title: z.string().max(200) }), { session: true, rate: 10 }),
   'windows:restoreDetached': ch(none, { session: true, rate: 1 }),
@@ -1155,6 +1157,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'ring:silence': void;
   'windows:detach': { id: number };
   'windows:dock': void;
+  'windows:toMain': void;
   'windows:adopt': { route: string; title: string } | null;
   'windows:describe': void;
   'windows:restoreDetached': number;

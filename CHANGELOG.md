@@ -5,6 +5,55 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-01 — 0.2.74: Chats in windows of their own; schedule conflicts asked before moving; a modern Home with announcements
+
+- **Chats open in windows of their own** (#103). **Open in new window** in a conversation's header — in Chat and in
+  the chat drawer — opens it in its own window, with the system's own minimise, maximise and close. Several can be
+  open at once; each new one opens a step away from the last so none hides another, and opening a conversation
+  that already has a window brings that window forward (restoring it if minimised). What you had typed goes with
+  it. **Open in main app** in the window's title bar shows the conversation in the main window and closes the
+  window. A window is no longer kept above everything else by default; the pin in its title bar does that, and a
+  call's chat still starts on top. Windows remember their size and place, and come back onto a connected screen.
+- Where it bites: closing a chat window saves the draft first, and waits for a pasted picture or voice message
+  still going up (the window minimises meanwhile, then closes); files picked from disk always carried on without
+  the window. Signing out closes every chat window (and every other secondary window) at once; locking WorkSuite
+  hides them behind the lock screen as before.
+
+- **Schedule conflicts, finished** (#99). Dragging or stretching an entry onto something else now asks first —
+  **Move anyway** or leave it where it was — instead of moving it and warning afterwards. Day, Week and Month flag
+  the entries that overlap another of your commitments (⚠); the same meeting seen twice (as a meeting and as a
+  calendar invitation) is not a clash with itself. **Choose another time** takes you back to the start time.
+  Accepting an invitation asks the server again rather than trusting the list, so something added since is caught.
+  A meeting cancelled or moved refreshes the calendar and its warnings. Saving something that is already in your
+  calendar says so; people whose availability cannot be checked are named.
+
+- **Home, modernised** (#104). A compact header — greeting, date, a company filter, **Customize** and **New**. The
+  cards along the top are buttons and count exactly what they open: **Due today**, **Overdue** and **Upcoming**
+  (the next week) are now apart, as are meetings, what is waiting for you and unread messages; big numbers are
+  shortened (1.2K) with the exact number on hover. **Agenda** lists today with the kind of each entry (a meeting, a
+  task, a *Tender Meeting*…), **Join** for meetings and a way to the record. **Waiting for me** gathers approvals,
+  meeting invitations you have not answered and announcements to acknowledge. **Recent files** show a preview
+  where there is one, the type and whether the file is still being processed, and leave out temporary upload
+  pieces; **Activity** shows a run of similar updates as one line (×12) rather than one per upload part. The daily
+  summary is a few short points, each going to where it came from. Every widget loads on its own, says when it
+  failed and offers **Retry**. **Customize** shows, hides, reorders and widens widgets (or drag one by its handle
+  onto another), and **Reset Layout** puts it all back. The page narrows to one column in a small window.
+- **Announcements on Home** (#98). The **Announcements** widget shows those sent to you for the company chosen at
+  the top — urgent and pinned first — with who sent it and when; open one to read it (it is marked read) and
+  **Acknowledge** where that is asked for. **See all** lists every one. A notification about an announcement opens
+  it on Home; one withdrawn or expired since says it is no longer available.
+- **Announcements to several companies** (#98), in HR → Announcements: choose companies from a searchable list
+  with chips, how many are chosen, **Select All** and **Clear** (at least one is needed). Before anything goes out it
+  says how many people it reaches in which companies — someone in two of them is counted, and notified, once.
+  **Save Draft** keeps it unseen; **Publish Announcement** asks first. An announcement can be edited, given an
+  expiry date, pinned, and **withdrawn** (it disappears for everyone; who read it stays in the report). The list
+  and the read report can be narrowed to one company, and the report shows each person's company. Announcement
+  notifications reach everyone they were sent to, whether or not they have the HR app.
+- Where it bites: the Tasks page's **Due today** no longer includes tasks whose time today has already passed —
+  those are **Overdue**. Grouped activity, file previews and states, and the summary's points and sources need
+  the WorkSuite Dashboard update for #104; an older server shows what it sends. Announcements need WorkSuite HR 1.1.0
+  for several companies, authors and withdrawal; on a server without announcements the widget is not shown.
+
 ## 2026-10-01 — 0.2.73: Meet roles, ring-in, notes, recording and transcripts; Drive sharing alerts, the transfer queue and Drive settings; schedule conflicts
 
 - **Meet roles and room settings** (#82). Meetings have a host, co-hosts, presenters and participants.

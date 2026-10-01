@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { canOpenRoute, canOpenWebPath } from '@shared/access';
 import { useCanOpen, useVisibleIds } from '../../core/access';
 import { ApiError, apiDelete, apiGet, apiGetMeta, apiPost, apiPut } from '../../core/api';
@@ -9,7 +9,7 @@ import { dayLabel, wallTimeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Avatar, Button, Chip, Modal, Spinner, cx } from '../../components/ui';
 import { createMeeting, openMeeting } from '../meet/api';
-import { categoryOf, CATEGORIES, colourOf, dayOf, destinationOf, REMINDERS, SWATCHES, toInput, type CalendarEvent, type EventDetail } from './api';
+import { CATEGORIES, colourOf, entryCategory, relatedOf, dayOf, destinationOf, REMINDERS, SWATCHES, toInput, type CalendarEvent, type EventDetail } from './api';
 import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';
 import { useConflictGate, useInvitationAnswer } from './conflicts';
@@ -105,7 +105,8 @@ function Summary({ e, onClose }: { e: CalendarEvent; onClose: () => void }) {
     if (to.route) navigate(to.route);
     else void call('app:openInBrowser', { path: to.web! });
   };
-  const kind = CATEGORIES.find((c) => c.id === categoryOf(e.source))?.label ?? 'Entry';
+  const kind = e.related?.kind_label ?? CATEGORIES.find((c) => c.id === entryCategory(e))?.label ?? 'Entry';
+  const related = relatedOf(e);
   const when = e.all_day
     ? dayOf(e.start_at) === dayOf(e.end_at ?? e.start_at)
       ? dayLabel(dayOf(e.start_at))
@@ -120,6 +121,11 @@ function Summary({ e, onClose }: { e: CalendarEvent; onClose: () => void }) {
       footer={
         <>
           <span className="flex-1" />
+          {related ? (
+            <Button title={related.web ? 'Opens on the web' : undefined} onClick={() => (related.route ? navigate(related.route) : void call('app:openInBrowser', { path: related.web! }))}>
+              {related.label}
+            </Button>
+          ) : null}
           {to ? (
             <Button loading={checking} disabled={gone} title={to.web ? 'Opens on the web' : undefined} onClick={() => void open()}>
               {to.label}
@@ -131,6 +137,7 @@ function Summary({ e, onClose }: { e: CalendarEvent; onClose: () => void }) {
     >
       <h2 className="text-[17px] font-bold text-ink">{e.title}</h2>
       <span className="text-ink-2">{when}</span>
+      {e.related?.label ? <span className="text-ink-2">{e.related.label}</span> : null}
       {e.subtitle || e.location ? <span className="text-ink-2">{e.subtitle ?? e.location}</span> : null}
       {e.status ? <Chip>{e.status.replace(/_/g, ' ')}</Chip> : null}
       {e.priority ? <span className="text-ink-3">Priority: {e.priority}</span> : null}
@@ -201,7 +208,8 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
   const participants = detail.data?.participants ?? [];
   // Schedule conflicts (worksuite-desktop#99): checked before saving, for you and everybody on the event; and an
   // invitation waiting for your answer says what it overlaps, and asks before you accept it.
-  const gate = useConflictGate('Save anyway');
+  const startField = useRef<HTMLInputElement>(null);
+  const gate = useConflictGate('Save anyway', () => startField.current?.focus());
   const eventId = id !== null && /^\d+$/.test(String(id)) ? Number(id) : null;
   const conflictQuery = () => {
     const b = body();
@@ -333,7 +341,7 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
       <div className="grid grid-cols-2 gap-2">
         <label className={label}>
           Start
-          <input type={allDay ? 'date' : 'datetime-local'} value={allDay ? start.slice(0, 10) : start} onChange={(ev) => setStart(ev.target.value)} disabled={!editable} className={field} />
+          <input ref={startField} type={allDay ? 'date' : 'datetime-local'} value={allDay ? start.slice(0, 10) : start} onChange={(ev) => setStart(ev.target.value)} disabled={!editable} className={field} />
         </label>
         <label className={label}>
           End
@@ -452,7 +460,7 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
         <div className="flex items-center gap-1.5">
           <b className="w-[110px] text-ink">Your response</b>
           {RSVP.map(([v, l]) => (
-            <button key={v} type="button" aria-pressed={e.my_rsvp === v} onClick={() => invitation.answer(v)} className={cx('h-[30px] rounded-[7px] px-3 font-semibold', e.my_rsvp === v ? 'bg-success text-white' : 'border border-line text-ink hover:bg-subtle')}>
+            <button key={v} type="button" aria-pressed={e.my_rsvp === v} onClick={() => void invitation.answer(v)} className={cx('h-[30px] rounded-[7px] px-3 font-semibold', e.my_rsvp === v ? 'bg-success text-white' : 'border border-line text-ink hover:bg-subtle')}>
               {l}
             </button>
           ))}

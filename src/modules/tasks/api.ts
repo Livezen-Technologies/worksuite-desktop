@@ -179,16 +179,20 @@ export function dueOf(t: Pick<Task, 'due_date' | 'due_at' | 'status'>, today: st
   return { day, label: name, group: open ? group : 'later', tone: !open ? 'done' : late ? 'overdue' : diff <= 0 ? 'soon' : 'plain' };
 }
 
-export type Scope = 'all' | 'mine' | 'today' | 'overdue' | 'done' | 'shared' | `list:${number}`;
+export type Scope = 'all' | 'mine' | 'today' | 'overdue' | 'upcoming' | 'done' | 'shared' | `list:${number}`;
 
 export const SCOPES: Array<{ id: Scope; label: string }> = [
   { id: 'all', label: 'All active' },
   { id: 'mine', label: 'Assigned to me' },
   { id: 'today', label: 'Due today' },
   { id: 'overdue', label: 'Overdue' },
+  { id: 'upcoming', label: 'Upcoming' },
   { id: 'done', label: 'Completed' },
   { id: 'shared', label: 'Shared with me' },
 ];
+
+/** Upcoming: due in the next week, after today. */
+export const UPCOMING_DAYS = 7;
 
 /** Which tasks a view shows (the shared ones come from their own request). */
 export function inScope(t: Task, scope: Scope, me: number, today: string, now = Date.now()): boolean {
@@ -197,8 +201,13 @@ export function inScope(t: Task, scope: Scope, me: number, today: string, now = 
   if (scope.startsWith('list:')) return t.list_id === Number(scope.slice(5));
   if (!isOpen(t)) return false;
   if (scope === 'mine') return t.assignee_id === me;
-  if (scope === 'today') return dueOf(t, today, now).day === today;
+  // Due today, overdue and upcoming are apart (worksuite-desktop#104): something due at 9 this morning, at noon, is overdue, not "today".
+  if (scope === 'today') return dueOf(t, today, now).group === 'today';
   if (scope === 'overdue') return dueOf(t, today, now).group === 'overdue';
+  if (scope === 'upcoming') {
+    const d = dueOf(t, today, now);
+    return d.group !== 'overdue' && d.day !== null && d.day > today && d.day <= addDays(today, UPCOMING_DAYS);
+  }
   return true;
 }
 

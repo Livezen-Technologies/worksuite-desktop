@@ -115,8 +115,12 @@ export default function MeetingsPage(_props: ModuleProps) {
   );
 }
 
-function useMeetings(scope: string) {
-  return useQuery({ queryKey: ['meetings', 'list', scope], queryFn: ({ signal }) => apiGet<{ meetings: Meeting[]; can: Can }>('/api/meetings', { scope }, signal), refetchInterval: 60_000 });
+function useMeetings(scope: string, source = '') {
+  return useQuery({
+    queryKey: ['meetings', 'list', scope, source],
+    queryFn: ({ signal }) => apiGet<{ meetings: Meeting[]; can: Can }>('/api/meetings', source ? { scope, source } : { scope }, signal),
+    refetchInterval: 60_000,
+  });
 }
 
 function MeetingList({ scope, q, title, typeFilter, onOpen }: { scope: string; q: string; title: string; typeFilter?: boolean; onOpen: (id: number) => void }) {
@@ -163,6 +167,12 @@ function Row({ m, onOpen }: { m: Meeting; onOpen: () => void }) {
       <span className="flex min-w-0 flex-1 flex-col">
         <b className="truncate text-ink">{m.title}</b>
         <span className="truncate text-[11.5px] text-ink-3">
+          {m.source ? (
+            <span className="mr-1 rounded-full bg-selection px-1.5 py-px text-[11px] font-semibold text-primary">
+              {m.source.kind_label}
+              {m.source.label ? ` · ${m.source.label}` : ''}
+            </span>
+          ) : null}
           <span className={cx('font-semibold', TYPE_COLOUR[m.type] ?? 'text-ink-2')}>{typeLabel(m.type)}</span> · {m.where || '—'}
         </span>
       </span>
@@ -204,7 +214,7 @@ function InvitationRow({ m, busy, onOpen, send }: { m: Meeting; busy: boolean; o
       {invitation.flag ? <span className="flex">{invitation.flag}</span> : null}
       <div className="flex flex-wrap gap-1.5">
         {(['accepted', 'tentative', 'declined'] as Rsvp[]).map((r) => (
-          <button key={r} type="button" disabled={busy} onClick={() => invitation.answer(r)} className={cx('h-7 rounded-[7px] px-2.5 text-[12px] font-semibold', r === 'accepted' ? 'bg-primary text-white' : 'border border-line text-ink hover:bg-subtle')}>
+          <button key={r} type="button" disabled={busy} onClick={() => void invitation.answer(r)} className={cx('h-7 rounded-[7px] px-2.5 text-[12px] font-semibold', r === 'accepted' ? 'bg-primary text-white' : 'border border-line text-ink hover:bg-subtle')}>
             {RSVP_LABEL[r]}
           </button>
         ))}

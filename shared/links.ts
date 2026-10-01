@@ -52,6 +52,12 @@ export function resolveWebLink(link: string | null | undefined, catalogue: AppDe
     const section = acct[1] === 'security' || acct[1] === 'access' ? acct[1] : ACCOUNT_TABS.includes(tab) ? tab : acct[1] === 'settings' ? 'general' : 'profile';
     return { kind: 'tab', route: `/account/${section}`, app: 'account' };
   }
+  // Announcements are everyone's, read on Home (worksuite-desktop#98): `/announcements?open=12` opens that one there.
+  const notice = /^\/announcements\/?(?:\?(.*))?$/.exec(path);
+  if (notice) {
+    const open = new URLSearchParams(notice[1] ?? '').get('open');
+    return { kind: 'tab', route: open && /^\d+$/.test(open) ? `/home?announcement=${open}` : '/home?announcements=all', app: 'home' };
+  }
   const own = ownPath(path);
   if (own) return { kind: 'tab', route: own.route, app: own.app };
   const app = appForWebPath(path, catalogue);

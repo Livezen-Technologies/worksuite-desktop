@@ -22,6 +22,7 @@ import { answerCall, startCall } from '../calls/start';
 import { PRESENCE } from './Details';
 import { NewChat } from './NewChat';
 import { Thread } from './Thread';
+import { openChatWindow } from './window';
 import { roomPerson, type Room } from './types';
 
 const GLYPH: Record<Kind, [string, string]> = {
@@ -397,6 +398,9 @@ function Conversation({ roomId }: { roomId: string }) {
             </div>
           ) : null}
         </span>
+        <button type="button" aria-label="Open in new window" title="Open in new window" onClick={() => void openChatWindow(roomId, room?.name).then(minimiseChatDrawer, (e) => toast('error', errorMessage(e)))} className={hbtn}>
+          <Icon name="external" size={15} />
+        </button>
         <span className="mx-1 h-5 w-px bg-line" aria-hidden />
         <button type="button" aria-label="Minimise" title="Minimise to the corner" onClick={minimiseChatDrawer} className={hbtn}>
           <Icon name="minus" size={16} />

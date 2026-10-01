@@ -37,11 +37,21 @@ export interface ConflictPerson {
   tentative_only: boolean;
 }
 
+/** Someone whose time could not be checked (outside the companies the person asking shares with them). */
+export interface UnknownPerson {
+  user_id?: number;
+  id?: number;
+  email?: string;
+  name?: string | null;
+}
+
 export interface ConflictResult {
   conflicts: Conflict[];
   duplicates: Conflict[];
   people: ConflictPerson[];
   checked: number;
+  /** Newer servers: the invited people whose availability is not known, said rather than left out. */
+  unknown?: UnknownPerson[];
 }
 
 export interface ConflictQuery {
@@ -111,6 +121,17 @@ export function conflictLine(c: Conflict): string {
   return [c.busy_only ? 'Busy' : c.title || 'Untitled', span(c), STATUS[c.status]].filter(Boolean).join(' · ');
 }
 
+/** The same meeting seen twice (as a meeting and as a calendar invitation) is one commitment, and said so. */
+export function duplicateLine(duplicates: Conflict[]): string {
+  return `This is already in the calendar once (${[...new Set(duplicates.map((d) => d.title ?? 'the same meeting'))].join(', ')}): it is not counted twice.`;
+}
+
+export function unknownLine(unknown: UnknownPerson[]): string {
+  const names = unknown.map((u) => u.name || u.email).filter(Boolean) as string[];
+  const who = names.length === unknown.length && names.length <= 3 ? names.join(', ') : `${unknown.length} ${unknown.length === 1 ? 'person' : 'people'}`;
+  return `Availability could not be checked for ${who}.`;
+}
+
 const linkOf = (c: Conflict) => (c.source === 'meeting' ? `/meetings?meeting=${c.id}` : `/calendar?event=${c.id}`);
 
 /** A short flag on an invitation that clashes with something. */
@@ -166,7 +187,7 @@ export function ConflictDialog({
   onPropose,
   onClose,
 }: {
-  result: Pick<ConflictResult, 'conflicts' | 'duplicates' | 'people'>;
+  result: Pick<ConflictResult, 'conflicts' | 'duplicates' | 'people' | 'unknown'>;
   /** What going ahead does: "Save anyway", "Accept anyway". */
   action: string;
   onContinue: () => void;
@@ -196,7 +217,8 @@ export function ConflictDialog({
       <div className="flex flex-col gap-3 text-[13px]">
         <p className="text-ink-2">This overlaps other commitments. You can keep the overlap if it is on purpose.</p>
         <ConflictList conflicts={result.conflicts} people={result.people} onView={view} />
-        {result.duplicates.length ? <p className="rounded-[8px] bg-subtle px-2.5 py-1.5 text-[12px] text-ink-2">This is already in the calendar once ({result.duplicates.map((d) => d.title ?? 'the same meeting').join(', ')}): it is not counted twice.</p> : null}
+        {result.duplicates.length ? <p className="rounded-[8px] bg-subtle px-2.5 py-1.5 text-[12px] text-ink-2">{duplicateLine(result.duplicates)}</p> : null}
+        {result.unknown?.length ? <p className="text-[12px] text-ink-3">{unknownLine(result.unknown)}</p> : null}
       </div>
     </Modal>
   );
@@ -207,7 +229,7 @@ export function ConflictDialog({
  * the Schedule Conflict dialog (rendered from `dialog`) lets the person choose. `onChooseAnother` keeps them in the
  * form they were in.
  */
-export function useConflictGate(action = 'Save anyway') {
+export function useConflictGate(action = 'Save anyway', onChooseAnother?: () => void) {
   const [pending, setPending] = useState<{ result: ConflictResult; go: () => void } | null>(null);
   const guard = async (q: ConflictQuery, go: () => void | Promise<void>): Promise<void> => {
     let result: ConflictResult | null = null;
@@ -219,11 +241,12 @@ export function useConflictGate(action = 'Save anyway') {
     }
     if (!result || result.conflicts.length === 0) {
       await go();
+      if (result?.duplicates.length) toast('info', duplicateLine(result.duplicates));
       return;
     }
     setPending({ result, go: () => void go() });
   };
-  const dialog: ReactNode = pending ? <ConflictDialog result={pending.result} action={action} onContinue={pending.go} onChooseAnother={() => undefined} onClose={() => setPending(null)} /> : null;
+  const dialog: ReactNode = pending ? <ConflictDialog result={pending.result} action={action} onContinue={pending.go} onChooseAnother={onChooseAnother ?? (() => undefined)} onClose={() => setPending(null)} /> : null;
   return { guard, dialog };
 }
 
@@ -296,16 +319,24 @@ export function useInvitationAnswer(source: 'meeting' | 'event', id: number | nu
   const [asking, setAsking] = useState(false);
   const [proposing, setProposing] = useState(false);
   const again = () => void qc.invalidateQueries({ queryKey: ['calendar', 'conflicts'] });
-  const answer = (rsvp: string) => {
-    if (rsvp === 'accepted' && waiting?.conflicts.length) setAsking(true);
-    else void Promise.resolve(send(rsvp)).then(again);
+  const [fresh, setFresh] = useState<Pick<ConflictResult, 'conflicts' | 'duplicates' | 'people' | 'unknown'> | null>(null);
+  // Accepting asks again (what is in the calendar may have changed since the list was read); unanswered, the list's own answer stands.
+  const answer = async (rsvp: string) => {
+    if (rsvp !== 'accepted' || !waiting || id === null) return void Promise.resolve(send(rsvp)).then(again);
+    // The list's times are instants (UTC, written without a zone); said as such, or the server would read them on the WorkSuite clock.
+    const instant = (s: string) => (/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : `${s.replace(' ', 'T')}Z`);
+    const now = await checkConflicts({ start: instant(waiting.start_at), end: instant(waiting.end_at), ...(source === 'meeting' ? { meeting_id: id } : { event_id: id }) }).catch(() => null);
+    const result = now && Array.isArray(now.conflicts) ? now : { conflicts: waiting.conflicts, duplicates: [], people: [] };
+    if (!result.conflicts.length) return void Promise.resolve(send(rsvp)).then(again);
+    setFresh(result);
+    setAsking(true);
   };
   const propose = source === 'meeting' && waiting && id !== null ? () => setProposing(true) : null;
   const dialogs: ReactNode = (
     <>
       {asking && waiting ? (
         <ConflictDialog
-          result={{ conflicts: waiting.conflicts, duplicates: [], people: [] }}
+          result={fresh ?? { conflicts: waiting.conflicts, duplicates: [], people: [] }}
           action="Accept anyway"
           onContinue={() => void Promise.resolve(send('accepted')).then(again)}
           onPropose={propose ?? undefined}

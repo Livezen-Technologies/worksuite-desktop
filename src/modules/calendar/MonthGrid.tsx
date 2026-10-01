@@ -1,7 +1,7 @@
 import { wallTimeLabel } from '../../core/time';
 import { cx } from '../../components/ui';
-import { useRef, useState } from 'react';
-import { colourOf, dayDiff, dayOf, minutesOf, monthGrid, movable, type CalendarEvent } from './api';
+import { useMemo, useRef, useState } from 'react';
+import { clashingKeys, colourOf, dayDiff, dayOf, minutesOf, monthGrid, movable, type CalendarEvent } from './api';
 import { eventKey } from './WeekGrid';
 
 const WEEKDAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
@@ -25,6 +25,7 @@ export function MonthGrid({ anchor, events, today, readOnly, onOpen, onCreate, o
   // A ref, not state: the drop can arrive before a re-render would have shown what is being dragged.
   const dragging = useRef<CalendarEvent | null>(null);
   const [over, setOver] = useState<string | null>(null);
+  const clashes = useMemo(() => clashingKeys(events, eventKey), [events]);
   const days = monthGrid(anchor);
   const can = (e: CalendarEvent) => !readOnly && movable(e);
   const grab = (e: CalendarEvent) => ({
@@ -81,8 +82,8 @@ export function MonthGrid({ anchor, events, today, readOnly, onOpen, onCreate, o
                     {e.title}
                   </button>
                 ) : (
-                  <button key={eventKey(e)} type="button" {...grab(e)} onClick={() => onOpen(e)} className={cx('flex items-center gap-1 truncate rounded-[5px] px-1 text-left text-[11px] text-ink hover:bg-subtle', can(e) && 'cursor-grab')} title={e.title}>
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: colourOf(e) }} />
+                  <button key={eventKey(e)} type="button" {...grab(e)} onClick={() => onOpen(e)} className={cx('flex items-center gap-1 truncate rounded-[5px] px-1 text-left text-[11px] text-ink hover:bg-subtle', can(e) && 'cursor-grab')} title={clashes.has(eventKey(e)) ? `${e.title} · Overlaps another commitment` : e.title}>
+                    {clashes.has(eventKey(e)) ? <span aria-label="Overlaps another commitment" data-clash="" className="shrink-0 text-[10px] text-warning">⚠</span> : <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: colourOf(e) }} />}
                     <span className="shrink-0 text-ink-3">{wallTimeLabel(e.start_at)}</span>
                     <span className="truncate">{e.title}</span>
                   </button>
