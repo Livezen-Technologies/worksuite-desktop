@@ -267,6 +267,9 @@ describe('sign-in helpers', () => {
   });
   it('summarises the WorkSuite user', () => {
     expect(toUserSummary({ id: 7, name: '', email: 'a@b.c', organization: 'Livezen' })).toMatchObject({ id: '7', name: 'a@b.c', organizationName: 'Livezen' });
+    // A required profile picture (#46); an older server that says nothing asks for nothing.
+    expect(toUserSummary({ id: 7, email: 'a@b.c', picture_required: true }).pictureRequired).toBe(true);
+    expect(toUserSummary({ id: 7, email: 'a@b.c' }).pictureRequired).toBe(false);
   });
 });
 

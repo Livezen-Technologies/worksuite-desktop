@@ -1,3 +1,4 @@
+import { resolveWebLink } from '@shared/links';
 import { addDays, currentZone, dayLabel } from '../../core/time';
 
 /**
@@ -39,8 +40,12 @@ export interface CalendarEvent {
   priority?: string;
   status?: string;
   subtitle?: string;
+  /** The one record this entry opens, as a web path (#64): `/tasks?task=12`, `/projects?project=3`… */
   link?: string;
   route?: string;
+  /** A milestone's or sprint's project; a repair's, loan's or warranty's asset. */
+  project_id?: number | null;
+  asset_id?: number | null;
 }
 
 export interface Participant {
@@ -69,7 +74,8 @@ export const CATEGORIES: Array<{ id: string; label: string; color: string; sourc
   { id: 'projects', label: 'Projects & sprints', color: '#1F7A4D', sources: (s) => s.startsWith('project_'), apps: ['projects'] },
   { id: 'tenders', label: 'Tender closing', color: '#B45309', sources: (s) => s === 'tender', apps: ['tenders'] },
   { id: 'assets', label: 'Assets (licence, warranty, maintenance)', color: '#4A5168', sources: (s) => s.startsWith('asset_'), apps: ['assets'] },
-  { id: 'renewals', label: 'Subscription renewals', color: '#B83280', sources: (s) => s === 'subscription', apps: ['subscriptions'] },
+  // Vendor subscriptions kept in Expenses, not the customer Subscriptions app.
+  { id: 'renewals', label: 'Subscription renewals', color: '#B83280', sources: (s) => s === 'subscription', apps: ['expenses'] },
 ];
 
 export function categoryOf(source: string): string {
@@ -184,13 +190,55 @@ export function layoutDay<T extends { start: number; end: number }>(items: T[]):
   return out;
 }
 
-/** Where a non-event entry opens: a native tab route, or a web path. */
-export function destinationOf(e: CalendarEvent): { route?: string; web?: string } | null {
-  if (e.source === 'businessmeeting') return { route: `/meetings?meeting=${e.id}` };
-  if (e.source === 'meeting' && e.uuid) return { route: `/meet/${e.uuid}` };
-  if (e.source === 'task') return { route: `/tasks?task=${e.id}` };
-  if (e.link) return { web: e.link };
-  if (e.route) return { web: e.route };
+/** Where a non-event entry opens, and what its button says. */
+export interface Destination {
+  /** A native tab route, or else… */
+  route?: string;
+  /** …a web path opened in the browser. */
+  web?: string;
+  label: string;
+}
+
+/**
+ * The exact record an entry is about (#64): the `link` the server sends or,
+ * from an older server, built from the id where the id is the record's own.
+ * A milestone's or a repair's id is not its project's or asset's, so without
+ * `project_id`/`asset_id` those open the module, as before.
+ */
+function linkOf(e: CalendarEvent): string | null {
+  if (e.link) return e.link;
+  switch (e.source) {
+    case 'businessmeeting': return `/meetings?meeting=${e.id}`;
+    case 'task': return `/tasks?task=${e.id}`;
+    case 'tender': return e.route ?? `/tenders?open=${e.id}`;
+    case 'subscription': return `/expenses?tab=subs&sub=${e.id}`;
+    case 'leave': return `/hr?tab=leave&leave=${e.id}`;
+  }
+  if (e.source.startsWith('project_')) return e.project_id ? `/projects?project=${e.project_id}` : '/projects';
+  if (e.source.startsWith('asset_')) return e.asset_id ? `/assets?asset=${e.asset_id}` : '/assets';
+  return null;
+}
+
+function openLabel(e: CalendarEvent): string {
+  switch (e.source) {
+    case 'businessmeeting': return 'Open Meeting';
+    case 'task': return 'Open Task';
+    case 'tender': return 'View Tender';
+    case 'subscription': return 'Open Subscription';
+    case 'leave': return 'Open Leave Request';
+  }
+  if (e.source.startsWith('project_')) return e.project_id ? 'Open Project' : 'Open Projects';
+  if (e.source.startsWith('asset_')) return e.asset_id ? 'Open Asset' : 'Open Assets';
+  return 'Open';
+}
+
+export function destinationOf(e: CalendarEvent): Destination | null {
+  if (e.source === 'meeting') return e.uuid ? { route: `/meet/${e.uuid}`, label: 'Open Meeting room' } : null;
+  const link = linkOf(e);
+  if (!link) return null;
+  const t = resolveWebLink(link);
+  if (t.kind === 'tab') return { route: t.route, label: openLabel(e) };
+  if (t.kind === 'browser') return { web: t.path, label: `${openLabel(e)} ↗` };
   return null;
 }
 

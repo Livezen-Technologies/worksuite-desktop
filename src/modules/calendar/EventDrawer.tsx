@@ -1,8 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { canOpenRoute, canOpenWebPath } from '@shared/access';
 import { useCanOpen, useVisibleIds } from '../../core/access';
-import { ApiError, apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
+import { ApiError, apiDelete, apiGet, apiGetMeta, apiPost, apiPut } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
 import { useTab } from '../../core/tab-context';
 import { dayLabel, wallTimeLabel } from '../../core/time';
@@ -48,6 +48,14 @@ export function EventDrawer({ event, draft, onClose }: { event: CalendarEvent | 
 }
 
 function Shell({ title, colour, extra, onClose, children, footer }: { title: string; colour: string; extra?: React.ReactNode; onClose: () => void; children: React.ReactNode; footer?: React.ReactNode }) {
+  // Escape closes it; the calendar underneath keeps its day, view and filters (#64). A dialog on top handles its own first.
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape' && !ev.defaultPrevented && !document.querySelector('[role="dialog"][aria-modal="true"]')) onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
   return (
     <aside aria-label={title} className="absolute top-0 right-0 bottom-0 z-30 flex w-[560px] max-w-full flex-col border-l border-line bg-surface text-[13px] shadow-[-12px_0_36px_rgb(var(--ws-shadow-rgb)/.16)]">
       <div className="flex shrink-0 items-center gap-2 border-b border-line px-[18px] py-3.5">
@@ -69,6 +77,33 @@ function Summary({ e, onClose }: { e: CalendarEvent; onClose: () => void }) {
   const where = destinationOf(e);
   const to = where && (where.route ? canOpenRoute(where.route, visible) : canOpenWebPath(where.web!, visible)) ? where : null;
   const meet = useCanOpen('meet');
+  const [checking, setChecking] = useState(false);
+  const [gone, setGone] = useState(false);
+  /*
+   * Before leaving, ask the calendar again whether this entry is still there for
+   * this person: the feed answers through the same permissions and deletions, so
+   * a record deleted or no longer shared since the calendar loaded says so here,
+   * instead of opening onto an empty screen (#64). Offline, it cannot ask: it opens.
+   */
+  const open = async () => {
+    if (!to) return;
+    setChecking(true);
+    setGone(false);
+    try {
+      const day = dayOf(e.start_at);
+      const r = await apiGetMeta<{ events: CalendarEvent[] }>('/api/calendar/events', { from: day, to: day });
+      if (!r.offline && !(r.data?.events ?? []).some((x) => x.source === e.source && String(x.id) === String(e.id))) {
+        setGone(true);
+        return;
+      }
+    } catch {
+      // Could not ask: open it, and let the record's own screen say what it finds.
+    } finally {
+      setChecking(false);
+    }
+    if (to.route) navigate(to.route);
+    else void call('app:openInBrowser', { path: to.web! });
+  };
   const kind = CATEGORIES.find((c) => c.id === categoryOf(e.source))?.label ?? 'Entry';
   const when = e.all_day
     ? dayOf(e.start_at) === dayOf(e.end_at ?? e.start_at)
@@ -84,7 +119,11 @@ function Summary({ e, onClose }: { e: CalendarEvent; onClose: () => void }) {
       footer={
         <>
           <span className="flex-1" />
-          {to ? <Button onClick={() => (to.route ? navigate(to.route) : void call('app:openInBrowser', { path: to.web! }))}>{to.route ? 'Open' : 'Open on the web ↗'}</Button> : null}
+          {to ? (
+            <Button loading={checking} disabled={gone} title={to.web ? 'Opens on the web' : undefined} onClick={() => void open()}>
+              {to.label}
+            </Button>
+          ) : null}
           {join ? <Button variant="primary" onClick={join}>Join</Button> : null}
         </>
       }
@@ -92,9 +131,14 @@ function Summary({ e, onClose }: { e: CalendarEvent; onClose: () => void }) {
       <h2 className="text-[17px] font-bold text-ink">{e.title}</h2>
       <span className="text-ink-2">{when}</span>
       {e.subtitle || e.location ? <span className="text-ink-2">{e.subtitle ?? e.location}</span> : null}
-      {e.status ? <Chip>{e.status}</Chip> : null}
+      {e.status ? <Chip>{e.status.replace(/_/g, ' ')}</Chip> : null}
       {e.priority ? <span className="text-ink-3">Priority: {e.priority}</span> : null}
       {e.description ? <p className="whitespace-pre-wrap text-ink selectable">{e.description}</p> : null}
+      {gone ? (
+        <p role="alert" className="m-0 rounded-[10px] bg-warning-bg px-3 py-2 text-[12.5px] text-warning">
+          This has been deleted, or you no longer have access to it.
+        </p>
+      ) : null}
       <span className="text-[12px] text-ink-3">This comes from {kind.toLowerCase()} and is changed where it lives.</span>
     </Shell>
   );
@@ -254,6 +298,12 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
       }
     >
       {id && detail.isLoading && !event ? <Spinner /> : null}
+      {/* Deleted, or no longer shared, since the calendar loaded (#64): say so, rather than a form for nothing. */}
+      {id && detail.error instanceof ApiError && (detail.error.status === 404 || detail.error.status === 403) ? (
+        <p role="alert" className="m-0 rounded-[9px] bg-warning-bg px-3 py-2 text-warning">
+          This event has been deleted, or you no longer have access to it.
+        </p>
+      ) : null}
       {e?.edit_block && !editable ? <div className="rounded-[9px] bg-subtle px-3 py-2 text-ink-2">{e.edit_block}</div> : null}
       {event?.recurring && event.occurrence_date && editable ? (
         <div className="rounded-[9px] bg-selection px-3 py-2 text-ink-2">

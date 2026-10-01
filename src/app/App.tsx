@@ -1,4 +1,4 @@
-import { Suspense, useEffect } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import type { ToastMessage } from '@shared/types';
 import { app } from '../core/app-state';
 import { hasDesktop, on } from '../core/bridge';
@@ -11,6 +11,7 @@ import { Onboarding, SetupWizard } from './onboarding/Onboarding';
 import { Toasts } from './overlays/Toasts';
 import { ShowMeHost } from '../modules/ai/help/ShowMe';
 import { LockScreen } from './screens/LockScreen';
+import { AddPictureScreen } from './screens/AddPictureScreen';
 import { LockBoundary } from './Boundaries';
 import { UpdateRequired } from './screens/UpdateScreens';
 import { WindowRoot } from './WindowRoot';
@@ -32,6 +33,10 @@ export function App() {
   const auth = useStore(app, (s) => s.auth);
   const locked = useStore(app, (s) => s.lock?.locked ?? false);
   const required = useStore(app, (s) => s.update?.required ?? false);
+  // A profile picture the server requires (#46). Not from a copy kept offline: nothing could be sent, so it would only lock the app.
+  const pictureOwedBy = useStore(app, (s) => (s.bootstrap?.user.pictureRequired === true && !s.bootstrap.offline ? s.bootstrap.user.id : null));
+  // Who has just sent one, so a refresh that fails does not bring the screen back — for them, not the next person to sign in.
+  const [pictureSentBy, setPictureSentBy] = useState<string | null>(null);
   const hash = window.location.hash;
 
   if (!hasDesktop()) {
@@ -49,6 +54,7 @@ export function App() {
   else if (hash.startsWith('#/window/quick-ask')) body = <QuickAskWindow />;
   else if (hash.startsWith('#/window/')) body = <WindowRoot hash={hash} />;
   else if (auth.setupPending) body = <SetupWizard />;
+  else if (pictureOwedBy !== null && pictureOwedBy !== pictureSentBy) body = <AddPictureScreen onDone={() => setPictureSentBy(pictureOwedBy)} />;
   else body = <Shell />;
 
   return (

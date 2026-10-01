@@ -62,6 +62,8 @@ export interface UserSummary {
   organizationName: string | null;
   timeFormat: string | null;
   weekStart: number | null;
+  /** The server requires a profile picture and this account has none: the app asks for one first (#46). */
+  pictureRequired?: boolean;
 }
 
 export interface Organization {

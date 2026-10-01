@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { wallToUtc } from '../../../src/core/time';
-import { dayDiff, endOf, movable, rangeLabel, shifted, step, viewRange, type CalendarEvent } from '../../../src/modules/calendar/api';
+import { CATEGORIES, dayDiff, destinationOf, endOf, movable, rangeLabel, shifted, step, viewRange, type CalendarEvent } from '../../../src/modules/calendar/api';
 
 const ev = (over: Partial<CalendarEvent> = {}): CalendarEvent => ({
   source: 'event',
@@ -63,5 +63,36 @@ describe('calendar arithmetic', () => {
     expect(wallToUtc('2026-12-01', 10 * 60 + 30, 'America/New_York')).toBe('2026-12-01T15:30:00.000Z');
     expect(wallToUtc('2026-03-08', 3 * 60 + 30, 'America/New_York')).toBe('2026-03-08T07:30:00.000Z');
     expect(wallToUtc('2026-09-26', 0, 'UTC')).toBe('2026-09-26T00:00:00.000Z');
+  });
+});
+
+/** #64: an entry opens the one record it is about, natively where that app is native, and says what it opens. */
+describe('where an entry opens', () => {
+  it.each([
+    [{ source: 'task', id: 12 }, { route: '/tasks?task=12', label: 'Open Task' }],
+    [{ source: 'businessmeeting', id: 5 }, { route: '/meetings?meeting=5', label: 'Open Meeting' }],
+    [{ source: 'tender', id: 4, route: '/tenders?open=4' }, { route: '/tenders?open=4', label: 'View Tender' }],
+    [{ source: 'subscription', id: 7 }, { route: '/expenses?tab=subs&sub=7', label: 'Open Subscription' }],
+    [{ source: 'leave', id: 2, link: '/hr?tab=leave&leave=2' }, { route: '/hr?tab=leave&leave=2', label: 'Open Leave Request' }],
+    [{ source: 'meeting', id: 9, uuid: 'abc' }, { route: '/meet/abc', label: 'Open Meeting room' }],
+  ])('%o', (over, want) => {
+    expect(destinationOf(ev({ editable: false, ...over } as Partial<CalendarEvent>))).toEqual(want);
+  });
+
+  it('opens a project or an asset on the web, at that record, from the parent id the server sends', () => {
+    expect(destinationOf(ev({ source: 'project_milestone', id: 3, project_id: 21, link: '/projects?project=21' }))).toEqual({ web: '/projects?project=21', label: 'Open Project ↗' });
+    expect(destinationOf(ev({ source: 'asset_maintenance', id: 8, asset_id: 55, link: '/assets?asset=55' }))).toEqual({ web: '/assets?asset=55', label: 'Open Asset ↗' });
+  });
+
+  it('from an older server, a milestone opens its module rather than a project numbered like the milestone', () => {
+    expect(destinationOf(ev({ source: 'project_sprint', id: 3 }))).toEqual({ web: '/projects', label: 'Open Projects ↗' });
+  });
+
+  it('offers nothing for a public holiday', () => {
+    expect(destinationOf(ev({ source: 'holiday', id: 20261001 }))).toBeNull();
+  });
+
+  it('lists subscription renewals for people with Expenses, where they are kept', () => {
+    expect(CATEGORIES.find((c) => c.id === 'renewals')?.apps).toEqual(['expenses']);
   });
 });
