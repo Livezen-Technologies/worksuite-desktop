@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-10-01 — 0.2.73: Chats in windows of their own; schedule conflicts asked before moving; a modern Home with announcements
+## 2026-10-01 — 0.2.74: Chats in windows of their own; schedule conflicts asked before moving; a modern Home with announcements
 
 - **Chats open in windows of their own** (#103). **Open in new window** in a conversation's header — in Chat and in
   the chat drawer — opens it in its own window, with the system's own minimise, maximise and close. Several can be
@@ -53,6 +53,60 @@ person who has to live with the change — what it does, and where it bites.
   those are **Overdue**. Grouped activity, file previews and states, and the summary's points and sources need
   the WorkSuite Dashboard update for #104; an older server shows what it sends. Announcements need WorkSuite HR 1.1.0
   for several companies, authors and withdrawal; on a server without announcements the widget is not shown.
+
+## 2026-10-01 — 0.2.73: Meet roles, ring-in, notes, recording and transcripts; Drive sharing alerts, the transfer queue and Drive settings; schedule conflicts
+
+- **Meet roles and room settings** (#82). Meetings have a host, co-hosts, presenters and participants.
+  - The host can hand over hosting, add co-hosts and choose who may present.
+  - Leaving as host passes the meeting to a co-host.
+  - Room settings decide who may join, whether there is a waiting room, and who may present, invite, chat, record
+    and see transcripts. They can be set when the meeting is scheduled.
+- **Ring people into a meeting that is on** (#79). Invite someone from inside the call and their app rings, as a
+  call does.
+- **Notes & Minutes** (#80). Minutes are written together during the meeting and saved as you go. They stay with
+  the meeting's details afterwards, and can be drafted from the transcript and chat.
+- **Recording, on the server or on this computer** (#68).
+  - Server recording is fixed.
+  - A meeting can also be recorded on this computer and saved to Drive in the background.
+  - The local copy is kept for as long as Settings › Meet › Recording says.
+- **Recording status** (#89).
+  - Each recording shows where it is: Recording, Finalizing, Queued, Processing, Uploading to Drive, Ready to play,
+    Paused or Failed.
+  - Downloading is shown apart from playback.
+  - Progress is shown only when it can be measured.
+  - Separate badges say Saved locally, Saved to Drive and Ready to play.
+  - Actions: Try again, Pause, Resume, Cancel transfer, Play, Open in Drive.
+  - A stuck step says what to do, and you are told when a recording is ready or fails.
+- **Transcripts** (#81).
+  - Meetings are transcribed on this computer with a speech model you add in Settings › Local AI, or on the
+    WorkSuite server where that is allowed.
+  - Transcripts can be corrected, exported and emailed.
+- **Drive sharing reaches people** (#16). Something shared with you appears in Shared with me at once. Its alert
+  still pops up when the live notice was missed, for example while the computer was asleep.
+- **Share keeps the document in view** (#42). Share opens over the document, which stays visible and dimmed behind
+  it. Closing returns to the same editor, with its changes, selection and scroll.
+- **One transfer queue** (#94).
+  - Uploads and downloads run two at a time; the rest wait in order.
+  - The Transfers panel has Active, Queued and Finished sections.
+  - Each file can be paused, resumed, cancelled or retried, and there are Pause all and Resume all.
+  - A temporary failure is retried automatically.
+  - The queue survives a restart, and nothing is sent twice.
+- **Drive › Settings** (#95), also in Settings › Files & Sync:
+  - how many transfers run at once, and upload and download speed caps;
+  - the download folder, and what to do when a name is already taken;
+  - Drive quota, local cache and offline storage, and transfer notifications;
+  - Reset to defaults. These settings apply to this computer only.
+- **Schedule conflicts** (#99).
+  - Saving an event or meeting that overlaps something else shows the overlap first. You see what it is where you
+    may see it, and Busy where you may not.
+  - Scheduling a meeting marks each person busy or free.
+  - Invitations that clash are flagged in Meetings, Calendar and Home's Waiting for me. Accepting one asks first
+    and offers Propose new time.
+- Where it bites:
+  - These need the matching WorkSuite server (Communication 1.2.0, Meeting 1.2.0, Calendar 1.2.0, Ai 1.1.0,
+    Core 1.0.2, Notifications 1.1.0). Run its migrations.
+  - Against an older server, the new parts stay out of the way.
+  - The metered-connection setting is kept, but the app cannot yet tell when a connection is metered.
 
 ## 2026-10-01 — 0.2.72: A profile picture before the workspace; calendar entries open their record; search on the server's index
 
