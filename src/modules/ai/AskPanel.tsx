@@ -3,23 +3,14 @@ import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { useStickToBottom } from '../../components/useStickToBottom';
 import { app } from '../../core/app-state';
-import { askLocal, localReady, useLocalModels, type LocalAsk } from '../../core/local-ai';
+import { t } from '../../core/i18n';
+import { localReady, useLocalModels } from '../../core/local-ai';
 import { useStore } from '../../core/store';
 import { navigate } from '../../core/tabs';
 import { ActionCard } from './ActionCard';
 import { LocalSetup } from './LocalSetup';
-import { ask, assistantProblem, pickFile, useAssistant, type AskTurn, type PendingAction, type Surface } from './assistant';
-
-interface Entry {
-  role: 'user' | 'assistant';
-  text: string;
-  error?: boolean;
-  turn?: AskTurn;
-  /** Answered by the model on this computer. */
-  local?: boolean;
-}
-
-const LOCAL_SYSTEM = 'You are WorkSuite\'s assistant, running on this computer. Answer clearly and briefly. You cannot see the person\'s WorkSuite data or change anything; say so when a question needs it.';
+import { useAssistant, type PendingAction, type Surface } from './assistant';
+import { createAskSession, type AskEntry, type AskSession } from './session';
 
 /**
  * Ask the assistant (WS-AI-SRS-001 FR-DSK-AI-01/02/04): the server's own
@@ -27,9 +18,15 @@ const LOCAL_SYSTEM = 'You are WorkSuite\'s assistant, running on this computer. 
  * beside it shows, and any file they pick from this computer. What it
  * proposes to change arrives as cards; nothing changes until one is
  * confirmed, and only in the main window.
+ *
+ * The conversation lives in a session (session.ts), not here: the drawer and
+ * the floating widget pass the shared one, so either can close, minimise or
+ * take over without losing it. Without one (Quick Ask) the panel keeps its
+ * own, which ends with it.
  */
 export function AskPanel({
   surface,
+  session: given,
   tabRef,
   tabTitle,
   selection,
@@ -39,6 +36,8 @@ export function AskPanel({
   autoFocus,
 }: {
   surface: Surface;
+  /** The conversation to show; a private one when none is given. */
+  session?: AskSession;
   /** The record the active tab shows, as `task:12`, when it shows one. */
   tabRef?: string | null;
   tabTitle?: string | null;
@@ -51,79 +50,38 @@ export function AskPanel({
   autoFocus?: boolean;
 }) {
   const { availability, rules } = useAssistant(surface);
-  const [entries, setEntries] = useState<Entry[]>([]);
-  const [conversationId, setConversationId] = useState<number | null>(null);
-  const [text, setText] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [useTab, setUseTab] = useState(true);
-  const [files, setFiles] = useState<{ ref: string; name: string; via: 'upload' | 'drive' }[]>([]);
-  const [fileError, setFileError] = useState<string | null>(null);
+  const [own] = useState(() => (given ? null : createAskSession()));
+  const session = given ?? own!;
+  const st = useStore(session.store, (s) => s);
+  const { entries, text, busy, streaming, useTab, files, fileError } = st;
+  const set = session.store.set;
+  const input = useRef<HTMLTextAreaElement>(null);
   // Local AI (WS-SRS-LAI): the model on this computer, when one is installed — also offline.
   const offline = useStore(app, (s) => s.status?.network === 'OFFLINE');
   const localModels = useLocalModels(surface === 'assistant.panel');
   const localModel = surface === 'assistant.panel' ? localReady(localModels.data) : null;
-  const [localPick, setLocalPick] = useState<boolean | null>(null);
-  const local = !!localModel && (localPick ?? offline);
-  const [streaming, setStreaming] = useState<string | null>(null);
-  const running = useRef<LocalAsk | null>(null);
-  const input = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => () => running.current?.cancel(), []);
+  const local = !!localModel && (st.localPick ?? offline);
+  // A private conversation ends with the panel, and a local answer with it; a shared one carries on.
+  useEffect(() => (own ? () => own.cancel() : undefined), [own]);
+  // Showing the conversation reads what arrived while it was hidden.
+  useEffect(() => session.view(), [session]);
 
-  useEffect(() => setUseTab(true), [tabRef]);
+  useEffect(() => {
+    if (session.store.get().tabRef !== (tabRef ?? null)) set({ useTab: true, tabRef: tabRef ?? null });
+  }, [tabRef, session, set]);
   // The conversation follows new messages and a streaming answer while the reader is at the end (worksuite-desktop#50).
-  const view = useStickToBottom(`${entries.length}:${busy}:${streaming?.length ?? -1}`);
+  const { scroller, content, unseen, toEnd, onScroll } = useStickToBottom(`${entries.length}:${busy}:${streaming?.length ?? -1}`);
 
   const off = local ? null : availability.data && !availability.data.enabled ? availability.data.reason ?? 'The assistant is not switched on for you.' : null;
   const refs = [...(useTab && tabRef ? [tabRef] : []), ...files.map((f) => f.ref)];
 
-  const send = async () => {
-    const q = text.trim();
-    if (!q || busy) return;
-    // A selection from another app goes with the question, fenced, as material to work on.
-    const full = selection && selection.trim() && entries.length === 0 ? `${q}\n\nThe text I selected:\n"""\n${selection.trim().slice(0, 6000)}\n"""` : q;
-    setText('');
-    setEntries((e) => [...e, { role: 'user', text: q, local }]);
+  const send = () => {
+    if (!text.trim() || busy) return Promise.resolve();
     // Asking is looking at the answer: back to the end, following again, from wherever the reader had scrolled.
-    view.toEnd();
-    setBusy(true);
-    if (local) {
-      // This computer's model: the conversation so far in this mode, nothing from WorkSuite.
-      const history = entries.filter((x) => x.local && !x.error).map((x) => ({ role: x.role, content: x.text }));
-      setStreaming('');
-      const r = askLocal([{ role: 'system', content: LOCAL_SYSTEM }, ...history, { role: 'user', content: full }], (t) => setStreaming(t));
-      running.current = r;
-      try {
-        const a = await r.done;
-        setEntries((e) => [...e, { role: 'assistant', text: a.text.trim() || (a.cancelled ? 'Stopped.' : ''), local: true }]);
-      } catch (err) {
-        setEntries((e) => [...e, { role: 'assistant', text: assistantProblem(err), error: true, local: true }]);
-      } finally {
-        running.current = null;
-        setStreaming(null);
-        setBusy(false);
-      }
-      return;
-    }
-    try {
-      const t = await ask(full, { surface, refs, conversationId });
-      setConversationId(t.conversation_id);
-      setEntries((e) => [...e, t.ok ? { role: 'assistant', text: t.reply ?? '', turn: t } : { role: 'assistant', text: t.error ?? 'The assistant could not answer just now.', error: true }]);
-    } catch (err) {
-      setEntries((e) => [...e, { role: 'assistant', text: assistantProblem(err), error: true }]);
-    } finally {
-      setBusy(false);
-    }
+    toEnd();
+    return session.send({ surface, refs, local, selection });
   };
-
-  const attach = async () => {
-    setFileError(null);
-    try {
-      const f = await pickFile();
-      if (f) setFiles((all) => [...all.filter((x) => x.ref !== f.ref), f]);
-    } catch (e) {
-      setFileError(assistantProblem(e));
-    }
-  };
+  const attach = () => session.attach();
 
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -139,13 +97,13 @@ export function AskPanel({
       {off ? <p className="rounded-[10px] bg-warning-bg px-3 py-2 text-[12.5px] text-[#7A4308] dark:text-warning">{off}</p> : null}
 
       <div className="relative flex min-h-0 flex-1 flex-col">
-      <div ref={view.scroller} onScroll={view.onScroll} data-testid="ai-conversation" className="min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-thin" aria-live="polite">
-        <div ref={view.content} className="flex flex-col gap-3 pb-1">
+      <div ref={scroller} onScroll={onScroll} data-testid="ai-conversation" className="min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-thin" aria-live="polite">
+        <div ref={content} className="flex flex-col gap-3 pb-1">
         {/* First-use Local AI setup: offered until a model on this computer can answer, then "ready" once (worksuite-desktop#49/#55). */}
         {surface === 'assistant.panel' ? (
           <LocalSetup
             onStart={() => {
-              setLocalPick(true);
+              set({ localPick: true });
               input.current?.focus();
             }}
           />
@@ -155,13 +113,26 @@ export function AskPanel({
             Ask about your work — tasks, mail, files, meetings, customers. The assistant sees only what you can open, and changes nothing until you confirm it.
           </p>
         ) : null}
-        {entries.map((e, i) => <Bubble key={i} e={e} elsewhere={reviewElsewhere} />)}
-        {streaming ? <Bubble e={{ role: 'assistant', text: streaming, local: true }} /> : null}
-        {busy && !streaming ? <p className="flex items-center gap-2 text-[12.5px] text-ink-3"><Icon name="spinner" size={14} className="animate-spin" /> Looking into it…</p> : null}
+        {entries.map((e, i) => (
+          <Bubble key={i} e={e} elsewhere={reviewElsewhere} onRetry={e.retry && i === entries.length - 1 && !busy ? () => void session.retry() : undefined} />
+        ))}
+        {/* A growing answer is not read out word by word: the whole one is, once it lands. */}
+        {streaming ? (
+          <div aria-live="off">
+            <Bubble e={{ role: 'assistant', text: streaming, local: true }} />
+          </div>
+        ) : null}
+        {/* From the moment the question goes until the answer starts to show; read out once, as it appears. */}
+        {busy && !streaming ? (
+          <p data-testid="ai-thinking" className="flex items-center gap-2 text-[13px] text-ink-2">
+            <Icon name="sparkles" size={16} aria-hidden className="shrink-0 text-teal motion-safe:animate-pulse" />
+            {t('ai.thinking')}
+          </p>
+        ) : null}
         </div>
       </div>
-      {view.unseen ? (
-        <button type="button" onClick={view.toEnd} className="absolute bottom-2 left-1/2 flex h-8 -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-[12px] font-semibold text-ink shadow-md hover:bg-subtle">
+      {unseen ? (
+        <button type="button" onClick={toEnd} className="absolute bottom-2 left-1/2 flex h-8 -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-[12px] font-semibold text-ink shadow-md hover:bg-subtle">
           <Icon name="arrow-down" size={14} /> Jump to latest
         </button>
       ) : null}
@@ -196,7 +167,7 @@ export function AskPanel({
                 aria-checked={local === o.v}
                 title={o.hint}
                 disabled={busy || (!o.v && offline)}
-                onClick={() => setLocalPick(o.v)}
+                onClick={() => set({ localPick: o.v })}
                 className={cx('flex h-7 flex-1 items-center justify-center gap-1.5 rounded-[7px] transition-colors disabled:opacity-50', local === o.v ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink')}
               >
                 <Icon name={o.icon} size={13} /> {o.label}
@@ -206,7 +177,7 @@ export function AskPanel({
         ) : null}
         {tabRef && !local ? (
           <label className="flex items-center gap-2 text-[12px] text-ink-2">
-            <input type="checkbox" checked={useTab} onChange={(e) => setUseTab(e.target.checked)} />
+            <input type="checkbox" checked={useTab} onChange={(e) => set({ useTab: e.target.checked })} />
             <span className="truncate">Use this tab{tabTitle ? `: ${tabTitle}` : ''}</span>
           </label>
         ) : null}
@@ -217,7 +188,7 @@ export function AskPanel({
                 <Icon name="paperclip" size={12} />
                 <span className="max-w-[160px] truncate">{f.name}</span>
                 {f.via === 'drive' ? <span className="text-ink-3">(Drive)</span> : null}
-                <button type="button" aria-label={`Leave out ${f.name}`} onClick={() => setFiles((all) => all.filter((x) => x.ref !== f.ref))}><Icon name="x" size={12} /></button>
+                <button type="button" aria-label={`Leave out ${f.name}`} onClick={() => set((s) => ({ files: s.files.filter((x) => x.ref !== f.ref) }))}><Icon name="x" size={12} /></button>
               </span>
             ))}
           </div>
@@ -233,7 +204,7 @@ export function AskPanel({
           <textarea
             ref={input}
             value={text}
-            onChange={(e) => setText(e.target.value.slice(0, 4000))}
+            onChange={(e) => set({ text: e.target.value.slice(0, 4000) })}
             onKeyDown={onKey}
             rows={1}
             autoFocus={autoFocus}
@@ -243,7 +214,7 @@ export function AskPanel({
             className="bare-focus field-sizing-content max-h-40 min-h-[34px] min-w-0 flex-1 resize-none bg-transparent px-1 py-[7px] text-[13.5px] text-ink outline-none"
           />
           {streaming !== null ? (
-            <button type="button" onClick={() => running.current?.cancel()} className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] border border-line text-ink hover:bg-subtle" aria-label="Stop" title="Stop">
+            <button type="button" onClick={() => session.cancel()} className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] border border-line text-ink hover:bg-subtle" aria-label="Stop" title="Stop">
               <Icon name="stop" size={14} />
             </button>
           ) : null}
@@ -251,27 +222,43 @@ export function AskPanel({
             <Icon name="send" size={16} />
           </button>
         </div>
-        <div className="px-1 text-[11px] text-ink-3">{local ? 'On this computer · nothing is sent · ' : ''}Enter to send · Shift+Enter for a new line</div>
+        <div className="flex items-center gap-2 px-1 text-[11px] text-ink-3">
+          <span className="min-w-0 flex-1">{local ? 'On this computer · nothing is sent · ' : ''}Enter to send · Shift+Enter for a new line</span>
+          {given && entries.length > 0 && !busy ? (
+            <button type="button" onClick={() => session.reset()} className="shrink-0 font-semibold text-ink-2 hover:text-ink">
+              New conversation
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>
   );
 }
 
-function Bubble({ e, elsewhere }: { e: Entry; elsewhere?: () => void }) {
+function Bubble({ e, elsewhere, onRetry }: { e: AskEntry; elsewhere?: () => void; onRetry?: () => void }) {
   if (e.role === 'user') {
     return <p className="ml-8 self-end whitespace-pre-wrap rounded-[12px] bg-primary px-3 py-2 text-[13px] text-white selectable">{e.text}</p>;
   }
   if (e.error) {
-    return <p role="alert" className="flex items-start gap-1.5 rounded-[10px] bg-danger-bg px-3 py-2 text-[12.5px] text-danger"><Icon name="alert" size={15} className="mt-0.5 shrink-0" />{e.text}</p>;
+    return (
+      <div className="space-y-1.5">
+        <p role="alert" className="flex items-start gap-1.5 rounded-[10px] bg-danger-bg px-3 py-2 text-[12.5px] text-danger"><Icon name="alert" size={15} className="mt-0.5 shrink-0" />{e.text}</p>
+        {onRetry ? (
+          <button type="button" onClick={onRetry} className="flex h-8 items-center gap-1.5 rounded-[8px] border border-line px-3 text-[12.5px] font-semibold text-ink hover:bg-subtle">
+            <Icon name="rotate-cw" size={14} /> {t('ai.retry')}
+          </button>
+        ) : null}
+      </div>
+    );
   }
-  const t = e.turn;
-  const records = (t?.sources ?? []).filter((s) => s.kind === 'record');
-  const cards = (t?.pending_actions ?? []) as PendingAction[];
+  const turn = e.turn;
+  const records = (turn?.sources ?? []).filter((s) => s.kind === 'record');
+  const cards = (turn?.pending_actions ?? []) as PendingAction[];
   return (
     <div className="space-y-2">
-      {(t?.tool_runs ?? []).length ? (
+      {(turn?.tool_runs ?? []).length ? (
         <div className="flex flex-wrap gap-1">
-          {t!.tool_runs.map((r, i) => (
+          {turn!.tool_runs.map((r, i) => (
             <span key={i} title={r.error ?? undefined} className={cx('rounded-full px-2 py-0.5 text-[11px]', r.ok ? 'bg-subtle text-ink-2' : 'bg-warning-bg text-[#7A4308]')}>{r.label}</span>
           ))}
         </div>

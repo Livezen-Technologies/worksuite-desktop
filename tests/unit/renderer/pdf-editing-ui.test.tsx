@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { emptyEditState, emptySecurity, type PdfEditState, type PdfSessionView } from '../../../shared/pdf';
+
+// PDF Studio re-renders whole after each answer from the main process: under a full parallel run that can take more
+// than testing-library's default second (seen on "offers the modes…" and "undoes from the title bar…").
+configure({ asyncUtilTimeout: 5000 });
 
 /**
  * PDF Studio's editing in the window (stage D2): the mode switch, the save

@@ -4,7 +4,7 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
-## 1.1.0 — 2026-09-30
+## 1.2.0 — 2026-10-01
 
 **Added**
 
@@ -14,6 +14,16 @@ the root CHANGELOG.md.
 - Profile pictures in Chat (#37): people's current pictures in the conversation list, the conversation's header, beside their messages, in the details, the member lists, the new-conversation picker and @-mentions; the initials (on the colour that name always has) when there is none, it fails to load, or its owner does not show it to you. A changed picture shows without signing out. Groups keep their rounded-square initials. A WhatsApp contact's picture shows when the server sends one
 - A Meet meeting's card in a conversation (#71): the meeting's name (cut short, with the whole of it on hover), who started it and when, Live (with a pulsing dot) or Ended, and one action — **Join** (it shows that it is joining and cannot be pressed twice), **Return to meeting** when this computer is already in it, or **View details** once it has ended (when it started, how long it ran, who was in it, whether it was recorded). A removed meeting has no action. Smaller in the chat drawer
 - The conversation list can be made wider or narrower by dragging its edge, or with the arrow keys once the edge is focused; it stays between 240 px and 560 px, is remembered on this computer, and a double-click (or Enter) puts it back to 300 px (#34)
+
+## 1.1.0 — 2026-10-01
+
+**Added**
+
+- attachments open in a preview over the conversation — pictures with zoom, rotate, full screen and ‹ › through the conversation's (or the Media tab's) pictures; video and sound with their players; CSV as a table (first 1,000 rows); text as text — with the name, type, size, Download and Open in app, loading, error and Try again (#38)
+
+**Changed**
+
+- a PDF still opens in PDF Studio and a Word, Excel or PowerPoint file in a WorkSuite tab; Web Chat files open in the same preview (#38)
 
 ## 1.0.0 — 2026-09-30
 

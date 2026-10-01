@@ -41,7 +41,7 @@ export function defaultPreferences(): Preferences {
     shortcuts: {},
     backgroundServices: { notifications: true, realtime: true },
     webchatRinging: { window: true, duringDnd: 'card', shortcut: true, volume: 80 },
-    ai: { quickAsk: true, shortcut: process.platform === 'darwin' ? 'Alt+Space' : 'Control+Alt+Space', insert: true, dockAtStart: false, language: 'Sinhala' },
+    ai: { quickAsk: true, shortcut: process.platform === 'darwin' ? 'Alt+Space' : 'Control+Alt+Space', insert: true, dockAtStart: false, language: 'Sinhala', display: 'drawer', sound: false },
   };
 }
 
@@ -57,7 +57,9 @@ export class SettingsService {
 
   constructor(private readonly db: Database) {
     const stored = db.getConfig<Partial<Preferences>>('preferences') ?? {};
-    this.prefs = { ...defaultPreferences(), ...stored };
+    const defaults = defaultPreferences();
+    // The AI settings are one object: one saved before a field was added takes that field's default.
+    this.prefs = { ...defaults, ...stored, ai: { ...defaults.ai, ...stored.ai } };
   }
 
   setPolicy(policy: DesktopPolicy | null): void {

@@ -4,7 +4,7 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
-## 1.1.0 — 2026-09-30
+## 1.2.0 — 2026-10-01
 
 **Added**
 
@@ -16,6 +16,18 @@ the root CHANGELOG.md.
 **Fixed**
 
 - The AI Assistant's conversation follows new messages and streaming answers while you are at the end, in both WorkSuite AI and On this computer; it stays where you scrolled up to, with a Jump to latest button when something new arrives below, and follows again when you come back or send a message; loaded images and a resized panel no longer hide the end behind the box, and Quick Ask keeps its box in place (#50)
+
+## 1.1.0 — 2026-09-30
+
+**Added**
+
+- the conversation is kept outside the panel (session.ts): the drawer and the floating widget show the same one, and closing, minimising or switching loses no message, draft, file or answer on its way (#61)
+- New conversation, once there is one (#61)
+- Try again on a failed answer asks the same question once more in its place (#43)
+
+**Changed**
+
+- Thinking… with the sparkle pulsing (a still icon under reduced motion) replaces Looking into it…, from the question until the answer starts to show; a streaming answer is not read out word by word (#43)
 
 ## 1.0.0 — 2026-09-30
 

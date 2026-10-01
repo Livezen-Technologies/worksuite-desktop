@@ -147,6 +147,8 @@ export const preferencesPatchSchema = z
       insert: z.boolean(),
       dockAtStart: z.boolean(),
       language: z.string().regex(/^[A-Za-z ]{2,40}$/),
+      display: z.enum(['drawer', 'widget', 'hidden']),
+      sound: z.boolean(),
     }),
   })
   .partial();
@@ -942,6 +944,8 @@ export interface LockState {
   biometric: 'touch-id' | null;
   /** A PIN is set for this person on this computer. */
   pin: boolean;
+  /** Its number of digits, so the lock screen unlocks on the last one; null without a PIN, or until a PIN set before this was kept is next used. */
+  pinLength: number | null;
   userName: string | null;
   userEmail: string | null;
   lockMinutes: number;

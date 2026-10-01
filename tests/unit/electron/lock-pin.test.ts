@@ -37,6 +37,33 @@ describe('LockPin', () => {
     for (const bad of ['123', '123456789', '12a4', '0000', '1234', '9876']) expect(() => pins.set('1', bad)).toThrow();
   });
 
+  it('knows how many digits the PIN has, for the lock screen, and never the digits', () => {
+    const { db, rows } = fakeDb();
+    const pins = new LockPin(db, () => vault);
+    expect(pins.length('7')).toBeNull();
+    expect(pins.length(null)).toBeNull();
+    pins.set('7', '482159');
+    expect(pins.length('7')).toBe(6);
+    expect([...rows.values()].join('')).not.toContain('482159');
+    pins.clear('7');
+    expect(pins.length('7')).toBeNull();
+  });
+
+  it('learns the length of a PIN set before it was kept at its next right use — not a wrong one', () => {
+    const { db } = fakeDb();
+    const pins = new LockPin(db, () => vault);
+    pins.set('7', '4821');
+    // As an older version stored it: no length.
+    const { length: _, ...legacy } = vault.decrypt<Record<string, unknown>>(db.getConfig<string>('lock_pin:7')!)!;
+    db.setConfig('lock_pin:7', vault.encrypt(legacy));
+    expect(pins.length('7')).toBeNull();
+    expect(pins.verify('7', '48213')).toBe(false);
+    expect(pins.length('7')).toBeNull();
+    expect(pins.verify('7', '4821')).toBe(true);
+    expect(pins.length('7')).toBe(4);
+    expect(pins.verify('7', '4821')).toBe(true);
+  });
+
   it('is unreadable under another key', () => {
     const { db } = fakeDb();
     new LockPin(db, () => vault).set('7', '4821');

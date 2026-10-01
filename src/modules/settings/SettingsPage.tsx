@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { categoryVisible } from '@shared/access';
-import { QUICK_ASK_SHORTCUTS, type Preferences } from '@shared/types';
+import { QUICK_ASK_SHORTCUTS, type AiDisplay, type Preferences } from '@shared/types';
 import { useCanOpen, useVisibleIds } from '../../core/access';
 import { app, isLocked, updatePrefs } from '../../core/app-state';
 import { call, errorMessage, isMac } from '../../core/bridge';
@@ -389,6 +389,14 @@ function WebchatRingingPrefs({ prefs }: { prefs: Preferences }) {
   );
 }
 
+const WEBSITE = 'https://worksuiteone.com/';
+
+const DISPLAY_HINT: Record<AiDisplay, string> = {
+  drawer: 'The AI button in the header opens the assistant beside your tabs.',
+  widget: 'An Ask AI button in the bottom-right corner opens the assistant over your work. Minimize it and the conversation keeps going.',
+  hidden: 'No button anywhere. The keyboard shortcut and the command palette still open it.',
+};
+
 /**
  * Settings › AI Assistant (AI Assistant — Web + Desktop UIs, page 3): how the
  * assistant works on this computer. It sees only what it is given, and never
@@ -407,6 +415,21 @@ function AiSection({ prefs }: { prefs: Preferences }) {
       {writer.isError || (writer.data && !writer.data.available) ? (
         <p className="mb-2 rounded-[10px] bg-warning-bg px-3 py-2 text-[13px] text-[#7A4308] dark:text-warning">{writer.isError ? writerProblem(writer.error) : 'No AI connection is configured for this workspace yet.'}</p>
       ) : null}
+      <Row label="Display mode" hint={DISPLAY_HINT[a.display]}>
+        <Select<AiDisplay>
+          label="Display mode"
+          value={a.display}
+          options={[
+            { value: 'drawer', label: 'Header icon & drawer' },
+            { value: 'widget', label: 'Floating chat widget' },
+            { value: 'hidden', label: 'Hidden' },
+          ]}
+          onValueChange={(v) => set({ display: v })}
+        />
+      </Row>
+      <Row label="Sound for new answers" hint="A short chime when an answer arrives while the assistant is closed or minimized.">
+        <Switch label="Sound for new answers" checked={a.sound} onChange={(v) => set({ sound: v })} />
+      </Row>
       <Row label="Quick Ask" hint="Opens over any app with the text you have selected there. The selection is read only when you press the shortcut.">
         <Switch label="Quick Ask" checked={a.quickAsk} onChange={(v) => set({ quickAsk: v })} />
       </Row>
@@ -423,9 +446,11 @@ function AiSection({ prefs }: { prefs: Preferences }) {
       <Row label="Insert results into other apps" hint="Pastes only when you click Insert, into the app Quick Ask was opened over.">
         <Switch label="Insert results into other apps" checked={a.insert} onChange={(v) => set({ insert: v })} />
       </Row>
-      <Row label="Open the AI dock at start-up" hint="Show the assistant beside every tab.">
-        <Switch label="Open the AI dock at start-up" checked={a.dockAtStart} onChange={(v) => set({ dockAtStart: v })} />
-      </Row>
+      {a.display !== 'hidden' ? (
+        <Row label="Open the AI Assistant at start-up" hint={a.display === 'widget' ? 'Open the floating widget when WorkSuite starts.' : 'Show the assistant beside every tab.'}>
+          <Switch label="Open the AI Assistant at start-up" checked={a.dockAtStart} onChange={(v) => set({ dockAtStart: v })} />
+        </Row>
+      ) : null}
       <Row label="Language for translations" hint="Where Translate goes unless you choose another.">
         <Select label="Language for translations" value={a.language} options={languages.map((l) => ({ value: l, label: l }))} onValueChange={(v) => set({ language: v })} />
       </Row>
@@ -1072,7 +1097,7 @@ function Monitoring() {
   );
 }
 
-function About() {
+export function About() {
   const { navigate } = useTab();
   const info = useStore(app, (s) => s.info);
   const u = useStore(app, (s) => s.update);
@@ -1129,7 +1154,25 @@ function About() {
           Open Diagnostics
         </Button>
       </Row>
-      <p className="mt-6 text-[12px] text-ink-3">© Livezen Technologies. WorkSuite Desktop includes open-source software; licences are listed in the application's resources.</p>
+      {/* Who makes WorkSuite (#48): the year is this year's, and the website opens in the default browser. */}
+      <div className="mt-6 space-y-1 text-[13px] leading-[1.5] break-words text-ink-2">
+        <p>WorkSuite is owned and developed by Livezen Technologies LLC.</p>
+        <p>© {new Date().getFullYear()} Livezen Technologies LLC. All rights reserved.</p>
+        <p>
+          Website:{' '}
+          <a
+            href={WEBSITE}
+            onClick={(e) => {
+              e.preventDefault();
+              void call('app:openExternal', { url: WEBSITE }).catch(() => undefined);
+            }}
+            className="font-semibold text-primary hover:underline"
+          >
+            worksuiteone.com
+          </a>
+        </p>
+      </div>
+      <p className="mt-4 text-[12px] text-ink-3">WorkSuite Desktop includes open-source software; licences are listed in the application's resources.</p>
     </>
   );
 }
