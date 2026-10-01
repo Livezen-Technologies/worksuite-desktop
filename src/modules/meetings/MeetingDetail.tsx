@@ -11,6 +11,8 @@ import { toast } from '../../core/toasts';
 import { Button, Chip, Empty, ErrorNote, FileBadge, Modal, Spinner, cx } from '../../components/ui';
 import { useNow } from '../calls/parts';
 import { openMeeting } from '../meet/api';
+import { RecordingStatusView } from '../meet/RecordingStatus';
+import { serverRecordingStatus } from '@shared/recording-status';
 import type { Stroke } from '../meet/session';
 import { providerLabel, RSVP_LABEL, typeLabel, type AgendaItem, type Detail, type Person, type Rsvp } from './api';
 import { Select } from '../../components/Select';
@@ -411,16 +413,17 @@ function FilesTab({ d, act }: { d: Detail; act: Act }) {
         <div className="flex flex-col gap-1.5 rounded-[10px] border border-line p-2.5">
           <b className="text-ink">Your recordings</b>
           {d.recordings.map((r) => (
-            <div key={r.id} className="flex items-center gap-2 text-[12.5px]">
-              <span className="min-w-0 flex-1 truncate text-ink">{r.title}</span>
-              <span className={cx('font-semibold', r.status === 'ready' ? 'text-success' : r.status === 'failed' ? 'text-danger' : 'text-ink-3')} title={r.error ?? undefined}>
-                {{ recording: 'Recording…', processing: 'Processing…', uploading: 'Uploading…', ready: 'Ready', failed: 'Failed' }[r.status] ?? r.status}
-              </span>
-              {r.drive_file_id ? (
-                <button type="button" onClick={() => navigate(`/files?file=${r.drive_file_id}`)} className="font-semibold text-primary hover:underline">
-                  Open in Drive
-                </button>
-              ) : null}
+            // The same status, words and actions as in Meet (worksuite-desktop#89).
+            <div key={r.id} className="flex flex-col gap-1 text-[12.5px]">
+              <span className="min-w-0 truncate text-ink">{r.title}</span>
+              <RecordingStatusView
+                compact
+                status={serverRecordingStatus(r)}
+                on={{
+                  ...(r.drive_file_id ? { play: () => navigate(`/files?file=${r.drive_file_id}&play=1`), openInDrive: () => navigate(`/files?file=${r.drive_file_id}`) } : {}),
+                  retry: () => void act(() => apiPost(`/api/meet/recordings/${r.id}/retry`), 'Trying again.'),
+                }}
+              />
             </div>
           ))}
           <span className="text-[11.5px] text-ink-3">In your Drive, shared with nobody until you share them.</span>

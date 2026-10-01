@@ -442,6 +442,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('meetrec:retry', (input) => ctx.meetRecorder.retry(input.id));
   router.handle('meetrec:discard', (input) => ctx.meetRecorder.discard(input.id));
   router.handle('meetrec:reveal', (input) => ctx.meetRecorder.reveal(input.id));
+  router.handle('meetrec:open', (input) => ctx.meetRecorder.openLocal(input.id));
+  router.handle('meetrec:downloads', () => ctx.meetRecorder.downloads());
   router.handle('meetrec:chooseFolder', async (_i, c) => {
     const w = winOf(c.sender);
     const opts: Electron.OpenDialogOptions = { title: 'Choose where meeting recordings are saved', defaultPath: ctx.settings.effective().meetRecording.localFolder, properties: ['openDirectory', 'createDirectory'] };
@@ -572,7 +574,11 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
           : input.version
             ? `/api/files/${input.version.fileId}/versions/${input.version.versionId}/download`
           : `/api/mail/messages/${input.mail!.uid}/attachments/${encodeURIComponent(input.mail!.ref)}?${new URLSearchParams({ folder: input.mail!.folder, dl: '1', ...(input.mail!.mailbox ? { mailbox: input.mail!.mailbox } : {}) })}`;
-    return download(path, input.fileId ?? null);
+    const t = await download(path, input.fileId ?? null);
+    // A Meet recording's download is shown on the recording itself, also after a restart (worksuite-desktop#89).
+    const rec = input.recording ?? input.forRecording;
+    if (rec) ctx.meetRecorder.rememberDownload(rec, t.id);
+    return t;
   });
   // Hotel PMS files (shared/pms-files.ts): the address built here from what the page names; the organization's download
   // policy checked here too, not only by the channel and the screen, so a page cannot save around it.

@@ -437,6 +437,23 @@ export default function FilesPage(_props: ModuleProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ask]);
 
+  // /files?file=<id>: a file named from elsewhere — a meeting recording, a notification — shown in its folder, and
+  // with &play=1 opened as well, in the player for a video (worksuite-desktop#89).
+  const fileParam = query.get('file');
+  const playParam = query.get('play') === '1';
+  const openedFile = useRef<string | null>(null);
+  useEffect(() => {
+    if (!fileParam || !/^\d+$/.test(fileParam) || openedFile.current === fileParam) return;
+    openedFile.current = fileParam;
+    void apiGet<DriveFile>(`/api/files/${fileParam}`)
+      .then((f) => {
+        onPlace(f.folder_id ? { view: 'folder', folder: f.folder_id } : { view: 'home', folder: null });
+        if (playParam) d.open({ type: 'file', f });
+      })
+      .catch((e) => toast('error', errorMessage(e)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileParam]);
+
   const view = place.view;
   const listView = !PAGES.includes(view);
   // /files?view=devices&sync=<folder id>: "Sync to this computer" from a folder's menu or details.

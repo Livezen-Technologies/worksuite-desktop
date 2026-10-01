@@ -98,6 +98,8 @@ export const INVOKE_CHANNELS = [
   'meetrec:discard',
   'meetrec:reveal',
   'meetrec:chooseFolder',
+  'meetrec:open',
+  'meetrec:downloads',
   'stt:status',
   'stt:chooseModel',
   'stt:removeModel',

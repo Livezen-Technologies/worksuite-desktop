@@ -492,6 +492,10 @@ export interface Transfer {
   retryAt?: string | null;
   /** Times it has been tried again by itself after a temporary failure. */
   attempts?: number;
+  /** While it runs: when bytes last moved, so one that has stopped moving can be told from one that is slow (worksuite-desktop#89). */
+  movedAt?: string | null;
+  /** Waiting in the queue because the connection is lost, or a metered connection is set to wait. */
+  held?: 'connection' | 'metered' | null;
 }
 
 export interface OfflineMutation {
@@ -991,6 +995,10 @@ export interface LocalRecording {
   deleteAfter: string | null;
   /** Recovered after WorkSuite closed while it was recording. */
   recovered: boolean;
+  /** When it entered the step it is in (worksuite-desktop#89): a step that goes on far too long is said to be stuck. */
+  stepAt?: string | null;
+  /** Its upload in the transfer queue, while there is one: its progress, Pause, Resume and Cancel are the queue's. */
+  transferId?: string | null;
 }
 
 /** What a piece of speech said, when, and whether it was unclear (worksuite-desktop#81). */

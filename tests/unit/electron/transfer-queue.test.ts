@@ -218,8 +218,13 @@ describe('the transfer queue (worksuite-desktop#94)', () => {
     q.t.setOnline(false);
     await q.add(1);
     expect(q.state()['f1.txt']).toBe('queued');
+    // Says what it waits for (worksuite-desktop#89).
+    expect(q.byName('f1.txt').held).toBe('connection');
     q.t.setOnline(true);
     expect(q.state()['f1.txt']).toBe('running');
+    expect(q.byName('f1.txt').held).toBeNull();
+    // Running: when bytes last moved, so a run that has stopped moving can be told from a slow one.
+    expect(Date.parse(q.byName('f1.txt').movedAt!)).toBeGreaterThan(Date.now() - 5000);
   });
 
   it('with auto-resume off, a lost connection pauses transfers until the person resumes them', async () => {

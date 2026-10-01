@@ -24,6 +24,18 @@ function webmHead(): Buffer {
   return Buffer.concat([ebml, segment, info, tracks, cluster]);
 }
 
+/** A box of an MP4: its size, its type, its body. */
+function box(type: string, body: string): Buffer {
+  const b = Buffer.alloc(8 + body.length);
+  b.writeUInt32BE(8 + body.length, 0);
+  b.write(type, 4, 'latin1');
+  b.write(body, 8, 'latin1');
+  return b;
+}
+
+/** A fragmented MP4 as Chromium's MediaRecorder writes it: header, index, then fragments of pictures. */
+const MP4 = Buffer.concat([box('ftyp', 'isom0000'), box('moov', 'm'.repeat(16)), box('moof', 'f'), box('mdat', 'xyz')]);
+
 describe('giving a WebM recording its length', () => {
   it('adds a Duration to the Info, growing it, and leaves the frames as they were', () => {
     const head = webmHead();
@@ -57,6 +69,8 @@ describe('recording a meeting on this computer', () => {
   let uploaded: Map<string, (o: { fileId: string | null } | { error: string }) => void>;
   let transferState: Record<string, { state: string; fileId: string | null }>;
   const http = { post: vi.fn() };
+  const notify = vi.fn();
+  const openPath = vi.fn(async (_p: string) => '');
 
   const make = (free: number | null = 10 * 1024 ** 3) =>
     new MeetRecorder({
@@ -75,6 +89,8 @@ describe('recording a meeting on this computer', () => {
       prefs: () => prefs,
       userId: () => '7',
       freeSpace: async () => free,
+      notify,
+      openPath,
     });
 
   beforeEach(async () => {
@@ -83,9 +99,11 @@ describe('recording a meeting on this computer', () => {
     prefs = { method: 'local', quality: '720p', layout: 'grid', folder: 'Meeting Recordings', localFolder: dir, keepLocal: 'delete' };
     uploaded = new Map();
     transferState = {};
+    notify.mockReset();
+    openPath.mockClear();
     http.post.mockReset().mockImplementation(async (path: string, body?: { action?: string }) => {
       if (path === '/api/meet/recordings/folder') return { id: 44 };
-      if (body?.action === 'ready') return { size: 5 };
+      if (body?.action === 'ready') return { size: MP4.length };
       return {};
     });
   });
@@ -101,31 +119,34 @@ describe('recording a meeting on this computer', () => {
     const rec = make();
     const { id } = await rec.start({ meeting: 'm-uuid-123', title: 'Board', layout: 'grid', mime: 'video/mp4' });
     expect(http.post).toHaveBeenCalledWith('/api/meet/m-uuid-123/recordings/local', expect.objectContaining({ client_id: id, action: 'start' }));
-    await rec.chunk(id, new Uint8Array([1, 2, 3]));
-    await rec.chunk(id, new Uint8Array([4, 5]));
+    await rec.chunk(id, new Uint8Array(MP4.subarray(0, 30)));
+    await rec.chunk(id, new Uint8Array(MP4.subarray(30)));
     const part = rec.list()[0]!;
     expect(part.state).toBe('recording');
-    expect(part.bytes).toBe(5);
+    expect(part.bytes).toBe(MP4.length);
     await rec.stop(id, 60_000);
     await vi.waitFor(() => expect(uploaded.size).toBe(1));
     const view = rec.list()[0]!;
     expect(view.state).toBe('uploading');
     expect(view.fileName).toMatch(/^Board .*\.mp4$/);
     const local = join(dir, view.fileName!);
-    expect(await readFile(local)).toEqual(Buffer.from([1, 2, 3, 4, 5]));
+    expect(await readFile(local)).toEqual(MP4);
+    expect(view.transferId).toBe('t1');
 
     uploaded.get('t1')!({ fileId: '901' });
     await vi.waitFor(() => expect(rec.list()[0]!.state).toBe('ready'));
     expect(http.post).toHaveBeenCalledWith('/api/meet/m-uuid-123/recordings/local', expect.objectContaining({ action: 'ready', file_id: 901 }));
     expect(rec.list()[0]!.driveFileId).toBe(901);
     expect(existsSync(local)).toBe(false);
+    // Ready to play, and the person is told so.
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ id, state: 'ready', driveFileId: 901 }), 'ready');
   });
 
   it('keeps the local copy when Drive does not have the same file, and says so', async () => {
     http.post.mockImplementation(async (path: string, body?: { action?: string }) => (path.endsWith('/folder') ? { id: 44 } : body?.action === 'ready' ? { size: 999 } : {}));
     const rec = make();
     const { id } = await rec.start({ meeting: 'm-uuid-123', title: 'Board', layout: 'grid', mime: 'video/mp4' });
-    await rec.chunk(id, new Uint8Array([1, 2, 3]));
+    await rec.chunk(id, new Uint8Array(MP4));
     await rec.stop(id, 1000);
     await vi.waitFor(() => expect(uploaded.size).toBe(1));
     uploaded.get('t1')!({ fileId: '901' });
@@ -145,7 +166,7 @@ describe('recording a meeting on this computer', () => {
   it('a failed upload is tried again as the same upload, never a second file', async () => {
     const rec = make();
     const { id } = await rec.start({ meeting: 'm-uuid-123', title: 'Board', layout: 'grid', mime: 'video/mp4' });
-    await rec.chunk(id, new Uint8Array([1]));
+    await rec.chunk(id, new Uint8Array(MP4));
     await rec.stop(id, 1000);
     await vi.waitFor(() => expect(uploaded.size).toBe(1));
     transferState.t1!.state = 'failed';
@@ -160,7 +181,9 @@ describe('recording a meeting on this computer', () => {
   it('after a crash mid-recording, finishes what reached the disk and uploads it', async () => {
     const rec = make();
     const { id } = await rec.start({ meeting: 'm-uuid-123', title: 'Board', layout: 'grid', mime: 'video/mp4' });
-    await rec.chunk(id, new Uint8Array([9, 9]));
+    // The fragment being written when WorkSuite closed is cut short: the whole ones before it still play.
+    const cut = Buffer.concat([MP4, box('moof', 'ffff').subarray(0, 6)]);
+    await rec.chunk(id, new Uint8Array(cut));
     // WorkSuite closes without stopping; it opens again.
     const after = make();
     await after.recover();
@@ -168,7 +191,7 @@ describe('recording a meeting on this computer', () => {
     const view = after.list()[0]!;
     expect(view.recovered).toBe(true);
     expect(view.state).toBe('uploading');
-    expect((await stat(join(dir, view.fileName!))).size).toBe(2);
+    expect((await stat(join(dir, view.fileName!))).size).toBe(cut.length);
     expect(after.pending()).toEqual({ recording: 0, working: 1 });
   });
 
@@ -176,7 +199,7 @@ describe('recording a meeting on this computer', () => {
     prefs.keepLocal = '7';
     const rec = make();
     const { id } = await rec.start({ meeting: 'm-uuid-123', title: 'Board', layout: 'grid', mime: 'video/mp4' });
-    await rec.chunk(id, new Uint8Array([1, 2, 3, 4, 5]));
+    await rec.chunk(id, new Uint8Array(MP4));
     await rec.stop(id, 1000);
     await vi.waitFor(() => expect(uploaded.size).toBe(1));
     uploaded.get('t1')!({ fileId: '5' });
@@ -193,5 +216,60 @@ describe('recording a meeting on this computer', () => {
     const { id } = await rec.start({ meeting: 'm-uuid-123', title: 'Board', layout: 'grid', mime: 'video/webm' });
     await expect(rec.discard(id)).rejects.toThrow(/Wait until/);
     await writeFile(join(dir, 'x'), 'x');
+  });
+
+  it('never uploads a file that is not a whole video: it fails, says why, keeps the file and tells the person', async () => {
+    const rec = make();
+    const { id } = await rec.start({ meeting: 'm-uuid-123', title: 'Board', layout: 'grid', mime: 'video/mp4' });
+    await rec.chunk(id, new Uint8Array([1, 2, 3, 4, 5]));
+    await rec.stop(id, 1000);
+    await vi.waitFor(() => expect(rec.list()[0]!.state).toBe('failed'));
+    const view = rec.list()[0]!;
+    expect(view.failedAt).toBe('processing');
+    expect(view.error).toMatch(/cannot be played|not a video/);
+    expect(uploaded.size).toBe(0);
+    expect(existsSync(join(dir, view.fileName!))).toBe(true);
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ id, state: 'failed' }), 'failed');
+  });
+
+  it('a cancelled upload keeps the recording on this computer, quietly, and Try again uploads it anew', async () => {
+    const rec = make();
+    const { id } = await rec.start({ meeting: 'm-uuid-123', title: 'Board', layout: 'grid', mime: 'video/mp4' });
+    await rec.chunk(id, new Uint8Array(MP4));
+    await rec.stop(id, 1000);
+    await vi.waitFor(() => expect(uploaded.size).toBe(1));
+    transferState.t1!.state = 'cancelled';
+    uploaded.get('t1')!({ error: 'The upload was cancelled.' });
+    await vi.waitFor(() => expect(rec.list()[0]!.state).toBe('failed'));
+    const view = rec.list()[0]!;
+    expect(view.error).toMatch(/cancelled\. The recording is kept on this computer/);
+    expect(existsSync(join(dir, view.fileName!))).toBe(true);
+    expect(notify).not.toHaveBeenCalled();
+    await rec.retry(id);
+    await vi.waitFor(() => expect(uploaded.size).toBe(2));
+  });
+
+  it('keeps when each step began, and plays the finished copy here', async () => {
+    const rec = make();
+    const { id } = await rec.start({ meeting: 'm-uuid-123', title: 'Board', layout: 'grid', mime: 'video/mp4' });
+    expect(rec.list()[0]!.stepAt).toBeTruthy();
+    await expect(rec.openLocal(id)).rejects.toThrow(/no finished copy/);
+    await rec.chunk(id, new Uint8Array(MP4));
+    const before = rec.list()[0]!.stepAt!;
+    await new Promise((r) => setTimeout(r, 5));
+    await rec.stop(id, 1000);
+    await vi.waitFor(() => expect(uploaded.size).toBe(1));
+    expect(Date.parse(rec.list()[0]!.stepAt!)).toBeGreaterThan(Date.parse(before));
+    await expect(rec.openLocal(id)).resolves.toBe(true);
+    expect(openPath).toHaveBeenCalledWith(join(dir, rec.list()[0]!.fileName!));
+  });
+
+  it("remembers which transfer has each recording's download, after a restart too", () => {
+    const rec = make();
+    expect(rec.downloads()).toEqual({});
+    rec.rememberDownload(5, 'dl-1');
+    rec.rememberDownload(6, 'dl-2');
+    rec.rememberDownload(5, 'dl-3');
+    expect(make().downloads()).toEqual({ '5': 'dl-3', '6': 'dl-2' });
   });
 });

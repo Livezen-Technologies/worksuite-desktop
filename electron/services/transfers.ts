@@ -104,6 +104,8 @@ interface Live {
   meta: Meta;
   abort: AbortController | null;
   samples: Array<{ at: number; bytes: number }>;
+  /** When bytes last moved (or it started): a run that has stopped moving is told from a slow one. */
+  movedAt?: number;
 }
 
 /** A short-lived download grant the server minted for one file (`/d/{token}`, e.g. a task's attachment). */
@@ -351,6 +353,8 @@ export class TransferManager {
           this.pauseLive(l, 'The connection was lost. Resume to continue.');
         }
       }
+      // What waits in the queue now waits for the connection, and says so.
+      this.emit();
       return;
     }
     if (this.cfg.autoResume) {
@@ -361,6 +365,7 @@ export class TransferManager {
       }
     }
     this.pump();
+    this.emit();
   }
 
   /** The connection is metered (or no longer): Drive › Settings says whether to carry on, go one at a time, or wait. */
@@ -382,7 +387,15 @@ export class TransferManager {
 
   private view(l: Live): Transfer {
     const at = this.queue.indexOf(l.t.id);
-    return { ...l.t, position: at >= 0 ? at + 1 : null, retryAt: l.meta.retryAt ?? null, attempts: l.meta.attempts ?? 0 };
+    const held = l.t.state === 'queued' ? (this.offline ? 'connection' : this.metered && this.cfg.metered === 'pause' ? 'metered' : null) : null;
+    return {
+      ...l.t,
+      position: at >= 0 ? at + 1 : null,
+      retryAt: l.meta.retryAt ?? null,
+      attempts: l.meta.attempts ?? 0,
+      movedAt: l.t.state === 'running' && l.movedAt ? new Date(l.movedAt).toISOString() : null,
+      held,
+    };
   }
 
   list(): Transfer[] {
@@ -458,8 +471,9 @@ export class TransferManager {
   }
 
   private progress(l: Live, bytes: number): void {
-    l.t.bytes = bytes;
     const now = Date.now();
+    if (bytes !== l.t.bytes) l.movedAt = now;
+    l.t.bytes = bytes;
     l.samples.push({ at: now, bytes });
     while (l.samples.length > 2 && now - l.samples[0]!.at > 3000) l.samples.shift();
     const first = l.samples[0]!;
@@ -629,6 +643,7 @@ export class TransferManager {
     l.t.error = null;
     l.t.speed = 0;
     l.samples = [];
+    l.movedAt = Date.now();
     l.meta.retryAt = null;
     this.persist(l);
     this.emit();

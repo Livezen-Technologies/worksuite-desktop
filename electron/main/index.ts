@@ -400,6 +400,17 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     transfers,
     prefs: () => settings.effective().meetRecording,
     userId: () => (sessionCtl.isReady() ? sessionCtl.userId() : null),
+    // The server tells the owner about cloud recordings; one made here is told from here (worksuite-desktop#89).
+    notify: (r, how) =>
+      notifications.notify({
+        id: `meetrec:${r.id}:${how}`,
+        module: 'meet',
+        title: how === 'ready' ? 'Your recording is ready to play' : 'Your recording could not be finished',
+        body: how === 'ready' ? `${r.title} is in your Drive.` : `${r.title}: ${r.error ?? 'it could not be finished.'}`,
+        sender: null,
+        link: how === 'ready' && r.driveFileId ? `/files?file=${r.driveFileId}&play=1` : '/meet',
+        critical: false,
+      }),
   });
   meetRecorder.onChanged = (list) => broadcast('meetrec:changed', list);
   // Speech to text on this computer (worksuite-desktop#81): whisper.cpp in a hidden page, with the person's model.

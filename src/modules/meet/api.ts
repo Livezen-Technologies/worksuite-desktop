@@ -154,6 +154,10 @@ export interface Recording {
   drive_file_id?: number | null;
   duration?: number | null;
   meeting_uuid?: string | null;
+  /** How the step it is in is going (worksuite-desktop#89): stuck for far too long, with what to do; whole and in Drive. */
+  stalled?: boolean;
+  guidance?: string | null;
+  playable?: boolean;
 }
 
 const UUID = /^[A-Za-z0-9-]{8,64}$/;

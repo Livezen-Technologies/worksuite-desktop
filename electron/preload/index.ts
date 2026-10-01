@@ -166,6 +166,8 @@ const api = {
     discard: call('meetrec:discard'),
     reveal: call('meetrec:reveal'),
     chooseFolder: call('meetrec:chooseFolder'),
+    open: call('meetrec:open'),
+    downloads: call('meetrec:downloads'),
   },
   stt: {
     status: call('stt:status'),
