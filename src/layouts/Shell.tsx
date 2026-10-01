@@ -8,10 +8,11 @@ import { noteRecentApp } from '../core/recent-apps';
 import { useStore } from '../core/store';
 import { activateIndex, activeTab, closeTab, closeTabsForApps, detachTab, dockSide, insertTab, navigate, openTab, resetTabs, restoreClosed, restoreTabs, suspendIdle, tabsStore, undockSide } from '../core/tabs';
 import { toast } from '../core/toasts';
-import { closeOverlay, minimiseChatDrawer, openChatDrawer, openOverlay, toggleDock, ui } from '../core/ui';
+import { aiWidget, closeOverlay, minimiseChatDrawer, openAssistant, openChatDrawer, openOverlay, toggleAssistant, toggleDock, ui, useAiDisplay } from '../core/ui';
 import { allowedModules, moduleFor } from '../modules/registry';
 import { PanelBoundary } from '../app/Boundaries';
-import { AiDock, askWorkSuite, makeTask, openAiChanges, openAiDockWith } from '../app/overlays/AiDock';
+import { AiDock, askWorkSuite, makeTask, openAiChanges, openAiDockWith, useAssistantAlerts, useAssistantFollowsDisplay } from '../app/overlays/AiDock';
+import { AiWidget } from '../app/overlays/AiWidget';
 import { Launcher } from '../app/overlays/Launcher';
 import { NetworkPopover, NotificationCenter, ProfileMenu, TransferCenter } from '../app/overlays/Popovers';
 import { OrgSwitcher } from '../app/overlays/OrgSwitcher';
@@ -41,9 +42,13 @@ export function Shell() {
   const restored = useRef(false);
   const knownApps = useRef<Set<string> | null>(null);
 
-  // Settings › AI Assistant: the dock beside every tab from the start.
+  // Settings › AI Assistant: the assistant open from the start, where the person keeps it (#61).
+  const aiDisplay = useAiDisplay();
+  useAssistantFollowsDisplay();
+  useAssistantAlerts();
   useEffect(() => {
-    if (app.get().prefs?.ai?.dockAtStart && ui.get().dock === null) ui.set({ dock: 'ai' });
+    const ai = app.get().prefs?.ai;
+    if (ai?.dockAtStart && ai.display !== 'hidden' && ui.get().dock === null) openAssistant();
   }, []);
 
   // Tab restore at start (FR-NAV-04) — only apps the user can still open.
@@ -73,7 +78,10 @@ export function Shell() {
       const name = moduleFor(id)?.manifest.name ?? id;
       toast('warning', `${name} is no longer available to you.`);
     }
-    if (ui.get().dock === 'ai' && !canOpen('ai')) toggleDock('ai');
+    if (!canOpen('ai')) {
+      if (ui.get().dock === 'ai') toggleDock('ai');
+      aiWidget.set({ open: false });
+    }
   }, [visible]);
 
   // Shell commands (FR-SRCH-03) and shortcuts (FR-SRCH-04).
@@ -99,7 +107,7 @@ export function Shell() {
       registerCommand({ id: 'settings', label: 'Settings', group: 'Navigate', run: () => navigate('/settings') }),
       registerCommand({ id: 'account', label: 'My account', group: 'Navigate', keywords: 'profile picture password two-factor passkey sessions', run: () => navigate('/account/profile') }),
       registerCommand({ id: 'account-security', label: 'Change my password', group: 'Navigate', keywords: 'security two-factor 2fa passkey sessions sign out', run: () => navigate('/account/security') }),
-      registerCommand({ id: 'ai', label: 'Open AI Assistant', group: 'Shell', run: () => toggleDock('ai'), when: () => canOpen('ai') }),
+      registerCommand({ id: 'ai', label: 'Open AI Assistant', group: 'Shell', run: () => toggleAssistant(), when: () => canOpen('ai') }),
       registerCommand({ id: 'switch-org', label: 'Switch organization', group: 'Shell', run: () => openOverlay('org') }),
       registerCommand({ id: 'lock', label: 'Lock WorkSuite', group: 'Shell', run: () => void call('security:lock') }),
       registerCommand({ id: 'help', label: 'Help & Diagnostics', group: 'Navigate', run: () => navigate('/diagnostics') }),
@@ -170,10 +178,10 @@ export function Shell() {
         else if (h.to === 'search') askWorkSuite(h.text);
         else if (h.to === 'changes') {
           openAiChanges();
-          ui.set({ dock: 'ai' });
+          openAssistant();
         } else {
           openAiDockWith(h.text, h.result);
-          ui.set({ dock: 'ai' });
+          openAssistant();
         }
       }),
       on<NavigateRequest>('navigate', (req) => {
@@ -241,8 +249,16 @@ export function Shell() {
           <TabStrip />
           {hasChat ? <RingingBar tone={!ringWindow} /> : null}
           <div className="relative flex min-h-0 flex-1">
-            <Workspace />
-            {dock === 'ai' && hasAi ? (
+            {/* The floating AI widget keeps inside the workspace: never over the sidebar, the tabs, the status bar or a drawer. */}
+            <div className="relative flex min-h-0 min-w-0 flex-1">
+              <Workspace />
+              {hasAi ? (
+                <PanelBoundary name="The AI Assistant" onClose={() => aiWidget.set({ open: false })} floating>
+                  <AiWidget />
+                </PanelBoundary>
+              ) : null}
+            </div>
+            {dock === 'ai' && hasAi && aiDisplay !== 'widget' ? (
               <PanelBoundary name="The AI Assistant" onClose={() => toggleDock('ai')}>
                 <AiDock />
               </PanelBoundary>

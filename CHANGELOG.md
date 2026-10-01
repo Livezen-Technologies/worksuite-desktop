@@ -5,6 +5,93 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-01 — Drive Home: less empty space, easier to find things
+
+**Changed**
+
+- **One compact header** with search, **New** and **Upload**. The banner that repeated Upload and New folder is gone.
+- **Continue working and Recently opened** fit the number of files. Up to three show as compact rows, and more as
+  tiles. Each shows six at most, with See all for the rest. Recently opened says when you opened a file, not when it
+  last changed.
+- **Shared by link** lists each file once, even with several links, and keeps two files with the same name apart.
+  Each file says who can open it (anybody with the link, with the password, or named people), and has **Copy link**
+  and **Manage**.
+- **Starred folders** are compact cards, six at most.
+- **The Drive sidebar's filters** read **Documents**, **Media and other files** and **By date**. Hover over one for
+  its full list. The storage and sync lines no longer get cut off.
+- **Narrow windows:** the page fits without clipping. The header wraps, and Starred folders and Shared by link stack.
+
+**Added**
+
+- **Downloads in progress and leftovers are left out:** `.part` and `.crdownload` downloads, temporary and lock
+  files (`~$…`, `.~lock…`, `.tmp`) and system files (`.DS_Store`, `Thumbs.db`) no longer appear in Home's sections.
+- **No more blank cards:** a file without a picture shows its kind's icon over its type.
+- **A ⋯ button on every Home file** opens its actions (preview, share, download, star) and **Open containing
+  folder**, from the keyboard as well as by right-clicking.
+- **While Home loads**, each section shows its shape. Each one says when it's empty, and an error offers Try again.
+
+---
+
+## 2026-10-01 — Chat attachments open in a preview
+
+**Added**
+
+- **Clicking an attachment in Chat opens it over the conversation**, in a message, in the Details panel's Media,
+  Files and Audio tabs, and in Web Chat:
+  - **Pictures:** zoom (−, +, Fit), rotate, full screen, and ‹ › (or ← →) through the conversation's pictures, or the
+    Media tab's.
+  - **Video and sound:** play, seek and volume.
+  - **CSV:** a table, the first 1,000 rows.
+  - **Text files:** shown as text, readable and scrollable.
+  - **Everything shows** the file's name, type and size, with **Download** (saved, not opened) and **Open in app**.
+    A file with no preview, or larger than 2 MB for CSV and text, offers those two instead.
+  - **Loading, errors and retry:** each preview shows that it's loading, says what went wrong (including "You no
+    longer have access to this file."), and offers Try again.
+  - **Closing** (Esc, or Back) returns to the same place in the conversation, on the attachment that was clicked.
+- A **PDF** still opens in PDF Studio (pages, zoom, search). A **Word, Excel or PowerPoint** file still opens in a
+  WorkSuite DOC, Sheet or Slides tab.
+
+---
+
+## 2026-09-30 — The AI Assistant as a floating widget; Thinking…; About
+
+**Added**
+
+- **Settings › AI Assistant › Display mode:** the header's AI button and its drawer (as before), a **floating chat
+  widget**, or **Hidden**. The widget is an Ask AI button in the bottom-right corner of the workspace that opens the
+  same Ask, Write and Changes, with Minimize, Maximize / Restore and Close. It stays inside the workspace, never over
+  the sidebar, tabs, status bar or a side drawer. Escape minimizes it. In Hidden, the shortcut and the command palette
+  still open the assistant.
+- **One conversation, wherever it shows.** Closing or minimizing the drawer or the widget, or switching between them,
+  keeps the messages, the question being written, the files picked and an answer on its way (closing the drawer used
+  to start over). The launcher and the header button turn while an answer is coming, and count answers that arrived
+  while it was closed. **Sound for new answers** (off at first) chimes for them. **New conversation** starts afresh.
+- **Try again** under an answer that failed asks the same question again in its place.
+
+**Changed**
+
+- **Thinking…** with the AI sparkle pulsing replaces "Looking into it…", from the moment a question is sent until
+  the answer starts to show. With reduced motion the sparkle stands still. A local answer is no longer read out word
+  by word as it streams.
+- **About** names the owner in full: WorkSuite is owned and developed by Livezen Technologies LLC, © this year, with
+  worksuiteone.com opening in the default browser. The open-source notice stands on its own line. Installers carry
+  the same copyright.
+
+---
+
+## 2026-09-30 — The lock screen unlocks on the last digit of the PIN
+
+**Changed**
+
+- **No Unlock click for a PIN.** The PIN field has the cursor as soon as the lock screen shows, and the PIN is
+  checked as soon as its last digit is typed or pasted. It says "Unlocking…" meanwhile and sends it once. A wrong PIN
+  says so (with the attempt count; five wrong PINs or passwords still sign you out), empties the field and puts the
+  cursor back. The password, Touch ID and Sign out work as before, and the password still waits for Unlock.
+- WorkSuite now keeps how many digits the PIN has (never the digits), with its sealed hash. A PIN set before this
+  version needs Unlock once more; from then on it goes on its last digit.
+
+---
+
 ## 2026-09-30 — Modules carry their own version and changelog
 
 Nothing changes in the app. For developers: every module in `src/modules/` now has a `module.json` (its version,

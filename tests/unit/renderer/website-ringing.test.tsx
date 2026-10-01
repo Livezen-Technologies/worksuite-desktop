@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebchatRingChat, WebchatRingState } from '@shared/types';
 
@@ -41,7 +41,8 @@ describe('the website-chat call window (RING-UI-06)', () => {
     expect(screen.getByText('Reading Pricing')).toBeTruthy();
     expect(screen.getByText('“Do you ship to Galle?”')).toBeTruthy();
     expect(screen.getByText(/Ctrl\+Shift\+J to join/)).toBeTruthy();
-    expect(vi.mocked(playTone)).toHaveBeenCalledWith('webchat', 0.8);
+    // The tone starts in an effect, which React may run a moment after the name is on screen (a slow CI runner).
+    await waitFor(() => expect(vi.mocked(playTone)).toHaveBeenCalledWith('webchat', 0.8));
     fireEvent.click(screen.getByRole('button', { name: 'Join chat' }));
     expect(call).toHaveBeenCalledWith('ring:join', { id: 7 });
     fireEvent.click(screen.getByRole('button', { name: 'Silence' }));

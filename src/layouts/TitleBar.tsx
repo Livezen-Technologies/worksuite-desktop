@@ -3,13 +3,14 @@ import { app } from '../core/app-state';
 import { isMac } from '../core/bridge';
 import { t } from '../core/i18n';
 import { useStore } from '../core/store';
-import { minimiseChatDrawer, openChatDrawer, openOverlay, toggleDock, ui } from '../core/ui';
+import { minimiseChatDrawer, openChatDrawer, openOverlay, toggleDock, ui, useAiDisplay } from '../core/ui';
 import { prettyAccelerator } from '../core/commands';
 import { Icon } from '../components/Icon';
 import { ClockControl } from '../app/overlays/ClockPopover';
 import { ActiveCalls } from '../app/ActiveCalls';
 import { CountBadge, cx } from '../components/ui';
 import { UserPicture, useMe } from '../components/UserPicture';
+import { unreadLabel, useAssistantActivity } from '../app/overlays/AiDock';
 
 /**
  * Title / top bar, 52 px (§4.12 shared shell components): WorkSuite mark,
@@ -26,6 +27,10 @@ export function TitleBar() {
   const transfers = useStore(app, (s) => s.transfers);
   const activeTransfers = transfers.filter((x) => x.state === 'running' || x.state === 'queued').length;
   const hasAi = useCanOpen('ai');
+  // The header button is the drawer's (Settings › AI Assistant › Display mode); it says when an answer is on its way or came in unseen.
+  const aiDisplay = useAiDisplay();
+  const { busy: aiBusy, unread: aiUnread } = useAssistantActivity();
+  const aiState = dock === 'ai' ? null : aiBusy ? t('ai.working') : aiUnread ? unreadLabel(aiUnread) : null;
   const hasChat = useCanOpen('chat');
 
   const network = status?.network ?? 'ONLINE';
@@ -74,14 +79,17 @@ export function TitleBar() {
       <TopButton icon="transfers" label={t('shell.transfers')} onClick={() => openOverlay('transfers')} active={overlay === 'transfers'} count={activeTransfers} countTone="indigo" />
       {hasChat ? <TopButton icon="chat" label="Chat" onClick={() => (dock === 'chat' ? minimiseChatDrawer() : openChatDrawer(null))} active={dock === 'chat'} count={status?.unread.chat ?? 0} /> : null}
       <TopButton icon="bell" label={t('nav.notifications')} onClick={() => openOverlay('notifications')} active={overlay === 'notifications'} count={unread} />
-      {hasAi ? (
+      {hasAi && aiDisplay === 'drawer' ? (
         <button
           type="button"
-          className={cx('no-drag flex h-8 items-center gap-1.5 rounded-[8px] border border-teal-light/30 px-3 text-[13px] font-semibold text-teal-light hover:bg-teal/20', dock === 'ai' && 'bg-teal/25')}
+          className={cx('no-drag relative flex h-8 items-center gap-1.5 rounded-[8px] border border-teal-light/30 px-3 text-[13px] font-semibold text-teal-light hover:bg-teal/20', dock === 'ai' && 'bg-teal/25')}
           onClick={() => toggleDock('ai')}
           aria-pressed={dock === 'ai'}
+          aria-label={aiState ? `${t('ai.title')} — ${aiState}` : t('ai.title')}
+          title={aiState ?? t('ai.title')}
         >
-          <Icon name="sparkles" size={15} /> {t('shell.ai')}
+          <Icon name="sparkles" size={15} className={cx(aiBusy && dock !== 'ai' && 'motion-safe:animate-pulse')} /> {t('shell.ai')}
+          {aiUnread && dock !== 'ai' ? <CountBadge n={aiUnread} className="absolute -top-1 -right-1.5" /> : null}
         </button>
       ) : null}
       {/* 32 px across, edge included (TopBar design: a 2 px indigo edge, no ring outside it), so it lines up with the buttons beside it. */}

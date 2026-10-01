@@ -1,14 +1,17 @@
+import { useEffect } from 'react';
 import { app } from '../../core/app-state';
 import { call, isMac } from '../../core/bridge';
+import { t } from '../../core/i18n';
 import { createStore, useStore } from '../../core/store';
 import { navigate, tabsStore } from '../../core/tabs';
-import { openOverlay, toggleDock } from '../../core/ui';
+import { aiWidget, openOverlay, toggleDock, ui, useAiDisplay } from '../../core/ui';
 import { Icon } from '../../components/Icon';
 import { Button, cx, IconButton } from '../../components/ui';
 import { Assist } from '../../modules/ai/Assist';
 import { AskPanel } from '../../modules/ai/AskPanel';
 import { Changes } from '../../modules/ai/Changes';
 import { refForRoute } from '../../modules/ai/assistant';
+import { assistantSession } from '../../modules/ai/session';
 import { shortcutLabel } from '../../modules/ai/writer';
 
 export type AiDockView = 'ask' | 'write' | 'changes';
@@ -36,6 +39,76 @@ export function askWorkSuite(text: string): void {
 }
 
 /**
+ * Switching the display mode moves an open assistant with it, conversation and all (it is one session);
+ * Hidden puts it away.
+ */
+export function useAssistantFollowsDisplay(): void {
+  const display = useAiDisplay();
+  useEffect(() => {
+    const docked = ui.get().dock === 'ai';
+    const floating = aiWidget.get().open;
+    if (display === 'widget') {
+      if (docked) {
+        ui.set({ dock: null });
+        aiWidget.set({ open: true });
+      }
+    } else if (floating) {
+      aiWidget.set({ open: false });
+      if (display === 'drawer') ui.set({ dock: 'ai' });
+    }
+    if (display === 'hidden' && docked) ui.set({ dock: null });
+  }, [display]);
+}
+
+/** A soft two-note chime, synthesised: an answer arrived while the assistant was closed or minimised. */
+function chime(): void {
+  try {
+    const ctx = new AudioContext();
+    const t0 = ctx.currentTime + 0.02;
+    [
+      [880, 0],
+      [1320, 0.12],
+    ].forEach(([hz, at]) => {
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t0 + at!);
+      g.gain.linearRampToValueAtTime(0.08, t0 + at! + 0.02);
+      g.gain.linearRampToValueAtTime(0, t0 + at! + 0.22);
+      g.connect(ctx.destination);
+      const o = ctx.createOscillator();
+      o.frequency.value = hz!;
+      o.connect(g);
+      o.start(t0 + at!);
+      o.stop(t0 + at! + 0.25);
+    });
+    setTimeout(() => void ctx.close().catch(() => undefined), 800);
+  } catch {
+    /* no audio here */
+  }
+}
+
+/** Settings › AI Assistant › Sound: a chime for each answer that arrives while no panel shows the conversation. */
+export function useAssistantAlerts(): void {
+  useEffect(
+    () =>
+      assistantSession.onUnseen(() => {
+        if (app.get().prefs?.ai?.sound) chime();
+      }),
+    [],
+  );
+}
+
+/** The assistant is answering, and how many answers arrived unseen: for the header button and the launcher. */
+export function useAssistantActivity(): { busy: boolean; unread: number } {
+  const busy = useStore(assistantSession.store, (s) => s.busy);
+  const unread = useStore(assistantSession.store, (s) => s.unread);
+  return { busy, unread };
+}
+
+export function unreadLabel(n: number): string {
+  return n === 1 ? t('ai.unreadOne') : t('ai.unreadMany', { n });
+}
+
+/**
  * The AI dock (Ctrl/Cmd+Shift+A; AI Assistant — Web + Desktop UIs; WS-AI-SRS-001
  * FR-DSK-AI-01): beside every tab.
  *
@@ -46,6 +119,21 @@ export function askWorkSuite(text: string): void {
  *  · Changes — what the assistant proposed, waiting for a decision or done.
  */
 export function AiDock() {
+  return (
+    <aside className="flex w-[360px] shrink-0 flex-col border-l border-line bg-surface" aria-label={t('ai.title')}>
+      <div className="flex items-center justify-between border-b border-line px-4 py-3">
+        <div className="flex items-center gap-2 text-[14.5px] font-bold text-ink">
+          <Icon name="sparkles" size={17} className="text-teal" /> {t('ai.title')}
+        </div>
+        <IconButton icon="x" label={t('ai.close')} onClick={() => toggleDock('ai')} />
+      </div>
+      <AssistantBody />
+    </aside>
+  );
+}
+
+/** What the drawer and the widget both show: Ask, Write and Changes, on the one conversation. */
+export function AssistantBody({ autoFocus }: { autoFocus?: boolean }) {
   const hasAi = useStore(app, (s) => s.apps.some((a) => a.id === 'ai'));
   const language = useStore(app, (s) => s.prefs?.ai?.language ?? 'English');
   const quickAsk = useStore(app, (s) => (s.prefs?.ai?.quickAsk ? s.prefs.ai.shortcut : null));
@@ -59,13 +147,7 @@ export function AiDock() {
     </button>
   );
   return (
-    <aside className="flex w-[360px] shrink-0 flex-col border-l border-line bg-surface" aria-label="AI Assistant">
-      <div className="flex items-center justify-between border-b border-line px-4 py-3">
-        <div className="flex items-center gap-2 text-[14.5px] font-bold text-ink">
-          <Icon name="sparkles" size={17} className="text-teal" /> AI Assistant
-        </div>
-        <IconButton icon="x" label="Close AI Assistant" onClick={() => toggleDock('ai')} />
-      </div>
+    <>
       <div role="tablist" aria-label="What the assistant does" className="mx-4 mt-3 flex gap-1 rounded-[10px] bg-subtle p-1">
         {view('ask', 'Ask')}
         {view('write', 'Write')}
@@ -73,7 +155,7 @@ export function AiDock() {
       </div>
       {d.view === 'ask' ? (
         <div className="flex min-h-0 flex-1 flex-col p-4">
-          <AskPanel surface="assistant.panel" tabRef={tabRef} tabTitle={active?.title ?? null} />
+          <AskPanel surface="assistant.panel" session={assistantSession} tabRef={tabRef} tabTitle={active?.title ?? null} autoFocus={autoFocus} />
         </div>
       ) : d.view === 'changes' ? (
         <div className="flex min-h-0 flex-1 flex-col p-4">
@@ -109,6 +191,6 @@ export function AiDock() {
       <p className="border-t border-line px-4 py-2 text-[11.5px] text-ink-3">
         {d.view === 'write' ? 'Sees only what you give it. Never sends on its own.' : 'Reads only what you can open. Changes nothing until you confirm.'}
       </p>
-    </aside>
+    </>
   );
 }

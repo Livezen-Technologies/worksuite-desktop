@@ -18,25 +18,34 @@ export function LockScreen() {
   // With a PIN set, the lock screen asks for it first; the password stays one click away.
   const [usePin, setUsePin] = useState(!!lock?.pin);
   const pinMode = usePin && !!lock?.pin;
+  // Known for a PIN set or used since it was kept: the PIN is checked as soon as its last digit is in.
+  const pinLength = pinMode ? (lock?.pinLength ?? null) : null;
   const [busy, setBusy] = useState(false);
+  // A ref as well as state: a paste and a keystroke in the same tick must not send the PIN twice.
+  const sending = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => {
     input.current?.focus();
   }, [pinMode]);
 
-  const unlock = async () => {
-    if (!password) return;
+  // Only the main process unlocks, and only after the PIN or password checks out (lock:changed); wrong ones count
+  // towards its five-attempt sign-out there. Here the field is emptied and focused again for the next try.
+  const unlock = async (value = password) => {
+    if (!value || sending.current) return;
+    sending.current = true;
     setBusy(true);
     setError(null);
     try {
-      const r = pinMode ? await call('security:unlockPin', { pin: password }) : await call('security:unlockPassword', { password });
+      const r = pinMode ? await call('security:unlockPin', { pin: value }) : await call('security:unlockPassword', { password: value });
       if (!r.ok) setError(r.message);
-      setPassword('');
     } catch (e) {
       setError(errorMessage(e));
     } finally {
+      setPassword('');
+      sending.current = false;
       setBusy(false);
+      input.current?.focus();
     }
   };
   const biometric = async () => {
@@ -72,9 +81,18 @@ export function LockScreen() {
               type="password"
               inputMode="numeric"
               autoComplete="off"
-              maxLength={8}
+              maxLength={pinLength ?? 8}
+              readOnly={busy}
+              aria-invalid={error ? true : undefined}
+              aria-describedby={error ? 'lock-error' : undefined}
               value={password}
-              onChange={(e) => setPassword(e.target.value.replace(/\D/g, ''))}
+              onChange={(e) => {
+                if (sending.current) return;
+                // Typed or pasted: digits only, no more than the PIN has; the last one sends it.
+                const digits = e.target.value.replace(/\D/g, '').slice(0, pinLength ?? 8);
+                setPassword(digits);
+                if (pinLength && digits.length === pinLength) void unlock(digits);
+              }}
               className="mt-1.5 h-11 w-full rounded-[9px] border border-white/15 bg-navy px-3 text-center text-[20px] tracking-[0.5em] text-white outline-none focus:border-brand"
             />
           ) : (
@@ -83,15 +101,27 @@ export function LockScreen() {
               ref={input}
               type="password"
               autoComplete="current-password"
+              readOnly={busy}
+              aria-invalid={error ? true : undefined}
+              aria-describedby={error ? 'lock-error' : undefined}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="mt-1.5 h-11 w-full rounded-[9px] border border-white/15 bg-navy px-3 text-[14px] text-white outline-none focus:border-brand"
             />
           )}
         </label>
-        {error ? <p className="mt-2 w-full text-[12.5px] text-[#F7A39C]">{error}</p> : null}
-        <button type="submit" disabled={busy || (pinMode ? password.length < 4 : !password)} className="mt-4 h-11 w-full rounded-[9px] bg-brand text-[14px] font-semibold hover:opacity-90 disabled:opacity-50">
-          {busy ? 'Checking…' : t('lock.unlock')}
+        {error ? (
+          <p id="lock-error" role="alert" className="mt-2 w-full text-[12.5px] text-[#F7A39C]">
+            {error}
+          </p>
+        ) : null}
+        <button
+          type="submit"
+          aria-busy={busy}
+          disabled={busy || (pinMode ? password.length < (pinLength ?? 4) : !password)}
+          className="mt-4 h-11 w-full rounded-[9px] bg-brand text-[14px] font-semibold hover:opacity-90 disabled:opacity-50"
+        >
+          {busy ? t('lock.unlocking') : t('lock.unlock')}
         </button>
         {lock?.biometric === 'touch-id' ? (
           <button type="button" onClick={() => void biometric()} className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-[9px] border border-white/15 text-[14px] font-semibold hover:bg-white/5">

@@ -155,12 +155,12 @@ export function Rail({
         {item('my_shares', 'Shared by me', 'send')}
         {head('fold', 'Folders', tree.length)}
         {!shut.fold ? (tree.length ? branch(tree, 0) : <span className="px-2.5 py-1 text-[12px] text-ink-3">No folders yet.</span>) : null}
-        {head('find', 'Find by type or date', GROUPS.length)}
+        {head('find', 'Filters', GROUPS.length)}
         {!shut.find
           ? GROUPS.map((g) => {
               const on = g.views.includes(place.view);
               return (
-                <button key={g.id} type="button" aria-current={on ? 'page' : undefined} title={g.label} onClick={() => onPlace({ view: g.views[0]!, folder: null })} className={row(on)}>
+                <button key={g.id} type="button" aria-current={on ? 'page' : undefined} title={g.hint ?? g.label} onClick={() => onPlace({ view: g.views[0]!, folder: null })} className={row(on)}>
                   <span className={bar(on)} />
                   <Icon name={g.icon} size={16} className={cx('w-[18px] shrink-0', on ? 'text-primary' : 'text-ink-2')} />
                   <span className="min-w-0 flex-1 truncate">{g.label}</span>
@@ -189,8 +189,8 @@ export function Rail({
       </div>
       <div className="mx-2.5 mb-2.5 flex flex-col gap-2 rounded-[12px] border border-line bg-surface px-3 py-2.5">
         <div className="flex items-baseline gap-1.5">
-          <b className="text-[13px] text-ink">{bytes(used)}</b>
-          <span className="flex-1 text-[11.5px] text-ink-3">{quota ? `of ${bytes(quota)} used` : 'used'}</span>
+          <b className="text-[13px] whitespace-nowrap text-ink">{bytes(used)}</b>
+          <span className="min-w-0 flex-1 text-[12px] text-ink-2">{quota ? `of ${bytes(quota)} used` : 'used'}</span>
           <button type="button" onClick={() => onPlace({ view: 'storage', folder: null })} className="text-[11.5px] font-bold text-primary hover:underline">Manage</button>
         </div>
         {quota ? (
@@ -199,9 +199,9 @@ export function Rail({
           </div>
         ) : null}
         {syncLine ? (
-          <button type="button" onClick={() => onPlace({ view: 'devices', folder: null })} className="flex items-center gap-1.5 text-left text-[11.5px] text-ink-2 hover:text-ink">
-            <Icon name={syncLine.icon} size={13} className={cx('shrink-0', syncLine.tone)} />
-            <span className="min-w-0 flex-1 truncate">{syncLine.text}</span>
+          <button type="button" onClick={() => onPlace({ view: 'devices', folder: null })} className="flex items-start gap-1.5 text-left text-[12px] leading-[1.35] text-ink-2 hover:text-ink">
+            <Icon name={syncLine.icon} size={13} className={cx('mt-px shrink-0', syncLine.tone)} />
+            <span className="min-w-0 flex-1">{syncLine.text}</span>
           </button>
         ) : null}
       </div>
