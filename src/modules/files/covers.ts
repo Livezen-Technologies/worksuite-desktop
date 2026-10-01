@@ -96,7 +96,7 @@ async function pdfCover(bytes: Uint8Array): Promise<Uint8Array> {
     await page.render({ canvas: c, canvasContext: c.getContext('2d')!, viewport }).promise;
     return fit(c);
   } finally {
-    void doc.destroy();
+    void doc.loadingTask.destroy();
   }
 }
 

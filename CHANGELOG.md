@@ -39,6 +39,10 @@ person who has to live with the change — what it does, and where it bites.
   not read as "nothing there". When your access changes, results found under the old access are dropped.
 - Where it bites: an older server sends none of this, and search works as before. Offline search is unchanged.
 
+- **Security: PDFs are shown with pdf.js 6.3** (was 5.7). pdf.js 5.6–6.2 could run a crafted PDF's script when it
+  was opened (GHSA-hq66-cqwq-w95j, high). The file viewer and Drive's PDF covers are the two places it is used;
+  nothing else about them changed.
+
 ## 2026-10-01 — 0.2.71: Chat's channel toolbar (WhatsApp in Chat), profile pictures, a resizable conversation list; AI Assistant scrolling; Local AI first-use setup and Gemma 3 4B; Office menus and Open in new window; Meet Home and pre-join redesign; meeting cards in Chat; screen sharing fixed
 
 - **A channel toolbar down the far left of Chat** (#33): Chat, Web Chat and WhatsApp, each with its unread count
