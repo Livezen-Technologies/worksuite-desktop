@@ -151,3 +151,65 @@ describe('following the conversation', () => {
     expect(scroller().scrollTop).toBe(860);
   });
 });
+
+/**
+ * A long answer that has just landed is read from its first line, not from mid-sentence (worksuite-desktop#150): the
+ * view goes to the answer's start, stays there as it settles, and says nothing has arrived unseen.
+ */
+describe('showing a long answer from its start', () => {
+  let reveal: (el: Element | null | undefined) => void = () => undefined;
+  function Answered({ answerTop }: { answerTop: number }) {
+    const view = useStickToBottom(1);
+    reveal = view.reveal;
+    return (
+      <div>
+        <div data-testid="scroller" ref={(el) => {
+          view.scroller.current = el;
+          if (el && !('sized' in el.dataset)) {
+            el.dataset.sized = '1';
+            sized(el, box);
+            el.getBoundingClientRect = () => ({ top: 100 }) as DOMRect;
+          }
+        }} onScroll={view.onScroll}>
+          <div ref={view.content}>
+            <p>question</p>
+            <p data-testid="answer" ref={(el) => {
+              // Where the answer starts on screen: the scroller's top (100) plus its place in the content, less the scroll.
+              if (el) el.getBoundingClientRect = () => ({ top: 100 + answerTop - scroller().scrollTop }) as DOMRect;
+            }}>answer</p>
+          </div>
+        </div>
+        {view.unseen ? <button type="button" onClick={view.toEnd}>Jump to latest</button> : null}
+      </div>
+    );
+  }
+
+  it('an answer taller than the view is shown from its first line, and stays there as it settles', () => {
+    render(<Answered answerTop={300} />);
+    expect(scroller().scrollTop).toBe(600);
+    act(() => reveal(screen.getByTestId('answer')));
+    expect(scroller().scrollTop).toBe(292);
+    act(() => {
+      fireEvent.scroll(scroller());
+      observers.forEach((o) => o());
+    });
+    expect(scroller().scrollTop).toBe(292);
+    expect(screen.queryByText('Jump to latest')).toBeNull();
+  });
+
+  it('an answer that fits is simply followed to the end', () => {
+    render(<Answered answerTop={800} />);
+    act(() => reveal(screen.getByTestId('answer')));
+    expect(scroller().scrollTop).toBe(600);
+  });
+
+  it('a reader who scrolled up to read is not moved', () => {
+    render(<Answered answerTop={300} />);
+    act(() => {
+      scroller().scrollTop = 50;
+      fireEvent.scroll(scroller());
+    });
+    act(() => reveal(screen.getByTestId('answer')));
+    expect(scroller().scrollTop).toBe(50);
+  });
+});

@@ -1,8 +1,7 @@
 import { useEffect } from 'react';
 import { app } from '../../core/app-state';
-import { createStore } from '../../core/store';
 import { tabsStore } from '../../core/tabs';
-import { aiDisplay, aiWidget, openAssistant, ui } from '../../core/ui';
+import { aiDisplay, aiMinimized, aiWidget, openAssistant, putAssistantAway, ui } from '../../core/ui';
 import { assistantSession } from '../../modules/ai/session';
 import { aiDock, aiNotice } from './AiDock';
 
@@ -12,7 +11,7 @@ import { aiDock, aiNotice } from './AiDock';
  * Hidden) the same floating button stands in the workspace's corner until the answer has been seen or put away.
  * Nothing here ever opens the assistant by itself.
  */
-export const aiMinimized = createStore<{ on: boolean }>({ on: false });
+export { aiMinimized } from '../../core/ui';
 
 /** Marks the assistant's own surfaces (the widget, the drawer, its floating button and notice). */
 export const AI_ASSISTANT_ATTR = 'data-ai-assistant';
@@ -35,7 +34,7 @@ export function minimizeAssistant(): void {
     aiWidget.set({ open: false });
     return;
   }
-  if (ui.get().dock === 'ai') ui.set({ dock: null });
+  putAssistantAway();
   aiMinimized.set({ on: true });
 }
 

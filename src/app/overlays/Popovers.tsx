@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { app, organizationName } from '../../core/app-state';
 import { call, errorMessage } from '../../core/bridge';
+import { shownPresence } from '../../core/presence';
 import { useStore } from '../../core/store';
 import { navigate } from '../../core/tabs';
 import { closeOverlay, openOverlay } from '../../core/ui';
@@ -50,13 +51,17 @@ export function ProfileMenu() {
   const hasHr = useStore(app, (s) => s.apps.some((a) => a.id === 'hr'));
   const orgs = useStore(app, (s) => s.bootstrap?.organizations.length ?? 0);
   const orgId = useStore(app, (s) => s.organizationId);
-  const presence = useQuery({ queryKey: ['account', 'presence'], queryFn: ({ signal }) => apiGet<{ status: string; choice: string }>('/api/chat/presence/me', undefined, signal), enabled: hasChat });
+  // Asked afresh each time the menu opens: what the server last said may be from before this sign-in or unlock.
+  const presence = useQuery({ queryKey: ['account', 'presence'], queryFn: ({ signal }) => apiGet<{ status: string; choice: string }>('/api/chat/presence/me', undefined, signal), enabled: hasChat, refetchOnMount: 'always' });
+  // The same connection the title bar's pill reads (#150): never Offline here beside Online there.
+  const network = useStore(app, (s) => s.status?.network ?? 'ONLINE');
   const mfa = useMfa();
   const { today, clockedIn } = useAttendance(hasHr);
   const [confirm, setConfirm] = useState(false);
   const [picking, setPicking] = useState(false);
   const go = (route: string) => (closeOverlay(), navigate(route));
-  const shown = SHOWN[presence.data?.status ?? ''] ?? null;
+  const shownAs = shownPresence(presence.data, network);
+  const shown = shownAs ? SHOWN[shownAs]! : null;
   const working = hasHr && clockedIn && today?.check_in ? `${today.on_break ? 'On a break' : 'Working'} since ${attendanceTime(today.check_in)}` : null;
   const choose = async (status: string) => {
     setPicking(false);

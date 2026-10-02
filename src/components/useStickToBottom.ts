@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 
 /** Within this many pixels of the end counts as at the end: a reader a line short of it is still following. */
 const NEAR = 48;
+/** Room left above an answer shown from its start, so the question before it still peeks in. */
+const REVEAL_GAP = 8;
 
 /**
  * A conversation that follows what arrives (worksuite-desktop#50): while the reader is at (or near) the end, new
@@ -18,6 +20,7 @@ export function useStickToBottom(changed: unknown): {
   pinned: boolean;
   unseen: boolean;
   toEnd: () => void;
+  reveal: (el: Element | null | undefined) => void;
   onScroll: () => void;
 } {
   const scroller = useRef<HTMLDivElement | null>(null);
@@ -57,6 +60,25 @@ export function useStickToBottom(changed: unknown): {
     jump();
   }, [jump, pin]);
 
+  /**
+   * A long answer that has just landed, for a reader following the conversation (worksuite-desktop#150): shown from its
+   * first line rather than its last, so it is never read from mid-sentence. One that fits is simply followed to the end.
+   * The view then stays put, as it does for a reader who scrolled up — without "Jump to latest", nothing is unseen.
+   */
+  const reveal = useCallback(
+    (target: Element | null | undefined) => {
+      const el = scroller.current;
+      if (!el || !target || !pinnedRef.current) return;
+      const top = el.scrollTop + target.getBoundingClientRect().top - el.getBoundingClientRect().top;
+      const end = el.scrollHeight - el.clientHeight;
+      if (top >= end) return jump();
+      el.scrollTop = Math.max(0, top - REVEAL_GAP);
+      lastHeight.current = el.scrollHeight;
+      pin(atEnd(el));
+    },
+    [jump, pin],
+  );
+
   // Only the reader moves the view away from the end; following it never does, because growing content does not scroll.
   const onScroll = useCallback(() => {
     const el = scroller.current;
@@ -77,5 +99,5 @@ export function useStickToBottom(changed: unknown): {
     return () => ro.disconnect();
   }, [follow]);
 
-  return { scroller, content, pinned, unseen, toEnd, onScroll };
+  return { scroller, content, pinned, unseen, toEnd, reveal, onScroll };
 }

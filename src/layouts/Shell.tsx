@@ -8,12 +8,13 @@ import { noteRecentApp } from '../core/recent-apps';
 import { useStore } from '../core/store';
 import { activateIndex, activeTab, closeTab, closeTabsForApps, detachTab, dockSide, insertTab, navigate, openTab, resetTabs, restoreClosed, restoreTabs, suspendIdle, tabsStore, undockSide } from '../core/tabs';
 import { toast } from '../core/toasts';
-import { aiWidget, closeOverlay, minimiseChatDrawer, openAssistant, openChatDrawer, openOverlay, toggleAssistant, toggleDock, ui, useAiDisplay } from '../core/ui';
+import { aiWidget, closeOverlay, closeTopPanel, minimiseChatDrawer, openAssistant, openChatDrawer, openOverlay, toggleAssistant, toggleDock, ui, useAiDisplay } from '../core/ui';
 import { allowedModules, moduleFor } from '../modules/registry';
 import { PanelBoundary } from '../app/Boundaries';
 import { AiDock, askWorkSuite, makeTask, openAiChanges, openAiDockWith, useAssistantAlerts, useAssistantFollowsDisplay } from '../app/overlays/AiDock';
 import { AiWidget } from '../app/overlays/AiWidget';
 import { AI_WORKSPACE_ATTR, restoreAssistant, useAutoMinimize } from '../app/overlays/aiMinimize';
+import { closeMenuOnRouteChange, openAssistantAtStart } from '../app/overlays/panels';
 import { Launcher } from '../app/overlays/Launcher';
 import { NetworkPopover, NotificationCenter, ProfileMenu, TransferCenter } from '../app/overlays/Popovers';
 import { OrgSwitcher } from '../app/overlays/OrgSwitcher';
@@ -49,10 +50,9 @@ export function Shell() {
   useAssistantAlerts();
   // Settings › AI Assistant › Auto-minimize when I continue working (#126).
   useAutoMinimize();
-  useEffect(() => {
-    const ai = app.get().prefs?.ai;
-    if (ai?.dockAtStart && ai.display !== 'hidden' && ui.get().dock === null) openAssistant();
-  }, []);
+  // Only when WorkSuite starts, as the setting says; a menu closes when the screen changes under it (#150).
+  useEffect(() => void openAssistantAtStart(), []);
+  useEffect(() => closeMenuOnRouteChange(), []);
 
   // Tab restore at start (FR-NAV-04) — only apps the user can still open.
   useEffect(() => {
@@ -152,7 +152,8 @@ export function Shell() {
       if (typing && !acc.includes('Mod') && acc !== 'F1') return;
       const id = commandForAccelerator(effectiveShortcuts(app.get().prefs?.shortcuts), acc);
       if (!id) {
-        if (e.key === 'Escape') closeOverlay();
+        // Escape that nothing nearer took: the open menu, else the assistant (#150).
+        if (e.key === 'Escape' && !e.defaultPrevented) closeTopPanel();
         return;
       }
       if (!getCommand(id)) return;

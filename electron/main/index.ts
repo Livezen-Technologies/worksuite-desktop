@@ -1429,6 +1429,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         if (scope) win.setTitle(scope.kind === 'chat-mini' ? 'WorkSuite chat' : 'WorkSuite call');
       }
     } else {
+      // Present again at once, not at the next heartbeat: no heartbeat went while locked (#150).
+      void heartbeatPresence();
       broadcast('realtime:resync');
       // What a notification clicked while locked pointed at, now that the workspace is back (#114).
       if (pendingNav.length) setTimeout(() => flushNavigation(), 300);
