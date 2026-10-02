@@ -520,7 +520,7 @@ function SourceDialog({ msgRef, onClose }: { msgRef: MessageRef; onClose: () => 
     retry: false,
   });
   return (
-    <Modal title={text('Original message')} width={860} onClose={onClose} footer={<Button onClick={onClose}>Close</Button>}>
+    <Modal title={text('Original message')} labelledBy="mail-source-title" width={860} onClose={onClose} footer={<Button onClick={onClose}>Close</Button>}>
       <div className="p-4">
         {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} /> : <pre className="max-h-[60vh] overflow-auto rounded-[8px] bg-subtle p-3 font-mono text-[12px] leading-relaxed whitespace-pre-wrap text-ink selectable">{q.data?.source}</pre>}
       </div>

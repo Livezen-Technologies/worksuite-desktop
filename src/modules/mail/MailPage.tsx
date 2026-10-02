@@ -166,13 +166,14 @@ export default function MailPage({ active }: ModuleProps) {
     setCompose((c) => (c ? { ...c, shown: false } : c));
     openRef({ uid: String(r.row.id), folder: r.row.folder_slug ?? folder, mailbox: rowMailbox(r.row, effectiveBox) });
   };
-  const closeMessage = () => go(`/mail?${placeQuery()}`);
+  const routeOf = (q: URLSearchParams) => (q.size ? `/mail?${q}` : '/mail');
+  const closeMessage = () => go(routeOf(placeQuery()));
   const pick = (p: Partial<Place>) => {
     setSearching(null);
     setChips([]);
     setSearch('');
     setCompose((c) => (c ? { ...c, shown: false } : c));
-    go(`/mail?${placeQuery({ view: null, label: null, ...p })}`);
+    go(routeOf(placeQuery({ view: null, label: null, ...p })));
   };
   const closeTab = (key: string) => {
     const r = afterClose(tabs, key, currentKey);
@@ -210,7 +211,7 @@ export default function MailPage({ active }: ModuleProps) {
   const onKey = (e: KeyboardEvent) => {
     if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
     const t = e.target as HTMLElement | null;
-    if (t && (t.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"]') || t.isContentEditable)) return;
+    if (t && typeof t.closest === 'function' && (t.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"]') || t.isContentEditable)) return;
     if (compose?.shown || searching !== null) return;
     const k = e.key;
     const handled = () => e.preventDefault();

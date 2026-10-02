@@ -197,7 +197,7 @@ function ManageMailbox({ box, onClose }: { box: Mailbox; onClose: () => void }) 
     }
   };
   return (
-    <Modal title={b.email} width={480} onClose={onClose} footer={<Button onClick={onClose}>Done</Button>}>
+    <Modal title={b.email} labelledBy="mail-manage-title" width={480} onClose={onClose} footer={<Button onClick={onClose}>Done</Button>}>
       <div className="flex flex-col gap-4 p-5 text-[13.5px]">
         <Switch label={text('Show in the unified inbox')} checked={b.in_unified !== false} onChange={(v) => void save({ in_unified: v })} />
         <Switch label={text('Notify me about new mail')} checked={(b as Mailbox & { notify?: boolean }).notify !== false} onChange={(v) => void save({ notify: v } as Partial<Mailbox>)} />
@@ -247,6 +247,7 @@ function RepairPassword({ box, onClose }: { box: Mailbox; onClose: () => void })
   return (
     <Modal
       title={text('Repair {email}', { email: box.email })}
+      labelledBy="mail-repair-title"
       width={460}
       onClose={onClose}
       footer={

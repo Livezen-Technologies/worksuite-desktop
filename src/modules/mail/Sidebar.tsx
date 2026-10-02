@@ -283,6 +283,7 @@ function NameDialog({ kind, mailbox, onClose }: { kind: 'folder' | 'label'; mail
   return (
     <Modal
       title={kind === 'folder' ? text('New folder') : text('New label')}
+      labelledBy="mail-name-title"
       width={420}
       onClose={onClose}
       footer={

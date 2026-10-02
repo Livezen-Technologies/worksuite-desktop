@@ -37,7 +37,7 @@ export function AddMailbox({ onClose, initial = 'local' }: { onClose: () => void
   const title = KINDS.find((k) => k.id === kind)!.label;
   return (
     <Modal labelledBy="add-mailbox-title" width={820} onClose={onClose}>
-      <div className="flex min-h-[520px]">
+      <div className="-mx-5 -my-4 flex min-h-[520px]">
         <div className="w-[240px] shrink-0 border-r border-line bg-subtle p-3">
           <h2 id="add-mailbox-title" className="px-1 pb-3 pt-1 text-[16px] font-bold text-ink">
             Add a mailbox
