@@ -13,6 +13,7 @@ import { join, resolve } from 'node:path';
 import { canOpenApp, canOpenLink, canOpenRoute, notificationAllowed, visibleAppIds } from '@shared/access';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
 import { resolveWebLink } from '@shared/links';
+import { redirectRoute } from '@shared/channels';
 import { networkStatus } from '@shared/network';
 import { pmsCached } from '@shared/pms-cache';
 import { eventsCached } from '@shared/event-desk';
@@ -38,7 +39,7 @@ import { AuthService } from '../services/auth';
 import { BootstrapService } from '../services/bootstrap';
 import { CallService } from '../services/calls';
 import { ScreenShare } from '../services/screen-share';
-import { createRemoteControl } from '../services/remote-control/host';
+import { accessibility, createRemoteControl } from '../services/remote-control/host';
 import { DEFAULT_POLICY } from '../services/policy';
 import { Database } from '../services/db';
 import { archName, DeviceService, platformName } from '../services/device';
@@ -77,6 +78,7 @@ import { OfficeEditorHost } from '../services/office-editor';
 import { OfficeExternal } from '../services/office-external';
 import { createPdfStudio } from '../services/pdf/host';
 import { createLocalAI } from '../services/local-ai/host';
+import { OcrService } from '../services/ocr';
 import { OfficeLocalFiles, officePathsInArgv } from '../services/office-local';
 import { officeDocRoute } from '@shared/office';
 import { pdfPathsInArgv } from '../services/pdf/local-files';
@@ -641,7 +643,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     windows.showMain();
     broadcast('toast', { kind: 'error', text: NO_ACCESS });
   };
-  const navigate = (req: NavigateRequest): void => {
+  const navigate = (asked: NavigateRequest): void => {
+    // A channel's old route (`/whatsapp?chat=5`) opens in its host now, on the same conversation (#35).
+    const req = { ...asked, route: redirectRoute(asked.route) };
     // Locked: the workspace is not there to take it; it opens once WorkSuite is unlocked (#114).
     if (lock.isLocked()) {
       pendingNav.push(req);
@@ -1458,6 +1462,16 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     changed: () => broadcast('ai:localChanged'),
   });
   app.on('will-quit', () => void localAI.stop());
+  // Text read from images on this computer (worksuite-desktop#59): Tesseract, its language data fetched once when first needed.
+  const ocr = new OcrService({
+    dir: join(p.userData, 'LocalAI', 'ocr'),
+    fetch: (url, init) => net.fetch(url, { ...init, cache: 'no-store' } as RequestInit),
+    progress: (sender, ev) => {
+      const wc = webContents.fromId(sender);
+      if (wc && !wc.isDestroyed()) wc.send('ai:ocrProgress', ev);
+    },
+  });
+  app.on('will-quit', () => void ocr.stop());
   handPdfs = (paths) => void pdfStudio.openFromOs(paths);
   pdfOnline = () => pdfStudio.online();
   if (pendingPdfs.length) handPdfs(pendingPdfs.splice(0));
@@ -1647,6 +1661,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   pmsLocks.register(router);
   restaurant.register(router);
   localAI.register(router);
+  router.handle('ai:ocr', (input, c) => ocr.recognize(c.sender.id, input));
+  router.handle('ai:ocrCancel', (input) => ocr.cancel(input.id));
+  router.handle('ai:ocrStatus', () => ocr.status());
   const openGuest = async (input: string, server?: string) => {
     const info = await guests.prepare(input, server);
     const w = windows.open('meet', `/guest-meet/${info.uuid}?server=${encodeURIComponent(info.origin)}`, info.title ?? 'WorkSuite Meet · Guest');
@@ -1794,7 +1811,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     notifications.markGap();
   });
   powerMonitor.on('user-did-resign-active', () => remoteControl.onSystem('user-did-resign-active'));
+  app.on('browser-window-focus', () => { if (process.platform === 'darwin') { accessibility.openedSettings(); void accessibility.refresh(); } });
   powerMonitor.on('resume', () => {
+    if (process.platform === 'darwin') { accessibility.openedSettings(); void accessibility.refresh(); }
     device.poke();
     sync.kick('resume');
     realtime.kick();

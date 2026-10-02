@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.0 — 2026-10-02
+
+- Announcements to several companies (#98): the company picker offers only companies you may publish to, with 'All companies you may publish to', Clear Selection, a count and chips marked 'draft only' where you may write but not publish; Publish is disabled with the reason when such a company is chosen; the acknowledgement report separates 'Acknowledged earlier text' and 'Read, not acknowledged' and filters by the companies you may read it in; edits, withdrawal and expiry refresh open consoles and readers at once.
+
 ## 1.1.0 — 2026-10-01
 
 - Announcements to several companies or all you may publish to: searchable company picker with chips, Select All and Clear, the audience said before publishing, Save Draft and Publish Announcement, edit, expiry, pinned, withdraw, a company filter on the list and the report (#98).

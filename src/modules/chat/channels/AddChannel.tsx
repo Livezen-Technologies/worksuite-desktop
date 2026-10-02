@@ -2,9 +2,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { apiPost } from '../../../core/api';
 import { call, errorMessage } from '../../../core/bridge';
+import { text } from '../../../core/i18n';
 import { Icon } from '../../../components/Icon';
 import { Button, Modal, cx } from '../../../components/ui';
 import { LinkPhone } from './LinkPhone';
+import { isMetaConnected, PLATFORM_ICON, PLATFORM_LABEL, type MetaAccount, type MetaPlatform } from './meta';
 import { isConnected, WA, type WaAccount } from './whatsapp';
 
 export type AddStep = { at: 'list' } | { at: 'whatsapp' } | { at: 'link'; accountId: number; name: string };
@@ -13,13 +15,22 @@ export type AddStep = { at: 'list' } | { at: 'whatsapp' } | { at: 'link'; accoun
  * "Add a channel" (worksuite-desktop#33): the messaging integrations this server has and where each stands for this
  * person, and the setup that can be done here. A WhatsApp number linked by QR code is set up in the dialog; a
  * Business Platform number (Meta's tokens) and the website chat widget are set up on the web, where their settings
- * are edited. A channel appears in the toolbar once it is connected.
+ * are edited. Messenger and Instagram (#36) are connected through Facebook Login (`onMeta`). A channel appears in the
+ * toolbar once it is connected.
  */
-export function AddChannel({ website, whatsapp, initial = { at: 'list' }, onClose, onConnected }: {
+export function AddChannel({ website, whatsapp, meta, initial = { at: 'list' }, onClose, onConnected, onSettings, onMeta, onMetaSettings }: {
   website: { access: boolean; canSetUp: boolean };
   whatsapp: { access: boolean; canConnect: boolean; accounts: WaAccount[] };
+  /** Messenger and Instagram: whether this person has them, may connect accounts, and the accounts shared with them. */
+  meta?: MetaOffer;
+  /** Connecting a Facebook Page or an Instagram account. */
+  onMeta?: (platform: MetaPlatform) => void;
+  /** Messenger's or Instagram's channel settings. */
+  onMetaSettings?: (platform: MetaPlatform) => void;
   initial?: AddStep;
   onClose: () => void;
+  /** WhatsApp's channel settings (worksuite-desktop#35). */
+  onSettings?: () => void;
   onConnected: (channel: 'whatsapp') => void;
 }) {
   const qc = useQueryClient();
@@ -109,16 +120,22 @@ export function AddChannel({ website, whatsapp, initial = { at: 'list' }, onClos
           action={
             whatsapp.access && whatsapp.canConnect ? (
               <div className="flex flex-col items-end gap-1">
+                {onSettings && whatsapp.accounts.length ? <Button size="sm" icon="settings" onClick={onSettings}>{text('Settings')}</Button> : null}
                 {waiting.filter((a) => a.provider === 'web_js' && a.can_connect !== false).map((a) => (
                   <Button key={a.id} size="sm" onClick={() => setStep({ at: 'link', accountId: a.id, name: a.name })}>Link {a.name}</Button>
                 ))}
                 <Button size="sm" variant="primary" icon="plus" onClick={() => setStep({ at: 'whatsapp' })}>Connect a number</Button>
               </div>
+            ) : whatsapp.access && whatsapp.accounts.length && onSettings ? (
+              <Button size="sm" icon="settings" onClick={onSettings}>{text('Settings')}</Button>
             ) : whatsapp.access && !whatsapp.accounts.length ? (
               <span className="max-w-[160px] text-right text-[11.5px] text-ink-3">Ask whoever manages WhatsApp numbers to share one with you.</span>
             ) : null
           }
         />
+        {(['messenger', 'instagram'] as const).map((p) => (
+          <MetaIntegration key={p} platform={p} meta={meta} onConnect={onMeta} onSettings={onMetaSettings} />
+        ))}
         <Integration
           icon="globe"
           name="Web Chat"
@@ -129,6 +146,52 @@ export function AddChannel({ website, whatsapp, initial = { at: 'list' }, onClos
         />
       </div>
     </Modal>
+  );
+}
+
+type MetaOffer = { access: boolean; canConnect: boolean; ready: boolean; accounts: MetaAccount[] };
+
+/** Messenger or Instagram in the list: where it stands for this person, and connecting one for whoever may. */
+function MetaIntegration({ platform, meta, onConnect, onSettings }: {
+  platform: MetaPlatform;
+  meta?: MetaOffer;
+  onConnect?: (platform: MetaPlatform) => void;
+  onSettings?: (platform: MetaPlatform) => void;
+}) {
+  const mine = (meta?.accounts ?? []).filter((a) => a.platform === platform);
+  const up = mine.filter(isMetaConnected);
+  const down = mine.filter((a) => !isMetaConnected(a));
+  const access = !!meta?.access;
+  const state = !access ? 'Not available to you' : up.length ? text('{n} connected', { n: up.length }) : down.length ? 'Not connected' : 'Not set up';
+  const note = !access
+    ? text('Ask an administrator for access to Messenger and Instagram.')
+    : down.length
+      ? text('{names}: reconnect to keep receiving messages.', { names: down.map((a) => a.name).join(', ') })
+      : meta?.canConnect && !meta.ready
+        ? text('Messenger and Instagram are not set up on this server yet. Ask whoever runs it to add the Meta app.')
+        : platform === 'messenger'
+          ? text('Answer the messages people send your Facebook Pages.')
+          : text('Answer direct messages to your Instagram professional accounts.');
+  return (
+    <Integration
+      icon={PLATFORM_ICON[platform]}
+      name={PLATFORM_LABEL[platform]}
+      connected={up.length > 0}
+      state={state}
+      note={note}
+      action={
+        access ? (
+          <div className="flex flex-col items-end gap-1">
+            {onSettings && mine.length ? <Button size="sm" icon="settings" onClick={() => onSettings(platform)}>{text('Settings')}</Button> : null}
+            {meta?.canConnect && meta.ready && onConnect ? (
+              <Button size="sm" variant="primary" icon="plus" onClick={() => onConnect(platform)}>{platform === 'messenger' ? text('Connect a Page') : text('Connect Instagram')}</Button>
+            ) : !mine.length && !meta?.canConnect ? (
+              <span className="max-w-[160px] text-right text-[11.5px] text-ink-3">{text('Ask whoever manages your Pages to share one with you.')}</span>
+            ) : null}
+          </div>
+        ) : null
+      }
+    />
   );
 }
 

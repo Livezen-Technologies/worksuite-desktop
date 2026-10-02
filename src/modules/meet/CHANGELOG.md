@@ -4,6 +4,18 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.10.0 — 2026-10-02
+
+- Add meeting-scoped browser guest chat for desktop hosts (#140); requires Communication 1.10.0 on the server.
+
+## 1.9.0 — 2026-10-02
+
+- The meeting More menu is grouped into Meeting Tools (Recording, Transcription, Activities, Meeting Info), Host Controls (Host controls, Livestreaming, Lock/Unlock Meeting, Recording Settings) and View & Layout (#124); labels follow state (Stop Recording, Stop Transcription, Unlock Meeting, Exit Full Screen); actions you may not use stay visible, disabled, with the reason.
+
+## 1.8.1 — 2026-10-02
+
+- Refresh Accessibility asynchronously when opening the share picker without holding up screen sharing (#132).
+
 ## 1.8.0 — 2026-10-02
 
 - Add Share Document in the meeting toolbar and Files panel, with Drive selection and device uploads. Open shared Office documents and PDFs in WorkSuite windows while the meeting remains connected, and select the document window for presentation (#109).

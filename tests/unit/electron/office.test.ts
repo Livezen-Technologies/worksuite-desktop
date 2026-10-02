@@ -563,9 +563,10 @@ describe('copies opened in other apps (OO-DSK-050, OO-OFF-030)', () => {
     const { x, launched, posts } = setup();
     const c = await x.open({ fileId: 42, name: 'Proposal.docx', folderId: 9, version: 7, app: 'default' });
     expect(c.state).toBe('downloading');
-    await settle();
-    expect(x.list()[0]!.state).toBe('open');
-    expect(launched).toEqual([join(dir, 'Proposal.docx')]);
+    await vi.waitFor(() => {
+      expect(x.list()[0]!.state).toBe('open');
+      expect(launched).toEqual([join(dir, 'Proposal.docx')]);
+    });
     await x.check();
     expect(x.list()[0]!.state).toBe('open');
     writeFileSync(join(dir, 'Proposal.docx'), 'edited in Word, longer');

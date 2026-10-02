@@ -66,6 +66,12 @@ const en = {
   'ai.viewReply': 'View reply',
   'ai.openAssistant': 'Open Assistant',
   'ai.dismiss': 'Dismiss',
+  // Images in the assistant (worksuite-desktop#59).
+  'ai.readingImage': 'Reading image…',
+  'ai.extractingText': 'Extracting text…',
+  'ai.preparingReply': 'Preparing reply…',
+  'ai.ocrDownloading': 'Getting text reading ready… {pct}%',
+  'ai.extractRequest': 'Extract the text',
   'lock.touchId': 'Use Touch ID',
   'lock.signOut': 'Sign out instead',
   'auth.serverTitle': 'Connect to WorkSuite',
@@ -128,6 +134,11 @@ const si: Table = {
   'auth.password': 'මුරපදය',
   'common.cancel': 'අවලංගු කරන්න',
   'common.save': 'සුරකින්න',
+  'ai.readingImage': 'රූපය කියවමින්…',
+  'ai.extractingText': 'පෙළ උපුටා ගනිමින්…',
+  'ai.preparingReply': 'පිළිතුර සකසමින්…',
+  'ai.ocrDownloading': 'පෙළ කියවීම සූදානම් කරමින්… {pct}%',
+  'ai.extractRequest': 'පෙළ උපුටා ගන්න',
 };
 
 const ta: Table = {
@@ -149,6 +160,11 @@ const ta: Table = {
   'auth.password': 'கடவுச்சொல்',
   'common.cancel': 'ரத்துசெய்',
   'common.save': 'சேமி',
+  'ai.readingImage': 'படத்தைப் படிக்கிறது…',
+  'ai.extractingText': 'உரையைப் பிரித்தெடுக்கிறது…',
+  'ai.preparingReply': 'பதிலைத் தயாரிக்கிறது…',
+  'ai.ocrDownloading': 'உரை வாசிப்பைத் தயார்செய்கிறது… {pct}%',
+  'ai.extractRequest': 'உரையைப் பிரித்தெடு',
 };
 
 const ar: Table = {

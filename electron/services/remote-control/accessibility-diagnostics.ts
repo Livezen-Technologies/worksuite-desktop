@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
+import { systemPreferences } from 'electron';
 import { homedir } from 'node:os';
 import { accessibility } from './host';
 
@@ -7,7 +8,8 @@ import { accessibility } from './host';
 export async function accessibilityDiagnostics() {
   const permission = await accessibility.refresh();
   if (process.platform !== 'darwin') return { permission };
-  const executable = realpathSync(process.execPath);
+  const realPath = (path: string) => { try { return realpathSync(path); } catch { return path; } };
+  const executable = realPath(process.execPath);
   const bundle = executable.match(/^.*?\.app(?=\/)/)?.[0] ?? executable;
   const redactPath = (path: string) => path.replace(homedir(), '~').replace(/\/Users\/[^/]+\//g, '/Users/~/');
   const signing = await new Promise<Record<string, string> | null>((resolve) => {
@@ -22,13 +24,18 @@ export async function accessibilityDiagnostics() {
     });
   });
   const installed = '/Applications/WorkSuite.app';
-  const otherInstalledCopy = existsSync(installed) && realpathSync(installed) !== bundle;
+  const otherInstalledCopy = existsSync(installed) && realPath(installed) !== bundle;
+  const signingVerification = await new Promise<'valid' | 'invalid' | 'unable_to_verify'>((resolve) => {
+    execFile('/usr/bin/codesign', ['--verify', '--strict', bundle], { timeout: 4_000 }, (error) => resolve(!error ? 'valid' : typeof error.code === 'number' ? 'invalid' : 'unable_to_verify'));
+  });
+  let screenRecording = 'unknown';
+  try { screenRecording = systemPreferences.getMediaAccessStatus('screen'); } catch { /* Keep verification errors distinct from denial. */ }
   return {
-    permission,
+    permission, screenRecording,
     app: { executable: redactPath(executable), bundle: redactPath(bundle), pid: process.pid, signing },
-    helper: { executable: '/usr/bin/osascript', ownerPid: process.pid, permissionCheck: 'CGPreflightPostEventAccess (AXIsProcessTrusted on older macOS)' },
+    helper: { executable: '/usr/bin/osascript', ownerPid: process.pid, permissionCheck: 'AXIsProcessTrusted and CGPreflightPostEventAccess; same launch context as the input injector' },
     otherInstalledCopy,
     translocated: bundle.includes('/AppTranslocation/'),
-    signingVerification: signing ? 'available' : 'unable_to_verify',
+    signingVerification,
   };
 }

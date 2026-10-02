@@ -27,6 +27,11 @@ const WEBSITE_EVENTS = new Set(['chat.widget.message', 'chat.widget.activity', '
 /** Events that change nothing a list or thread shows; refetching every message on each keystroke was waste. */
 const QUIET_CHAT_EVENTS = /^chat\.(typing\.|presence$|call\.)/;
 
+/** A realtime event about an announcement: the server's own nudge, or the notification that one was published. */
+export function touchesAnnouncements(e: { type: string; event?: string }): boolean {
+  return e.type === 'hr.announcement.changed' || (e.type === 'notification' && e.event === 'hr.announcement_published');
+}
+
 export function wireQueryInvalidation(): void {
   on('realtime:resync', () => void queryClient.invalidateQueries());
   on('organization:changed', () => void queryClient.invalidateQueries());
@@ -45,6 +50,9 @@ export function wireQueryInvalidation(): void {
       void queryClient.invalidateQueries({ queryKey: ['chat', 'calls'] });
       if (e.room_id !== undefined) void queryClient.invalidateQueries({ queryKey: ['chat', 'messages', String(e.room_id)] });
     }
+    // Messenger and Instagram (worksuite-desktop#36): a message in or out, a read, an account's connection changed —
+    // the toolbar badges, the lists and an open thread ask again.
+    if (e.type === 'meta.message' || e.type === 'meta.account') void queryClient.invalidateQueries({ queryKey: ['meta'] });
     if (e.type === 'notification') void queryClient.invalidateQueries({ queryKey: ['notifications'] });
     // Something shared with this person, or their access changed: Shared with me and Drive's lists show it now (worksuite-desktop#16).
     if (e.type === 'notification' && typeof e.event === 'string' && /^files\.(shared|access_changed|access_revoked)$/.test(e.event)) {
@@ -55,6 +63,9 @@ export function wireQueryInvalidation(): void {
     if (touchesInvitations(e)) for (const queryKey of [['meetings'], ['calendar'], ['home']]) void queryClient.invalidateQueries({ queryKey });
     if (e.type === 'activity.new') void queryClient.invalidateQueries({ queryKey: ['home'] });
     if (e.type === 'hr.attendance.changed') void queryClient.invalidateQueries({ queryKey: ['hr'] });
+    // An announcement was published, edited, withdrawn, expired or deleted (worksuite-desktop#98): Home's block, an open
+    // reader (which then says it is no longer available) and HR's console ask again.
+    if (touchesAnnouncements(e)) for (const queryKey of [['announcements'], ['hr', 'announcements']]) void queryClient.invalidateQueries({ queryKey });
     // Hotel PMS's live nudges (`pms.room`, `pms.hk_task`, `pms.request`): the rack and the desk's lists ask again (PMS-ARC-030).
     if (e.type.startsWith('pms.')) void queryClient.invalidateQueries({ queryKey: ['pms', 'live'] });
   });

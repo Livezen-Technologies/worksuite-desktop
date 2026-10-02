@@ -120,6 +120,9 @@ const api = {
     localAsk: call('ai:localAsk'),
     localCancel: call('ai:localCancel'),
     localRestart: call('ai:localRestart'),
+    ocr: call('ai:ocr'),
+    ocrCancel: call('ai:ocrCancel'),
+    ocrStatus: call('ai:ocrStatus'),
   },
   ring: {
     state: call('ring:state'),

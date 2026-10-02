@@ -677,7 +677,15 @@ export async function shareOn(lp: LocalParticipant, pick: SharePick | null): Pro
   if (lp.isScreenShareEnabled) await lp.setScreenShareEnabled(false);
   if (!pick) return;
   await call('media:screenPick', { id: pick.id, audio: pick.audio });
-  await lp.setScreenShareEnabled(true, { audio: pick.audio });
+  try { await lp.setScreenShareEnabled(true, { audio: pick.audio }); }
+  catch (e) {
+    const name = e instanceof Error ? e.name : '';
+    const detail = errorMessage(e);
+    throw new Error(name === 'NotAllowedError' || name === 'SecurityError'
+      ? `Screen capture was refused. Check Screen Recording / Screen & System Audio Recording for the running WorkSuite app; Accessibility is separate. ${detail}`
+      : name === 'NotFoundError' ? `The selected screen or window is no longer available. Refresh the sharing picker. ${detail}`
+      : `Screen capture could not start or be published to the call. ${detail}`);
+  }
 }
 
 export async function pauseOn(lp: LocalParticipant | undefined, paused: boolean): Promise<void> {

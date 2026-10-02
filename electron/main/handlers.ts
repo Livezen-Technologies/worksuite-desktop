@@ -110,7 +110,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     return { granted: await systemPreferences.askForMediaAccess(kind) };
   });
   router.handle('media:screenSources', () => ctx.screenShare.sources());
-  router.handle('media:screenPick', (input, c) => ctx.screenShare.pick(c.sender.id, input.id, !!input.audio));
+  router.handle('media:screenPick', (input, c) => ctx.screenShare.preparePick(c.sender.id, input.id, !!input.audio));
   router.handle('media:privacySettings', async (input) => {
     // Fixed addresses of the OS's own privacy panes; nothing from the page.
     const mac = { microphone: 'Privacy_Microphone', camera: 'Privacy_Camera', screen: 'Privacy_ScreenCapture', accessibility: 'Privacy_Accessibility' } as const;

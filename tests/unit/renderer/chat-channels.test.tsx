@@ -6,11 +6,13 @@ import type * as CoreApi from '../../../src/core/api';
 
 /**
  * Chat's channel toolbar (worksuite-desktop#33): which channels show, their badges and warnings, switching, and
- * WhatsApp's list, thread and reply box, with the draft kept.
+ * WhatsApp's list, thread and reply box, with the draft kept. WhatsApp as Chat's channel (#35): its attachments,
+ * files and templates, starting a conversation, and its channel settings.
  */
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiPost: vi.fn() }));
 vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(async () => null), on: () => () => undefined, hasDesktop: () => true, errorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)), isMac: false, registerDropped: vi.fn() }));
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
+vi.mock('../../../src/core/open-document', async (orig) => ({ ...(await orig<object>()), openDocument: vi.fn(async () => undefined), openInOffice: vi.fn() }));
 const tab = { route: '/chat?channel=whatsapp', go: vi.fn() };
 vi.mock('../../../src/core/tab-context', () => ({
   useTab: () => {
@@ -22,12 +24,15 @@ vi.mock('../../../src/core/tab-context', () => ({
 
 import { apiGet, apiPost } from '../../../src/core/api';
 import { call } from '../../../src/core/bridge';
+import { openDocument, openInOffice } from '../../../src/core/open-document';
 import { toast } from '../../../src/core/toasts';
+import { closePreview } from '../../../src/modules/chat/AttachmentViewer';
 import { AddChannel } from '../../../src/modules/chat/channels/AddChannel';
 import { ChannelBar } from '../../../src/modules/chat/channels/ChannelBar';
 import { badgeText, buildChannels, channelOf, channelRoute, channelTitle, chatUnread, rememberWhatsapp, whatsappState, type Channel } from '../../../src/modules/chat/channels/channels';
 import { WhatsappChannel } from '../../../src/modules/chat/channels/WhatsappChannel';
-import { messageText, preview, type WaAccount, type WaChat, type WaMessage } from '../../../src/modules/chat/channels/whatsapp';
+import { WhatsappSettings } from '../../../src/modules/chat/channels/WhatsappSettings';
+import { fileRefusal, messageText, preview, waAttachment, waLimits, type WaAccount, type WaChat, type WaMessage } from '../../../src/modules/chat/channels/whatsapp';
 import type { Room } from '../../../src/modules/chat/types';
 import type { WebsiteRow } from '../../../src/modules/chat/website/api';
 
@@ -48,7 +53,10 @@ beforeEach(() => {
   vi.mocked(call).mockReset().mockResolvedValue(null as never);
   vi.mocked(toast).mockReset();
 });
-afterEach(cleanup);
+afterEach(() => {
+  closePreview();
+  cleanup();
+});
 
 describe('the channels', () => {
   it('reads the channel from the route, keeping the website routes Chat always had', () => {
@@ -88,6 +96,33 @@ describe('the channels', () => {
     expect(buildChannels({ active: 'whatsapp', rooms: [], website: { access: false, rows: [] }, whatsapp: { access: false, accounts: [] } }).map((c) => c.id)).toEqual(['chat']);
     // Access but no number yet: shown while it is open (its empty state says how to connect one).
     expect(buildChannels({ active: 'whatsapp', rooms: [], website: { access: false, rows: [] }, whatsapp: { access: true, accounts: [] } }).map((c) => c.id)).toEqual(['chat', 'whatsapp']);
+  });
+
+  it('shows WhatsApp, now only in Chat (#35), to whoever has it and a number or may connect one — never without access', () => {
+    const at = (whatsapp: { access: boolean; accounts: WaAccount[]; canConnect?: boolean }, chat?: boolean) => buildChannels({ active: 'chat', chat, rooms: [], website: { access: false, rows: [] }, whatsapp }).map((c) => c.id);
+    expect(at({ access: true, accounts: [], canConnect: true })).toEqual(['chat', 'whatsapp']);
+    expect(at({ access: true, accounts: [], canConnect: false })).toEqual(['chat']);
+    expect(at({ access: false, accounts: [account({})], canConnect: true })).toEqual(['chat']);
+    // WhatsApp without Chat: Chat for WhatsApp alone.
+    expect(buildChannels({ active: 'whatsapp', chat: false, rooms: [], website: { access: false, rows: [] }, whatsapp: { access: true, accounts: [account({})] } }).map((c) => c.id)).toEqual(['whatsapp']);
+  });
+
+  it('puts the unread messages on the shared numbers on the WhatsApp icon', () => {
+    const [, wa] = buildChannels({ active: 'chat', rooms: [], website: { access: false, rows: [] }, whatsapp: { access: true, accounts: [account({ unread: 3 }), account({ id: 2, unread: 9 })] } });
+    expect(wa).toMatchObject({ id: 'whatsapp', badge: 12 });
+    render(<ChannelBar channels={[wa!]} active="chat" onPick={() => undefined} onAdd={() => undefined} />);
+    expect(screen.getByRole('button', { name: 'WhatsApp · 12 unread' }).textContent).toContain('12');
+  });
+
+  it('reads an attachment kept in the Drive, and the files the workspace allows', () => {
+    expect(waAttachment(message({ kind: 'text' }))).toBeNull();
+    expect(waAttachment(message({ kind: 'image', file_id: 31, filename: 'shelf.jpg', mime_type: 'image/jpeg', size: 2048 }))).toEqual({ driveFile: 31, filename: 'shelf.jpg', mime: 'image/jpeg', size: 2048, url: '/api/files/31/download', download_url: '/api/files/31/download' });
+    const limits = waLimits({ whatsapp_allow_video: '0', whatsapp_max_attach_mb: '2' });
+    expect(fileRefusal({ name: 'clip.mp4', type: 'video/mp4', size: 10 }, limits)).toBe('clip.mp4: videos cannot be sent on WhatsApp here.');
+    expect(fileRefusal({ name: 'big.pdf', type: 'application/pdf', size: 3 * 1024 * 1024 }, limits)).toBe('big.pdf is larger than 2 MB.');
+    expect(fileRefusal({ name: 'quote.pdf', type: 'application/pdf', size: 1024 }, limits)).toBeNull();
+    // Never more than the app's API proxy takes in one request.
+    expect(waLimits({ whatsapp_max_attach_mb: '64' }).maxBytes).toBe(25 * 1024 * 1024);
   });
 
   it('names a channel with its count and its problem', () => {
@@ -164,9 +199,13 @@ describe('WhatsApp in Chat', () => {
     vi.mocked(apiGet).mockImplementation((async (path: string) => {
       if (path === '/api/whatsapp/chats') return { chats, total: chats.length };
       if (path === '/api/whatsapp/chats/7') return t;
+      if (path === '/api/whatsapp/settings') return { settings: { whatsapp_allow_video: '0' }, can_edit: false };
+      if (path === '/api/whatsapp/templates') return { templates: [{ id: 3, account_id: null, name: 'Order update', kind: 'template', body: 'Hello {{1}}, your order {{2}} is ready.', slots: [1, 2] }, { id: 4, account_id: '2', name: 'Other number', kind: 'template', body: 'Hi', slots: [] }, { id: 5, account_id: null, name: 'Thanks', kind: 'quick_reply', body: 'Thanks!', slots: [] }] };
       throw new Error(`unexpected ${path}`);
     }) as never);
   }
+
+  const mount = (o: { onSettings?: () => void; accounts?: WaAccount[] } = {}) => wrap(<WhatsappChannel accounts={o.accounts ?? [account({})]} loading={false} error={null} retry={() => undefined} onConnect={null} onRelink={() => undefined} onSettings={o.onSettings} />);
 
   it('lists the conversations, and opens one', async () => {
     serve();
@@ -214,8 +253,117 @@ describe('WhatsApp in Chat', () => {
     tab.route = '/chat?channel=whatsapp&wa=7';
     serve(thread({ allowed: false }));
     wrap(<WhatsappChannel accounts={[account({})]} loading={false} error={null} retry={() => undefined} onConnect={null} onRelink={() => undefined} />);
-    expect(await screen.findByText(/more than 24 hours since they last wrote.*Templates are sent from WhatsApp on the web/)).toBeTruthy();
+    expect(await screen.findByText(/more than 24 hours since they last wrote.*Send an approved template instead/)).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Attach files' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('sends an approved template once the 24-hour window has closed, its placeholders filled in', async () => {
+    tab.route = '/chat?channel=whatsapp&wa=7';
+    serve(thread({ allowed: false }));
+    vi.mocked(apiPost).mockResolvedValue({ ok: true } as never);
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Send a template' }));
+    const list = await screen.findByRole('list', { name: 'Templates' });
+    // Only this number's approved templates (or everybody's): not another number's, not a saved reply.
+    expect(within(list).getAllByRole('button').map((b) => b.querySelector('b')?.textContent)).toEqual(['Order update']);
+    fireEvent.click(within(list).getByRole('button'));
+    const send = screen.getAllByRole('button', { name: 'Send' }).at(-1) as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    fireEvent.change(screen.getByRole('textbox', { name: '{{1}}' }), { target: { value: 'Nimal' } });
+    fireEvent.change(screen.getByRole('textbox', { name: '{{2}}' }), { target: { value: 'SO-12' } });
+    expect(screen.getByText('Hello Nimal, your order SO-12 is ready.')).toBeTruthy();
+    fireEvent.click(send);
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/chats/7/messages', { kind: 'template', template_id: 3, variables: ['Nimal', 'SO-12'] }));
+    await waitFor(() => expect(screen.queryByRole('list', { name: 'Templates' })).toBeNull());
+  });
+
+  it('offers no template to a viewer of the number', async () => {
+    tab.route = '/chat?channel=whatsapp&wa=7';
+    serve(thread({ allowed: false, canSend: false }));
+    mount();
+    expect(await screen.findByText('You can read this number’s conversations but not answer them.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Send a template' })).toBeNull();
+  });
+
+  it('shows the conversation’s attachments and opens them in the shared preview, or on this computer', async () => {
+    tab.route = '/chat?channel=whatsapp&wa=7';
+    const t = thread();
+    t.messages.push(
+      message({ id: 3, kind: 'image', body: null, caption: 'The shelf', file_id: 31, filename: 'shelf.jpg', mime_type: 'image/jpeg', size: 2048 }),
+      message({ id: 4, kind: 'document', body: 'quote.pdf', file_id: 32, filename: 'quote.pdf', mime_type: 'application/pdf', size: 4096 }),
+      message({ id: 5, kind: 'document', body: 'prices.xlsx', file_id: 33, filename: 'prices.xlsx', mime_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+      message({ id: 6, kind: 'video', body: null, media_note: 'Larger than the workspace keeps.' }),
+    );
+    serve(t);
+    mount();
+    const picture = await screen.findByRole('button', { name: 'Open shelf.jpg' });
+    expect(picture.querySelector('img')?.getAttribute('src')).toContain('/api/files/31/download');
+    expect(screen.getByText('The shelf')).toBeTruthy();
+    expect(screen.getByText('Larger than the workspace keeps.')).toBeTruthy();
+    fireEvent.click(picture);
+    expect(await screen.findByRole('dialog', { name: /shelf\.jpg/ })).toBeTruthy();
+    closePreview();
+    fireEvent.click(screen.getByRole('button', { name: 'Open quote.pdf' }));
+    expect(openDocument).toHaveBeenCalledWith({ fileId: '32' }, 'quote.pdf');
+    fireEvent.click(screen.getByRole('button', { name: 'Open prices.xlsx' }));
+    expect(openInOffice).toHaveBeenCalledWith({ kind: 'api', path: '/api/files/33/download', name: 'prices.xlsx' });
+  });
+
+  it('sends files with the words as their caption, refusing what the workspace does not allow', async () => {
+    tab.route = '/chat?channel=whatsapp&wa=7';
+    serve();
+    vi.mocked(apiPost).mockImplementation((async (path: string) => (path.endsWith('/attachments') ? { sent: 1, failed: 0, results: [{ name: 'quote.pdf', ok: true }] } : { ok: true })) as never);
+    const { container } = mount();
+    const box = await screen.findByRole('textbox', { name: 'Message Nimal Perera on WhatsApp' });
+    await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/api/whatsapp/settings', undefined, expect.anything()));
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const pdf = new File(['%PDF'], 'quote.pdf', { type: 'application/pdf' });
+    const clip = new File(['x'], 'clip.mp4', { type: 'video/mp4' });
+    // The workspace's settings have arrived: videos are switched off.
+    await act(async () => undefined);
+    fireEvent.change(input, { target: { files: [pdf, clip] } });
+    expect(toast).toHaveBeenCalledWith('error', 'clip.mp4: videos cannot be sent on WhatsApp here.');
+    const tray = screen.getByRole('list', { name: 'Files to send' });
+    expect(within(tray).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['quote.pdf']);
+    fireEvent.change(box, { target: { value: 'Your quote' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/chats/7/attachments', expect.any(FormData)));
+    const form = vi.mocked(apiPost).mock.calls.find((c) => c[0] === '/api/whatsapp/chats/7/attachments')![1] as FormData;
+    expect((form.getAll('files[]') as File[]).map((f) => f.name)).toEqual(['quote.pdf']);
+    expect(form.get('caption')).toBe('Your quote');
+    await waitFor(() => expect(screen.queryByRole('list', { name: 'Files to send' })).toBeNull());
+    expect((box as HTMLTextAreaElement).value).toBe('');
+  });
+
+  it('offers no voice or video call in a WhatsApp conversation', async () => {
+    tab.route = '/chat?channel=whatsapp&wa=7';
+    serve();
+    mount();
+    await screen.findByRole('region', { name: 'WhatsApp with Nimal Perera' });
+    expect(screen.queryByRole('button', { name: /voice call|video call|^call/i })).toBeNull();
+  });
+
+  it('opens the channel settings from the list', async () => {
+    serve();
+    const onSettings = vi.fn();
+    mount({ onSettings });
+    fireEvent.click(await screen.findByRole('button', { name: 'WhatsApp settings' }));
+    expect(onSettings).toHaveBeenCalled();
+  });
+
+  it('starts a conversation with a number from an old link or Contacts, then opens it', async () => {
+    tab.route = '/chat?channel=whatsapp&to=94771112223';
+    serve();
+    vi.mocked(apiPost).mockResolvedValue({ chat_id: 55 } as never);
+    mount({ accounts: [account({}), account({ id: 2, name: 'Support', is_default: false })] });
+    const number = await screen.findByRole('textbox', { name: /Phone number/ });
+    expect((number as HTMLInputElement).value).toBe('94771112223');
+    fireEvent.click(screen.getByRole('combobox', { name: /Send from/ }));
+    fireEvent.click(screen.getByRole('option', { name: /Support/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/chats', { account_id: 2, phone: '94771112223' }));
+    expect(tab.go).toHaveBeenCalledWith('/chat?channel=whatsapp&wa=55');
   });
 
   it('shows a number that is not connected, with the way to link it again', async () => {
@@ -240,6 +388,60 @@ describe('WhatsApp in Chat', () => {
     wrap(<WhatsappChannel accounts={[]} loading={false} error={null} retry={() => undefined} onConnect={null} onRelink={() => undefined} />);
     expect(screen.getByText('Ask whoever manages WhatsApp numbers to share one with you.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Connect a number' })).toBeNull();
+  });
+});
+
+describe('WhatsApp channel settings', () => {
+  const settings = (accounts: WaAccount[], o: { onConnect?: (() => void) | null; onRelink?: (a: WaAccount) => void } = {}) =>
+    wrap(<WhatsappSettings accounts={accounts} loading={false} onConnect={o.onConnect ?? null} onRelink={o.onRelink ?? (() => undefined)} onClose={() => undefined} />);
+
+  it('lists the numbers and where each stands, with what this person may do', () => {
+    settings([account({ role: 'owner', provider_label: 'WhatsApp Web' }), account({ id: 2, name: 'Support', is_default: false, status: 'error', status_note: 'The phone unlinked this device.', can_connect: false, role: 'agent' })]);
+    const sales = screen.getByRole('listitem', { name: 'Sales' });
+    expect(within(sales).getByText('Connected')).toBeTruthy();
+    expect(within(sales).getByText('Default')).toBeTruthy();
+    expect(within(sales).getByText('+94771234567 · WhatsApp Web · Owner')).toBeTruthy();
+    expect(within(sales).getByRole('button', { name: 'Check connection' })).toBeTruthy();
+    expect(within(sales).getByRole('button', { name: 'Unlink from phone' })).toBeTruthy();
+    expect(within(sales).queryByRole('button', { name: 'Make default' })).toBeNull();
+    const support = screen.getByRole('listitem', { name: 'Support' });
+    expect(within(support).getByText('Not connected')).toBeTruthy();
+    expect(within(support).getByText('The phone unlinked this device.')).toBeTruthy();
+    // The server says this person may not change Support: nothing is offered.
+    expect(within(support).queryAllByRole('button')).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: 'Connect a number' })).toBeNull();
+  });
+
+  it('checks a connection, makes a number the default, links one again and unlinks one after asking', async () => {
+    vi.mocked(apiPost).mockResolvedValue({ ok: true, error: null } as never);
+    const onRelink = vi.fn();
+    const onConnect = vi.fn();
+    const down = account({ id: 2, name: 'Support', is_default: false, status: 'disconnected' });
+    settings([account({}), down], { onRelink, onConnect });
+    const sales = screen.getByRole('listitem', { name: 'Sales' });
+    fireEvent.click(within(sales).getByRole('button', { name: 'Check connection' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/accounts/1/check'));
+    const support = screen.getByRole('listitem', { name: 'Support' });
+    fireEvent.click(within(support).getByRole('button', { name: 'Make default' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/accounts/2/default'));
+    fireEvent.click(within(support).getByRole('button', { name: 'Link again' }));
+    expect(onRelink).toHaveBeenCalledWith(down);
+    fireEvent.click(within(sales).getByRole('button', { name: 'Unlink from phone' }));
+    expect(within(sales).getByRole('alert').textContent).toContain('Unlink Sales from the phone? Its conversations stay here.');
+    fireEvent.click(within(sales).getByRole('button', { name: 'Unlink' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/accounts/1/unlink'));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('success', 'Sales is unlinked.'));
+    fireEvent.click(screen.getByRole('button', { name: 'Connect a number' }));
+    expect(onConnect).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'More on the web' }));
+    expect(call).toHaveBeenCalledWith('app:openInBrowser', { path: '/whatsapp' });
+  });
+
+  it('is reached from Add a channel too', () => {
+    const onSettings = vi.fn();
+    wrap(<AddChannel website={{ access: false, canSetUp: false }} whatsapp={{ access: true, canConnect: false, accounts: [account({})] }} onClose={() => undefined} onConnected={() => undefined} onSettings={onSettings} />);
+    fireEvent.click(within(screen.getByRole('region', { name: 'WhatsApp' })).getByRole('button', { name: 'Settings' }));
+    expect(onSettings).toHaveBeenCalled();
   });
 });
 

@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import type { AiRules } from '@shared/types';
 import { ApiError, apiGet, apiPost, apiPut } from '../../core/api';
 import { call } from '../../core/bridge';
+import type { UploadImage } from './images';
+import type { VisionInfo } from './vision';
 
 /**
  * The AI assistant (WS-AI-SRS-001 §8.2, DSK-1…5): the server's own, asked
@@ -45,8 +47,11 @@ export interface AskTurn {
   context?: { used: { ref: string; title: string }[]; denied: string[] };
 }
 
-/** One question to the assistant. `refs` are records it may read, as the person asking. */
-export function ask(text: string, opts: { surface: Surface; refs?: string[]; conversationId?: number | null; moduleAccess?: { read: string[]; write: string[] } }): Promise<AskTurn> {
+/**
+ * One question to the assistant. `refs` are records it may read, as the person asking; `images` go only to a model
+ * the server has verified as reading images (worksuite-desktop#59).
+ */
+export function ask(text: string, opts: { surface: Surface; refs?: string[]; conversationId?: number | null; moduleAccess?: { read: string[]; write: string[] }; images?: UploadImage[] }): Promise<AskTurn> {
   return apiPost<AskTurn>('/api/ai/assist/chat', {
     text,
     reply_language: currentLanguage(),
@@ -56,6 +61,25 @@ export function ask(text: string, opts: { surface: Surface; refs?: string[]; con
     use_context: (opts.refs ?? []).length > 0,
     // Modules this person switched off for WorkSuite AI (worksuite-desktop#51): it uses none of their functions.
     ...(opts.moduleAccess ? { module_access: { off_read: opts.moduleAccess.read, off_write: opts.moduleAccess.write } } : {}),
+    ...(opts.images?.length ? { images: opts.images } : {}),
+  });
+}
+
+/**
+ * Whether online AI can look at images here (worksuite-desktop#59): the server has a model a person marked as reading
+ * them. Asked only when online AI may be used at all; a server without the endpoint has none.
+ */
+export function useVision(enabled: boolean) {
+  return useQuery({
+    queryKey: ['ai', 'vision'],
+    queryFn: ({ signal }) =>
+      apiGet<VisionInfo>('/api/ai/assist/vision', undefined, signal).catch((e: unknown) => {
+        if (e instanceof ApiError && e.status === 404) return { available: false, reason: 'Your WorkSuite server cannot answer questions about images yet.' };
+        throw e;
+      }),
+    enabled,
+    staleTime: 5 * 60_000,
+    retry: (n, e) => !(e instanceof ApiError && e.forbidden) && n < 1,
   });
 }
 

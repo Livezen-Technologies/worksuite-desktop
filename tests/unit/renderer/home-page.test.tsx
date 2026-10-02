@@ -20,6 +20,8 @@ import { aiWidget, ui } from '../../../src/core/ui';
 import { visibleApps } from '../../../shared/apps';
 import { resolveWebLink } from '../../../shared/links';
 import HomePage from '../../../src/modules/home/HomePage';
+import { current, ranked, type MyAnnouncement } from '../../../src/modules/home/Announcements';
+import { touchesAnnouncements } from '../../../src/core/query';
 import { assistantSession } from '../../../src/modules/ai/session';
 import { compactCount, taskBuckets } from '../../../src/modules/home/today';
 import type { Task } from '../../../src/modules/tasks/api';
@@ -399,6 +401,31 @@ describe('Announcements on Home (#98, #104)', () => {
     }) as never);
     show('/home?announcement=99');
     expect(await screen.findByText(/no longer available/)).toBeTruthy();
+  });
+
+  it('urgent and pinned come first; one past its expiry is gone; See all opens every one', async () => {
+    const a = (id: number, over: Partial<MyAnnouncement>) => ({ ...NOTICES[0], id, title: `N${id}`, ...over }) as MyAnnouncement;
+    const order = ranked([
+      a(1, { priority: 'important', published_at: '2026-10-01 09:00:00' }),
+      a(2, { priority: 'normal', pinned: true, published_at: '2026-09-01 09:00:00' }),
+      a(3, { priority: 'urgent', published_at: '2026-09-02 09:00:00' }),
+      a(4, { priority: 'normal', published_at: '2026-10-02 09:00:00' }),
+      a(5, { priority: 'urgent', pinned: true, published_at: '2026-08-01 09:00:00' }),
+    ]).map((n) => n.id);
+    expect(order).toEqual([5, 3, 2, 1, 4]);
+    const now = Date.parse('2026-10-02T10:30:00Z');
+    expect(current([a(1, { expires_at: '2026-10-02 10:29:00' }), a(2, { expires_at: '2026-10-02 23:59:59' }), a(3, { expires_at: null })], now).map((n) => n.id)).toEqual([2, 3]);
+
+    const { go } = show();
+    const box = await screen.findByRole('region', { name: 'Announcements' });
+    fireEvent.click(await within(box).findByRole('button', { name: 'See all announcements' }));
+    expect(go).toHaveBeenCalledWith('/home?announcements=all');
+  });
+
+  it('an announcement published, edited or withdrawn elsewhere refreshes the lists', () => {
+    expect(touchesAnnouncements({ type: 'hr.announcement.changed' })).toBe(true);
+    expect(touchesAnnouncements({ type: 'notification', event: 'hr.announcement_published' })).toBe(true);
+    expect(touchesAnnouncements({ type: 'notification', event: 'files.shared' })).toBe(false);
   });
 
   it('a notification link opens it on Home', () => {

@@ -1,6 +1,7 @@
 import { Children, Fragment, isValidElement, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactElement, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
+import { text, useLanguage } from '../core/i18n';
 
 /**
  * The one dropdown (replaces every native <select> in the app).
@@ -116,6 +117,7 @@ export function lookOf(className = ''): { size: 'sm' | 'md'; dark: boolean; acti
 }
 
 export function Select<T = string>(props: SelectProps<T>) {
+  useLanguage();
   const { value, onChange, onValueChange, children, disabled, className, placeholder, title } = props;
   const ariaLabel = props['aria-label'] ?? props.label;
   const options = useMemo<Array<SelectOption<T | string>>>(() => (props.options ? props.options : optionsFromChildren(children)), [props.options, children]);
@@ -147,8 +149,8 @@ export function Select<T = string>(props: SelectProps<T>) {
     const below = vh - r.bottom - 10;
     const above = r.top - 10;
     const want = Math.min(340, 44 + options.length * 34 + (searchable ? 46 : 0));
-    if (below >= want || below >= above) setPos({ left, width, top: r.bottom + 4, maxHeight: Math.max(120, Math.min(340, below)) });
-    else setPos({ left, width, bottom: vh - r.top + 4, maxHeight: Math.max(120, Math.min(340, above)) });
+    if (below >= want || below >= above) setPos({ left, width, top: r.bottom + 4, maxHeight: Math.max(0, Math.min(340, below)) });
+    else setPos({ left, width, bottom: vh - r.top + 4, maxHeight: Math.max(0, Math.min(340, above)) });
   }, [options.length, searchable]);
 
   const close = useCallback((refocus = true) => {
@@ -290,7 +292,7 @@ export function Select<T = string>(props: SelectProps<T>) {
           look.layout,
         ].join(' ')}
       >
-        <span className={'min-w-0 flex-1 truncate ' + (placeholderShown && !look.active ? (look.dark ? 'text-white/60' : 'text-ink-3') : '')}>{current ? current.label : (placeholder ?? (value ? String(value) : 'Choose…'))}</span>
+        <span className={'min-w-0 flex-1 truncate ' + (placeholderShown && !look.active ? (look.dark ? 'text-white/60' : 'text-ink-3') : '')}>{current ? current.label : (placeholder ?? (value ? String(value) : text('Choose…')))}</span>
         <Icon name="chevron-down" size={14} className={'shrink-0 transition-transform ' + (look.dark ? 'text-white/70 ' : look.active ? 'text-primary ' : 'text-ink-3 ') + (open ? 'rotate-180' : '')} />
       </button>
       {open && pos
@@ -306,15 +308,15 @@ export function Select<T = string>(props: SelectProps<T>) {
                   <Icon name="search" size={14} className="shrink-0 text-ink-3" />
                   <input
                     autoFocus
-                    aria-label={`Search ${ariaLabel ?? 'options'}`}
+                    aria-label={text('Search {label}', { label: ariaLabel ?? text('options') })}
                     aria-controls={listId}
                     value={query}
                     onChange={(e) => (search(e.target.value), setActive(startAt(e.target.value)))}
-                    placeholder="Search…"
+                    placeholder={text('Search…')}
                     className="bare-focus h-[38px] min-w-0 flex-1 border-0 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-3"
                   />
                   {query ? (
-                    <button type="button" aria-label="Clear the search" onClick={() => (search(''), setActive(startAt('')))} className="flex h-5 w-5 items-center justify-center rounded-full text-ink-3 hover:bg-subtle hover:text-ink">
+                    <button type="button" aria-label={text('Clear the search')} onClick={() => (search(''), setActive(startAt('')))} className="flex h-5 w-5 items-center justify-center rounded-full text-ink-3 hover:bg-subtle hover:text-ink">
                       <Icon name="x" size={12} />
                     </button>
                   ) : null}
@@ -352,7 +354,7 @@ export function Select<T = string>(props: SelectProps<T>) {
                     </Fragment>
                   );
                 })}
-                {!shown.length ? <div className="px-3 py-3 text-center text-[12.5px] text-ink-3">{props.loading ? 'Searching…' : (props.empty ?? (query ? `Nothing matches “${query}”.` : 'Nothing to choose.'))}</div> : null}
+                {!shown.length ? <div className="px-3 py-3 text-center text-[12.5px] text-ink-3">{props.loading ? text('Searching…') : (props.empty ?? (query ? text('Nothing matches “{query}”.', { query }) : text('Nothing to choose.')))}</div> : null}
               </div>
             </div>,
             document.body,

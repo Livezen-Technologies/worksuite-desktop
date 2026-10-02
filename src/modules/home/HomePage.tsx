@@ -24,7 +24,7 @@ import { isJunkFile } from '../files/api';
 import type { Room } from '../chat/types';
 import { assistantSession } from '../ai/session';
 import { aiDock } from '../../app/overlays/AiDock';
-import { AllAnnouncements, AnnouncementReader, AnnouncementRows, forCompany, ranked, toAcknowledge, useMyAnnouncements, type MyAnnouncement } from './Announcements';
+import { AllAnnouncements, AnnouncementReader, AnnouncementRows, current, forCompany, ranked, toAcknowledge, useMyAnnouncements, type MyAnnouncement } from './Announcements';
 import { Agenda } from './Agenda';
 import { MoreButton, PopMenu, type MenuAction } from './Menu';
 import { TodaysWork } from './TodaysWork';
@@ -168,7 +168,7 @@ export default function HomePage(_props: ModuleProps) {
   const next = agendaOf(agenda, now).next;
   // Announcements: an older server without them, or one refusing, has no card rather than an error.
   const noAnnouncements = announcements.error instanceof ApiError && (announcements.error.status === 404 || announcements.error.forbidden);
-  const notices = ranked(forCompany(announcements.data ?? [], company));
+  const notices = ranked(current(forCompany(announcements.data ?? [], company)));
   const acks = toAcknowledge(notices);
   const approvalItems = has('hr') ? (approvals.data?.items ?? []) : [];
   const approvalCount = has('hr') ? (approvals.data?.count ?? 0) : 0;
@@ -274,7 +274,7 @@ export default function HomePage(_props: ModuleProps) {
         title={t('home.announcements')}
         count={notices.filter((a) => !a.read).length}
         countTone="indigo"
-        action={notices.length ? <HeaderLink label="All announcements" onClick={() => go('/home?announcements=all')}>All</HeaderLink> : null}
+        action={notices.length ? <HeaderLink label="See all announcements" onClick={() => go('/home?announcements=all')}>See all</HeaderLink> : null}
         loading={announcements.isLoading}
         error={announcements.error}
         onRetry={() => void announcements.refetch()}
