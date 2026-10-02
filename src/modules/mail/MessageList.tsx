@@ -245,7 +245,7 @@ export function MessageList(p: MessageListProps) {
         {p.notice ? <p className="mt-1.5 text-[12px] text-ink-3">{p.notice}</p> : null}
       </div>
       {view === 'table' && flat.length ? <TableHead unified={p.unified} /> : null}
-      <div className="min-h-0 flex-1 border-t border-line" role="listbox" aria-label="Messages" aria-activedescendant={p.selectedKey ? `mail-row-${p.selectedKey}` : undefined}>
+      <div className="min-h-0 flex-1 border-t border-line" role="listbox" tabIndex={0} aria-label="Messages" aria-activedescendant={p.selectedKey && flat.some((r) => r.key === p.selectedKey) ? `mail-row-${p.selectedKey}` : undefined}>
         {p.loading ? <Spinner /> : p.error && flat.length === 0 ? <div className="p-4"><ErrorNote error={p.error} onRetry={p.onRetry} /></div> : flat.length === 0 ? <Empty icon="inbox" title={p.search ? text('No messages match') : text('Nothing here')} hint={p.search ? text('Press Enter to search every mailbox, older mail too.') : undefined} /> : null}
         {items.length > 0 ? (
           items.length > 150 ? (

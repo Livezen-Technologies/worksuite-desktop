@@ -49,6 +49,8 @@ export interface MessageViewProps {
   onControls?: (c: ViewControls | null) => void;
   /** Start a reply as soon as the message is here (a notification's Reply). */
   autoReply?: boolean;
+  /** The message arrived: its tab can be named (a message opened from a link is not in the list). */
+  onLoaded?: (subject: string, from: string) => void;
 }
 
 export interface ViewControls {
@@ -187,6 +189,10 @@ export function MessageView(p: MessageViewProps) {
     onControls?.({ act: (a) => void act(a === 'star' && m?.is_starred ? 'unstar' : a), reply });
     return () => onControls?.(null);
   });
+  const { onLoaded } = p;
+  useEffect(() => {
+    if (m) onLoaded?.(m.subject, m.from_name || m.from_email);
+  }, [m, onLoaded]);
   const replied = useRef(false);
   useEffect(() => {
     if (p.autoReply && m && clean && !replied.current) {

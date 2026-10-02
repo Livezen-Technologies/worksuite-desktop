@@ -184,6 +184,9 @@ export default function MailPage({ active }: ModuleProps) {
       else closeMessage();
     }
   };
+  // A message opened from a link (a notification, another window) names its tab once it has arrived.
+  // (The update returns the same list when there is nothing to name, so React does not render again.)
+  const nameTab = (subject: string, from: string) => setTabs((ts) => (ts.some((t) => t.key === currentKey && (!t.subject || !t.from)) ? ts.map((t) => (t.key === currentKey ? { ...t, subject: t.subject || subject, from: t.from || from } : t)) : ts));
   const at = flat.findIndex((r) => r.key === currentKey);
   const move = (by: number) => {
     const i = step(flat, at, by);
@@ -380,6 +383,7 @@ export default function MailPage({ active }: ModuleProps) {
             controls.current = c;
           }}
           autoReply={query.get('reply') === '1'}
+          onLoaded={nameTab}
         />
       ) : null}
     </ReadingPane>
