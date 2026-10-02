@@ -5,6 +5,7 @@ import { todaySales, type SalesAccess } from './sales';
 import type { OcrLanguage } from '@shared/ocr';
 import { t, text } from '../../core/i18n';
 import { askLocal } from '../../core/local-ai';
+import { markdownPlain } from '../../core/markdown';
 import { createStore, type Store } from '../../core/store';
 import { ask, assistantProblem, pickFile, type AskTurn, type PendingAction, type Surface } from './assistant';
 import { admitImages, ocrPng, uploadImage, type AskImage, type UploadImage } from './images';
@@ -132,7 +133,8 @@ export function answerPreview(entries: AskEntry[], locked: boolean, max = 180): 
   if (!last) return '';
   const card = last.turn?.pending_actions?.find((a) => a.status === 'awaiting_confirmation');
   const said = last.stopped ? '' : last.text.trim() || card?.preview?.title || '';
-  const lines = said
+  // The answer's words, not its Markdown marks.
+  const lines = markdownPlain(said)
     .split('\n')
     .map((l) => l.trim())
     .filter(Boolean)

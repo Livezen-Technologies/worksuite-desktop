@@ -267,6 +267,18 @@ describe('the floating button and its preview (#126)', () => {
     expect(screen.getByText('Two tasks are due today.')).toBeTruthy();
   });
 
+  it('draws the answer in Markdown, in the conversation and its preview, with no raw marks (#150)', async () => {
+    const later = await minimisedAsking();
+    await later.answer(turn('\n**Two tasks** are due *today*:\n\n* Finish the report\n* Call Nimal'));
+    expect(screen.getByTestId('ai-notice-preview').textContent).toBe('Two tasks are due today: • Finish the report • Call Nimal');
+    fireEvent.click(screen.getByRole('button', { name: 'View Result' }));
+    const conversation = screen.getByTestId('ai-conversation');
+    expect(conversation.textContent).not.toContain('*');
+    expect(conversation.querySelector('strong')?.textContent).toBe('Two tasks');
+    expect(conversation.querySelector('em')?.textContent).toBe('today');
+    expect([...conversation.querySelectorAll('li')].map((li) => li.textContent)).toEqual(['Finish the report', 'Call Nimal']);
+  });
+
   it('View Result brings back the conversation and its latest answer', async () => {
     const later = await minimisedAsking();
     await later.answer(turn('Two tasks are due today.'));

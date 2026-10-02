@@ -11,6 +11,7 @@ import { hasDesktop, on } from '../core/bridge';
 import { useLanguage } from '../core/i18n';
 import { useStore } from '../core/store';
 import { toast } from '../core/toasts';
+import { closePanelsOnSessionChange } from '../core/ui';
 import { Shell } from '../layouts/Shell';
 import { Spinner } from '../components/ui';
 import { Onboarding, SetupWizard } from './onboarding/Onboarding';
@@ -37,6 +38,8 @@ export function App() {
   // Messages from the main process, on every screen — including sign-in, where
   // a refused passkey callback or a server warning has to be seen too.
   useEffect(() => (hasDesktop() ? on<ToastMessage>('toast', (t) => toast(t.kind, t.text)) : undefined), []);
+  // Signed in, out, locked or unlocked: the workspace comes back with no menu or panel open (worksuite-desktop#150).
+  useEffect(() => closePanelsOnSessionChange(), []);
   useLanguage();
   const ready = useStore(app, (s) => s.ready);
   const auth = useStore(app, (s) => s.auth);
