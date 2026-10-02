@@ -57,6 +57,10 @@
   /* The offline banner and an action waiting to go: a warm note, not an error. */
   --ws-note-bg: #fdf1e3;
   --ws-note-line: #f6d7b0;
+  /* Glass: a quieter action beside the main one — a translucent fill with a soft edge, brighter on hover. */
+  --ws-glass: rgba(255, 255, 255, 0.62);
+  --ws-glass-hover: rgba(255, 255, 255, 0.96);
+  --ws-glass-line: rgba(15, 27, 61, 0.14);
 }
 
 [data-theme='dark'] {
@@ -93,6 +97,9 @@
   --ws-acct-slate: #5f6e86;
   --ws-note-bg: #36240f;
   --ws-note-line: #5a3b14;
+  --ws-glass: rgba(255, 255, 255, 0.045);
+  --ws-glass-hover: rgba(255, 255, 255, 0.09);
+  --ws-glass-line: rgba(255, 255, 255, 0.14);
 }
 
 [data-density='compact'] {
@@ -127,6 +134,9 @@
   --color-badge: var(--ws-badge);
   --color-well: var(--ws-well);
   --color-edge: var(--ws-edge);
+  --color-glass: var(--ws-glass);
+  --color-glass-hover: var(--ws-glass-hover);
+  --color-glass-line: var(--ws-glass-line);
   --font-sans: 'Plus Jakarta Sans Variable', 'Noto Sans Sinhala', 'Noto Sans Tamil', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   --radius-control: 8px;

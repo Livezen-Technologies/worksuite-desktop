@@ -136,6 +136,28 @@ describe('the sidebar', () => {
     expect(await screen.findByText('Local store 412 MB')).toBeTruthy();
   });
 
+  it('leads with an accent New email button whose N chip is the wired shortcut, and a glass search button (#148)', async () => {
+    show();
+    const nav = await screen.findByRole('navigation', { name: 'Mail' });
+    const compose = within(nav).getByRole('button', { name: 'New email' });
+    // The chip is decoration; the shortcut is named for assistive tech, and N really composes.
+    expect(compose.getAttribute('aria-keyshortcuts')).toBe('N');
+    const chip = compose.querySelector('kbd')!;
+    expect(chip.textContent).toBe('N');
+    expect(chip.getAttribute('aria-hidden')).toBe('true');
+    expect(compose.className).toContain('text-white');
+    expect(compose.className).toContain('focus-visible:outline-2');
+    expect(compose.className).toContain('motion-safe:enabled:hover:-translate-y-px');
+    expect(compose.className).not.toMatch(/(^|\s)(enabled:)?hover:-translate-y-px/);
+    const search = within(nav).getByRole('button', { name: 'Search mail' });
+    expect(search.getAttribute('title')).toBe('Search mail (/)');
+    expect(search.className).toContain('bg-glass');
+    expect(search.className).toContain('h-11 w-11');
+    expect(search.querySelector('kbd')).toBeNull();
+    fireEvent.keyDown(document.body, { key: 'n' });
+    expect(await screen.findByRole('form', { name: 'New email' })).toBeTruthy();
+  });
+
   it('opens a smart view as the combined list narrowed', async () => {
     show();
     fireEvent.click(within(await screen.findByRole('navigation', { name: 'Mail' })).getByRole('button', { name: /^Unread/ }));
