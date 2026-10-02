@@ -23,7 +23,7 @@ export function Button({ variant = 'secondary', size = 'md', icon, loading, clas
       {...rest}
       disabled={rest.disabled || loading}
       className={cx(
-        'inline-flex items-center justify-center gap-1.5 rounded-[8px] font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap',
+        'ws-localized-control inline-flex items-center justify-center gap-1.5 rounded-[8px] font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap',
         size === 'sm' ? 'h-7 px-2.5 text-[12px]' : size === 'lg' ? 'h-11 px-5 text-[14px]' : 'h-8 px-3 text-[13px]',
         VARIANTS[variant],
         className,

@@ -2,11 +2,17 @@
   "compilerOptions": {
     "composite": true,
     "target": "ES2023",
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
-    "types": ["vite/client"],
+    "types": [
+      "vite/client"
+    ],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
@@ -17,9 +23,20 @@
     "outDir": "node_modules/.tsc/web",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@shared/*": ["shared/*"]
+      "@/*": [
+        "src/*"
+      ],
+      "@shared/*": [
+        "shared/*"
+      ]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "shared/**/*.ts", "tests/unit/renderer/**/*.ts", "tests/unit/renderer/**/*.tsx"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "shared/**/*.ts",
+    "tests/unit/renderer/**/*.ts",
+    "tests/unit/renderer/**/*.tsx",
+    "shared/locales/*.json"
+  ]
 }

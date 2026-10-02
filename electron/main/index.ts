@@ -1306,6 +1306,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       log.info('local data removed', { scope });
     },
     changed: (s) => {
+      settings.setUserLanguageScope(s.server?.origin ?? null, s.user?.id ?? null);
       broadcast('auth:changed', s);
       emitStatus();
       if (s.stage === 'ready') {

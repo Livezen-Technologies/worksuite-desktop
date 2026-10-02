@@ -1,3 +1,4 @@
+import { localize } from '@shared/localization';
 import { Notification, app, nativeImage } from 'electron';
 import { join } from 'node:path';
 import type { NotificationItem, NotificationPrivacy, Preferences } from '@shared/types';
@@ -86,14 +87,14 @@ export function mapServerNotification(n: ServerNotification): NotificationItem {
 }
 
 /** Privacy modes (FR-NTF-04). */
-export function present(n: Incoming, privacy: NotificationPrivacy, moduleLabel: string): Presented {
+export function present(n: Incoming, privacy: NotificationPrivacy, moduleLabel: string, language = 'en'): Presented {
   switch (privacy) {
     case 'FULL':
       return { title: n.title, body: n.body };
     case 'SENDER_ONLY':
-      return { title: moduleLabel, body: n.sender ? `New from ${n.sender}` : `New ${moduleLabel.toLowerCase()} notification` };
+      return { title: localize(moduleLabel, language), body: n.sender ? localize('New from {sender}', language, { sender: n.sender }) : localize('New {module} notification', language, { module: localize(moduleLabel, language).toLowerCase() }) };
     case 'GENERIC':
-      return { title: 'WorkSuite', body: 'New WorkSuite notification' };
+      return { title: 'WorkSuite', body: localize('New WorkSuite notification', language) };
   }
 }
 
@@ -497,7 +498,7 @@ export class NotificationService {
     }
     if (!Notification.isSupported()) return;
     const privacy: NotificationPrivacy = this.isLocked() ? 'GENERIC' : this.prefs().notificationPrivacy;
-    const shown = present(n, privacy, MODULE_LABELS[n.module] ?? n.module.charAt(0).toUpperCase() + n.module.slice(1));
+    const shown = present(n, privacy, MODULE_LABELS[n.module] ?? n.module.charAt(0).toUpperCase() + n.module.slice(1), this.prefs().language);
     const icon = process.platform === 'darwin' ? undefined : nativeImage.createFromPath(join(app.isPackaged ? process.resourcesPath : join(__dirname, '../../resources'), 'icons', '128x128.png'));
     const note = new Notification({
       title: shown.title,

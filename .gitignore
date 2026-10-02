@@ -12,3 +12,6 @@ keys/
 coverage/
 test-results/
 playwright-report/
+
+# Reproducible translator exports (npm run localization:report)
+docs/localization/missing-*.json

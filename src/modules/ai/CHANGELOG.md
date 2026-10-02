@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.5.0 — 2026-10-02
+
+- Send optional interface reply language to the server and apply the selected default to local AI while preserving explicit language requests and user text (#60).
+
 ## 1.4.1 — 2026-10-02
 
 - Keep ordinary first-turn questions unchanged while applying intent context to guidance, reporting, actions and topic changes after a guide (merge verification for #96).

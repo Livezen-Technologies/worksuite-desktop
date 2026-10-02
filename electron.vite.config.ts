@@ -1,3 +1,4 @@
+import { localizationPlugin } from './build-tools/localization.mjs';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { defineConfig } from 'electron-vite';
@@ -76,7 +77,7 @@ export default defineConfig({
   renderer: {
     root: resolve(__dirname, 'src'),
     resolve: { alias: { ...shared, '@': resolve(__dirname, 'src') } },
-    plugins: [react(), tailwindcss(), speechEngine()],
+    plugins: [localizationPlugin(__dirname), react(), tailwindcss(), speechEngine()],
     build: {
       outDir: resolve(__dirname, 'out/renderer'),
       // The speech page is its own: isolated (for whisper.cpp's threads), hidden, and only for transcribing.

@@ -1,3 +1,4 @@
+import { currentLanguage } from '../../core/i18n';
 import { useQuery } from '@tanstack/react-query';
 import type { AiRules } from '@shared/types';
 import { ApiError, apiGet, apiPost, apiPut } from '../../core/api';
@@ -48,6 +49,7 @@ export interface AskTurn {
 export function ask(text: string, opts: { surface: Surface; refs?: string[]; conversationId?: number | null; moduleAccess?: { read: string[]; write: string[] } }): Promise<AskTurn> {
   return apiPost<AskTurn>('/api/ai/assist/chat', {
     text,
+    reply_language: currentLanguage(),
     surface: opts.surface,
     refs: opts.refs ?? [],
     conversation_id: opts.conversationId ?? undefined,
