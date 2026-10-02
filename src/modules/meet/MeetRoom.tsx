@@ -4,11 +4,10 @@ import { GuestChat } from './GuestChat';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { Participant } from 'livekit-client';
-import { apiGet } from '../../core/api';
-import { call, errorMessage } from '../../core/bridge';
-import { bytes, dateLabel, parseTs } from '../../core/time';
+import { call } from '../../core/bridge';
+import { parseTs } from '../../core/time';
 import { toast } from '../../core/toasts';
-import { Button, Empty, FileBadge, Modal, Spinner, cx } from '../../components/ui';
+import { Button, Modal, cx } from '../../components/ui';
 import { CallAvatar, useNow } from '../calls/parts';
 import { ScreenPicker } from '../calls/ScreenPicker';
 import { CallWorkspace } from '../calls/ui/CallWorkspace';
@@ -16,7 +15,6 @@ import type { ControlButton, MenuEntry } from '../calls/ui/CoreCallControls';
 import { personOf } from '../calls/ui/people';
 import { callUi } from '../calls/ui/state';
 import { Thread } from '../chat/Thread';
-import type { ChatFile } from '../chat/types';
 import { formatCode, invitation } from './api';
 import { ShareInChat, ShareRow } from './MeetHome';
 import { remote } from './remote/controller';
@@ -37,6 +35,7 @@ import { HandQueue, PollsPanel, QaPanel } from './Activities';
 import { useMeetT } from './i18n';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
+import { MeetingFiles, ShareMeetingDocument } from './MeetingFiles';
 
 /** 00:24:10 — how long the meeting has been going. */
 export function hms(ms: number): string {
@@ -59,6 +58,7 @@ export function MeetRoom() {
   const t = useMeetT();
   const [picking, setPicking] = useState<'start' | 'change' | null>(null);
   const [ending, setEnding] = useState(false);
+  const [sharingDocument, setSharingDocument] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [streamSettings, setStreamSettings] = useState(false);
   useLivestreamNotice(meet.livestream);
@@ -139,6 +139,7 @@ export function MeetRoom() {
       : meet.mayPresent
         ? { id: 'share', icon: 'screen-share', label: 'Share your screen', onClick: () => setPicking('start') }
         : { id: 'share', icon: 'screen-share', label: t('hc.off.present'), disabled: true },
+    { id: 'document', icon: 'file', label: 'Share Document', disabled: !meet.mayPresent || !info.room_id, onClick: () => setSharingDocument(true) },
     reactControl(),
     // Raising a hand never turns the microphone on: the host gives the floor.
     {
@@ -298,7 +299,7 @@ export function MeetRoom() {
             ),
           },
           { id: 'Notes', label: 'Notes', content: <MeetNotes /> },
-          { id: 'Files', label: 'Files', content: <FilesPanel roomId={info.room_id} /> },
+          { id: 'Files', label: 'Files', content: <MeetingFiles roomId={info.room_id} mayShare={meet.mayPresent} onPresent={() => { toast('info', 'Choose the document window to present. Participants follow its page or slide as you navigate.'); setPicking(sharing ? 'change' : 'start'); }} /> },
           { id: 'Info', label: 'Info', content: <InfoPanel /> },
           { id: 'Settings', label: 'Settings', content: <RoomSettingsPanel onHostControls={meet.canManage ? () => setHostControls(true) : undefined} /> },
         ]}
@@ -331,6 +332,7 @@ export function MeetRoom() {
           }}
         />
       ) : null}
+      {sharingDocument && meet.mayPresent && info.room_id ? <ShareMeetingDocument roomId={info.room_id} onClose={() => setSharingDocument(false)} onSent={() => callUi.set({ panelOpen: true, panelTab: 'Files' })} /> : null}
       {hostControls && meet.canManage ? <HostControlsDrawer onClose={() => setHostControls(false)} /> : null}
       {transcribing ? <StartTranscriptionDialog onClose={() => setTranscribing(false)} /> : null}
       {streamSettings && meet.canManage ? <LivestreamControls close={() => setStreamSettings(false)} /> : null}
@@ -446,40 +448,6 @@ function PeoplePanel() {
   );
 }
 
-function FilesPanel({ roomId }: { roomId: number | null }) {
-  const q = useQuery({
-    queryKey: ['chat', 'shared', String(roomId)],
-    queryFn: ({ signal }) => apiGet<{ files: Array<{ message_id: number; sender_name: string; created_at: string; file?: ChatFile }>; media: Array<{ message_id: number; file?: ChatFile; created_at: string; sender_name: string }> }>(`/api/chat/rooms/${roomId}/shared`, undefined, signal),
-    enabled: !!roomId,
-    refetchInterval: 15_000,
-  });
-  if (!roomId) return <Empty icon="file" title="This meeting has no conversation to share files in" />;
-  const files = [...(q.data?.files ?? []), ...(q.data?.media ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const share = async () => {
-    try {
-      const picked = await call('files:pickFiles', { multiple: true, title: 'Share files with the meeting' });
-      if (picked.length) await call('transfers:upload', { handles: picked.map((p) => p.handle), target: { kind: 'chat', roomId: String(roomId) } });
-    } catch (e) {
-      toast('error', errorMessage(e));
-    }
-  };
-  return (
-    <div className="flex flex-col gap-2 p-3.5 text-[12.5px]">
-      {q.isLoading ? <Spinner /> : null}
-      {!q.isLoading && !files.length ? <p className="text-ink-3">Nothing shared yet.</p> : null}
-      {files.map((f) => (
-        <div key={f.message_id} className="flex items-center gap-2.5 rounded-[9px] border border-line px-2.5 py-2">
-          <FileBadge name={f.file?.filename ?? 'file'} size={30} />
-          <span className="flex min-w-0 flex-1 flex-col">
-            <b className="truncate text-ink">{f.file?.filename}</b>
-            <span className="text-[11px] text-ink-3">{f.file ? bytes(f.file.size) : ''} · {f.sender_name} · {dateLabel(f.created_at)}</span>
-          </span>
-        </div>
-      ))}
-      <button type="button" onClick={() => void share()} className="h-9 rounded-[8px] border border-line font-semibold text-ink hover:bg-subtle">Share a file from this computer</button>
-    </div>
-  );
-}
 
 function InfoPanel() {
   const info = meet.info!;
