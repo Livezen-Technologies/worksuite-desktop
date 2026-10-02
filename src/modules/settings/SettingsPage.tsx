@@ -1164,7 +1164,8 @@ export function RemoteControlSection() {
           </p>
         ) : null}
         {!pending && !unknown && s.accessibility === 'denied' ? <p className="mt-1.5 text-ink-2">Permission required</p> : null}
-        {unknown ? <p className="mt-1.5 text-ink-2">The permission check did not complete. Check again to retry.</p> : null}
+        {unknown ? <p className="mt-1.5 text-ink-2">{s.accessibilityDetails?.problem ?? 'The permission check did not complete. Check again to retry.'}</p> : null}
+        {s.accessibilityDetails ? <details className="mt-2 text-[12px] text-ink-3"><summary className="cursor-pointer">Running app and input-helper checks</summary><p className="break-all selectable">Running copy: {s.accessibilityDetails.runningApp}</p><p>App Accessibility: {s.accessibilityDetails.appTrusted === null ? 'Unable to verify' : s.accessibilityDetails.appTrusted ? 'Granted' : 'Denied'}. Helper Accessibility: {s.accessibilityDetails.helperAccessibility === null ? 'Unable to verify' : s.accessibilityDetails.helperAccessibility ? 'Granted' : 'Denied'}. Helper event posting: {s.accessibilityDetails.helperTrusted === null ? 'Unable to verify' : s.accessibilityDetails.helperTrusted ? 'Granted' : 'Denied'}.</p><p>Compare this running copy with the entry in macOS settings if more than one WorkSuite installation exists. Diagnostics include signing identity and app translocation checks.</p></details> : null}
         {s.accessibility !== 'not_required' ? (
           <div className="mt-2.5 flex flex-wrap gap-2">
             {s.accessibility === 'denied' ? (

@@ -611,6 +611,8 @@ export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'v
 
 /** Screens and windows offered for sharing (FR-COM-05), and whether the OS lets us capture them. */
 export interface ScreenSources {
+  permissionStatus?: 'granted' | 'denied' | 'checking' | 'unknown' | 'not_required';
+  permissionProblem?: string | null;
   /** The system's Screen Recording permission (macOS); 'granted' where the system has no such gate. */
   permission: string;
   sources: Array<{ id: string; name: string; kind: 'screen' | 'window'; thumbnail: string | null }>;
@@ -621,7 +623,7 @@ export interface ScreenSources {
    */
   state?: 'ok' | 'denied' | 'failed' | 'partial';
   problem?: string | null;
-  /** macOS applies a changed Screen Recording permission only to a newly started app. */
+  /** Permission changed during this run, but capture remains unavailable; a restart may help. */
   restartMayHelp?: boolean;
   platform?: string;
 }
@@ -780,6 +782,7 @@ export interface RemoteControlSupport {
    * macOS: the running app reports access but its input helper explicitly reports denial.
    */
   accessibilityHint?: 'restart' | null;
+  accessibilityDetails?: { appTrusted: boolean | null; helperTrusted: boolean | null; helperAccessibility: boolean | null; problem: string | null; checkedAt: number | null; runningApp: string };
   /** The computer's policy lets it be controlled at all (the server still decides each time). */
   policyAllows: boolean;
 }

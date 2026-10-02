@@ -95,7 +95,7 @@ export function MeetRoom() {
   const uuid = meet.uuid;
   useEffect(() => remote.start(uuid), [uuid]);
   // Whether this computer can be controlled, for the picker's "Let people ask to control" (RC01).
-  const rcView = useQuery({ queryKey: ['rc-state'], queryFn: () => call('rc:state'), enabled: picking === 'start', staleTime: 0 });
+  const rcView = useQuery({ queryKey: ['rc-state'], queryFn: () => call('rc:recheck'), enabled: picking === 'start', staleTime: 0 });
   const pickerControl = rcView.data
     ? {
         allowRequests: rcView.data.allowRequests,

@@ -5,7 +5,7 @@ vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(), on: vi.fn(), errorMe
 vi.mock('../../../src/core/api', () => ({ ApiError: class {}, apiGet: vi.fn(), apiPost: vi.fn(), request: vi.fn() }));
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
 
-import { deviceProblem, NO_ANSWER_MS, ringPhase, statusLine, stoppedAs, type Phase } from '../../../src/modules/calls/session';
+import { deviceProblem, shareOn, NO_ANSWER_MS, ringPhase, statusLine, stoppedAs, type Phase } from '../../../src/modules/calls/session';
 import { canCall } from '../../../src/modules/chat/types';
 import { routeQuery } from '../../../src/modules/calls/start';
 
@@ -94,4 +94,13 @@ describe('calling actions in a conversation', () => {
     expect(canCall({ type: 'system' })).toBe(false);
     expect(canCall(undefined)).toBe(false);
   });
+});
+
+
+it.each([['NotAllowedError', 'Screen capture was refused'], ['NotFoundError', 'no longer available'], ['NotReadableError', 'could not start or be published']])('explains screen capture startup failure %s', async (name, message) => {
+  const { call } = await import('../../../src/core/bridge');
+  vi.mocked(call).mockResolvedValue(undefined as never);
+  const lp = { isScreenShareEnabled: false, setScreenShareEnabled: vi.fn().mockRejectedValue(named(name)) };
+  await expect(shareOn(lp as never, { id: 'screen:1:0', name: 'Screen 1', audio: false })).rejects.toThrow(message);
+  expect(call).toHaveBeenCalledWith('media:screenPick', { id: 'screen:1:0', audio: false });
 });
