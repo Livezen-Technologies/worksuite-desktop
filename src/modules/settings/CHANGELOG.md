@@ -4,11 +4,15 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
-## 1.9.4 — 2026-10-02
+## 1.9.5 — 2026-10-02
 
 - Sinhala and Tamil text for announcements (#98).
 - Sinhala and Tamil text for the WhatsApp channel; search no longer lists WhatsApp as its own app — it opens Chat's WhatsApp channel (#35).
 - Sinhala and Tamil text for the meeting More menu (#124).
+
+## 1.9.4 — 2026-10-02
+
+- Expose running-app and helper permission evidence; invalidate stale macOS Accessibility checks (#132).
 
 ## 1.9.3 — 2026-10-02
 

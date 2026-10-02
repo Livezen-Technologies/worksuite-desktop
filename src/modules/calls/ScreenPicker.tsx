@@ -48,8 +48,8 @@ export function pickerView(q: { isLoading: boolean; error: unknown; data?: Scree
   if (q.error) return { kind: 'failed', detail: errorMessage(q.error), restart: false };
   const d = q.data;
   if (!d) return { kind: 'loading' };
-  const state = d.state ?? (d.permission !== 'granted' && d.permission !== 'not-determined' ? 'denied' : 'ok');
-  if (state === 'denied') return { kind: 'denied', restart: d.platform === 'darwin' || platform === 'darwin' };
+  const state = d.state ?? ((d.permission === 'denied' || d.permission === 'restricted') ? 'denied' : 'ok');
+  if (state === 'denied') return { kind: 'denied', restart: !!d.restartMayHelp };
   if (state === 'failed') return { kind: 'failed', detail: d.problem ?? null, restart: !!d.restartMayHelp };
   const here = d.sources.filter((s) => s.kind === tab);
   const partial = state === 'partial' ? (d.problem ?? null) : null;
@@ -77,16 +77,19 @@ export function ScreenPicker({ onPick, onClose, changing, control, inMeeting }: 
   const allow = allowRequests ?? control?.allowRequests ?? false;
   const canAudio = platform === 'win32';
   const meeting = inMeeting || !!control;
-  const q = useQuery({ queryKey: ['screen-sources'], queryFn: () => call('media:screenSources'), gcTime: 0, staleTime: 0, retry: false, refetchOnWindowFocus: 'always' });
+  const q = useQuery({ queryKey: ['screen-sources'], queryFn: () => call('media:screenSources'), gcTime: 0, staleTime: 0, retry: false, refetchOnWindowFocus: false });
   const view = pickerView(q, tab);
   const list = (q.data?.sources ?? []).filter((s) => s.kind === tab);
 
   // Back from System Settings (or another app): look again.
+  const refetch = q.refetch;
   useEffect(() => {
-    const again = () => void q.refetch();
+    const again = () => void refetch();
+    const visible = () => { if (document.visibilityState === 'visible') again(); };
     window.addEventListener('focus', again);
-    return () => window.removeEventListener('focus', again);
-  }, [q]);
+    document.addEventListener('visibilitychange', visible);
+    return () => { window.removeEventListener('focus', again); document.removeEventListener('visibilitychange', visible); };
+  }, [refetch]);
 
   const setQuality = (v: Quality) => {
     setQualityState(v);
@@ -130,6 +133,7 @@ export function ScreenPicker({ onPick, onClose, changing, control, inMeeting }: 
       }
     >
       <div className="flex flex-col gap-3">
+        {platform === 'darwin' ? <div role="status" className="rounded-[8px] border border-line bg-well px-3 py-2 text-[12.5px] text-ink-2">Screen Recording / Screen &amp; System Audio Recording: {q.isFetching ? 'Checking' : q.error || q.data?.permissionStatus === 'unknown' || q.data?.permission === 'unknown' || q.data?.permission === 'not-determined' ? 'Unable to Verify' : q.data?.permission === 'granted' ? 'Granted' : q.data?.permission === 'denied' || q.data?.permission === 'restricted' ? 'Denied' : 'Unable to Verify'}.{q.data?.permissionProblem ? <span className="block">{q.data.permissionProblem}</span> : null}</div> : null}
         <div className="flex items-center gap-2">
           <div role="tablist" aria-label="What to share" className="flex gap-1 text-[12.5px] font-semibold">
             {(['screen', 'window'] as const).map((t) => (
@@ -172,8 +176,8 @@ export function ScreenPicker({ onPick, onClose, changing, control, inMeeting }: 
         {view.kind === 'loading' ? <Spinner label="Looking for screens and windows…" /> : null}
         {view.kind === 'denied' ? (
           <Notice tone="warn" title="WorkSuite isn’t allowed to record the screen">
-            Allow WorkSuite under <b>Screen Recording</b> in your system’s privacy settings — that is separate from Accessibility, which only remote control needs.
-            {view.restart ? ' macOS applies it once WorkSuite restarts.' : ' Then come back here; the list refreshes on its own.'}
+            Allow WorkSuite under <b>Screen Recording / Screen &amp; System Audio Recording</b> in your system’s privacy settings — that is separate from Accessibility, which only remote control needs.
+            {view.restart ? ' The permission changed during this run, but capture is not yet available; restart WorkSuite, then check again.' : ' Then come back here; the list refreshes on its own.'}
             <Actions>
               <Button size="sm" variant="primary" onClick={settings}>Open System Settings</Button>
               {view.restart ? <Button size="sm" onClick={restart}>Restart WorkSuite</Button> : null}
@@ -183,7 +187,7 @@ export function ScreenPicker({ onPick, onClose, changing, control, inMeeting }: 
         ) : null}
         {view.kind === 'failed' ? (
           <Notice tone="error" title="The screens and windows could not be listed">
-            {view.restart ? 'If you have just allowed Screen Recording, WorkSuite needs to restart before macOS lets it see the screen. ' : 'Try again; if it keeps happening, restart WorkSuite. '}
+            {view.restart ? 'If you have just allowed Screen Recording, WorkSuite needs to restart before macOS lets it see the screen. ' : 'Refresh the source list and check the selected screen or window is still open. '}
             {view.detail ? <span className="block pt-1 text-[11.5px] opacity-80">The system said: {view.detail}</span> : null}
             <Actions>
               <Button size="sm" variant="primary" icon="refresh" onClick={retry}>Try again</Button>

@@ -8,6 +8,10 @@ the root CHANGELOG.md.
 
 - The call bar's menus use one accessible, responsive menu (#124): grouped sections with submenus, shortcuts and checkmarks on the right, height capped to the window with scrolling, placed above the bar without covering it and flipping to stay on screen, a bottom sheet below 640 px; full keyboard and submenu navigation, Escape/outside click return focus to the button; View & Layout (Layout, Video, Enter/Exit Full Screen, Shrink to a Floating Window) shared by meetings and direct calls; direct calls get an Audio group with Speaker and Noise Suppression.
 
+## 1.4.1 — 2026-10-02
+
+- Separate macOS capture permission status, validate the chosen source kind and report discovery/startup failures (#132).
+
 ## 1.4.0 — 2026-10-02
 
 - Direct calls show Calling, Ringing, Connecting, Connected, Busy, Declined and No answer (#113); Reconnecting… keeps the clock running and rejoins for up to 30 s; Maximise and speaker selection in the call windows; Call again on the ended screen; Answer instead of Accept; the caller now waits the server's 45 s and an unanswered call is recorded as missed; turning the camera on is refused while locked.

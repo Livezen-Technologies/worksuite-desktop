@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-10-02 — 0.2.82: a tidier meeting More menu
+## 2026-10-02 — 0.2.83: a tidier meeting More menu
 
 The meeting More menu was one long list that could run off the window. It is now grouped and fits (#124):
 
@@ -17,7 +17,7 @@ The meeting More menu was one long list that could run off the window. It is now
 
 ---
 
-## 2026-10-02 — 0.2.81: WhatsApp lives in Chat
+## 2026-10-02 — 0.2.82: WhatsApp lives in Chat
 
 WhatsApp is now a channel of Chat, next to Chat and Web Chat, instead of a separate app that opened the web (#35):
 
@@ -30,7 +30,7 @@ No server change needed.
 
 ---
 
-## 2026-10-02 — 0.2.80: announcements to several companies
+## 2026-10-02 — 0.2.81: announcements to several companies
 
 Publishing an announcement to more than one company is tightened up and kept current everywhere (#98):
 
@@ -42,6 +42,17 @@ Publishing an announcement to more than one company is tightened up and kept cur
 - One notification per person, even if they belong to several of the chosen companies.
 
 Needs the server update (HR module and its migration).
+
+---
+
+## 2026-10-02 — 0.2.80: macOS permissions and screen capture
+
+- Screen sharing checks Screen Recording / Screen & System Audio Recording separately from Accessibility. The picker refreshes after returning from System Settings and shows Granted, Denied, Checking or Unable to Verify.
+- Capture validates only the chosen screen or window, so a failed window list cannot block a valid screen. Discovery timeouts, disappeared selections and capture startup failures have specific errors; retired requests cannot capture an old selection.
+- Remote control shows running-app and input-helper permission evidence, refreshes stale checks after settings changes and sleep/wake, and reports contradictory native checks as unverifiable. Screen sharing remains available while control is unavailable or being checked; participant control still requires explicit approval.
+- Diagnostics includes Screen Recording status and actual app-signature verification. Restart advice requires observed permission-change evidence instead of a generic capture failure.
+
+Modules: Calls 1.4.1, Meet 1.8.1, Settings 1.9.4, Diagnostics 1.0.2. Installed signed macOS builds and delivery to another participant still require the acceptance tests in `docs/MACOS_PERMISSIONS.md` (#132).
 
 ---
 
