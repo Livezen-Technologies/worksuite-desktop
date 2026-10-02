@@ -40,6 +40,8 @@ vi.mock('../../../src/modules/chat/ChatDrawer', async (orig) => {
   return { ...real, ChatDrawer: () => (broken.chat ? <Boom /> : <real.ChatDrawer />) };
 });
 
+vi.mock('electron', () => ({ app: { getPath: () => '/tmp' } }));
+const { defaultPreferences } = await import('../../../electron/services/settings');
 const { app } = await import('../../../src/core/app-state');
 const { queryClient } = await import('../../../src/core/query');
 const { ui } = await import('../../../src/core/ui');
@@ -49,7 +51,7 @@ const { AppBoundary, LockBoundary } = await import('../../../src/app/Boundaries'
 const signedIn = () =>
   app.set({
     ready: true,
-    prefs: { ai: { display: 'drawer' } } as never,
+    prefs: { ...defaultPreferences(), ai: { ...defaultPreferences().ai, display: 'drawer' } },
     apps: visibleApps({ apps: '*', permissions: ['*'] }),
     bootstrap: { permissions: ['*'], apps: ['*'], user: { id: '5', name: 'Hasarinda' } } as never,
     auth: { stage: 'ready', user: { id: '5', name: 'Hasarinda' } } as never,
