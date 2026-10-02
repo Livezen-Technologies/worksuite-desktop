@@ -33,7 +33,7 @@ const DONE: Record<MeetingAnswer, string> = { accepted: 'You’re going to', ten
 
 export function WaitingInvitations({ items, canMeetings, onOpen, limit = 4 }: { items: WaitingInvitation[]; canMeetings: boolean; onOpen: (link: string) => void; limit?: number }) {
   return (
-    <ul className="m-0 flex list-none flex-col gap-3 p-0" aria-label="Invitations waiting for your answer">
+    <ul className="m-0 flex list-none flex-col p-0 [&>li]:border-t [&>li]:border-line [&>li]:py-3" aria-label="Invitations waiting for your answer">
       {items.slice(0, limit).map((i) => (
         <InvitationItem key={`${i.source}:${i.id}`} i={i} canMeetings={canMeetings} onOpen={onOpen} />
       ))}
@@ -58,31 +58,37 @@ function InvitationItem({ i, canMeetings, onOpen }: { i: WaitingInvitation; canM
   const answer = useInvitationAnswer(i.source, i.id, send);
   const where = i.where ? i.where : i.online_url;
   return (
-    <li className="flex items-start gap-2.5" data-invitation={`${i.source}:${i.id}`}>
-      <Icon name="calendar-check" size={16} className="mt-0.5 shrink-0 text-ink-3" />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="truncate text-[13px] font-semibold text-ink">Invitation · {i.title}</div>
-        {i.organizer ? <div className="truncate text-[12px] text-ink-2">From {i.organizer}</div> : null}
-        <div className="truncate text-[12px] text-ink-3">{invitationWhen(i)}</div>
-        {where ? (
-          <div className="truncate text-[12px] text-ink-3" title={where}>
-            {i.online_url && where.includes(i.online_url) ? 'Online · ' : ''}
-            {where.replace(/^Online — /, '')}
+    <li className="flex flex-col gap-2.5" data-invitation={`${i.source}:${i.id}`}>
+      <div className="flex gap-3">
+        <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-selection text-primary">
+          <Icon name="calendar-check" size={16} />
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="truncate text-[14px] font-semibold text-ink" title={i.title}>
+            {i.title}
           </div>
-        ) : null}
-        {i.conflicts.length ? <span className="self-start">{answer.flag}</span> : null}
-        <div className="mt-1 flex flex-wrap gap-1.5">
-          {(['accepted', 'tentative', 'declined'] as MeetingAnswer[]).map((r) => (
-            <Button key={r} size="sm" variant={r === 'accepted' ? 'primary' : undefined} disabled={busy} onClick={() => void answer.answer(r)}>
-              {ANSWER_LABEL[r]}
-            </Button>
-          ))}
-          <Button size="sm" variant="ghost" onClick={() => onOpen(invitationLink(i, canMeetings))}>
-            {i.source === 'meeting' ? 'View meeting' : 'View event'}
-          </Button>
+          <div className="truncate text-[12px] text-ink-2">{i.organizer ? `Invitation from ${i.organizer}` : 'Invitation'}</div>
+          <div className="text-[12px] text-ink-3">{invitationWhen(i)}</div>
+          {where ? (
+            <div className="truncate text-[12px] text-ink-3" title={where}>
+              {i.online_url && where.includes(i.online_url) ? 'Online · ' : ''}
+              {where.replace(/^Online — /, '')}
+            </div>
+          ) : null}
+          {i.conflicts.length ? <span className="mt-1 self-start">{answer.flag}</span> : null}
         </div>
-        {answer.dialogs}
       </div>
+      <div className="flex flex-wrap items-center gap-1.5 pl-11">
+        {(['accepted', 'tentative', 'declined'] as MeetingAnswer[]).map((r) => (
+          <Button key={r} size="sm" className="h-8 px-3" variant={r === 'accepted' ? 'primary' : undefined} disabled={busy} onClick={() => void answer.answer(r)}>
+            {ANSWER_LABEL[r]}
+          </Button>
+        ))}
+        <button type="button" onClick={() => onOpen(invitationLink(i, canMeetings))} className="h-8 px-1.5 text-[12px] font-semibold text-primary hover:underline">
+          {i.source === 'meeting' ? 'View meeting' : 'View event'}
+        </button>
+      </div>
+      {answer.dialogs}
     </li>
   );
 }

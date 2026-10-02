@@ -82,8 +82,8 @@ function wrap(ui: React.ReactNode, client = new QueryClient({ defaultOptions: { 
 describe('Home › Waiting for me', () => {
   it('says who asked, when on the reader’s clock with the zone it was booked in, and where', () => {
     wrap(<WaitingInvitations items={[invitation()]} canMeetings onOpen={vi.fn()} />);
-    const row = screen.getByText('Invitation · Budget review').closest('li')!;
-    expect(within(row).getByText('From Nadia Perera')).toBeTruthy();
+    const row = screen.getByText('Budget review').closest('li')!;
+    expect(within(row).getByText('Invitation from Nadia Perera')).toBeTruthy();
     // 04:30Z is 08:30 in Dubai.
     expect(within(row).getByText(/8:30–9:30 \(Asia\/Dubai\) · booked in Asia\/Colombo/)).toBeTruthy();
     expect(within(row).getByText('Online · https://meet.example.com/j/42')).toBeTruthy();
