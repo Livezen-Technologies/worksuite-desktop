@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.7.0 — 2026-10-02
+
+**Added**
+
+- Saved livestream destinations, optional YouTube account connection, per-destination media previews and host/co-host broadcast controls.
+
+**Fixed**
+
+- Livestreaming stays independent of recording and notifies current and newly joining participants.
+
 ## 1.6.1 — 2026-10-02
 
 **Fixed**

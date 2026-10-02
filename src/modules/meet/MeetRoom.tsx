@@ -1,3 +1,4 @@
+import { LivestreamBadge, LivestreamControls, useLivestreamNotice } from './Livestreaming';
 import { RecordingFeedback } from './RecordingFeedback';
 import { GuestChat } from './GuestChat';
 import { useQuery } from '@tanstack/react-query';
@@ -59,6 +60,8 @@ export function MeetRoom() {
   const [picking, setPicking] = useState<'start' | 'change' | null>(null);
   const [ending, setEnding] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const [streamSettings, setStreamSettings] = useState(false);
+  useLivestreamNotice(meet.livestream);
   const [recSettings, setRecSettings] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   // Host controls (#91): the hosts' drawer; it closes by itself if I stop being one.
@@ -173,6 +176,7 @@ export function MeetRoom() {
         : []),
     ...(meet.canManage ? [{ label: meet.locked ? 'Unlock the meeting' : 'Lock the meeting', hint: meet.locked ? undefined : 'No one new can join', icon: 'lock', onClick: () => void meet.lock(!meet.locked) }] : []),
     ...(meet.canManage ? [{ label: t('hc.title'), icon: 'shield', onClick: () => setHostControls(true) }] : []),
+    ...(meet.canManage ? [{ label: 'Livestreaming…', icon: 'video' as const, onClick: () => setStreamSettings(true) }] : []),
     { label: 'Room settings', icon: 'settings', onClick: () => callUi.togglePanel('Settings') },
     { label: ui.boardOnStage ? 'Board back to the panel' : 'Whiteboard on stage', icon: 'board', onClick: () => callUi.set({ boardOnStage: !ui.boardOnStage, ...(ui.boardOnStage ? {} : { panelOpen: false }) }) },
     { label: t('act.qa'), icon: 'help', onClick: () => callUi.togglePanel('Q&A') },
@@ -229,6 +233,7 @@ export function MeetRoom() {
         clock={clock}
         badges={
           <>
+            <LivestreamBadge status={meet.livestream} />
             <RecordingFeedback active={!!rec} since={rec?.since ?? null} now={now} phase={meet.recordingCommand !== 'idle' ? meet.recordingCommand : meet.rec?.pending?.some((r) => r.phase === 'stopping') ? 'stopping' : meet.rec?.pending?.some((r) => r.phase === 'starting') ? 'starting' : 'idle'} error={meet.recordingError} stopped={meet.recordingStopped}
               retry={() => void (meet.recordingRetry === 'start' ? meet.startRecording() : meet.stopRecording())}
               stopPending={meet.rec?.pending?.some((r) => r.phase === 'starting') ? () => void meet.stopRecording() : undefined} />
@@ -328,6 +333,7 @@ export function MeetRoom() {
       ) : null}
       {hostControls && meet.canManage ? <HostControlsDrawer onClose={() => setHostControls(false)} /> : null}
       {transcribing ? <StartTranscriptionDialog onClose={() => setTranscribing(false)} /> : null}
+      {streamSettings && meet.canManage ? <LivestreamControls close={() => setStreamSettings(false)} /> : null}
       {recSettings ? (
         <Modal title="Recording settings" onClose={() => setRecSettings(false)} width={560} footer={<Button variant="primary" onClick={() => setRecSettings(false)}>Done</Button>}>
           <RecordingSettings compact />

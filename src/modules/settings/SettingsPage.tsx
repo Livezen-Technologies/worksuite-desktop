@@ -1,3 +1,4 @@
+import { LivestreamDestinations } from '../meet/Livestreaming';
 import { DarkProfilePicker } from './Appearance';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState, useRef, type ReactNode } from 'react';
@@ -1064,6 +1065,8 @@ function MeetSection() {
       <H title="Meet" hint="Meetings on this computer." />
       <h3 className="mt-2 mb-3 text-[14px] font-bold text-ink">Recording</h3>
       <RecordingSettings />
+      <h3 className="mt-6 mb-3 text-[14px] font-bold text-ink">Livestreaming</h3>
+      <LivestreamDestinations />
       <h3 className="mt-6 mb-3 text-[14px] font-bold text-ink">Transcription</h3>
       <SpeechModelSettings />
     </>

@@ -1,3 +1,4 @@
+import type { LivestreamStatus } from '@shared/livestream';
 import { announceRecording } from './recording-notice';
 import { DisconnectReason, Room, RoomEvent, Track, VideoPresets, type Participant, type RemoteParticipant } from 'livekit-client';
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
@@ -160,6 +161,8 @@ export class MeetSession {
   recordingError: string | null = null;
   recordingRetry: 'start' | 'stop' = 'start';
   recordingStopped = false;
+  livestream: LivestreamStatus | null = null;
+  private streamRequest = false;
   private recordedNotice = false;
   private recordRequest = false;
   private recRead: Promise<void> | null = null;
@@ -406,7 +409,9 @@ export class MeetSession {
         if (topic === 'meet.activity') {
           if (!p) {
             try {
-              this.onActivity(JSON.parse(new TextDecoder().decode(payload)) as ActivityEvent);
+              const event = JSON.parse(new TextDecoder().decode(payload)) as ActivityEvent;
+              if ((event as { what?: string }).what === 'livestream') void this.refreshLivestream();
+              else this.onActivity(event);
             } catch {
               /* not an activity message */
             }
@@ -479,6 +484,7 @@ export class MeetSession {
         this.changed();
       }
       // Somebody started or stopped recording (#68): everybody is told, and the badge follows.
+      if (e.what === 'livestream') void this.refreshLivestream();
       if (e.what === 'recording') {
         // Both realtime and the media server may deliver this; announce only the confirmed status transition.
         void this.refreshRecording();
@@ -565,9 +571,10 @@ export class MeetSession {
     this.joinedAt = this.joinedAt ?? Date.now();
     this.phase = 'in';
     void this.refreshRecording();
+    void this.refreshLivestream();
     void this.refreshTranscribing();
     void this.refreshActivities();
-    if (!this.recTimer) this.recTimer = setInterval(() => void this.refreshRecording(), 3_000);
+    if (!this.recTimer) this.recTimer = setInterval(() => { void this.refreshRecording(); void this.refreshLivestream(); }, 3_000);
     // The main window shows "in a meeting" and brings this window back.
     void call('calls:active', { uuid: this.uuid, kind: 'meet', title: this.info?.title || 'Meeting' }).catch(() => undefined);
     this.changed();
@@ -743,6 +750,17 @@ export class MeetSession {
   // ── recording (worksuite-desktop#68) ─────────────────────────────────────
 
   /** What the server knows of the meeting's recordings now. */
+  async refreshLivestream(): Promise<void> {
+    if (this.streamRequest || !this.uuid || !this.room) return;
+    this.streamRequest = true;
+    const uuid = this.uuid;
+    try {
+      const status = await apiGet<LivestreamStatus>(`/api/meet/${uuid}/livestream`);
+      if (this.uuid === uuid && this.room) { this.livestream = status; this.changed(); }
+    } catch { /* Keep the last confirmed state during network loss; older servers may not support livestreams. */ }
+    finally { this.streamRequest = false; }
+  }
+
   refreshRecording(): Promise<void> {
     if (this.recRead) return this.recRead;
     this.recRead = this.readRecording().finally(() => { this.recRead = null; });
@@ -774,7 +792,7 @@ export class MeetSession {
     if (this.localRec?.id && this.localRec.startedAt > 0) return { since: this.localRec.startedAt, mine: true, local: true, who: [] };
     const cloud = this.rec?.cloud;
     const locals = this.rec?.local ?? [];
-    if (cloud || locals.length || (!this.rec && this.room?.isRecording)) {
+    if (cloud || locals.length || (!this.rec && this.livestream?.available === false && this.room?.isRecording)) {
       const at = cloud?.started_at ?? locals[0]?.started_at;
       const since = at ? Date.parse(`${at.replace(' ', 'T')}${/Z|[+-]\d\d:?\d\d$/.test(at) ? '' : 'Z'}`) : null;
       return { since, mine: false, local: !cloud && locals.length > 0, who: [...(cloud?.by ? [cloud.by.name] : []), ...locals.map((l) => l.by.name)] };
@@ -1070,6 +1088,7 @@ export class MeetSession {
     if (local) void local.stop();
     if (this.recTimer) clearInterval(this.recTimer);
     this.recTimer = null;
+    this.livestream = null;
     this.rec = null; this.recordedNotice = false; this.recordingCommand = 'idle'; this.recordingError = null; this.recordingStopped = false;
     void call('calls:active', { uuid: null, kind: 'meet' }).catch(() => undefined);
     pointers.reset();

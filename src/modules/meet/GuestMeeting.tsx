@@ -1,3 +1,4 @@
+import { LivestreamBadge, useLivestreamNotice } from './Livestreaming';
 import { RecordingFeedback } from './RecordingFeedback';
 import { announceRecording } from './recording-notice';
 import { useEffect, useRef, useState } from 'react';
@@ -98,6 +99,8 @@ export function GuestMeeting() {
     const active = connection.current; connection.current = null;
     await active?.disconnect(); setRoom(null); setPhase('left'); setFarewell('You left the meeting.');
   };
+  const [livestream, setLivestream] = useState<{ active: boolean; live: boolean; count: number } | null>(null);
+  useLivestreamNotice(livestream);
   const run = (action: Promise<unknown>) => void action.catch((e) => setError(errorMessage(e)));
   const sources = useState<Awaited<ReturnType<typeof call<'media:screenSources'>>> | null>(null);
   const sharingAllowed = room?.localParticipant.permissions?.canPublishSources?.includes(3 /* TrackSource.SCREEN_SHARE */) === true;
@@ -114,6 +117,7 @@ export function GuestMeeting() {
       try {
         const next = await call('guest:info');
         if (!alive) return;
+        setLivestream(next.livestream ?? null);
         const active = next.recording?.active ?? room.isRecording;
         const at = next.recording?.since;
         const since = at ? Date.parse(`${at.replace(' ', 'T')}${/Z|[+-]\d\d:?\d\d$/.test(at) ? '' : 'Z'}`) : null;
@@ -149,7 +153,7 @@ export function GuestMeeting() {
         <p className="text-ink-3">The host controls admission and meeting permissions.</p>
       </form>
     </section> : room ? <>
-      {phase === 'in' ? <RecordingFeedback active={capture.active} since={capture.since} now={captureNow} /> : null}
+      {phase === 'in' ? <><LivestreamBadge status={livestream} /><RecordingFeedback active={capture.active} since={capture.since} now={captureNow} /></> : null}
     {reconnecting ? <p role="status">Reconnecting… Your guest session is being restored.</p> : null}
       {phase === 'waiting' ? <p role="status">Waiting for the host to let you in. Your camera and microphone are not shared.</p> : <>
         <div className="mb-4 flex flex-wrap gap-2">

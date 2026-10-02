@@ -11,6 +11,7 @@ export interface GuestMeetInfo {
   guests: boolean;
   sfu_url: string;
   chat: 'everyone' | 'hosts' | 'off';
+  livestream?: { active: boolean; live: boolean; count: number };
   recording?: { active: boolean; since: string | null };
 }
 export interface GuestMeetToken { url: string; token: string; identity: string; door: 'waiting_room' | 'no_host' | null }

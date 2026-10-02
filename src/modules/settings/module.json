@@ -1,6 +1,6 @@
 {
     "module": "settings",
-    "version": "1.7.0",
+    "version": "1.7.1",
     "paths": [
         "electron/services/settings.ts"
     ]
