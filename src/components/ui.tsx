@@ -5,7 +5,13 @@ export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ');
 }
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success' | 'teal';
+type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success' | 'teal' | 'accent' | 'glass';
+type Size = 'sm' | 'md' | 'lg' | 'action' | 'action-lg' | 'action-icon';
+
+/** A focus ring drawn outside the glow and the glass edge, in either theme. */
+const RING = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ws-focus)]';
+/** Hover lifts by a pixel and a press settles back; neither moves when reduced motion is asked for. */
+const LIFT = 'motion-safe:transition-[transform,filter,box-shadow,background-color,border-color,color] motion-safe:duration-150 motion-safe:enabled:hover:-translate-y-px motion-safe:enabled:active:translate-y-0 motion-safe:enabled:active:scale-[.98]';
 
 const VARIANTS: Record<Variant, string> = {
   primary: 'bg-primary text-white hover:bg-primary-hover border border-transparent',
@@ -14,17 +20,46 @@ const VARIANTS: Record<Variant, string> = {
   danger: 'bg-danger text-white hover:opacity-90 border border-transparent',
   success: 'bg-success text-white hover:opacity-90 border border-transparent',
   teal: 'bg-teal text-white hover:opacity-90 border border-transparent',
+  /**
+   * The one main action of a panel: a soft top-to-bottom brand gradient with white text, a thin top
+   * highlight and a coloured glow. Brand keeps white text at AA in light and every dark profile.
+   */
+  accent: cx(
+    'border border-transparent text-white bg-[linear-gradient(to_bottom,var(--color-brand),color-mix(in_srgb,var(--color-brand)_84%,black))]',
+    'shadow-[inset_0_1px_0_rgb(255_255_255/.2),0_6px_16px_-6px_color-mix(in_srgb,var(--color-brand)_70%,transparent)]',
+    'enabled:hover:brightness-[1.05] enabled:hover:shadow-[inset_0_1px_0_rgb(255_255_255/.26),0_10px_22px_-8px_color-mix(in_srgb,var(--color-brand)_80%,transparent)] enabled:active:brightness-100',
+    RING,
+    LIFT,
+  ),
+  /** A quieter action beside an accent one: translucent glass with a soft edge; the icon takes the accent on hover. */
+  glass: cx(
+    'group border border-glass-line bg-glass text-ink-2 enabled:hover:border-primary/45 enabled:hover:bg-glass-hover enabled:hover:text-ink enabled:hover:[&>svg]:text-primary',
+    RING,
+    LIFT,
+  ),
 };
 
-export function Button({ variant = 'secondary', size = 'md', icon, loading, className, children, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: 'sm' | 'md' | 'lg'; icon?: string; loading?: boolean }) {
+const SIZES: Record<Size, string> = {
+  sm: 'h-7 px-2.5 text-[12px] rounded-[8px]',
+  md: 'h-8 px-3 text-[13px] rounded-[8px]',
+  lg: 'h-11 px-5 text-[14px] rounded-[8px]',
+  /** 40px, 12px round: a secondary action in a panel footer. */
+  action: 'h-10 px-2.5 text-[12px] rounded-[12px]',
+  /** 44px, 12px round: the main action in a panel footer. */
+  'action-lg': 'h-11 px-4 text-[13.5px] rounded-[12px]',
+  /** A 44px square beside an `action-lg` button. */
+  'action-icon': 'h-11 w-11 shrink-0 px-0 rounded-[12px]',
+};
+
+export function Button({ variant = 'secondary', size = 'md', icon, loading, className, children, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: Size; icon?: string; loading?: boolean }) {
   return (
     <button
       type="button"
       {...rest}
       disabled={rest.disabled || loading}
       className={cx(
-        'ws-localized-control inline-flex items-center justify-center gap-1.5 rounded-[8px] font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap',
-        size === 'sm' ? 'h-7 px-2.5 text-[12px]' : size === 'lg' ? 'h-11 px-5 text-[14px]' : 'h-8 px-3 text-[13px]',
+        'ws-localized-control inline-flex items-center justify-center gap-1.5 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap',
+        SIZES[size],
         VARIANTS[variant],
         className,
       )}
@@ -187,8 +222,22 @@ export function Switch({ checked, onChange, disabled, label, id, describedBy }: 
 }
 
 
-export function Kbd({ children }: { children: ReactNode }) {
-  return <kbd className="rounded-[5px] border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[11px] font-medium">{children}</kbd>;
+const KBD: Record<'chrome' | 'key' | 'accent', string> = {
+  /** On the navy window chrome. */
+  chrome: 'rounded-[5px] border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[11px] font-medium',
+  /** A key cap on a surface or a glass button. */
+  key: 'inline-flex h-5 min-w-[18px] items-center justify-center rounded-[5px] border border-b-2 border-line bg-surface px-[5px] font-sans text-[10.5px] font-semibold text-ink-3',
+  /** Inside an accent button: translucent white glass that blends into the gradient. */
+  accent: 'inline-flex h-5 min-w-[18px] items-center justify-center rounded-[5px] border border-white/25 bg-white/10 px-[5px] font-sans text-[10.5px] font-semibold text-white shadow-[inset_0_1px_0_rgb(255_255_255/.18)]',
+};
+
+/** A keyboard shortcut chip. Inside a button, pass `aria-hidden` and name the keys with `aria-keyshortcuts` on the button. */
+export function Kbd({ children, tone = 'chrome', className, ...rest }: { children: ReactNode; tone?: keyof typeof KBD; className?: string; 'aria-hidden'?: boolean }) {
+  return (
+    <kbd {...rest} className={cx(KBD[tone], className)}>
+      {children}
+    </kbd>
+  );
 }
 
 export function Modal({ title, children, onClose, width = 520, footer, labelledBy }: { title?: ReactNode; children: ReactNode; onClose?: () => void; width?: number; footer?: ReactNode; labelledBy?: string }) {
