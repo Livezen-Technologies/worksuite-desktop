@@ -90,12 +90,14 @@ const MAX_BODY = 25 * 1024 * 1024;
  */
 const MEDIA = /^\/media\/[A-Za-z0-9_\-~.]{8,512}(\?download=1)?$/;
 
+const HLS_MEDIA = /^\/media\/hls\/[A-Za-z0-9_\-~.]{8,512}\/[A-Za-z0-9_]{1,64}\.(m3u8|ts)$/;
+
 export function isMediaPath(apiPath: string): boolean {
-  return MEDIA.test(apiPath);
+  return MEDIA.test(apiPath) || HLS_MEDIA.test(apiPath);
 }
 
 export function isProxyPathAllowed(apiPath: string, method = 'GET'): boolean {
-  if (MEDIA.test(apiPath)) return ['GET', 'HEAD'].includes(method.toUpperCase());
+  if (isMediaPath(apiPath)) return ['GET', 'HEAD'].includes(method.toUpperCase());
   if (!PATH_OK.test(apiPath)) return false;
   const pathOnly = apiPath.split('?')[0]!;
   // No dot segments at all: a URL parser folds `/./` away, and the deny list
@@ -165,7 +167,7 @@ export function createApiProxy(deps: ProxyDeps) {
 
     let upstream: Response;
     try {
-      upstream = await deps.http.raw(method, deps.http.url(apiPath), { headers, body, timeoutMs: 60_000 });
+      upstream = await deps.http.raw(method, deps.http.url(apiPath), { headers, body, timeoutMs: 60_000, signal: request.signal });
     } catch (e) {
       if (cacheable || cacheModule) {
         const hit = deps.cache.get(userId, apiPath);

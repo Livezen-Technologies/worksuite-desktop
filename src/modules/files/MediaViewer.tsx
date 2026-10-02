@@ -11,6 +11,7 @@ import { Button, Spinner, cx } from '../../components/ui';
 import { can, kindOf, mediaUrl, opened, tagOf, type DriveFile } from './api';
 import { useDrive } from './ctx';
 import { FileIcon } from './Thumb';
+import { VideoStream } from './VideoStream';
 import { Select } from '../../components/Select';
 
 interface Probe {
@@ -44,13 +45,13 @@ interface Marker {
 interface Opened {
   file: { id: number; name: string; description: string | null; tags: string[] };
   media: Probe | null;
-  state: 'ready' | 'probing' | 'converting' | 'unplayable' | 'unavailable';
+  state: 'ready' | 'probing' | 'converting' | 'unplayable' | 'unavailable' | 'failed';
   source?: 'original' | 'proxy' | 'image' | null;
-  urls?: { source?: string; poster?: string; art?: string };
+  urls?: { source?: string; poster?: string; art?: string; hls?: string; original?: string };
   tracks?: Track[];
   markers?: Marker[];
   playback?: { position_ms: number; completed: boolean } | null;
-  jobs: Array<{ kind: string; state: string; progress: number | string }>;
+  jobs: Array<{ kind: string; state: string; progress: number | string; stalled?: boolean; error?: string; id?: number }>;
   ffmpeg: boolean;
   reason?: string | null;
   message?: string;
@@ -87,7 +88,7 @@ export function MediaViewer({ files, start, onClose }: { files: DriveFile[]; sta
   const q = useQuery({
     queryKey: ['files', 'media', f.id],
     queryFn: ({ signal }) => apiGet<Opened>(`/api/drive/media/${f.id}`, undefined, signal),
-    refetchInterval: (query) => (['probing', 'converting'].includes(query.state.data?.state ?? '') ? 3000 : false),
+    refetchInterval: (query) => (query.state.data?.jobs.some((j) => !j.stalled && ['running', 'queued'].includes(j.state)) || ['probing', 'converting'].includes(query.state.data?.state ?? '') ? 3000 : false),
   });
   const o = q.data;
   // A server without ffmpeg can't prepare media, but the file itself may still play.
@@ -114,8 +115,12 @@ export function MediaViewer({ files, start, onClose }: { files: DriveFile[]; sta
   const [marks, setMarks] = useState<Marker[] | null>(null);
   // What it is: from the server's reading of the file, else from its name.
   const isVideo = o?.media?.kind ? o.media.kind !== 'audio' : kindOf(f.name, f.extension) !== 'audio';
-  const src = mediaUrl(o?.urls?.source) ?? direct;
-  const playable = !!o && (o.state === 'ready' || !!direct);
+  const src = mediaUrl(o?.urls?.source ?? o?.urls?.original) ?? direct;
+  const hlsUrl = o?.urls?.hls?.startsWith('/media/hls/') ? apiUrl(o.urls.hls) : mediaUrl(o?.urls?.hls);
+  const playable = !!o && (!!src || !!hlsUrl);
+  const activeJob = o?.jobs.find((j) => j.state === 'running' || j.state === 'queued');
+  const failedJob = o?.jobs.find((j) => ['probe', 'proxy', 'hls'].includes(j.kind) && (j.state === 'failed' || j.stalled));
+  const processing = o?.state === 'failed' || !!failedJob ? 'Failed' : activeJob?.state === 'queued' ? 'Queued' : ['probing', 'converting'].includes(o?.state ?? '') ? 'Preparing Video' : 'Ready';
   const markers = (marks ?? o?.markers ?? []).filter((m) => m.type === 'comment' || m.type === 'chapter' || m.type === 'bookmark').sort((a, b) => a.at_ms - b.at_ms);
 
   // A new file: its description, and nothing playing yet.
@@ -126,6 +131,8 @@ export function MediaViewer({ files, start, onClose }: { files: DriveFile[]; sta
     setMarks(null);
     setPlaying(false);
     setAt(0);
+    setLength(0);
+    setPlaybackError(null);
   }
   const description = desc ?? o?.file.description ?? '';
 
@@ -153,7 +160,7 @@ export function MediaViewer({ files, start, onClose }: { files: DriveFile[]; sta
     if (!el) return;
     setLength(el.duration * 1000);
     el.playbackRate = speed;
-    const pos = o?.playback?.position_ms ?? 0;
+    const pos = at > 5000 ? at : o?.playback?.position_ms ?? 0;
     if (pos > 5000 && !o?.playback?.completed && pos < el.duration * 1000 - 5000) {
       el.currentTime = pos / 1000;
       toast('info', `Carrying on from ${clock(pos)}`);
@@ -217,7 +224,7 @@ export function MediaViewer({ files, start, onClose }: { files: DriveFile[]; sta
   };
   const prepare = async () => {
     try {
-      await apiPost(`/api/drive/media/${f.id}/prepare`, { what: 'proxy' });
+      await apiPost(`/api/drive/media/${f.id}/prepare`, { what: failedJob?.kind ?? (o?.media?.kind === 'video' ? 'hls' : o?.media ? 'proxy' : 'probe') });
       toast('info', 'Making a copy this app can play. The original is not changed.');
       void q.refetch();
     } catch (e) {
@@ -254,7 +261,7 @@ export function MediaViewer({ files, start, onClose }: { files: DriveFile[]; sta
         {can(f.access, 'download') ? (
           <>
             <button type="button" onClick={() => d.download([f], true)} className="h-[34px] rounded-[8px] border border-[#2A3A66] px-3 font-semibold hover:bg-white/10">Open locally</button>
-            <button type="button" onClick={() => d.download([f])} className="h-[34px] rounded-[8px] bg-[#3B5BDB] px-3.5 font-bold text-white hover:brightness-110">Download</button>
+            <button type="button" onClick={() => d.download([f])} className="h-[34px] rounded-[8px] bg-[#3B5BDB] px-3.5 font-bold text-white hover:brightness-110">Download Original</button>
           </>
         ) : null}
         <button type="button" aria-label="Close viewer" onClick={onClose} className="ml-1 flex h-[34px] w-[34px] items-center justify-center rounded-[8px] text-[18px] hover:bg-white/10">×</button>
@@ -263,30 +270,33 @@ export function MediaViewer({ files, start, onClose }: { files: DriveFile[]; sta
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="relative flex min-h-0 flex-1 items-center justify-center p-6">
             {q.isLoading ? <Spinner /> : null}
+            {o && playable && processing !== 'Ready' ? <div role="status" className="absolute top-2 z-10 rounded bg-[#16254F] p-3">{processing}{activeJob && Number(activeJob.progress) > 0 ? ` · ${activeJob.progress}%` : ''} {processing === 'Failed' ? <Button onClick={() => void prepare()}>Retry preparation</Button> : null}</div> : null}
             {q.error ? <div role="alert" className="text-[#FFB4A3]">{errorMessage(q.error)} <Button onClick={() => void q.refetch()}>Retry</Button></div> : null}
-            {playbackError && playbackError === src ? <div role="alert" className="absolute top-2 z-10 rounded bg-[#16254F] p-3">Playback failed. Check your connection and try again. <Button onClick={() => { setPlaybackError(null); media.current?.load(); void q.refetch(); }}>Retry playback</Button></div> : null}
+            {playbackError && playbackError === src ? <div role="alert" className="absolute top-2 z-10 rounded bg-[#16254F] p-3">Playback failed. Check your connection and try again. <Button onClick={() => { setPlaybackError(null); media.current?.load(); void q.refetch(); }}>Retry playback</Button> {o?.ffmpeg ? <Button onClick={() => void prepare()}>Make a playable copy</Button> : null}</div> : null}
             {o && !playable && !(fallback.isLoading && fallback.fetchStatus !== 'idle') ? (
               <div className="flex max-w-[420px] flex-col items-center gap-3 text-center">
                 <FileIcon f={f} size={72} />
-                <b className="text-[15px]">{o.state === 'probing' || o.state === 'converting' ? 'Processing…' : o.state === 'unavailable' ? 'This server can’t play media files' : 'This file can’t be played here'}</b>
+                <b className="text-[15px]">{o.state === 'probing' || o.state === 'converting' || o.state === 'failed' ? processing : o.state === 'unavailable' ? 'This server can’t play media files' : 'This file can’t be played here'}</b>
                 {job ? <span className="text-[#AFC0E8]">{job.kind} · {job.state}{Number(job.progress) > 0 ? ` · ${job.progress}%` : ''}</span> : null}
+                {failedJob?.error ? <span role="alert" className="text-[#FFB4A3]">{failedJob.error}</span> : null}
                 {o.reason || o.message ? <span className="text-[#AFC0E8]">{o.reason ?? o.message}</span> : null}
-                {o.state === 'unplayable' && o.ffmpeg && !job ? <Button variant="primary" onClick={() => void prepare()}>Make a playable copy</Button> : null}
+                {o.ffmpeg && (!job || job.stalled || o.state === 'failed') ? <Button variant="primary" onClick={() => void prepare()}>{processing === 'Failed' ? 'Retry preparation' : 'Make a playable copy'}</Button> : null}
                 {can(f.access, 'download') && o.state !== 'probing' ? <Button onClick={() => d.download([f], true)}>Open locally</Button> : null}
               </div>
             ) : null}
-            {playable && src ? (
+            {playable && (src || hlsUrl) ? (
               <div className="flex h-full w-full max-w-[1200px] flex-col justify-center gap-3">
                 {isVideo ? (
-                  <video
-                    ref={media}
-                    key={src}
-                    src={src}
+                  <VideoStream
+                    mediaRef={media}
+                    hlsUrl={hlsUrl}
+                    key={f.id}
+                    source={src}
                     poster={mediaUrl(o.urls?.poster) ?? undefined}
                     muted={muted}
                     preload="metadata"
                     onLoadedMetadata={() => { setPlaybackError(null); loaded(); }}
-                    onError={() => setPlaybackError(src)}
+                    onError={() => setPlaybackError(src ?? hlsUrl)}
                     onTimeUpdate={(e) => setAt(e.currentTarget.currentTime * 1000)}
                     onPlay={() => setPlaying(true)}
                     onPause={() => (setPlaying(false), saveProgress())}
@@ -296,14 +306,14 @@ export function MediaViewer({ files, start, onClose }: { files: DriveFile[]; sta
                     className="max-h-[calc(100vh-260px)] w-full rounded-[10px] bg-black"
                   >
                     {(o.tracks ?? []).map((t) => (trackUrl(t.url) ? <track key={t.id} kind={t.kind} src={trackUrl(t.url)!} srcLang={t.lang} label={t.label} default={subs === String(t.id)} /> : null))}
-                  </video>
+                  </VideoStream>
                 ) : (
                   <div className="flex flex-col items-center gap-4">
                     {o.urls?.art ? <img src={mediaUrl(o.urls.art) ?? undefined} alt="" className="h-52 w-52 rounded-[18px] object-cover shadow-2xl" /> : <span className="flex h-52 w-52 items-center justify-center rounded-[24px] bg-white/10"><Icon name="music" size={64} /></span>}
                     <b className="text-[16px]">{o.media?.title ?? f.name}</b>
                     {o.media?.artist ? <span className="text-[#AFC0E8]">{o.media.artist}</span> : null}
-                    <audio ref={media} key={src} src={src} muted={muted} onLoadedMetadata={() => { setPlaybackError(null); loaded(); }}
-                    onError={() => setPlaybackError(src)} onTimeUpdate={(e) => setAt(e.currentTarget.currentTime * 1000)} onPlay={() => setPlaying(true)} onPause={() => (setPlaying(false), saveProgress())} onEnded={() => (setPlaying(false), saveProgress())} />
+                    <audio ref={media} key={src} src={src ?? undefined} muted={muted} onLoadedMetadata={() => { setPlaybackError(null); loaded(); }}
+                    onError={() => setPlaybackError(src ?? hlsUrl)} onTimeUpdate={(e) => setAt(e.currentTarget.currentTime * 1000)} onPlay={() => setPlaying(true)} onPause={() => (setPlaying(false), saveProgress())} onEnded={() => (setPlaying(false), saveProgress())} />
                   </div>
                 )}
                 <div className="flex flex-col gap-2 rounded-[10px] bg-[#111A31] px-3.5 py-2.5">
