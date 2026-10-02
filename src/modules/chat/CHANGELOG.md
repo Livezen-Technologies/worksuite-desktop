@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.7.0 — 2026-10-02
+
+- Chat › Calls tab in the full Chat page, shared with the drawer (#113); call cards and the log say Busy, No answer and Cancelled and refresh as calls ring and stop; Voice and Video call buttons show only where the room supports calling (not website visitors, notice rooms or unconfigured servers).
+
 ## 1.6.0 — 2026-10-02
 
 **Added**

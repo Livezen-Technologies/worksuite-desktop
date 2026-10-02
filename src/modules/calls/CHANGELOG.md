@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.4.0 — 2026-10-02
+
+- Direct calls show Calling, Ringing, Connecting, Connected, Busy, Declined and No answer (#113); Reconnecting… keeps the clock running and rejoins for up to 30 s; Maximise and speaker selection in the call windows; Call again on the ended screen; Answer instead of Accept; the caller now waits the server's 45 s and an unanswered call is recorded as missed; turning the camera on is refused while locked.
+
 ## 1.3.0 — 2026-10-02
 
 **Added**
