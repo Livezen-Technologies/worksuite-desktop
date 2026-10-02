@@ -1,4 +1,5 @@
 import { APP_CATALOGUE, visibleApps, type AccessGrant } from './apps';
+import { channelAppOfRoute, redirectRoute } from './channels';
 import { appForWebPath, resolveWebLink } from './links';
 
 /**
@@ -57,9 +58,18 @@ export function routeApp(route: string): string {
   return route.replace(/^\/+/, '').split(/[/?#]/)[0] || 'home';
 }
 
+/**
+ * The app whose access opens a desktop route: its first segment's, but a channel's for a channel in its host
+ * (`/chat?channel=whatsapp…` is WhatsApp's), and a channel's own old route is where it now opens (shared/channels.ts).
+ */
+export function routeOwner(route: string): string {
+  const to = redirectRoute(route);
+  return channelAppOfRoute(to) ?? routeApp(to);
+}
+
 /** A desktop route (`/chat?room=4`, `/calls/ring?…`): refused only when it belongs to an app the person may not open. */
 export function canOpenRoute(route: string, visible: VisibleApps): boolean {
-  const id = routeApp(route);
+  const id = routeOwner(route);
   return !isKnownApp(id) || canOpenApp(id, visible);
 }
 
@@ -124,6 +134,7 @@ export const NOTIFICATION_CATEGORY_APPS: Readonly<Record<string, readonly string
   marketing: ['marketing'],
   social: ['social'],
   whatsapp: ['whatsapp'],
+  meta: ['messenger', 'instagram'],
   customer_subscriptions: ['subscriptions'],
   subscriptions: ['subscriptions'],
   support: ['support'],

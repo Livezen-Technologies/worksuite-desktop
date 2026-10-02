@@ -8,6 +8,20 @@ the root CHANGELOG.md.
 
 - Modernized global search filters, responsive result details, file metadata and stable selection (#129).
 
+## 1.9.6 — 2026-10-02
+
+- Sinhala and Tamil text for the Messenger and Instagram channels (#36).
+
+## 1.9.5 — 2026-10-02
+
+- Sinhala and Tamil text for announcements (#98).
+- Sinhala and Tamil text for the WhatsApp channel; search no longer lists WhatsApp as its own app — it opens Chat's WhatsApp channel (#35).
+- Sinhala and Tamil text for the meeting More menu (#124).
+
+## 1.9.4 — 2026-10-02
+
+- Expose running-app and helper permission evidence; invalidate stale macOS Accessibility checks (#132).
+
 ## 1.9.3 — 2026-10-02
 
 - Sinhala and Tamil text for images in the AI Assistant (#59).

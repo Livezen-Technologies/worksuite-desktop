@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { canOpenApp, canOpenLink, canOpenRoute } from '@shared/access';
+import { appRoute, navApps } from '@shared/apps';
 import { resolveWebLink } from '@shared/links';
 import { idsOf } from '../../core/access';
 import { app } from '../../core/app-state';
@@ -193,6 +194,8 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const apps = useStore(app, (s) => s.apps);
+  // The apps to go to: a channel is in its host (WhatsApp, in Chat: #35), not an app of its own.
+  const listed = useMemo(() => navApps(apps), [apps]);
   const shortcuts = effectiveShortcuts(useStore(app, (s) => s.prefs?.shortcuts));
   const network = useStore(app, (s) => s.status?.network);
   const user = useStore(app, (s) => s.auth?.user?.id ?? null);
@@ -271,7 +274,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
 
   const openApp = (a: (typeof apps)[number]) => {
     noteRecentApp(user, a.id);
-    if (a.surface === 'native') navigate(`/${a.id}`);
+    if (a.surface === 'native') navigate(appRoute(a));
     else void call('app:openInBrowser', { path: a.webPath });
   };
 
@@ -295,11 +298,11 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
       kv: [['Opens', a.surface === 'browser' ? 'In your browser' : 'In the desktop app']],
       verb: `Open ${appLabel(a)}`,
       run: () => openApp(a),
-      window: a.surface === 'native' ? () => void call('windows:open', { kind: 'record', route: `/${a.id}`, title: a.label }) : undefined,
+      window: a.surface === 'native' ? () => void call('windows:open', { kind: 'record', route: appRoute(a), title: a.label }) : undefined,
       link: origin ? `${origin}${a.webPath}` : undefined,
     });
     if (commandMode) {
-      for (const a of apps) if (!lower || appLabel(a).toLowerCase().includes(lower) || (a.keywords ?? '').includes(lower)) out.push(appItem(a, 'Go to'));
+      for (const a of listed) if (!lower || appLabel(a).toLowerCase().includes(lower) || (a.keywords ?? '').includes(lower)) out.push(appItem(a, 'Go to'));
       for (const c of create) {
         if (lower && !c.label.toLowerCase().includes(lower)) continue;
         out.push({
@@ -335,7 +338,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
       return out;
     }
     if (!lower) return out;
-    if (scope === 'All') for (const a of apps) if (appLabel(a).toLowerCase().includes(lower) || (a.keywords ?? '').includes(lower)) out.push(appItem(a, 'Apps'));
+    if (scope === 'All') for (const a of listed) if (appLabel(a).toLowerCase().includes(lower) || (a.keywords ?? '').includes(lower)) out.push(appItem(a, 'Apps'));
     const words = serverData?.terms ?? [];
     for (const g of serverData?.results ?? []) {
       const look = groupLook(g.group);
@@ -385,7 +388,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
       });
     }
     return out;
-  }, [commandMode, term, apps, create, serverData, offlineData, shortcuts, scope, allowed, origin, user]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [commandMode, term, listed, create, serverData, offlineData, shortcuts, scope, allowed, origin, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filters: All, then each group that found something (and the one chosen, even when empty).
   const groups = [...new Set(items.filter((i) => i.group !== 'Apps').map((i) => i.group))];
@@ -601,7 +604,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
                 ) : null}
                 <Heading>Jump to</Heading>
                 <div className="grid grid-cols-8 gap-1.5">
-                  {[...apps]
+                  {[...listed]
                     .sort((a, b) => a.order - b.order)
                     .slice(0, 8)
                     .map((a) => (

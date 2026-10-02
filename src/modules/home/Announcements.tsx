@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { apiGet, apiPost } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
+import { text } from '../../core/i18n';
 import { sanitizeHtml } from '../../core/rich';
 import { relative } from '../../core/time';
 import { toast } from '../../core/toasts';
@@ -11,7 +12,10 @@ import { Button, Chip, Modal, Spinner, cx } from '../../components/ui';
  * Announcements sent to you (worksuite-desktop#98, #104): the Home widget, the
  * one opened from it or from a notification, and all of them. The server sends
  * only what you are among the audience of, still published and not expired —
- * withdrawn ones disappear — so what is shown here is what you may read.
+ * withdrawn ones disappear — so what is shown here is what you may read. An
+ * edit, withdrawal or expiry elsewhere reaches this list as the realtime
+ * `hr.announcement.changed` (core/query.ts), and one whose expiry passes while
+ * it is on screen leaves without waiting for that.
  */
 export interface MyAnnouncement {
   id: number;
@@ -31,6 +35,7 @@ export interface MyAnnouncement {
   /** Newer servers: who wrote it, and every company it went to. */
   author?: string | null;
   companies?: Array<{ id: number; name: string }>;
+  company_ids?: number[];
 }
 
 interface Full extends MyAnnouncement {
@@ -39,11 +44,17 @@ interface Full extends MyAnnouncement {
 
 export const MY_ANNOUNCEMENTS = ['announcements', 'mine'] as const;
 
-const RANK = { urgent: 0, important: 1, normal: 2 } as const;
+/** Urgent ones, then pinned ones, then important, then the rest. */
+const rank = (a: MyAnnouncement) => (a.priority === 'urgent' ? 0 : a.pinned ? 1 : a.priority === 'important' ? 2 : 3);
 
-/** Urgent first, then pinned, then the newest. */
+/** Urgent and pinned first (an urgent pinned one before an urgent one), then the newest. */
 export function ranked(items: MyAnnouncement[]): MyAnnouncement[] {
-  return [...items].sort((a, b) => RANK[a.priority] - RANK[b.priority] || Number(b.pinned) - Number(a.pinned) || (b.published_at ?? '').localeCompare(a.published_at ?? ''));
+  return [...items].sort((a, b) => rank(a) - rank(b) || Number(b.pinned) - Number(a.pinned) || (b.published_at ?? '').localeCompare(a.published_at ?? ''));
+}
+
+/** Not past its expiry (server times are UTC): one that lapses while Home is open leaves at once. */
+export function current(items: MyAnnouncement[], now = Date.now()): MyAnnouncement[] {
+  return items.filter((a) => !a.expires_at || Date.parse(`${a.expires_at.replace(' ', 'T')}Z`) > now);
 }
 
 /** Those for the company chosen in the header; all of them when it is "All organizations". */
@@ -72,14 +83,17 @@ const TONE = { urgent: 'danger', important: 'warning', normal: 'muted' } as cons
 export function PriorityChip({ a }: { a: Pick<MyAnnouncement, 'priority' | 'pinned'> }) {
   return (
     <>
-      {a.priority !== 'normal' ? <Chip tone={TONE[a.priority]}>{a.priority === 'urgent' ? 'Urgent' : 'Important'}</Chip> : null}
+      {a.priority === 'urgent' || a.priority === 'important' ? <Chip tone={TONE[a.priority]}>{a.priority === 'urgent' ? 'Urgent' : 'Important'}</Chip> : null}
       {a.pinned ? <Chip tone="indigo">Pinned</Chip> : null}
     </>
   );
 }
 
+/** "3 companies", in the reader's language. */
+const companiesCount = (n: number) => text('{n} companies', { n });
+
 function byline(a: MyAnnouncement): string {
-  return [a.author, a.published_at ? relative(a.published_at) : null, a.companies && a.companies.length > 1 ? `${a.companies.length} companies` : a.company].filter(Boolean).join(' · ');
+  return [a.author, a.published_at ? relative(a.published_at) : null, a.companies && a.companies.length > 1 ? companiesCount(a.companies.length) : a.company].filter(Boolean).join(' · ');
 }
 
 export function useAcknowledge() {
@@ -89,7 +103,7 @@ export function useAcknowledge() {
     setBusy(id);
     try {
       await apiPost(`/api/hr/announcements/mine/${id}/ack`, {});
-      toast('success', 'Acknowledged.');
+      toast('success', text('Acknowledged.'));
       void qc.invalidateQueries({ queryKey: MY_ANNOUNCEMENTS });
     } catch (e) {
       toast('error', errorMessage(e));
@@ -102,7 +116,7 @@ export function useAcknowledge() {
 
 /** Whom it went to, as the card's small heading: the company, or how many. */
 function audience(a: MyAnnouncement): string | null {
-  return a.companies && a.companies.length > 1 ? `${a.companies.length} companies` : (a.company ?? a.companies?.[0]?.name ?? null);
+  return a.companies && a.companies.length > 1 ? companiesCount(a.companies.length) : (a.company ?? a.companies?.[0]?.name ?? null);
 }
 
 /** The cards of the Home widget (optimized): up to five, the ones to acknowledge with their button. */

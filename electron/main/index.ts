@@ -13,6 +13,7 @@ import { join, resolve } from 'node:path';
 import { canOpenApp, canOpenLink, canOpenRoute, notificationAllowed, visibleAppIds } from '@shared/access';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
 import { resolveWebLink } from '@shared/links';
+import { redirectRoute } from '@shared/channels';
 import { networkStatus } from '@shared/network';
 import { pmsCached } from '@shared/pms-cache';
 import { eventsCached } from '@shared/event-desk';
@@ -38,7 +39,7 @@ import { AuthService } from '../services/auth';
 import { BootstrapService } from '../services/bootstrap';
 import { CallService } from '../services/calls';
 import { ScreenShare } from '../services/screen-share';
-import { createRemoteControl } from '../services/remote-control/host';
+import { accessibility, createRemoteControl } from '../services/remote-control/host';
 import { DEFAULT_POLICY } from '../services/policy';
 import { Database } from '../services/db';
 import { archName, DeviceService, platformName } from '../services/device';
@@ -642,7 +643,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     windows.showMain();
     broadcast('toast', { kind: 'error', text: NO_ACCESS });
   };
-  const navigate = (req: NavigateRequest): void => {
+  const navigate = (asked: NavigateRequest): void => {
+    // A channel's old route (`/whatsapp?chat=5`) opens in its host now, on the same conversation (#35).
+    const req = { ...asked, route: redirectRoute(asked.route) };
     // Locked: the workspace is not there to take it; it opens once WorkSuite is unlocked (#114).
     if (lock.isLocked()) {
       pendingNav.push(req);
@@ -1808,7 +1811,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     notifications.markGap();
   });
   powerMonitor.on('user-did-resign-active', () => remoteControl.onSystem('user-did-resign-active'));
+  app.on('browser-window-focus', () => { if (process.platform === 'darwin') { accessibility.openedSettings(); void accessibility.refresh(); } });
   powerMonitor.on('resume', () => {
+    if (process.platform === 'darwin') { accessibility.openedSettings(); void accessibility.refresh(); }
     device.poke();
     sync.kick('resume');
     realtime.kick();

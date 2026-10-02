@@ -1,13 +1,17 @@
 import type { Room } from '../types';
 import type { WebsiteRow } from '../website/api';
+import { metaState, type MetaAccount, type MetaPlatform } from './meta';
 import { isConnected, type WaAccount } from './whatsapp';
 
 /**
- * The messaging channels down the left of Chat (worksuite-desktop#33): Chat itself, website chat and WhatsApp.
- * A channel is in the toolbar once this person has it: website chat when they staff it, WhatsApp once a number is
- * shared with them. Anything else is offered under "Add a channel".
+ * The messaging channels down the left of Chat (worksuite-desktop#33): Chat itself, website chat, WhatsApp, and
+ * Messenger and Instagram (#36). A channel is in the toolbar once this person has it: website chat when they staff
+ * it, WhatsApp once a number is shared with them, Messenger or Instagram once an account of it is. Anything else is
+ * offered under "Add a channel".
  */
-export type ChannelId = 'chat' | 'website' | 'whatsapp';
+export type ChannelId = 'chat' | 'website' | 'whatsapp' | MetaPlatform;
+
+export const isMetaChannel = (id: ChannelId): id is MetaPlatform => id === 'messenger' || id === 'instagram';
 
 export interface Channel {
   id: ChannelId;
@@ -22,11 +26,13 @@ export interface Channel {
 /** Which channel a Chat route is on. Website chats keep the routes they always had. */
 export function channelOf(query: URLSearchParams): ChannelId {
   if (query.get('view') === 'website' || query.get('website')) return 'website';
-  if (query.get('channel') === 'whatsapp') return 'whatsapp';
+  const channel = query.get('channel');
+  if (channel === 'whatsapp' || channel === 'messenger' || channel === 'instagram') return channel;
   return 'chat';
 }
 
 const LAST_WA = 'ws.chat.whatsapp.last';
+const lastMeta = (platform: MetaPlatform) => `ws.chat.${platform}.last`;
 
 /** The WhatsApp conversation to come back to when the channel is picked again. */
 export function rememberWhatsapp(id: string | null): void {
@@ -37,17 +43,27 @@ export function rememberWhatsapp(id: string | null): void {
   }
 }
 
+/** The Messenger or Instagram conversation to come back to. */
+export function rememberMeta(platform: MetaPlatform, id: string | null): void {
+  try {
+    if (id) localStorage.setItem(lastMeta(platform), id);
+  } catch {
+    // A convenience: the channel opens on its list instead.
+  }
+}
+
 /** Where picking a channel goes. Chat reopens its last conversation itself. */
 export function channelRoute(id: ChannelId): string {
   if (id === 'website') return '/chat?view=website';
-  if (id === 'whatsapp') {
+  if (id === 'whatsapp' || isMetaChannel(id)) {
     let last: string | null = null;
     try {
-      last = localStorage.getItem(LAST_WA);
+      last = localStorage.getItem(id === 'whatsapp' ? LAST_WA : lastMeta(id));
     } catch {
       last = null;
     }
-    return last && /^\d+$/.test(last) ? `/chat?channel=whatsapp&wa=${last}` : '/chat?channel=whatsapp';
+    const param = id === 'whatsapp' ? 'wa' : 'mc';
+    return last && /^\d+$/.test(last) ? `/chat?channel=${id}&${param}=${last}` : `/chat?channel=${id}`;
   }
   return '/chat';
 }
@@ -71,11 +87,31 @@ export function whatsappState(accounts: WaAccount[]): { badge: number; problem: 
   return { badge, problem: down.length === 1 ? `${down[0]!.name} is not connected` : `${down.length} numbers are not connected` };
 }
 
-/** The toolbar's channels. The one open now is always there, even before it has anything in it. */
-export function buildChannels(input: { active: ChannelId; rooms: Room[]; website: { access: boolean; rows: WebsiteRow[] }; whatsapp: { access: boolean; accounts: WaAccount[] } }): Channel[] {
-  const out: Channel[] = [{ id: 'chat', label: 'Chat', icon: 'chat', badge: chatUnread(input.rooms), problem: null }];
+/**
+ * The toolbar's channels. The one open now is always there, even before it has anything in it. WhatsApp shows for
+ * whoever has WhatsApp once a number is shared with them (or they may connect one), its badge the unread messages
+ * on those numbers.
+ */
+export function buildChannels(input: {
+  active: ChannelId;
+  chat?: boolean;
+  rooms: Room[];
+  website: { access: boolean; rows: WebsiteRow[] };
+  whatsapp: { access: boolean; accounts: WaAccount[]; canConnect?: boolean };
+  meta?: { access: boolean; accounts: MetaAccount[] };
+}): Channel[] {
+  // Chat itself is there for whoever has Chat; someone who has only WhatsApp (#35) has only its channel.
+  const out: Channel[] = input.chat === false ? [] : [{ id: 'chat', label: 'Chat', icon: 'chat', badge: chatUnread(input.rooms), problem: null }];
   if (input.website.access || input.active === 'website') out.push({ id: 'website', label: 'Web Chat', icon: 'globe', badge: websiteWaiting(input.website.rows), problem: null });
-  if (input.whatsapp.access && (input.whatsapp.accounts.length || input.active === 'whatsapp')) out.push({ id: 'whatsapp', label: 'WhatsApp', icon: 'phone', ...whatsappState(input.whatsapp.accounts) });
+  if (input.whatsapp.access && (input.whatsapp.accounts.length || input.whatsapp.canConnect || input.active === 'whatsapp')) out.push({ id: 'whatsapp', label: 'WhatsApp', icon: 'phone', ...whatsappState(input.whatsapp.accounts) });
+  // Messenger and Instagram (#36) once an account of theirs is shared with this person, or it is open now; connecting
+  // the first one is under "Add a channel".
+  const meta = input.meta;
+  if (meta?.access) {
+    for (const [id, label, icon] of [['messenger', 'Messenger', 'message-circle'], ['instagram', 'Instagram', 'camera']] as const) {
+      if (meta.accounts.some((a) => a.platform === id) || input.active === id) out.push({ id, label, icon, ...metaState(id, meta.accounts) });
+    }
+  }
   return out;
 }
 

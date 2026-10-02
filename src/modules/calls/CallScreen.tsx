@@ -5,6 +5,7 @@ import { Track } from 'livekit-client';
 import { call, errorMessage } from '../../core/bridge';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
+import { text } from '../../core/i18n';
 import { cx } from '../../components/ui';
 import { formatClock, VoiceRecorder } from '../chat/parts';
 import { Thread } from '../chat/Thread';
@@ -13,7 +14,8 @@ import { CallAvatar, Pill, useNow } from './parts';
 import { ScreenPicker } from './ScreenPicker';
 import { session, statusLine, type CallParams } from './session';
 import { CallWorkspace } from './ui/CallWorkspace';
-import type { ControlButton, MenuEntry } from './ui/CoreCallControls';
+import type { ControlButton } from './ui/CoreCallControls';
+import type { MenuItem, MenuSection } from '../../components/Menu';
 import { personOf } from './ui/people';
 import { callUi } from './ui/state';
 import { playTone, ringVolume, saveRingVolume } from './tones';
@@ -159,16 +161,12 @@ export function CallScreen() {
   const people = [...(lp ? [personOf(lp, true)] : []), ...remotes.map((p) => personOf(p, false))].map(p => locked && !prefs?.lockedShowCallerDetails && !p.self ? { ...p, name: 'Caller' } : p);
   const paused = s.sharePaused;
   const panelOn = (tab: string) => ui.panelOpen && ui.panelTab === tab;
-  // Which speaker the call plays through, where this computer has more than one.
-  const speakerMenu = (): MenuEntry[] =>
-    s.speakers.length
-      ? [
-          { heading: 'Speaker' },
-          { label: 'System default', icon: 'volume', checked: !s.speakerId, onClick: () => void s.setSpeaker('') },
-          ...s.speakers.map((d, i): MenuEntry => ({ label: d.label || `Speaker ${i + 1}`, icon: 'volume', checked: s.speakerId === d.deviceId, onClick: () => void s.setSpeaker(d.deviceId) })),
-          'sep',
-        ]
-      : [];
+  // Which speaker the call plays through, where this computer has more than one (#113): a submenu of More.
+  const speakerItems = (): MenuItem[] => [
+    { id: 'default', icon: 'volume', label: text('System default'), radio: true, checked: !s.speakerId, onSelect: () => void s.setSpeaker('') },
+    ...s.speakers.map((d, i): MenuItem => ({ id: `d${i}-${d.deviceId}`, icon: 'volume', label: d.label || text('Speaker {n}', { n: i + 1 }), radio: true, checked: s.speakerId === d.deviceId, onSelect: () => void s.setSpeaker(d.deviceId) })),
+  ];
+  const speakerName = s.speakerId ? (s.speakers.find((d) => d.deviceId === s.speakerId)?.label ?? null) : text('System default');
   const buttons: ControlButton[] = live
     ? [
         { id: 'mic', icon: muted ? 'mic-off' : 'mic', label: muted ? 'Unmute' : 'Mute', tone: muted ? 'warn' : undefined, onClick: () => void s.toggleMic() },
@@ -195,10 +193,16 @@ export function CallScreen() {
         ...(roomId > 0 ? [{ id: 'chat', icon: 'chat', label: panelOn('Chat') ? 'Hide chat' : 'Chat', tone: panelOn('Chat') ? ('active' as const) : undefined, onClick: () => locked ? openChat() : callUi.togglePanel('Chat') }] : []),
       ]
     : [];
-  const more: MenuEntry[] = s.phase === 'connected'
+  const more: MenuSection[] = s.phase === 'connected'
     ? [
-        ...speakerMenu(),
-        { label: s.noise ? 'Noise suppression: on' : 'Noise suppression: off', icon: 'audio-lines', checked: s.noise, onClick: () => void s.toggleNoise() },
+        {
+          id: 'audio',
+          label: text('Audio'),
+          items: [
+            ...(s.speakers.length ? [{ id: 'speaker', icon: 'volume', label: text('Speaker'), description: speakerName ?? undefined, submenu: [{ id: 'speakers', items: speakerItems() }] }] : []),
+            { id: 'noise', icon: 'audio-lines', label: text('Noise Suppression'), description: text('Filters out background noise from your microphone'), checked: s.noise, onSelect: () => void s.toggleNoise() },
+          ],
+        },
       ]
     : [];
 

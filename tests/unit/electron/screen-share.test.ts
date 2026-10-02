@@ -59,15 +59,15 @@ describe('what there is to share', () => {
     access.status = 'denied';
     const get = vi.fn(async () => []);
     const r = await share(get).sources();
-    expect(r).toMatchObject({ state: 'denied', permission: 'denied', restartMayHelp: true });
+    expect(r).toMatchObject({ state: 'denied', permission: 'denied', restartMayHelp: false });
     expect(get).not.toHaveBeenCalled();
   });
 
-  it('on a Mac, no screen at all after allowing it suggests a restart', async () => {
+  it('does not infer a restart requirement just from an empty screen list', async () => {
     onPlatform('darwin');
     const r = await share(async (t) => (t[0] === 'screen' ? [] : [src('window:10:0', 'Notes')])).sources();
     expect(r.state).toBe('ok');
-    expect(r.restartMayHelp).toBe(true);
+    expect(r.restartMayHelp).toBe(false);
   });
 });
 
@@ -86,7 +86,74 @@ it('refuses a previously picked screen if the app locks while sources are being 
   handle({ frame: { url: wc.getURL() } } as never, reply);
   locked = true;
   resolve([src('screen:1:0', 'Screen 1')] as never[]);
-  await Promise.resolve();
-  expect(reply).toHaveBeenCalledWith({});
+  await vi.waitFor(() => expect(reply).toHaveBeenCalledWith({}));
   expect(s.lastGranted(42)).toBeNull();
+});
+
+
+it('suggests restart only when denied permission becomes granted but capture stays unavailable', async () => {
+  onPlatform('darwin'); access.status = 'denied';
+  const s = share(async () => []);
+  expect((await s.sources()).restartMayHelp).toBe(false);
+  access.status = 'granted';
+  expect((await s.sources()).restartMayHelp).toBe(true);
+});
+
+it('validates and grants the selected screen even when window discovery fails (#132)', async () => {
+  const { webContents } = await import('electron');
+  const wc = { id: 61, getURL: () => 'app://bundle/#/window/meet' };
+  vi.mocked(webContents.fromFrame).mockReturnValue(wc as never);
+  const asked: string[][] = [];
+  const s = share(async (types) => { asked.push(types); if (types.includes('window')) throw new Error('Window discovery failed'); return [src('screen:1:0', 'Screen 1')]; });
+  expect((await s.sources()).state).toBe('partial');
+  await s.preparePick(wc.id, 'screen:1:0');
+  let handler!: (request: never, callback: (value: unknown) => void) => void;
+  s.install({ setDisplayMediaRequestHandler: (h: typeof handler) => { handler = h; } } as never);
+  const reply = vi.fn(); handler({ frame: { url: wc.getURL() } } as never, reply);
+  await vi.waitFor(() => expect(reply).toHaveBeenCalledWith({ video: expect.objectContaining({ id: 'screen:1:0' }) }));
+  expect(asked.slice(-2)).toEqual([['screen'], ['screen']]);
+  expect(s.lastGranted(wc.id)?.source.id).toBe('screen:1:0');
+});
+
+it('separates permission denial, discovery failure and a disappeared selection', async () => {
+  onPlatform('darwin'); access.status = 'denied';
+  const s = share(async () => []);
+  await expect(s.preparePick(4, 'screen:1:0')).rejects.toMatchObject({ code: 'PERMISSION_DENIED' });
+  access.status = 'granted';
+  await expect(s.preparePick(4, 'screen:1:0')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  await expect(share(async () => { throw new Error('OS discovery failure'); }).preparePick(4, 'screen:1:0')).rejects.toThrow('OS discovery failure');
+});
+
+it('does not turn an unavailable native permission check into a denial', async () => {
+  onPlatform('darwin'); access.status = 'unknown';
+  const r = await share(async () => [src('screen:1:0', 'Screen 1')]).sources();
+  expect(r).toMatchObject({ permissionStatus: 'unknown', state: 'ok', restartMayHelp: false });
+  expect(r.sources.length).toBeGreaterThan(0);
+});
+
+
+it('refuses a retired capture after a new source is picked', async () => {
+  const { webContents } = await import('electron');
+  const wc = { id: 72, getURL: () => 'app://bundle/#/window/meet' };
+  vi.mocked(webContents.fromFrame).mockReturnValue(wc as never);
+  let finish!: (sources: unknown[]) => void;
+  const s = share(() => new Promise((resolve) => { finish = resolve; }));
+  let handler!: (request: never, callback: (value: unknown) => void) => void;
+  s.install({ setDisplayMediaRequestHandler: (h: typeof handler) => { handler = h; } } as never);
+  s.pick(wc.id, 'screen:1:0'); const reply = vi.fn();
+  handler({ frame: { url: wc.getURL() } } as never, reply);
+  s.pick(wc.id, 'screen:2:0'); finish([src('screen:1:0', 'Screen 1')]);
+  await vi.waitFor(() => expect(reply).toHaveBeenCalledWith({}));
+  expect(s.lastGranted(wc.id)).toBeNull();
+});
+
+it('bounds source discovery without granting capture', async () => {
+  vi.useFakeTimers();
+  try {
+    const s = share(() => new Promise(() => {}));
+    const result = s.preparePick(5, 'screen:1:0').catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await result).toMatchObject({ code: 'INTERNAL', message: expect.stringContaining('timed out') });
+    expect(s.lastGranted(5)).toBeNull();
+  } finally { vi.useRealTimers(); }
 });
