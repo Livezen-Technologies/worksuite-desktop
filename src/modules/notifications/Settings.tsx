@@ -182,7 +182,7 @@ export default function NotificationSettings() {
             <SettingRow label="Sound" hint="A sound with each banner.">
               <Switch label="Sound" checked={prefs.notificationSounds} onChange={(v) => local({ notificationSounds: v })} />
             </SettingRow>
-            <SettingRow label="What banners show" hint="While WorkSuite is locked, banners never show what they are about.">
+            <SettingRow label="What banners show" hint="While WorkSuite is locked, banners say only “New message in WorkSuite.” unless Settings › Security allows the sender or a preview.">
               <Select
                 label="What banners show"
                 value={prefs.notificationPrivacy}
@@ -197,6 +197,7 @@ export default function NotificationSettings() {
             <SettingRow label="Badge count on the app icon" hint="Unread chat and notifications, on the Dock or the taskbar.">
               <Switch label="Badge count on the app icon" checked={prefs.badgeCount !== false} onChange={(v) => local({ badgeCount: v })} />
             </SettingRow>
+            <SystemPermission enabled={prefs.notificationsEnabled} />
             <div className="flex flex-wrap items-center gap-2 pt-3">
               <Button icon="bell" onClick={() => void call('notifications:test').then((ok) => !ok && toast('warning', 'This system does not support notifications. Check its notification settings.'))}>
                 Send a test notification
@@ -209,6 +210,23 @@ export default function NotificationSettings() {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Whether the operating system lets WorkSuite's banners show (#114). Electron
+ * cannot read the per-app permission on macOS or Windows, so this says so,
+ * names where to look, and reports the system's refusal when there was one.
+ */
+export function SystemPermission({ enabled }: { enabled: boolean }) {
+  const q = useQuery({ queryKey: ['notifications', 'permission'], queryFn: () => call('notifications:permission'), enabled, refetchInterval: 60_000 });
+  const s = q.data;
+  if (!enabled || !s) return null;
+  return (
+    <p role={s.state === 'unknown' ? undefined : 'alert'} className={cx('mt-2 rounded-[8px] px-3 py-2 text-[12px]', s.state === 'unknown' ? 'bg-subtle text-ink-3' : 'bg-danger-bg text-danger')}>
+      {s.detail}
+      {s.failure ? <span className="block font-mono text-[11px]">{s.failure}</span> : null}
+    </p>
   );
 }
 

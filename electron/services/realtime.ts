@@ -29,6 +29,9 @@ interface Ticket {
   enabled: boolean;
 }
 
+/** Longer than the gateway's 30 s ping: a connected socket silent this long may be dead. */
+const STALE_MS = 35_000;
+
 type WebSocketCtor = new (url: string) => WebSocket;
 
 /** The realtime host must belong to the server's own domain. */
@@ -101,10 +104,24 @@ export class RealtimeService {
     this.setState('idle');
   }
 
-  /** Reconnect now (network came back, resume from sleep). */
+  /**
+   * Reconnect now (network came back, resume from sleep). A socket that says
+   * it is connected but has been silent past a heartbeat is replaced too:
+   * after sleep it is usually dead without having closed (#114).
+   */
   kick(): void {
     if (!this.running) return;
-    if (this.state === 'connected') return;
+    if (this.state === 'connected') {
+      if (Date.now() - this.lastFrameAt < STALE_MS) return;
+      const ws = this.ws;
+      this.ws = null;
+      try {
+        ws?.close();
+      } catch {
+        /* already closed */
+      }
+      this.setState('down');
+    }
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.retryTimer = null;
     void this.connect();
