@@ -187,6 +187,50 @@ describe('no duplicates after unlocking, sleeping or reconnecting (#114)', () =>
     s.stop();
   });
 
+  it('retries missed messages after the network is unavailable on resume', async () => {
+    const { s, get } = service({}, { rooms: [room()], messages: msgs });
+    s.start('5');
+    get.mockRejectedValueOnce(new Error('Network unavailable'));
+    s.markGap(Date.now() - 60_000);
+    await s.catchUpChat();
+    expect(shown).toEqual([]);
+    await s.catchUpChat();
+    expect(shown).toHaveLength(2);
+    await s.catchUpChat();
+    expect(shown).toHaveLength(2);
+    s.stop();
+  });
+
+  it('retries partial catch-up without repeating messages already delivered', async () => {
+    const { s, get } = service({}, { rooms: [room(), room({ id: 13 })], messages: msgs });
+    s.start('5');
+    get.mockResolvedValueOnce({ rooms: [room(), room({ id: 13 })] });
+    get.mockResolvedValueOnce({ messages: msgs });
+    get.mockRejectedValueOnce(new Error('Connection lost'));
+    s.markGap(Date.now() - 60_000);
+    await s.catchUpChat();
+    expect(shown).toHaveLength(2);
+    await s.catchUpChat();
+    expect(shown).toHaveLength(2);
+    s.stop();
+  });
+
+  it('retries a failed catch-up on the regular poll without another reconnect', async () => {
+    vi.useFakeTimers();
+    const { s, get } = service({}, { rooms: [room()], messages: msgs });
+    try {
+      s.start('5');
+      get.mockRejectedValueOnce(new Error('Network unavailable'));
+      s.markGap(Date.now() - 60_000);
+      await s.catchUpChat();
+      expect(shown).toEqual([]);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(shown).toHaveLength(2);
+    } finally {
+      s.stop();
+    }
+  });
+
   it('skips muted conversations, mention-only ones without a mention, and old messages', async () => {
     const { s } = service({}, { rooms: [room({ muted: true }), room({ id: 13, notify_level: 'mentions' }), room({ id: 14, last_message: { sender_id: 9, created_at: stamp(3_600_000) } })], messages: msgs });
     s.start('5');
