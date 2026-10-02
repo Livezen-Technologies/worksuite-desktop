@@ -68,6 +68,8 @@ export interface MeetingPreset {
   client_id?: number;
   /** Shown in the dialog: "Lead · Acme Corp". */
   label: string;
+  /** External guests to invite by email — a tender's contact person, for one. */
+  guests?: string[];
 }
 
 export interface Meeting {

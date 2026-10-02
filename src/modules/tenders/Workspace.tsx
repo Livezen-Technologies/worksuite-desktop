@@ -12,6 +12,8 @@ import Approvals from './Approvals';
 import Bonds from './Bonds';
 import Budget from './Budget';
 import Checklist from './Checklist';
+import ContactPersons from './ContactPersons';
+import { fetchContactPersons, K3, tabLabel } from './persons';
 import Decision from './Decision';
 import Documents from './Documents';
 import Meetings from './Meetings';
@@ -31,8 +33,8 @@ import { Left, openWeb, OutcomePill, PriorityPill, Score, StagePill, subline } f
  * The working tabs — checklist, documents, bonds, meetings, budget, costs and
  * approvals — open in the browser for now.
  */
-type Tab = 'overview' | 'checklist' | 'documents' | 'bonds' | 'meetings' | 'budget' | 'approvals' | 'notice' | 'decision' | 'history' | 'activity';
-const TABS: Tab[] = ['overview', 'checklist', 'documents', 'bonds', 'meetings', 'budget', 'approvals', 'notice', 'decision', 'history', 'activity'];
+type Tab = 'overview' | 'checklist' | 'documents' | 'contacts' | 'bonds' | 'meetings' | 'budget' | 'approvals' | 'notice' | 'decision' | 'history' | 'activity';
+const TABS: Tab[] = ['overview', 'checklist', 'documents', 'contacts', 'bonds', 'meetings', 'budget', 'approvals', 'notice', 'decision', 'history', 'activity'];
 
 type Ask = { kind: 'move'; to: string; label: string; blockers: string[] } | { kind: 'cancel' } | { kind: 'win' } | { kind: 'lose' };
 
@@ -58,6 +60,8 @@ export default function Workspace({
   const qc = useQueryClient();
   // Opened means read afresh: a tender moved by somebody else a moment ago must not show its old stage and moves.
   const q = useQuery({ queryKey: K.tender(id), queryFn: ({ signal }) => fetchTender(id, signal), refetchOnMount: 'always' });
+  // For the tab's count; the tab itself reads the same query.
+  const persons = useQuery({ queryKey: K3.persons(id), queryFn: ({ signal }) => fetchContactPersons(id, signal), refetchOnMount: 'always' });
   const [ask, setAsk] = useState<Ask | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const t: Tab = (TABS as string[]).includes(tab) ? (tab as Tab) : 'overview';
@@ -214,6 +218,7 @@ export default function Workspace({
             ['overview', 'Overview'],
             ['checklist', req.mandatory ? `Checklist · ${req.missing ? `${req.missing} outstanding` : 'ready'}` : 'Checklist'],
             ['documents', d.documents.length ? `Documents · ${d.documents.length}` : 'Documents'],
+            ['contacts', tabLabel(persons.data?.count)],
             ['bonds', 'Bonds'],
             ['meetings', 'Meetings'],
             ['budget', 'Budget'],
@@ -240,6 +245,7 @@ export default function Workspace({
       {t === 'overview' ? <Overview d={d} canManage={canManage} busy={busy === 'score'} onRescore={() => void act('score', () => rescore(id), 'Scored again.')} onApprovals={() => onTab('approvals')} /> : null}
       {t === 'checklist' ? <Checklist id={id} org={org} canManage={canManage} canApprove={canApprove} can={d.can} /> : null}
       {t === 'documents' ? <Documents id={id} docs={d.documents} can={d.can} /> : null}
+      {t === 'contacts' ? <ContactPersons tender={{ id, title: r.title, reference: r.reference }} /> : null}
       {t === 'bonds' ? <Bonds id={id} currency={r.currency} canManage={canManage} can={d.can} /> : null}
       {t === 'meetings' ? <Meetings id={id} tender={r.title} canManage={canManage} /> : null}
       {t === 'budget' ? <Budget id={id} budget={d.budget} canManage={canManage} /> : null}
