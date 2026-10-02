@@ -47,7 +47,8 @@ export default defineConfig({
       rollupOptions: {
         // node:sqlite exists only with the node: prefix, which the build
         // host's builtin list may not know; it is always provided by Electron.
-        external: ['node:sqlite', 'node-llama-cpp'],
+        // tesseract.js starts its own worker thread from its own files (services/ocr.ts), so it is loaded as installed.
+        external: ['node:sqlite', 'node-llama-cpp', 'tesseract.js'],
         input: {
           index: resolve(__dirname, 'electron/main/index.ts'),
           // Utility processes (§3.2): hashing and other CPU work never runs on

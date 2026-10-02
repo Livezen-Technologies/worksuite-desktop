@@ -47,9 +47,10 @@ function support(policy: DesktopPolicy): RemoteControlSupport {
     available: s.available,
     method: s.method,
     displayServer: s.displayServer,
-    reason: ax.status === 'unknown' ? 'Unable to verify Accessibility access. Check again to retry.' : ax.status === 'checking' ? 'Checking Accessibility access…' : s.reason,
+    reason: ax.status === 'unknown' ? ax.problem ?? 'Unable to verify Accessibility access. Check again to retry.' : ax.status === 'checking' ? 'Checking Accessibility access…' : s.reason,
     accessibility: ax.status,
     accessibilityHint: ax.hint,
+    ...(process.platform === 'darwin' ? { accessibilityDetails: { appTrusted: ax.appTrusted ?? null, helperTrusted: ax.helperTrusted ?? null, helperAccessibility: ax.helperAccessibility ?? null, problem: ax.problem ?? null, checkedAt: ax.checkedAt ?? null, runningApp: process.execPath } } : {}),
     policyAllows: policy.remote_control_host !== 'disabled',
   };
 }

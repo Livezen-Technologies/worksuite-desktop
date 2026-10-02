@@ -39,11 +39,11 @@ export function minimiseChatDrawer(): void {
 
 /** Settings › AI Assistant › Display mode: the header button and its drawer, the floating widget, or neither. */
 export function aiDisplay(): AiDisplay {
-  return app.get().prefs?.ai?.display ?? 'drawer';
+  return app.get().prefs?.ai?.display ?? 'widget';
 }
 
 export function useAiDisplay(): AiDisplay {
-  return useStore(app, (s) => s.prefs?.ai?.display ?? 'drawer');
+  return useStore(app, (s) => s.prefs?.ai?.display ?? 'widget');
 }
 
 /** The floating widget (#61): open or down to its launcher, and whether it fills the workspace. */

@@ -53,3 +53,18 @@ describe('Accessibility verification', () => {
     expect(helperTrusted).not.toHaveBeenCalled();
   });
 });
+
+
+it('shows contradictory Accessibility/event-posting checks as unverifiable rather than permission denial', async () => {
+  const check = new AccessibilityCheck({ platform: 'darwin', appTrusted: () => true, helperTrusted: async () => ({ trusted: false, accessibility: true, error: null }), now: () => 1000 });
+  expect(await check.refresh()).toMatchObject({ status: 'unknown', appTrusted: true, helperAccessibility: true, helperTrusted: false, problem: expect.stringContaining('preflight disagrees') });
+});
+
+it('invalidates an in-flight probe when Settings is opened', async () => {
+  let finish!: (result: boolean) => void;
+  const probe = vi.fn().mockImplementationOnce(() => new Promise<boolean>((resolve) => { finish = resolve; })).mockResolvedValue(true);
+  const check = new AccessibilityCheck({ platform: 'darwin', appTrusted: () => true, helperTrusted: probe, now: () => 1000 });
+  const first = check.refresh(); await Promise.resolve();
+  check.openedSettings(); finish(false);
+  expect((await first).status).toBe('granted');
+});

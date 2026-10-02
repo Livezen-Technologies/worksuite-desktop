@@ -68,6 +68,10 @@ export const INVOKE_CHANNELS = [
   'ai:localAsk',
   'ai:localCancel',
   'ai:localRestart',
+  // Text read from images on this computer (worksuite-desktop#59).
+  'ai:ocr',
+  'ai:ocrCancel',
+  'ai:ocrStatus',
   'ring:state',
   'ring:join',
   'ring:silence',
@@ -373,6 +377,7 @@ export const EVENT_CHANNELS = [
   'office:event',
   'ai:localEvent',
   'ai:localChanged',
+  'ai:ocrProgress',
   'office:localChanged',
   ...POS_EVENT_CHANNELS,
 ] as const;
