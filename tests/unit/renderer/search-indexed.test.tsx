@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { visibleApps } from '@shared/apps';
@@ -14,6 +14,7 @@ const apiGet = vi.fn();
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: (...a: unknown[]) => apiGet(...a) }));
 vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(async () => []), on: () => () => undefined, hasDesktop: () => true, errorMessage: (e: unknown) => String(e), isMac: false, platform: 'linux', registerDropped: vi.fn() }));
 
+const { call } = await import('../../../src/core/bridge');
 const { app } = await import('../../../src/core/app-state');
 const { SearchOverlay, markWords } = await import('../../../src/app/overlays/SearchOverlay');
 
@@ -47,8 +48,10 @@ const lastParams = () => apiGet.mock.calls.at(-1)?.[1] as Record<string, unknown
 
 beforeEach(() => {
   apiGet.mockReset();
+  vi.mocked(call).mockReset();
+  vi.mocked(call).mockResolvedValue([] as never);
   apiGet.mockResolvedValue(answer());
-  app.set({ apps: visibleApps({ apps: ['notes', 'mail', 'chat'], permissions: [] }), status: { network: 'ONLINE' } as never });
+  app.set({ auth: null, bootstrap: null, apps: visibleApps({ apps: ['notes', 'mail', 'chat'], permissions: [] }), status: { network: 'ONLINE' } as never });
 });
 afterEach(cleanup);
 
@@ -59,12 +62,57 @@ describe('marking the words', () => {
       { text: ' budget for ', match: false },
       { text: 'solaris', match: true },
     ]);
+    expect(markWords('தமிழ் மொழி', ['தமிழ்']).find((p) => p.match)?.text).toBe('தமிழ்');
     expect(markWords('the consolar', ['solar']).some((p) => p.match)).toBe(false);
     expect(markWords('ශ්‍රී ලංකාව', ['ලංකා']).find((p) => p.match)?.text).toBe('ලංකාව');
   });
 });
 
 describe('search on the index (#57)', () => {
+  it('hides old results immediately and aborts an outdated query before the next debounce', async () => {
+    show();
+    type('solar');
+    await screen.findAllByText('Solar', { exact: false });
+    const signal = apiGet.mock.calls.at(-1)?.[2] as AbortSignal;
+    type('different');
+    expect(screen.queryByText('Solar', { exact: false })).toBeNull();
+    expect(screen.queryByText('Weekly notes')).toBeNull();
+    // An already completed request need not be aborted; cancellation is exercised below.
+    expect(signal).toBeInstanceOf(AbortSignal);
+    apiGet.mockImplementation(() => new Promise(() => {}));
+    await waitFor(() => expect(lastParams().q).toBe('different'));
+    const pending = apiGet.mock.calls.at(-1)?.[2] as AbortSignal;
+    type('replacement');
+    await waitFor(() => expect(pending.aborted).toBe(true));
+  });
+
+  it('does not reuse another user or previous bootstrap results', async () => {
+    show();
+    type('solar');
+    await screen.findByText('Weekly notes');
+    apiGet.mockImplementation(() => new Promise(() => {}));
+    act(() => app.set({ auth: { user: { id: 99 }, server: { origin: 'https://other.example' } } as never }));
+    expect(screen.queryByText('Weekly notes')).toBeNull();
+    await waitFor(() => expect(apiGet).toHaveBeenCalledTimes(2));
+    apiGet.mockResolvedValue(answer());
+    act(() => app.set({ apps: [...app.get().apps] }));
+    await screen.findByText('Weekly notes');
+    apiGet.mockImplementation(() => new Promise(() => {}));
+    act(() => app.set({ bootstrap: {} as never }));
+    expect(screen.queryByText('Weekly notes')).toBeNull();
+  });
+
+  it('hides cached offline content when returning online', async () => {
+    vi.mocked(call).mockResolvedValue([{ module: 'notes', route: '/notes?note=8', title: 'Offline budget', subtitle: 'Saved note', cachedAt: new Date().toISOString() }] as never);
+    app.set({ status: { network: 'OFFLINE' } as never });
+    show();
+    type('budget');
+    await screen.findByText('Offline budget');
+    apiGet.mockImplementation(() => new Promise(() => {}));
+    act(() => app.set({ status: { network: 'ONLINE' } as never }));
+    expect(screen.queryByText('Offline budget')).toBeNull();
+  });
+
   it('shows the snippet with the words marked, in the list and the preview', async () => {
     show();
     type('solar');

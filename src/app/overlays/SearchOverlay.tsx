@@ -117,6 +117,7 @@ export function nextScope(scopes: string[], current: string, back = false): stri
   return scopes[(i + (back ? scopes.length - 1 : 1) + scopes.length) % scopes.length] ?? 'All';
 }
 
+let searchAccessEpoch = 0;
 const RECENT_MAX = 6;
 const recentKey = (user: string | number) => `ws.search.recent.${user}`;
 
@@ -211,27 +212,34 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
   );
   const filtered = days > 0 || mine || company > 0;
 
-  // Access changed — a role removed, a company left — arrives as a new bootstrap: what was found under the old
-  // access is dropped, not shown. (The server checks access on every search; this is the cache in this window.)
+  // A new bootstrap must never reuse results checked under previous record permissions.
+  const bootstrap = useStore(app, (s) => s.bootstrap);
+  const accessEpoch = useMemo(() => ({ apps, bootstrap, revision: ++searchAccessEpoch }), [apps, bootstrap]).revision;
   const qc = useQueryClient();
-  const firstApps = useRef(apps);
+  const currentQuery = !commandMode && term === debounced && debounced.length >= 2;
   useEffect(() => {
-    if (apps !== firstApps.current) void qc.invalidateQueries({ queryKey: ['search'] });
-  }, [apps, qc]);
+    if (!currentQuery) {
+      void qc.cancelQueries({ queryKey: ['search', origin, user, accessEpoch] });
+      void qc.cancelQueries({ queryKey: ['search-offline', origin, user, accessEpoch] });
+    }
+  }, [currentQuery, qc, origin, user, accessEpoch]);
 
   const online = network !== 'OFFLINE';
   const server = useQuery({
-    queryKey: ['search', params],
+    queryKey: ['search', origin, user, accessEpoch, params],
     queryFn: ({ signal }) => apiGet<ServerAnswer>('/api/search/global', params, signal),
-    enabled: !commandMode && online && debounced.length >= 2,
+    enabled: currentQuery && online,
     staleTime: 15_000,
     retry: false,
   });
   const offline = useQuery({
-    queryKey: ['search-offline', debounced],
+    queryKey: ['search-offline', origin, user, accessEpoch, debounced],
     queryFn: () => call('offline:search', { q: debounced }),
-    enabled: !commandMode && debounced.length >= 2 && (!online || (server.error instanceof ApiError && server.error.offline)),
+    enabled: currentQuery && (!online || (server.error instanceof ApiError && server.error.offline)),
   });
+
+  const serverData = currentQuery && online ? server.data : undefined;
+  const offlineData = currentQuery && (!online || (server.error instanceof ApiError && server.error.offline)) ? offline.data : undefined;
 
   const allowed = idsOf(apps);
   const create = CREATE.filter((c) => allowed.has(c.app));
@@ -281,8 +289,8 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
     }
     if (!lower) return out;
     if (scope === 'All') for (const a of apps) if (appLabel(a).toLowerCase().includes(lower) || (a.keywords ?? '').includes(lower)) out.push(appItem(a, 'Apps'));
-    const words = server.data?.terms ?? [];
-    for (const g of server.data?.results ?? []) {
+    const words = serverData?.terms ?? [];
+    for (const g of serverData?.results ?? []) {
       const look = groupLook(g.group);
       for (const it of g.items) {
         // A hit in an app the person was not given is not shown (the server should not send one).
@@ -312,14 +320,14 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
         });
       }
     }
-    for (const it of offline.data ?? []) {
+    for (const it of offlineData ?? []) {
       // Saved on this computer while the app was the person's; not shown once it is not.
       if (!canOpenApp(it.module, allowed) || !canOpenRoute(it.route, allowed)) continue;
       const look = groupLook('offline results');
       out.push({ key: `off:${it.route}`, group: 'Offline results', title: it.title, subtitle: it.subtitle, at: `saved ${relative(it.cachedAt)}`, colour: look.colour, icon: look.icon, kv: [['Saved', relative(it.cachedAt)]], verb: 'Open', run: () => navigate(it.route) });
     }
     return out;
-  }, [commandMode, term, apps, create, server.data, offline.data, shortcuts, scope, allowed, origin, user]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [commandMode, term, apps, create, serverData, offlineData, shortcuts, scope, allowed, origin, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filters: All, then each group that found something (and the one chosen, even when empty).
   const groups = [...new Set(items.filter((i) => i.group !== 'Apps').map((i) => i.group))];
@@ -328,7 +336,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
   const selected = Math.min(sel, Math.max(0, shown.length - 1));
   const cur = idle ? undefined : shown[selected];
   const fetching = server.isFetching || offline.isFetching;
-  const index = server.data?.index ?? null;
+  const index = serverData?.index ?? null;
   const building = index?.state === 'building';
   const waiting = !commandMode && term.length >= 2 && (debounced !== term || fetching) && shown.length === 0;
 
@@ -450,10 +458,10 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
                     </option>
                   ))}
                 </select>
-                {(server.data?.companies?.length ?? 0) > 1 ? (
+                {(serverData?.companies?.length ?? 0) > 1 ? (
                   <select aria-label="Company" value={company} onChange={(e) => (setCompany(Number(e.target.value)), setSel(0))} className="h-[30px] max-w-[180px] shrink-0 rounded-full border border-line bg-surface px-2.5 text-[12.5px] font-semibold text-ink-2">
                     <option value={0}>All companies</option>
-                    {server.data!.companies!.map((c) => (
+                    {serverData!.companies!.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                       </option>
