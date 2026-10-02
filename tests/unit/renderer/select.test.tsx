@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { lookOf, matches, optionsFromChildren, Select } from '../../../src/components/Select';
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe('the one dropdown: reading options', () => {
   it('reads <option> and <optgroup> children, as a native select would', () => {
@@ -152,4 +152,16 @@ describe('the one dropdown: searched by the caller', () => {
     expect(screen.getByRole('combobox', { name: 'Customer' }).getAttribute('data-value')).toBe('7');
     expect(asked.at(-1)).toBe(''); // closing clears the caller's search too
   });
+});
+
+
+it('fits the list into the available viewport space instead of forcing a 120px minimum', () => {
+  const height = window.innerHeight;
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 100 });
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ top: 35, bottom: 65, left: 20, right: 150, width: 130, height: 30, x: 20, y: 35, toJSON: () => ({}) });
+  render(<Harness n={8} />);
+  fireEvent.click(screen.getByRole('combobox', { name: 'Person' }));
+  const popup = screen.getByRole('listbox').parentElement!;
+  expect(parseFloat(popup.style.maxHeight)).toBeLessThanOrEqual(25);
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: height });
 });

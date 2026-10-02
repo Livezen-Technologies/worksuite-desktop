@@ -9,16 +9,18 @@ import { ApiError, apiGet } from '../../core/api';
 import { appColour, groupLook } from '../../core/app-look';
 import { call } from '../../core/bridge';
 import { allCommands, effectiveShortcuts, prettyAccelerator } from '../../core/commands';
-import { appLabel } from '../../core/i18n';
+import { appLabel, text, useLanguage } from '../../core/i18n';
 import { noteRecentApp } from '../../core/recent-apps';
 import { useStore } from '../../core/store';
 import { navigate } from '../../core/tabs';
 import { openWebLink } from '../../core/tab-context';
-import { relative } from '../../core/time';
+import { bytes, relative } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { closeOverlay, ui } from '../../core/ui';
 import { AppTile } from '../../components/AppTile';
 import { Icon } from '../../components/Icon';
+import { Select } from '../../components/Select';
+import { extOf, kindOf } from '../../modules/files/api';
 import { cx, DATA_TEXT } from '../../components/ui';
 
 /**
@@ -32,6 +34,7 @@ import { cx, DATA_TEXT } from '../../components/ui';
  */
 export interface Item {
   key: string;
+  fileId?: number;
   group: string;
   title: string;
   subtitle?: string;
@@ -169,10 +172,25 @@ interface ServerAnswer {
 }
 
 export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
+  useLanguage();
+  const [width, setWidth] = useState(() => Math.min(980, window.innerWidth - 32));
+  const narrow = width < 760;
+  const compact = width < 920;
+  const [moreFilters, setMoreFilters] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const details = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const resize = () => setWidth(Math.min(980, window.innerWidth - 32));
+    window.addEventListener('resize', resize);
+    return () => window.removeEventListener('resize', resize);
+  }, []);
+  useEffect(() => {
+    if (narrow && detailsOpen) details.current?.querySelector<HTMLButtonElement>('button')?.focus();
+  }, [narrow, detailsOpen]);
   const seed = useStore(ui, (s) => s.searchSeed);
   const [q, setQ] = useState(mode === 'palette' ? '>' : seed);
   const [scope, setScope] = useState('All');
-  const [sel, setSel] = useState(0);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const apps = useStore(app, (s) => s.apps);
@@ -241,8 +259,15 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
     enabled: currentQuery && (!online || (server.error instanceof ApiError && server.error.offline)),
   });
 
+  const companyIdentity = `${origin}:${user}:${accessEpoch}`;
+  const [companyList, setCompanyList] = useState<{ identity: string; companies: NonNullable<ServerAnswer['companies']> }>({ identity: '', companies: [] });
   const serverData = currentQuery && online ? server.data : undefined;
   const offlineData = currentQuery && (!online || (server.error instanceof ApiError && server.error.offline)) ? offline.data : undefined;
+
+  if (serverData?.companies && (companyList.identity !== companyIdentity || companyList.companies !== serverData.companies)) {
+    setCompanyList({ identity: companyIdentity, companies: serverData.companies });
+  }
+  const companies = companyList.identity === companyIdentity ? companyList.companies : [];
 
   const allowed = idsOf(apps);
   const create = CREATE.filter((c) => allowed.has(c.app));
@@ -280,13 +305,35 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
       for (const a of listed) if (!lower || appLabel(a).toLowerCase().includes(lower) || (a.keywords ?? '').includes(lower)) out.push(appItem(a, 'Go to'));
       for (const c of create) {
         if (lower && !c.label.toLowerCase().includes(lower)) continue;
-        out.push({ key: `new:${c.id}`, group: 'Actions', title: c.label, colour: appColour(c.app), icon: c.icon, action: true, hint: shortcuts[c.id] ? prettyAccelerator(shortcuts[c.id]!) : undefined, kv: [['Creates', c.label.replace(/^New |^Upload /, '')]], verb: `Run “${c.label}”`, run: () => navigate(c.route) });
+        out.push({
+          key: `new:${c.id}`,
+          group: 'Actions',
+          title: c.label,
+          colour: appColour(c.app),
+          icon: c.icon,
+          action: true,
+          hint: shortcuts[c.id] ? prettyAccelerator(shortcuts[c.id]!) : undefined,
+          kv: [['Creates', c.label.replace(/^New |^Upload /, '')]],
+          verb: `Run “${c.label}”`,
+          run: () => navigate(c.route),
+        });
       }
       const made = new Set(create.map((c) => c.id));
       for (const c of allCommands()) {
         if (made.has(c.id) || /^tab-\d$/.test(c.id)) continue;
         if (lower && !c.label.toLowerCase().includes(lower) && !(c.keywords ?? '').includes(lower)) continue;
-        out.push({ key: `cmd:${c.id}`, group: 'Commands', title: c.label, colour: '#23349E', icon: 'zap', action: true, hint: shortcuts[c.id] ? prettyAccelerator(shortcuts[c.id]!) : undefined, kv: [['Command', c.group]], verb: `Run “${c.label}”`, run: c.run });
+        out.push({
+          key: `cmd:${c.id}`,
+          group: 'Commands',
+          title: c.label,
+          colour: '#23349E',
+          icon: 'zap',
+          action: true,
+          hint: shortcuts[c.id] ? prettyAccelerator(shortcuts[c.id]!) : undefined,
+          kv: [['Command', c.group]],
+          verb: `Run “${c.label}”`,
+          run: c.run,
+        });
       }
       return out;
     }
@@ -298,10 +345,14 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
       for (const it of g.items) {
         // A hit in an app the person was not given is not shown (the server should not send one).
         if (!canOpenLink(it.route, allowed)) continue;
-        const target = resolveWebLink(it.route);
+        const candidate = g.key === 'files' || g.group.toLowerCase() === 'files' ? Number(it.id) : 0;
+        const fileId = Number.isSafeInteger(candidate) && candidate > 0 ? candidate : undefined;
+        const route = fileId && Number.isSafeInteger(fileId) && fileId > 0 ? `${it.route}${it.route.includes('?') ? '&' : '?'}file=${fileId}` : it.route;
+        const target = resolveWebLink(route);
         const native = target.kind === 'tab' && canOpenApp(target.app, allowed);
         out.push({
           key: `srv:${g.group}:${it.id}:${it.route}`,
+          fileId,
           group: g.group,
           title: it.title,
           subtitle: it.subtitle ?? undefined,
@@ -309,17 +360,13 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
           words: words.length ? words : undefined,
           at: relative(it.at),
           colour: look.colour,
-          icon: look.icon,
+          icon: fileId ? searchFileIcon(it.title) : look.icon,
           ext: !native,
-          kv: [
-            ['In', g.group],
-            ...(it.at ? ([['When', relative(it.at)]] as Array<[string, string]>) : []),
-            ['Opens', native ? 'In the desktop app' : 'In your browser'],
-          ],
+          kv: [['In', g.group], ...(it.at ? ([['When', relative(it.at)]] as Array<[string, string]>) : []), ['Opens', native ? 'In the desktop app' : 'In your browser']],
           verb: 'Open',
-          run: () => openRoute(it.route),
-          window: native ? () => openRoute(it.route, 'window') : undefined,
-          link: origin ? `${origin}${it.route}` : undefined,
+          run: () => openRoute(route),
+          window: native ? () => openRoute(route, 'window') : undefined,
+          link: origin ? `${origin}${route}` : undefined,
         });
       }
     }
@@ -327,7 +374,18 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
       // Saved on this computer while the app was the person's; not shown once it is not.
       if (!canOpenApp(it.module, allowed) || !canOpenRoute(it.route, allowed)) continue;
       const look = groupLook('offline results');
-      out.push({ key: `off:${it.route}`, group: 'Offline results', title: it.title, subtitle: it.subtitle, at: `saved ${relative(it.cachedAt)}`, colour: look.colour, icon: look.icon, kv: [['Saved', relative(it.cachedAt)]], verb: 'Open', run: () => navigate(it.route) });
+      out.push({
+        key: `off:${it.route}`,
+        group: 'Offline results',
+        title: it.title,
+        subtitle: it.subtitle,
+        at: `saved ${relative(it.cachedAt)}`,
+        colour: look.colour,
+        icon: look.icon,
+        kv: [['Saved', relative(it.cachedAt)]],
+        verb: 'Open',
+        run: () => navigate(it.route),
+      });
     }
     return out;
   }, [commandMode, term, listed, create, serverData, offlineData, shortcuts, scope, allowed, origin, user]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -336,7 +394,14 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
   const groups = [...new Set(items.filter((i) => i.group !== 'Apps').map((i) => i.group))];
   const scopes = ['All', ...groups, ...(scope !== 'All' && !groups.includes(scope) ? [scope] : [])];
   const shown = commandMode || scope === 'All' ? items : items.filter((i) => i.group === scope);
-  const selected = Math.min(sel, Math.max(0, shown.length - 1));
+  const fetchingResults = server.isFetching || offline.isFetching;
+  const selected = Math.max(
+    0,
+    shown.findIndex((it) => it.key === selectedKey),
+  );
+  const setSel = (i: number) => setSelectedKey(shown[i]?.key ?? null);
+  // A refresh may reorder rows; selection belongs to the record, never its old position.
+  if (shown.length && !fetchingResults && !shown.some((it) => it.key === selectedKey)) setSelectedKey(shown[0]!.key);
   const cur = idle ? undefined : shown[selected];
   const fetching = server.isFetching || offline.isFetching;
   const index = serverData?.index ?? null;
@@ -356,7 +421,8 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
   };
   const setQuery = (v: string) => {
     setQ(v);
-    setSel(0);
+    setSelectedKey(null);
+    setDetailsOpen(false);
   };
 
   const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -372,10 +438,10 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
     } else if (e.key === 'Enter') {
       e.preventDefault();
       run(cur, e.metaKey || e.ctrlKey ? 'window' : 'open');
-    } else if (e.key === 'Tab') {
+    } else if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
       e.preventDefault();
       if (!idle && !commandMode) {
-        setScope(nextScope(scopes, scope, e.shiftKey));
+        setScope(nextScope(scopes, scope, e.key === 'ArrowLeft'));
         setSel(0);
       }
     } else if (e.key === 'Backspace' && q === '' && scope !== 'All') {
@@ -385,7 +451,10 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
 
   const copy = (it: Item) => {
     if (!it.link) return;
-    void navigator.clipboard.writeText(it.link).then(() => toast('success', 'Link copied.'));
+    void navigator.clipboard
+      .writeText(it.link)
+      .then(() => toast('success', text('Link copied.')))
+      .catch(() => toast('error', text('Could not copy the link.')));
   };
 
   let lastGroup = '';
@@ -393,8 +462,9 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
     <div className="no-drag fixed inset-0 z-50 bg-[rgba(15,27,61,.42)] backdrop-blur-[3px]" onMouseDown={(e) => e.target === e.currentTarget && closeOverlay()}>
       <div
         role="dialog"
-        aria-label={commandMode ? 'Command palette' : 'Search'}
-        className="animate-in absolute top-[96px] left-1/2 flex h-[640px] max-h-[calc(100vh-120px)] w-[980px] max-w-[calc(100vw-32px)] -translate-x-1/2 flex-col overflow-hidden rounded-[18px] bg-surface shadow-[0_40px_100px_rgb(var(--ws-shadow-rgb)/.35),0_0_0_1px_var(--ws-edge)]"
+        onKeyDown={(e) => { if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); closeOverlay(); } }}
+        aria-label={text(commandMode ? 'Command palette' : 'Search')}
+        className="animate-in absolute top-[min(96px,5vh)] left-1/2 flex h-[640px] max-h-[90vh] w-[980px] max-w-[calc(100vw-32px)] -translate-x-1/2 flex-col overflow-hidden rounded-[18px] bg-surface shadow-[0_40px_100px_rgb(var(--ws-shadow-rgb)/.35),0_0_0_1px_var(--ws-edge)]"
       >
         <div className="flex h-16 shrink-0 items-center gap-3 border-b border-line pr-4 pl-5">
           <span className={cx('flex', q ? 'text-primary' : 'text-ink-3')}>
@@ -407,7 +477,12 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
             </span>
           ) : null}
           {scope !== 'All' && !commandMode ? (
-            <button type="button" aria-label="Remove filter" onClick={() => (setScope('All'), setSel(0))} className="flex items-center gap-1 rounded-[7px] bg-selection py-[3px] pr-1.5 pl-2 text-[12px] font-bold text-primary">
+            <button
+              type="button"
+              aria-label={text('Remove filter')}
+              onClick={() => (setScope('All'), setSel(0))}
+              className="flex items-center gap-1 rounded-[7px] bg-selection py-[3px] pr-1.5 pl-2 text-[12px] font-bold text-primary"
+            >
               in {scope}
               <Icon name="x" size={12} />
             </button>
@@ -417,15 +492,21 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
             value={q}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKey}
-            placeholder={commandMode ? 'Type a command…' : 'Search people, records, files, mail…'}
+            placeholder={text(commandMode ? 'Type a command…' : 'Search people, records, files, mail…')}
             className="bare-focus h-full min-w-0 flex-1 bg-transparent text-[17px] font-medium text-ink outline-none placeholder:text-ink-3"
-            aria-label="Search WorkSuite"
+            aria-label={text('Search WorkSuite')}
             role="combobox"
-            aria-expanded="true"
+            aria-expanded={!(narrow && detailsOpen)}
             aria-controls="search-results"
+            aria-activedescendant={cur && !(narrow && detailsOpen) ? `search-result-${selected}` : undefined}
           />
           {q ? (
-            <button type="button" aria-label="Clear search" onClick={() => (setQuery(''), input.current?.focus())} className="flex h-[26px] w-[26px] items-center justify-center rounded-full bg-subtle text-ink-3 hover:text-ink">
+            <button
+              type="button"
+              aria-label={text('Clear search')}
+              onClick={() => (setQuery(''), input.current?.focus())}
+              className="flex h-[26px] w-[26px] items-center justify-center rounded-full bg-subtle text-ink-3 hover:text-ink"
+            >
               <Icon name="x" size={14} />
             </button>
           ) : null}
@@ -433,53 +514,60 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
           <Kbd>Esc</Kbd>
         </div>
         {!idle && !commandMode ? (
-          <div role="tablist" aria-label="Filter results" className="flex shrink-0 gap-1.5 overflow-x-auto border-b border-line px-[18px] py-2.5 scroll-thin">
-            {scopes.map((s) => {
-              const n = s === 'All' ? items.filter((i) => i.group !== 'Apps').length : items.filter((i) => i.group === s).length;
-              const on = s === scope;
-              return (
+          <div className="shrink-0 border-b border-line px-3 py-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <div role="tablist" aria-label={text('Filter results')} className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto scroll-thin">
+                {scopes.map((s) => {
+                  const n = s === 'All' ? items.filter((i) => i.group !== 'Apps').length : items.filter((i) => i.group === s).length;
+                  const on = s === scope;
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      role="tab"
+                      aria-selected={on}
+                      onClick={() => (setScope(s), setSelectedKey(null), input.current?.focus())}
+                      className={cx(
+                        'flex h-[30px] shrink-0 items-center gap-1.5 rounded-full border px-3 text-[12.5px] font-semibold focus-visible:ring-2 focus-visible:ring-primary',
+                        on ? 'border-primary bg-primary text-white' : 'border-line bg-surface text-ink-2',
+                      )}
+                    >
+                      {text(s)} <span className="text-[10.5px] opacity-75">{n}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {online && compact ? (
                 <button
-                  key={s}
                   type="button"
-                  role="tab"
-                  aria-selected={on}
-                  onClick={() => (setScope(s), setSel(0), input.current?.focus())}
-                  className={cx('flex h-[30px] shrink-0 items-center gap-1.5 rounded-full border pr-2.5 pl-3 text-[12.5px] font-semibold', on ? 'border-primary bg-primary text-white' : cx('border-line bg-surface', n ? 'text-ink-2' : 'text-ink-3'))}
+                  aria-expanded={moreFilters}
+                  aria-controls="search-filters"
+                  onClick={() => setMoreFilters(!moreFilters)}
+                  className="flex h-[30px] shrink-0 items-center gap-1.5 rounded-[7px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink focus-visible:ring-2 focus-visible:ring-primary"
                 >
-                  {s}
-                  <span className={cx('flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-[5px] text-[10.5px]', on ? 'bg-white/20 text-white' : 'bg-subtle text-ink-3')}>{n}</span>
+                  <Icon name="filter" size={14} />
+                  {text('More Filters')}
+                  {filtered ? <span className="text-primary">{Number(days > 0) + Number(mine) + Number(company > 0)}</span> : null}
                 </button>
-              );
-            })}
-            <span className="flex-1" />
-            {online ? (
-              <>
-                <select aria-label="When" value={days} onChange={(e) => (setDays(Number(e.target.value)), setSel(0))} className="h-[30px] shrink-0 rounded-full border border-line bg-surface px-2.5 text-[12.5px] font-semibold text-ink-2">
-                  {WHEN.map((w) => (
-                    <option key={w.days} value={w.days}>
-                      {w.label}
-                    </option>
-                  ))}
-                </select>
-                {(serverData?.companies?.length ?? 0) > 1 ? (
-                  <select aria-label="Company" value={company} onChange={(e) => (setCompany(Number(e.target.value)), setSel(0))} className="h-[30px] max-w-[180px] shrink-0 rounded-full border border-line bg-surface px-2.5 text-[12.5px] font-semibold text-ink-2">
-                    <option value={0}>All companies</option>
-                    {serverData!.companies!.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : null}
-                <button type="button" role="switch" aria-checked={mine} onClick={() => (setMine(!mine), setSel(0))} className={cx('flex h-[30px] shrink-0 items-center rounded-full border px-3 text-[12.5px] font-semibold', mine ? 'border-primary bg-selection text-primary' : 'border-line bg-surface text-ink-2')}>
-                  Mine
-                </button>
-              </>
+              ) : null}
+              {online && !compact ? <SearchFilters {...{ days, setDays, company, setCompany, mine, setMine, companies }} /> : null}
+            </div>
+            {online && compact && moreFilters ? (
+              <div id="search-filters" className="mt-2 flex flex-wrap gap-2">
+                <SearchFilters {...{ days, setDays, company, setCompany, mine, setMine, companies }} />
+              </div>
             ) : null}
           </div>
         ) : null}
-        <div className="flex min-h-0 flex-1">
-          <div ref={list} id="search-results" role="listbox" aria-label="Results" className="min-w-0 flex-1 overflow-y-auto px-2 pt-1 pb-2 scroll-thin">
+        <div className="relative flex min-h-0 flex-1">
+          <div
+            ref={list}
+            id="search-results"
+            role="listbox"
+            aria-label={text('Results')}
+            hidden={narrow && detailsOpen && !!cur}
+            className="min-w-0 flex-1 overflow-y-auto px-2 pt-1 pb-2 scroll-thin"
+          >
             {idle ? (
               <div className="flex flex-col gap-1.5 px-3 pb-3">
                 {recent.length ? (
@@ -487,7 +575,12 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
                     <Heading>Recent searches</Heading>
                     <div className="flex flex-wrap gap-2 px-1.5">
                       {recent.map((t) => (
-                        <button key={t} type="button" onClick={() => (setQuery(t), input.current?.focus())} className="flex h-8 items-center gap-[7px] rounded-full border border-line bg-surface pr-3 pl-2.5 text-[12.5px] font-semibold text-ink-2 hover:text-ink">
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => (setQuery(t), input.current?.focus())}
+                          className="flex h-8 items-center gap-[7px] rounded-full border border-line bg-surface pr-3 pl-2.5 text-[12.5px] font-semibold text-ink-2 hover:text-ink"
+                        >
                           <Icon name="history" size={14} className="text-ink-3" />
                           {t}
                         </button>
@@ -515,7 +608,13 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
                     .sort((a, b) => a.order - b.order)
                     .slice(0, 8)
                     .map((a) => (
-                      <button key={a.id} type="button" title={a.surface === 'browser' ? 'Opens in your browser' : undefined} onClick={() => (closeOverlay(), openApp(a))} className="flex flex-col items-center gap-[7px] rounded-[12px] px-1 pt-2.5 pb-2 text-[12px] font-semibold text-ink-2 hover:bg-subtle hover:text-ink">
+                      <button
+                        key={a.id}
+                        type="button"
+                        title={a.surface === 'browser' ? 'Opens in your browser' : undefined}
+                        onClick={() => (closeOverlay(), openApp(a))}
+                        className="flex flex-col items-center gap-[7px] rounded-[12px] px-1 pt-2.5 pb-2 text-[12px] font-semibold text-ink-2 hover:bg-subtle hover:text-ink"
+                      >
                         <AppTile icon={a.icon} colour={appColour(a.id)} size={44} />
                         <span className="max-w-full truncate">{appLabel(a)}</span>
                       </button>
@@ -526,7 +625,12 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
                     <Heading className="pt-3.5">Create</Heading>
                     <div className="grid grid-cols-3 gap-1.5">
                       {create.slice(0, 6).map((c) => (
-                        <button key={c.id} type="button" onClick={() => (closeOverlay(), navigate(c.route))} className="flex h-10 items-center gap-[9px] rounded-[10px] border border-line bg-well px-3 text-[12.5px] font-semibold text-ink-2 hover:border-primary/40 hover:text-ink">
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => (closeOverlay(), navigate(c.route))}
+                          className="flex h-10 items-center gap-[9px] rounded-[10px] border border-line bg-well px-3 text-[12.5px] font-semibold text-ink-2 hover:border-primary/40 hover:text-ink"
+                        >
                           <AppTile icon={c.icon} colour={appColour(c.app)} size={26} radius={8} iconSize={14} />
                           {c.label}
                         </button>
@@ -558,11 +662,30 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
                   <button
                     type="button"
                     role="option"
+                    id={`search-result-${i}`}
                     data-index={i}
                     aria-selected={on}
-                    onClick={() => setSel(i)}
+                    onClick={() => {
+                      setSel(i);
+                      if (narrow) setDetailsOpen(true);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
+                        e.preventDefault();
+                        const next = e.key === 'Home' ? 0 : e.key === 'End' ? shown.length - 1 : Math.max(0, Math.min(shown.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)));
+                        setSel(next);
+                        list.current?.querySelector<HTMLButtonElement>(`[data-index="${next}"]`)?.focus();
+                      } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        run(it, e.ctrlKey || e.metaKey ? 'window' : 'open');
+                      }
+                    }}
                     onDoubleClick={() => run(it)}
-                    className={cx('flex w-full items-center gap-3 rounded-[10px] px-3 text-left', it.snippet ? 'min-h-[54px] py-2' : it.subtitle ? 'h-[54px]' : 'h-11', on ? 'bg-selection shadow-[inset_3px_0_0_var(--color-primary)]' : 'hover:bg-subtle')}
+                    className={cx(
+                      'flex w-full items-center gap-3 rounded-[10px] px-3 text-left focus-visible:outline-2 focus-visible:outline-primary',
+                      it.snippet ? 'min-h-[54px] py-2' : it.subtitle ? 'h-[54px]' : 'h-11',
+                      on ? 'bg-selection shadow-[inset_3px_0_0_var(--color-primary)]' : 'hover:bg-subtle',
+                    )}
                   >
                     <AppTile icon={it.icon} colour={it.colour} size={32} iconSize={16} />
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -623,7 +746,11 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
                             : 'Check the spelling, or try a name, subject or file type.'}
                 </span>
                 {scope !== 'All' && !commandMode ? (
-                  <button type="button" onClick={() => (setScope('All'), setSel(0))} className="mt-1.5 h-[34px] rounded-[9px] border border-line bg-surface px-3.5 text-[12.5px] font-semibold text-primary">
+                  <button
+                    type="button"
+                    onClick={() => (setScope('All'), setSel(0))}
+                    className="mt-1.5 h-[34px] rounded-[9px] border border-line bg-surface px-3.5 text-[12.5px] font-semibold text-primary"
+                  >
                     Search all apps
                   </button>
                 ) : null}
@@ -635,48 +762,83 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
               </div>
             ) : null}
           </div>
-          {cur ? (
-            <aside aria-label="Preview" className="flex w-[340px] shrink-0 flex-col gap-3.5 overflow-hidden border-l border-line bg-well p-5">
-              <div className="flex items-center gap-2.5">
-                <AppTile icon={cur.icon} colour={cur.colour} size={40} iconSize={19} />
-                <span className="flex flex-col">
-                  <span className={cx('text-[11px] font-bold tracking-[.5px] uppercase', DATA_TEXT)} style={{ ['--c' as string]: cur.colour }}>
-                    {cur.group}
+          {cur && (!narrow || detailsOpen) ? (
+            <aside
+              ref={details}
+              aria-label={text('Preview')}
+              onKeyDown={(e) => {
+                if (narrow && e.key === 'Escape') {
+                  e.preventDefault();
+                  setDetailsOpen(false);
+                  requestAnimationFrame(() => list.current?.querySelector<HTMLButtonElement>(`[data-index="${selected}"]`)?.focus());
+                }
+              }}
+              className={cx('flex min-h-0 min-w-0 shrink-0 flex-col overflow-hidden border-l border-line bg-well', narrow ? 'absolute inset-0 z-10 w-full' : 'w-[340px]')}
+            >
+              {narrow ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDetailsOpen(false);
+                    requestAnimationFrame(() => list.current?.querySelector<HTMLButtonElement>(`[data-index="${selected}"]`)?.focus());
+                  }}
+                  className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-3 text-[13px] font-semibold text-primary focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <Icon name="chevron-left" size={16} />
+                  {text('Back to Results')}
+                </button>
+              ) : null}
+              <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-5 scroll-thin">
+                <div className="flex items-center gap-2.5">
+                  <AppTile icon={cur.icon} colour={cur.colour} size={40} iconSize={19} />
+                  <span className="flex flex-col">
+                    <span className={cx('text-[11px] font-bold tracking-[.5px] uppercase', DATA_TEXT)} style={{ ['--c' as string]: cur.colour }}>
+                      {cur.group}
+                    </span>
+                    {cur.at ? <span className="text-[11.5px] text-ink-3">{cur.at}</span> : null}
                   </span>
-                  {cur.at ? <span className="text-[11.5px] text-ink-3">{cur.at}</span> : null}
-                </span>
+                </div>
+                <b title={cur.title} className="min-w-0 text-[16px] leading-[1.35] [overflow-wrap:anywhere] text-ink selectable">
+                  {cur.title}
+                </b>
+                {cur.snippet ? (
+                  <p className="m-0 rounded-[10px] border border-line bg-surface p-3 text-[12.5px] leading-[1.55] text-ink-2 selectable">
+                    <Marked text={cur.snippet} words={cur.words ?? []} />
+                  </p>
+                ) : null}
+                {cur.subtitle && !cur.ext && !cur.subtitle.startsWith('Opens') && cur.subtitle !== 'Desktop app' ? (
+                  <p className="m-0 rounded-[10px] border border-line bg-surface p-3 text-[12.5px] leading-[1.55] text-ink-2 selectable">{cur.subtitle}</p>
+                ) : null}
+                <SearchFacts key={cur.key} item={cur} online={online} identity={companyIdentity} />
               </div>
-              <b className="text-[16px] leading-[1.35] text-ink selectable">{cur.title}</b>
-              {cur.snippet ? (
-                <p className="m-0 rounded-[10px] border border-line bg-surface p-3 text-[12.5px] leading-[1.55] text-ink-2 selectable">
-                  <Marked text={cur.snippet} words={cur.words ?? []} />
-                </p>
-              ) : null}
-              {cur.subtitle && !cur.ext && !cur.subtitle.startsWith('Opens') && cur.subtitle !== 'Desktop app' ? (
-                <p className="m-0 rounded-[10px] border border-line bg-surface p-3 text-[12.5px] leading-[1.55] text-ink-2 selectable">{cur.subtitle}</p>
-              ) : null}
-              <div className="flex flex-col gap-2">
-                {cur.kv.map(([k, v]) => (
-                  <div key={k} className="flex gap-2.5 text-[12px]">
-                    <span className="w-[78px] shrink-0 text-ink-3">{k}</span>
-                    <span className="font-semibold text-ink-2">{v}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-auto flex flex-col gap-2">
-                <button type="button" onClick={() => run(cur)} className="flex h-[38px] items-center justify-center gap-2 rounded-[10px] bg-primary text-[13px] font-bold text-white hover:bg-primary-hover">
-                  {cur.verb}
+              <div className="flex shrink-0 flex-col gap-2 border-t border-line bg-well p-4">
+                <button
+                  type="button"
+                  onClick={() => run(cur)}
+                  className="flex min-h-[38px] items-center justify-center gap-2 rounded-[10px] bg-primary text-[13px] font-bold text-white hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  {text(cur.verb)}
                   <Kbd>↵</Kbd>
                 </button>
                 {!cur.action ? (
                   <div className="flex gap-2">
-                    <button type="button" disabled={!cur.window} onClick={() => run(cur, 'window')} className="flex h-[34px] flex-1 items-center justify-center gap-1.5 rounded-[9px] border border-line bg-surface text-[12px] font-semibold text-ink-2 hover:text-ink disabled:opacity-50">
+                    <button
+                      type="button"
+                      disabled={!cur.window}
+                      onClick={() => run(cur, 'window')}
+                      className="flex min-h-[34px] flex-1 items-center justify-center gap-1.5 rounded-[9px] border border-line bg-surface text-[12px] font-semibold text-ink-2 hover:text-ink disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-primary"
+                    >
                       <Icon name="maximize" size={13} />
-                      New window
+                      {text('New window')}
                     </button>
-                    <button type="button" disabled={!cur.link} onClick={() => copy(cur)} className="flex h-[34px] flex-1 items-center justify-center gap-1.5 rounded-[9px] border border-line bg-surface text-[12px] font-semibold text-ink-2 hover:text-ink disabled:opacity-50">
+                    <button
+                      type="button"
+                      disabled={!cur.link}
+                      onClick={() => copy(cur)}
+                      className="flex min-h-[34px] flex-1 items-center justify-center gap-1.5 rounded-[9px] border border-line bg-surface text-[12px] font-semibold text-ink-2 hover:text-ink disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-primary"
+                    >
                       <Icon name="link" size={13} />
-                      Copy link
+                      {text('Copy link')}
                     </button>
                   </div>
                 ) : null}
@@ -684,13 +846,21 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
             </aside>
           ) : null}
         </div>
-        {!online && !commandMode ? <div className="shrink-0 border-t border-line bg-warning-bg px-[18px] py-2 text-[12px] font-semibold text-warning">Offline — showing results saved on this computer.</div> : null}
-        {online && !commandMode && !idle && building ? (
-          <div role="status" className="shrink-0 border-t border-line bg-warning-bg px-[18px] py-2 text-[12px] font-semibold text-warning">
-            Search is still indexing ({Math.round((index?.progress ?? 0) * 100)}%). {index!.building.join(', ')} {index!.building.length === 1 ? 'is' : 'are'} searched the slower way meanwhile{filtered ? ', and the filters skip them' : ''}.
-          </div>
+        {!online && !commandMode ? (
+          <div className="shrink-0 border-t border-line bg-warning-bg px-[18px] py-2 text-[12px] font-semibold text-warning">Offline — showing results saved on this computer.</div>
         ) : null}
-        <div className="flex h-[42px] shrink-0 items-center gap-4 border-t border-line px-[18px] text-[11.5px] text-ink-3">
+        {online && !commandMode && !idle && building ? (
+          <details className="shrink-0 border-t border-line bg-well px-4 py-1.5 text-[12px] text-ink-2">
+            <summary className="cursor-pointer rounded focus-visible:ring-2 focus-visible:ring-primary">
+              <span role="status">{text('Search is still indexing ({progress}%).', { progress: Math.round((index?.progress ?? 0) * 100) })}</span> {text('Details')}
+            </summary>
+            <p className="m-0 max-h-20 overflow-y-auto pt-2 scroll-thin">
+              {text('Some sources are searched the slower way meanwhile: {sources}.', { sources: index!.building.map((source) => text(source)).join(', ') })}
+              {filtered ? ` ${text('Filters skip sources that are still indexing.')}` : ''}
+            </p>
+          </details>
+        ) : null}
+        <div className="flex h-[42px] shrink-0 items-center gap-3 overflow-x-auto border-t border-line px-[18px] whitespace-nowrap text-[11.5px] text-ink-3">
           <span className="flex items-center gap-[5px]">
             <Kbd>↑</Kbd>
             <Kbd>↓</Kbd>navigate
@@ -702,11 +872,21 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
             <Kbd>{prettyAccelerator('Mod+Enter').replace('Enter', '↵')}</Kbd>new window
           </span>
           <span className="flex items-center gap-[5px]">
-            <Kbd>Tab</Kbd>filter
+            <Kbd>Alt+←/→</Kbd>
+            {text('filter')}
           </span>
           <span className="flex items-center gap-[5px]">
             <Kbd>&gt;</Kbd>commands
           </span>
+          {narrow && cur && !detailsOpen ? (
+            <button
+              type="button"
+              onClick={() => setDetailsOpen(true)}
+              className="rounded border border-line px-2 py-1 font-semibold text-primary focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              {text('Details')}
+            </button>
+          ) : null}
           <span className="ml-auto flex items-center gap-[5px]">
             <Kbd>{prettyAccelerator(shortcuts.search ?? 'Mod+K')}</Kbd>anywhere
           </span>
@@ -721,5 +901,134 @@ function Heading({ children, className }: { children: React.ReactNode; className
 }
 
 function Kbd({ children }: { children: React.ReactNode }) {
-  return <kbd className="inline-flex h-5 min-w-[18px] items-center justify-center rounded-[5px] border border-b-2 border-line bg-surface px-[5px] font-sans text-[10.5px] font-semibold text-ink-3">{children}</kbd>;
+  return (
+    <kbd className="inline-flex h-5 min-w-[18px] items-center justify-center rounded-[5px] border border-b-2 border-line bg-surface px-[5px] font-sans text-[10.5px] font-semibold text-ink-3">
+      {children}
+    </kbd>
+  );
+}
+
+/** Files use their actual kind, rather than the Files application's folder glyph. */
+export function searchFileIcon(name: string): string {
+  return (
+    (
+      {
+        image: 'file-image',
+        pdf: 'file-text',
+        document: 'file-text',
+        spreadsheet: 'file-sheet',
+        presentation: 'board',
+        video: 'film',
+        audio: 'audio-lines',
+        archive: 'archive',
+        code: 'file-code',
+        design: 'pen',
+      } as Record<string, string>
+    )[kindOf(name)] ?? 'file'
+  );
+}
+
+function SearchFilters({
+  days,
+  setDays,
+  company,
+  setCompany,
+  mine,
+  setMine,
+  companies,
+}: {
+  days: number;
+  setDays: (days: number) => void;
+  company: number;
+  setCompany: (id: number) => void;
+  mine: boolean;
+  setMine: (mine: boolean) => void;
+  companies: NonNullable<ServerAnswer['companies']>;
+}) {
+  return (
+    <>
+      <Select<number>
+        aria-label={text('Date Range')}
+        value={days}
+        onValueChange={setDays}
+        options={WHEN.map((w) => ({ value: w.days, label: text(w.label) }))}
+        className={cx('h-[30px] w-[130px] shrink-0', days > 0 && 'bg-selection')}
+      />
+      {companies.length > 1 || company > 0 ? (
+        <Select<number>
+          aria-label={text('Company')}
+          value={company}
+          onValueChange={setCompany}
+          searchable
+          options={[{ value: 0, label: text('All companies') }, ...companies.map((c) => ({ value: c.id, label: c.name }))]}
+          className={cx('h-[30px] w-[180px] shrink-0', company > 0 && 'bg-selection')}
+        />
+      ) : null}
+      <button
+        type="button"
+        role="switch"
+        aria-checked={mine}
+        onClick={() => setMine(!mine)}
+        className={cx(
+          'flex h-[30px] shrink-0 items-center rounded-[7px] border px-3 text-[12.5px] font-semibold focus-visible:ring-2 focus-visible:ring-primary',
+          mine ? 'border-primary bg-selection text-primary' : 'border-line bg-surface text-ink-2',
+        )}
+      >
+        {text('Mine')}
+      </button>
+    </>
+  );
+}
+
+interface SearchFileDetails {
+  id: number;
+  extension: string | null;
+  size: number;
+  company: { id: number; name: string } | null;
+  location: Array<{ id: number; name: string }>;
+  modified_at: string | null;
+  updated_at: string | null;
+}
+
+/** Fetch the existing permission-checked endpoint; a new selection never displays the last file's metadata. */
+function SearchFacts({ item, online, identity }: { item: Item; online: boolean; identity: string }) {
+  const file = useQuery({
+    queryKey: ['search-file-details', identity, item.fileId],
+    queryFn: ({ signal }) => apiGet<SearchFileDetails>(`/api/files/${item.fileId}/details`, undefined, signal),
+    enabled: !!item.fileId && online,
+    staleTime: 15_000,
+    retry: false,
+  });
+  const data = file.data?.id === item.fileId ? file.data : undefined;
+  const fields: Array<[string, string]> = item.fileId
+    ? [
+        ['Type', extOf(item.title, data?.extension).toUpperCase() || text('File')],
+        ['Size', data ? bytes(data.size) : (item.subtitle?.split(' · ')[1] ?? text('Not available'))],
+        ['Company', data ? (data.company?.name ?? text('No company')) : text('Not available')],
+        ['Location', data ? data.location.map((p) => p.name).join(' / ') || text('My files') : text('Not available')],
+        ['Modified', data ? relative(data.modified_at ?? data.updated_at) || text('Not available') : text('Not available')],
+      ]
+    : item.kv;
+  return (
+    <>
+      <dl className="m-0 grid grid-cols-[78px_minmax(0,1fr)] gap-x-3 gap-y-2 text-[12px]">
+        {fields.map(([k, v]) => (
+          <div key={k} className="contents">
+            <dt className="text-ink-3">{text(k)}</dt>
+            <dd className="m-0 font-semibold [overflow-wrap:anywhere] text-ink-2 selectable">{v}</dd>
+          </div>
+        ))}
+      </dl>
+      {item.fileId && file.isFetching ? (
+        <span role="status" className="text-[12px] text-ink-3">
+          {text('Loading details…')}
+        </span>
+      ) : null}
+      {item.fileId && file.isError ? (
+        <span role="status" className="text-[12px] text-ink-3">
+          {text('Details could not be loaded. You can still open this result.')}
+        </span>
+      ) : null}
+    </>
+  );
 }

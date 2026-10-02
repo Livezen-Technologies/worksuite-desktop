@@ -5,6 +5,16 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.86: clearer search filters and result details
+
+- Search uses themed, searchable filters and preserves the selected item when results refresh. Smaller windows put secondary filters in More Filters and show result details in a drawer with focus restoration.
+- Complete filenames wrap, file-kind icons and permission-checked metadata make results easier to identify, and Open actions remain reachable while details scroll. Indexing status is compact and expandable.
+- Sinhala and Tamil search labels and shared dropdown text preserve the newer channel, meeting and announcement translations.
+
+Modules: Settings 1.10.0 (#129).
+
+---
+
 ## 2026-10-02 — 0.2.85: browser guest meetings
 
 - Desktop hosts can read and reply to browser guests in Browser meeting chat. Guests remain limited to the current meeting, and the server enforces admission and host chat settings.
