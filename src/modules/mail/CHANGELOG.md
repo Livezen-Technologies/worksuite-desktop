@@ -7,6 +7,7 @@ the root CHANGELOG.md.
 ## 1.2.1 — 2026-10-03
 
 - The switches in a mailbox's Manage dialog show their names and a one-line hint (Show in the unified inbox, Notify me about new mail, Pause syncing) — they were bare toggles; Remove… reads as a red danger action.
+- New email is a 44 px brand-gradient button with white text, a glow, an N shortcut chip and a 1 px lift on hover; the search button beside it is a 44 px glass square labelled Search mail (/) (#148).
 
 ## 1.2.0 — 2026-10-03
 

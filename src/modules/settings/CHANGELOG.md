@@ -7,6 +7,7 @@ the root CHANGELOG.md.
 ## 1.11.2 — 2026-10-03
 
 - Sinhala and Tamil text for the Manage dialog's hints.
+- Command palette result footer (#148): Open is a 44 px brand-gradient button with a glass ↵ chip; New window and Copy link are 40 px glass buttons showing Ctrl/⌘+↵ and Ctrl/⌘+C only when they work; Copy link turns into Copied with a check for 1.5 s; focus rings everywhere, no lift or scale with reduced motion. Ctrl/⌘+C copies the result's link when nothing is selected.
 
 ## 1.11.1 — 2026-10-03
 
