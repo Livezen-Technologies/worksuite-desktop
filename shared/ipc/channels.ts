@@ -55,6 +55,7 @@ export const INVOKE_CHANNELS = [
   'ai:rules',
   'ai:confirm',
   'ai:upload',
+  'ai:answerReady',
   // Local AI (WS-SRS-LAI): models on this computer, llama.cpp in the ws-local-ai process.
   'ai:localStatus',
   'ai:localModels',

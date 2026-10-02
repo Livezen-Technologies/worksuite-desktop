@@ -35,7 +35,7 @@ const { app } = await import('../../../src/core/app-state');
 const { createAskSession } = await import('../../../src/modules/ai/session');
 const { AskPanel } = await import('../../../src/modules/ai/AskPanel');
 
-const AI: Preferences['ai'] = { quickAsk: true, shortcut: 'Alt+Space', insert: true, dockAtStart: false, language: 'English', display: 'widget', sound: false, moduleAccess: { worksuite: {}, local: {} }, onlineFallback: true, autoMinimize: false };
+const AI: Preferences['ai'] = { quickAsk: true, shortcut: 'Alt+Space', insert: true, dockAtStart: false, language: 'English', display: 'widget', sound: false, moduleAccess: { worksuite: {}, local: {} }, onlineFallback: true, autoMinimize: false, autoMinimizeWhenWorking: true };
 const PREFS = { ai: AI, notificationsEnabled: true, moduleNotifications: {}, dndEnabled: false, dndFrom: '22:00', dndTo: '07:00' } as unknown as Preferences;
 const ONLINE: SendOptions = { surface: 'assistant.panel', refs: [], local: false, online: true, imageRoute: { engine: 'online' } };
 const png = (name: string) => new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], name, { type: 'image/png' });

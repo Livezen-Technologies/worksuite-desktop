@@ -107,6 +107,7 @@ const api = {
     rules: call('ai:rules'),
     confirm: call('ai:confirm'),
     upload: call('ai:upload'),
+    answerReady: call('ai:answerReady'),
     // Local AI (WS-SRS-LAI): the models on this computer, the runtime, and asking the default model.
     localStatus: call('ai:localStatus'),
     localModels: call('ai:localModels'),

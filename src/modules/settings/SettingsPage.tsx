@@ -8,7 +8,7 @@ import { useCanOpen, useVisibleIds } from '../../core/access';
 import { app, isLocked, updatePrefs } from '../../core/app-state';
 import { call, errorMessage, isMac } from '../../core/bridge';
 import { conflicts, effectiveShortcuts, prettyAccelerator, accelerator, DEFAULT_SHORTCUTS } from '../../core/commands';
-import { LANGUAGES } from '../../core/i18n';
+import { LANGUAGES, t, text } from '../../core/i18n';
 import { LOCAL_AI_KEY, useLocalAIStatus, useLocalModels } from '../../core/local-ai';
 import { secondsLeft, timeLeftLabel } from '../ai/setup';
 import { queryClient } from '../../core/query';
@@ -414,7 +414,7 @@ const DISPLAY_HINT: Record<AiDisplay, string> = {
  * assistant works on this computer. It sees only what it is given, and never
  * sends anything without the person.
  */
-function AiSection({ prefs }: { prefs: Preferences }) {
+export function AiSection({ prefs }: { prefs: Preferences }) {
   const a = prefs.ai;
   const set = (patch: Partial<Preferences['ai']>) => void updatePrefs({ ai: { ...a, ...patch } });
   const writer = useWriter();
@@ -451,6 +451,11 @@ function AiSection({ prefs }: { prefs: Preferences }) {
           <Switch label="Allow online fallback" checked={a.onlineFallback ?? true} onChange={(v) => set({ onlineFallback: v })} />
         </span>
       </Row>
+      {a.display !== 'hidden' ? (
+        <Row label={t('ai.autoMinimizeWorking')} hint={text('While the assistant is thinking, switching tabs, opening another app or clicking your work outside it puts it down to its floating button. The answer keeps coming, and the button tells you when it is ready. It stays open while you are typing in it.')}>
+          <Switch label={t('ai.autoMinimizeWorking')} checked={a.autoMinimizeWhenWorking ?? true} onChange={(v) => set({ autoMinimizeWhenWorking: v })} />
+        </Row>
+      ) : null}
       {a.display === 'widget' ? (
         <Row label="Auto-minimize after sending" hint="The widget goes down to its button once you send a question. The answer keeps coming, and the button tells you when it is ready.">
           <Switch label="Auto-minimize after sending" checked={a.autoMinimize ?? false} onChange={(v) => set({ autoMinimize: v })} />

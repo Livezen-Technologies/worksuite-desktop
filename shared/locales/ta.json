@@ -679,5 +679,6 @@
   "Nothing matches “{query}”.": "“{query}” உடன் எதுவும் பொருந்தவில்லை.",
   "Nothing to choose.": "தேர்வு செய்ய எதுவும் இல்லை.",
   "Could not copy the link.": "இணைப்பை நகலெடுக்க முடியவில்லை.",
-  "New window": "புதிய சாளரம்"
+  "New window": "புதிய சாளரம்",
+  "While the assistant is thinking, switching tabs, opening another app or clicking your work outside it puts it down to its floating button. The answer keeps coming, and the button tells you when it is ready. It stays open while you are typing in it.": "உதவியாளர் சிந்திக்கும்போது, தாவலை மாற்றுவது, வேறொரு பயன்பாட்டைத் திறப்பது அல்லது அதற்கு வெளியே உங்கள் வேலையில் கிளிக் செய்வது அதை மிதக்கும் பொத்தானாகச் சிறிதாக்கும். பதில் தொடர்ந்து வரும், அது தயாரானதும் பொத்தான் உங்களுக்குச் சொல்லும். நீங்கள் அதில் தட்டச்சு செய்யும்போது அது திறந்தே இருக்கும்."
 }

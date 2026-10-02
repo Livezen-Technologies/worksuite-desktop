@@ -57,7 +57,7 @@ import { NotificationService, inDnd } from '../services/notifications';
 import { WebchatRinger, ringerHeight } from '../services/webchat-ring';
 import { QuickAsk } from '../services/quick-ask';
 import { AiService } from '../services/ai';
-import { AI_CHANGES_LINK, AiPendingWatcher } from '../services/ai-pending';
+import { AI_ANSWER_LINK, AI_CHANGES_LINK, AiPendingWatcher } from '../services/ai-pending';
 import * as fsp from 'node:fs/promises';
 import { createInjector, type Injector } from '../services/remote-control/input';
 import { OfflineCache } from '../services/offline-cache';
@@ -681,8 +681,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     const w = windows.showMain();
     w.webContents.send('ai:open', { to: 'changes', text: '', result: null });
   };
+  // The assistant's conversation, where an answer that arrived in the background is read (#126).
+  const openAiAnswer = (): void => {
+    const w = windows.showMain();
+    w.webContents.send('ai:open', { to: 'ask', text: '', result: null });
+  };
   const openLink = (link: string | null): void => {
     if (link === AI_CHANGES_LINK) return openAiChanges();
+    if (link === AI_ANSWER_LINK) return openAiAnswer();
     const target = resolveWebLink(link);
     // Nor in the browser instead: a link into an app the person may not open is refused.
     if (!canOpenLink(link, sessionCtl.visibleApps())) refuse();
