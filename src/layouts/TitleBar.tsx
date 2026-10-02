@@ -12,6 +12,7 @@ import { CountBadge, cx } from '../components/ui';
 import { UserPicture, useMe } from '../components/UserPicture';
 import { unreadLabel, useAssistantActivity } from '../app/overlays/AiDock';
 import { phaseLabel } from '../modules/ai/session';
+import { useGuest } from '../core/session';
 
 /**
  * Title / top bar, 52 px (§4.12 shared shell components): WorkSuite mark,
@@ -33,6 +34,10 @@ export function TitleBar() {
   const { busy: aiBusy, unread: aiUnread, phase: aiPhase, engine: aiEngine } = useAssistantActivity();
   const aiState = dock === 'ai' ? null : aiBusy || aiPhase === 'needsInput' ? phaseLabel(aiPhase, aiEngine) : aiUnread ? unreadLabel(aiUnread) : null;
   const hasChat = useCanOpen('chat');
+  // Guest mode (#149): the Local Profile is who this is; transfers and notifications need an account.
+  const guest = useGuest();
+  const localProfile = useStore(app, (s) => s.local?.profile ?? null);
+  const who = guest ? { name: localProfile?.name, avatar: localProfile?.picture ?? null } : { name: me?.name ?? user?.name, avatar: me?.avatar };
 
   const network = status?.network ?? 'ONLINE';
   const pending = status?.pendingChanges ?? 0;
@@ -77,9 +82,9 @@ export function TitleBar() {
         {pill.text}
       </button>
 
-      <TopButton icon="transfers" label={t('shell.transfers')} onClick={() => openOverlay('transfers')} active={overlay === 'transfers'} count={activeTransfers} countTone="indigo" />
+      {guest ? null : <TopButton icon="transfers" label={t('shell.transfers')} onClick={() => openOverlay('transfers')} active={overlay === 'transfers'} count={activeTransfers} countTone="indigo" />}
       {hasChat ? <TopButton icon="chat" label="Chat" onClick={() => (dock === 'chat' ? minimiseChatDrawer() : openChatDrawer(null))} active={dock === 'chat'} count={status?.unread.chat ?? 0} /> : null}
-      <TopButton icon="bell" label={t('nav.notifications')} onClick={() => openOverlay('notifications')} active={overlay === 'notifications'} count={unread} />
+      {guest ? null : <TopButton icon="bell" label={t('nav.notifications')} onClick={() => openOverlay('notifications')} active={overlay === 'notifications'} count={unread} />}
       {hasAi && aiDisplay === 'drawer' ? (
         <button
           type="button"
@@ -98,9 +103,9 @@ export function TitleBar() {
         type="button"
         className={cx('no-drag flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 bg-[#E8ECFA] transition-colors', overlay === 'profile' ? 'border-[#9DB0F7]' : 'border-[#3B5BDB] hover:border-[#7C93F2]')}
         onClick={() => openOverlay('profile')}
-        aria-label={`Account: ${me?.name ?? user?.name ?? ''}`}
+        aria-label={`Account: ${who.name ?? ''}`}
       >
-        <UserPicture name={me?.name ?? user?.name} src={me?.avatar} size={28} className="!bg-[#E8ECFA] text-[11px] !text-[#1E2F8A]" />
+        <UserPicture name={who.name} src={who.avatar} size={28} className="!bg-[#E8ECFA] text-[11px] !text-[#1E2F8A]" />
       </button>
     </header>
   );

@@ -5,6 +5,8 @@ import { useTab, useTabTitle } from '../../core/tab-context';
 import { Button, Empty, Spinner } from '../../components/ui';
 import { openMeeting } from './api';
 import { MeetHome } from './MeetHome';
+import { GuestMeetHome } from './GuestMeetHome';
+import { useGuest } from '../../core/session';
 import { MeetLobby } from './MeetLobby';
 import { MeetRingScreen } from './MeetRingScreen';
 import { MeetRoom } from './MeetRoom';
@@ -21,14 +23,18 @@ export default function MeetPage({ tabId }: ModuleProps) {
   const ringing = path[1] === 'ring';
   const uuid = ringing ? null : (path[1] ?? null);
   const inWindow = tabId.startsWith('window-meet');
+  const guest = useGuest();
 
   useEffect(() => {
+    if (guest) return;
     if (!inWindow && uuid) {
       void openMeeting(uuid);
       go('/meet');
     }
-  }, [inWindow, uuid, go]);
+  }, [inWindow, uuid, go, guest]);
 
+  // Guest mode (#149): joining by link or code, with the Local Profile's name.
+  if (guest) return <GuestMeetHome />;
   if (ringing) return <MeetRingScreen />;
   if (inWindow && uuid) return <MeetingWindow uuid={uuid} />;
   return <MeetHome />;

@@ -3,6 +3,7 @@ import { GuestJoinForm } from '../../modules/meet/GuestJoinForm';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AuthState } from '@shared/types';
 import { app } from '../../core/app-state';
+import { backToGuest, enterGuestMode } from '../../core/session';
 import { call, errorMessage, isMac, on } from '../../core/bridge';
 import { t, LANGUAGES, useLanguage } from '../../core/i18n';
 import { Select } from '../../components/Select';
@@ -18,6 +19,8 @@ import { Checkbox } from '../../components/Checkbox';
  */
 export function Onboarding({ auth }: { auth: AuthState }) {
   const language = useLanguage();
+  // Signing in from guest mode (#149): guest mode is still open behind this screen.
+  const fromGuest = useStore(app, (s) => s.session.mode === 'guest' && s.session.signingIn);
   const [guest, setGuest] = useState(false);
   const [destination, setDestination] = useState<{ input: string; server?: string } | null>(null);
   useEffect(() => {
@@ -37,8 +40,8 @@ export function Onboarding({ auth }: { auth: AuthState }) {
         <Select label="Language" aria-label="Choose your language" className="mb-4 w-full" value={language} options={LANGUAGES.map((l) => ({ value: l.id, label: l.label }))} onValueChange={(value) => void updatePrefs({ language: value }).catch((e) => toast('error', errorMessage(e)))} />
         {language !== 'en' ? <p className="mb-4 text-xs text-ink-3">Some screens still use English.</p> : null}
         {(auth.stage === 'no-server' || auth.stage === 'signed-out' || auth.stage === 'expired') ? <div className="mb-4">
-          <Button className="w-full" variant="secondary" icon="user" onClick={() => void call('local:open').catch((e) => toast('error', errorMessage(e)))}>Continue as Guest</Button>
-          <p className="mt-1 text-center text-[12px] text-ink-3">Notes, Tasks and Calendar in a Local Profile saved on this device. No account or email needed.</p>
+          {fromGuest ? <Button className="w-full" variant="secondary" icon="chevron-left" onClick={backToGuest}>Back to your Local Profile</Button> : <Button className="w-full" variant="secondary" icon="user" onClick={() => void enterGuestMode().catch((e) => toast('error', errorMessage(e)))}>Continue as Guest</Button>}
+          <p className="mt-1 text-center text-[12px] text-ink-3">{fromGuest ? 'Sign in or create an account on your WorkSuite server. You can move your local data to it afterwards.' : 'Notes, Tasks, Contacts and Calendar in a Local Profile saved on this device. No account or email needed.'}</p>
         </div> : null}
         {guest ? <GuestJoinForm key={destination?.input} initialInput={destination?.input} server={destination?.server ?? auth.server?.origin} onBack={() => setGuest(false)} /> : null}
         {!guest ? <>

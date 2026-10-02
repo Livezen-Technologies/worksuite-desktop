@@ -5,6 +5,36 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.97: guest mode in the main window
+
+**Continue as Guest** no longer opens a separate, differently styled window on top of an empty one (#149):
+
+- **Same window, same look.** Your Local Profile opens in the normal WorkSuite window, with the usual sidebar, top bar, theme and screens. The profile menu shows *Name · Local profile · Saved on this device* with Sign in / Create account, Backup & export data and Profile; Backup & Data and Profile are in Settings.
+- **Notes, Tasks, Contacts and Calendar** work on this computer with the same screens as an account — Contacts is new for guests. **Meet** joins a meeting by link or code under your profile name.
+- **Account-only apps** — Chat, Mail, Drive, company records, shared workspaces, HR, CRM, AI Assistant — stay in the sidebar with a lock and open a *Sign in to use …* panel, also from links and ⌘K.
+- **Signing in** switches to your full account without a restart and asks: *Move data* or *Keep on this device only*. Moving keeps a backup until every item is confirmed in your account; anything that fails is listed and can be retried without duplicates. Signing out never shows guest data to someone else.
+- **The note editor's Save button** now looks like a normal primary button.
+- Your existing Local Profile data is upgraded in place.
+
+Not moved yet: task reminders and pin/favourite flags. Needs the server update (Contacts and Tasks honour `Idempotency-Key`) for retries to be duplicate-free.
+
+---
+
+## 2026-10-03 — 0.2.96: write mail with formatting
+
+Mail's compose tab was a bare text box. It is now a proper editor:
+
+- **A formatting toolbar** — undo/redo, headings, bold, italic, underline, strikethrough, text colour and highlight, links, tables, bulleted and numbered lists, indent, quote and clear formatting. Ctrl/⌘ + B, I, U, K and friends work, and typing "- ", "1. " or "> " starts a list or quote.
+- **Recipients as chips**, with suggestions from your contacts; × removes one.
+- **Attach from Files** adds a file from your WorkSuite Drive (as a copy); **Insert template** keeps the template's formatting.
+- **Your signature** sits below the message; **Write with AI** works only on what you wrote, never on the signature or the email you're replying to, which is a collapsible block left as it was.
+- **Sent as clean HTML** with a matching plain-text version, checked on this computer and again on the server — no scripts or unsafe links get through. Drafts keep their formatting; older plain drafts are converted.
+- **The bottom bar**: Send and its options are one even control, Send later sits beside it, and Discard is quiet red text.
+
+Pasted pictures are added as attachments rather than placed inside the text. Needs the server update (Mail: HTML cleaning, text part, `POST /api/mail/upload/from-drive`, and a migration for scheduled mail).
+
+---
+
 ## 2026-10-03 — 0.2.95: macOS remote control sees the permission you granted
 
 On a Mac, Settings › Remote control could keep saying **Accessibility: Denied** after WorkSuite was switched on in System Settings (#147):

@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.0 — 2026-10-03
+
+- Compose has a real editor (design D05): a visible writing surface with a formatting toolbar — undo/redo, Normal/Heading/Subheading, bold, italic, underline, strikethrough, text colour and highlight, link (http/https/mailto only), table, bulleted and numbered lists, indent, quote, clear formatting — with Ctrl/⌘ shortcuts and Markdown-style list starts; recipients as chips with suggestions from Contacts; Attach from Files; Insert template; the signature below a '-- ' line; Write with AI works on your own words only; the quoted email is a collapsible block left untouched; mail is sent as cleaned HTML with a matching plain-text part; old plain drafts are converted; Send is one control with equal halves, Send later is secondary and Discard is quiet red text. Pasted pictures are attached rather than placed inline.
+
 ## 1.2.1 — 2026-10-03
 
 - The switches in a mailbox's Manage dialog show their names and a one-line hint (Show in the unified inbox, Notify me about new mail, Pause syncing) — they were bare toggles; Remove… reads as a red danger action.

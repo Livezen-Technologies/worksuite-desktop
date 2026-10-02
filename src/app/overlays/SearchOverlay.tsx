@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { canOpenApp, canOpenLink, canOpenRoute } from '@shared/access';
-import { appRoute, navApps } from '@shared/apps';
+import { GUEST_LOCKED_APPS, appRoute, navApps } from '@shared/apps';
 import { resolveWebLink } from '@shared/links';
 import { idsOf } from '../../core/access';
 import { app } from '../../core/app-state';
@@ -17,6 +17,7 @@ import { openWebLink } from '../../core/tab-context';
 import { bytes, relative } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { closeOverlay, ui } from '../../core/ui';
+import { openSignInPanel, useGuest } from '../../core/session';
 import { AppTile } from '../../components/AppTile';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
@@ -194,6 +195,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const apps = useStore(app, (s) => s.apps);
+  const guest = useGuest();
   // The apps to go to: a channel is in its host (WhatsApp, in Chat: #35), not an app of its own.
   const listed = useMemo(() => navApps(apps), [apps]);
   const shortcuts = effectiveShortcuts(useStore(app, (s) => s.prefs?.shortcuts));
@@ -287,6 +289,15 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
   const items = useMemo<Item[]>(() => {
     const lower = term.toLowerCase();
     const out: Item[] = [];
+    // Guest mode (#149): an app that needs an account is found, and opens the sign-in panel — never the app.
+    const locked = (group: string) => {
+      if (!guest) return;
+      for (const a of GUEST_LOCKED_APPS) {
+        const label = text(a.guestLabel ?? a.label);
+        if (lower && !label.toLowerCase().includes(lower) && !(a.keywords ?? '').includes(lower)) continue;
+        out.push({ key: `locked:${a.id}`, group, title: label, subtitle: text('Needs a WorkSuite account'), colour: '#8A90A2', icon: 'lock', kv: [[text('Needs'), text('A WorkSuite account')]], verb: text('Sign in to use {app}', { app: label }), run: () => { closeOverlay(); openSignInPanel(a.id); } });
+      }
+    };
     const appItem = (a: (typeof apps)[number], group: string): Item => ({
       key: `app:${a.id}`,
       group,
@@ -303,6 +314,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
     });
     if (commandMode) {
       for (const a of listed) if (!lower || appLabel(a).toLowerCase().includes(lower) || (a.keywords ?? '').includes(lower)) out.push(appItem(a, 'Go to'));
+      locked('Go to');
       for (const c of create) {
         if (lower && !c.label.toLowerCase().includes(lower)) continue;
         out.push({
@@ -339,6 +351,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
     }
     if (!lower) return out;
     if (scope === 'All') for (const a of listed) if (appLabel(a).toLowerCase().includes(lower) || (a.keywords ?? '').includes(lower)) out.push(appItem(a, 'Apps'));
+    if (scope === 'All') locked('Apps');
     const words = serverData?.terms ?? [];
     for (const g of serverData?.results ?? []) {
       const look = groupLook(g.group);
@@ -388,7 +401,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
       });
     }
     return out;
-  }, [commandMode, term, listed, create, serverData, offlineData, shortcuts, scope, allowed, origin, user]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [commandMode, term, listed, create, serverData, offlineData, shortcuts, scope, allowed, origin, user, guest]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filters: All, then each group that found something (and the one chosen, even when empty).
   const groups = [...new Set(items.filter((i) => i.group !== 'Apps').map((i) => i.group))];

@@ -68,24 +68,31 @@ export interface AppDefinition {
   channelOf?: string;
   /** The desktop route the app opens at, when it is not `/<id>`. */
   route?: string;
+  /**
+   * Guest mode (#149): `local` apps work on the Local Profile's data on this device; `locked` ones stay in the sidebar
+   * with a lock and open the sign-in panel; any other app is not shown to a guest at all.
+   */
+  guest?: 'local' | 'locked';
+  /** What guest mode calls a locked app, when that says more than its name ("Drive & Files"). */
+  guestLabel?: string;
 }
 
 export const APP_CATALOGUE: AppDefinition[] = [
   // Everyday — native desktop modules (Phase 1, §18).
   { id: 'home', label: 'Home', group: 'work', icon: 'home', webPath: '/', surface: 'native', sidebar: 'work', order: 10, keywords: 'dashboard start overview' },
   { id: 'activity', label: 'Activity', group: 'work', icon: 'activity', perm: 'analytics.view', webPath: '/activity', surface: 'native', sidebar: 'work', order: 20, keywords: 'feed history timeline' },
-  { id: 'mail', label: 'Mail', group: 'communication', icon: 'mail', app: 'mail', webPath: '/mail', surface: 'native', sidebar: 'work', order: 30, badge: 'mail', keywords: 'email inbox message' },
-  { id: 'chat', label: 'Chat', group: 'communication', icon: 'chat', app: 'chat', webPath: '/chat', surface: 'native', sidebar: 'work', order: 40, badge: 'chat', keywords: 'message im team' },
-  { id: 'calendar', label: 'Calendar', group: 'work', icon: 'calendar', app: 'calendar', webPath: '/calendar', surface: 'native', sidebar: 'work', order: 50, keywords: 'events meetings schedule' },
-  { id: 'tasks', label: 'Tasks', group: 'work', icon: 'tasks', app: 'tasks', webPath: '/tasks', surface: 'native', sidebar: 'work', order: 60, badge: 'tasks', keywords: 'todo to-do' },
-  { id: 'files', label: 'Files', group: 'work', icon: 'folder', app: 'drive', webPath: '/files', surface: 'native', sidebar: 'work', order: 70, keywords: 'drive documents folders storage' },
+  { id: 'mail', label: 'Mail', group: 'communication', icon: 'mail', app: 'mail', webPath: '/mail', surface: 'native', sidebar: 'work', order: 30, badge: 'mail', keywords: 'email inbox message', guest: 'locked' },
+  { id: 'chat', label: 'Chat', group: 'communication', icon: 'chat', app: 'chat', webPath: '/chat', surface: 'native', sidebar: 'work', order: 40, badge: 'chat', keywords: 'message im team', guest: 'locked' },
+  { id: 'calendar', label: 'Calendar', group: 'work', icon: 'calendar', app: 'calendar', webPath: '/calendar', surface: 'native', sidebar: 'work', order: 50, keywords: 'events meetings schedule', guest: 'local' },
+  { id: 'tasks', label: 'Tasks', group: 'work', icon: 'tasks', app: 'tasks', webPath: '/tasks', surface: 'native', sidebar: 'work', order: 60, badge: 'tasks', keywords: 'todo to-do', guest: 'local' },
+  { id: 'files', label: 'Files', group: 'work', icon: 'folder', app: 'drive', webPath: '/files', surface: 'native', sidebar: 'work', order: 70, keywords: 'drive documents folders storage', guest: 'locked', guestLabel: 'Drive & Files' },
   // Office: new documents, spreadsheets and presentations, templates and the recent ones (src/modules/office/OfficeHome).
   // A part of Files (shared/access APP_PARTS), so it shows with the Drive; a document is a tab of its own, `/office/<id>`.
   { id: 'office', label: 'Office', group: 'work', icon: 'file-text', app: 'drive', webPath: '/office', surface: 'native', order: 71, keywords: 'word excel powerpoint document spreadsheet presentation docx xlsx pptx template new write' },
   // PDF Studio: native here for everyone signed in (a PDF from this computer needs no app); a Drive file is still the
   // server's to allow. The web's `/pdf?file=<id>` links open the file here.
   { id: 'pdf', label: 'PDF Studio', group: 'work', icon: 'file-text', webPath: '/pdf', surface: 'native', order: 72, keywords: 'pdf viewer reader acrobat document open print search bookmarks' },
-  { id: 'crm', label: 'CRM', group: 'business', icon: 'users', app: 'crm', perm: 'crm.view', webPath: '/crm', surface: 'native', sidebar: 'business', order: 110, keywords: 'leads customers pipeline' },
+  { id: 'crm', label: 'CRM', group: 'business', icon: 'users', app: 'crm', perm: 'crm.view', webPath: '/crm', surface: 'native', sidebar: 'business', order: 110, keywords: 'leads customers pipeline', guest: 'locked', guestLabel: 'CRM & Sales' },
   // The server's OMS: `/oms?order=` (what notifications and shares link to) opens here as `/sales?order=`.
   { id: 'sales', label: 'Sales & Orders', group: 'business', icon: 'trending-up', app: 'oms', perm: 'oms.view', webPath: '/oms', surface: 'native', sidebar: 'business', order: 120, keywords: 'orders sales order fulfilment dispatch returns' },
   // `/billing?invoice=` and `/billing/invoices/<id>` (notifications, shares, chat cards) open the invoice here.
@@ -94,9 +101,9 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'inventory', label: 'Inventory', group: 'business', icon: 'package', app: 'inventory', perm: 'inventory.view', webPath: '/inventory', surface: 'native', sidebar: 'business', order: 128, keywords: 'inventory stock products warehouse movements catalogue sku barcode' },
   // HR carries no app slug: there is no `hr` row in `applications`, and its
   // self-service screens answer for the caller alone (web/src/core/sidebar/apps.ts).
-  { id: 'hr', label: 'HR', group: 'people', icon: 'id-card', webPath: '/hr', surface: 'native', sidebar: 'business', order: 140, keywords: 'people leave attendance clock in' },
+  { id: 'hr', label: 'HR', group: 'people', icon: 'id-card', webPath: '/hr', surface: 'native', sidebar: 'business', order: 140, keywords: 'people leave attendance clock in', guest: 'locked', guestLabel: 'HR & People' },
 
-  { id: 'meet', label: 'Meet', group: 'communication', icon: 'video', app: 'meet', webPath: '/meet', surface: 'native', sidebar: 'work', order: 45, keywords: 'video call meeting join code' },
+  { id: 'meet', label: 'Meet', group: 'communication', icon: 'video', app: 'meet', webPath: '/meet', surface: 'native', sidebar: 'work', order: 45, keywords: 'video call meeting join code', guest: 'local' },
   // Agendas, attendance and minutes. Not an application on the server — the
   // `meeting.view` permission is its only gate (AppGate::CORE notes).
   { id: 'meetings', label: 'Meetings', group: 'work', icon: 'calendar-clock', perm: 'meeting.view', webPath: '/meetings', surface: 'native', sidebar: 'work', order: 55, keywords: 'agenda minutes attendance rooms schedule' },
@@ -111,14 +118,14 @@ export const APP_CATALOGUE: AppDefinition[] = [
 
   // Opened in the browser until their desktop modules ship (§14, §18).
   { id: 'social', label: 'Social', group: 'communication', icon: 'megaphone', app: 'social', webPath: '/social', surface: 'browser', order: 46 },
-  { id: 'projects', label: 'Projects', group: 'work', icon: 'kanban', app: 'projects', webPath: '/projects', surface: 'browser', order: 170 },
+  { id: 'projects', label: 'Projects', group: 'work', icon: 'kanban', app: 'projects', webPath: '/projects', surface: 'browser', order: 170, guest: 'locked', guestLabel: 'Shared workspaces' },
   // `/tenders?open=<id>` (notifications, search, the stream) opens that tender here.
   { id: 'tenders', label: 'Tenders', group: 'business', icon: 'file-text', app: 'tender', perm: 'tender.view', webPath: '/tenders', surface: 'native', sidebar: 'business', order: 129, keywords: 'tenders bids bid rfq rfp procurement pipeline award' },
-  { id: 'notes', label: 'Notes', group: 'work', icon: 'notebook', app: 'notes', webPath: '/notes', surface: 'native', order: 190, keywords: 'notebook journal meeting notes' },
-  { id: 'contacts', label: 'Contacts', group: 'work', icon: 'contact', app: 'contacts', webPath: '/contacts', surface: 'native', order: 80 },
+  { id: 'notes', label: 'Notes', group: 'work', icon: 'notebook', app: 'notes', webPath: '/notes', surface: 'native', order: 190, keywords: 'notebook journal meeting notes', guest: 'local' },
+  { id: 'contacts', label: 'Contacts', group: 'work', icon: 'contact', app: 'contacts', webPath: '/contacts', surface: 'native', order: 80, guest: 'local' },
 
   // `/finance?tab=<view>&company=<id>`, the web's view names; screens not built here yet open in the browser from its rail.
-  { id: 'finance', label: 'Finance', group: 'business', icon: 'landmark', app: 'finance', perm: 'finance.view', webPath: '/finance', surface: 'native', sidebar: 'business', order: 130, keywords: 'accounts ledger journals general ledger trial balance chart of accounts periods books accounting' },
+  { id: 'finance', label: 'Finance', group: 'business', icon: 'landmark', app: 'finance', perm: 'finance.view', webPath: '/finance', surface: 'native', sidebar: 'business', order: 130, keywords: 'accounts ledger journals general ledger trial balance chart of accounts periods books accounting', guest: 'locked', guestLabel: 'Company records' },
   // `/expenses?tab=<view>&org=<ids|all>`; `/expenses?claim=12` (notifications) opens that claim.
   { id: 'expenses', label: 'Expenses', group: 'business', icon: 'wallet', app: 'expenses', webPath: '/expenses', surface: 'native', sidebar: 'business', order: 135, keywords: 'expense claims receipts reimbursement advances petty cash corporate cards mileage per diem budgets policies subscriptions' },
   { id: 'purchasing', label: 'Purchasing', group: 'business', icon: 'cart', app: 'inventory', webPath: '/purchase', surface: 'browser', order: 161 },
@@ -153,7 +160,7 @@ export const APP_CATALOGUE: AppDefinition[] = [
   // kick and a customer display. Tills, registers and settings are managed on the web.
   { id: 'pos', label: 'POS', group: 'operations', icon: 'store', app: 'pos', perm: 'pos.access', webPath: '/pos', surface: 'native', sidebar: 'business', order: 220, keywords: 'pos point of sale till register checkout cashier sell sale receipt barcode drawer shift float z report' },
   { id: 'admin', label: 'Admin Center', group: 'admin', icon: 'settings-2', perm: 'users.view', webPath: '/admin', surface: 'browser', order: 500 },
-  { id: 'ai', label: 'AI Assistant', group: 'admin', icon: 'sparkles', app: 'ai', webPath: '/ai', surface: 'browser', order: 510 },
+  { id: 'ai', label: 'AI Assistant', group: 'admin', icon: 'sparkles', app: 'ai', webPath: '/ai', surface: 'browser', order: 510, guest: 'locked' },
 ];
 
 /** What the server said the user may reach. */
@@ -222,6 +229,11 @@ export function navApps<T extends Pick<AppDefinition, 'id' | 'channelOf'>>(apps:
 export function appRoute(a: Pick<AppDefinition, 'id' | 'route'>): string {
   return a.route ?? `/${a.id}`;
 }
+
+/** Guest mode's apps (#149): Notes, Tasks, Contacts, Calendar and Meet, on this device's data. */
+export const GUEST_APPS: AppDefinition[] = APP_CATALOGUE.filter((a) => a.guest === 'local').sort((a, b) => a.order - b.order);
+/** What guest mode shows locked, to open after signing in. */
+export const GUEST_LOCKED_APPS: AppDefinition[] = APP_CATALOGUE.filter((a) => a.guest === 'locked').sort((a, b) => a.order - b.order);
 
 export function findApp(id: string, catalogue: AppDefinition[] = APP_CATALOGUE): AppDefinition | undefined {
   return catalogue.find((a) => a.id === id);

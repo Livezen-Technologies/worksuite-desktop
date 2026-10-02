@@ -39,7 +39,7 @@ export function openWebLink(link: string | null | undefined): void {
   const target = resolveWebLink(link, undefined);
   if (target.kind === 'none') return;
   if (target.app && !canOpen(target.app)) {
-    refuse();
+    refuse(target.app);
     return;
   }
   if (target.kind === 'tab') navigateGlobal(target.route);
@@ -48,7 +48,7 @@ export function openWebLink(link: string | null | undefined): void {
 
 /** A route in a window of its own, when the person may open its app. */
 export function openRouteInWindow(route: string, title?: string): void {
-  if (!canOpenDesktopRoute(route)) return refuse();
+  if (!canOpenDesktopRoute(route)) return refuse(route);
   void call('windows:open', { kind: 'record', route, title }).catch((e) => toast('error', errorMessage(e)));
 }
 

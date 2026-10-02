@@ -29,6 +29,8 @@ import { discoverStudioModels, setStudioModels, STUDIO_KEY, studioState, testStu
 import { Checkbox } from '../../components/Checkbox';
 import { DriveSettings } from '../files/DriveSettings';
 import { MailSettings } from '../mail/MailSettings';
+import { LocalDataSection, LocalProfileSection } from '../guest/LocalSettings';
+import { useGuest } from '../../core/session';
 
 /** Settings / profile tree (§4.9). Anything the organization's policy decides is shown locked, with the reason. */
 const SECTIONS = [
@@ -47,12 +49,21 @@ const SECTIONS = [
   { id: 'remote-control', label: 'Remote control', icon: 'screen-share' },
   { id: 'monitoring', label: 'Monitoring', icon: 'eye' },
   { id: 'about', label: 'About', icon: 'info' },
+  // Guest mode's own (#149): the Local Profile and its data, where an account's profile and data settings are.
+  { id: 'local-profile', label: 'Profile', icon: 'user' },
+  { id: 'local-data', label: 'Backup & data', icon: 'download' },
 ] as const;
+
+/** What a guest's Settings show: what applies to this computer and the Local Profile, nothing that needs an account. */
+const GUEST_SECTIONS: ReadonlySet<string> = new Set(['general', 'preferences', 'local-profile', 'local-data', 'about']);
+const LOCAL_SECTIONS: ReadonlySet<string> = new Set(['local-profile', 'local-data']);
 
 export default function SettingsPage(_props: ModuleProps) {
   useTabTitle('Settings');
   const { path, go, query } = useTab();
-  const section = SECTIONS.find((s) => s.id === path[1])?.id ?? 'general';
+  const guest = useGuest();
+  const shown = SECTIONS.filter((s) => (guest ? GUEST_SECTIONS.has(s.id) : !LOCAL_SECTIONS.has(s.id)));
+  const section = shown.find((s) => s.id === path[1])?.id ?? 'general';
   const prefs = useStore(app, (s) => s.prefs);
   const hasMail = useCanOpen('mail');
   if (!prefs) return null;
@@ -60,7 +71,7 @@ export default function SettingsPage(_props: ModuleProps) {
     <div className="flex h-full">
       <nav className="w-[230px] shrink-0 border-r border-line bg-surface p-3" aria-label="Settings sections">
         <h1 className="px-3 pt-1 pb-3 text-[20px] font-bold text-ink">Settings</h1>
-        {SECTIONS.filter((s) => s.id !== 'mail' || hasMail).map((s) => (
+        {shown.filter((s) => s.id !== 'mail' || hasMail).map((s) => (
           <button key={s.id} type="button" onClick={() => go(`/settings/${s.id}`)} aria-current={section === s.id ? 'page' : undefined} className={cx('flex h-9 w-full items-center gap-2.5 rounded-[8px] px-3 text-left text-[13.5px]', section === s.id ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
             <Icon name={s.icon} size={16} /> {s.label}
           </button>
@@ -83,6 +94,8 @@ export default function SettingsPage(_props: ModuleProps) {
           {section === 'remote-control' ? <RemoteControlSection /> : null}
           {section === 'monitoring' ? <Monitoring /> : null}
           {section === 'about' ? <About /> : null}
+          {section === 'local-profile' ? <LocalProfileSection /> : null}
+          {section === 'local-data' ? <LocalDataSection /> : null}
         </div>
       </div>
     </div>
@@ -135,12 +148,27 @@ function General() {
   const b = useStore(app, (s) => s.bootstrap);
   const server = useStore(app, (s) => s.auth?.server);
   const prefs = useStore(app, (s) => s.prefs)!;
+  const guest = useGuest();
+  const language = (
+    <Row label="Language" hint="Choose your interface language. Some screens still use English.">
+      <Select label="Language" value={prefs.language} options={LANGUAGES.map((l) => ({ value: l.id, label: l.label }))} onValueChange={(v) => void updatePrefs({ language: v })} />
+    </Row>
+  );
+  // A guest has no WorkSuite profile, server or organizations: this computer's clock and language only.
+  if (guest)
+    return (
+      <>
+        <H title="General" />
+        {language}
+        <Row label="Time zone" hint="This computer's time zone.">
+          <span className="font-mono text-[13px] text-ink-2">{currentZone()}</span>
+        </Row>
+      </>
+    );
   return (
     <>
       <H title="General" />
-      <Row label="Language" hint="Choose your interface language. Some screens still use English.">
-        <Select label="Language" value={prefs.language} options={LANGUAGES.map((l) => ({ value: l.id, label: l.label }))} onValueChange={(v) => void updatePrefs({ language: v })} />
-      </Row>
+      {language}
       <Row label="Time zone" hint="From your WorkSuite profile, then your organization, then this computer. Changed in My account › Preferences.">
         <button type="button" className="font-mono text-[13px] text-primary hover:underline" onClick={() => navigate('/account/preferences')}>
           {currentZone()}
@@ -167,6 +195,8 @@ function General() {
 }
 
 function PreferencesSection({ prefs }: { prefs: Preferences }) {
+  // Downloads are Files', which a guest does not have (#149).
+  const guest = useGuest();
   return (
     <>
       <H title="Preferences" />
@@ -185,12 +215,16 @@ function PreferencesSection({ prefs }: { prefs: Preferences }) {
       <Row label="Sidebar">
         <Select label="Sidebar" value={prefs.sidebarMode} options={[{ value: 'expanded', label: 'Expanded' }, { value: 'collapsed', label: 'Collapsed' }, { value: 'auto-hide', label: 'Auto-hide' }]} onValueChange={(v) => void updatePrefs({ sidebarMode: v })} />
       </Row>
-      <Row label="Open downloaded files" hint="When a file is double-clicked in Files.">
-        <Select label="Open downloaded files" value={prefs.openFilesLocally} options={[{ value: 'ask', label: 'Ask' }, { value: 'always', label: 'Open locally' }, { value: 'never', label: 'Download only' }]} onValueChange={(v) => void updatePrefs({ openFilesLocally: v })} />
-      </Row>
-      <Row label="Download folder" hint={<span className="font-mono">{prefs.downloadFolder}</span>}>
-        <Button onClick={() => void call('files:chooseDownloadFolder').then((p) => p && toast('success', 'Download folder changed.'))}>Change…</Button>
-      </Row>
+      {guest ? null : (
+        <>
+          <Row label="Open downloaded files" hint="When a file is double-clicked in Files.">
+            <Select label="Open downloaded files" value={prefs.openFilesLocally} options={[{ value: 'ask', label: 'Ask' }, { value: 'always', label: 'Open locally' }, { value: 'never', label: 'Download only' }]} onValueChange={(v) => void updatePrefs({ openFilesLocally: v })} />
+          </Row>
+          <Row label="Download folder" hint={<span className="font-mono">{prefs.downloadFolder}</span>}>
+            <Button onClick={() => void call('files:chooseDownloadFolder').then((p) => p && toast('success', 'Download folder changed.'))}>Change…</Button>
+          </Row>
+        </>
+      )}
       <Toggle k="notificationSounds" prefs={prefs} label="Sounds" />
       <Toggle k="hardwareAcceleration" prefs={prefs} label="Hardware acceleration" hint="Turn off if the window flickers or draws badly. Takes effect after a restart." />
       <Shortcuts prefs={prefs} />

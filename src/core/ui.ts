@@ -128,9 +128,10 @@ export function resetFloatingPanels(): void {
 }
 
 
-/** Who the workspace is on the screen for: a person signed in and not locked out, or nobody. */
-function onScreenFor(s: AppState): string | null {
-  return s.auth?.stage === 'ready' && !s.lock?.locked ? `in:${s.auth.user?.id ?? ''}` : null;
+/** Who the workspace is on the screen for: a person signed in and not locked out, guest mode (#149), or nobody. */
+export function onScreenFor(s: AppState): string | null {
+  if (s.auth?.stage === 'ready') return s.lock?.locked ? null : `in:${s.auth.user?.id ?? ''}`;
+  return s.session.mode === 'guest' && !s.session.signingIn ? 'guest' : null;
 }
 
 /**

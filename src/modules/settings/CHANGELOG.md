@@ -9,6 +9,7 @@ the root CHANGELOG.md.
 - Sinhala and Tamil text for the Manage dialog's hints.
 - Command palette result footer (#148): Open is a 44 px brand-gradient button with a glass ↵ chip; New window and Copy link are 40 px glass buttons showing Ctrl/⌘+↵ and Ctrl/⌘+C only when they work; Copy link turns into Copied with a check for 1.5 s; focus rings everywhere, no lift or scale with reduced motion. Ctrl/⌘+C copies the result's link when nothing is selected.
 - Remote control on macOS (#147): Check again really asks macOS again (the app and its input helper, no cached answer); the status also re-checks when you return to WorkSuite and every 2 s while access is missing; "Access granted — restart WorkSuite to finish" with a Restart button when macOS needs a relaunch; the running copy's path, bundle ID, Team ID and signing identity are shown, with warnings for unsigned, translocated or duplicate copies, and steps to remove and re-add the permission.
+- Guest mode (#149): Backup & Data and Profile live in the normal Settings for a Local Profile, with account-only options hidden; ⌘K lists locked apps that open the Sign in panel; Sinhala and Tamil text.
 
 ## 1.11.1 — 2026-10-03
 

@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.10.2 — 2026-10-03
+
+- In guest mode Meet offers joining by link or code with the Local Profile's name; starting a meeting needs an account (#149).
+
 ## 1.10.1 — 2026-10-03
 
 - A guest meeting opened from a Local Profile fills in the profile's name; the guest window now reads the meeting's current state (ended, locked) from the server instead of what it was when the link was first opened (#141).

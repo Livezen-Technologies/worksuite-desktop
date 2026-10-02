@@ -5,6 +5,7 @@ import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, Modal, cx } from '../../components/ui';
+import { useGuest } from '../../core/session';
 import { NOTEBOOK_COLORS, VIEWS, type Notebook, type Section, type View } from './api';
 
 export type Place = { view: View } | { notebook: number } | { section: number };
@@ -13,6 +14,7 @@ const row = (active: boolean, indent: number) => cx('group flex h-[29px] w-full 
 
 /** The views and your notebooks (NotesMain, left), with sections inside each. */
 export function Rail({ place, counts, notebooks, sections, onPlace, onNew }: { place: Place; counts: Record<string, number>; notebooks: Notebook[]; sections: Section[]; onPlace: (p: Place) => void; onNew: () => void }) {
+  const guest = useGuest();
   const qc = useQueryClient();
   const [closed, setClosed] = useState<number[]>([]);
   const [naming, setNaming] = useState<{ kind: 'notebook'; id: number | null; name: string; section?: string } | { kind: 'section'; id: number | null; notebook: number; name: string } | null>(null);
@@ -70,18 +72,21 @@ export function Rail({ place, counts, notebooks, sections, onPlace, onNew }: { p
       <button type="button" onClick={onNew} title="New note (N)" className="mb-2.5 flex h-[38px] shrink-0 items-center justify-center gap-1.5 rounded-[9px] bg-primary font-bold text-white hover:bg-primary-hover">
         <Icon name="plus" size={16} /> New note
       </button>
-      {VIEWS.map((v) => (
+      {VIEWS.filter((v) => !guest || v.id !== 'shared').map((v) => (
         <button key={v.id} type="button" aria-current={is({ view: v.id }) ? 'page' : undefined} onClick={() => onPlace({ view: v.id })} className={row(is({ view: v.id }), 0)}>
           <span className="w-2.5" />
           <span className="flex-1 truncate">{v.label}</span>
           <span className="text-[11.5px] text-ink-3">{counts[v.id] || ''}</span>
         </button>
       ))}
+      {/* Guest mode (#149): notebooks and sharing need an account. */}
+      {guest ? null : <>
       <div className="mx-2 mt-2.5 mb-0.5 flex items-center text-[10.5px] font-bold tracking-[0.6px] text-ink-3">
         <span className="flex-1">NOTEBOOKS</span>
         <button type="button" aria-label="New notebook" title="New notebook" onClick={() => setNaming({ kind: 'notebook', id: null, name: '', section: '' })} className="text-[14px] text-primary hover:opacity-80">+</button>
       </div>
       {notebooks.length === 0 ? <span className="px-2 py-1 text-[12px] text-ink-3">Notebooks group notes by team, project or anything else.</span> : null}
+      </>}
       {notebooks.map((nb) => {
         const open = !closed.includes(nb.id);
         const own = sections.filter((s) => s.notebook_id === nb.id);
