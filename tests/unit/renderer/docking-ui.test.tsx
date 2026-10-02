@@ -7,7 +7,7 @@ vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(), on: () => () => unde
 vi.mock('../../../src/core/app-state', async () => {
   const { createStore } = await import('../../../src/core/store');
   const { visibleApps } = await import('../../../shared/apps');
-  return { app: createStore({ apps: visibleApps({ apps: '*', permissions: ['*'] }) }) };
+  return { app: createStore({ apps: visibleApps({ apps: '*', permissions: ['*'] }), session: { mode: 'account', signingIn: false, moveOffer: false } }), isGuest: () => false };
 });
 // Each tab shows its route, so a test can see which pane holds what.
 vi.mock('../../../src/modules/registry', async (orig) => {
