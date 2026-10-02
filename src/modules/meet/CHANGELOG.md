@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.5.0 — 2026-10-02
+
+**Added**
+
+- Isolated guest joining and meeting-specific Drive recordings with transcript/minutes snapshots (#85, #88).
+
 ## 1.4.0 — 2026-10-01
 
 **Added**
@@ -30,7 +36,7 @@ the root CHANGELOG.md.
   - **Scheduling:** the form starts from your defaults.
 
 - Join desktop meetings as a guest, with device checks, passcode and host admission, scoped guest permissions, reconnection, guest chat, and post-meeting actions (#85).
-## 1.4.0 — 2026-10-02
+
 
 **Added**
 

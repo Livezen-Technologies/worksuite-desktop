@@ -1,3 +1,4 @@
+import { Checkbox } from '../../components/Checkbox';
 import { useEffect, useState } from 'react';
 import type { ImportReview } from '@shared/local-workspace';
 import { app } from '../../core/app-state';
@@ -45,8 +46,8 @@ export function LocalImportOffer() {
     {review ? <Modal title="Review local data import" onClose={() => { if (!busy) setReview(null); }} width={700} footer={<><Button disabled={busy} onClick={() => setReview(null)}>Close</Button><Button variant="primary" loading={busy} disabled={!selection.length} onClick={() => void upload()}>Import selected items</Button></>}>
       <p className="font-semibold">Destination: {review.account} · {review.organization}</p>
       <p className="mt-2 text-ink-2">Select what to upload. Potential duplicates match an existing title or an account list was too large to fully check. They are skipped unless you explicitly allow copies. Previously imported identical content is always skipped. Originals stay on the device; nothing merges into an existing record.</p>
-      <label className="my-3 flex gap-2"><input type="checkbox" checked={copies} onChange={(e) => setCopies(e.target.checked)} />Allow new copies of potential duplicates</label>
-      {review.rows.map((row) => <label key={row.item.id} className="flex items-start gap-2 border-b border-line py-2"><input type="checkbox" disabled={busy || row.alreadyImported || (row.duplicate && !copies)} checked={selection.includes(row.item.id)} onChange={(e) => setSelection((ids) => e.target.checked ? [...ids, row.item.id] : ids.filter((id) => id !== row.item.id))} /><span><b>{row.item.title}</b> · {row.item.kind}{row.alreadyImported ? ' · Already imported' : row.duplicate ? ' · Potential duplicate' : ''}<p className="whitespace-pre-wrap text-ink-3">{row.item.body.slice(0, 180)}</p>{row.item.start || row.item.due ? <p>{new Date((row.item.start ?? row.item.due)!).toLocaleString()}</p> : null}</span></label>)}
+      <label className="my-3 flex gap-2"><Checkbox checked={copies} onChange={(e) => setCopies(e.target.checked)} />Allow new copies of potential duplicates</label>
+      {review.rows.map((row) => <label key={row.item.id} className="flex items-start gap-2 border-b border-line py-2"><Checkbox disabled={busy || row.alreadyImported || (row.duplicate && !copies)} checked={selection.includes(row.item.id)} onChange={(e) => setSelection((ids) => e.target.checked ? [...ids, row.item.id] : ids.filter((id) => id !== row.item.id))} /><span><b>{row.item.title}</b> · {row.item.kind}{row.alreadyImported ? ' · Already imported' : row.duplicate ? ' · Potential duplicate' : ''}<p className="whitespace-pre-wrap text-ink-3">{row.item.body.slice(0, 180)}</p>{row.item.start || row.item.due ? <p>{new Date((row.item.start ?? row.item.due)!).toLocaleString()}</p> : null}</span></label>)}
       {message ? <p className="mt-3" role="status">{message}</p> : null}
     </Modal> : null}
   </>;

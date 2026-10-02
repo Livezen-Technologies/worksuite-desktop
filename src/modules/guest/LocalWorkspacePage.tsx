@@ -1,3 +1,4 @@
+import { Checkbox } from '../../components/Checkbox';
 import { useEffect, useState } from 'react';
 import type { LocalItem, LocalItemInput, LocalView } from '@shared/local-workspace';
 import { Button, TextField, Spinner } from '../../components/ui';
@@ -71,7 +72,7 @@ export default function LocalWorkspacePage() {
           <button className="text-left font-semibold hover:underline" onClick={() => setDraft(item)}>{item.title}</button>
           <p className="whitespace-pre-wrap text-[13px] text-ink-2">{item.body.slice(0, 160)}</p>
           {item.start || item.due ? <p className="text-[12px] text-ink-3">{new Date((item.start ?? item.due)!).toLocaleString()}</p> : null}
-          {item.kind === 'task' ? <label className="flex gap-2"><input type="checkbox" checked={item.completed} onChange={(e) => void act(async () => { await call('local:save', { ...item, completed: e.target.checked }); await reload(); })} />Completed</label> : null}
+          {item.kind === 'task' ? <label className="flex gap-2"><Checkbox checked={item.completed} onChange={(e) => void act(async () => { await call('local:save', { ...item, completed: e.target.checked }); await reload(); })} />Completed</label> : null}
           <Button size="sm" variant="ghost" disabled={busy} onClick={() => void remove(item)}>Delete</Button>
         </article>) : <p className="text-ink-3">No local items yet.</p>}
       </section><form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); void save(); }}>

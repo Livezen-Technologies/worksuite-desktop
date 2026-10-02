@@ -1,3 +1,4 @@
+import { Checkbox } from '../../components/Checkbox';
 import { queueMedia } from './outgoing';
 import { useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { useEffect, useImperativeHandle, useRef, useState, type Ref, type ReactNode } from 'react';
@@ -736,7 +737,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       ) : null;
   const trayEl = tray.length && !editing && !recording ? (
           <div className="px-1 pt-1">
-            {!site ? <label className="flex items-center gap-1 px-1 text-[11px] text-ink-2"><input type="checkbox" checked={originalQuality} onChange={(e) => setOriginalQuality(e.target.checked)} />Original Quality</label> : null}
+            {!site ? <label className="flex items-center gap-1 px-1 text-[11px] text-ink-2"><Checkbox checked={originalQuality} onChange={(e) => setOriginalQuality(e.target.checked)} />Original Quality</label> : null}
             <Tray items={tray} transfers={transfers} onRemove={remove} onRetry={retry} compact={compact} />
           </div>
         ) : null;

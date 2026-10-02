@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.1 — 2026-10-02
+
+**Fixed**
+
+- Show media processing and playback failure retry guidance (#88).
+
 ## 1.3.0 — 2026-10-02
 
 **Added**
