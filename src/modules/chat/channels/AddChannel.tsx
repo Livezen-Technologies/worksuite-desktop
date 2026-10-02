@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { apiPost } from '../../../core/api';
 import { call, errorMessage } from '../../../core/bridge';
+import { text } from '../../../core/i18n';
 import { Icon } from '../../../components/Icon';
 import { Button, Modal, cx } from '../../../components/ui';
 import { LinkPhone } from './LinkPhone';
@@ -15,11 +16,13 @@ export type AddStep = { at: 'list' } | { at: 'whatsapp' } | { at: 'link'; accoun
  * Business Platform number (Meta's tokens) and the website chat widget are set up on the web, where their settings
  * are edited. A channel appears in the toolbar once it is connected.
  */
-export function AddChannel({ website, whatsapp, initial = { at: 'list' }, onClose, onConnected }: {
+export function AddChannel({ website, whatsapp, initial = { at: 'list' }, onClose, onConnected, onSettings }: {
   website: { access: boolean; canSetUp: boolean };
   whatsapp: { access: boolean; canConnect: boolean; accounts: WaAccount[] };
   initial?: AddStep;
   onClose: () => void;
+  /** WhatsApp's channel settings (worksuite-desktop#35). */
+  onSettings?: () => void;
   onConnected: (channel: 'whatsapp') => void;
 }) {
   const qc = useQueryClient();
@@ -109,11 +112,14 @@ export function AddChannel({ website, whatsapp, initial = { at: 'list' }, onClos
           action={
             whatsapp.access && whatsapp.canConnect ? (
               <div className="flex flex-col items-end gap-1">
+                {onSettings && whatsapp.accounts.length ? <Button size="sm" icon="settings" onClick={onSettings}>{text('Settings')}</Button> : null}
                 {waiting.filter((a) => a.provider === 'web_js' && a.can_connect !== false).map((a) => (
                   <Button key={a.id} size="sm" onClick={() => setStep({ at: 'link', accountId: a.id, name: a.name })}>Link {a.name}</Button>
                 ))}
                 <Button size="sm" variant="primary" icon="plus" onClick={() => setStep({ at: 'whatsapp' })}>Connect a number</Button>
               </div>
+            ) : whatsapp.access && whatsapp.accounts.length && onSettings ? (
+              <Button size="sm" icon="settings" onClick={onSettings}>{text('Settings')}</Button>
             ) : whatsapp.access && !whatsapp.accounts.length ? (
               <span className="max-w-[160px] text-right text-[11.5px] text-ink-3">Ask whoever manages WhatsApp numbers to share one with you.</span>
             ) : null

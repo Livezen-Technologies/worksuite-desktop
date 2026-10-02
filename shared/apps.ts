@@ -60,6 +60,14 @@ export interface AppDefinition {
   keywords?: string;
   /** Set on a visible app the person has only in self-service mode (their own claims), not the full app. */
   selfService?: boolean;
+  /**
+   * A channel of this app's screen, not an app of its own in navigation (shared/channels.ts): WhatsApp is a channel
+   * of Chat (worksuite-desktop#35). Its access is its own; the sidebar, launcher and search list it only for someone
+   * who has it and not its host, and it opens at `route`.
+   */
+  channelOf?: string;
+  /** The desktop route the app opens at, when it is not `/<id>`. */
+  route?: string;
 }
 
 export const APP_CATALOGUE: AppDefinition[] = [
@@ -93,9 +101,12 @@ export const APP_CATALOGUE: AppDefinition[] = [
   // `meeting.view` permission is its only gate (AppGate::CORE notes).
   { id: 'meetings', label: 'Meetings', group: 'work', icon: 'calendar-clock', perm: 'meeting.view', webPath: '/meetings', surface: 'native', sidebar: 'work', order: 55, keywords: 'agenda minutes attendance rooms schedule' },
 
+  // A channel of Chat (worksuite-desktop#35): no entry of its own beside Chat. `/whatsapp?chat=` (notifications,
+  // shares) opens that conversation in Chat › WhatsApp.
+  { id: 'whatsapp', label: 'WhatsApp', group: 'communication', icon: 'phone', app: 'whatsapp', webPath: '/whatsapp', surface: 'native', channelOf: 'chat', route: '/chat?channel=whatsapp', order: 47, keywords: 'message wa customers' },
+
   // Opened in the browser until their desktop modules ship (§14, §18).
   { id: 'social', label: 'Social', group: 'communication', icon: 'megaphone', app: 'social', webPath: '/social', surface: 'browser', order: 46 },
-  { id: 'whatsapp', label: 'WhatsApp', group: 'communication', icon: 'phone', app: 'whatsapp', webPath: '/whatsapp', surface: 'browser', order: 47 },
   { id: 'projects', label: 'Projects', group: 'work', icon: 'kanban', app: 'projects', webPath: '/projects', surface: 'browser', order: 170 },
   // `/tenders?open=<id>` (notifications, search, the stream) opens that tender here.
   { id: 'tenders', label: 'Tenders', group: 'business', icon: 'file-text', app: 'tender', perm: 'tender.view', webPath: '/tenders', surface: 'native', sidebar: 'business', order: 129, keywords: 'tenders bids bid rfq rfp procurement pipeline award' },
@@ -192,6 +203,20 @@ export function visibleApps(grant: AccessGrant, catalogue: AppDefinition[] = APP
     .filter((d) => isAppVisible(d, grant))
     .map((d) => (isSelfService(d, grant) ? { ...d, selfService: true } : d))
     .sort((a, b) => a.order - b.order);
+}
+
+/**
+ * The apps navigation lists — the sidebar, the launcher, search's apps: a channel is inside its host (WhatsApp in
+ * Chat) and has no entry of its own, unless the person has the channel and not the host.
+ */
+export function navApps<T extends Pick<AppDefinition, 'id' | 'channelOf'>>(apps: readonly T[]): T[] {
+  const ids = new Set(apps.map((a) => a.id));
+  return apps.filter((a) => !a.channelOf || !ids.has(a.channelOf));
+}
+
+/** Where opening an app goes: its own route, or `/<id>`. */
+export function appRoute(a: Pick<AppDefinition, 'id' | 'route'>): string {
+  return a.route ?? `/${a.id}`;
 }
 
 export function findApp(id: string, catalogue: AppDefinition[] = APP_CATALOGUE): AppDefinition | undefined {

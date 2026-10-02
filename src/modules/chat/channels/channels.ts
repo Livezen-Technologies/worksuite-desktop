@@ -71,11 +71,16 @@ export function whatsappState(accounts: WaAccount[]): { badge: number; problem: 
   return { badge, problem: down.length === 1 ? `${down[0]!.name} is not connected` : `${down.length} numbers are not connected` };
 }
 
-/** The toolbar's channels. The one open now is always there, even before it has anything in it. */
-export function buildChannels(input: { active: ChannelId; rooms: Room[]; website: { access: boolean; rows: WebsiteRow[] }; whatsapp: { access: boolean; accounts: WaAccount[] } }): Channel[] {
-  const out: Channel[] = [{ id: 'chat', label: 'Chat', icon: 'chat', badge: chatUnread(input.rooms), problem: null }];
+/**
+ * The toolbar's channels. The one open now is always there, even before it has anything in it. WhatsApp shows for
+ * whoever has WhatsApp once a number is shared with them (or they may connect one), its badge the unread messages
+ * on those numbers.
+ */
+export function buildChannels(input: { active: ChannelId; chat?: boolean; rooms: Room[]; website: { access: boolean; rows: WebsiteRow[] }; whatsapp: { access: boolean; accounts: WaAccount[]; canConnect?: boolean } }): Channel[] {
+  // Chat itself is there for whoever has Chat; someone who has only WhatsApp (#35) has only its channel.
+  const out: Channel[] = input.chat === false ? [] : [{ id: 'chat', label: 'Chat', icon: 'chat', badge: chatUnread(input.rooms), problem: null }];
   if (input.website.access || input.active === 'website') out.push({ id: 'website', label: 'Web Chat', icon: 'globe', badge: websiteWaiting(input.website.rows), problem: null });
-  if (input.whatsapp.access && (input.whatsapp.accounts.length || input.active === 'whatsapp')) out.push({ id: 'whatsapp', label: 'WhatsApp', icon: 'phone', ...whatsappState(input.whatsapp.accounts) });
+  if (input.whatsapp.access && (input.whatsapp.accounts.length || input.whatsapp.canConnect || input.active === 'whatsapp')) out.push({ id: 'whatsapp', label: 'WhatsApp', icon: 'phone', ...whatsappState(input.whatsapp.accounts) });
   return out;
 }
 
