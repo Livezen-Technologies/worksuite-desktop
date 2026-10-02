@@ -117,19 +117,22 @@ export default function CalendarPage(_props: ModuleProps) {
     enabled: !!linked && /^\d+$/.test(linked),
   });
   const want = linked ? `event:${linked}` : wantNew ? 'new' : null;
-  if (want && handled !== want && (want === 'new' || linkedEvent.data)) {
+  if (want && handled !== want && (want === 'new' ? canOpenApp('calendar', visible) && !offline : linkedEvent.data)) {
     setHandled(want);
     setDrawer(want === 'new' ? { event: null, draft: { ...nextDraft(), title: (query.get('title') ?? '').slice(0, 200) || undefined } } : { event: { ...linkedEvent.data!, source: 'event' }, draft: null });
   }
 
+  const canCreate = canOpenApp('calendar', visible);
   const newEvent = () => {
+    if (!canCreate) return;
     if (offline) return toast('info', 'You are offline. New events can be added when you are back.');
     setDrawer({ event: null, draft: nextDraft(days.includes(today) ? today : date) });
   };
-  const create = (ymd: string, minutes: number, allDay = false) => {
+  const create = useCallback((draft: Draft) => {
+    if (!canCreate) return;
     if (offline) return toast('info', 'You are offline. New events can be added when you are back.');
-    setDrawer({ event: null, draft: allDay ? { start: ymd, end: ymd, allDay: true } : { start: naive(ymd, minutes), end: naive(ymd, minutes + 60), allDay: false } });
-  };
+    setDrawer({ event: null, draft });
+  }, [canCreate, offline, setDrawer]);
 
   /** Carry out a change: to this entry alone, to every occurrence of a series, or to one occurrence taken out of it. */
   const apply = async (c: Change, scope: 'single' | 'all' | 'one') => {
@@ -277,7 +280,7 @@ export default function CalendarPage(_props: ModuleProps) {
     <div className="relative flex h-full bg-surface text-[13px]">
       <SidePanel id="calendar" label="the calendars">
         <aside aria-label="Calendars" className="flex w-[250px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-line px-3 py-3.5 scroll-thin">
-          <button type="button" data-guide="calendar.new-event" onClick={newEvent} title="New event (N)" className="flex h-[38px] shrink-0 items-center justify-center gap-1.5 rounded-[9px] bg-primary font-bold text-white hover:bg-primary-hover">
+          <button type="button" data-guide="calendar.new-event" disabled={!canCreate || offline} onClick={newEvent} title="New event (N)" className="flex h-[38px] shrink-0 items-center justify-center gap-1.5 rounded-[9px] bg-primary font-bold text-white hover:bg-primary-hover">
             <Icon name="plus" size={16} /> New event
           </button>
           <MiniMonth month={mini} today={today} range={view === 'month' ? [] : days} selected={date} onMonth={(n) => setMini(addMonths(mini, n))} onPick={(x) => set(view === 'month' ? 'day' : view, x)} />
@@ -347,9 +350,9 @@ export default function CalendarPage(_props: ModuleProps) {
         </div>
         {q.error && !q.data ? <div className="p-4"><ErrorNote error={q.error} onRetry={() => void q.refetch()} /></div> : null}
         {view === 'month' ? (
-          <MonthGrid anchor={date} events={events} today={today} readOnly={offline} onOpen={(e) => setDrawer({ event: e, draft: null })} onCreate={create} onDay={(x) => set('day', x)} onMove={onMove} />
+          <MonthGrid anchor={date} events={events} today={today} readOnly={offline || !canCreate} onOpen={(e) => setDrawer({ event: e, draft: null })} onCreate={create} onDay={(x) => set('day', x)} onMove={onMove} />
         ) : (
-          <WeekGrid days={days} events={events} today={today} readOnly={offline} onOpen={(e) => setDrawer({ event: e, draft: null })} onCreate={create} onMove={onMove} onResize={onResize} />
+          <WeekGrid days={days} events={events} today={today} readOnly={offline || !canCreate} onOpen={(e) => setDrawer({ event: e, draft: null })} onCreate={create} onMove={onMove} onResize={onResize} />
         )}
       </main>
       {drawer ? (
