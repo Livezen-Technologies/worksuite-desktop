@@ -15,7 +15,7 @@ export function useServerRecordings() {
     queryKey: ['meet', 'recordings'],
     queryFn: ({ signal }) => apiGet<{ recordings: Recording[] }>('/api/meet/recordings', undefined, signal),
     refetchOnMount: 'always',
-    refetchInterval: (q) => q.state.data?.recordings.some(r => r.status && !['ready', 'failed'].includes(r.status)) ? 10_000 : 60_000,
+    refetchInterval: (q) => q.state.data?.recordings?.some(r => r.status && !['ready', 'failed'].includes(r.status)) ? 10_000 : 60_000,
   });
 }
 

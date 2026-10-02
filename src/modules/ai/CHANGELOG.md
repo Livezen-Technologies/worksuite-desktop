@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.4.1 — 2026-10-02
+
+- Keep ordinary first-turn questions unchanged while applying intent context to guidance, reporting, actions and topic changes after a guide (merge verification for #96).
+
 ## 1.4.0 — 2026-10-02
 
 - Fix #96: separate reporting, how-to guidance and action requests; carry guide instructions only into relevant follow-ups and prioritize the latest topic.

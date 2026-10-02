@@ -12,7 +12,7 @@ import { LocalSetup } from './LocalSetup';
 import { useAssistant, type PendingAction, type Surface } from './assistant';
 import { createAskSession, type AskEntry, type AskSession } from './session';
 import { effective, personalOff, toolAllowed, useLocalTools, useOrgAccess } from './tools';
-import { guideFollowUp, intentContext } from './intent';
+import { guideFollowUp, intentContext, requestIntent } from './intent';
 import { salesAccess } from './sales';
 import { Checkbox } from '../../components/Checkbox';
 import { GUIDES } from './help/catalog';
@@ -152,7 +152,7 @@ export function AskPanel({
       : languageNote
         ? languageNote.trim()
         : undefined;
-    return session.send({ ...base(), context: [intentContext(q), context].filter(Boolean).join('\n') });
+    return session.send({ ...base(), context: [requestIntent(q) !== 'general' || entries.some(e => e.guide) ? intentContext(q) : undefined, context].filter(Boolean).join('\n') || undefined });
   };
   /** No guide covers it: the assistant explains in general terms, and is told this is not a request to act. */
   const askAnyway = (question: string) =>
