@@ -104,6 +104,7 @@ export function MediaViewer({ files, start, onClose }: { files: DriveFile[]; sta
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
   const [speed, setSpeed] = useState(1);
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
   const [subs, setSubs] = useState<string>('off');
   const [note, setNote] = useState('');
   const [desc, setDesc] = useState<string | null>(null);
@@ -262,11 +263,12 @@ export function MediaViewer({ files, start, onClose }: { files: DriveFile[]; sta
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="relative flex min-h-0 flex-1 items-center justify-center p-6">
             {q.isLoading ? <Spinner /> : null}
-            {q.error ? <p className="text-[#FFB4A3]">{errorMessage(q.error)}</p> : null}
+            {q.error ? <div role="alert" className="text-[#FFB4A3]">{errorMessage(q.error)} <Button onClick={() => void q.refetch()}>Retry</Button></div> : null}
+            {playbackError && playbackError === src ? <div role="alert" className="absolute top-2 z-10 rounded bg-[#16254F] p-3">Playback failed. Check your connection and try again. <Button onClick={() => { setPlaybackError(null); media.current?.load(); void q.refetch(); }}>Retry playback</Button></div> : null}
             {o && !playable && !(fallback.isLoading && fallback.fetchStatus !== 'idle') ? (
               <div className="flex max-w-[420px] flex-col items-center gap-3 text-center">
                 <FileIcon f={f} size={72} />
-                <b className="text-[15px]">{o.state === 'probing' ? 'Reading the file…' : o.state === 'converting' ? 'Making a copy this app can play…' : o.state === 'unavailable' ? 'This server can’t play media files' : 'This file can’t be played here'}</b>
+                <b className="text-[15px]">{o.state === 'probing' || o.state === 'converting' ? 'Processing…' : o.state === 'unavailable' ? 'This server can’t play media files' : 'This file can’t be played here'}</b>
                 {job ? <span className="text-[#AFC0E8]">{job.kind} · {job.state}{Number(job.progress) > 0 ? ` · ${job.progress}%` : ''}</span> : null}
                 {o.reason || o.message ? <span className="text-[#AFC0E8]">{o.reason ?? o.message}</span> : null}
                 {o.state === 'unplayable' && o.ffmpeg && !job ? <Button variant="primary" onClick={() => void prepare()}>Make a playable copy</Button> : null}
@@ -282,7 +284,9 @@ export function MediaViewer({ files, start, onClose }: { files: DriveFile[]; sta
                     src={src}
                     poster={mediaUrl(o.urls?.poster) ?? undefined}
                     muted={muted}
-                    onLoadedMetadata={loaded}
+                    preload="metadata"
+                    onLoadedMetadata={() => { setPlaybackError(null); loaded(); }}
+                    onError={() => setPlaybackError(src)}
                     onTimeUpdate={(e) => setAt(e.currentTarget.currentTime * 1000)}
                     onPlay={() => setPlaying(true)}
                     onPause={() => (setPlaying(false), saveProgress())}
@@ -298,7 +302,8 @@ export function MediaViewer({ files, start, onClose }: { files: DriveFile[]; sta
                     {o.urls?.art ? <img src={mediaUrl(o.urls.art) ?? undefined} alt="" className="h-52 w-52 rounded-[18px] object-cover shadow-2xl" /> : <span className="flex h-52 w-52 items-center justify-center rounded-[24px] bg-white/10"><Icon name="music" size={64} /></span>}
                     <b className="text-[16px]">{o.media?.title ?? f.name}</b>
                     {o.media?.artist ? <span className="text-[#AFC0E8]">{o.media.artist}</span> : null}
-                    <audio ref={media} key={src} src={src} muted={muted} onLoadedMetadata={loaded} onTimeUpdate={(e) => setAt(e.currentTarget.currentTime * 1000)} onPlay={() => setPlaying(true)} onPause={() => (setPlaying(false), saveProgress())} onEnded={() => (setPlaying(false), saveProgress())} />
+                    <audio ref={media} key={src} src={src} muted={muted} onLoadedMetadata={() => { setPlaybackError(null); loaded(); }}
+                    onError={() => setPlaybackError(src)} onTimeUpdate={(e) => setAt(e.currentTarget.currentTime * 1000)} onPlay={() => setPlaying(true)} onPause={() => (setPlaying(false), saveProgress())} onEnded={() => (setPlaying(false), saveProgress())} />
                   </div>
                 )}
                 <div className="flex flex-col gap-2 rounded-[10px] bg-[#111A31] px-3.5 py-2.5">

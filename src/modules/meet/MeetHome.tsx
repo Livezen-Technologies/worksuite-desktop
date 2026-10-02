@@ -11,6 +11,7 @@ import { bytes, dateLabel, listStamp, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, ErrorNote, Modal, Spinner, cx } from '../../components/ui';
+import { mediaUrl } from '../files/api';
 import { downloadStatus, localRecordingStatus, serverRecordingStatus } from '@shared/recording-status';
 import type { Room } from '../chat/types';
 import { useNow } from '../calls/parts';
@@ -418,11 +419,12 @@ function Recordings() {
                     onClick={() => play(r)}
                     className="relative flex h-[60px] w-[96px] shrink-0 items-center justify-center overflow-hidden rounded-[9px] bg-[#D8E4F6] text-[#24365F] disabled:cursor-default dark:bg-selection dark:text-ink"
                   >
-                    <Icon name={status.playable ? 'play' : status.phase === 'failed' ? 'alert' : 'clock'} size={20} />
+                    {r.thumbnail_url && status.playable ? <img src={mediaUrl(r.thumbnail_url) ?? undefined} alt="" className="absolute inset-0 h-full w-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : null}
+                    <Icon name={status.playable ? 'play' : status.phase === 'failed' ? 'alert' : 'clock'} size={20} className="relative" />
                   </button>
                   <span className="flex min-w-0 flex-1 flex-col gap-1">
                     <b className="truncate text-[13.5px] text-ink">{name}</b>
-                    <span className="truncate text-[12px] text-ink-3">{[dateLabel(r.created_at).replace(/, \d{4}$/, ''), r.size ? bytes(r.size) : null, r.method === 'local' ? 'Recorded on a computer' : null].filter(Boolean).join(' · ')}</span>
+                    <span className="truncate text-[12px] text-ink-3">{[dateLabel(r.created_at).replace(/, \d{4}$/, ''), r.size ? bytes(r.size) : null, r.duration ? `${Math.floor(r.duration / 60)}:${String(r.duration % 60).padStart(2, '0')}` : null, r.method === 'local' ? 'Recorded on a computer' : null].filter(Boolean).join(' · ')}</span>
                     <RecordingStatusView
                       compact={status.phase === 'ready'}
                       status={status.phase === 'processing' ? { ...status, label: t('home.processing') } : status}

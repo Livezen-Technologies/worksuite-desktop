@@ -49,7 +49,7 @@ const MAX_DOWNLOADS = 100;
 export function recordingFileName(title: string, at: Date, ext: string): string {
   const safe = title.replace(/[\\/:*?"<>|\p{C}]+/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Meeting';
   const p = (n: number) => String(n).padStart(2, '0');
-  return `${safe} ${at.getFullYear()}-${p(at.getMonth() + 1)}-${p(at.getDate())} ${p(at.getHours())}${p(at.getMinutes())}${ext}`;
+  return `${safe} ${at.getFullYear()}-${p(at.getMonth() + 1)}-${p(at.getDate())} ${p(at.getHours())}${p(at.getMinutes())}${p(at.getSeconds())}${ext}`;
 }
 
 /**
@@ -304,7 +304,7 @@ export class MeetRecorder {
     try {
       void this.tell(e, 'uploading').catch(() => undefined);
       const prefs = this.deps.prefs();
-      const folder = await this.deps.http.post<{ id: number }>('/api/meet/recordings/folder', { name: prefs.folder });
+      const folder = await this.deps.http.post<{ id: number }>('/api/meet/recordings/folder', { name: prefs.folder, meeting: e.meeting, client_id: e.id });
       const transferId = await this.deps.transfers.uploadOwn(e.path, e.fileName ?? basename(e.path), { kind: 'files', folderId: String(folder.id), name: e.fileName ?? basename(e.path) });
       this.set(e, { transferId });
       this.await(e, transferId);

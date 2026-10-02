@@ -112,7 +112,7 @@ describe('recording a meeting on this computer', () => {
   });
 
   it('names files so no file system refuses them', () => {
-    expect(recordingFileName('Q3: plan / review?', new Date(2026, 9, 1, 9, 5), '.webm')).toBe('Q3 plan review 2026-10-01 0905.webm');
+    expect(recordingFileName('Q3: plan / review?', new Date(2026, 9, 1, 9, 5), '.webm')).toBe('Q3 plan review 2026-10-01 090500.webm');
   });
 
   it('writes as it goes, then finishes, uploads to Drive, checks it, and deletes the local copy as chosen', async () => {
@@ -127,6 +127,7 @@ describe('recording a meeting on this computer', () => {
     await rec.stop(id, 60_000);
     await vi.waitFor(() => expect(uploaded.size).toBe(1));
     const view = rec.list()[0]!;
+    expect(http.post).toHaveBeenCalledWith('/api/meet/recordings/folder', { name: 'Meeting Recordings', meeting: 'm-uuid-123', client_id: id });
     expect(view.state).toBe('uploading');
     expect(view.fileName).toMatch(/^Board .*\.mp4$/);
     const local = join(dir, view.fileName!);
