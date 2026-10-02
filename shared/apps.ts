@@ -104,6 +104,10 @@ export const APP_CATALOGUE: AppDefinition[] = [
   // A channel of Chat (worksuite-desktop#35): no entry of its own beside Chat. `/whatsapp?chat=` (notifications,
   // shares) opens that conversation in Chat › WhatsApp.
   { id: 'whatsapp', label: 'WhatsApp', group: 'communication', icon: 'phone', app: 'whatsapp', webPath: '/whatsapp', surface: 'native', channelOf: 'chat', route: '/chat?channel=whatsapp', order: 47, keywords: 'message wa customers' },
+  // Channels of Chat too (worksuite-desktop#36): a Facebook Page's Messenger and an Instagram professional account, both
+  // the server's `meta` application. `/messenger?conversation=` and `/instagram?conversation=` open that conversation.
+  { id: 'messenger', label: 'Messenger', group: 'communication', icon: 'message-circle', app: 'meta', webPath: '/messenger', surface: 'native', channelOf: 'chat', route: '/chat?channel=messenger', order: 48, keywords: 'facebook page fb messages customers' },
+  { id: 'instagram', label: 'Instagram', group: 'communication', icon: 'camera', app: 'meta', webPath: '/instagram', surface: 'native', channelOf: 'chat', route: '/chat?channel=instagram', order: 49, keywords: 'ig direct dm messages customers' },
 
   // Opened in the browser until their desktop modules ship (§14, §18).
   { id: 'social', label: 'Social', group: 'communication', icon: 'megaphone', app: 'social', webPath: '/social', surface: 'browser', order: 46 },

@@ -134,6 +134,7 @@ export const NOTIFICATION_CATEGORY_APPS: Readonly<Record<string, readonly string
   marketing: ['marketing'],
   social: ['social'],
   whatsapp: ['whatsapp'],
+  meta: ['messenger', 'instagram'],
   customer_subscriptions: ['subscriptions'],
   subscriptions: ['subscriptions'],
   support: ['support'],
