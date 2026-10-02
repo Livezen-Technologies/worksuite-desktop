@@ -5,6 +5,17 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.94: a clean Home after signing in
+
+After signing in — from the login screen, the lock screen or a Local Profile — Home now opens with nothing on top of it (#150):
+
+- **Menus and panels start closed.** The profile menu, AI Assistant, notifications, chat drawer, transfers and search no longer reappear over Home after sign-in or unlock. If "Open the AI Assistant at start-up" is on, it opens once when WorkSuite starts, not after every sign-in.
+- **One floating panel at a time.** Opening the profile menu puts the AI Assistant away, and the other way round; an open chat conversation moves to the corner. **Esc** closes the open menu first, then the assistant; clicking outside a menu or moving to another page closes it. The profile menu always sits above the assistant.
+- **Online means online.** The profile menu no longer says Offline while the title bar says Online — it shows the status you chose as soon as you're connected (Offline only when you really are, or chose to appear offline).
+- **AI replies are formatted.** Bold, italic, lists, headings, code, quotes and links render properly instead of showing `**` and `*`. A long reply opens at its first line, with no blank gap above it.
+
+---
+
 ## 2026-10-03 — 0.2.93: clearer Mail settings and modern buttons
 
 - **Mail › Manage** showed three toggles with no names. Each now reads **Show in the unified inbox**, **Notify me about new mail** and **Pause syncing**, with a one-line explanation, and **Remove…** is shown as the red danger action it is.
