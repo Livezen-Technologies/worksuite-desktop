@@ -1,5 +1,6 @@
 /**
- * Apps that are a channel of another app's screen (worksuite-desktop#35): WhatsApp is a channel of Chat. Such an
+ * Apps that are a channel of another app's screen (worksuite-desktop#35, #36): WhatsApp, Messenger and Instagram are
+ * channels of Chat. Such an
  * app keeps its own access — its slug and permission still decide who has it — but it is opened in its host, at the
  * channel's route, and its old routes and the web's links to it open there too, on the same conversation.
  */
@@ -13,9 +14,20 @@ export function whatsappRoute(opts: { chat?: string | null; to?: string | null }
   return '/chat?channel=whatsapp';
 }
 
+/** Facebook Messenger and Instagram, connected Pages and Instagram accounts (worksuite-desktop#36). */
+export type MetaPlatform = 'messenger' | 'instagram';
+
+/** The desktop route of Messenger or Instagram in Chat, on a conversation (`mc`) or the list. */
+export function metaRoute(platform: MetaPlatform, opts: { conversation?: string | null } = {}): string {
+  const id = opts.conversation ?? '';
+  return /^\d{1,20}$/.test(id) ? `/chat?channel=${platform}&mc=${id}` : `/chat?channel=${platform}`;
+}
+
 /** The channel apps, each with its host app and how a path of its own (`/whatsapp?chat=5`, `/whatsapp/5`) maps into the host. */
 export const CHANNEL_APPS: Readonly<Record<string, { host: string; route: (query: URLSearchParams, rest: string[]) => string }>> = {
   whatsapp: { host: 'chat', route: (q, rest) => whatsappRoute({ chat: q.get('chat') ?? q.get('wa') ?? rest[0], to: q.get('to') }) },
+  messenger: { host: 'chat', route: (q, rest) => metaRoute('messenger', { conversation: q.get('conversation') ?? q.get('mc') ?? rest[0] }) },
+  instagram: { host: 'chat', route: (q, rest) => metaRoute('instagram', { conversation: q.get('conversation') ?? q.get('mc') ?? rest[0] }) },
 };
 
 function split(route: string): { segments: string[]; query: URLSearchParams } {

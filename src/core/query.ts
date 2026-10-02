@@ -50,6 +50,9 @@ export function wireQueryInvalidation(): void {
       void queryClient.invalidateQueries({ queryKey: ['chat', 'calls'] });
       if (e.room_id !== undefined) void queryClient.invalidateQueries({ queryKey: ['chat', 'messages', String(e.room_id)] });
     }
+    // Messenger and Instagram (worksuite-desktop#36): a message in or out, a read, an account's connection changed —
+    // the toolbar badges, the lists and an open thread ask again.
+    if (e.type === 'meta.message' || e.type === 'meta.account') void queryClient.invalidateQueries({ queryKey: ['meta'] });
     if (e.type === 'notification') void queryClient.invalidateQueries({ queryKey: ['notifications'] });
     // Something shared with this person, or their access changed: Shared with me and Drive's lists show it now (worksuite-desktop#16).
     if (e.type === 'notification' && typeof e.event === 'string' && /^files\.(shared|access_changed|access_revoked)$/.test(e.event)) {
