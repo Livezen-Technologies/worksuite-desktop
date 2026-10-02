@@ -9,6 +9,8 @@ the root CHANGELOG.md.
 **Added**
 
 - a Q&A & Polls tab on the meeting's details (worksuite-desktop#92). Hosts, co-hosts and the organiser see everything; participants see the visible questions, without the names of anonymous askers, and the poll results that were shared.
+- Scheduling a meeting starts from your Meet defaults, set in Host Controls › My defaults for new meetings (worksuite-desktop#91).
+
 
 ## 1.3.2 — 2026-10-01
 

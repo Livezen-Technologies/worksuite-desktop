@@ -15,6 +15,20 @@ the root CHANGELOG.md.
   - The menu opens above the button when there is no room below.
   - Choosing twice before the menu closes starts only one meeting.
   - Labels are in English, Sinhala and Tamil.
+- **Host Controls** (worksuite-desktop#91): a toolbar button, for the host and co-hosts only, opens a drawer with four groups.
+  - **Participant permissions:** screen sharing, reactions, microphone and camera.
+    - Turning the microphone or camera off stops it at once, and the button tells the participant why it is off.
+    - Turning it back on lets participants switch it on themselves; it does not switch on by itself.
+  - **Chat:** chat on or off for participants.
+  - **Meeting access:**
+    - Host must join first; a co-host counts as the host.
+    - Open, Trusted or Restricted access, and Allow guests to request access.
+  - **Activities:** whiteboard, Q&A, polls, raise hand, recording and transcription.
+  - **Two tabs:** "This meeting", and "My defaults for new meetings" for future meetings.
+  - **Updates:** changes reach everyone at once, and participants are told what was turned off. Settings come back after a reconnect.
+  - **Reactions:** new emoji reactions in the meeting.
+  - **Scheduling:** the form starts from your defaults.
+
 
 ## 1.3.0 — 2026-10-01
 
