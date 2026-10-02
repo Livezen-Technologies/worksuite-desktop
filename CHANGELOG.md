@@ -5,6 +5,17 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-02 — 0.2.80: macOS permissions and screen capture
+
+- Screen sharing checks Screen Recording / Screen & System Audio Recording separately from Accessibility. The picker refreshes after returning from System Settings and shows Granted, Denied, Checking or Unable to Verify.
+- Capture validates only the chosen screen or window, so a failed window list cannot block a valid screen. Discovery timeouts, disappeared selections and capture startup failures have specific errors; retired requests cannot capture an old selection.
+- Remote control shows running-app and input-helper permission evidence, refreshes stale checks after settings changes and sleep/wake, and reports contradictory native checks as unverifiable. Screen sharing remains available while control is unavailable or being checked; participant control still requires explicit approval.
+- Diagnostics includes Screen Recording status and actual app-signature verification. Restart advice requires observed permission-change evidence instead of a generic capture failure.
+
+Modules: Calls 1.4.1, Meet 1.8.1, Settings 1.9.4, Diagnostics 1.0.2. Installed signed macOS builds and delivery to another participant still require the acceptance tests in `docs/MACOS_PERMISSIONS.md` (#132).
+
+---
+
 ## 2026-10-02 — 0.2.79: images in the AI Assistant
 
 You can now give the AI Assistant pictures — screenshots, photos of documents, scans (#59):
