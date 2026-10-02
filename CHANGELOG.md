@@ -26,7 +26,7 @@ person who has to live with the change — what it does, and where it bites.
   see the visible questions, without anonymous names, and the poll results that were shared.
 - Where it bites:
   - This needs WorkSuite Communication 1.3.0 and Meeting 1.4.0 on the server. Run its migrations.
-  - Against an older server, the tabs and the button are not offered.
+  - Against an older server, Raise hand is greyed out, and Q&A and Polls have nothing to show.
   - An anonymous poll keeps no name with a vote, so not even the host can see who chose what.
 
 ## 2026-10-01 — 0.2.74: Chats in windows of their own; schedule conflicts asked before moving; a modern Home with announcements
