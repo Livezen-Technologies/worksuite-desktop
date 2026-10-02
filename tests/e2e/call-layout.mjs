@@ -16,7 +16,8 @@ const open = async (q, label) => {
   await sleep(1200);
   return w;
 };
-const clickLabel = (w, label) => w.evaluate(`(() => { const b = [...document.querySelectorAll('button')].find(b => (b.getAttribute('aria-label') ?? '') === ${JSON.stringify(label)} || b.textContent.trim().startsWith(${JSON.stringify(label)})); if (b) b.click(); return !!b; })()`);
+// A button, or a menu item (the menus' rows are role="menuitem…", not buttons).
+const clickLabel = (w, label) => w.evaluate(`(() => { const b = [...document.querySelectorAll('button, [role^="menuitem"]')].find(b => (b.getAttribute('aria-label') ?? '') === ${JSON.stringify(label)} || b.textContent.trim().startsWith(${JSON.stringify(label)})); if (b) b.click(); return !!b; })()`);
 /** A real click (a user gesture: full screen needs one). */
 const trusted = async (w, label) => {
   const r = await w.evaluate(`(() => { const b = [...document.querySelectorAll('button')].find(b => (b.getAttribute('aria-label') ?? '') === ${JSON.stringify(label)}); if (!b) return null; const q = b.getBoundingClientRect(); return { x: q.x + q.width / 2, y: q.y + q.height / 2 }; })()`);

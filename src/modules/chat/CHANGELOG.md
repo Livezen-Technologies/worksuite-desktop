@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.8.0 — 2026-10-02
+
+- WhatsApp is a channel of Chat (#35): it replaces the separate WhatsApp entry (sidebar, launcher, search), and old WhatsApp links, tabs, notifications and worksuite://whatsapp deep links open the same conversation in Chat; the channel shows to anyone with WhatsApp access, also before a number is connected if they may connect one; attachments display (pictures inline, files open, Office files in a tab); send files with a caption, approved templates once the 24-hour window has closed, and start a conversation from a number; WhatsApp settings (numbers, status, Check connection, Link again, Make default, Unlink, Connect a number) from the list's gear and Add a channel; Chat access alone never opens WhatsApp, and WhatsApp-only people see only that channel.
+
 ## 1.7.0 — 2026-10-02
 
 - Chat › Calls tab in the full Chat page, shared with the drawer (#113); call cards and the log say Busy, No answer and Cancelled and refresh as calls ring and stop; Voice and Video call buttons show only where the room supports calling (not website visitors, notice rooms or unconfigured servers).

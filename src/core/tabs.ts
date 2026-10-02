@@ -1,3 +1,4 @@
+import { channelAppOfRoute, redirectRoute } from '@shared/channels';
 import type { TabRecord } from '@shared/ipc/contract';
 import { canOpen, refuse } from './access';
 import { call } from './bridge';
@@ -104,7 +105,9 @@ function guardWait(id: string): Promise<void> | null {
   }
 }
 
-function make(route: string, organizationId: string | null, title?: string): Tab {
+function make(at: string, organizationId: string | null, title?: string): Tab {
+  // A channel's old route (`/whatsapp?chat=5`) opens in its host now, on the same conversation (#35).
+  const route = redirectRoute(at);
   return {
     id: newId(),
     route,
@@ -164,15 +167,16 @@ export function activate(id: string): void {
   }));
 }
 
-/** Whether a route's app may be opened; says no when it may not. */
+/** Whether a route's app may be opened; says no when it may not. A channel in its host is the channel's to allow. */
 function allowed(route: string): boolean {
-  if (canOpen(appForRoute(route))) return true;
+  if (canOpen(channelAppOfRoute(route) ?? appForRoute(route))) return true;
   refuse();
   return false;
 }
 
 /** Opens a route in a new tab; null when the person may not open its app. */
-export function openTab(route: string, opts: { background?: boolean; title?: string; organizationId?: string | null } = {}): string | null {
+export function openTab(at: string, opts: { background?: boolean; title?: string; organizationId?: string | null } = {}): string | null {
+  const route = redirectRoute(at);
   if (!allowed(route)) return null;
   const tab = make(route, opts.organizationId ?? null, opts.title);
   update((s) => ({ tabs: [...s.tabs, tab], activeId: opts.background ? s.activeId : tab.id }));
@@ -184,7 +188,8 @@ export function openTab(route: string, opts: { background?: boolean; title?: str
  * when it belongs to the same app, to the app's existing tab otherwise, and
  * to a new tab only when the app has none.
  */
-export function navigate(route: string, organizationId: string | null = null): void {
+export function navigate(at: string, organizationId: string | null = null): void {
+  const route = redirectRoute(at);
   if (!allowed(route)) return;
   const s = tabsStore.get();
   const app = appForRoute(route);
@@ -208,7 +213,8 @@ export function navigate(route: string, organizationId: string | null = null): v
   openTab(route, { organizationId });
 }
 
-export function setRoute(id: string, route: string): void {
+export function setRoute(id: string, at: string): void {
+  const route = redirectRoute(at);
   if (!allowed(route)) return;
   update((s) => ({
     tabs: s.tabs.map((t) => (t.id === id ? { ...t, route, app: appForRoute(route), title: t.route === route ? t.title : titleForRoute(route), suspended: false } : t)),
@@ -444,6 +450,7 @@ export async function restoreTabs(allowed: Set<string>): Promise<boolean> {
   try {
     const saved = await call('tabs:restore');
     const tabs: Tab[] = saved.tabs
+      .map((r) => ({ ...r, route: redirectRoute(r.route) }))
       .filter((r) => allowed.has(appForRoute(r.route)))
       .map((r) => ({ ...r, app: appForRoute(r.route), lastActive: Date.now(), suspended: true, reloadKey: 0 }));
     if (tabs.length === 0) return false;

@@ -5,6 +5,46 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-02 — 0.2.83: a tidier meeting More menu
+
+The meeting More menu was one long list that could run off the window. It is now grouped and fits (#124):
+
+- **Three groups.** Meeting Tools (recording, transcription, Activities › Q&A, Polls, Notes, Files, Whiteboard; Meeting Info › details, join link, room settings), Host Controls (host controls, livestreaming, Lock/Unlock Meeting, recording settings) and View & Layout (Layout, Video, Full Screen, floating window). Secondary options sit in submenus, so the menu is short.
+- **Says what is going on.** Stop Recording, Stop Transcription, Unlock Meeting, Exit Full Screen. Something you can't use stays visible, greyed, with the reason — "Only the host and co-hosts can lock the meeting".
+- **Stays on screen.** It opens above the call controls without covering them, flips to fit, scrolls when the window is short, and becomes a bottom sheet on narrow windows.
+- **Keyboard friendly.** Arrow keys, Home/End, typing a letter, Right/Left for submenus, Escape or a click outside closes it and puts the focus back on More.
+- Direct calls' More menu gets the same look, with Audio › Speaker and Noise Suppression.
+
+---
+
+## 2026-10-02 — 0.2.82: WhatsApp lives in Chat
+
+WhatsApp is now a channel of Chat, next to Chat and Web Chat, instead of a separate app that opened the web (#35):
+
+- **One place.** The separate WhatsApp entry is gone from the sidebar, launcher and search. Old WhatsApp links, open tabs, notifications and `worksuite://whatsapp` links open the same conversation in Chat's WhatsApp channel.
+- **Reply properly.** Pictures show inline and files open on this computer; send files with a caption (up to 25 MB); once the 24-hour window has closed, send an approved template; start a conversation with a number from the new + button or a contact's "Open the conversation".
+- **Settings in the channel.** The gear in the WhatsApp list (and Add a channel) shows each number with its status, and offers Check connection, Link again, Make default, Unlink and Connect a number — each only where you are allowed. Broadcasts, templates and business hours stay on the web, one click away.
+- **Same access as before.** Chat access alone does not open WhatsApp. Someone with WhatsApp but not Chat still gets a WhatsApp entry, which opens Chat showing only the WhatsApp channel. WhatsApp threads have no call buttons.
+
+No server change needed.
+
+---
+
+## 2026-10-02 — 0.2.81: announcements to several companies
+
+Publishing an announcement to more than one company is tightened up and kept current everywhere (#98):
+
+- **Only companies you may publish to.** The company picker offers just those, with "All companies you may publish to", Clear Selection, a count and removable chips. A company where you may draft but not publish is marked "draft only", and Publish says why it is unavailable. The server checks each company too — before, ticking a company you were refused alongside one you were allowed let the announcement through.
+- **Audience before publishing.** "Will reach N people in M companies", with the per-company breakdown, and a confirm step. Save Draft stays; drafts never reach anyone.
+- **Home's Announcements.** Urgent first, then pinned, then important, then newest — a pinned announcement no longer sinks below an unpinned important one. Expired ones disappear at once; "See all" opens the full list.
+- **Edits, withdrawal and expiry show everywhere straight away.** Home, an open announcement and the HR console refresh as soon as it changes, and notifications already sent are updated (or expire) with it.
+- **Acknowledgement report.** "Acknowledged earlier text" and "Read, not acknowledged" are told apart, filtered by the companies you may see the report for.
+- One notification per person, even if they belong to several of the chosen companies.
+
+Needs the server update (HR module and its migration).
+
+---
+
 ## 2026-10-02 — 0.2.80: macOS permissions and screen capture
 
 - Screen sharing checks Screen Recording / Screen & System Audio Recording separately from Accessibility. The picker refreshes after returning from System Settings and shows Granted, Denied, Checking or Unable to Verify.
