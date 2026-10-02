@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { whatsappRoute } from '@shared/channels';
 import { useState, type ReactNode } from 'react';
 import { useCanOpen } from '../../core/access';
 import { apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
@@ -397,8 +398,9 @@ function Details({ c, loading }: { c: Contact & Partial<ContactDetail>; loading:
   );
 }
 
-/** Call, and — for whoever has WhatsApp — send on it or open the conversation there. */
+/** Call, and — for whoever has WhatsApp — send on it or open the conversation there (Chat › WhatsApp). */
 function PhoneMenu({ phone, onClose, onWhatsapp, onCall }: { phone: string; onClose: () => void; onWhatsapp?: () => void; onCall: () => void }) {
+  const { navigate } = useTab();
   const d = digits(phone);
   const item = 'flex h-[34px] w-full items-center gap-2.5 rounded-[8px] px-2.5 text-left text-[12.5px] font-semibold text-ink hover:bg-ground';
   return (
@@ -410,7 +412,7 @@ function PhoneMenu({ phone, onClose, onWhatsapp, onCall }: { phone: string; onCl
             <button type="button" role="menuitem" autoFocus onClick={onWhatsapp} className={item}>
               <Icon name="send" size={15} className="text-[#15803D]" /> Send a WhatsApp message
             </button>
-            <button type="button" role="menuitem" onClick={() => (onClose(), void call('app:openInBrowser', { path: `/whatsapp?to=${d}` }))} className={item}>
+            <button type="button" role="menuitem" onClick={() => (onClose(), navigate(whatsappRoute({ to: d })))} className={item}>
               <Icon name="user" size={15} className="text-ink-2" /> Open the conversation
             </button>
           </>

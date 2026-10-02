@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { LAUNCHER_GROUPS, type AppDefinition, type LauncherGroup } from '@shared/apps';
+import { appRoute, LAUNCHER_GROUPS, navApps, type AppDefinition, type LauncherGroup } from '@shared/apps';
 import { app, updatePrefs } from '../../core/app-state';
 import { appColour } from '../../core/app-look';
 import { call } from '../../core/bridge';
@@ -45,7 +45,8 @@ export function Launcher() {
   const [now] = useState(() => Date.now());
   const [recentIds] = useState(() => readRecentApps(userId));
 
-  const all = useMemo(() => apps.filter((a) => a.id !== 'home'), [apps]);
+  // A channel is in its host (WhatsApp, in Chat: #35), not an app of its own here.
+  const all = useMemo(() => navApps(apps).filter((a) => a.id !== 'home'), [apps]);
   const needle = filter.trim().toLowerCase();
   const matching = all.filter((a) => !needle || appLabel(a).toLowerCase().includes(needle) || (a.keywords ?? '').includes(needle));
   const cats = [
@@ -75,9 +76,9 @@ export function Launcher() {
       void call('app:openInBrowser', { path: a.webPath });
       return;
     }
-    if (how === 'tab') navigate(`/${a.id}`);
-    else if (how === 'new-tab') openTab(`/${a.id}`);
-    else void call('windows:open', { kind: 'record', route: `/${a.id}`, title: a.label });
+    if (how === 'tab') navigate(appRoute(a));
+    else if (how === 'new-tab') openTab(appRoute(a));
+    else void call('windows:open', { kind: 'record', route: appRoute(a), title: a.label });
   };
   const togglePin = (a: AppDefinition) => {
     const next = pinned.includes(a.id) ? pinned.filter((p) => p !== a.id) : [...pinned, a.id];

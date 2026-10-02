@@ -1,4 +1,5 @@
 import { APP_CATALOGUE, type AppDefinition } from './apps';
+import { CHANNEL_APPS } from './channels';
 
 /**
  * Maps a WorkSuite web link (from a notification, search hit or activity
@@ -63,6 +64,13 @@ export function resolveWebLink(link: string | null | undefined, catalogue: AppDe
   const app = appForWebPath(path, catalogue);
   if (!app) return { kind: 'browser', path, app: null };
   if (BROWSER_PAGES.some((re) => re.test(path))) return { kind: 'browser', path, app: app.id };
+  // A channel of another app (WhatsApp, of Chat: worksuite-desktop#35) opens in its host, on the same conversation;
+  // whether it may is still the channel's own access.
+  const channel = app.channelOf ? CHANNEL_APPS[app.id] : undefined;
+  if (channel) {
+    const [p = '', qs = ''] = path.split('#')[0]!.split('?');
+    return { kind: 'tab', route: channel.route(new URLSearchParams(qs), p.slice(app.webPath.length).split('/').filter(Boolean)), app: app.id };
+  }
   if (app.surface === 'native') {
     const rest = path.slice(app.webPath.length);
     return { kind: 'tab', route: `/${app.id}${rest}`, app: app.id };

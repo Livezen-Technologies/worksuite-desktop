@@ -27,6 +27,7 @@ import { AddChannel, type AddStep } from './channels/AddChannel';
 import { ChannelBar } from './channels/ChannelBar';
 import { buildChannels, channelOf, channelRoute, LIST_WIDTH } from './channels/channels';
 import { WhatsappChannel } from './channels/WhatsappChannel';
+import { WhatsappSettings } from './channels/WhatsappSettings';
 import { useWaAccounts } from './channels/whatsapp';
 
 /**
@@ -39,6 +40,8 @@ import { useWaAccounts } from './channels/whatsapp';
  *
  * Down the far left, the channel toolbar (worksuite-desktop#33): Chat, Web Chat and WhatsApp, each with its unread
  * count, and "Add a channel". Picking one shows its conversations in the list; drafts are kept per conversation.
+ * WhatsApp is only here now (#35): its old links open its channel, and someone with WhatsApp but not Chat gets
+ * Chat with only that channel.
  */
 type Filter = 'all' | 'unread' | 'mentions' | 'archived' | 'calls';
 
@@ -54,7 +57,10 @@ export default function ChatPage({ tabId }: ModuleProps) {
   const { query, go, path } = useTab();
   const mini = tabId.startsWith('window-chat-mini');
   const room = roomFromRoute(query, path);
-  const channel = channelOf(query);
+  const chatAccess = useCanOpen('chat');
+  const asked = channelOf(query);
+  // Someone with WhatsApp and not Chat has Chat for WhatsApp alone.
+  const channel = asked === 'chat' && !chatAccess ? 'whatsapp' : asked;
   const websiteAccess = useWebsiteAccess();
   const websiteOpen = useWebsiteInbox(false, websiteAccess && !mini);
   const whatsappAccess = useCanOpen('whatsapp');
@@ -63,12 +69,13 @@ export default function ChatPage({ tabId }: ModuleProps) {
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
   const canConnect = !!perms && (perms.includes('*') || perms.includes('whatsapp.connect'));
   const [adding, setAdding] = useState<AddStep | null>(null);
+  const [settings, setSettings] = useState(false);
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [starting, setStarting] = useState(false);
   const [starred, setStarred] = useState(false);
   const [details, setDetails] = useState(true);
-  const rooms = useQuery({ queryKey: ['chat', 'rooms'], queryFn: ({ signal }) => apiGetMeta<{ rooms: Room[] }>('/api/chat/rooms', undefined, signal) });
+  const rooms = useQuery({ queryKey: ['chat', 'rooms'], queryFn: ({ signal }) => apiGetMeta<{ rooms: Room[] }>('/api/chat/rooms', undefined, signal), enabled: chatAccess });
   const all = (rooms.data?.data.rooms ?? []).filter((r) => r.type !== 'widget');
   const current = all.find((r) => String(r.id) === room);
   useTabTitle(channel !== 'chat' ? null : current ? `Chat · ${current.name}` : 'Chat');
@@ -92,7 +99,7 @@ export default function ChatPage({ tabId }: ModuleProps) {
     if (reopen) go(`/chat?room=${reopen}`);
   }, [reopen, go]);
 
-  const channels = buildChannels({ active: channel, rooms: all, website: { access: websiteAccess, rows: websiteOpen.data?.conversations ?? [] }, whatsapp: { access: whatsappAccess, accounts: waAccounts } });
+  const channels = buildChannels({ active: channel, chat: chatAccess, rooms: all, website: { access: websiteAccess, rows: websiteOpen.data?.conversations ?? [] }, whatsapp: { access: whatsappAccess, accounts: waAccounts, canConnect } });
   const connect = whatsappAccess && canConnect ? () => setAdding({ at: 'whatsapp' }) : null;
 
   const chat = (
@@ -145,7 +152,7 @@ export default function ChatPage({ tabId }: ModuleProps) {
         <WebsiteWorkspace />
       ) : channel === 'whatsapp' ? (
         whatsappAccess ? (
-          <WhatsappChannel accounts={waAccounts} loading={wa.isLoading} error={wa.error} retry={() => void wa.refetch()} onConnect={connect} onRelink={(a) => setAdding({ at: 'link', accountId: a.id, name: a.name })} />
+          <WhatsappChannel accounts={waAccounts} loading={wa.isLoading} error={wa.error} retry={() => void wa.refetch()} onConnect={connect} onRelink={(a) => setAdding({ at: 'link', accountId: a.id, name: a.name })} onSettings={() => setSettings(true)} />
         ) : (
           <div className="flex min-w-0 flex-1 bg-ground">
             <Empty icon="lock" title="WhatsApp is not available to you" hint="Ask an administrator for access to WhatsApp." />
@@ -154,11 +161,21 @@ export default function ChatPage({ tabId }: ModuleProps) {
       ) : (
         chat
       )}
+      {settings && whatsappAccess ? (
+        <WhatsappSettings
+          accounts={waAccounts}
+          loading={wa.isLoading}
+          onConnect={connect ? () => (setSettings(false), connect()) : null}
+          onRelink={(a) => (setSettings(false), setAdding({ at: 'link', accountId: a.id, name: a.name }))}
+          onClose={() => setSettings(false)}
+        />
+      ) : null}
       {adding ? (
         <AddChannel
           initial={adding}
           website={{ access: websiteAccess, canSetUp: canOpenWeb('/website-chats') }}
           whatsapp={{ access: whatsappAccess, canConnect, accounts: waAccounts }}
+          onSettings={whatsappAccess ? () => (setAdding(null), setSettings(true)) : undefined}
           onClose={() => setAdding(null)}
           onConnected={() => {
             setAdding(null);

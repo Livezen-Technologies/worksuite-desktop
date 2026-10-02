@@ -13,6 +13,7 @@ import { join, resolve } from 'node:path';
 import { canOpenApp, canOpenLink, canOpenRoute, notificationAllowed, visibleAppIds } from '@shared/access';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
 import { resolveWebLink } from '@shared/links';
+import { redirectRoute } from '@shared/channels';
 import { networkStatus } from '@shared/network';
 import { pmsCached } from '@shared/pms-cache';
 import { eventsCached } from '@shared/event-desk';
@@ -642,7 +643,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     windows.showMain();
     broadcast('toast', { kind: 'error', text: NO_ACCESS });
   };
-  const navigate = (req: NavigateRequest): void => {
+  const navigate = (asked: NavigateRequest): void => {
+    // A channel's old route (`/whatsapp?chat=5`) opens in its host now, on the same conversation (#35).
+    const req = { ...asked, route: redirectRoute(asked.route) };
     // Locked: the workspace is not there to take it; it opens once WorkSuite is unlocked (#114).
     if (lock.isLocked()) {
       pendingNav.push(req);
