@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { visibleApps } from '@shared/apps';
@@ -10,13 +10,23 @@ import type * as CoreApi from '../../../src/core/api';
  * word, the snippet that shows why, the filters sent to the server, and an
  * index still being built said rather than passed off as "no results".
  */
+Element.prototype.scrollIntoView ??= vi.fn();
 const apiGet = vi.fn();
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: (...a: unknown[]) => apiGet(...a) }));
-vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(async () => []), on: () => () => undefined, hasDesktop: () => true, errorMessage: (e: unknown) => String(e), isMac: false, platform: 'linux', registerDropped: vi.fn() }));
+vi.mock('../../../src/core/bridge', () => ({
+  call: vi.fn(async () => []),
+  on: () => () => undefined,
+  hasDesktop: () => true,
+  errorMessage: (e: unknown) => String(e),
+  isMac: false,
+  platform: 'linux',
+  registerDropped: vi.fn(),
+}));
 
 const { call } = await import('../../../src/core/bridge');
+const { setLanguage } = await import('../../../src/core/i18n');
 const { app } = await import('../../../src/core/app-state');
-const { SearchOverlay, markWords } = await import('../../../src/app/overlays/SearchOverlay');
+const { SearchOverlay, markWords, searchFileIcon } = await import('../../../src/app/overlays/SearchOverlay');
 
 const answer = (over: Record<string, unknown> = {}) => ({
   results: [
@@ -36,24 +46,27 @@ const answer = (over: Record<string, unknown> = {}) => ({
 });
 
 function show() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <QueryClientProvider client={client}>
       <SearchOverlay mode="search" />
     </QueryClientProvider>,
   );
+  return client;
 }
 
 const type = (q: string) => fireEvent.change(screen.getByLabelText('Search WorkSuite'), { target: { value: q } });
 const lastParams = () => apiGet.mock.calls.at(-1)?.[1] as Record<string, unknown>;
 
 beforeEach(() => {
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1100 });
   apiGet.mockReset();
   vi.mocked(call).mockReset();
   vi.mocked(call).mockResolvedValue([] as never);
   apiGet.mockResolvedValue(answer());
   app.set({ auth: null, bootstrap: null, apps: visibleApps({ apps: ['notes', 'mail', 'chat'], permissions: [] }), status: { network: 'ONLINE' } as never });
 });
-afterEach(cleanup);
+afterEach(() => { cleanup(); setLanguage('en'); });
 
 describe('marking the words', () => {
   it('marks every word that starts with a term, whole, and keeps Sinhala vowel signs inside the word', () => {
@@ -124,7 +137,14 @@ describe('search on the index (#57)', () => {
   });
 
   it('sends the group in view, the date, "mine" and the company to the server', async () => {
-    apiGet.mockResolvedValue(answer({ companies: [{ id: 1, name: 'Livezen' }, { id: 2, name: 'Asterix' }] }));
+    apiGet.mockResolvedValue(
+      answer({
+        companies: [
+          { id: 1, name: 'Livezen' },
+          { id: 2, name: 'Asterix' },
+        ],
+      }),
+    );
     show();
     type('solar');
     await screen.findByRole('tab', { name: /Notes/ });
@@ -132,9 +152,11 @@ describe('search on the index (#57)', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Notes/ }));
     await waitFor(() => expect(lastParams()).toMatchObject({ q: 'solar', types: 'Notes' }));
 
-    fireEvent.change(screen.getByLabelText('When'), { target: { value: '7' } });
+    fireEvent.click(screen.getByRole('combobox', { name: 'Date Range' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Past week' }));
     fireEvent.click(screen.getByRole('switch', { name: 'Mine' }));
-    fireEvent.change(await screen.findByLabelText('Company'), { target: { value: '2' } });
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Company' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Asterix' }));
 
     await waitFor(() => expect(lastParams()).toMatchObject({ q: 'solar', types: 'Notes', owner: 'me', company: 2 }));
     expect(String(lastParams().from)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
@@ -145,7 +167,122 @@ describe('search on the index (#57)', () => {
     show();
     type('quarterly');
 
-    expect(await screen.findByText(/Search is still indexing \(42%\)\. Mail, Chat are searched the slower way/)).toBeTruthy();
+    expect(await screen.findByText('Search is still indexing (42%).')).toBeTruthy();
+    const status = document.querySelector('details')!;
+    expect(status.open).toBe(false);
+    fireEvent.click(status.querySelector('summary')!);
+    expect(status.textContent).toContain('Mail, Chat');
     expect(screen.getByText(/still being built, so this may not be everything/)).toBeTruthy();
   });
+});
+
+describe('search details and responsive filters (#129)', () => {
+  it('keeps the selected record and filters when refreshed results reorder', async () => {
+    const client = show();
+    type('solar');
+    fireEvent.click(await screen.findByRole('option', { name: /Weekly notes/ }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Mine' }));
+    await waitFor(() => expect(lastParams().owner).toBe('me'));
+    await waitFor(() => expect(within(screen.getByLabelText('Preview')).getByText('Weekly notes')).toBeTruthy());
+    const next = answer();
+    next.results[0]!.items.reverse();
+    apiGet.mockResolvedValue(next);
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['search'] });
+    });
+    expect(screen.getByRole('option', { name: /Weekly notes/ }).getAttribute('aria-selected')).toBe('true');
+    expect(within(screen.getByLabelText('Preview')).getByText('Weekly notes')).toBeTruthy();
+    expect(screen.getByRole('switch', { name: 'Mine' }).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('searches long company lists and keeps the chosen company during a pending update', async () => {
+    apiGet.mockResolvedValue(answer({ companies: Array.from({ length: 12 }, (_, i) => ({ id: i + 1, name: `Company ${i + 1}` })) }));
+    show();
+    type('solar');
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Company' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search Company' }), { target: { value: 'Company 12' } });
+    expect(screen.queryByRole('option', { name: 'Company 1' })).toBeNull();
+    apiGet.mockImplementation(() => new Promise(() => {}));
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Search Company' }), { key: 'Enter' });
+    await waitFor(() => expect(lastParams().company).toBe(12));
+    expect(screen.getByRole('combobox', { name: 'Company' }).textContent).toContain('Company 12');
+  });
+
+  it('moves filters into More Filters and shows a details drawer with a way back on narrow windows', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 600 });
+    show();
+    type('solar');
+    await screen.findByRole('option', { name: /Weekly notes/ });
+    expect(screen.queryByRole('combobox', { name: 'Date Range' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'More Filters' }));
+    expect(screen.getByRole('combobox', { name: 'Date Range' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('option', { name: /Weekly notes/ }));
+    expect(screen.queryByRole('listbox', { name: 'Results' })).toBeNull();
+    const back = screen.getByRole('button', { name: 'Back to Results' });
+    expect(document.activeElement).toBe(back);
+    fireEvent.click(back);
+    expect(screen.getByRole('listbox', { name: 'Results' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: /Weekly notes/ }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(screen.getByRole('option', { name: /Weekly notes/ }));
+    fireEvent.keyDown(screen.getByLabelText('Preview'), { key: 'Escape' });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('option', { name: /Weekly notes/ })));
+  });
+
+  it('shows complete filenames and permission-checked file facts without leaking the previous selection', async () => {
+    app.set({ apps: visibleApps({ apps: ['drive'], permissions: ['files.view'] }) });
+    const name = 'very-long-unbroken-filename-'.repeat(6) + '.xlsx';
+    const pending = new Promise(() => {});
+    apiGet.mockImplementation((path: string) => {
+      if (path === '/api/files/4/details')
+        return Promise.resolve({
+          id: 4,
+          extension: 'xlsx',
+          size: 2048,
+          company: { id: 1, name: 'Livezen' },
+          location: [{ id: 7, name: 'Reports' }],
+          modified_at: '2026-10-01',
+          updated_at: null,
+        });
+      if (path === '/api/files/9/details') return pending;
+      return Promise.resolve(
+        answer({
+          results: [
+            {
+              group: 'Files',
+              key: 'files',
+              items: [
+                { id: 4, title: name, route: '/files?folder=7', subtitle: 'XLSX · 2 KB', at: null },
+                { id: 9, title: 'Other.pdf', route: '/files', subtitle: 'PDF · 8 KB', at: null },
+              ],
+            },
+          ],
+        }),
+      );
+    });
+    show();
+    type('report');
+    expect(await screen.findByText('Livezen')).toBeTruthy();
+    const preview = screen.getByLabelText('Preview');
+    expect(within(preview).getByTitle(name).textContent).toBe(name);
+    expect(within(preview).getByText('Reports')).toBeTruthy();
+    expect(within(preview).getByText('XLSX')).toBeTruthy();
+    fireEvent.click(within(preview).getByRole('button', { name: 'New window' }));
+    expect(call).toHaveBeenCalledWith('windows:open', { kind: 'record', route: '/files?folder=7&file=4', title: 'WorkSuite' });
+    fireEvent.click(screen.getByRole('option', { name: /Other.pdf/ }));
+    expect(within(screen.getByLabelText('Preview')).queryByText('Livezen')).toBeNull();
+    expect(within(screen.getByLabelText('Preview')).getByText('PDF')).toBeTruthy();
+  });
+});
+
+
+it.each([['invoice.pdf', 'file-text'], ['report.docx', 'file-text'], ['report.xlsx', 'file-sheet'], ['photo.jpg', 'file-image'], ['slides.pptx', 'board'], ['video.mp4', 'film'], ['backup.zip', 'archive'], ['unknown', 'file']])('uses the document kind for %s', (name, icon) => {
+  expect(searchFileIcon(name)).toBe(icon);
+});
+
+it('updates filter labels when the interface language changes', async () => {
+  show(); type('solar');
+  await screen.findByRole('combobox', { name: 'Date Range' });
+  act(() => setLanguage('si'));
+  fireEvent.click(screen.getByRole('combobox', { name: 'දින පරාසය' }));
+  expect(screen.getByRole('option', { name: 'පසුගිය සතිය' })).toBeTruthy();
 });
