@@ -5,6 +5,20 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-02 — 0.2.79: images in the AI Assistant
+
+You can now give the AI Assistant pictures — screenshots, photos of documents, scans (#59):
+
+- **Add images** with the image button, by dropping them on the panel, or by pasting. Thumbnails show before sending, with a large preview and Remove. PNG, JPEG, WebP, GIF and BMP, up to 10 MB each and 5 per message; anything refused says why.
+- **Extract Text** reads English, Sinhala and Tamil — also mixed — on this computer, keeps lines and paragraphs, and has Copy Text. Words it is unsure of are underlined; what it cannot read says `[unreadable]` instead of being guessed. The first use downloads about 5.5 MB of language data from `cdn.jsdelivr.net` (each file's size and checksum are verified); firewalled sites need to allow that host.
+- **Ask about an image** and the question goes to a model your administrator has marked as able to read images — only online, and only when online fallback is on in AI Assistant settings. The Local AI engine cannot look at images yet, so without an online vision model a card offers Extract Text, answering from the image's text on this computer, the settings, or Local AI setup. Your question and images stay in the box.
+- Progress reads Reading image → Extracting text → Preparing reply. Stop or a failure puts the question and images back; Try again resends them.
+- Text inside an image is treated as something to read, never as instructions to the assistant.
+
+Needs the server update (AI module) and an administrator ticking **Images** on a vision-capable model in AI settings.
+
+---
+
 ## 2026-10-02 — 0.2.78: direct calls from Chat, separate from meetings
 
 Voice and video calls from a conversation are their own thing now — no meeting invitation, room link or calendar event (#113):

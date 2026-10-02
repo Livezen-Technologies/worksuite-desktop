@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from 'react';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { useStickToBottom } from '../../components/useStickToBottom';
@@ -9,8 +9,10 @@ import { useStore } from '../../core/store';
 import { navigate, tabsStore } from '../../core/tabs';
 import { ActionCard } from './ActionCard';
 import { LocalSetup } from './LocalSetup';
-import { useAssistant, type PendingAction, type Surface } from './assistant';
-import { createAskSession, phaseLabel, type AskEntry, type AskSession } from './session';
+import { useAssistant, useVision, type PendingAction, type Surface } from './assistant';
+import { ComposerImages, ImageSteps, NoVisionCard, ReadCard, SentImages } from './ImageParts';
+import { createAskSession, phaseLabel, type AskEntry, type AskSession, type ImageMode } from './session';
+import { MAX_IMAGES, routeImages, stepLabel } from './vision';
 import { effective, personalOff, toolAllowed, useLocalTools, useOrgAccess } from './tools';
 import { guideFollowUp, intentContext, requestIntent } from './intent';
 import { salesAccess } from './sales';
@@ -66,7 +68,7 @@ export function AskPanel({
   const [own] = useState(() => (given ? null : createAskSession()));
   const session = given ?? own!;
   const st = useStore(session.store, (s) => s);
-  const { entries, text, busy, phase, engine, streaming, useTab, files, fileError } = st;
+  const { entries, text, busy, phase, engine, streaming, useTab, files, fileError, images, imageProblems, step, imageMode } = st;
   const set = session.store.set;
   const input = useRef<HTMLTextAreaElement>(null);
   // Local AI (WS-SRS-LAI): the model on this computer, when one is installed — also offline.
@@ -79,6 +81,19 @@ export function AskPanel({
   const fallbackOn = useStore(app, (s) => s.prefs?.ai.onlineFallback ?? true);
   const enabled = availability.data ? availability.data.enabled : !availability.isError;
   const online = fallbackOn && !offline && enabled;
+  // Images (worksuite-desktop#59): attached in the assistant beside the tabs; read on this computer, and looked at only
+  // by an online model the server verified as reading images, when online fallback allows it.
+  const imagesOn = surface === 'assistant.panel';
+  const vision = useVision(imagesOn && online);
+  const imageRoute = routeImages({
+    fallbackOn,
+    offline,
+    enabled,
+    vision: vision.data ?? (vision.isLoading ? { available: false, reason: 'WorkSuite is still checking whether an online model can read images. Try again in a moment.' } : undefined),
+    localText: !!localModel,
+  });
+  const picker = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
   const onlineWhy = online
     ? null
     : !fallbackOn
@@ -127,7 +142,37 @@ export function AskPanel({
   const [helpOpen, setHelpOpen] = useState(false);
   const [support, setSupport] = useState<{ kind: SupportKind; question?: string } | null>(null);
   const languageNote = language !== 'en' ? ` Answer in ${(LANGUAGES.find((l) => l.id === language)?.label ?? language).replace(/^.*\((.*)\)$/, '$1')}.` : '';
-  const base = () => ({ surface, refs, local, online, onlineWhy, selection, localTools, moduleAccess: personalOff(accessPrefs, 'worksuite'), sales: salesAccess(local ? 'local' : 'worksuite', org.data, accessPrefs, !offline) });
+  const base = () => ({ surface, refs, local, online, onlineWhy, selection, localTools, moduleAccess: personalOff(accessPrefs, 'worksuite'), sales: salesAccess(local ? 'local' : 'worksuite', org.data, accessPrefs, !offline), imageRoute });
+  const sendImages = (mode: ImageMode) => {
+    toEnd();
+    const sent = session.sendImages({ ...base(), context: languageNote ? languageNote.trim() : undefined }, mode);
+    if (mode !== 'extract') onSent?.();
+    return sent;
+  };
+  const addImages = (list: FileList | File[] | null | undefined) => {
+    const all = [...(list ?? [])];
+    if (all.length) void session.addImages(all);
+  };
+  const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const pasted = [...e.clipboardData.files];
+    if (!imagesOn || !pasted.length) return;
+    // A screenshot is pasted as an image; text that comes with it (from a document) still pastes as text.
+    if (!e.clipboardData.types.includes('text/plain')) e.preventDefault();
+    addImages(pasted);
+  };
+  const dropping = (e: DragEvent) => imagesOn && e.dataTransfer.types.includes('Files');
+  const onDragOver = (e: DragEvent<HTMLDivElement>) => {
+    if (!dropping(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setDragging(true);
+  };
+  const onDrop = (e: DragEvent<HTMLDivElement>) => {
+    if (!dropping(e)) return;
+    e.preventDefault();
+    setDragging(false);
+    addImages(e.dataTransfer.files);
+  };
   const openGuide = (g: Guide, question: string | null = null) => {
     toEnd();
     setHelpOpen(false);
@@ -136,6 +181,7 @@ export function AskPanel({
 
   const send = () => {
     const q = text.trim();
+    if (images.length && !busy) return sendImages('ask');
     if (!q || busy) return Promise.resolve();
     // Asking is looking at the answer: back to the end, following again, from wherever the reader had scrolled.
     toEnd();
@@ -185,7 +231,19 @@ export function AskPanel({
   const lastAnswer = [...entries].reverse().find((x) => x.role === 'assistant' && !x.error)?.text ?? null;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div
+      className={cx('relative flex min-h-0 flex-1 flex-col gap-3', dragging && 'rounded-[12px] outline-2 outline-offset-2 outline-primary outline-dashed')}
+      onDragOver={onDragOver}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+      }}
+      onDrop={onDrop}
+    >
+      {dragging ? (
+        <p role="status" className="pointer-events-none absolute inset-x-0 top-2 z-10 mx-auto w-fit rounded-full bg-primary px-3 py-1 text-[12px] font-semibold text-white shadow-md">
+          Drop images to attach them
+        </p>
+      ) : null}
       {off ? (
         <div role="status" className="space-y-2 rounded-[10px] bg-warning-bg px-3 py-2 text-[12.5px] text-[#7A4308] dark:text-warning">
           <p>{off}</p>
@@ -234,7 +292,20 @@ export function AskPanel({
           ) : e.noGuide ? (
             <NoGuideCard key={i} question={e.question ?? ''} onAsk={!busy && (local || online) ? () => void askAnyway(e.question ?? '') : undefined} onSupport={(kind, q) => setSupport({ kind, question: q })} />
           ) : (
-            <Bubble key={i} e={e} elsewhere={reviewElsewhere} onRetry={e.retry && i === entries.length - 1 && !busy ? () => void session.retry() : undefined} onSetup={surface === 'assistant.panel' ? () => navigate('/settings/local-ai') : undefined} onSettle={session.settle} />
+            e.noVision ? (
+              <NoVisionCard
+                key={i}
+                route={e.noVision}
+                hasImages={images.length > 0}
+                busy={busy}
+                onExtract={() => void sendImages('extract')}
+                onLocalText={() => void sendImages('localText')}
+                onSettings={() => navigate('/settings/ai')}
+                onSetup={surface === 'assistant.panel' ? () => navigate('/settings/local-ai') : undefined}
+              />
+            ) : (
+              <Bubble key={i} e={e} elsewhere={reviewElsewhere} onRetry={e.retry && i === entries.length - 1 && !busy ? () => void session.retry() : undefined} onSetup={surface === 'assistant.panel' ? () => navigate('/settings/local-ai') : undefined} onSettle={session.settle} />
+            )
           )
         ))}
         {/* A growing answer is not read out word by word: the whole one is, once it lands. */}
@@ -244,7 +315,9 @@ export function AskPanel({
           </div>
         ) : null}
         {/* From the moment the question goes until the answer starts to show; read out once, as it appears. */}
-        {busy && !streaming ? (
+        {busy && !streaming && step && imageMode ? (
+          <ImageSteps step={step} mode={imageMode} />
+        ) : busy && !streaming ? (
           <p data-testid="ai-thinking" className="flex items-center gap-2 text-[13px] text-ink-2">
             <Icon name="sparkles" size={16} aria-hidden className="shrink-0 text-teal motion-safe:animate-pulse" />
             {t('ai.thinking')}
@@ -301,6 +374,18 @@ export function AskPanel({
           </div>
         ) : null}
         {fileError ? <p role="alert" className="text-[12px] text-danger">{fileError}</p> : null}
+        <ComposerImages images={images} onRemove={(id) => session.removeImage(id)} disabled={busy} />
+        {imageProblems.length ? (
+          <div role="alert" className="flex items-start gap-1.5 rounded-[8px] bg-danger-bg px-2.5 py-1.5 text-[12px] text-danger">
+            <Icon name="alert" size={14} className="mt-0.5 shrink-0" />
+            <ul className="min-w-0 flex-1 space-y-0.5">
+              {imageProblems.map((p, i) => (
+                <li key={i}>{p}</li>
+              ))}
+            </ul>
+            <button type="button" onClick={() => set({ imageProblems: [] })} aria-label="Dismiss" className="shrink-0 hover:text-ink"><Icon name="x" size={13} /></button>
+          </div>
+        ) : null}
         {/* The Chat composer's box: the field and its buttons in one bordered, focus-ringed frame. */}
         <div className={cx('relative flex items-end gap-1 rounded-[12px] border px-2 py-1.5 transition-colors', off ? 'border-line bg-subtle/60' : 'border-line bg-surface focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15')}>
           {surface === 'assistant.panel' && rules?.localFiles && online ? (
@@ -308,21 +393,54 @@ export function AskPanel({
               <Icon name="paperclip" size={18} />
             </button>
           ) : null}
+          {imagesOn ? (
+            <>
+              <input
+                ref={picker}
+                type="file"
+                multiple
+                accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,.png,.jpg,.jpeg,.webp,.gif,.bmp"
+                className="hidden"
+                tabIndex={-1}
+                aria-hidden
+                onChange={(e) => {
+                  addImages(e.target.files);
+                  e.target.value = '';
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => picker.current?.click()}
+                disabled={busy || images.length >= MAX_IMAGES}
+                className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle hover:text-ink disabled:opacity-50"
+                aria-label="Attach images"
+                title={images.length >= MAX_IMAGES ? 'Up to 5 images can go with one message' : 'Attach images (or paste, or drop them here)'}
+              >
+                <Icon name="image" size={18} />
+              </button>
+            </>
+          ) : null}
           <textarea
             ref={input}
             value={text}
             onChange={(e) => set({ text: e.target.value.slice(0, 4000) })}
             onKeyDown={onKey}
+            onPaste={onPaste}
             rows={1}
             autoFocus={autoFocus}
             disabled={!!off}
-            placeholder={selection ? 'Ask about the selected text' : 'Ask the assistant'}
+            placeholder={images.length ? 'Ask about the image, or choose Extract Text' : selection ? 'Ask about the selected text' : 'Ask the assistant'}
             aria-label="Your question"
             className="bare-focus field-sizing-content max-h-40 min-h-[34px] min-w-0 flex-1 resize-none bg-transparent px-1 py-[7px] text-[13.5px] text-ink outline-none"
           />
           {busy ? (
             <button type="button" onClick={() => session.cancel()} className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] border border-line text-ink hover:bg-subtle" aria-label={t('ai.stop')} title={t('ai.stop')}>
               <Icon name="stop" size={14} />
+            </button>
+          ) : null}
+          {images.length && !busy ? (
+            <button type="button" onClick={() => void sendImages('extract')} className="flex h-[34px] shrink-0 items-center gap-1 rounded-[9px] border border-line px-2.5 text-[12.5px] font-semibold text-ink hover:bg-subtle" title="Read the text in the images, on this computer">
+              <Icon name="scan" size={15} /> Extract Text
             </button>
           ) : null}
           <button type="button" onClick={() => void send()} disabled={busy || !text.trim() || !!off} className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] bg-primary text-white hover:bg-primary-hover disabled:bg-subtle disabled:text-ink-3" aria-label="Send" title="Send (Enter)">
@@ -333,7 +451,7 @@ export function AskPanel({
           {/* Where the next answer comes from, said plainly — never a promise the mode cannot keep (worksuite-desktop#53). */}
           <span data-testid="ai-mode" className="min-w-0 flex-1" title={viaLocal ? (localTools ? 'Answered on this computer. The WorkSuite data it reads, and the changes it prepares, come from WorkSuite as you.' : 'Answered on this computer; your question stays here.') + (online ? ' If it cannot answer, online AI does.' : '') : 'Your question, and the files and tab you include, are sent to WorkSuite AI.'}>
             <Icon name={(active ? engine === 'local' : viaLocal) ? 'cpu' : 'sparkles'} size={11} className="mr-1 inline align-[-1px]" />
-            {active ? phaseLabel(phase, engine) : `${phaseLabel('idle', viaLocal ? 'local' : 'online')}${viaLocal && localTools ? ' · WorkSuite data from the server' : ''} · Enter to send`}
+            {active ? (step ? stepLabel(step) : phaseLabel(phase, engine)) : `${phaseLabel('idle', viaLocal ? 'local' : 'online')}${viaLocal && localTools ? ' · WorkSuite data from the server' : ''} · Enter to send`}
           </span>
           <button type="button" onClick={() => setHelpOpen(!helpOpen)} aria-expanded={helpOpen} className="flex shrink-0 items-center gap-1 font-semibold text-ink-2 hover:text-ink">
             <Icon name="help" size={12} /> Help &amp; Guide
@@ -352,8 +470,17 @@ export function AskPanel({
 
 function Bubble({ e, elsewhere, onRetry, onSetup, onSettle }: { e: AskEntry; elsewhere?: () => void; onRetry?: () => void; onSetup?: () => void; onSettle?: (a: PendingAction) => void }) {
   if (e.role === 'user') {
-    return <p className="ml-8 self-end whitespace-pre-wrap rounded-[12px] bg-primary px-3 py-2 text-[13px] text-white selectable">{e.text}</p>;
+    const said = <p className="ml-8 self-end whitespace-pre-wrap rounded-[12px] bg-primary px-3 py-2 text-[13px] text-white selectable">{e.text}</p>;
+    return e.images?.length ? (
+      <div className="ml-8 flex flex-col items-end gap-1.5 self-end">
+        <SentImages images={e.images} />
+        {said}
+      </div>
+    ) : (
+      said
+    );
   }
+  if (e.read) return <ReadCard reads={e.read} text={e.text} />;
   if (e.stopped) {
     return (
       <div className="space-y-1.5">
@@ -400,7 +527,11 @@ function Bubble({ e, elsewhere, onRetry, onSetup, onSettle }: { e: AskEntry; els
           ))}
         </div>
       ) : null}
-      {e.local ? (
+      {e.fromImageText ? (
+        <span title="The model on this computer cannot see pictures: it answered from the text read in the image." className="inline-flex items-center gap-1 rounded-full bg-subtle px-2 py-0.5 text-[11px] text-ink-2">
+          <Icon name="cpu" size={11} /> Processed locally · from the text in the image
+        </span>
+      ) : e.local ? (
         <span className="inline-flex items-center gap-1 rounded-full bg-subtle px-2 py-0.5 text-[11px] text-ink-2">
           <Icon name="cpu" size={11} /> Processed locally
         </span>

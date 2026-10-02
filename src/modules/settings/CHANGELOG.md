@@ -8,6 +8,10 @@ the root CHANGELOG.md.
 
 - Modernized global search filters, responsive result details, file metadata and stable selection (#129).
 
+## 1.9.3 — 2026-10-02
+
+- Sinhala and Tamil text for images in the AI Assistant (#59).
+
 ## 1.9.2 — 2026-10-02
 
 - Sinhala and Tamil text for the new call states (#113).
