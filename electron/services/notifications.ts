@@ -192,6 +192,7 @@ export class NotificationService {
       void this.refreshCounts();
       // The list too, so one the realtime push missed (asleep, reconnecting) still pops up (worksuite-desktop#16).
       void this.refreshList(true);
+      void this.catchUpChat();
     }, 60_000);
     this.pollTimer.unref?.();
     // Mail has no realtime events; its unread count is polled, gently — the
@@ -660,6 +661,9 @@ export class NotificationService {
         }
       }
     } catch (e) {
+      // Resume can beat the network coming back. Keep the window for the next
+      // poll/resync; already delivered message IDs suppress partial duplicates.
+      if (this.userId === me) this.markGap(gap);
       log.debug('chat catch-up failed', { code: isDesktopError(e) ? e.code : String(e) });
     }
   }

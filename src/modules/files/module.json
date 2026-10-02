@@ -1,5 +1,7 @@
 {
     "module": "files",
-    "version": "1.5.0",
-    "paths": []
+    "version": "1.6.0",
+    "paths": [
+        "electron/services/api-proxy.ts"
+    ]
 }

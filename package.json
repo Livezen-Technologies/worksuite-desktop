@@ -42,6 +42,7 @@
     "@embedpdf/pdfium": "2.15.1",
     "@transcribe/shout": "^1.0.7",
     "@transcribe/transcriber": "^3.0.1",
+    "hls.js": "1.6.16",
     "livekit-client": "^2.22.3",
     "node-llama-cpp": "^3.22.1",
     "pdfjs-dist": "^6.3.289",
