@@ -16,7 +16,7 @@ describe('the AI Assistant settings (#61)', () => {
 
   it('give settings saved by an older version the new fields, keeping what was chosen', () => {
     const ai = new SettingsService(dbWith({ ai: { quickAsk: false, shortcut: 'Alt+Space', insert: false, dockAtStart: true, language: 'Tamil' } })).effective().ai;
-    expect(ai).toEqual({ quickAsk: false, shortcut: 'Alt+Space', insert: false, dockAtStart: true, language: 'Tamil', display: 'drawer', sound: false, moduleAccess: { worksuite: {}, local: {} }, onlineFallback: true });
+    expect(ai).toEqual({ quickAsk: false, shortcut: 'Alt+Space', insert: false, dockAtStart: true, language: 'Tamil', display: 'drawer', sound: false, moduleAccess: { worksuite: {}, local: {} }, onlineFallback: true, autoMinimize: false });
   });
 
   it('keep a chosen display mode and sound', () => {

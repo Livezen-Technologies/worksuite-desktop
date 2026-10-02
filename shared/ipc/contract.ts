@@ -75,6 +75,7 @@ import type {
   DiagnosticCheck,
   Draft,
   NotificationItem,
+  NotificationPermission,
   OfflineMutation,
   Preferences,
   PreferenceLock,
@@ -144,6 +145,8 @@ export const preferencesPatchSchema = z
     lockedAnswerCalls: z.boolean(),
     lockedShowCallerDetails: z.boolean(),
     lockedAllowChat: z.boolean(),
+    lockedNotificationSender: z.boolean(),
+    lockedNotificationPreview: z.boolean(),
     openFilesLocally: z.enum(['ask', 'always', 'never']),
     mailCacheDays: z.union([z.literal(7), z.literal(30), z.literal(90), z.literal(0)]),
     tabSuspendMinutes: z.number().int().min(5).max(480),
@@ -167,6 +170,7 @@ export const preferencesPatchSchema = z
         local: z.record(z.string().regex(/^[a-z][a-z0-9_]{0,31}$/), z.object({ read: z.boolean(), write: z.boolean() })),
       }),
       onlineFallback: z.boolean(),
+      autoMinimize: z.boolean(),
     }),
     // The local folder is not here: only the main process's folder dialog sets it.
     meetRecording: z.object({
@@ -718,6 +722,7 @@ export const contract = {
   'notifications:markAllRead': ch(none, { session: true }),
   'notifications:pause': ch(z.object({ minutes: z.number().int().min(0).max(60 * 24 * 7).nullable() }), { session: true }),
   'notifications:test': ch(none, { session: true, rate: 1 }),
+  'notifications:permission': ch(none, { session: true }),
   /** The bell's count again, now: after the notification centre read, snoozed or archived something. */
   'notifications:refresh': ch(none, { session: true, rate: 10 }),
 
@@ -1252,6 +1257,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'notifications:markAllRead': void;
   'notifications:pause': { pausedUntil: string | null };
   'notifications:test': boolean;
+  'notifications:permission': NotificationPermission;
   'notifications:refresh': void;
   'clipboard:readForPaste': { text: string | null; image: string | null; files: PickedFile[] };
   'print:print': boolean;

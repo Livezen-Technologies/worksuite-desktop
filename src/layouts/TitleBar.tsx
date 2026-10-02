@@ -11,6 +11,7 @@ import { ActiveCalls } from '../app/ActiveCalls';
 import { CountBadge, cx } from '../components/ui';
 import { UserPicture, useMe } from '../components/UserPicture';
 import { unreadLabel, useAssistantActivity } from '../app/overlays/AiDock';
+import { phaseLabel } from '../modules/ai/session';
 
 /**
  * Title / top bar, 52 px (§4.12 shared shell components): WorkSuite mark,
@@ -29,8 +30,8 @@ export function TitleBar() {
   const hasAi = useCanOpen('ai');
   // The header button is the drawer's (Settings › AI Assistant › Display mode); it says when an answer is on its way or came in unseen.
   const aiDisplay = useAiDisplay();
-  const { busy: aiBusy, unread: aiUnread } = useAssistantActivity();
-  const aiState = dock === 'ai' ? null : aiBusy ? t('ai.working') : aiUnread ? unreadLabel(aiUnread) : null;
+  const { busy: aiBusy, unread: aiUnread, phase: aiPhase, engine: aiEngine } = useAssistantActivity();
+  const aiState = dock === 'ai' ? null : aiBusy || aiPhase === 'needsInput' ? phaseLabel(aiPhase, aiEngine) : aiUnread ? unreadLabel(aiUnread) : null;
   const hasChat = useCanOpen('chat');
 
   const network = status?.network ?? 'ONLINE';

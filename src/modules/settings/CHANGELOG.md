@@ -4,9 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
-## 1.8.0 — 2026-10-02
+## 1.9.0 — 2026-10-02
 
 - Add a shared Sinhala/Tamil localization pipeline, first-time language selection, per-user language persistence, locale formatting and reproducible translation audits. Catalogs are drafts; full translation and fluent review remain pending (#60).
+
+## 1.8.0 — 2026-10-02
+
+**Added**
+
+- Settings › AI Assistant › Auto-minimize after sending, and an AI Assistant row under Notifications › By app to mute the assistant's notices (worksuite-desktop#110).
+- Security › Access while locked: show the sender, and show a preview, in notifications while WorkSuite is locked (both off by default, within the organisation's minimum) (worksuite-desktop#114).
 
 ## 1.7.2 — 2026-10-02
 

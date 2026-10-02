@@ -10,7 +10,7 @@ import { navigate, tabsStore } from '../../core/tabs';
 import { ActionCard } from './ActionCard';
 import { LocalSetup } from './LocalSetup';
 import { useAssistant, type PendingAction, type Surface } from './assistant';
-import { createAskSession, type AskEntry, type AskSession } from './session';
+import { createAskSession, phaseLabel, type AskEntry, type AskSession } from './session';
 import { effective, personalOff, toolAllowed, useLocalTools, useOrgAccess } from './tools';
 import { guideFollowUp, intentContext, requestIntent } from './intent';
 import { salesAccess } from './sales';
@@ -41,6 +41,8 @@ export function AskPanel({
   onOpen,
   reviewElsewhere,
   autoFocus,
+  onMinimize,
+  onSent,
 }: {
   surface: Surface;
   /** The conversation to show; a private one when none is given. */
@@ -55,12 +57,16 @@ export function AskPanel({
   /** Where a card is reviewed when it cannot be confirmed here (Quick Ask). */
   reviewElsewhere?: () => void;
   autoFocus?: boolean;
+  /** The floating widget: Minimize while working puts it down to its launcher, the answer still on its way. */
+  onMinimize?: () => void;
+  /** A question went to the assistant (not one a guide answered): for Auto-minimize after sending. */
+  onSent?: () => void;
 }) {
   const { availability, rules } = useAssistant(surface);
   const [own] = useState(() => (given ? null : createAskSession()));
   const session = given ?? own!;
   const st = useStore(session.store, (s) => s);
-  const { entries, text, busy, streaming, useTab, files, fileError } = st;
+  const { entries, text, busy, phase, engine, streaming, useTab, files, fileError } = st;
   const set = session.store.set;
   const input = useRef<HTMLTextAreaElement>(null);
   // Local AI (WS-SRS-LAI): the model on this computer, when one is installed — also offline.
@@ -152,7 +158,9 @@ export function AskPanel({
       : languageNote
         ? languageNote.trim()
         : undefined;
-    return session.send({ ...base(), context: [requestIntent(q) !== 'general' || entries.some(e => e.guide) ? intentContext(q) : undefined, context].filter(Boolean).join('\n') || undefined });
+    const sent = session.send({ ...base(), context: [requestIntent(q) !== 'general' || entries.some(e => e.guide) ? intentContext(q) : undefined, context].filter(Boolean).join('\n') || undefined });
+    onSent?.();
+    return sent;
   };
   /** No guide covers it: the assistant explains in general terms, and is told this is not a request to act. */
   const askAnyway = (question: string) =>
@@ -172,6 +180,8 @@ export function AskPanel({
     }
   };
 
+  // While a question is on its way, or its answer waits on the person, the status says so; otherwise where the next one goes.
+  const active = busy || phase === 'needsInput';
   const lastAnswer = [...entries].reverse().find((x) => x.role === 'assistant' && !x.error)?.text ?? null;
 
   return (
@@ -224,7 +234,7 @@ export function AskPanel({
           ) : e.noGuide ? (
             <NoGuideCard key={i} question={e.question ?? ''} onAsk={!busy && (local || online) ? () => void askAnyway(e.question ?? '') : undefined} onSupport={(kind, q) => setSupport({ kind, question: q })} />
           ) : (
-            <Bubble key={i} e={e} elsewhere={reviewElsewhere} onRetry={e.retry && i === entries.length - 1 && !busy ? () => void session.retry() : undefined} onSetup={surface === 'assistant.panel' ? () => navigate('/settings/local-ai') : undefined} />
+            <Bubble key={i} e={e} elsewhere={reviewElsewhere} onRetry={e.retry && i === entries.length - 1 && !busy ? () => void session.retry() : undefined} onSetup={surface === 'assistant.panel' ? () => navigate('/settings/local-ai') : undefined} onSettle={session.settle} />
           )
         ))}
         {/* A growing answer is not read out word by word: the whole one is, once it lands. */}
@@ -242,7 +252,14 @@ export function AskPanel({
         ) : null}
         </div>
       </div>
-      {unseen ? (
+      {/* While it works the widget can go down to its launcher; the answer carries on and is waiting there. */}
+      {busy && onMinimize ? (
+        <div className="absolute right-0 bottom-2 left-0 flex justify-center">
+          <button type="button" onClick={onMinimize} className="flex h-8 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-[12px] font-semibold text-ink shadow-md hover:bg-subtle">
+            <Icon name="minus" size={14} /> {t('ai.minimizeWhileWorking')}
+          </button>
+        </div>
+      ) : unseen ? (
         <button type="button" onClick={toEnd} className="absolute bottom-2 left-1/2 flex h-8 -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-[12px] font-semibold text-ink shadow-md hover:bg-subtle">
           <Icon name="arrow-down" size={14} /> Jump to latest
         </button>
@@ -303,8 +320,8 @@ export function AskPanel({
             aria-label="Your question"
             className="bare-focus field-sizing-content max-h-40 min-h-[34px] min-w-0 flex-1 resize-none bg-transparent px-1 py-[7px] text-[13.5px] text-ink outline-none"
           />
-          {streaming !== null ? (
-            <button type="button" onClick={() => session.cancel()} className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] border border-line text-ink hover:bg-subtle" aria-label="Stop" title="Stop">
+          {busy ? (
+            <button type="button" onClick={() => session.cancel()} className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] border border-line text-ink hover:bg-subtle" aria-label={t('ai.stop')} title={t('ai.stop')}>
               <Icon name="stop" size={14} />
             </button>
           ) : null}
@@ -315,8 +332,8 @@ export function AskPanel({
         <div className="flex items-center gap-2 px-1 text-[11px] text-ink-3">
           {/* Where the next answer comes from, said plainly — never a promise the mode cannot keep (worksuite-desktop#53). */}
           <span data-testid="ai-mode" className="min-w-0 flex-1" title={viaLocal ? (localTools ? 'Answered on this computer. The WorkSuite data it reads, and the changes it prepares, come from WorkSuite as you.' : 'Answered on this computer; your question stays here.') + (online ? ' If it cannot answer, online AI does.' : '') : 'Your question, and the files and tab you include, are sent to WorkSuite AI.'}>
-            <Icon name={viaLocal ? 'cpu' : 'sparkles'} size={11} className="mr-1 inline align-[-1px]" />
-            {viaLocal ? (localTools ? 'Processing locally · WorkSuite data from the server' : 'Processing locally') : 'Using online AI'} · Enter to send
+            <Icon name={(active ? engine === 'local' : viaLocal) ? 'cpu' : 'sparkles'} size={11} className="mr-1 inline align-[-1px]" />
+            {active ? phaseLabel(phase, engine) : `${phaseLabel('idle', viaLocal ? 'local' : 'online')}${viaLocal && localTools ? ' · WorkSuite data from the server' : ''} · Enter to send`}
           </span>
           <button type="button" onClick={() => setHelpOpen(!helpOpen)} aria-expanded={helpOpen} className="flex shrink-0 items-center gap-1 font-semibold text-ink-2 hover:text-ink">
             <Icon name="help" size={12} /> Help &amp; Guide
@@ -333,9 +350,24 @@ export function AskPanel({
   );
 }
 
-function Bubble({ e, elsewhere, onRetry, onSetup }: { e: AskEntry; elsewhere?: () => void; onRetry?: () => void; onSetup?: () => void }) {
+function Bubble({ e, elsewhere, onRetry, onSetup, onSettle }: { e: AskEntry; elsewhere?: () => void; onRetry?: () => void; onSetup?: () => void; onSettle?: (a: PendingAction) => void }) {
   if (e.role === 'user') {
     return <p className="ml-8 self-end whitespace-pre-wrap rounded-[12px] bg-primary px-3 py-2 text-[13px] text-white selectable">{e.text}</p>;
+  }
+  if (e.stopped) {
+    return (
+      <div className="space-y-1.5">
+        <span className="inline-flex items-center gap-1 rounded-full bg-subtle px-2 py-0.5 text-[11px] text-ink-2">
+          <Icon name="stop" size={10} /> {t('ai.stopped')}
+        </span>
+        {e.text !== t('ai.stopped') ? <p className="whitespace-pre-wrap text-[13.5px] leading-[1.55] text-ink selectable">{e.text}</p> : null}
+        {onRetry ? (
+          <button type="button" onClick={onRetry} className="flex h-8 items-center gap-1.5 rounded-[8px] border border-line px-3 text-[12.5px] font-semibold text-ink hover:bg-subtle">
+            <Icon name="rotate-cw" size={14} /> {t('ai.retry')}
+          </button>
+        ) : null}
+      </div>
+    );
   }
   if (e.error) {
     return (
@@ -387,7 +419,7 @@ function Bubble({ e, elsewhere, onRetry, onSetup }: { e: AskEntry; elsewhere?: (
           ))}
         </ul>
       ) : null}
-      {cards.filter((c) => c.status !== 'superseded').map((c) => <ActionCard key={c.id} action={c} elsewhere={elsewhere} />)}
+      {cards.filter((c) => c.status !== 'superseded').map((c) => <ActionCard key={c.id} action={c} elsewhere={elsewhere} onChange={onSettle} />)}
     </div>
   );
 }

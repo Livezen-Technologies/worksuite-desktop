@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { categoryVisible } from '@shared/access';
+import { bannerBlock } from '@shared/notification-block';
 import type { Preferences } from '@shared/types';
 import { useVisibleIds } from '../../core/access';
 import { app, updatePrefs } from '../../core/app-state';
@@ -55,6 +56,7 @@ export default function NotificationSettings() {
   const { navigate } = useTab();
   const qc = useQueryClient();
   const prefs = useStore(app, (s) => s.prefs);
+  const status = useStore(app, (s) => s.status);
   const visible = useVisibleIds();
   const q = useQuery({ queryKey: AccountK.notifications, queryFn: ({ signal }) => apiGet<Payload>('/api/notifications/preferences', undefined, signal) });
   const [draft, setDraft] = useState<Prefs | null>(null);
@@ -176,13 +178,14 @@ export default function NotificationSettings() {
         <div className="grid items-start gap-4 lg:grid-cols-2">
           <QuietHours p={p} commit={commit} prefs={prefs} local={local} />
           <Card title={<span className="flex items-center gap-2"><Icon name="monitor" size={16} className="text-ink-3" /> This computer</span>}>
+            <BannerBlocked prefs={prefs} supported={status?.notificationsSupported !== false} pausedUntil={status?.notificationsPausedUntil ?? null} />
             <SettingRow label="Show banners" hint="Notifications appear in the corner of the screen, even with WorkSuite’s window closed.">
               <Switch label="Show banners" checked={prefs.notificationsEnabled} onChange={(v) => local({ notificationsEnabled: v })} />
             </SettingRow>
             <SettingRow label="Sound" hint="A sound with each banner.">
               <Switch label="Sound" checked={prefs.notificationSounds} onChange={(v) => local({ notificationSounds: v })} />
             </SettingRow>
-            <SettingRow label="What banners show" hint="While WorkSuite is locked, banners never show what they are about.">
+            <SettingRow label="What banners show" hint="While WorkSuite is locked, banners say only “New message in WorkSuite.” unless Settings › Security allows the sender or a preview.">
               <Select
                 label="What banners show"
                 value={prefs.notificationPrivacy}
@@ -197,6 +200,7 @@ export default function NotificationSettings() {
             <SettingRow label="Badge count on the app icon" hint="Unread chat and notifications, on the Dock or the taskbar.">
               <Switch label="Badge count on the app icon" checked={prefs.badgeCount !== false} onChange={(v) => local({ badgeCount: v })} />
             </SettingRow>
+            <SystemPermission enabled={prefs.notificationsEnabled} />
             <div className="flex flex-wrap items-center gap-2 pt-3">
               <Button icon="bell" onClick={() => void call('notifications:test').then((ok) => !ok && toast('warning', 'This system does not support notifications. Check its notification settings.'))}>
                 Send a test notification
@@ -209,6 +213,41 @@ export default function NotificationSettings() {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Whether the operating system lets WorkSuite's banners show (#114). Electron
+ * cannot read the per-app permission on macOS or Windows, so this says so,
+ * names where to look, and reports the system's refusal when there was one.
+ */
+export function SystemPermission({ enabled }: { enabled: boolean }) {
+  const q = useQuery({ queryKey: ['notifications', 'permission'], queryFn: () => call('notifications:permission'), enabled, refetchInterval: 60_000 });
+  const s = q.data;
+  if (!enabled || !s) return null;
+  return (
+    <p role={s.state === 'unknown' ? undefined : 'alert'} className={cx('mt-2 rounded-[8px] px-3 py-2 text-[12px]', s.state === 'unknown' ? 'bg-subtle text-ink-3' : 'bg-danger-bg text-danger')}>
+      {s.detail}
+      {s.failure ? <span className="block font-mono text-[11px]">{s.failure}</span> : null}
+    </p>
+  );
+}
+
+/**
+ * Why banners are not showing on this computer, when they are not (worksuite-desktop#97): a meeting invitation that
+ * only reached the bell is explained here, with what turns banners back on.
+ */
+export function BannerBlocked({ prefs, supported, pausedUntil, now = new Date() }: { prefs: Preferences; supported: boolean; pausedUntil: string | null; now?: Date }) {
+  const all = bannerBlock(prefs, { supported, pausedUntil, now });
+  const why = all ?? bannerBlock(prefs, { supported, pausedUntil, now }, 'calendar');
+  if (!why) return null;
+  return (
+    <p role="status" data-banner-blocked className="m-0 mb-2 flex items-start gap-2 rounded-[8px] bg-warning-bg px-3 py-2 text-[12.5px] text-ink">
+      <Icon name="bell-off" size={15} className="mt-px shrink-0 text-warning" />
+      <span>
+        <b>{all ? 'Banners are blocked on this computer.' : 'Meeting banners are blocked on this computer.'}</b> {why}
+      </span>
+    </p>
   );
 }
 

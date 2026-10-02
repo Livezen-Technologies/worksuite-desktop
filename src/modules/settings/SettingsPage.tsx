@@ -281,6 +281,7 @@ const MODULE_TOGGLES = [
   ['files', 'Files'],
   ['support', 'Support'],
   ['salon', 'SalonMate front desk'],
+  ['ai', 'AI Assistant'],
   ['system', 'System alerts'],
 ] as const;
 
@@ -450,7 +451,12 @@ function AiSection({ prefs }: { prefs: Preferences }) {
           <Switch label="Allow online fallback" checked={a.onlineFallback ?? true} onChange={(v) => set({ onlineFallback: v })} />
         </span>
       </Row>
-      <Row label="Sound for new answers" hint="A short chime when an answer arrives while the assistant is closed or minimized.">
+      {a.display === 'widget' ? (
+        <Row label="Auto-minimize after sending" hint="The widget goes down to its button once you send a question. The answer keeps coming, and the button tells you when it is ready.">
+          <Switch label="Auto-minimize after sending" checked={a.autoMinimize ?? false} onChange={(v) => set({ autoMinimize: v })} />
+        </Row>
+      ) : null}
+      <Row label="Sound for new answers" hint="A short chime when an answer arrives while the assistant is closed or minimized. Off while notifications are off, paused or in Do not disturb.">
         <Switch label="Sound for new answers" checked={a.sound} onChange={(v) => set({ sound: v })} />
       </Row>
       <Row label="Quick Ask" hint="Opens over any app with the text you have selected there. The selection is read only when you press the shortcut.">
@@ -502,7 +508,9 @@ function SecuritySection({ prefs }: { prefs: Preferences }) {
       <H title="Access While Locked" hint="Applies to WorkSuite’s app lock. It does not bypass the operating system lock screen. Organization policies may restrict these options." />
       <Toggle k="lockedAnswerCalls" prefs={prefs} label="Answer Calls" />
       <Toggle k="lockedShowCallerDetails" prefs={prefs} label="Show Caller Details" />
-      <Toggle k="lockedAllowChat" prefs={prefs} label="Allow Chat" />
+      <Toggle k="lockedAllowChat" prefs={prefs} label="Allow Chat" hint="Clicking a message notification opens a restricted chat window. Off: WorkSuite asks you to unlock, then opens the conversation." />
+      <Toggle k="lockedNotificationSender" prefs={prefs} label="Show Sender in Notifications" hint="Off: message notifications only say “New message in WorkSuite.”" />
+      <Toggle k="lockedNotificationPreview" prefs={prefs} label="Show Message Preview in Notifications" hint="Never more than Notifications › What banners show allows." />
       <PinRow set={!!lockState?.pin} />
       <Row label="Unlock with" hint={`Your WorkSuite password${lockState?.pin ? ', your PIN' : ''}${lockState?.biometric === 'touch-id' ? ' or Touch ID' : ''}.${lockState?.biometric === 'touch-id' ? '' : ' Windows Hello support is planned.'}`}>
         <Button icon="lock" onClick={() => void call('security:lock')}>

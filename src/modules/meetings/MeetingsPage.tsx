@@ -7,12 +7,12 @@ import { useTab, useTabTitle } from '../../core/tab-context';
 import { addDays, dateLabel, dayKey, parseTs, timeLabel, todayInZone } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Empty, ErrorNote, Spinner, cx } from '../../components/ui';
-import { providerLabel, RSVP_LABEL, TYPE_COLOUR, TYPES, typeLabel, type Can, type Meeting, type MeetingRoom, type Rsvp } from './api';
+import { matchesSource, providerLabel, RSVP_LABEL, SOURCE_FILTERS, TYPE_COLOUR, TYPES, typeLabel, type Can, type Meeting, type MeetingRoom, type Rsvp } from './api';
 import { MeetingDetail } from './MeetingDetail';
 import { ScheduleDialog } from './ScheduleDialog';
 import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';
-import { useInvitationAnswer } from '../calendar/conflicts';
+import { invitationsChanged, useInvitationAnswer } from '../calendar/conflicts';
 
 type Tab = 'dashboard' | 'mine' | 'invitations' | 'rooms' | 'recurring';
 const TABS: Array<[Tab, string]> = [
@@ -124,14 +124,19 @@ function useMeetings(scope: string, source = '') {
 }
 
 function MeetingList({ scope, q, title, typeFilter, onOpen }: { scope: string; q: string; title: string; typeFilter?: boolean; onOpen: (id: number) => void }) {
-  const list = useMeetings(scope);
+  // "Related to": tender meetings, CRM meetings… (#100, #101) — asked of the server, and held to on the rows.
+  const [source, setSource] = useState('');
+  const list = useMeetings(scope, source);
   const [type, setType] = useState('');
   const needle = q.trim().toLowerCase();
-  const rows = (list.data?.meetings ?? []).filter((m) => (!type || m.type === type) && (!needle || [m.title, m.meeting_no, m.where ?? ''].some((v) => v.toLowerCase().includes(needle))));
+  const rows = (list.data?.meetings ?? []).filter((m) => matchesSource(m, source) && (!type || m.type === type) && (!needle || [m.title, m.meeting_no, m.where ?? '', m.source?.label ?? ''].some((v) => v.toLowerCase().includes(needle))));
   return (
     <section className="flex flex-col gap-2 rounded-[12px] border border-line bg-surface p-4">
-      <div className="flex items-center">
+      <div className="flex items-center gap-1.5">
         <h2 className="flex-1 text-[15px] font-bold text-ink">{title}</h2>
+        <Select aria-label="Related to" value={source} onChange={(e) => setSource(e.target.value)} className="h-8 rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink">
+          {SOURCE_FILTERS.map(([k, v]) => <option key={k} value={k}>{k ? v : 'Related to anything'}</option>)}
+        </Select>
         {typeFilter ? (
           <Select aria-label="Type" value={type} onChange={(e) => setType(e.target.value)} className="h-8 rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink">
             <option value="">Any type</option>
@@ -187,7 +192,8 @@ function Invitations({ onOpen, compact }: { onOpen: (id: number) => void; compac
   const list = useMeetings('upcoming');
   const answer = useMutation({
     mutationFn: ({ id, rsvp }: { id: number; rsvp: Rsvp }) => apiPost(`/api/meetings/${id}/rsvp`, { rsvp }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['meetings'] }),
+    // Its count here, Home's Waiting for me and the Calendar drop it together (#97).
+    onSuccess: () => invitationsChanged(qc),
     onError: (e) => toast('error', errorMessage(e)),
   });
   const rows = (list.data?.meetings ?? []).filter((m) => m.my_rsvp === 'no_response' && m.my_role !== 'organizer');

@@ -111,11 +111,14 @@ describe('Local AI calling module functions', () => {
     expect(m.seen[1]!.at(-1)).toMatch(/these details are needed: Amount/);
     expect(first.text).toBe('How much is the invoice for?');
     expect(first.actions).toEqual([]);
+    // The answer waits on the person (worksuite-desktop#110): Needs your input, until they give the amount.
+    expect(first.asked).toBe(true);
 
     const m2 = model(['<call>{"name":"billing.create_invoice","arguments":{"customer":"Acme","amount":1200}}</call>', 'The invoice is ready for you to review below.']);
     const second = await runLocalAgent({ messages: [{ role: 'user', content: '1200' }], tools: [newInvoice], allow: () => null, ask: m2.ask, onText: () => undefined, onCancelSet: () => undefined, run: async () => ({ ok: true, pending_action: draft }) });
     expect(m2.seen[1]!.at(-1)).toMatch(/ready for the person to review and confirm \(not applied yet\)/);
     expect(second.actions).toEqual([draft]);
+    expect(second.asked).toBe(false);
   });
 
   it('a switched-off module, an unknown function, and no connection are explained, not run', async () => {
