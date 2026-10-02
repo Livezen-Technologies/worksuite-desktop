@@ -11,7 +11,8 @@ import { Button, Modal, cx } from '../../components/ui';
 import { CallAvatar, useNow } from '../calls/parts';
 import { ScreenPicker } from '../calls/ScreenPicker';
 import { CallWorkspace } from '../calls/ui/CallWorkspace';
-import type { ControlButton, MenuEntry } from '../calls/ui/CoreCallControls';
+import type { ControlButton } from '../calls/ui/CoreCallControls';
+import { meetMoreSections } from './moreMenu';
 import { personOf } from '../calls/ui/people';
 import { callUi } from '../calls/ui/state';
 import { Thread } from '../chat/Thread';
@@ -157,36 +158,41 @@ export function MeetRoom() {
     // Host controls (#91): the host and co-hosts only.
     ...hostControlsControl(hostControls, () => setHostControls(!hostControls)),
   ];
-  const more: MenuEntry[] = [
-    // Reachable even when their screen is not on the stage (the board is, or the floating card).
-    ...(remote.session ? [{ label: 'Release control', hint: `Of ${remote.session.sharer.name}'s computer`, icon: 'stop', danger: true, onClick: () => void remote.release() }] : []),
-    // Recording (#68): started as Settings › Meet › Recording says; stopped by whoever may record — also after it was turned off (#91).
-    ...(meet.mayRecord || (meet.mayStopRecording && rec && (rec.mine || meet.rec?.cloud || room.isRecording))
-      ? [
-          rec && (rec.mine || meet.rec?.cloud || room.isRecording)
-            ? { label: meet.recordingCommand === 'stopping' ? 'Stopping Recording…' : 'Stop Recording', disabled: meet.recordingCommand === 'starting' || meet.recordingCommand === 'stopping', hint: rec.mine ? 'It is finished and uploaded to your Drive after' : undefined, icon: 'stop', danger: true, onClick: () => void meet.stopRecording() }
-            : { label: meet.recordingCommand === 'starting' ? 'Starting Recording…' : 'Record the meeting', disabled: meet.recordingCommand === 'starting' || meet.recordingCommand === 'stopping', hint: recordHint, icon: 'film', onClick: () => void meet.startRecording() },
-          { label: 'Recording settings…', icon: 'settings', onClick: () => setRecSettings(true) },
-        ]
-      : []),
-    // Transcription (#81): whoever runs the meeting or may record it.
-    ...(meet.liveTx
-      ? [{ label: 'Stop transcription', hint: 'The transcript is kept in the meeting’s details', icon: 'stop', danger: true, onClick: () => void meet.stopTranscription() }]
-      : meet.mayTranscribe && !meet.transcribing
-        ? [{ label: 'Start transcription…', hint: 'English, Sinhala or Tamil', icon: 'file-text', onClick: () => setTranscribing(true) }]
-        : []),
-    ...(meet.canManage ? [{ label: meet.locked ? 'Unlock the meeting' : 'Lock the meeting', hint: meet.locked ? undefined : 'No one new can join', icon: 'lock', onClick: () => void meet.lock(!meet.locked) }] : []),
-    ...(meet.canManage ? [{ label: t('hc.title'), icon: 'shield', onClick: () => setHostControls(true) }] : []),
-    ...(meet.canManage ? [{ label: 'Livestreaming…', icon: 'video' as const, onClick: () => setStreamSettings(true) }] : []),
-    { label: 'Room settings', icon: 'settings', onClick: () => callUi.togglePanel('Settings') },
-    { label: ui.boardOnStage ? 'Board back to the panel' : 'Whiteboard on stage', icon: 'board', onClick: () => callUi.set({ boardOnStage: !ui.boardOnStage, ...(ui.boardOnStage ? {} : { panelOpen: false }) }) },
-    { label: t('act.qa'), icon: 'help', onClick: () => callUi.togglePanel('Q&A') },
-    { label: t('act.polls'), icon: 'chart', onClick: () => callUi.togglePanel('Polls') },
-    { label: 'Notes & minutes', icon: 'file', onClick: () => callUi.togglePanel('Notes') },
-    { label: 'Files', icon: 'paperclip', onClick: () => callUi.togglePanel('Files') },
-    { label: 'Meeting details', icon: 'info', onClick: () => callUi.togglePanel('Info') },
-    { label: 'Copy join link', icon: 'link', onClick: copyLink },
-  ];
+  // More (#124): Meeting Tools and Host Controls, with the reason beside what cannot be used; the workspace adds View & Layout.
+  const more = meetMoreSections(
+    {
+      role: meet.role,
+      canManage: meet.canManage,
+      settings: meet.settings,
+      mayRecord: meet.mayRecord,
+      mayStopRecording: meet.mayStopRecording,
+      recordingActive: !!rec && (rec.mine || !!meet.rec?.cloud || room.isRecording),
+      recordingCommand: meet.recordingCommand,
+      recordHint,
+      recordingMine: !!rec?.mine,
+      mayTranscribe: meet.mayTranscribe,
+      transcribingHere: !!meet.liveTx,
+      transcribingElsewhere: meet.transcribing && !meet.liveTx ? { by: meet.transcribing.by } : null,
+      locked: meet.locked,
+      boardOnStage: ui.boardOnStage,
+      controlling: remote.session ? remote.session.sharer.name : null,
+      words: { hostControls: t('hc.title'), qa: t('act.qa'), polls: t('act.polls') },
+    },
+    {
+      releaseControl: () => void remote.release(),
+      startRecording: () => void meet.startRecording(),
+      stopRecording: () => void meet.stopRecording(),
+      recordingSettings: () => setRecSettings(true),
+      startTranscription: () => setTranscribing(true),
+      stopTranscription: () => void meet.stopTranscription(),
+      setLocked: (v) => void meet.lock(v),
+      hostControls: () => setHostControls(true),
+      livestreaming: () => setStreamSettings(true),
+      panel: (tab) => callUi.togglePanel(tab),
+      toggleBoardOnStage: () => callUi.set({ boardOnStage: !ui.boardOnStage, ...(ui.boardOnStage ? {} : { panelOpen: false }) }),
+      copyLink,
+    },
+  );
 
   const alerts =
     meet.error || meet.liveTx?.error || (meet.canManage && waiting.length) || meet.reactions.length ? (
