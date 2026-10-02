@@ -60,6 +60,8 @@ export interface Incoming {
   sender: string | null;
   link: string | null;
   critical: boolean;
+  /** An incoming call (`chat.call.ringing`), not a message: said as a call, locked or not (worksuite-desktop#113). */
+  call?: boolean;
 }
 
 interface MissedRoom {
@@ -427,11 +429,12 @@ export class NotificationService {
         this.notify({
           id: `call:${String(e.uuid ?? e.event_id ?? Date.now())}`,
           module: 'chat',
-          title: `Incoming ${String(e.mode ?? 'call')} from ${caller}`,
-          body: e.room_name ? String(e.room_name) : 'WorkSuite call',
+          title: `Incoming ${e.mode === 'video' ? 'video' : 'voice'} call from ${caller}`,
+          body: e.room_name ? String(e.room_name) : 'Answer or decline in the call window',
           sender: caller,
           link: `/chat?room=${String(e.room_id ?? '')}`,
           critical: true,
+          call: true,
         });
         break;
       }

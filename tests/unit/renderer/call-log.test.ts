@@ -16,9 +16,12 @@ describe('the call log', () => {
     expect(describeCall(call({ direction: 'outgoing', mode: 'video', duration: 720 }))).toEqual({ kind: 'out', line: 'Outgoing video · 12 min', action: 'Call again' });
     expect(describeCall(call({ duration: 240 })).line).toBe('Incoming voice · 4 min');
   });
-  it('a call nobody took is not an "outgoing" one', () => {
-    expect(describeCall(call({ direction: 'outgoing', outcome: 'cancelled' })).line).toBe('No one joined');
+  it('a call nobody took is not an "outgoing" one, and says why (worksuite-desktop#113)', () => {
+    expect(describeCall(call({ direction: 'outgoing', outcome: 'cancelled' })).line).toBe('Cancelled');
+    expect(describeCall(call({ direction: 'outgoing', outcome: 'missed' }))).toEqual({ kind: 'out', line: 'No answer', action: 'Call again' });
     expect(describeCall(call({ direction: 'outgoing', outcome: 'declined' })).line).toBe('Declined');
+    expect(describeCall(call({ direction: 'outgoing', outcome: 'declined', decline_reason: 'busy' })).line).toBe('Busy');
+    expect(describeCall(call({ direction: 'outgoing', outcome: null, status: 'ended' })).line).toBe('No one joined');
   });
   it('a live call is joined', () => {
     expect(describeCall(call({ live: true, mode: 'video' }))).toEqual({ kind: 'live', line: 'Ongoing video call', action: 'Join' });
@@ -42,8 +45,13 @@ describe('a call card in the thread', () => {
   });
 
   it('a call nobody took is missed for them, and "No answer" for the caller', () => {
-    expect(describeCard(card({ call_outcome: 'cancelled' }), false)).toMatchObject({ title: 'Missed voice call', action: 'Call back', tone: 'missed' });
-    expect(describeCard(card({ call_outcome: 'cancelled' }), true)).toMatchObject({ title: 'No answer', action: 'Call again' });
+    expect(describeCard(card({ call_outcome: 'missed' }), false)).toMatchObject({ title: 'Missed voice call', action: 'Call back', tone: 'missed' });
+    expect(describeCard(card({ call_outcome: 'missed' }), true)).toMatchObject({ title: 'No answer', action: 'Call again' });
+  });
+
+  it('a call the caller gave up on is cancelled for them, and still missed for the other side', () => {
+    expect(describeCard(card({ call_outcome: 'cancelled' }), false)).toMatchObject({ title: 'Missed voice call', tone: 'missed' });
+    expect(describeCard(card({ call_outcome: 'cancelled' }), true)).toMatchObject({ title: 'Cancelled call', action: 'Call again' });
   });
 
   it('a declined call is not a missed one', () => {

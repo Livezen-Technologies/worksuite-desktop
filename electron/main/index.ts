@@ -821,8 +821,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     if (!lock.isLocked()) broadcast('realtime:event', e);
     else for (const win of BrowserWindow.getAllWindows()) {
       const scope = scopeFor(win.webContents);
-      const event = e as { type?: string; uuid?: string; outcome?: string };
-      if (!guestWindowIds.has(win.webContents.id) && scope?.uuid && event.type === 'chat.call.stopped' && event.uuid === scope.uuid) win.webContents.send('realtime:event', { type: event.type, uuid: event.uuid, outcome: event.outcome });
+      const event = e as { type?: string; uuid?: string; outcome?: string; reason?: string };
+      if (!guestWindowIds.has(win.webContents.id) && scope?.uuid && event.type === 'chat.call.stopped' && event.uuid === scope.uuid) win.webContents.send('realtime:event', { type: event.type, uuid: event.uuid, outcome: event.outcome, reason: event.reason });
     }
     // `access.changed` (the person's apps changed) and `profile.updated`: fetch the bootstrap again.
     accessWatch.onEvent(e);

@@ -5,12 +5,14 @@ import { apiGet, apiGetMeta, apiPost } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
-import { listStamp } from '../../core/time';
+import { listStamp, parseTs } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Avatar, Empty, ErrorNote, OfflineNote, Spinner, cx } from '../../components/ui';
 import { UserAvatar } from '../../components/UserAvatar';
 import type { ModuleProps } from '../registry';
+import { useNow } from '../calls/parts';
+import { CALL_FILTERS, CallLogList, useCallLog, type CallFilter } from './CallLog';
 import { Details, PRESENCE } from './Details';
 import { NewChat, StarredDialog } from './NewChat';
 import { lastOrRecent, roomFromRoute } from './routes';
@@ -38,7 +40,7 @@ import { useWaAccounts } from './channels/whatsapp';
  * Down the far left, the channel toolbar (worksuite-desktop#33): Chat, Web Chat and WhatsApp, each with its unread
  * count, and "Add a channel". Picking one shows its conversations in the list; drafts are kept per conversation.
  */
-type Filter = 'all' | 'unread' | 'mentions' | 'archived';
+type Filter = 'all' | 'unread' | 'mentions' | 'archived' | 'calls';
 
 const STATUS_CHOICES: Array<{ id: string; label: string; dot: string }> = [
   { id: 'available', label: 'Available', dot: 'bg-success' },
@@ -196,6 +198,11 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
   });
   const web = useWebsiteInbox(false, websiteAccess);
   const needle = q.trim().toLowerCase();
+  // Chat › Calls: the call log, beside the conversations (worksuite-desktop#113).
+  const calls = useCallLog(filter === 'calls');
+  const [callFilter, setCallFilter] = useState<CallFilter>('All');
+  const now = useNow(60_000);
+  const missed = (calls.data ?? []).filter((c) => c.missed && now - parseTs(c.started_at).getTime() < 86_400_000).length;
   const search = useQuery({
     queryKey: ['chat', 'search', needle],
     queryFn: ({ signal }) => apiGet<{ results: Array<{ message_id: number; room_id: number; room_name: string; sender_name: string; snippet: string; created_at: string }> }>('/api/chat/search', { q: needle, kind: 'all' }, signal),
@@ -243,10 +250,12 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
               ['all', 'All'],
               ['unread', 'Unread'],
               ['mentions', 'Mentions'],
+              ['calls', 'Calls'],
             ] as Array<[Filter, string]>
           ).map(([f, l]) => (
-            <button key={f} type="button" role="tab" aria-selected={filter === f} onClick={() => setFilter(f)} className={cx('shrink-0 rounded-full px-2.5 py-1', filter === f ? 'bg-ink text-surface' : 'border border-line text-ink hover:bg-subtle')}>
+            <button key={f} type="button" role="tab" aria-selected={filter === f} onClick={() => setFilter(f)} className={cx('flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1', filter === f ? 'bg-ink text-surface' : 'border border-line text-ink hover:bg-subtle')}>
               {l}
+              {f === 'calls' && missed ? <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-badge px-1 text-[10px] font-bold text-white" aria-label={`${missed} missed`}>{missed}</span> : null}
             </button>
           ))}
           {websiteAccess ? (
@@ -255,52 +264,67 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
             </button>
           ) : null}
         </div>
-        {offline ? <OfflineNote cachedAt={offline} /> : null}
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto pb-2 scroll-thin">
-        {filter === 'archived' ? (
-          <button type="button" onClick={() => setFilter('all')} className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[12.5px] font-bold text-ink hover:bg-subtle">
-            <Icon name="chevron-left" size={15} className="text-ink-3" /> Archived conversations
-          </button>
-        ) : archived && !needle ? (
-          <button type="button" onClick={() => setFilter('archived')} className="flex w-full items-center gap-2.5 px-3.5 py-[7px] text-left hover:bg-subtle">
-            <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] bg-subtle text-ink-2"><Icon name="archive" size={16} /></span>
-            <b className="flex-1 text-[13px] font-semibold text-ink">Archived</b>
-            <span className="text-[11.5px] font-semibold text-ink-3">{archived}</span>
-          </button>
-        ) : null}
-        {loading ? <Spinner /> : error ? <div className="p-4"><ErrorNote error={error} onRetry={retry} /></div> : null}
-        {!loading && !error && visible.length === 0 && visitors.length === 0 ? <Empty icon="chat" title={filter === 'archived' ? 'No archived conversations' : 'No conversations'} /> : null}
-        {sections.map(([title, list]) =>
-          list.length ? (
-            <div key={title}>
-              <div className="px-3.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase">{title}</div>
-              {list.map((r) => (
-                <RoomRow key={r.id} r={r} active={String(r.id) === selected} status={r.other_user_id ? presence.data?.presence[String(r.other_user_id)] : undefined} onOpen={() => go(`/chat?room=${r.id}`)} />
-              ))}
-            </div>
-          ) : null,
-        )}
-        {visitors.length ? (
-          <div>
-            <div className="px-3.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase">Website</div>
-            {visitors.map((c) => (
-              <VisitorRow key={c.id} c={c} active={selected === `w${c.id}`} onOpen={() => go(`/chat?view=website&website=${c.id}`)} />
-            ))}
-          </div>
-        ) : null}
-        {needle.length >= 3 && search.data?.results.length ? (
-          <div>
-            <div className="px-3.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase">Messages</div>
-            {search.data.results.slice(0, 20).map((h) => (
-              <button key={h.message_id} type="button" onClick={() => go(`/chat?room=${h.room_id}`)} className="flex w-full flex-col px-3.5 py-2 text-left hover:bg-subtle">
-                <span className="flex gap-2 text-[12px]"><b className="flex-1 truncate text-ink">{h.room_name}</b><span className="text-ink-3">{listStamp(h.created_at)}</span></span>
-                <span className="truncate text-[12px] text-ink-3">{h.sender_name}: {h.snippet}</span>
+        {filter === 'calls' ? (
+          <div className="flex gap-1 text-[12px] font-semibold">
+            {CALL_FILTERS.map((f) => (
+              <button key={f} type="button" aria-pressed={callFilter === f} onClick={() => setCallFilter(f)} className={cx('shrink-0 rounded-full px-2.5 py-0.5', callFilter === f ? 'bg-selection text-primary' : 'text-ink-2 hover:bg-subtle')}>
+                {f}
               </button>
             ))}
           </div>
         ) : null}
+        {offline ? <OfflineNote cachedAt={offline} /> : null}
       </div>
+      {filter === 'calls' ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-2 scroll-thin">
+          <CallLogList log={calls} rooms={rooms} filter={callFilter} needle={needle} />
+        </div>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto pb-2 scroll-thin">
+          {filter === 'archived' ? (
+            <button type="button" onClick={() => setFilter('all')} className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[12.5px] font-bold text-ink hover:bg-subtle">
+              <Icon name="chevron-left" size={15} className="text-ink-3" /> Archived conversations
+            </button>
+          ) : archived && !needle ? (
+            <button type="button" onClick={() => setFilter('archived')} className="flex w-full items-center gap-2.5 px-3.5 py-[7px] text-left hover:bg-subtle">
+              <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] bg-subtle text-ink-2"><Icon name="archive" size={16} /></span>
+              <b className="flex-1 text-[13px] font-semibold text-ink">Archived</b>
+              <span className="text-[11.5px] font-semibold text-ink-3">{archived}</span>
+            </button>
+          ) : null}
+          {loading ? <Spinner /> : error ? <div className="p-4"><ErrorNote error={error} onRetry={retry} /></div> : null}
+          {!loading && !error && visible.length === 0 && visitors.length === 0 ? <Empty icon="chat" title={filter === 'archived' ? 'No archived conversations' : 'No conversations'} /> : null}
+          {sections.map(([title, list]) =>
+            list.length ? (
+              <div key={title}>
+                <div className="px-3.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase">{title}</div>
+                {list.map((r) => (
+                  <RoomRow key={r.id} r={r} active={String(r.id) === selected} status={r.other_user_id ? presence.data?.presence[String(r.other_user_id)] : undefined} onOpen={() => go(`/chat?room=${r.id}`)} />
+                ))}
+              </div>
+            ) : null,
+          )}
+          {visitors.length ? (
+            <div>
+              <div className="px-3.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase">Website</div>
+              {visitors.map((c) => (
+                <VisitorRow key={c.id} c={c} active={selected === `w${c.id}`} onOpen={() => go(`/chat?view=website&website=${c.id}`)} />
+              ))}
+            </div>
+          ) : null}
+          {needle.length >= 3 && search.data?.results.length ? (
+            <div>
+              <div className="px-3.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase">Messages</div>
+              {search.data.results.slice(0, 20).map((h) => (
+                <button key={h.message_id} type="button" onClick={() => go(`/chat?room=${h.room_id}`)} className="flex w-full flex-col px-3.5 py-2 text-left hover:bg-subtle">
+                  <span className="flex gap-2 text-[12px]"><b className="flex-1 truncate text-ink">{h.room_name}</b><span className="text-ink-3">{listStamp(h.created_at)}</span></span>
+                  <span className="truncate text-[12px] text-ink-3">{h.sender_name}: {h.snippet}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      )}
     </aside>
   );
 }

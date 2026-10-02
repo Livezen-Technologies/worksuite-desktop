@@ -11,7 +11,7 @@ import { Thread } from '../chat/Thread';
 import { openChatWindow } from '../chat/window';
 import { CallAvatar, Pill, useNow } from './parts';
 import { ScreenPicker } from './ScreenPicker';
-import { session, type CallParams } from './session';
+import { session, statusLine, type CallParams } from './session';
 import { CallWorkspace } from './ui/CallWorkspace';
 import type { ControlButton, MenuEntry } from './ui/CoreCallControls';
 import { personOf } from './ui/people';
@@ -70,30 +70,15 @@ export function CallScreen() {
     toggle: () => setRingbackMuted(!ringbackMuted),
   };
 
-  const status = (() => {
-    switch (s.phase) {
-      case 'devices':
-      case 'placing':
-        return ['Connecting…', 'text-[#FDE68A]'];
-      case 'ringing':
-        return [s.conn?.i_started ? 'Ringing…' : 'Connecting…', s.conn?.i_started ? 'text-[#AFC0E8]' : 'text-[#FDE68A]'];
-      case 'connected':
-        return [`Connected · ${clock ?? '0:00'}`, 'text-[#9EE6C3]'];
-      case 'ended':
-        return [`Call ended${s.endedAfter ? ` · ${formatClock(s.endedAfter / 1000)}` : ''}`, 'text-[#AFC0E8]'];
-      case 'unreachable':
-        return [s.unreachable?.reason === 'busy' ? 'On another call' : s.unreachable?.reason === 'offline' ? 'Not available right now' : 'No answer', 'text-[#FFD2C4]'];
-      default:
-        return ['Connecting…', 'text-[#FDE68A]'];
-    }
-  })() as [string, string];
+  const status = statusLine({ ...s, answering: !!s.params?.uuid }, clock, s.endedAfter ? formatClock(s.endedAfter / 1000) : null);
   useTabTitle(s.phase === 'connected' ? `Call in progress · ${name}` : video ? 'Video call' : 'Voice call');
 
   const openChat = () => { if (locked && !prefs?.lockedAllowChat) { toast('info', 'Unlock WorkSuite to open chat.'); return; } void openChatWindow(roomId, name ?? 'Chat', { onTop: true }).catch(e => toast('error', errorMessage(e))); };
   const muted = lp ? !lp.isMicrophoneEnabled : false;
   const camera = lp?.isCameraEnabled ?? false;
   const sharing = lp?.isScreenShareEnabled ?? false;
-  const live = s.phase === 'connected' || s.phase === 'ringing';
+  const live = s.phase === 'connected' || s.phase === 'ringing' || s.phase === 'calling' || s.phase === 'connecting';
+  const outgoing = (s.phase === 'calling' || s.phase === 'ringing') && !!s.conn?.i_started;
 
   const problem = s.problem ? (
     <div className="no-drag self-stretch rounded-[12px] border border-[rgba(229,72,77,.35)] bg-[rgba(229,72,77,.16)] px-3 py-2.5 text-[12px] leading-normal text-[#FFD2C4]" role="alert">
@@ -174,6 +159,16 @@ export function CallScreen() {
   const people = [...(lp ? [personOf(lp, true)] : []), ...remotes.map((p) => personOf(p, false))].map(p => locked && !prefs?.lockedShowCallerDetails && !p.self ? { ...p, name: 'Caller' } : p);
   const paused = s.sharePaused;
   const panelOn = (tab: string) => ui.panelOpen && ui.panelTab === tab;
+  // Which speaker the call plays through, where this computer has more than one.
+  const speakerMenu = (): MenuEntry[] =>
+    s.speakers.length
+      ? [
+          { heading: 'Speaker' },
+          { label: 'System default', icon: 'volume', checked: !s.speakerId, onClick: () => void s.setSpeaker('') },
+          ...s.speakers.map((d, i): MenuEntry => ({ label: d.label || `Speaker ${i + 1}`, icon: 'volume', checked: s.speakerId === d.deviceId, onClick: () => void s.setSpeaker(d.deviceId) })),
+          'sep',
+        ]
+      : [];
   const buttons: ControlButton[] = live
     ? [
         { id: 'mic', icon: muted ? 'mic-off' : 'mic', label: muted ? 'Unmute' : 'Mute', tone: muted ? 'warn' : undefined, onClick: () => void s.toggleMic() },
@@ -200,7 +195,12 @@ export function CallScreen() {
         ...(roomId > 0 ? [{ id: 'chat', icon: 'chat', label: panelOn('Chat') ? 'Hide chat' : 'Chat', tone: panelOn('Chat') ? ('active' as const) : undefined, onClick: () => locked ? openChat() : callUi.togglePanel('Chat') }] : []),
       ]
     : [];
-  const more: MenuEntry[] = s.phase === 'connected' ? [{ label: s.noise ? 'Noise suppression: on' : 'Noise suppression: off', icon: 'audio-lines', checked: s.noise, onClick: () => void s.toggleNoise() }] : [];
+  const more: MenuEntry[] = s.phase === 'connected'
+    ? [
+        ...speakerMenu(),
+        { label: s.noise ? 'Noise suppression: on' : 'Noise suppression: off', icon: 'audio-lines', checked: s.noise, onClick: () => void s.toggleNoise() },
+      ]
+    : [];
 
   const overlay =
     s.phase !== 'connected' ? (
@@ -211,15 +211,24 @@ export function CallScreen() {
         {problem}
         {unreachable}
         {s.phase === 'ended' || s.phase === 'unreachable' ? (
-          <button type="button" onClick={() => void call('windows:close')} className="no-drag h-10 rounded-full bg-[#2A3A66] px-6 font-bold text-white hover:bg-[#344777]">
-            Close
-          </button>
+          <div className="flex gap-2" onMouseMove={() => s.stay()}>
+            <button type="button" onClick={() => void s.again()} className="no-drag h-10 rounded-full bg-[#22A861] px-5 font-bold text-white hover:bg-[#1E9656]">
+              Call again
+            </button>
+            <button type="button" onClick={() => void call('windows:close')} className="no-drag h-10 rounded-full bg-[#2A3A66] px-6 font-bold text-white hover:bg-[#344777]">
+              Close
+            </button>
+          </div>
         ) : s.phase === 'error' ? (
           <div className="flex gap-2">
             <button type="button" onClick={() => s.params && void s.start(s.params)} className="no-drag h-10 rounded-full bg-white px-5 font-bold text-[#0F1B3D]">Retry</button>
             <button type="button" onClick={() => void s.hangUp(false).then(() => call('windows:close'))} className="no-drag h-10 rounded-full bg-[#C4321C] px-5 font-bold text-white">End the call</button>
           </div>
         ) : null}
+      </div>
+    ) : s.reconnecting || s.remoteLost ? (
+      <div role="status" className="rounded-full bg-[rgba(15,27,61,.85)] px-4 py-2 text-[12.5px] font-semibold text-[#FDE68A]">
+        {s.reconnecting ? 'Reconnecting… Your connection dropped.' : 'Reconnecting… waiting for the other side.'}
       </div>
     ) : s.problem ? (
       <div className="max-w-[420px]">{problem}</div>
@@ -251,7 +260,7 @@ export function CallScreen() {
         }
         buttons={buttons}
         more={more}
-        end={{ label: s.phase === 'ringing' && s.conn?.i_started ? 'Cancel the call' : 'Hang up', onClick: () => void s.hangUp() }}
+        end={{ label: outgoing ? 'Cancel the call' : 'Hang up', onClick: () => void s.hangUp() }}
         status={sharing ? (paused ? `Sharing ${s.shareLabel ?? 'your screen'} — paused` : `You are sharing ${s.shareLabel ?? 'your screen'}`) : null}
       />
       {picker}

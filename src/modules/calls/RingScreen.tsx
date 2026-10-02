@@ -156,7 +156,7 @@ export function RingScreen() {
             </button>
             <button type="button" disabled={busy} onClick={() => void answer(video)} className="flex h-10 flex-1 items-center justify-center gap-2 rounded-[10px] bg-[#1F7A4D] text-[13.5px] font-bold hover:bg-[#1A6841]">
               <Icon name={video ? 'video' : 'phone'} size={16} />
-              Accept
+              Answer
             </button>
           </div>
           <label className="flex items-center gap-2 text-[11.5px] text-[#AFC0E8]">
