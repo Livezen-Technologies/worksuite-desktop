@@ -1,91 +1,78 @@
 import { execFile } from 'node:child_process';
 
-/**
- * Whether macOS lets WorkSuite post mouse and keyboard events (Privacy & Security › Accessibility), asked the way
- * remote control will need it (worksuite-desktop#47).
- *
- * Two answers, either of which is enough:
- * - the app's own (`isTrustedAccessibilityClient(false)` — never shows a prompt), and
- * - the helper's: the `osascript` that injects the input asks `AXIsProcessTrusted()` itself. macOS answers for the
- *   app responsible for it (WorkSuite), and this is the process that has to be allowed, so its answer is the one
- *   that counts when the two disagree.
- *
- * The helper is asked in the background and its answer kept for a few seconds, so the five-second refresh of the
- * Settings screen does not start a process every time; `refresh()` asks now (Check again, coming back from System
- * Settings). Nothing here asks for the permission or starts a session: granting Accessibility lets WorkSuite take
- * input only once the person approves a request, each time.
- */
+/** Shared by the probe and the real input process; never requests permission or posts an event. */
+export const MAC_PERMISSION_SCRIPT = String.raw`
+ObjC.import('ApplicationServices'); ObjC.import('CoreGraphics');
+function inputTrusted() {
+  if (typeof $.CGPreflightPostEventAccess === 'function') return !!$.CGPreflightPostEventAccess();
+  return !!$.AXIsProcessTrusted();
+}
+`;
+
 export interface AccessibilityDeps {
   platform: string;
-  /** The app's own answer (systemPreferences.isTrustedAccessibilityClient(false)). */
   appTrusted: () => boolean;
-  /** The helper's answer: true, false, or null when it could not be asked. */
   helperTrusted: () => Promise<boolean | null>;
   now: () => number;
 }
-
 export interface AccessibilityState {
-  status: 'granted' | 'denied' | 'not_required';
-  /**
-   * After System Settings was opened from WorkSuite and access still reads as off: either the entry there is an
-   * earlier version's (remove it and add WorkSuite again), or macOS applies it only once WorkSuite is reopened.
-   */
+  status: 'granted' | 'denied' | 'checking' | 'unknown' | 'not_required';
   hint: 'restart' | null;
+  appTrusted?: boolean | null;
+  helperTrusted?: boolean | null;
+  checkedAt?: number;
 }
 
-/** How long the helper's answer is kept. */
-const KEEP_MS = 10_000;
-
+/** The event-posting helper is authoritative. Failed checks never become permission denials. */
 export class AccessibilityCheck {
-  private helper: { trusted: boolean | null; at: number } | null = null;
+  private result: AccessibilityState | null = null;
   private asking: Promise<void> | null = null;
-  private openedAt: number | null = null;
-
+  private generation = 0;
   constructor(private readonly deps: AccessibilityDeps) {}
 
-  /** The status now, from what is known; asks the helper again in the background when its answer is old. */
   state(): AccessibilityState {
     if (this.deps.platform !== 'darwin') return { status: 'not_required', hint: null };
-    if (this.deps.appTrusted()) return { status: 'granted', hint: null };
-    if (!this.helper || this.deps.now() - this.helper.at > KEEP_MS) void this.ask();
-    if (this.helper?.trusted) return { status: 'granted', hint: null };
-    return { status: 'denied', hint: this.openedAt !== null && this.helper !== null && this.helper.at > this.openedAt ? 'restart' : null };
+    let app: boolean | null = null;
+    try { app = this.deps.appTrusted(); } catch { /* Unavailable native check. */ }
+    if (!this.asking && (!this.result || this.deps.now() - this.result.checkedAt! > 10_000 || app !== this.result.appTrusted)) void this.ask();
+    return this.asking ? { status: 'checking', hint: null } : this.result!;
   }
 
-  /** Asks again now (Check again; the window came back from System Settings). */
   async refresh(): Promise<AccessibilityState> {
-    if (this.deps.platform === 'darwin' && !this.deps.appTrusted()) await this.ask(true);
-    return this.state();
+    if (this.deps.platform !== 'darwin') return this.state();
+    await this.ask();
+    // Another refresh may have superseded ours. Wait for its result too.
+    while (this.asking) await this.asking;
+    return this.result!;
   }
 
-  /** WorkSuite opened the Accessibility pane: an answer after this that is still "off" earns the restart hint. */
-  openedSettings(): void {
-    this.openedAt = this.deps.now();
-  }
+  /** Returning from Settings is handled by a fresh check, never blanket reset advice. */
+  openedSettings(): void { this.result = null; }
 
-  private ask(force = false): Promise<void> {
-    if (this.asking && !force) return this.asking;
-    const run = this.deps
-      .helperTrusted()
-      .catch(() => null)
-      .then((trusted) => {
-        this.helper = { trusted, at: this.deps.now() };
-      })
-      .finally(() => {
-        if (this.asking === run) this.asking = null;
-      });
+  private ask(): Promise<void> {
+    const generation = ++this.generation;
+    let app: boolean | null = null;
+    try { app = this.deps.appTrusted(); } catch { /* Preserve unknown. */ }
+    const run = Promise.resolve().then(() => this.deps.helperTrusted()).catch(() => null).then((trusted) => {
+      if (generation !== this.generation) return;
+      this.result = {
+        status: trusted === null ? 'unknown' : trusted ? 'granted' : 'denied',
+        hint: app === true && trusted === false ? 'restart' : null,
+        appTrusted: app, helperTrusted: trusted, checkedAt: this.deps.now(),
+      };
+    }).finally(() => { if (this.asking === run) this.asking = null; });
     this.asking = run;
     return run;
   }
 }
 
-/** The helper's own answer: the same osascript remote control injects through, asked for AXIsProcessTrusted(). */
 export function askHelper(timeoutMs = 4_000): Promise<boolean | null> {
   return new Promise((resolve) => {
-    execFile('/usr/bin/osascript', ['-l', 'JavaScript', '-e', "ObjC.import('ApplicationServices'); $.AXIsProcessTrusted()"], { timeout: timeoutMs }, (err, stdout) => {
-      if (err) return resolve(null);
-      const out = String(stdout).trim();
-      resolve(out === 'true' ? true : out === 'false' ? false : null);
-    });
+    execFile('/usr/bin/osascript', ['-l', 'JavaScript', '-e', `${MAC_PERMISSION_SCRIPT}\ninputTrusted()`],
+      { timeout: timeoutMs, env: { ...process.env, WS_OWNER_PID: String(process.pid) } }, (err, stdout) => {
+        if (err) return resolve(null);
+        const out = String(stdout).trim();
+        resolve(out === 'true' ? true : out === 'false' ? false : null);
+      });
   });
 }

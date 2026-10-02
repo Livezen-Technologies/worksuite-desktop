@@ -13,6 +13,11 @@ the root CHANGELOG.md.
 **Changed**
 
 - Shared theme tokens and legacy window chrome follow the selected profile across all renderer windows
+## 1.5.1 — 2026-10-01
+
+**Fixed**
+
+- Verify the running macOS input helper, distinguish unavailable permission checks, and refresh Accessibility status without blanket reset advice (#84).
 
 ## 1.5.0 — 2026-10-01
 

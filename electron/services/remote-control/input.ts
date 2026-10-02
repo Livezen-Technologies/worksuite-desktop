@@ -1,3 +1,4 @@
+import { MAC_PERMISSION_SCRIPT } from './accessibility';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -540,7 +541,7 @@ class WindowsInjector extends LineHelper {
  * double-click); keys carry exactly the modifiers held for the controller,
  * none once they are let go.
  */
-export const MAC_SCRIPT = String.raw`
+export const MAC_SCRIPT = MAC_PERMISSION_SCRIPT + String.raw`
 ObjC.import('Foundation'); ObjC.import('CoreGraphics'); ObjC.import('AppKit');
 function run() {
   var out = $.NSFileHandle.fileHandleWithStandardOutput;
@@ -577,6 +578,7 @@ function run() {
     var se = Application('System Events');
     se.keystroke(s);
   }
+  if (!inputTrusted()) { say('permission-denied'); return; }
   say('ready');
   for (;;) {
     var l = line();

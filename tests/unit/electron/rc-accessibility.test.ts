@@ -1,70 +1,54 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AccessibilityCheck } from '../../../electron/services/remote-control/accessibility';
-
-/** A Mac whose answers the test sets, with a clock it moves. */
 function mac(app: boolean, helper: boolean | null) {
-  const s = { app, helper, now: 1_000 };
+  const s = { app, helper, now: 1000 };
   const helperTrusted = vi.fn(async () => s.helper);
   const check = new AccessibilityCheck({ platform: 'darwin', appTrusted: () => s.app, helperTrusted, now: () => s.now });
   return { s, check, helperTrusted };
 }
-
-describe('remote control: macOS Accessibility (worksuite-desktop#47)', () => {
-  it('is granted when the app says so, without asking the helper', async () => {
+describe('Accessibility verification', () => {
+  it('checks the helper even when the running app reports permission', async () => {
+    const { check, helperTrusted } = mac(true, false);
+    expect(check.state().status).toBe('checking');
+    expect(await check.refresh()).toMatchObject({ status: 'denied', hint: 'restart', appTrusted: true, helperTrusted: false });
+    expect(helperTrusted).toHaveBeenCalled();
+  });
+  it('trusts the process posting input when the app answer is stale', async () => {
+    expect((await mac(false, true).check.refresh()).status).toBe('granted');
+  });
+  it('separates failed verification from explicit denial', async () => {
     const { check, helperTrusted } = mac(true, null);
-    expect(check.state()).toEqual({ status: 'granted', hint: null });
-    expect((await check.refresh()).status).toBe('granted');
-    expect(helperTrusted).not.toHaveBeenCalled();
+    helperTrusted.mockRejectedValueOnce(new Error('timeout'));
+    expect((await check.refresh()).status).toBe('unknown');
   });
-
-  it('believes the helper that injects input when the app\'s own answer is stale', async () => {
-    const { check } = mac(false, true);
-    expect((await check.refresh()).status).toBe('granted');
-    expect(check.state().status).toBe('granted');
-  });
-
-  it('asks the helper again only after a few seconds, unless asked to check now', async () => {
-    const { s, check, helperTrusted } = mac(false, false);
+  it('refreshes cached permission and revocation', async () => {
+    const { s, check } = mac(true, true);
     await check.refresh();
-    check.state();
-    check.state();
-    expect(helperTrusted).toHaveBeenCalledTimes(1);
-    s.now += 11_000;
-    check.state();
-    expect(helperTrusted).toHaveBeenCalledTimes(2);
-    await check.refresh();
-    expect(helperTrusted).toHaveBeenCalledTimes(3);
-  });
-
-  it('turns granted the moment access is given, and denied again when it is taken away', async () => {
-    const { s, check } = mac(false, false);
+    s.app = false; s.helper = false;
+    expect(check.state().status).toBe('checking');
     expect((await check.refresh()).status).toBe('denied');
-    s.app = true;
-    expect(check.state().status).toBe('granted');
-    s.app = false;
-    s.helper = false;
-    expect((await check.refresh()).status).toBe('denied');
+    s.helper = true;
+    expect((await check.refresh()).status).toBe('granted');
   });
-
-  it('after System Settings was opened and access still reads as off, says why instead of asking again', async () => {
-    const { s, check } = mac(false, false);
+  it('does not prescribe resets merely because System Settings was opened', async () => {
+    const { check } = mac(false, false);
+    await check.refresh(); check.openedSettings();
     expect((await check.refresh()).hint).toBeNull();
-    s.now += 500;
-    check.openedSettings();
-    expect(check.state().hint).toBeNull();
-    s.now += 500;
-    expect(await check.refresh()).toEqual({ status: 'denied', hint: 'restart' });
   });
-
-  it('a helper that cannot be asked counts as no answer, not as access', async () => {
-    const { check, helperTrusted } = mac(false, null);
-    helperTrusted.mockRejectedValueOnce(new Error('osascript timed out'));
-    expect((await check.refresh()).status).toBe('denied');
+  it('does not let an older probe overwrite the latest result', async () => {
+    const { check, helperTrusted } = mac(false, false);
+    let finish!: (value: boolean) => void;
+    helperTrusted.mockImplementationOnce(() => new Promise<boolean>((resolve) => { finish = resolve; }));
+    const older = check.refresh();
+    await Promise.resolve();
+    helperTrusted.mockResolvedValueOnce(true);
+    expect((await check.refresh()).status).toBe('granted');
+    finish(false); await older;
+    expect(check.state().status).toBe('granted');
   });
-
-  it('is not needed on Windows or Linux', async () => {
+  it('needs no check on other platforms', async () => {
     const helperTrusted = vi.fn();
-    const check = new AccessibilityCheck({ platform: 'win32', appTrusted: () => false, helperTrusted, now: () => 0 });
+    const check = new AccessibilityCheck({ platform: 'linux', appTrusted: () => false, helperTrusted, now: () => 0 });
     expect(await check.refresh()).toEqual({ status: 'not_required', hint: null });
     expect(helperTrusted).not.toHaveBeenCalled();
   });

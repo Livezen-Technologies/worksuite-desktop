@@ -45,6 +45,21 @@ describe('Settings › Remote control: Accessibility on a Mac (worksuite-desktop
   });
   afterEach(cleanup);
 
+  it('shows a failed probe separately from denied permission and recovers on retry', async () => {
+    let failed = true;
+    bridge.call.mockImplementation(async (ch: string) => {
+      if (ch === 'rc:recheck' && failed) throw new Error('IPC unavailable');
+      return view({});
+    });
+    mount();
+    expect(await screen.findByText('Unable to verify Accessibility access')).toBeTruthy();
+    expect(screen.queryByText('This computer can be shared, but not controlled')).toBeNull();
+    expect(screen.queryByText('Accessibility access enabled')).toBeNull();
+    failed = false;
+    fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
+    expect(await screen.findByText('Accessibility access enabled')).toBeTruthy();
+  });
+
   it('checks again on opening the screen, and drops the warning once access is confirmed', async () => {
     bridge.call.mockImplementation(async (ch: string) => (ch === 'rc:state' ? view(DENIED) : ch === 'rc:recheck' ? view({}) : undefined));
     mount();
@@ -78,7 +93,7 @@ describe('Settings › Remote control: Accessibility on a Mac (worksuite-desktop
   it('when access still reads as off after System Settings, explains removing the old entry or reopening WorkSuite', async () => {
     bridge.call.mockImplementation(async (ch: string) => (ch === 'rc:state' || ch === 'rc:recheck' ? view({ ...DENIED, accessibilityHint: 'restart' }) : undefined));
     mount();
-    expect((await screen.findByTestId('rc-accessibility-hint')).textContent).toMatch(/remove it with −, add it again with \+.*quit WorkSuite and open it again/);
+    expect((await screen.findByTestId('rc-accessibility-hint')).textContent).toMatch(/running app reports access.*input helper reports permission required.*Quit WorkSuite and open it again/);
     expect(screen.getByText(/Nobody controls this computer until you approve their request/)).toBeTruthy();
   });
 });
