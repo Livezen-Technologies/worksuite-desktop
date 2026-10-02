@@ -14,6 +14,7 @@ export const INVOKE_CHANNELS = [
   'app:openInBrowser',
   'app:setDockIcon',
 
+  'local:open', 'local:read', 'local:save', 'local:remove', 'local:export', 'local:restore', 'local:deleteAll', 'local:meeting', 'local:signIn', 'local:importOffer', 'local:reviewImport', 'local:import',
   'guest:pending',
   'guest:open',
   'guest:info',

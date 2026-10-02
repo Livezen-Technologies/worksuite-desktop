@@ -1,0 +1,51 @@
+import { mkdtempSync, statSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import { LocalWorkspace } from '../../../electron/services/local-workspace';
+import type { LocalItemInput } from '@shared/local-workspace';
+const folders: string[] = [];
+const input = (kind: LocalItemInput['kind'] = 'note'): LocalItemInput => ({ kind, title: 'Local item', body: 'Private device text', completed: false, due: null, start: kind === 'event' ? '2026-10-02T09:00:00Z' : null, end: null, reminder: null });
+afterEach(() => { for (const folder of folders.splice(0)) rmSync(folder, { recursive: true, force: true }); });
+describe('device-only guest persistence', () => {
+  it('preserves all kinds and meeting destinations across real database restarts, without account state', () => {
+    const folder = mkdtempSync(join(tmpdir(), 'local-86-')); folders.push(folder);
+    const path = join(folder, 'guest.sqlite');
+    let store = new LocalWorkspace(path);
+    const note = store.save(input()); store.save(input('task')); store.save(input('event'));
+    store.meeting('4F2 9A1 C07', 'https://example.test'); store.close();
+    store = new LocalWorkspace(path);
+    expect(store.read().items).toHaveLength(3); expect(store.read().meetingInput).toBe('4F2 9A1 C07');
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+    const edited = store.save({ ...note, title: 'Edited offline' });
+    expect(edited.revision).toBe(2);
+    expect(() => store.save({ ...note, title: 'Stale edit' })).toThrow('another window');
+    store.remove(note.id); expect(store.read().items).toHaveLength(2);
+    store.close(); store = new LocalWorkspace(path); expect(store.read().items).toHaveLength(2); store.close();
+  });
+  it('backs up, merges and skips identical content without overwriting original IDs', () => {
+    const source = new LocalWorkspace(':memory:'); const target = new LocalWorkspace(':memory:');
+    source.save(input()); source.save(input('event')); const existing = target.save(input());
+    const backup = source.export(); expect(JSON.parse(backup)).toMatchObject({ format: 'worksuite-local', version: 1 });
+    expect(target.restore(backup)).toEqual({ added: 1, skipped: 1 });
+    expect(target.read().items.some((item) => item.id === existing.id)).toBe(true);
+    expect(target.restore(backup)).toEqual({ added: 0, skipped: 2 });
+    const before = target.export();
+    expect(() => target.restore(JSON.stringify({ format: 'worksuite-local', version: 1, items: [input(), { kind: 'event', title: 'Invalid' }] }))).toThrow();
+    expect(target.export()).toBe(before);
+    target.deleteAll(); expect(target.read()).toEqual({ items: [], meetingInput: '', meetingServer: '' });
+    source.close(); target.close();
+  });
+  it('delivers missed task/event reminders once, retains denied notifications, and skips completed tasks', () => {
+    const store = new LocalWorkspace(':memory:'); const now = Date.parse('2026-10-02T12:00:00Z');
+    const reminder = '2026-10-02T11:00:00Z';
+    const task = store.save({ ...input('task'), reminder }); store.save({ ...input('event'), reminder }); store.save({ ...input('task'), completed: true, reminder });
+    expect(store.reminders(now, () => false)).toBe(0);
+    expect(store.reminders(now, () => true)).toBe(2);
+    expect(store.reminders(now + 60000, () => true)).toBe(0);
+    store.save({ ...task, reminder: '2026-10-02T12:02:00Z' });
+    expect(store.reminders(now + 120000, () => true)).toBe(1);
+    const restored = new LocalWorkspace(':memory:'); restored.restore(store.export());
+    expect(restored.reminders(now + 180000, () => true)).toBe(0); restored.close(); store.close();
+  });
+});

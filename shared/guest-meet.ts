@@ -1,3 +1,4 @@
+import { LOCAL_CHANNELS } from './local-workspace';
 /** The public meeting contract carries no workspace records or account credentials. */
 export interface GuestMeetInfo {
   uuid: string;
@@ -33,6 +34,7 @@ export function guestDestination(input: string, server: string | null): { origin
 
 /** A guest window has no account authority, even if a different window signs in. */
 export const GUEST_CHANNELS = new Set([
+  ...LOCAL_CHANNELS, 'local:open',
   'guest:open', 'guest:info', 'guest:join', 'guest:signIn',
   'media:access', 'media:privacySettings', 'media:screenSources', 'media:screenPick',
   'windows:close', 'windows:state', 'windows:minimize', 'windows:toggleMaximize', 'windows:setFullScreen', 'security:activity',

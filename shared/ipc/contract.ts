@@ -1,3 +1,4 @@
+import { localItemInput, type LocalView, type LocalItem, type ImportReview, type ImportResult } from '../local-workspace';
 import type { GuestMeetInfo, GuestMeetToken } from '../guest-meet';
 /**
  * The typed IPC contract (§3.4, §8.4, WF-05).
@@ -271,6 +272,18 @@ export const contract = {
   /** macOS: the Dock icon with the unread count painted on (the renderer draws it; see core/dock-badge). */
   'app:setDockIcon': ch(z.object({ png: z.string().regex(/^data:image\/png;base64,[A-Za-z0-9+/=]+$/).max(4_000_000) }), { whileLocked: true, rate: 30 }),
 
+  'local:open': ch(none, { rate: 2 }),
+  'local:read': ch(none),
+  'local:save': ch(localItemInput, { rate: 5 }),
+  'local:remove': ch(z.object({ id: z.string().uuid() })),
+  'local:export': ch(none, { rate: 2 }),
+  'local:restore': ch(none, { rate: 2 }),
+  'local:deleteAll': ch(z.object({ confirmation: z.literal('DELETE LOCAL DATA') }), { rate: 1 }),
+  'local:meeting': ch(z.object({ input: z.string().max(2048), server: z.string().max(512) })),
+  'local:signIn': ch(none),
+  'local:importOffer': ch(none, { session: true }),
+  'local:reviewImport': ch(none, { session: true, rate: 1 }),
+  'local:import': ch(z.object({ token: z.string().uuid(), ids: z.array(z.string().uuid()).max(10000), createCopies: z.boolean().default(false) }), { session: true, rate: 1 }),
   'guest:pending': ch(none),
   'guest:open': ch(z.object({ input: z.string().trim().min(1).max(2048), server: z.string().max(512).optional() }), { rate: 2 }),
   'guest:info': ch(none, { rate: 2 }),
@@ -1069,6 +1082,18 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'app:openExternal': boolean;
   'app:openInBrowser': boolean;
   'app:setDockIcon': boolean;
+  'local:open': { id: number };
+  'local:read': LocalView;
+  'local:save': LocalItem;
+  'local:remove': void;
+  'local:export': { saved: boolean };
+  'local:restore': { added: number; skipped: number } | null;
+  'local:deleteAll': void;
+  'local:meeting': void;
+  'local:signIn': void;
+  'local:importOffer': { count: number };
+  'local:reviewImport': ImportReview;
+  'local:import': ImportResult;
   'guest:pending': { input: string; server?: string } | null;
   'guest:open': { id: number };
   'guest:info': GuestMeetInfo;

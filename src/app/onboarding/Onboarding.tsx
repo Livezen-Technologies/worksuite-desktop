@@ -1,3 +1,4 @@
+import { toast } from '../../core/toasts';
 import { GuestJoinForm } from '../../modules/meet/GuestJoinForm';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AuthState } from '@shared/types';
@@ -30,6 +31,7 @@ export function Onboarding({ auth }: { auth: AuthState }) {
           <span className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-brand text-[16px] font-extrabold text-white">W</span>
           <span className="text-[18px] font-bold text-ink">WorkSuite</span>
         </div>
+        {(auth.stage === 'no-server' || auth.stage === 'signed-out' || auth.stage === 'expired') ? <Button className="mb-4 w-full" variant="secondary" onClick={() => void call('local:open').catch((e) => toast('error', errorMessage(e)))}>Continue Without Signing In</Button> : null}
         {guest ? <GuestJoinForm key={destination?.input} initialInput={destination?.input} server={destination?.server ?? auth.server?.origin} onBack={() => setGuest(false)} /> : null}
         {!guest ? <>
         {auth.stage === 'no-server' ? <ServerStep /> : null}
