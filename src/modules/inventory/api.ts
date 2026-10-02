@@ -1,3 +1,4 @@
+import { cleanDescription, descriptionText } from '../../core/description';
 import { useQuery } from '@tanstack/react-query';
 import { apiDelete, apiGet, apiPost, apiPut, apiUrl, request } from '../../core/api';
 import { addDays, dayWords, listStamp, parseTs, timeLabel, dayKey, todayInZone } from '../../core/time';
@@ -777,7 +778,7 @@ export function parseAmount(v: string): number | null {
  * server keeps the old one either way, and sending a masked null would read
  * as "clear it".
  */
-export function bodyOf(d: ProductDraft, canCost: boolean): { body: Record<string, unknown>; error: string | null } {
+export function bodyOf(d: ProductDraft, canCost: boolean, descriptionFormat: 'html' | 'text' = 'html'): { body: Record<string, unknown>; error: string | null } {
   if (!d.name.trim()) return { body: {}, error: 'Give the product a name.' };
   const nums: Array<[string, string, string]> = [
     ['unit_price', d.unit_price, 'The selling price'],
@@ -797,7 +798,7 @@ export function bodyOf(d: ProductDraft, canCost: boolean): { body: Record<string
     unit_id: d.unit_id,
     tracking: d.tracking,
     costing_method: d.costing_method,
-    description: d.description.trim() || null,
+    description: (descriptionFormat === 'text' ? descriptionText(d.description) : /<\/?[a-z][^>]*>/i.test(d.description) ? cleanDescription(d.description) : d.description).trim() || null,
     is_stocked: d.is_stocked ? 1 : 0,
   };
   for (const [k, v, label] of nums) {
