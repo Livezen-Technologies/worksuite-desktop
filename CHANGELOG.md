@@ -5,6 +5,21 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-02 — 0.2.77: the new Home
+
+Home now follows the "WorkSuite Home — Optimized" design, on your real data:
+
+- **Header** — the date and organization picker above the greeting, with Customize and a New split button.
+- **Four tiles** — Due today (with overdue in red), Meetings today (with the next time), Waiting for you (invitations · approvals · announcements) and Unread messages (with mentions). Each opens its page.
+- **Today's work** — Today / Overdue / Upcoming tabs; tick a task to complete it; "Add a task".
+- **Today's agenda** — all-day renewals grouped, a timeline with a NOW line, ended meetings with Recording & notes, the next meeting highlighted with Join / Details, and tender meetings with Open tender / View meeting.
+- **Right rail** — Your daily brief with Ask AI, Waiting for me (invitations with Going / Maybe / Not going, approvals, announcements to read) and Announcements.
+- **Recent activity and Recent files** at the bottom.
+
+Saved Home layouts carry over: hidden cards stay hidden and your order is kept. The greeting no longer says "Good evening" all day when the 12-hour clock is set.
+
+---
+
 ## 2026-10-02 — 0.2.76: meeting invitations that arrive; tender meetings and contact persons; the AI Assistant works in the background; chat notifications while locked
 
 - **Meeting invitations reach people** (#97).

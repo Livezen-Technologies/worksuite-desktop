@@ -152,7 +152,8 @@ export function listStamp(stamp: string | null | undefined): string {
 }
 
 export function greeting(now = new Date()): string {
-  const h = Number(new Intl.DateTimeFormat('en-GB', opts({ hour: '2-digit', hour12: false })).format(now)) % 24;
+  // The hour as a number whatever the time format: a 12-hour setting would make it "10 am", which is no number.
+  const h = Number(new Intl.DateTimeFormat('en-GB', { ...opts({ hour: '2-digit' }), hour12: false }).format(now)) % 24;
   if (h < 12) return text('Good morning');
   if (h < 17) return text('Good afternoon');
   return text('Good evening');

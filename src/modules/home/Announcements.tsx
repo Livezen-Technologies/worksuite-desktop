@@ -100,28 +100,38 @@ export function useAcknowledge() {
   return { acknowledge, busy };
 }
 
-/** The rows of the Home widget: up to five, the ones to acknowledge with their button. */
+/** Whom it went to, as the card's small heading: the company, or how many. */
+function audience(a: MyAnnouncement): string | null {
+  return a.companies && a.companies.length > 1 ? `${a.companies.length} companies` : (a.company ?? a.companies?.[0]?.name ?? null);
+}
+
+/** The cards of the Home widget (optimized): up to five, the ones to acknowledge with their button. */
 export function AnnouncementRows({ items, onOpen, limit = 5 }: { items: MyAnnouncement[]; onOpen: (id: number) => void; limit?: number }) {
   const { acknowledge, busy } = useAcknowledge();
   return (
-    <ul className="m-0 flex list-none flex-col gap-1 p-0">
+    <ul className="m-0 flex list-none flex-col gap-2 p-0">
       {items.slice(0, limit).map((a) => (
-        <li key={a.id} className={cx('flex items-start gap-2 rounded-[8px] px-2 py-1.5 hover:bg-subtle', a.priority === 'urgent' && 'bg-danger-bg/40')}>
-          <button type="button" onClick={() => onOpen(a.id)} className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
+        <li key={a.id} className={cx('flex flex-col gap-2 rounded-[10px] border border-line bg-well p-3', a.priority === 'urgent' && 'border-danger/40')}>
+          <button type="button" onClick={() => onOpen(a.id)} className="flex min-w-0 flex-col gap-1.5 text-left">
+            <span className="flex min-w-0 items-center justify-between gap-2">
+              <span className="truncate text-[11px] font-semibold tracking-[0.04em] text-teal uppercase">{audience(a)}</span>
+              <span className="shrink-0 text-[12px] text-ink-3">{[a.author, a.published_at ? relative(a.published_at) : null].filter(Boolean).join(' · ')}</span>
+            </span>
             <span className="flex min-w-0 items-center gap-1.5">
               {!a.read ? <span aria-label="Unread" className="h-2 w-2 shrink-0 rounded-full bg-primary" /> : null}
-              <b className="truncate text-[13.5px] text-ink">{a.title}</b>
+              <b className="truncate text-[14px] font-semibold text-ink">{a.title}</b>
               <PriorityChip a={a} />
             </span>
-            {a.preview ? <span className="line-clamp-2 text-[12.5px] text-ink-2">{a.preview}</span> : null}
-            <span className="truncate text-[12px] text-ink-3">{byline(a)}</span>
+            {a.preview ? <span className="line-clamp-2 text-[13px] leading-[1.45] text-ink-2">{a.preview}</span> : null}
           </button>
           {a.requires_ack && !a.acknowledged ? (
-            <Button size="sm" variant="primary" loading={busy === a.id} onClick={() => void acknowledge(a.id)}>
+            <Button size="sm" variant="primary" className="self-start" loading={busy === a.id} onClick={() => void acknowledge(a.id)}>
               Acknowledge
             </Button>
           ) : a.requires_ack ? (
-            <Chip tone="success">Acknowledged</Chip>
+            <Chip tone="success" className="self-start">
+              Acknowledged
+            </Chip>
           ) : null}
         </li>
       ))}
