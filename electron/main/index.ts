@@ -7,7 +7,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { localize } from '@shared/localization';
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { GuestMeetService } from '../services/guest-meet';
-import { app, Notification, clipboard, crashReporter, dialog, globalShortcut, ipcMain, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents, webContents } from 'electron';
+import { app, net as electronNet, Notification, clipboard, crashReporter, dialog, globalShortcut, ipcMain, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents, webContents } from 'electron';
 import os from 'node:os';
 import { hkdfSync } from 'node:crypto';
 import { join, resolve } from 'node:path';
@@ -776,6 +776,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     const counts = { ...raw, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: canOpenApp('mail', visible) ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0 };
     const services: Record<string, ServiceHealth> = { ...supervisor.health() };
     return {
+      internetOnline: electronNet.isOnline(),
+      realtimeDiagnostics: realtime.diagnostics(),
       network: networkStatus(apiReachable, realtime.getState(), realtimeDownSince),
       realtime: realtime.getState(),
       pendingChanges: uid ? queue.pendingCount(uid) + salonSync.pending() + eventDesk.pending() + pos.pending() + restaurant.sync.pending() : 0,
@@ -813,7 +815,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   realtime.onState = (s: RealtimeState) => {
     notifications.realtimeState(s);
-    realtimeDownSince = s === 'down' ? (realtimeDownSince ?? Date.now()) : null;
+    realtimeDownSince = s === 'down' || s === 'connecting' ? (realtimeDownSince ?? Date.now()) : null;
     emitStatus();
   };
   function scopeFor(sender: Electron.WebContents) {

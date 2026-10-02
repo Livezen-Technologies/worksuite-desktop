@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-10-03 — 0.2.89: a Local Profile — WorkSuite without an account
+## 2026-10-03 — 0.2.90: a Local Profile — WorkSuite without an account
 
 **Continue as Guest** on the login screen sets up a profile that lives only on this computer (#141):
 
@@ -22,7 +22,7 @@ A guest meeting window now also reads the meeting's current state (ended, locked
 
 ---
 
-## 2026-10-03 — 0.2.88: the AI Assistant steps aside while you work
+## 2026-10-03 — 0.2.89: the AI Assistant steps aside while you work
 
 Ask the AI Assistant something and carry on — it gets out of the way and tells you when it's done (#126):
 
@@ -33,6 +33,15 @@ Ask the AI Assistant something and carry on — it gets out of the way and tells
 - **View Result** or the button brings back the conversation with the latest answer. Nothing reopens on its own.
 - If the WorkSuite window isn't in front, a desktop banner says the answer is ready — following your notification settings and Do not disturb, and saying only "New WorkSuite notification" while locked.
 - Turn it off with **Auto-minimize when I continue working** in AI Assistant settings.
+
+---
+
+## 2026-10-03 — 0.2.88: steadier realtime connections
+
+- Quiet connections stay healthy with the companion gateway's observable heartbeat. Reconnect attempts are coalesced, retired socket events are ignored, and connection status requires authenticated readiness.
+- Connection details distinguish offline, server unavailable, reconnecting and verified connected states, with safe disconnect reasons and attempt counts.
+
+Modules: Notifications 1.4.0 (#123). Deploy the server/gateway companion PR #66 and restart its managed gateway process first. Production upload/network/sleep acceptance remains in `docs/CONNECTION_RECOVERY.md`.
 
 ---
 

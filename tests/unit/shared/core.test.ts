@@ -4,7 +4,7 @@ import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
 import { redact, redactString, redactUrl } from '@shared/redact';
 import { backoffDelay, WindowLimiter } from '@shared/backoff';
 import { canonicalJson } from '@shared/canonical-json';
-import { attentionCount, networkStatus, trayState, trayTooltip } from '@shared/network';
+import { attentionCount, connectionLabel, networkStatus, trayState, trayTooltip } from '@shared/network';
 import { conflictedCopyName, numberedName, safeFileName } from '@shared/filename';
 import { resolveWebLink } from '@shared/links';
 
@@ -171,4 +171,13 @@ describe('the icon badge', () => {
     expect(attentionCount(0, 0)).toBe(0);
     expect(attentionCount(-1, Number.NaN)).toBe(0);
   });
+});
+
+it('distinguishes offline networking, server failure and verified realtime without inventing connected state (#123)', () => {
+  expect(connectionLabel(null)).toBe('Checking connection…');
+  expect(connectionLabel({ network: 'OFFLINE', realtime: 'down', internetOnline: false })).toBe('Internet Offline');
+  expect(connectionLabel({ network: 'OFFLINE', realtime: 'down', internetOnline: true })).toBe('Server Unavailable');
+  expect(connectionLabel({ network: 'RECONNECTING', realtime: 'connecting', internetOnline: true })).toBe('Reconnecting…');
+  expect(connectionLabel({ network: 'ONLINE', realtime: 'idle', internetOnline: true })).toBe('Server reachable — live updates off');
+  expect(connectionLabel({ network: 'ONLINE', realtime: 'connected', internetOnline: true })).toBe('Connected');
 });

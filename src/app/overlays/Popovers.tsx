@@ -1,3 +1,4 @@
+import { connectionLabel } from '@shared/network';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { app, organizationName } from '../../core/app-state';
@@ -166,7 +167,7 @@ export function NetworkPopover() {
   const status = useStore(app, (s) => s.status);
   const q = useQuery({ queryKey: ['offline', 'pending'], queryFn: () => call('offline:pending') });
   const st = useQuery({ queryKey: ['offline', 'status'], queryFn: () => call('offline:status') });
-  const label = { ONLINE: 'Online', LIMITED: 'Limited — live updates paused', RECONNECTING: 'Reconnecting…', OFFLINE: 'Offline' }[status?.network ?? 'ONLINE'];
+  const label = connectionLabel(status);
   return (
     <Popover label="Connection" width={400} offset={200}>
       <PopoverHeader title="Connection" />
@@ -175,6 +176,7 @@ export function NetworkPopover() {
           <span className="font-semibold text-ink">{label}</span>
         </div>
         <div>Live updates: {status?.realtime === 'connected' ? 'connected' : status?.realtime === 'disabled' ? 'not offered by this server (checking every minute instead)' : 'reconnecting'}</div>
+        {(status?.realtimeDiagnostics?.attempt ?? 0) >= 3 ? <div className="text-warning">Live updates repeatedly failed ({status?.realtimeDiagnostics?.lastDisconnect ?? 'connection unavailable'}). Check your network/VPN, server gateway and proxy; open Help → Diagnostics. Queued files and unsaved changes remain on this device.</div> : null}
         {st.data ? <div>Saved for offline use: {st.data.cacheEntries} items ({bytes(st.data.cacheBytes)})</div> : null}
         {st.data?.reason ? <div className="text-warning">{st.data.reason}</div> : null}
       </div>
