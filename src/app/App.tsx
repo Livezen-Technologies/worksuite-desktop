@@ -1,8 +1,9 @@
 import { LockedChat } from './LockedChat';
 import { lockedScope } from '@shared/locked-access';
 import { ChatSendingStatus } from '../modules/chat/OutgoingMedia';
-import { isLocalWorkspaceHash } from '@shared/local-workspace';
-import { LocalImportOffer } from '../modules/guest/LocalImportOffer';
+import { GuestGate } from '../modules/guest/GuestGate';
+import { MoveLocalData } from '../modules/guest/MoveLocalData';
+import { SignInPanel } from '../modules/guest/SignInPanel';
 import { isGuestMeetingHash } from '@shared/guest-meet';
 import { Suspense, lazy, useEffect, useState } from 'react';
 import type { ToastMessage } from '@shared/types';
@@ -25,7 +26,6 @@ import { RemoteControlWindow } from './RemoteControlWindow';
 import { WebchatRingWindow } from '../modules/chat/website/Ringing';
 import { QuickAskWindow } from './QuickAskWindow';
 
-const LocalWorkspacePage = lazy(() => import('../modules/guest/LocalWorkspacePage'));
 const GuestMeeting = lazy(() => import('../modules/meet/GuestMeeting').then((module) => ({ default: module.GuestMeeting })));
 
 /**
@@ -47,12 +47,14 @@ export function App() {
   const pictureOwedBy = useStore(app, (s) => (s.bootstrap?.user.pictureRequired === true && !s.bootstrap.offline ? s.bootstrap.user.id : null));
   // Who has just sent one, so a refresh that fails does not bring the screen back — for them, not the next person to sign in.
   const [pictureSentBy, setPictureSentBy] = useState<string | null>(null);
+  // Guest mode (#149): this window, this shell; `signingIn` shows sign-in in front of it.
+  const session = useStore(app, (s) => s.session);
+  const local = useStore(app, (s) => s.local);
   const hash = window.location.hash;
 
   if (!hasDesktop()) {
     return <div className="flex h-full items-center justify-center p-8 text-center text-ink-2">WorkSuite Desktop's interface runs inside the desktop app.</div>;
   }
-  if (isLocalWorkspaceHash(hash)) return <Suspense fallback={<Spinner />}><LocalWorkspacePage /></Suspense>;
   if (isGuestMeetingHash(hash)) return <Suspense fallback={<Spinner />}><GuestMeeting /></Suspense>;
   if (!ready || !auth) return <Spinner label="Starting WorkSuite…" className="h-full" />;
   // Remote control's prompt and bar: above everything else, and never behind the lock screen — stopping control must always work.
@@ -66,13 +68,16 @@ export function App() {
   const lockedCall = callWindow && (!!prefs?.lockedAnswerCalls || scope?.kind === 'ring' && prefs?.lockedCallNotifications === true);
   if (locked && auth.stage === 'ready' && !required && scope?.kind === 'chat-mini' && prefs?.lockedAllowChat && scope.room) return <LockedChat room={scope.room} />;
   let body;
+  const guest = session.mode === 'guest' && auth.stage !== 'ready' && !hash.startsWith('#/window/');
   if (required && auth.stage !== 'revoked') body = <UpdateRequired />;
+  // A guest never meets the account's picture gate or setup wizard: guest mode is the shell with its own apps.
+  else if (guest && !session.signingIn) body = !local?.profile || local.locked ? <GuestGate /> : <Shell key="guest" />;
   else if (auth.stage !== 'ready') body = <Onboarding auth={auth} />;
   else if (hash.startsWith('#/window/quick-ask')) body = <QuickAskWindow />;
   else if (hash.startsWith('#/window/')) body = <WindowRoot hash={hash} />;
   else if (auth.setupPending) body = <SetupWizard />;
   else if (pictureOwedBy !== null && pictureOwedBy !== pictureSentBy) body = <AddPictureScreen onDone={() => setPictureSentBy(pictureOwedBy)} />;
-  else body = <Shell />;
+  else body = <Shell key="account" />;
 
   return (
     <Suspense fallback={<Spinner className="h-full" />}>
@@ -84,7 +89,8 @@ export function App() {
         body
       )}
       {!locked && auth.stage === 'ready' ? <ChatSendingStatus /> : null}
-      {auth.stage === 'ready' && !locked && !hash.startsWith('#/window/') ? <LocalImportOffer /> : null}
+      {guest ? <SignInPanel /> : null}
+      {auth.stage === 'ready' && !locked && !hash.startsWith('#/window/') ? <MoveLocalData /> : null}
       <Toasts />
       <ShowMeHost />
     </Suspense>

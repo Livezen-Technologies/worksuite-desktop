@@ -6,6 +6,8 @@ import { openOverlay } from '../core/ui';
 import { navigate } from '../core/tabs';
 import { cx } from '../components/ui';
 import type { SyncStatus } from '@shared/types';
+import { useGuest } from '../core/session';
+import { text } from '../core/i18n';
 
 /** Status bar, 26 px (§4.12, FR-RT-01, FR-UPD-02): realtime, files, pending changes, version and channel. */
 export function StatusBar() {
@@ -18,6 +20,21 @@ export function StatusBar() {
   const pending = status?.pendingChanges ?? 0;
   const sync = useStore(app, (s) => s.sync);
   const files = filesLabel(sync);
+  // Guest mode (#149): nothing syncs or waits for a server; everything is on this device.
+  const guest = useGuest();
+  if (guest)
+    return (
+      <footer className="flex h-[26px] shrink-0 items-center gap-5 border-t border-line bg-subtle px-4 text-[12px] text-ink-2">
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-primary" />
+          {text('Local profile')} · {text('Saved on this device')}
+        </span>
+        <div className="flex-1" />
+        <span className="font-mono text-[11.5px]">
+          v{info?.version ?? ''} · {channel.charAt(0).toUpperCase() + channel.slice(1)}
+        </span>
+      </footer>
+    );
   return (
     <footer className="flex h-[26px] shrink-0 items-center gap-5 border-t border-line bg-subtle px-4 text-[12px] text-ink-2">
       <span className="flex items-center gap-1.5">

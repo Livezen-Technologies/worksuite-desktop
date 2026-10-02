@@ -1,6 +1,6 @@
 import { MAX_CONCURRENT } from '../transfers';
 import { DARK_PROFILE_IDS } from '../theme-profiles';
-import { localItemInput, localProfileInput, type LocalView, type LocalItem, type LocalProfile, type LocalStatus, type RestorePreview, type ImportReview, type ImportResult } from '../local-workspace';
+import { localProfileInput, type LocalOverview, type LocalProfile, type LocalStatus, type MoveOffer, type MoveResult, type RestorePreview } from '../local-workspace';
 import type { GuestMeetInfo, GuestMeetToken } from '../guest-meet';
 /**
  * The typed IPC contract (§3.4, §8.4, WF-05).
@@ -290,23 +290,25 @@ export const contract = {
   /** macOS: the Dock icon with the unread count painted on (the renderer draws it; see core/dock-badge). */
   'app:setDockIcon': ch(z.object({ png: z.string().regex(/^data:image\/png;base64,[A-Za-z0-9+/=]+$/).max(4_000_000) }), { whileLocked: true, rate: 30 }),
 
-  'local:open': ch(none, { rate: 2 }),
+  // Guest mode runs in the main window (#149): entering it is refused while an account is signed in.
+  'local:enter': ch(none, { rate: 4 }),
+  'local:leave': ch(none),
   'local:status': ch(none),
   'local:profile': ch(localProfileInput, { rate: 2 }),
   'local:unlock': ch(z.object({ pin: z.string().max(8) }), { rate: 1 }),
-  'local:read': ch(none),
-  'local:save': ch(localItemInput, { rate: 5 }),
-  'local:remove': ch(z.object({ id: z.string().uuid() })),
+  // The module screens' requests, answered from the Local Profile (electron/services/local-api.ts).
+  'local:api': ch(z.object({ method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']), path: z.string().regex(/^\/api\/[^\s#\\]*$/).max(1024), query: z.record(z.string().max(64), z.union([z.string().max(2048), z.number(), z.boolean()])).optional(), body: z.unknown().optional() }), { rate: 60 }),
+  'local:overview': ch(none),
   'local:export': ch(none, { rate: 2 }),
   'local:restorePreview': ch(none, { rate: 2 }),
   'local:restore': ch(z.object({ token: z.string().uuid() }), { rate: 2 }),
   'local:deleteAll': ch(z.object({ confirmation: z.literal('DELETE LOCAL DATA') }), { rate: 1 }),
   'local:meeting': ch(z.object({ input: z.string().max(2048), server: z.string().max(512) })),
   'local:joinMeeting': ch(z.object({ input: z.string().trim().min(1).max(2048), server: z.string().max(512).optional() }), { rate: 2 }),
-  'local:signIn': ch(none),
-  'local:importOffer': ch(none, { session: true }),
-  'local:reviewImport': ch(z.object({ pin: z.string().max(8).optional() }).default({}), { session: true, rate: 1 }),
-  'local:import': ch(z.object({ token: z.string().uuid(), ids: z.array(z.string().uuid()).max(10000), createCopies: z.boolean().default(false) }), { session: true, rate: 1 }),
+  // Signing in from guest mode: what may move into this account, moving it, or keeping it on the device.
+  'local:moveOffer': ch(none, { session: true }),
+  'local:move': ch(none, { session: true, rate: 1 }),
+  'local:keep': ch(none, { session: true }),
   'guest:pending': ch(none),
   'guest:open': ch(z.object({ input: z.string().trim().min(1).max(2048), server: z.string().max(512).optional() }), { rate: 2 }),
   'guest:info': ch(none, { rate: 2 }),
@@ -1130,23 +1132,22 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'app:openExternal': boolean;
   'app:openInBrowser': boolean;
   'app:setDockIcon': boolean;
-  'local:open': { id: number };
+  'local:enter': LocalStatus;
+  'local:leave': void;
   'local:status': LocalStatus;
   'local:profile': LocalProfile;
   'local:unlock': { unlocked: boolean; retryAfter: number };
-  'local:read': LocalView;
-  'local:save': LocalItem;
-  'local:remove': void;
+  'local:api': { status: number; data: unknown; message: string | null };
+  'local:overview': LocalOverview;
   'local:export': { saved: boolean };
   'local:restorePreview': RestorePreview | null;
   'local:restore': { added: number; skipped: number };
   'local:deleteAll': void;
   'local:meeting': void;
   'local:joinMeeting': { id: number };
-  'local:signIn': void;
-  'local:importOffer': { count: number; pinRequired: boolean; profileName: string | null };
-  'local:reviewImport': ImportReview;
-  'local:import': ImportResult;
+  'local:moveOffer': MoveOffer | null;
+  'local:move': MoveResult;
+  'local:keep': void;
   'guest:pending': { input: string; server?: string } | null;
   'guest:open': { id: number };
   'guest:info': GuestMeetInfo;

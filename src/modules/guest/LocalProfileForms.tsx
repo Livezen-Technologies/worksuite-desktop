@@ -58,7 +58,7 @@ export function LocalProfileForm({ profile, onSaved, onCancel }: { profile: Loca
   return <form className="flex max-w-md flex-col gap-4" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
     <div>
       <h1 className="text-[20px] font-bold text-ink">{profile ? 'Edit Local Profile' : 'Set up your Local Profile'}</h1>
-      {profile ? null : <p className="mt-1 text-[13px] text-ink-2">Your notes, tasks and calendar are saved on this device. No email, verification or account is needed, and nothing is sent to a server.</p>}
+      {profile ? null : <p className="mt-1 text-[13px] text-ink-2">Your notes, tasks, contacts and calendar are saved on this device. No email, verification or account is needed, and nothing is sent to a server.</p>}
     </div>
     <TextField label="Display name" value={name} maxLength={60} required autoFocus onChange={(e) => setName(e.target.value)} hint={text('Shown on this device and used when you join a meeting.')} />
     <div className="flex items-center gap-3">
@@ -87,7 +87,7 @@ export function LocalProfileForm({ profile, onSaved, onCancel }: { profile: Loca
   </form>;
 }
 
-/** The Local Profile's PIN, asked once per window. Wrong PINs wait a minute after five. */
+/** The Local Profile's PIN, asked each time guest mode opens. Wrong PINs wait a minute after five. */
 export function LocalUnlock({ profile, onUnlocked }: { profile: LocalProfile; onUnlocked: () => void }) {
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);

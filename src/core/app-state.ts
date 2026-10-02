@@ -3,6 +3,7 @@ import type { InputOf, LockState } from '@shared/ipc/contract';
 import type { AppInfo, AuthState, Bootstrap, Preferences, PreferenceLock, StatusSnapshot, SyncStatus, Transfer, UpdateStatus } from '@shared/types';
 import { grantOf } from '@shared/access';
 import { visibleApps, type AppDefinition } from '@shared/apps';
+import type { LocalStatus } from '@shared/local-workspace';
 import { call, hasDesktop, on } from './bridge';
 import { createStore } from './store';
 import { setRegional } from './time';
@@ -29,6 +30,14 @@ export interface AppState {
   /** Drive sync on this computer. */
   sync: SyncStatus | null;
   resolvedTheme: 'light' | 'dark';
+  /**
+   * Guest mode or an account (#149): the same window, shell and module screens either way; guest mode's apps are
+   * `GUEST_APPS` and their data the Local Profile's. `signingIn`: a guest on the sign-in screen, guest mode still
+   * open behind it. `moveOffer`: signed in from guest mode, so the move-your-data question is due.
+   */
+  session: { mode: 'guest' | 'account'; signingIn: boolean; moveOffer: boolean };
+  /** The Local Profile, in guest mode. */
+  local: LocalStatus | null;
 }
 
 export const app = createStore<AppState>({
@@ -46,7 +55,14 @@ export const app = createStore<AppState>({
   transfers: [],
   sync: null,
   resolvedTheme: 'light',
+  session: { mode: 'account', signingIn: false, moveOffer: false },
+  local: null,
 });
+
+/** Whether this window is in guest mode (#149). */
+export function isGuest(): boolean {
+  return app.get().session.mode === 'guest';
+}
 
 const media = typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-color-scheme: dark)') : null;
 
@@ -67,6 +83,8 @@ function applyTheme(prefs: Preferences | null): void {
  * any app that left it.
  */
 function applyBootstrap(b: Bootstrap | null): void {
+  // Guest mode's apps stand until an account signs in.
+  if (!b && isGuest()) return;
   const apps = b ? visibleApps(grantOf(b)) : [];
   if (b) setRegional({ timezone: b.user.timezone, locale: b.user.locale, timeFormat: b.user.timeFormat });
   const current = app.get().organizationId;
@@ -97,6 +115,10 @@ export async function initAppState(): Promise<void> {
   }
 
   on<AuthState>('auth:changed', async (a) => {
+    // Signed in from guest mode: guest mode ends here, without a restart or another window, and the move question is due.
+    if (a.stage === 'ready' && isGuest()) app.set({ session: { mode: 'account', signingIn: false, moveOffer: true }, local: null, apps: [] });
+    // Signed out: nothing of the account stays, and guest mode opens only when chosen again.
+    if (a.stage !== 'ready' && app.get().auth?.stage === 'ready') app.set({ session: { mode: 'account', signingIn: false, moveOffer: false } });
     app.set({ auth: a });
     if (a.stage === 'ready') {
       applyBootstrap(await call('session:bootstrap'));

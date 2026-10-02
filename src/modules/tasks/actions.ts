@@ -1,3 +1,5 @@
+import { isGuest } from '../../core/app-state';
+import { apiPatch, apiPost } from '../../core/api';
 import { call } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import type { Task } from './api';
@@ -8,6 +10,11 @@ import type { Task } from './api';
  * this person may change and says no in a sentence when they may not.
  */
 export async function patchTask(task: Pick<Task, 'id' | 'title'>, field: string, value: unknown, label: string): Promise<void> {
+  // Guest mode (#149): saved on this device at once; there is no server to queue for.
+  if (isGuest()) {
+    await apiPatch(`/api/tasks/${task.id}`, { field, value });
+    return;
+  }
   const r = await call('offline:submit', {
     module: 'tasks',
     entity: 'task',
@@ -24,6 +31,7 @@ export async function patchTask(task: Pick<Task, 'id' | 'title'>, field: string,
 
 /** A new task, through the offline queue too. */
 export async function createTask(body: Record<string, unknown>): Promise<{ queued: boolean; id: number | null }> {
+  if (isGuest()) return { queued: false, id: (await apiPost<{ id: number }>('/api/tasks', body)).id };
   const r = await call('offline:submit', {
     module: 'tasks',
     entity: 'task',
