@@ -57,6 +57,9 @@ export class RealtimeService {
   private watchdog: NodeJS.Timeout | null = null;
   private lastFrameAt = 0;
   private running = false;
+  private generation = 0;
+  private connecting = false;
+  private lastDisconnect: string | null = null;
   private everConnected = false;
   onEvent: (e: RealtimeEvent) => void = () => undefined;
   onState: (s: RealtimeState) => void = () => undefined;
@@ -69,6 +72,8 @@ export class RealtimeService {
     private readonly allowInsecure: boolean,
     private readonly WS: WebSocketCtor = WebSocket,
   ) {}
+
+  diagnostics(): { attempt: number; lastDisconnect: string | null } { return { attempt: this.attempt, lastDisconnect: this.lastDisconnect }; }
 
   getState(): RealtimeState {
     return this.state;
@@ -83,12 +88,15 @@ export class RealtimeService {
   start(): void {
     if (this.running) return;
     this.running = true;
+    this.generation++;
     this.attempt = 0;
     void this.connect();
   }
 
   stop(): void {
     this.running = false;
+    this.generation++;
+    this.connecting = false;
     this.everConnected = false;
     if (this.retryTimer) clearTimeout(this.retryTimer);
     if (this.watchdog) clearInterval(this.watchdog);
@@ -129,23 +137,34 @@ export class RealtimeService {
 
   private schedule(): void {
     if (!this.running) return;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
     const delay = backoffDelay(this.attempt++, { baseMs: 1000, maxMs: 60_000, jitter: 0.5 });
     this.retryTimer = setTimeout(() => void this.connect(), delay);
     this.retryTimer.unref?.();
   }
 
   private async connect(): Promise<void> {
-    if (!this.running) return;
+    if (!this.running || this.connecting || this.ws) return;
+    const generation = this.generation;
+    const origin = this.serverOrigin();
+    this.connecting = true;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
     this.setState('connecting');
     let ticket: Ticket;
     try {
       ticket = await this.http.get<Ticket>('/api/notifications/realtime-ticket');
     } catch (e) {
+      if (!this.running || generation !== this.generation) return;
+      this.lastDisconnect = isDesktopError(e) ? `ticket: ${e.code}` : 'ticket request failed';
       log.debug('ticket unavailable', { code: isDesktopError(e) ? e.code : String(e) });
       this.setState('down');
       this.schedule();
       return;
+    } finally {
+      if (generation === this.generation) this.connecting = false;
     }
+    if (!this.running || generation !== this.generation || origin !== this.serverOrigin()) return;
     if (!ticket.enabled || !ticket.url) {
       // The installation runs without the gateway: poll, and retry rarely.
       this.setState('disabled');
@@ -153,7 +172,6 @@ export class RealtimeService {
       this.retryTimer.unref?.();
       return;
     }
-    const origin = this.serverOrigin();
     if (!origin || !realtimeUrlAllowed(ticket.url, origin, this.allowInsecure)) {
       log.warn('realtime URL outside the server domain; not connecting', { url: ticket.url.slice(0, 80) });
       this.setState('disabled');
@@ -170,8 +188,9 @@ export class RealtimeService {
       return;
     }
     this.ws = ws;
+    const openedAt = Date.now();
     ws.onmessage = (msg) => {
-      this.lastFrameAt = Date.now();
+      if (this.ws !== ws || !this.running || generation !== this.generation) return;
       let data: RealtimeEvent;
       try {
         data = JSON.parse(typeof msg.data === 'string' ? msg.data : String(msg.data)) as RealtimeEvent;
@@ -179,7 +198,9 @@ export class RealtimeService {
         return;
       }
       if (!data || typeof data.type !== 'string') return;
+      this.lastFrameAt = Date.now();
       if (data.type === 'ready') {
+        if (this.state === 'connected') return;
         const wasReconnect = this.everConnected;
         this.everConnected = true;
         this.attempt = 0;
@@ -188,30 +209,29 @@ export class RealtimeService {
         return;
       }
       if (data.type === 'ping' || data.type === 'pong') return;
-      this.onEvent(data);
+      if (this.state === 'connected') this.onEvent(data);
     };
-    ws.onclose = () => {
-      if (this.ws !== ws) return;
+    const disconnect = (reason: string, code?: number) => {
+      if (this.ws !== ws || generation !== this.generation) return;
       this.ws = null;
+      if (this.watchdog) clearInterval(this.watchdog);
+      this.watchdog = null;
+      this.lastDisconnect = reason;
+      log.info('realtime disconnected', { reason, code, attempt: this.attempt });
+      try { ws.close(); } catch { /* already closed */ }
       if (!this.running) return;
       this.setState('down');
       this.schedule();
     };
-    ws.onerror = () => {
-      /* onclose follows */
-    };
+    ws.onclose = event => disconnect('socket closed', event.code);
+    ws.onerror = () => disconnect('socket error');
     this.lastFrameAt = Date.now();
     if (this.watchdog) clearInterval(this.watchdog);
     // The gateway pings every 30 s; silence for 75 s means a dead socket.
     this.watchdog = setInterval(() => {
-      if (this.ws === ws && Date.now() - this.lastFrameAt > 75_000) {
-        log.info('realtime heartbeat missed; reconnecting');
-        try {
-          ws.close();
-        } catch {
-          /* ignore */
-        }
-      }
+      if (this.ws !== ws) return;
+      if (this.state !== 'connected' && Date.now() - openedAt >= 30_000) disconnect('gateway ready timeout');
+      else if (Date.now() - this.lastFrameAt > 75_000) disconnect('heartbeat timeout');
     }, 15_000);
     this.watchdog.unref?.();
   }

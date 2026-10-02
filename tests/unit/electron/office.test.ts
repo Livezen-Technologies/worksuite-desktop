@@ -482,11 +482,15 @@ describe("the editor's page", () => {
 describe('copies opened in other apps (OO-DSK-050, OO-OFF-030)', () => {
   let dir: string;
   let db: Database;
+  let copies: OfficeExternal[];
   beforeEach(() => {
+    copies = [];
     dir = mkdtempSync(join(tmpdir(), 'ws-office-'));
     db = new Database(join(dir, 'db.sqlite'));
   });
-  afterEach(() => {
+  afterEach(async () => {
+    await vi.waitFor(() => expect(copies.flatMap(x => x.list()).some(c => c.state === 'downloading')).toBe(false));
+    copies.forEach(x => x.stop());
     db.raw.close();
     rmSync(dir, { recursive: true, force: true });
   });
@@ -533,9 +537,10 @@ describe('copies opened in other apps (OO-DSK-050, OO-OFF-030)', () => {
       pollMs: 60_000,
       ...over,
     });
+    copies.push(x);
     return { x, launched, uploads, posts, setAnswer: (fn: () => Response) => (answer = fn) };
   }
-  const settle = () => new Promise((r) => setTimeout(r, 20));
+  const settle = (x: OfficeExternal) => vi.waitFor(() => expect(x.list().some(c => c.state === 'downloading')).toBe(false));
 
   it('offers the default app everywhere, and on Linux nothing named', async () => {
     const { x } = setup();
@@ -563,9 +568,10 @@ describe('copies opened in other apps (OO-DSK-050, OO-OFF-030)', () => {
     const { x, launched, posts } = setup();
     const c = await x.open({ fileId: 42, name: 'Proposal.docx', folderId: 9, version: 7, app: 'default' });
     expect(c.state).toBe('downloading');
-    await settle();
-    expect(x.list()[0]!.state).toBe('open');
-    expect(launched).toEqual([join(dir, 'Proposal.docx')]);
+    await vi.waitFor(() => {
+      expect(x.list()[0]!.state).toBe('open');
+      expect(launched).toEqual([join(dir, 'Proposal.docx')]);
+    });
     await x.check();
     expect(x.list()[0]!.state).toBe('open');
     writeFileSync(join(dir, 'Proposal.docx'), 'edited in Word, longer');
@@ -580,7 +586,7 @@ describe('copies opened in other apps (OO-DSK-050, OO-OFF-030)', () => {
   it("shows the server's conflict and replaces nothing until the person chooses (OO-OFF-030/031)", async () => {
     const { x, posts, uploads, setAnswer } = setup();
     const c = await x.open({ fileId: 42, name: 'Proposal.docx', folderId: 9, version: 6, app: 'default' });
-    await settle();
+    await settle(x);
     setAnswer(() => new Response(JSON.stringify({ status: 'error', message: 'The cloud file changed while you were editing.', errors: { code: 'OFFICE_VERSION_CONFLICT', base_version: 6, server_version: 7, actions: ['keep_both', 'review', 'upload_as_new_version', 'cancel'] } }), { status: 409, headers: { 'content-type': 'application/json' } }));
     const r = await x.upload(c.id, 'version');
     expect(r).toEqual({ state: 'conflict', conflict: { message: 'The cloud file changed while you were editing.', baseVersion: 6, serverVersion: 7, actions: ['keep_both', 'review', 'upload_as_new_version', 'cancel'] } });
@@ -599,7 +605,7 @@ describe('copies opened in other apps (OO-DSK-050, OO-OFF-030)', () => {
   it('a new version on purpose goes against the server version the conflict named', async () => {
     const { x, posts, setAnswer } = setup();
     const c = await x.open({ fileId: 42, name: 'Proposal.docx', folderId: 9, version: 6, app: 'default' });
-    await settle();
+    await settle(x);
     setAnswer(() => new Response(JSON.stringify({ status: 'error', message: 'changed', errors: { code: 'OFFICE_VERSION_CONFLICT', base_version: 6, server_version: 7, actions: [] } }), { status: 409, headers: { 'content-type': 'application/json' } }));
     await x.upload(c.id, 'version');
     setAnswer(() => new Response(JSON.stringify({ status: 'success', data: { current: { version: 8 } } }), { status: 201, headers: { 'content-type': 'application/json' } }));
@@ -610,7 +616,7 @@ describe('copies opened in other apps (OO-DSK-050, OO-OFF-030)', () => {
   it('keeps its list encrypted per person, and forgets it on a wipe', async () => {
     const { x } = setup();
     await x.open({ fileId: 42, name: 'Proposal.docx', folderId: 9, version: 7, app: 'default' });
-    await settle();
+    await settle(x);
     const stored = db.getConfig<string>('office_local_copies:2')!;
     expect(stored).not.toContain('Proposal');
     expect(x.localPath(42)).toEqual({ path: join(dir, 'Proposal.docx'), synced: false });

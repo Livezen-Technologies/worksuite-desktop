@@ -38,7 +38,13 @@ module.exports = {
   // Local AI (LAI-DSK-002): node-llama-cpp's native binaries load from outside the asar; the CUDA builds
   // (hundreds of MB) are left out — GPUs are used through Vulkan and Metal.
   files: ['out/**', 'package.json', '!**/*.map', '!node_modules/@napi-rs/**', '!node_modules/@node-llama-cpp/*cuda*/**'],
-  asarUnpack: ['node_modules/node-llama-cpp/**', 'node_modules/@node-llama-cpp/**'],
+  // Text in images (worksuite-desktop#59): tesseract.js's worker thread is started from outside the asar, with the
+  // packages it loads there (its WebAssembly core and their few dependencies).
+  asarUnpack: [
+    'node_modules/node-llama-cpp/**',
+    'node_modules/@node-llama-cpp/**',
+    'node_modules/{tesseract.js,tesseract.js-core,regenerator-runtime,is-url,bmp-js,wasm-feature-detect,zlibjs}/**',
+  ],
   extraResources: [
     { from: 'resources/tray', to: 'tray' },
     { from: 'resources/icons', to: 'icons' },

@@ -24,6 +24,7 @@ import { pmsDownload } from '../services/pms-download';
 import { accessibility } from '../services/remote-control/host';
 import { createZip } from '../services/zip';
 import { openExternalSafely } from '../security/hardening';
+import { answerNotice } from '../services/ai-pending';
 import { broadcast } from './events';
 import { logger } from './log';
 
@@ -111,7 +112,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     return { granted: await systemPreferences.askForMediaAccess(kind) };
   });
   router.handle('media:screenSources', () => ctx.screenShare.sources());
-  router.handle('media:screenPick', (input, c) => ctx.screenShare.pick(c.sender.id, input.id, !!input.audio));
+  router.handle('media:screenPick', (input, c) => ctx.screenShare.preparePick(c.sender.id, input.id, !!input.audio));
   router.handle('media:privacySettings', async (input) => {
     // Fixed addresses of the OS's own privacy panes; nothing from the page.
     const mac = { microphone: 'Privacy_Microphone', camera: 'Privacy_Camera', screen: 'Privacy_ScreenCapture', accessibility: 'Privacy_Accessibility' } as const;
@@ -321,6 +322,13 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     return ctx.ai.confirm(input.id, input.nonce);
   });
   // A file from this computer, picked here: never a path the page names.
+  // An answer ready while the window is behind others (#126): a banner, as the notification settings allow; none in front.
+  router.handle('ai:answerReady', (input) => {
+    const main = ctx.windows.getMain();
+    if (main && main.isFocused()) return false;
+    ctx.notifications.notify(answerNotice(input.kind, input.preview));
+    return true;
+  });
   router.handle('ai:upload', async (_i, c) => {
     const w = winOf(c.sender);
     if (!ctx.ai.rules().localFiles) throw new DesktopError('POLICY_DENIED', 'Files from this computer cannot be sent to the assistant here.');

@@ -8,15 +8,16 @@ const { SettingsService } = await import('../../../electron/services/settings');
 const dbWith = (preferences: unknown) => ({ getConfig: () => preferences, setConfig: () => undefined }) as unknown as Database;
 
 describe('the AI Assistant settings (#61)', () => {
-  it('start with the header button and its drawer, and no sound', () => {
+  it('starts with the minimized floating widget, and no sound', () => {
     const ai = new SettingsService(dbWith(undefined)).effective().ai;
-    expect(ai.display).toBe('drawer');
+    expect(ai.display).toBe('widget');
+    expect(ai.dockAtStart).toBe(false);
     expect(ai.sound).toBe(false);
   });
 
   it('give settings saved by an older version the new fields, keeping what was chosen', () => {
     const ai = new SettingsService(dbWith({ ai: { quickAsk: false, shortcut: 'Alt+Space', insert: false, dockAtStart: true, language: 'Tamil' } })).effective().ai;
-    expect(ai).toEqual({ quickAsk: false, shortcut: 'Alt+Space', insert: false, dockAtStart: true, language: 'Tamil', display: 'drawer', sound: false, moduleAccess: { worksuite: {}, local: {} }, onlineFallback: true, autoMinimize: false });
+    expect(ai).toEqual({ quickAsk: false, shortcut: 'Alt+Space', insert: false, dockAtStart: true, language: 'Tamil', display: 'widget', sound: false, moduleAccess: { worksuite: {}, local: {} }, onlineFallback: true, autoMinimize: false, autoMinimizeWhenWorking: true });
   });
 
   it('keep a chosen display mode and sound', () => {
@@ -24,4 +25,9 @@ describe('the AI Assistant settings (#61)', () => {
     expect(ai.display).toBe('widget');
     expect(ai.sound).toBe(true);
   });
+});
+
+it.each(['widget', 'drawer', 'hidden'] as const)('preserves an explicitly chosen %s display (#127)', display => {
+  const ai = new SettingsService(dbWith({ ai: { display, dockAtStart: true } })).effective().ai;
+  expect(ai.display).toBe(display); expect(ai.dockAtStart).toBe(true);
 });

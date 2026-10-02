@@ -1,4 +1,4 @@
-import type { NetworkStatus, RealtimeState } from './types';
+import type { NetworkStatus, RealtimeState, StatusSnapshot } from './types';
 
 /**
  * Network status (FR-OFF-05, §6 state models):
@@ -60,4 +60,15 @@ export function trayTooltip(s: {
  */
 export function attentionCount(chat: number, notifications: number): number {
   return Math.max(0, chat || 0) + Math.max(0, notifications || 0);
+}
+
+/** OS offline evidence is separate from failure to reach the configured server. */
+export function connectionLabel(status: Pick<StatusSnapshot, 'network' | 'realtime' | 'internetOnline'> | null): string {
+  if (!status) return 'Checking connection…';
+  if (status.internetOnline === false) return 'Internet Offline';
+  if (status.network === 'OFFLINE') return 'Server Unavailable';
+  if (status.realtime === 'connected') return 'Connected';
+  if (status.realtime === 'disabled') return 'Connected — polling';
+  if (status.realtime === 'idle') return 'Server reachable — live updates off';
+  return status.network === 'LIMITED' ? 'Server Unavailable — live updates' : 'Reconnecting…';
 }

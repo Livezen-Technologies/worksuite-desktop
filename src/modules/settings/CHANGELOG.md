@@ -4,9 +4,44 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
-## 1.10.0 — 2026-10-02
+## 1.11.0 — 2026-10-03
 
 - Add verified per-account lock-screen controls, custom idle timeouts and separate sleep and notification preferences (#115).
+
+## 1.10.2 — 2026-10-03
+
+- AI Assistant setting Auto-minimize when I continue working (on by default) (#126); Sinhala and Tamil text for it.
+- Login screen: Continue as Guest, with a short explanation; Sinhala and Tamil text for the Local Profile (#141).
+
+## 1.10.1 — 2026-10-03
+
+- Default new or missing AI display preferences to the floating widget without opening chat at startup (#127).
+
+## 1.10.0 — 2026-10-02
+
+- Modernized global search filters, responsive result details, file metadata and stable selection (#129).
+
+## 1.9.6 — 2026-10-02
+
+- Sinhala and Tamil text for the Messenger and Instagram channels (#36).
+
+## 1.9.5 — 2026-10-02
+
+- Sinhala and Tamil text for announcements (#98).
+- Sinhala and Tamil text for the WhatsApp channel; search no longer lists WhatsApp as its own app — it opens Chat's WhatsApp channel (#35).
+- Sinhala and Tamil text for the meeting More menu (#124).
+
+## 1.9.4 — 2026-10-02
+
+- Expose running-app and helper permission evidence; invalidate stale macOS Accessibility checks (#132).
+
+## 1.9.3 — 2026-10-02
+
+- Sinhala and Tamil text for images in the AI Assistant (#59).
+
+## 1.9.2 — 2026-10-02
+
+- Sinhala and Tamil text for the new call states (#113).
 
 ## 1.9.1 — 2026-10-02
 

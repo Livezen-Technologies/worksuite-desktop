@@ -77,6 +77,12 @@ describe('what a banner shows while WorkSuite is locked (#114)', () => {
     expect(presentLocked(chat, { notificationPrivacy: 'SENDER_ONLY', ...all })).toEqual({ title: 'WorkSuite', body: 'New message from Asha' });
     expect(presentLocked(chat, { notificationPrivacy: 'GENERIC', ...all })).toEqual({ title: 'WorkSuite', body: LOCKED_MESSAGE });
   });
+  it('says an incoming call is a call, naming the caller only where "Show caller details" allows (#113)', () => {
+    const ring = { module: 'chat', title: 'Incoming voice call from Asha', body: 'Design', sender: 'Asha', call: true };
+    expect(presentLocked(ring, { notificationPrivacy: 'FULL', lockedNotificationSender: true, lockedNotificationPreview: true })).toEqual({ title: 'WorkSuite', body: 'Incoming WorkSuite call' });
+    expect(presentLocked(ring, { notificationPrivacy: 'FULL', lockedShowCallerDetails: true })).toEqual({ title: 'WorkSuite', body: 'Incoming call from Asha' });
+    expect(presentLocked(ring, { notificationPrivacy: 'GENERIC', lockedShowCallerDetails: true })).toEqual({ title: 'WorkSuite', body: 'Incoming WorkSuite call' });
+  });
   it('keeps every other notification generic', () => {
     expect(presentLocked({ module: 'files', title: 'Shared', body: 'Budget.xlsx', sender: null }, { notificationPrivacy: 'FULL', lockedNotificationSender: true, lockedNotificationPreview: true })).toEqual({ title: 'WorkSuite', body: 'New WorkSuite notification' });
   });

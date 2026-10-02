@@ -1,5 +1,6 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
 import { APP_PARTS, canOpenApp, SHELL_SCREENS, type VisibleApps } from '@shared/access';
+import { CHANNEL_APPS } from '@shared/channels';
 import { APP_CATALOGUE } from '@shared/apps';
 import { defineDesktopManifest, validateManifest, type DesktopManifest, type DesktopManifestInput } from '@shared/manifest';
 
@@ -396,12 +397,14 @@ export function titleForRoute(route: string): string {
 
 /**
  * Modules the current user may open: visible apps with a desktop module, the
- * parts of a visible app (calls, of chat), and the always-on screens — the
+ * parts of a visible app (calls, of chat), the host of a visible channel (chat, of WhatsApp), and the always-on screens — the
  * same decision as everywhere else (`canOpenApp`, shared/access.ts).
  */
 export function allowedModules(visibleAppIds: VisibleApps): Set<string> {
   const out = new Set<string>();
   for (const m of MODULES) if (canOpenApp(m.id, visibleAppIds)) out.add(m.id);
+  // A channel's screen is its host's (WhatsApp is in Chat, #35): someone with the channel keeps that tab.
+  for (const [channel, { host }] of Object.entries(CHANNEL_APPS)) if (visibleAppIds.has(channel) && MODULES.some((m) => m.id === host)) out.add(host);
   return out;
 }
 

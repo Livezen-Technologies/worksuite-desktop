@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import type { AppDefinition } from '@shared/apps';
+import { appRoute, navApps, type AppDefinition } from '@shared/apps';
 import { app, updatePrefs } from '../core/app-state';
 import { apiGet } from '../core/api';
 import { appLabel, t } from '../core/i18n';
@@ -28,8 +28,10 @@ export function Sidebar() {
   const mode = prefs?.sidebarMode ?? 'expanded';
   const collapsed = mode === 'collapsed' || (mode === 'auto-hide' && !hover);
 
-  const native = apps.filter((a) => a.surface === 'native');
-  const pinnedBrowser = apps.filter((a) => a.surface === 'browser' && prefs?.pinnedApps.includes(a.id));
+  // A channel (WhatsApp, in Chat) has no entry of its own: a pin of it from before is Chat's now (#35).
+  const listed = navApps(apps);
+  const native = listed.filter((a) => a.surface === 'native');
+  const pinnedBrowser = listed.filter((a) => (a.surface === 'browser' || a.channelOf) && prefs?.pinnedApps.includes(a.id));
   const work = native.filter((a) => a.sidebar === 'work');
   const business = [...native.filter((a) => a.sidebar === 'business'), ...pinnedBrowser];
 
@@ -40,7 +42,7 @@ export function Sidebar() {
 
   const open = (a: AppDefinition) => {
     if (a.surface === 'browser') openOverlay('launcher');
-    else navigate(`/${a.id}`);
+    else navigate(appRoute(a));
   };
 
   return (

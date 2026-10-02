@@ -1,6 +1,6 @@
 {
     "module": "settings",
-    "version": "1.10.0",
+    "version": "1.11.0",
     "paths": [
         "electron/services/settings.ts",
         "shared/localization.ts",
@@ -11,10 +11,6 @@
         "src/components/ui.tsx",
         "src/app/onboarding/Onboarding.tsx",
         "build-tools/localization.mjs",
-        "src/app/overlays/SearchOverlay.tsx",
-        "electron/services/lock.ts",
-        "electron/services/lock-pin.ts",
-        "electron/services/lock-verification.ts",
-        "shared/locked-access.ts"
+        "src/app/overlays/SearchOverlay.tsx"
     ]
 }

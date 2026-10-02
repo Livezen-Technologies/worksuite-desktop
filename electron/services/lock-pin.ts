@@ -18,6 +18,29 @@ const N = 1 << 15;
 const KEYLEN = 32;
 const hashOf = (pin: string, salt: Buffer): Buffer => scryptSync(pin, salt, KEYLEN, { N, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
 
+/** Why a PIN is refused, or null: 4 to 8 digits, not repeated or consecutive. */
+export function pinProblem(pin: string): string | null {
+  if (!PIN_PATTERN.test(pin)) return 'A PIN is 4 to 8 digits.';
+  if (/^(\d)\1+$/.test(pin) || '0123456789'.includes(pin) || '9876543210'.includes(pin)) return 'Choose a PIN that is harder to guess than repeated or consecutive digits.';
+  return null;
+}
+
+/** A salted scrypt hash of a PIN, the same as the app lock keeps. */
+export function hashPin(pin: string): { salt: string; hash: string } {
+  const problem = pinProblem(pin);
+  if (problem) throw new Error(problem);
+  const salt = randomBytes(16);
+  return { salt: salt.toString('base64'), hash: hashOf(pin, salt).toString('base64') };
+}
+
+/** Constant-time check of a PIN against {@link hashPin}'s result. */
+export function pinMatches(pin: string, stored: { salt: string; hash: string }): boolean {
+  if (!PIN_PATTERN.test(pin)) return false;
+  const want = Buffer.from(stored.hash, 'base64');
+  const got = hashOf(pin, Buffer.from(stored.salt, 'base64'));
+  return want.length === got.length && timingSafeEqual(want, got);
+}
+
 /**
  * A PIN for the app lock, per person on this computer (FR-SEC-05): it unlocks WorkSuite without the server, so
  * it also works offline. Only a salted scrypt hash is kept, and that sealed by the database's Vault key, which
@@ -68,10 +91,7 @@ export class LockPin {
   }
 
   set(userId: string, pin: string): void {
-    if (!PIN_PATTERN.test(pin)) throw new Error('A PIN is 4 to 8 digits.');
-    if (/^(\d)\1+$/.test(pin) || '0123456789'.includes(pin) || '9876543210'.includes(pin)) throw new Error('Choose a PIN that is harder to guess than repeated or consecutive digits.');
-    const salt = randomBytes(16);
-    this.write(userId, { v: 1, salt: salt.toString('base64'), hash: hashOf(pin, salt).toString('base64'), length: pin.length });
+    this.write(userId, { v: 1, ...hashPin(pin), length: pin.length });
   }
 
   clear(userId: string): void {
@@ -80,10 +100,8 @@ export class LockPin {
 
   verify(userId: string, pin: string): boolean {
     const p = this.read(userId);
-    if (!p || !PIN_PATTERN.test(pin)) return false;
-    const want = Buffer.from(p.hash, 'base64');
-    const got = hashOf(pin, Buffer.from(p.salt, 'base64'));
-    const ok = want.length === got.length && timingSafeEqual(want, got);
+    if (!p) return false;
+    const ok = pinMatches(pin, p);
     if (ok && p.length !== pin.length) this.write(userId, { ...p, length: pin.length });
     return ok;
   }

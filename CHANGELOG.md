@@ -5,6 +5,185 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.91: lock-screen settings per account, protected by your password
+
+Security → Lock Screen is rebuilt (#115):
+
+- **Lock automatically** has its own switch, with Immediately, 1, 5, 15, 30 minutes or a custom time. "Never" is gone — a saved "Never" becomes automatic locking switched off. *Immediately* locks when every WorkSuite window loses focus; the other times count inactivity in WorkSuite. **Lock Now** works even with automatic locking off.
+- **Lock when the computer sleeps** and **Lock when the computer locks** are separate switches.
+- **Turning protection off or removing the PIN asks for your WorkSuite password**, checked in the app's main process. Setting or changing a PIN still works as before; switching accounts during the check is refused.
+- **While locked**, chat banners, ringing, names, previews and sounds each have their own switch. Hiding banners still delivers messages and updates unread counts in the background. An incoming call can ring and be declined even when answering while locked is off; answering, the camera and microphone stay blocked then, and the button says **Unlock to answer**. Website-chat alerts follow the same switches.
+- **Per account.** These choices and the PIN are kept for each server and account on this computer; old shared choices are carried over once.
+- Your organisation's locking, timeout, privacy and access rules apply, with an explanation where a choice is fixed.
+
+Touch ID and automatic PIN entry still work. Windows Hello is not offered. Real computer sleep/lock, Touch ID and banners still need checking on devices.
+
+---
+
+## 2026-10-03 — 0.2.90: a Local Profile — WorkSuite without an account
+
+**Continue as Guest** on the login screen sets up a profile that lives only on this computer (#141):
+
+- **Your name, and optionally a picture and a PIN.** No email, no registration, nothing sent anywhere. The header shows your name with *Local Profile · Saved on This Device*, and whether you're online separately.
+- **Notes, Tasks and Calendar offline** — create, edit, delete and search. Reminders work while WorkSuite runs, including in the background; they can't fire while it's fully closed, and the app says so.
+- **Kept across restarts and updates.** The local data file is upgraded in place; one from a newer WorkSuite is left untouched rather than changed.
+- **Join a meeting** by link or code when you're online, under your local name.
+- **Online-only parts are marked** "Needs a WorkSuite account" — Chat, Mail, Drive, company records, shared workspaces, HR, CRM, AI Assistant — and stay out of reach.
+- **Backup & Data:** export, restore (with a preview of what will be added before anything is written) and delete everything. Backups never contain the PIN.
+- **Sign in later** with Sign In / Create Account. Your local notes, tasks and events stay separate; you can review them by type, pick which to bring over and confirm with your PIN. Nothing is ever uploaded or merged on its own.
+- No profile-picture or AI-model setup is asked of a guest.
+
+A guest meeting window now also reads the meeting's current state (ended, locked) instead of what it was when the link was opened.
+
+---
+
+## 2026-10-03 — 0.2.89: the AI Assistant steps aside while you work
+
+Ask the AI Assistant something and carry on — it gets out of the way and tells you when it's done (#126):
+
+- **Thinking…** shows the moment you send.
+- **It minimizes itself** when you switch tabs, open another module or click in your work while it's thinking — never while you're typing in it, and it never takes your focus. The request, its attachments and the conversation carry on in the background.
+- **The floating AI button** pulses while it works (a still dot if your system asks for reduced motion), with a Thinking… tooltip and **Stop processing** beside it.
+- **When the answer is ready** the pulse stops and a small preview shows its first lines with **View Result** and **Dismiss**. If it needs an answer or an approval from you, it says **Needs your input** and waits; if it failed, **Try again** resends the same request.
+- **View Result** or the button brings back the conversation with the latest answer. Nothing reopens on its own.
+- If the WorkSuite window isn't in front, a desktop banner says the answer is ready — following your notification settings and Do not disturb, and saying only "New WorkSuite notification" while locked.
+- Turn it off with **Auto-minimize when I continue working** in AI Assistant settings.
+
+---
+
+## 2026-10-03 — 0.2.88: steadier realtime connections
+
+- Quiet connections stay healthy with the companion gateway's observable heartbeat. Reconnect attempts are coalesced, retired socket events are ignored, and connection status requires authenticated readiness.
+- Connection details distinguish offline, server unavailable, reconnecting and verified connected states, with safe disconnect reasons and attempt counts.
+
+Modules: Notifications 1.4.0 (#123). Deploy the server/gateway companion PR #66 and restart its managed gateway process first. Production upload/network/sleep acceptance remains in `docs/CONNECTION_RECOVERY.md`.
+
+---
+
+## 2026-10-03 — 0.2.87: floating Ask AI by default
+
+- New installations and preferences without an AI display choice use the floating Ask AI widget, minimized to its launcher at startup.
+- Explicit Widget, Header Icon & Drawer, Hidden and startup preferences remain unchanged. The existing widget keeps background processing, minimize/maximize, result notices and workspace bounds.
+
+Modules: AI 1.7.1, Settings 1.10.1 (#127).
+
+---
+
+## 2026-10-03 — 0.2.86: clearer search filters and result details
+
+- Search uses themed, searchable filters and preserves the selected item when results refresh. Smaller windows put secondary filters in More Filters and show result details in a drawer with focus restoration.
+- Complete filenames wrap, file-kind icons and permission-checked metadata make results easier to identify, and Open actions remain reachable while details scroll. Indexing status is compact and expandable.
+- Sinhala and Tamil search labels and shared dropdown text preserve the newer channel, meeting and announcement translations.
+
+Modules: Settings 1.10.0 (#129).
+
+---
+
+## 2026-10-02 — 0.2.85: browser guest meetings
+
+- Desktop hosts can read and reply to browser guests in Browser meeting chat. Guests remain limited to the current meeting, and the server enforces admission and host chat settings.
+- Keep workspace conversations available to signed-in members and desktop guest chat available in their own expandable sections.
+
+Modules: Meet 1.10.0. Deploy Communication 1.10.0 and its browser chat migration first. Browser camera/microphone checks, permission guidance, waiting-room admission and reconnection are provided by the web/server update for #140; see `docs/BROWSER_GUEST_MEETINGS.md` for deployment and real-browser acceptance checks.
+
+
+---
+
+## 2026-10-02 — 0.2.84: Messenger and Instagram in Chat
+
+Facebook Messenger and Instagram Direct join Chat, Web Chat and WhatsApp as channels (#36):
+
+- **Connect from + Add Channel.** Facebook Login opens in your browser; then pick the Facebook Page, or the Instagram professional account linked to it. Pages you can't use are greyed out with the reason (no messaging role on the Page, or a permission was declined).
+- **In the toolbar,** each connected channel shows its unread count, and a warning if an account has lost its connection.
+- **Read and reply in the same chat view.** Every conversation shows its channel and account ("Messenger · Your Page", "@name · Instagram"). Send text and files — Instagram takes images, video and audio; Messenger takes any file up to 25 MB.
+- **Clear when you can't send.** Both platforms only allow replies within 24 hours of the customer's last message; the box says so, as it does when you lack permission, the account is disconnected or an attachment isn't supported.
+- **Channel settings** show the connection status and any error (sign-in expired, permission removed, not receiving messages), with Check connection, Reconnect and Disconnect. Conversations are kept after disconnecting.
+- No call buttons on these channels.
+
+Needs the server update (new Meta module and its migrations), a Meta app with its App ID, App Secret and webhook set up on the server, and Meta's App Review before customers outside your app's testers can connect.
+
+---
+
+## 2026-10-02 — 0.2.83: a tidier meeting More menu
+
+The meeting More menu was one long list that could run off the window. It is now grouped and fits (#124):
+
+- **Three groups.** Meeting Tools (recording, transcription, Activities › Q&A, Polls, Notes, Files, Whiteboard; Meeting Info › details, join link, room settings), Host Controls (host controls, livestreaming, Lock/Unlock Meeting, recording settings) and View & Layout (Layout, Video, Full Screen, floating window). Secondary options sit in submenus, so the menu is short.
+- **Says what is going on.** Stop Recording, Stop Transcription, Unlock Meeting, Exit Full Screen. Something you can't use stays visible, greyed, with the reason — "Only the host and co-hosts can lock the meeting".
+- **Stays on screen.** It opens above the call controls without covering them, flips to fit, scrolls when the window is short, and becomes a bottom sheet on narrow windows.
+- **Keyboard friendly.** Arrow keys, Home/End, typing a letter, Right/Left for submenus, Escape or a click outside closes it and puts the focus back on More.
+- Direct calls' More menu gets the same look, with Audio › Speaker and Noise Suppression.
+
+---
+
+## 2026-10-02 — 0.2.82: WhatsApp lives in Chat
+
+WhatsApp is now a channel of Chat, next to Chat and Web Chat, instead of a separate app that opened the web (#35):
+
+- **One place.** The separate WhatsApp entry is gone from the sidebar, launcher and search. Old WhatsApp links, open tabs, notifications and `worksuite://whatsapp` links open the same conversation in Chat's WhatsApp channel.
+- **Reply properly.** Pictures show inline and files open on this computer; send files with a caption (up to 25 MB); once the 24-hour window has closed, send an approved template; start a conversation with a number from the new + button or a contact's "Open the conversation".
+- **Settings in the channel.** The gear in the WhatsApp list (and Add a channel) shows each number with its status, and offers Check connection, Link again, Make default, Unlink and Connect a number — each only where you are allowed. Broadcasts, templates and business hours stay on the web, one click away.
+- **Same access as before.** Chat access alone does not open WhatsApp. Someone with WhatsApp but not Chat still gets a WhatsApp entry, which opens Chat showing only the WhatsApp channel. WhatsApp threads have no call buttons.
+
+No server change needed.
+
+---
+
+## 2026-10-02 — 0.2.81: announcements to several companies
+
+Publishing an announcement to more than one company is tightened up and kept current everywhere (#98):
+
+- **Only companies you may publish to.** The company picker offers just those, with "All companies you may publish to", Clear Selection, a count and removable chips. A company where you may draft but not publish is marked "draft only", and Publish says why it is unavailable. The server checks each company too — before, ticking a company you were refused alongside one you were allowed let the announcement through.
+- **Audience before publishing.** "Will reach N people in M companies", with the per-company breakdown, and a confirm step. Save Draft stays; drafts never reach anyone.
+- **Home's Announcements.** Urgent first, then pinned, then important, then newest — a pinned announcement no longer sinks below an unpinned important one. Expired ones disappear at once; "See all" opens the full list.
+- **Edits, withdrawal and expiry show everywhere straight away.** Home, an open announcement and the HR console refresh as soon as it changes, and notifications already sent are updated (or expire) with it.
+- **Acknowledgement report.** "Acknowledged earlier text" and "Read, not acknowledged" are told apart, filtered by the companies you may see the report for.
+- One notification per person, even if they belong to several of the chosen companies.
+
+Needs the server update (HR module and its migration).
+
+---
+
+## 2026-10-02 — 0.2.80: macOS permissions and screen capture
+
+- Screen sharing checks Screen Recording / Screen & System Audio Recording separately from Accessibility. The picker refreshes after returning from System Settings and shows Granted, Denied, Checking or Unable to Verify.
+- Capture validates only the chosen screen or window, so a failed window list cannot block a valid screen. Discovery timeouts, disappeared selections and capture startup failures have specific errors; retired requests cannot capture an old selection.
+- Remote control shows running-app and input-helper permission evidence, refreshes stale checks after settings changes and sleep/wake, and reports contradictory native checks as unverifiable. Screen sharing remains available while control is unavailable or being checked; participant control still requires explicit approval.
+- Diagnostics includes Screen Recording status and actual app-signature verification. Restart advice requires observed permission-change evidence instead of a generic capture failure.
+
+Modules: Calls 1.4.1, Meet 1.8.1, Settings 1.9.4, Diagnostics 1.0.2. Installed signed macOS builds and delivery to another participant still require the acceptance tests in `docs/MACOS_PERMISSIONS.md` (#132).
+
+---
+
+## 2026-10-02 — 0.2.79: images in the AI Assistant
+
+You can now give the AI Assistant pictures — screenshots, photos of documents, scans (#59):
+
+- **Add images** with the image button, by dropping them on the panel, or by pasting. Thumbnails show before sending, with a large preview and Remove. PNG, JPEG, WebP, GIF and BMP, up to 10 MB each and 5 per message; anything refused says why.
+- **Extract Text** reads English, Sinhala and Tamil — also mixed — on this computer, keeps lines and paragraphs, and has Copy Text. Words it is unsure of are underlined; what it cannot read says `[unreadable]` instead of being guessed. The first use downloads about 5.5 MB of language data from `cdn.jsdelivr.net` (each file's size and checksum are verified); firewalled sites need to allow that host.
+- **Ask about an image** and the question goes to a model your administrator has marked as able to read images — only online, and only when online fallback is on in AI Assistant settings. The Local AI engine cannot look at images yet, so without an online vision model a card offers Extract Text, answering from the image's text on this computer, the settings, or Local AI setup. Your question and images stay in the box.
+- Progress reads Reading image → Extracting text → Preparing reply. Stop or a failure puts the question and images back; Try again resends them.
+- Text inside an image is treated as something to read, never as instructions to the assistant.
+
+Needs the server update (AI module) and an administrator ticking **Images** on a vision-capable model in AI settings.
+
+---
+
+## 2026-10-02 — 0.2.78: direct calls from Chat, separate from meetings
+
+Voice and video calls from a conversation are their own thing now — no meeting invitation, room link or calendar event (#113):
+
+- **Clear call states** — Calling, Ringing (once the other person's device shows the ring), Connecting, Connected, Busy, Declined and No answer.
+- **Incoming calls** — "Incoming voice/video call from X" with Answer and Decline; while locked, "Incoming WorkSuite call", naming the caller only when Show Caller Details is on.
+- **Call window** — Maximise and speaker selection join minimise, mute, camera and end. Switching voice to video turns on only your camera.
+- **Connection loss** — "Reconnecting…" with the clock still running; the call rejoins for up to 30 seconds before ending.
+- **Call history** — a Calls tab in the full Chat page; Busy / No answer / Cancelled on call cards and in the log; Call again after a call ends. An unanswered call now rings the full 45 seconds and is recorded as missed.
+- **Only where calling works** — no call buttons in website-visitor chats, notice rooms or where the server has no calling set up.
+
+Needs the server update with the Communication migration (`php spark migrate --all`). With an older server calls still work; they just read Ringing straight away.
+
+---
+
 ## 2026-10-02 — 0.2.77: the new Home
 
 Home now follows the "WorkSuite Home — Optimized" design, on your real data:

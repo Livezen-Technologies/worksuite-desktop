@@ -5,12 +5,14 @@ import { apiGet, apiGetMeta, apiPost } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
-import { listStamp } from '../../core/time';
+import { listStamp, parseTs } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Avatar, Empty, ErrorNote, OfflineNote, Spinner, cx } from '../../components/ui';
 import { UserAvatar } from '../../components/UserAvatar';
 import type { ModuleProps } from '../registry';
+import { useNow } from '../calls/parts';
+import { CALL_FILTERS, CallLogList, useCallLog, type CallFilter } from './CallLog';
 import { Details, PRESENCE } from './Details';
 import { NewChat, StarredDialog } from './NewChat';
 import { lastOrRecent, roomFromRoute } from './routes';
@@ -23,8 +25,13 @@ import { ResizeDivider, useResizableWidth } from '../../components/ResizeDivider
 import { canOpenWeb, useCanOpen } from '../../core/access';
 import { AddChannel, type AddStep } from './channels/AddChannel';
 import { ChannelBar } from './channels/ChannelBar';
-import { buildChannels, channelOf, channelRoute, LIST_WIDTH } from './channels/channels';
+import { buildChannels, channelOf, channelRoute, isMetaChannel, LIST_WIDTH } from './channels/channels';
+import { MetaChannel } from './channels/MetaChannel';
+import { MetaConnect } from './channels/MetaConnect';
+import { MetaSettings } from './channels/MetaSettings';
+import { PLATFORM_LABEL, useMetaAccounts, type MetaAccount, type MetaPlatform } from './channels/meta';
 import { WhatsappChannel } from './channels/WhatsappChannel';
+import { WhatsappSettings } from './channels/WhatsappSettings';
 import { useWaAccounts } from './channels/whatsapp';
 
 /**
@@ -37,8 +44,10 @@ import { useWaAccounts } from './channels/whatsapp';
  *
  * Down the far left, the channel toolbar (worksuite-desktop#33): Chat, Web Chat and WhatsApp, each with its unread
  * count, and "Add a channel". Picking one shows its conversations in the list; drafts are kept per conversation.
+ * WhatsApp is only here now (#35): its old links open its channel, and someone with WhatsApp but not Chat gets
+ * Chat with only that channel. Messenger and Instagram (#36) are channels too, for whoever has them.
  */
-type Filter = 'all' | 'unread' | 'mentions' | 'archived';
+type Filter = 'all' | 'unread' | 'mentions' | 'archived' | 'calls';
 
 const STATUS_CHOICES: Array<{ id: string; label: string; dot: string }> = [
   { id: 'available', label: 'Available', dot: 'bg-success' },
@@ -52,21 +61,32 @@ export default function ChatPage({ tabId }: ModuleProps) {
   const { query, go, path } = useTab();
   const mini = tabId.startsWith('window-chat-mini');
   const room = roomFromRoute(query, path);
-  const channel = channelOf(query);
+  const chatAccess = useCanOpen('chat');
+  const asked = channelOf(query);
+  const whatsappAccess = useCanOpen('whatsapp');
+  // Messenger and Instagram are one application on the server (`meta`): having one is having both.
+  const metaAccess = useCanOpen('messenger');
+  // Someone with WhatsApp (or Messenger and Instagram) and not Chat has Chat for those channels alone.
+  const channel = asked === 'chat' && !chatAccess ? (whatsappAccess || !metaAccess ? 'whatsapp' : 'messenger') : asked;
   const websiteAccess = useWebsiteAccess();
   const websiteOpen = useWebsiteInbox(false, websiteAccess && !mini);
-  const whatsappAccess = useCanOpen('whatsapp');
   const wa = useWaAccounts(whatsappAccess && !mini);
   const waAccounts = wa.data?.accounts ?? [];
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
   const canConnect = !!perms && (perms.includes('*') || perms.includes('whatsapp.connect'));
+  const meta = useMetaAccounts(metaAccess && !mini);
+  const metaAccounts = meta.data?.accounts ?? [];
+  const metaCanConnect = !!meta.data?.can_connect;
+  const [connecting, setConnecting] = useState<{ platform: MetaPlatform; reconnect?: MetaAccount } | null>(null);
+  const [metaSettings, setMetaSettings] = useState<MetaPlatform | null>(null);
   const [adding, setAdding] = useState<AddStep | null>(null);
+  const [settings, setSettings] = useState(false);
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [starting, setStarting] = useState(false);
   const [starred, setStarred] = useState(false);
   const [details, setDetails] = useState(true);
-  const rooms = useQuery({ queryKey: ['chat', 'rooms'], queryFn: ({ signal }) => apiGetMeta<{ rooms: Room[] }>('/api/chat/rooms', undefined, signal) });
+  const rooms = useQuery({ queryKey: ['chat', 'rooms'], queryFn: ({ signal }) => apiGetMeta<{ rooms: Room[] }>('/api/chat/rooms', undefined, signal), enabled: chatAccess });
   const all = (rooms.data?.data.rooms ?? []).filter((r) => r.type !== 'widget');
   const current = all.find((r) => String(r.id) === room);
   useTabTitle(channel !== 'chat' ? null : current ? `Chat · ${current.name}` : 'Chat');
@@ -90,8 +110,9 @@ export default function ChatPage({ tabId }: ModuleProps) {
     if (reopen) go(`/chat?room=${reopen}`);
   }, [reopen, go]);
 
-  const channels = buildChannels({ active: channel, rooms: all, website: { access: websiteAccess, rows: websiteOpen.data?.conversations ?? [] }, whatsapp: { access: whatsappAccess, accounts: waAccounts } });
+  const channels = buildChannels({ active: channel, chat: chatAccess, rooms: all, website: { access: websiteAccess, rows: websiteOpen.data?.conversations ?? [] }, whatsapp: { access: whatsappAccess, accounts: waAccounts, canConnect }, meta: { access: metaAccess, accounts: metaAccounts } });
   const connect = whatsappAccess && canConnect ? () => setAdding({ at: 'whatsapp' }) : null;
+  const connectMeta = (platform: MetaPlatform) => (metaAccess && metaCanConnect && meta.data?.ready ? () => setConnecting({ platform }) : null);
 
   const chat = (
     <div className="flex h-full min-w-0 flex-1">
@@ -143,20 +164,76 @@ export default function ChatPage({ tabId }: ModuleProps) {
         <WebsiteWorkspace />
       ) : channel === 'whatsapp' ? (
         whatsappAccess ? (
-          <WhatsappChannel accounts={waAccounts} loading={wa.isLoading} error={wa.error} retry={() => void wa.refetch()} onConnect={connect} onRelink={(a) => setAdding({ at: 'link', accountId: a.id, name: a.name })} />
+          <WhatsappChannel accounts={waAccounts} loading={wa.isLoading} error={wa.error} retry={() => void wa.refetch()} onConnect={connect} onRelink={(a) => setAdding({ at: 'link', accountId: a.id, name: a.name })} onSettings={() => setSettings(true)} />
         ) : (
           <div className="flex min-w-0 flex-1 bg-ground">
             <Empty icon="lock" title="WhatsApp is not available to you" hint="Ask an administrator for access to WhatsApp." />
           </div>
         )
+      ) : isMetaChannel(channel) ? (
+        metaAccess ? (
+          <MetaChannel
+            key={channel}
+            platform={channel}
+            accounts={metaAccounts.filter((a) => a.platform === channel)}
+            loading={meta.isLoading}
+            error={meta.error}
+            retry={() => void meta.refetch()}
+            onConnect={connectMeta(channel)}
+            onReconnect={(a) => setConnecting({ platform: a.platform, reconnect: a })}
+            onSettings={() => setMetaSettings(channel)}
+          />
+        ) : (
+          <div className="flex min-w-0 flex-1 bg-ground">
+            <Empty icon="lock" title={`${PLATFORM_LABEL[channel]} is not available to you`} hint="Ask an administrator for access to Messenger and Instagram." />
+          </div>
+        )
       ) : (
         chat
       )}
+      {metaSettings && metaAccess ? (
+        <MetaSettings
+          platform={metaSettings}
+          accounts={metaAccounts.filter((a) => a.platform === metaSettings)}
+          loading={meta.isLoading}
+          onConnect={connectMeta(metaSettings) ? () => (setMetaSettings(null), setConnecting({ platform: metaSettings })) : null}
+          onReconnect={(a) => (setMetaSettings(null), setConnecting({ platform: a.platform, reconnect: a }))}
+          onClose={() => setMetaSettings(null)}
+        />
+      ) : null}
+      {connecting && metaAccess ? (
+        <MetaConnect
+          platform={connecting.platform}
+          reconnect={connecting.reconnect}
+          onClose={() => setConnecting(null)}
+          onConnected={(accounts) => {
+            const platform = connecting.platform;
+            setConnecting(null);
+            const ok = accounts.filter((a) => a.status === 'connected');
+            if (ok.length === accounts.length) toast('success', `${accounts.map((a) => a.name).join(', ')} ${accounts.length === 1 ? 'is' : 'are'} connected to ${PLATFORM_LABEL[platform]}.`);
+            else toast('error', accounts.filter((a) => a.status !== 'connected').map((a) => `${a.name}: ${a.status_note ?? 'not connected'}`).join(' '));
+            go(`/chat?channel=${platform}`);
+          }}
+        />
+      ) : null}
+      {settings && whatsappAccess ? (
+        <WhatsappSettings
+          accounts={waAccounts}
+          loading={wa.isLoading}
+          onConnect={connect ? () => (setSettings(false), connect()) : null}
+          onRelink={(a) => (setSettings(false), setAdding({ at: 'link', accountId: a.id, name: a.name }))}
+          onClose={() => setSettings(false)}
+        />
+      ) : null}
       {adding ? (
         <AddChannel
           initial={adding}
           website={{ access: websiteAccess, canSetUp: canOpenWeb('/website-chats') }}
           whatsapp={{ access: whatsappAccess, canConnect, accounts: waAccounts }}
+          meta={{ access: metaAccess, canConnect: metaCanConnect, ready: !!meta.data?.ready, accounts: metaAccounts }}
+          onMeta={(platform) => (setAdding(null), setConnecting({ platform }))}
+          onMetaSettings={(platform) => (setAdding(null), setMetaSettings(platform))}
+          onSettings={whatsappAccess ? () => (setAdding(null), setSettings(true)) : undefined}
           onClose={() => setAdding(null)}
           onConnected={() => {
             setAdding(null);
@@ -196,6 +273,11 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
   });
   const web = useWebsiteInbox(false, websiteAccess);
   const needle = q.trim().toLowerCase();
+  // Chat › Calls: the call log, beside the conversations (worksuite-desktop#113).
+  const calls = useCallLog(filter === 'calls');
+  const [callFilter, setCallFilter] = useState<CallFilter>('All');
+  const now = useNow(60_000);
+  const missed = (calls.data ?? []).filter((c) => c.missed && now - parseTs(c.started_at).getTime() < 86_400_000).length;
   const search = useQuery({
     queryKey: ['chat', 'search', needle],
     queryFn: ({ signal }) => apiGet<{ results: Array<{ message_id: number; room_id: number; room_name: string; sender_name: string; snippet: string; created_at: string }> }>('/api/chat/search', { q: needle, kind: 'all' }, signal),
@@ -243,10 +325,12 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
               ['all', 'All'],
               ['unread', 'Unread'],
               ['mentions', 'Mentions'],
+              ['calls', 'Calls'],
             ] as Array<[Filter, string]>
           ).map(([f, l]) => (
-            <button key={f} type="button" role="tab" aria-selected={filter === f} onClick={() => setFilter(f)} className={cx('shrink-0 rounded-full px-2.5 py-1', filter === f ? 'bg-ink text-surface' : 'border border-line text-ink hover:bg-subtle')}>
+            <button key={f} type="button" role="tab" aria-selected={filter === f} onClick={() => setFilter(f)} className={cx('flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1', filter === f ? 'bg-ink text-surface' : 'border border-line text-ink hover:bg-subtle')}>
               {l}
+              {f === 'calls' && missed ? <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-badge px-1 text-[10px] font-bold text-white" aria-label={`${missed} missed`}>{missed}</span> : null}
             </button>
           ))}
           {websiteAccess ? (
@@ -255,52 +339,67 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
             </button>
           ) : null}
         </div>
-        {offline ? <OfflineNote cachedAt={offline} /> : null}
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto pb-2 scroll-thin">
-        {filter === 'archived' ? (
-          <button type="button" onClick={() => setFilter('all')} className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[12.5px] font-bold text-ink hover:bg-subtle">
-            <Icon name="chevron-left" size={15} className="text-ink-3" /> Archived conversations
-          </button>
-        ) : archived && !needle ? (
-          <button type="button" onClick={() => setFilter('archived')} className="flex w-full items-center gap-2.5 px-3.5 py-[7px] text-left hover:bg-subtle">
-            <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] bg-subtle text-ink-2"><Icon name="archive" size={16} /></span>
-            <b className="flex-1 text-[13px] font-semibold text-ink">Archived</b>
-            <span className="text-[11.5px] font-semibold text-ink-3">{archived}</span>
-          </button>
-        ) : null}
-        {loading ? <Spinner /> : error ? <div className="p-4"><ErrorNote error={error} onRetry={retry} /></div> : null}
-        {!loading && !error && visible.length === 0 && visitors.length === 0 ? <Empty icon="chat" title={filter === 'archived' ? 'No archived conversations' : 'No conversations'} /> : null}
-        {sections.map(([title, list]) =>
-          list.length ? (
-            <div key={title}>
-              <div className="px-3.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase">{title}</div>
-              {list.map((r) => (
-                <RoomRow key={r.id} r={r} active={String(r.id) === selected} status={r.other_user_id ? presence.data?.presence[String(r.other_user_id)] : undefined} onOpen={() => go(`/chat?room=${r.id}`)} />
-              ))}
-            </div>
-          ) : null,
-        )}
-        {visitors.length ? (
-          <div>
-            <div className="px-3.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase">Website</div>
-            {visitors.map((c) => (
-              <VisitorRow key={c.id} c={c} active={selected === `w${c.id}`} onOpen={() => go(`/chat?view=website&website=${c.id}`)} />
-            ))}
-          </div>
-        ) : null}
-        {needle.length >= 3 && search.data?.results.length ? (
-          <div>
-            <div className="px-3.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase">Messages</div>
-            {search.data.results.slice(0, 20).map((h) => (
-              <button key={h.message_id} type="button" onClick={() => go(`/chat?room=${h.room_id}`)} className="flex w-full flex-col px-3.5 py-2 text-left hover:bg-subtle">
-                <span className="flex gap-2 text-[12px]"><b className="flex-1 truncate text-ink">{h.room_name}</b><span className="text-ink-3">{listStamp(h.created_at)}</span></span>
-                <span className="truncate text-[12px] text-ink-3">{h.sender_name}: {h.snippet}</span>
+        {filter === 'calls' ? (
+          <div className="flex gap-1 text-[12px] font-semibold">
+            {CALL_FILTERS.map((f) => (
+              <button key={f} type="button" aria-pressed={callFilter === f} onClick={() => setCallFilter(f)} className={cx('shrink-0 rounded-full px-2.5 py-0.5', callFilter === f ? 'bg-selection text-primary' : 'text-ink-2 hover:bg-subtle')}>
+                {f}
               </button>
             ))}
           </div>
         ) : null}
+        {offline ? <OfflineNote cachedAt={offline} /> : null}
       </div>
+      {filter === 'calls' ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-2 scroll-thin">
+          <CallLogList log={calls} rooms={rooms} filter={callFilter} needle={needle} />
+        </div>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto pb-2 scroll-thin">
+          {filter === 'archived' ? (
+            <button type="button" onClick={() => setFilter('all')} className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[12.5px] font-bold text-ink hover:bg-subtle">
+              <Icon name="chevron-left" size={15} className="text-ink-3" /> Archived conversations
+            </button>
+          ) : archived && !needle ? (
+            <button type="button" onClick={() => setFilter('archived')} className="flex w-full items-center gap-2.5 px-3.5 py-[7px] text-left hover:bg-subtle">
+              <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] bg-subtle text-ink-2"><Icon name="archive" size={16} /></span>
+              <b className="flex-1 text-[13px] font-semibold text-ink">Archived</b>
+              <span className="text-[11.5px] font-semibold text-ink-3">{archived}</span>
+            </button>
+          ) : null}
+          {loading ? <Spinner /> : error ? <div className="p-4"><ErrorNote error={error} onRetry={retry} /></div> : null}
+          {!loading && !error && visible.length === 0 && visitors.length === 0 ? <Empty icon="chat" title={filter === 'archived' ? 'No archived conversations' : 'No conversations'} /> : null}
+          {sections.map(([title, list]) =>
+            list.length ? (
+              <div key={title}>
+                <div className="px-3.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase">{title}</div>
+                {list.map((r) => (
+                  <RoomRow key={r.id} r={r} active={String(r.id) === selected} status={r.other_user_id ? presence.data?.presence[String(r.other_user_id)] : undefined} onOpen={() => go(`/chat?room=${r.id}`)} />
+                ))}
+              </div>
+            ) : null,
+          )}
+          {visitors.length ? (
+            <div>
+              <div className="px-3.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase">Website</div>
+              {visitors.map((c) => (
+                <VisitorRow key={c.id} c={c} active={selected === `w${c.id}`} onOpen={() => go(`/chat?view=website&website=${c.id}`)} />
+              ))}
+            </div>
+          ) : null}
+          {needle.length >= 3 && search.data?.results.length ? (
+            <div>
+              <div className="px-3.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase">Messages</div>
+              {search.data.results.slice(0, 20).map((h) => (
+                <button key={h.message_id} type="button" onClick={() => go(`/chat?room=${h.room_id}`)} className="flex w-full flex-col px-3.5 py-2 text-left hover:bg-subtle">
+                  <span className="flex gap-2 text-[12px]"><b className="flex-1 truncate text-ink">{h.room_name}</b><span className="text-ink-3">{listStamp(h.created_at)}</span></span>
+                  <span className="truncate text-[12px] text-ink-3">{h.sender_name}: {h.snippet}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      )}
     </aside>
   );
 }

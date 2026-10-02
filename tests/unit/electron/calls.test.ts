@@ -51,6 +51,22 @@ describe('incoming calls', () => {
     expect(open.mock.calls[0]![0]).toBe('ring');
   });
 
+  it('tells the server the ring is showing, once, so the caller reads Ringing (worksuite-desktop#113)', () => {
+    const post = vi.fn().mockResolvedValue(null);
+    const calls = new CallService({ open: vi.fn() } as never, { get: vi.fn(), post } as never, () => true);
+    calls.handle({ type: 'chat.call.ringing', ...ringing } as never);
+    calls.handle({ type: 'chat.call.ringing', ...ringing } as never);
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post).toHaveBeenCalledWith(`/api/chat/calls/${ringing.uuid}/delivered`);
+  });
+
+  it('does not say a ring is showing when it is not', () => {
+    const post = vi.fn().mockResolvedValue(null);
+    const calls = new CallService({ open: vi.fn() } as never, { get: vi.fn(), post } as never, () => false);
+    calls.handle({ type: 'chat.call.ringing', ...ringing } as never);
+    expect(post).not.toHaveBeenCalled();
+  });
+
   it('hangs up a call whose window closes', () => {
     const post = vi.fn().mockResolvedValue(null);
     const calls = new CallService({ open: vi.fn() } as never, { get: vi.fn(), post } as never, () => true);

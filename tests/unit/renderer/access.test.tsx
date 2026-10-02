@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -36,6 +36,7 @@ const { registerCommand, runCommand, allCommands } = await import('../../../src/
 const { allowedModules } = await import('../../../src/modules/registry');
 const { visibleNotices, visibleCategories } = await import('../../../src/modules/notifications/api');
 const { NotifDrawer } = await import('../../../src/modules/notifications/Drawer');
+const { Launcher } = await import('../../../src/app/overlays/Launcher');
 
 /** Somebody not set up: Home, HR and the everyday apps. */
 const give = (apps: string[]) => app.set({ apps: visibleApps({ apps, permissions: [] }) });
@@ -116,6 +117,54 @@ describe('tabs', () => {
     expect(gone).toEqual(['mail']);
     expect(tabsStore.get().tabs.map((t) => t.app)).toEqual(['home']);
     expect(tabsStore.get().closed.some((t) => t.app === 'chat')).toBe(false);
+  });
+});
+
+describe('WhatsApp, a channel of Chat (#35)', () => {
+  it('opens its links and old routes in Chat › WhatsApp with the same conversation, for whoever has WhatsApp', () => {
+    give(['chat', 'whatsapp']);
+    openWebLink('/whatsapp?chat=5');
+    expect(openInBrowser).not.toHaveBeenCalled();
+    const tab = tabsStore.get().tabs.find((t) => t.app === 'chat');
+    expect(tab?.route).toBe('/chat?channel=whatsapp&wa=5');
+    navigate('/whatsapp/9');
+    expect(tabsStore.get().tabs.filter((t) => t.app === 'chat').map((t) => t.route)).toEqual(['/chat?channel=whatsapp&wa=9']);
+    expect(openTab('/whatsapp')).not.toBeNull();
+    expect(tabsStore.get().tabs.at(-1)?.route).toBe('/chat?channel=whatsapp');
+    expect(tabsStore.get().tabs.some((t) => t.route.startsWith('/whatsapp'))).toBe(false);
+  });
+
+  it('refuses them to someone with Chat and not WhatsApp, and the browser is no way round', () => {
+    give(['chat']);
+    openWebLink('/whatsapp?chat=5');
+    expect(openTab('/chat?channel=whatsapp&wa=5')).toBeNull();
+    expect(openInBrowser).not.toHaveBeenCalled();
+    expect(tabsStore.get().tabs.map((t) => t.app)).toEqual(['home']);
+    expect(lastToast()).toBe("You don't have access to this.");
+  });
+
+  it('gives someone with WhatsApp and not Chat the WhatsApp channel, and nothing else of Chat', () => {
+    give(['whatsapp']);
+    expect(allowedModules(new Set(app.get().apps.map((a) => a.id))).has('chat')).toBe(true);
+    expect(openTab('/chat?channel=whatsapp&wa=5')).not.toBeNull();
+    expect(openTab('/chat?room=4')).toBeNull();
+  });
+
+  it('has no entry of its own in the launcher beside Chat', () => {
+    Element.prototype.scrollIntoView ??= () => undefined;
+    // The launcher reads the pins from the person's preferences.
+    app.set({ prefs: { pinnedApps: [] } as never });
+    give(['chat', 'whatsapp']);
+    render(<Launcher />);
+    const apps = screen.getByRole('listbox', { name: 'Apps' });
+    expect(within(apps).getByText('Chat')).toBeTruthy();
+    expect(within(apps).queryByText('WhatsApp')).toBeNull();
+    cleanup();
+    // Without Chat, it keeps its entry, which opens Chat › WhatsApp.
+    give(['whatsapp']);
+    render(<Launcher />);
+    fireEvent.click(within(screen.getByRole('listbox', { name: 'Apps' })).getByText('WhatsApp'));
+    expect(tabsStore.get().tabs.some((t) => t.route === '/chat?channel=whatsapp')).toBe(true);
   });
 });
 

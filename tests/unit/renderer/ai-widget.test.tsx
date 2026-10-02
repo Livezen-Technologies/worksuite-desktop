@@ -18,7 +18,7 @@ const { assistantSession, createAskSession } = await import('../../../src/module
 const { AiDock, useAssistantAlerts, useAssistantFollowsDisplay } = await import('../../../src/app/overlays/AiDock');
 const { AiWidget } = await import('../../../src/app/overlays/AiWidget');
 
-const AI: Preferences['ai'] = { quickAsk: true, shortcut: 'Alt+Space', insert: true, dockAtStart: false, language: 'Sinhala', display: 'widget', sound: false, moduleAccess: { worksuite: {}, local: {} }, onlineFallback: true, autoMinimize: false };
+const AI: Preferences['ai'] = { quickAsk: true, shortcut: 'Alt+Space', insert: true, dockAtStart: false, language: 'Sinhala', display: 'widget', sound: false, moduleAccess: { worksuite: {}, local: {} }, onlineFallback: true, autoMinimize: false, autoMinimizeWhenWorking: true };
 const setAi = (patch: Partial<Preferences['ai']>) => app.set((s) => ({ prefs: { ...(s.prefs ?? {}), ai: { ...AI, ...(s.prefs?.ai ?? {}), ...patch } } as Preferences }));
 
 const turn = (reply: string): AskTurn => ({ ok: true, reply, conversation_id: 4, tool_runs: [], sources: [], pending_actions: [] }) as unknown as AskTurn;
@@ -206,4 +206,14 @@ describe('the sound for new answers (#61)', () => {
     expect(made).toHaveBeenCalledTimes(1);
     vi.unstubAllGlobals();
   });
+});
+
+it('uses a minimized launcher when no display preference was saved (#127)', () => {
+  app.set({ prefs: { ai: { ...AI, display: undefined } } as unknown as Preferences });
+  wrap(<AiWidget />);
+  expect(launcher().getAttribute('aria-expanded')).toBe('false');
+  expect(screen.queryByRole('dialog')).toBeNull();
+  act(() => openAssistant());
+  expect(aiWidget.get().open).toBe(true);
+  expect(ui.get().dock).toBeNull();
 });

@@ -1,18 +1,20 @@
 import { lockedScope, lockedApi, lockedIpc } from '@shared/locked-access';
 import { lockedClickTarget } from '../services/locked-notifications';
 import { accessibilityDiagnostics } from '../services/remote-control/accessibility-diagnostics';
-import { LocalWorkspace } from '../services/local-workspace';
+import { LocalAccess, LocalWorkspace } from '../services/local-workspace';
 import { LocalWorkspaceImport, type ImportAccount } from '../services/local-workspace-import';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { localize } from '@shared/localization';
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { GuestMeetService } from '../services/guest-meet';
-import { app, Notification, clipboard, crashReporter, dialog, globalShortcut, ipcMain, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents, webContents } from 'electron';
+import { app, net as electronNet, Notification, clipboard, crashReporter, dialog, globalShortcut, ipcMain, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents, webContents } from 'electron';
 import os from 'node:os';
 import { hkdfSync } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { canOpenApp, canOpenLink, canOpenRoute, notificationAllowed, visibleAppIds } from '@shared/access';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
 import { resolveWebLink } from '@shared/links';
+import { redirectRoute } from '@shared/channels';
 import { networkStatus } from '@shared/network';
 import { pmsCached } from '@shared/pms-cache';
 import { eventsCached } from '@shared/event-desk';
@@ -38,7 +40,7 @@ import { AuthService } from '../services/auth';
 import { BootstrapService } from '../services/bootstrap';
 import { CallService } from '../services/calls';
 import { ScreenShare } from '../services/screen-share';
-import { createRemoteControl } from '../services/remote-control/host';
+import { accessibility, createRemoteControl } from '../services/remote-control/host';
 import { DEFAULT_POLICY } from '../services/policy';
 import { Database } from '../services/db';
 import { archName, DeviceService, platformName } from '../services/device';
@@ -56,7 +58,7 @@ import { NotificationService, inDnd } from '../services/notifications';
 import { WebchatRinger, ringerHeight } from '../services/webchat-ring';
 import { QuickAsk } from '../services/quick-ask';
 import { AiService } from '../services/ai';
-import { AI_CHANGES_LINK, AiPendingWatcher } from '../services/ai-pending';
+import { AI_ANSWER_LINK, AI_CHANGES_LINK, AiPendingWatcher } from '../services/ai-pending';
 import * as fsp from 'node:fs/promises';
 import { createInjector, type Injector } from '../services/remote-control/input';
 import { OfflineCache } from '../services/offline-cache';
@@ -77,6 +79,7 @@ import { OfficeEditorHost } from '../services/office-editor';
 import { OfficeExternal } from '../services/office-external';
 import { createPdfStudio } from '../services/pdf/host';
 import { createLocalAI } from '../services/local-ai/host';
+import { OcrService } from '../services/ocr';
 import { OfficeLocalFiles, officePathsInArgv } from '../services/office-local';
 import { officeDocRoute } from '@shared/office';
 import { pdfPathsInArgv } from '../services/pdf/local-files';
@@ -641,7 +644,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     windows.showMain();
     broadcast('toast', { kind: 'error', text: NO_ACCESS });
   };
-  const navigate = (req: NavigateRequest): void => {
+  const navigate = (asked: NavigateRequest): void => {
+    // A channel's old route (`/whatsapp?chat=5`) opens in its host now, on the same conversation (#35).
+    const req = { ...asked, route: redirectRoute(asked.route) };
     // Locked: the workspace is not there to take it; it opens once WorkSuite is unlocked (#114).
     if (lock.isLocked()) {
       pendingNav.push(req);
@@ -677,8 +682,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     const w = windows.showMain();
     w.webContents.send('ai:open', { to: 'changes', text: '', result: null });
   };
+  // The assistant's conversation, where an answer that arrived in the background is read (#126).
+  const openAiAnswer = (): void => {
+    const w = windows.showMain();
+    w.webContents.send('ai:open', { to: 'ask', text: '', result: null });
+  };
   const openLink = (link: string | null): void => {
     if (link === AI_CHANGES_LINK) return openAiChanges();
+    if (link === AI_ANSWER_LINK) return openAiAnswer();
     const target = resolveWebLink(link);
     // Nor in the browser instead: a link into an app the person may not open is refused.
     if (!canOpenLink(link, sessionCtl.visibleApps())) refuse();
@@ -765,6 +776,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     const counts = { ...raw, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: canOpenApp('mail', visible) ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0 };
     const services: Record<string, ServiceHealth> = { ...supervisor.health() };
     return {
+      internetOnline: electronNet.isOnline(),
+      realtimeDiagnostics: realtime.diagnostics(),
       network: networkStatus(apiReachable, realtime.getState(), realtimeDownSince),
       realtime: realtime.getState(),
       pendingChanges: uid ? queue.pendingCount(uid) + salonSync.pending() + eventDesk.pending() + pos.pending() + restaurant.sync.pending() : 0,
@@ -802,7 +815,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   realtime.onState = (s: RealtimeState) => {
     notifications.realtimeState(s);
-    realtimeDownSince = s === 'down' ? (realtimeDownSince ?? Date.now()) : null;
+    realtimeDownSince = s === 'down' || s === 'connecting' ? (realtimeDownSince ?? Date.now()) : null;
     emitStatus();
   };
   function scopeFor(sender: Electron.WebContents) {
@@ -821,8 +834,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     if (!lock.isLocked()) broadcast('realtime:event', e);
     else for (const win of BrowserWindow.getAllWindows()) {
       const scope = scopeFor(win.webContents);
-      const event = e as { type?: string; uuid?: string; outcome?: string };
-      if (!guestWindowIds.has(win.webContents.id) && scope?.uuid && event.type === 'chat.call.stopped' && event.uuid === scope.uuid) win.webContents.send('realtime:event', { type: event.type, uuid: event.uuid, outcome: event.outcome });
+      const event = e as { type?: string; uuid?: string; outcome?: string; reason?: string };
+      if (!guestWindowIds.has(win.webContents.id) && scope?.uuid && event.type === 'chat.call.stopped' && event.uuid === scope.uuid) win.webContents.send('realtime:event', { type: event.type, uuid: event.uuid, outcome: event.outcome, reason: event.reason });
     }
     // `access.changed` (the person's apps changed) and `profile.updated`: fetch the bootstrap again.
     accessWatch.onEvent(e);
@@ -1468,6 +1481,16 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     changed: () => broadcast('ai:localChanged'),
   });
   app.on('will-quit', () => void localAI.stop());
+  // Text read from images on this computer (worksuite-desktop#59): Tesseract, its language data fetched once when first needed.
+  const ocr = new OcrService({
+    dir: join(p.userData, 'LocalAI', 'ocr'),
+    fetch: (url, init) => net.fetch(url, { ...init, cache: 'no-store' } as RequestInit),
+    progress: (sender, ev) => {
+      const wc = webContents.fromId(sender);
+      if (wc && !wc.isDestroyed()) wc.send('ai:ocrProgress', ev);
+    },
+  });
+  app.on('will-quit', () => void ocr.stop());
   handPdfs = (paths) => void pdfStudio.openFromOs(paths);
   pdfOnline = () => pdfStudio.online();
   if (pendingPdfs.length) handPdfs(pendingPdfs.splice(0));
@@ -1657,8 +1680,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   pmsLocks.register(router);
   restaurant.register(router);
   localAI.register(router);
-  const openGuest = async (input: string, server?: string) => {
-    const info = await guests.prepare(input, server);
+  router.handle('ai:ocr', (input, c) => ocr.recognize(c.sender.id, input));
+  router.handle('ai:ocrCancel', (input) => ocr.cancel(input.id));
+  router.handle('ai:ocrStatus', () => ocr.status());
+  const openGuest = async (input: string, server?: string, localName?: string) => {
+    const prepared = await guests.prepare(input, server);
+    const info = localName ? { ...prepared, localName } : prepared;
     const w = windows.open('meet', `/guest-meet/${info.uuid}?server=${encodeURIComponent(info.origin)}`, info.title ?? 'WorkSuite Meet · Guest');
     const senderId = w.webContents.id;
     guests.bind(senderId, info);
@@ -1671,12 +1698,15 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     const w = windows.open('meet', '/guest-workspace', 'WorkSuite · Guest workspace');
     const id = w.webContents.id;
     localWindows.add(id); guestWindowIds.add(id);
-    w.once('closed', () => { localWindows.delete(id); guestWindowIds.delete(id); });
+    w.once('closed', () => { localWindows.delete(id); guestWindowIds.delete(id); localAccess.forget(id); });
     return { id: w.id };
   };
-  const localOnly = (senderId: number) => {
+  // Windows past the Local Profile's PIN (or with none set); wrong PINs wait a minute after five.
+  const localAccess = new LocalAccess(local);
+  const localWindow = (senderId: number) => {
     if (!localWindows.has(senderId)) throw new DesktopError('PERMISSION_DENIED', 'Open the local guest workspace first.');
   };
+  const localOnly = (senderId: number) => { localWindow(senderId); localAccess.require(senderId); };
   const currentImportAccount = (): ImportAccount | null => {
     const b = sessionCtl.current();
     const origin = auth.getServer()?.origin;
@@ -1686,11 +1716,26 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   };
   const importer = new LocalWorkspaceImport(local, currentImportAccount);
   router.handle('local:open', () => openLocal());
+  router.handle('local:status', (_input, c) => {
+    localWindow(c.sender.id);
+    const profile = local.profile();
+    return { profile, locked: localAccess.locked(c.sender.id), language: settings.effective().language };
+  });
+  router.handle('local:profile', (input, c) => {
+    localWindow(c.sender.id);
+    // Creating the profile needs nothing; changing one that has a PIN needs it entered first.
+    if (local.profile()) localOnly(c.sender.id);
+    const profile = local.saveProfile(input);
+    localAccess.grant(c.sender.id);
+    return profile;
+  });
+  router.handle('local:unlock', (input, c) => { localWindow(c.sender.id); return localAccess.unlock(c.sender.id, input.pin); });
   router.handle('local:read', (_input, c) => { localOnly(c.sender.id); return local.read(); });
   router.handle('local:save', (input, c) => { localOnly(c.sender.id); return local.save(input); });
   router.handle('local:remove', (input, c) => { localOnly(c.sender.id); local.remove(input.id); });
   router.handle('local:meeting', (input, c) => { localOnly(c.sender.id); local.meeting(input.input, input.server); });
-  router.handle('local:deleteAll', (_input, c) => { localOnly(c.sender.id); local.deleteAll(); });
+  router.handle('local:deleteAll', (_input, c) => { localOnly(c.sender.id); local.deleteAll(); localAccess.clear(); });
+  router.handle('local:joinMeeting', (input, c) => { localOnly(c.sender.id); return openGuest(input.input, input.server, local.profile()?.name); });
   router.handle('local:signIn', (_input, c) => { localOnly(c.sender.id); windows.showMain(); BrowserWindow.fromWebContents(c.sender)?.close(); });
   router.handle('local:export', async (_input, c) => {
     localOnly(c.sender.id);
@@ -1699,16 +1744,38 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     writeFileSync(chosen.filePath, local.export(), { mode: 0o600, flush: true });
     return { saved: true };
   });
-  router.handle('local:restore', async (_input, c) => {
+  // Restore is two steps: choose and validate a file (counts only, nothing written), then confirm that preview.
+  let pendingRestore: { token: string; sender: number; text: string } | null = null;
+  router.handle('local:restorePreview', async (_input, c) => {
     localOnly(c.sender.id);
     const chosen = await dialog.showOpenDialog(BrowserWindow.fromWebContents(c.sender)!, { title: 'Restore guest workspace backup', properties: ['openFile'], filters: [{ name: 'Guest workspace backup', extensions: ['json'] }] });
     if (chosen.canceled || !chosen.filePaths[0]) return null;
     if (statSync(chosen.filePaths[0]).size > 20_000_000) throw new DesktopError('IPC_VALIDATION_FAILED', 'Backup files must be under 20 MB.');
-    try { return local.restore(readFileSync(chosen.filePaths[0], 'utf8')); }
+    const text = readFileSync(chosen.filePaths[0], 'utf8');
+    let counts: ReturnType<typeof local.preview>;
+    try { counts = local.preview(text); }
+    catch { throw new DesktopError('IPC_VALIDATION_FAILED', 'This is not a valid guest workspace backup. Nothing was changed.'); }
+    pendingRestore = { token: randomUUID(), sender: c.sender.id, text };
+    return { token: pendingRestore.token, ...counts };
+  });
+  router.handle('local:restore', (input, c) => {
+    localOnly(c.sender.id);
+    const pending = pendingRestore;
+    if (!pending || pending.token !== input.token || pending.sender !== c.sender.id) throw new DesktopError('PERMISSION_DENIED', 'Choose the backup again before restoring.');
+    pendingRestore = null;
+    try { return local.restore(pending.text); }
     catch { throw new DesktopError('IPC_VALIDATION_FAILED', 'This is not a valid guest workspace backup. Nothing was changed.'); }
   });
-  router.handle('local:importOffer', () => ({ count: local.read().items.length }));
-  router.handle('local:reviewImport', () => {
+  router.handle('local:importOffer', () => {
+    const profile = local.profile();
+    return { count: local.read().items.length, pinRequired: !!profile?.hasPin, profileName: profile?.name ?? null };
+  });
+  router.handle('local:reviewImport', (input) => {
+    // A Local Profile with a PIN shows its items to an account only after that PIN.
+    if (local.profile()?.hasPin) {
+      const result = localAccess.tryPin(input.pin ?? '');
+      if (!result.unlocked) throw new DesktopError('PERMISSION_DENIED', result.retryAfter ? `Too many wrong PINs. Try again in ${result.retryAfter} seconds.` : 'Enter the Local Profile PIN to review its items.');
+    }
     const origin = auth.getServer()?.origin;
     const token = auth.accessToken();
     if (!origin || !token) throw new DesktopError('NOT_SIGNED_IN', 'Refresh your sign-in before importing.');
@@ -1720,7 +1787,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   router.handle('local:import', (input) => importer.run(input.token, input.ids, input.createCopies));
   const localReminderTimer = setInterval(() => local.reminders(Date.now(), (item) => {
     if (!Notification.isSupported()) return false;
-    try { const reminder = new Notification({ title: `Guest reminder · ${item.title}`, body: item.kind === 'event' ? 'Your local calendar reminder is due.' : 'Your local task reminder is due.' }); reminder.on('click', () => openLocal()); reminder.show(); return true; }
+    try { const reminder = new Notification({ title: `${localize('Local reminder', settings.effective().language)} · ${item.title}`, body: localize(item.kind === 'event' ? 'Your local calendar reminder is due.' : 'Your local task reminder is due.', settings.effective().language) }); reminder.on('click', () => openLocal()); reminder.show(); return true; }
     catch { return false; }
   }), 15000);
   app.on('before-quit', () => { clearInterval(localReminderTimer); local.close(); });
@@ -1804,7 +1871,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     notifications.markGap();
   });
   powerMonitor.on('user-did-resign-active', () => remoteControl.onSystem('user-did-resign-active'));
+  app.on('browser-window-focus', () => { if (process.platform === 'darwin') { accessibility.openedSettings(); void accessibility.refresh(); } });
   powerMonitor.on('resume', () => {
+    if (process.platform === 'darwin') { accessibility.openedSettings(); void accessibility.refresh(); }
     device.poke();
     sync.kick('resume');
     realtime.kick();

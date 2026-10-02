@@ -13,6 +13,7 @@ import { allowedModules, moduleFor } from '../modules/registry';
 import { PanelBoundary } from '../app/Boundaries';
 import { AiDock, askWorkSuite, makeTask, openAiChanges, openAiDockWith, useAssistantAlerts, useAssistantFollowsDisplay } from '../app/overlays/AiDock';
 import { AiWidget } from '../app/overlays/AiWidget';
+import { AI_WORKSPACE_ATTR, restoreAssistant, useAutoMinimize } from '../app/overlays/aiMinimize';
 import { Launcher } from '../app/overlays/Launcher';
 import { NetworkPopover, NotificationCenter, ProfileMenu, TransferCenter } from '../app/overlays/Popovers';
 import { OrgSwitcher } from '../app/overlays/OrgSwitcher';
@@ -46,6 +47,8 @@ export function Shell() {
   const aiDisplay = useAiDisplay();
   useAssistantFollowsDisplay();
   useAssistantAlerts();
+  // Settings › AI Assistant › Auto-minimize when I continue working (#126).
+  useAutoMinimize();
   useEffect(() => {
     const ai = app.get().prefs?.ai;
     if (ai?.dockAtStart && ai.display !== 'hidden' && ui.get().dock === null) openAssistant();
@@ -179,6 +182,8 @@ export function Shell() {
         else if (h.to === 'changes') {
           openAiChanges();
           openAssistant();
+        } else if (h.to === 'ask') {
+          restoreAssistant();
         } else {
           openAiDockWith(h.text, h.result);
           openAssistant();
@@ -250,7 +255,7 @@ export function Shell() {
           {hasChat ? <RingingBar tone={!ringWindow} /> : null}
           <div className="relative flex min-h-0 flex-1">
             {/* The floating AI widget keeps inside the workspace: never over the sidebar, the tabs, the status bar or a drawer. */}
-            <div className="relative flex min-h-0 min-w-0 flex-1">
+            <div {...{ [AI_WORKSPACE_ATTR]: '' }} className="relative flex min-h-0 min-w-0 flex-1">
               <Workspace />
               {hasAi ? (
                 <PanelBoundary name="The AI Assistant" onClose={() => aiWidget.set({ open: false })} floating>

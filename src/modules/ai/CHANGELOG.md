@@ -4,6 +4,18 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.8.0 — 2026-10-03
+
+- The assistant tucks itself away while you keep working (#126): sending shows Thinking… at once; switching tabs, opening another module or clicking in the workspace while it works minimizes it to the floating button (never while you are typing in it, and never moving your focus); the button's tooltip reads Thinking…; when the answer is ready a compact preview shows its first lines with View Result and Dismiss, Needs your input names what is waiting, a failure offers Try again, and Stop processing sits beside the button; View Result or the button restores the conversation; a drawer can be minimized too; no answer text while locked.
+
+## 1.7.1 — 2026-10-03
+
+- Use the minimized floating Ask AI widget when no display preference is saved; preserve explicit display choices (#127).
+
+## 1.7.0 — 2026-10-02
+
+- Images in the AI Assistant (#59): upload, drag-and-drop and paste; thumbnails with preview and remove; PNG/JPEG/WebP/GIF/BMP checked by content, 10 MB each, 5 per message; Extract Text reads English, Sinhala and Tamil on this computer (language data ~5.5 MB downloaded once from cdn.jsdelivr.net, size and SHA-256 pinned) with Copy Text and uncertain/[unreadable] marking; image questions go online only to a server model verified to read images and only when online fallback is on, otherwise a card offers Extract Text, answering from the image's text locally, settings or Local AI setup; text in images is quoted as reference, never followed; Reading image → Extracting text → Preparing reply; Stop and failures put the question and images back, Try again resends.
+
 ## 1.6.0 — 2026-10-02
 
 - Send optional interface reply language to the server and apply the selected default to local AI while preserving explicit language requests and user text (#60).

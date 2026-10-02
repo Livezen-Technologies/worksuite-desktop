@@ -60,6 +60,8 @@ export interface Incoming {
   sender: string | null;
   link: string | null;
   critical: boolean;
+  /** An incoming call (`chat.call.ringing`), not a message: said as a call, locked or not (worksuite-desktop#113). */
+  call?: boolean;
 }
 
 interface MissedRoom {
@@ -144,6 +146,7 @@ const MODULE_LABELS: Record<string, string> = {
   files: 'Files',
   support: 'Support',
   salon: 'SalonMate',
+  ai: 'AI Assistant',
   system: 'WorkSuite',
 };
 
@@ -429,11 +432,12 @@ export class NotificationService {
           id: `call:${String(e.uuid ?? e.event_id ?? Date.now())}`,
           module: 'chat',
           category: 'incoming-call',
-          title: `Incoming ${String(e.mode ?? 'call')} from ${caller}`,
-          body: e.room_name ? String(e.room_name) : 'WorkSuite call',
+          title: `Incoming ${e.mode === 'video' ? 'video' : 'voice'} call from ${caller}`,
+          body: e.room_name ? String(e.room_name) : 'Answer or decline in the call window',
           sender: caller,
           link: `/chat?room=${String(e.room_id ?? '')}`,
           critical: true,
+          call: true,
         });
         break;
       }

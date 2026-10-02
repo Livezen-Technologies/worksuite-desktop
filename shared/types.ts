@@ -357,6 +357,12 @@ export interface AiPrefs {
    * is sent; the answer carries on, and the launcher says when it is ready.
    */
   autoMinimize: boolean;
+  /**
+   * Auto-minimize when I continue working (worksuite-desktop#126): while a question is on its way, switching tabs,
+   * opening another module or clicking the workspace outside the assistant puts it down to its floating button; the
+   * answer carries on, and the button says when it is ready. Never while the person is using the assistant itself.
+   */
+  autoMinimizeWhenWorking: boolean;
 }
 
 /** The two assistants Module Access is set for: the server's, and the model on this computer. */
@@ -379,8 +385,8 @@ export const QUICK_ASK_SHORTCUTS = ['Alt+Space', 'Control+Alt+Space', 'CommandOr
 
 /** Quick Ask handing its text to the main window: the AI dock, a new task, or search. */
 export interface AiHandoff {
-  /** `changes`: a card to review in the main window, the only place one is confirmed. */
-  to: 'dock' | 'task' | 'search' | 'changes';
+  /** `changes`: a card to review in the main window, the only place one is confirmed. `ask`: the conversation, from an answer's banner (#126). */
+  to: 'dock' | 'task' | 'search' | 'changes' | 'ask';
   text: string;
   result: string | null;
 }
@@ -496,6 +502,8 @@ export interface NotificationItem {
 }
 
 export interface StatusSnapshot {
+  internetOnline?: boolean;
+  realtimeDiagnostics?: { attempt: number; lastDisconnect: string | null };
   network: NetworkStatus;
   realtime: RealtimeState;
   pendingChanges: number;
@@ -617,6 +625,8 @@ export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'v
 
 /** Screens and windows offered for sharing (FR-COM-05), and whether the OS lets us capture them. */
 export interface ScreenSources {
+  permissionStatus?: 'granted' | 'denied' | 'checking' | 'unknown' | 'not_required';
+  permissionProblem?: string | null;
   /** The system's Screen Recording permission (macOS); 'granted' where the system has no such gate. */
   permission: string;
   sources: Array<{ id: string; name: string; kind: 'screen' | 'window'; thumbnail: string | null }>;
@@ -627,7 +637,7 @@ export interface ScreenSources {
    */
   state?: 'ok' | 'denied' | 'failed' | 'partial';
   problem?: string | null;
-  /** macOS applies a changed Screen Recording permission only to a newly started app. */
+  /** Permission changed during this run, but capture remains unavailable; a restart may help. */
   restartMayHelp?: boolean;
   platform?: string;
 }
@@ -786,6 +796,7 @@ export interface RemoteControlSupport {
    * macOS: the running app reports access but its input helper explicitly reports denial.
    */
   accessibilityHint?: 'restart' | null;
+  accessibilityDetails?: { appTrusted: boolean | null; helperTrusted: boolean | null; helperAccessibility: boolean | null; problem: string | null; checkedAt: number | null; runningApp: string };
   /** The computer's policy lets it be controlled at all (the server still decides each time). */
   policyAllows: boolean;
 }

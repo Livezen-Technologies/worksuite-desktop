@@ -31,7 +31,7 @@ import { PRESENCE } from './Details';
 import { ForwardDialog, type RoomDetail } from './NewChat';
 import { EmojiPicker, VoicePlayer } from './parts';
 import { AttachmentGallery, openChatAttachment, useAttachmentGallery } from './AttachmentViewer';
-import { mediaUrl, roomPerson, type ChatMessage, type Room } from './types';
+import { canCall, mediaUrl, roomPerson, type ChatMessage, type Room } from './types';
 
 export interface ReplyTarget {
   id: number;
@@ -230,12 +230,16 @@ export function Thread({
             <Icon name="search" size={15} />
           </button>
         ) : null}
-        <button type="button" aria-label="Start a voice call" title="Voice call" onClick={() => void startCall(roomId, 'audio', room?.name)} className={headerBtn}>
-          <Icon name="phone" size={16} />
-        </button>
-        <button type="button" aria-label="Start a video call" title="Video call" onClick={() => void startCall(roomId, 'video', room?.name)} className={headerBtn}>
-          <Icon name="video" size={16} />
-        </button>
+        {canCall(room) ? (
+          <>
+            <button type="button" aria-label="Start a voice call" title="Voice call" onClick={() => void startCall(roomId, 'audio', room?.name)} className={headerBtn}>
+              <Icon name="phone" size={16} />
+            </button>
+            <button type="button" aria-label="Start a video call" title="Video call" onClick={() => void startCall(roomId, 'video', room?.name)} className={headerBtn}>
+              <Icon name="video" size={16} />
+            </button>
+          </>
+        ) : null}
         {!mini && meetAllowed ? (
           <button type="button" onClick={() => void startMeetingFromChat(roomId, room?.name)} className="flex h-[34px] items-center rounded-[8px] bg-primary px-3 text-[12.5px] font-bold text-white hover:bg-primary-hover">
             Meet

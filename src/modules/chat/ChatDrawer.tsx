@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { ApiError, apiGet, apiGetMeta, apiPost } from '../../core/api';
+import { apiGet, apiGetMeta, apiPost } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
 import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
@@ -16,21 +16,14 @@ import { resolveWebLink } from '@shared/links';
 import { APP_CATALOGUE } from '@shared/apps';
 import { appColour } from '../../core/app-look';
 import { AppTile } from '../../components/AppTile';
-import { describeCall, type CallRow, type Kind } from '../calls/log';
 import { useNow } from '../calls/parts';
-import { answerCall, startCall } from '../calls/start';
+import { startCall } from '../calls/start';
+import { CALL_FILTERS, CallLogList, useCallLog, type CallFilter } from './CallLog';
 import { PRESENCE } from './Details';
 import { NewChat } from './NewChat';
 import { Thread } from './Thread';
 import { openChatWindow } from './window';
-import { roomPerson, type Room } from './types';
-
-const GLYPH: Record<Kind, [string, string]> = {
-  missed: ['↙', 'text-danger'],
-  in: ['↙', 'text-success'],
-  out: ['↗', 'text-primary'],
-  live: ['●', 'text-success'],
-};
+import { canCall, roomPerson, type Room } from './types';
 
 /** The web address of what the active tab shows, when it is a record. */
 function recordLink(route: string): string | null {
@@ -112,16 +105,11 @@ function Lists() {
   const now = useNow(60_000);
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<'All' | 'Unread' | 'Mentions'>('All');
-  const [callFilter, setCallFilter] = useState<'All' | 'Missed' | 'Incoming' | 'Outgoing'>('All');
+  const [callFilter, setCallFilter] = useState<CallFilter>('All');
   const [starting, setStarting] = useState(false);
   const rooms = useRooms();
   const all = (rooms.data?.data.rooms ?? []).filter((r) => r.type !== 'widget');
-  const calls = useQuery({
-    queryKey: ['chat', 'calls', 'history'],
-    queryFn: ({ signal }) => apiGet<CallRow[]>('/api/chat/calls/history', undefined, signal),
-    refetchInterval: tab === 'Calls' ? 30_000 : 120_000,
-    retry: false,
-  });
+  const calls = useCallLog(tab === 'Calls');
   const people = [...new Set(all.map((r) => r.other_user_id).filter((id): id is number => typeof id === 'number'))];
   const presence = useQuery({
     queryKey: ['chat', 'presence', people.join(',')],
@@ -130,7 +118,6 @@ function Lists() {
     refetchInterval: 60_000,
   });
   const needle = q.trim().toLowerCase();
-  const nameOf = (c: CallRow) => c.room_name ?? all.find((r) => r.id === c.room_id)?.name ?? c.caller_name;
   const live = all.filter((r) => !r.archived);
   const archived = all.filter((r) => r.archived);
   const shown = (tab === 'Archived' ? archived : live).filter((r) => {
@@ -141,13 +128,6 @@ function Lists() {
   });
   // Pinned first, then the most recent.
   const ordered = tab === 'Chats' ? [...shown.filter((r) => r.pinned), ...shown.filter((r) => !r.pinned)] : shown;
-  const log = (calls.data ?? []).filter((c) => {
-    const k = describeCall(c).kind;
-    if (callFilter === 'Missed' && k !== 'missed') return false;
-    if (callFilter === 'Incoming' && c.direction !== 'incoming') return false;
-    if (callFilter === 'Outgoing' && c.direction !== 'outgoing') return false;
-    return !needle || nameOf(c).toLowerCase().includes(needle);
-  });
   const unreadChats = live.filter((r) => r.unread > 0).length;
   // Calls missed in the last day.
   const missed = (calls.data ?? []).filter((c) => c.missed && now - parseTs(c.started_at).getTime() < 86_400_000).length;
@@ -194,7 +174,7 @@ function Lists() {
         </div>
       ) : tab === 'Calls' ? (
         <div className="flex shrink-0 gap-1.5 px-3.5 pt-2.5 pb-1">
-          {(['All', 'Missed', 'Incoming', 'Outgoing'] as const).map((f) => (
+          {CALL_FILTERS.map((f) => (
             <button key={f} type="button" aria-pressed={callFilter === f} onClick={() => setCallFilter(f)} className={pill(callFilter === f)}>
               {f}
             </button>
@@ -205,43 +185,7 @@ function Lists() {
       )}
       <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pt-0.5 pb-2 scroll-thin">
         {tab === 'Calls' ? (
-          <>
-            {calls.isLoading ? <Spinner /> : calls.error ? (
-              calls.error instanceof ApiError && calls.error.status === 404 ? <Empty icon="phone" title="Call history needs a newer WorkSuite" /> : <div className="p-3"><ErrorNote error={calls.error} onRetry={() => void calls.refetch()} /></div>
-            ) : !log.length ? <Empty icon="phone" title="No calls" /> : null}
-            {log.map((c) => {
-              const d = describeCall(c);
-              const room = all.find((r) => r.id === c.room_id);
-              const group = !!room && room.type !== 'direct';
-              return (
-                <div key={c.uuid} className="flex items-center gap-3 rounded-[12px] pr-2 pl-2.5">
-                  <UserAvatar userId={roomPerson(room)} name={room?.avatar_name || nameOf(c)} size={42} className={group ? '!rounded-[13px]' : ''} />
-                  <span className="flex min-w-0 flex-1 items-center gap-2 border-b border-line py-[11px]">
-                    <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-                      <b className={cx('truncate text-[14px]', d.kind === 'missed' ? 'text-danger' : 'text-ink')}>{nameOf(c)}</b>
-                      <span className="flex items-center gap-[5px] text-[12px] text-ink-3">
-                        <span className={cx('font-bold', GLYPH[d.kind][1])} aria-hidden>{GLYPH[d.kind][0]}</span>
-                        <span className="truncate">{d.line}</span>
-                      </span>
-                    </span>
-                    <span className="flex shrink-0 flex-col items-end gap-1">
-                      <span className="text-[11.5px] text-ink-3">{d.kind === 'live' ? 'now' : listStamp(c.started_at)}</span>
-                      {d.kind !== 'live' ? <span className="text-[11.5px] font-semibold whitespace-nowrap text-primary">{d.action}</span> : null}
-                    </span>
-                    <button
-                      type="button"
-                      aria-label={`${d.action} ${nameOf(c)}`}
-                      title={d.action}
-                      onClick={() => (d.kind === 'live' ? void answerCall(c.uuid, String(c.room_id), false, nameOf(c)) : void startCall(c.room_id, c.mode, nameOf(c)))}
-                      className={cx('flex h-9 w-9 shrink-0 items-center justify-center rounded-full', d.kind === 'live' ? 'bg-[#1F9D5C] text-white' : 'bg-selection text-primary hover:brightness-95')}
-                    >
-                      <Icon name={c.mode === 'video' ? 'video' : 'phone'} size={16} />
-                    </button>
-                  </span>
-                </div>
-              );
-            })}
-          </>
+          <CallLogList log={calls} rooms={all} filter={callFilter} needle={needle} />
         ) : (
           <>
             {tab === 'Chats' && archived.length && !needle && filter === 'All' ? (
@@ -375,12 +319,16 @@ function Conversation({ roomId }: { roomId: string }) {
           <b className="truncate text-[14px] text-ink">{room?.name ?? 'Conversation'}</b>
           <span className={cx('truncate text-[12px]', typing.length ? 'font-semibold text-success' : 'text-ink-3')}>{status}</span>
         </span>
-        <button type="button" aria-label="Voice call" title="Voice call" onClick={() => void startCall(roomId, 'audio', room?.name)} className={cx(hbtn, '!text-primary')}>
-          <Icon name="phone" size={17} />
-        </button>
-        <button type="button" aria-label="Video call" title="Video call" onClick={() => void startCall(roomId, 'video', room?.name)} className={cx(hbtn, '!text-primary')}>
-          <Icon name="video" size={17} />
-        </button>
+        {canCall(room) ? (
+          <>
+            <button type="button" aria-label="Voice call" title="Voice call" onClick={() => void startCall(roomId, 'audio', room?.name)} className={cx(hbtn, '!text-primary')}>
+              <Icon name="phone" size={17} />
+            </button>
+            <button type="button" aria-label="Video call" title="Video call" onClick={() => void startCall(roomId, 'video', room?.name)} className={cx(hbtn, '!text-primary')}>
+              <Icon name="video" size={17} />
+            </button>
+          </>
+        ) : null}
         <span className="relative">
           <button type="button" aria-label="More" aria-expanded={menu} onClick={() => setMenu(!menu)} className={hbtn}>
             <Icon name="more-vertical" size={17} />

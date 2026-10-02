@@ -7,6 +7,8 @@ import { CallAvatar, VideoView } from '../parts';
 import { CallSidePanel, type PanelTab } from './CallSidePanel';
 import { CallVideoPip } from './CallVideoPip';
 import { CoreCallControls, type ControlButton, type MenuEntry } from './CoreCallControls';
+import type { MenuSection } from '../../../components/Menu';
+import { text } from '../../../core/i18n';
 import { computeLayout, HEADER, SIDE_COLUMN, STRIP, type LayoutOutput } from './layout';
 import { featured, type CallPerson } from './people';
 import { callUi, type LayoutMode } from './state';
@@ -40,7 +42,8 @@ export interface WorkspaceProps {
   board?: ReactNode | null;
   tabs: PanelTab[];
   buttons: ControlButton[];
-  more: MenuEntry[];
+  /** The More menu's own groups (Meeting Tools, Host Controls…); View & Layout is added after them. */
+  more: MenuSection[];
   end: { label: string; onClick: () => void; menu?: MenuEntry[] };
   /** A line above the controls ("You are sharing Screen 1"). */
   status?: ReactNode;
@@ -56,7 +59,8 @@ const IDLE_MS = 3_000;
 
 export function CallWorkspace(props: WorkspaceProps) {
   const ui = useSyncExternalStore(callUi.subscribe, callUi.get);
-  const root = useRef<HTMLDivElement>(null);
+  // The surface's element (state, not a ref: full screen and the menu's actions use it).
+  const [root, setRoot] = useState<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ width: 1024, height: 700 });
   const held = useRef(false);
   const idle = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -71,7 +75,7 @@ export function CallWorkspace(props: WorkspaceProps) {
   }, []);
 
   useLayoutEffect(() => {
-    const el = root.current;
+    const el = root;
     if (!el) return;
     const ro = new ResizeObserver(([e]) => {
       if (!e) return;
@@ -80,18 +84,18 @@ export function CallWorkspace(props: WorkspaceProps) {
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [root]);
 
   // Full screen is this element's, and the store follows the browser: Esc leaves it too.
   useEffect(() => {
-    const sync = () => callUi.set({ fullscreen: document.fullscreenElement === root.current && root.current !== null });
+    const sync = () => callUi.set({ fullscreen: document.fullscreenElement === root && root !== null });
     document.addEventListener('fullscreenchange', sync);
     return () => document.removeEventListener('fullscreenchange', sync);
-  }, []);
+  }, [root]);
   const toggleFullscreen = useCallback(() => {
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
-    else void root.current?.requestFullscreen().catch(() => undefined);
-  }, []);
+    else void root?.requestFullscreen().catch(() => undefined);
+  }, [root]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.key === 'F11') {
@@ -177,37 +181,40 @@ export function CallWorkspace(props: WorkspaceProps) {
 
   if (floating) {
     return (
-      <div ref={root} className="relative flex h-full flex-col overflow-hidden bg-[#0B1226] text-[13px] text-[#E6ECFA]">
+      <div ref={setRoot} className="relative flex h-full flex-col overflow-hidden bg-[#0B1226] text-[13px] text-[#E6ECFA]">
         <FloatingCard {...props} star={star} self={self} remoteScreen={remoteScreen} onReturn={() => setFloating(false)} onChat={() => (callUi.set({ panelOpen: true, panelTab: props.tabs.find((t) => t.id === 'Chat')?.id ?? props.tabs[0]?.id ?? 'Chat' }), setFloating(false))} />
       </div>
     );
   }
 
+  const layouts = (
+    [
+      ['auto', text('Auto'), primary ? text('The shared screen, you in the corner') : text('Speaker for two, a grid for more')],
+      ['focus', text('Focus'), primary ? text('The shared screen, people in the corner') : text('Whoever is speaking, large')],
+      ['side', text('Side by side'), primary ? text('The shared screen with people beside it') : text('A grid')],
+      ['grid', text('Grid'), primary ? text('The shared screen with people under it') : text('Everybody the same size')],
+    ] as Array<[LayoutMode, string, string]>
+  ).map(([mode, label, hint]) => ({ mode, label, hint }));
   const layoutMenu: MenuEntry[] = [
-    { heading: primary ? 'While something is shared' : 'Layout' },
-    ...(
-      [
-        ['auto', 'Auto', primary ? 'The shared screen, you in the corner' : 'Speaker for two, a grid for more'],
-        ['focus', 'Focus', primary ? 'The shared screen, people in the corner' : 'Whoever is speaking, large'],
-        ['side', 'Side by side', primary ? 'The shared screen with people beside it' : 'A grid'],
-        ['grid', 'Grid', primary ? 'The shared screen with people under it' : 'Everybody the same size'],
-      ] as Array<[LayoutMode, string, string]>
-    ).map(([mode, label, hint]) => ({ label, hint, checked: ui.layoutMode === mode, onClick: () => callUi.set({ layoutMode: mode }) })),
+    { heading: primary ? text('While something is shared') : text('Layout') },
+    ...layouts.map(({ mode, label, hint }) => ({ label, hint, radio: true, checked: ui.layoutMode === mode, onClick: () => callUi.set({ layoutMode: mode }) })),
   ];
-  const view: MenuEntry[] = [
-    { heading: 'View' },
-    { label: 'Show my video', icon: 'user', checked: ui.selfView, onClick: () => callUi.set({ selfView: !ui.selfView }) },
-    { label: 'Mirror my video', icon: 'flip', checked: ui.mirror, onClick: () => callUi.set({ mirror: !ui.mirror }) },
-    { label: ui.fit === 'fill' ? 'Show whole picture (fit)' : 'Fill the tile', icon: 'scaling', onClick: () => callUi.set({ fit: ui.fit === 'fill' ? 'fit' : 'fill' }) },
-    { label: ui.pipEnabled ? 'Hide the corner video' : 'Show the corner video', icon: 'pip', onClick: () => callUi.set({ pipEnabled: !ui.pipEnabled }) },
-    'sep',
-    { label: ui.fullscreen ? 'Leave full screen' : 'Full screen', hint: 'F11', icon: ui.fullscreen ? 'fullscreen-exit' : 'fullscreen', onClick: toggleFullscreen },
-    { label: 'Shrink to a floating window', icon: 'minimize', onClick: () => setFloating(true) },
-  ];
+  const view = viewSection({
+    primary,
+    layoutMode: ui.layoutMode,
+    layouts,
+    selfView: ui.selfView,
+    mirror: ui.mirror,
+    fill: ui.fit === 'fill',
+    pip: ui.pipEnabled,
+    fullscreen: ui.fullscreen,
+    toggleFullscreen,
+    float: () => setFloating(true),
+  });
   const buttons: ControlButton[] = [
     ...props.buttons,
-    { id: 'layout', icon: 'grid', label: 'Layout', menu: layoutMenu },
-    { id: 'more', icon: 'more', label: 'More', menu: [...props.more, ...(props.more.length ? (['sep'] as MenuEntry[]) : []), ...view] },
+    { id: 'layout', icon: 'grid', label: text('Layout'), menu: layoutMenu },
+    { id: 'more', icon: 'more', label: text('More'), sections: [...props.more, view] },
   ];
 
   const stageRect = layout.stage;
@@ -217,7 +224,7 @@ export function CallWorkspace(props: WorkspaceProps) {
   const tiles = [...people.filter((p) => !p.self), ...people.filter((p) => p.self && ui.selfView)];
 
   return (
-    <div ref={root} onPointerMove={wake} className="relative h-full overflow-hidden bg-[#0B1226] text-[13px] text-[#E6ECFA]">
+    <div ref={setRoot} onPointerMove={wake} className="relative h-full overflow-hidden bg-[#0B1226] text-[13px] text-[#E6ECFA]">
       <Header {...props} pinned={pinned} maximized={maximized} fullscreen={ui.fullscreen} onPin={() => void call('windows:setAlwaysOnTop', { value: !pinned }).then(setPinned)} onMax={() => void call('windows:toggleMaximize').then(setMaximized)} onFull={toggleFullscreen} onFloat={() => setFloating(true)} />
 
       <div className="absolute z-[10]" style={{ left: stageRect.x, top: stageRect.y, width: stageRect.width, height: stageRect.height }}>
@@ -459,4 +466,60 @@ function FloatingCard({ title, clock, badges, buttons, end, star, self, remoteSc
       </div>
     </>
   );
+}
+
+/**
+ * The More menu's View & Layout group: the layout and the video options as
+ * submenus, full screen (saying which way it goes) and the floating window.
+ */
+export function viewSection(v: {
+  primary: boolean;
+  layoutMode: LayoutMode;
+  layouts: Array<{ mode: LayoutMode; label: string; hint: string }>;
+  selfView: boolean;
+  mirror: boolean;
+  fill: boolean;
+  pip: boolean;
+  fullscreen: boolean;
+  toggleFullscreen: () => void;
+  float: () => void;
+}): MenuSection {
+  const set = (patch: Parameters<typeof callUi.set>[0]) => () => callUi.set(patch);
+  return {
+    id: 'view',
+    label: text('View & Layout'),
+    items: [
+      {
+        id: 'layout',
+        icon: 'grid',
+        label: text('Layout'),
+        description: v.layouts.find((l) => l.mode === v.layoutMode)?.label,
+        submenu: [
+          {
+            id: 'layouts',
+            label: v.primary ? text('While something is shared') : undefined,
+            items: v.layouts.map((l) => ({ id: l.mode, label: l.label, description: l.hint, radio: true, checked: v.layoutMode === l.mode, onSelect: set({ layoutMode: l.mode }) })),
+          },
+        ],
+      },
+      {
+        id: 'video',
+        icon: 'video',
+        label: text('Video'),
+        submenu: [
+          {
+            id: 'video',
+            items: [
+              { id: 'self', icon: 'user', label: text('Show My Video'), checked: v.selfView, onSelect: set({ selfView: !v.selfView }) },
+              { id: 'mirror', icon: 'flip', label: text('Mirror My Video'), checked: v.mirror, onSelect: set({ mirror: !v.mirror }) },
+              { id: 'fill', icon: 'scaling', label: text('Fill the Tile'), description: text('Crops the picture to fill its tile'), checked: v.fill, onSelect: set({ fit: v.fill ? 'fit' : 'fill' }) },
+              { id: 'pip', icon: 'pip', label: text('Show the Corner Video'), checked: v.pip, onSelect: set({ pipEnabled: !v.pip }) },
+            ],
+          },
+        ],
+      },
+      { id: 'fullscreen', icon: v.fullscreen ? 'fullscreen-exit' : 'fullscreen', label: v.fullscreen ? text('Exit Full Screen') : text('Enter Full Screen'), shortcut: 'F11', onSelect: v.toggleFullscreen },
+      { id: 'float', icon: 'minimize', label: text('Shrink to a Floating Window'), onSelect: v.float },
+    ],
+  };
 }
