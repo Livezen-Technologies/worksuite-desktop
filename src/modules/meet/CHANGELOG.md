@@ -30,6 +30,11 @@ the root CHANGELOG.md.
   - **Scheduling:** the form starts from your defaults.
 
 - Join desktop meetings as a guest, with device checks, passcode and host admission, scoped guest permissions, reconnection, guest chat, and post-meeting actions (#85).
+## 1.4.0 — 2026-10-02
+
+**Added**
+
+- Meeting recording folders with timestamped segments and video thumbnails and duration (#88).
 
 ## 1.3.0 — 2026-10-01
 

@@ -270,6 +270,7 @@ export interface UpcomingRow {
 }
 
 export interface Recording {
+  thumbnail_url?: string | null;
   id: number;
   title: string;
   created_at: string;

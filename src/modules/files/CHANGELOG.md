@@ -13,6 +13,11 @@ the root CHANGELOG.md.
 **Changed**
 
 - a menu opened from a button now opens above it when there is no room below, is never wider than the window, and acts only once per opening.
+## 1.2.1 — 2026-10-02
+
+**Fixed**
+
+- Show Processing until media is ready and offer retry guidance when playback fails (#88).
 
 ## 1.2.0 — 2026-10-01
 
