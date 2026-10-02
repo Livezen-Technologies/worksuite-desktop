@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.4.0 — 2026-10-02
+
+- Prevent upload-time reconnect races, verify gateway readiness and report connection recovery diagnostics (#123).
+
 ## 1.3.1 — 2026-10-02
 
 - Retry missed chat notifications on the regular poll when the network is not ready after resume or a catch-up request fails. Preserve the missed-message window and avoid repeating partially delivered banners (#114).
