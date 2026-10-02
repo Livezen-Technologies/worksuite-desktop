@@ -5,6 +5,12 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.93: Mail's Manage dialog says what each switch does
+
+Settings › Mail › **Manage** showed three toggles with no names. Each now reads **Show in the unified inbox**, **Notify me about new mail** and **Pause syncing**, with a one-line explanation, and **Remove…** is shown as the red danger action it is.
+
+---
+
 ## 2026-10-03 — 0.2.92: the new Mail
 
 Mail is rebuilt to the *WorkSuite Mail — Desktop app* design, in light and dark:

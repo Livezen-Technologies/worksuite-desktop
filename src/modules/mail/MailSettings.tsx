@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { apiDelete, apiPost, apiPut } from '../../core/api';
 import { app, updatePrefs } from '../../core/app-state';
 import { call, errorMessage } from '../../core/bridge';
@@ -172,6 +172,26 @@ function Accounts() {
   );
 }
 
+/** A switch with its label and a one-line hint beside it — the switch alone only names itself to screen readers. */
+function SwitchRow({ label, hint, checked, onChange }: { label: string; hint: string; checked: boolean; onChange: (v: boolean) => void }) {
+  const id = useId();
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div className="min-w-0">
+        <div className="font-semibold text-ink" aria-hidden>
+          {label}
+        </div>
+        <p id={id} className="mt-0.5 text-[12.5px] text-ink-3">
+          {hint}
+        </p>
+      </div>
+      <div className="pt-0.5">
+        <Switch label={label} describedBy={id} checked={checked} onChange={onChange} />
+      </div>
+    </div>
+  );
+}
+
 function ManageMailbox({ box, onClose }: { box: Mailbox; onClose: () => void }) {
   const qc = useQueryClient();
   const [b, setB] = useState(box);
@@ -199,9 +219,9 @@ function ManageMailbox({ box, onClose }: { box: Mailbox; onClose: () => void }) 
   return (
     <Modal title={b.email} labelledBy="mail-manage-title" width={480} onClose={onClose} footer={<Button onClick={onClose}>Done</Button>}>
       <div className="flex flex-col gap-4 p-5 text-[13.5px]">
-        <Switch label={text('Show in the unified inbox')} checked={b.in_unified !== false} onChange={(v) => void save({ in_unified: v })} />
-        <Switch label={text('Notify me about new mail')} checked={(b as Mailbox & { notify?: boolean }).notify !== false} onChange={(v) => void save({ notify: v } as Partial<Mailbox>)} />
-        {!b.shared ? <Switch label={text('Pause syncing')} checked={!!b.sync_paused} onChange={(v) => void save({ sync_paused: v })} /> : null}
+        <SwitchRow label={text('Show in the unified inbox')} hint={text('Mix its mail into Unified inbox with your other mailboxes.')} checked={b.in_unified !== false} onChange={(v) => void save({ in_unified: v })} />
+        <SwitchRow label={text('Notify me about new mail')} hint={text('Desktop notifications for mail arriving in this mailbox.')} checked={(b as Mailbox & { notify?: boolean }).notify !== false} onChange={(v) => void save({ notify: v } as Partial<Mailbox>)} />
+        {!b.shared ? <SwitchRow label={text('Pause syncing')} hint={text('Stop checking for new mail until you turn this off.')} checked={!!b.sync_paused} onChange={(v) => void save({ sync_paused: v })} /> : null}
         <div className="flex flex-wrap gap-2 border-t border-line pt-4">
           {!b.is_default && !b.shared ? <Button onClick={() => void act(() => apiPost(`/api/mail/mailboxes/${b.id}/default`), text('Now your default mailbox.'))}>Make default</Button> : null}
           <Button icon="refresh" onClick={() => void act(() => apiPost(`/api/mail/mailboxes/${b.id}/sync`), text('Checking for new mail.'))}>
@@ -213,7 +233,7 @@ function ManageMailbox({ box, onClose }: { box: Mailbox; onClose: () => void }) 
                 Remove for good
               </Button>
             ) : (
-              <Button variant="ghost" className="text-danger" onClick={() => setConfirm(true)}>
+              <Button variant="ghost" className="!text-danger hover:!bg-danger/10" onClick={() => setConfirm(true)}>
                 Remove…
               </Button>
             )

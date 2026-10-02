@@ -319,4 +319,21 @@ describe('settings › mail', () => {
     fireEvent.click(await screen.findByRole('radio', { name: 'Bottom' }));
     await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/prefs', { pane: 'bottom' }));
   });
+
+  it("names every switch in a mailbox's Manage dialog on screen, not only to screen readers", async () => {
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MailSettings />
+      </QueryClientProvider>,
+    );
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Manage' }))[0]!);
+    const dialog = await screen.findByRole('dialog');
+    for (const name of ['Show in the unified inbox', 'Notify me about new mail']) {
+      expect(within(dialog).getByRole('switch', { name })).toBeTruthy();
+      expect(within(dialog).getByText(name)).toBeTruthy();
+    }
+    expect(within(dialog).getByText('Mix its mail into Unified inbox with your other mailboxes.')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('switch', { name: 'Show in the unified inbox' }));
+    await waitFor(() => expect(apiPut).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/mail\/mailboxes\/\d+$/), { in_unified: false }));
+  });
 });
