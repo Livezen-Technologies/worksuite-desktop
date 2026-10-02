@@ -22,7 +22,7 @@ const { assistantSession, createAskSession, nextPhase, phaseLabel } = await impo
 const { aiNotice, assistantMayNotify, useAssistantAlerts } = await import('../../../src/app/overlays/AiDock');
 const { AiWidget } = await import('../../../src/app/overlays/AiWidget');
 
-const AI: Preferences['ai'] = { quickAsk: true, shortcut: 'Alt+Space', insert: true, dockAtStart: false, language: 'Sinhala', display: 'widget', sound: false, moduleAccess: { worksuite: {}, local: {} }, onlineFallback: true, autoMinimize: false };
+const AI: Preferences['ai'] = { quickAsk: true, shortcut: 'Alt+Space', insert: true, dockAtStart: false, language: 'Sinhala', display: 'widget', sound: false, moduleAccess: { worksuite: {}, local: {} }, onlineFallback: true, autoMinimize: false, autoMinimizeWhenWorking: true };
 const PREFS = { ai: AI, notificationsEnabled: true, moduleNotifications: {}, dndEnabled: false, dndFrom: '22:00', dndTo: '07:00' } as unknown as Preferences;
 const setPrefs = (patch: Partial<Preferences>, ai: Partial<Preferences['ai']> = {}) => app.set((s) => ({ prefs: { ...(s.prefs ?? PREFS), ...patch, ai: { ...AI, ...(s.prefs?.ai ?? {}), ...ai } } as Preferences }));
 
@@ -213,11 +213,12 @@ describe('processing in the background (#110)', () => {
     expect(screen.getByRole('button', { name: 'Stop processing' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Minimize while working' }));
     expect(screen.queryByRole('dialog')).toBeNull();
-    // The launcher turns, with a still mark for reduced motion, and its tooltip says where it is.
+    // The launcher turns, with a still mark for reduced motion; its tooltip says Thinking… and its name where it is (#126).
     const ring = screen.getByTestId('ai-launcher-busy');
     expect(ring.getAttribute('class')).toContain('motion-safe:animate-spin');
     expect(screen.getByTestId('ai-launcher-still').getAttribute('class')).toContain('motion-reduce:block');
-    expect(launcher().getAttribute('title')).toBe('Thinking with online AI…');
+    expect(launcher().getAttribute('title')).toBe('Thinking…');
+    expect(launcher().getAttribute('aria-label')).toBe('Ask AI — Thinking with online AI…');
   });
 
   it('auto-minimizes after sending only when that setting is on', async () => {
@@ -266,7 +267,7 @@ describe('the notice when an answer is ready (#110)', () => {
     await act(() => assistantSession.send(ONLINE));
   }
 
-  it('says Your answer is ready with View reply, without taking the focus or opening the assistant', async () => {
+  it('says Your answer is ready with View Result, without taking the focus or opening the assistant', async () => {
     renderHook(() => useAssistantAlerts());
     wrap(
       <>
@@ -287,7 +288,7 @@ describe('the notice when an answer is ready (#110)', () => {
     expect(notice.getAttribute('class')).toContain('motion-safe:animate-');
     // The badge counts it too.
     expect(launcher().getAttribute('aria-label')).toBe('Ask AI — 1 new answer');
-    fireEvent.click(screen.getByRole('button', { name: 'View reply' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View Result' }));
     expect(aiWidget.get().open).toBe(true);
     expect(screen.queryByTestId('ai-notice')).toBeNull();
     expect(screen.getByText('Two tasks.')).toBeTruthy();
@@ -321,7 +322,7 @@ describe('the notice when an answer is ready (#110)', () => {
     wrap(<AiWidget />);
     await answerUnseen(turn('Two tasks.'));
     expect(screen.getByTestId('ai-notice')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'View reply' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View Result' }));
     expect(ui.get().dock).toBe('ai');
   });
 

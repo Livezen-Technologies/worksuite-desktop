@@ -63,9 +63,10 @@ const en = {
   'ai.stopped': 'Stopped.',
   'ai.minimizeWhileWorking': 'Minimize while working',
   'ai.autoMinimize': 'Auto-minimize after sending',
-  'ai.viewReply': 'View reply',
   'ai.openAssistant': 'Open Assistant',
   'ai.dismiss': 'Dismiss',
+  'ai.viewResult': 'View Result',
+  'ai.autoMinimizeWorking': 'Auto-minimize when I continue working',
   // Images in the assistant (worksuite-desktop#59).
   'ai.readingImage': 'Reading image…',
   'ai.extractingText': 'Extracting text…',
@@ -139,6 +140,16 @@ const si: Table = {
   'ai.preparingReply': 'පිළිතුර සකසමින්…',
   'ai.ocrDownloading': 'පෙළ කියවීම සූදානම් කරමින්… {pct}%',
   'ai.extractRequest': 'පෙළ උපුටා ගන්න',
+  'ai.thinking': 'සිතමින්…',
+  'ai.retry': 'නැවත උත්සාහ කරන්න',
+  'ai.needsInput': 'ඔබේ ආදානය අවශ්‍යයි',
+  'ai.complete': 'ඔබේ පිළිතුර සූදානම්',
+  'ai.failed': 'සහායකයාට පිළිතුරු දිය නොහැකි විය',
+  'ai.stop': 'සැකසීම නවත්වන්න',
+  'ai.openAssistant': 'සහායකයා විවෘත කරන්න',
+  'ai.dismiss': 'ඉවත් කරන්න',
+  'ai.viewResult': 'ප්‍රතිඵලය බලන්න',
+  'ai.autoMinimizeWorking': 'මම වැඩ දිගටම කරන විට ස්වයංක්‍රීයව කුඩා කරන්න',
 };
 
 const ta: Table = {
@@ -165,6 +176,16 @@ const ta: Table = {
   'ai.preparingReply': 'பதிலைத் தயாரிக்கிறது…',
   'ai.ocrDownloading': 'உரை வாசிப்பைத் தயார்செய்கிறது… {pct}%',
   'ai.extractRequest': 'உரையைப் பிரித்தெடு',
+  'ai.thinking': 'சிந்திக்கிறது…',
+  'ai.retry': 'மீண்டும் முயற்சி செய்',
+  'ai.needsInput': 'உங்கள் உள்ளீடு தேவை',
+  'ai.complete': 'உங்கள் பதில் தயார்',
+  'ai.failed': 'உதவியாளரால் பதிலளிக்க முடியவில்லை',
+  'ai.stop': 'செயலாக்கத்தை நிறுத்து',
+  'ai.openAssistant': 'உதவியாளரைத் திற',
+  'ai.dismiss': 'நிராகரி',
+  'ai.viewResult': 'முடிவைப் பார்',
+  'ai.autoMinimizeWorking': 'நான் வேலையைத் தொடரும்போது தானாகச் சிறிதாக்கு',
 };
 
 const ar: Table = {

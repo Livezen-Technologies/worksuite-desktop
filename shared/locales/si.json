@@ -651,5 +651,6 @@
   "Not sent": "යැවුණේ නැත",
   "Sending": "යවමින්",
   "Not available to you": "ඔබට ලබා ගත නොහැක",
-  "Not set up": "සකසා නැත"
+  "Not set up": "සකසා නැත",
+  "While the assistant is thinking, switching tabs, opening another app or clicking your work outside it puts it down to its floating button. The answer keeps coming, and the button tells you when it is ready. It stays open while you are typing in it.": "සහායකයා සිතමින් සිටින අතරතුර, ටැබ් මාරු කිරීම, වෙනත් යෙදුමක් විවෘත කිරීම හෝ එයින් පිටත ඔබේ වැඩ මත ක්ලික් කිරීම එය පාවෙන බොත්තමට කුඩා කරයි. පිළිතුර දිගටම පැමිණෙන අතර, එය සූදානම් වූ විට බොත්තම ඔබට කියයි. ඔබ එහි ටයිප් කරන අතරතුර එය විවෘතව පවතී."
 }

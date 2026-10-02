@@ -172,6 +172,7 @@ export const preferencesPatchSchema = z
       }),
       onlineFallback: z.boolean(),
       autoMinimize: z.boolean(),
+      autoMinimizeWhenWorking: z.boolean(),
     }),
     // The local folder is not here: only the main process's folder dialog sets it.
     meetRecording: z.object({
@@ -373,6 +374,8 @@ export const contract = {
   'ai:ocrStatus': ch(none, { session: true }),
   'ai:confirm': ch(z.object({ id: z.number().int().positive(), nonce: z.string().regex(/^[a-f0-9]{16,64}$/) }), { session: true, sensitive: true, rate: 5 }),
   'ai:upload': ch(none, { session: true, rate: 3 }),
+  /** An answer arrived while the assistant was minimised and the window is not in front (#126): a banner, as notifications allow. */
+  'ai:answerReady': ch(z.strictObject({ kind: z.enum(['ready', 'input', 'failed']), preview: z.string().max(300) }), { session: true, rate: 20 }),
   // Website chats ringing like calls (WS-WCHAT ENH-01, RING-49): the call window, the main window's bar.
   'ring:state': ch(none, { session: true, whileLocked: true }),
   'ring:join': ch(z.object({ id: z.number().int().positive() }), { session: true, rate: 4 }),
@@ -1217,6 +1220,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'ai:ocrStatus': OcrStatus;
   'ai:confirm': unknown;
   'ai:upload': AiUpload | null;
+  'ai:answerReady': boolean;
   'ring:state': WebchatRingState;
   'ring:join': boolean;
   'ring:silence': void;
