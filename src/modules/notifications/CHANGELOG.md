@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.3 — 2026-10-03
+
+- An AI Assistant answer that arrives while the window is not focused shows a desktop banner through the usual notification settings, Do not disturb and banner privacy; while locked it only says New WorkSuite notification (#126).
+
 ## 1.3.2 — 2026-10-02
 
 - Incoming calls say 'Incoming voice/video call from X'; while locked they say 'Incoming WorkSuite call' and name the caller only when Show Caller Details is on (#113).

@@ -5,6 +5,20 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.88: the AI Assistant steps aside while you work
+
+Ask the AI Assistant something and carry on — it gets out of the way and tells you when it's done (#126):
+
+- **Thinking…** shows the moment you send.
+- **It minimizes itself** when you switch tabs, open another module or click in your work while it's thinking — never while you're typing in it, and it never takes your focus. The request, its attachments and the conversation carry on in the background.
+- **The floating AI button** pulses while it works (a still dot if your system asks for reduced motion), with a Thinking… tooltip and **Stop processing** beside it.
+- **When the answer is ready** the pulse stops and a small preview shows its first lines with **View Result** and **Dismiss**. If it needs an answer or an approval from you, it says **Needs your input** and waits; if it failed, **Try again** resends the same request.
+- **View Result** or the button brings back the conversation with the latest answer. Nothing reopens on its own.
+- If the WorkSuite window isn't in front, a desktop banner says the answer is ready — following your notification settings and Do not disturb, and saying only "New WorkSuite notification" while locked.
+- Turn it off with **Auto-minimize when I continue working** in AI Assistant settings.
+
+---
+
 ## 2026-10-03 — 0.2.87: floating Ask AI by default
 
 - New installations and preferences without an AI display choice use the floating Ask AI widget, minimized to its launcher at startup.
