@@ -1,5 +1,6 @@
 import { LivestreamBadge, LivestreamControls, useLivestreamNotice } from './Livestreaming';
 import { RecordingFeedback } from './RecordingFeedback';
+import BrowserMeetingChat from './BrowserMeetingChat';
 import { GuestChat } from './GuestChat';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState, useSyncExternalStore } from 'react';
@@ -279,13 +280,14 @@ export function MeetRoom() {
                       ? 'Only the host and co-hosts can write here.'
                       : "Meeting chat · saved to the meeting's conversation"}
                 </span>
-                <div className="min-h-0 flex-1">
-                  <GuestChat room={room} chat={meet.settings.chat} />
-                  <Thread roomId={String(info.room_id)} room={undefined} mini bare rooms={[]} />
+                <div className="min-h-0 flex-1 flex flex-col">
+                  <BrowserMeetingChat uuid={info.uuid} />
+                  <details className="border-t border-line"><summary className="cursor-pointer p-3 text-xs text-ink-3">Desktop guest chat</summary><GuestChat room={room} chat={meet.settings.chat} /></details>
+                  <details className="border-t border-line"><summary className="cursor-pointer p-3 text-xs text-ink-3">Workspace conversation (members only)</summary><div className="h-80"><Thread roomId={String(info.room_id)} room={undefined} mini bare rooms={[]} /></div></details>
                 </div>
               </div>
             ) : (
-              <GuestChat room={room} chat={meet.settings.chat} />
+              <><BrowserMeetingChat uuid={info.uuid} /><GuestChat room={room} chat={meet.settings.chat} /></>
             ),
           },
           { id: 'Q&A', label: t('act.qa'), badge: openQuestions || undefined, content: <QaPanel /> },
