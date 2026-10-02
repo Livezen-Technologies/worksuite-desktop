@@ -5,6 +5,15 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-02 — 0.2.81: browser guest meetings
+
+- Desktop hosts can read and reply to browser guests in Browser meeting chat. Guests remain limited to the current meeting, and the server enforces admission and host chat settings.
+- Keep workspace conversations available to signed-in members and desktop guest chat available in their own expandable sections.
+
+Modules: Meet 1.9.0. Deploy Communication 1.10.0 and its browser chat migration first. Browser camera/microphone checks, permission guidance, waiting-room admission and reconnection are provided by the web/server update for #140; see `docs/BROWSER_GUEST_MEETINGS.md` for deployment and real-browser acceptance checks.
+
+---
+
 ## 2026-10-02 — 0.2.80: macOS permissions and screen capture
 
 - Screen sharing checks Screen Recording / Screen & System Audio Recording separately from Accessibility. The picker refreshes after returning from System Settings and shows Granted, Denied, Checking or Unable to Verify.
