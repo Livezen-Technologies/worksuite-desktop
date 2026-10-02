@@ -6,6 +6,9 @@ import { Button, Modal } from '../../components/ui';
 import { createTask } from './actions';
 import { PRIORITIES, STATUSES, type Priority, type Status, type TaskList } from './api';
 import { RichEditor } from './RichText';
+import { app } from '../../core/app-state';
+import { useStore } from '../../core/store';
+import { ReminderDrafts, type ReminderDraft } from './Reminders';
 import { Select } from '../../components/Select';
 
 export interface Directory {
@@ -27,6 +30,8 @@ export function when(day: string, time: string): string | null {
 export function NewTask({ lists, defaults, onClose, onCreated }: { lists: TaskList[]; defaults: { list_id?: number | null; status?: Status; due?: string; title?: string }; onClose: () => void; onCreated: (id: number | null) => void }) {
   const directory = useQuery({ queryKey: ['chat', 'directory'], queryFn: ({ signal }) => apiGet<Directory>('/api/chat/directory', undefined, signal), staleTime: 5 * 60_000 });
   const orgs = useQuery({ queryKey: ['tasks', 'organizations'], queryFn: ({ signal }) => apiGet<{ organizations: Array<{ id: number; name: string }> }>('/api/tasks/organizations', undefined, signal), staleTime: 5 * 60_000 });
+  const me = Number(useStore(app, (s) => s.auth?.user?.id) ?? 0);
+  const [reminders, setReminders] = useState<ReminderDraft[]>([]);
   const [title, setTitle] = useState(defaults.title ?? '');
   const [description, setDescription] = useState('');
   const [list, setList] = useState(defaults.list_id ? String(defaults.list_id) : '');
@@ -52,6 +57,7 @@ export function NewTask({ lists, defaults, onClose, onCreated }: { lists: TaskLi
       const r = await createTask({
         title: title.trim(),
         description,
+        reminders: reminders.map((r) => ({ ...r, recipients: r.recipients.filter((id) => id === me || id === Number(assignee)) })),
         status,
         priority,
         ...(list ? { list_id: Number(list) } : {}),
@@ -147,6 +153,7 @@ export function NewTask({ lists, defaults, onClose, onCreated }: { lists: TaskLi
             </span>
           </label>
         </div>
+        <ReminderDrafts value={reminders} onChange={setReminders} due={when(due, dueTime)} recipients={[{ id: me, name: 'Me' }, ...(assignee && Number(assignee) !== me ? [{ id: Number(assignee), name: directory.data?.users.find((u) => u.id === Number(assignee))?.name ?? 'Assignee' }] : [])]} />
         <label className={label}>
           Tags
           <input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="design, urgent" className={field} />

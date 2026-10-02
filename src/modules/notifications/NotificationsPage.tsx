@@ -1,3 +1,4 @@
+import { TaskReminderActions } from './TaskReminderActions';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useVisibleIds } from '../../core/access';
@@ -344,6 +345,7 @@ function Preview({ n, labels, onChanged }: { n: Notice | null; labels?: Record<s
               {q.label}
             </Button>
           ) : null}
+          <TaskReminderActions notice={n} />
           <Button size="sm" onClick={() => run(() => act(n.id, n.read ? 'unread' : 'read'), n.read ? 'Marked unread' : 'Marked read')}>
             {n.read ? 'Mark unread' : 'Mark read'}
           </Button>

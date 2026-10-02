@@ -18,6 +18,7 @@ import { openMeeting } from '../meet/api';
  */
 export interface Notice {
   id: number;
+  actions?: unknown;
   event: string | null;
   category: string | null;
   title: string;
@@ -177,6 +178,7 @@ export function openNotice(n: Pick<Notice, 'link' | 'title'>): void {
 /** The buttons a row offers, from what its link is. */
 export function quickActions(n: Notice): Array<{ label: string; primary?: boolean; go: true }> {
   if (!n.link) return [];
+  if (n.event === 'task.reminder') return [{ label: 'Open Task', primary: true, go: true }];
   if (meetUuid(n.link)) return [{ label: 'Join', primary: true, go: true }];
   if (isChatLink(n.link)) return [{ label: 'Reply', primary: true, go: true }];
   return [{ label: isApproval(n) ? 'Review' : 'Open', primary: isApproval(n), go: true }];
