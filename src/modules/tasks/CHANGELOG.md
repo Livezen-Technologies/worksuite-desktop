@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.1 — 2026-10-03
+
+- Tasks work on Local Profile data in guest mode (#149).
+
 ## 1.2.0 — 2026-10-02
 
 - Added multiple task reminders in creation and detail editors: due time, 15 minutes, 1 hour, 1 day, or custom date/time, with authorized recipients, timezone previews, edit/remove and notification settings guidance (issue #62).

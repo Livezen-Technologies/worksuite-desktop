@@ -5,6 +5,21 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.97: guest mode in the main window
+
+**Continue as Guest** no longer opens a separate, differently styled window on top of an empty one (#149):
+
+- **Same window, same look.** Your Local Profile opens in the normal WorkSuite window, with the usual sidebar, top bar, theme and screens. The profile menu shows *Name · Local profile · Saved on this device* with Sign in / Create account, Backup & export data and Profile; Backup & Data and Profile are in Settings.
+- **Notes, Tasks, Contacts and Calendar** work on this computer with the same screens as an account — Contacts is new for guests. **Meet** joins a meeting by link or code under your profile name.
+- **Account-only apps** — Chat, Mail, Drive, company records, shared workspaces, HR, CRM, AI Assistant — stay in the sidebar with a lock and open a *Sign in to use …* panel, also from links and ⌘K.
+- **Signing in** switches to your full account without a restart and asks: *Move data* or *Keep on this device only*. Moving keeps a backup until every item is confirmed in your account; anything that fails is listed and can be retried without duplicates. Signing out never shows guest data to someone else.
+- **The note editor's Save button** now looks like a normal primary button.
+- Your existing Local Profile data is upgraded in place.
+
+Not moved yet: task reminders and pin/favourite flags. Needs the server update (Contacts and Tasks honour `Idempotency-Key`) for retries to be duplicate-free.
+
+---
+
 ## 2026-10-03 — 0.2.96: write mail with formatting
 
 Mail's compose tab was a bare text box. It is now a proper editor:
