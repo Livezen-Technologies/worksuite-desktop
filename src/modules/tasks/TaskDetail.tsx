@@ -17,6 +17,7 @@ import { EmojiPicker } from '../chat/parts';
 import { createTask, patchTask } from './actions';
 import { PRIORITIES, progressOf, STATUSES, type Activity, type Attachment, type TaskDetail as Detail, type TaskList } from './api';
 import { when, type Directory } from './NewTask';
+import { TaskReminders } from './Reminders';
 import { PeoplePanel, ReviewPanel, usePeople } from './People';
 import { RichEditor, RichView } from './RichText';
 import { Select } from '../../components/Select';
@@ -157,6 +158,7 @@ export function TaskDetail({ id, lists, onClose, onOpen }: { id: number; lists: 
               <Row label="Due date">
                 <When key={`u${t.due_at}${t.due_date}`} value={inputsOf(t.due_date, t.due_at)} disabled={!canEdit('due_date')} label="Due" onChange={(v) => void save('due_date', v, `Due date of “${t.title}”`)} />
               </Row>
+              <TaskReminders task={t} />
               <Row label="List">
                 <Select aria-label="List" disabled={!canEdit('list_id')} value={t.list_id ?? ''} onChange={(e) => void save('list_id', e.target.value ? Number(e.target.value) : '', `List of “${t.title}”`)} className={aside}>
                   <option value="">No list</option>

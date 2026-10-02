@@ -8,6 +8,10 @@ the root CHANGELOG.md.
 
 - Add a shared Sinhala/Tamil localization pipeline, first-time language selection, per-user language persistence, locale formatting and reproducible translation audits. Catalogs are drafts; full translation and fluent review remain pending (#60).
 
+## 1.7.2 — 2026-10-02
+
+- Cancel outdated global searches during debounce, hide stale results, and isolate online/offline search caches by server, user and access refresh (#57).
+
 ## 1.7.1 — 2026-10-02
 
 **Added**

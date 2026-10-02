@@ -1,4 +1,5 @@
 import { localize } from '@shared/localization';
+import { reminderAction } from '@shared/task-reminders';
 import { Notification, app, nativeImage } from 'electron';
 import { join } from 'node:path';
 import type { NotificationItem, NotificationPrivacy, Preferences } from '@shared/types';
@@ -28,6 +29,9 @@ const MISSED_WINDOW_MS = 15 * 60_000;
 interface ServerNotification {
   id: string | number;
   type?: string | null;
+  event_key?: string | null;
+  actions?: unknown;
+  desktop_allowed?: boolean;
   title?: string | null;
   body?: string | null;
   link?: string | null;
@@ -40,6 +44,7 @@ interface ServerNotification {
 }
 
 export interface Incoming {
+  reminder?: { taskId: number; runId: number } | null;
   id: string;
   module: string;
   /** The server's category (`projects`, `expenses`…): muted per category from the notification settings' Desktop column. */
@@ -282,7 +287,7 @@ export class NotificationService {
         raw.forEach((n, k) => {
           const i = items[k]!;
           if (i.read || this.shown.includes(i.id) || Date.parse(i.createdAt) < since) return;
-          this.notify({ id: i.id, module: i.module, category: n.category ?? null, title: i.title, body: i.body, sender: null, link: i.link, critical: n.priority === 'critical' || n.priority === 'emergency' || n.level === 'critical' || n.level === 'emergency' });
+          if (n.desktop_allowed !== false) this.notify({ reminder: (n.event_key ?? n.type) === 'task.reminder' ? reminderAction(n.link, n.actions) : null, id: i.id, module: i.module, category: n.category ?? null, title: i.title, body: i.body, sender: null, link: i.link, critical: n.priority === 'critical' || n.priority === 'emergency' || n.level === 'critical' || n.level === 'emergency' });
         });
       }
       this.listed = true;
@@ -360,6 +365,7 @@ export class NotificationService {
         const link = typeof e.link === 'string' ? e.link : null;
         this.notify({
           id,
+          reminder: e.event === 'task.reminder' ? reminderAction(link, e.actions) : null,
           module: moduleOf({ category: e.category as string, link }),
           category: typeof e.category === 'string' ? e.category : null,
           title: String(e.title ?? 'Notification'),
@@ -506,11 +512,25 @@ export class NotificationService {
       silent: !this.prefs().notificationSounds,
       icon,
       urgency: n.critical ? 'critical' : 'normal',
+      actions: n.reminder && privacy === 'FULL' ? [{ type: 'button', text: 'Snooze 15 min' }, { type: 'button', text: 'Mark Complete' }] : undefined,
       timeoutType: n.critical ? 'never' : 'default',
     });
     note.on('click', () => {
       this.onClick(n.link, n.module);
       if (/^\d+$/.test(n.id)) void this.markRead([n.id]).catch(() => undefined);
+    });
+    const recipient = this.userId;
+    note.on('action', (_event, index) => {
+      if (!n.reminder || recipient !== this.userId) return;
+      if (this.isLocked() || !this.moduleEnabled(n)) { this.onClick(n.link, n.module); return; }
+      const action = index === 0
+        ? this.http.post(`/api/task-reminder-runs/${n.reminder.runId}/snooze`, { minutes: 15 })
+        : index === 1 ? this.http.request('PATCH', `/api/tasks/${n.reminder.taskId}`, { body: { field: 'status', value: 'done' } }) : null;
+      if (!action) return;
+      void action.then(() => this.markRead([n.id])).then(() => note.close()).catch((error) => {
+        log.debug('Task reminder action failed', { error: String(error) });
+        this.onClick(n.link, n.module);
+      });
     });
     note.on('close', () => this.live.delete(n.id));
     this.live.set(n.id, note);

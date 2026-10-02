@@ -10,6 +10,7 @@
         "src/styles.css",
         "src/components/ui.tsx",
         "src/app/onboarding/Onboarding.tsx",
-        "build-tools/localization.mjs"
+        "build-tools/localization.mjs",
+        "src/app/overlays/SearchOverlay.tsx"
     ]
 }
