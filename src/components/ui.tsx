@@ -107,7 +107,7 @@ export function Avatar({ name, size = 32, className, presence, src }: { name: st
   return (
     <span className={cx('relative inline-flex shrink-0 items-center justify-center rounded-full font-bold', AVATAR_TONES[h % AVATAR_TONES.length], className)} style={{ width: size, height: size, fontSize: Math.max(10, size * 0.36) }} aria-hidden>
       {initials(n)}
-      {src && failed !== src ? <img src={src} alt="" draggable={false} decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(src)} className="absolute inset-0 h-full w-full rounded-[inherit] object-cover" /> : null}
+      {src && failed !== src ? <img key={src} src={src} alt="" draggable={false} decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(src)} className="absolute inset-0 h-full w-full rounded-[inherit] object-cover" /> : null}
       {presence ? (
         <span className={cx('absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-surface', presence === 'online' ? 'bg-success' : presence === 'away' ? 'bg-warning' : 'bg-ink-3')} />
       ) : null}

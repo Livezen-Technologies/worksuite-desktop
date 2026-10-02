@@ -30,6 +30,13 @@ let owner: string | null = null;
 let timer: ReturnType<typeof setTimeout> | null = null;
 let version = 0;
 let listening = false;
+let generation = 0;
+const revisions = new Map<number, number>();
+
+function scope(): string | null {
+  const s = app.get();
+  return s.auth?.user?.id ? `${s.auth.server?.origin ?? ''}#${s.auth.user.id}#${s.organizationId ?? ''}` : null;
+}
 
 function changed(): void {
   version++;
@@ -37,29 +44,39 @@ function changed(): void {
 }
 
 /** Signed in as somebody else, or to another server: nothing learned before applies. */
-function checkOwner(): void {
-  const s = app.get().auth;
-  const who = s?.user?.id ? `${s.server?.origin ?? ''}#${s.user.id}` : null;
-  if (who === owner) return;
+function checkOwner(): boolean {
+  const who = scope();
+  if (who === owner) return false;
   owner = who;
+  generation++;
   known.clear();
   wanted.clear();
+  revisions.clear();
+  if (timer) clearTimeout(timer);
+  timer = null;
+  return true;
 }
 
 async function flush(): Promise<void> {
   timer = null;
+  checkOwner();
+  if (!owner) return;
+  const started = generation;
   const ids = [...wanted];
   wanted.clear();
   for (let i = 0; i < ids.length; i += BATCH) {
     const chunk = ids.slice(i, i + BATCH);
+    const before = new Map(chunk.map((id) => [id, revisions.get(id) ?? 0]));
     try {
       const r = await apiGet<{ avatars: Record<string, string | null> }>('/api/users/avatars', { ids: chunk.join(',') });
       const now = Date.now();
-      for (const id of chunk) known.set(id, { address: r.avatars?.[String(id)] ?? null, at: now });
+      if (started !== generation || scope() !== owner) return;
+      for (const id of chunk) if (before.get(id) === (revisions.get(id) ?? 0)) known.set(id, { address: r.avatars?.[String(id)] ?? null, at: now });
     } catch {
       // Offline or refused: the initials stay, and the next use asks again a little later.
       const now = Date.now();
-      for (const id of chunk) if (!known.has(id)) known.set(id, { address: null, at: now - STALE_MS + 60_000 });
+      if (started !== generation || scope() !== owner) return;
+      for (const id of chunk) if (before.get(id) === (revisions.get(id) ?? 0) && !known.has(id)) known.set(id, { address: null, at: now - STALE_MS + 60_000 });
     }
   }
   changed();
@@ -73,10 +90,16 @@ function want(id: number): void {
 function listen(): void {
   if (listening) return;
   listening = true;
+  app.subscribe(() => {
+    if (checkOwner()) changed();
+  });
   try {
     on<{ type?: string; user_id?: number; avatar?: string | null }>('realtime:event', (e) => {
       if (e?.type !== 'profile.updated' || typeof e.user_id !== 'number') return;
+      checkOwner();
+      if (!owner) return;
       const id = e.user_id;
+      revisions.set(id, (revisions.get(id) ?? 0) + 1);
       // A picture only some may see comes as HIDDEN: ask whether this viewer is one of them.
       if (e.avatar === HIDDEN) {
         known.delete(id);
@@ -100,6 +123,7 @@ function listen(): void {
 function request(id: number | null | undefined): void {
   if (!id || id <= 0) return;
   checkOwner();
+  if (!owner) return;
   listen();
   const e = known.get(id);
   if (!e || Date.now() - e.at > STALE_MS) want(id);
@@ -132,14 +156,17 @@ function subscribe(l: () => void): () => void {
 
 /** A person's picture, sized for `px`, or null for their initials. Re-renders when it changes. */
 export function useUserAvatar(id: number | null | undefined, px: number): string | null {
+  const account = useSyncExternalStore(app.subscribe, scope);
   useSyncExternalStore(subscribe, () => version);
   // Asked for after the render, batched with the rest of the screen.
-  useEffect(() => request(id), [id]);
+  useEffect(() => request(id), [id, account]);
   return avatarSrc(avatarAddress(id), px);
 }
 
 /** Tests only: forget everything. */
 export function resetAvatars(): void {
+  generation++;
+  revisions.clear();
   known.clear();
   wanted.clear();
   owner = null;

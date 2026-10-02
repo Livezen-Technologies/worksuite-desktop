@@ -9,7 +9,12 @@ import type * as CoreApi from '../../../src/core/api';
  */
 const realtime: Array<(e: unknown) => void> = [];
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn() }));
-vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(), on: (_ch: string, cb: (e: unknown) => void) => (realtime.push(cb), () => undefined), errorMessage: String, isMac: false }));
+vi.mock('../../../src/core/bridge', () => ({
+  call: vi.fn(),
+  on: (_ch: string, cb: (e: unknown) => void) => (realtime.push(cb), () => undefined),
+  errorMessage: String,
+  isMac: false,
+}));
 vi.mock('../../../src/core/app-state', async () => {
   const { createStore } = await import('../../../src/core/store');
   return { app: createStore({ apps: [], auth: { server: { origin: 'https://app.worksuite.lk' }, user: { id: 1, name: 'Me' } } }) };
@@ -25,6 +30,7 @@ const lookups = vi.mocked(apiGet);
 const img = (c: HTMLElement) => c.querySelector('img');
 
 beforeEach(() => {
+  app.set({ auth: { server: { origin: 'https://app.worksuite.lk' }, user: { id: 1, name: 'Me' } }, organizationId: null } as never);
   resetAvatars();
   lookups.mockReset();
   Object.defineProperty(window, 'devicePixelRatio', { value: 2, configurable: true });
@@ -47,13 +53,124 @@ describe('picture addresses', () => {
 });
 
 describe('avatars with pictures', () => {
+  it('keeps identically named people associated with their user IDs', async () => {
+    lookups.mockResolvedValue({ avatars: { '7': '/avatars/alex7/256.webp', '8': '/avatars/alex8/256.webp' } } as never);
+    const { container } = render(
+      <>
+        <UserAvatar userId={7} name="Alex Silva" />
+        <UserAvatar userId={8} name="Alex Silva" />
+      </>,
+    );
+    await waitFor(() => expect(container.querySelectorAll('img')).toHaveLength(2));
+    expect([...container.querySelectorAll('img')].map((i) => i.src)).toEqual(['https://app.worksuite.lk/avatars/alex7/64.webp', 'https://app.worksuite.lk/avatars/alex8/64.webp']);
+  });
+
+  it('never uses an unverified fallback photo when the ID lookup returns no picture', async () => {
+    lookups.mockResolvedValue({ avatars: { '7': null } } as never);
+    const { container } = render(<UserAvatar userId={7} name="Alex Silva" src="https://app.worksuite.lk/avatars/another-person/64.webp" />);
+    await waitFor(() => expect(lookups).toHaveBeenCalled());
+    expect(img(container)).toBeNull();
+    expect(container.textContent).toBe('AS');
+  });
+
+  it('discards an old account lookup after switching accounts with the avatar still mounted', async () => {
+    let finish!: (value: unknown) => void;
+    lookups.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }) as never,
+    );
+    lookups.mockResolvedValueOnce({ avatars: { '7': null } } as never);
+    const { container } = render(<UserAvatar userId={7} name="Alex Silva" />);
+    await waitFor(() => expect(lookups).toHaveBeenCalledTimes(1));
+    act(() => app.set({ auth: { server: { origin: 'https://app.worksuite.lk' }, user: { id: 2, name: 'Other' } } } as never));
+    await waitFor(() => expect(lookups).toHaveBeenCalledTimes(2));
+    await act(async () => finish({ avatars: { '7': '/avatars/old-account/256.webp' } }));
+    expect(img(container)).toBeNull();
+    expect(container.textContent).toBe('AS');
+  });
+
+  it('clears a mounted photo at sign-out', async () => {
+    lookups.mockResolvedValueOnce({ avatars: { '7': '/avatars/old/256.webp' } } as never);
+    const { container } = render(<UserAvatar userId={7} name="Alex Silva" />);
+    await waitFor(() => expect(img(container)).not.toBeNull());
+    act(() => app.set({ auth: null } as never));
+    expect(img(container)).toBeNull();
+  });
+
+  it('rejects a delayed response even after signing back into the same account', async () => {
+    let finish!: (value: unknown) => void;
+    lookups
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          finish = resolve;
+        }) as never,
+      )
+      .mockResolvedValueOnce({ avatars: { '7': '/avatars/current-session/256.webp' } } as never);
+    const { container } = render(<UserAvatar userId={7} name="Alex Silva" />);
+    await waitFor(() => expect(lookups).toHaveBeenCalledTimes(1));
+    act(() => app.set({ auth: null } as never));
+    act(() => app.set({ auth: { server: { origin: 'https://app.worksuite.lk' }, user: { id: 1, name: 'Me' } } } as never));
+    await waitFor(() => expect(img(container)?.src).toContain('/avatars/current-session/'));
+    await act(async () => finish({ avatars: { '7': '/avatars/old-session/256.webp' } }));
+    expect(img(container)?.src).toContain('/avatars/current-session/');
+  });
+
+  it('does not associate an invalid user ID with a supplied fallback photo', () => {
+    const { container } = render(<UserAvatar userId={7.5} name="Alex Silva" src="https://app.worksuite.lk/avatars/another/64.webp" />);
+    expect(img(container)).toBeNull();
+    expect(lookups).not.toHaveBeenCalled();
+    expect(container.textContent).toBe('AS');
+  });
+
+  it('looks up mounted avatars again when the company scope changes', async () => {
+    lookups.mockResolvedValueOnce({ avatars: { '7': '/avatars/old-company/256.webp' } } as never).mockResolvedValueOnce({ avatars: { '7': null } } as never);
+    const { container } = render(<UserAvatar userId={7} name="Alex Silva" />);
+    await waitFor(() => expect(img(container)).not.toBeNull());
+    act(() => app.set({ organizationId: '2' } as never));
+    expect(img(container)).toBeNull();
+    await waitFor(() => expect(lookups).toHaveBeenCalledTimes(2));
+  });
+
+  it('does not replace a realtime picture update with an older delayed lookup', async () => {
+    let finish!: (value: unknown) => void;
+    lookups.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }) as never,
+    );
+    const { container } = render(<UserAvatar userId={7} name="Alex Silva" />);
+    await waitFor(() => expect(lookups).toHaveBeenCalled());
+    act(() => realtime.forEach((cb) => cb({ type: 'profile.updated', user_id: 7, avatar: '/avatars/new/256.webp' })));
+    await act(async () => finish({ avatars: { '7': '/avatars/old/256.webp' } }));
+    expect(img(container)?.src).toContain('/avatars/new/');
+  });
+
+  it('replaces the image element when a row is reused for a different person', async () => {
+    lookups.mockResolvedValue({ avatars: { '7': '/avatars/one/256.webp', '8': '/avatars/two/256.webp' } } as never);
+    const { container, rerender } = render(<UserAvatar userId={7} name="Alex Silva" />);
+    await waitFor(() => expect(img(container)).not.toBeNull());
+    const old = img(container)!;
+    rerender(<UserAvatar userId={8} name="Alex Silva" />);
+    expect(old.isConnected).toBe(false);
+    expect(img(container)).toBeNull();
+    await waitFor(() => expect(img(container)?.src).toContain('/avatars/two/'));
+    fireEvent.error(old);
+    expect(img(container)?.src).toContain('/avatars/two/');
+  });
   it('looks up everybody on screen in one request, and shows their pictures', async () => {
     lookups.mockResolvedValue({ avatars: { '7': '/avatars/tok7/256.webp', '8': null } } as never);
     const { container } = render(
       <div>
-        <span data-testid="a"><UserAvatar userId={7} name="Nimal Perera" size={34} /></span>
-        <span data-testid="b"><UserAvatar userId={8} name="Kasun Silva" size={34} /></span>
-        <span data-testid="c"><UserAvatar userId={7} name="Nimal Perera" size={30} /></span>
+        <span data-testid="a">
+          <UserAvatar userId={7} name="Nimal Perera" size={34} />
+        </span>
+        <span data-testid="b">
+          <UserAvatar userId={8} name="Kasun Silva" size={34} />
+        </span>
+        <span data-testid="c">
+          <UserAvatar userId={7} name="Nimal Perera" size={30} />
+        </span>
       </div>,
     );
     await waitFor(() => expect(container.querySelectorAll('img')).toHaveLength(2));

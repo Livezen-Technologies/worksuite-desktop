@@ -5,6 +5,10 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## Unreleased
+
+- Keep profile pictures associated with user IDs across account, server and company switches. Discard stale lookups and replace reused image elements; show the current person's initials instead of an unverified fallback photo (#119).
+
 ## 2026-10-02 — 0.2.76: meeting invitations that arrive; tender meetings and contact persons; the AI Assistant works in the background; chat notifications while locked
 
 - **Meeting invitations reach people** (#97).
