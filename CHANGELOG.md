@@ -5,6 +5,23 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.89: a Local Profile — WorkSuite without an account
+
+**Continue as Guest** on the login screen sets up a profile that lives only on this computer (#141):
+
+- **Your name, and optionally a picture and a PIN.** No email, no registration, nothing sent anywhere. The header shows your name with *Local Profile · Saved on This Device*, and whether you're online separately.
+- **Notes, Tasks and Calendar offline** — create, edit, delete and search. Reminders work while WorkSuite runs, including in the background; they can't fire while it's fully closed, and the app says so.
+- **Kept across restarts and updates.** The local data file is upgraded in place; one from a newer WorkSuite is left untouched rather than changed.
+- **Join a meeting** by link or code when you're online, under your local name.
+- **Online-only parts are marked** "Needs a WorkSuite account" — Chat, Mail, Drive, company records, shared workspaces, HR, CRM, AI Assistant — and stay out of reach.
+- **Backup & Data:** export, restore (with a preview of what will be added before anything is written) and delete everything. Backups never contain the PIN.
+- **Sign in later** with Sign In / Create Account. Your local notes, tasks and events stay separate; you can review them by type, pick which to bring over and confirm with your PIN. Nothing is ever uploaded or merged on its own.
+- No profile-picture or AI-model setup is asked of a guest.
+
+A guest meeting window now also reads the meeting's current state (ended, locked) instead of what it was when the link was opened.
+
+---
+
 ## 2026-10-03 — 0.2.88: the AI Assistant steps aside while you work
 
 Ask the AI Assistant something and carry on — it gets out of the way and tells you when it's done (#126):

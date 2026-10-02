@@ -7,6 +7,7 @@ the root CHANGELOG.md.
 ## 1.10.2 — 2026-10-03
 
 - AI Assistant setting Auto-minimize when I continue working (on by default) (#126); Sinhala and Tamil text for it.
+- Login screen: Continue as Guest, with a short explanation; Sinhala and Tamil text for the Local Profile (#141).
 
 ## 1.10.1 — 2026-10-03
 
