@@ -5,6 +5,21 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-02 — 0.2.84: Messenger and Instagram in Chat
+
+Facebook Messenger and Instagram Direct join Chat, Web Chat and WhatsApp as channels (#36):
+
+- **Connect from + Add Channel.** Facebook Login opens in your browser; then pick the Facebook Page, or the Instagram professional account linked to it. Pages you can't use are greyed out with the reason (no messaging role on the Page, or a permission was declined).
+- **In the toolbar,** each connected channel shows its unread count, and a warning if an account has lost its connection.
+- **Read and reply in the same chat view.** Every conversation shows its channel and account ("Messenger · Your Page", "@name · Instagram"). Send text and files — Instagram takes images, video and audio; Messenger takes any file up to 25 MB.
+- **Clear when you can't send.** Both platforms only allow replies within 24 hours of the customer's last message; the box says so, as it does when you lack permission, the account is disconnected or an attachment isn't supported.
+- **Channel settings** show the connection status and any error (sign-in expired, permission removed, not receiving messages), with Check connection, Reconnect and Disconnect. Conversations are kept after disconnecting.
+- No call buttons on these channels.
+
+Needs the server update (new Meta module and its migrations), a Meta app with its App ID, App Secret and webhook set up on the server, and Meta's App Review before customers outside your app's testers can connect.
+
+---
+
 ## 2026-10-02 — 0.2.83: a tidier meeting More menu
 
 The meeting More menu was one long list that could run off the window. It is now grouped and fits (#124):
