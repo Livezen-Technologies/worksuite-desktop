@@ -5,6 +5,21 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-02 — 0.2.80: announcements to several companies
+
+Publishing an announcement to more than one company is tightened up and kept current everywhere (#98):
+
+- **Only companies you may publish to.** The company picker offers just those, with "All companies you may publish to", Clear Selection, a count and removable chips. A company where you may draft but not publish is marked "draft only", and Publish says why it is unavailable. The server checks each company too — before, ticking a company you were refused alongside one you were allowed let the announcement through.
+- **Audience before publishing.** "Will reach N people in M companies", with the per-company breakdown, and a confirm step. Save Draft stays; drafts never reach anyone.
+- **Home's Announcements.** Urgent first, then pinned, then important, then newest — a pinned announcement no longer sinks below an unpinned important one. Expired ones disappear at once; "See all" opens the full list.
+- **Edits, withdrawal and expiry show everywhere straight away.** Home, an open announcement and the HR console refresh as soon as it changes, and notifications already sent are updated (or expire) with it.
+- **Acknowledgement report.** "Acknowledged earlier text" and "Read, not acknowledged" are told apart, filtered by the companies you may see the report for.
+- One notification per person, even if they belong to several of the chosen companies.
+
+Needs the server update (HR module and its migration).
+
+---
+
 ## 2026-10-02 — 0.2.79: images in the AI Assistant
 
 You can now give the AI Assistant pictures — screenshots, photos of documents, scans (#59):
