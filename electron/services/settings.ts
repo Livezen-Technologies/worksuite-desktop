@@ -1,3 +1,4 @@
+import { DEFAULT_DARK_PROFILE, normalizeDarkProfile } from '@shared/theme-profiles';
 import { app } from 'electron';
 import { join } from 'node:path';
 import type { DesktopPolicy, Preferences, PreferenceLock } from '@shared/types';
@@ -26,6 +27,7 @@ export function defaultPreferences(): Preferences {
     minimizeToTray: true,
     restoreTabs: true,
     theme: 'system',
+    darkColorProfile: DEFAULT_DARK_PROFILE,
     density: 'comfortable',
     hardwareAcceleration: true,
     notificationSounds: true,
@@ -69,7 +71,7 @@ export class SettingsService {
     const stored = db.getConfig<Partial<Preferences>>('preferences') ?? {};
     const defaults = defaultPreferences();
     // The AI settings are one object: one saved before a field was added takes that field's default.
-    this.prefs = { ...defaults, ...stored, ai: { ...defaults.ai, ...stored.ai }, meetRecording: { ...defaults.meetRecording, ...stored.meetRecording }, drive: normalizeDrivePrefs(stored.drive) };
+    this.prefs = { ...defaults, ...stored, darkColorProfile: normalizeDarkProfile(stored.darkColorProfile), ai: { ...defaults.ai, ...stored.ai }, meetRecording: { ...defaults.meetRecording, ...stored.meetRecording }, drive: normalizeDrivePrefs(stored.drive) };
   }
 
   setPolicy(policy: DesktopPolicy | null): void {

@@ -1,3 +1,4 @@
+import type { DarkColorProfile } from './theme-profiles';
 /**
  * Types shared by the main process and the renderer. Everything crossing the
  * IPC boundary is described here and validated by the zod schemas in
@@ -202,6 +203,8 @@ export interface Preferences {
   minimizeToTray: boolean;
   restoreTabs: boolean;
   theme: Theme;
+  /** Optional for compatibility with preferences saved before dark profiles existed. */
+  darkColorProfile?: DarkColorProfile;
   density: Density;
   hardwareAcceleration: boolean;
   notificationSounds: boolean;

@@ -1,3 +1,4 @@
+import { DarkProfilePicker } from './Appearance';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 import { categoryVisible } from '@shared/access';
@@ -168,9 +169,11 @@ function PreferencesSection({ prefs }: { prefs: Preferences }) {
       <Toggle k="startMinimized" prefs={prefs} label="Start minimized to the tray" />
       <Toggle k="minimizeToTray" prefs={prefs} label="Closing the window keeps WorkSuite in the tray" hint="Off: closing the window quits WorkSuite." />
       <Toggle k="restoreTabs" prefs={prefs} label="Reopen my tabs when WorkSuite starts" />
+      <H title="Appearance" />
       <Row label="Theme">
         <Select label="Theme" value={prefs.theme} options={[{ value: 'system', label: 'System' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} onValueChange={(v) => void updatePrefs({ theme: v })} />
       </Row>
+      <DarkProfilePicker prefs={prefs} />
       <Row label="Density">
         <Select label="Density" value={prefs.density} options={[{ value: 'comfortable', label: 'Comfortable' }, { value: 'compact', label: 'Compact' }]} onValueChange={(v) => void updatePrefs({ density: v })} />
       </Row>

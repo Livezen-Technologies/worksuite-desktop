@@ -9,6 +9,11 @@ the root CHANGELOG.md.
 **Added**
 
 - a raised-hand badge on call tiles, a hand sound, and a tab row in the call's side panel that scrolls when its tabs do not fit (worksuite-desktop#92).
+## 1.1.2 — 2026-10-01
+
+**Fixed**
+
+- Voice-window backgrounds follow the chosen dark color profile (#73)
 
 ## 1.1.1 — 2026-10-01
 

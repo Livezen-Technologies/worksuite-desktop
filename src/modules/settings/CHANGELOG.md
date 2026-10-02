@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.6.0 — 2026-10-01
+
+**Added**
+
+- Seven persistent dark color profiles with palette previews and reset in Preferences Appearance (#73)
+
+**Changed**
+
+- Shared theme tokens and legacy window chrome follow the selected profile across all renderer windows
+
 ## 1.5.0 — 2026-10-01
 
 **Added**
