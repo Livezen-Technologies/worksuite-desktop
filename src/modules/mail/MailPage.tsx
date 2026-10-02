@@ -1,519 +1,510 @@
-import { isOfficeFile, openInOffice } from '../../core/open-document';
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { apiGetMeta, setDefaultMailbox, withMailbox } from '../../core/api';
 import { app } from '../../core/app-state';
-import { ApiError, apiGet, apiGetMeta, apiPost, setDefaultMailbox, withMailbox } from '../../core/api';
-import { call, errorMessage } from '../../core/bridge';
-import { useDraft } from '../../core/drafts';
+import { errorMessage } from '../../core/bridge';
+import { text } from '../../core/i18n';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
-import { dateLabel, listStamp, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
+import { searchFold } from '@shared/localization';
 import { Icon } from '../../components/Icon';
-import { Avatar, Button, Chip, Empty, ErrorNote, FileBadge, IconButton, Modal, OfflineNote, Spinner, TextField, cx } from '../../components/ui';
-import { VirtualList } from '../../components/VirtualList';
-import type { ModuleProps } from '../registry';
-import { escapeHtml, mailFrameDoc, parseAddresses, sanitizeMailHtml, textToHtml } from './sanitize';
-import { Select } from '../../components/Select';
-import { openPdf } from '../pdf/open';
 import { SidePanel } from '../../components/SidePanel';
-import { AiTextDialog } from '../ai/AiTextDialog';
-import { AiMenuButton } from '../ai/AiMenuButton';
-import { WRITING_TASKS, type TextTask } from '../ai/textTools';
+import { Empty, cx } from '../../components/ui';
+import type { ModuleProps } from '../registry';
+import { AddMailbox } from './AddMailbox';
+import { messageAction, useLocalStore, useMailPrefs, useMailboxes, usePendingMail, useSyncStatus, useViewCounts } from './api';
+import { Compose } from './Compose';
+import { MessageList, type ListRow } from './MessageList';
+import { MessageView, windowRoute, type ViewControls } from './MessageView';
+import { applyFilters, filtersFor, folderName, groupRows, queueKey, queuedByMessage, rowMailbox, smartView, sortRows, step, type ChipId } from './model';
+import { useOutgoing, undoSend } from './outgoing';
+import { ReadingPane, afterClose, withTab, type OpenTab } from './ReadingPane';
+import { ScheduledList } from './Scheduled';
+import { SearchView } from './SearchView';
+import { MailSidebar, unreadOf, type Place } from './Sidebar';
+import { StatusBar, WaitingPanel } from './StatusBar';
+import type { ComposeSeed, Label, MessagePage, MessageRef, MessageRow } from './types';
 
-/** A PDF attachment, by its type or its name. */
-const isPdf = (a: { name: string; mime: string }) => a.mime === 'application/pdf' || /\.pdf$/i.test(a.name);
+export { joinQuote, splitQuote, unquote } from './quote';
 
 /**
- * Desktop Mail, three panes (UI-07, FR-COM-01, §4.14): accounts and folders,
- * the conversation list, and the message. READ_CACHE + DRAFTS: recent mail
- * reads offline within the cache window; composing saves a draft every
- * moment, and sending needs the server.
+ * Desktop Mail (UI-07, FR-COM-01, §4.14): the sidebar — mailboxes, smart
+ * views, folders, labels and the sync card — the message list, and the
+ * reading pane with a tab per open message. READ_CACHE + DRAFTS + the offline
+ * queue: recent mail reads offline within the cache window, drafts are kept as
+ * they are typed, and archiving, deleting, starring, moving and sending made
+ * offline wait in the queue — with Undo — until the connection returns.
+ *
+ * Keyboard (when no field has focus): j/k or ↓/↑ next and previous, Enter
+ * open, Esc back, e archive, # delete, ! spam, s star, u unread, r reply,
+ * a reply all, f forward, n new email, / search.
  */
-interface Mailbox {
-  id: number;
-  email: string;
-  display_name: string | null;
-  shared: boolean;
-  unread: number | null;
-  in_unified?: boolean;
-  is_default?: boolean;
-  archived?: boolean;
-}
-interface Folder {
-  id: number;
-  name: string;
-  slug: string;
-  type: string;
-  total: number;
-  unread: number;
-}
-interface MessageRow {
-  id: number;
-  from_name: string;
-  from_email: string;
-  subject: string;
-  preview: string;
-  is_read: boolean;
-  is_starred: boolean;
-  has_attachment: boolean;
-  folder_slug?: string;
-  created_at: string;
-  mailbox?: { id: number; email: string; name: string; colour: string };
-  uid_key?: string;
-}
-interface MessageDetail {
-  id: number;
-  message_id: string;
-  from_name: string;
-  from_email: string;
-  subject: string;
-  to: string[];
-  cc: string[];
-  body_html: string;
-  is_starred: boolean;
-  attachments: Array<{ ref: string; name: string; mime: string; size: number }>;
-  created_at: string;
-}
-
-type Filter = 'all' | 'unread' | 'flagged' | 'attachments';
-
 export default function MailPage({ active }: ModuleProps) {
-  const { query, go, route } = useTab();
-  const box = query.get('box') ?? 'unified';
-  const folder = query.get('folder') ?? 'inbox';
+  const qc = useQueryClient();
+  const { query, go, route, openInWindow, navigate } = useTab();
+  const place: Place = {
+    box: query.get('box') ?? 'unified',
+    view: smartView(query.get('view'))?.id ?? null,
+    folder: query.get('folder') ?? 'inbox',
+    label: query.get('label') ? Number(query.get('label')) : null,
+  };
   const msg = query.get('msg');
   const msgBox = query.get('mbx');
-  const [filter, setFilter] = useState<Filter>('all');
-  const [compose, setCompose] = useState<ComposeSeed | null>(null);
+  const msgFolder = query.get('mf') ?? place.folder;
+  const status = useStore(app, (s) => s.status);
+  const cacheDays = useStore(app, (s) => s.prefs?.mailCacheDays ?? 30);
+  const networkOffline = status?.network === 'OFFLINE';
+
+  const [chips, setChips] = useState<ChipId[]>([]);
+  const [search, setSearch] = useState('');
+  const [searching, setSearching] = useState<string | null>(null);
+  const [tabs, setTabs] = useState<OpenTab[]>([]);
+  const [compose, setCompose] = useState<{ seed: ComposeSeed; shown: boolean; n: number } | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [focus, setFocus] = useState(false);
+  const [team, setTeam] = useState<'open' | 'answered' | 'closed' | 'all'>('open');
+  const [teamWho, setTeamWho] = useState<'all' | 'mine' | 'nobody'>('all');
+  const controls = useRef<ViewControls | null>(null);
   const [composeRoute, setComposeRoute] = useState<string | null>(null);
+  const openCompose = (seed: ComposeSeed) => setCompose((c) => ({ seed, shown: true, n: (c?.n ?? 0) + 1 }));
   if (query.get('compose') === '1' && composeRoute !== route) {
     setComposeRoute(route);
     // `?compose=1&to=a@b` — a new message to somebody (Contacts' Email).
     const to = query.get('to');
-    setCompose({ mode: 'new', ...(to && /^[^\s@<>]+@[^\s@<>]+$/.test(to) ? { to } : {}) });
+    setCompose((c) => ({ seed: { mode: 'new', ...(to && /^[^\s@<>]+@[^\s@<>]+$/.test(to) ? { to } : {}) }, shown: true, n: (c?.n ?? 0) + 1 }));
   }
-  const cacheDays = useStore(app, (s) => s.prefs?.mailCacheDays ?? 30);
   useTabTitle(msg ? 'Mail · Message' : 'Mail');
 
-  const mailboxes = useQuery({ queryKey: ['mail', 'mailboxes'], queryFn: () => apiGet<{ mailboxes: Mailbox[] }>('/api/mail/mailboxes'), staleTime: 5 * 60_000 });
-  const boxes = (mailboxes.data?.mailboxes ?? []).filter((m) => !m.archived);
+  const mailboxes = useMailboxes();
+  const boxes = useMemo(() => (mailboxes.data?.mailboxes ?? []).filter((m) => !m.archived), [mailboxes.data]);
   const defaultBox = boxes.find((m) => m.is_default) ?? boxes[0];
   useEffect(() => setDefaultMailbox(defaultBox ? String(defaultBox.id) : null), [defaultBox]);
-  const unified = box === 'unified' && boxes.length > 1;
-  const effectiveBox = unified ? null : box === 'unified' ? (defaultBox ? String(defaultBox.id) : null) : box;
+  const localStore = mailboxes.isSuccess && boxes.length === 0;
+  const counts = useViewCounts(active && (mailboxes.isSuccess || mailboxes.isError));
+  const sync = useSyncStatus(active && boxes.length > 0);
+  const pending = usePendingMail();
+  const localBytes = useLocalStore();
+  const { prefs, set: setPrefs } = useMailPrefs();
+  const outgoing = useOutgoing();
+
+  const view = smartView(place.view);
+  const folder = view?.folder ?? place.folder;
+  const unified = place.box === 'unified' && boxes.length > 1 && place.label === null;
+  const effectiveBox = place.label !== null ? null : unified ? null : place.box === 'unified' ? (defaultBox ? String(defaultBox.id) : null) : place.box;
+  const filters = filtersFor(view, chips);
+  const folderKey = `${effectiveBox ?? 'unified'}:${folder}`;
+  const canThread = !unified && filters.length === 0 && folder !== 'outbox';
+  const threaded = canThread && !!prefs.conversations?.[folderKey];
 
   const list = useInfiniteQuery({
-    queryKey: ['mail', 'messages', unified ? 'unified' : effectiveBox, folder],
+    queryKey: ['mail', 'messages', unified ? 'unified' : effectiveBox, folder, filters.join(','), threaded],
     initialPageParam: 1,
     queryFn: ({ pageParam, signal }) =>
-      apiGetMeta<{ messages: MessageRow[]; has_more: boolean; total: number }>(
+      apiGetMeta<MessagePage>(
         '/api/mail/messages',
-        unified ? { unified: 1, folder, page: pageParam, per_page: 50 } : withMailbox({ folder, page: pageParam, per_page: 50 }, effectiveBox),
+        unified
+          ? { unified: 1, folder, page: pageParam, per_page: 50, ...(filters.length ? { filters: filters.join(',') } : {}) }
+          : place.label !== null
+            ? { folder, page: pageParam, per_page: 50 }
+            : withMailbox({ folder, page: pageParam, per_page: 50, ...(filters.length ? { filters: filters.join(',') } : {}), ...(threaded ? { threaded: 1 } : {}), sort: prefs.sort ?? 'date', dir: prefs.dir ?? 'desc' }, effectiveBox),
         signal,
       ),
     getNextPageParam: (last, pages) => (last.data.has_more ? pages.length + 1 : undefined),
-    enabled: mailboxes.isSuccess || mailboxes.isError,
+    enabled: (mailboxes.isSuccess || mailboxes.isError) && folder !== 'outbox',
   });
-  const rows = useMemo(() => {
-    const all = (list.data?.pages ?? []).flatMap((p) => p.data.messages);
-    return all.filter((m) => (filter === 'unread' ? !m.is_read : filter === 'flagged' ? m.is_starred : filter === 'attachments' ? m.has_attachment : true));
-  }, [list.data, filter]);
-  const offline = list.data?.pages.some((p) => p.offline) ? list.data.pages[0]?.cachedAt ?? null : null;
-  const unreadCount = unified ? boxes.filter((b) => !b.shared).reduce((n, b) => n + (b.unread ?? 0), 0) : null;
+  const firstPage = list.data?.pages[0];
+  const cachedOffline = !!list.data?.pages.some((p) => p.offline);
+  const offline = networkOffline || cachedOffline;
+  const isTeam = !!firstPage?.data.team;
 
-  const select = (m: MessageRow) => {
-    const p = new URLSearchParams({ box, folder, msg: String(m.id) });
-    const mb = m.mailbox?.id ?? effectiveBox;
-    if (mb) p.set('mbx', String(mb));
-    go(`/mail?${p}`);
+  const queued = useMemo(() => queuedByMessage(pending.data ?? []), [pending.data]);
+  const rowKey = (m: MessageRow) => queueKey(rowMailbox(m, effectiveBox), m.folder_slug ?? folder, m.id);
+  const rows = (() => {
+    let all = (list.data?.pages ?? []).flatMap((p) => p.data.messages);
+    all = applyFilters(all, filters);
+    if (isTeam) {
+      const me = Number(app.get().bootstrap?.user.id ?? 0);
+      all = all.filter((m) => (team === 'all' || (m.team?.status ?? 'open') === team) && (teamWho === 'all' || (teamWho === 'mine' ? m.team?.assignee_id === me : !m.team?.assignee_id)));
+    }
+    const term = searchFold(search.trim());
+    if (term) all = all.filter((m) => searchFold(`${m.from_name} ${m.from_email} ${m.subject} ${m.preview}`).includes(term));
+    return sortRows(all, prefs.sort ?? 'date', prefs.dir ?? 'desc');
+  })();
+  const groups = groupRows(rows, prefs.group ?? 'date').map((g) => ({ ...g, items: g.rows.map((r): ListRow => ({ row: r, key: rowKey(r), queued: queued.get(rowKey(r)) ?? null })) }));
+  const flat = groups.flatMap((g) => g.items);
+
+  // The open message: the URL names it; its tab joins the strip.
+  const current: MessageRef | null = msg ? { uid: msg, folder: msgFolder, mailbox: msgBox ?? effectiveBox } : null;
+  const currentKey = current ? queueKey(current.mailbox, current.folder, current.uid) : null;
+  const known = current ? flat.find((r) => r.key === currentKey)?.row : undefined;
+  if (current && currentKey && !tabs.some((t) => t.key === currentKey)) {
+    setTabs(withTab(tabs, { key: currentKey, ref: current, subject: known?.subject ?? '', from: known ? known.from_name || known.from_email : '' }, currentKey));
+  } else if (known && currentKey) {
+    const t = tabs.find((x) => x.key === currentKey);
+    if (t && !t.subject && known.subject) setTabs(withTab(tabs, { ...t, subject: known.subject, from: known.from_name || known.from_email }, currentKey));
+  }
+
+  const placeQuery = (p: Partial<Place> = {}) => {
+    const next = { ...place, ...p };
+    const q = new URLSearchParams();
+    if (next.box !== 'unified') q.set('box', next.box);
+    if (next.view) q.set('view', next.view);
+    if (next.folder !== 'inbox') q.set('folder', next.folder);
+    if (next.label !== null) q.set('label', String(next.label));
+    return q;
   };
-
-  return (
-    <div className="flex h-full">
-      <SidePanel id="mail" label="the folders">
-        <FolderPane boxes={boxes} box={box} folder={folder} onCompose={() => setCompose({ mode: 'new' })} onPick={(b, f) => go(`/mail?box=${b}&folder=${f}`)} cacheDays={cacheDays} loading={mailboxes.isLoading} active={active} unifiedUnread={unreadCount} />
-      </SidePanel>
-      <div className="flex w-[380px] shrink-0 flex-col border-r border-line bg-surface">
-        <div className="px-4 pt-4 pb-2">
-          <div className="flex items-baseline justify-between">
-            <h1 className="text-[18px] font-bold text-ink">{unified ? 'Combined inbox' : folder.charAt(0).toUpperCase() + folder.slice(1)}</h1>
-            {list.data?.pages[0] ? <span className="text-[12.5px] text-ink-3">{list.data.pages[0].data.total} messages</span> : null}
-          </div>
-          <div className="mt-3 flex gap-1.5">
-            {(['all', 'unread', 'flagged', 'attachments'] as const).map((f) => (
-              <button key={f} type="button" onClick={() => setFilter(f)} className={cx('rounded-full border px-3 py-1 text-[12.5px] font-semibold capitalize', filter === f ? 'border-ink bg-ink text-surface' : 'border-line text-ink-2 hover:bg-subtle')}>
-                {f}
-              </button>
-            ))}
-          </div>
-          {offline ? <div className="mt-2"><OfflineNote cachedAt={offline} /></div> : null}
-        </div>
-        <div className="min-h-0 flex-1">
-          {list.isLoading ? <Spinner /> : list.error ? <div className="p-4"><ErrorNote error={list.error} onRetry={() => void list.refetch()} /></div> : rows.length === 0 ? <Empty icon="inbox" title="Nothing here" /> : null}
-          {rows.length > 0 ? (
-            <VirtualList
-              items={rows}
-              estimate={96}
-              getKey={(m) => m.uid_key ?? `${m.mailbox?.id ?? ''}:${m.id}`}
-              onEndReached={() => list.hasNextPage && !list.isFetchingNextPage && void list.fetchNextPage()}
-              render={(m) => {
-                const selected = String(m.id) === msg && (!m.mailbox || String(m.mailbox.id) === msgBox);
-                return (
-                  <button type="button" onClick={() => select(m)} className={cx('flex w-full flex-col gap-0.5 border-b border-line px-4 py-3 text-left', selected ? 'bg-selection' : 'hover:bg-subtle')}>
-                    <span className="flex items-center gap-2">
-                      <span className={cx('h-2 w-2 shrink-0 rounded-full', m.is_read ? 'bg-transparent' : 'bg-primary')} />
-                      <span className={cx('min-w-0 flex-1 truncate text-[13.5px]', m.is_read ? 'text-ink-2' : 'font-bold text-ink')}>{m.from_name || m.from_email}</span>
-                      {m.has_attachment ? <Icon name="paperclip" size={13} className="text-ink-3" /> : null}
-                      {m.is_starred ? <Icon name="flag" size={13} className="text-warning" /> : null}
-                      <span className="shrink-0 text-[12px] text-ink-3">{listStamp(m.created_at)}</span>
-                    </span>
-                    <span className={cx('truncate pl-4 text-[13px]', m.is_read ? 'text-ink-2' : 'font-semibold text-ink')}>{m.subject || '(no subject)'}</span>
-                    <span className="truncate pl-4 text-[12.5px] text-ink-3">{m.preview}</span>
-                    {m.mailbox && unified ? (
-                      <span className="pl-4 pt-0.5">
-                        <Chip tone="indigo">{m.mailbox.name}</Chip>
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              }}
-            />
-          ) : null}
-          {list.isFetchingNextPage ? <Spinner label="Loading more…" /> : null}
-        </div>
-      </div>
-      <div className="flex min-w-0 flex-1 flex-col bg-surface">
-        {msg ? <MessageView uid={msg} folder={folder} mailbox={msgBox} onReply={(seed) => setCompose(seed)} onGone={() => go(`/mail?box=${box}&folder=${folder}`)} /> : <Empty icon="mail" title="Select a message" hint="Choose a message from the list to read it here." />}
-      </div>
-      {compose ? <Compose seed={compose} boxes={boxes} defaultBox={msgBox ?? effectiveBox ?? (defaultBox ? String(defaultBox.id) : null)} onClose={() => setCompose(null)} /> : null}
-    </div>
-  );
-}
-
-function FolderPane({ boxes, box, folder, onCompose, onPick, cacheDays, loading, active, unifiedUnread }: { boxes: Mailbox[]; box: string; folder: string; onCompose: () => void; onPick: (box: string, folder: string) => void; cacheDays: number; loading: boolean; active: boolean; unifiedUnread: number | null }) {
-  const [open, setOpen] = useState<string | null>(null);
-  const expanded = open ?? (box !== 'unified' ? box : boxes[0] ? String(boxes[0].id) : null);
-  return (
-    <div className="flex w-[250px] shrink-0 flex-col border-r border-line bg-surface">
-      <div className="p-4">
-        <Button data-guide="mail.compose" variant="primary" size="lg" icon="plus" className="w-full" onClick={onCompose}>
-          Compose
-        </Button>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 scroll-thin">
-        {boxes.length > 1 ? (
-          <FolderRow label="Combined inbox" count={unifiedUnread ?? 0} active={box === 'unified' && folder === 'inbox'} onClick={() => onPick('unified', 'inbox')} strong />
-        ) : null}
-        {loading ? <Spinner /> : null}
-        {boxes.map((b) => (
-          <MailboxFolders key={b.id} box={b} expanded={expanded === String(b.id)} onToggle={() => setOpen(expanded === String(b.id) ? '' : String(b.id))} current={box === String(b.id) || (boxes.length === 1 && box === 'unified') ? folder : null} onPick={(f) => onPick(String(b.id), f)} active={active} />
-        ))}
-        {!loading && boxes.length === 0 ? <p className="p-2 text-[12.5px] text-ink-3">No mailbox is connected to your account. Connect one in WorkSuite Mail on the web.</p> : null}
-      </div>
-      <div className="m-3 rounded-[10px] bg-subtle p-3 text-[12px] leading-snug text-ink-2">
-        {cacheDays === 0 ? 'Offline cache: message headers only' : `Offline cache: last ${cacheDays} days`}
-        <br />
-        Messages you open are kept for reading offline.
-      </div>
-    </div>
-  );
-}
-
-function MailboxFolders({ box, expanded, onToggle, current, onPick, active }: { box: Mailbox; expanded: boolean; onToggle: () => void; current: string | null; onPick: (slug: string) => void; active: boolean }) {
-  const folders = useQuery({
-    queryKey: ['mail', 'folders', box.id],
-    queryFn: () => apiGet<{ folders: Folder[] }>('/api/mail/folders', { mailbox: box.id }),
-    enabled: expanded && active,
-    staleTime: 60_000,
-  });
-  return (
-    <div className="mt-3">
-      <button type="button" onClick={onToggle} className="flex w-full items-center gap-1 px-2 py-1 text-left text-[11.5px] font-bold uppercase tracking-wide text-ink-3 hover:text-ink">
-        <Icon name={expanded ? 'chevron-down' : 'chevron-right'} size={13} />
-        <span className="truncate">{box.shared ? `Shared · ${box.email}` : box.email}</span>
-      </button>
-      {expanded ? (
-        <div className="mt-1 flex flex-col">
-          {folders.isLoading ? <Spinner label="" /> : null}
-          {folders.error ? <p className="px-2 text-[12px] text-danger">{errorMessage(folders.error)}</p> : null}
-          {(folders.data?.folders ?? []).map((f) => (
-            <FolderRow key={f.slug} label={f.name} count={f.slug === 'sent' || f.slug === 'trash' ? 0 : f.unread} muted={f.slug === 'drafts' ? f.total : undefined} active={current === f.slug} onClick={() => onPick(f.slug)} />
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function FolderRow({ label, count, muted, active, onClick, strong }: { label: string; count: number; muted?: number; active: boolean; onClick: () => void; strong?: boolean }) {
-  return (
-    <button type="button" onClick={onClick} className={cx('flex h-9 w-full items-center justify-between rounded-[8px] px-3 text-left text-[13.5px]', active ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle', strong && !active && 'font-semibold')}>
-      <span className="truncate">{label}</span>
-      {count ? <span className={cx('text-[12.5px] font-semibold tabular', active ? 'text-primary' : 'text-ink-2')}>{count}</span> : muted ? <span className="text-[12.5px] text-ink-3">{muted}</span> : null}
-    </button>
-  );
-}
-
-interface ComposeSeed {
-  mode: 'new' | 'reply' | 'reply_all' | 'forward';
-  to?: string;
-  cc?: string;
-  subject?: string;
-  quote?: string;
-  inReplyTo?: string;
-  mailbox?: string | null;
-}
-
-function MessageView({ uid, folder, mailbox, onReply, onGone }: { uid: string; folder: string; mailbox: string | null; onReply: (s: ComposeSeed) => void; onGone: () => void }) {
-  const qc = useQueryClient();
-  const [summary, setSummary] = useState(false);
-  const { openInWindow, route } = useTab();
-  const q = useQuery({
-    queryKey: ['mail', 'message', mailbox, folder, uid],
-    queryFn: ({ signal }) => apiGetMeta<MessageDetail>(`/api/mail/messages/${uid}`, withMailbox({ folder }, mailbox), signal),
-  });
-  const m = q.data?.data;
-  const clean = useMemo(() => (m ? sanitizeMailHtml(m.body_html) : null), [m]);
-  useEffect(() => {
-    if (q.isSuccess) void qc.invalidateQueries({ queryKey: ['mail', 'messages'] });
-  }, [q.isSuccess, qc]);
-
-  const act = async (action: 'archive' | 'trash' | 'unread' | 'star' | 'unstar') => {
-    try {
-      await apiPost(`/api/mail/messages/${uid}/action`, { action, folder }, withMailbox({}, mailbox));
-      void qc.invalidateQueries({ queryKey: ['mail'] });
-      if (action === 'archive' || action === 'trash' || action === 'unread') onGone();
-      toast('success', action === 'archive' ? 'Archived.' : action === 'trash' ? 'Moved to Trash.' : action === 'unread' ? 'Marked as unread.' : 'Updated.');
-    } catch (e) {
-      toast('error', e instanceof ApiError && e.offline ? 'You are offline. Try again when you reconnect.' : errorMessage(e));
+  const openRef = (ref: MessageRef) => {
+    const q = placeQuery();
+    q.set('msg', ref.uid);
+    if (ref.mailbox) q.set('mbx', ref.mailbox);
+    if (ref.folder !== place.folder) q.set('mf', ref.folder);
+    go(`/mail?${q}`);
+  };
+  const openRow = (r: ListRow) => {
+    setSearching(null);
+    setCompose((c) => (c ? { ...c, shown: false } : c));
+    openRef({ uid: String(r.row.id), folder: r.row.folder_slug ?? folder, mailbox: rowMailbox(r.row, effectiveBox) });
+  };
+  const routeOf = (q: URLSearchParams) => (q.size ? `/mail?${q}` : '/mail');
+  const closeMessage = () => go(routeOf(placeQuery()));
+  const pick = (p: Partial<Place>) => {
+    setSearching(null);
+    setChips([]);
+    setSearch('');
+    setCompose((c) => (c ? { ...c, shown: false } : c));
+    go(routeOf(placeQuery({ view: null, label: null, ...p })));
+  };
+  const closeTab = (key: string) => {
+    const r = afterClose(tabs, key, currentKey);
+    setTabs(r.tabs);
+    if (r.active !== currentKey) {
+      const t = r.tabs.find((x) => x.key === r.active);
+      if (t) openRef(t.ref);
+      else closeMessage();
     }
   };
-  const print = () => {
-    if (!m || !clean) return;
-    const html = `<h2 style="font-family:sans-serif">${escapeHtml(m.subject)}</h2><p style="font-family:sans-serif;color:#555">From ${escapeHtml(m.from_name)} &lt;${escapeHtml(m.from_email)}&gt;<br>To ${escapeHtml(m.to.join(', '))}<br>${escapeHtml(dateLabel(m.created_at))} ${escapeHtml(timeLabel(m.created_at))}</p><hr>${clean.html}`;
-    void call('print:print', { html, title: m.subject || 'Email' }).catch((e) => toast('error', errorMessage(e)));
+  // A message opened from a link (a notification, another window) names its tab once it has arrived.
+  // (The update returns the same list when there is nothing to name, so React does not render again.)
+  const nameTab = (subject: string, from: string) => setTabs((ts) => (ts.some((t) => t.key === currentKey && (!t.subject || !t.from)) ? ts.map((t) => (t.key === currentKey ? { ...t, subject: t.subject || subject, from: t.from || from } : t)) : ts));
+  const at = flat.findIndex((r) => r.key === currentKey);
+  const move = (by: number) => {
+    const i = step(flat, at, by);
+    if (i >= 0 && flat[i]) openRow(flat[i]);
   };
-  const quote = m ? `\n\nOn ${dateLabel(m.created_at)} ${m.from_name || m.from_email} wrote:\n> ${new DOMParser().parseFromString(clean?.html ?? '', 'text/html').body.textContent?.trim().split('\n').slice(0, 40).join('\n> ') ?? ''}` : '';
-  const re = (s: string) => (/^re:/i.test(s) ? s : `Re: ${s}`);
+  const star = async (r: ListRow) => {
+    try {
+      await messageAction({ uid: String(r.row.id), folder: r.row.folder_slug ?? folder, mailbox: rowMailbox(r.row, effectiveBox) }, r.row.is_starred ? 'unstar' : 'star', r.row.subject);
+      void qc.invalidateQueries({ queryKey: ['mail'] });
+      void qc.invalidateQueries({ queryKey: ['offline'] });
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
+  // After archive or delete: the next message in the list, as a mail app does.
+  const gone = () => {
+    const next = flat[at + 1] ?? flat[at - 1] ?? null;
+    if (currentKey) setTabs((ts) => ts.filter((t) => t.key !== currentKey));
+    if (next && next.key !== currentKey) openRow(next);
+    else closeMessage();
+  };
 
-  if (q.isLoading) return <Spinner />;
-  if (q.error) return <div className="p-6"><ErrorNote error={q.error} onRetry={() => void q.refetch()} /></div>;
-  if (!m || !clean) return null;
-  return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b border-line px-5 py-2.5">
-        <Button onClick={() => onReply({ mode: 'reply', to: m.from_email, subject: re(m.subject), quote, inReplyTo: m.message_id, mailbox })}>Reply</Button>
-        <Button onClick={() => onReply({ mode: 'reply_all', to: [m.from_email, ...m.to].join(', '), cc: m.cc.join(', '), subject: re(m.subject), quote, inReplyTo: m.message_id, mailbox })}>Reply all</Button>
-        <Button onClick={() => onReply({ mode: 'forward', subject: /^fwd?:/i.test(m.subject) ? m.subject : `Fwd: ${m.subject}`, quote, mailbox })}>Forward</Button>
-        <Button icon="sparkles" onClick={() => setSummary(true)} title="Summarise this email with AI">
-          Summarise
-        </Button>
-        <div className="flex-1" />
-        {q.data?.offline ? <OfflineNote cachedAt={q.data.cachedAt} /> : null}
-        <IconButton icon={m.is_starred ? 'flag' : 'flag'} label={m.is_starred ? 'Remove flag' : 'Flag'} active={m.is_starred} onClick={() => void act(m.is_starred ? 'unstar' : 'star')} />
-        <IconButton icon="mail" label="Mark as unread" onClick={() => void act('unread')} />
-        <IconButton icon="printer" label="Print" onClick={print} />
-        <IconButton icon="external" label="Open in new window" onClick={() => openInWindow(route, m.subject)} />
-        <IconButton icon="archive" label="Archive" onClick={() => void act('archive')} />
-        <IconButton icon="trash" label="Delete" onClick={() => void act('trash')} />
+  // Keyboard.
+  const keys = useRef<(e: KeyboardEvent) => void>(() => undefined);
+  const onKey = (e: KeyboardEvent) => {
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = e.target as HTMLElement | null;
+    if (t && typeof t.closest === 'function' && (t.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"]') || t.isContentEditable)) return;
+    if (compose?.shown || searching !== null) return;
+    const k = e.key;
+    const handled = () => e.preventDefault();
+    if (k === 'j' || k === 'ArrowDown') return handled(), move(1);
+    if (k === 'k' || k === 'ArrowUp') return handled(), move(-1);
+    if (k === 'Enter' && e.shiftKey && current) return handled(), openInWindow(windowRoute(current), known?.subject);
+    if ((k === 'Enter' || k === 'o') && !current && flat[0]) return handled(), openRow(flat[0]);
+    if (k === 'Escape') {
+      if (focus) return handled(), setFocus(false);
+      if (current) return handled(), closeMessage();
+      return;
+    }
+    if (k === '/') {
+      const box = document.querySelector<HTMLInputElement>('[data-mail-search]');
+      if (box) return handled(), box.focus();
+      return;
+    }
+    if (k === 'n' || k === 'c') return handled(), openCompose({ mode: 'new' });
+    const c = controls.current;
+    if (!current || !c) return;
+    const map: Record<string, () => void> = {
+      e: () => c.act('archive'),
+      '#': () => c.act('trash'),
+      Delete: () => c.act('trash'),
+      '!': () => c.act('spam'),
+      s: () => c.act('star'),
+      u: () => c.act('unread'),
+      r: () => c.reply('reply'),
+      a: () => c.reply('reply_all'),
+      f: () => c.reply('forward'),
+    };
+    const run = map[k];
+    if (run) {
+      handled();
+      run();
+    }
+  };
+  useEffect(() => {
+    keys.current = onKey;
+  });
+  useEffect(() => {
+    if (!active) return;
+    const on = (e: KeyboardEvent) => keys.current(e);
+    window.addEventListener('keydown', on);
+    return () => window.removeEventListener('keydown', on);
+  }, [active]);
+
+  const folderBox = place.box !== 'unified' ? (boxes.find((b) => String(b.id) === place.box) ?? defaultBox ?? null) : (defaultBox ?? null);
+  const placeBox = place.box !== 'unified' ? boxes.find((b) => String(b.id) === place.box) : undefined;
+  const label = place.label !== null ? (qc.getQueryData<{ labels: Label[] }>(['mail', 'labels'])?.labels.find((l) => l.id === place.label) ?? null) : null;
+  const title = view
+    ? view.label
+    : label
+      ? label.name
+      : placeBox && folder === 'inbox'
+        ? placeBox.email
+        : folder === 'inbox'
+          ? unified
+            ? text('Unified inbox')
+            : text('Inbox')
+          : folderName(folder.startsWith('label:') ? folder.slice(6) : folder.charAt(0).toUpperCase() + folder.slice(1));
+  const unifiedUnread = boxes.filter((b) => b.in_unified !== false).reduce((n, b) => n + (unreadOf(b, counts.data ?? null) ?? 0), 0);
+  const aside = unified && !view ? text('{n} unread · {m} mailboxes', { n: unifiedUnread, m: boxes.length }) : placeBox ? (placeBox.account_type === 'local_mailbox' ? text('WorkSuite Local') : placeBox.shared ? text('Shared') : (placeBox.provider_label ?? null)) : null;
+  const notice = firstPage?.data.unsearched?.length
+    ? text('Not searched: {list}.', { list: firstPage.data.unsearched.join(', ') })
+    : firstPage?.data.offline?.length
+      ? text('Could not reach {list} — showing the others.', { list: firstPage.data.offline.join(', ') })
+      : firstPage?.data.quick_failed
+        ? text('This mailbox could not apply that filter on the server; it is applied to what is loaded.')
+        : null;
+  const pane = prefs.pane ?? 'right';
+  const mailPending = (pending.data ?? []).filter((m) => m.state !== 'DONE');
+  const account = current?.mailbox ? (boxes.find((b) => String(b.id) === current.mailbox) ?? null) : null;
+
+  const teamTabs = isTeam ? (
+    <div className="mt-2">
+      <div role="tablist" aria-label="Conversations" className="flex rounded-[10px] bg-subtle p-0.5">
+        {(['open', 'answered', 'closed', 'all'] as const).map((s) => {
+          const n = s === 'all' ? null : (list.data?.pages ?? []).flatMap((p) => p.data.messages).filter((m) => (m.team?.status ?? 'open') === s).length;
+          return (
+            <button key={s} type="button" role="tab" aria-selected={team === s} onClick={() => setTeam(s)} className={cx('flex h-8 flex-1 items-center justify-center gap-1.5 rounded-[8px] text-[13px] font-semibold', team === s ? 'bg-surface text-ink shadow-sm' : 'text-ink-2 hover:text-ink')}>
+              {s === 'open' ? text('Open') : s === 'answered' ? text('Pending') : s === 'closed' ? text('Done') : text('All')}
+              {n ? <span className="text-[12px] text-ink-3">{n}</span> : null}
+            </button>
+          );
+        })}
       </div>
-      <div className="px-7 pt-5">
-        <h2 className="text-[22px] font-bold text-ink selectable">{m.subject || '(no subject)'}</h2>
-        <div className="mt-4 flex items-center gap-3">
-          <Avatar name={m.from_name || m.from_email} size={40} />
-          <div className="min-w-0 text-[13.5px]">
-            <div className="selectable">
-              <span className="font-bold text-ink">{m.from_name}</span> <span className="text-ink-3">&lt;{m.from_email}&gt;</span>
-            </div>
-            <div className="truncate text-[12.5px] text-ink-3 selectable">
-              to {m.to.join(', ')}
-              {m.cc.length ? ` · cc ${m.cc.join(', ')}` : ''} · {listStamp(m.created_at)}
-            </div>
-          </div>
-        </div>
-        {clean.blockedImages > 0 ? <div className="mt-3 rounded-[8px] bg-subtle px-3 py-1.5 text-[12px] text-ink-2">{clean.blockedImages} remote image{clean.blockedImages === 1 ? ' was' : 's were'} blocked to protect your privacy.</div> : null}
+      <div className="mt-2 flex gap-1.5">
+        {(['mine', 'nobody'] as const).map((w) => (
+          <button key={w} type="button" aria-pressed={teamWho === w} onClick={() => setTeamWho(teamWho === w ? 'all' : w)} className={cx('h-[26px] rounded-full border px-2.5 text-[12.5px] font-semibold', teamWho === w ? 'border-ink bg-ink text-surface' : 'border-line text-ink hover:bg-subtle')}>
+            {w === 'mine' ? text('Assigned to me') : text('Unassigned')}
+          </button>
+        ))}
       </div>
-      {summary ? (
-        <AiTextDialog
-          title="Summary of this email"
-          task="summarize"
-          input={() => `From: ${m.from_name} <${m.from_email}>\nTo: ${m.to.join(', ')}\nSubject: ${m.subject}\nDate: ${dateLabel(m.created_at)}\n\n${plainText(clean.html)}`}
-          actions={[{ label: 'Copy', icon: 'copy', primary: true, run: (t) => void navigator.clipboard.writeText(t).then(() => toast('success', 'Summary copied.')) }]}
-          onClose={() => setSummary(false)}
+    </div>
+  ) : null;
+
+  const listEl =
+    folder === 'outbox' ? (
+      <ScheduledList active={active} />
+    ) : (
+      <MessageList
+        title={title}
+        aside={aside}
+        groups={groups}
+        total={firstPage?.data.total ?? 0}
+        loading={list.isLoading}
+        error={list.error}
+        onRetry={() => void list.refetch()}
+        selectedKey={currentKey}
+        onOpen={openRow}
+        onStar={(r) => void star(r)}
+        prefs={prefs}
+        onPrefs={setPrefs}
+        conversations={canThread ? threaded : null}
+        onConversations={(on) => setPrefs({ conversations: { ...(prefs.conversations ?? {}), [folderKey]: on } })}
+        chips={chips}
+        onChips={setChips}
+        search={search}
+        onSearch={setSearch}
+        onSearchAll={(q) => setSearching(q)}
+        unified={unified}
+        boxes={boxes}
+        offline={offline}
+        offlineDays={cacheDays}
+        refreshing={list.isFetching && !list.isLoading}
+        onRefresh={() => {
+          void qc.invalidateQueries({ queryKey: ['mail'] });
+        }}
+        hasMore={!!list.hasNextPage}
+        loadingMore={list.isFetchingNextPage}
+        onMore={() => void list.fetchNextPage()}
+        notice={notice}
+        team={teamTabs}
+        fill={pane === 'hidden' || pane === 'bottom'}
+      />
+    );
+
+  const reader = (
+    <ReadingPane
+      tabs={tabs}
+      activeKey={currentKey}
+      onActivate={(t) => openRef(t.ref)}
+      onClose={closeTab}
+      empty={<Empty icon="mail" title={text('Select a message')} hint={text('Choose a message from the list to read it here. j and k move through the list.')} />}
+    >
+      {current ? (
+        <MessageView
+          key={currentKey}
+          msgRef={current}
+          backLabel={title}
+          onBack={closeMessage}
+          onReply={openCompose}
+          onGone={gone}
+          onPrev={at > 0 ? () => move(-1) : null}
+          onNext={at >= 0 && at < flat.length - 1 ? () => move(1) : null}
+          prefs={prefs}
+          onPrefs={setPrefs}
+          focus={focus}
+          onFocus={() => setFocus(!focus)}
+          boxes={boxes}
+          localStore={localStore}
+          offline={offline}
+          account={account}
+          onControls={(c) => {
+            controls.current = c;
+          }}
+          autoReply={query.get('reply') === '1'}
+          onLoaded={nameTab}
         />
       ) : null}
-      <iframe title="Message" sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={mailFrameDoc(clean.html)} className="mx-5 mt-3 min-h-0 flex-1 rounded-[8px] border-0 bg-white" />
-      {m.attachments.length ? (
-        <div className="flex flex-wrap gap-2 border-t border-line px-6 py-3">
-          {m.attachments.map((a) => (
-            <button
-              key={a.ref}
-              type="button"
-              draggable
-              onClick={() =>
-                // A PDF opens in PDF Studio, preview only (PDF-OPEN-004); a Word, Excel or PowerPoint file in a
-                // WorkSuite DOC / Sheet / Slides tab; anything else downloads and opens.
-                isPdf(a)
-                  ? openPdf({ kind: 'mail', uid: String(uid), ref: a.ref, folder, mailbox: mailbox ?? null, name: a.name }, a.name)
-                  : isOfficeFile(a.name)
-                  ? openInOffice({ kind: 'api', name: a.name, path: `/api/mail/messages/${uid}/attachments/${encodeURIComponent(a.ref)}?${new URLSearchParams({ folder, dl: '1', ...(mailbox ? { mailbox } : {}) })}` })
-                  : void call('transfers:download', { mail: { uid, ref: a.ref, folder, mailbox }, name: a.name, open: true })
-                      .then(() => toast('info', `Downloading ${a.name}…`))
-                      .catch((e) => toast('error', errorMessage(e)))
-              }
-              className="flex items-center gap-3 rounded-[10px] border border-line px-3 py-2 text-left hover:bg-subtle"
-              title={isPdf(a) ? 'Open in PDF Studio' : 'Download and open'}
-            >
-              <FileBadge name={a.name} />
-              <span>
-                <span className="block max-w-[220px] truncate text-[13px] font-semibold text-ink">{a.name}</span>
-                <span className="block text-[11.5px] text-ink-3">{Math.max(1, Math.round(a.size / 1024))} KB · {isPdf(a) ? 'open' : 'download'}</span>
-              </span>
-            </button>
+    </ReadingPane>
+  );
+
+  const main = searching !== null ? (
+    <SearchView
+      initial={searching}
+      boxes={boxes}
+      current={place.box}
+      onClose={() => setSearching(null)}
+      onOpen={(m) => {
+        setSearching(null);
+        openRef({ uid: String(m.id), folder: m.folder_slug ?? 'inbox', mailbox: m.mailbox ? String(m.mailbox.id) : effectiveBox });
+      }}
+    />
+  ) : focus && current ? (
+    <div className="flex min-w-0 flex-1 flex-col">
+      {reader}
+      <WaitingPanel pending={mailPending} />
+    </div>
+  ) : pane === 'bottom' ? (
+    <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex h-[42%] min-h-[180px] shrink-0 border-b border-line">{listEl}</div>
+      <div className="flex min-h-0 flex-1 flex-col">
+        {reader}
+        <WaitingPanel pending={mailPending} />
+      </div>
+    </div>
+  ) : pane === 'hidden' ? (
+    current ? (
+      <div className="flex min-w-0 flex-1 flex-col">
+        {reader}
+        <WaitingPanel pending={mailPending} />
+      </div>
+    ) : (
+      <div className="flex min-w-0 flex-1 flex-col">
+        {listEl}
+        <WaitingPanel pending={mailPending} />
+      </div>
+    )
+  ) : (
+    <>
+      {listEl}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {reader}
+        <WaitingPanel pending={mailPending} />
+      </div>
+    </>
+  );
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex min-h-0 flex-1">
+        {!focus ? (
+          <SidePanel id="mail" label="the folders">
+            <MailSidebar
+              boxes={boxes}
+              loading={mailboxes.isLoading}
+              counts={counts.data ?? null}
+              place={place}
+              folderBox={folderBox}
+              showLabels={localStore}
+              active={active}
+              sync={sync.data ?? null}
+              offline={offline}
+              pending={mailPending.length}
+              cacheDays={cacheDays}
+              onCompose={() => openCompose({ mode: 'new' })}
+              onSearch={() => setSearching(search)}
+              onAddMailbox={() => setAdding(true)}
+              onPick={pick}
+              onSettings={() => navigate('/settings/mail')}
+            />
+          </SidePanel>
+        ) : null}
+        <div className="flex min-w-0 flex-1 flex-col">
+          {compose ? (
+            <div role="tablist" aria-label="Mail and the message you are writing" className="flex h-10 shrink-0 items-end gap-1 border-b border-line bg-subtle px-2 pt-1.5">
+              <button type="button" role="tab" aria-selected={!compose.shown} onClick={() => setCompose({ ...compose, shown: false })} className={cx('flex h-full max-w-[220px] items-center rounded-t-[8px] border border-b-0 px-3 text-[12.5px]', !compose.shown ? 'border-line bg-surface font-bold text-ink' : 'border-transparent text-ink-2 hover:bg-surface/60')}>
+                <span className="truncate">{title}</span>
+              </button>
+              <div role="tab" aria-selected={compose.shown} tabIndex={0} onClick={() => setCompose({ ...compose, shown: true })} onKeyDown={(e) => (e.key === 'Enter' ? setCompose({ ...compose, shown: true }) : undefined)} className={cx('flex h-full max-w-[260px] cursor-default items-center gap-1.5 rounded-t-[8px] border border-b-0 px-3 text-[12.5px]', compose.shown ? 'border-line bg-surface font-bold text-ink' : 'border-transparent text-ink-2 hover:bg-surface/60')}>
+                <Icon name="pen" size={13} />
+                <span className="truncate">{compose.seed.subject || (compose.seed.mode === 'new' ? text('New email') : text('Reply'))}</span>
+              </div>
+            </div>
+          ) : null}
+          <div className="flex min-h-0 flex-1">
+            {compose?.shown ? (
+              <Compose key={compose.n} seed={compose.seed} boxes={boxes} defaultBox={current?.mailbox ?? effectiveBox ?? (defaultBox ? String(defaultBox.id) : null)} offline={offline} onClose={() => setCompose(null)} onReopen={openCompose} />
+            ) : (
+              main
+            )}
+          </div>
+        </div>
+      </div>
+      <StatusBar sync={sync.data ?? null} mailboxes={boxes.length} offline={offline} waiting={mailPending.length} zoom={prefs.zoom ?? 100} localBytes={localBytes.data ?? null} />
+      {outgoing.length ? (
+        <div role="status" aria-live="polite" className="pointer-events-none fixed bottom-14 left-1/2 z-40 flex -translate-x-1/2 flex-col gap-2">
+          {outgoing.map((o) => (
+            <div key={o.id} className="pointer-events-auto flex items-center gap-3 rounded-[10px] bg-navy px-4 py-2.5 text-[13.5px] text-white shadow-lg">
+              <SendingLabel subject={o.subject} at={o.at} />
+              <button type="button" onClick={() => undoSend(o.id)} className="rounded-[6px] bg-primary px-3 py-1 text-[13px] font-bold text-[var(--ws-on-primary)] hover:bg-primary-hover">
+                Undo
+              </button>
+            </div>
           ))}
         </div>
       ) : null}
+      {adding ? <AddMailbox onClose={() => setAdding(false)} /> : null}
     </div>
   );
 }
 
-function Compose({ seed, boxes, defaultBox, onClose }: { seed: ComposeSeed; boxes: Mailbox[]; defaultBox: string | null; onClose: () => void }) {
-  const context = seed.mode === 'new' ? 'compose:new' : `compose:${seed.mode}:${seed.inReplyTo ?? seed.subject ?? ''}`;
-  const draft = useDraft('mail', context, { to: seed.to ?? '', cc: seed.cc ?? '', bcc: '', subject: seed.subject ?? '', body: seed.quote ?? '', from: seed.mailbox ?? defaultBox ?? '' });
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [showCc, setShowCc] = useState(!!seed.cc);
-  const v = draft.value;
-  const set = (patch: Partial<typeof v>) => draft.setValue({ ...v, ...patch });
-  // AI writing tools (worksuite-desktop#53) work on what the person wrote, never on the quoted email below it.
-  const [ai, setAi] = useState<{ task: TextTask; title: string } | null>(null);
-  const [own, quoted] = splitQuote(v.body, seed.quote);
-  const original = seed.quote ? unquote(seed.quote) : '';
-  const aiItems = [
-    ...(original && seed.mode !== 'forward' ? [{ label: 'Draft a reply', icon: 'reply', run: () => setAi({ task: 'reply', title: 'Draft a reply' }) }] : []),
-    ...WRITING_TASKS.map((w) => ({ label: w.label, disabled: !own.trim(), run: () => setAi({ task: w.task, title: w.label }) })),
-  ];
-  const send = async () => {
-    setSending(true);
-    setError(null);
-    try {
-      await apiPost('/api/mail/send', {
-        to: parseAddresses(v.to),
-        cc: parseAddresses(v.cc),
-        bcc: parseAddresses(v.bcc),
-        subject: v.subject,
-        body_html: textToHtml(v.body),
-        in_reply_to: seed.inReplyTo,
-        reply_mode: seed.mode === 'new' ? undefined : seed.mode,
-        mailbox: v.from || undefined,
-      });
-      await draft.clear();
-      toast('success', 'Sent.');
-      onClose();
-    } catch (e) {
-      setError(e instanceof ApiError && e.offline ? 'You are offline. Your message is saved as a draft; send it when you reconnect.' : errorMessage(e));
-    } finally {
-      setSending(false);
-    }
-  };
-  return (
-    <Modal
-      title={seed.mode === 'new' ? 'New message' : seed.mode === 'forward' ? 'Forward' : 'Reply'}
-      width={720}
-      onClose={onClose}
-      footer={
-        <>
-          <span className="mr-auto text-[12px] text-ink-3">{draft.restored ? 'Draft restored · ' : ''}Saved as you type</span>
-          <Button
-            onClick={async () => {
-              await draft.clear();
-              onClose();
-            }}
-          >
-            Discard
-          </Button>
-          <Button variant="primary" icon="send" loading={sending} disabled={!v.to.trim()} onClick={() => void send()}>
-            Send
-          </Button>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-3 p-5">
-        {boxes.length > 1 ? (
-          <label className="flex items-center gap-3 text-[13px]">
-            <span className="w-14 text-ink-3">From</span>
-            <Select value={v.from} onChange={(e) => set({ from: e.target.value })} className="h-9 flex-1 rounded-[8px] border border-line bg-surface px-2" aria-label="From">
-              {boxes.map((b) => (
-                <option key={b.id} value={String(b.id)}>
-                  {b.display_name ? `${b.display_name} <${b.email}>` : b.email}
-                </option>
-              ))}
-            </Select>
-          </label>
-        ) : null}
-        <div className="flex items-end gap-2">
-          <TextField className="flex-1" label="To" value={v.to} onChange={(e) => set({ to: e.target.value })} placeholder="name@company.com, …" autoFocus={!v.to} />
-          {!showCc ? (
-            <Button size="sm" variant="ghost" onClick={() => setShowCc(true)}>
-              Cc/Bcc
-            </Button>
-          ) : null}
-        </div>
-        {showCc ? (
-          <div className="grid grid-cols-2 gap-3">
-            <TextField label="Cc" value={v.cc} onChange={(e) => set({ cc: e.target.value })} />
-            <TextField label="Bcc" value={v.bcc} onChange={(e) => set({ bcc: e.target.value })} />
-          </div>
-        ) : null}
-        <TextField label="Subject" value={v.subject} onChange={(e) => set({ subject: e.target.value })} />
-        <div className="-mb-1 flex items-center gap-2">
-          <AiMenuButton items={aiItems} label="Write with AI" />
-          <span className="text-[11.5px] text-ink-3">{own.trim() ? 'Works on what you wrote; the quoted email is left as it is.' : original ? 'Draft a reply from the email below, or write and then improve it.' : 'Write something, then improve it.'}</span>
-        </div>
-        {ai ? (
-          <AiTextDialog
-            title={ai.title}
-            task={ai.task}
-            input={() =>
-              ai.task === 'reply'
-                ? `Subject: ${v.subject}\n\nThe email I am replying to:\n${original}${own.trim() ? `\n\nWhat I want to say (my notes):\n${own.trim()}` : ''}`
-                : own.trim()
-            }
-            actions={[{ label: own.trim() ? 'Replace my text' : 'Use this', primary: true, run: (t) => set({ body: joinQuote(t, quoted) }) }]}
-            onClose={() => setAi(null)}
-          />
-        ) : null}
-        <textarea value={v.body} onChange={(e) => set({ body: e.target.value })} aria-label="Message" rows={14} autoFocus={!!v.to} className="min-h-[260px] rounded-[8px] border border-line bg-surface p-3 text-[13.5px] leading-relaxed text-ink outline-none focus:border-primary" />
-        {error ? <ErrorNote error={error} /> : null}
-        <p className="text-[12px] text-ink-3">Attachments and formatting are available in WorkSuite Mail on the web; the desktop composer sends plain text for now.</p>
-      </div>
-    </Modal>
-  );
-}
-
-/** An email's text, without its markup. */
-function plainText(html: string): string {
-  return new DOMParser().parseFromString(html, 'text/html').body.textContent?.replace(/\n{3,}/g, '\n\n').trim() ?? '';
-}
-
-/** The person's own words and the quoted email below them (worksuite-desktop#53). */
-export function splitQuote(body: string, quote?: string): [string, string] {
-  if (quote && body.endsWith(quote)) return [body.slice(0, body.length - quote.length), quote];
-  const m = /\n\nOn [^\n]* wrote:\n>/.exec(body);
-  return m ? [body.slice(0, m.index), body.slice(m.index)] : [body, ''];
-}
-
-export function joinQuote(own: string, quoted: string): string {
-  return quoted ? `${own.trimEnd()}${quoted}` : own;
-}
-
-/** The quoted email as plain lines. */
-export function unquote(quote: string): string {
-  return quote
-    .replace(/^\s+/, '')
-    .split('\n')
-    .map((l) => l.replace(/^> ?/, ''))
-    .join('\n')
-    .trim();
+/** "Sending “Re: Payroll export” in 8 s", counting down. */
+function SendingLabel({ subject, at }: { subject: string; at: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(t);
+  }, []);
+  return <span>{text('Sending “{subject}” in {n} s', { subject, n: Math.max(0, Math.ceil((at - now) / 1000)) })}</span>;
 }

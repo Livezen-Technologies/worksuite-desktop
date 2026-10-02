@@ -44,6 +44,19 @@
   --ws-edge: rgba(15, 27, 61, 0.07);
   /* A card set into a surface: a shade below it on light, a shade above it on dark. */
   --ws-well: #f4f5f9;
+  /* Mail accounts: the colour each mailbox is drawn in (its avatar, its tag on a row). White text on all of them. */
+  --ws-acct-blue: #2563eb;
+  --ws-acct-sky: #0369a1;
+  --ws-acct-indigo: #23349e;
+  --ws-acct-teal: #0e7c86;
+  --ws-acct-emerald: #15803d;
+  --ws-acct-amber: #b45309;
+  --ws-acct-red: #b42318;
+  --ws-acct-violet: #6d28d9;
+  --ws-acct-slate: #475569;
+  /* The offline banner and an action waiting to go: a warm note, not an error. */
+  --ws-note-bg: #fdf1e3;
+  --ws-note-line: #f6d7b0;
 }
 
 [data-theme='dark'] {
@@ -69,6 +82,17 @@
   --ws-shadow-rgb: 0 0 0;
   --ws-edge: rgba(160, 176, 225, 0.16);
   --ws-well: #1a2447;
+  --ws-acct-blue: #3b6ff0;
+  --ws-acct-sky: #1683c4;
+  --ws-acct-indigo: #4c63e6;
+  --ws-acct-teal: #14929c;
+  --ws-acct-emerald: #22924f;
+  --ws-acct-amber: #c46a12;
+  --ws-acct-red: #d0473c;
+  --ws-acct-violet: #7c4ddb;
+  --ws-acct-slate: #5f6e86;
+  --ws-note-bg: #36240f;
+  --ws-note-line: #5a3b14;
 }
 
 [data-density='compact'] {

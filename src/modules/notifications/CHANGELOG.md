@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.4.3 — 2026-10-03
+
+- New-mail notifications have Reply, Archive and Mark read; a mail push refreshes Mail's counts.
+
 ## 1.4.2 — 2026-10-03
 
 - Keep locked call and chat banners independent and apply locked sound/privacy controls (#115).

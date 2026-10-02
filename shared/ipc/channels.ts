@@ -294,6 +294,8 @@ export const INVOKE_CHANNELS = [
 
   'offline:status',
   'offline:pending',
+  'offline:moduleBytes',
+  'offline:clearModule',
   'offline:submit',
   'offline:retry',
   'offline:discard',

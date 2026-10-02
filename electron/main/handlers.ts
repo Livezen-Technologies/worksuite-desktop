@@ -584,6 +584,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       ? `/api/hr/reports/attendance?${new URLSearchParams({ type: r.type, from: r.from, to: r.to, format: 'csv', ...(r.department_id ? { department_id: String(r.department_id) } : {}), ...(r.employee_id ? { employee_id: String(r.employee_id) } : {}) })}`
       : input.payslip
       ? `/api/payroll/me/payslips/${encodeURIComponent(input.payslip)}/pdf`
+      : input.mailSource
+      ? `/api/mail/messages/${input.mailSource.uid}/source?${new URLSearchParams({ folder: input.mailSource.folder, download: '1', ...(input.mailSource.mailbox ? { mailbox: input.mailSource.mailbox } : {}) })}`
       : input.fileId
       ? `/api/files/${encodeURIComponent(input.fileId)}/download`
       : input.recording
@@ -866,6 +868,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   // ── offline ────────────────────────────────────────────────────────────
   router.handle('offline:status', () => ctx.queue.status(uid(), { bytes: ctx.cache.totalBytes(), entries: ctx.cache.count() }));
   router.handle('offline:pending', () => ctx.queue.list(uid()));
+  router.handle('offline:moduleBytes', (input) => ctx.cache.moduleBytes(uid(), input.module));
+  router.handle('offline:clearModule', (input) => ctx.cache.clearModule(uid(), input.module));
   router.handle('offline:submit', (input) => ctx.queue.submit(uid(), input));
   router.handle('offline:retry', async (input) => {
     ctx.queue.retry(uid(), input.id);
