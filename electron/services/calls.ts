@@ -157,6 +157,16 @@ export class CallService {
     if (this.rung.has(r.uuid) || [...this.active.values()].some((a) => a.uuid === r.uuid)) return;
     this.rung.set(r.uuid, now);
     this.windows.open('ring', route, 'Incoming WorkSuite call', true);
+    void this.delivered(r.uuid);
+  }
+
+  /** The ring is showing here: the caller's "Calling…" becomes "Ringing…" (worksuite-desktop#113). An older server has no such call. */
+  private async delivered(uuid: string): Promise<void> {
+    try {
+      await this.http.post(`/api/chat/calls/${uuid}/delivered`);
+    } catch (e) {
+      log.debug('ring delivery not recorded', { uuid, error: String(e) });
+    }
   }
 
   /**

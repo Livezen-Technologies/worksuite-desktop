@@ -2,6 +2,7 @@ import { app } from '../../core/app-state';
 import { createLocalTracks, Room, RoomEvent, Track, VideoPresets, type LocalParticipant, type LocalTrack, type Participant, type RemoteTrack } from 'livekit-client';
 import { ApiError, apiGet, apiPost, request } from '../../core/api';
 import { call, errorMessage, on } from '../../core/bridge';
+import { text } from '../../core/i18n';
 import type { SharePick } from './ScreenPicker';
 
 /**
@@ -12,10 +13,18 @@ import type { SharePick } from './ScreenPicker';
  * The server's call API (`/api/chat/calls`) rings and records; the media goes
  * through LiveKit with the token it returns. The caller's no-answer timeout,
  * hanging up when the other person has left a direct call, and noticing the
- * call ended elsewhere are all this side's job — the server does not push
- * "connected" or "ended" to a caller.
+ * call ended elsewhere are all this side's job; the server's `chat.call.*`
+ * events and the poll of the call say how it is going.
+ *
+ * A caller reads Calling until a device of the other person's shows the ring
+ * (`chat.call.updated`, `what: ringing`), then Ringing, then Connecting once
+ * somebody answered and until their media arrives (worksuite-desktop#113).
+ * The one answering reads Connecting until the caller's media is there.
  */
-export type Phase = 'devices' | 'placing' | 'ringing' | 'connected' | 'ended' | 'unreachable' | 'error';
+export type Phase = 'devices' | 'placing' | 'calling' | 'ringing' | 'connecting' | 'connected' | 'ended' | 'unreachable' | 'error';
+
+/** Why nobody is on the line: what the call window says, and whether a voice message is offered. */
+export type Unreachable = 'busy' | 'offline' | 'no_answer' | 'declined';
 
 export interface CallParams {
   roomId: number;
@@ -35,7 +44,33 @@ export interface Connection {
   url: string;
   token: string;
   i_started: boolean;
-  members: Array<{ user_id: number; name: string; state: string }>;
+  members: Member[];
+}
+
+export interface Member {
+  user_id: number;
+  name: string;
+  state: string;
+  /** A device of theirs is showing the ring. Absent from a server before worksuite-desktop#113: read as shown. */
+  delivered?: boolean;
+}
+
+/** Calling until a device of somebody being rung shows the ring, then Ringing. */
+export function ringPhase(members: Member[] | undefined): 'calling' | 'ringing' {
+  const rung = (members ?? []).filter((m) => m.state === 'ringing');
+  return !rung.length || rung.some((m) => m.delivered !== false) ? 'ringing' : 'calling';
+}
+
+/**
+ * What a call that stopped before anybody talked means to the caller: Declined,
+ * Busy (everybody declined as busy) or No answer — or null, an ending to show as
+ * "Call ended" (answered, cancelled here, merged, ended elsewhere).
+ */
+export function stoppedAs(outcome: string | null | undefined, reason: string | null | undefined, talked: boolean, iStarted: boolean): Unreachable | null {
+  if (talked || !iStarted) return null;
+  if (outcome === 'missed') return 'no_answer';
+  if (outcome === 'declined') return reason === 'busy' ? 'busy' : 'declined';
+  return null;
 }
 
 interface Unplaced {
@@ -46,14 +81,71 @@ interface Unplaced {
   who?: Record<string, string>;
 }
 
+/**
+ * How the call is going, in words, and the colour they are drawn in: Calling,
+ * Ringing, Connecting, Connected with the clock, Reconnecting, Busy, Declined,
+ * No answer, Call ended.
+ */
+export function statusLine(
+  s: { phase: Phase; answering: boolean; unreachable: { reason: Unreachable } | null; reconnecting: boolean; remoteLost: boolean; lost: boolean },
+  clock: string | null,
+  endedAfter: string | null,
+): [string, string] {
+  switch (s.phase) {
+    case 'devices':
+    case 'placing':
+      return s.answering ? [text('Connecting…'), 'text-[#FDE68A]'] : [text('Calling…'), 'text-[#AFC0E8]'];
+    case 'calling':
+      return [text('Calling…'), 'text-[#AFC0E8]'];
+    case 'ringing':
+      return [text('Ringing…'), 'text-[#AFC0E8]'];
+    case 'connecting':
+      return [text('Connecting…'), 'text-[#FDE68A]'];
+    case 'connected':
+      return s.reconnecting || s.remoteLost ? [`${text('Reconnecting…')} · ${clock ?? '0:00'}`, 'text-[#FDE68A]'] : [`${text('Connected')} · ${clock ?? '0:00'}`, 'text-[#9EE6C3]'];
+    case 'ended':
+      return [`${text('Call ended')}${s.lost ? ` · ${text('connection lost')}` : ''}${endedAfter ? ` · ${endedAfter}` : ''}`, 'text-[#AFC0E8]'];
+    case 'unreachable': {
+      const r = s.unreachable?.reason;
+      return [text(r === 'busy' ? 'Busy' : r === 'declined' ? 'Declined' : r === 'offline' ? 'Not available right now' : 'No answer'), 'text-[#FFD2C4]'];
+    }
+    default:
+      return [text('Connecting…'), 'text-[#FDE68A]'];
+  }
+}
+
 /** Browser-side voice processing: on by default, off for music or a quiet room. */
 export const CLEAN_AUDIO = { noiseSuppression: true, echoCancellation: true, autoGainControl: true };
 export const RAW_AUDIO = { noiseSuppression: false, echoCancellation: true, autoGainControl: false };
 
-/** The caller gives up after this long with nobody picking up (the server rings for 45 s). */
-export const NO_ANSWER_MS = 30_000;
-/** A direct call whose other side has gone for this long is over. */
-const ALONE_MS = 2_500;
+/** The caller gives up after this long with nobody picking up: as long as the server rings (CallState::RING_SECONDS). */
+export const NO_ANSWER_MS = 45_000;
+/**
+ * How long a connection that dropped — this side's, or the other person's in a
+ * direct call — may take to come back before the call is given up. The server
+ * ends a call between two the moment either hangs up, so a gone person who is
+ * not heard of as hanging up is somebody whose connection dropped.
+ */
+export const RECONNECT_MS = 30_000;
+/** Between tries to get back into a call whose connection dropped. */
+const RETRY_MS = 3_000;
+const SPEAKER_KEY = 'ws.calls.speaker';
+
+function savedSpeaker(): string {
+  try {
+    return localStorage.getItem(SPEAKER_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+/** Play into this output device ('' for the system's). Not every element or system can: then the default plays. */
+async function sinkTo(el: HTMLMediaElement, id: string): Promise<void> {
+  const sink = el as HTMLMediaElement & { setSinkId?: (id: string) => Promise<void> };
+  await sink.setSinkId?.(id).catch(() => undefined);
+}
+
+const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export interface DeviceProblem {
   message: string;
@@ -76,12 +168,21 @@ export class CallSession {
   conn: Connection | null = null;
   problem: DeviceProblem | null = null;
   /** Why nobody is on the line, when the call could not be made or was not answered. */
-  unreachable: { reason: 'busy' | 'offline' | 'no_answer'; voicemail: boolean } | null = null;
+  unreachable: { reason: Unreachable; voicemail: boolean } | null = null;
   room: Room | null = null;
   connectedAt: number | null = null;
   endedAfter: number | null = null;
+  /** The call ended because a dropped connection did not come back in time. */
+  lost = false;
+  /** This side's connection dropped and is coming back: "Reconnecting…", the clock running on. */
+  reconnecting = false;
+  /** The other person in a direct call dropped and has not come back yet. */
+  remoteLost = false;
   noise = true;
   sound = true;
+  /** The output devices, and the one the call plays through ('' is the system's). */
+  speakers: MediaDeviceInfo[] = [];
+  speakerId = savedSpeaker();
   /** Who spoke last (not you), so the big picture stays on them in a pause. */
   lastSpeaker: string | null = null;
   /** What is being shared, in words: "Screen 1", "Visual Studio Code". */
@@ -94,6 +195,9 @@ export class CallSession {
   private busy = false;
   private left = false;
   private joined = false;
+  private recovering = false;
+  /** When the caller's ring runs out, kept across a reconnect so the ring is not given longer. */
+  private ringUntil: number | null = null;
   private closing: ReturnType<typeof setTimeout> | null = null;
 
   subscribe = (fn: () => void): (() => void) => {
@@ -124,6 +228,8 @@ export class CallSession {
     this.params = p;
     this.left = false;
     this.joined = false;
+    this.lost = false;
+    this.ringUntil = null;
     this.problem = null;
     this.set('devices');
     try {
@@ -148,6 +254,8 @@ export class CallSession {
     } finally {
       this.busy = false;
     }
+    // Named now that the microphone may be used: the list for choosing a speaker.
+    void this.listSpeakers();
 
     this.set('placing');
     let conn: Connection;
@@ -173,16 +281,22 @@ export class CallSession {
     await this.connect(conn);
   }
 
-  private async connect(conn: Connection): Promise<void> {
+  /**
+   * Into the media room. `again` is coming back after the connection dropped:
+   * a failure then is reported to the caller of this (recover), not as the
+   * call failing.
+   */
+  private async connect(conn: Connection, again = false): Promise<boolean> {
     const room = new Room({ adaptiveStream: true, dynacast: true });
     this.room = room;
     const refresh = () => this.changed();
     room
       .on(RoomEvent.ParticipantConnected, () => {
         if (this.phase !== 'connected') {
-          this.connectedAt = Date.now();
+          this.connectedAt ??= Date.now();
           this.phase = 'connected';
         }
+        this.remoteLost = false;
         refresh();
       })
       .on(RoomEvent.ParticipantDisconnected, () => {
@@ -193,6 +307,7 @@ export class CallSession {
         if (track.kind === Track.Kind.Audio) {
           const el = track.attach();
           el.muted = !this.sound;
+          if (this.speakerId) void sinkTo(el, this.speakerId);
           document.body.appendChild(el);
           this.audio.add(el);
         }
@@ -213,62 +328,188 @@ export class CallSession {
         this.lastSpeaker = speakers.find((p) => !p.isLocal)?.identity ?? this.lastSpeaker;
         refresh();
       })
+      // The media connection blipped: LiveKit is putting it back by itself.
+      .on(RoomEvent.Reconnecting, () => {
+        this.reconnecting = true;
+        refresh();
+      })
+      .on(RoomEvent.Reconnected, () => {
+        this.reconnecting = false;
+        refresh();
+      })
       .on(RoomEvent.Disconnected, () => {
-        // A failed connect disconnects too; that is the connect's error to report, not an ending.
-        if (this.joined && this.phase !== 'ended' && this.phase !== 'unreachable') void this.finish();
+        // Our own leaving (the room was let go first), or a failed connect: that is not this.
+        if (room !== this.room || !this.joined || this.left || this.phase === 'ended' || this.phase === 'unreachable') return;
+        // LiveKit gave up putting it back: get back into the call ourselves, for a while.
+        void this.recover();
       });
     try {
       await room.connect(conn.url, conn.token);
       this.joined = true;
       for (const t of this.tracks) await room.localParticipant.publishTrack(t);
     } catch (e) {
+      if (again) {
+        if (this.room === room) this.room = null;
+        void room.disconnect();
+        return false;
+      }
       this.problem = { message: `Could not connect the call: ${errorMessage(e)}`, pane: null };
       await this.hangUp(false);
       this.set('error');
-      return;
+      return false;
     }
     if (room.remoteParticipants.size > 0) {
-      this.connectedAt = Date.now();
+      this.connectedAt ??= Date.now();
+      this.remoteLost = false;
       this.set('connected');
-    } else this.set('ringing');
+    } else if (this.connectedAt) {
+      // Back from a dropped connection before the other person is: they are coming back too.
+      this.set('connected');
+      this.whenAlone();
+    } else this.set(conn.i_started ? ringPhase(conn.members) : 'connecting');
 
-    // Nobody picks up: the caller gives up, and may leave a voice message.
-    if (conn.i_started && room.remoteParticipants.size === 0) {
+    // Nobody picks up: the caller gives up when the ring runs out, and may leave a voice message.
+    if (conn.i_started && !this.connectedAt && room.remoteParticipants.size === 0) {
+      this.ringUntil ??= Date.now() + NO_ANSWER_MS;
       const t = setTimeout(() => {
-        if (this.phase === 'ringing' && this.remoteCount === 0) {
-          void this.hangUp(false).then(() => {
+        if ((this.phase === 'calling' || this.phase === 'ringing') && this.remoteCount === 0) {
+          void this.hangUp(false, 'no_answer').then(() => {
             this.unreachable = { reason: 'no_answer', voicemail: true };
             this.set('unreachable');
           });
         }
-      }, NO_ANSWER_MS);
+      }, Math.max(0, this.ringUntil - Date.now()));
       this.cleanups.push(() => clearTimeout(t));
     }
-    // The call may end without anyone here noticing through the media.
+    // The call may end, be answered or start ringing without anyone here noticing through the media.
     const poll = setInterval(() => {
-      void apiGet<{ status: string }>(`/api/chat/calls/${conn.uuid}`)
+      void apiGet<{ status: string; outcome?: string | null; decline_reason?: string | null; members?: Member[] }>(`/api/chat/calls/${conn.uuid}`)
         .then((s) => {
-          if (s.status === 'ended') void this.finish();
+          if (s.status === 'ended') this.stopped(s.outcome, s.decline_reason);
+          else if (s.status === 'connected' && conn.i_started && (this.phase === 'calling' || this.phase === 'ringing')) this.set('connecting');
+          else if (this.phase === 'calling' && ringPhase(s.members) === 'ringing') this.set('ringing');
         })
         .catch(() => undefined);
     }, 5_000);
     this.cleanups.push(() => clearInterval(poll));
     this.cleanups.push(
-      on<{ type: string; uuid?: string; outcome?: string }>('realtime:event', (e) => {
-        // "answered" also means someone else picked up; only the end of a call ends it.
-        if (e.type === 'chat.call.stopped' && e.uuid === conn.uuid && e.outcome !== 'answered') void this.finish();
+      on<{ type: string; uuid?: string; outcome?: string; reason?: string; what?: string }>('realtime:event', (e) => {
+        if (e.uuid !== conn.uuid) return;
+        if (e.type === 'chat.call.stopped') {
+          // "Answered" stops the ring; for the caller, the other side is on the way.
+          if (e.outcome !== 'answered') this.stopped(e.outcome, e.reason);
+          else if (conn.i_started && (this.phase === 'calling' || this.phase === 'ringing')) this.set('connecting');
+        } else if (e.type === 'chat.call.updated' && e.what === 'ringing' && this.phase === 'calling') this.set('ringing');
       }),
     );
+    return true;
   }
 
-  /** A direct call is over once the other person has gone (a group call carries on). */
+  /** The call stopped on the server: said as Declined, Busy or No answer when nobody talked, else ended. */
+  private stopped(outcome: string | null | undefined, reason: string | null | undefined): void {
+    if (this.phase === 'ended' || this.phase === 'unreachable') return;
+    const why = stoppedAs(outcome, reason, !!this.connectedAt, !!this.conn?.i_started);
+    if (!why) {
+      void this.finish();
+      return;
+    }
+    void this.hangUp(false).then(() => {
+      this.unreachable = { reason: why, voicemail: why !== 'declined' };
+      this.set('unreachable');
+    });
+  }
+
+  /**
+   * The media connection dropped and LiveKit could not put it back: answer the
+   * call again (a fresh token, the same place on it) and rejoin, every few
+   * seconds, for RECONNECT_MS. The clock runs on; the window says
+   * "Reconnecting…". A call that ended meanwhile, or one that does not come
+   * back in time, ends here.
+   */
+  private async recover(): Promise<void> {
+    const conn = this.conn;
+    if (this.recovering || !conn || this.left) return;
+    this.recovering = true;
+    this.reconnecting = true;
+    const lp = this.room?.localParticipant;
+    const muted = lp ? !lp.isMicrophoneEnabled : false;
+    const camera = !!lp?.isCameraEnabled;
+    this.teardown();
+    this.changed();
+    const until = Date.now() + RECONNECT_MS;
+    let over = false;
+    while (!this.left && !over && Date.now() < until) {
+      try {
+        const fresh = await apiPost<Connection>(`/api/chat/calls/${conn.uuid}/answer`, { video: false });
+        this.tracks = await createLocalTracks({ audio: this.noise ? CLEAN_AUDIO : RAW_AUDIO, video: false });
+        if (this.left) break;
+        this.conn = fresh;
+        if (await this.connect(fresh, true)) {
+          const back = this.room?.localParticipant;
+          if (back && muted) await back.setMicrophoneEnabled(false).catch(() => undefined);
+          if (back && camera && !app.get().lock?.locked) await back.setCameraEnabled(true).catch(() => undefined);
+          this.recovering = false;
+          this.reconnecting = false;
+          this.changed();
+          return;
+        }
+        this.stopTracks();
+      } catch (e) {
+        this.stopTracks();
+        // Over on the server, or no longer ours to join: nothing to come back to.
+        over = e instanceof ApiError && [403, 404, 410].includes(e.status);
+      }
+      if (!over && !this.left) await pause(RETRY_MS);
+    }
+    this.recovering = false;
+    this.reconnecting = false;
+    if (this.left) return;
+    this.lost = !over;
+    await this.finish();
+  }
+
+  /**
+   * A direct call whose other person has gone (a group call carries on). Their
+   * hanging up ends the call on the server, which says so at once; until then
+   * they dropped, and have RECONNECT_MS to come back.
+   */
   private whenAlone(): void {
     const direct = (this.conn?.members.length ?? 0) <= 2;
     if (!direct || this.phase !== 'connected' || this.remoteCount > 0) return;
+    this.remoteLost = true;
+    this.changed();
     const t = setTimeout(() => {
-      if (this.remoteCount === 0 && this.phase === 'connected') void this.hangUp();
-    }, ALONE_MS);
+      if (this.remoteCount === 0 && this.phase === 'connected') {
+        this.lost = true;
+        void this.hangUp();
+      }
+    }, RECONNECT_MS);
     this.cleanups.push(() => clearTimeout(t));
+  }
+
+  /** The output devices, named once the microphone may be used. */
+  async listSpeakers(): Promise<void> {
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      this.speakers = all.filter((d) => d.kind === 'audiooutput' && d.deviceId !== 'default');
+    } catch {
+      this.speakers = [];
+    }
+    // A speaker that is no longer here: the system's plays, and the choice stays for when it is back.
+    this.changed();
+  }
+
+  /** Play the call through this speaker ('' for the system's), now and next time. */
+  async setSpeaker(id: string): Promise<void> {
+    this.speakerId = id;
+    try {
+      if (id) localStorage.setItem(SPEAKER_KEY, id);
+      else localStorage.removeItem(SPEAKER_KEY);
+    } catch {
+      // Remembering is a convenience; this call still uses it.
+    }
+    await Promise.all([...this.audio].map((el) => sinkTo(el, id)));
+    this.changed();
   }
 
   async toggleMic(): Promise<void> {
@@ -280,6 +521,12 @@ export class CallSession {
   async toggleCamera(): Promise<void> {
     const lp = this.room?.localParticipant;
     if (!lp) return;
+    // Turning a voice call into video is this side's camera only: the other person's stays as they left it.
+    if (!lp.isCameraEnabled && app.get().lock?.locked) {
+      this.problem = { message: 'Unlock WorkSuite to turn your camera on.', pane: null };
+      this.changed();
+      return;
+    }
     if (!lp.isCameraEnabled && !(await call('media:access', { kind: 'camera' })).granted) {
       this.problem = deviceProblem(Object.assign(new Error('denied'), { name: 'NotAllowedError' }), 'camera');
       this.changed();
@@ -329,13 +576,17 @@ export class CallSession {
     this.changed();
   }
 
-  /** Leave the call. The server ends it when nobody is left. */
-  async hangUp(close = true): Promise<void> {
+  /**
+   * Leave the call. The server ends it when nobody is left, and a call between
+   * two when either goes. `no_answer`: the caller's ring ran out, which the
+   * server records as missed rather than cancelled.
+   */
+  async hangUp(close = true, reason?: 'no_answer'): Promise<void> {
     // Once: leaving twice used to re-finish a cancelled call as answered.
     const uuid = this.left ? null : this.conn?.uuid;
     this.left = true;
     this.teardown();
-    if (uuid) await apiPost(`/api/chat/calls/${uuid}/end`).catch(() => undefined);
+    if (uuid) await apiPost(`/api/chat/calls/${uuid}/end`, reason ? { reason } : undefined).catch(() => undefined);
     void call('calls:active', { uuid: null });
     if (close) {
       this.endedAfter = this.connectedAt ? Date.now() - this.connectedAt : null;
@@ -369,6 +620,7 @@ export class CallSession {
     this.unreachable = null;
     this.connectedAt = null;
     this.endedAfter = null;
+    this.lost = false;
     await this.start(p);
   }
 
@@ -401,6 +653,8 @@ export class CallSession {
   }
 
   private teardown(): void {
+    this.reconnecting = this.recovering;
+    this.remoteLost = false;
     for (const c of this.cleanups.splice(0)) c();
     for (const el of this.audio) el.remove();
     this.audio.clear();

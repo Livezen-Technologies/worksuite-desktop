@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Track } from 'livekit-client';
 import { call, isMac } from '../../core/bridge';
 import { Icon } from '../../components/Icon';
@@ -51,6 +51,8 @@ export function VoiceWindow({
   const s = session;
   const [pinned, setPinned] = useState(true);
   const [compact, setCompact] = useState(false);
+  const [maximized, setMaximized] = useState(false);
+  const [audioMenu, setAudioMenu] = useState(false);
   const lp = s.room?.localParticipant;
   const remotes = s.room ? [...s.room.remoteParticipants.values()] : [];
   const muted = lp ? !lp.isMicrophoneEnabled : false;
@@ -58,11 +60,12 @@ export function VoiceWindow({
   const sharing = lp?.isScreenShareEnabled ?? false;
   const speaking = remotes.some((p) => p.isSpeaking) || !!lp?.isSpeaking;
   const connected = s.phase === 'connected';
-  const outgoing = (s.phase === 'ringing' && !!s.conn?.i_started) || s.phase === 'placing' || s.phase === 'devices';
+  const outgoing = ((s.phase === 'calling' || s.phase === 'ringing') && !!s.conn?.i_started) || ((s.phase === 'placing' || s.phase === 'devices') && !s.params?.uuid);
+  const steady = connected && !s.reconnecting && !s.remoteLost;
   const remoteVideo = remotes.map((p) => p.getTrackPublication(Track.Source.ScreenShare)?.track ?? p.getTrackPublication(Track.Source.Camera)?.track).find((t) => t && !t.isMuted);
 
   useEffect(() => {
-    void call('windows:state').then((w) => setPinned(w.alwaysOnTop), () => undefined);
+    void call('windows:state').then((w) => (setPinned(w.alwaysOnTop), setMaximized(w.maximized)), () => undefined);
   }, []);
   // A call that ends while shrunk comes back to full size to say so.
   useEffect(() => {
@@ -81,8 +84,8 @@ export function VoiceWindow({
         <span className={cx('flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-[#E3F4F5] text-[13px] font-bold text-[#0B6770]', connected && 'shadow-[0_0_0_2px_#3DD68C]')}>{initials(name)}</span>
         <button type="button" onClick={() => shrink(false)} title="Open the call window" className="no-drag flex min-w-0 flex-1 flex-col text-left">
           <b className="truncate text-[13px]">{name}</b>
-          <span className={cx('truncate text-[11.5px] tabular-nums', connected ? 'text-[#9EE6C3]' : 'text-[#C9D3EE]')}>
-            {connected ? `${clock ?? '0:00'}${muted ? ' · muted' : ''}` : status[0]}
+          <span className={cx('truncate text-[11.5px] tabular-nums', steady ? 'text-[#9EE6C3]' : 'text-[#C9D3EE]')}>
+            {steady ? `${clock ?? '0:00'}${muted ? ' · muted' : ''}` : status[0]}
           </span>
         </button>
         <button type="button" aria-label={muted ? 'Unmute' : 'Mute'} onClick={() => void s.toggleMic()} className={cx('no-drag flex h-9 w-9 shrink-0 items-center justify-center rounded-full', muted ? 'bg-white text-[#0F1B3D]' : 'bg-white/12 text-white')}>
@@ -119,6 +122,15 @@ export function VoiceWindow({
           <Icon name="minimize" size={14} />
         </button>
       ) : null}
+      <button
+        type="button"
+        aria-label={maximized ? 'Restore the window' : 'Maximise the window'}
+        title={maximized ? 'Restore' : 'Maximise'}
+        onClick={() => void call('windows:toggleMaximize').then(setMaximized, () => undefined)}
+        className="no-drag flex h-[30px] w-[30px] items-center justify-center rounded-[8px] text-[#C9D3EE] hover:text-white"
+      >
+        <Icon name={maximized ? 'app-window' : 'maximize'} size={14} />
+      </button>
     </div>
   );
 
@@ -163,8 +175,8 @@ export function VoiceWindow({
         )}
         <b className="mt-3.5 max-w-full truncate text-center text-[22px] tracking-[-0.2px]">{name}</b>
         {where && !connected ? <span className="text-[12.5px] text-[#AFC0E8]">{where}</span> : null}
-        <span className={cx('flex items-center gap-1.5 text-[13.5px] font-semibold tabular-nums', connected ? 'text-[#9EE6C3]' : outgoing && s.phase === 'ringing' ? 'text-[#C9D3EE]' : status[1])}>
-          {connected ? <span className="h-[7px] w-[7px] rounded-full bg-[#3DD68C]" /> : null}
+        <span role="status" className={cx('flex items-center gap-1.5 text-[13.5px] font-semibold tabular-nums', steady ? 'text-[#9EE6C3]' : outgoing ? 'text-[#C9D3EE]' : status[1])}>
+          {steady ? <span className="h-[7px] w-[7px] rounded-full bg-[#3DD68C]" /> : null}
           {status[0]}
         </span>
         {remotes.length > 1 ? <span className="text-[12px] text-[#AFC0E8]">{remotes.length + 1} in the call</span> : null}
@@ -208,7 +220,10 @@ export function VoiceWindow({
               <RoundButton icon={s.sound ? 'volume' : 'volume-off'} label={s.sound ? 'Speaker' : 'Speaker off'} tone={s.sound ? 'dim' : 'white'} pressed={!s.sound} onClick={() => s.toggleSound()} />
               <RoundButton icon={camera ? 'video-off' : 'video'} label={camera ? 'Stop video' : 'Add video'} tone={camera ? 'white' : 'dim'} pressed={camera} onClick={() => void s.toggleCamera()} />
               <RoundButton icon="screen-share" label={sharing ? 'Stop sharing' : 'Share screen'} tone={sharing ? 'white' : 'dim'} pressed={sharing} onClick={onShare} />
-              <RoundButton icon="audio-lines" label={s.noise ? 'Noise on' : 'Noise off'} tone={s.noise ? 'white' : 'dim'} pressed={s.noise} onClick={() => void s.toggleNoise()} />
+              <span className="relative">
+                <RoundButton icon="audio-lines" label="Audio" pressed={audioMenu} onClick={() => (setAudioMenu(!audioMenu), void s.listSpeakers())} />
+                {audioMenu ? <AudioMenu onClose={() => setAudioMenu(false)} /> : null}
+              </span>
               <RoundButton icon="chat" label="Chat" onClick={onChat} />
             </div>
             <RoundButton icon="phone-off" label="Hang up" tone="red" size={64} onClick={() => void s.hangUp()} />
@@ -225,6 +240,42 @@ export function VoiceWindow({
         )}
       </div>
       {picker}
+    </div>
+  );
+}
+
+/** The voice window's Audio menu: which speaker the call plays through, and noise suppression. */
+function AudioMenu({ onClose }: { onClose: () => void }) {
+  useSyncExternalStore(session.subscribe, session.snapshot);
+  const s = session;
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const away = (e: MouseEvent) => !ref.current?.parentElement?.contains(e.target as Node) && onClose();
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('mousedown', away);
+    window.addEventListener('keydown', key);
+    return () => {
+      window.removeEventListener('mousedown', away);
+      window.removeEventListener('keydown', key);
+    };
+  }, [onClose]);
+  const item = 'no-drag flex h-8 w-full items-center gap-2 rounded-[8px] px-2.5 text-left text-[12.5px] text-white hover:bg-white/10';
+  const pick = (id: string) => void s.setSpeaker(id);
+  return (
+    <div ref={ref} role="menu" aria-label="Audio" className="absolute bottom-[calc(100%+6px)] left-1/2 z-20 w-60 -translate-x-1/2 rounded-[12px] bg-[#13224A] p-1.5 shadow-[0_16px_40px_rgba(0,0,0,.45)]">
+      <div className="px-2.5 pt-1 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-[#8FA0CC] uppercase">Speaker</div>
+      {[{ deviceId: '', label: 'System default' }, ...s.speakers.map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Speaker ${i + 1}` }))].map((d) => (
+        <button key={d.deviceId || 'default'} type="button" role="menuitemradio" aria-checked={s.speakerId === d.deviceId} onClick={() => pick(d.deviceId)} className={item}>
+          <Icon name={s.speakerId === d.deviceId ? 'check' : 'volume'} size={14} className={s.speakerId === d.deviceId ? 'text-[#9EE6C3]' : 'text-[#8FA0CC]'} />
+          <span className="truncate">{d.label}</span>
+        </button>
+      ))}
+      <div className="my-1 h-px bg-white/10" />
+      <button type="button" role="menuitemcheckbox" aria-checked={s.noise} onClick={() => void s.toggleNoise()} className={item}>
+        <Icon name="audio-lines" size={14} className={s.noise ? 'text-[#9EE6C3]' : 'text-[#8FA0CC]'} />
+        <span className="flex-1">Noise suppression</span>
+        <span className="text-[11px] text-[#AFC0E8]">{s.noise ? 'On' : 'Off'}</span>
+      </button>
     </div>
   );
 }

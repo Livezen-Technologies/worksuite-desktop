@@ -5,6 +5,21 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-02 — 0.2.78: direct calls from Chat, separate from meetings
+
+Voice and video calls from a conversation are their own thing now — no meeting invitation, room link or calendar event (#113):
+
+- **Clear call states** — Calling, Ringing (once the other person's device shows the ring), Connecting, Connected, Busy, Declined and No answer.
+- **Incoming calls** — "Incoming voice/video call from X" with Answer and Decline; while locked, "Incoming WorkSuite call", naming the caller only when Show Caller Details is on.
+- **Call window** — Maximise and speaker selection join minimise, mute, camera and end. Switching voice to video turns on only your camera.
+- **Connection loss** — "Reconnecting…" with the clock still running; the call rejoins for up to 30 seconds before ending.
+- **Call history** — a Calls tab in the full Chat page; Busy / No answer / Cancelled on call cards and in the log; Call again after a call ends. An unanswered call now rings the full 45 seconds and is recorded as missed.
+- **Only where calling works** — no call buttons in website-visitor chats, notice rooms or where the server has no calling set up.
+
+Needs the server update with the Communication migration (`php spark migrate --all`). With an older server calls still work; they just read Ringing straight away.
+
+---
+
 ## 2026-10-02 — 0.2.77: the new Home
 
 Home now follows the "WorkSuite Home — Optimized" design, on your real data:

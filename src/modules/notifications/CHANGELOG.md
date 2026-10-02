@@ -8,6 +8,10 @@ the root CHANGELOG.md.
 
 - Prevent upload-time reconnect races, verify gateway readiness and report connection recovery diagnostics (#123).
 
+## 1.3.2 — 2026-10-02
+
+- Incoming calls say 'Incoming voice/video call from X'; while locked they say 'Incoming WorkSuite call' and name the caller only when Show Caller Details is on (#113).
+
 ## 1.3.1 — 2026-10-02
 
 - Retry missed chat notifications on the regular poll when the network is not ready after resume or a catch-up request fails. Preserve the missed-message window and avoid repeating partially delivered banners (#114).

@@ -18,6 +18,20 @@ export interface Room {
   favorite?: boolean;
   archived?: boolean;
   notify_level?: string;
+  /** Whether the server offers calls here (worksuite-desktop#113). Absent from an older server. */
+  can_call?: boolean;
+}
+
+/** Conversations nobody can ring: a website visitor's chat and WorkSuite's own notices. */
+const NOT_CALLABLE = new Set(['widget', 'system']);
+
+/**
+ * Whether a conversation offers voice and video calls: the server says, and a
+ * channel that cannot carry a WorkSuite call never offers one — no call button
+ * may suggest calling that the channel does not support (worksuite-desktop#113).
+ */
+export function canCall(r: Pick<Room, 'type' | 'can_call'> | null | undefined): boolean {
+  return !!r && r.can_call !== false && !NOT_CALLABLE.has(r.type);
 }
 
 /** The person a conversation's avatar shows: the other person in a direct message; nobody for a group, which keeps its own shape and initials. */

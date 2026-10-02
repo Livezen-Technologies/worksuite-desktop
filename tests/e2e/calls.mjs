@@ -57,7 +57,7 @@ try {
   await t.waitFor(`!!document.querySelector('[aria-label="Start a voice call"]')`, 'the call buttons');
   await t.clickButton('Start a voice call');
   const callWin = await t.attach((u) => u.includes('/window/call?'), 'the call window');
-  await callWin.waitFor(`${callWin.hasText('Could not connect the call')} || ${callWin.hasText('Ringing')}`, 'the call to be placed', 30_000);
+  await callWin.waitFor(`${callWin.hasText('Could not connect the call')} || ${callWin.hasText('Calling')} || ${callWin.hasText('Ringing')}`, 'the call to be placed', 30_000);
   await callWin.shot('k1-call-window');
   const history = await api('GET', '/api/chat/calls/history');
   const placed = (history.data ?? []).find((c) => c.room_id === roomId);
@@ -116,7 +116,7 @@ try {
   await api('POST', '/api/chat/presence', { status: 'offline', active: false });
   await t.clickButton('Start a voice call');
   const vm = await t.attach((u) => u.includes('/window/call?'), 'the call window again');
-  await vm.waitFor(`${vm.hasText('Not available right now')} || ${vm.hasText('On another call')} || ${vm.hasText('Could not connect')}`, 'the outcome', 30_000);
+  await vm.waitFor(`${vm.hasText('Not available right now')} || ${vm.hasText('Busy')} || ${vm.hasText('Could not connect')}`, 'the outcome', 30_000);
   if (await vm.evaluate(vm.hasText('Leave a voice message'))) {
     await vm.shot('k4-unreachable');
     await vm.clickButton('Leave a voice message');
