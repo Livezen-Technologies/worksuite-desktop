@@ -70,7 +70,9 @@ module.exports = {
     loadBrowserProcessSpecificV8Snapshot: false,
     grantFileProtocolExtraPrivileges: false,
   },
-  protocols: [{ name: 'WorkSuite link', schemes: ['worksuite'] }],
+  // mailto: is declared so the system can offer WorkSuite as the mail app; it becomes the default only when the person turns on
+  // "Open mailto: links in WorkSuite" (Settings › Mail), which calls setAsDefaultProtocolClient at runtime.
+  protocols: [{ name: 'WorkSuite link', schemes: ['worksuite'] }, { name: 'Email link', schemes: ['mailto'] }],
   // FR-DL-06: only WorkSuite's own reference file type; common formats are never claimed.
   fileAssociations: [{ ext: 'worksuite', name: 'WorkSuite reference', description: 'A link to a WorkSuite record', role: 'Viewer', mimeType: 'application/x-worksuite-reference' }],
 
@@ -153,7 +155,7 @@ module.exports = {
     vendor: 'Livezen Technologies',
     synopsis: 'The WorkSuite desktop client',
     description: 'WorkSuite Desktop — mail, chat, tasks, files and every WorkSuite app on your desktop.',
-    mimeTypes: ['x-scheme-handler/worksuite', 'application/x-worksuite-reference'],
+    mimeTypes: ['x-scheme-handler/worksuite', 'x-scheme-handler/mailto', 'application/x-worksuite-reference'],
     desktop: { entry: { StartupWMClass: 'WorkSuite' } },
     artifactName: 'WorkSuite-${version}-${arch}.${ext}',
   },
