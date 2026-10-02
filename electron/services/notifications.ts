@@ -1,3 +1,5 @@
+import { meetingNoticeActions, type MeetingNoticeActions } from '@shared/meeting-invitations';
+import { inDnd } from '@shared/notification-block';
 import { reminderAction } from '@shared/task-reminders';
 import { Notification, app, nativeImage } from 'electron';
 import { join } from 'node:path';
@@ -46,6 +48,8 @@ interface ServerNotification {
 
 export interface Incoming {
   reminder?: { taskId: number; runId: number } | null;
+  /** A meeting invitation's own answers (worksuite-desktop#97): Going, Maybe, Not going on the banner. */
+  meeting?: MeetingNoticeActions | null;
   id: string;
   module: string;
   /** The server's category (`projects`, `expenses`…): muted per category from the notification settings' Desktop column. */
@@ -126,18 +130,8 @@ export function present(n: Incoming, privacy: NotificationPrivacy, moduleLabel: 
   }
 }
 
-/** Whether `now` falls inside a do-not-disturb window that may cross midnight. */
-export function inDnd(from: string, to: string, now: Date): boolean {
-  const toMin = (s: string) => {
-    const [h, m] = s.split(':').map(Number);
-    return (h ?? 0) * 60 + (m ?? 0);
-  };
-  const f = toMin(from);
-  const t = toMin(to);
-  const n = now.getHours() * 60 + now.getMinutes();
-  if (f === t) return false;
-  return f < t ? n >= f && n < t : n >= f || n < t;
-}
+/** Whether `now` falls inside a do-not-disturb window that may cross midnight (shared with the settings' explanation). */
+export { inDnd };
 
 const MODULE_LABELS: Record<string, string> = {
   mail: 'Mail',
@@ -315,7 +309,7 @@ export class NotificationService {
         raw.forEach((n, k) => {
           const i = items[k]!;
           if (i.read || this.shown.includes(i.id) || Date.parse(i.createdAt) < since) return;
-          if (n.desktop_allowed !== false) this.notify({ reminder: (n.event_key ?? n.type) === 'task.reminder' ? reminderAction(n.link, n.actions) : null, id: i.id, module: i.module, category: n.category ?? null, title: i.title, body: i.body, sender: null, link: i.link, critical: n.priority === 'critical' || n.priority === 'emergency' || n.level === 'critical' || n.level === 'emergency' });
+          if (n.desktop_allowed !== false) this.notify({ reminder: (n.event_key ?? n.type) === 'task.reminder' ? reminderAction(n.link, n.actions) : null, meeting: meetingNoticeActions(n.event_key ?? n.type, n.actions), id: i.id, module: i.module, category: n.category ?? null, title: i.title, body: i.body, sender: null, link: i.link, critical: n.priority === 'critical' || n.priority === 'emergency' || n.level === 'critical' || n.level === 'emergency' });
         });
       }
       this.listed = true;
@@ -394,6 +388,7 @@ export class NotificationService {
         this.notify({
           id,
           reminder: e.event === 'task.reminder' ? reminderAction(link, e.actions) : null,
+          meeting: meetingNoticeActions(typeof e.event === 'string' ? e.event : null, e.actions),
           module: moduleOf({ category: e.category as string, link }),
           category: typeof e.category === 'string' ? e.category : null,
           title: String(e.title ?? 'Notification'),
@@ -541,7 +536,14 @@ export class NotificationService {
       silent: !this.prefs().notificationSounds,
       icon,
       urgency: n.critical ? 'critical' : 'normal',
-      actions: n.reminder && privacy === 'FULL' ? [{ type: 'button', text: 'Snooze 15 min' }, { type: 'button', text: 'Mark Complete' }] : undefined,
+      actions:
+        privacy !== 'FULL'
+          ? undefined
+          : n.reminder
+            ? [{ type: 'button', text: 'Snooze 15 min' }, { type: 'button', text: 'Mark Complete' }]
+            : n.meeting?.answers.length
+              ? n.meeting.answers.map((a) => ({ type: 'button' as const, text: a.label }))
+              : undefined,
       timeoutType: n.critical ? 'never' : 'default',
     });
     note.on('click', () => {
@@ -550,6 +552,16 @@ export class NotificationService {
     });
     const recipient = this.userId;
     note.on('action', (_event, index) => {
+      if (n.meeting && !n.reminder && recipient === this.userId) {
+        const answer = n.meeting.answers[index];
+        if (!answer) return;
+        if (this.isLocked() || !this.moduleEnabled(n)) { this.onClick(n.link, n.module); return; }
+        void this.answerMeeting(n.meeting.meetingId, answer.rsvp).then(() => this.markRead([n.id])).then(() => note.close()).catch((error) => {
+          log.debug('Meeting answer failed', { error: String(error) });
+          this.onClick(n.link, n.module);
+        });
+        return;
+      }
       if (!n.reminder || recipient !== this.userId) return;
       if (this.isLocked() || !this.moduleEnabled(n)) { this.onClick(n.link, n.module); return; }
       const action = index === 0
@@ -569,6 +581,24 @@ export class NotificationService {
     });
     this.live.set(n.id, note);
     note.show();
+  }
+
+  /**
+   * Answer a meeting invitation from its banner: through the Calendar, which everybody invited has, or Meetings'
+   * own answer for a server or a person without the Calendar's.
+   */
+  private async answerMeeting(id: number, rsvp: string): Promise<void> {
+    try {
+      await this.http.post(`/api/calendar/conflicts/invitations/meetings/${id}/rsvp`, { rsvp });
+    } catch (e) {
+      if (!(isDesktopError(e) && (e.code === 'NOT_FOUND' || e.code === 'APP_ACCESS_DENIED' || e.code === 'PERMISSION_DENIED'))) throw e;
+      await this.http.post(`/api/meetings/${id}/rsvp`, { rsvp });
+    }
+  }
+
+  /** Whether the operating system lets this app show notifications at all. */
+  supported(): boolean {
+    return Notification.isSupported();
   }
 
   test(): boolean {

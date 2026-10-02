@@ -12,7 +12,7 @@ import { MeetingDetail } from './MeetingDetail';
 import { ScheduleDialog } from './ScheduleDialog';
 import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';
-import { useInvitationAnswer } from '../calendar/conflicts';
+import { invitationsChanged, useInvitationAnswer } from '../calendar/conflicts';
 
 type Tab = 'dashboard' | 'mine' | 'invitations' | 'rooms' | 'recurring';
 const TABS: Array<[Tab, string]> = [
@@ -192,7 +192,8 @@ function Invitations({ onOpen, compact }: { onOpen: (id: number) => void; compac
   const list = useMeetings('upcoming');
   const answer = useMutation({
     mutationFn: ({ id, rsvp }: { id: number; rsvp: Rsvp }) => apiPost(`/api/meetings/${id}/rsvp`, { rsvp }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['meetings'] }),
+    // Its count here, Home's Waiting for me and the Calendar drop it together (#97).
+    onSuccess: () => invitationsChanged(qc),
     onError: (e) => toast('error', errorMessage(e)),
   });
   const rows = (list.data?.meetings ?? []).filter((m) => m.my_rsvp === 'no_response' && m.my_role !== 'organizer');

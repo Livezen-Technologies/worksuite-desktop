@@ -1,3 +1,4 @@
+import { MeetingInviteActions } from './MeetingInviteActions';
 import { TaskReminderActions } from './TaskReminderActions';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
@@ -90,6 +91,7 @@ export function NotifRow({ n, labels, selected, onSelect, checked, onCheck, onOp
             </button>
           ))}
           <TaskReminderActions notice={n} />
+          <MeetingInviteActions notice={n} />
           {n.count > 1 ? <span className="rounded-full bg-subtle px-2 py-0.5 text-[11px] font-bold text-ink-2 dark:bg-[#1B2542] dark:text-[#C9CFE6]">{n.count} alike</span> : null}
           {n.snoozed_until && !n.archived ? <span className="text-[11.5px] font-semibold text-warning">Snoozed</span> : null}
           <span className="flex-1" />
