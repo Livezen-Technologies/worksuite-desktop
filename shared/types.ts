@@ -231,6 +231,12 @@ export interface Preferences {
   dndTo: string;
   /** Minutes of inactivity before the app locks; 0 = never. */
   appLockMinutes: number;
+  appLockEnabled?: boolean;
+  lockOnSleep?: boolean;
+  lockedChatNotifications?: boolean;
+  lockedCallNotifications?: boolean;
+  lockedNotificationSounds?: boolean;
+
   lockOnSystemLock: boolean;
   lockedAnswerCalls?: boolean;
   lockedShowCallerDetails?: boolean;

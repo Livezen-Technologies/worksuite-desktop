@@ -29,6 +29,7 @@ export class LockService {
   onChanged: (s: LockState) => void = () => undefined;
   minutes: () => number = () => 15;
   lockOnSystemLock: () => boolean = () => true;
+  lockOnSleep: () => boolean = () => true;
   enabled: () => boolean = () => false;
   hasPin: () => boolean = () => false;
   pinLength: () => number | null = () => null;
@@ -42,7 +43,7 @@ export class LockService {
       if (this.enabled() && this.lockOnSystemLock()) this.lock('system');
     });
     powerMonitor.on('suspend', () => {
-      if (this.enabled() && this.lockOnSystemLock()) this.lock('system');
+      if (this.enabled() && this.lockOnSleep()) this.lock('system');
     });
   }
 
@@ -58,6 +59,7 @@ export class LockService {
   private check(): void {
     if (this.locked || !this.enabled()) return;
     const mins = this.minutes();
+    // Immediate mode locks on loss of focus, not while the person is typing.
     if (mins <= 0) return;
     if (Date.now() - this.lastActivity >= mins * 60_000) this.lock('timeout');
   }
@@ -92,7 +94,7 @@ export class LockService {
   }
 
   lock(reason: NonNullable<LockState['reason']>): LockState {
-    if (!this.enabled()) return this.state();
+    if (reason !== 'manual' && !this.enabled()) return this.state();
     if (!this.locked) {
       this.locked = true;
       this.reason = reason;

@@ -15,11 +15,12 @@ export function lockedScope(url: string, kind: string | null): LockedScope | nul
     return { kind, uuid, room };
   } catch { return null; }
 }
-export function lockedApi(scope: LockedScope | null, url: string, method: string, prefs: Pick<Preferences, 'lockedAnswerCalls' | 'lockedAllowChat'>, body?: unknown): boolean {
+export function lockedApi(scope: LockedScope | null, url: string, method: string, prefs: Pick<Preferences, 'lockedAnswerCalls' | 'lockedAllowChat' | 'lockedCallNotifications'>, body?: unknown): boolean {
   if (!scope) return false;
   const u = new URL(url); const path = u.pathname.replace(/^\/__api/, '');
-  if (scope.uuid && prefs.lockedAnswerCalls && path === `/api/chat/calls/${scope.uuid}` && method === 'GET') return true;
-  if (scope.uuid && prefs.lockedAnswerCalls && ['answer', 'decline', 'end'].some(a => path === `/api/chat/calls/${scope.uuid}/${a}`) && method === 'POST') {
+  const ringOnly = scope.kind === 'ring' && prefs.lockedCallNotifications === true;
+  if (scope.uuid && (prefs.lockedAnswerCalls || ringOnly) && path === `/api/chat/calls/${scope.uuid}` && method === 'GET') return true;
+  if (scope.uuid && (prefs.lockedAnswerCalls || ringOnly && path.endsWith('/decline')) && ['answer', 'decline', 'end'].some(a => path === `/api/chat/calls/${scope.uuid}/${a}`) && method === 'POST') {
     if (path.endsWith('/answer') && body && typeof body === 'object' && (body as Record<string, unknown>).video === true) return false;
     return true;
   }
@@ -31,16 +32,16 @@ export function lockedApi(scope: LockedScope | null, url: string, method: string
   }
   return false;
 }
-export function lockedIpc(scope: LockedScope | null, channel: string, input: unknown, prefs: Pick<Preferences, 'lockedAnswerCalls' | 'lockedAllowChat'>): boolean {
-  if (!scope || !prefs.lockedAnswerCalls && scope.kind !== 'chat-mini') return false;
+export function lockedIpc(scope: LockedScope | null, channel: string, input: unknown, prefs: Pick<Preferences, 'lockedAnswerCalls' | 'lockedAllowChat' | 'lockedCallNotifications'>): boolean {
+  if (!scope || !prefs.lockedAnswerCalls && scope.kind !== 'chat-mini' && !(scope.kind === 'ring' && prefs.lockedCallNotifications === true)) return false;
   if (scope.kind === 'chat-mini' && !prefs.lockedAllowChat) return false;
   if (['windows:setAlwaysOnTop', 'windows:setCompact'].includes(channel)) return true;
   if (channel === 'calls:active') return scope.kind !== 'chat-mini' && ((input as { uuid?: string | null })?.uuid === scope.uuid || (input as { uuid?: string | null })?.uuid === null);
-  if (channel === 'media:access') return scope.kind !== 'chat-mini';
+  if (channel === 'media:access') return !!prefs.lockedAnswerCalls && scope.kind !== 'chat-mini';
   if (channel === 'windows:open') {
     const b = input as { kind: string; route: string };
     const target = lockedScope(`app://bundle/#/window/${b.kind}?route=${encodeURIComponent(b.route)}`, b.kind);
-    return !!target && (scope.kind === 'ring' && ['call', 'video-call'].includes(target.kind) && target.uuid === scope.uuid && target.room === scope.room || !!prefs.lockedAllowChat && target.kind === 'chat-mini' && target.room === scope.room);
+    return !!target && (scope.kind === 'ring' && !!prefs.lockedAnswerCalls && ['call', 'video-call'].includes(target.kind) && target.uuid === scope.uuid && target.room === scope.room || !!prefs.lockedAllowChat && target.kind === 'chat-mini' && target.room === scope.room);
   }
   return false;
 }

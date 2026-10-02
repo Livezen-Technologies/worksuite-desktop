@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.1 — 2026-10-02
+
+- Apply locked ringing sound controls and keep incoming alerts separate from permission to answer (#115).
+
 ## 1.3.0 — 2026-10-02
 
 **Added**

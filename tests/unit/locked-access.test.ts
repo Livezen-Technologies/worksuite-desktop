@@ -36,3 +36,12 @@ describe('locked access boundaries (#112)', () => {
     expect(lockedIpc(null, 'media:access', {}, prefs)).toBe(false);
   });
 });
+it('allows a locked ring to be seen and declined without granting answering, media or call-window access (#115)', () => {
+  const ring = lockedScope('app://bundle/#/window/ring?route=' + encodeURIComponent('/calls/ring?uuid=abcdefgh-123&room_id=7'), 'ring');
+  const p = { lockedAnswerCalls: false, lockedAllowChat: false, lockedCallNotifications: true };
+  expect(lockedApi(ring, 'https://example.com/api/chat/calls/abcdefgh-123', 'GET', p)).toBe(true);
+  expect(lockedApi(ring, 'https://example.com/api/chat/calls/abcdefgh-123/decline', 'POST', p)).toBe(true);
+  expect(lockedApi(ring, 'https://example.com/api/chat/calls/abcdefgh-123/answer', 'POST', p, { video: false })).toBe(false);
+  expect(lockedIpc(ring, 'media:access', {}, p)).toBe(false);
+  expect(lockedIpc(ring, 'windows:open', { kind: 'call', route: '/calls/call?uuid=abcdefgh-123&room_id=7' }, p)).toBe(false);
+});

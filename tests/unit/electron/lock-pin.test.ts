@@ -72,3 +72,15 @@ describe('LockPin', () => {
     expect(other.verify('7', '4821')).toBe(false);
   });
 });
+
+it('isolates the same user ID on different servers and migrates legacy PINs only once', () => {
+  const { db } = fakeDb();
+  // Use a stable vault for all scoped reads.
+  const vault = new Vault(Vault.generateKey()); const scoped = new LockPin(db, () => vault);
+  scoped.set('7', '4821'); scoped.setServerScope('https://one.example');
+  expect(scoped.verify('7', '4821')).toBe(true);
+  scoped.setServerScope('https://two.example'); expect(scoped.has('7')).toBe(false);
+  scoped.set('7', '5829'); expect(scoped.verify('7', '5829')).toBe(true);
+  scoped.setServerScope('https://one.example'); expect(scoped.verify('7', '4821')).toBe(true);
+  scoped.clear('7'); scoped.setServerScope('https://two.example'); expect(scoped.verify('7', '5829')).toBe(true);
+});

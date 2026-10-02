@@ -30,8 +30,21 @@ export class LockPin {
     private readonly vault: () => Vault,
   ) {}
 
+  private server: string | null = null;
+  setServerScope(origin: string | null): void { this.server = origin; }
+
   private key(userId: string): string {
-    return `lock_pin:${userId}`;
+    if (!this.server) return `lock_pin:${userId}`;
+    const key = `lock_pin:${this.server}:${userId}`;
+    const legacy = `lock_pin:${userId}`;
+    const owner = `lock_pin_legacy_owner:${userId}`;
+    if (!this.db.getConfig<string>(owner)) {
+      this.db.setConfig(owner, this.server);
+      const value = this.db.getConfig<string>(legacy);
+      if (value && !this.db.getConfig(key)) this.db.setConfig(key, value);
+      this.db.deleteConfig(legacy);
+    }
+    return key;
   }
 
   private read(userId: string): StoredPin | null {

@@ -140,7 +140,12 @@ export const preferencesPatchSchema = z
     dndEnabled: z.boolean(),
     dndFrom: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
     dndTo: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
-    appLockMinutes: z.union([z.literal(0), z.literal(1), z.literal(5), z.literal(15), z.literal(30), z.literal(60)]),
+    appLockMinutes: z.number().int().min(0).max(1440),
+    appLockEnabled: z.boolean(),
+    lockOnSleep: z.boolean(),
+    lockedChatNotifications: z.boolean(),
+    lockedCallNotifications: z.boolean(),
+    lockedNotificationSounds: z.boolean(),
     lockOnSystemLock: z.boolean(),
     lockedAnswerCalls: z.boolean(),
     lockedShowCallerDetails: z.boolean(),
@@ -995,7 +1000,7 @@ export const contract = {
   // A PIN for the app lock on this computer: setting one takes the WorkSuite password.
   'security:unlockPin': ch(z.strictObject({ pin: z.string().regex(/^\d{4,8}$/) }), { whileLocked: true, rate: 1 }),
   'security:setPin': ch(z.strictObject({ pin: z.string().regex(/^\d{4,8}$/), password: z.string().min(1).max(512) }), { session: true, sensitive: true, rate: 3 }),
-  'security:clearPin': ch(none, { session: true, sensitive: true, rate: 3 }),
+  'security:clearPin': ch(z.strictObject({ password: z.string().min(1).max(512) }), { session: true, sensitive: true, rate: 3 }),
   'security:state': ch(none, { whileLocked: true }),
   'security:deviceInfo': ch(none, { session: true }),
   'security:activity': ch(none, { whileLocked: true, rate: 2 }),
@@ -1009,7 +1014,7 @@ export const contract = {
   'updates:busy': ch(none, { whileLocked: true }),
 
   'settings:get': ch(none, { whileLocked: true }),
-  'settings:set': ch(preferencesPatchSchema, { rate: 10 }),
+  'settings:set': ch(preferencesPatchSchema.extend({ verificationPassword: z.string().min(1).max(512).optional() }), { sensitive: true, rate: 10 }),
 
   'status:snapshot': ch(none, { whileLocked: true }),
 

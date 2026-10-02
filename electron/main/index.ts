@@ -274,7 +274,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const calls = new CallService(
     windows,
     http,
-    () => sessionCtl.isReady() && (!lock.isLocked() || !!settings.effective().lockedAnswerCalls) && canOpenApp('calls', sessionCtl.visibleApps()),
+    () => sessionCtl.isReady() && (!lock.isLocked() || settings.effective().lockedCallNotifications !== false) && canOpenApp('calls', sessionCtl.visibleApps()),
     () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('meet', sessionCtl.visibleApps()),
   );
   const screenShare = new ScreenShare(url => !lock.isLocked() && isTrustedShellUrl(url));
@@ -1038,7 +1038,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     signedIn: () => sessionCtl.isReady(),
     locked: () => lock.isLocked(),
     me: () => (sessionCtl.get().user?.id ? Number(sessionCtl.get().user?.id) : null),
-    prefs: () => settings.effective().webchatRinging,
+    prefs: () => {
+      const p = settings.effective();
+      return { ...p.webchatRinging, volume: !p.notificationSounds || lock.isLocked() && p.lockedNotificationSounds === false ? 0 : p.webchatRinging.volume };
+    },
     quiet: () => {
       const p = settings.effective();
       return (p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) || notifications.pausedUntilIso() !== null;
@@ -1047,7 +1050,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     onChanged: (s) => {
       broadcast('ring:changed', s);
       const prefs = settings.effective().webchatRinging;
-      if ((s.chats.length || s.outcome) && prefs.window) windows.showRinger(ringerHeight(s));
+      if ((s.chats.length || s.outcome) && prefs.window && (!lock.isLocked() || settings.effective().lockedChatNotifications !== false)) windows.showRinger(ringerHeight(s));
       else windows.hideRinger();
       tray.update({ webchatRinging: s.chats.map((c) => ({ id: c.id, label: c.site ? `${c.visitor} · ${c.site}` : c.visitor })) });
       const live = s.chats.some((c) => !c.silenced);
@@ -1332,6 +1335,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       log.info('local data removed', { scope });
     },
     changed: (s) => {
+      lockPin.setServerScope(s.server?.origin ?? null);
       settings.setUserLanguageScope(s.server?.origin ?? null, s.user?.id ?? null);
       broadcast('auth:changed', s);
       emitStatus();
@@ -1382,11 +1386,17 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     );
   };
 
-  lock.enabled = () => sessionCtl.isReady();
+  lock.enabled = () => sessionCtl.isReady() && settings.effective().appLockEnabled !== false;
+  app.on('browser-window-blur', () => {
+    setImmediate(() => {
+      if (lock.enabled() && lock.minutes() === 0 && !BrowserWindow.getAllWindows().some(win => win.isFocused())) lock.lock('timeout');
+    });
+  });
   lock.hasPin = () => lockPin.has(sessionCtl.userId());
   lock.pinLength = () => lockPin.length(sessionCtl.userId());
   lock.minutes = () => settings.effective().appLockMinutes;
   lock.lockOnSystemLock = () => settings.effective().lockOnSystemLock;
+  lock.lockOnSleep = () => settings.effective().lockOnSleep !== false;
   lock.user = () => ({ name: sessionCtl.get().user?.name ?? null, email: sessionCtl.get().user?.email ?? null });
   lock.onChanged = (s) => {
     broadcast('lock:changed', s);

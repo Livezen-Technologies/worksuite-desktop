@@ -492,27 +492,91 @@ function AiSection({ prefs }: { prefs: Preferences }) {
   );
 }
 
-function SecuritySection({ prefs }: { prefs: Preferences }) {
+export function SecuritySection({ prefs }: { prefs: Preferences }) {
   const { navigate } = useTab();
   const lock = isLocked('appLockMinutes');
   const lockState = useStore(app, (s) => s.lock);
   const max = useStore(app, (s) => s.bootstrap?.policy.app_lock_max_minutes ?? 0);
-  const options = [0, 1, 5, 15, 30, 60].filter((m) => !max || (m > 0 && m <= max)).map((m) => ({ value: m, label: m === 0 ? 'Never' : `After ${m} minute${m === 1 ? '' : 's'}` }));
+  const [verify, setVerify] = useState<'disable' | null>(null);
+  const [custom, setCustom] = useState(![0, 1, 5, 15, 30].includes(prefs.appLockMinutes));
+  const [minutes, setMinutes] = useState(String(prefs.appLockMinutes || 15));
+  const options = [0, 1, 5, 15, 30].filter((m) => !max || m <= max).map((m) => ({ value: String(m), label: m === 0 ? 'Immediately' : `${m} minute${m === 1 ? '' : 's'}` }));
+  options.push({ value: 'custom', label: 'Custom' });
   return (
     <>
-      <H title="Security" />
-      <Row label="Lock WorkSuite" hint="When nobody has used WorkSuite for this long." lock={lock}>
-        <Select label="App lock" value={prefs.appLockMinutes} options={options} onValueChange={(v) => void updatePrefs({ appLockMinutes: v as Preferences['appLockMinutes'] })} />
+      <H
+        title="Security → Lock Screen"
+        hint="WorkSuite’s app lock protects its windows. These controls do not change or bypass your operating system’s lock screen. Preferences are saved for your account on this device."
+      />
+      <Row label="Enable Lock Screen" lock={isLocked('appLockEnabled')}>
+        <Switch
+          label="Enable Lock Screen"
+          checked={prefs.appLockEnabled !== false}
+          disabled={!!isLocked('appLockEnabled')}
+          onChange={(v) => (v ? void updatePrefs({ appLockEnabled: true }) : setVerify('disable'))}
+        />
       </Row>
-      <Toggle k="lockOnSystemLock" prefs={prefs} label="Lock when this computer locks or sleeps" />
-      <H title="Access While Locked" hint="Applies to WorkSuite’s app lock. It does not bypass the operating system lock screen. Organization policies may restrict these options." />
-      <Toggle k="lockedAnswerCalls" prefs={prefs} label="Answer Calls" />
-      <Toggle k="lockedShowCallerDetails" prefs={prefs} label="Show Caller Details" />
-      <Toggle k="lockedAllowChat" prefs={prefs} label="Allow Chat" hint="Clicking a message notification opens a restricted chat window. Off: WorkSuite asks you to unlock, then opens the conversation." />
-      <Toggle k="lockedNotificationSender" prefs={prefs} label="Show Sender in Notifications" hint="Off: message notifications only say “New message in WorkSuite.”" />
-      <Toggle k="lockedNotificationPreview" prefs={prefs} label="Show Message Preview in Notifications" hint="Never more than Notifications › What banners show allows." />
+      {verify ? (
+        <VerifyLockChange
+          title="Disable Lock Screen"
+          onClose={() => setVerify(null)}
+          action={async (password) => {
+            const result = await call('settings:set', { appLockEnabled: false, verificationPassword: password });
+            app.set({ prefs: result.preferences, locks: result.locks });
+          }}
+        />
+      ) : null}
+      <Row label="Automatically lock after" hint="Immediately locks when all WorkSuite windows lose focus; other intervals measure inactivity in WorkSuite." lock={lock}>
+        <Select
+          label="App lock"
+          value={custom ? 'custom' : String(prefs.appLockMinutes)}
+          options={options}
+          onValueChange={(v) => {
+            setCustom(v === 'custom');
+            if (v !== 'custom') void updatePrefs({ appLockMinutes: Number(v) });
+          }}
+        />
+      </Row>
+      {custom ? (
+        <Row label="Custom timeout" hint={`Whole minutes from 1 to ${max || 1440}.`}>
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const n = Number(minutes);
+              if (Number.isInteger(n) && n >= 1 && n <= (max || 1440)) void updatePrefs({ appLockMinutes: n });
+            }}
+          >
+            <TextField label="Minutes" type="number" min={1} max={max || 1440} value={minutes} onChange={(e) => setMinutes(e.target.value)} />
+            <Button type="submit">Save</Button>
+          </form>
+        </Row>
+      ) : null}
+      <Toggle k="lockOnSystemLock" prefs={prefs} label="Lock after operating-system lock" />
+      <Toggle k="lockOnSleep" prefs={prefs} label="Lock after computer sleep" />
+      <H
+        title="Notifications While Locked"
+        hint="Message delivery and unread counts keep working when banners are hidden. Message content is hidden by default. Organization privacy policies still apply."
+      />
+      <Toggle k="lockedChatNotifications" prefs={prefs} label="Chat notifications" />
+      <Toggle k="lockedCallNotifications" prefs={prefs} label="Incoming calls and ringing" />
+      <Toggle k="lockedShowCallerDetails" prefs={prefs} label="Show caller names" />
+      <Toggle k="lockedNotificationSender" prefs={prefs} label="Show sender names" />
+      <Toggle k="lockedNotificationPreview" prefs={prefs} label="Message previews" hint="Never shows more than Notifications › What banners show or your organization allows." />
+      <Toggle k="lockedNotificationSounds" prefs={prefs} label="Notification sounds while locked" />
+      <H title="Access While Locked" hint="Restricted access remains subject to your organization’s policy." />
+      <Toggle k="lockedAnswerCalls" prefs={prefs} label="Answer Calls While Locked" />
+      <Toggle
+        k="lockedAllowChat"
+        prefs={prefs}
+        label="Allow Chat While Locked"
+        hint="Opens a restricted chat window from a notification. Off: unlock before opening the conversation."
+      />
       <PinRow set={!!lockState?.pin} />
-      <Row label="Unlock with" hint={`Your WorkSuite password${lockState?.pin ? ', your PIN' : ''}${lockState?.biometric === 'touch-id' ? ' or Touch ID' : ''}.${lockState?.biometric === 'touch-id' ? '' : ' Windows Hello support is planned.'}`}>
+      <Row
+        label="Unlock with"
+        hint={`Your WorkSuite password${lockState?.pin ? ', your PIN' : ''}${lockState?.biometric === 'touch-id' ? ' or Touch ID' : ''}.${lockState?.biometric === 'touch-id' ? '' : ' Windows Hello support is planned.'}`}
+      >
         <Button icon="lock" onClick={() => void call('security:lock')}>
           Lock now
         </Button>
@@ -526,32 +590,91 @@ function SecuritySection({ prefs }: { prefs: Preferences }) {
   );
 }
 
+function VerifyLockChange({ title, action, onClose }: { title: string; action: (password: string) => Promise<void>; onClose: () => void }) {
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const save = async () => {
+    if (!password || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await action(password);
+      onClose();
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title={title}
+      onClose={onClose}
+      width={420}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={!password} loading={busy} onClick={() => void save()}>
+            Verify and continue
+          </Button>
+        </>
+      }
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save();
+        }}
+      >
+        <TextField
+          label="WorkSuite password"
+          type="password"
+          autoComplete="current-password"
+          autoFocus
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          hint="Verify your identity before changing protection on this device."
+        />
+        {error ? (
+          <p role="alert" className="text-danger">
+            {error}
+          </p>
+        ) : null}
+      </form>
+    </Modal>
+  );
+}
+
 /** A PIN for the app lock on this computer: quicker than the password, and it works offline. */
 function PinRow({ set }: { set: boolean }) {
   const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [remove, setRemove] = useState(false);
   return (
-    <Row label="PIN" hint={set ? 'Unlocks WorkSuite on this computer, also offline. Five wrong tries sign you out.' : 'Set a 4 to 8 digit PIN to unlock WorkSuite on this computer, also offline.'}>
+    <Row
+      label="PIN"
+      hint={set ? 'Unlocks WorkSuite on this computer, also offline. Five wrong tries sign you out.' : 'Set a 4 to 8 digit PIN to unlock WorkSuite on this computer, also offline.'}
+    >
       <div className="flex gap-2">
         <Button data-guide="settings.set-pin" icon="lock" onClick={() => setOpen(true)}>
           {set ? 'Change PIN' : 'Set PIN'}
         </Button>
         {set ? (
-          <Button
-            variant="ghost"
-            loading={busy}
-            onClick={() => {
-              setBusy(true);
-              void call('security:clearPin')
-                .then(() => toast('success', 'PIN removed.'))
-                .catch((e) => toast('error', errorMessage(e)))
-                .finally(() => setBusy(false));
-            }}
-          >
+          <Button variant="ghost" onClick={() => setRemove(true)}>
             Remove
           </Button>
         ) : null}
       </div>
+      {remove ? (
+        <VerifyLockChange
+          title="Remove PIN"
+          onClose={() => setRemove(false)}
+          action={async (password) => {
+            await call('security:clearPin', { password });
+            toast('success', 'PIN removed.');
+          }}
+        />
+      ) : null}
       {open ? <PinDialog change={set} onClose={() => setOpen(false)} /> : null}
     </Row>
   );
@@ -607,8 +730,23 @@ function PinDialog({ change, onClose }: { change: boolean; onClose: () => void }
         }}
       >
         <TextField label="New PIN (4–8 digits)" type="password" inputMode="numeric" autoComplete="off" autoFocus value={pin} onChange={(e) => setPin(digits(e.target.value))} />
-        <TextField label="Confirm PIN" type="password" inputMode="numeric" autoComplete="off" value={again} onChange={(e) => setAgain(digits(e.target.value))} error={mismatch ? 'The PINs do not match.' : null} />
-        <TextField label="WorkSuite password" type="password" autoComplete="current-password" hint="To check it is you." value={password} onChange={(e) => setPassword(e.target.value)} />
+        <TextField
+          label="Confirm PIN"
+          type="password"
+          inputMode="numeric"
+          autoComplete="off"
+          value={again}
+          onChange={(e) => setAgain(digits(e.target.value))}
+          error={mismatch ? 'The PINs do not match.' : null}
+        />
+        <TextField
+          label="WorkSuite password"
+          type="password"
+          autoComplete="current-password"
+          hint="To check it is you."
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
         {error ? <p className="text-[12.5px] text-danger">{error}</p> : null}
         <button type="submit" hidden />
       </form>
