@@ -1,6 +1,6 @@
 # Browser guest meetings (#140)
 
-Deploy the companion WorkSuite server PR (Communication 1.10.0), run `php spark migrate --all`, and publish its rebuilt web assets before releasing Desktop 0.2.84 (Meet 1.10.0). The public URL remains `/meet/{uuid}`.
+Deploy the companion WorkSuite server PR (Communication 1.10.0), run `php spark migrate --all`, and publish its rebuilt web assets before releasing Desktop 0.2.85 (Meet 1.10.0). The public URL remains `/meet/{uuid}`.
 
 Guests choose Join in Browser, supply their name and any meeting passcode, and check devices with camera/microphone off initially. Device checks ask permission only when enabled. Speaker test uses the system output device. Guests can join with both devices off. Open Desktop App and Download App remain optional.
 

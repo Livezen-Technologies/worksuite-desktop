@@ -66,7 +66,7 @@ import {
   Stethoscope, Store, Sun, Timer, Trash2, TrendingUp, TriangleAlert, Upload, UserRound, Users, Video, Wallet, Wifi, WifiOff, Wrench, X, Zap,
   SlidersHorizontal, Image, RotateCw, CircleHelp, Shield, Dices, Crop,
   Scissors,
-  Forward, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Mic, MicOff, VideoOff, PhoneOff, PhoneIncoming, MonitorUp, Maximize2, Camera, Film, Music, Square, AtSign, Cake, Smartphone, MapPin, Tag, List, type LucideIcon,
+  Forward, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Mic, MicOff, VideoOff, PhoneOff, PhoneIncoming, MonitorUp, Maximize2, Camera, Film, Music, Square, AtSign, MessageCircle, Cake, Smartphone, MapPin, Tag, List, type LucideIcon,
 } from 'lucide-react';
 
 /**
@@ -90,7 +90,7 @@ const ICONS: Record<string, LucideIcon> = {
   server: Server, link: Link, history: History, zap: Zap, hash: Hash, compose: SquarePen, user: UserRound, building: Building2,
   briefcase: Briefcase, 'list-todo': ListTodo, spinner: LoaderCircle, back: ArrowLeft, 'panel-close': PanelLeftClose, 'panel-open': PanelLeftOpen, 'panel-right-close': PanelRightClose, 'panel-right-open': PanelRightOpen,
   mic: Mic, 'mic-off': MicOff, 'video-off': VideoOff, 'phone-off': PhoneOff, 'phone-incoming': PhoneIncoming, 'screen-share': MonitorUp, maximize: Maximize2,
-  camera: Camera, film: Film, music: Music, stop: Square, at: AtSign,
+  camera: Camera, film: Film, music: Music, stop: Square, at: AtSign, 'message-circle': MessageCircle,
   cake: Cake, mobile: Smartphone, 'map-pin': MapPin, tag: Tag, list: List,
   weight: Weight, key: Key, 'user-plus': UserPlus, door: DoorOpen, chart: ChartColumn, 'calendar-check': CalendarCheck, hourglass: Hourglass, 'chevrons-up-down': ChevronsUpDown, 'check-check': CheckCheck, 'more-vertical': EllipsisVertical, handshake: Handshake, hand: Hand, volume: Volume2, 'volume-off': VolumeX, 'audio-lines': AudioLines, minimize: Minimize2, 'folder-plus': FolderPlus, 'file-code': FileCode, unlock: LockOpen, 'zoom-in': ZoomIn, 'zoom-out': ZoomOut,
   fullscreen: Expand, 'fullscreen-exit': Shrink, pip: PictureInPicture2, 'layout-side': Columns2, 'layout-strip': PanelBottom, flip: FlipHorizontal2, scaling: Scaling, eraser: Eraser, board: Presentation, pointer: MousePointer2, pen: Pencil, 'arrow-draw': MoveUpRight, square: Square, type: Type, highlighter: Highlighter, 'app-window': AppWindow,

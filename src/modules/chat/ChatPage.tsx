@@ -25,7 +25,11 @@ import { ResizeDivider, useResizableWidth } from '../../components/ResizeDivider
 import { canOpenWeb, useCanOpen } from '../../core/access';
 import { AddChannel, type AddStep } from './channels/AddChannel';
 import { ChannelBar } from './channels/ChannelBar';
-import { buildChannels, channelOf, channelRoute, LIST_WIDTH } from './channels/channels';
+import { buildChannels, channelOf, channelRoute, isMetaChannel, LIST_WIDTH } from './channels/channels';
+import { MetaChannel } from './channels/MetaChannel';
+import { MetaConnect } from './channels/MetaConnect';
+import { MetaSettings } from './channels/MetaSettings';
+import { PLATFORM_LABEL, useMetaAccounts, type MetaAccount, type MetaPlatform } from './channels/meta';
 import { WhatsappChannel } from './channels/WhatsappChannel';
 import { WhatsappSettings } from './channels/WhatsappSettings';
 import { useWaAccounts } from './channels/whatsapp';
@@ -41,7 +45,7 @@ import { useWaAccounts } from './channels/whatsapp';
  * Down the far left, the channel toolbar (worksuite-desktop#33): Chat, Web Chat and WhatsApp, each with its unread
  * count, and "Add a channel". Picking one shows its conversations in the list; drafts are kept per conversation.
  * WhatsApp is only here now (#35): its old links open its channel, and someone with WhatsApp but not Chat gets
- * Chat with only that channel.
+ * Chat with only that channel. Messenger and Instagram (#36) are channels too, for whoever has them.
  */
 type Filter = 'all' | 'unread' | 'mentions' | 'archived' | 'calls';
 
@@ -59,15 +63,22 @@ export default function ChatPage({ tabId }: ModuleProps) {
   const room = roomFromRoute(query, path);
   const chatAccess = useCanOpen('chat');
   const asked = channelOf(query);
-  // Someone with WhatsApp and not Chat has Chat for WhatsApp alone.
-  const channel = asked === 'chat' && !chatAccess ? 'whatsapp' : asked;
+  const whatsappAccess = useCanOpen('whatsapp');
+  // Messenger and Instagram are one application on the server (`meta`): having one is having both.
+  const metaAccess = useCanOpen('messenger');
+  // Someone with WhatsApp (or Messenger and Instagram) and not Chat has Chat for those channels alone.
+  const channel = asked === 'chat' && !chatAccess ? (whatsappAccess || !metaAccess ? 'whatsapp' : 'messenger') : asked;
   const websiteAccess = useWebsiteAccess();
   const websiteOpen = useWebsiteInbox(false, websiteAccess && !mini);
-  const whatsappAccess = useCanOpen('whatsapp');
   const wa = useWaAccounts(whatsappAccess && !mini);
   const waAccounts = wa.data?.accounts ?? [];
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
   const canConnect = !!perms && (perms.includes('*') || perms.includes('whatsapp.connect'));
+  const meta = useMetaAccounts(metaAccess && !mini);
+  const metaAccounts = meta.data?.accounts ?? [];
+  const metaCanConnect = !!meta.data?.can_connect;
+  const [connecting, setConnecting] = useState<{ platform: MetaPlatform; reconnect?: MetaAccount } | null>(null);
+  const [metaSettings, setMetaSettings] = useState<MetaPlatform | null>(null);
   const [adding, setAdding] = useState<AddStep | null>(null);
   const [settings, setSettings] = useState(false);
   const [q, setQ] = useState('');
@@ -99,8 +110,9 @@ export default function ChatPage({ tabId }: ModuleProps) {
     if (reopen) go(`/chat?room=${reopen}`);
   }, [reopen, go]);
 
-  const channels = buildChannels({ active: channel, chat: chatAccess, rooms: all, website: { access: websiteAccess, rows: websiteOpen.data?.conversations ?? [] }, whatsapp: { access: whatsappAccess, accounts: waAccounts, canConnect } });
+  const channels = buildChannels({ active: channel, chat: chatAccess, rooms: all, website: { access: websiteAccess, rows: websiteOpen.data?.conversations ?? [] }, whatsapp: { access: whatsappAccess, accounts: waAccounts, canConnect }, meta: { access: metaAccess, accounts: metaAccounts } });
   const connect = whatsappAccess && canConnect ? () => setAdding({ at: 'whatsapp' }) : null;
+  const connectMeta = (platform: MetaPlatform) => (metaAccess && metaCanConnect && meta.data?.ready ? () => setConnecting({ platform }) : null);
 
   const chat = (
     <div className="flex h-full min-w-0 flex-1">
@@ -158,9 +170,52 @@ export default function ChatPage({ tabId }: ModuleProps) {
             <Empty icon="lock" title="WhatsApp is not available to you" hint="Ask an administrator for access to WhatsApp." />
           </div>
         )
+      ) : isMetaChannel(channel) ? (
+        metaAccess ? (
+          <MetaChannel
+            key={channel}
+            platform={channel}
+            accounts={metaAccounts.filter((a) => a.platform === channel)}
+            loading={meta.isLoading}
+            error={meta.error}
+            retry={() => void meta.refetch()}
+            onConnect={connectMeta(channel)}
+            onReconnect={(a) => setConnecting({ platform: a.platform, reconnect: a })}
+            onSettings={() => setMetaSettings(channel)}
+          />
+        ) : (
+          <div className="flex min-w-0 flex-1 bg-ground">
+            <Empty icon="lock" title={`${PLATFORM_LABEL[channel]} is not available to you`} hint="Ask an administrator for access to Messenger and Instagram." />
+          </div>
+        )
       ) : (
         chat
       )}
+      {metaSettings && metaAccess ? (
+        <MetaSettings
+          platform={metaSettings}
+          accounts={metaAccounts.filter((a) => a.platform === metaSettings)}
+          loading={meta.isLoading}
+          onConnect={connectMeta(metaSettings) ? () => (setMetaSettings(null), setConnecting({ platform: metaSettings })) : null}
+          onReconnect={(a) => (setMetaSettings(null), setConnecting({ platform: a.platform, reconnect: a }))}
+          onClose={() => setMetaSettings(null)}
+        />
+      ) : null}
+      {connecting && metaAccess ? (
+        <MetaConnect
+          platform={connecting.platform}
+          reconnect={connecting.reconnect}
+          onClose={() => setConnecting(null)}
+          onConnected={(accounts) => {
+            const platform = connecting.platform;
+            setConnecting(null);
+            const ok = accounts.filter((a) => a.status === 'connected');
+            if (ok.length === accounts.length) toast('success', `${accounts.map((a) => a.name).join(', ')} ${accounts.length === 1 ? 'is' : 'are'} connected to ${PLATFORM_LABEL[platform]}.`);
+            else toast('error', accounts.filter((a) => a.status !== 'connected').map((a) => `${a.name}: ${a.status_note ?? 'not connected'}`).join(' '));
+            go(`/chat?channel=${platform}`);
+          }}
+        />
+      ) : null}
       {settings && whatsappAccess ? (
         <WhatsappSettings
           accounts={waAccounts}
@@ -175,6 +230,9 @@ export default function ChatPage({ tabId }: ModuleProps) {
           initial={adding}
           website={{ access: websiteAccess, canSetUp: canOpenWeb('/website-chats') }}
           whatsapp={{ access: whatsappAccess, canConnect, accounts: waAccounts }}
+          meta={{ access: metaAccess, canConnect: metaCanConnect, ready: !!meta.data?.ready, accounts: metaAccounts }}
+          onMeta={(platform) => (setAdding(null), setConnecting({ platform }))}
+          onMetaSettings={(platform) => (setAdding(null), setMetaSettings(platform))}
           onSettings={whatsappAccess ? () => (setAdding(null), setSettings(true)) : undefined}
           onClose={() => setAdding(null)}
           onConnected={() => {
