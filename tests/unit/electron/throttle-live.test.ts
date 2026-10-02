@@ -1,0 +1,51 @@
+import { afterEach, expect, it, vi } from 'vitest';
+import { TokenBucket } from '../../../electron/services/throttle';
+afterEach(() => vi.useRealTimers());
+it('removing a cap releases a waiting transfer immediately', async () => {
+  vi.useFakeTimers();
+  const bucket = new TokenBucket(100);
+  let done = false;
+  const pending = bucket.take(1100).then(() => { done = true; });
+  await vi.advanceTimersByTimeAsync(1);
+  expect(done).toBe(false);
+  bucket.setRate(null);
+  await pending;
+  expect(done).toBe(true);
+  expect(vi.getTimerCount()).toBe(0);
+});
+it('a faster cap wakes both transfers and reserves against one shared bucket', async () => {
+  vi.useFakeTimers();
+  const bucket = new TokenBucket(100);
+  let finished = 0;
+  const jobs = [bucket.take(1000), bucket.take(1000)].map(p => p.then(() => { finished++; }));
+  bucket.setRate(1000);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(finished).toBe(1);
+  await vi.advanceTimersByTimeAsync(1000);
+  await Promise.all(jobs);
+  expect(finished).toBe(2);
+  expect(vi.getTimerCount()).toBe(0);
+});
+it('reducing a cap recalculates an existing wait', async () => {
+  vi.useFakeTimers();
+  const bucket = new TokenBucket(1000);
+  let done = false;
+  const pending = bucket.take(2000).then(() => { done = true; });
+  bucket.setRate(100);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(done).toBe(false);
+  await vi.advanceTimersByTimeAsync(18000);
+  await pending;
+  expect(done).toBe(true);
+});
+it('cancelling a waiting transfer clears its timer and change subscription', async () => {
+  vi.useFakeTimers();
+  const bucket = new TokenBucket(100);
+  const controller = new AbortController();
+  const pending = bucket.take(1000, controller.signal);
+  const rejected = expect(pending).rejects.toBeTruthy();
+  controller.abort();
+  await rejected;
+  bucket.setRate(null);
+  expect(vi.getTimerCount()).toBe(0);
+});

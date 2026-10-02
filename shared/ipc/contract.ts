@@ -183,6 +183,7 @@ export const preferencesPatchSchema = z
       autoRetry: z.boolean(),
       autoResume: z.boolean(),
       metered: z.enum(['normal', 'limit', 'pause']),
+      meteredConnection: z.boolean(),
       askWhereToSave: z.boolean(),
       conflict: z.enum(['ask', 'both', 'skip', 'replace']),
       notifyComplete: z.boolean(),

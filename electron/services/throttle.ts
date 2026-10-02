@@ -31,6 +31,7 @@ const realClock: ThrottleClock = {
 export class TokenBucket {
   private tokens = 0;
   private at: number;
+  private rateChanged = new Set<() => void>();
 
   /** `rate` in bytes a second; null is no cap. */
   constructor(
@@ -52,6 +53,7 @@ export class TokenBucket {
     this.rate = rate && rate > 0 ? rate : null;
     // Whatever was owed under the old cap is forgiven; a full second of the new one is there to start.
     this.tokens = this.rate ?? 0;
+    for (const wake of [...this.rateChanged]) wake();
   }
 
   /** How long, in milliseconds, taking `n` bytes now would have to wait (without taking them). */
@@ -64,11 +66,29 @@ export class TokenBucket {
 
   /** Take `n` bytes from the bucket, waiting as long as the cap needs. */
   async take(n: number, signal?: AbortSignal): Promise<void> {
-    if (!this.rate || n <= 0) return;
-    this.refill();
-    this.tokens -= n;
-    if (this.tokens >= 0) return;
-    await this.clock.sleep(Math.ceil((-this.tokens / this.rate) * 1000), signal);
+    while (this.rate && n > 0) {
+      if (signal?.aborted) throw signal.reason ?? new Error('aborted');
+      this.refill();
+      this.tokens -= n;
+      if (this.tokens >= 0) return;
+      const wait = Math.ceil((-this.tokens / this.rate) * 1000);
+      const sleepAbort = new AbortController();
+      const stop = () => sleepAbort.abort(signal?.reason);
+      signal?.addEventListener('abort', stop, { once: true });
+      let wake!: () => void;
+      const changed = new Promise<'changed'>(resolve => { wake = () => resolve('changed'); });
+      this.rateChanged.add(wake);
+      try {
+        const result = await Promise.race([this.clock.sleep(wait, sleepAbort.signal).then(() => 'elapsed' as const), changed]);
+        if (signal?.aborted) throw signal.reason ?? new Error('aborted');
+        if (result === 'elapsed') return;
+        // setRate resets the bucket; reserve this request against the new shared rate.
+      } finally {
+        this.rateChanged.delete(wake);
+        signal?.removeEventListener('abort', stop);
+        sleepAbort.abort();
+      }
+    }
   }
 
   private refill(): void {

@@ -21,6 +21,7 @@ export function defaultDrivePrefs(): DrivePrefs {
     autoRetry: true,
     autoResume: true,
     metered: 'limit',
+    meteredConnection: false,
     askWhereToSave: false,
     conflict: 'ask',
     notifyComplete: false,

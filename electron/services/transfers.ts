@@ -149,6 +149,7 @@ export interface QueueConfig {
   autoRetry: boolean;
   autoResume: boolean;
   metered: 'normal' | 'limit' | 'pause';
+  meteredConnection?: boolean;
 }
 
 export function queueConfig(p: DrivePrefs): QueueConfig {
@@ -161,6 +162,7 @@ export function queueConfig(p: DrivePrefs): QueueConfig {
     autoRetry: p.autoRetry,
     autoResume: p.autoResume,
     metered: p.metered,
+    meteredConnection: p.meteredConnection,
   };
 }
 
@@ -405,10 +407,12 @@ export class TransferManager {
    * frees) the transfers already moving.
    */
   configure(cfg: QueueConfig): void {
+    const connectionChanged = cfg.meteredConnection !== this.cfg.meteredConnection;
     const maxConcurrent = Number.isFinite(cfg.maxConcurrent) ? Math.min(MAX_CONCURRENT, Math.max(1, Math.round(cfg.maxConcurrent))) : MAX_CONCURRENT;
     this.cfg = { ...cfg, maxConcurrent };
     this.buckets.upload.setRate(cfg.uploadBps);
     this.buckets.download.setRate(cfg.downloadBps);
+    if (connectionChanged && cfg.meteredConnection !== undefined) this.setMetered(cfg.meteredConnection);
     if (this.metered && cfg.metered === 'pause') this.setAside();
     this.pump();
     this.emit();

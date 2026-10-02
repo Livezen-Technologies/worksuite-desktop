@@ -84,6 +84,7 @@ export function DriveSettings({ embedded = false }: { embedded?: boolean }) {
           <ToggleRow label="Ask where to save each time" hint="Choose a place and name for every download instead of the download folder." checked={d.askWhereToSave} onChange={(v) => set({ askWhereToSave: v })} />
           <Storage />
           <ToggleRow label="Resume after reconnecting" hint="Transfers the connection interrupted carry on by themselves when it is back. Off: they wait, paused, for you." checked={d.autoResume} onChange={(v) => set({ autoResume: v })} />
+          <ToggleRow label="Treat this connection as metered" hint="For this computer: turn on for a mobile hotspot or a connection with a data allowance." checked={!!d.meteredConnection} onChange={(v) => set({ meteredConnection: v })} />
           <Row label="On a metered connection" hint="For background transfers, when the network is metered.">
             <Select
               label="On a metered connection"

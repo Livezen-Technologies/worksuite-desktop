@@ -449,9 +449,9 @@ describe('Drive settings, saved on this computer (worksuite-desktop#95)', () => 
     const s = new SettingsService(db as never);
     const changed = vi.fn();
     s.onChange(changed);
-    s.update({ drive: { maxConcurrent: 4 } as never, downloadFolder: '/elsewhere' });
+    s.update({ drive: { maxConcurrent: 4, meteredConnection: true } as never, downloadFolder: '/elsewhere' });
     s.update({ drive: { conflict: 'skip' } as never });
-    expect(s.effective().drive).toMatchObject({ maxConcurrent: 2, conflict: 'skip', autoRetry: true });
+    expect(s.effective().drive).toMatchObject({ maxConcurrent: 2, conflict: 'skip', autoRetry: true, meteredConnection: true });
     expect((config.preferences as { drive: { maxConcurrent: number } }).drive.maxConcurrent).toBe(2);
     expect(changed).toHaveBeenCalledTimes(2);
     const reset = s.resetDrive();
@@ -484,4 +484,16 @@ it('rejects IPC preferences above the shared two-transfer ceiling', () => {
   expect(schema.safeParse({ drive: { maxConcurrent: 3 } }).success).toBe(false);
   expect(schema.safeParse({ drive: { maxUploads: 3 } }).success).toBe(false);
   expect(schema.safeParse({ drive: { maxDownloads: 3 } }).success).toBe(false);
+});
+
+it('applies the device metered override immediately and releases waiting files when disabled', async () => {
+  const q = setup();
+  for (let n = 1; n <= 3; n++) await q.add(n);
+  q.t.configure({ ...q.t.config(), metered: 'pause', meteredConnection: true });
+  expect(running(q.t.list())).toHaveLength(0);
+  expect(q.byName('f1.txt').held).toBe('metered');
+  q.t.configure({ ...q.t.config(), meteredConnection: false });
+  expect(running(q.t.list())).toHaveLength(2);
+  expect(q.byName('f3.txt').state).toBe('queued');
+  q.t.stopAll();
 });

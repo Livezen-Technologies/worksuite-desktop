@@ -270,6 +270,8 @@ export interface DrivePrefs {
   autoResume: boolean;
   /** On a metered connection: carry on as usual, one file at a time, or wait. */
   metered: 'normal' | 'limit' | 'pause';
+  /** Device-local override for hotspots and connections with a data allowance. */
+  meteredConnection?: boolean;
   /** Ask for a place and name for each download instead of using the download folder. */
   askWhereToSave: boolean;
   /** An upload whose name is already in the folder. */
