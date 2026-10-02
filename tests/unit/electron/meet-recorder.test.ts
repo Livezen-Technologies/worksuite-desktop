@@ -183,6 +183,21 @@ describe('recording a meeting on this computer', () => {
     expect(uploaded.has('t1')).toBe(true);
   });
 
+  it('keeps a paused recording upload paused after restart', async () => {
+    const rec = make();
+    const { id } = await rec.start({ meeting: 'm-uuid-123', title: 'Board', layout: 'grid', mime: 'video/mp4' });
+    await rec.active(id); await rec.chunk(id, new Uint8Array(MP4)); await rec.stop(id, 1000);
+    await vi.waitFor(() => expect(uploaded.size).toBe(1));
+    transferState.t1!.state = 'paused';
+    const resume = vi.fn();
+    const after = make();
+    (after as unknown as { deps: { transfers: { resume: typeof resume } } }).deps.transfers.resume = resume;
+    await after.recover();
+    expect(resume).not.toHaveBeenCalled();
+    expect(after.list()[0]!.transferId).toBe('t1');
+    expect((await stat(join(dir, after.list()[0]!.fileName!))).size).toBe(MP4.length);
+  });
+
   it('after a crash mid-recording, finishes what reached the disk and uploads it', async () => {
     const rec = make();
     const { id } = await rec.start({ meeting: 'm-uuid-123', title: 'Board', layout: 'grid', mime: 'video/mp4' });

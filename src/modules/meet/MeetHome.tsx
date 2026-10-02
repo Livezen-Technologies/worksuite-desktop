@@ -12,15 +12,16 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, ErrorNote, Modal, Spinner, cx } from '../../components/ui';
 import { mediaUrl } from '../files/api';
-import { downloadStatus, localRecordingStatus, serverRecordingStatus } from '@shared/recording-status';
+import { localRecordingStatus, serverRecordingStatus } from '@shared/recording-status';
 import type { Room } from '../chat/types';
 import { useNow } from '../calls/parts';
 import { PopMenu, below, type MenuItem } from '../files/Menu';
 import { ScheduleDialog } from '../meetings/ScheduleDialog';
 import { createMeeting, formatCode, invitation, openMeeting, resolveCode, type Created, type HistoryRow, type Recording, type UpcomingRow } from './api';
 import { DeviceSettings, Preview, useMeetDevices } from './devices';
-import { transferAct, useLocalRecordings, useRecordingDownloads, useTransfers } from './recordings';
-import { DownloadStatusView, RecordingStatusView } from './RecordingStatus';
+import { transferAct, useLocalRecordings, useTransfers } from './recordings';
+import { RecordingStatusView } from './RecordingStatus';
+import { RecordingProgress } from './RecordingProgress';
 import { byDay, checkMeetingInput, dayHeading, historyJoinable, lengthLabel, meetingMinutes, scheduledMinutes, upcomingJoinable } from './home';
 import { useMeetT, type MKey } from './i18n';
 
@@ -346,7 +347,6 @@ function Recordings() {
   // Recordings made on this computer, step by step (worksuite-desktop#68), with their uploads and downloads (#89).
   const local = useLocalRecordings();
   const transfers = useTransfers();
-  const downloads = useRecordingDownloads();
   const [all, setAll] = useState(false);
   const [menu, setMenu] = useState<{ at: { x: number; y: number }; r: Recording } | null>(null);
   const [renaming, setRenaming] = useState<Recording | null>(null);
@@ -409,8 +409,6 @@ function Recordings() {
               const mine = r.drive_file_id ? local.find((x) => x.driveFileId === r.drive_file_id && x.fileName) : undefined;
               const base = serverRecordingStatus(r);
               const status = mine ? { ...base, savedLocally: true, actions: [...base.actions, 'reveal' as const] } : base;
-              const dlId = downloads[String(r.id)];
-              const dl = downloadStatus(transferOf(dlId), now);
               return (
                 <div key={r.id} className="flex min-w-0 items-start gap-3 rounded-[12px] border border-line p-2.5">
                   <button
@@ -427,28 +425,7 @@ function Recordings() {
                   <span className="flex min-w-0 flex-1 flex-col gap-1">
                     <b className="truncate text-[13.5px] text-ink">{name}</b>
                     <span className="truncate text-[12px] text-ink-3">{[dateLabel(r.created_at).replace(/, \d{4}$/, ''), r.size ? bytes(r.size) : null, r.duration ? `${Math.floor(r.duration / 60)}:${String(r.duration % 60).padStart(2, '0')}` : null, r.method === 'local' ? 'Recorded on a computer' : null].filter(Boolean).join(' · ')}</span>
-                    <RecordingStatusView
-                      compact={status.phase === 'ready'}
-                      status={status.phase === 'processing' ? { ...status, label: t('home.processing') } : status}
-                      on={{
-                        retry: () => retryCloud(r),
-                        openInDrive: () => navigate(`/files?file=${r.drive_file_id}`),
-                        ...(mine ? { reveal: localAct(() => call('meetrec:reveal', { id: mine.id })) } : {}),
-                      }}
-                    />
-                    {dl && dlId ? (
-                      <DownloadStatusView
-                        status={dl}
-                        on={{
-                          pause: transferAct('transfers:pause', dlId),
-                          resume: transferAct('transfers:resume', dlId),
-                          cancel: transferAct('transfers:cancel', dlId),
-                          retry: transferAct('transfers:retry', dlId),
-                          open: transferAct('transfers:open', dlId),
-                          reveal: transferAct('transfers:reveal', dlId),
-                        }}
-                      />
-                    ) : null}
+                    <RecordingProgress recording={r} />
                   </span>
                   <button type="button" aria-label={t('home.moreFor', { title: name })} title={t('home.moreFor', { title: name })} aria-haspopup="menu" onClick={(e) => setMenu({ at: below(e.currentTarget, 'right', 200), r })} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle hover:text-ink">
                     <Icon name="more-vertical" size={16} />
@@ -467,7 +444,7 @@ function Recordings() {
           label={t('home.moreFor', { title: menu.r.title || 'Meeting recording' })}
           onClose={() => setMenu(null)}
           items={[
-            { label: t('home.download'), icon: 'download', disabled: !menu.r.ready, run: () => download(menu.r) },
+            { label: t('home.download'), icon: 'download', disabled: !serverRecordingStatus(menu.r).playable, run: () => download(menu.r) },
             ...(menu.r.status === 'failed' && menu.r.method !== 'local' ? [{ label: 'Try again', icon: 'refresh', run: () => retryCloud(menu.r) }] : []),
             ...(menu.r.drive_file_id ? [{ label: 'Open in Drive', icon: 'folder', run: () => navigate(`/files?file=${menu.r.drive_file_id}`) }] : []),
             // Its transcripts (worksuite-desktop#81) are in the meeting's details: made from here, read and emailed there.

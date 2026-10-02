@@ -20,7 +20,8 @@ export function useLocalRecordings(): LocalRecording[] {
     () =>
       on<LocalRecording[]>('meetrec:changed', (list) => {
         qc.setQueryData(['meet', 'local-recordings'], list);
-        if (list.some((r) => r.state === 'ready')) void qc.invalidateQueries({ queryKey: ['meet', 'recordings'] });
+        void qc.invalidateQueries({ queryKey: ['meet', 'recordings'] });
+        void qc.invalidateQueries({ queryKey: ['meetings', 'detail'] });
       }),
     [qc],
   );
@@ -29,7 +30,7 @@ export function useLocalRecordings(): LocalRecording[] {
 
 /** Which transfer has each Meet recording's download, by the recording's id. */
 export function useRecordingDownloads(): Record<string, string> {
-  const q = useQuery({ queryKey: ['meet', 'recording-downloads'], queryFn: () => call('meetrec:downloads'), refetchOnMount: 'always' });
+  const q = useQuery({ queryKey: ['meet', 'recording-downloads'], queryFn: () => call('meetrec:downloads'), refetchOnMount: 'always', refetchInterval: 5_000 });
   return q.data ?? {};
 }
 

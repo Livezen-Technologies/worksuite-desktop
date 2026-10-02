@@ -270,6 +270,7 @@ export interface UpcomingRow {
 }
 
 export interface Recording {
+  client_id?: string | null;
   thumbnail_url?: string | null;
   id: number;
   title: string;

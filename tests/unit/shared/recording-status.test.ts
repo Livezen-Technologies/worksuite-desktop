@@ -172,3 +172,15 @@ describe('the words', () => {
     expect(etaLabel(3 * 3600 + 600)).toBe('about 3 h 10 min left');
   });
 });
+
+it('does not equate a stored file or an unknown service state with verified playback', () => {
+  expect(serverRecordingStatus({ status: 'ready', drive_file_id: 9, playable: false })).toMatchObject({ phase: 'processing', playable: false, savedToDrive: true });
+  expect(serverRecordingStatus({ status: 'ready', drive_file_id: 9 }).actions).not.toContain('play');
+  expect(serverRecordingStatus({ status: 'unexpected', drive_file_id: 9, ready: true }).playable).toBe(false);
+});
+
+it('explains a held upload as paused and detects a missing transfer queue job', () => {
+  expect(localRecordingStatus(rec(), tr({ state: 'queued', held: 'connection' }), NOW)).toMatchObject({ phase: 'paused', note: expect.stringContaining('connection') });
+  expect(downloadStatus(tr({ state: 'queued', held: 'connection' }), NOW)).toMatchObject({ phase: 'paused', label: 'Download paused' });
+  expect(localRecordingStatus(rec({ stepAt: ago(FINALIZE_STALL_MS + 1) }), null, NOW)).toMatchObject({ stalled: true, note: expect.stringContaining('restart WorkSuite') });
+});

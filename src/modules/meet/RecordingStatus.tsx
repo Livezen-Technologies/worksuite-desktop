@@ -80,7 +80,7 @@ export function RecordingStatusView({ status, on, compact }: { status: Recording
         {status.savedToDrive ? <span className="rounded-full bg-subtle px-2 py-px font-semibold text-ink-2">Saved to Drive</span> : null}
         {text ? <span className="text-ink-3">{text}</span> : null}
       </div>
-      {status.progress && !compact ? <ProgressBar progress={status.progress} label={status.label} /> : null}
+      {status.progress && (!compact || !status.playable) ? <ProgressBar progress={status.progress} label={status.label} /> : null}
       {status.note ? (
         <span role={status.tone === 'danger' || status.stalled ? 'alert' : 'status'} className={cx('text-[12px]', status.tone === 'danger' ? 'text-danger' : status.stalled ? 'text-[#9A4A06] dark:text-warning' : 'text-ink-2')}>
           {status.note}

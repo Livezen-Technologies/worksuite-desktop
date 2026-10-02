@@ -1,3 +1,4 @@
+import { DriveRecordings } from '../meet/RecordingProgress';
 import { useQuery } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { apiGet, apiGetMeta } from '../../core/api';
@@ -132,6 +133,7 @@ export function Home({ onPlace, now, newItems }: { onPlace: (p: Place, q?: strin
           <Icon name="upload" size={15} /> Upload
         </button>
       </header>
+      <DriveRecordings />
       {q.data?.offline ? <OfflineNote cachedAt={q.data.cachedAt} /> : null}
       {q.error && !q.data ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
       {q.error && !q.data ? null : (

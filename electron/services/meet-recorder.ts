@@ -435,7 +435,8 @@ export class MeetRecorder {
           if (e.transferId && t?.state === 'done' && t.fileId) void this.register(e, Number(t.fileId));
           else if (e.transferId && t && t.state !== 'cancelled') {
             this.await(e, e.transferId);
-            this.deps.transfers.resume(e.transferId);
+            // A deliberate pause survives restart; only an interrupted running job resumes.
+            if (t.state !== 'paused') this.deps.transfers.resume(e.transferId);
           } else void this.upload(e);
         }
       } catch (err) {

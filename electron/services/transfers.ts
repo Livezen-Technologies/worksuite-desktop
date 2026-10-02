@@ -475,6 +475,7 @@ export class TransferManager {
     const held = l.t.state === 'queued' ? (this.offline ? 'connection' : this.metered && this.cfg.metered === 'pause' ? 'metered' : null) : null;
     return {
       ...l.t,
+      fileId: l.meta.fileId,
       position: at >= 0 ? at + 1 : null,
       retryAt: l.meta.retryAt ?? null,
       attempts: l.meta.attempts ?? 0,
@@ -507,6 +508,7 @@ export class TransferManager {
       const m = this.deps.vault().decrypt<Meta>(r.meta);
       return {
         id: r.id,
+        fileId: m?.fileId ?? null,
         direction: r.direction as Transfer['direction'],
         name: r.name,
         source: r.direction === 'upload' ? (m?.path ?? '') : 'WorkSuite',

@@ -478,6 +478,8 @@ export type TransferDirection = 'upload' | 'download';
 export type TransferState = 'queued' | 'running' | 'paused' | 'done' | 'failed' | 'cancelled';
 
 export interface Transfer {
+  /** Drive file identity for associating downloads without matching display names. */
+  fileId?: string | null;
   id: string;
   direction: TransferDirection;
   name: string;

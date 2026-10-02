@@ -150,9 +150,12 @@ export function localRecordingStatus(r: LocalRecording, t: Transfer | null | und
   }
 
   if (r.state === 'uploading') {
-    if (!t) return out('queued', 'progress', [], { progress: { percent: null, done: null, total: null, etaSeconds: null } });
+    if (!t) {
+      const stalled = (since(r.stepAt ?? r.endedAt, now) ?? 0) >= FINALIZE_STALL_MS;
+      return out('queued', stalled ? 'warning' : 'progress', local ? ['reveal'] : [], { progress: { percent: null, done: null, total: null, etaSeconds: null }, stalled, note: stalled ? 'The upload has not entered the transfer queue. Check your connection and restart WorkSuite to recover it; the recording stays on this computer.' : null });
+    }
     const progress = transferProgress(t);
-    if (t.state === 'queued') return out('queued', t.held ? 'warning' : 'progress', ['pause', 'cancel'], { progress: progress.done ? progress : null, note: waitingNote(t, now) });
+    if (t.state === 'queued') return out(t.held ? 'paused' : 'queued', t.held ? 'warning' : 'progress', ['pause', 'cancel'], { progress: progress.done ? progress : null, note: waitingNote(t, now) });
     if (t.state === 'paused') {
       return out('paused', 'warning', ['resume', 'cancel'], { progress, note: explainTransferProblem(t.error) ?? 'Paused. Resume to carry on from where it stopped; the recording stays on this computer.' });
     }
@@ -212,9 +215,14 @@ export function serverRecordingStatus(r: ServerRecordingLike): RecordingStatus {
     case 'failed':
       // The server can file one of its own again while it still has the whole file; a desktop's is retried there.
       return out('failed', 'danger', [...(local ? [] : (['retry'] as const)), ...(drive ? (['openInDrive'] as const) : [])], { note: r.error ?? 'The recording could not be finished.' });
+    case 'ready': {
+      // A Drive ID proves storage, not that the recording has been verified.
+      const playable = r.playable === true || (r.playable === undefined && r.ready === true);
+      if (!playable) return out('processing', 'progress', drive ? ['openInDrive'] : [], { progress: moving, note: 'Saved, but playback has not been verified yet.' });
+      return out('ready', 'success', ['play', ...(drive ? (['openInDrive'] as const) : [])], { playable: true, stalled: false, note: null });
+    }
     default:
-      // Ready. One from before recordings were checked and filed in Drive plays from the server's own copy.
-      return out('ready', 'success', ['play', ...(drive ? (['openInDrive'] as const) : [])], { playable: r.playable ?? (drive || !!r.ready), stalled: false, note: null });
+      return out('processing', 'warning', drive ? ['openInDrive'] : [], { progress: moving, note: 'The recording service reported an unknown state. Refresh or ask your administrator to check the recording service.' });
   }
 }
 
@@ -224,7 +232,7 @@ export function downloadStatus(t: Transfer | null | undefined, now: number = Dat
   const progress = transferProgress(t);
   switch (t.state) {
     case 'queued':
-      return { phase: 'queued', label: 'Download queued', progress: progress.done ? progress : null, stalled: false, note: waitingNote(t, now), actions: ['pause', 'cancel'] };
+      return { phase: t.held ? 'paused' : 'queued', label: t.held ? 'Download paused' : 'Download queued', progress: progress.done ? progress : null, stalled: false, note: waitingNote(t, now), actions: ['pause', 'cancel'] };
     case 'paused':
       return { phase: 'paused', label: 'Download paused', progress, stalled: false, note: explainTransferProblem(t.error), actions: ['resume', 'cancel'] };
     case 'failed':

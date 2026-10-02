@@ -136,7 +136,7 @@ export interface Detail {
   action_items: ActionItem[];
   files: Array<{ id: number; kind: string; filename: string; size: number; mime: string; url: string; at: string }>;
   /** Your recordings of this meeting held on Meet (worksuite-desktop#68); only their owner sees them. */
-  recordings?: Array<{ id: number; title: string; status: string; method: string; error: string | null; drive_file_id: number | null; size: number | null; created_at: string; stalled?: boolean; guidance?: string | null; playable?: boolean }>;
+  recordings?: Array<{ id: number; client_id?: string | null; title: string; status: string; method: 'cloud' | 'local'; error: string | null; drive_file_id: number | null; size: number | null; created_at: string; stalled?: boolean; guidance?: string | null; playable?: boolean }>;
   chat: { room_id: number; meet_uuid: string | null; join_url: string | null; member: boolean } | null;
   can: Can;
 }

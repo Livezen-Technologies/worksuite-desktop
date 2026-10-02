@@ -1,3 +1,4 @@
+import { DriveRecordings } from '../meet/RecordingProgress';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { apiDelete, apiGet, apiPost, apiPut, request } from '../../core/api';
@@ -77,6 +78,7 @@ export function Details({ item, list, onClose, tab: firstTab }: { item: Item; li
         ))}
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-4 py-3.5 text-[12.5px] scroll-thin">
+        {tab === 'details' && isFile ? <DriveRecordings fileId={item.f.id} /> : null}
         {tab === 'details' ? isFile ? <FileFacts f={item.f} /> : <FolderFacts f={item.f} /> : null}
         {tab === 'details' ? <Records type={type} id={f.id} /> : null}
         {tab === 'details' ? <Notify type={type} id={f.id} /> : null}

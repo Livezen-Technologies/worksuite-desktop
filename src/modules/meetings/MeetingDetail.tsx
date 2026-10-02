@@ -11,8 +11,7 @@ import { toast } from '../../core/toasts';
 import { Button, Chip, Empty, ErrorNote, FileBadge, Modal, Spinner, cx } from '../../components/ui';
 import { useNow } from '../calls/parts';
 import { openMeeting } from '../meet/api';
-import { RecordingStatusView } from '../meet/RecordingStatus';
-import { serverRecordingStatus } from '@shared/recording-status';
+import { RecordingProgress } from '../meet/RecordingProgress';
 import type { Stroke } from '../meet/session';
 import { openRelatedLabel, providerLabel, RSVP_LABEL, typeLabel, type AgendaItem, type Detail, type Person, type Rsvp } from './api';
 import { Select } from '../../components/Select';
@@ -64,7 +63,7 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
   });
   const [cancelling, setCancelling] = useState(false);
   const [reason, setReason] = useState('');
-  const q = useQuery({ queryKey: ['meetings', 'detail', id], queryFn: ({ signal }) => apiGet<Detail>(`/api/meetings/${id}`, undefined, signal), refetchInterval: 30_000 });
+  const q = useQuery({ queryKey: ['meetings', 'detail', id], queryFn: ({ signal }) => apiGet<Detail>(`/api/meetings/${id}`, undefined, signal), refetchOnMount: 'always', refetchInterval: (query) => query.state.data?.recordings?.some(r => !['ready', 'failed'].includes(r.status)) ? 10_000 : 30_000 });
   useTabTitle(q.data ? `Meeting · ${q.data.meeting.title}` : 'Meeting');
   // A cancelled or moved meeting no longer overlaps anything: the calendar and its conflict answers are read again (#99).
   const refresh = () => {
@@ -403,7 +402,6 @@ function MinutesTab({ d }: { d: Detail }) {
 }
 
 function FilesTab({ d, act }: { d: Detail; act: Act }) {
-  const { navigate } = useTab();
   const input = useRef<HTMLInputElement>(null);
   const upload = (files: FileList | null) => {
     for (const f of Array.from(files ?? [])) {
@@ -429,14 +427,7 @@ function FilesTab({ d, act }: { d: Detail; act: Act }) {
             // The same status, words and actions as in Meet (worksuite-desktop#89).
             <div key={r.id} className="flex flex-col gap-1 text-[12.5px]">
               <span className="min-w-0 truncate text-ink">{r.title}</span>
-              <RecordingStatusView
-                compact
-                status={serverRecordingStatus(r)}
-                on={{
-                  ...(r.drive_file_id ? { play: () => navigate(`/files?file=${r.drive_file_id}&play=1`), openInDrive: () => navigate(`/files?file=${r.drive_file_id}`) } : {}),
-                  retry: () => void act(() => apiPost(`/api/meet/recordings/${r.id}/retry`), 'Trying again.'),
-                }}
-              />
+              <RecordingProgress recording={{ ...r, ready: r.playable === true }} />
             </div>
           ))}
           <span className="text-[11.5px] text-ink-3">In your Drive, shared with nobody until you share them.</span>

@@ -262,6 +262,8 @@ describe('the transfer queue (worksuite-desktop#94)', () => {
 
     const after = setup({}, db, vault);
     expect(after.state()).toEqual({ 'f1.txt': 'queued', 'f2.txt': 'queued', 'f3.txt': 'queued', 'f4.txt': 'paused' });
+    expect(after.byName('f4.txt').fileId).toBe('4');
+    expect(after.byName('f1.txt').fileId).toBe('1');
     after.t.recover();
     expect(running(after.t.list())).toEqual(['f1.txt', 'f2.txt']);
     expect(after.byName('f3.txt').position).toBe(1);
