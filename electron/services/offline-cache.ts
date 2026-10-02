@@ -88,6 +88,12 @@ export class OfflineCache {
     return this.db.run('DELETE FROM cached_records WHERE module = ? AND cached_at < ?', module, cutoff).changes;
   }
 
+  /** How much one app's saved answers take for one person (Mail's "Local store"). */
+  moduleBytes(userId: string, module: string): number {
+    const r = this.db.get<{ n: number | null }>('SELECT SUM(bytes) AS n FROM cached_records WHERE user_id = ? AND module = ?', userId, module);
+    return Number(r?.n ?? 0);
+  }
+
   totalBytes(): number {
     const r = this.db.get<{ n: number | null }>('SELECT SUM(bytes) AS n FROM cached_records');
     return Number(r?.n ?? 0);

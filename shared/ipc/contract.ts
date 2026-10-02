@@ -562,7 +562,15 @@ export const contract = {
           .object({
             uid: z.string().regex(/^\d{1,20}$/),
             ref: z.string().min(1).max(512),
-            folder: z.string().regex(/^[A-Za-z0-9._\-/ ]{1,128}$/),
+            folder: z.string().regex(/^[A-Za-z0-9._\-/ :]{1,128}$/),
+            mailbox: z.string().regex(/^\d{1,20}$/).nullable(),
+          })
+          .optional(),
+        /** A message's original as the server holds it (.eml): the main process builds the request from these parts. */
+        mailSource: z
+          .object({
+            uid: z.string().regex(/^\d{1,20}$/),
+            folder: z.string().regex(/^[A-Za-z0-9._\-/ :]{1,128}$/),
             mailbox: z.string().regex(/^\d{1,20}$/).nullable(),
           })
           .optional(),
@@ -683,7 +691,7 @@ export const contract = {
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => [v.fileId, v.mail, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.minutesExport, v.transcriptExport, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.elearningMedia, v.officeExport, v.chatMedia, v.taskAttachment].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, the minutes or a transcript of a meeting, a payment slip, an order list, an Orders report, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, an eLearning lesson file, an Office export, a chat attachment or a task attachment'),
+      .refine((v) => [v.fileId, v.mail, v.mailSource, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.minutesExport, v.transcriptExport, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.elearningMedia, v.officeExport, v.chatMedia, v.taskAttachment].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment or original, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, the minutes or a transcript of a meeting, a payment slip, an order list, an Orders report, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, an eLearning lesson file, an Office export, a chat attachment or a task attachment'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   /**
@@ -994,6 +1002,8 @@ export const contract = {
 
   'offline:status': ch(none, { session: true }),
   'offline:pending': ch(none, { session: true }),
+  /** How much one app's saved answers take on this computer. */
+  'offline:moduleBytes': ch(z.object({ module: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/) }), { session: true }),
   'offline:submit': ch(mutationInputSchema, { session: true, rate: 20 }),
   'offline:retry': ch(z.object({ id: idString }), { session: true }),
   'offline:discard': ch(z.object({ id: idString }), { session: true }),
@@ -1395,6 +1405,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'office:saveCopy': { name: string } | null;
   'offline:status': OfflineStatus;
   'offline:pending': OfflineMutation[];
+  'offline:moduleBytes': number;
   'offline:submit': SubmitResult;
   'offline:retry': void;
   'offline:discard': void;

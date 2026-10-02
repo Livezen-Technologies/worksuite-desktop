@@ -44,10 +44,16 @@ export function sanitizeMailHtml(input: string): SanitizedMail {
   return { html: doc.body.innerHTML, blockedImages };
 }
 
-/** The frame document: light background (mail expects it), readable defaults. */
-export function mailFrameDoc(bodyHtml: string): string {
+/**
+ * The frame document: light background (mail expects it — an email designed
+ * with its own colours stays readable in the dark theme), readable defaults,
+ * and the reader's zoom (75–200 %).
+ */
+export function mailFrameDoc(bodyHtml: string, zoom = 100): string {
+  const z = Math.max(50, Math.min(300, Math.round(Number.isFinite(zoom) ? zoom : 100)));
   return `<!doctype html><html><head><meta charset="utf-8"><style>
     html,body{margin:0;padding:0;background:#fff;color:#151A2D;font:14px/1.55 'Plus Jakarta Sans Variable',system-ui,sans-serif;word-wrap:break-word}
+    body{zoom:${z}%}
     body{padding:4px 2px 24px}
     img{max-width:100%;height:auto}
     a{color:#23349E}

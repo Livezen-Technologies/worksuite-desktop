@@ -66,6 +66,9 @@ export function wireQueryInvalidation(): void {
     // An announcement was published, edited, withdrawn, expired or deleted (worksuite-desktop#98): Home's block, an open
     // reader (which then says it is no longer available) and HR's console ask again.
     if (touchesAnnouncements(e)) for (const queryKey of [['announcements'], ['hr', 'announcements']]) void queryClient.invalidateQueries({ queryKey });
+    // Mail's sync pushed a change (new mail, a flag, a move — `mail.changed` / `mail.counts`): the lists and counts ask
+    // again; a sync's progress only touches the sync card.
+    if (e.type === 'mail') void queryClient.invalidateQueries({ queryKey: e.event === 'mail.sync.progress' ? ['mail', 'sync'] : ['mail'] });
     // Hotel PMS's live nudges (`pms.room`, `pms.hk_task`, `pms.request`): the rack and the desk's lists ask again (PMS-ARC-030).
     if (e.type.startsWith('pms.')) void queryClient.invalidateQueries({ queryKey: ['pms', 'live'] });
   });

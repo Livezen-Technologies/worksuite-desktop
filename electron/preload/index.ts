@@ -416,6 +416,7 @@ const api = {
   offline: {
     status: call('offline:status'),
     pending: call('offline:pending'),
+    moduleBytes: call('offline:moduleBytes'),
     submit: call('offline:submit'),
     retry: call('offline:retry'),
     discard: call('offline:discard'),

@@ -1136,6 +1136,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/mail/folders', 'mail'],
     ['/api/mail/mailboxes', 'mail'],
     ['/api/mail/messages', 'mail'],
+    // The sidebar's counts, labels, the list's layout and the sync card: Mail opens offline as it was left.
+    ['/api/mail/views', 'mail'],
+    ['/api/mail/labels', 'mail'],
+    ['/api/mail/prefs', 'mail'],
+    ['/api/mail/sync/status', 'mail'],
     ['/api/chat/rooms', 'chat'],
     ['/api/chat/messages', 'chat'],
     ['/api/calendar/events', 'calendar'],

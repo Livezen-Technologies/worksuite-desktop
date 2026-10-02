@@ -62,6 +62,27 @@ export interface Incoming {
   critical: boolean;
   /** An incoming call (`chat.call.ringing`), not a message: said as a call, locked or not (worksuite-desktop#113). */
   call?: boolean;
+  /** One new email: its banner offers Reply, Archive and Mark read, which act on this message. */
+  mail?: MailNotice | null;
+}
+
+/** The new email a mail banner is about. */
+export interface MailNotice {
+  uid: number;
+  mailbox: number | null;
+  folder: string;
+}
+
+/** A mail banner's buttons, in order. */
+export const MAIL_ACTIONS = ['Reply', 'Archive', 'Mark read'] as const;
+
+/** The route that opens one message (and, with `reply`, starts the reply). */
+export function mailRoute(m: MailNotice, reply = false): string {
+  const q = new URLSearchParams({ msg: String(m.uid) });
+  if (m.mailbox) q.set('mbx', String(m.mailbox));
+  if (m.folder !== 'inbox') q.set('mf', m.folder);
+  if (reply) q.set('reply', '1');
+  return `/mail?${q}`;
 }
 
 interface MissedRoom {
@@ -162,6 +183,7 @@ export class NotificationService {
   private lastMailCount: number | null = null;
   private pollTimer: NodeJS.Timeout | null = null;
   private mailTimer: NodeJS.Timeout | null = null;
+  private mailNudge: NodeJS.Timeout | null = null;
   private userId: string | null = null;
   /** The system's error for the last banner it refused (macOS, Windows): Settings explains it (#114). */
   private lastFailure: string | null = null;
@@ -196,8 +218,9 @@ export class NotificationService {
       void this.catchUpChat();
     }, 60_000);
     this.pollTimer.unref?.();
-    // Mail has no realtime events; its unread count is polled, gently — the
-    // unified count opens one IMAP session per account on the server.
+    // Mail's unread count is polled, gently — the unified count opens one IMAP
+    // session per account on the server — and asked again when the server's
+    // sync pushes a change (`mail` realtime events, below).
     void this.pollMail(true);
     this.mailTimer = setInterval(() => void this.pollMail(false), 120_000);
     this.mailTimer.unref?.();
@@ -206,8 +229,10 @@ export class NotificationService {
   stop(): void {
     if (this.pollTimer) clearInterval(this.pollTimer);
     if (this.mailTimer) clearInterval(this.mailTimer);
+    if (this.mailNudge) clearTimeout(this.mailNudge);
     this.pollTimer = null;
     this.mailTimer = null;
+    this.mailNudge = null;
     for (const n of this.live.values()) n.close();
     this.live.clear();
     this.userId = null;
@@ -267,8 +292,10 @@ export class NotificationService {
         const n = count - before;
         let sender: string | null = null;
         let subject = '';
+        let preview = '';
+        let notice: MailNotice | null = null;
         try {
-          const list = await this.http.get<{ messages?: Array<{ from_name?: string; from_email?: string; subject?: string; is_read?: boolean }> }>(
+          const list = await this.http.get<{ messages?: Array<{ id?: number; from_name?: string; from_email?: string; subject?: string; preview?: string; is_read?: boolean; mailbox?: { id?: number } | null; folder_slug?: string }> }>(
             '/api/mail/messages',
             { query: { unified: 1, folder: 'inbox', per_page: 1 } },
           );
@@ -276,6 +303,9 @@ export class NotificationService {
           if (top && !top.is_read) {
             sender = top.from_name || top.from_email || null;
             subject = top.subject ?? '';
+            preview = (top.preview ?? '').trim();
+            const uid = Number(top.id);
+            if (n === 1 && Number.isSafeInteger(uid) && uid > 0) notice = { uid, mailbox: Number(top.mailbox?.id) > 0 ? Number(top.mailbox!.id) : null, folder: top.folder_slug || 'inbox' };
           }
         } catch {
           /* the count alone is enough */
@@ -284,10 +314,11 @@ export class NotificationService {
           id: `mail:${Date.now()}`,
           module: 'mail',
           title: sender ? `${sender}` : n === 1 ? 'New email' : `${n} new emails`,
-          body: subject || (n === 1 ? 'You have a new email.' : `You have ${n} new emails.`),
+          body: subject ? (preview ? `${subject} · ${preview}`.slice(0, 240) : subject) : n === 1 ? 'You have a new email.' : `You have ${n} new emails.`,
           sender,
-          link: '/mail',
+          link: notice ? mailRoute(notice) : '/mail',
           critical: false,
+          mail: notice,
         });
       }
     } catch (e) {
@@ -425,6 +456,17 @@ export class NotificationService {
       case 'chat.read':
         void this.refreshCounts();
         break;
+      // The server's mail sync pushes (IDLE): new mail is counted now rather than at the next two-minute poll.
+      case 'mail': {
+        if (e.event !== 'mail.counts' && e.event !== 'mail.changed') break;
+        if (this.mailNudge) break;
+        this.mailNudge = setTimeout(() => {
+          this.mailNudge = null;
+          void this.pollMail(false);
+        }, 3_000);
+        this.mailNudge.unref?.();
+        break;
+      }
       case 'chat.call.ringing': {
         if (e.desktop === false) return;
         const caller = String(e.caller_name ?? 'Someone');
@@ -551,7 +593,9 @@ export class NotificationService {
             ? [{ type: 'button', text: 'Snooze 15 min' }, { type: 'button', text: 'Mark Complete' }]
             : n.meeting?.answers.length
               ? n.meeting.answers.map((a) => ({ type: 'button' as const, text: a.label }))
-              : undefined,
+              : n.mail
+                ? MAIL_ACTIONS.map((label) => ({ type: 'button' as const, text: localize(label, this.prefs().language) }))
+                : undefined,
       timeoutType: n.critical ? 'never' : 'default',
     });
     note.on('click', () => {
@@ -560,6 +604,10 @@ export class NotificationService {
     });
     const recipient = this.userId;
     note.on('action', (_event, index) => {
+      if (n.mail && recipient === this.userId) {
+        void this.mailAction(n, n.mail, index).then(() => note.close());
+        return;
+      }
       if (n.meeting && !n.reminder && recipient === this.userId) {
         const answer = n.meeting.answers[index];
         if (!answer) return;
@@ -589,6 +637,24 @@ export class NotificationService {
     });
     this.live.set(n.id, note);
     note.show();
+  }
+
+  /**
+   * A mail banner's button: Reply opens the message and starts the reply; Archive and Mark read act on the message
+   * without opening the app. Locked, or without Mail any more, it opens the app instead; a refusal opens the message.
+   */
+  async mailAction(n: Incoming, m: MailNotice, index: number): Promise<void> {
+    const action = MAIL_ACTIONS[index];
+    if (!action) return;
+    if (this.isLocked() || !this.moduleEnabled(n)) return this.onClick(mailRoute(m), 'mail');
+    if (action === 'Reply') return this.onClick(mailRoute(m, true), 'mail');
+    try {
+      await this.http.post(`/api/mail/messages/${m.uid}/action`, { action: action === 'Archive' ? 'archive' : 'read', folder: m.folder, ...(m.mailbox ? { mailbox: m.mailbox } : {}) });
+      await this.pollMail(false);
+    } catch (error) {
+      log.debug('Mail notification action failed', { error: String(error) });
+      this.onClick(mailRoute(m), 'mail');
+    }
   }
 
   /**
