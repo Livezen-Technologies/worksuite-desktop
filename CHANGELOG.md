@@ -5,6 +5,21 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.96: write mail with formatting
+
+Mail's compose tab was a bare text box. It is now a proper editor:
+
+- **A formatting toolbar** — undo/redo, headings, bold, italic, underline, strikethrough, text colour and highlight, links, tables, bulleted and numbered lists, indent, quote and clear formatting. Ctrl/⌘ + B, I, U, K and friends work, and typing "- ", "1. " or "> " starts a list or quote.
+- **Recipients as chips**, with suggestions from your contacts; × removes one.
+- **Attach from Files** adds a file from your WorkSuite Drive (as a copy); **Insert template** keeps the template's formatting.
+- **Your signature** sits below the message; **Write with AI** works only on what you wrote, never on the signature or the email you're replying to, which is a collapsible block left as it was.
+- **Sent as clean HTML** with a matching plain-text version, checked on this computer and again on the server — no scripts or unsafe links get through. Drafts keep their formatting; older plain drafts are converted.
+- **The bottom bar**: Send and its options are one even control, Send later sits beside it, and Discard is quiet red text.
+
+Pasted pictures are added as attachments rather than placed inside the text. Needs the server update (Mail: HTML cleaning, text part, `POST /api/mail/upload/from-drive`, and a migration for scheduled mail).
+
+---
+
 ## 2026-10-03 — 0.2.95: macOS remote control sees the permission you granted
 
 On a Mac, Settings › Remote control could keep saying **Accessibility: Denied** after WorkSuite was switched on in System Settings (#147):
