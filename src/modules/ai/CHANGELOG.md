@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.8.2 — 2026-10-03
+
+- AI replies render their formatting — bold, italic, lists, headings, code, quotes and links (http/https only, never raw HTML); a long reply is shown from its first line instead of its end, with no blank gap above it; the assistant no longer reopens after every sign-in or unlock when 'Open at start-up' is on — only once per app run (#150).
+
 ## 1.8.1 — 2026-10-03
 
 - An 'action items' task for Mail's AI chips.

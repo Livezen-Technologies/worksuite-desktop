@@ -1202,5 +1202,13 @@
   "Text size": "පෙළ ප්‍රමාණය",
   "Mix its mail into Unified inbox with your other mailboxes.": "ඔබේ අනෙකුත් තැපැල් පෙට්ටි සමඟ එහි තැපැල් ඒකාබද්ධ එන ලිපි වෙත එක් කරන්න.",
   "Desktop notifications for mail arriving in this mailbox.": "මෙම තැපැල් පෙට්ටියට පැමිණෙන තැපැල් සඳහා ඩෙස්ක්ටොප් දැනුම්දීම්.",
-  "Stop checking for new mail until you turn this off.": "ඔබ මෙය අක්‍රිය කරන තුරු නව තැපැල් පරීක්ෂා කිරීම නවත්වන්න."
+  "Stop checking for new mail until you turn this off.": "ඔබ මෙය අක්‍රිය කරන තුරු නව තැපැල් පරීක්ෂා කිරීම නවත්වන්න.",
+  "Restart WorkSuite": "WorkSuite නැවත ආරම්භ කරන්න",
+  "Access granted — restart WorkSuite to finish": "ප්‍රවේශය ලබා දී ඇත — අවසන් කිරීමට WorkSuite නැවත ආරම්භ කරන්න",
+  "WorkSuite has access, but its input helper does not": "WorkSuite හට ප්‍රවේශය ඇත, නමුත් එහි ආදාන සහායකයාට නැත",
+  "Check again": "නැවත පරීක්ෂා කරන්න",
+  "Granted": "ලබා දී ඇත",
+  "Denied": "ප්‍රතික්ෂේප කර ඇත",
+  "Unable to verify": "තහවුරු කළ නොහැක",
+  "Still shows Denied after turning WorkSuite on?": "WorkSuite සක්‍රිය කළ පසුත් තවමත් ප්‍රතික්ෂේප කර ඇති බව පෙන්වයිද?"
 }

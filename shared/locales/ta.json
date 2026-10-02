@@ -1202,5 +1202,13 @@
   "Text size": "உரை அளவு",
   "Mix its mail into Unified inbox with your other mailboxes.": "உங்கள் மற்ற அஞ்சல் பெட்டிகளுடன் இதன் அஞ்சலை ஒருங்கிணைந்த இன்பாக்ஸில் சேர்க்கவும்.",
   "Desktop notifications for mail arriving in this mailbox.": "இந்த அஞ்சல் பெட்டிக்கு வரும் அஞ்சலுக்கான டெஸ்க்டாப் அறிவிப்புகள்.",
-  "Stop checking for new mail until you turn this off.": "இதை அணைக்கும் வரை புதிய அஞ்சலைச் சரிபார்ப்பதை நிறுத்தவும்."
+  "Stop checking for new mail until you turn this off.": "இதை அணைக்கும் வரை புதிய அஞ்சலைச் சரிபார்ப்பதை நிறுத்தவும்.",
+  "Restart WorkSuite": "WorkSuite-ஐ மீண்டும் தொடங்கவும்",
+  "Access granted — restart WorkSuite to finish": "அணுகல் வழங்கப்பட்டது — முடிக்க WorkSuite-ஐ மீண்டும் தொடங்கவும்",
+  "WorkSuite has access, but its input helper does not": "WorkSuite-க்கு அணுகல் உள்ளது, ஆனால் அதன் உள்ளீட்டு உதவிக்கு இல்லை",
+  "Check again": "மீண்டும் சரிபார்க்கவும்",
+  "Granted": "வழங்கப்பட்டது",
+  "Denied": "மறுக்கப்பட்டது",
+  "Unable to verify": "சரிபார்க்க முடியவில்லை",
+  "Still shows Denied after turning WorkSuite on?": "WorkSuite-ஐ இயக்கிய பிறகும் மறுக்கப்பட்டது எனக் காட்டுகிறதா?"
 }

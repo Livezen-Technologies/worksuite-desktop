@@ -123,6 +123,7 @@ export const INVOKE_CHANNELS = [
 
   'rc:state',
   'rc:recheck',
+  'rc:restart',
   'rc:setAllowRequests',
   'rc:shareStarted',
   'rc:shareChanged',

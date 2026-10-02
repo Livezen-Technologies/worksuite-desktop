@@ -3,10 +3,10 @@ import { DarkProfilePicker } from './Appearance';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState, useRef, type ReactNode } from 'react';
 import { categoryVisible } from '@shared/access';
-import { QUICK_ASK_SHORTCUTS, type AiDisplay, type Preferences } from '@shared/types';
+import { QUICK_ASK_SHORTCUTS, type AiDisplay, type Preferences, type RemoteControlIdentity, type RemoteControlView } from '@shared/types';
 import { useCanOpen, useVisibleIds } from '../../core/access';
 import { app, isLocked, updatePrefs } from '../../core/app-state';
-import { call, errorMessage, isMac } from '../../core/bridge';
+import { call, errorMessage, isMac, on } from '../../core/bridge';
 import { conflicts, effectiveShortcuts, prettyAccelerator, accelerator, DEFAULT_SHORTCUTS } from '../../core/commands';
 import { LANGUAGES, t, text } from '../../core/i18n';
 import { LOCAL_AI_KEY, useLocalAIStatus, useLocalModels } from '../../core/local-ai';
@@ -1273,24 +1273,60 @@ async function fresh(next: Awaited<ReturnType<typeof call<'rc:recheck'>>>): Prom
   queryClient.setQueryData(['rc-state'], next);
 }
 
+/** While Accessibility is not yet granted, it is asked again this often (worksuite-desktop#147). */
+export const RC_RECHECK_MS = 2_000;
+
+function yesNo(v: boolean | null | undefined): string {
+  return v === null || v === undefined ? text('Unable to verify') : v ? text('Granted') : text('Denied');
+}
+
+/** Why macOS may not be applying the entry in System Settings to this running copy. */
+function IdentityWarnings({ identity }: { identity: RemoteControlIdentity | null | undefined }) {
+  if (!identity) return null;
+  const warnings: string[] = [];
+  if (identity.development) warnings.push(text('This is a development build. macOS gives its Accessibility access to Electron or to the app that started it, such as Terminal — not to WorkSuite.'));
+  if (identity.translocated) warnings.push(text('macOS is running WorkSuite from a temporary location because it was opened where it was downloaded. Move WorkSuite to Applications, open it from there, then allow it again.'));
+  if (identity.otherInstalledCopy) warnings.push(text('Another copy of WorkSuite is in Applications. The entry in System Settings may belong to that copy, not to this one.'));
+  if (identity.adhoc && !identity.development) warnings.push(text('This copy of WorkSuite is not signed with a Developer ID, so macOS ties Accessibility to this exact build. After an update the old entry stays on but no longer applies: remove WorkSuite from the list and add it again.'));
+  if (warnings.length === 0) return null;
+  return (
+    <ul className="mt-2 list-disc space-y-1 pl-5 text-ink-2" data-testid="rc-identity-warnings">
+      {warnings.map((w) => <li key={w}>{w}</li>)}
+    </ul>
+  );
+}
+
 export function RemoteControlSection() {
   const q = useQuery({ queryKey: ['rc-state'], queryFn: () => call('rc:state'), refetchInterval: 5_000 });
   const v = q.data;
   const [checking, setChecking] = useState(false);
+  const [restarting, setRestarting] = useState(false);
   const generation = useRef(0);
+  const inFlight = useRef(false);
   const [verifyError, setVerifyError] = useState(false);
-  const recheck = async () => {
+  /** A fresh check of the app and its helper. `quiet` (the 2-second poll) keeps the last answer on screen meanwhile. */
+  const recheck = async (quiet = false) => {
+    if (quiet && inFlight.current) return;
     const request = ++generation.current;
-    setChecking(true);
-    setVerifyError(false);
+    inFlight.current = true;
+    if (!quiet) {
+      setChecking(true);
+      setVerifyError(false);
+    }
     try {
       await queryClient.cancelQueries({ queryKey: ['rc-state'] });
       const next = await call('rc:recheck');
-      if (request === generation.current) await fresh(next);
+      if (request === generation.current) {
+        await fresh(next);
+        setVerifyError(false);
+      }
     } catch {
-      if (request === generation.current) setVerifyError(true);
+      if (request === generation.current && !quiet) setVerifyError(true);
     } finally {
-      if (request === generation.current) setChecking(false);
+      if (request === generation.current) {
+        inFlight.current = false;
+        setChecking(false);
+      }
     }
   };
   useEffect(() => {
@@ -1299,15 +1335,31 @@ export function RemoteControlSection() {
     const back = () => { if (document.visibilityState === 'visible') void recheck(); };
     window.addEventListener('focus', back);
     document.addEventListener('visibilitychange', back);
+    // The main process checks again when WorkSuite becomes the active app, and says so.
+    const off = on<RemoteControlView>('rc:changed', (next) => {
+      if (!inFlight.current) void fresh(next);
+    });
     return () => {
       mounted = false;
       // The ref is a request counter, not a DOM node. Invalidate outstanding replies.
       // eslint-disable-next-line react-hooks/exhaustive-deps
       generation.current++;
+      inFlight.current = false;
       window.removeEventListener('focus', back);
       document.removeEventListener('visibilitychange', back);
+      off();
     };
   }, []);
+  const s = v?.support;
+  // The banner asks for access: keep asking macOS every two seconds while it is on screen, and stop once granted.
+  const waiting = !!s && (s.accessibility === 'denied' || s.accessibility === 'unknown');
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void recheck(true);
+    }, RC_RECHECK_MS);
+    return () => window.clearInterval(timer);
+  }, [waiting]);
   const set = async (value: boolean) => {
     try {
       await call('rc:setAllowRequests', { value });
@@ -1316,41 +1368,80 @@ export function RemoteControlSection() {
       toast('error', errorMessage(e));
     }
   };
-  if (!v) return <>
+  const restart = async () => {
+    setRestarting(true);
+    try {
+      await call('rc:restart');
+    } catch (e) {
+      setRestarting(false);
+      toast('error', errorMessage(e));
+    }
+  };
+  if (!v || !s) return <>
     <H title="Remote control" />
-    <p className="text-ink-2">{checking ? 'Checking Accessibility access…' : 'Unable to verify Accessibility access'}</p>
+    <p className="text-ink-2">{checking ? text('Checking Accessibility access…') : text('Unable to verify Accessibility access')}</p>
     <Button size="sm" variant="ghost" loading={checking} onClick={() => void recheck()}>Check again</Button>
   </>;
-  const s = v.support;
   const pending = checking || s.accessibility === 'checking';
   const unknown = verifyError || s.accessibility === 'unknown';
   const works = s.available && s.policyAllows && !pending && !unknown;
+  const hint = !pending && !unknown && s.accessibility === 'denied' ? (s.accessibilityHint ?? null) : null;
+  const d = s.accessibilityDetails;
+  const id = d?.identity ?? null;
+  const headline = pending
+    ? text('Checking Accessibility access…')
+    : unknown
+      ? text('Unable to verify Accessibility access')
+      : hint === 'restart'
+        ? text('Access granted — restart WorkSuite to finish')
+        : hint === 'helper'
+          ? text('WorkSuite has access, but its input helper does not')
+          : works
+            ? text('This computer can be controlled when you allow it')
+            : text('This computer can be shared, but not controlled');
   return (
     <>
       <H title="Remote control" hint="When you share your screen in a meeting, others can ask to use your mouse and keyboard. Nothing happens until you allow it, on this computer, each time." />
-      <div className={cx('mb-4 rounded-[12px] border p-4 text-[13.5px]', works || pending || unknown ? 'border-line bg-surface' : 'border-[#F1D9B5] bg-[#FFF9EC] dark:bg-warning-bg')}>
+      <div className={cx('mb-4 rounded-[12px] border p-4 text-[13.5px]', works || pending || unknown ? 'border-line bg-surface' : 'border-[#F1D9B5] bg-[#FFF9EC] dark:bg-warning-bg')} data-testid="rc-banner">
         <div className="flex items-center gap-2 font-semibold text-ink">
-          <Icon name={pending || unknown ? 'refresh' : works ? 'shield-check' : 'warning'} size={17} className={works ? 'text-success' : 'text-warning'} />
-          {pending ? 'Checking Accessibility access…' : unknown ? 'Unable to verify Accessibility access' : works ? 'This computer can be controlled when you allow it' : 'This computer can be shared, but not controlled'}
+          <Icon name={pending || unknown || hint === 'restart' ? 'refresh' : works ? 'shield-check' : 'warning'} size={17} className={works ? 'text-success' : 'text-warning'} />
+          {headline}
         </div>
-        {!works && !pending && !unknown ? <p className="mt-1.5 text-ink-2">{!s.policyAllows ? "Your organization's policy for this computer doesn't allow it." : s.reason}</p> : works && s.reason ? <p className="mt-1.5 text-ink-2">{s.reason}</p> : null}
+        {hint === 'restart' ? (
+          <p className="mt-1.5 text-ink-2" data-testid="rc-accessibility-hint">
+            macOS has given WorkSuite Accessibility access. Its input helper only receives it when WorkSuite starts again, so restart WorkSuite once to finish. Nothing else needs to change in System Settings.
+          </p>
+        ) : hint === 'helper' ? (
+          <div className="mt-1.5 text-ink-2" data-testid="rc-accessibility-hint">
+            <p>macOS still does not count WorkSuite’s input helper ({d?.helperPath ?? '/usr/bin/osascript'}) as part of WorkSuite after a restart. Usually another copy, or a stale entry, holds the permission.</p>
+            <ol className="mt-1.5 list-decimal space-y-1 pl-5">
+              <li>Quit WorkSuite and open it from the Applications folder in Finder — not from Terminal, a download folder or the disk image.</li>
+              <li>In Privacy &amp; Security › Accessibility, select WorkSuite and click − to remove it. Click +, choose WorkSuite in Applications and turn it on.</li>
+              <li>Restart WorkSuite, then check again.</li>
+            </ol>
+          </div>
+        ) : !works && !pending && !unknown ? (
+          <p className="mt-1.5 text-ink-2">{!s.policyAllows ? text("Your organization's policy for this computer doesn't allow it.") : s.reason}</p>
+        ) : works && s.reason ? (
+          <p className="mt-1.5 text-ink-2">{s.reason}</p>
+        ) : null}
         {!pending && !unknown && s.accessibility === 'granted' ? (
           <p className="mt-1.5 flex items-center gap-1.5 text-ink-2" data-testid="rc-accessibility">
             <Icon name="check" size={14} className="text-success" /> Accessibility access enabled
           </p>
         ) : null}
-        {!pending && !unknown && s.accessibility === 'denied' && s.accessibilityHint === 'restart' ? (
-          <p className="mt-1.5 text-ink-2" data-testid="rc-accessibility-hint">
-            The running app reports access, but its input helper reports permission required. Quit WorkSuite and open it again, then check again. Use the running copy of WorkSuite in Accessibility settings if multiple copies are installed.
-          </p>
-        ) : null}
-        {!pending && !unknown && s.accessibility === 'denied' ? <p className="mt-1.5 text-ink-2">Permission required</p> : null}
-        {unknown ? <p className="mt-1.5 text-ink-2">{s.accessibilityDetails?.problem ?? 'The permission check did not complete. Check again to retry.'}</p> : null}
-        {s.accessibilityDetails ? <details className="mt-2 text-[12px] text-ink-3"><summary className="cursor-pointer">Running app and input-helper checks</summary><p className="break-all selectable">Running copy: {s.accessibilityDetails.runningApp}</p><p>App Accessibility: {s.accessibilityDetails.appTrusted === null ? 'Unable to verify' : s.accessibilityDetails.appTrusted ? 'Granted' : 'Denied'}. Helper Accessibility: {s.accessibilityDetails.helperAccessibility === null ? 'Unable to verify' : s.accessibilityDetails.helperAccessibility ? 'Granted' : 'Denied'}. Helper event posting: {s.accessibilityDetails.helperTrusted === null ? 'Unable to verify' : s.accessibilityDetails.helperTrusted ? 'Granted' : 'Denied'}.</p><p>Compare this running copy with the entry in macOS settings if more than one WorkSuite installation exists. Diagnostics include signing identity and app translocation checks.</p></details> : null}
+        {!pending && !unknown && s.accessibility === 'denied' && !hint ? <p className="mt-1.5 text-ink-2">Permission required</p> : null}
+        {unknown ? <p className="mt-1.5 text-ink-2">{d?.problem ?? text('The permission check did not complete. Check again to retry.')}</p> : null}
+        {!works && !pending ? <IdentityWarnings identity={id} /> : null}
         {s.accessibility !== 'not_required' ? (
           <div className="mt-2.5 flex flex-wrap gap-2">
-            {s.accessibility === 'denied' ? (
-              <Button size="sm" onClick={() => void call('media:privacySettings', { pane: 'accessibility' })}>
+            {hint ? (
+              <Button size="sm" icon="refresh" loading={restarting} onClick={() => void restart()}>
+                Restart WorkSuite
+              </Button>
+            ) : null}
+            {s.accessibility === 'denied' && hint !== 'restart' ? (
+              <Button size="sm" variant={hint ? 'ghost' : undefined} onClick={() => void call('media:privacySettings', { pane: 'accessibility' })}>
                 Open Accessibility settings
               </Button>
             ) : null}
@@ -1358,6 +1449,36 @@ export function RemoteControlSection() {
               Check again
             </Button>
           </div>
+        ) : null}
+        {waiting ? <p className="mt-2 text-[12px] text-ink-3" data-testid="rc-auto-check">WorkSuite checks again every few seconds while this message is shown, and when you come back to it.</p> : null}
+        {d ? (
+          <details className="mt-2 text-[12px] text-ink-3" data-testid="rc-details">
+            <summary className="cursor-pointer">Running app and input-helper checks</summary>
+            <p className="break-all selectable">{text('Running copy: {path}', { path: id?.bundle ?? d.runningApp })}</p>
+            {id ? (
+              <p className="selectable">
+                {text('Bundle ID: {id}', { id: id.bundleId ?? text('unknown') })} · {text('Team ID: {team}', { team: id.teamId ?? text('not set') })} · {text('Signed by: {who}', { who: id.signingUnavailable ? text('Unable to verify') : id.adhoc ? text('ad-hoc (no Developer ID)') : (id.authority ?? text('unknown')) })}
+              </p>
+            ) : null}
+            <p>
+              {text('App Accessibility: {state}.', { state: yesNo(d.appTrusted) })} {text('Helper Accessibility: {state}.', { state: yesNo(d.helperAccessibility) })} {text('Helper event posting: {state}.', { state: yesNo(d.helperTrusted) })}
+            </p>
+            <p className="break-all">{text('Input helper: {path}, started by WorkSuite, so WorkSuite’s entry in Accessibility covers it. It is not listed separately.', { path: d.helperPath ?? '/usr/bin/osascript' })}</p>
+            <p>Compare this running copy with the entry in macOS settings if more than one WorkSuite installation exists. Diagnostics include signing identity and app translocation checks.</p>
+          </details>
+        ) : null}
+        {s.accessibility !== 'not_required' && s.accessibility !== 'granted' ? (
+          <details className="mt-2 text-[12px] text-ink-3" data-testid="rc-still-denied">
+            <summary className="cursor-pointer">Still shows Denied after turning WorkSuite on?</summary>
+            <ol className="mt-1.5 list-decimal space-y-1 pl-5">
+              <li>Check that the running copy above is the WorkSuite in Applications, and open WorkSuite from there.</li>
+              <li>Quit WorkSuite. In System Settings › Privacy &amp; Security › Accessibility, select WorkSuite and click − to remove it, then click + and choose WorkSuite in Applications. Turn it on.</li>
+              <li>Open WorkSuite again. This screen updates by itself; you can also press Check again.</li>
+              <li>
+                If it still does not change, reset WorkSuite’s entry in Terminal with <code className="selectable font-mono">tccutil reset Accessibility {id?.bundleId ?? 'lk.worksuite.desktop'}</code>, then open WorkSuite and allow it again.
+              </li>
+            </ol>
+          </details>
         ) : null}
         {s.accessibility !== 'not_required' ? (
           <p className="mt-2 text-[12px] text-ink-3">Accessibility only lets WorkSuite take input. Nobody controls this computer until you approve their request, each time.</p>

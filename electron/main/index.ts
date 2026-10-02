@@ -42,6 +42,7 @@ import { BootstrapService } from '../services/bootstrap';
 import { CallService } from '../services/calls';
 import { ScreenShare } from '../services/screen-share';
 import { accessibility, createRemoteControl } from '../services/remote-control/host';
+import { AX_RESTARTED_ARG, watchAccessibility } from '../services/remote-control/accessibility-watch';
 import { DEFAULT_POLICY } from '../services/policy';
 import { Database } from '../services/db';
 import { archName, DeviceService, platformName } from '../services/device';
@@ -1443,6 +1444,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         if (scope) win.setTitle(scope.kind === 'chat-mini' ? 'WorkSuite chat' : 'WorkSuite call');
       }
     } else {
+      // Present again at once, not at the next heartbeat: no heartbeat went while locked (#150).
+      void heartbeatPresence();
       broadcast('realtime:resync');
       // What a notification clicked while locked pointed at, now that the workspace is back (#114).
       if (pendingNav.length) setTimeout(() => flushNavigation(), 300);
@@ -1628,10 +1631,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
   });
 
-  const relaunch = (safe: boolean): void => {
-    const args = process.argv.slice(1).filter((a) => a !== '--safe-mode' && a !== '--updated' && a !== '--hidden');
+  const relaunch = (safe: boolean, extraArgs: string[] = []): void => {
+    const args = process.argv.slice(1).filter((a) => a !== '--safe-mode' && a !== '--updated' && a !== '--hidden' && a !== AX_RESTARTED_ARG);
     if (safe) args.push('--safe-mode');
     else clearCrashes(p.crashState);
+    args.push(...extraArgs);
     markCleanExit(p.runningMarker);
     app.relaunch({ args });
     windows.quitting = true;
@@ -1903,9 +1907,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     notifications.markGap();
   });
   powerMonitor.on('user-did-resign-active', () => remoteControl.onSystem('user-did-resign-active'));
-  app.on('browser-window-focus', () => { if (process.platform === 'darwin') { accessibility.openedSettings(); void accessibility.refresh(); } });
+  // Back from System Settings, or WorkSuite brought to the front: Accessibility is asked again and every window told.
+  watchAccessibility({ app, platform: process.platform, recheck: () => accessibility.refresh(), changed: () => broadcast('rc:changed', remoteControl.view()) });
   powerMonitor.on('resume', () => {
-    if (process.platform === 'darwin') { accessibility.openedSettings(); void accessibility.refresh(); }
+    if (process.platform === 'darwin') void accessibility.refresh().then(() => broadcast('rc:changed', remoteControl.view()));
     device.poke();
     sync.kick('resume');
     realtime.kick();

@@ -109,7 +109,8 @@ export interface AppContext {
   quickAsk: QuickAsk;
   /** The assistant's rules here, confirming its proposals, files from this computer (DSK-2…7). */
   ai: AiService;
-  relaunch: (safeMode: boolean) => void;
+  /** `extraArgs` are passed to the new process only (e.g. `--ax-restarted` after Restart WorkSuite). */
+  relaunch: (safeMode: boolean, extraArgs?: string[]) => void;
   quit: () => void;
   /** Clock in or out (FR-TRAY-01): the tray, the title bar and the HR page all go through this. */
   clockAttendance: (direction: 'in' | 'out', extra?: ClockExtra) => Promise<void>;
