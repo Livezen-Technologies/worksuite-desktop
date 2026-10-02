@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.5.0 — 2026-10-02
+
+**Added**
+
+- the AI Assistant keeps working while minimised or while you use other apps (worksuite-desktop#110). The status says what it is doing (Thinking, Working, Needs your input, Complete, Failed) and where (on this computer or online AI). The launcher animates while it works, with the status as its tooltip. When the answer is ready it shows a badge and a small "Your answer is ready" notice with View reply. When it needs a confirmation or more details it shows "Needs your input" with Open Assistant. Neither notice takes the keyboard or opens the assistant. Stop processing and Try again are always there; with online AI, Stop stops waiting for the answer but does not cancel the request on the server. Minimize while working, and an optional Auto-minimize after sending. Notices respect notification settings and Do not disturb, and the animation respects reduced motion.
+
 ## 1.4.1 — 2026-10-02
 
 - Keep ordinary first-turn questions unchanged while applying intent context to guidance, reporting, actions and topic changes after a guide (merge verification for #96).

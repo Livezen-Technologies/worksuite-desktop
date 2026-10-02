@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.8.0 — 2026-10-02
+
+**Added**
+
+- Settings › AI Assistant › Auto-minimize after sending, and an AI Assistant row under Notifications › By app to mute the assistant's notices (worksuite-desktop#110).
+
 ## 1.7.2 — 2026-10-02
 
 - Cancel outdated global searches during debounce, hide stale results, and isolate online/offline search caches by server, user and access refresh (#57).
