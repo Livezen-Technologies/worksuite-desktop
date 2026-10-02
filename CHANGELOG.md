@@ -5,6 +5,19 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-02 — 0.2.81: WhatsApp lives in Chat
+
+WhatsApp is now a channel of Chat, next to Chat and Web Chat, instead of a separate app that opened the web (#35):
+
+- **One place.** The separate WhatsApp entry is gone from the sidebar, launcher and search. Old WhatsApp links, open tabs, notifications and `worksuite://whatsapp` links open the same conversation in Chat's WhatsApp channel.
+- **Reply properly.** Pictures show inline and files open on this computer; send files with a caption (up to 25 MB); once the 24-hour window has closed, send an approved template; start a conversation with a number from the new + button or a contact's "Open the conversation".
+- **Settings in the channel.** The gear in the WhatsApp list (and Add a channel) shows each number with its status, and offers Check connection, Link again, Make default, Unlink and Connect a number — each only where you are allowed. Broadcasts, templates and business hours stay on the web, one click away.
+- **Same access as before.** Chat access alone does not open WhatsApp. Someone with WhatsApp but not Chat still gets a WhatsApp entry, which opens Chat showing only the WhatsApp channel. WhatsApp threads have no call buttons.
+
+No server change needed.
+
+---
+
 ## 2026-10-02 — 0.2.80: announcements to several companies
 
 Publishing an announcement to more than one company is tightened up and kept current everywhere (#98):
