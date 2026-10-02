@@ -5,6 +5,15 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.87: floating Ask AI by default
+
+- New installations and preferences without an AI display choice use the floating Ask AI widget, minimized to its launcher at startup.
+- Explicit Widget, Header Icon & Drawer, Hidden and startup preferences remain unchanged. The existing widget keeps background processing, minimize/maximize, result notices and workspace bounds.
+
+Modules: AI 1.7.1, Settings 1.10.1 (#127).
+
+---
+
 ## 2026-10-03 — 0.2.86: clearer search filters and result details
 
 - Search uses themed, searchable filters and preserves the selected item when results refresh. Smaller windows put secondary filters in More Filters and show result details in a drawer with focus restoration.

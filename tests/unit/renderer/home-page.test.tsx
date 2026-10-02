@@ -16,7 +16,7 @@ import { app } from '../../../src/core/app-state';
 import { call } from '../../../src/core/bridge';
 import { TabProvider } from '../../../src/core/tab-context';
 import { setRegional } from '../../../src/core/time';
-import { ui } from '../../../src/core/ui';
+import { aiWidget, ui } from '../../../src/core/ui';
 import { visibleApps } from '../../../shared/apps';
 import { resolveWebLink } from '../../../shared/links';
 import HomePage from '../../../src/modules/home/HomePage';
@@ -140,6 +140,7 @@ afterAll(() => {
 });
 
 beforeEach(() => {
+  aiWidget.set({ open: false, maximized: false });
   failDash = false;
   localStorage.clear();
   nav.navigate.mockReset();
@@ -352,7 +353,8 @@ describe('Home cards (#104)', () => {
     fireEvent.change(within(brief).getByRole('textbox', { name: 'Ask AI' }), { target: { value: 'What is due this week?' } });
     fireEvent.click(within(brief).getByRole('button', { name: 'Send to AI' }));
     expect(assistantSession.store.get().text).toBe('What is due this week?');
-    expect(ui.get().dock).toBe('ai');
+    expect(aiWidget.get().open).toBe(true);
+    expect(ui.get().dock).toBeNull();
   });
 });
 

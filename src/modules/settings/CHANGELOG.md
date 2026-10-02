@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.10.1 — 2026-10-03
+
+- Default new or missing AI display preferences to the floating widget without opening chat at startup (#127).
+
 ## 1.10.0 — 2026-10-02
 
 - Modernized global search filters, responsive result details, file metadata and stable selection (#129).
