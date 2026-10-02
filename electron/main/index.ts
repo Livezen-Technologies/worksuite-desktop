@@ -77,6 +77,7 @@ import { OfficeEditorHost } from '../services/office-editor';
 import { OfficeExternal } from '../services/office-external';
 import { createPdfStudio } from '../services/pdf/host';
 import { createLocalAI } from '../services/local-ai/host';
+import { OcrService } from '../services/ocr';
 import { OfficeLocalFiles, officePathsInArgv } from '../services/office-local';
 import { officeDocRoute } from '@shared/office';
 import { pdfPathsInArgv } from '../services/pdf/local-files';
@@ -1458,6 +1459,16 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     changed: () => broadcast('ai:localChanged'),
   });
   app.on('will-quit', () => void localAI.stop());
+  // Text read from images on this computer (worksuite-desktop#59): Tesseract, its language data fetched once when first needed.
+  const ocr = new OcrService({
+    dir: join(p.userData, 'LocalAI', 'ocr'),
+    fetch: (url, init) => net.fetch(url, { ...init, cache: 'no-store' } as RequestInit),
+    progress: (sender, ev) => {
+      const wc = webContents.fromId(sender);
+      if (wc && !wc.isDestroyed()) wc.send('ai:ocrProgress', ev);
+    },
+  });
+  app.on('will-quit', () => void ocr.stop());
   handPdfs = (paths) => void pdfStudio.openFromOs(paths);
   pdfOnline = () => pdfStudio.online();
   if (pendingPdfs.length) handPdfs(pendingPdfs.splice(0));
@@ -1647,6 +1658,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   pmsLocks.register(router);
   restaurant.register(router);
   localAI.register(router);
+  router.handle('ai:ocr', (input, c) => ocr.recognize(c.sender.id, input));
+  router.handle('ai:ocrCancel', (input) => ocr.cancel(input.id));
+  router.handle('ai:ocrStatus', () => ocr.status());
   const openGuest = async (input: string, server?: string) => {
     const info = await guests.prepare(input, server);
     const w = windows.open('meet', `/guest-meet/${info.uuid}?server=${encodeURIComponent(info.origin)}`, info.title ?? 'WorkSuite Meet · Guest');

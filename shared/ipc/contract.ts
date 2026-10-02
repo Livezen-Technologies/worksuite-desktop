@@ -39,6 +39,7 @@ import {
   type DeskStatus,
 } from '../event-desk';
 import { localRequestSchema, type LocalAIStatus, type LocalModelView } from '../local-ai';
+import { ocrRequestSchema, type OcrResult, type OcrStatus } from '../ocr';
 import {
   restaurantOutboxAction,
   restaurantOutboxAdd,
@@ -366,6 +367,10 @@ export const contract = {
   'ai:localAsk': ch(localRequestSchema, { session: true, rate: 30, sensitive: true }),
   'ai:localCancel': ch(z.strictObject({ id: z.string().regex(/^[A-Za-z0-9-]{8,64}$/) }), { session: true, rate: 60 }),
   'ai:localRestart': ch(none, { session: true, rate: 3 }),
+  // Reading the text in an image on this computer (worksuite-desktop#59): the picture as a PNG the window drew.
+  'ai:ocr': ch(ocrRequestSchema, { session: true, rate: 10 }),
+  'ai:ocrCancel': ch(z.strictObject({ id: z.string().regex(/^[A-Za-z0-9-]{8,64}$/) }), { session: true, rate: 30 }),
+  'ai:ocrStatus': ch(none, { session: true }),
   'ai:confirm': ch(z.object({ id: z.number().int().positive(), nonce: z.string().regex(/^[a-f0-9]{16,64}$/) }), { session: true, sensitive: true, rate: 5 }),
   'ai:upload': ch(none, { session: true, rate: 3 }),
   // Website chats ringing like calls (WS-WCHAT ENH-01, RING-49): the call window, the main window's bar.
@@ -1206,6 +1211,10 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'ai:localAsk': void;
   'ai:localCancel': void;
   'ai:localRestart': void;
+  /** Resolves with the text once it is read (its progress comes as `ai:ocrProgress`), or `cancelled`. */
+  'ai:ocr': OcrResult;
+  'ai:ocrCancel': void;
+  'ai:ocrStatus': OcrStatus;
   'ai:confirm': unknown;
   'ai:upload': AiUpload | null;
   'ring:state': WebchatRingState;

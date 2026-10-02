@@ -2,11 +2,15 @@ import { replyLanguageInstruction } from '@shared/localization';
 import { currentLanguage } from '../../core/i18n';
 import { isTodaySales } from './intent';
 import { todaySales, type SalesAccess } from './sales';
-import { t } from '../../core/i18n';
+import type { OcrLanguage } from '@shared/ocr';
+import { t, text } from '../../core/i18n';
 import { askLocal } from '../../core/local-ai';
 import { createStore, type Store } from '../../core/store';
 import { ask, assistantProblem, pickFile, type AskTurn, type PendingAction, type Surface } from './assistant';
+import { admitImages, ocrPng, uploadImage, type AskImage, type UploadImage } from './images';
+import { readImage, type OcrJob } from './ocr';
 import { runLocalAgent, runTool, toolsSystem, type AiTool } from './tools';
+import { imageQuestion, LOCAL_IMAGE_SYSTEM, readText, type ImageRoute, type ReadText, type VisionStep } from './vision';
 
 export interface AskEntry {
   role: 'user' | 'assistant';
@@ -26,13 +30,33 @@ export interface AskEntry {
   noGuide?: boolean;
   /** The question a guide or noGuide entry answers. */
   question?: string;
-  /** A failed or stopped answer: what to send again for Try again. */
-  retry?: { full: string; opts: SendOptions };
+  /** A failed or stopped answer: what to send again for Try again — with images, the question, its images and what was asked of them. */
+  retry?: { full: string; opts: SendOptions; images?: AskImage[]; mode?: ImageMode };
   /** Stopped by the person before it finished: what had arrived by then, if anything. */
   stopped?: boolean;
   /** Local AI needs details the person has not given, and asks for them. */
   asks?: boolean;
+  /** Images that went with a question (worksuite-desktop#59): their thumbnails. */
+  images?: Array<{ name: string; url: string }>;
+  /** Extract Text: what was read from each image, on this computer. */
+  read?: ImageRead[];
+  /** A question about an image no model could look at: why, and what can be done instead. */
+  noVision?: Extract<ImageRoute, { engine: null }>;
+  /** Answered by the model on this computer from the text read in the images, not from the images. */
+  fromImageText?: boolean;
 }
+
+/** The text read from one image. */
+export interface ImageRead {
+  name: string;
+  read: ReadText | null;
+  languages: OcrLanguage[];
+  /** Why it could not be read. */
+  error?: string;
+}
+
+/** What is done with the images in the composer: a question to a model that sees them, their text, or a question answered from their text here. */
+export type ImageMode = 'ask' | 'extract' | 'localText';
 
 /**
  * Where a question is (worksuite-desktop#110): one state for the drawer, the widget and its launcher.
@@ -124,6 +148,13 @@ export interface AskState {
   tabRef: string | null;
   files: AskFile[];
   fileError: string | null;
+  /** Images attached to the question being written (worksuite-desktop#59). */
+  images: AskImage[];
+  /** Why images offered were not attached, or cannot be sent: shown until dismissed or the next attempt. */
+  imageProblems: string[];
+  /** Reading image → Extracting text → Preparing reply, while a question with images is on its way. */
+  step: VisionStep | null;
+  imageMode: ImageMode | null;
   /** Answers that arrived while no panel showed the conversation. */
   unread: number;
   /** Panels showing the conversation now (the drawer, the widget). */
@@ -153,11 +184,24 @@ export interface SendOptions {
   sales?: SalesAccess;
   /** The latest request, separate from guide/selection context, also retained for retries. */
   request?: string;
+  /** Where a question about images goes (`routeImages`). */
+  imageRoute?: ImageRoute;
 }
 
 const LOCAL_SYSTEM = 'You are WorkSuite\'s assistant, running on this computer. Answer clearly and briefly. You cannot see the person\'s WorkSuite data or change anything right now (WorkSuite\'s module functions need a connection, and the modules turned on in Settings › AI Assistant › Module Access); say so when a question needs it.';
 
-const fresh = (): AskState => ({ entries: [], conversationId: null, text: '', busy: false, phase: 'idle', engine: null, streaming: null, useTab: true, tabRef: null, files: [], fileError: null, unread: 0, viewers: 0 });
+const fresh = (): AskState => ({ entries: [], conversationId: null, text: '', busy: false, phase: 'idle', engine: null, streaming: null, useTab: true, tabRef: null, files: [], fileError: null, images: [], imageProblems: [], step: null, imageMode: null, unread: 0, viewers: 0 });
+
+/** The most the server takes in one question (`AssistController::MAX_TEXT`), with room to spare. */
+const ONLINE_TEXT_MAX = 7800;
+
+/** The end of `prior` that fits in `room` characters, cut at a line. */
+function fit(prior: string, room: number): string {
+  if (prior.length <= room) return prior;
+  if (room < 200) return '';
+  const tail = prior.slice(prior.length - room + 40);
+  return `Earlier in this conversation (the latest part):\n${tail.slice(tail.indexOf('\n') + 1)}`;
+}
 
 /** Thrown when the model on this computer did not answer; `acted` when a WorkSuite function already ran. */
 class LocalFailed extends Error {
@@ -173,7 +217,7 @@ class LocalFailed extends Error {
 export function carriedOver(before: AskEntry[]): string {
   let i = before.length;
   while (i > 0 && !(before[i - 1]!.role === 'assistant' && !before[i - 1]!.local && !before[i - 1]!.error)) i--;
-  const lines = before.slice(i).filter((e) => !e.error && e.text.trim()).slice(-12).map((e) => `${e.role === 'user' ? 'Me' : 'Assistant'}: ${e.text.trim().slice(0, 1500)}`);
+  const lines = before.slice(i).filter((e) => !e.error && !e.noVision && e.text.trim()).slice(-12).map((e) => `${e.role === 'user' ? 'Me' : 'Assistant'}: ${e.text.trim().slice(0, 1500)}`);
   return lines.length ? `Earlier in this conversation:\n${lines.join('\n')}\n\n` : '';
 }
 
@@ -200,6 +244,15 @@ export interface AskSession {
   /** A card in the conversation was confirmed, cancelled or changed: the answer stops waiting once none is open. */
   settle(action: PendingAction): void;
   attach(): Promise<void>;
+  /** Images offered by the picker, a drop or a paste: checked, then attached to the question being written. */
+  addImages(files: File[]): Promise<void>;
+  removeImage(id: string): void;
+  /**
+   * Sends the images in the composer (worksuite-desktop#59): with the question to a model that can see them, for their
+   * text (Extract Text), or with the question to the model here, from their text. A question no model can look at is
+   * answered with why, and the draft and images stay where they are.
+   */
+  sendImages(opts: SendOptions, mode: ImageMode): Promise<void>;
   /** A new conversation — only between answers. */
   reset(): void;
   /** A panel shows the conversation: what arrived meanwhile is read. Returns the function that says it closed. */
@@ -232,7 +285,7 @@ export function createAskSession(): AskSession {
   /** The model on this computer: an answer entry, or LocalFailed. `live` is false once the person stopped it. */
   const runLocal = async (full: string, opts: SendOptions, before: AskEntry[], live: () => boolean): Promise<AskEntry> => {
     // The whole conversation, whichever answered each turn.
-    const history = before.filter((x) => !x.error).map((x) => ({ role: x.role, content: x.text }));
+    const history = before.filter((x) => !x.error && !x.noVision).map((x) => ({ role: x.role, content: x.text }));
     store.set({ streaming: '' });
     // Text arriving is the answer being written: working, no longer only thinking.
     const onText = (text: string) => {
@@ -364,6 +417,144 @@ export function createAskSession(): AskSession {
     }
   };
 
+  /** Object URLs made for images in this conversation, revoked when it ends. */
+  const urls = new Set<string>();
+  const thumbs = (images: AskImage[]) => images.map((i) => ({ name: i.name, url: i.url }));
+
+  /**
+   * A question with images, or their text (worksuite-desktop#59): Reading image → Extracting text → Preparing reply.
+   * Like `run`, it carries on whether or not a panel shows it, and Stop ends it at once — here also the text reader
+   * on this computer. A stopped or failed one leaves its question and images back in the composer (unless something
+   * new is being written there) as well as Try again, so nothing the person attached is lost.
+   */
+  const runImages = async (mode: ImageMode, question: string, images: AskImage[], opts: SendOptions, before: AskEntry[]) => {
+    const retry = { full: question, opts, images, mode };
+    let live = true;
+    const jobs: OcrJob[] = [];
+    const STOPPED = Symbol('stopped');
+    let halt: () => void = () => undefined;
+    const halted = new Promise<typeof STOPPED>((r) => (halt = () => r(STOPPED)));
+    const until = <T,>(p: Promise<T>) => Promise.race([p, halted]);
+    // The draft goes back where it was, unless the person has started something new there.
+    const restore = (st: AskState): Partial<AskState> => ({
+      ...(st.images.length ? {} : { images }),
+      ...(st.text.trim() || mode === 'extract' ? {} : { text: question }),
+    });
+    const step = (next: VisionStep) => {
+      if (live) move('progress', { step: next });
+    };
+    const stop = () => {
+      if (!live) return;
+      live = false;
+      for (const j of jobs) j.cancel();
+      running?.cancel();
+      running = null;
+      const st = store.get();
+      const partial = st.streaming?.trim();
+      move('stop', { ...restore(st), streaming: null, step: null, imageMode: null, entries: [...st.entries, { role: 'assistant', text: partial || t('ai.stopped'), stopped: true, local: st.engine === 'local' || undefined, retry }] });
+      halt();
+    };
+    stopCurrent = stop;
+    const finish = (entry: AskEntry) => {
+      if (!live) return;
+      if (entry.error) store.set((st) => restore(st));
+      answered(entry);
+    };
+    move('send', { engine: mode === 'ask' ? 'online' : 'local', imageMode: mode, step: { kind: 'reading', progress: null } });
+    try {
+      // Reading image: each drawn again, as the text reader and (for online AI) the upload take it.
+      const pngs = await until(Promise.all(images.map((i) => ocrPng(i))));
+      if (pngs === STOPPED) return;
+      let uploads: UploadImage[] = [];
+      if (mode === 'ask') {
+        const u = await until(Promise.all(images.map((i) => uploadImage(i))));
+        if (u === STOPPED) return;
+        uploads = u;
+      }
+      // Extracting text, on this computer: for Extract Text, and as help for a model reading Sinhala or Tamil.
+      const reads: ImageRead[] = [];
+      for (const [i, png] of pngs.entries()) {
+        step({ kind: 'extracting', progress: i / pngs.length });
+        const job = readImage(png, (p) =>
+          step(p.stage === 'downloading' ? { kind: 'extracting', progress: p.progress, downloading: true } : { kind: 'extracting', progress: (i + (p.stage === 'recognizing' ? (p.progress ?? 0) : 0)) / pngs.length }),
+        );
+        jobs.push(job);
+        try {
+          const r = await until(job.done);
+          if (r === STOPPED) return;
+          reads.push({ name: images[i]!.name, read: r.cancelled ? null : readText(r.lines), languages: r.languages });
+        } catch (err) {
+          // A question still goes to a model that can see the image; only Extract Text needs the text.
+          if (!live) return;
+          if (mode === 'extract') throw err;
+          reads.push({ name: images[i]!.name, read: null, languages: [], error: assistantProblem(err) });
+        }
+      }
+      if (mode === 'extract') {
+        const found = reads.some((r) => r.read?.text.trim());
+        finish({ role: 'assistant', text: found ? reads.map((r) => r.read?.text ?? '').join('\n\n') : text('No text was found in the image.'), read: reads, local: true });
+        return;
+      }
+      step({ kind: 'preparing', progress: null });
+      const asked = imageQuestion(question, reads);
+      if (mode === 'localText') {
+        if (!opts.local) throw new Error(text('No model on this computer can answer yet. Set up Local AI in Settings › Local AI.'));
+        const history = before.filter((x) => !x.error && !x.noVision).map((x) => ({ role: x.role, content: x.text }));
+        store.set({ streaming: '' });
+        const r = askLocal([{ role: 'system', content: `${LOCAL_IMAGE_SYSTEM}\n${replyLanguageInstruction(currentLanguage())}` }, ...history, { role: 'user', content: opts.context ? `${opts.context}\n\n${asked}` : asked }], (txt) => {
+          if (live) store.set({ streaming: txt });
+        });
+        running = r;
+        const a = await until(r.done);
+        if (a === STOPPED) return;
+        if (live) store.set({ streaming: null });
+        if (!a.text.trim()) throw new Error(text('The model on this computer gave no answer.'));
+        finish({ role: 'assistant', text: a.text.trim(), local: true, fromImageText: true });
+        return;
+      }
+      // Preparing reply, online, with the conversation so far: the model that reads images may not be the one that answered before.
+      const full = opts.context ? `${opts.context}\n\nQuestion: ${asked}` : asked;
+      const prior = fit(carriedOver(before), ONLINE_TEXT_MAX - full.length);
+      const answer = await until(ask(prior + full, { surface: opts.surface, refs: opts.refs, conversationId: store.get().conversationId, moduleAccess: opts.moduleAccess, images: uploads }));
+      if (answer === STOPPED) return;
+      store.set({ conversationId: answer.conversation_id });
+      finish(
+        answer.ok
+          ? { role: 'assistant', text: answer.reply ?? '', turn: answer, fallback: text('The model on this computer cannot look at pictures, so an online model that can read images answered.') }
+          : { role: 'assistant', text: answer.error ?? text('The assistant could not answer just now.'), error: true, retry },
+      );
+    } catch (err) {
+      finish({ role: 'assistant', text: assistantProblem(err), error: true, retry });
+    } finally {
+      if (live) move('fail');
+      live = false;
+      if (stopCurrent === stop) {
+        stopCurrent = null;
+        store.set({ step: null, imageMode: null, streaming: null });
+      }
+    }
+  };
+
+  const sendImages = async (opts: SendOptions, mode: ImageMode) => {
+    const s = store.get();
+    if (s.busy || !s.images.length) return;
+    const q = s.text.trim();
+    if (mode !== 'extract' && !q) {
+      store.set({ imageProblems: [text('Type a question about the image, or choose Extract Text.')] });
+      return;
+    }
+    // Nothing can look at it: say why and what can be done, keeping the question and the images where they are.
+    const route = opts.imageRoute;
+    if (mode === 'ask' && route && route.engine === null) {
+      store.set((st) => ({ imageProblems: [], entries: [...st.entries, { role: 'assistant', text: route.why, noVision: route }] }));
+      return;
+    }
+    const images = s.images;
+    const said = mode === 'extract' ? t('ai.extractRequest') : q;
+    store.set({ text: mode === 'extract' ? s.text : '', images: [], imageProblems: [], entries: [...s.entries, { role: 'user', text: said, images: thumbs(images) }] });
+    await runImages(mode, q, images, { ...opts, request: q }, s.entries);
+  };
+
   const send = async (opts: SendOptions, question?: string) => {
     const s = store.get();
     const q = (question ?? s.text).trim();
@@ -392,9 +583,17 @@ export function createAskSession(): AskSession {
     const failed = s.entries.at(-1);
     if (s.busy || !(failed?.error || failed?.stopped) || !failed.retry) return;
     const entries = s.entries.slice(0, -1);
+    const again = failed.retry;
+    if (again.images && again.mode) {
+      // The same images, sent again: the copy put back in the composer goes, so they are not sent twice.
+      const same = s.images.length === again.images.length && s.images.every((x, i) => x.id === again.images![i]!.id);
+      store.set({ entries, ...(same ? { images: [], ...(s.text.trim() === again.full ? { text: '' } : {}) } : {}) });
+      await runImages(again.mode, again.full, again.images, again.opts, entries.slice(0, -1));
+      return;
+    }
     store.set({ entries });
     // The question stays where it was; the conversation before it is everything up to it.
-    await run(failed.retry.full, failed.retry.opts, entries.slice(0, -1));
+    await run(again.full, again.opts, entries.slice(0, -1));
   };
 
   const settle = (action: PendingAction) => {
@@ -423,8 +622,27 @@ export function createAskSession(): AskSession {
         store.set({ fileError: assistantProblem(e) });
       }
     },
+    async addImages(files) {
+      const { added, problems } = await admitImages(store.get().images.length, files);
+      for (const i of added) urls.add(i.url);
+      store.set((s) => ({ images: [...s.images, ...added], imageProblems: problems }));
+    },
+    removeImage(id) {
+      const s = store.get();
+      const img = s.images.find((i) => i.id === id);
+      if (!img) return;
+      // Its thumbnail may still show in the conversation (a question that was stopped and put back).
+      if (!s.entries.some((e) => e.images?.some((x) => x.url === img.url))) {
+        URL.revokeObjectURL(img.url);
+        urls.delete(img.url);
+      }
+      store.set({ images: s.images.filter((i) => i.id !== id), imageProblems: [] });
+    },
+    sendImages,
     reset() {
       if (store.get().busy) return;
+      for (const u of urls) URL.revokeObjectURL(u);
+      urls.clear();
       store.set((s) => ({ ...fresh(), viewers: s.viewers, tabRef: s.tabRef }));
     },
     view() {

@@ -46,7 +46,8 @@
     "livekit-client": "^2.22.3",
     "node-llama-cpp": "^3.22.1",
     "pdfjs-dist": "^6.3.289",
-    "qrcode-generator": "^2.0.4"
+    "qrcode-generator": "^2.0.4",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
