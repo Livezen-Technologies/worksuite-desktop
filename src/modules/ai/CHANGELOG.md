@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.8.1 — 2026-10-03
+
+- An 'action items' task for Mail's AI chips.
+
 ## 1.8.0 — 2026-10-03
 
 - The assistant tucks itself away while you keep working (#126): sending shows Thinking… at once; switching tabs, opening another module or clicking in the workspace while it works minimizes it to the floating button (never while you are typing in it, and never moving your focus); the button's tooltip reads Thinking…; when the answer is ready a compact preview shows its first lines with View Result and Dismiss, Needs your input names what is waiting, a failure offers Try again, and Stop processing sits beside the button; View Result or the button restores the conversation; a drawer can be minimized too; no answer text while locked.

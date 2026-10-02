@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.11.1 — 2026-10-03
+
+- Settings › Mail: accounts with status and Repair, Manage, offline period and local size with Clear, notifications and badge; storage and sync; appearance; Sinhala and Tamil text for Mail.
+
 ## 1.11.0 — 2026-10-03
 
 - Add verified per-account lock-screen controls, custom idle timeouts and separate sleep and notification preferences (#115).

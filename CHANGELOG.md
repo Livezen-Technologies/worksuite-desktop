@@ -5,6 +5,26 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.92: the new Mail
+
+Mail is rebuilt to the *WorkSuite Mail — Desktop app* design, in light and dark:
+
+- **Sidebar.** All your mailboxes, with a **Unified inbox**, **smart views** with counts (Unread, Starred, Important, Today, Has attachments, Scheduled, Drafts), folders (shared and nested ones included), labels, and a card saying when everything last synced.
+- **Message list.** Search every mailbox from this computer, filter chips (Unread, Has files, Starred, Last 7 days), Today / Yesterday / Earlier this week groups, and a badge showing which account each message is in.
+- **Reading.** Open messages become **tabs**. The toolbar and bottom bar have every action; the message shows whether it passed **SPF, DKIM and DMARC**, and AI chips offer **Summarise, Action items and Translate**. The More menu adds open in a new window, view or download the original, print, add or block the sender, save as a note and Remind me.
+- **Offline.** A banner says you're offline and how far back mail is saved; actions are marked as queued, attachments not yet downloaded say so, and **Waiting to send** lists every queued action with **Undo**.
+- **Add a mailbox.** Mailboxes your administrator created (WorkSuite Local Mail — one click, no server settings), Microsoft 365, Google, IMAP/SMTP or POP3/send-only, and how much to keep for offline use.
+- **Writing.** Compose opens in its own tab, with templates, your signature, AI writing help, **Send later** and an 8-second **Undo send**. Sending offline queues the message.
+- **Shared team inboxes** have Open / Pending / Done tabs, Assigned to me and Unassigned.
+- **Search** understands `from:`, `to:`, `has:attachment`, `is:unread`, `is:starred`, `before:` and `after:`.
+- **Settings › Mail** covers accounts (with Repair), offline storage, sync, notifications and appearance (density, reading pane, text size, action bar).
+- **Notifications** for new mail have Reply, Archive and Mark read.
+- **Keyboard:** j/k, Enter, Esc, e archive, # delete, ! spam, s star, u unread, r / a / f, n new, / search.
+
+Not yet in this release: a formatting toolbar in compose, attaching from Files, recipient chips, internal notes and snooze in shared inboxes, and the Import mail screen. Message HTML stays sanitised and remote images stay blocked. Needs the server update (Mail: `GET /api/mail/views`).
+
+---
+
 ## 2026-10-03 — 0.2.91: lock-screen settings per account, protected by your password
 
 Security → Lock Screen is rebuilt (#115):
