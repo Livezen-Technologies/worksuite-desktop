@@ -279,14 +279,16 @@ describe('compose', () => {
     show('/mail?compose=1&to=ann@example.org');
     const form = await screen.findByRole('form', { name: 'New email' });
     fireEvent.change(within(form).getByLabelText('Subject'), { target: { value: 'Hello' } });
-    fireEvent.change(within(form).getByLabelText('Message'), { target: { value: 'Hi Ann' } });
+    const message = within(form).getByRole('textbox', { name: 'Message' });
+    message.innerHTML = '<div>Hi <b>Ann</b></div><img src=x onerror="alert(1)">';
+    fireEvent.input(message);
     fireEvent.click(within(form).getByRole('button', { name: 'Send' }));
     expect(await screen.findByText(/Sending “Hello” in \d s/)).toBeTruthy();
     expect(call).not.toHaveBeenCalledWith('offline:submit', expect.anything());
     await act(async () => {
       vi.advanceTimersByTime(8_500);
     });
-    await waitFor(() => expect(call).toHaveBeenCalledWith('offline:submit', expect.objectContaining({ entity: 'message.send', path: '/api/mail/send', body: expect.objectContaining({ to: ['ann@example.org'], subject: 'Hello', body_html: 'Hi Ann', mailbox: '1' }) })));
+    await waitFor(() => expect(call).toHaveBeenCalledWith('offline:submit', expect.objectContaining({ entity: 'message.send', path: '/api/mail/send', body: expect.objectContaining({ to: ['ann@example.org'], subject: 'Hello', body_html: '<div>Hi <b>Ann</b></div>', body_text: 'Hi Ann', mailbox: '1' }) })));
   });
 
   it('schedules with Send later on the server', async () => {
