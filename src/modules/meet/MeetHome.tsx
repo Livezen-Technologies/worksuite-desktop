@@ -51,6 +51,8 @@ export function MeetHome() {
   const now = useNow(60_000);
 
   const run = async (what: 'new' | 'join', fn: () => Promise<void>) => {
+    // One at a time: a second Start now while the first is starting would make a second meeting.
+    if (busy) return;
     setBusy(what);
     try {
       await fn();
@@ -181,7 +183,7 @@ export function MeetHome() {
         </div>
         <Recordings />
       </main>
-      {menu ? <PopMenu at={menu} width={320} items={newItems} label={t('home.new')} onClose={() => setMenu(null)} /> : null}
+      {menu ? <PopMenu at={menu} width={320} stacked items={newItems} label={t('home.new')} onClose={() => setMenu(null)} /> : null}
       {created ? <CreatedDialog m={created} host={me} onClose={() => setCreated(null)} /> : null}
       {scheduling ? <ScheduleDialog onClose={() => setScheduling(false)} online /> : null}
       {checking ? <DeviceCheck name={me ?? ''} onClose={() => setChecking(false)} /> : null}

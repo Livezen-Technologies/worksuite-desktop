@@ -4,6 +4,14 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.4.0 — 2026-10-01
+
+**Added**
+
+- a Q&A & Polls tab on the meeting's details (worksuite-desktop#92). Hosts, co-hosts and the organiser see everything; participants see the visible questions, without the names of anonymous askers, and the poll results that were shared.
+- Scheduling a meeting starts from your Meet defaults, set in Host Controls › My defaults for new meetings (worksuite-desktop#91).
+
+
 ## 1.3.2 — 2026-10-01
 
 - Meetings show the record they were scheduled from (Tender Meeting, Lead, Customer, Supplier) with Open Related Record when the server sends it; Schedule can be prefilled from a record (#100, #101 groundwork).

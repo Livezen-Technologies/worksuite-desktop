@@ -8,7 +8,7 @@ import { Avatar, Button, Modal, cx } from '../../components/ui';
 import { TYPES, type MeetingPreset } from './api';
 import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';
-import { DEFAULT_ROOM_SETTINGS, type RoomSettings } from '../meet/api';
+import { DEFAULT_ROOM_SETTINGS, type MeetDefaultsView, type RoomSettings } from '../meet/api';
 import { RoomSettingsFields } from '../meet/RoomRoles';
 import { checkConflicts, ConflictFlag, useConflictGate, type ConflictQuery } from '../calendar/conflicts';
 
@@ -64,7 +64,8 @@ export function ScheduleDialog({ onClose, online, onCreated, preset }: { onClose
   const [roomId, setRoomId] = useState<number | ''>('');
   const [address, setAddress] = useState('');
   const [people, setPeople] = useState<Array<{ id: number; name: string; role: 'required' | 'host' | 'presenter' }>>([]);
-  const [roomSettings, setRoomSettings] = useState<RoomSettings>(DEFAULT_ROOM_SETTINGS);
+  // Only what is changed here is sent: the meeting begins with its organiser's own defaults (worksuite-desktop#91), which the server applies.
+  const [roomSettings, setRoomSettings] = useState<Partial<RoomSettings>>({});
   const [passcode, setPasscode] = useState('');
   const [roomOpen, setRoomOpen] = useState(false);
   const [q, setQ] = useState('');
@@ -77,6 +78,9 @@ export function ScheduleDialog({ onClose, online, onCreated, preset }: { onClose
   const needsRoom = where === 'room' || where === 'hybrid';
   const paste = PROVIDERS.find(([k]) => k === provider)?.[2] ?? false;
   const builtin = isOnline && provider === 'builtin';
+  // My defaults for new meetings, so the room settings shown are the ones the meeting will begin with. None from an older server.
+  const myDefaults = useQuery({ queryKey: ['meet', 'defaults'], queryFn: ({ signal }) => apiGet<MeetDefaultsView>('/api/meet/defaults', undefined, signal), enabled: builtin, retry: false, staleTime: 60_000 });
+  const roomValue: RoomSettings = { ...DEFAULT_ROOM_SETTINGS, ...myDefaults.data?.settings, ...roomSettings };
   const directory = useQuery({ queryKey: ['chat', 'directory'], queryFn: ({ signal }) => apiGet<{ users: Array<{ id: number; name: string; email?: string }> }>('/api/chat/directory', undefined, signal), staleTime: 5 * 60_000 });
   const rooms = useQuery({
     queryKey: ['meetings', 'rooms-available', start, end],
@@ -303,7 +307,7 @@ export function ScheduleDialog({ onClose, online, onCreated, preset }: { onClose
                   </span>
                   <input value={passcode} maxLength={12} onChange={(e) => setPasscode(e.target.value.replace(/[^A-Za-z0-9]/g, ''))} className={field} />
                 </label>
-                <RoomSettingsFields value={roomSettings} onChange={(patch) => setRoomSettings({ ...roomSettings, ...patch })} />
+                <RoomSettingsFields value={roomValue} onChange={(patch) => setRoomSettings({ ...roomSettings, ...patch })} />
                 <p className="text-[11.5px] text-ink-3">Co-hosts and presenters are chosen on each person above. You can change all of this during the meeting.</p>
               </div>
             ) : null}

@@ -20,7 +20,7 @@ vi.mock('livekit-client', () => ({
 }));
 const nav = vi.fn();
 
-const { ApiError, apiGet } = await import('../../../src/core/api');
+const { ApiError, apiGet, apiPost } = await import('../../../src/core/api');
 const { call } = await import('../../../src/core/bridge');
 const { app } = await import('../../../src/core/app-state');
 const { byDay, checkMeetingInput, historyJoinable, lengthLabel, meetingMinutes, upcomingJoinable } = await import('../../../src/modules/meet/home');
@@ -116,11 +116,33 @@ describe('Meet Home', () => {
     fireEvent.click(screen.getByRole('button', { name: /New meeting/ }));
     const menu = screen.getByRole('menu', { name: 'New meeting' });
     expect([...menu.querySelectorAll('[role="menuitem"]')].map((b) => b.textContent)).toEqual([
-      'Start nowJoin now and invite people from inside',
-      'Create a link for laterGet a link and code to share',
-      'Schedule in CalendarInvite people; it shows in Calendar',
+      'Start nowStart a meeting and invite others.',
+      'Create link for laterGet a meeting link to share.',
+      'Schedule in CalendarChoose a time and invite participants.',
     ]);
     fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('New meeting: one highlight that follows the pointer and the arrow keys, and one meeting per choice (worksuite-desktop#90)', async () => {
+    serve({});
+    home();
+    fireEvent.click(screen.getByRole('button', { name: /New meeting/ }));
+    const items = [...screen.getByRole('menu', { name: 'New meeting' }).querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+    // Each is an icon beside a title, with the description under it.
+    expect(items[0]!.querySelectorAll('svg')).toHaveLength(1);
+    expect(items[0]!.lastElementChild!.children).toHaveLength(2);
+    expect(document.activeElement).toBe(items[0]);
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(items[1]);
+    fireEvent.mouseEnter(items[2]!);
+    expect(document.activeElement).toBe(items[2]);
+    fireEvent.keyDown(window, { key: 'ArrowUp' });
+    expect(document.activeElement).toBe(items[1]);
+    // Chosen twice before the menu is gone: one link is made.
+    fireEvent.click(items[1]!);
+    fireEvent.click(items[1]!);
+    await waitFor(() => expect(vi.mocked(apiPost).mock.calls.filter(([p]) => p === '/api/meet/create')).toHaveLength(1));
     expect(screen.queryByRole('menu')).toBeNull();
   });
 
@@ -326,5 +348,28 @@ describe('the pre-join screen', () => {
   it('an audio meeting starts with the camera off', () => {
     lobby({ mode: 'audio' });
     expect(screen.getByRole('button', { name: 'Turn on camera' })).toBeTruthy();
+  });
+});
+
+describe('a menu opened from a button (worksuite-desktop#90)', () => {
+  it('opens above the button when there is no room below, and never wider than the window', async () => {
+    const { PopMenu, below } = await import('../../../src/modules/files/Menu');
+    const button = document.createElement('button');
+    button.getBoundingClientRect = () => ({ top: 700, bottom: 744, left: 40, right: 200, width: 160, height: 44, x: 40, y: 700, toJSON: () => ({}) }) as DOMRect;
+    const at = below(button, 'left', 320);
+    expect(at).toEqual({ x: 40, y: 748, above: 696 });
+    const rect = HTMLElement.prototype.getBoundingClientRect;
+    HTMLElement.prototype.getBoundingClientRect = function () {
+      return this.getAttribute('role') === 'menu' ? ({ top: 0, left: 0, width: 320, height: 200, right: 320, bottom: 200, x: 0, y: 0, toJSON: () => ({}) } as DOMRect) : rect.call(this);
+    };
+    try {
+      window.innerHeight = 800;
+      render(<PopMenu at={at} stacked width={320} label="Choices" items={[{ label: 'One', hint: 'The first', icon: 'video', run: () => undefined }]} onClose={() => undefined} />);
+      const menu = screen.getByRole('menu', { name: 'Choices' });
+      expect(menu.style.top).toBe('496px');
+      expect(menu.style.width.replace(/[\s*]+/g, '')).toBe('min(320px,calc(100vw-16px))');
+    } finally {
+      HTMLElement.prototype.getBoundingClientRect = rect;
+    }
   });
 });

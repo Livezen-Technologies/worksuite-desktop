@@ -4,7 +4,7 @@
  */
 type Note = { hz: number[]; at: number; len: number };
 
-export type ToneKind = 'ring' | 'ringback' | 'webchat' | 'webchat-strong';
+export type ToneKind = 'ring' | 'ringback' | 'webchat' | 'webchat-strong' | 'hand';
 
 const PATTERNS: Record<ToneKind, { every: number; notes: Note[]; level: number }> = {
   // Two rising notes, twice, then a pause.
@@ -38,6 +38,15 @@ const PATTERNS: Record<ToneKind, { every: number; notes: Note[]; level: number }
       { hz: [1175, 1397], at: 0.26, len: 0.24 },
       { hz: [880, 1175], at: 0.62, len: 0.2 },
       { hz: [1175, 1397], at: 0.88, len: 0.3 },
+    ],
+  },
+  // A hand raised in a meeting (worksuite-desktop#92): one soft rising pair, for the hosts. Played once.
+  hand: {
+    every: 60_000,
+    level: 0.14,
+    notes: [
+      { hz: [660], at: 0, len: 0.12 },
+      { hz: [990], at: 0.14, len: 0.2 },
     ],
   },
   // The familiar two-tone ringback, quietly.
@@ -89,6 +98,12 @@ export function playTone(kind: ToneKind, volume = 1): { stop: () => void; setVol
       if (master) master.gain.value = Math.max(0, Math.min(1, v));
     },
   };
+}
+
+/** A pattern played once, not repeated: a notice rather than a ring. */
+export function playOnce(kind: ToneKind, volume = 1): void {
+  const t = playTone(kind, volume);
+  setTimeout(t.stop, 1_500);
 }
 
 const VOLUME_KEY = 'ws.ringtone.volume';

@@ -4,6 +4,32 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.4.0 — 2026-10-01
+
+**Added**
+
+- Q&A, Polls and Raise hand in the meeting (worksuite-desktop#92). Participants ask and upvote questions; hosts and co-hosts answer, mark answered and hide them. Hosts create single- or multiple-choice polls, launch them, close voting and share the results, and each person votes once while everyone sees how many have voted. Before you send, each question and poll says whether your name will be shown. Raised hands show on tiles and in People, in the order they went up. Hosts are told when a hand goes up and can lower one or all, and raising a hand never turns the microphone on. Host Controls switch each one on or off, and the state is kept across devices and reconnects. Labels are in English, Sinhala and Tamil.
+- **New meeting menu** (worksuite-desktop#90): each choice is an icon beside its title, with a short description underneath (Start now, Create link for later, Schedule in Calendar).
+  - One option is highlighted at a time, following the pointer or the arrow keys.
+  - The shadow is lighter.
+  - The menu opens above the button when there is no room below.
+  - Choosing twice before the menu closes starts only one meeting.
+  - Labels are in English, Sinhala and Tamil.
+- **Host Controls** (worksuite-desktop#91): a toolbar button, for the host and co-hosts only, opens a drawer with four groups.
+  - **Participant permissions:** screen sharing, reactions, microphone and camera.
+    - Turning the microphone or camera off stops it at once, and the button tells the participant why it is off.
+    - Turning it back on lets participants switch it on themselves; it does not switch on by itself.
+  - **Chat:** chat on or off for participants.
+  - **Meeting access:**
+    - Host must join first; a co-host counts as the host.
+    - Open, Trusted or Restricted access, and Allow guests to request access.
+  - **Activities:** whiteboard, Q&A, polls, raise hand, recording and transcription.
+  - **Two tabs:** "This meeting", and "My defaults for new meetings" for future meetings.
+  - **Updates:** changes reach everyone at once, and participants are told what was turned off. Settings come back after a reconnect.
+  - **Reactions:** new emoji reactions in the meeting.
+  - **Scheduling:** the form starts from your defaults.
+
+
 ## 1.3.0 — 2026-10-01
 
 **Added**

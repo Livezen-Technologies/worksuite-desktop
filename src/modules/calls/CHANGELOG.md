@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.0 — 2026-10-01
+
+**Added**
+
+- a raised-hand badge on call tiles, a hand sound, and a tab row in the call's side panel that scrolls when its tabs do not fit (worksuite-desktop#92).
+
 ## 1.1.1 — 2026-10-01
 
 - A call's chat opens through the shared chat-window path, saving the draft first (#103).

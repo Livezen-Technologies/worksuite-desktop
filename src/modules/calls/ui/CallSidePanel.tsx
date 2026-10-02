@@ -59,7 +59,9 @@ export function CallSidePanel({ tabs, active, rect, docked, width }: { tabs: Pan
           className="absolute top-0 bottom-0 -left-1 z-10 w-2 cursor-col-resize hover:bg-primary/30 focus-visible:bg-primary/40"
         />
       ) : null}
-      <div role="tablist" aria-label="Panel" className="flex shrink-0 items-center border-b border-line px-2">
+      <div className="flex shrink-0 items-center border-b border-line px-2">
+        {/* Many tabs in a narrow panel scroll sideways rather than squeeze. */}
+        <div role="tablist" aria-label="Panel" className="flex min-w-0 flex-1 items-center overflow-x-auto scroll-thin">
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -67,13 +69,13 @@ export function CallSidePanel({ tabs, active, rect, docked, width }: { tabs: Pan
             role="tab"
             aria-selected={t.id === shown.id}
             onClick={() => callUi.set({ panelTab: t.id })}
-            className={cx('relative h-[42px] px-2.5 text-[12.5px]', t.id === shown.id ? 'font-bold text-primary shadow-[inset_0_-2px_0_var(--color-primary)]' : 'font-medium text-ink-2 hover:text-ink')}
+            className={cx('relative h-[42px] shrink-0 px-2.5 text-[12.5px] whitespace-nowrap', t.id === shown.id ? 'font-bold text-primary shadow-[inset_0_-2px_0_var(--color-primary)]' : 'font-medium text-ink-2 hover:text-ink')}
           >
             {t.label}
             {t.badge ? <span className="ml-1 rounded-full bg-[#E0522F] px-1.5 text-[10.5px] font-bold text-white">{t.badge}</span> : null}
           </button>
         ))}
-        <span className="flex-1" />
+        </div>
         <button type="button" aria-label="Close the panel" onClick={() => callUi.set({ panelOpen: false })} className="flex h-8 w-8 items-center justify-center rounded-[8px] text-[16px] text-ink-2 hover:bg-subtle hover:text-ink">
           ×
         </button>

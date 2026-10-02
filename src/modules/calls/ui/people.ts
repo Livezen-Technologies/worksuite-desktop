@@ -19,9 +19,11 @@ export interface CallPerson {
   screenPaused: boolean;
   host?: boolean;
   guest?: boolean;
+  /** A raised hand in a meeting (worksuite-desktop#92): its place in the queue, and how to say so. */
+  hand?: { position: number; label: string } | null;
 }
 
-export function personOf(p: Participant, self: boolean, extra: { host?: boolean; guest?: boolean } = {}): CallPerson {
+export function personOf(p: Participant, self: boolean, extra: { host?: boolean; guest?: boolean; hand?: CallPerson['hand'] } = {}): CallPerson {
   const cam = p.getTrackPublication(Track.Source.Camera);
   const scr = p.getTrackPublication(Track.Source.ScreenShare);
   return {

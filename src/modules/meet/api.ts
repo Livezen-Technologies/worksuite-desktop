@@ -53,6 +53,42 @@ export interface RoomSettings {
   record: 'host' | 'hosts';
   /** Who sees the meeting's transcripts and minutes. */
   transcripts: 'participants' | 'hosts';
+  /** Q&A, polls and raised hands (worksuite-desktop#92); missing from an older server, which has none of them. */
+  qa?: boolean;
+  /** Askers may leave their name off a question. */
+  qa_anonymous?: boolean;
+  polls?: boolean;
+  raise_hand?: boolean;
+  /**
+   * Host Controls (worksuite-desktop#91); missing from an older server. Who may come in: open (anyone with the
+   * link), trusted (invited people signed in come straight in, everybody else asks) or restricted (only invited
+   * people may ask). `access` and `waiting_room` are what it means in the settings before it.
+   */
+  access_mode?: AccessMode;
+  /** Guests (no WorkSuite account) may come in, or ask to. Never in a restricted meeting. */
+  guest_requests?: boolean;
+  /** What participants (everybody but the host and co-hosts) may use. */
+  microphone?: boolean;
+  camera?: boolean;
+  reactions?: boolean;
+  whiteboard?: boolean;
+  /** Off: nobody records or transcribes this meeting. */
+  recording?: boolean;
+  transcription?: boolean;
+}
+
+export type AccessMode = 'open' | 'trusted' | 'restricted';
+
+/** The access mode, from a server that sends it or from the settings before it. */
+export function accessModeOf(s: Partial<RoomSettings>): AccessMode {
+  if (s.access_mode) return s.access_mode;
+  if (s.access === 'invited') return 'restricted';
+  return s.waiting_room === false ? 'open' : 'trusted';
+}
+
+/** Whether guests may come in or ask, from a server that sends it or from the settings before it. */
+export function guestsOf(s: Partial<RoomSettings>): boolean {
+  return s.guest_requests ?? (s.access ?? 'anyone') === 'anyone';
 }
 
 export const DEFAULT_ROOM_SETTINGS: RoomSettings = {
@@ -64,7 +100,28 @@ export const DEFAULT_ROOM_SETTINGS: RoomSettings = {
   chat: 'everyone',
   record: 'host',
   transcripts: 'participants',
+  qa: true,
+  qa_anonymous: true,
+  polls: true,
+  raise_hand: true,
+  access_mode: 'trusted',
+  guest_requests: true,
+  microphone: true,
+  camera: true,
+  reactions: true,
+  whiteboard: true,
+  recording: true,
+  transcription: true,
 };
+
+/** `GET/PUT /api/meet/defaults`: my defaults for the meetings I start or schedule (worksuite-desktop#91). */
+export interface MeetDefaultsView {
+  settings: RoomSettings;
+  /** False: never saved, so new meetings use the standard settings. */
+  saved: boolean;
+  /** False: the server cannot keep them yet. */
+  available?: boolean;
+}
 
 /** `GET/PUT /api/meet/{uuid}/settings`. */
 export interface RoomSettingsView {
@@ -89,11 +146,82 @@ export interface RoomActivity {
 export const may = {
   manage: (r: MeetRole) => r === 'host' || r === 'cohost',
   present: (r: MeetRole, s: RoomSettings) => s.present === 'everyone' || r !== 'participant',
-  record: (r: MeetRole, s: RoomSettings) => r === 'host' || (r === 'cohost' && s.record === 'hosts'),
+  /** Nobody while the room has recording off (worksuite-desktop#91). */
+  record: (r: MeetRole, s: RoomSettings) => s.recording !== false && (r === 'host' || (r === 'cohost' && s.record === 'hosts')),
   invite: (r: MeetRole, s: RoomSettings) => s.invite === 'everyone' || r === 'host' || r === 'cohost',
   chat: (r: MeetRole, s: RoomSettings) => (s.chat === 'off' ? false : s.chat === 'hosts' ? r === 'host' || r === 'cohost' : true),
   transcripts: (r: MeetRole, s: RoomSettings) => s.transcripts === 'participants' || r === 'host' || r === 'cohost',
+  /** Participants' permissions (worksuite-desktop#91): the host and co-hosts are never limited. A setting an older server leaves out is on. */
+  microphone: (r: MeetRole, s: RoomSettings) => r === 'host' || r === 'cohost' || s.microphone !== false,
+  camera: (r: MeetRole, s: RoomSettings) => r === 'host' || r === 'cohost' || s.camera !== false,
+  react: (r: MeetRole, s: RoomSettings) => r === 'host' || r === 'cohost' || s.reactions !== false,
+  draw: (r: MeetRole, s: RoomSettings) => r === 'host' || r === 'cohost' || s.whiteboard !== false,
+  transcribe: (r: MeetRole, s: RoomSettings) => s.transcription !== false && (r === 'host' || r === 'cohost' || may.record(r, s)),
 };
+
+/**
+ * Q&A, polls and raised hands (worksuite-desktop#92): `GET /api/meet/{uuid}/activities`.
+ * The server keeps them and decides who sees what; every change it is told of
+ * comes back as the whole state.
+ */
+export interface MeetQuestion {
+  id: number;
+  text: string;
+  anonymous: boolean;
+  /** Null when asked anonymously, for everybody but the host and co-hosts. */
+  author: string | null;
+  author_id: number | null;
+  guest: boolean | null;
+  mine: boolean;
+  status: 'open' | 'answered';
+  answer: string | null;
+  answered_by: string | null;
+  answered_at: string | null;
+  /** Only the host and co-hosts are sent hidden questions. */
+  hidden: boolean;
+  votes: number;
+  voted: boolean;
+  created_at: string | null;
+}
+
+export interface MeetPoll {
+  id: number;
+  question: string;
+  kind: 'single' | 'multiple';
+  options: string[];
+  anonymous: boolean;
+  status: 'draft' | 'live' | 'closed';
+  shared: boolean;
+  /** How many have voted: everybody sees it while the poll is live. */
+  voters: number;
+  /** What I chose, once I have voted. */
+  my_choices: number[] | null;
+  /** The count per option: the hosts', and everybody's once shared. */
+  results: number[] | null;
+  /** Who chose what: the hosts', and never on an anonymous poll. */
+  ballots?: Array<{ name: string; choices: number[] }>;
+  created_at?: string | null;
+  launched_at?: string | null;
+  closed_at?: string | null;
+}
+
+export interface RaisedHand {
+  /** `u12` for a person signed in, the guest's identity for a guest. */
+  who: string;
+  user_id: number | null;
+  name: string;
+  raised_at: string;
+  mine: boolean;
+}
+
+export interface MeetActivities {
+  enabled: { qa: boolean; qa_anonymous: boolean; polls: boolean; raise_hand: boolean };
+  me: { who: string; name: string; manages: boolean; guest: boolean };
+  questions: MeetQuestion[];
+  polls: MeetPoll[];
+  /** First raised first. */
+  hands: RaisedHand[];
+}
 
 export interface Created extends MeetInfo {
   code: string;

@@ -5,6 +5,58 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-02 — 0.2.75: Q&A, polls and raise hand; Host Controls; a clearer New meeting menu
+
+- **Q&A** (#92):
+  - Participants ask questions and upvote them, one vote each.
+  - Hosts and co-hosts answer them, mark them answered, or hide inappropriate ones. Participants never see hidden
+    questions.
+- **Polls** (#92):
+  - Hosts and co-hosts create single- or multiple-choice polls, launch them and close voting.
+  - Results reach participants only when the host shares them.
+  - Each person votes once, and everyone sees how many have voted.
+- **Anonymous or named:** before you send a question or a vote, the screen says whether your name will be shown.
+- **Raise hand** (#92):
+  - The toolbar button puts a hand badge on your tile and in People, in the order hands went up.
+  - Hosts are told when a hand goes up, and can lower one hand or all of them. You can lower your own.
+  - Raising your hand never turns your microphone on.
+- **Host Controls:** Q&A, anonymous questions, polls and raise hand can each be switched off.
+- **Sync:** everything stays the same across devices and reconnects.
+- **Meeting details:** a new **Q&A & Polls** tab. The organiser, hosts and co-hosts see everything. Participants
+  see the visible questions, without anonymous names, and the poll results that were shared.
+- **Host Controls** (#91): the host and co-hosts get a toolbar button that opens one drawer.
+  - **Participant permissions:** screen sharing, reactions, microphone and camera.
+    - Turning the microphone or camera off stops it straight away, and participants are told why.
+    - Turning it back on lets them switch it on themselves.
+  - **Chat:** chat on or off for participants.
+  - **Meeting access:** Host must join first (a co-host counts), and the access mode:
+    - **Open:** anyone with the link joins.
+    - **Trusted:** invited people come straight in; everyone else asks to be let in.
+    - **Restricted:** only invited people can ask to be let in.
+    - Guest requests can be switched on or off.
+  - **Activities:** whiteboard, Q&A, polls, raise hand, recording and transcription.
+  - **This meeting vs. future meetings:** "This meeting" settings are kept apart from "My defaults for new meetings",
+    which new and scheduled meetings start from.
+  - **Updates:** changes reach everyone at once and come back after a reconnect.
+  - **Reactions:** meetings now have emoji reactions.
+- Where it bites (#91):
+  - Rooms made before this read their old settings as Open or Trusted, so invited people may now come straight in
+    where they used to wait in the waiting room.
+  - People waiting to be let in join the meeting's conversation only once they are admitted.
+  - Reactions and whiteboard drawing are held back by every app, not by the server.
+
+- **New meeting menu** (#90):
+  - Each choice is an icon beside its title with a short description underneath: Start now, Create link for later,
+    Schedule in Calendar.
+  - One option is highlighted at a time, by mouse or arrow keys, and the shadow is lighter.
+  - The menu opens above the button when there is no room below.
+  - Choosing twice quickly starts only one meeting.
+  - Every menu opened from a button now flips above it when it would not fit below.
+- Where it bites:
+  - This needs WorkSuite Communication 1.3.0 and Meeting 1.4.0 on the server. Run its migrations (two new ones).
+  - Against an older server, Raise hand is greyed out, and Q&A and Polls have nothing to show.
+  - An anonymous poll keeps no name with a vote, so not even the host can see who chose what.
+
 ## 2026-10-01 — 0.2.74: Chats in windows of their own; schedule conflicts asked before moving; a modern Home with announcements
 
 - **Chats open in windows of their own** (#103). **Open in new window** in a conversation's header — in Chat and in
