@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.9.2 — 2026-10-02
+
+- Replace avatar image elements when their source changes so reused rows cannot show a previous user (#119).
+
 ## 1.9.1 — 2026-10-02
 
 - Greeting now picks morning/afternoon/evening correctly when the 12-hour clock is set; Sinhala and Tamil text for the new Home.
