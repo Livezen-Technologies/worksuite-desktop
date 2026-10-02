@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.4.0 — 2026-10-02
+
+- Prevent upload-time reconnect races, verify gateway readiness and report connection recovery diagnostics (#123).
+
 ## 1.3.2 — 2026-10-02
 
 - Incoming calls say 'Incoming voice/video call from X'; while locked they say 'Incoming WorkSuite call' and name the caller only when Show Caller Details is on (#113).

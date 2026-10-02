@@ -5,6 +5,15 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.88: steadier realtime connections
+
+- Quiet connections stay healthy with the companion gateway's observable heartbeat. Reconnect attempts are coalesced, retired socket events are ignored, and connection status requires authenticated readiness.
+- Connection details distinguish offline, server unavailable, reconnecting and verified connected states, with safe disconnect reasons and attempt counts.
+
+Modules: Notifications 1.4.0 (#123). Deploy the server/gateway companion PR #66 and restart its managed gateway process first. Production upload/network/sleep acceptance remains in `docs/CONNECTION_RECOVERY.md`.
+
+---
+
 ## 2026-10-03 — 0.2.87: floating Ask AI by default
 
 - New installations and preferences without an AI display choice use the floating Ask AI widget, minimized to its launcher at startup.

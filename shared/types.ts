@@ -490,6 +490,8 @@ export interface NotificationItem {
 }
 
 export interface StatusSnapshot {
+  internetOnline?: boolean;
+  realtimeDiagnostics?: { attempt: number; lastDisconnect: string | null };
   network: NetworkStatus;
   realtime: RealtimeState;
   pendingChanges: number;
