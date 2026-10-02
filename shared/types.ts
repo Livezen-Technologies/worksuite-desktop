@@ -477,6 +477,8 @@ export interface StatusSnapshot {
   pendingChanges: number;
   unread: { mail: number; chat: number; notifications: number; tasks: number };
   notificationsPausedUntil: string | null;
+  /** Whether the operating system lets this app show notifications (false: banners are blocked there). */
+  notificationsSupported?: boolean;
   services: Record<string, ServiceHealth>;
   locked: boolean;
   safeMode: boolean;

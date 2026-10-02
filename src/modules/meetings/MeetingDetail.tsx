@@ -6,20 +6,20 @@ import { app } from '../../core/app-state';
 import { call, errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
-import { bytes, dateLabel, parseTs, relative, timeLabel } from '../../core/time';
+import { bytes, currentZone, dateLabel, parseTs, relative, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Button, Chip, Empty, ErrorNote, FileBadge, Modal, Spinner, cx } from '../../components/ui';
 import { useNow } from '../calls/parts';
 import { openMeeting } from '../meet/api';
 import { RecordingProgress } from '../meet/RecordingProgress';
 import type { Stroke } from '../meet/session';
-import { openRelatedLabel, providerLabel, RSVP_LABEL, typeLabel, type AgendaItem, type Detail, type Person, type Rsvp } from './api';
+import { openRelatedLabel, providerLabel, RSVP_LABEL, typeLabel, type AgendaItem, type Delivery, type Detail, type Person, type Rsvp } from './api';
 import { Select } from '../../components/Select';
 import { MinutesEditor } from './minutes/MinutesEditor';
 import { TranscriptsTab } from './transcripts/TranscriptsTab';
 import { QaPollsTab } from './QaPollsTab';
 import { latestTranscriptText } from './transcripts/material';
-import { useInvitationAnswer } from '../calendar/conflicts';
+import { invitationsChanged, useInvitationAnswer } from '../calendar/conflicts';
 import type { ChatMessage } from '../chat/types';
 
 const TABS = ['Summary', 'Agenda', 'People', 'Minutes', 'Transcripts', 'Q&A & Polls', 'Files', 'Board', 'Activity'] as const;
@@ -65,11 +65,9 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
   const [reason, setReason] = useState('');
   const q = useQuery({ queryKey: ['meetings', 'detail', id], queryFn: ({ signal }) => apiGet<Detail>(`/api/meetings/${id}`, undefined, signal), refetchOnMount: 'always', refetchInterval: (query) => query.state.data?.recordings?.some(r => !['ready', 'failed'].includes(r.status)) ? 10_000 : 30_000 });
   useTabTitle(q.data ? `Meeting · ${q.data.meeting.title}` : 'Meeting');
-  // A cancelled or moved meeting no longer overlaps anything: the calendar and its conflict answers are read again (#99).
-  const refresh = () => {
-    void qc.invalidateQueries({ queryKey: ['meetings'] });
-    void qc.invalidateQueries({ queryKey: ['calendar'] });
-  };
+  // A cancelled or moved meeting no longer overlaps anything: the calendar and its conflict answers are read again (#99),
+  // and an answer here leaves Home's Waiting for me and Meetings' Invitations at once (#97).
+  const refresh = () => invitationsChanged(qc);
   const act = async (fn: () => Promise<unknown>, done?: string) => {
     try {
       await fn();
@@ -108,7 +106,8 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
               {m.live_status === 'ongoing' ? <Chip tone="danger">Happening now</Chip> : m.live_status === 'cancelled' ? <Chip>Cancelled</Chip> : m.live_status === 'completed' ? <Chip tone="success">Completed</Chip> : null}
             </div>
             <span className="text-ink-2">
-              {dateLabel(m.start_at)} {timeLabel(m.start_at)}–{timeLabel(m.end_at)} · {m.where || providerLabel(m)} · {organiser ? 'organised by you' : `organised by ${m.organizer ?? 'someone'}`}
+              {dateLabel(m.start_at)} {timeLabel(m.start_at)}–{timeLabel(m.end_at)}
+              {m.timezone && m.timezone !== currentZone() ? ` (your time; booked in ${m.timezone})` : ''} · {m.where || providerLabel(m)} · {organiser ? 'organised by you' : `organised by ${m.organizer ?? 'someone'}`}
               {m.project ? ` · Project: ${m.project}` : ''}
             </span>
           </div>
@@ -187,6 +186,7 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
               <span className="break-words text-ink">{m.where || providerLabel(m)}</span>
               {m.online_url && !(m.where ?? '').includes(m.online_url) ? <span className="truncate text-[12px] text-ink-3">Online: {m.online_url.replace(/^https?:\/\//, '')}</span> : null}
             </section>
+            {d.deliveries?.rows.length ? <Deliveries meetingId={m.id} rows={d.deliveries.rows} act={act} /> : null}
             <section className="flex flex-col gap-1 rounded-[12px] border border-line bg-surface p-3.5">
               <b className="text-ink">Files</b>
               <span className="text-[12px] text-ink-2">{d.files.length ? d.files.slice(0, 4).map((f) => f.filename).join(' · ') : 'None yet'}</span>
@@ -518,4 +518,37 @@ export function minutesMaterial(d: Detail, written: { summary: string; decisions
     chat ? `The meeting's chat:\n${chat}` : null,
   ];
   return lines.filter(Boolean).join('\n\n');
+}
+
+const DELIVERY_KIND: Record<string, string> = { invitation: 'Invitation', update: 'Update', cancellation: 'Cancellation', reminder: 'Reminder', summary: 'Summary' };
+
+/**
+ * What the invitation emails did (worksuite-desktop#97), for whoever runs the meeting: how many went, which are
+ * still on their way, and each one that failed — with why, and Retry.
+ */
+export function Deliveries({ meetingId, rows, act }: { meetingId: number; rows: Delivery[]; act: (fn: () => Promise<unknown>, done?: string) => Promise<void> }) {
+  const mail = rows.filter((r) => r.channel === 'email');
+  if (!mail.length) return null;
+  const failed = mail.filter((r) => r.state === 'failed');
+  const sent = mail.filter((r) => r.state === 'sent').length;
+  const waiting = mail.filter((r) => r.state === 'queued' || r.state === 'sending').length;
+  return (
+    <section className="flex flex-col gap-1.5 rounded-[12px] border border-line bg-surface p-3.5" data-deliveries>
+      <b className="text-ink">Emails</b>
+      <span className="text-[12px] text-ink-2">
+        {sent} sent{waiting ? ` · ${waiting} on the way` : ''}{failed.length ? ` · ${failed.length} not delivered` : ''}
+      </span>
+      {failed.map((r) => (
+        <div key={r.id} className="flex flex-col gap-0.5 rounded-[8px] bg-danger-bg px-2.5 py-1.5 text-[12px]">
+          <span className="text-ink">
+            <b>{DELIVERY_KIND[r.kind] ?? r.kind}</b> to {r.name || r.email}
+          </span>
+          {r.error ? <span className="text-ink-2">{r.error}</span> : null}
+          <button type="button" className="self-start font-semibold text-primary hover:underline" onClick={() => void act(() => apiPost(`/api/meetings/${meetingId}/deliveries/${r.id}/retry`), 'It will be sent again in a minute.')}>
+            Retry
+          </button>
+        </div>
+      ))}
+    </section>
+  );
 }

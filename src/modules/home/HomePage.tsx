@@ -6,7 +6,7 @@ import { call, errorMessage } from '../../core/bridge';
 import { t } from '../../core/i18n';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
-import { dateLabel, dayLabel, greeting, relative, timeLabel, todayInZone, wallMinutes, wallTimeLabel } from '../../core/time';
+import { dayLabel, greeting, relative, todayInZone, wallMinutes, wallTimeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { openAssistant } from '../../core/ui';
 import { useCanOpen } from '../../core/access';
@@ -15,7 +15,9 @@ import { Avatar, Button, Chip, OfflineNote, cx } from '../../components/ui';
 import { Checkbox } from '../../components/Checkbox';
 import type { ModuleProps } from '../registry';
 import { CATEGORIES, destinationOf, entryCategory, type CalendarEvent } from '../calendar/api';
-import { ConflictFlag, useWaitingInvitations, type WaitingInvitation } from '../calendar/conflicts';
+import { awaitingAnswer } from '@shared/meeting-invitations';
+import { useWaitingInvitations } from '../calendar/conflicts';
+import { WaitingInvitations } from './WaitingInvitations';
 import { openMeeting } from '../meet/api';
 import { dueOf, type Task } from '../tasks/api';
 import { ALL_TASKS } from '../tasks/queries';
@@ -122,7 +124,9 @@ export default function HomePage(_props: ModuleProps) {
   const notices = ranked(forCompany(announcements.data ?? [], company));
   const acks = toAcknowledge(notices);
   const approvalItems = has('hr') ? (approvals.data?.items ?? []) : [];
-  const waitingCount = (has('hr') ? (approvals.data?.count ?? 0) : 0) + (invitations.data?.length ?? 0) + acks.length;
+  // Waiting for an answer: one answered — even "maybe" — has left Waiting for me, and stays on the meeting (#97).
+  const waiting = (invitations.data ?? []).filter((i) => awaitingAnswer(i.my_rsvp));
+  const waitingCount = (has('hr') ? (approvals.data?.count ?? 0) : 0) + waiting.length + acks.length;
   const unreadChat = has('chat') ? (status?.unread.chat ?? 0) : 0;
   const unreadMail = has('mail') ? (status?.unread.mail ?? 0) : 0;
   const offlineAt = dash.data?.offline ? dash.data.cachedAt : null;
@@ -176,7 +180,7 @@ export default function HomePage(_props: ModuleProps) {
         empty={waitingCount === 0 ? <><Icon name="check-circle" size={15} /> Nothing waiting for you.</> : null}
       >
         <div className="flex flex-col gap-3">
-          {invitations.data?.length ? <WaitingInvitations items={invitations.data} onOpen={openLink} /> : null}
+          {waiting.length ? <WaitingInvitations items={waiting} canMeetings={has('meetings')} onOpen={openLink} /> : null}
           {acks.length ? <AnnouncementRows items={acks} onOpen={(id) => go(`/home?announcement=${id}`)} limit={3} /> : null}
           {approvalItems.length ? <WaitingForMe items={approvalItems} onOpen={openLink} /> : null}
         </div>
@@ -581,29 +585,6 @@ function DailySummary({ summary, error, facts, onOpen, onNew }: { summary?: Summ
         </button>
       </div>
     </div>
-  );
-}
-
-/** Invitations to answer, the ones that clash flagged. */
-function WaitingInvitations({ items, onOpen }: { items: WaitingInvitation[]; onOpen: (link: string) => void }) {
-  return (
-    <ul className="m-0 flex list-none flex-col gap-2 p-0">
-      {items.slice(0, 4).map((i) => (
-        <li key={`${i.source}:${i.id}`} className="flex items-center gap-2.5">
-          <Icon name="calendar-check" size={16} className="shrink-0 text-ink-3" />
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <div className="truncate text-[13px] font-semibold text-ink">Invitation · {i.title}</div>
-            <div className="truncate text-[12px] text-ink-3">
-              {dateLabel(i.start_at)} · {timeLabel(i.start_at)}
-            </div>
-            {i.conflicts.length ? <ConflictFlag conflicts={i.conflicts} className="self-start" /> : null}
-          </div>
-          <Button size="sm" onClick={() => onOpen(i.link)}>
-            Answer
-          </Button>
-        </li>
-      ))}
-    </ul>
   );
 }
 

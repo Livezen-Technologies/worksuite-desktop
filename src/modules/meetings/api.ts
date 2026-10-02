@@ -72,6 +72,8 @@ export interface Meeting {
   start_at: string;
   end_at: string;
   all_day: boolean;
+  /** The clock it was booked on (an IANA zone). */
+  timezone?: string | null;
   duration_minutes: number;
   recur_freq: string;
   location_type: string;
@@ -128,8 +130,25 @@ export interface ActionItem {
   task_id: number | null;
 }
 
+/** One message about a meeting to one person (worksuite-desktop#97), as its organiser sees it. */
+export interface Delivery {
+  id: number;
+  participant_id: number | null;
+  name: string | null;
+  email: string | null;
+  channel: 'email' | 'in_app' | string;
+  kind: 'invitation' | 'update' | 'cancellation' | 'reminder' | 'summary' | string;
+  state: 'queued' | 'sending' | 'sent' | 'failed' | 'suppressed' | 'cancelled' | string;
+  attempts: number;
+  error: string | null;
+  next_attempt_at: string | null;
+  sent_at: string | null;
+}
+
 export interface Detail {
   meeting: Meeting;
+  /** For whoever runs it: what reached whom, failures first; null for everyone else. */
+  deliveries?: { rows: Delivery[]; counts: Record<string, number> } | null;
   participants: Person[];
   agenda: AgendaItem[];
   minutes: { summary: string | null; decisions: string | null; notes: string | null; finalised_at: string | null } | null;

@@ -763,6 +763,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       pendingChanges: uid ? queue.pendingCount(uid) + salonSync.pending() + eventDesk.pending() + pos.pending() + restaurant.sync.pending() : 0,
       unread: counts,
       notificationsPausedUntil: notifications.pausedUntilIso(),
+      notificationsSupported: notifications.supported(),
       services,
       locked: lock.isLocked(),
       safeMode: boot.safeMode,
