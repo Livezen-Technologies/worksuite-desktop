@@ -42,7 +42,7 @@ export { joinQuote, splitQuote, unquote } from './quote';
  */
 export default function MailPage({ active }: ModuleProps) {
   const qc = useQueryClient();
-  const { query, go, route, openInWindow } = useTab();
+  const { query, go, route, openInWindow, navigate } = useTab();
   const place: Place = {
     box: query.get('box') ?? 'unified',
     view: smartView(query.get('view'))?.id ?? null,
@@ -451,6 +451,7 @@ export default function MailPage({ active }: ModuleProps) {
               onSearch={() => setSearching(search)}
               onAddMailbox={() => setAdding(true)}
               onPick={pick}
+              onSettings={() => navigate('/settings/mail')}
             />
           </SidePanel>
         ) : null}

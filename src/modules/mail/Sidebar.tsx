@@ -37,6 +37,8 @@ export interface SidebarProps {
   onSearch: () => void;
   onAddMailbox: () => void;
   onPick: (p: Partial<Place>) => void;
+  /** Settings › Mail: accounts, offline and storage. */
+  onSettings: () => void;
 }
 
 const FOLDER_ICON: Record<string, string> = { inbox: 'inbox', sent: 'send', drafts: 'file-text', archive: 'archive', spam: 'shield-alert', junk: 'shield-alert', trash: 'trash' };
@@ -132,7 +134,9 @@ export function MailSidebar(p: SidebarProps) {
 
         {p.showLabels ? <LabelSection open={open.labels} onToggle={() => toggle('labels')} onAdd={() => setNaming('label')} place={p.place} active={p.active} onPick={p.onPick} /> : null}
       </div>
-      <SyncCard sync={p.sync} boxes={p.boxes} offline={p.offline} pending={p.pending} cacheDays={p.cacheDays} />
+      <button type="button" onClick={p.onSettings} title={text('Mail accounts, offline and storage settings')} className="block text-left">
+        <SyncCard sync={p.sync} boxes={p.boxes} offline={p.offline} pending={p.pending} cacheDays={p.cacheDays} />
+      </button>
       {naming ? <NameDialog kind={naming} mailbox={p.folderBox} onClose={() => setNaming(null)} /> : null}
     </nav>
   );
@@ -163,7 +167,8 @@ function Row({ icon, iconClass, lead, label, title, count, strong, active, neste
 function FolderSection({ box, many, open, onToggle, onAdd, place, active, onPick }: { box: Mailbox; many: boolean; open: boolean; onToggle: () => void; onAdd: () => void; place: Place; active: boolean; onPick: (p: Partial<Place>) => void }) {
   const folders = useFolders(box.id, active);
   const list = (folders.data?.folders ?? []).filter((f) => f.slug !== 'starred' && f.slug !== 'important');
-  const here = (f: Folder) => !place.view && place.label === null && place.folder === f.slug && (place.box === String(box.id) || (place.box === 'unified' && !many));
+  // A mailbox's inbox is its row under Mailboxes when there are several: one place, one highlight.
+  const here = (f: Folder) => !place.view && place.label === null && place.folder === f.slug && !(many && f.slug === 'inbox') && (place.box === String(box.id) || (place.box === 'unified' && !many));
   return (
     <>
       <SectionHeading label={many ? text('Folders · {email}', { email: box.email }) : text('Folders')} open={open} onToggle={onToggle} onAdd={onAdd} addLabel={text('New folder')} />
@@ -224,7 +229,7 @@ export function SyncCard({ sync, boxes, offline, pending, cacheDays }: { sync: S
   const cache = cacheDays === 0 ? text('headers only offline') : text('offline cache {n} days', { n: cacheDays });
   if (offline) {
     return (
-      <div role="status" className="m-2 mt-0 flex items-start gap-2.5 rounded-[10px] border border-line bg-surface p-2.5 text-[12px] leading-snug">
+      <span role="status" className="m-2 mt-0 flex items-start gap-2.5 rounded-[10px] border border-line bg-surface p-2.5 text-[12px] leading-snug hover:bg-subtle">
         <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] bg-warning-bg text-warning">
           <Icon name="warning" size={14} />
         </span>
@@ -232,7 +237,7 @@ export function SyncCard({ sync, boxes, offline, pending, cacheDays }: { sync: S
           <span className="block font-semibold text-warning">{pending ? text('Offline · {n} actions waiting', { n: pending }) : text('Offline')}</span>
           <span className="block truncate text-ink-3">Showing mail saved on this computer</span>
         </span>
-      </div>
+      </span>
     );
   }
   const live = sync?.enabled ? sync.mailboxes : [];
@@ -242,7 +247,7 @@ export function SyncCard({ sync, boxes, offline, pending, cacheDays }: { sync: S
   const head = problem ? text('A mailbox needs attention') : live.length ? text('All mailboxes synced') : text('Mail is checked on a schedule');
   const ago = agoShort(lag);
   return (
-    <div role="status" className="m-2 mt-0 flex items-start gap-2.5 rounded-[10px] border border-line bg-surface p-2.5 text-[12px] leading-snug">
+    <span role="status" className="m-2 mt-0 flex items-start gap-2.5 rounded-[10px] border border-line bg-surface p-2.5 text-[12px] leading-snug hover:bg-subtle">
       <span className={cx('mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px]', problem ? 'bg-danger-bg text-danger' : 'bg-success-bg text-success')}>
         <Icon name={problem ? 'warning' : 'check'} size={14} />
       </span>
@@ -252,7 +257,7 @@ export function SyncCard({ sync, boxes, offline, pending, cacheDays }: { sync: S
           {live.length ? (pushed ? text('Pushed (IDLE) · {cache}', { cache }) : text('Checked regularly · {cache}', { cache })) : cache}
         </span>
       </span>
-    </div>
+    </span>
   );
 }
 

@@ -180,7 +180,9 @@ export function mailboxBadge(m: Pick<Mailbox, 'email'> & Partial<Pick<Mailbox, '
 }
 
 /** The account's first letter, for its round avatar. */
-export function mailboxLetter(m: Pick<Mailbox, 'email'> & Partial<Pick<Mailbox, 'display_name'>>): string {
+export function mailboxLetter(m: Pick<Mailbox, 'email'> & Partial<Pick<Mailbox, 'provider' | 'account_type' | 'oauth_provider'>>): string {
+  if (m.account_type === 'local_mailbox' || m.provider === 'local') return 'W';
+  if (/gmail|google/.test(m.provider ?? '') || m.oauth_provider === 'google') return 'G';
   return (m.email[0] ?? '?').toUpperCase();
 }
 
@@ -254,7 +256,11 @@ export function step<T>(items: T[], current: number, by: number): number {
 
 /** The person's own words, without markup, for AI and quoting. */
 export function plainText(html: string): string {
-  return new DOMParser().parseFromString(html, 'text/html').body.textContent?.replace(/\n{3,}/g, '\n\n').trim() ?? '';
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  // Line breaks and blocks keep their lines: a signature's <br> is not run together.
+  doc.querySelectorAll('br').forEach((br) => br.replaceWith('\n'));
+  doc.querySelectorAll('p, div, li, tr, h1, h2, h3, h4, h5, h6, blockquote').forEach((el) => el.append('\n'));
+  return (doc.body.textContent ?? '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 /** A mailbox tag from a full mailbox row. */

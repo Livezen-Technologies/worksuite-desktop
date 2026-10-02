@@ -173,10 +173,10 @@ export function MessageList(p: MessageListProps) {
     <section aria-label="Messages" className={cx('flex min-h-0 flex-col bg-surface', p.fill ? 'min-w-0 flex-1' : 'w-[420px] shrink-0 border-r border-line')}>
       <div ref={bar} className="px-4 pt-3 pb-2">
         <div className="flex items-center gap-2">
-          <h1 className="min-w-0 flex-1 truncate text-[19px] font-bold text-ink selectable" title={p.title}>
+          <h1 className="min-w-0 flex-1 truncate text-[19px] font-bold text-ink selectable" title={p.aside ? `${p.title} · ${p.aside}` : p.title}>
             {p.title}
           </h1>
-          {p.aside ? <span className="shrink-0 truncate text-[12.5px] text-ink-3">{p.aside}</span> : null}
+          {p.aside && p.fill ? <span className="shrink-0 truncate text-[12.5px] text-ink-3">{p.aside}</span> : null}
           <button type="button" onClick={p.onRefresh} aria-label="Refresh" title="Refresh" className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle">
             <Icon name="refresh" size={16} className={p.refreshing ? 'animate-spin' : undefined} />
           </button>

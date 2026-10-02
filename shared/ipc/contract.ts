@@ -1004,6 +1004,8 @@ export const contract = {
   'offline:pending': ch(none, { session: true }),
   /** How much one app's saved answers take on this computer. */
   'offline:moduleBytes': ch(z.object({ module: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/) }), { session: true }),
+  /** Remove one app's saved answers from this computer (Mail › Clear). */
+  'offline:clearModule': ch(z.object({ module: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/) }), { session: true, sensitive: true, rate: 1 }),
   'offline:submit': ch(mutationInputSchema, { session: true, rate: 20 }),
   'offline:retry': ch(z.object({ id: idString }), { session: true }),
   'offline:discard': ch(z.object({ id: idString }), { session: true }),
@@ -1406,6 +1408,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'offline:status': OfflineStatus;
   'offline:pending': OfflineMutation[];
   'offline:moduleBytes': number;
+  'offline:clearModule': number;
   'offline:submit': SubmitResult;
   'offline:retry': void;
   'offline:discard': void;

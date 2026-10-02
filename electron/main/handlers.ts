@@ -869,6 +869,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('offline:status', () => ctx.queue.status(uid(), { bytes: ctx.cache.totalBytes(), entries: ctx.cache.count() }));
   router.handle('offline:pending', () => ctx.queue.list(uid()));
   router.handle('offline:moduleBytes', (input) => ctx.cache.moduleBytes(uid(), input.module));
+  router.handle('offline:clearModule', (input) => ctx.cache.clearModule(uid(), input.module));
   router.handle('offline:submit', (input) => ctx.queue.submit(uid(), input));
   router.handle('offline:retry', async (input) => {
     ctx.queue.retry(uid(), input.id);

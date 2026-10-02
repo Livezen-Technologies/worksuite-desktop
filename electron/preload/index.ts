@@ -417,6 +417,7 @@ const api = {
     status: call('offline:status'),
     pending: call('offline:pending'),
     moduleBytes: call('offline:moduleBytes'),
+    clearModule: call('offline:clearModule'),
     submit: call('offline:submit'),
     retry: call('offline:retry'),
     discard: call('offline:discard'),

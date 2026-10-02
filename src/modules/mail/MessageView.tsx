@@ -434,8 +434,8 @@ function ActionBar({ style, onReply, onArchive, onDelete, onMove, onUnread, onSt
           {btn('forward', text('Forward'), () => onReply('forward'))}
           {btn('archive', text('Archive'), onArchive)}
           {btn('trash', text('Delete'), onDelete)}
-          {btn('tag', text('Move to'), onMove, canMove)}
-          {btn('flag', starred ? text('Unstar') : text('Star'), onStar)}
+          {btn('folder-input', text('Move to'), onMove, canMove)}
+          {btn('star', starred ? text('Unstar') : text('Star'), onStar)}
           {more}
         </div>
       </div>
@@ -560,7 +560,7 @@ function TeamBar({ ref_, m, me }: { ref_: MessageRef; m: MessageDetail; me: numb
       </button>
       <span className="flex-1" />
       {team.status !== 'closed' ? (
-        <Button variant="primary" className="bg-success hover:bg-success" onClick={() => void run('status', { status: 'closed' })}>
+        <Button variant="success" onClick={() => void run('status', { status: 'closed' })}>
           Mark done
         </Button>
       ) : null}

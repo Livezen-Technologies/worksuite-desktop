@@ -85,7 +85,9 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   };
   const templates = useTemplates(true);
   const signatures = useSignatures(true);
-  const from = boxes.find((b) => String(b.id) === v.from) ?? boxes[0] ?? null;
+  // The mailbox it goes from: the draft's, else the one the page names, else the first (the list may arrive after the composer opens).
+  const from = boxes.find((b) => String(b.id) === v.from) ?? boxes.find((b) => String(b.id) === defaultBox) ?? boxes.find((b) => b.is_default) ?? boxes[0] ?? null;
+  const fromId = from ? String(from.id) : v.from;
 
   // The default signature goes in once, above the quoted email, on a message that has none yet.
   const sig = signatures.data?.signatures.find((s) => s.is_default) ?? null;
@@ -139,7 +141,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
     body_html: textToHtml(v.body),
     in_reply_to: seed.inReplyTo,
     reply_mode: seed.mode === 'new' ? undefined : seed.mode,
-    mailbox: v.from || undefined,
+    mailbox: fromId || undefined,
     attachments: (v.attachments ?? []).map((a) => a.token),
     ...(scheduleAt ? { schedule_at: scheduleAt } : {}),
   });
@@ -226,7 +228,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
       >
         <Field label="From">
           {boxes.length > 1 ? (
-            <Select aria-label="From" value={v.from} onValueChange={(x) => set({ from: String(x) })} options={boxes.map((b) => ({ value: String(b.id), label: b.display_name && b.display_name !== b.email ? `${b.display_name} <${b.email}>` : b.email }))} className="h-8 max-w-[360px]" />
+            <Select aria-label="From" value={fromId} onValueChange={(x) => set({ from: String(x) })} options={boxes.map((b) => ({ value: String(b.id), label: b.display_name && b.display_name !== b.email ? `${b.display_name} <${b.email}>` : b.email }))} className="h-8 max-w-[360px]" />
           ) : from ? (
             <span className="flex items-center gap-2 text-[13.5px] font-semibold text-ink">
               <AccountAvatar letter={mailboxLetter(from)} colour={from.colour} size={20} />

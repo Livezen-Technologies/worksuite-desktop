@@ -28,6 +28,7 @@ import { ModuleAccess } from '../ai/ModuleAccess';
 import { discoverStudioModels, setStudioModels, STUDIO_KEY, studioState, testStudioModel, useStudioStatus, type StudioDiscovery } from '../ai/studio';
 import { Checkbox } from '../../components/Checkbox';
 import { DriveSettings } from '../files/DriveSettings';
+import { MailSettings } from '../mail/MailSettings';
 
 /** Settings / profile tree (§4.9). Anything the organization's policy decides is shown locked, with the reason. */
 const SECTIONS = [
@@ -39,6 +40,7 @@ const SECTIONS = [
   { id: 'desktop', label: 'Desktop', icon: 'monitor' },
   { id: 'files', label: 'Files & Sync', icon: 'folder' },
   { id: 'offline', label: 'Offline', icon: 'cloud-off' },
+  { id: 'mail', label: 'Mail', icon: 'mail' },
   { id: 'ai', label: 'AI Assistant', icon: 'sparkles' },
   { id: 'local-ai', label: 'Local AI', icon: 'cpu' },
   { id: 'meet', label: 'Meet', icon: 'video' },
@@ -52,12 +54,13 @@ export default function SettingsPage(_props: ModuleProps) {
   const { path, go } = useTab();
   const section = SECTIONS.find((s) => s.id === path[1])?.id ?? 'general';
   const prefs = useStore(app, (s) => s.prefs);
+  const hasMail = useCanOpen('mail');
   if (!prefs) return null;
   return (
     <div className="flex h-full">
       <nav className="w-[230px] shrink-0 border-r border-line bg-surface p-3" aria-label="Settings sections">
         <h1 className="px-3 pt-1 pb-3 text-[20px] font-bold text-ink">Settings</h1>
-        {SECTIONS.map((s) => (
+        {SECTIONS.filter((s) => s.id !== 'mail' || hasMail).map((s) => (
           <button key={s.id} type="button" onClick={() => go(`/settings/${s.id}`)} aria-current={section === s.id ? 'page' : undefined} className={cx('flex h-9 w-full items-center gap-2.5 rounded-[8px] px-3 text-left text-[13.5px]', section === s.id ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
             <Icon name={s.icon} size={16} /> {s.label}
           </button>
@@ -73,6 +76,7 @@ export default function SettingsPage(_props: ModuleProps) {
           {section === 'desktop' ? <DesktopSection prefs={prefs} /> : null}
           {section === 'files' ? <FilesSection /> : null}
           {section === 'offline' ? <OfflineSection prefs={prefs} /> : null}
+          {section === 'mail' && hasMail ? <MailSettings /> : null}
           {section === 'ai' ? <AiSection prefs={prefs} /> : null}
           {section === 'local-ai' ? <LocalAISection /> : null}
           {section === 'meet' ? <MeetSection /> : null}
