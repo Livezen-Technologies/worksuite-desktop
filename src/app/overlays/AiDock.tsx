@@ -12,8 +12,9 @@ import { Assist } from '../../modules/ai/Assist';
 import { AskPanel } from '../../modules/ai/AskPanel';
 import { Changes } from '../../modules/ai/Changes';
 import { refForRoute } from '../../modules/ai/assistant';
-import { assistantSession, type AskEngine, type AskPhase } from '../../modules/ai/session';
+import { answerPreview, assistantSession, type AskEngine, type AskPhase } from '../../modules/ai/session';
 import { shortcutLabel } from '../../modules/ai/writer';
+import { AI_ASSISTANT_ATTR, minimizeAssistant } from './aiMinimize';
 
 export type AiDockView = 'ask' | 'write' | 'changes';
 
@@ -124,7 +125,9 @@ export const aiNotice = createStore<{ kind: AiNoticeKind | null }>({ kind: null 
 
 /**
  * For each answer that arrives while no panel shows the conversation: the notice, and Settings › AI Assistant ›
- * Sound's chime — both only as the notification settings allow.
+ * Sound's chime — both only as the notification settings allow. With WorkSuite's window behind other apps, a desktop
+ * banner too (worksuite-desktop#126): the notification service shows it as the same settings, "What banners show"
+ * and the app lock allow — while locked it never says what the answer is.
  */
 export function useAssistantAlerts(): void {
   useEffect(
@@ -132,9 +135,11 @@ export function useAssistantAlerts(): void {
       assistantSession.onUnseen(() => {
         const s = app.get();
         if (!assistantMayNotify(s.prefs, s.status?.notificationsPausedUntil)) return;
-        const phase = assistantSession.store.get().phase;
-        aiNotice.set({ kind: phase === 'needsInput' ? 'input' : phase === 'failed' ? 'failed' : 'ready' });
+        const st = assistantSession.store.get();
+        const kind: AiNoticeKind = st.phase === 'needsInput' ? 'input' : st.phase === 'failed' ? 'failed' : 'ready';
+        aiNotice.set({ kind });
         if (s.prefs?.ai?.sound) chime();
+        if (!document.hasFocus()) void call('ai:answerReady', { kind, preview: answerPreview(st.entries, !!s.lock?.locked).slice(0, 300) }).catch(() => undefined);
       }),
     [],
   );
@@ -174,14 +179,15 @@ export function unreadLabel(n: number): string {
  */
 export function AiDock() {
   return (
-    <aside className="flex w-[360px] shrink-0 flex-col border-l border-line bg-surface" aria-label={t('ai.title')}>
+    <aside {...{ [AI_ASSISTANT_ATTR]: '' }} className="flex w-[360px] shrink-0 flex-col border-l border-line bg-surface" aria-label={t('ai.title')}>
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <div className="flex items-center gap-2 text-[14.5px] font-bold text-ink">
           <Icon name="sparkles" size={17} className="text-teal" /> {t('ai.title')}
         </div>
         <IconButton icon="x" label={t('ai.close')} onClick={() => toggleDock('ai')} />
       </div>
-      <AssistantBody />
+      {/* Minimize while working: the drawer closes to the floating button, the answer still on its way (#126). */}
+      <AssistantBody onMinimize={minimizeAssistant} />
     </aside>
   );
 }

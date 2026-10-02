@@ -14,7 +14,7 @@ export const INVOKE_CHANNELS = [
   'app:openInBrowser',
   'app:setDockIcon',
 
-  'local:open', 'local:read', 'local:save', 'local:remove', 'local:export', 'local:restore', 'local:deleteAll', 'local:meeting', 'local:signIn', 'local:importOffer', 'local:reviewImport', 'local:import',
+  'local:open', 'local:status', 'local:profile', 'local:unlock', 'local:read', 'local:save', 'local:remove', 'local:export', 'local:restorePreview', 'local:restore', 'local:deleteAll', 'local:meeting', 'local:joinMeeting', 'local:signIn', 'local:importOffer', 'local:reviewImport', 'local:import',
   'guest:pending',
   'guest:open',
   'guest:info',
@@ -55,6 +55,7 @@ export const INVOKE_CHANNELS = [
   'ai:rules',
   'ai:confirm',
   'ai:upload',
+  'ai:answerReady',
   // Local AI (WS-SRS-LAI): models on this computer, llama.cpp in the ws-local-ai process.
   'ai:localStatus',
   'ai:localModels',

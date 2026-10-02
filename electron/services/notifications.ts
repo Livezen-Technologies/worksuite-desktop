@@ -146,6 +146,7 @@ const MODULE_LABELS: Record<string, string> = {
   files: 'Files',
   support: 'Support',
   salon: 'SalonMate',
+  ai: 'AI Assistant',
   system: 'WorkSuite',
 };
 

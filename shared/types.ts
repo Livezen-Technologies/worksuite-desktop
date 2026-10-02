@@ -351,6 +351,12 @@ export interface AiPrefs {
    * is sent; the answer carries on, and the launcher says when it is ready.
    */
   autoMinimize: boolean;
+  /**
+   * Auto-minimize when I continue working (worksuite-desktop#126): while a question is on its way, switching tabs,
+   * opening another module or clicking the workspace outside the assistant puts it down to its floating button; the
+   * answer carries on, and the button says when it is ready. Never while the person is using the assistant itself.
+   */
+  autoMinimizeWhenWorking: boolean;
 }
 
 /** The two assistants Module Access is set for: the server's, and the model on this computer. */
@@ -373,8 +379,8 @@ export const QUICK_ASK_SHORTCUTS = ['Alt+Space', 'Control+Alt+Space', 'CommandOr
 
 /** Quick Ask handing its text to the main window: the AI dock, a new task, or search. */
 export interface AiHandoff {
-  /** `changes`: a card to review in the main window, the only place one is confirmed. */
-  to: 'dock' | 'task' | 'search' | 'changes';
+  /** `changes`: a card to review in the main window, the only place one is confirmed. `ask`: the conversation, from an answer's banner (#126). */
+  to: 'dock' | 'task' | 'search' | 'changes' | 'ask';
   text: string;
   result: string | null;
 }

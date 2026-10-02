@@ -33,6 +33,8 @@ export function GuestMeeting() {
       const next = await call('guest:info');
       if (!mounted.current) return;
       setInfo(next); setError('');
+      // Opened from a Local Profile: its display name, which the guest can still change.
+      if (next.localName) setName((current) => current || next.localName!.slice(0, 40));
       setPhase(next.ended ? 'ended' : 'lobby');
       if (next.ended) setFarewell('This meeting has ended.');
     } catch (e) { if (mounted.current) { setError(errorMessage(e)); setPhase('error'); } }

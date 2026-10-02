@@ -4,6 +4,11 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.10.2 — 2026-10-03
+
+- AI Assistant setting Auto-minimize when I continue working (on by default) (#126); Sinhala and Tamil text for it.
+- Login screen: Continue as Guest, with a short explanation; Sinhala and Tamil text for the Local Profile (#141).
+
 ## 1.10.1 — 2026-10-03
 
 - Default new or missing AI display preferences to the floating widget without opening chat at startup (#127).

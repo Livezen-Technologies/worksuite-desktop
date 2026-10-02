@@ -14,6 +14,33 @@ import type { Incoming } from './notifications';
 /** The link a notification or the tray opens: the main window's Changes view, never a route. */
 export const AI_CHANGES_LINK = 'ai:changes';
 
+/** The link an "answer ready" banner opens: the main window's assistant, on the conversation (#126). */
+export const AI_ANSWER_LINK = 'ai:answer';
+
+export type AiAnswerKind = 'ready' | 'input' | 'failed';
+
+/**
+ * The banner for an answer that arrived while the assistant was minimised and WorkSuite's window was not in front
+ * (worksuite-desktop#126). It goes through the notification service like any other, so notifications off, the AI
+ * Assistant muted, paused and Do not disturb silence it, "What banners show" decides whether the answer's first
+ * words appear, and while WorkSuite is locked it says only that there is a notification. Like the Changes banner it
+ * has no buttons: it opens the assistant, and nothing is confirmed or sent from it.
+ */
+export function answerNotice(kind: AiAnswerKind, preview: string, at = Date.now()): Incoming {
+  const words = preview.replace(/\s+/g, ' ').trim().slice(0, 160);
+  const title = kind === 'input' ? 'The AI Assistant needs your input' : kind === 'failed' ? 'The AI Assistant could not answer' : 'Your AI Assistant answer is ready';
+  return {
+    id: `ai-answer:${at}`,
+    module: 'ai',
+    category: 'ai',
+    title,
+    body: words || (kind === 'failed' ? 'Open the assistant to try again.' : 'Open the assistant to see it.'),
+    sender: 'AI Assistant',
+    link: AI_ANSWER_LINK,
+    critical: false,
+  };
+}
+
 interface Waiting {
   id: number;
   risk: 'R1' | 'R2';

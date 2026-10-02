@@ -125,6 +125,22 @@ export function waitsOnPerson(entry: AskEntry | undefined): boolean {
   return !!entry.asks || (entry.turn?.pending_actions ?? []).some((a) => a.status === 'awaiting_confirmation');
 }
 
+/** The first lines of the latest answer, for its preview: plain and short — and nothing at all while WorkSuite is locked. */
+export function answerPreview(entries: AskEntry[], locked: boolean, max = 180): string {
+  if (locked) return '';
+  const last = [...entries].reverse().find((e) => e.role === 'assistant');
+  if (!last) return '';
+  const card = last.turn?.pending_actions?.find((a) => a.status === 'awaiting_confirmation');
+  const said = last.stopped ? '' : last.text.trim() || card?.preview?.title || '';
+  const lines = said
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(' ');
+  return lines.length > max ? `${lines.slice(0, max - 1).trimEnd()}…` : lines;
+}
+
 export interface AskFile {
   ref: string;
   name: string;
