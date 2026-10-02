@@ -1,3 +1,5 @@
+import { LockedChat } from './LockedChat';
+import { lockedScope } from '@shared/locked-access';
 import { ChatSendingStatus } from '../modules/chat/OutgoingMedia';
 import { isLocalWorkspaceHash } from '@shared/local-workspace';
 import { LocalImportOffer } from '../modules/guest/LocalImportOffer';
@@ -38,6 +40,7 @@ export function App() {
   useLanguage();
   const ready = useStore(app, (s) => s.ready);
   const auth = useStore(app, (s) => s.auth);
+  const prefs = useStore(app, s => s.prefs);
   const locked = useStore(app, (s) => s.lock?.locked ?? false);
   const required = useStore(app, (s) => s.update?.required ?? false);
   // A profile picture the server requires (#46). Not from a copy kept offline: nothing could be sent, so it would only lock the app.
@@ -57,6 +60,11 @@ export function App() {
   // The website-chat call window: above the lock screen too, saying only that a chat waits while locked (RING-40).
   if (hash.startsWith('#/window/webchat-ring')) return <WebchatRingWindow />;
 
+  const windowKind = hash.replace('#/window/', '').split('?')[0] ?? '';
+  const scope = lockedScope(`app://bundle/${hash}`, windowKind);
+  const callWindow = !!scope && scope.kind !== 'chat-mini';
+  const lockedCall = callWindow && !!prefs?.lockedAnswerCalls;
+  if (locked && auth.stage === 'ready' && !required && scope?.kind === 'chat-mini' && prefs?.lockedAllowChat && scope.room) return <LockedChat room={scope.room} />;
   let body;
   if (required && auth.stage !== 'revoked') body = <UpdateRequired />;
   else if (auth.stage !== 'ready') body = <Onboarding auth={auth} />;
@@ -68,7 +76,7 @@ export function App() {
 
   return (
     <Suspense fallback={<Spinner className="h-full" />}>
-      {locked && auth.stage === 'ready' ? (
+      {callWindow ? <><div className={locked && !lockedCall ? 'hidden' : 'h-full'}>{body}</div>{locked && !lockedCall ? <LockScreen /> : null}</> : locked && auth.stage === 'ready' ? (
         <LockBoundary>
           <LockScreen />
         </LockBoundary>

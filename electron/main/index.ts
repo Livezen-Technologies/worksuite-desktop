@@ -1,10 +1,11 @@
+import { lockedScope, lockedApi, lockedIpc } from '@shared/locked-access';
 import { accessibilityDiagnostics } from '../services/remote-control/accessibility-diagnostics';
 import { LocalWorkspace } from '../services/local-workspace';
 import { LocalWorkspaceImport, type ImportAccount } from '../services/local-workspace-import';
 import { createHash } from 'node:crypto';
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { GuestMeetService } from '../services/guest-meet';
-import { app, Notification, clipboard, crashReporter, dialog, globalShortcut, ipcMain, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents } from 'electron';
+import { app, Notification, clipboard, crashReporter, dialog, globalShortcut, ipcMain, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents, webContents } from 'electron';
 import os from 'node:os';
 import { hkdfSync } from 'node:crypto';
 import { join, resolve } from 'node:path';
@@ -272,10 +273,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const calls = new CallService(
     windows,
     http,
-    () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('calls', sessionCtl.visibleApps()),
+    () => sessionCtl.isReady() && (!lock.isLocked() || !!settings.effective().lockedAnswerCalls) && canOpenApp('calls', sessionCtl.visibleApps()),
     () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('meet', sessionCtl.visibleApps()),
   );
-  const screenShare = new ScreenShare(isTrustedShellUrl);
+  const screenShare = new ScreenShare(url => !lock.isLocked() && isTrustedShellUrl(url));
   screenShare.install(session.defaultSession);
   // Meet remote control on this computer (WS-MEET-ENH-01): the share, consent, grant and input live here.
   const remoteControl = createRemoteControl({
@@ -795,13 +796,25 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     realtimeDownSince = s === 'down' ? (realtimeDownSince ?? Date.now()) : null;
     emitStatus();
   };
+  function scopeFor(sender: Electron.WebContents) {
+    const win = BrowserWindow.fromWebContents(sender);
+    const scope = lockedScope(sender.getURL(), win ? windows.kindOf(win.id) : null);
+    if (scope && (!sessionCtl.isReady() || !canOpenApp(scope.kind === 'chat-mini' ? 'chat' : 'calls', sessionCtl.visibleApps()))) return null;
+    if (scope && !scope.uuid && scope.kind !== 'chat-mini' && win) scope.uuid = calls.list().find(c => c.windowId === win.id && c.kind === 'call')?.uuid ?? null;
+    return scope;
+  }
   realtime.onEvent = (e) => {
     notifications.handleRealtime(e);
     webchat.handle(e);
     calls.handle(e);
     aiPending.handle(e as { type?: string });
     remoteControl.onRealtime(e as { type?: string; meeting?: string });
-    broadcast('realtime:event', e);
+    if (!lock.isLocked()) broadcast('realtime:event', e);
+    else for (const win of BrowserWindow.getAllWindows()) {
+      const scope = scopeFor(win.webContents);
+      const event = e as { type?: string; uuid?: string; outcome?: string };
+      if (!guestWindowIds.has(win.webContents.id) && scope?.uuid && event.type === 'chat.call.stopped' && event.uuid === scope.uuid) win.webContents.send('realtime:event', { type: event.type, uuid: event.uuid, outcome: event.outcome });
+    }
     // `access.changed` (the person's apps changed) and `profile.updated`: fetch the bootstrap again.
     accessWatch.onEvent(e);
   };
@@ -1354,7 +1367,13 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     // Locked: the call window stops saying who is waiting, and Quick Ask stops answering its shortcut.
     webchat.refresh();
     syncQuickAsk();
-    if (s.locked) windows.hideQuickAsk();
+    if (s.locked) {
+      windows.hideQuickAsk();
+      if (!settings.effective().lockedShowCallerDetails) for (const win of BrowserWindow.getAllWindows()) {
+        const scope = scopeFor(win.webContents);
+        if (scope) win.setTitle(scope.kind === 'chat-mini' ? 'WorkSuite chat' : 'WorkSuite call');
+      }
+    } else broadcast('realtime:resync');
   };
 
   function onReconnect(): void {
@@ -1513,6 +1532,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       return isTrustedShellUrl(frame.url);
     },
     isLocked: () => lock.isLocked(),
+    canUseWhileLocked: (channel, input, sender) => lockedIpc(scopeFor(sender), channel, input, settings.effective()),
     isSignedIn: () => sessionCtl.isReady(),
     hasPermission: (key) => sessionCtl.hasPermission(key),
     audit: (action, details) => {
@@ -1669,7 +1689,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   router.handle('guest:join', (input, c) => guests.join(c.sender.id, input.name, input.pass));
   router.handle('guest:signIn', (_input, c) => { windows.showMain(); BrowserWindow.fromWebContents(c.sender)?.close(); });
   session.defaultSession.webRequest.onBeforeRequest({ urls: ['app://bundle/__api/*', 'app://bundle/__local/*'] }, (details, callback) => {
-    callback({ cancel: details.webContentsId !== undefined && guestWindowIds.has(details.webContentsId) });
+    const id = details.webContentsId;
+    const sender = id === undefined ? null : webContents.fromId(id);
+    let body: unknown;
+    try { body = JSON.parse((details.uploadData ?? []).map(x => x.bytes?.toString('utf8') ?? '').join('')); } catch { /* no JSON body */ }
+    const allowed = !lock.isLocked() || lockedApi(sender ? scopeFor(sender) : null, details.url, details.method, settings.effective(), body);
+    callback({ cancel: !allowed || id !== undefined && guestWindowIds.has(id) });
   });
   router.install();
   const missing = router.missingHandlers();

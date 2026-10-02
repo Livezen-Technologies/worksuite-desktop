@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.0 — 2026-10-02
+
+**Added**
+
+- Restricted call windows can answer and manage calls while the workspace stays locked; caller details are private by default.
+
+**Fixed**
+
+- Locking preserves ongoing calls, stops local screen sharing, and respects notification sound and Do Not Disturb preferences.
+
 ## 1.2.2 — 2026-10-02
 
 **Fixed**

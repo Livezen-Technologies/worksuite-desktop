@@ -1,3 +1,5 @@
+import { app } from '../../core/app-state';
+import { useStore } from '../../core/store';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Track } from 'livekit-client';
 import { call, errorMessage } from '../../core/bridge';
@@ -20,6 +22,8 @@ import { VoiceWindow } from './VoiceWindow';
 /** The call window (CallVoice for a voice call, CallVideo for video). */
 export function CallScreen() {
   const { query } = useTab();
+  const prefs = useStore(app, s => s.prefs);
+  const locked = useStore(app, s => !!s.lock?.locked);
   useSyncExternalStore(session.subscribe, session.snapshot);
   const ui = useSyncExternalStore(callUi.subscribe, callUi.get);
   const [picking, setPicking] = useState<'start' | 'change' | null>(null);
@@ -32,7 +36,8 @@ export function CallScreen() {
   const room = s.room;
   const lp = room?.localParticipant;
   const remotes = room ? [...room.remoteParticipants.values()] : [];
-  const name = (remotes.length === 1 && remotes[0]!.name) || query.get('name') || 'Call';
+  const name = locked && !prefs?.lockedShowCallerDetails ? 'Caller' : (remotes.length === 1 && remotes[0]!.name) || query.get('name') || 'Call';
+  useEffect(() => { if (locked) { void s.share(null); } }, [locked, s]);
   const clock = s.connectedAt ? formatClock((now - s.connectedAt) / 1000) : null;
 
   // Start once per window; a remount (StrictMode, a reload of the tree) finds it started.
@@ -84,7 +89,7 @@ export function CallScreen() {
   })() as [string, string];
   useTabTitle(s.phase === 'connected' ? `Call in progress · ${name}` : video ? 'Video call' : 'Voice call');
 
-  const openChat = () => void openChatWindow(roomId, name ?? 'Chat', { onTop: true });
+  const openChat = () => { if (locked && !prefs?.lockedAllowChat) { toast('info', 'Unlock WorkSuite to open chat.'); return; } void openChatWindow(roomId, name ?? 'Chat', { onTop: true }).catch(e => toast('error', errorMessage(e))); };
   const muted = lp ? !lp.isMicrophoneEnabled : false;
   const camera = lp?.isCameraEnabled ?? false;
   const sharing = lp?.isScreenShareEnabled ?? false;
@@ -107,7 +112,7 @@ export function CallScreen() {
   const unreachable =
     s.phase === 'unreachable' ? (
       <div className="no-drag flex flex-col items-center gap-2 self-stretch text-center text-[12.5px] text-[#C3CEEA]">
-        {s.unreachable?.voicemail && !sent ? (
+        {!locked && s.unreachable?.voicemail && !sent ? (
           recording ? (
             <div className="self-stretch rounded-[10px] bg-surface px-2 py-1.5 text-ink">
               <VoiceRecorder
@@ -133,7 +138,7 @@ export function CallScreen() {
       </div>
     ) : null;
 
-  const picker = picking ? (
+  const picker = !locked && picking ? (
     <ScreenPicker
       changing={picking === 'change'}
       onClose={() => setPicking(null)}
@@ -152,12 +157,12 @@ export function CallScreen() {
     return (
       <VoiceWindow
         name={name}
-        where={query.get('room')}
+        where={locked && !prefs?.lockedShowCallerDetails ? null : query.get('room')}
         status={status}
         clock={clock}
         ringing={ringing}
         onChat={openChat}
-        onShare={() => (sharing ? void s.share(null) : setPicking('start'))}
+        onShare={() => locked ? toast('info', 'Unlock WorkSuite to share your screen.') : (sharing ? void s.share(null) : setPicking('start'))}
         problem={problem}
         unreachable={unreachable}
         picker={picker}
@@ -166,7 +171,7 @@ export function CallScreen() {
     );
   }
 
-  const people = [...(lp ? [personOf(lp, true)] : []), ...remotes.map((p) => personOf(p, false))];
+  const people = [...(lp ? [personOf(lp, true)] : []), ...remotes.map((p) => personOf(p, false))].map(p => locked && !prefs?.lockedShowCallerDetails && !p.self ? { ...p, name: 'Caller' } : p);
   const paused = s.sharePaused;
   const panelOn = (tab: string) => ui.panelOpen && ui.panelTab === tab;
   const buttons: ControlButton[] = live
@@ -189,10 +194,10 @@ export function CallScreen() {
                       { label: 'Stop sharing', icon: 'stop', danger: true, onClick: () => void s.share(null) },
                     ],
                   }
-                : { id: 'share', icon: 'screen-share', label: 'Share your screen', onClick: () => setPicking('start') },
+                : { id: 'share', icon: 'screen-share', label: 'Share your screen', onClick: () => locked ? toast('info', 'Unlock WorkSuite to share your screen.') : setPicking('start') },
             ] as ControlButton[])
           : []),
-        ...(roomId > 0 ? [{ id: 'chat', icon: 'chat', label: panelOn('Chat') ? 'Hide chat' : 'Chat', tone: panelOn('Chat') ? ('active' as const) : undefined, onClick: () => callUi.togglePanel('Chat') }] : []),
+        ...(roomId > 0 ? [{ id: 'chat', icon: 'chat', label: panelOn('Chat') ? 'Hide chat' : 'Chat', tone: panelOn('Chat') ? ('active' as const) : undefined, onClick: () => locked ? openChat() : callUi.togglePanel('Chat') }] : []),
       ]
     : [];
   const more: MenuEntry[] = s.phase === 'connected' ? [{ label: s.noise ? 'Noise suppression: on' : 'Noise suppression: off', icon: 'audio-lines', checked: s.noise, onClick: () => void s.toggleNoise() }] : [];
@@ -230,7 +235,7 @@ export function CallScreen() {
         lastSpeaker={s.lastSpeaker}
         overlay={overlay}
         tabs={
-          roomId > 0 && s.phase === 'connected'
+          !locked && roomId > 0 && s.phase === 'connected'
             ? [
                 {
                   id: 'Chat',

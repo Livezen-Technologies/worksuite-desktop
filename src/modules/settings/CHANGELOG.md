@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.7.0 — 2026-10-02
+
+**Added**
+
+- Security access-while-locked preferences for calls, caller details and plain text chat, constrained by organization policy.
+
 ## 1.6.0 — 2026-10-01
 
 **Added**

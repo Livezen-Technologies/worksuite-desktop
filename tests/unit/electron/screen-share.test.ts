@@ -9,7 +9,7 @@ vi.mock('electron', () => ({
   desktopCapturer: { getSources: vi.fn() },
   systemPreferences: { getMediaAccessStatus: () => access.status },
   BrowserWindow: { getAllWindows: () => [] },
-  webContents: { fromFrame: () => undefined },
+  webContents: { fromFrame: vi.fn() },
 }));
 vi.mock('../../../electron/main/log', () => ({ logger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }));
 
@@ -69,4 +69,24 @@ describe('what there is to share', () => {
     expect(r.state).toBe('ok');
     expect(r.restartMayHelp).toBe(true);
   });
+});
+
+it('refuses a previously picked screen if the app locks while sources are being resolved (#112)', async () => {
+  const { desktopCapturer, webContents } = await import('electron');
+  const wc = { id: 42, getURL: () => 'app://bundle/#/window/call' };
+  vi.mocked(webContents.fromFrame).mockReturnValue(wc as never);
+  let locked = false;
+  let resolve!: (sources: never[]) => void;
+  vi.mocked(desktopCapturer.getSources).mockImplementation(() => new Promise(r => { resolve = r; }));
+  const s = new ScreenShare(() => !locked);
+  let handle!: (request: never, callback: (value: unknown) => void) => void;
+  s.install({ setDisplayMediaRequestHandler: (handler: typeof handle) => { handle = handler; } } as never);
+  s.pick(42, 'screen:1:0');
+  const reply = vi.fn();
+  handle({ frame: { url: wc.getURL() } } as never, reply);
+  locked = true;
+  resolve([src('screen:1:0', 'Screen 1')] as never[]);
+  await Promise.resolve();
+  expect(reply).toHaveBeenCalledWith({});
+  expect(s.lastGranted(42)).toBeNull();
 });

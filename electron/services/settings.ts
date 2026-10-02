@@ -39,6 +39,9 @@ export function defaultPreferences(): Preferences {
     dndFrom: '22:00',
     dndTo: '07:00',
     appLockMinutes: 15,
+    lockedAnswerCalls: true,
+    lockedShowCallerDetails: false,
+    lockedAllowChat: false,
     lockOnSystemLock: true,
     openFilesLocally: 'ask',
     downloadFolder: downloads,
@@ -95,6 +98,9 @@ export class SettingsService {
     if (p.required_background_services.includes('notifications')) {
       out.push({ key: 'backgroundServices', reason: 'Your organization requires background notifications.' });
     }
+    for (const [flag, key] of [['locked_answer_calls', 'lockedAnswerCalls'], ['locked_show_caller_details', 'lockedShowCallerDetails'], ['locked_allow_chat', 'lockedAllowChat']] as const) {
+      if (p[flag] === false) out.push({ key, reason: 'Your organization disables this access while WorkSuite is locked.' });
+    }
     return out;
   }
 
@@ -103,10 +109,14 @@ export class SettingsService {
     const p = { ...this.prefs, backgroundServices: { ...this.prefs.backgroundServices } };
     const pol = this.policy;
     if (!pol) return p;
+    if (pol.locked_answer_calls === false) p.lockedAnswerCalls = false;
+    if (pol.locked_show_caller_details === false) p.lockedShowCallerDetails = false;
+    if (pol.locked_allow_chat === false) p.lockedAllowChat = false;
     if (pol.app_lock_max_minutes > 0 && (p.appLockMinutes === 0 || p.appLockMinutes > pol.app_lock_max_minutes)) {
       p.appLockMinutes = pol.app_lock_max_minutes;
     }
     p.notificationPrivacy = stricterPrivacy(p.notificationPrivacy, pol.notification_min_privacy);
+    if (p.notificationPrivacy === 'GENERIC') p.lockedShowCallerDetails = false;
     if (pol.auto_update === 'enforced') p.updateChannel = pol.update_channel;
     if (pol.required_background_services.includes('notifications')) p.backgroundServices.notifications = true;
     if (pol.required_background_services.includes('realtime')) p.backgroundServices.realtime = true;

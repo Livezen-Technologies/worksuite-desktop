@@ -1,3 +1,4 @@
+import { app } from '../../core/app-state';
 import { call } from '../../core/bridge';
 import { flushDrafts } from '../../core/drafts';
 
@@ -9,6 +10,6 @@ import { flushDrafts } from '../../core/drafts';
  * top from its title bar; a call's chat starts on top, beside the call.
  */
 export async function openChatWindow(roomId: string | number, title?: string, opts: { onTop?: boolean } = {}): Promise<void> {
-  await flushDrafts();
+  if (!app.get().lock?.locked) await flushDrafts();
   await call('windows:open', { kind: 'chat-mini', route: `/chat?room=${roomId}`, title: title ?? 'Chat', alwaysOnTop: !!opts.onTop });
 }

@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.6.0 — 2026-10-02
+
+**Added**
+
+- Separate opt-in plain text chat while locked, with hidden conversation previews and unlock required for files, linked records and other modules.
+
 ## 1.5.0 — 2026-10-01
 
 **Added**

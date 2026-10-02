@@ -112,6 +112,9 @@ export function normalizePolicy(input: Record<string, unknown> | null | undefine
     external_file_open: pick(p.external_file_open, ['allowed', 'managed_only', 'disabled'], d.external_file_open),
     downloads: pick(p.downloads, ['allowed', 'managed_only', 'disabled'], d.downloads),
     screen_capture_share: pick(p.screen_capture_share, ['allowed', 'disabled'], d.screen_capture_share),
+    locked_answer_calls: p.locked_answer_calls !== false,
+    locked_show_caller_details: p.locked_show_caller_details !== false,
+    locked_allow_chat: p.locked_allow_chat !== false,
     app_lock_max_minutes: clamp(p.app_lock_max_minutes, 0, 60, d.app_lock_max_minutes),
     notification_min_privacy: pick(p.notification_min_privacy, PRIVACY_ORDER, d.notification_min_privacy),
     required_background_services: Array.isArray(p.required_background_services)

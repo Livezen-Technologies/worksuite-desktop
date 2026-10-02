@@ -498,6 +498,10 @@ function SecuritySection({ prefs }: { prefs: Preferences }) {
         <Select label="App lock" value={prefs.appLockMinutes} options={options} onValueChange={(v) => void updatePrefs({ appLockMinutes: v as Preferences['appLockMinutes'] })} />
       </Row>
       <Toggle k="lockOnSystemLock" prefs={prefs} label="Lock when this computer locks or sleeps" />
+      <H title="Access While Locked" hint="Applies to WorkSuite’s app lock. It does not bypass the operating system lock screen. Organization policies may restrict these options." />
+      <Toggle k="lockedAnswerCalls" prefs={prefs} label="Answer Calls" />
+      <Toggle k="lockedShowCallerDetails" prefs={prefs} label="Show Caller Details" />
+      <Toggle k="lockedAllowChat" prefs={prefs} label="Allow Chat" />
       <PinRow set={!!lockState?.pin} />
       <Row label="Unlock with" hint={`Your WorkSuite password${lockState?.pin ? ', your PIN' : ''}${lockState?.biometric === 'touch-id' ? ' or Touch ID' : ''}.${lockState?.biometric === 'touch-id' ? '' : ' Windows Hello support is planned.'}`}>
         <Button icon="lock" onClick={() => void call('security:lock')}>

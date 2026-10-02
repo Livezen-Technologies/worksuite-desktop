@@ -1,3 +1,4 @@
+import { app } from '../../core/app-state';
 import { createLocalTracks, Room, RoomEvent, Track, VideoPresets, type LocalParticipant, type LocalTrack, type Participant, type RemoteTrack } from 'livekit-client';
 import { ApiError, apiGet, apiPost, request } from '../../core/api';
 import { call, errorMessage, on } from '../../core/bridge';
@@ -126,7 +127,7 @@ export class CallSession {
     this.problem = null;
     this.set('devices');
     try {
-      const video = p.mode === 'video';
+      const video = p.mode === 'video' && !app.get().lock?.locked;
       if (!(await call('media:access', { kind: 'microphone' })).granted) {
         this.problem = deviceProblem(Object.assign(new Error('denied'), { name: 'NotAllowedError' }));
         this.set('error');
@@ -134,7 +135,7 @@ export class CallSession {
       }
       const camera = video ? (await call('media:access', { kind: 'camera' })).granted : false;
       try {
-        this.tracks = await createLocalTracks({ audio: CLEAN_AUDIO, video: camera ? { resolution: VideoPresets.h720.resolution } : false });
+        this.tracks = await createLocalTracks({ audio: CLEAN_AUDIO, video: camera && !app.get().lock?.locked ? { resolution: VideoPresets.h720.resolution } : false });
       } catch (e) {
         // A camera that fails is no reason not to talk.
         if (!camera) throw e;
@@ -152,7 +153,7 @@ export class CallSession {
     let conn: Connection;
     try {
       const r = p.uuid
-        ? await apiPost<Connection>(`/api/chat/calls/${p.uuid}/answer`, { video: p.mode === 'video' })
+        ? await apiPost<Connection>(`/api/chat/calls/${p.uuid}/answer`, { video: p.mode === 'video' && !app.get().lock?.locked })
         : await apiPost<Connection | Unplaced>('/api/chat/calls', { room_id: p.roomId, mode: p.mode });
       if ('placed' in r && r.placed === false) {
         this.stopTracks();
@@ -292,10 +293,12 @@ export class CallSession {
 
   /** Share the screen or window picked in our picker (the page never picks for itself), or stop. */
   async share(pick: SharePick | null): Promise<void> {
+    if (pick && app.get().lock?.locked) return;
     const lp = this.room?.localParticipant;
     if (!lp) return;
     try {
       await shareOn(lp, pick);
+      if (pick && app.get().lock?.locked) { await shareOn(lp, null); pick = null; }
       this.shareLabel = pick ? pick.name : null;
     } catch (e) {
       this.fail(e);

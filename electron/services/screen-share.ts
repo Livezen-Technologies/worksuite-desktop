@@ -129,6 +129,7 @@ export class ScreenShare {
       }
       void desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 0, height: 0 } }).then(
         (all) => {
+          if (!this.trusted(wc.getURL())) { callback({}); return; }
           const source = all.find((s) => s.id === pick.id);
           if (!source) log.info('picked source is gone', { id: pick.id });
           else {

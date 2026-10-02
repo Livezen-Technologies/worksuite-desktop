@@ -1,3 +1,6 @@
+import { openChatWindow } from '../chat/window';
+import { app } from '../../core/app-state';
+import { useStore } from '../../core/store';
 import { useEffect, useRef, useState } from 'react';
 import { apiGet, apiPost } from '../../core/api';
 import { call, errorMessage, on } from '../../core/bridge';
@@ -21,8 +24,12 @@ export function RingScreen() {
   const { query } = useTab();
   const uuid = query.get('uuid') ?? '';
   const roomId = query.get('room_id') ?? '';
-  const name = query.get('name') ?? 'Someone';
-  const where = query.get('room');
+  const locked = useStore(app, s => !!s.lock?.locked);
+  const details = useStore(app, s => !!s.prefs?.lockedShowCallerDetails);
+  const sounds = useStore(app, s => s.prefs?.notificationSounds ?? true);
+  const prefs = useStore(app, s => s.prefs);
+  const name = locked && !details ? 'Incoming caller' : query.get('name') ?? 'Someone';
+  const where = locked && !details ? null : query.get('room');
   const video = query.get('mode') === 'video';
   const silent = query.get('silent') === '1';
   const expires = Math.max(1, Number(query.get('expires')) || 45);
@@ -51,13 +58,17 @@ export function RingScreen() {
   }, [uuid, expires]);
 
   useEffect(() => {
-    if (muted) return;
+    const minutes = new Date().getHours() * 60 + new Date().getMinutes();
+    const time = (v: string) => { const [h, m] = v.split(':').map(Number); return (h ?? 0) * 60 + (m ?? 0); };
+    const from = time(prefs?.dndFrom ?? '00:00'); const to = time(prefs?.dndTo ?? '00:00');
+    const dnd = prefs?.dndEnabled && (from === to || (from < to ? minutes >= from && minutes < to : minutes >= from || minutes < to));
+    if (muted || !sounds || dnd || locked && !prefs?.lockedAnswerCalls) return;
     tone.current = playTone('ring', volume);
     return () => {
       tone.current?.stop();
       tone.current = null;
     };
-  }, [muted]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [muted, sounds, locked, prefs?.lockedAnswerCalls, prefs?.dndEnabled, prefs?.dndFrom, prefs?.dndTo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const decline = async () => {
     setBusy(true);
@@ -69,7 +80,7 @@ export function RingScreen() {
     setBusy(true);
     tone.current?.stop();
     try {
-      await answerCall(uuid, roomId, withVideo, where ? `${name} · ${where}` : name);
+      await answerCall(uuid, roomId, withVideo && !locked, where ? `${name} · ${where}` : name);
       close();
     } catch (e) {
       setBusy(false);
@@ -176,8 +187,8 @@ export function RingScreen() {
                 Answer with voice only
               </button>
             ) : null}
-            <button type="button" onClick={() => setReplying(true)} className="hover:text-white">
-              Reply with message…
+            <button type="button" disabled={locked && !prefs?.lockedAllowChat} onClick={() => locked ? void openChatWindow(Number(roomId), 'Chat').catch(e => toast('error', errorMessage(e))) : setReplying(true)} className="hover:text-white disabled:opacity-50">
+              {locked ? prefs?.lockedAllowChat ? 'Open text chat' : 'Unlock to chat' : 'Reply with message…'}
             </button>
           </div>
         </div>

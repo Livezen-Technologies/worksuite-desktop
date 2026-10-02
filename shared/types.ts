@@ -94,6 +94,9 @@ export interface DesktopPolicy {
   downloads: 'allowed' | 'managed_only' | 'disabled';
   screen_capture_share: 'allowed' | 'disabled';
   app_lock_max_minutes: number;
+  locked_answer_calls?: boolean;
+  locked_show_caller_details?: boolean;
+  locked_allow_chat?: boolean;
   notification_min_privacy: NotificationPrivacy;
   required_background_services: string[];
   personal_device_mode: 'full' | 'online_only' | 'blocked';
@@ -220,6 +223,9 @@ export interface Preferences {
   /** Minutes of inactivity before the app locks; 0 = never. */
   appLockMinutes: number;
   lockOnSystemLock: boolean;
+  lockedAnswerCalls?: boolean;
+  lockedShowCallerDetails?: boolean;
+  lockedAllowChat?: boolean;
   openFilesLocally: 'ask' | 'always' | 'never';
   downloadFolder: string;
   mailCacheDays: 7 | 30 | 90 | 0;

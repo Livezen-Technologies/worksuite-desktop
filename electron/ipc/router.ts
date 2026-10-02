@@ -33,6 +33,7 @@ export interface RouterDeps {
   isTrustedSender: (event: Pick<IpcMainInvokeEvent, 'sender' | 'senderFrame'>) => boolean;
   isLocked: () => boolean;
   isSignedIn: () => boolean;
+  canUseWhileLocked?: (channel: string, input: unknown, sender: WebContents) => boolean;
   isGuestSender?: (id: number) => boolean;
   hasPermission: (key: string) => boolean;
   audit: (action: string, details: Record<string, unknown>) => void;
@@ -127,7 +128,7 @@ export class IpcRouter {
     if (!parsed.success) return this.violation(event, channel, 'IPC_VALIDATION_FAILED', parsed.error.issues[0]?.message ?? 'invalid');
 
     const opts = spec as { whileLocked?: boolean; session?: boolean; permission?: string; sensitive?: boolean; rate?: number };
-    if (this.deps.isLocked() && !opts.whileLocked) return failure('APP_LOCKED', 'WorkSuite is locked.');
+    if (this.deps.isLocked() && !opts.whileLocked && !this.deps.canUseWhileLocked?.(channel, parsed.data, event.sender)) return failure('APP_LOCKED', 'WorkSuite is locked.');
     const guestCapture = this.deps.isGuestSender?.(event.sender.id) && (channel === 'media:screenSources' || channel === 'media:screenPick');
     if (opts.session && !guestCapture && !this.deps.isSignedIn()) return failure('NOT_SIGNED_IN', 'Sign in to WorkSuite first.');
     if (opts.permission && !this.deps.hasPermission(opts.permission)) {
