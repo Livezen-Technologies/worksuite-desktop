@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.7.2 — 2026-10-02
+
+- Route missing interface translations through the shared catalog and missing-string tracker (#60).
+
 ## 1.7.1 — 2026-10-02
 
 - Handle missing recording lists safely during Drive polling and use the shared accessible checkbox in livestream destination selection (merge verification for #89/#93).

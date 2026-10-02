@@ -4,7 +4,9 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AuthState } from '@shared/types';
 import { app } from '../../core/app-state';
 import { call, errorMessage, isMac, on } from '../../core/bridge';
-import { t } from '../../core/i18n';
+import { t, LANGUAGES, useLanguage } from '../../core/i18n';
+import { Select } from '../../components/Select';
+import { updatePrefs } from '../../core/app-state';
 import { useStore } from '../../core/store';
 import { Icon } from '../../components/Icon';
 import { Button, TextField, cx } from '../../components/ui';
@@ -15,6 +17,7 @@ import { Checkbox } from '../../components/Checkbox';
  * UI-02, WF-01 steps 1–5). Everything that can fail says what to do next.
  */
 export function Onboarding({ auth }: { auth: AuthState }) {
+  const language = useLanguage();
   const [guest, setGuest] = useState(false);
   const [destination, setDestination] = useState<{ input: string; server?: string } | null>(null);
   useEffect(() => {
@@ -31,6 +34,8 @@ export function Onboarding({ auth }: { auth: AuthState }) {
           <span className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-brand text-[16px] font-extrabold text-white">W</span>
           <span className="text-[18px] font-bold text-ink">WorkSuite</span>
         </div>
+        <Select label="Language" aria-label="Choose your language" className="mb-4 w-full" value={language} options={LANGUAGES.map((l) => ({ value: l.id, label: l.label }))} onValueChange={(value) => void updatePrefs({ language: value }).catch((e) => toast('error', errorMessage(e)))} />
+        {language !== 'en' ? <p className="mb-4 text-xs text-ink-3">Some screens still use English.</p> : null}
         {(auth.stage === 'no-server' || auth.stage === 'signed-out' || auth.stage === 'expired') ? <Button className="mb-4 w-full" variant="secondary" onClick={() => void call('local:open').catch((e) => toast('error', errorMessage(e)))}>Continue Without Signing In</Button> : null}
         {guest ? <GuestJoinForm key={destination?.input} initialInput={destination?.input} server={destination?.server ?? auth.server?.origin} onBack={() => setGuest(false)} /> : null}
         {!guest ? <>

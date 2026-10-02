@@ -1,3 +1,4 @@
+import { localize } from '@shared/localization';
 import { useCallback } from 'react';
 import { useLanguage } from '../../core/i18n';
 
@@ -195,7 +196,7 @@ const ta: Partial<Record<PosKey, string>> = {
 const TABLES: Record<string, Partial<Record<PosKey, string>>> = { en, si, ta };
 
 export function translate(lang: string, key: PosKey, vars?: Record<string, string | number>): string {
-  let s: string = TABLES[lang]?.[key] ?? en[key];
+  let s: string = TABLES[lang]?.[key] ?? localize(en[key], lang);
   if (vars) for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, String(v));
   return s;
 }

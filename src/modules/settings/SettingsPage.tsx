@@ -134,7 +134,7 @@ function General() {
   return (
     <>
       <H title="General" />
-      <Row label="Language" hint="Sinhala, Tamil, Arabic and Hindi cover the main screens; the rest appears in English.">
+      <Row label="Language" hint="Choose your interface language. Some screens still use English.">
         <Select label="Language" value={prefs.language} options={LANGUAGES.map((l) => ({ value: l.id, label: l.label }))} onValueChange={(v) => void updatePrefs({ language: v })} />
       </Row>
       <Row label="Time zone" hint="From your WorkSuite profile, then your organization, then this computer. Changed in My account › Preferences.">

@@ -1,3 +1,4 @@
+import { localize } from '@shared/localization';
 import { meetingNoticeActions, type MeetingNoticeActions } from '@shared/meeting-invitations';
 import { inDnd } from '@shared/notification-block';
 import { reminderAction } from '@shared/task-reminders';
@@ -119,14 +120,14 @@ export function mapServerNotification(n: ServerNotification): NotificationItem {
 }
 
 /** Privacy modes (FR-NTF-04). */
-export function present(n: Incoming, privacy: NotificationPrivacy, moduleLabel: string): Presented {
+export function present(n: Incoming, privacy: NotificationPrivacy, moduleLabel: string, language = 'en'): Presented {
   switch (privacy) {
     case 'FULL':
       return { title: n.title, body: n.body };
     case 'SENDER_ONLY':
-      return { title: moduleLabel, body: n.sender ? `New from ${n.sender}` : `New ${moduleLabel.toLowerCase()} notification` };
+      return { title: localize(moduleLabel, language), body: n.sender ? localize('New from {sender}', language, { sender: n.sender }) : localize('New {module} notification', language, { module: localize(moduleLabel, language).toLowerCase() }) };
     case 'GENERIC':
-      return { title: 'WorkSuite', body: 'New WorkSuite notification' };
+      return { title: 'WorkSuite', body: localize('New WorkSuite notification', language) };
   }
 }
 
@@ -528,7 +529,7 @@ export class NotificationService {
     if (!Notification.isSupported()) return;
     const locked = this.isLocked();
     const privacy: NotificationPrivacy = locked ? 'GENERIC' : this.prefs().notificationPrivacy;
-    const shown = locked ? presentLocked(n, this.prefs()) : present(n, privacy, MODULE_LABELS[n.module] ?? n.module.charAt(0).toUpperCase() + n.module.slice(1));
+    const shown = locked ? presentLocked(n, this.prefs()) : present(n, privacy, MODULE_LABELS[n.module] ?? n.module.charAt(0).toUpperCase() + n.module.slice(1), this.prefs().language);
     const icon = process.platform === 'darwin' ? undefined : nativeImage.createFromPath(join(app.isPackaged ? process.resourcesPath : join(__dirname, '../../resources'), 'icons', '128x128.png'));
     const note = new Notification({
       title: shown.title,

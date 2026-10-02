@@ -1,8 +1,16 @@
 {
     "module": "settings",
-    "version": "1.8.0",
+    "version": "1.9.0",
     "paths": [
         "electron/services/settings.ts",
+        "shared/localization.ts",
+        "shared/locales",
+        "src/core/i18n.ts",
+        "src/core/time.ts",
+        "src/styles.css",
+        "src/components/ui.tsx",
+        "src/app/onboarding/Onboarding.tsx",
+        "build-tools/localization.mjs",
         "src/app/overlays/SearchOverlay.tsx"
     ]
 }

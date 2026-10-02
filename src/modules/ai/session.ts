@@ -1,3 +1,5 @@
+import { replyLanguageInstruction } from '@shared/localization';
+import { currentLanguage } from '../../core/i18n';
 import { isTodaySales } from './intent';
 import { todaySales, type SalesAccess } from './sales';
 import { t } from '../../core/i18n';
@@ -261,7 +263,7 @@ export function createAskSession(): AskSession {
         if (!a.text && !a.cancelled && !a.tools.length) throw new Error('The model on this computer gave no answer.');
         return { role: 'assistant', text: a.text || (a.cancelled ? t('ai.stopped') : ''), local: true, turn, asks: a.asked && !a.cancelled ? true : undefined };
       }
-      const r = askLocal([{ role: 'system', content: LOCAL_SYSTEM }, ...history, { role: 'user', content: full }], onText);
+      const r = askLocal([{ role: 'system', content: LOCAL_SYSTEM + '\n' + replyLanguageInstruction(currentLanguage()) }, ...history, { role: 'user', content: full }], onText);
       running = r;
       const a = await r.done;
       if (!a.text.trim() && !a.cancelled) throw new Error('The model on this computer gave no answer.');

@@ -517,3 +517,9 @@ textarea,
 [data-theme='dark'][data-dark-profile]:not([data-dark-profile='blue']) :is(
   [class~="hover:border-[#3B4E85]"]:hover
 ) { border-color: var(--ws-line); }
+
+/* Sinhala and Tamil glyphs and combining marks use bundled fonts, including while offline. */
+html:lang(si) { --font-sans: 'Noto Sans Sinhala', 'Plus Jakarta Sans Variable', system-ui, sans-serif; }
+html:lang(ta) { --font-sans: 'Noto Sans Tamil', 'Plus Jakarta Sans Variable', system-ui, sans-serif; }
+html:lang(si) body, html:lang(ta) body { line-height: 1.65; }
+html:lang(si) .ws-localized-control, html:lang(ta) .ws-localized-control { white-space: normal; overflow-wrap: anywhere; height: auto; min-height: 2rem; padding-block: .35rem; }

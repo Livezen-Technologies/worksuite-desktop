@@ -1,0 +1,12 @@
+{
+  "si": {
+    "status": "pending",
+    "reviewer": null,
+    "reviewedCommit": null
+  },
+  "ta": {
+    "status": "pending",
+    "reviewer": null,
+    "reviewedCommit": null
+  }
+}

@@ -2,10 +2,16 @@
   "compilerOptions": {
     "composite": true,
     "target": "ES2023",
-    "lib": ["ES2023", "DOM"],
+    "lib": [
+      "ES2023",
+      "DOM"
+    ],
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "types": ["node", "electron-vite/node"],
+    "types": [
+      "node",
+      "electron-vite/node"
+    ],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
@@ -18,8 +24,17 @@
     "outDir": "node_modules/.tsc/node",
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["shared/*"]
+      "@shared/*": [
+        "shared/*"
+      ]
     }
   },
-  "include": ["electron/**/*.ts", "shared/**/*.ts", "electron.vite.config.ts", "vitest.config.ts", "tests/unit/electron/**/*.ts"]
+  "include": [
+    "electron/**/*.ts",
+    "shared/**/*.ts",
+    "electron.vite.config.ts",
+    "vitest.config.ts",
+    "tests/unit/electron/**/*.ts",
+    "shared/locales/*.json"
+  ]
 }

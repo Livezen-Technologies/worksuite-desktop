@@ -1,3 +1,4 @@
+import { normalizeLanguage } from '@shared/localization';
 import { DEFAULT_DARK_PROFILE, normalizeDarkProfile } from '@shared/theme-profiles';
 import { app } from 'electron';
 import { join } from 'node:path';
@@ -69,14 +70,29 @@ export function defaultPreferences(): Preferences {
  */
 export class SettingsService {
   private prefs: Preferences;
+  private languageScope: string | null = null;
+  private defaultLanguage: string;
   private policy: DesktopPolicy | null = null;
   private listeners = new Set<(p: Preferences) => void>();
 
   constructor(private readonly db: Database) {
     const stored = db.getConfig<Partial<Preferences>>('preferences') ?? {};
     const defaults = defaultPreferences();
+    const savedLanguage = db.getConfig<unknown>('interface_language_default');
+    this.defaultLanguage = normalizeLanguage(typeof savedLanguage === 'string' ? savedLanguage : stored.language);
     // The AI settings are one object: one saved before a field was added takes that field's default.
     this.prefs = { ...defaults, ...stored, darkColorProfile: normalizeDarkProfile(stored.darkColorProfile), ai: { ...defaults.ai, ...stored.ai }, meetRecording: { ...defaults.meetRecording, ...stored.meetRecording }, drive: normalizeDrivePrefs(stored.drive) };
+  }
+
+  /** Interface language is isolated by server and user, while device policy stays computer-wide. */
+  setUserLanguageScope(origin: string | null, userId: string | null): void {
+    const next = origin && userId ? `${origin}:${userId}` : null;
+    if (next === this.languageScope) return;
+    if (this.db.getConfig('interface_language_default') === undefined || this.db.getConfig('interface_language_default') === null) this.db.setConfig('interface_language_default', this.defaultLanguage);
+    this.languageScope = next;
+    const saved = this.db.getConfig<Record<string, string>>('interface_languages') ?? {};
+    this.prefs = { ...this.prefs, language: normalizeLanguage(next ? saved[next] ?? this.defaultLanguage : this.defaultLanguage) };
+    this.emit();
   }
 
   setPolicy(policy: DesktopPolicy | null): void {
@@ -140,6 +156,13 @@ export class SettingsService {
     // So do Drive's: a change to one of them leaves the others as they were.
     const drive = patch.drive ? normalizeDrivePrefs({ ...this.prefs.drive, ...patch.drive }) : this.prefs.drive;
     this.prefs = { ...this.prefs, ...patch, meetRecording, drive };
+    if (patch.language !== undefined) {
+      this.prefs.language = normalizeLanguage(patch.language);
+      if (this.languageScope) {
+        const languages = this.db.getConfig<Record<string, string>>('interface_languages') ?? {};
+        this.db.setConfig('interface_languages', { ...languages, [this.languageScope]: this.prefs.language });
+      } else { this.defaultLanguage = this.prefs.language; this.db.setConfig('interface_language_default', this.prefs.language); }
+    }
     this.db.setConfig('preferences', this.prefs);
     this.emit();
     return this.effective();

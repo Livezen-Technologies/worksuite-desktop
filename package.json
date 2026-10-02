@@ -9,6 +9,8 @@
   "homepage": "https://worksuite.lk",
   "main": "out/main/index.js",
   "scripts": {
+    "localization:report": "node scripts/localization.mjs --write",
+    "localization:release-check": "node scripts/localization.mjs --release",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",

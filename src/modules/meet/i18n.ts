@@ -1,3 +1,4 @@
+import { localize } from '@shared/localization';
 import { useLanguage } from '../../core/i18n';
 
 /**
@@ -635,7 +636,7 @@ function lang(): string {
 }
 
 export function mt(key: MKey, vars?: Record<string, string | number>): string {
-  let s: string = TABLES[lang()]?.[key] ?? en[key];
+  let s: string = TABLES[lang()]?.[key] ?? localize(en[key], lang());
   if (vars) for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, String(v));
   return s;
 }

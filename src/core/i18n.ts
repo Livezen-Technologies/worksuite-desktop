@@ -1,3 +1,4 @@
+import { localize, normalizeLanguage, localeForLanguage } from '@shared/localization';
 import { useSyncExternalStore } from 'react';
 import type { AppDefinition } from '@shared/apps';
 import { MESSAGES, RTL_LANGUAGES, type MessageKey } from './locales';
@@ -11,18 +12,20 @@ let lang = 'en';
 const subs = new Set<() => void>();
 
 export function setLanguage(next: string | null | undefined): void {
-  const l = (next ?? 'en').split('-')[0]!;
+  const l = normalizeLanguage(next);
   const chosen = l in MESSAGES ? l : 'en';
-  if (chosen === lang && document.documentElement.lang === chosen) return;
+  if (chosen === lang && (typeof document === 'undefined' || document.documentElement.lang === chosen)) return;
   lang = chosen;
-  document.documentElement.lang = chosen;
-  document.documentElement.dir = RTL_LANGUAGES.has(chosen) ? 'rtl' : 'ltr';
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = chosen;
+    document.documentElement.dir = RTL_LANGUAGES.has(chosen) ? 'rtl' : 'ltr';
+  }
   for (const fn of subs) fn();
 }
 
 export function t(key: MessageKey, vars?: Record<string, string | number>): string {
   const table = MESSAGES[lang] ?? {};
-  let s = table[key] ?? MESSAGES.en?.[key] ?? key;
+  let s = table[key] ?? localize(MESSAGES.en?.[key] ?? key, lang);
   if (vars) for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, String(v));
   return s;
 }
@@ -34,6 +37,7 @@ export function useLanguage(): string {
       subs.add(fn);
       return () => subs.delete(fn);
     },
+    () => lang,
     () => lang,
   );
 }
@@ -49,5 +53,10 @@ export const LANGUAGES: Array<{ id: string; label: string }> = [
 /** An app's label in the current language, where the shell has one. */
 export function appLabel(a: Pick<AppDefinition, 'id' | 'label'>): string {
   const key = `nav.${a.id}` as MessageKey;
-  return key in MESSAGES.en! ? t(key) : a.label;
+  return key in MESSAGES.en! ? t(key) : text(a.label);
 }
+
+/** Static interface text; user-provided values belong only in interpolation variables. */
+export function text(source: string, vars?: Record<string, string | number>): string { return localize(source, lang, vars); }
+export function currentLanguage(): string { return lang; }
+export function currentLocale(): string { return localeForLanguage(lang); }
