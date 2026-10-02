@@ -1,7 +1,8 @@
 {
     "module": "settings",
-    "version": "1.7.1",
+    "version": "1.7.2",
     "paths": [
-        "electron/services/settings.ts"
+        "electron/services/settings.ts",
+        "src/app/overlays/SearchOverlay.tsx"
     ]
 }
