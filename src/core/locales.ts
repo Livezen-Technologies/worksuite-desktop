@@ -95,6 +95,15 @@ const en = {
   'home.activity': 'Activity',
   'home.files': 'Recent files',
   'home.summary': 'Daily summary',
+  'home.dueToday': 'Due today',
+  'home.meetingsToday': 'Meetings today',
+  'home.waitingForYou': 'Waiting for you',
+  'home.agenda': "Today's agenda",
+  'home.brief': 'Your daily brief',
+  'home.announcements': 'Announcements',
+  'home.recentActivity': 'Recent activity',
+  'home.customize': 'Customize',
+  'home.new': 'New',
 } as const;
 
 export type MessageKey = keyof typeof en;

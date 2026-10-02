@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.9.1 — 2026-10-02
+
+- Greeting now picks morning/afternoon/evening correctly when the 12-hour clock is set; Sinhala and Tamil text for the new Home.
+
 ## 1.9.0 — 2026-10-02
 
 - Add a shared Sinhala/Tamil localization pipeline, first-time language selection, per-user language persistence, locale formatting and reproducible translation audits. Catalogs are drafts; full translation and fluent review remain pending (#60).

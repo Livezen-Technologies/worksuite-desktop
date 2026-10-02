@@ -2,7 +2,26 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { setRegional } from '../../../src/core/time';
 import type { CalendarEvent } from '../../../src/modules/calendar/api';
 import type { Task } from '../../../src/modules/tasks/api';
-import { DEFAULT_LAYOUT, dueToday, meetingsToday, mergeTasks, move, normalise, todaysWork, toggle } from '../../../src/modules/home/today';
+import {
+  DEFAULT_LAYOUT,
+  agendaOf,
+  allDayLabel,
+  cappedCount,
+  dueToday,
+  durationLabel,
+  isTenderMeeting,
+  mainSpans,
+  meetingsToday,
+  mergeTasks,
+  move,
+  normalise,
+  place,
+  resize,
+  todaysWork,
+  toggle,
+  untilLabel,
+  waitingBreakdown,
+} from '../../../src/modules/home/today';
 
 beforeAll(() => setRegional({ timezone: 'Asia/Colombo', locale: 'en-GB' }));
 
@@ -62,5 +81,76 @@ describe('Home: customize (QA-015)', () => {
     expect(n.order).toHaveLength(DEFAULT_LAYOUT.order.length);
     expect(n.hidden).toEqual(['files']);
     expect(normalise('garbage')).toEqual(DEFAULT_LAYOUT);
+  });
+
+  it('moves a card only among the cards of its zone', () => {
+    // The daily brief is the first of the rail, though main cards come before it in the list.
+    expect(move(DEFAULT_LAYOUT, 'summary', -1)).toBe(DEFAULT_LAYOUT);
+    expect(move(DEFAULT_LAYOUT, 'files', 1)).toBe(DEFAULT_LAYOUT);
+    expect(move(DEFAULT_LAYOUT, 'waiting', -1).order.filter((id) => ['summary', 'waiting', 'announcements'].includes(id))).toEqual(['waiting', 'summary', 'announcements']);
+    expect(place(DEFAULT_LAYOUT, 'summary', 'work')).toBe(DEFAULT_LAYOUT);
+    expect(place(DEFAULT_LAYOUT, 'files', 'work').order.slice(0, 2)).toEqual(['files', 'work']);
+    expect(resize(DEFAULT_LAYOUT, 'waiting', 'wide').wide).toEqual([]);
+  });
+
+  it('migrates a layout saved before the optimized Home', () => {
+    // Never reordered: the new default order, with what was hidden; the old two-of-three "wide" is dropped.
+    const untouched = normalise({ order: ['work', 'calendar', 'waiting', 'announcements', 'activity', 'files', 'summary'], hidden: ['files'], wide: ['calendar'] });
+    expect(untouched).toEqual({ ...DEFAULT_LAYOUT, hidden: ['files'] });
+    // Reordered: kept, each card in its own zone.
+    const moved = normalise({ order: ['files', 'work', 'summary', 'calendar', 'waiting', 'announcements', 'activity'], hidden: [], wide: ['files'] });
+    expect(moved.order.slice(0, 2)).toEqual(['files', 'work']);
+    expect(moved.wide).toEqual([]);
+    // A version 2 layout keeps its wide main cards, never a wide rail card.
+    expect(normalise({ version: 2, order: DEFAULT_LAYOUT.order, hidden: [], wide: ['calendar', 'summary'] }).wide).toEqual(['calendar']);
+  });
+
+  it('pairs main cards 5 + 4, a wide or lone one takes the row', () => {
+    expect([...mainSpans(['work', 'calendar', 'activity', 'files'], [])]).toEqual([['work', 'major'], ['calendar', 'minor'], ['activity', 'major'], ['files', 'minor']]);
+    expect([...mainSpans(['work', 'calendar', 'activity'], ['calendar'])]).toEqual([['work', 'full'], ['calendar', 'full'], ['activity', 'full']]);
+  });
+});
+
+describe('Home: the tiles and the agenda (optimized)', () => {
+  const ev = (over: Partial<CalendarEvent>): CalendarEvent => ({ source: 'event', id: 1, title: 'x', color: null, start_at: `${today} 10:00:00`, end_at: `${today} 10:30:00`, all_day: false, editable: true, ...over });
+
+  it('caps unread at 99+ and says what is waiting by kind', () => {
+    expect(cappedCount(99)).toBe('99');
+    expect(cappedCount(100)).toBe('99+');
+    expect(waitingBreakdown({ invitations: 1, approvals: 2, acknowledgements: 0 })).toBe('1 invitation · 2 approvals');
+    expect(waitingBreakdown({ invitations: 0, approvals: 0, acknowledgements: 0 })).toBe('');
+  });
+
+  it('says how long and how soon', () => {
+    expect(durationLabel(30)).toBe('30 min');
+    expect(durationLabel(60)).toBe('1 hr');
+    expect(durationLabel(95)).toBe('1 hr 35 min');
+    expect(untilLabel(55)).toBe('in 55 min');
+    expect(untilLabel(0)).toBe('Now');
+  });
+
+  it('puts now after what ended, and the next meeting is the one on now or the first to come', () => {
+    const events = [
+      ev({ id: 1, title: 'Standup', source: 'meeting', start_at: `${today} 09:00:00`, end_at: `${today} 09:15:00` }),
+      ev({ id: 2, title: 'Focus', start_at: `${today} 10:00:00`, end_at: `${today} 11:00:00` }),
+      ev({ id: 3, title: 'Review', source: 'businessmeeting', start_at: `${today} 14:00:00`, end_at: `${today} 14:30:00` }),
+      ev({ id: 4, title: 'Renewal', source: 'subscription', all_day: true }),
+    ];
+    const a = agendaOf(events, 10 * 60 + 5);
+    expect(a.allDay.map((e) => e.id)).toEqual([4]);
+    expect(a.timed.map((i) => [i.e.id, i.past, i.live])).toEqual([[1, true, false], [2, false, true], [3, false, false]]);
+    expect(a.nowAt).toBe(1);
+    expect(a.next?.e.id).toBe(3);
+    expect(agendaOf(events, 14 * 60 + 10).next?.live).toBe(true);
+    expect(agendaOf(events, 20 * 60).nowAt).toBe(3);
+    expect(agendaOf(events, 20 * 60).next).toBeNull();
+    expect(allDayLabel([events[3]!, { ...events[3]!, id: 5 }])).toEqual({ title: 'All day · 2 renewals', detail: 'Subscription renewals' });
+    expect(allDayLabel([events[3]!, ev({ id: 6, source: 'task', all_day: true })]).title).toBe('All day · 2 items');
+  });
+
+  it('knows a tender meeting by its source, or by its label from an older server', () => {
+    expect(isTenderMeeting(ev({ source: 'businessmeeting', source_type: 'tender' }))).toBe(true);
+    expect(isTenderMeeting(ev({ source: 'businessmeeting', related: { kind_label: 'Tender Meeting', label: null, link: null, open_label: null } }))).toBe(true);
+    expect(isTenderMeeting(ev({ source: 'businessmeeting', source_type: 'crm_lead' }))).toBe(false);
   });
 });
