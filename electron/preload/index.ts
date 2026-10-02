@@ -57,7 +57,7 @@ const api = {
     openInBrowser: call('app:openInBrowser'),
     setDockIcon: call('app:setDockIcon'),
   },
-  local: { open: call('local:open'), read: call('local:read'), save: call('local:save'), remove: call('local:remove'), export: call('local:export'), restore: call('local:restore'), deleteAll: call('local:deleteAll'), meeting: call('local:meeting'), signIn: call('local:signIn'), importOffer: call('local:importOffer'), reviewImport: call('local:reviewImport'), import: call('local:import') },
+  local: { open: call('local:open'), status: call('local:status'), profile: call('local:profile'), unlock: call('local:unlock'), restorePreview: call('local:restorePreview'), joinMeeting: call('local:joinMeeting'), read: call('local:read'), save: call('local:save'), remove: call('local:remove'), export: call('local:export'), restore: call('local:restore'), deleteAll: call('local:deleteAll'), meeting: call('local:meeting'), signIn: call('local:signIn'), importOffer: call('local:importOffer'), reviewImport: call('local:reviewImport'), import: call('local:import') },
   guest: { pending: call('guest:pending'), open: call('guest:open'), info: call('guest:info'), join: call('guest:join'), signIn: call('guest:signIn') },
   auth: {
     state: call('auth:state'),
