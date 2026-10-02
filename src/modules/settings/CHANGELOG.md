@@ -4,6 +4,11 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.11.2 — 2026-10-03
+
+- Sinhala and Tamil text for the Manage dialog's hints.
+- Command palette result footer (#148): Open is a 44 px brand-gradient button with a glass ↵ chip; New window and Copy link are 40 px glass buttons showing Ctrl/⌘+↵ and Ctrl/⌘+C only when they work; Copy link turns into Copied with a check for 1.5 s; focus rings everywhere, no lift or scale with reduced motion. Ctrl/⌘+C copies the result's link when nothing is selected.
+
 ## 1.11.1 — 2026-10-03
 
 - Settings › Mail: accounts with status and Repair, Manage, offline period and local size with Clear, notifications and badge; storage and sync; appearance; Sinhala and Tamil text for Mail.

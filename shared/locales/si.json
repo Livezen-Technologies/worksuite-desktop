@@ -1199,5 +1199,8 @@
   "Bright surfaces, best in daylight": "දීප්තිමත් මතුපිට, දිවා ආලෝකයේ වඩාත් සුදුසුයි",
   "Low-glare surfaces for long sessions": "දිගු වැඩ සඳහා අඩු දීප්තියක් සහිත මතුපිට",
   "Follows Windows or macOS": "Windows හෝ macOS අනුගමනය කරයි",
-  "Text size": "පෙළ ප්‍රමාණය"
+  "Text size": "පෙළ ප්‍රමාණය",
+  "Mix its mail into Unified inbox with your other mailboxes.": "ඔබේ අනෙකුත් තැපැල් පෙට්ටි සමඟ එහි තැපැල් ඒකාබද්ධ එන ලිපි වෙත එක් කරන්න.",
+  "Desktop notifications for mail arriving in this mailbox.": "මෙම තැපැල් පෙට්ටියට පැමිණෙන තැපැල් සඳහා ඩෙස්ක්ටොප් දැනුම්දීම්.",
+  "Stop checking for new mail until you turn this off.": "ඔබ මෙය අක්‍රිය කරන තුරු නව තැපැල් පරීක්ෂා කිරීම නවත්වන්න."
 }

@@ -5,7 +5,7 @@ import { errorMessage } from '../../core/bridge';
 import { text } from '../../core/i18n';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
-import { Button, DATA_TEXT, Modal, Spinner, TextField, cx } from '../../components/ui';
+import { Button, DATA_TEXT, Kbd, Modal, Spinner, TextField, cx } from '../../components/ui';
 import { mailKeys, useFolders, useLabels } from './api';
 import { SMART_VIEWS, agoShort, folderName, mailboxLetter, type SmartViewId } from './model';
 import { AccountAvatar, Count, SectionHeading } from './parts';
@@ -68,12 +68,13 @@ export function MailSidebar(p: SidebarProps) {
   return (
     <nav aria-label="Mail" className="flex w-[260px] shrink-0 flex-col border-r border-line bg-surface">
       <div className="flex gap-2 p-3 pb-1">
-        <Button data-guide="mail.compose" variant="primary" size="lg" icon="compose" className="flex-1" onClick={p.onCompose} title="New email (N)">
-          New email
+        <Button data-guide="mail.compose" variant="accent" size="action-lg" icon="compose" className="flex-1" onClick={p.onCompose} title={text('New email (N)')} aria-keyshortcuts="N">
+          <span className="min-w-0 flex-1 text-left">{text('New email')}</span>
+          <Kbd tone="accent" aria-hidden>
+            N
+          </Kbd>
         </Button>
-        <button type="button" onClick={p.onSearch} aria-label="Search mail" title="Search mail (/)" className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-line text-ink-2 hover:bg-subtle">
-          <Icon name="search" size={17} />
-        </button>
+        <Button variant="glass" size="action-icon" icon="search" onClick={p.onSearch} aria-label={text('Search mail')} title={text('Search mail (/)')} />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2 scroll-thin">
         <SectionHeading label={text('Mailboxes')} open={open.mailboxes} onToggle={() => toggle('mailboxes')} onAdd={p.onAddMailbox} addLabel={text('Add a mailbox')} />

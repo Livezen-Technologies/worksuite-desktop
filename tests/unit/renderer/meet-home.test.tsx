@@ -79,8 +79,15 @@ describe('the rules', () => {
   });
 
   it('groups upcoming meetings by day, in order', () => {
-    const g = byDay([{ scheduled_at: at(60 * 26) }, { scheduled_at: at(30) }, { scheduled_at: at(90) }]);
-    expect(g.map((x) => x.rows.length)).toEqual([2, 1]);
+    // A morning clock, so +30 and +90 minutes fall on the same day whatever time the suite runs.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 2, 9, 0, 0));
+    try {
+      const g = byDay([{ scheduled_at: at(60 * 26) }, { scheduled_at: at(30) }, { scheduled_at: at(90) }]);
+      expect(g.map((x) => x.rows.length)).toEqual([2, 1]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('remembers devices, and falls back to the default for one that has gone', () => {

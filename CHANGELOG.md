@@ -5,6 +5,15 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.93: clearer Mail settings and modern buttons
+
+- **Mail › Manage** showed three toggles with no names. Each now reads **Show in the unified inbox**, **Notify me about new mail** and **Pause syncing**, with a one-line explanation, and **Remove…** is shown as the red danger action it is.
+- **Command palette (⌘K / Ctrl+K)** (#148): the selected result's **Open** button is a brand-coloured gradient with white text, a soft glow and a glass ↵ key; **New window** and **Copy link** are translucent glass buttons that light up on hover. Their shortcut keys show only when they work (Ctrl/⌘+↵ and Ctrl/⌘+C — the latter copies the result's link when nothing is selected). **Copy link** briefly turns into **Copied** with a check.
+- **Mail's New email** button gets the same treatment — white text on the brand gradient, with its **N** shortcut — and the search button beside it becomes a matching glass square.
+- Keyboard focus rings on all of them; hover lifts are off when your system asks for reduced motion.
+
+---
+
 ## 2026-10-03 — 0.2.92: the new Mail
 
 Mail is rebuilt to the *WorkSuite Mail — Desktop app* design, in light and dark:
