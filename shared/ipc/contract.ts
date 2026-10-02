@@ -167,6 +167,7 @@ export const preferencesPatchSchema = z
         local: z.record(z.string().regex(/^[a-z][a-z0-9_]{0,31}$/), z.object({ read: z.boolean(), write: z.boolean() })),
       }),
       onlineFallback: z.boolean(),
+      autoMinimize: z.boolean(),
     }),
     // The local folder is not here: only the main process's folder dialog sets it.
     meetRecording: z.object({

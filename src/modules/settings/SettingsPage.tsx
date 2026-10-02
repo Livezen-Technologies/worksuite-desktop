@@ -281,6 +281,7 @@ const MODULE_TOGGLES = [
   ['files', 'Files'],
   ['support', 'Support'],
   ['salon', 'SalonMate front desk'],
+  ['ai', 'AI Assistant'],
   ['system', 'System alerts'],
 ] as const;
 
@@ -450,7 +451,12 @@ function AiSection({ prefs }: { prefs: Preferences }) {
           <Switch label="Allow online fallback" checked={a.onlineFallback ?? true} onChange={(v) => set({ onlineFallback: v })} />
         </span>
       </Row>
-      <Row label="Sound for new answers" hint="A short chime when an answer arrives while the assistant is closed or minimized.">
+      {a.display === 'widget' ? (
+        <Row label="Auto-minimize after sending" hint="The widget goes down to its button once you send a question. The answer keeps coming, and the button tells you when it is ready.">
+          <Switch label="Auto-minimize after sending" checked={a.autoMinimize ?? false} onChange={(v) => set({ autoMinimize: v })} />
+        </Row>
+      ) : null}
+      <Row label="Sound for new answers" hint="A short chime when an answer arrives while the assistant is closed or minimized. Off while notifications are off, paused or in Do not disturb.">
         <Switch label="Sound for new answers" checked={a.sound} onChange={(v) => set({ sound: v })} />
       </Row>
       <Row label="Quick Ask" hint="Opens over any app with the text you have selected there. The selection is read only when you press the shortcut.">

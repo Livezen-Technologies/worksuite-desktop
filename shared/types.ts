@@ -333,6 +333,11 @@ export interface AiPrefs {
    * was asked, WorkSuite AI answers instead — the question and the context it needs are then sent to it.
    */
   onlineFallback: boolean;
+  /**
+   * Auto-minimize after sending (worksuite-desktop#110): the floating widget goes down to its launcher once a question
+   * is sent; the answer carries on, and the launcher says when it is ready.
+   */
+  autoMinimize: boolean;
 }
 
 /** The two assistants Module Access is set for: the server's, and the model on this computer. */

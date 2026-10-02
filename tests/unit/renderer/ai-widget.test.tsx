@@ -18,7 +18,7 @@ const { assistantSession, createAskSession } = await import('../../../src/module
 const { AiDock, useAssistantAlerts, useAssistantFollowsDisplay } = await import('../../../src/app/overlays/AiDock');
 const { AiWidget } = await import('../../../src/app/overlays/AiWidget');
 
-const AI: Preferences['ai'] = { quickAsk: true, shortcut: 'Alt+Space', insert: true, dockAtStart: false, language: 'Sinhala', display: 'widget', sound: false, moduleAccess: { worksuite: {}, local: {} }, onlineFallback: true };
+const AI: Preferences['ai'] = { quickAsk: true, shortcut: 'Alt+Space', insert: true, dockAtStart: false, language: 'Sinhala', display: 'widget', sound: false, moduleAccess: { worksuite: {}, local: {} }, onlineFallback: true, autoMinimize: false };
 const setAi = (patch: Partial<Preferences['ai']>) => app.set((s) => ({ prefs: { ...(s.prefs ?? {}), ai: { ...AI, ...(s.prefs?.ai ?? {}), ...patch } } as Preferences }));
 
 const turn = (reply: string): AskTurn => ({ ok: true, reply, conversation_id: 4, tool_runs: [], sources: [], pending_actions: [] }) as unknown as AskTurn;
@@ -106,7 +106,7 @@ describe('the floating widget (#61)', () => {
     // Down to the launcher: it turns while the answer is coming, and says so.
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.getByTestId('ai-launcher-busy')).toBeTruthy();
-    expect(launcher().getAttribute('aria-label')).toBe('Ask AI — The AI Assistant is answering…');
+    expect(launcher().getAttribute('aria-label')).toBe('Ask AI — Thinking with online AI…');
     expect(document.activeElement).toBe(launcher());
     await answer('Two tasks are due.');
     // It stopped turning, and the answer waits, counted.

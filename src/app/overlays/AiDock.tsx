@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import type { Preferences } from '@shared/types';
 import { app } from '../../core/app-state';
 import { call, isMac } from '../../core/bridge';
 import { t } from '../../core/i18n';
@@ -11,7 +12,7 @@ import { Assist } from '../../modules/ai/Assist';
 import { AskPanel } from '../../modules/ai/AskPanel';
 import { Changes } from '../../modules/ai/Changes';
 import { refForRoute } from '../../modules/ai/assistant';
-import { assistantSession } from '../../modules/ai/session';
+import { assistantSession, type AskEngine, type AskPhase } from '../../modules/ai/session';
 import { shortcutLabel } from '../../modules/ai/writer';
 
 export type AiDockView = 'ask' | 'write' | 'changes';
@@ -86,22 +87,75 @@ function chime(): void {
   }
 }
 
-/** Settings › AI Assistant › Sound: a chime for each answer that arrives while no panel shows the conversation. */
+/** Within a Do not disturb schedule (from–to, which may run past midnight); the same rule the desktop notifications use. */
+function inDnd(from: string, to: string, now: Date): boolean {
+  const minutes = (s: string) => {
+    const [h, m] = s.split(':').map(Number);
+    return (h ?? 0) * 60 + (m ?? 0);
+  };
+  const f = minutes(from);
+  const t = minutes(to);
+  const n = now.getHours() * 60 + now.getMinutes();
+  if (f === t) return false;
+  return f < t ? n >= f && n < t : n >= f || n < t;
+}
+
+/**
+ * Whether the assistant may tell the person an answer arrived (worksuite-desktop#110): notifications on, the AI
+ * Assistant not muted in them, not paused and not in Do not disturb. When it may not, the answer is still counted
+ * on the launcher and the header button — quietly, with no notice and no sound.
+ */
+export function assistantMayNotify(prefs: Preferences | null | undefined, pausedUntil: string | null | undefined, now = new Date()): boolean {
+  if (!prefs) return true;
+  if (prefs.notificationsEnabled === false) return false;
+  if (prefs.moduleNotifications?.ai === false || prefs.moduleNotifications?.['cat:ai'] === false) return false;
+  if (pausedUntil && Date.parse(pausedUntil) > now.getTime()) return false;
+  if (prefs.dndEnabled && inDnd(prefs.dndFrom, prefs.dndTo, now)) return false;
+  return true;
+}
+
+/**
+ * The notice beside the launcher (worksuite-desktop#110): an answer that arrived while the assistant was closed or
+ * minimised. `ready` — Your answer is ready; `input` — it needs the person (a change to confirm, details asked for);
+ * `failed` — it could not answer.
+ */
+export type AiNoticeKind = 'ready' | 'input' | 'failed';
+export const aiNotice = createStore<{ kind: AiNoticeKind | null }>({ kind: null });
+
+/**
+ * For each answer that arrives while no panel shows the conversation: the notice, and Settings › AI Assistant ›
+ * Sound's chime — both only as the notification settings allow.
+ */
 export function useAssistantAlerts(): void {
   useEffect(
     () =>
       assistantSession.onUnseen(() => {
-        if (app.get().prefs?.ai?.sound) chime();
+        const s = app.get();
+        if (!assistantMayNotify(s.prefs, s.status?.notificationsPausedUntil)) return;
+        const phase = assistantSession.store.get().phase;
+        aiNotice.set({ kind: phase === 'needsInput' ? 'input' : phase === 'failed' ? 'failed' : 'ready' });
+        if (s.prefs?.ai?.sound) chime();
+      }),
+    [],
+  );
+  // Once the conversation shows, or another question goes, the notice has said what it had to.
+  useEffect(
+    () =>
+      assistantSession.store.subscribe(() => {
+        const st = assistantSession.store.get();
+        if (aiNotice.get().kind && (st.viewers > 0 || st.busy)) aiNotice.set({ kind: null });
       }),
     [],
   );
 }
 
-/** The assistant is answering, and how many answers arrived unseen: for the header button and the launcher. */
-export function useAssistantActivity(): { busy: boolean; unread: number } {
+/** Where the assistant is, and how many answers arrived unseen: for the header button and the launcher. */
+export function useAssistantActivity(): { busy: boolean; unread: number; phase: AskPhase; engine: AskEngine } {
   const busy = useStore(assistantSession.store, (s) => s.busy);
   const unread = useStore(assistantSession.store, (s) => s.unread);
-  return { busy, unread };
+  const phase = useStore(assistantSession.store, (s) => s.phase);
+  const engine = useStore(assistantSession.store, (s) => s.engine);
+  return { busy, unread, phase, engine };
 }
 
 export function unreadLabel(n: number): string {
@@ -133,7 +187,7 @@ export function AiDock() {
 }
 
 /** What the drawer and the widget both show: Ask, Write and Changes, on the one conversation. */
-export function AssistantBody({ autoFocus }: { autoFocus?: boolean }) {
+export function AssistantBody({ autoFocus, onMinimize, onSent }: { autoFocus?: boolean; onMinimize?: () => void; onSent?: () => void }) {
   const hasAi = useStore(app, (s) => s.apps.some((a) => a.id === 'ai'));
   const language = useStore(app, (s) => s.prefs?.ai?.language ?? 'English');
   const quickAsk = useStore(app, (s) => (s.prefs?.ai?.quickAsk ? s.prefs.ai.shortcut : null));
@@ -155,7 +209,7 @@ export function AssistantBody({ autoFocus }: { autoFocus?: boolean }) {
       </div>
       {d.view === 'ask' ? (
         <div className="flex min-h-0 flex-1 flex-col p-4">
-          <AskPanel surface="assistant.panel" session={assistantSession} tabRef={tabRef} tabTitle={active?.title ?? null} autoFocus={autoFocus} />
+          <AskPanel surface="assistant.panel" session={assistantSession} tabRef={tabRef} tabTitle={active?.title ?? null} autoFocus={autoFocus} onMinimize={onMinimize} onSent={onSent} />
         </div>
       ) : d.view === 'changes' ? (
         <div className="flex min-h-0 flex-1 flex-col p-4">

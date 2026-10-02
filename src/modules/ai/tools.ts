@@ -230,6 +230,8 @@ export interface AgentResult {
   tools: AskTool[];
   actions: PendingAction[];
   sources: AskSource[];
+  /** A function needed details the person has not given: the answer asks them for those. */
+  asked: boolean;
 }
 
 /**
@@ -251,6 +253,7 @@ export async function runLocalAgent(opts: {
   const tools: AskTool[] = [];
   const actions: PendingAction[] = [];
   const sources: AskSource[] = [];
+  let asked = false;
   for (let step = 0; ; step++) {
     // A call is not shown while it is being written: only an answer streams.
     const job = opts.ask(msgs, (t) => (/<call>/.test(t) ? undefined : opts.onText(t)));
@@ -259,7 +262,7 @@ export async function runLocalAgent(opts: {
     const call = r.cancelled ? null : parseCall(r.text);
     if (!call || step >= MAX_STEPS) {
       const text = call ? 'I could not finish this in a few steps. Try asking for one thing at a time.' : r.text.replace(/<call>[\s\S]*?<\/call>/g, '').trim();
-      return { text, cancelled: r.cancelled, tools, actions, sources };
+      return { text, cancelled: r.cancelled, tools, actions, sources, asked };
     }
     msgs.push({ role: 'assistant', content: r.text.trim() });
     const tool = opts.tools.find((t) => t.name === call.name);
@@ -278,6 +281,7 @@ export async function runLocalAgent(opts: {
     }
     tools.push({ name: call.name, label: tool?.label ?? call.name, ok: out.ok || !!out.missing?.length, error: out.ok ? null : (out.error ?? null) });
     if (out.pending_action) actions.push(out.pending_action);
+    if (out.missing?.length) asked = true;
     for (const l of out.links ?? []) if (!sources.some((s) => s.url === l.url)) sources.push({ n: sources.length + 1, kind: 'record', title: l.label, url: l.url });
     msgs.push({ role: 'user', content: resultMessage(call.name, out) });
   }
