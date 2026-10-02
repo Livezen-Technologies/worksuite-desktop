@@ -5,7 +5,7 @@ import { useCanOpen, useVisibleIds } from '../../core/access';
 import { ApiError, apiDelete, apiGet, apiGetMeta, apiPost, apiPut } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
 import { useTab } from '../../core/tab-context';
-import { dayLabel, wallTimeLabel } from '../../core/time';
+import { currentZone, dayLabel, wallTimeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Avatar, Button, Chip, Modal, Spinner, cx } from '../../components/ui';
 import { createMeeting, openMeeting } from '../meet/api';
@@ -139,6 +139,8 @@ function Summary({ e, onClose }: { e: CalendarEvent; onClose: () => void }) {
       <span className="text-ink-2">{when}</span>
       {e.related?.label ? <span className="text-ink-2">{e.related.label}</span> : null}
       {e.subtitle || e.location ? <span className="text-ink-2">{e.subtitle ?? e.location}</span> : null}
+      {e.organizer ? <span className="text-ink-2">Organised by {e.organizer}</span> : null}
+      {e.timezone && e.timezone !== currentZone() ? <span className="text-ink-3">Booked on {e.timezone} time; shown here on yours.</span> : null}
       {e.status ? <Chip>{e.status.replace(/_/g, ' ')}</Chip> : null}
       {e.priority ? <span className="text-ink-3">Priority: {e.priority}</span> : null}
       {e.description ? <p className="whitespace-pre-wrap text-ink selectable">{e.description}</p> : null}

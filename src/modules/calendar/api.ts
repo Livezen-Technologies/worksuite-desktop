@@ -53,6 +53,9 @@ export interface CalendarEvent {
   source_type?: string | null;
   source_kind?: string | null;
   related?: { kind_label: string; label: string | null; link: string | null; open_label: string | null } | null;
+  /** A business meeting's: the clock it was booked on, and who organises it (#100). */
+  timezone?: string | null;
+  organizer?: string | null;
 }
 
 export interface Participant {
@@ -275,7 +278,8 @@ function linkOf(e: CalendarEvent): string | null {
 
 function openLabel(e: CalendarEvent): string {
   switch (e.source) {
-    case 'businessmeeting': return 'Open Meeting';
+    // Beside "Open Tender", the meeting itself is the one to view (#100).
+    case 'businessmeeting': return e.source_type ? 'View Meeting' : 'Open Meeting';
     case 'task': return 'Open Task';
     case 'tender': return 'View Tender';
     case 'subscription': return 'Open Subscription';
