@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.9.3 — 2026-10-02
+
+- Default new or missing AI display preferences to the floating widget without opening chat at startup (#127).
+
 ## 1.9.2 — 2026-10-02
 
 - Sinhala and Tamil text for the new call states (#113).

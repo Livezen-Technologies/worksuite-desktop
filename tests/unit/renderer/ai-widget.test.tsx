@@ -207,3 +207,13 @@ describe('the sound for new answers (#61)', () => {
     vi.unstubAllGlobals();
   });
 });
+
+it('uses a minimized launcher when no display preference was saved (#127)', () => {
+  app.set({ prefs: { ai: { ...AI, display: undefined } } as unknown as Preferences });
+  wrap(<AiWidget />);
+  expect(launcher().getAttribute('aria-expanded')).toBe('false');
+  expect(screen.queryByRole('dialog')).toBeNull();
+  act(() => openAssistant());
+  expect(aiWidget.get().open).toBe(true);
+  expect(ui.get().dock).toBeNull();
+});
