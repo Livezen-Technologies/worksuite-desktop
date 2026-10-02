@@ -4,6 +4,11 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.8.0 — 2026-10-02
+
+- Add Share Document in the meeting toolbar and Files panel, with Drive selection and device uploads. Open shared Office documents and PDFs in WorkSuite windows while the meeting remains connected, and select the document window for presentation (#109).
+- List shared Drive documents using the server's current per-reader access decisions. Explain attachment-copy editing and external editing limitations. Meeting-only grants, guest document access and document navigation synchronization remain outstanding.
+
 ## 1.7.2 — 2026-10-02
 
 - Route missing interface translations through the shared catalog and missing-string tracker (#60).
