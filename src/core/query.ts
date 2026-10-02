@@ -40,6 +40,11 @@ export function wireQueryInvalidation(): void {
       void queryClient.invalidateQueries({ queryKey: ['chat', 'rooms'] });
       if (e.room_id !== undefined) void queryClient.invalidateQueries({ queryKey: ['chat', 'messages', String(e.room_id)] });
     }
+    // A call rang, was answered or stopped: Chat › Calls and the call's card in its conversation say so now (worksuite-desktop#113).
+    if (e.type === 'chat.call.ringing' || e.type === 'chat.call.stopped') {
+      void queryClient.invalidateQueries({ queryKey: ['chat', 'calls'] });
+      if (e.room_id !== undefined) void queryClient.invalidateQueries({ queryKey: ['chat', 'messages', String(e.room_id)] });
+    }
     if (e.type === 'notification') void queryClient.invalidateQueries({ queryKey: ['notifications'] });
     // Something shared with this person, or their access changed: Shared with me and Drive's lists show it now (worksuite-desktop#16).
     if (e.type === 'notification' && typeof e.event === 'string' && /^files\.(shared|access_changed|access_revoked)$/.test(e.event)) {
