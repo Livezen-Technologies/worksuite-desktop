@@ -42,6 +42,8 @@ export function defaultPreferences(): Preferences {
     lockedAnswerCalls: true,
     lockedShowCallerDetails: false,
     lockedAllowChat: false,
+    lockedNotificationSender: false,
+    lockedNotificationPreview: false,
     lockOnSystemLock: true,
     openFilesLocally: 'ask',
     downloadFolder: downloads,
@@ -54,7 +56,7 @@ export function defaultPreferences(): Preferences {
     shortcuts: {},
     backgroundServices: { notifications: true, realtime: true },
     webchatRinging: { window: true, duringDnd: 'card', shortcut: true, volume: 80 },
-    ai: { quickAsk: true, shortcut: process.platform === 'darwin' ? 'Alt+Space' : 'Control+Alt+Space', insert: true, dockAtStart: false, language: 'Sinhala', display: 'drawer', sound: false, moduleAccess: { worksuite: {}, local: {} }, onlineFallback: true },
+    ai: { quickAsk: true, shortcut: process.platform === 'darwin' ? 'Alt+Space' : 'Control+Alt+Space', insert: true, dockAtStart: false, language: 'Sinhala', display: 'drawer', sound: false, moduleAccess: { worksuite: {}, local: {} }, onlineFallback: true, autoMinimize: false },
     meetRecording: { method: 'cloud', quality: '720p', layout: 'grid', folder: 'Meeting Recordings', localFolder: join(videos, 'WorkSuite Recordings'), keepLocal: '7' },
     drive: defaultDrivePrefs(),
   };
@@ -91,7 +93,9 @@ export class SettingsService {
     }
     if (p.notification_min_privacy !== 'FULL') {
       out.push({ key: 'notificationPrivacy', reason: 'Your organization limits what notifications may show.' });
+      out.push({ key: 'lockedNotificationPreview', reason: 'Your organization limits what notifications may show.' });
     }
+    if (p.notification_min_privacy === 'GENERIC') out.push({ key: 'lockedNotificationSender', reason: 'Your organization limits what notifications may show.' });
     if (p.auto_update === 'enforced') {
       out.push({ key: 'updateChannel', reason: 'Your organization chooses the update channel.' });
     }
@@ -117,6 +121,9 @@ export class SettingsService {
     }
     p.notificationPrivacy = stricterPrivacy(p.notificationPrivacy, pol.notification_min_privacy);
     if (p.notificationPrivacy === 'GENERIC') p.lockedShowCallerDetails = false;
+    // What a banner shows while locked is never more than the organization lets any banner show (#114).
+    if (pol.notification_min_privacy !== 'FULL') p.lockedNotificationPreview = false;
+    if (pol.notification_min_privacy === 'GENERIC') p.lockedNotificationSender = false;
     if (pol.auto_update === 'enforced') p.updateChannel = pol.update_channel;
     if (pol.required_background_services.includes('notifications')) p.backgroundServices.notifications = true;
     if (pol.required_background_services.includes('realtime')) p.backgroundServices.realtime = true;

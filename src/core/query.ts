@@ -1,5 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 import { ApiError } from './api';
+import { touchesInvitations } from '@shared/meeting-invitations';
 import { on } from './bridge';
 
 /**
@@ -44,6 +45,9 @@ export function wireQueryInvalidation(): void {
     if (e.type === 'notification' && typeof e.event === 'string' && /^files\.(shared|access_changed|access_revoked)$/.test(e.event)) {
       for (const k of ['shared', 'list', 'home', 'access']) void queryClient.invalidateQueries({ queryKey: ['files', k] });
     }
+    // Invited, moved, cancelled or answered — here, on another screen or from the email: every view that shows the
+    // invitation, or counts them, asks again (worksuite-desktop#97).
+    if (touchesInvitations(e)) for (const queryKey of [['meetings'], ['calendar'], ['home']]) void queryClient.invalidateQueries({ queryKey });
     if (e.type === 'activity.new') void queryClient.invalidateQueries({ queryKey: ['home'] });
     if (e.type === 'hr.attendance.changed') void queryClient.invalidateQueries({ queryKey: ['hr'] });
     // Hotel PMS's live nudges (`pms.room`, `pms.hk_task`, `pms.request`): the rack and the desk's lists ask again (PMS-ARC-030).

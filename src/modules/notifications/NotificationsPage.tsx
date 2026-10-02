@@ -1,3 +1,4 @@
+import { MeetingInviteActions } from './MeetingInviteActions';
 import { TaskReminderActions } from './TaskReminderActions';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
@@ -346,6 +347,7 @@ function Preview({ n, labels, onChanged }: { n: Notice | null; labels?: Record<s
             </Button>
           ) : null}
           <TaskReminderActions notice={n} />
+          <MeetingInviteActions notice={n} />
           <Button size="sm" onClick={() => run(() => act(n.id, n.read ? 'unread' : 'read'), n.read ? 'Marked unread' : 'Marked read')}>
             {n.read ? 'Mark unread' : 'Mark read'}
           </Button>

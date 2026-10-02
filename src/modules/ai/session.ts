@@ -1,8 +1,9 @@
 import { isTodaySales } from './intent';
 import { todaySales, type SalesAccess } from './sales';
+import { t } from '../../core/i18n';
 import { askLocal } from '../../core/local-ai';
 import { createStore, type Store } from '../../core/store';
-import { ask, assistantProblem, pickFile, type AskTurn, type Surface } from './assistant';
+import { ask, assistantProblem, pickFile, type AskTurn, type PendingAction, type Surface } from './assistant';
 import { runLocalAgent, runTool, toolsSystem, type AiTool } from './tools';
 
 export interface AskEntry {
@@ -23,8 +24,79 @@ export interface AskEntry {
   noGuide?: boolean;
   /** The question a guide or noGuide entry answers. */
   question?: string;
-  /** A failed answer: what to send again for Try again. */
+  /** A failed or stopped answer: what to send again for Try again. */
   retry?: { full: string; opts: SendOptions };
+  /** Stopped by the person before it finished: what had arrived by then, if anything. */
+  stopped?: boolean;
+  /** Local AI needs details the person has not given, and asks for them. */
+  asks?: boolean;
+}
+
+/**
+ * Where a question is (worksuite-desktop#110): one state for the drawer, the widget and its launcher.
+ *
+ *  · idle — nothing on its way.
+ *  · thinking — asked; nothing has come back yet.
+ *  · working — the answer is streaming in, or a WorkSuite function is running for it.
+ *  · needsInput — the answer waits on the person: a change to confirm or cancel, or details it asked for. Nothing
+ *    more happens until they respond.
+ *  · complete — answered.
+ *  · failed — no answer; Try again asks once more.
+ */
+export type AskPhase = 'idle' | 'thinking' | 'working' | 'needsInput' | 'complete' | 'failed';
+export type AskEvent = 'send' | 'progress' | 'answer' | 'ask' | 'fail' | 'stop' | 'settled' | 'reset';
+
+/** The one way a phase changes; an event that does not fit where the question is changes nothing. */
+export function nextPhase(phase: AskPhase, event: AskEvent): AskPhase {
+  const active = phase === 'thinking' || phase === 'working';
+  switch (event) {
+    case 'send':
+      return active ? phase : 'thinking';
+    case 'progress':
+      return active ? 'working' : phase;
+    case 'answer':
+      return active ? 'complete' : phase;
+    case 'ask':
+      return active ? 'needsInput' : phase;
+    case 'fail':
+      return active ? 'failed' : phase;
+    case 'stop':
+      return active ? 'idle' : phase;
+    case 'settled':
+      return phase === 'needsInput' ? 'complete' : phase;
+    case 'reset':
+      return active ? phase : 'idle';
+  }
+}
+
+/** Which answers: the model on this computer, or WorkSuite AI online; null before it is known. */
+export type AskEngine = 'local' | 'online' | null;
+
+/**
+ * The status said beside the question box and on the launcher: where the answer is coming from, accurately — the
+ * engine actually answering while a question is on its way, and the one the next question would go to otherwise.
+ */
+export function phaseLabel(phase: AskPhase, engine: AskEngine): string {
+  switch (phase) {
+    case 'thinking':
+      return engine === 'local' ? t('ai.thinkingLocal') : engine === 'online' ? t('ai.thinkingOnline') : t('ai.thinking');
+    case 'working':
+      return engine === 'online' ? t('ai.workingOnline') : t('ai.workingLocal');
+    case 'needsInput':
+      return t('ai.needsInput');
+    case 'complete':
+      return t('ai.complete');
+    case 'failed':
+      return t('ai.failed');
+    default:
+      return engine === 'local' ? t('ai.readyLocal') : t('ai.readyOnline');
+  }
+}
+
+/** An answer that waits on the person: a change to confirm, or details asked for. */
+export function waitsOnPerson(entry: AskEntry | undefined): boolean {
+  if (!entry || entry.role !== 'assistant' || entry.error) return false;
+  return !!entry.asks || (entry.turn?.pending_actions ?? []).some((a) => a.status === 'awaiting_confirmation');
 }
 
 export interface AskFile {
@@ -38,7 +110,11 @@ export interface AskState {
   conversationId: number | null;
   /** The question being written. */
   text: string;
+  /** Thinking or working: a question is on its way. Kept with `phase`, which says more. */
   busy: boolean;
+  phase: AskPhase;
+  /** Who is answering the question on its way, or answered the last one. */
+  engine: AskEngine;
   /** A local answer as it grows; null when none is streaming. */
   streaming: string | null;
   useTab: boolean;
@@ -79,7 +155,7 @@ export interface SendOptions {
 
 const LOCAL_SYSTEM = 'You are WorkSuite\'s assistant, running on this computer. Answer clearly and briefly. You cannot see the person\'s WorkSuite data or change anything right now (WorkSuite\'s module functions need a connection, and the modules turned on in Settings › AI Assistant › Module Access); say so when a question needs it.';
 
-const fresh = (): AskState => ({ entries: [], conversationId: null, text: '', busy: false, streaming: null, useTab: true, tabRef: null, files: [], fileError: null, unread: 0, viewers: 0 });
+const fresh = (): AskState => ({ entries: [], conversationId: null, text: '', busy: false, phase: 'idle', engine: null, streaming: null, useTab: true, tabRef: null, files: [], fileError: null, unread: 0, viewers: 0 });
 
 /** Thrown when the model on this computer did not answer; `acted` when a WorkSuite function already ran. */
 class LocalFailed extends Error {
@@ -112,10 +188,15 @@ export interface AskSession {
   showGuide(question: string | null, guide: string, text: string, others?: string[]): void;
   /** A how-to question no guide covers. */
   noGuide(question: string): void;
-  /** Asks the question whose answer failed again, in place of the failure. */
+  /** Asks the question whose answer failed, or was stopped, again in its place. */
   retry(): Promise<void>;
-  /** Stops a local answer (the model on this computer); a server answer cannot be called back. */
+  /**
+   * Stop processing: a local answer stops where it is; for one from online AI, the app stops waiting (the server
+   * cannot be called back, but nothing it proposed is applied unless it is confirmed on its card).
+   */
   cancel(): void;
+  /** A card in the conversation was confirmed, cancelled or changed: the answer stops waiting once none is open. */
+  settle(action: PendingAction): void;
   attach(): Promise<void>;
   /** A new conversation — only between answers. */
   reset(): void;
@@ -128,19 +209,33 @@ export interface AskSession {
 export function createAskSession(): AskSession {
   const store = createStore<AskState>(fresh());
   let running: { cancel(): void } | null = null;
+  /** Stops the question on its way, if there is one. */
+  let stopCurrent: (() => void) | null = null;
   const unseen = new Set<(entry: AskEntry) => void>();
+
+  const move = (event: AskEvent, patch: Partial<AskState> = {}) =>
+    store.set((s) => {
+      const phase = nextPhase(s.phase, event);
+      return { ...patch, phase, busy: phase === 'thinking' || phase === 'working' };
+    });
 
   const answered = (entry: AskEntry) => {
     const hidden = store.get().viewers === 0;
+    // The phase is settled before anyone hears of the answer, so a notice says what it is.
+    move(entry.error ? 'fail' : waitsOnPerson(entry) ? 'ask' : 'answer');
     store.set((s) => ({ entries: [...s.entries, entry], unread: hidden ? s.unread + 1 : s.unread }));
     if (hidden) for (const fn of unseen) fn(entry);
   };
 
-  /** The model on this computer: an answer entry, or LocalFailed. */
-  const runLocal = async (full: string, opts: SendOptions, before: AskEntry[]): Promise<AskEntry> => {
+  /** The model on this computer: an answer entry, or LocalFailed. `live` is false once the person stopped it. */
+  const runLocal = async (full: string, opts: SendOptions, before: AskEntry[], live: () => boolean): Promise<AskEntry> => {
     // The whole conversation, whichever answered each turn.
     const history = before.filter((x) => !x.error).map((x) => ({ role: x.role, content: x.text }));
     store.set({ streaming: '' });
+    // Text arriving is the answer being written: working, no longer only thinking.
+    const onText = (text: string) => {
+      if (live()) move('progress', { streaming: text });
+    };
     const lt = opts.localTools;
     let acted = false;
     try {
@@ -152,24 +247,32 @@ export function createAskSession(): AskSession {
           tools: lt.tools,
           allow: lt.allow,
           ask: (m, onText) => askLocal(m, onText),
-          onText: (t) => store.set({ streaming: t }),
-          onCancelSet: (c) => (running = { cancel: c }),
-          run: (name, args) => ((acted = true), runTool(name, args)),
+          onText,
+          // A step that starts after Stop (a function was running then) is stopped at once.
+          onCancelSet: (c) => (live() ? (running = { cancel: c }) : c()),
+          run: (name, args) => {
+            acted = true;
+            // A WorkSuite function running for the answer is work, too.
+            if (live()) move('progress');
+            return runTool(name, args);
+          },
         });
         const turn: AskTurn = { conversation_id: null, ok: true, reply: a.text, error: null, sources: a.sources, tool_runs: a.tools, pending_actions: a.actions };
         if (!a.text && !a.cancelled && !a.tools.length) throw new Error('The model on this computer gave no answer.');
-        return { role: 'assistant', text: a.text || (a.cancelled ? 'Stopped.' : ''), local: true, turn };
+        return { role: 'assistant', text: a.text || (a.cancelled ? t('ai.stopped') : ''), local: true, turn, asks: a.asked && !a.cancelled ? true : undefined };
       }
-      const r = askLocal([{ role: 'system', content: LOCAL_SYSTEM }, ...history, { role: 'user', content: full }], (t) => store.set({ streaming: t }));
+      const r = askLocal([{ role: 'system', content: LOCAL_SYSTEM }, ...history, { role: 'user', content: full }], onText);
       running = r;
       const a = await r.done;
       if (!a.text.trim() && !a.cancelled) throw new Error('The model on this computer gave no answer.');
-      return { role: 'assistant', text: a.text.trim() || 'Stopped.', local: true };
+      return { role: 'assistant', text: a.text.trim() || t('ai.stopped'), local: true };
     } catch (err) {
       throw new LocalFailed(assistantProblem(err), acted);
     } finally {
-      running = null;
-      store.set({ streaming: null });
+      if (live()) {
+        running = null;
+        store.set({ streaming: null });
+      }
     }
   };
 
@@ -178,27 +281,55 @@ export function createAskSession(): AskSession {
    * this computer when it can, online AI when it cannot and the person allows it. Never both for one question once a
    * WorkSuite function has run, so nothing is done twice; a module that is off or a missing permission is an answer,
    * not a failure, and is never a reason to go online.
+   *
+   * It runs here, not in a panel (worksuite-desktop#110): closing or minimising the widget, or changing modules, does
+   * not stop it. Stop processing does, at once: whatever comes back after that is not shown.
    */
   const run = async (full: string, opts: SendOptions, before: AskEntry[]) => {
     const retry = { full, opts };
-    store.set({ busy: true });
+    let live = true;
+    const STOPPED = Symbol('stopped');
+    let halt: () => void = () => undefined;
+    const halted = new Promise<typeof STOPPED>((r) => (halt = () => r(STOPPED)));
+    const until = <T,>(p: Promise<T>) => Promise.race([p, halted]);
+    const stop = () => {
+      if (!live) return;
+      live = false;
+      const s = store.get();
+      const partial = s.streaming?.trim();
+      running?.cancel();
+      running = null;
+      // What had arrived stays, marked as stopped, with Try again; the person stopped it, so it is not counted unread.
+      move('stop', { streaming: null, entries: [...s.entries, { role: 'assistant', text: partial || t('ai.stopped'), stopped: true, local: s.engine === 'local' || undefined, retry }] });
+      halt();
+    };
+    stopCurrent = stop;
+    const finish = (entry: AskEntry) => {
+      if (live) answered(entry);
+    };
+    move('send', { engine: null });
     try {
       if (isTodaySales(opts.request ?? full)) {
-        const report = await todaySales(opts.sales);
-        answered({ role: 'assistant', text: report.text, turn: { conversation_id: null, ok: true, reply: report.text, error: null, sources: report.sources, tool_runs: [] } });
+        const report = await until(todaySales(opts.sales));
+        if (report === STOPPED) return;
+        finish({ role: 'assistant', text: report.text, turn: { conversation_id: null, ok: true, reply: report.text, error: null, sources: report.sources, tool_runs: [] } });
         return;
       }
       // Files and the tab beside it are read by WorkSuite AI; the model on this computer cannot see them.
       const needsServer = opts.refs.length > 0;
       let why: string;
       if (opts.local && !needsServer) {
+        store.set({ engine: 'local' });
         try {
-          answered(await runLocal(full, opts, before));
+          const entry = await until(runLocal(full, opts, before, () => live));
+          if (entry === STOPPED) return;
+          finish(entry);
           return;
         } catch (err) {
+          if (!live) return;
           const f = err as LocalFailed;
           if (f.acted || !opts.online) {
-            answered({ role: 'assistant', text: f.acted ? `${f.message} Part of it may already have run in WorkSuite, so it was not repeated online. Check before trying again.` : `${f.message}${opts.onlineWhy ? ` ${opts.onlineWhy}` : ''}`, error: true, local: true, retry });
+            finish({ role: 'assistant', text: f.acted ? `${f.message} Part of it may already have run in WorkSuite, so it was not repeated online. Check before trying again.` : `${f.message}${opts.onlineWhy ? ` ${opts.onlineWhy}` : ''}`, error: true, local: true, retry });
             return;
           }
           why = 'The model on this computer could not answer, so online AI did.';
@@ -210,18 +341,24 @@ export function createAskSession(): AskSession {
       }
       if (!opts.online) {
         const reason = needsServer ? 'Files and this tab can only be read by WorkSuite AI, online.' : 'No model on this computer can answer yet.';
-        answered({ role: 'assistant', text: `${reason} ${opts.onlineWhy ?? 'Online AI is not available.'}`, error: true, needsSetup: !opts.local, retry });
+        finish({ role: 'assistant', text: `${reason} ${opts.onlineWhy ?? 'Online AI is not available.'}`, error: true, needsSetup: !opts.local, retry });
         return;
       }
+      store.set({ engine: 'online' });
       // What was said on this computer goes along, the first time online AI answers after it.
       const context = carriedOver(before);
-      const t = await ask(context + full, { surface: opts.surface, refs: opts.refs, conversationId: store.get().conversationId, moduleAccess: opts.moduleAccess });
-      store.set({ conversationId: t.conversation_id });
-      answered(t.ok ? { role: 'assistant', text: t.reply ?? '', turn: t, fallback: opts.local || needsServer ? why : undefined } : { role: 'assistant', text: t.error ?? 'The assistant could not answer just now.', error: true, retry });
+      const answer = await until(ask(context + full, { surface: opts.surface, refs: opts.refs, conversationId: store.get().conversationId, moduleAccess: opts.moduleAccess }));
+      if (answer === STOPPED) return;
+      store.set({ conversationId: answer.conversation_id });
+      finish(answer.ok ? { role: 'assistant', text: answer.reply ?? '', turn: answer, fallback: opts.local || needsServer ? why : undefined } : { role: 'assistant', text: answer.error ?? 'The assistant could not answer just now.', error: true, retry });
     } catch (err) {
-      answered({ role: 'assistant', text: assistantProblem(err), error: true, retry });
+      finish({ role: 'assistant', text: assistantProblem(err), error: true, retry });
     } finally {
-      store.set({ busy: false });
+      // Whatever ended it, nothing is left thinking.
+      if (live) move('fail');
+      live = false;
+      // A stopped question can end after the next one began: only its own Stop is put away.
+      if (stopCurrent === stop) stopCurrent = null;
     }
   };
 
@@ -251,11 +388,20 @@ export function createAskSession(): AskSession {
   const retry = async () => {
     const s = store.get();
     const failed = s.entries.at(-1);
-    if (s.busy || !failed?.error || !failed.retry) return;
+    if (s.busy || !(failed?.error || failed?.stopped) || !failed.retry) return;
     const entries = s.entries.slice(0, -1);
     store.set({ entries });
     // The question stays where it was; the conversation before it is everything up to it.
     await run(failed.retry.full, failed.retry.opts, entries.slice(0, -1));
+  };
+
+  const settle = (action: PendingAction) => {
+    // The card's new state is kept with the answer, so the conversation shows it when it is opened again.
+    const entries = store.get().entries.map((e) =>
+      e.turn?.pending_actions?.some((a) => a.id === action.id) ? { ...e, turn: { ...e.turn, pending_actions: e.turn.pending_actions.map((a) => (a.id === action.id ? action : a)) } } : e,
+    );
+    store.set({ entries });
+    if (!waitsOnPerson(entries.at(-1))) move('settled');
   };
 
   return {
@@ -264,7 +410,8 @@ export function createAskSession(): AskSession {
     showGuide,
     noGuide,
     retry,
-    cancel: () => running?.cancel(),
+    cancel: () => stopCurrent?.(),
+    settle,
     async attach() {
       store.set({ fileError: null });
       try {

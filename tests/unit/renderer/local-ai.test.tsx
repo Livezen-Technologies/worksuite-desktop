@@ -76,7 +76,7 @@ describe('Local AI in the windows', () => {
         <AskPanel surface="assistant.panel" />
       </QueryClientProvider>,
     );
-    await waitFor(() => expect(screen.getByTestId('ai-mode').textContent).toContain('Processing locally'));
+    await waitFor(() => expect(screen.getByTestId('ai-mode').textContent).toContain('On this computer · Ready'));
     expect(screen.queryByRole('radio')).toBeNull();
     expect(screen.queryByRole('radiogroup')).toBeNull();
     expect(screen.queryByText(/nothing is sent/)).toBeNull();
@@ -87,9 +87,9 @@ describe('Local AI in the windows', () => {
     expect(asked!.messages.at(-1)).toEqual({ role: 'user', content: 'What is 2+2?' });
     act(() => emit('ai:localEvent', { id: asked!.id, type: 'chunk', text: 'Four.' } satisfies LocalAIEvent));
     expect(await screen.findByText('Four.')).toBeTruthy();
-    expect(screen.getByLabelText('Stop')).toBeTruthy();
+    expect(screen.getByLabelText('Stop processing')).toBeTruthy();
     act(() => emit('ai:localEvent', { id: asked!.id, type: 'done', text: 'Four.', tokens: 2, ms: 5, cancelled: false } satisfies LocalAIEvent));
-    await waitFor(() => expect(screen.queryByLabelText('Stop')).toBeNull());
+    await waitFor(() => expect(screen.queryByLabelText('Stop processing')).toBeNull());
     expect(screen.getByText('Processed locally')).toBeTruthy();
   });
 });

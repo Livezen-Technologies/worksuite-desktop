@@ -69,7 +69,7 @@ export function ScheduleDialog({ onClose, online, onCreated, preset }: { onClose
   const [passcode, setPasscode] = useState('');
   const [roomOpen, setRoomOpen] = useState(false);
   const [q, setQ] = useState('');
-  const [guests, setGuests] = useState('');
+  const [guests, setGuests] = useState(() => (preset?.guests ?? []).join(', '));
   const [agenda, setAgenda] = useState('');
   const [invite, setInvite] = useState(true);
   const [busy, setBusy] = useState(false);

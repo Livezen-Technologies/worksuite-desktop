@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useCanOpen } from '../../core/access';
 import { call, errorMessage } from '../../core/bridge';
+import { useTab } from '../../core/tab-context';
 import { dateLabel, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
@@ -9,22 +11,32 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../hr/parts';
 import { Pill } from '../inventory/parts';
 import { useNow } from '../calls/parts';
+import { openMeeting } from '../meet/api';
+import { RSVP_LABEL, zoneNote, type Rsvp } from '../meetings/api';
 import { K } from './api';
 import { MinutesSheet, MinutesView } from './Minutes';
-import { addMeeting, deleteMeeting, fetchMeetings, K2, labelOf, MEETING_KINDS, meetingBody, meetingDraft, MODES, updateMeeting, type Meeting, type MeetingDraft } from './work';
+import { addMeeting, deleteMeeting, DURATIONS, durationLabel, fetchMeetings, joinOf, K2, labelOf, MEETING_KINDS, meetingBody, meetingDraft, MODES, updateMeeting, type Meeting, type MeetingDraft } from './work';
 import { Checkbox } from '../../components/Checkbox';
 
 /**
- * The buyer's meetings: pre-bid, site visits, clarifications and the opening.
- * A mandatory one missed can disqualify the bid, so it says so; the deadline
- * for questions, when the buyer set one, is shown beside the meeting it
- * belongs to. Times are shown and typed on the reader's clock and stored as
- * the instant; attendance and the minutes are recorded afterwards — the
- * minutes as notes and the points agreed, each of which can become a task, a
- * reminder or a follow-up meeting.
+ * The buyer's meetings: pre-bid, site visits, clarifications, presentations and
+ * the opening. A mandatory one missed can disqualify the bid, so it says so;
+ * the deadline for questions, when the buyer set one, is shown beside the
+ * meeting it belongs to. Times are shown and typed on the reader's clock and
+ * stored as the instant; attendance and the minutes are recorded afterwards —
+ * the minutes as notes and the points agreed, each of which can become a task,
+ * a reminder or a follow-up meeting.
+ *
+ * Each one is also a meeting (#100): the team is invited, it is in their
+ * Meetings list and Calendar, and what is changed there comes back here. View
+ * Meeting opens it in Meetings for whoever is on it; Join is offered while it
+ * is still to happen; removing or cancelling one cancels it for everybody.
  */
 export default function Meetings({ id, tender = null, canManage }: { id: number; tender?: string | null; canManage: boolean }) {
   const qc = useQueryClient();
+  const { openLink } = useTab();
+  const canMeetings = useCanOpen('meetings');
+  const canMeet = useCanOpen('meet');
   const q = useQuery({ queryKey: K2.meetings(id), queryFn: ({ signal }) => fetchMeetings(id, signal) });
   // Which meetings are behind us; a minute is fine enough for that.
   const now = useNow(60_000);
@@ -33,17 +45,36 @@ export default function Meetings({ id, tender = null, canManage }: { id: number;
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: K2.meetings(id) });
     void qc.invalidateQueries({ queryKey: K.all });
+    // The same meeting is in Meetings and the Calendar.
+    void qc.invalidateQueries({ queryKey: ['meetings'] });
+    void qc.invalidateQueries({ queryKey: ['calendar'] });
   };
   if (q.isLoading) return <Spinner />;
   if (q.error || !q.data) return <ErrorNote error={q.error} onRetry={() => void q.refetch()} />;
   const remove = async (m: Meeting) => {
     try {
       await deleteMeeting(m.id);
-      toast('success', 'Removed.');
+      toast('success', m.meeting ? 'Removed, and its meeting cancelled for everybody.' : 'Removed.');
       refresh();
     } catch (e) {
       toast('error', errorMessage(e));
     }
+  };
+  // Called off, or back on: the meeting follows, and the people invited are told.
+  const callOff = async (m: Meeting, off: boolean) => {
+    try {
+      await updateMeeting(m.id, { cancelled: off });
+      toast('success', off ? 'Cancelled, and everybody told.' : 'Back on, and everybody told.');
+      refresh();
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
+  const joinOfLine = (m: Meeting): (() => void) | null => {
+    const j = m.cancelled_at ? null : joinOf(m.meeting ?? null);
+    if (!j) return null;
+    if ('uuid' in j) return canMeet ? () => void openMeeting(j.uuid, m.title ?? labelOf(MEETING_KINDS, m.kind)) : null;
+    return () => void call('app:openExternal', { url: j.url });
   };
   return (
     <div className="flex flex-col gap-3">
@@ -58,21 +89,40 @@ export default function Meetings({ id, tender = null, canManage }: { id: number;
         {q.data.length ? (
           q.data.map((m) => {
             const past = m.scheduled_at ? Date.parse(m.scheduled_at) < now : false;
+            const off = !!m.cancelled_at;
+            const linked = m.meeting ?? null;
+            const join = joinOfLine(m);
+            const booked = m.scheduled_at ? zoneNote(m.scheduled_at, linked?.timezone) : null;
             return (
-              <div key={m.id} data-meeting={m.id} className={cx('flex items-start gap-3 border-b border-line/60 px-3.5 py-2.5 text-[12.5px] last:border-b-0', past && 'bg-ground/60')}>
+              <div key={m.id} data-meeting={m.id} className={cx('flex items-start gap-3 border-b border-line/60 px-3.5 py-2.5 text-[12.5px] last:border-b-0', (past || off) && 'bg-ground/60')}>
                 <span className="flex w-[130px] shrink-0 flex-col">
-                  <b className="text-ink">{m.scheduled_at ? dateLabel(m.scheduled_at) : 'Not dated'}</b>
-                  <span className="text-ink-2">{m.scheduled_at ? timeLabel(m.scheduled_at) : ''}</span>
+                  <b className={cx('text-ink', off && 'line-through')}>{m.scheduled_at ? dateLabel(m.scheduled_at) : 'Not dated'}</b>
+                  <span className="text-ink-2">{m.scheduled_at ? `${timeLabel(m.scheduled_at)} · ${durationLabel(m.duration_minutes ?? 60)}` : ''}</span>
+                  {booked ? (
+                    <span className="text-[11px] text-ink-3" title="The time on the clock it was booked on">
+                      {booked}
+                    </span>
+                  ) : null}
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="flex flex-wrap items-center gap-1.5">
-                    <b className="text-[13px] text-ink">{labelOf(MEETING_KINDS, m.kind)}</b>
-                    {m.mandatory ? <Pill tone={past && !m.attended ? 'red' : 'amber'}>Attendance is mandatory</Pill> : null}
-                    {past ? m.attended ? <Pill tone="green">Attended</Pill> : <Pill>Not recorded as attended</Pill> : null}
+                    <b className="text-[13px] text-ink">{m.title ?? labelOf(MEETING_KINDS, m.kind)}</b>
+                    {m.title ? <span className="text-ink-3">{labelOf(MEETING_KINDS, m.kind)}</span> : null}
+                    {off ? <Pill tone="red">Cancelled</Pill> : null}
+                    {m.mandatory && !off ? <Pill tone={past && !m.attended ? 'red' : 'amber'}>Attendance is mandatory</Pill> : null}
+                    {past && !off ? m.attended ? <Pill tone="green">Attended</Pill> : <Pill>Not recorded as attended</Pill> : null}
                   </span>
+                  {linked ? (
+                    <span className="text-[11.5px] text-ink-3" data-linked-meeting={linked.id}>
+                      In Meetings and the Calendar{linked.meeting_no ? ` as ${linked.meeting_no}` : ''}
+                      {linked.organizer ? ` · organised by ${linked.organizer}` : ''}
+                      {` · ${linked.accepted} of ${linked.participants} accepted`}
+                      {linked.my_rsvp ? ` · you: ${RSVP_LABEL[linked.my_rsvp as Rsvp] ?? linked.my_rsvp}` : ''}
+                    </span>
+                  ) : null}
                   <span className="text-[11.5px] text-ink-3">
                     {[labelOf(MODES, m.mode), m.venue].filter((x) => x && x !== '—').join(' · ')}
-                    {m.link ? (
+                    {m.link && !join ? (
                       <>
                         {' · '}
                         <button type="button" className="text-primary hover:underline" title={m.link} onClick={() => /^https?:\/\//i.test(m.link!) && void call('app:openExternal', { url: m.link! })}>
@@ -89,19 +139,36 @@ export default function Meetings({ id, tender = null, canManage }: { id: number;
                   {m.attended_by ? <span className="text-[12px] text-ink-2">Went: {m.attended_by}</span> : null}
                   <MinutesView minutes={m.minutes} />
                 </span>
-                {canManage ? (
-                  <span className="flex shrink-0 items-center gap-1.5">
-                    <button type="button" aria-label="Minutes of the meeting" title="Minutes: notes, and points to make into tasks, reminders or follow-ups" className={btnSmall + ' !h-7 gap-1 !px-2 !text-[12px]'} onClick={() => setMinutesOf(m)}>
-                      <Icon name="tasks" size={13} /> Minutes
+                <span className="flex shrink-0 items-center gap-1.5">
+                  {linked?.can_view && canMeetings ? (
+                    <button type="button" className={btnSmall + ' !h-7 !px-2 !text-[12px]'} onClick={() => openLink(`/meetings?meeting=${linked.id}`)}>
+                      View Meeting
                     </button>
-                    <button type="button" aria-label="Edit the meeting" title="Edit" className={btnSmall + ' !h-7 !w-7 justify-center !px-0'} onClick={() => setEditing(m)}>
-                      <Icon name="compose" size={13} />
+                  ) : null}
+                  {join ? (
+                    <button type="button" className={btnPrimary + ' !h-7 !px-2.5 !text-[12px]'} onClick={join}>
+                      Join
                     </button>
-                    <button type="button" aria-label="Remove the meeting" title="Remove" className={btnSmall + ' !h-7 !w-7 justify-center !px-0 !text-danger'} onClick={() => void remove(m)}>
-                      <Icon name="trash" size={13} />
-                    </button>
-                  </span>
-                ) : null}
+                  ) : null}
+                  {canManage ? (
+                    <>
+                      {linked && !past ? (
+                        <button type="button" className={btnSmall + ' !h-7 !px-2 !text-[12px]'} onClick={() => void callOff(m, !off)}>
+                          {off ? 'Back on' : 'Cancel'}
+                        </button>
+                      ) : null}
+                      <button type="button" aria-label="Minutes of the meeting" title="Minutes: notes, and points to make into tasks, reminders or follow-ups" className={btnSmall + ' !h-7 gap-1 !px-2 !text-[12px]'} onClick={() => setMinutesOf(m)}>
+                        <Icon name="tasks" size={13} /> Minutes
+                      </button>
+                      <button type="button" aria-label="Edit the meeting" title="Edit" className={btnSmall + ' !h-7 !w-7 justify-center !px-0'} onClick={() => setEditing(m)}>
+                        <Icon name="compose" size={13} />
+                      </button>
+                      <button type="button" aria-label="Remove the meeting" title={m.meeting ? 'Remove — its meeting is cancelled for everybody' : 'Remove'} className={btnSmall + ' !h-7 !w-7 justify-center !px-0 !text-danger'} onClick={() => void remove(m)}>
+                        <Icon name="trash" size={13} />
+                      </button>
+                    </>
+                  ) : null}
+                </span>
               </div>
             );
           })
@@ -118,6 +185,8 @@ export default function Meetings({ id, tender = null, canManage }: { id: number;
 function MeetingSheet({ tenderId, meeting, onClose, onSaved }: { tenderId: number; meeting: Meeting | null; onClose: () => void; onSaved: () => void }) {
   const before = meeting ? meetingDraft(meeting) : null;
   const [d, setD] = useState<MeetingDraft>(() => meetingDraft(meeting));
+  // Telling the team: an invitation for a new one, an update when a saved one moves.
+  const [tell, setTell] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const out = meetingBody(d, before);
@@ -127,9 +196,10 @@ function MeetingSheet({ tenderId, meeting, onClose, onSaved }: { tenderId: numbe
     setBusy(true);
     setError(null);
     try {
-      if (meeting) await updateMeeting(meeting.id, out.body);
-      else await addMeeting(tenderId, out.body);
-      toast('success', meeting ? 'Saved.' : 'Meeting recorded.');
+      const body = { ...out.body, ...(tell ? {} : { skip_invitations: true }) };
+      if (meeting) await updateMeeting(meeting.id, body);
+      else await addMeeting(tenderId, body);
+      toast('success', meeting ? 'Saved.' : tell ? 'Meeting scheduled and the team invited.' : 'Meeting scheduled.');
       onSaved();
       onClose();
     } catch (e) {
@@ -162,6 +232,12 @@ function MeetingSheet({ tenderId, meeting, onClose, onSaved }: { tenderId: numbe
         <Field label="How">
           <Select<string> aria-label="How" value={d.mode} onValueChange={(v) => setD({ ...d, mode: v })} options={MODES.map(([value, label]) => ({ value, label }))} className={input} />
         </Field>
+        <Field label="Title" hint="Blank: the kind and the tender's reference.">
+          <input aria-label="Title" value={d.title} onChange={set('title')} maxLength={190} className={input} />
+        </Field>
+        <Field label="How long">
+          <Select<string> aria-label="How long" value={d.duration} onValueChange={(v) => setD({ ...d, duration: v })} options={(DURATIONS.some(([k]) => k === d.duration) ? DURATIONS : [...DURATIONS, [d.duration, durationLabel(Number(d.duration))] as [string, string]]).map(([value, label]) => ({ value, label }))} className={input} />
+        </Field>
         <Field label="When">
           <span className="flex gap-1.5">
             <input type="date" aria-label="Meeting date" value={d.date} onChange={set('date')} className={input} />
@@ -184,6 +260,10 @@ function MeetingSheet({ tenderId, meeting, onClose, onSaved }: { tenderId: numbe
       <label className="flex items-center gap-2 text-[12.5px] font-semibold text-ink">
         <Checkbox checked={d.mandatory} onChange={(e) => setD({ ...d, mandatory: e.target.checked })} />
         Attendance is mandatory
+      </label>
+      <label className="flex items-center gap-2 text-[12.5px] font-semibold text-ink">
+        <Checkbox checked={tell} onChange={(e) => setTell(e.target.checked)} />
+        {meeting ? 'Tell the people invited if the time or place changes' : 'Invite the tender team'}
       </label>
       {meeting ? (
         <>

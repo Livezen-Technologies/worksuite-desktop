@@ -4,6 +4,13 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.1.0 — 2026-10-02
+
+**Added**
+
+- a tender's meetings (pre-bid, site visit, clarification, presentation and more) are real meetings in Meetings and the Calendar, with invitations, answers, reminders and conflict checks. Edits, moves and cancellations stay in step (worksuite-desktop#100).
+- a Contact Persons tab with the number linked. Add a new contact or link an existing one, found by name, organisation, email or phone, with duplicates suggested first. Each has a tender role (Procurement Officer, Technical Contact, Supplier Representative or Other) and one Primary Contact. Open, email, call or schedule a meeting from it. Unlinking keeps the contact, and changes are recorded in the tender's history. Being listed gives no access to the tender (worksuite-desktop#118).
+
 ## 1.0.1 — 2026-10-01
 
 **Changed**

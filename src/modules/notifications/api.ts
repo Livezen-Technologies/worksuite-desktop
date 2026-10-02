@@ -1,4 +1,5 @@
 import { canOpenLink, categoryVisible, type VisibleApps } from '@shared/access';
+import { meetingNoticeActions } from '@shared/meeting-invitations';
 import { canFollowLink, refuse } from '../../core/access';
 import { apiGet, apiPost } from '../../core/api';
 import { call } from '../../core/bridge';
@@ -179,6 +180,8 @@ export function openNotice(n: Pick<Notice, 'link' | 'title'>): void {
 export function quickActions(n: Notice): Array<{ label: string; primary?: boolean; go: true }> {
   if (!n.link) return [];
   if (n.event === 'task.reminder') return [{ label: 'Open Task', primary: true, go: true }];
+  // A meeting invitation offers its own answers and View meeting (`MeetingInviteActions`).
+  if (meetingNoticeActions(n.event, n.actions)) return [];
   if (meetUuid(n.link)) return [{ label: 'Join', primary: true, go: true }];
   if (isChatLink(n.link)) return [{ label: 'Reply', primary: true, go: true }];
   return [{ label: isApproval(n) ? 'Review' : 'Open', primary: isApproval(n), go: true }];

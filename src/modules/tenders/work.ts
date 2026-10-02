@@ -345,18 +345,81 @@ export const MEETING_KINDS: Array<[string, string]> = [
   ['pre_bid', 'Pre-bid meeting'],
   ['site_visit', 'Site visit'],
   ['clarification', 'Clarification'],
+  ['presentation', 'Presentation'],
   ['opening', 'Bid opening'],
+  ['internal_review', 'Internal review'],
   ['other', 'Other'],
 ];
+/** How long to hold in people's calendars; the buyer usually gives only a start. */
+export const DURATIONS: Array<[string, string]> = [
+  ['30', '30 minutes'],
+  ['60', '1 hour'],
+  ['90', '1½ hours'],
+  ['120', '2 hours'],
+  ['180', '3 hours'],
+  ['240', 'Half a day'],
+  ['480', 'A day'],
+];
+export const durationLabel = (minutes: number) => DURATIONS.find(([k]) => Number(k) === minutes)?.[1] ?? `${minutes} min`;
 export const MODES: Array<[string, string]> = [
   ['physical', 'In person'],
   ['online', 'Online'],
   ['hybrid', 'Hybrid'],
 ];
 
+/**
+ * The one meeting a tender line is in Meetings and the Calendar (#100): its number, where it stands, how many
+ * have accepted, the reader's own answer, and the ways in — View Meeting (`can_view`) and Join.
+ */
+export interface LinkedMeeting {
+  id: number;
+  meeting_no: string | null;
+  status: string;
+  timezone: string | null;
+  organizer: string | null;
+  participants: number;
+  accepted: number;
+  my_rsvp: string | null;
+  can_view: boolean;
+  join_url: string | null;
+  meet_uuid: string | null;
+}
+
+export const toLinkedMeeting = (r: unknown): LinkedMeeting | null => {
+  if (!r || typeof r !== 'object') return null;
+  const o = r as Record<string, unknown>;
+  const id = int(o.id);
+  if (!id) return null;
+  return {
+    id,
+    meeting_no: str(o.meeting_no),
+    status: String(o.status ?? 'scheduled'),
+    timezone: str(o.timezone),
+    organizer: str(o.organizer),
+    participants: int(o.participants) ?? 0,
+    accepted: int(o.accepted) ?? 0,
+    my_rsvp: str(o.my_rsvp),
+    can_view: yes(o.can_view),
+    join_url: str(o.join_url),
+    meet_uuid: str(o.meet_uuid),
+  };
+};
+
+/** Join is offered while the meeting is still to happen or happening, and has somewhere to join. */
+export function joinOf(m: LinkedMeeting | null): { url: string } | { uuid: string } | null {
+  if (!m || m.status === 'cancelled' || m.status === 'completed' || m.status === 'deleted') return null;
+  if (m.meet_uuid) return { uuid: m.meet_uuid };
+  return m.join_url && /^https?:\/\//i.test(m.join_url) ? { url: m.join_url } : null;
+}
+
 export interface Meeting {
   id: number;
   kind: string;
+  /** Its own title when the default ("Pre-bid meeting · RFP-118") will not do. Absent from an older server. */
+  title?: string | null;
+  duration_minutes?: number;
+  cancelled_at?: string | null;
+  meeting?: LinkedMeeting | null;
   scheduled_at: string | null;
   mode: string | null;
   venue: string | null;
@@ -371,6 +434,10 @@ export interface Meeting {
 export const toMeeting = (r: Record<string, unknown>): Meeting => ({
   id: int(r.id) ?? 0,
   kind: String(r.kind ?? 'other'),
+  title: str(r.title),
+  duration_minutes: int(r.duration_minutes) ?? 60,
+  cancelled_at: str(r.cancelled_at),
+  meeting: toLinkedMeeting(r.meeting),
   scheduled_at: str(r.scheduled_at),
   mode: str(r.mode),
   venue: str(r.venue),
@@ -386,6 +453,8 @@ export const fetchMeetings = (id: number, signal?: AbortSignal) => apiGet<{ item
 
 export interface MeetingDraft {
   kind: string;
+  title: string;
+  duration: string;
   date: string;
   time: string;
   mode: string;
@@ -404,6 +473,8 @@ export function meetingDraft(m: Meeting | null): MeetingDraft {
   const q = wallParts(m?.questions_due_at ?? null);
   return {
     kind: m?.kind ?? 'pre_bid',
+    title: m?.title ?? '',
+    duration: String(m?.duration_minutes ?? 60),
     date: at.date,
     time: at.time,
     mode: m?.mode ?? 'physical',
@@ -427,6 +498,8 @@ export function meetingBody(d: MeetingDraft, before: MeetingDraft | null): { bod
   if (!d.date || !d.time) return { body: null, error: 'A meeting needs a date and a time — that is the thing somebody has to be at.' };
   const all: Record<string, string | boolean> = {
     kind: d.kind,
+    title: d.title.trim(),
+    duration_minutes: d.duration,
     scheduled_at: closingValue(d.date, d.time),
     mode: d.mode,
     venue: d.venue.trim(),

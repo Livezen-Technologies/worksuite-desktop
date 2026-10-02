@@ -5,6 +5,47 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-02 — 0.2.76: meeting invitations that arrive; tender meetings and contact persons; the AI Assistant works in the background; chat notifications while locked
+
+- **Meeting invitations reach people** (#97).
+  - Invitees get a notification, a desktop banner and an email with a calendar file.
+  - Invitations are listed in the notification centre, Meetings › Invitations and Home › Waiting for me. Each shows
+    the organiser, date, time, timezone and where, with Going, Maybe, Not going and View Meeting.
+  - Answers update every view without a refresh.
+  - Reminders, and notices of moves and cancellations, arrive even when the organiser's app is closed.
+  - The organiser sees which emails failed and can retry them.
+  - Settings says when banners are blocked on this computer.
+- **Tender meetings** (#100).
+  - Pre-bid meetings, site visits, clarifications and presentations scheduled on a tender are real meetings in
+    Meetings and the Calendar. They have invitations, answers, reminders and conflict checks.
+  - They are labelled Tender meeting and can be filtered, with Open Tender, View Meeting and Join.
+  - Edits, moves and cancellations stay in step. Closing dates stay separate.
+- **Contact Persons on tenders** (#118).
+  - Add new contacts or link existing ones. Duplicates are suggested first.
+  - Each contact has a tender role and one is the Primary Contact.
+  - Open, email, call or schedule a meeting from the list.
+  - Unlinking keeps the contact, and changes appear in the tender's history.
+  - Being listed gives no access to the tender.
+- **The AI Assistant works in the background** (#110).
+  - Minimise it, or move to another app, while it answers.
+  - The launcher shows Thinking, Working, Needs your input, Complete or Failed.
+  - A small notice says "Your answer is ready" or "Needs your input". It never takes the keyboard or opens the
+    assistant.
+  - Stop processing and Try again are always available. Auto-minimize after sending is a setting.
+  - The status says whether it is answering on this computer or with online AI.
+- **Chat notifications while locked** (#114).
+  - Messages keep arriving while WorkSuite is locked.
+  - Locked banners say "New message in WorkSuite." unless you allow the sender or a preview.
+  - Badges update straight away.
+  - After sleep the connection reconnects straight away and missed messages are caught up, without showing twice.
+  - Clicking a locked banner opens chat in restricted mode when that is allowed. Otherwise it asks you to unlock,
+    then opens the conversation.
+- Where it bites:
+  - These need the matching WorkSuite server. Run its migrations and its install seeder (the seeder gives default
+    roles the meeting permissions), and add the new `meetings:deliver` cron line.
+  - With online AI, Stop stops waiting for the answer but does not cancel the request on the server.
+  - The app cannot read the system's notification permission on macOS or Windows, so Settings says where to check.
+
 ## 2026-10-02 — 0.2.75: Q&A, polls and raise hand; Host Controls; a clearer New meeting menu
 
 - **Q&A** (#92):

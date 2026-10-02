@@ -1,11 +1,14 @@
+import { meetingNoticeActions, type MeetingNoticeActions } from '@shared/meeting-invitations';
+import { inDnd } from '@shared/notification-block';
 import { reminderAction } from '@shared/task-reminders';
 import { Notification, app, nativeImage } from 'electron';
 import { join } from 'node:path';
-import type { NotificationItem, NotificationPrivacy, Preferences } from '@shared/types';
+import type { NotificationItem, NotificationPermission, NotificationPrivacy, Preferences, RealtimeState } from '@shared/types';
 import { isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { Database } from './db';
 import type { HttpClient } from './http';
+import { notificationPermission, presentLocked } from './locked-notifications';
 import type { RealtimeEvent } from './realtime';
 import type { Vault } from './vault';
 
@@ -18,8 +21,9 @@ const log = logger('notifications');
  * Every notification passes through, in order: dedupe by id → whether the
  * person may open its app at all (an app they were not given never alerts)
  * → the user's per-module switch → do-not-disturb / paused → privacy mode (the stricter of
- * the user's choice and the organization's minimum; GENERIC whenever the app
- * is locked) → the OS adapter.
+ * the user's choice and the organization's minimum; while the app is locked,
+ * locked-notifications decides, generic unless this computer allows more) →
+ * the OS adapter. The lock never stops any of it (#114).
  */
 
 /** How far back a notification the realtime push missed is still worth popping up. */
@@ -44,6 +48,8 @@ interface ServerNotification {
 
 export interface Incoming {
   reminder?: { taskId: number; runId: number } | null;
+  /** A meeting invitation's own answers (worksuite-desktop#97): Going, Maybe, Not going on the banner. */
+  meeting?: MeetingNoticeActions | null;
   id: string;
   module: string;
   /** The server's category (`projects`, `expenses`…): muted per category from the notification settings' Desktop column. */
@@ -53,6 +59,28 @@ export interface Incoming {
   sender: string | null;
   link: string | null;
   critical: boolean;
+}
+
+interface MissedRoom {
+  id: number;
+  type: string;
+  name: string;
+  unread: number;
+  muted?: boolean;
+  mentions: number;
+  notify_level?: string;
+  last_message: { sender_id: number; created_at: string } | null;
+}
+
+interface MissedMessage {
+  id: number;
+  sender_id: number;
+  sender_name?: string;
+  type: string;
+  message: string | null;
+  created_at: string;
+  deleted?: boolean;
+  urgent?: boolean;
 }
 
 export interface Presented {
@@ -102,18 +130,8 @@ export function present(n: Incoming, privacy: NotificationPrivacy, moduleLabel: 
   }
 }
 
-/** Whether `now` falls inside a do-not-disturb window that may cross midnight. */
-export function inDnd(from: string, to: string, now: Date): boolean {
-  const toMin = (s: string) => {
-    const [h, m] = s.split(':').map(Number);
-    return (h ?? 0) * 60 + (m ?? 0);
-  };
-  const f = toMin(from);
-  const t = toMin(to);
-  const n = now.getHours() * 60 + now.getMinutes();
-  if (f === t) return false;
-  return f < t ? n >= f && n < t : n >= f || n < t;
-}
+/** Whether `now` falls inside a do-not-disturb window that may cross midnight (shared with the settings' explanation). */
+export { inDnd };
 
 const MODULE_LABELS: Record<string, string> = {
   mail: 'Mail',
@@ -141,6 +159,10 @@ export class NotificationService {
   private pollTimer: NodeJS.Timeout | null = null;
   private mailTimer: NodeJS.Timeout | null = null;
   private userId: string | null = null;
+  /** The system's error for the last banner it refused (macOS, Windows): Settings explains it (#114). */
+  private lastFailure: string | null = null;
+  /** Since when realtime may have missed chat messages (asleep, reconnecting): caught up on the resync (#114). */
+  private gapSince: number | null = null;
   onChanged: () => void = () => undefined;
   onClick: (link: string | null, module: string) => void = () => undefined;
   isLocked: () => boolean = () => false;
@@ -186,6 +208,7 @@ export class NotificationService {
     this.userId = null;
     this.lastMailCount = null;
     this.unread = { mail: 0, chat: 0, notifications: 0, tasks: 0 };
+    this.gapSince = null;
   }
 
   counts() {
@@ -286,7 +309,7 @@ export class NotificationService {
         raw.forEach((n, k) => {
           const i = items[k]!;
           if (i.read || this.shown.includes(i.id) || Date.parse(i.createdAt) < since) return;
-          if (n.desktop_allowed !== false) this.notify({ reminder: (n.event_key ?? n.type) === 'task.reminder' ? reminderAction(n.link, n.actions) : null, id: i.id, module: i.module, category: n.category ?? null, title: i.title, body: i.body, sender: null, link: i.link, critical: n.priority === 'critical' || n.priority === 'emergency' || n.level === 'critical' || n.level === 'emergency' });
+          if (n.desktop_allowed !== false) this.notify({ reminder: (n.event_key ?? n.type) === 'task.reminder' ? reminderAction(n.link, n.actions) : null, meeting: meetingNoticeActions(n.event_key ?? n.type, n.actions), id: i.id, module: i.module, category: n.category ?? null, title: i.title, body: i.body, sender: null, link: i.link, critical: n.priority === 'critical' || n.priority === 'emergency' || n.level === 'critical' || n.level === 'emergency' });
         });
       }
       this.listed = true;
@@ -365,6 +388,7 @@ export class NotificationService {
         this.notify({
           id,
           reminder: e.event === 'task.reminder' ? reminderAction(link, e.actions) : null,
+          meeting: meetingNoticeActions(typeof e.event === 'string' ? e.event : null, e.actions),
           module: moduleOf({ category: e.category as string, link }),
           category: typeof e.category === 'string' ? e.category : null,
           title: String(e.title ?? 'Notification'),
@@ -379,7 +403,7 @@ export class NotificationService {
       case 'chat.message': {
         this.unread.chat += 1;
         this.onChanged();
-        if (e.desktop === false || e.alert === false) return;
+        if (e.desktop === false || e.alert === false || e.muted === true) return;
         const room = e.room_name ? String(e.room_name) : null;
         const sender = String(e.sender ?? 'Someone');
         this.notify({
@@ -502,8 +526,9 @@ export class NotificationService {
       return;
     }
     if (!Notification.isSupported()) return;
-    const privacy: NotificationPrivacy = this.isLocked() ? 'GENERIC' : this.prefs().notificationPrivacy;
-    const shown = present(n, privacy, MODULE_LABELS[n.module] ?? n.module.charAt(0).toUpperCase() + n.module.slice(1));
+    const locked = this.isLocked();
+    const privacy: NotificationPrivacy = locked ? 'GENERIC' : this.prefs().notificationPrivacy;
+    const shown = locked ? presentLocked(n, this.prefs()) : present(n, privacy, MODULE_LABELS[n.module] ?? n.module.charAt(0).toUpperCase() + n.module.slice(1));
     const icon = process.platform === 'darwin' ? undefined : nativeImage.createFromPath(join(app.isPackaged ? process.resourcesPath : join(__dirname, '../../resources'), 'icons', '128x128.png'));
     const note = new Notification({
       title: shown.title,
@@ -511,7 +536,14 @@ export class NotificationService {
       silent: !this.prefs().notificationSounds,
       icon,
       urgency: n.critical ? 'critical' : 'normal',
-      actions: n.reminder && privacy === 'FULL' ? [{ type: 'button', text: 'Snooze 15 min' }, { type: 'button', text: 'Mark Complete' }] : undefined,
+      actions:
+        privacy !== 'FULL'
+          ? undefined
+          : n.reminder
+            ? [{ type: 'button', text: 'Snooze 15 min' }, { type: 'button', text: 'Mark Complete' }]
+            : n.meeting?.answers.length
+              ? n.meeting.answers.map((a) => ({ type: 'button' as const, text: a.label }))
+              : undefined,
       timeoutType: n.critical ? 'never' : 'default',
     });
     note.on('click', () => {
@@ -520,6 +552,16 @@ export class NotificationService {
     });
     const recipient = this.userId;
     note.on('action', (_event, index) => {
+      if (n.meeting && !n.reminder && recipient === this.userId) {
+        const answer = n.meeting.answers[index];
+        if (!answer) return;
+        if (this.isLocked() || !this.moduleEnabled(n)) { this.onClick(n.link, n.module); return; }
+        void this.answerMeeting(n.meeting.meetingId, answer.rsvp).then(() => this.markRead([n.id])).then(() => note.close()).catch((error) => {
+          log.debug('Meeting answer failed', { error: String(error) });
+          this.onClick(n.link, n.module);
+        });
+        return;
+      }
       if (!n.reminder || recipient !== this.userId) return;
       if (this.isLocked() || !this.moduleEnabled(n)) { this.onClick(n.link, n.module); return; }
       const action = index === 0
@@ -532,13 +574,90 @@ export class NotificationService {
       });
     });
     note.on('close', () => this.live.delete(n.id));
+    note.on('show', () => (this.lastFailure = null));
+    note.on('failed', (_event, error) => {
+      this.lastFailure = String(error);
+      log.info('the system refused a notification', { error: this.lastFailure.slice(0, 200) });
+    });
     this.live.set(n.id, note);
     note.show();
+  }
+
+  /**
+   * Answer a meeting invitation from its banner: through the Calendar, which everybody invited has, or Meetings'
+   * own answer for a server or a person without the Calendar's.
+   */
+  private async answerMeeting(id: number, rsvp: string): Promise<void> {
+    try {
+      await this.http.post(`/api/calendar/conflicts/invitations/meetings/${id}/rsvp`, { rsvp });
+    } catch (e) {
+      if (!(isDesktopError(e) && (e.code === 'NOT_FOUND' || e.code === 'APP_ACCESS_DENIED' || e.code === 'PERMISSION_DENIED'))) throw e;
+      await this.http.post(`/api/meetings/${id}/rsvp`, { rsvp });
+    }
+  }
+
+  /** Whether the operating system lets this app show notifications at all. */
+  supported(): boolean {
+    return Notification.isSupported();
   }
 
   test(): boolean {
     this.notify({ id: `test:${Date.now()}`, module: 'system', title: 'Notifications are working', body: 'This is how WorkSuite notifications will look.', sender: 'WorkSuite', link: null, critical: false });
     return Notification.isSupported();
+  }
+
+  /** Whether this computer shows banners, as far as can be told, and what to check (#114). */
+  permission(): NotificationPermission {
+    return notificationPermission(process.platform, Notification.isSupported(), this.lastFailure);
+  }
+
+  /** Chat messages may be missed from now on (the computer sleeps, the socket dropped). */
+  markGap(at = Date.now()): void {
+    if (this.gapSince === null || at < this.gapSince) this.gapSince = at;
+  }
+
+  /** The socket dropped: what came in since its last heartbeat (the watchdog allows 90 s of silence) may be lost. */
+  realtimeState(s: RealtimeState): void {
+    if (s === 'down') this.markGap(Date.now() - 90_000);
+  }
+
+  /**
+   * After a reconnect: messages that arrived while realtime was away pop up as
+   * they would have — once (the same `chat:<message id>` the push uses), not
+   * from muted conversations, and only from the last few minutes.
+   */
+  async catchUpChat(): Promise<void> {
+    const gap = this.gapSince;
+    this.gapSince = null;
+    const me = this.userId;
+    if (gap === null || !me) return;
+    const since = Math.max(gap - 5_000, Date.now() - MISSED_WINDOW_MS);
+    try {
+      const { rooms = [] } = await this.http.get<{ rooms?: MissedRoom[] }>('/api/chat/rooms');
+      const missed = rooms
+        .filter((r) => r.unread > 0 && !r.muted && r.notify_level !== 'none' && (r.notify_level !== 'mentions' || r.mentions > 0))
+        .filter((r) => r.last_message && String(r.last_message.sender_id) !== me && Date.parse(utcStamp(r.last_message.created_at)) >= since)
+        .slice(0, 5);
+      for (const room of missed) {
+        const { messages = [] } = await this.http.get<{ messages?: MissedMessage[] }>('/api/chat/messages', { query: { room_id: room.id } });
+        const fresh = messages.filter((m) => !m.deleted && String(m.sender_id) !== me && Date.parse(utcStamp(m.created_at)) >= since).slice(-Math.min(room.unread, 3));
+        for (const m of fresh) {
+          if (this.userId !== me) return;
+          const sender = m.sender_name || 'Someone';
+          this.notify({
+            id: `chat:${m.id}`,
+            module: 'chat',
+            title: room.type === 'direct' ? sender : `${sender} · ${room.name}`,
+            body: m.type === 'text' ? (m.message ?? '').slice(0, 200) : 'Sent an attachment',
+            sender,
+            link: `/chat?room=${room.id}`,
+            critical: m.urgent === true,
+          });
+        }
+      }
+    } catch (e) {
+      log.debug('chat catch-up failed', { code: isDesktopError(e) ? e.code : String(e) });
+    }
   }
 
   clearUser(userId: string): void {

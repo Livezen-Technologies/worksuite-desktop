@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { ApiError, apiGet, apiPost } from '../../core/api';
 import { app } from '../../core/app-state';
@@ -74,11 +74,47 @@ export interface WaitingInvitation {
   title: string;
   start_at: string;
   end_at: string;
+  all_day?: boolean;
   my_rsvp: string;
   conflicts: Conflict[];
   /** A meeting that also arrived as a calendar invitation: shown once. */
   duplicate: boolean;
   link: string;
+  /** Newer servers (worksuite-desktop#97): who asked, the zone it was booked in, and where. */
+  organizer?: string | null;
+  timezone?: string | null;
+  where?: string | null;
+  location_type?: string | null;
+  online_url?: string | null;
+}
+
+/**
+ * Everything that shows an invitation or a count of them: Meetings (its list, its Invitations and their count, a
+ * meeting's answers), the Calendar and its Waiting for me, and Home. Asked again together after an answer here, and
+ * when the server says an invitation changed (`touchesInvitations`), so no view keeps one that was answered elsewhere.
+ */
+export const INVITATION_QUERIES: ReadonlyArray<readonly string[]> = [['meetings'], ['calendar'], ['home']];
+
+export function invitationsChanged(qc: Pick<QueryClient, 'invalidateQueries'>): void {
+  for (const queryKey of INVITATION_QUERIES) void qc.invalidateQueries({ queryKey });
+}
+
+/**
+ * Answer an invitation (worksuite-desktop#97). A meeting is answered through the Calendar's Waiting for me, which
+ * everybody invited can reach whether or not they were given Meetings; a server without it, or a person without the
+ * Calendar, is answered through Meetings' own. A calendar event is answered on the event.
+ */
+export async function answerInvitation(source: 'meeting' | 'event', id: number, rsvp: string): Promise<void> {
+  if (source === 'event') {
+    await apiPost(`/api/calendar/events/${id}/rsvp`, { status: rsvp });
+    return;
+  }
+  try {
+    await apiPost(`/api/calendar/conflicts/invitations/meetings/${id}/rsvp`, { rsvp });
+  } catch (e) {
+    if (!(e instanceof ApiError && (e.status === 404 || e.status === 403 || e.status === 405))) throw e;
+    await apiPost(`/api/meetings/${id}/rsvp`, { rsvp });
+  }
 }
 
 /** What overlaps. Null when it could not be asked (offline, or a server without it): saving is never held up by that. */
@@ -318,7 +354,8 @@ export function useInvitationAnswer(source: 'meeting' | 'event', id: number | nu
   const waiting = useInvitationConflicts(source, id);
   const [asking, setAsking] = useState(false);
   const [proposing, setProposing] = useState(false);
-  const again = () => void qc.invalidateQueries({ queryKey: ['calendar', 'conflicts'] });
+  // Every view that shows it, or counts it, is asked again (#97).
+  const again = () => invitationsChanged(qc);
   const [fresh, setFresh] = useState<Pick<ConflictResult, 'conflicts' | 'duplicates' | 'people' | 'unknown'> | null>(null);
   // Accepting asks again (what is in the calendar may have changed since the list was read); unanswered, the list's own answer stands.
   const answer = async (rsvp: string) => {

@@ -2,6 +2,8 @@
  * Meetings (`/api/meetings/*`): agendas, attendance, minutes and action
  * items, gated by the `meeting.*` permissions. Times are instants with a Z.
  */
+import { currentZone, parseTs } from '../../core/time';
+
 export interface Can {
   view: boolean;
   schedule: boolean;
@@ -25,6 +27,8 @@ export interface MeetingSource {
   label: string | null;
   link: string | null;
   can_open: boolean;
+  /** "Open Tender" — sent with `link`. */
+  open_label?: string | null;
 }
 
 /** The "Related to" filter of the Meetings list, as the server takes it (`source=`). */
@@ -36,6 +40,18 @@ export const SOURCE_FILTERS: Array<[string, string]> = [
   ['crm_account', 'Customer'],
   ['vendor', 'Supplier'],
 ];
+
+/**
+ * Whether a meeting belongs under a "Related to" choice. The server filters (`source=`); this says the same thing
+ * again on the rows it sent, so a server that does not know the filter yet cannot show tender meetings as
+ * everything.
+ */
+export function matchesSource(m: Pick<Meeting, 'source'>, source: string): boolean {
+  if (!source) return true;
+  const t = m.source?.type;
+  if (!t) return false;
+  return source === 'crm' ? t.startsWith('crm_') : t === source;
+}
 
 /** "Open Tender", "Open Lead"… — what the button to the related record says. */
 export function openRelatedLabel(s: Pick<MeetingSource, 'type'>): string {
@@ -52,6 +68,8 @@ export interface MeetingPreset {
   client_id?: number;
   /** Shown in the dialog: "Lead · Acme Corp". */
   label: string;
+  /** External guests to invite by email — a tender's contact person, for one. */
+  guests?: string[];
 }
 
 export interface Meeting {
@@ -72,6 +90,8 @@ export interface Meeting {
   start_at: string;
   end_at: string;
   all_day: boolean;
+  /** The clock it was booked on — a tender's meeting, the buyer's company's (#100). */
+  timezone?: string | null;
   duration_minutes: number;
   recur_freq: string;
   location_type: string;
@@ -128,8 +148,25 @@ export interface ActionItem {
   task_id: number | null;
 }
 
+/** One message about a meeting to one person (worksuite-desktop#97), as its organiser sees it. */
+export interface Delivery {
+  id: number;
+  participant_id: number | null;
+  name: string | null;
+  email: string | null;
+  channel: 'email' | 'in_app' | string;
+  kind: 'invitation' | 'update' | 'cancellation' | 'reminder' | 'summary' | string;
+  state: 'queued' | 'sending' | 'sent' | 'failed' | 'suppressed' | 'cancelled' | string;
+  attempts: number;
+  error: string | null;
+  next_attempt_at: string | null;
+  sent_at: string | null;
+}
+
 export interface Detail {
   meeting: Meeting;
+  /** For whoever runs it: what reached whom, failures first; null for everyone else. */
+  deliveries?: { rows: Delivery[]; counts: Record<string, number> } | null;
   participants: Person[];
   agenda: AgendaItem[];
   minutes: { summary: string | null; decisions: string | null; notes: string | null; finalised_at: string | null } | null;
@@ -168,6 +205,22 @@ export const RSVP_LABEL: Record<Rsvp, string> = { accepted: 'Going', tentative: 
 
 export function typeLabel(t: string): string {
   return TYPES.find(([k]) => k === t)?.[1] ?? t;
+}
+
+/**
+ * When a meeting was booked on another clock — a tender's pre-bid meeting on the buyer's company's (#100) — the
+ * time as it is there: "20 Oct, 10:00 Asia/Colombo". Null on the reader's own clock, where it would only repeat.
+ */
+export function zoneNote(instant: string, zone: string | null | undefined, here = currentZone()): string | null {
+  if (!zone || zone === here) return null;
+  const at = parseTs(instant);
+  if (Number.isNaN(at.getTime())) return null;
+  try {
+    return `${new Intl.DateTimeFormat('en-GB', { timeZone: zone, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(at)} ${zone}`;
+  } catch {
+    // Not a zone this computer knows.
+    return null;
+  }
 }
 
 export function providerLabel(m: Pick<Meeting, 'location_type' | 'online_provider'>): string {

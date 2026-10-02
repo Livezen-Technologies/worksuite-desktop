@@ -208,3 +208,29 @@ describe('Customize (#104)', () => {
     expect(screen.getByRole('region', { name: 'Agenda' }).className).not.toContain('col-span-2');
   });
 });
+
+describe('Invitations waiting for me (#97)', () => {
+  const invite = (id: number, title: string, my_rsvp: string) => ({
+    source: 'meeting', id, title, start_at: `${shift(2)} 06:00:00`, end_at: `${shift(2)} 07:00:00`, all_day: false, my_rsvp, conflicts: [], duplicates: [], duplicate: false,
+    link: `/meetings?meeting=${id}`, organizer: 'Nadia Perera', timezone: 'Asia/Colombo', where: 'Board room, HQ', location_type: 'room', online_url: null,
+  });
+
+  it('lists only the unanswered, with who, when and where, answered in place and counted', async () => {
+    const base = vi.mocked(apiGet).getMockImplementation()!;
+    vi.mocked(apiGet).mockImplementation((async (path: string, ...rest: unknown[]) => {
+      if (path === '/api/calendar/conflicts/invitations') return { invitations: [invite(7, 'Budget review', 'no_response'), invite(8, 'Standup', 'tentative')] };
+      return (base as (p: string, ...r: unknown[]) => unknown)(path, ...rest);
+    }) as never);
+    show();
+    const waiting = await screen.findByRole('region', { name: 'Waiting for me' });
+    const row = (await within(waiting).findByText('Invitation · Budget review')).closest('li')!;
+    expect(within(waiting).queryByText('Invitation · Standup')).toBeNull();
+    expect(within(row).getByText('From Nadia Perera')).toBeTruthy();
+    expect(within(row).getByText('Board room, HQ')).toBeTruthy();
+    // The approval, the acknowledgement and the one invitation not yet answered — "maybe" is an answer.
+    expect(await screen.findByRole('button', { name: 'Waiting for me: 3' })).toBeTruthy();
+
+    fireEvent.click(within(row).getByRole('button', { name: 'Maybe' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/calendar/conflicts/invitations/meetings/7/rsvp', { rsvp: 'tentative' }));
+  });
+});
