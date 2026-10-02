@@ -4,6 +4,14 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.5.0 — 2026-10-02
+
+**Added**
+
+- invitations reliably reach invitees by bell, banner and email (with a calendar file), with reminders and notices of moves and cancellations. The organiser sees an Emails panel with delivery status and Retry (worksuite-desktop#97). Answers update Meetings, Calendar, Home and notifications at once.
+- tender meetings are labelled Tender meeting and can be filtered under Related to. Their details offer Open Tender and show the booking timezone (worksuite-desktop#100).
+- scheduling a meeting from a tender contact starts with the contact as a guest (worksuite-desktop#118).
+
 ## 1.4.1 — 2026-10-02
 
 **Fixed**

@@ -9,6 +9,7 @@ the root CHANGELOG.md.
 **Added**
 
 - Settings › AI Assistant › Auto-minimize after sending, and an AI Assistant row under Notifications › By app to mute the assistant's notices (worksuite-desktop#110).
+- Security › Access while locked: show the sender, and show a preview, in notifications while WorkSuite is locked (both off by default, within the organisation's minimum) (worksuite-desktop#114).
 
 ## 1.7.2 — 2026-10-02
 

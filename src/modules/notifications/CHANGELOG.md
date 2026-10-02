@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.0 — 2026-10-02
+
+**Added**
+
+- a meeting invitation in the notification centre has Going, Maybe, Not going and View Meeting, and on macOS the banner has the three answers (worksuite-desktop#97). Settings says why banners are blocked when they are.
+
+**Fixed**
+
+- chat notifications keep coming while WorkSuite is locked (worksuite-desktop#114). Locked banners say "New message in WorkSuite." unless you allow the sender or a preview. After sleep the connection is replaced at once, and missed messages and notifications are caught up without showing twice. Settings explains when the system may be blocking banners.
+
 ## 1.1.0 — 2026-10-02
 
 - Added Open Task, Snooze 15 min and Mark Complete to task reminder notifications. Native actions follow OS support, privacy and lock rules; the notification centre provides actions on every platform (issue #62).

@@ -4,6 +4,13 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.5.0 — 2026-10-02
+
+**Added**
+
+- a tender's meetings show as Tender meetings, in their own category and colour. The summary gives the tender reference, timezone, location or join link and organiser, with Open Tender, View Meeting and Join (worksuite-desktop#100). Tender closing dates stay separate entries.
+- meeting invitations carry the organiser, timezone and where. Going, Maybe and Not going answer from anywhere, and every view updates without a refresh (worksuite-desktop#97).
+
 ## 1.4.0 — 2026-10-01
 
 **Added**
