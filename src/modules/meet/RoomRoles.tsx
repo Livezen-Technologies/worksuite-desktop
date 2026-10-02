@@ -6,8 +6,9 @@ import { dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { Button, Modal, Spinner, Switch, TextField, cx } from '../../components/ui';
-import { DEFAULT_ROOM_SETTINGS, ROLE_LABEL, type MeetRole, type RoomActivity, type RoomSettings, type RoomSettingsView } from './api';
-import { useMeetT, type MKey } from './i18n';
+import { ROLE_LABEL, type MeetRole, type RoomActivity, type RoomSettings, type RoomSettingsView } from './api';
+import { HostControlsFields } from './HostControls';
+import { useMeetT } from './i18n';
 import { meet } from './session';
 
 /**
@@ -28,111 +29,22 @@ export function RoleBadge({ role, guest }: { role: MeetRole; guest?: boolean }) 
   return <span className={cx('rounded-full px-1.5 py-px text-[10.5px] font-bold', BADGE[role])}>{guest && role === 'participant' ? 'Guest' : ROLE_LABEL[role]}</span>;
 }
 
-/** The choices, in words, for each setting. */
-const CHOICES: { [K in keyof RoomSettings]?: Array<{ value: RoomSettings[K]; label: string }> } = {
-  access: [
-    { value: 'anyone', label: 'Anyone with the link, guests too' },
-    { value: 'signed_in', label: 'People signed in to WorkSuite' },
-    { value: 'invited', label: 'Only the people invited' },
-  ],
-  present: [
-    { value: 'everyone', label: 'Everyone' },
-    { value: 'presenters', label: 'Host, co-hosts and presenters' },
-  ],
-  invite: [
-    { value: 'everyone', label: 'Everyone in the meeting' },
-    { value: 'hosts', label: 'Host and co-hosts' },
-  ],
-  chat: [
-    { value: 'everyone', label: 'Everyone' },
-    { value: 'hosts', label: 'Host and co-hosts only' },
-    { value: 'off', label: 'Off' },
-  ],
-  record: [
-    { value: 'host', label: 'The host' },
-    { value: 'hosts', label: 'Host and co-hosts' },
-  ],
-  transcripts: [
-    { value: 'participants', label: 'Everyone in the meeting' },
-    { value: 'hosts', label: 'Host and co-hosts' },
-  ],
-};
-
-const LABELS: Record<keyof RoomSettings, string> = {
-  access: 'Who can join',
-  waiting_room: 'Waiting room',
-  join_before_host: 'Let people join before the host',
-  present: 'Who can share their screen',
-  invite: 'Who can invite people',
-  chat: 'Who can chat',
-  record: 'Who can record',
-  transcripts: 'Who can see transcripts and minutes',
-  qa: 'Q&A',
-  qa_anonymous: 'Let people ask anonymously',
-  polls: 'Polls',
-  raise_hand: 'Raise hand',
-};
-
-/** Q&A, polls and raised hands (worksuite-desktop#92): their names and hints in the meeting's language. */
-const TRANSLATED: Partial<Record<keyof RoomSettings, { label: MKey; hint?: MKey }>> = {
-  qa: { label: 'act.setting.qa', hint: 'act.setting.qaHint' },
-  qa_anonymous: { label: 'act.setting.qaAnonymous' },
-  polls: { label: 'act.setting.polls' },
-  raise_hand: { label: 'act.setting.raiseHand', hint: 'act.setting.raiseHandHint' },
-};
-
-const HINTS: Partial<Record<keyof RoomSettings, string>> = {
-  waiting_room: 'People wait until the host or a co-host admits them.',
-  join_before_host: 'Off: everyone waits until the host or a co-host is in.',
-};
-
 /**
- * The room settings as fields. While scheduling, `value` is a draft; in the
+ * The room settings as fields: the host controls in their groups
+ * (worksuite-desktop#91). While scheduling, `value` is a draft; in the
  * meeting, each change is saved as it is made.
  */
 export function RoomSettingsFields({ value, onChange, disabled }: { value: RoomSettings; onChange: (patch: Partial<RoomSettings>) => void; disabled?: boolean }) {
-  const t = useMeetT();
-  return (
-    <div className="flex flex-col gap-2.5 text-[12.5px]">
-      {(Object.keys(LABELS) as Array<keyof RoomSettings>).map((key) => {
-        // A setting an older server does not send reads as its default.
-        const v = value[key] ?? DEFAULT_ROOM_SETTINGS[key];
-        const tr = TRANSLATED[key];
-        const label = tr ? t(tr.label) : LABELS[key];
-        const hint = tr?.hint ? t(tr.hint) : HINTS[key];
-        if (typeof v === 'boolean') {
-          return (
-            <div key={key} className="flex items-start gap-2.5">
-              <span className="flex min-w-0 flex-1 flex-col">
-                <b className="text-ink">{label}</b>
-                {hint ? <span className="text-[11.5px] text-ink-3">{hint}</span> : null}
-              </span>
-              {/* Anonymous questions mean nothing with Q&A off. */}
-              <Switch checked={v} disabled={disabled || (key === 'qa_anonymous' && value.qa === false)} label={label} onChange={(on) => onChange({ [key]: on })} />
-            </div>
-          );
-        }
-        const options = (CHOICES[key] ?? []) as Array<{ value: string; label: string }>;
-        return (
-          <label key={key} className="flex flex-col gap-1">
-            <b className="text-ink">{LABELS[key]}</b>
-            <Select<string>
-              value={v}
-              disabled={disabled}
-              aria-label={LABELS[key]}
-              options={options}
-              onValueChange={(next) => onChange({ [key]: next } as Partial<RoomSettings>)}
-              className="h-9 rounded-[8px] border border-line bg-surface px-2 text-ink"
-            />
-          </label>
-        );
-      })}
-    </div>
-  );
+  return <HostControlsFields value={value} onChange={onChange} disabled={disabled} />;
 }
 
-/** The Settings tab in the meeting: room name, passcode, lock and the room settings; the activity for hosts and co-hosts. */
-export function RoomSettingsPanel() {
+/**
+ * The Settings tab in the meeting: room name, passcode and lock; the activity
+ * for hosts and co-hosts. What participants may do and who may come in are in
+ * Host controls (`onHostControls`); everybody else sees them here, to read.
+ */
+export function RoomSettingsPanel({ onHostControls }: { onHostControls?: () => void }) {
+  const t = useMeetT();
   const uuid = meet.uuid;
   const q = useQuery({ queryKey: ['meet', uuid, 'settings'], queryFn: ({ signal }) => apiGet<RoomSettingsView>(`/api/meet/${uuid}/settings`, undefined, signal) });
   const [saving, setSaving] = useState(false);
@@ -182,7 +94,18 @@ export function RoomSettingsPanel() {
         </span>
         <Switch checked={view.locked} disabled={!edit || saving} label="Lock the meeting" onChange={(locked) => void save({ locked })} />
       </div>
-      <RoomSettingsFields value={view.settings} disabled={!edit || saving} onChange={(patch) => void save(patch)} />
+      {edit ? (
+        <div className="flex flex-col items-start gap-2 rounded-[9px] bg-subtle px-2.5 py-2">
+          <span className="text-ink-2">{t('hc.settingsTab')}</span>
+          {onHostControls ? (
+            <Button size="sm" icon="shield" onClick={onHostControls}>
+              {t('hc.openHostControls')}
+            </Button>
+          ) : null}
+        </div>
+      ) : (
+        <RoomSettingsFields value={view.settings} disabled onChange={() => undefined} />
+      )}
       {edit ? <ActivityList /> : null}
     </div>
   );

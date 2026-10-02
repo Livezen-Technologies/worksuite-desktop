@@ -5,7 +5,7 @@ import { call, errorMessage, on } from '../../core/bridge';
 import { CLEAN_AUDIO, pauseOn, shareOn } from '../calls/session';
 import type { SharePick } from '../calls/ScreenPicker';
 import { DEFAULT_ROOM_SETTINGS, may, type MeetActivities, type MeetInfo, type MeetRole, type RaisedHand, type RoomSettings, type Sfu } from './api';
-import { mt } from './i18n';
+import { mt, type MKey } from './i18n';
 import { playOnce } from '../calls/tones';
 import type { RemoteControlView } from '@shared/types';
 import { pointers } from './remote/pointers';
@@ -43,8 +43,33 @@ export interface Meta {
   cohost?: boolean;
   waiting?: boolean;
   door?: 'waiting_room' | 'no_host' | null;
+  /** Waiting until a host is in (`door: no_host`): where they go once one is — straight in (null), or the waiting room. */
+  after?: 'waiting_room' | null;
   uid?: number | null;
 }
+
+/** The reactions anybody may send (worksuite-desktop#91): a short, fixed set, so nothing else is shown. */
+export const REACTIONS = ['👍', '👏', '❤️', '😂', '😮', '🎉'] as const;
+
+/** A reaction on screen for a moment. */
+export interface Reaction {
+  id: number;
+  name: string;
+  emoji: string;
+}
+
+/** The permissions a participant can lose or get back, as the host turns them off and on, with what they are told. */
+const TOLD: Array<{ may: (r: MeetRole, s: RoomSettings) => boolean; off: MKey; on: MKey | null }> = [
+  { may: (r, s) => may.microphone(r, s), off: 'hc.turnedOff.microphone', on: 'hc.turnedOn.microphone' },
+  { may: (r, s) => may.camera(r, s), off: 'hc.turnedOff.camera', on: 'hc.turnedOn.camera' },
+  { may: (r, s) => may.present(r, s), off: 'hc.turnedOff.present', on: null },
+  { may: (r, s) => may.react(r, s), off: 'hc.turnedOff.reactions', on: null },
+  { may: (r, s) => may.draw(r, s), off: 'hc.turnedOff.whiteboard', on: null },
+  { may: (r, s) => may.chat(r, s), off: 'hc.turnedOff.chat', on: null },
+  { may: (_r, s) => s.qa !== false, off: 'hc.turnedOff.qa', on: null },
+  { may: (_r, s) => s.polls !== false, off: 'hc.turnedOff.polls', on: null },
+  { may: (_r, s) => s.raise_hand !== false, off: 'hc.turnedOff.raiseHand', on: null },
+];
 
 export function metaOf(p: Participant): Meta {
   try {
@@ -142,6 +167,9 @@ export class MeetSession {
   private actAgain = false;
   /** The last change told, so one that arrives by both routes is told once. */
   private lastNotice: { key: string; at: number } | null = null;
+  /** Reactions on screen now (worksuite-desktop#91), newest last. */
+  reactions: Reaction[] = [];
+  private reactionId = 0;
 
   subscribe = (fn: () => void): (() => void) => {
     this.listeners.add(fn);
@@ -191,6 +219,28 @@ export class MeetSession {
     return may.invite(this.role, this.settings);
   }
 
+  /** Participants' permissions (worksuite-desktop#91), as the host set them. The media server holds the same. */
+  get mayMic(): boolean {
+    return may.microphone(this.role, this.settings);
+  }
+
+  get mayCamera(): boolean {
+    return may.camera(this.role, this.settings);
+  }
+
+  get mayReact(): boolean {
+    return may.react(this.role, this.settings);
+  }
+
+  get mayDraw(): boolean {
+    return may.draw(this.role, this.settings);
+  }
+
+  /** A recording already running can be stopped by whoever could record, even after recording was turned off. */
+  get mayStopRecording(): boolean {
+    return may.record(this.role, { ...this.settings, recording: true });
+  }
+
   /** Why we are waiting at the door, as the server put it. */
   get door(): 'waiting_room' | 'no_host' | null {
     const lp = this.room?.localParticipant;
@@ -199,6 +249,16 @@ export class MeetSession {
 
   get canPublish(): boolean {
     return this.room?.localParticipant.permissions?.canPublish ?? false;
+  }
+
+  /**
+   * Past the door: what the media server lets us receive. Not whether we may
+   * publish — a participant whose microphone, camera and screen are all off
+   * (worksuite-desktop#91) publishes nothing and is still in the meeting.
+   */
+  get admitted(): boolean {
+    const perm = this.room?.localParticipant.permissions;
+    return perm ? (perm.canSubscribe ?? perm.canPublish ?? false) : false;
   }
 
   /** People admitted to the meeting (not the ones waiting at the door). */
@@ -243,8 +303,13 @@ export class MeetSession {
       sfu = await apiGet<Sfu>(`/api/meet/${this.uuid}/sfu`, opts.passcode ? { pass: opts.passcode } : undefined);
     } catch (e) {
       this.phase = 'lobby';
+      // A 403 is the passcode, or the meeting's access mode turning us away (#91), in the server's words.
       this.error =
-        e instanceof ApiError && e.status === 403 ? 'That passcode is not right.' : e instanceof ApiError && e.status === 423 ? 'The host has locked this meeting. No one new can join.' : errorMessage(e);
+        e instanceof ApiError && e.status === 403 && /passcode/i.test(e.message)
+          ? 'That passcode is not right.'
+          : e instanceof ApiError && e.status === 423
+            ? 'The host has locked this meeting. No one new can join.'
+            : errorMessage(e);
       this.changed();
       return;
     }
@@ -298,18 +363,21 @@ export class MeetSession {
       })
       .on(RoomEvent.ParticipantPermissionsChanged, (_prev, p) => {
         // Admitted: the door opens and our devices go on.
-        if (p === room.localParticipant && this.phase === 'waiting' && this.canPublish) void this.enter();
+        if (p === room.localParticipant && this.phase === 'waiting' && this.admitted) void this.enter();
+        // A microphone or camera the host turned off is stopped here too, not only on the media server (#91).
+        if (p === room.localParticipant && this.phase === 'in') void this.applyPermissions();
         // No longer allowed to present: the media server has already stopped the screen; say so.
         if (p === room.localParticipant && room.localParticipant.isScreenShareEnabled && !this.mayPresentNow()) {
           void this.share(null).then(() => this.note('Only presenters can share their screen now. Ask the host to make you a presenter.'));
         }
         refresh();
       })
-      // Back after a dropped connection: Q&A, polls and hands may have moved on meanwhile.
-      .on(RoomEvent.Reconnected, () => void this.refreshActivities())
+      // Back after a dropped connection: the settings, Q&A, polls and hands may have moved on meanwhile.
+      .on(RoomEvent.Reconnected, () => void this.reload().then(() => this.refreshActivities()))
       .on(RoomEvent.ParticipantConnected, (p) => {
-        // Somebody waiting only because no host was in, and the room has no waiting room: let them in as I arrive.
-        if (this.canManage && !this.settings.waiting_room && metaOf(p).door === 'no_host') void this.admit(p);
+        // Somebody waiting only because no host was in, whom the room would have let straight in: let them in as I arrive.
+        const m = metaOf(p);
+        if (this.canManage && m.door === 'no_host' && ('after' in m ? m.after === null : !this.settings.waiting_room)) void this.admit(p);
       })
       .on(RoomEvent.DataReceived, (payload, p, _kind, topic) => {
         // Remote control: relayed to the main process as it came. The key, and the decision, are there.
@@ -336,7 +404,21 @@ export class MeetSession {
           }
           return;
         }
+        // A reaction (#91): from somebody in the room, one of the set, while the host allows them.
+        if (topic === 'meet.reaction') {
+          if (p && may.react(roleOf(p), this.settings)) {
+            try {
+              const r = JSON.parse(new TextDecoder().decode(payload)) as { e?: string };
+              if (r.e && (REACTIONS as readonly string[]).includes(r.e)) this.showReaction(p.name || 'Someone', r.e);
+            } catch {
+              /* not a reaction */
+            }
+          }
+          return;
+        }
         if (topic !== 'wb') return;
+        // With participants' drawing off (#91), only the host's and co-hosts' strokes reach the board.
+        if (p && !may.draw(roleOf(p), this.settings)) return;
         try {
           const msg = JSON.parse(new TextDecoder().decode(payload)) as Board;
           if (msg.t === 'clear') this.strokes = [];
@@ -376,7 +458,8 @@ export class MeetSession {
     // Roles and settings changed by someone else reach everyone in the meeting at once (`meet.control`, what: roles).
     this.offRoles = on<{ type?: string; meeting?: string; what?: string }>('realtime:event', (e) => {
       if (e?.type !== 'meet.control' || e.meeting !== this.uuid) return;
-      if (e.what === 'roles') void this.reload().then(() => this.refreshActivities());
+      // A settings change (#91) comes as both: what it changed for me is told when the settings are read again.
+      if (e.what === 'roles' || e.what === 'settings') void this.reload().then(() => this.refreshActivities());
       // Q&A, polls and raised hands (#92): the server keeps them; read them again.
       if (e.what === 'qa' || e.what === 'polls' || e.what === 'hands') this.onActivity(e as ActivityEvent);
       // Somebody started or stopped transcribing (#81): everybody is told while it is on.
@@ -398,7 +481,7 @@ export class MeetSession {
         this.changed();
       }
     });
-    if (this.canPublish) await this.enter();
+    if (this.admitted) await this.enter();
     else {
       this.phase = 'waiting';
       this.changed();
@@ -409,13 +492,47 @@ export class MeetSession {
   async reload(): Promise<void> {
     if (!this.uuid) return;
     try {
+      const before = { role: this.role, settings: this.settings };
       const info = await apiGet<MeetInfo>(`/api/meet/${this.uuid}`);
       this.info = { ...this.info, ...info };
       if (info.locked !== undefined) this.locked = info.locked;
+      if (this.phase === 'in') {
+        this.tellChanges(before.role, before.settings);
+        await this.applyPermissions();
+      }
       this.changed();
     } catch {
       /* the next change tries again */
     }
+  }
+
+  /**
+   * What the host turned off or back on for me (worksuite-desktop#91), in a
+   * toast. Only what I lost or got back: a change that leaves me as I was —
+   * the hosts are never limited — says nothing.
+   */
+  private tellChanges(roleBefore: MeetRole, before: RoomSettings): void {
+    const role = this.role;
+    const now = this.settings;
+    for (const c of TOLD) {
+      const had = c.may(roleBefore, before);
+      const has = c.may(role, now);
+      if (had && !has) toast('info', mt(c.off));
+      else if (!had && has && c.on && roleBefore === role) toast('info', mt(c.on));
+    }
+  }
+
+  /**
+   * Stop here what I may no longer use: the media server has already stopped
+   * the tracks, and this turns the devices off so the buttons say so. A
+   * permission given back turns nothing on — that stays mine to do.
+   */
+  async applyPermissions(): Promise<void> {
+    const lp = this.room?.localParticipant;
+    if (!lp) return;
+    if (!this.mayMic && lp.isMicrophoneEnabled) await lp.setMicrophoneEnabled(false).catch(() => undefined);
+    if (!this.mayCamera && lp.isCameraEnabled) await lp.setCameraEnabled(false).catch(() => undefined);
+    this.changed();
   }
 
   /** Whether my connection may publish a screen now — what the media server granted. */
@@ -446,8 +563,9 @@ export class MeetSession {
     // The main window shows "in a meeting" and brings this window back.
     void call('calls:active', { uuid: this.uuid, kind: 'meet', title: this.info?.title || 'Meeting' }).catch(() => undefined);
     this.changed();
-    if (this.wants.mic) await lp.setMicrophoneEnabled(true).catch((e) => this.note(`The microphone could not start: ${errorMessage(e)}`));
-    if (this.wants.cam) await lp.setCameraEnabled(true).catch((e) => this.note(`The camera could not start: ${errorMessage(e)}`));
+    // What the host turned off for participants (#91) does not start, whatever the lobby said.
+    if (this.wants.mic && this.mayMic) await lp.setMicrophoneEnabled(true).catch((e) => this.note(`The microphone could not start: ${errorMessage(e)}`));
+    if (this.wants.cam && this.mayCamera) await lp.setCameraEnabled(true).catch((e) => this.note(`The camera could not start: ${errorMessage(e)}`));
     this.changed();
   }
 
@@ -458,6 +576,7 @@ export class MeetSession {
 
   async toggleMic(): Promise<void> {
     const lp = this.room?.localParticipant;
+    if (lp && !lp.isMicrophoneEnabled && !this.mayMic) return this.note(mt('hc.off.microphone'));
     if (lp) await lp.setMicrophoneEnabled(!lp.isMicrophoneEnabled).catch((e) => this.note(errorMessage(e)));
     this.changed();
   }
@@ -465,6 +584,7 @@ export class MeetSession {
   async toggleCamera(): Promise<void> {
     const lp = this.room?.localParticipant;
     if (!lp) return;
+    if (!lp.isCameraEnabled && !this.mayCamera) return this.note(mt('hc.off.camera'));
     if (!lp.isCameraEnabled && !(await call('media:access', { kind: 'camera' })).granted) {
       this.note('WorkSuite needs camera access in your system privacy settings.');
       return;
@@ -706,8 +826,9 @@ export class MeetSession {
     }
   }
 
+  /** The hosts or whoever may record, while the room allows transcription (#91). */
   get mayTranscribe(): boolean {
-    return this.canManage || this.mayRecord;
+    return may.transcribe(this.role, this.settings);
   }
 
   async startTranscription(language: SpeechLanguage, autoEmail: AutoEmail | null): Promise<void> {
@@ -862,6 +983,8 @@ export class MeetSession {
   }
 
   draw(s: Stroke | null): void {
+    // Drawing turned off for participants (#91): nothing is drawn, and the others' screens would drop it anyway.
+    if (!this.mayDraw) return;
     const msg: Board = s ? { t: 'stroke', s } : { t: 'clear' };
     this.strokes = s ? [...this.strokes, s] : [];
     void this.room?.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(msg)), { reliable: true, topic: 'wb' }).catch(() => undefined);
@@ -873,10 +996,32 @@ export class MeetSession {
     }
   }
 
+  // ── reactions (worksuite-desktop#91) ─────────────────────────────────────
+
+  /** Send a reaction to everybody in the meeting, and show it here. */
+  react(emoji: string): void {
+    const lp = this.room?.localParticipant;
+    if (!lp || !this.mayReact || !(REACTIONS as readonly string[]).includes(emoji)) return;
+    void lp.publishData(new TextEncoder().encode(JSON.stringify({ e: emoji })), { reliable: true, topic: 'meet.reaction' }).catch(() => undefined);
+    this.showReaction(mt('hc.you'), emoji);
+  }
+
+  /** On screen for a few seconds; the last few only. */
+  private showReaction(name: string, emoji: string): void {
+    const id = ++this.reactionId;
+    this.reactions = [...this.reactions.slice(-5), { id, name, emoji }];
+    this.changed();
+    setTimeout(() => {
+      this.reactions = this.reactions.filter((r) => r.id !== id);
+      this.changed();
+    }, 4_000);
+  }
+
   private teardown(): void {
     this.offRoles?.();
     this.offRoles = null;
     this.activities = null;
+    this.reactions = [];
     // Leaving while transcribing here: what was said so far is finished and kept.
     if (this.liveTx) void this.stopTranscription();
     // Leaving while recording here: the recording stops, and is finished and uploaded in the background.

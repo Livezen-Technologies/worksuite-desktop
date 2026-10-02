@@ -167,13 +167,16 @@ export function TextField({ label, hint, error, className, ...rest }: InputHTMLA
   );
 }
 
-export function Switch({ checked, onChange, disabled, label }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; label: string }) {
+/** `describedBy`: the id of the line that says what the switch does, read out with its name. */
+export function Switch({ checked, onChange, disabled, label, id, describedBy }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; label: string; id?: string; describedBy?: string }) {
   return (
     <button
       type="button"
       role="switch"
+      id={id}
       aria-checked={checked}
       aria-label={label}
+      aria-describedby={describedBy}
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cx('relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50', checked ? 'bg-primary' : 'bg-line')}

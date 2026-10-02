@@ -83,14 +83,16 @@ describe('the room settings fields', () => {
   it('hands back each change on its own', () => {
     const onChange = vi.fn();
     render(<RoomSettingsFields value={DEFAULT_ROOM_SETTINGS} onChange={onChange} />);
-    fireEvent.click(screen.getByRole('switch', { name: 'Waiting room' }));
-    expect(onChange).toHaveBeenCalledWith({ waiting_room: false });
-    expect(screen.getByRole('switch', { name: 'Let people join before the host' }).getAttribute('aria-checked')).toBe('true');
+    // The waiting room and "join before the host" are Host controls now (#91): the access mode, and "Host must join first".
+    fireEvent.click(screen.getByRole('switch', { name: 'Host must join first' }));
+    expect(onChange).toHaveBeenCalledWith({ join_before_host: false });
+    expect(screen.getByRole('switch', { name: 'Use their microphone' }).getAttribute('aria-checked')).toBe('true');
   });
 
   it('cannot be changed by someone who may not', () => {
     render(<RoomSettingsFields value={DEFAULT_ROOM_SETTINGS} onChange={vi.fn()} disabled />);
-    expect((screen.getByRole('switch', { name: 'Waiting room' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('switch', { name: 'Host must join first' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('radio', { name: /Trusted/ }) as HTMLInputElement).disabled).toBe(true);
   });
 });
 

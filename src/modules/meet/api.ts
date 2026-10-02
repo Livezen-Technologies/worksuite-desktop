@@ -59,6 +59,36 @@ export interface RoomSettings {
   qa_anonymous?: boolean;
   polls?: boolean;
   raise_hand?: boolean;
+  /**
+   * Host Controls (worksuite-desktop#91); missing from an older server. Who may come in: open (anyone with the
+   * link), trusted (invited people signed in come straight in, everybody else asks) or restricted (only invited
+   * people may ask). `access` and `waiting_room` are what it means in the settings before it.
+   */
+  access_mode?: AccessMode;
+  /** Guests (no WorkSuite account) may come in, or ask to. Never in a restricted meeting. */
+  guest_requests?: boolean;
+  /** What participants (everybody but the host and co-hosts) may use. */
+  microphone?: boolean;
+  camera?: boolean;
+  reactions?: boolean;
+  whiteboard?: boolean;
+  /** Off: nobody records or transcribes this meeting. */
+  recording?: boolean;
+  transcription?: boolean;
+}
+
+export type AccessMode = 'open' | 'trusted' | 'restricted';
+
+/** The access mode, from a server that sends it or from the settings before it. */
+export function accessModeOf(s: Partial<RoomSettings>): AccessMode {
+  if (s.access_mode) return s.access_mode;
+  if (s.access === 'invited') return 'restricted';
+  return s.waiting_room === false ? 'open' : 'trusted';
+}
+
+/** Whether guests may come in or ask, from a server that sends it or from the settings before it. */
+export function guestsOf(s: Partial<RoomSettings>): boolean {
+  return s.guest_requests ?? (s.access ?? 'anyone') === 'anyone';
 }
 
 export const DEFAULT_ROOM_SETTINGS: RoomSettings = {
@@ -74,7 +104,24 @@ export const DEFAULT_ROOM_SETTINGS: RoomSettings = {
   qa_anonymous: true,
   polls: true,
   raise_hand: true,
+  access_mode: 'trusted',
+  guest_requests: true,
+  microphone: true,
+  camera: true,
+  reactions: true,
+  whiteboard: true,
+  recording: true,
+  transcription: true,
 };
+
+/** `GET/PUT /api/meet/defaults`: my defaults for the meetings I start or schedule (worksuite-desktop#91). */
+export interface MeetDefaultsView {
+  settings: RoomSettings;
+  /** False: never saved, so new meetings use the standard settings. */
+  saved: boolean;
+  /** False: the server cannot keep them yet. */
+  available?: boolean;
+}
 
 /** `GET/PUT /api/meet/{uuid}/settings`. */
 export interface RoomSettingsView {
@@ -99,10 +146,17 @@ export interface RoomActivity {
 export const may = {
   manage: (r: MeetRole) => r === 'host' || r === 'cohost',
   present: (r: MeetRole, s: RoomSettings) => s.present === 'everyone' || r !== 'participant',
-  record: (r: MeetRole, s: RoomSettings) => r === 'host' || (r === 'cohost' && s.record === 'hosts'),
+  /** Nobody while the room has recording off (worksuite-desktop#91). */
+  record: (r: MeetRole, s: RoomSettings) => s.recording !== false && (r === 'host' || (r === 'cohost' && s.record === 'hosts')),
   invite: (r: MeetRole, s: RoomSettings) => s.invite === 'everyone' || r === 'host' || r === 'cohost',
   chat: (r: MeetRole, s: RoomSettings) => (s.chat === 'off' ? false : s.chat === 'hosts' ? r === 'host' || r === 'cohost' : true),
   transcripts: (r: MeetRole, s: RoomSettings) => s.transcripts === 'participants' || r === 'host' || r === 'cohost',
+  /** Participants' permissions (worksuite-desktop#91): the host and co-hosts are never limited. A setting an older server leaves out is on. */
+  microphone: (r: MeetRole, s: RoomSettings) => r === 'host' || r === 'cohost' || s.microphone !== false,
+  camera: (r: MeetRole, s: RoomSettings) => r === 'host' || r === 'cohost' || s.camera !== false,
+  react: (r: MeetRole, s: RoomSettings) => r === 'host' || r === 'cohost' || s.reactions !== false,
+  draw: (r: MeetRole, s: RoomSettings) => r === 'host' || r === 'cohost' || s.whiteboard !== false,
+  transcribe: (r: MeetRole, s: RoomSettings) => s.transcription !== false && (r === 'host' || r === 'cohost' || may.record(r, s)),
 };
 
 /**

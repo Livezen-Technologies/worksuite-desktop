@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { callUi } from '../calls/ui/state';
+import { useMeetT } from './i18n';
 import { meet, type Stroke } from './session';
 
 const COLORS = ['#151A2D', '#23349E', '#B42318', '#1F7A4D', '#B45309'];
@@ -12,9 +13,14 @@ const COLORS = ['#151A2D', '#23349E', '#B42318', '#1F7A4D', '#B45309'];
  * go full screen with the rest of the meeting; the people stay in the
  * corner. Strokes are kept as fractions of the board, so they land in the
  * same place at any size, and the board redraws whenever it is resized.
+ *
+ * With drawing turned off for participants (worksuite-desktop#91) they see
+ * the board and why they cannot draw on it; the tools are gone.
  */
 export function Whiteboard({ stage }: { stage?: boolean }) {
   useSyncExternalStore(meet.subscribe, meet.snapshot);
+  const t = useMeetT();
+  const canDraw = meet.mayDraw;
   const canvas = useRef<HTMLCanvasElement>(null);
   const [color, setColor] = useState(COLORS[1]!);
   const [eraser, setEraser] = useState(false);
@@ -71,21 +77,31 @@ export function Whiteboard({ stage }: { stage?: boolean }) {
 
   const toolbar = (
     <div className={cx('flex flex-wrap items-center gap-1.5', stage && 'rounded-[12px] border border-line bg-surface p-1.5 shadow-[0_8px_24px_rgba(0,0,0,.25)]')}>
-      <button type="button" aria-pressed={!eraser} onClick={() => setEraser(false)} className={tool(!eraser)}>
-        <Icon name="compose" size={14} />
-        Pen
-      </button>
-      <button type="button" aria-pressed={eraser} onClick={() => setEraser(true)} className={tool(eraser)}>
-        <Icon name="eraser" size={14} />
-        Eraser
-      </button>
-      {COLORS.map((c) => (
-        <button key={c} type="button" aria-label={`Colour ${c}`} aria-pressed={color === c && !eraser} onClick={() => (setColor(c), setEraser(false))} className={cx('h-6 w-6 rounded-full border-2 ring-1 ring-line', color === c && !eraser ? 'border-primary' : 'border-transparent')} style={{ background: c }} />
-      ))}
+      {canDraw ? (
+        <>
+          <button type="button" aria-pressed={!eraser} onClick={() => setEraser(false)} className={tool(!eraser)}>
+            <Icon name="compose" size={14} />
+            Pen
+          </button>
+          <button type="button" aria-pressed={eraser} onClick={() => setEraser(true)} className={tool(eraser)}>
+            <Icon name="eraser" size={14} />
+            Eraser
+          </button>
+          {COLORS.map((c) => (
+            <button key={c} type="button" aria-label={`Colour ${c}`} aria-pressed={color === c && !eraser} onClick={() => (setColor(c), setEraser(false))} className={cx('h-6 w-6 rounded-full border-2 ring-1 ring-line', color === c && !eraser ? 'border-primary' : 'border-transparent')} style={{ background: c }} />
+          ))}
+        </>
+      ) : (
+        <span role="status" className="text-[12px] text-ink-2">
+          {t('hc.off.whiteboard')}
+        </span>
+      )}
       <span className={stage ? 'mx-1 h-6 w-px bg-line' : 'flex-1'} />
-      <button type="button" onClick={() => meet.draw(null)} className="h-8 rounded-[8px] border border-line bg-surface px-3 text-[12px] font-semibold text-ink hover:bg-subtle">
-        Clear board
-      </button>
+      {canDraw ? (
+        <button type="button" onClick={() => meet.draw(null)} className="h-8 rounded-[8px] border border-line bg-surface px-3 text-[12px] font-semibold text-ink hover:bg-subtle">
+          Clear board
+        </button>
+      ) : null}
       {stage ? (
         <button type="button" onClick={() => callUi.set({ boardOnStage: false, panelOpen: true, panelTab: 'Board' })} className="flex h-8 items-center gap-1.5 rounded-[8px] border border-line bg-surface px-3 text-[12px] font-semibold text-ink hover:bg-subtle">
           <Icon name="panel-close" size={14} />
@@ -107,8 +123,9 @@ export function Whiteboard({ stage }: { stage?: boolean }) {
         ref={canvas}
         aria-label="Whiteboard"
         className={cx('min-h-0 w-full flex-1 touch-none bg-white', stage ? 'rounded-[12px] shadow-[0_4px_20px_rgba(15,27,61,.15)]' : 'rounded-[10px] border border-line')}
-        style={{ cursor: eraser ? 'cell' : 'crosshair' }}
+        style={{ cursor: !canDraw ? 'default' : eraser ? 'cell' : 'crosshair' }}
         onPointerDown={(e) => {
+          if (!canDraw) return;
           e.currentTarget.setPointerCapture(e.pointerId);
           drawing.current = { color: eraser ? '#FFFFFF' : color, width: eraser ? (stage ? 28 : 18) : 3, points: [at(e)] };
         }}

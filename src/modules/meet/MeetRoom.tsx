@@ -22,6 +22,7 @@ import { PointerLayer } from './remote/PointerLayer';
 import { pointers } from './remote/pointers';
 import { isGuest, meet, roleOf, userIdOf } from './session';
 import { HostLeaveDialog, RoleBadge, RoomSettingsPanel, TransferHostDialog } from './RoomRoles';
+import { HostControlsDrawer, cameraControl, hostControlsControl, micControl, reactControl } from './HostControls';
 import { AddPeopleDialog, Invitations } from './InvitePeople';
 import { MeetNotes } from './MeetNotes';
 import { RecordingSettings } from './RecordingSettings';
@@ -58,6 +59,8 @@ export function MeetRoom() {
   const [leaving, setLeaving] = useState(false);
   const [recSettings, setRecSettings] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  // Host controls (#91): the hosts' drawer; it closes by itself if I stop being one.
+  const [hostControls, setHostControls] = useState(false);
   const rec = meet.recording;
   const recPrefs = useStore(app, (s) => s.prefs?.meetRecording);
   const recordHint = recPrefs ? `${recPrefs.method === 'local' ? 'On this computer' : 'On the server'} · ${{ grid: 'grid', speaker: 'speaker', screen: 'shared screen' }[recPrefs.layout]} · ${recPrefs.quality}` : undefined;
@@ -104,8 +107,9 @@ export function MeetRoom() {
   const panelOn = (tab: string) => ui.panelOpen && ui.panelTab === tab;
 
   const buttons: ControlButton[] = [
-    { id: 'mic', icon: lp.isMicrophoneEnabled ? 'mic' : 'mic-off', label: lp.isMicrophoneEnabled ? 'Mute' : 'Unmute', tone: lp.isMicrophoneEnabled ? undefined : 'warn', onClick: () => void meet.toggleMic() },
-    { id: 'camera', icon: lp.isCameraEnabled ? 'video' : 'video-off', label: lp.isCameraEnabled ? 'Turn camera off' : 'Turn camera on', tone: lp.isCameraEnabled ? undefined : 'warn', onClick: () => void meet.toggleCamera() },
+    // A microphone or camera the host turned off for participants (#91): the button says why it cannot be turned on.
+    micControl(lp),
+    cameraControl(lp),
     sharing
       ? {
           id: 'share',
@@ -129,7 +133,8 @@ export function MeetRoom() {
         }
       : meet.mayPresent
         ? { id: 'share', icon: 'screen-share', label: 'Share your screen', onClick: () => setPicking('start') }
-        : { id: 'share', icon: 'screen-share', label: 'Only presenters can share — ask the host', disabled: true },
+        : { id: 'share', icon: 'screen-share', label: t('hc.off.present'), disabled: true },
+    reactControl(),
     // Raising a hand never turns the microphone on: the host gives the floor.
     {
       id: 'hand',
@@ -143,12 +148,14 @@ export function MeetRoom() {
     { id: 'chat', icon: 'chat', label: panelOn('Chat') ? 'Hide chat' : 'Chat', tone: panelOn('Chat') ? 'active' : undefined, onClick: () => callUi.togglePanel('Chat') },
     { id: 'people', icon: 'users', label: 'People', tone: panelOn('People') ? 'active' : undefined, badge: meet.canManage ? waiting.length : undefined, onClick: () => callUi.togglePanel('People') },
     { id: 'board', icon: 'board', label: ui.boardOnStage ? 'Take the board off the stage' : 'Whiteboard', tone: ui.boardOnStage || panelOn('Board') ? 'active' : undefined, onClick: () => (ui.boardOnStage ? callUi.set({ boardOnStage: false }) : callUi.togglePanel('Board')) },
+    // Host controls (#91): the host and co-hosts only.
+    ...hostControlsControl(hostControls, () => setHostControls(!hostControls)),
   ];
   const more: MenuEntry[] = [
     // Reachable even when their screen is not on the stage (the board is, or the floating card).
     ...(remote.session ? [{ label: 'Release control', hint: `Of ${remote.session.sharer.name}'s computer`, icon: 'stop', danger: true, onClick: () => void remote.release() }] : []),
-    // Recording (#68): started as Settings › Meet › Recording says; stopped by whoever may record.
-    ...(meet.mayRecord
+    // Recording (#68): started as Settings › Meet › Recording says; stopped by whoever may record — also after it was turned off (#91).
+    ...(meet.mayRecord || (meet.mayStopRecording && rec && (rec.mine || meet.rec?.cloud || room.isRecording))
       ? [
           rec && (rec.mine || meet.rec?.cloud || room.isRecording)
             ? { label: 'Stop recording', hint: rec.mine ? 'It is finished and uploaded to your Drive after' : undefined, icon: 'stop', danger: true, onClick: () => void meet.stopRecording() }
@@ -163,6 +170,7 @@ export function MeetRoom() {
         ? [{ label: 'Start transcription…', hint: 'English, Sinhala or Tamil', icon: 'file-text', onClick: () => setTranscribing(true) }]
         : []),
     ...(meet.canManage ? [{ label: meet.locked ? 'Unlock the meeting' : 'Lock the meeting', hint: meet.locked ? undefined : 'No one new can join', icon: 'lock', onClick: () => void meet.lock(!meet.locked) }] : []),
+    ...(meet.canManage ? [{ label: t('hc.title'), icon: 'shield', onClick: () => setHostControls(true) }] : []),
     { label: 'Room settings', icon: 'settings', onClick: () => callUi.togglePanel('Settings') },
     { label: ui.boardOnStage ? 'Board back to the panel' : 'Whiteboard on stage', icon: 'board', onClick: () => callUi.set({ boardOnStage: !ui.boardOnStage, ...(ui.boardOnStage ? {} : { panelOpen: false }) }) },
     { label: t('act.qa'), icon: 'help', onClick: () => callUi.togglePanel('Q&A') },
@@ -174,8 +182,17 @@ export function MeetRoom() {
   ];
 
   const alerts =
-    meet.error || meet.liveTx?.error || (meet.canManage && waiting.length) ? (
+    meet.error || meet.liveTx?.error || (meet.canManage && waiting.length) || meet.reactions.length ? (
       <>
+        {meet.reactions.length ? (
+          <div aria-live="polite" className="flex flex-wrap gap-1.5">
+            {meet.reactions.map((r) => (
+              <span key={r.id} className="animate-in rounded-full border border-line bg-surface px-2.5 py-1 text-[12.5px] font-semibold text-ink shadow-lg">
+                <span className="text-[16px]">{r.emoji}</span> {r.name}
+              </span>
+            ))}
+          </div>
+        ) : null}
         {meet.error ? (
           <div className="flex items-center gap-2 rounded-[10px] bg-[#3A1A14] px-3 py-2 text-[12.5px] text-[#FFD2C4]" role="alert">
             <span className="flex-1">{meet.error}</span>
@@ -283,7 +300,7 @@ export function MeetRoom() {
           { id: 'Notes', label: 'Notes', content: <MeetNotes /> },
           { id: 'Files', label: 'Files', content: <FilesPanel roomId={info.room_id} /> },
           { id: 'Info', label: 'Info', content: <InfoPanel /> },
-          { id: 'Settings', label: 'Settings', content: <RoomSettingsPanel /> },
+          { id: 'Settings', label: 'Settings', content: <RoomSettingsPanel onHostControls={meet.canManage ? () => setHostControls(true) : undefined} /> },
         ]}
         buttons={buttons}
         more={more}
@@ -314,6 +331,7 @@ export function MeetRoom() {
           }}
         />
       ) : null}
+      {hostControls && meet.canManage ? <HostControlsDrawer onClose={() => setHostControls(false)} /> : null}
       {transcribing ? <StartTranscriptionDialog onClose={() => setTranscribing(false)} /> : null}
       {recSettings ? (
         <Modal title="Recording settings" onClose={() => setRecSettings(false)} width={560} footer={<Button variant="primary" onClick={() => setRecSettings(false)}>Done</Button>}>
