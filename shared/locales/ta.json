@@ -1199,5 +1199,13 @@
   "Bright surfaces, best in daylight": "பிரகாசமான மேற்பரப்புகள், பகலில் சிறந்தது",
   "Low-glare surfaces for long sessions": "நீண்ட நேரப் பயன்பாட்டுக்குக் குறைந்த கூச்சம்",
   "Follows Windows or macOS": "Windows அல்லது macOS ஐப் பின்பற்றும்",
-  "Text size": "உரை அளவு"
+  "Text size": "உரை அளவு",
+  "Restart WorkSuite": "WorkSuite-ஐ மீண்டும் தொடங்கவும்",
+  "Access granted — restart WorkSuite to finish": "அணுகல் வழங்கப்பட்டது — முடிக்க WorkSuite-ஐ மீண்டும் தொடங்கவும்",
+  "WorkSuite has access, but its input helper does not": "WorkSuite-க்கு அணுகல் உள்ளது, ஆனால் அதன் உள்ளீட்டு உதவிக்கு இல்லை",
+  "Check again": "மீண்டும் சரிபார்க்கவும்",
+  "Granted": "வழங்கப்பட்டது",
+  "Denied": "மறுக்கப்பட்டது",
+  "Unable to verify": "சரிபார்க்க முடியவில்லை",
+  "Still shows Denied after turning WorkSuite on?": "WorkSuite-ஐ இயக்கிய பிறகும் மறுக்கப்பட்டது எனக் காட்டுகிறதா?"
 }

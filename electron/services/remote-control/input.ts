@@ -1,4 +1,4 @@
-import { MAC_PERMISSION_SCRIPT } from './accessibility';
+import { MAC_HELPER, MAC_PERMISSION_SCRIPT, parsePermission, type HelperPermission } from './accessibility';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -624,6 +624,9 @@ function run() {
           if (w && w.kCGWindowBounds) a = Math.round(w.kCGWindowBounds.X) + ' ' + Math.round(w.kCGWindowBounds.Y) + ' ' + Math.round(w.kCGWindowBounds.Width) + ' ' + Math.round(w.kCGWindowBounds.Height);
         } else if (p[1] === 'ack') {
           a = 'ok';
+        } else if (p[1] === 'perm') {
+          // Asked again each time: this process's own Accessibility and event-posting answers, now.
+          a = permissionReport();
         } else if (p[1] === 'at') {
           // Front to back: the first window with something on screen at the point is the one a click reaches.
           var px = +p[2], py = +p[3], all = ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo(17, 0))) || [];
@@ -649,13 +652,22 @@ function run() {
 }
 `;
 
-class MacInjector extends LineHelper {
+export class MacInjector extends LineHelper {
   readonly method = 'cgevent' as const;
   protected platform(): 'darwin' {
     return 'darwin';
   }
+  /**
+   * Started directly by WorkSuite's main process (no shell, no `open`, not detached), so macOS counts WorkSuite
+   * as the process responsible for it and WorkSuite's Accessibility entry covers it (worksuite-desktop#147).
+   */
   protected command() {
-    return { file: '/usr/bin/osascript', args: ['-l', 'JavaScript', '-e', MAC_SCRIPT], env: { ...process.env, WS_OWNER_PID: String(process.pid) } };
+    return { file: MAC_HELPER, args: ['-l', 'JavaScript', '-e', MAC_SCRIPT], env: { ...process.env, WS_OWNER_PID: String(process.pid) } };
+  }
+  /** Re-checks Accessibility and event posting inside the running helper, over its pipe; null when it is not running. */
+  async permission(): Promise<HelperPermission | null> {
+    const r = await this.query('perm');
+    return r === null ? null : parsePermission(r, 'injector');
   }
 }
 

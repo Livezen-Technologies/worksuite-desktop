@@ -1,4 +1,4 @@
-import { Notification, clipboard, dialog, globalShortcut, screen, systemPreferences, type BrowserWindow, type Rectangle } from 'electron';
+import { Notification, app, clipboard, dialog, globalShortcut, screen, systemPreferences, type BrowserWindow, type Rectangle } from 'electron';
 import type { DesktopPolicy, RemoteControlSupport, RemoteControlView } from '@shared/types';
 import { logger } from '../../main/log';
 import type { WindowManager } from '../../windows/manager';
@@ -6,8 +6,10 @@ import type { Database } from '../db';
 import type { HttpClient } from '../http';
 import type { ScreenShare } from '../screen-share';
 import type { TransferManager } from '../transfers';
-import { AccessibilityCheck, askHelper } from './accessibility';
-import { createInjector, inputSupport } from './input';
+import { AccessibilityCheck, MAC_HELPER, askRunningHelper } from './accessibility';
+import { AX_RESTARTED_ARG } from './accessibility-watch';
+import { MacInjector, createInjector, inputSupport } from './input';
+import { runningIdentity, type RunningIdentity } from './signing';
 import { RemoteControlService, type Display } from './service';
 
 const log = logger('remote-control');
@@ -32,13 +34,29 @@ export interface HostDeps {
 
 const LOCAL_INPUT = new Set(['mouseDown', 'keyDown', 'rawKeyDown', 'gestureTap', 'touchStart']);
 
-/** macOS Accessibility, asked of the app and of the helper that injects input (worksuite-desktop#47). */
+/** The macOS input helper while control is live: asked over its pipe when Accessibility is checked again. */
+let liveHelper: MacInjector | null = null;
+
+/** macOS Accessibility, asked of the app and of the helper that injects input (worksuite-desktop#47, #147). */
 export const accessibility = new AccessibilityCheck({
   platform: process.platform,
+  // AXIsProcessTrustedWithOptions, asked each time (no prompt).
   appTrusted: () => systemPreferences.isTrustedAccessibilityClient(false),
-  helperTrusted: () => askHelper(),
+  helperTrusted: () => askRunningHelper(() => liveHelper),
   now: () => Date.now(),
+  relaunched: () => process.argv.includes(AX_RESTARTED_ARG),
 });
+
+/** Who the running copy is, for comparing with the entry in System Settings. Asked once: it does not change while running. */
+let identity: RunningIdentity | null = null;
+let identityAsked = false;
+function runningCopy(): RunningIdentity | null {
+  if (!identityAsked && process.platform === 'darwin') {
+    identityAsked = true;
+    void runningIdentity({ platform: process.platform, execPath: process.execPath, packaged: app.isPackaged }).then((x) => { identity = x; }, () => undefined);
+  }
+  return identity;
+}
 
 function support(policy: DesktopPolicy): RemoteControlSupport {
   const ax = accessibility.state();
@@ -50,7 +68,14 @@ function support(policy: DesktopPolicy): RemoteControlSupport {
     reason: ax.status === 'unknown' ? ax.problem ?? 'Unable to verify Accessibility access. Check again to retry.' : ax.status === 'checking' ? 'Checking Accessibility access…' : s.reason,
     accessibility: ax.status,
     accessibilityHint: ax.hint,
-    ...(process.platform === 'darwin' ? { accessibilityDetails: { appTrusted: ax.appTrusted ?? null, helperTrusted: ax.helperTrusted ?? null, helperAccessibility: ax.helperAccessibility ?? null, problem: ax.problem ?? null, checkedAt: ax.checkedAt ?? null, runningApp: process.execPath } } : {}),
+    ...(process.platform === 'darwin'
+      ? {
+          accessibilityDetails: {
+            appTrusted: ax.appTrusted ?? null, helperTrusted: ax.helperTrusted ?? null, helperAccessibility: ax.helperAccessibility ?? null, problem: ax.problem ?? null, checkedAt: ax.checkedAt ?? null,
+            runningApp: process.execPath, helperPath: MAC_HELPER, helperSource: ax.helperSource ?? null, identity: runningCopy(),
+          },
+        }
+      : {}),
     policyAllows: policy.remote_control_host !== 'disabled',
   };
 }
@@ -103,7 +128,11 @@ export function createRemoteControl(deps: HostDeps): RemoteControlService {
     policy: deps.policy,
     support: () => support(deps.policy()),
     pinnedKey: deps.pinnedKey,
-    createInjector: () => createInjector(),
+    createInjector: () => {
+      const inj = createInjector();
+      liveHelper = inj instanceof MacInjector ? inj : null;
+      return inj;
+    },
     screen: {
       displays: () => screen.getAllDisplays().map(display),
       primary: () => display(screen.getPrimaryDisplay()),

@@ -492,6 +492,8 @@ export const contract = {
   'rc:state': ch(none, { session: true, whileLocked: true }),
   /** Asks macOS again whether WorkSuite may take input (Check again; back from System Settings — worksuite-desktop#47). */
   'rc:recheck': ch(none, { session: true, rate: 20 }),
+  /** Restart WorkSuite after Accessibility was granted (worksuite-desktop#147): the app and its input helper start again. */
+  'rc:restart': ch(none, { session: true, rate: 1 }),
   'rc:setAllowRequests': ch(z.object({ value: z.boolean() }), { session: true, rate: 5 }),
   'rc:shareStarted': ch(
     z.object({
@@ -1189,6 +1191,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'speech:result': void;
   'rc:state': RemoteControlView;
   'rc:recheck': RemoteControlView;
+  'rc:restart': void;
   'rc:setAllowRequests': RemoteControlView;
   'rc:shareStarted': { shareId: number; controlOffered: boolean; why: string | null };
   'rc:shareChanged': void;

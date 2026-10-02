@@ -784,6 +784,20 @@ export interface SyncPolicy {
 
 // ── Meet remote control on this computer (WS-MEET-ENH-01) ─────────────────
 
+/** macOS: who the running WorkSuite is, to compare with its entry in Privacy & Security › Accessibility. */
+export interface RemoteControlIdentity {
+  executable: string;
+  bundle: string;
+  bundleId: string | null;
+  teamId: string | null;
+  authority: string | null;
+  adhoc: boolean;
+  translocated: boolean;
+  otherInstalledCopy: boolean;
+  development: boolean;
+  signingUnavailable: boolean;
+}
+
 /** Whether this computer can be controlled, and if not, why — in a sentence. */
 export interface RemoteControlSupport {
   available: boolean;
@@ -793,10 +807,24 @@ export interface RemoteControlSupport {
   /** macOS: Accessibility, which injecting needs. Elsewhere 'not_required'. */
   accessibility: 'granted' | 'denied' | 'checking' | 'unknown' | 'not_required';
   /**
-   * macOS: the running app reports access but its input helper explicitly reports denial.
+   * macOS: the running app reports access but its input helper reports denial.
+   *  - restart: granted while WorkSuite was running; restarting WorkSuite (and so its helper) finishes it.
+   *  - helper: a restart has already been tried; the helper is not being counted as WorkSuite's.
    */
-  accessibilityHint?: 'restart' | null;
-  accessibilityDetails?: { appTrusted: boolean | null; helperTrusted: boolean | null; helperAccessibility: boolean | null; problem: string | null; checkedAt: number | null; runningApp: string };
+  accessibilityHint?: 'restart' | 'helper' | null;
+  accessibilityDetails?: {
+    appTrusted: boolean | null;
+    helperTrusted: boolean | null;
+    helperAccessibility: boolean | null;
+    problem: string | null;
+    checkedAt: number | null;
+    runningApp: string;
+    /** The input helper's executable, and whether the last answer came from the running helper or a new one. */
+    helperPath?: string;
+    helperSource?: 'injector' | 'probe' | null;
+    /** Signing and location of the running copy (worksuite-desktop#147); null until known. */
+    identity?: RemoteControlIdentity | null;
+  };
   /** The computer's policy lets it be controlled at all (the server still decides each time). */
   policyAllows: boolean;
 }
