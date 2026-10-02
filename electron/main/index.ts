@@ -1,4 +1,5 @@
 import { lockedScope, lockedApi, lockedIpc } from '@shared/locked-access';
+import { lockedClickTarget } from '../services/locked-notifications';
 import { accessibilityDiagnostics } from '../services/remote-control/accessibility-diagnostics';
 import { LocalWorkspace } from '../services/local-workspace';
 import { LocalWorkspaceImport, type ImportAccount } from '../services/local-workspace-import';
@@ -641,6 +642,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     broadcast('toast', { kind: 'error', text: NO_ACCESS });
   };
   const navigate = (req: NavigateRequest): void => {
+    // Locked: the workspace is not there to take it; it opens once WorkSuite is unlocked (#114).
+    if (lock.isLocked()) {
+      pendingNav.push(req);
+      windows.showMain();
+      return;
+    }
     if (!sessionCtl.isReady() || !windows.getMain()) {
       // Checked by the main window when it takes them (Shell).
       pendingNav.push(req);
@@ -793,6 +800,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   }
 
   realtime.onState = (s: RealtimeState) => {
+    notifications.realtimeState(s);
     realtimeDownSince = s === 'down' ? (realtimeDownSince ?? Date.now()) : null;
     emitStatus();
   };
@@ -822,14 +830,29 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     broadcast('realtime:resync');
     // Events may have been missed while the socket was down, `access.changed` among them.
     if (sessionCtl.isReady()) void accessWatch.refresh('resync');
-    void notifications.refreshList();
+    // Announcing what the push missed, chat included: not just taking it as already seen (#114).
+    void notifications.refreshList(true);
+    void notifications.catchUpChat();
     void notifications.refreshCounts();
   };
   notifications.onChanged = () => {
     emitStatus();
     broadcast('notifications:changed');
   };
-  notifications.onClick = (link) => openLink(link);
+  notifications.onClick = (link) => {
+    if (!lock.isLocked()) return openLink(link);
+    // Locked (#114): a conversation opens in the restricted chat window when that is allowed; anything else after the unlock.
+    const target = lockedClickTarget(link, settings.effective());
+    if (target.kind === 'restricted-chat' && canOpenLink(link, sessionCtl.visibleApps())) {
+      windows.open('chat-mini', `/chat?room=${target.room}`, 'WorkSuite chat');
+      return;
+    }
+    broadcast('toast', { kind: 'info', text: 'Unlock WorkSuite to open this.' });
+    const web = resolveWebLink(link);
+    // Never into the browser from behind the lock: only a tab, and it waits for the unlock.
+    if (web.kind === 'tab' && canOpenLink(link, sessionCtl.visibleApps())) navigate({ route: web.route, source: 'notification' });
+    else windows.showMain();
+  };
   // An app the person may not open never alerts (and Mail is not polled for them).
   notifications.moduleEnabled = (n) => notificationAllowed(n, sessionCtl.visibleApps());
   notifications.isLocked = () => lock.isLocked();
@@ -1253,6 +1276,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     accessWatch.stop();
     tray.update({ attendance: null, apps: [] });
     rebuildMenu(new Set());
+    // Where a notification clicked while locked pointed: not for whoever signs in next.
+    pendingNav.length = 0;
     lock.reset();
     emitStatus();
   };
@@ -1373,7 +1398,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         const scope = scopeFor(win.webContents);
         if (scope) win.setTitle(scope.kind === 'chat-mini' ? 'WorkSuite chat' : 'WorkSuite call');
       }
-    } else broadcast('realtime:resync');
+    } else {
+      broadcast('realtime:resync');
+      // What a notification clicked while locked pointed at, now that the workspace is back (#114).
+      if (pendingNav.length) setTimeout(() => flushNavigation(), 300);
+    }
   };
 
   function onReconnect(): void {
@@ -1757,7 +1786,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   });
   // The screen locked, sleep, another user: control pauses on this computer (§E.6).
   powerMonitor.on('lock-screen', () => remoteControl.onSystem('lock-screen'));
-  powerMonitor.on('suspend', () => remoteControl.onSystem('suspend'));
+  powerMonitor.on('suspend', () => {
+    remoteControl.onSystem('suspend');
+    // Asleep, the socket hears nothing: what arrives meanwhile is caught up on the resync (#114).
+    notifications.markGap();
+  });
   powerMonitor.on('user-did-resign-active', () => remoteControl.onSystem('user-did-resign-active'));
   powerMonitor.on('resume', () => {
     device.poke();

@@ -774,6 +774,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('notifications:markAllRead', () => ctx.notifications.markAllRead());
   router.handle('notifications:pause', (input) => ({ pausedUntil: ctx.notifications.pause(input.minutes) }));
   router.handle('notifications:test', () => ctx.notifications.test());
+  router.handle('notifications:permission', () => ctx.notifications.permission());
   router.handle('notifications:refresh', () => ctx.notifications.refreshCounts());
 
   // ── clipboard (FR-XFR-05; never monitored, FR-XFR-06) ──────────────────

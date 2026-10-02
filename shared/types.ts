@@ -17,6 +17,15 @@ export type DeviceTrust = 'TRUSTED' | 'STANDARD' | 'RESTRICTED' | 'REVOKED';
 export type DeviceClassification = 'MANAGED' | 'PERSONAL' | 'UNKNOWN';
 
 export type NotificationPrivacy = 'FULL' | 'SENDER_ONLY' | 'GENERIC';
+
+/** Whether the operating system shows WorkSuite's banners, as far as the app can tell (#114). `unknown`: the OS does not say. */
+export interface NotificationPermission {
+  state: 'unsupported' | 'blocked' | 'unknown';
+  /** What to check, in the person's words. */
+  detail: string;
+  /** The system's own error for the last banner that failed to show (macOS, Windows). */
+  failure: string | null;
+}
 export type UpdateChannel = 'stable' | 'beta' | 'dev' | 'org';
 export type Theme = 'system' | 'light' | 'dark';
 export type Density = 'comfortable' | 'compact';
@@ -226,6 +235,10 @@ export interface Preferences {
   lockedAnswerCalls?: boolean;
   lockedShowCallerDetails?: boolean;
   lockedAllowChat?: boolean;
+  /** While locked, a message banner may say who sent it (#114). Off by default; never more than `notificationPrivacy` shows. */
+  lockedNotificationSender?: boolean;
+  /** While locked, a message banner may show the message's text (#114). Off by default; never more than `notificationPrivacy` shows. */
+  lockedNotificationPreview?: boolean;
   openFilesLocally: 'ask' | 'always' | 'never';
   downloadFolder: string;
   mailCacheDays: 7 | 30 | 90 | 0;

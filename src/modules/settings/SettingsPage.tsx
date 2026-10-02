@@ -508,7 +508,9 @@ function SecuritySection({ prefs }: { prefs: Preferences }) {
       <H title="Access While Locked" hint="Applies to WorkSuite’s app lock. It does not bypass the operating system lock screen. Organization policies may restrict these options." />
       <Toggle k="lockedAnswerCalls" prefs={prefs} label="Answer Calls" />
       <Toggle k="lockedShowCallerDetails" prefs={prefs} label="Show Caller Details" />
-      <Toggle k="lockedAllowChat" prefs={prefs} label="Allow Chat" />
+      <Toggle k="lockedAllowChat" prefs={prefs} label="Allow Chat" hint="Clicking a message notification opens a restricted chat window. Off: WorkSuite asks you to unlock, then opens the conversation." />
+      <Toggle k="lockedNotificationSender" prefs={prefs} label="Show Sender in Notifications" hint="Off: message notifications only say “New message in WorkSuite.”" />
+      <Toggle k="lockedNotificationPreview" prefs={prefs} label="Show Message Preview in Notifications" hint="Never more than Notifications › What banners show allows." />
       <PinRow set={!!lockState?.pin} />
       <Row label="Unlock with" hint={`Your WorkSuite password${lockState?.pin ? ', your PIN' : ''}${lockState?.biometric === 'touch-id' ? ' or Touch ID' : ''}.${lockState?.biometric === 'touch-id' ? '' : ' Windows Hello support is planned.'}`}>
         <Button icon="lock" onClick={() => void call('security:lock')}>
