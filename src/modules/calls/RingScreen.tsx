@@ -62,13 +62,13 @@ export function RingScreen() {
     const time = (v: string) => { const [h, m] = v.split(':').map(Number); return (h ?? 0) * 60 + (m ?? 0); };
     const from = time(prefs?.dndFrom ?? '00:00'); const to = time(prefs?.dndTo ?? '00:00');
     const dnd = prefs?.dndEnabled && (from === to || (from < to ? minutes >= from && minutes < to : minutes >= from || minutes < to));
-    if (muted || !sounds || dnd || locked && !prefs?.lockedAnswerCalls) return;
+    if (muted || !sounds || dnd || locked && (prefs?.lockedCallNotifications === false || prefs?.lockedNotificationSounds === false)) return;
     tone.current = playTone('ring', volume);
     return () => {
       tone.current?.stop();
       tone.current = null;
     };
-  }, [muted, sounds, locked, prefs?.lockedAnswerCalls, prefs?.dndEnabled, prefs?.dndFrom, prefs?.dndTo]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [muted, sounds, locked, prefs?.lockedAnswerCalls, prefs?.lockedNotificationSounds, prefs?.dndEnabled, prefs?.dndFrom, prefs?.dndTo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const decline = async () => {
     setBusy(true);
@@ -154,9 +154,9 @@ export function RingScreen() {
               <Icon name="phone-off" size={16} />
               Decline
             </button>
-            <button type="button" disabled={busy} onClick={() => void answer(video)} className="flex h-10 flex-1 items-center justify-center gap-2 rounded-[10px] bg-[#1F7A4D] text-[13.5px] font-bold hover:bg-[#1A6841]">
+            <button type="button" disabled={busy || locked && !prefs?.lockedAnswerCalls} onClick={() => void answer(video)} className="flex h-10 flex-1 items-center justify-center gap-2 rounded-[10px] bg-[#1F7A4D] text-[13.5px] font-bold hover:bg-[#1A6841]">
               <Icon name={video ? 'video' : 'phone'} size={16} />
-              Answer
+              {locked && !prefs?.lockedAnswerCalls ? 'Unlock to answer' : 'Answer'}
             </button>
           </div>
           <label className="flex items-center gap-2 text-[11.5px] text-[#AFC0E8]">
@@ -183,7 +183,7 @@ export function RingScreen() {
           </label>
           <div className="mt-auto flex justify-center gap-4 text-[12px] font-semibold text-[#AFC0E8]">
             {video ? (
-              <button type="button" disabled={busy} onClick={() => void answer(false)} className="hover:text-white">
+              <button type="button" disabled={busy || locked && !prefs?.lockedAnswerCalls} onClick={() => void answer(false)} className="hover:text-white">
                 Answer with voice only
               </button>
             ) : null}

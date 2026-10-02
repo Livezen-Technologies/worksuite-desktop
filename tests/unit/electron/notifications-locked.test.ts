@@ -331,3 +331,32 @@ describe('when the system does not show notifications (#114)', () => {
 });
 
 afterEach(() => vi.useRealTimers());
+
+describe('locked notification switches (#115)', () => {
+  it('hides chat banners while keeping delivery, updates and polling active', async () => {
+    const { s, changed, get } = service({ lockedChatNotifications: false });
+    s.start('7'); s.handleRealtime(message(811));
+    expect(shown).toHaveLength(0); expect(changed).toHaveBeenCalled();
+    await s.refreshCounts(); expect(get).toHaveBeenCalled(); s.stop();
+  });
+  it('controls call banners independently of chat banners', () => {
+    const { s } = service({ lockedChatNotifications: false, lockedCallNotifications: true });
+    s.handleRealtime({ type: 'chat.call.ringing', uuid: 'call-12345678', room_id: 12, caller_name: 'Asha' });
+    expect(shown).toHaveLength(1); expect(shown[0]?.body).toBe('Incoming WorkSuite call');
+    const hidden = service({ lockedCallNotifications: false });
+    hidden.s.handleRealtime({ type: 'chat.call.ringing', uuid: 'call-87654321', room_id: 12 });
+    expect(shown).toHaveLength(1);
+    hidden.s.handleRealtime(message(812)); expect(shown).toHaveLength(2);
+  });
+  it('mutes locked sounds without changing unlocked sounds', () => {
+    const { s, unlock } = service({ lockedNotificationSounds: false });
+    s.handleRealtime(message(813)); expect(shown[0]?.silent).toBe(true);
+    unlock(); s.handleRealtime(message(814)); expect(shown[1]?.silent).toBe(false);
+  });
+  it('uses caller-name permission rather than message previews for call alerts', () => {
+    const call = { module: 'chat', category: 'incoming-call', title: 'Call', body: 'Private room', sender: 'Asha' };
+    expect(presentLocked(call, { notificationPrivacy: 'FULL', lockedNotificationPreview: true })).toEqual({ title: 'WorkSuite', body: 'Incoming WorkSuite call' });
+    expect(presentLocked(call, { notificationPrivacy: 'FULL', lockedShowCallerDetails: true }).body).toBe('Incoming call from Asha');
+    expect(presentLocked(call, { notificationPrivacy: 'GENERIC', lockedShowCallerDetails: true }).body).toBe('Incoming WorkSuite call');
+  });
+});

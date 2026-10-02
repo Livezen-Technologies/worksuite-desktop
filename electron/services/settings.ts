@@ -40,6 +40,11 @@ export function defaultPreferences(): Preferences {
     dndFrom: '22:00',
     dndTo: '07:00',
     appLockMinutes: 15,
+    appLockEnabled: true,
+    lockOnSleep: true,
+    lockedChatNotifications: true,
+    lockedCallNotifications: true,
+    lockedNotificationSounds: true,
     lockedAnswerCalls: true,
     lockedShowCallerDetails: false,
     lockedAllowChat: false,
@@ -68,6 +73,8 @@ export function defaultPreferences(): Preferences {
  * the policy constrains is clamped and reported as locked, with the reason,
  * so Settings can show the toggle disabled instead of silently ignoring it.
  */
+const SECURITY_KEYS = ['appLockEnabled', 'appLockMinutes', 'lockOnSystemLock', 'lockOnSleep', 'lockedChatNotifications', 'lockedCallNotifications', 'lockedNotificationSounds', 'lockedAnswerCalls', 'lockedShowCallerDetails', 'lockedAllowChat', 'lockedNotificationSender', 'lockedNotificationPreview'] as const;
+
 export class SettingsService {
   private prefs: Preferences;
   private languageScope: string | null = null;
@@ -81,7 +88,7 @@ export class SettingsService {
     const savedLanguage = db.getConfig<unknown>('interface_language_default');
     this.defaultLanguage = normalizeLanguage(typeof savedLanguage === 'string' ? savedLanguage : stored.language);
     // The AI settings are one object: one saved before a field was added takes that field's default.
-    this.prefs = { ...defaults, ...stored, darkColorProfile: normalizeDarkProfile(stored.darkColorProfile), ai: { ...defaults.ai, ...stored.ai, display: stored.ai?.display ?? defaults.ai.display }, meetRecording: { ...defaults.meetRecording, ...stored.meetRecording }, drive: normalizeDrivePrefs(stored.drive) };
+    this.prefs = { ...defaults, ...stored, appLockEnabled: stored.appLockEnabled ?? stored.appLockMinutes !== 0, appLockMinutes: stored.appLockMinutes === 0 && stored.appLockEnabled === undefined ? 15 : stored.appLockMinutes ?? defaults.appLockMinutes, darkColorProfile: normalizeDarkProfile(stored.darkColorProfile), ai: { ...defaults.ai, ...stored.ai, display: stored.ai?.display ?? defaults.ai.display }, meetRecording: { ...defaults.meetRecording, ...stored.meetRecording }, drive: normalizeDrivePrefs(stored.drive) };
   }
 
   /** Interface language is isolated by server and user, while device policy stays computer-wide. */
@@ -89,6 +96,18 @@ export class SettingsService {
     const next = origin && userId ? `${origin}:${userId}` : null;
     if (next === this.languageScope) return;
     if (this.db.getConfig('interface_language_default') === undefined || this.db.getConfig('interface_language_default') === null) this.db.setConfig('interface_language_default', this.defaultLanguage);
+    // Lock choices are local to this installation and isolated by server and user.
+    const defaults = defaultPreferences();
+    let scoped = next ? this.db.getConfig<Partial<Preferences>>(`security_preferences:${next}`) : null;
+    // Migrate the old device-wide preferences once, to the first signed-in account.
+    if (next && !this.db.getConfig<string>('security_preferences_legacy_owner')) {
+      this.db.setConfig('security_preferences_legacy_owner', next);
+      if (!scoped) {
+        scoped = Object.fromEntries(SECURITY_KEYS.map(key => [key, this.prefs[key]]));
+        this.db.setConfig(`security_preferences:${next}`, scoped);
+      }
+    }
+    for (const key of SECURITY_KEYS) Object.assign(this.prefs, { [key]: scoped?.[key] ?? defaults[key] });
     this.languageScope = next;
     const saved = this.db.getConfig<Record<string, string>>('interface_languages') ?? {};
     this.prefs = { ...this.prefs, language: normalizeLanguage(next ? saved[next] ?? this.defaultLanguage : this.defaultLanguage) };
@@ -105,6 +124,7 @@ export class SettingsService {
     if (!p) return [];
     const out: PreferenceLock[] = [];
     if (p.app_lock_max_minutes > 0) {
+      out.push({ key: 'appLockEnabled', reason: 'Your organization requires app locking.' });
       out.push({ key: 'appLockMinutes', reason: `Your organization requires WorkSuite to lock after at most ${p.app_lock_max_minutes} minutes.` });
     }
     if (p.notification_min_privacy !== 'FULL') {
@@ -132,7 +152,8 @@ export class SettingsService {
     if (pol.locked_answer_calls === false) p.lockedAnswerCalls = false;
     if (pol.locked_show_caller_details === false) p.lockedShowCallerDetails = false;
     if (pol.locked_allow_chat === false) p.lockedAllowChat = false;
-    if (pol.app_lock_max_minutes > 0 && (p.appLockMinutes === 0 || p.appLockMinutes > pol.app_lock_max_minutes)) {
+    if (pol.app_lock_max_minutes > 0) p.appLockEnabled = true;
+    if (pol.app_lock_max_minutes > 0 && p.appLockMinutes > pol.app_lock_max_minutes) {
       p.appLockMinutes = pol.app_lock_max_minutes;
     }
     p.notificationPrivacy = stricterPrivacy(p.notificationPrivacy, pol.notification_min_privacy);
@@ -163,6 +184,7 @@ export class SettingsService {
         this.db.setConfig('interface_languages', { ...languages, [this.languageScope]: this.prefs.language });
       } else { this.defaultLanguage = this.prefs.language; this.db.setConfig('interface_language_default', this.prefs.language); }
     }
+    if (this.languageScope) this.db.setConfig(`security_preferences:${this.languageScope}`, Object.fromEntries(SECURITY_KEYS.map(key => [key, this.prefs[key]])));
     this.db.setConfig('preferences', this.prefs);
     this.emit();
     return this.effective();

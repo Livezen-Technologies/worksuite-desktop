@@ -1,3 +1,4 @@
+import { verifyLockChange } from '../services/lock-verification';
 import { app, BrowserWindow, clipboard, dialog, nativeImage, shell, systemPreferences, type WebContents } from 'electron';
 import { readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
@@ -957,6 +958,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('security:setPin', async (input) => {
     const uid = ctx.session.userId();
     const email = ctx.session.get().user?.email;
+    const origin = ctx.session.get().server?.origin;
     if (!uid || !email) return { ok: false, message: 'Sign in again.' };
     try {
       if (!(await ctx.auth.verifyPassword(email, input.password))) return { ok: false, message: 'That password is not right.' };
@@ -966,6 +968,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       if (e instanceof DesktopError && e.status !== null && e.status !== 401) return { ok: false, message: e.message };
       return { ok: false, message: 'That password is not right.' };
     }
+    if (uid !== ctx.session.userId() || origin !== ctx.session.get().server?.origin) return { ok: false, message: 'Your account changed. Try again.' };
     try {
       ctx.lockPin.set(uid, input.pin);
     } catch (e) {
@@ -975,7 +978,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     ctx.lock.changed();
     return { ok: true, message: null };
   });
-  router.handle('security:clearPin', () => {
+  router.handle('security:clearPin', async (input) => {
+    await verifyLockChange(() => ({ id: ctx.session.userId() ? `${ctx.session.get().server?.origin}:${ctx.session.userId()}` : null, email: ctx.session.get().user?.email ?? null }), (email, password) => ctx.auth.verifyPassword(email, password), input.password);
     const uid = ctx.session.userId();
     if (uid) {
       ctx.lockPin.clear(uid);
@@ -1017,9 +1021,13 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
 
   // ── settings ───────────────────────────────────────────────────────────
   router.handle('settings:get', () => ({ preferences: ctx.settings.effective(), locks: ctx.settings.locks() }));
-  router.handle('settings:set', (input) => {
+  router.handle('settings:set', async (input) => {
+    const { verificationPassword, ...choices } = input;
+    if (choices.appLockEnabled === false && ctx.settings.effective().appLockEnabled !== false) {
+      await verifyLockChange(() => ({ id: ctx.session.userId() ? `${ctx.session.get().server?.origin}:${ctx.session.userId()}` : null, email: ctx.session.get().user?.email ?? null }), (email, password) => ctx.auth.verifyPassword(email, password), verificationPassword);
+    }
     const locked = new Set(ctx.settings.locks().map((l) => l.key));
-    const patch = Object.fromEntries(Object.entries(input).filter(([k]) => !locked.has(k as never)));
+    const patch = Object.fromEntries(Object.entries(choices).filter(([k]) => k === 'appLockMinutes' || !locked.has(k as never)));
     const before = ctx.settings.raw();
     const prefs = ctx.settings.update(patch);
     if (before.startWithOs !== prefs.startWithOs || before.startMinimized !== prefs.startMinimized) applyAutostart(prefs.startWithOs, prefs.startMinimized);

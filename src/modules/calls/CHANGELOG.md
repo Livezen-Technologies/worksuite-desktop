@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.5.1 — 2026-10-03
+
+- Apply locked ringing sound controls and keep incoming alerts separate from permission to answer (#115).
+
 ## 1.5.0 — 2026-10-02
 
 - The call bar's menus use one accessible, responsive menu (#124): grouped sections with submenus, shortcuts and checkmarks on the right, height capped to the window with scrolling, placed above the bar without covering it and flipping to stay on screen, a bottom sheet below 640 px; full keyboard and submenu navigation, Escape/outside click return focus to the button; View & Layout (Layout, Video, Enter/Exit Full Screen, Shrink to a Floating Window) shared by meetings and direct calls; direct calls get an Audio group with Speaker and Noise Suppression.

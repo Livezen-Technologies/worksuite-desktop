@@ -5,6 +5,21 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.91: lock-screen settings per account, protected by your password
+
+Security → Lock Screen is rebuilt (#115):
+
+- **Lock automatically** has its own switch, with Immediately, 1, 5, 15, 30 minutes or a custom time. "Never" is gone — a saved "Never" becomes automatic locking switched off. *Immediately* locks when every WorkSuite window loses focus; the other times count inactivity in WorkSuite. **Lock Now** works even with automatic locking off.
+- **Lock when the computer sleeps** and **Lock when the computer locks** are separate switches.
+- **Turning protection off or removing the PIN asks for your WorkSuite password**, checked in the app's main process. Setting or changing a PIN still works as before; switching accounts during the check is refused.
+- **While locked**, chat banners, ringing, names, previews and sounds each have their own switch. Hiding banners still delivers messages and updates unread counts in the background. An incoming call can ring and be declined even when answering while locked is off; answering, the camera and microphone stay blocked then, and the button says **Unlock to answer**. Website-chat alerts follow the same switches.
+- **Per account.** These choices and the PIN are kept for each server and account on this computer; old shared choices are carried over once.
+- Your organisation's locking, timeout, privacy and access rules apply, with an explanation where a choice is fixed.
+
+Touch ID and automatic PIN entry still work. Windows Hello is not offered. Real computer sleep/lock, Touch ID and banners still need checking on devices.
+
+---
+
 ## 2026-10-03 — 0.2.90: a Local Profile — WorkSuite without an account
 
 **Continue as Guest** on the login screen sets up a profile that lives only on this computer (#141):

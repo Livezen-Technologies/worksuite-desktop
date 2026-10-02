@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.4.2 — 2026-10-03
+
+- Keep locked call and chat banners independent and apply locked sound/privacy controls (#115).
+
 ## 1.4.1 — 2026-10-03
 
 - An AI Assistant answer that arrives while the window is not focused shows a desktop banner through the usual notification settings, Do not disturb and banner privacy; while locked it only says New WorkSuite notification (#126).

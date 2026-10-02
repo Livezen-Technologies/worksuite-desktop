@@ -31,8 +31,8 @@ type LockedPrefs = Pick<Preferences, 'notificationPrivacy' | 'lockedNotification
  * message; `n.call` an incoming call, which names the caller only where
  * "Show caller details" allows (worksuite-desktop#113).
  */
-export function presentLocked(n: { module: string; title: string; body: string; sender: string | null; call?: boolean }, prefs: LockedPrefs): LockedPresented {
-  if (n.call) return { title: 'WorkSuite', body: prefs.lockedShowCallerDetails && prefs.notificationPrivacy !== 'GENERIC' && n.sender ? `Incoming call from ${n.sender}` : 'Incoming WorkSuite call' };
+export function presentLocked(n: { module: string; category?: string | null; title: string; body: string; sender: string | null; call?: boolean }, prefs: LockedPrefs): LockedPresented {
+  if (n.call || n.category === 'incoming-call') return { title: 'WorkSuite', body: prefs.lockedShowCallerDetails && prefs.notificationPrivacy !== 'GENERIC' && n.sender ? `Incoming call from ${n.sender}` : 'Incoming WorkSuite call' };
   if (n.module !== 'chat') return { title: 'WorkSuite', body: 'New WorkSuite notification' };
   const sender = !!prefs.lockedNotificationSender && prefs.notificationPrivacy !== 'GENERIC' && !!n.sender;
   const preview = !!prefs.lockedNotificationPreview && prefs.notificationPrivacy === 'FULL' && !!n.body;

@@ -63,7 +63,7 @@ export function App() {
   const windowKind = hash.replace('#/window/', '').split('?')[0] ?? '';
   const scope = lockedScope(`app://bundle/${hash}`, windowKind);
   const callWindow = !!scope && scope.kind !== 'chat-mini';
-  const lockedCall = callWindow && !!prefs?.lockedAnswerCalls;
+  const lockedCall = callWindow && (!!prefs?.lockedAnswerCalls || scope?.kind === 'ring' && prefs?.lockedCallNotifications === true);
   if (locked && auth.stage === 'ready' && !required && scope?.kind === 'chat-mini' && prefs?.lockedAllowChat && scope.room) return <LockedChat room={scope.room} />;
   let body;
   if (required && auth.stage !== 'revoked') body = <UpdateRequired />;

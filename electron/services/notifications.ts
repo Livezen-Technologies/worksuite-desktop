@@ -431,6 +431,7 @@ export class NotificationService {
         this.notify({
           id: `call:${String(e.uuid ?? e.event_id ?? Date.now())}`,
           module: 'chat',
+          category: 'incoming-call',
           title: `Incoming ${e.mode === 'video' ? 'video' : 'voice'} call from ${caller}`,
           body: e.room_name ? String(e.room_name) : 'Answer or decline in the call window',
           sender: caller,
@@ -517,6 +518,7 @@ export class NotificationService {
     if (!this.moduleEnabled(n)) return 'module-off';
     if (p.moduleNotifications[n.module] === false) return 'module-muted';
     if (n.category && p.moduleNotifications[`cat:${n.category}`] === false) return 'category-muted';
+    if (this.isLocked() && (n.category === 'incoming-call' ? p.lockedCallNotifications === false : n.module === 'chat' && p.lockedChatNotifications === false)) return 'locked-hidden';
     if (n.critical) return null;
     if (this.pausedUntil && this.pausedUntil > Date.now()) return 'paused';
     if (p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) return 'dnd';
@@ -539,7 +541,7 @@ export class NotificationService {
     const note = new Notification({
       title: shown.title,
       body: shown.body,
-      silent: !this.prefs().notificationSounds,
+      silent: !this.prefs().notificationSounds || locked && this.prefs().lockedNotificationSounds === false,
       icon,
       urgency: n.critical ? 'critical' : 'normal',
       actions:

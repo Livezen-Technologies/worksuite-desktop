@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.11.0 — 2026-10-03
+
+- Add verified per-account lock-screen controls, custom idle timeouts and separate sleep and notification preferences (#115).
+
 ## 1.10.2 — 2026-10-03
 
 - AI Assistant setting Auto-minimize when I continue working (on by default) (#126); Sinhala and Tamil text for it.
