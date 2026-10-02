@@ -1,3 +1,4 @@
+import { GuestChat } from './GuestChat';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { Participant } from 'livekit-client';
@@ -274,11 +275,12 @@ export function MeetRoom() {
                       : "Meeting chat · saved to the meeting's conversation"}
                 </span>
                 <div className="min-h-0 flex-1">
+                  <GuestChat room={room} chat={meet.settings.chat} />
                   <Thread roomId={String(info.room_id)} room={undefined} mini bare rooms={[]} />
                 </div>
               </div>
             ) : (
-              <Empty icon="chat" title="This meeting has no chat" />
+              <GuestChat room={room} chat={meet.settings.chat} />
             ),
           },
           { id: 'Q&A', label: t('act.qa'), badge: openQuestions || undefined, content: <QaPanel /> },

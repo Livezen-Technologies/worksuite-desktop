@@ -1,0 +1,1 @@
+{"module":"guest","version":"1.0.0","paths":["electron/services/local-workspace.ts","electron/services/local-workspace-import.ts","shared/local-workspace.ts"]}

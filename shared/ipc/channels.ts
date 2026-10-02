@@ -14,6 +14,12 @@ export const INVOKE_CHANNELS = [
   'app:openInBrowser',
   'app:setDockIcon',
 
+  'local:open', 'local:read', 'local:save', 'local:remove', 'local:export', 'local:restore', 'local:deleteAll', 'local:meeting', 'local:signIn', 'local:importOffer', 'local:reviewImport', 'local:import',
+  'guest:pending',
+  'guest:open',
+  'guest:info',
+  'guest:join',
+  'guest:signIn',
   'auth:state',
   'auth:setServer',
   'auth:signIn',
@@ -328,6 +334,7 @@ export type InvokeChannel = (typeof INVOKE_CHANNELS)[number];
 
 /** Events the main process pushes to renderers. */
 export const EVENT_CHANNELS = [
+  'guest:destination',
   'auth:changed',
   'session:changed',
   'status:changed',

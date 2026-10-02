@@ -9,12 +9,14 @@ import type { EventChannel } from '@shared/ipc/channels';
  *    channels in EVENT_CHANNELS exist in the preload, so nothing else could
  *    be received anyway.
  */
+export const guestWindowIds = new Set<number>();
+
 export const bus = new EventEmitter();
 bus.setMaxListeners(50);
 
 export function broadcast(channel: EventChannel, payload?: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
-    if (win.isDestroyed()) continue;
+    if (win.isDestroyed() || guestWindowIds.has(win.webContents.id)) continue;
     const wc = win.webContents;
     if (wc.isDestroyed() || wc.isCrashed()) continue;
     wc.send(channel, payload);
@@ -22,6 +24,6 @@ export function broadcast(channel: EventChannel, payload?: unknown): void {
 }
 
 export function sendTo(win: BrowserWindow | null | undefined, channel: EventChannel, payload?: unknown): void {
-  if (!win || win.isDestroyed()) return;
+  if (!win || win.isDestroyed() || guestWindowIds.has(win.webContents.id)) return;
   win.webContents.send(channel, payload);
 }

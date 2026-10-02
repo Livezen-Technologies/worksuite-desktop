@@ -1,3 +1,4 @@
+import { GUEST_CHANNELS } from '@shared/guest-meet';
 import type { IpcMainInvokeEvent, WebContents } from 'electron';
 import type { z } from 'zod';
 import { INVOKE_CHANNELS, type InvokeChannel } from '@shared/ipc/channels';
@@ -32,6 +33,7 @@ export interface RouterDeps {
   isTrustedSender: (event: Pick<IpcMainInvokeEvent, 'sender' | 'senderFrame'>) => boolean;
   isLocked: () => boolean;
   isSignedIn: () => boolean;
+  isGuestSender?: (id: number) => boolean;
   hasPermission: (key: string) => boolean;
   audit: (action: string, details: Record<string, unknown>) => void;
   onAbuse: (sender: WebContents, reason: string) => void;
@@ -110,6 +112,8 @@ export class IpcRouter {
       return this.violation(event, channel, 'IPC_FORBIDDEN_SENDER', 'Requests are only accepted from the WorkSuite shell.');
     }
 
+    if (this.deps.isGuestSender?.(event.sender.id) && !GUEST_CHANNELS.has(channel)) return failure('PERMISSION_DENIED', 'Guests can only use their meeting.');
+
     // Structured-clone size guard: files cross IPC by reference, never bytes.
     try {
       if (payload !== undefined && JSON.stringify(payload).length > 1_048_576 && !channel.startsWith('print:')) {
@@ -124,7 +128,8 @@ export class IpcRouter {
 
     const opts = spec as { whileLocked?: boolean; session?: boolean; permission?: string; sensitive?: boolean; rate?: number };
     if (this.deps.isLocked() && !opts.whileLocked) return failure('APP_LOCKED', 'WorkSuite is locked.');
-    if (opts.session && !this.deps.isSignedIn()) return failure('NOT_SIGNED_IN', 'Sign in to WorkSuite first.');
+    const guestCapture = this.deps.isGuestSender?.(event.sender.id) && (channel === 'media:screenSources' || channel === 'media:screenPick');
+    if (opts.session && !guestCapture && !this.deps.isSignedIn()) return failure('NOT_SIGNED_IN', 'Sign in to WorkSuite first.');
     if (opts.permission && !this.deps.hasPermission(opts.permission)) {
       return failure('PERMISSION_DENIED', 'Your organization does not allow this on the desktop.');
     }

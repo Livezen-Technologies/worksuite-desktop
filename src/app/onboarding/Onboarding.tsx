@@ -1,7 +1,9 @@
+import { toast } from '../../core/toasts';
+import { GuestJoinForm } from '../../modules/meet/GuestJoinForm';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AuthState } from '@shared/types';
 import { app } from '../../core/app-state';
-import { call, errorMessage, isMac } from '../../core/bridge';
+import { call, errorMessage, isMac, on } from '../../core/bridge';
 import { t } from '../../core/i18n';
 import { useStore } from '../../core/store';
 import { Icon } from '../../components/Icon';
@@ -13,6 +15,15 @@ import { Checkbox } from '../../components/Checkbox';
  * UI-02, WF-01 steps 1–5). Everything that can fail says what to do next.
  */
 export function Onboarding({ auth }: { auth: AuthState }) {
+  const [guest, setGuest] = useState(false);
+  const [destination, setDestination] = useState<{ input: string; server?: string } | null>(null);
+  useEffect(() => {
+    let mounted = true;
+    const receive = (next: { input: string; server?: string } | null) => { if (mounted && next) { setDestination(next); setGuest(true); } };
+    void call('guest:pending').then(receive, () => undefined);
+    const off = on('guest:destination', receive);
+    return () => { mounted = false; off(); };
+  }, []);
   return (
     <div className="drag flex h-full items-center justify-center bg-navy p-6">
       <div className="no-drag w-[440px] rounded-[16px] bg-surface p-8 shadow-2xl">
@@ -20,12 +31,17 @@ export function Onboarding({ auth }: { auth: AuthState }) {
           <span className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-brand text-[16px] font-extrabold text-white">W</span>
           <span className="text-[18px] font-bold text-ink">WorkSuite</span>
         </div>
+        {(auth.stage === 'no-server' || auth.stage === 'signed-out' || auth.stage === 'expired') ? <Button className="mb-4 w-full" variant="secondary" onClick={() => void call('local:open').catch((e) => toast('error', errorMessage(e)))}>Continue Without Signing In</Button> : null}
+        {guest ? <GuestJoinForm key={destination?.input} initialInput={destination?.input} server={destination?.server ?? auth.server?.origin} onBack={() => setGuest(false)} /> : null}
+        {!guest ? <>
         {auth.stage === 'no-server' ? <ServerStep /> : null}
         {auth.stage === 'signed-out' || auth.stage === 'expired' ? <SignInStep auth={auth} /> : null}
         {auth.stage === 'mfa' ? <MfaStep /> : null}
         {auth.stage === 'passkey' ? <PasskeyStep auth={auth} /> : null}
         {auth.stage === 'registering' || auth.stage === 'bootstrapping' ? <Progress stage={auth.stage} /> : null}
         {auth.stage === 'blocked' || auth.stage === 'revoked' ? <Stopped auth={auth} /> : null}
+        {(auth.stage === 'no-server' || auth.stage === 'signed-out' || auth.stage === 'expired') ? <Button className="mt-4 w-full" variant="secondary" onClick={() => setGuest(true)}>Join a Meeting</Button> : null}
+        </> : null}
       </div>
       {isMac ? null : <div className="drag absolute top-0 right-0 left-0 h-10" />}
     </div>

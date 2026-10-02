@@ -1,3 +1,5 @@
+import { isLocalWorkspaceHash } from '@shared/local-workspace';
+import { isGuestMeetingHash } from '@shared/guest-meet';
 import '@fontsource-variable/plus-jakarta-sans';
 import '@fontsource/jetbrains-mono/500.css';
 import '@fontsource/jetbrains-mono/600.css';
@@ -12,7 +14,7 @@ import { AppBoundary } from './app/Boundaries';
 import { initAppState } from './core/app-state';
 import { queryClient, wireQueryInvalidation } from './core/query';
 
-void initAppState().then(() => wireQueryInvalidation());
+if (!isGuestMeetingHash(window.location.hash) && !isLocalWorkspaceHash(window.location.hash)) void initAppState().then(() => wireQueryInvalidation());
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
