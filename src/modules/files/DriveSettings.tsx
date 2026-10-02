@@ -46,7 +46,7 @@ export function DriveSettings({ embedded = false }: { embedded?: boolean }) {
         </div>
 
         <Section title="Transfers">
-          <Row label="Files moving at once" hint="Uploads and downloads together. The rest wait their turn in the queue.">
+          <Row label="Files moving at once" hint="At most two uploads and downloads together, across every module. The rest wait their turn in the queue.">
             <Select label="Files moving at once" value={d.maxConcurrent} options={range(1, MAX_CONCURRENT).map((n) => ({ value: n, label: String(n) }))} onValueChange={(v) => set({ maxConcurrent: Number(v) })} />
           </Row>
           <Row label="Uploads at once" hint="Within the limit above.">

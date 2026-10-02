@@ -1,3 +1,4 @@
+import { MAX_CONCURRENT } from '../transfers';
 import { DARK_PROFILE_IDS } from '../theme-profiles';
 import { localItemInput, type LocalView, type LocalItem, type ImportReview, type ImportResult } from '../local-workspace';
 import type { GuestMeetInfo, GuestMeetToken } from '../guest-meet';
@@ -174,9 +175,9 @@ export const preferencesPatchSchema = z
     }).partial(),
     // Drive › Settings (worksuite-desktop#95). The download folder is not here either: only its dialog sets it.
     drive: z.object({
-      maxConcurrent: z.number().int().min(1).max(6),
-      maxUploads: z.number().int().min(1).max(6).nullable(),
-      maxDownloads: z.number().int().min(1).max(6).nullable(),
+      maxConcurrent: z.number().int().min(1).max(MAX_CONCURRENT),
+      maxUploads: z.number().int().min(1).max(MAX_CONCURRENT).nullable(),
+      maxDownloads: z.number().int().min(1).max(MAX_CONCURRENT).nullable(),
       uploadLimit: bandwidthLimitSchema,
       downloadLimit: bandwidthLimitSchema,
       autoRetry: z.boolean(),

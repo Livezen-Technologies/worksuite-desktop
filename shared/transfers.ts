@@ -6,10 +6,10 @@ import type { BandwidthLimit, DrivePrefs, Transfer } from './types';
  * how the Transfers panel groups and sums up what is moving.
  */
 
-/** Files moving at once unless the person chooses otherwise. */
+/** Default and hard ceiling across every module and direction. */
 export const DEFAULT_CONCURRENT = 2;
 /** The most the overall limit may be set to. */
-export const MAX_CONCURRENT = 6;
+export const MAX_CONCURRENT = 2;
 
 export function defaultDrivePrefs(): DrivePrefs {
   return {

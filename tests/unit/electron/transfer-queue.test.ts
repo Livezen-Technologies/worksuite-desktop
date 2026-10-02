@@ -12,6 +12,7 @@ import { MAX_AUTO_RETRIES, TransferManager, isTemporaryFailure, queueConfig, typ
 import { TokenBucket } from '../../../electron/services/throttle';
 import { SettingsService } from '../../../electron/services/settings';
 import { bytesPerSecond, defaultDrivePrefs, normalizeDrivePrefs, transferSections, transferSummary } from '../../../shared/transfers';
+import { contract } from '../../../shared/ipc/contract';
 import type { Transfer } from '../../../shared/types';
 
 const WS = 'https://ws.example';
@@ -30,11 +31,12 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-function setup(over: Partial<QueueConfig> = {}, db = new Database(':memory:'), vault = new Vault(Vault.generateKey())) {
+function setup(over: Partial<QueueConfig> = {}, db = new Database(':memory:'), vault = new Vault(Vault.generateKey()), retryDelay = 20) {
   const held: Held[] = [];
   const asked: string[] = [];
   const notified: Array<[string, string]> = [];
   const http = {
+    post: vi.fn(async () => ({ upload_id: 'upload-test', chunk_size: 256 * 1024, total_chunks: 1 })),
     url: (p: string) => `${WS}${p}`,
     raw: (_method: string, url: string, init: { headers?: Record<string, string>; signal?: AbortSignal }) =>
       new Promise<Response>((resolve, reject) => {
@@ -62,7 +64,7 @@ function setup(over: Partial<QueueConfig> = {}, db = new Database(':memory:'), v
     canOpenFiles: () => true,
     audit: () => undefined,
     notify: (x, how) => void notified.push([x.name, how]),
-    retryDelay: () => 20,
+    retryDelay: () => retryDelay,
   });
   t.configure({ ...queueConfig(defaultDrivePrefs()), ...over });
   /** The request for a file, by the number in its name. */
@@ -132,6 +134,39 @@ describe('the transfer queue (worksuite-desktop#94)', () => {
     await vi.waitFor(() => expect(running(q.t.list())).toEqual(['f1.txt', 'f4.txt']));
   });
 
+  it('shares the two slots between uploads and downloads, including resumed uploads', async () => {
+    const q = setup({ maxConcurrent: 6 });
+    const path = join(dir, 'recording.mp4'); writeFileSync(path, 'video');
+    await q.add(1);
+    const upload = await q.t.uploadOwn(path, 'recording.mp4', { kind: 'files', folderId: null });
+    await q.add(2); await q.add(3);
+    expect(running(q.t.list())).toEqual(['f1.txt', 'recording.mp4']);
+    q.t.pause(upload);
+    expect(running(q.t.list())).toEqual(['f1.txt', 'f2.txt']);
+    q.t.resume(upload); q.t.retry(upload);
+    expect(q.byName('recording.mp4').position).toBe(2);
+    q.req(1)!.answer();
+    await vi.waitFor(() => expect(q.byName('f3.txt').state).toBe('running'));
+    expect(q.byName('recording.mp4').state).toBe('queued');
+    q.t.stopAll();
+  });
+
+  it('preserves a temporary failure retry deadline across restart', async () => {
+    const db = new Database(':memory:'); const vault = new Vault(Vault.generateKey());
+    const before = setup({}, db, vault, 60_000);
+    await before.add(1); await before.add(2); await before.add(3);
+    before.req(1)!.answer(503);
+    await vi.waitFor(() => expect(before.byName('f1.txt').retryAt).toBeTruthy());
+    const deadline = before.byName('f1.txt').retryAt;
+    before.t.stopAll();
+    const after = setup({}, db, vault);
+    after.t.recover();
+    expect(after.byName('f1.txt').retryAt).toBe(deadline);
+    expect(after.byName('f1.txt').state).toBe('queued');
+    expect(running(after.t.list())).toEqual(['f2.txt', 'f3.txt']);
+    after.t.stopAll();
+  });
+
   it('Pause All stops everything moving or waiting; Resume All puts it back in the queue, within the limit', async () => {
     const q = setup();
     for (let n = 1; n <= 4; n++) await q.add(n);
@@ -148,12 +183,13 @@ describe('the transfer queue (worksuite-desktop#94)', () => {
 
   it('Clear finished removes only the history: what is moving or waiting stays', async () => {
     const q = setup();
-    for (let n = 1; n <= 4; n++) await q.add(n);
+    for (let n = 1; n <= 6; n++) await q.add(n);
+    q.t.pause(q.byName('f6.txt').id);
     q.req(1)!.answer();
     await vi.waitFor(() => expect(q.state()['f1.txt']).toBe('done'));
     await q.t.cancel(q.byName('f2.txt').id);
     q.t.clearFinished();
-    expect(q.state()).toEqual({ 'f3.txt': 'running', 'f4.txt': 'running' });
+    expect(q.state()).toEqual({ 'f3.txt': 'running', 'f4.txt': 'running', 'f5.txt': 'queued', 'f6.txt': 'paused' });
   });
 
   it('tries a temporary failure again by itself, without holding a slot, and gives up after a few tries', async () => {
@@ -193,18 +229,20 @@ describe('the transfer queue (worksuite-desktop#94)', () => {
     expect(isTemporaryFailure(Object.assign(new Error('no space left'), { code: 'ENOSPC' }))).toBe(false);
   });
 
-  it('a lower limit lets what is moving finish and holds the next until there is room', async () => {
-    const q = setup({ maxConcurrent: 3 });
+  it('clamps oversized settings to two and still respects a lower limit', async () => {
+    const q = setup({ maxConcurrent: 6 });
     for (let n = 1; n <= 5; n++) await q.add(n);
-    expect(running(q.t.list())).toHaveLength(3);
+    expect(q.t.config().maxConcurrent).toBe(2);
+    expect(running(q.t.list())).toHaveLength(2);
     q.t.configure({ ...q.t.config(), maxConcurrent: 1 });
-    expect(running(q.t.list())).toHaveLength(3);
     q.req(1)!.answer();
-    q.req(2)!.answer();
-    await vi.waitFor(() => expect(q.state()['f2.txt']).toBe('done'));
-    expect(running(q.t.list())).toEqual(['f3.txt']);
+    await vi.waitFor(() => expect(q.state()['f1.txt']).toBe('done'));
+    expect(running(q.t.list())).toEqual(['f2.txt']);
     q.t.configure({ ...q.t.config(), maxConcurrent: 4 });
-    expect(running(q.t.list())).toEqual(['f3.txt', 'f4.txt', 'f5.txt']);
+    expect(running(q.t.list())).toEqual(['f2.txt', 'f3.txt']);
+    expect(q.byName('f4.txt').state).toBe('queued');
+    q.t.configure({ ...q.t.config(), maxConcurrent: NaN });
+    expect(q.t.config().maxConcurrent).toBe(2);
   });
 
   it('keeps uploads and downloads within their own limits, inside the overall one', async () => {
@@ -399,10 +437,10 @@ describe('Drive settings, saved on this computer (worksuite-desktop#95)', () => 
     expect(s.effective().drive).toEqual(d);
   });
 
-  it('keeps limits in range: 1 to 6 overall, and a direction never above the overall', () => {
-    expect(normalizeDrivePrefs({ maxConcurrent: 40 }).maxConcurrent).toBe(6);
+  it('keeps limits in range: 1 to 2 overall, and a direction never above the overall', () => {
+    expect(normalizeDrivePrefs({ maxConcurrent: 40 }).maxConcurrent).toBe(2);
     expect(normalizeDrivePrefs({ maxConcurrent: 0 }).maxConcurrent).toBe(1);
-    expect(normalizeDrivePrefs({ maxConcurrent: 3, maxUploads: 5 }).maxUploads).toBe(3);
+    expect(normalizeDrivePrefs({ maxConcurrent: 3, maxUploads: 5 }).maxUploads).toBe(2);
     expect(normalizeDrivePrefs({ uploadLimit: { on: true } as never }).uploadLimit).toEqual({ on: true, value: 1, unit: 'MB' });
   });
 
@@ -413,8 +451,8 @@ describe('Drive settings, saved on this computer (worksuite-desktop#95)', () => 
     s.onChange(changed);
     s.update({ drive: { maxConcurrent: 4 } as never, downloadFolder: '/elsewhere' });
     s.update({ drive: { conflict: 'skip' } as never });
-    expect(s.effective().drive).toMatchObject({ maxConcurrent: 4, conflict: 'skip', autoRetry: true });
-    expect((config.preferences as { drive: { maxConcurrent: number } }).drive.maxConcurrent).toBe(4);
+    expect(s.effective().drive).toMatchObject({ maxConcurrent: 2, conflict: 'skip', autoRetry: true });
+    expect((config.preferences as { drive: { maxConcurrent: number } }).drive.maxConcurrent).toBe(2);
     expect(changed).toHaveBeenCalledTimes(2);
     const reset = s.resetDrive();
     expect(reset.drive).toEqual(defaultDrivePrefs());
@@ -438,4 +476,12 @@ describe('the Transfers panel’s sections and summary', () => {
     expect(transferSummary(list)).toBe('2 transferring · 8 queued');
     expect(transferSummary([tr('d', 'done')])).toBeNull();
   });
+});
+
+it('rejects IPC preferences above the shared two-transfer ceiling', () => {
+  const schema = contract['settings:set'].input;
+  expect(schema.safeParse({ drive: { maxConcurrent: 2 } }).success).toBe(true);
+  expect(schema.safeParse({ drive: { maxConcurrent: 3 } }).success).toBe(false);
+  expect(schema.safeParse({ drive: { maxUploads: 3 } }).success).toBe(false);
+  expect(schema.safeParse({ drive: { maxDownloads: 3 } }).success).toBe(false);
 });

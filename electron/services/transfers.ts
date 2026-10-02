@@ -5,7 +5,7 @@ import { lstat, mkdir, open, readdir, realpath, rename, stat, unlink, writeFile 
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import type { PickedFile, UploadTarget } from '@shared/ipc/contract';
 import type { DrivePrefs, Transfer, TransferState } from '@shared/types';
-import { bytesPerSecond } from '@shared/transfers';
+import { bytesPerSecond, MAX_CONCURRENT } from '@shared/transfers';
 import { backoffDelay } from '@shared/backoff';
 import { numberedName, safeFileName } from '@shared/filename';
 import { mimeFor } from '@shared/mime';
@@ -24,7 +24,7 @@ const log = logger('transfers');
  * DesktopDownloadManager / DesktopUploadManager (FR-XFR-01/02/03, AC-10).
  *
  * One queue for every module (worksuite-desktop#94): at most two files move at
- * once unless Drive › Settings says otherwise, the rest wait their turn in the
+ * once across uploads and downloads, the rest wait their turn in the
  * order they were asked for, and the next starts by itself whenever one ends,
  * is paused or is cancelled. A failure the network or a busy server caused is
  * tried again a few times, later, without holding a place from the files
@@ -405,7 +405,8 @@ export class TransferManager {
    * frees) the transfers already moving.
    */
   configure(cfg: QueueConfig): void {
-    this.cfg = { ...cfg };
+    const maxConcurrent = Number.isFinite(cfg.maxConcurrent) ? Math.min(MAX_CONCURRENT, Math.max(1, Math.round(cfg.maxConcurrent))) : MAX_CONCURRENT;
+    this.cfg = { ...cfg, maxConcurrent };
     this.buckets.upload.setRate(cfg.uploadBps);
     this.buckets.download.setRate(cfg.downloadBps);
     if (this.metered && cfg.metered === 'pause') this.setAside();
@@ -684,7 +685,7 @@ export class TransferManager {
 
   /** The overall limit as it applies now: one at a time on a metered connection, if asked. */
   private limit(): number {
-    return this.metered && this.cfg.metered === 'limit' ? 1 : Math.max(1, this.cfg.maxConcurrent);
+    return this.metered && this.cfg.metered === 'limit' ? 1 : Math.min(MAX_CONCURRENT, Math.max(1, this.cfg.maxConcurrent));
   }
 
   private held(): boolean {
@@ -1411,7 +1412,7 @@ export class TransferManager {
     back.sort((a, b) => (a.meta.queuedAt ?? a.t.createdAt).localeCompare(b.meta.queuedAt ?? b.t.createdAt));
     for (const l of back) {
       l.t.state = 'queued';
-      l.meta.retryAt = null;
+      // Preserve a pending retry deadline across restart so it cannot bypass backoff.
       this.live.set(l.t.id, l);
       this.dequeue(l.t.id);
       this.queue.push(l.t.id);
