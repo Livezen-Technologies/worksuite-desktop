@@ -5,6 +5,18 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-02 — 0.2.82: a tidier meeting More menu
+
+The meeting More menu was one long list that could run off the window. It is now grouped and fits (#124):
+
+- **Three groups.** Meeting Tools (recording, transcription, Activities › Q&A, Polls, Notes, Files, Whiteboard; Meeting Info › details, join link, room settings), Host Controls (host controls, livestreaming, Lock/Unlock Meeting, recording settings) and View & Layout (Layout, Video, Full Screen, floating window). Secondary options sit in submenus, so the menu is short.
+- **Says what is going on.** Stop Recording, Stop Transcription, Unlock Meeting, Exit Full Screen. Something you can't use stays visible, greyed, with the reason — "Only the host and co-hosts can lock the meeting".
+- **Stays on screen.** It opens above the call controls without covering them, flips to fit, scrolls when the window is short, and becomes a bottom sheet on narrow windows.
+- **Keyboard friendly.** Arrow keys, Home/End, typing a letter, Right/Left for submenus, Escape or a click outside closes it and puts the focus back on More.
+- Direct calls' More menu gets the same look, with Audio › Speaker and Noise Suppression.
+
+---
+
 ## 2026-10-02 — 0.2.81: WhatsApp lives in Chat
 
 WhatsApp is now a channel of Chat, next to Chat and Web Chat, instead of a separate app that opened the web (#35):

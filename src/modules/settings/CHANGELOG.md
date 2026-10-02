@@ -8,6 +8,7 @@ the root CHANGELOG.md.
 
 - Sinhala and Tamil text for announcements (#98).
 - Sinhala and Tamil text for the WhatsApp channel; search no longer lists WhatsApp as its own app — it opens Chat's WhatsApp channel (#35).
+- Sinhala and Tamil text for the meeting More menu (#124).
 
 ## 1.9.3 — 2026-10-02
 
