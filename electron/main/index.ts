@@ -13,6 +13,7 @@ import { hkdfSync } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { canOpenApp, canOpenLink, canOpenRoute, notificationAllowed, visibleAppIds } from '@shared/access';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
+import { findMailtoInArgv, mailBodiesKept, mailtoRoute, parseMailto } from '@shared/mailto';
 import { resolveWebLink } from '@shared/links';
 import { redirectRoute } from '@shared/channels';
 import { networkStatus } from '@shared/network';
@@ -157,7 +158,7 @@ function main(): void {
     e.preventDefault();
     handleLink(url);
   });
-  const argvLink = findDeepLinkInArgv(process.argv);
+  const argvLink = findDeepLinkInArgv(process.argv) ?? findMailtoInArgv(process.argv);
   if (argvLink) pendingLinks.push(argvLink);
   // PDFs the operating system hands over ("Open with"; a file dropped on the Dock icon): PDF Studio opens each.
   app.on('open-file', (e, path) => {
@@ -701,6 +702,13 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     } else windows.showMain();
   };
   const handleDeepLink = (url: string): void => {
+    // A mailto: link from another app (WorkSuite is the default mail app): a new message, prefilled, for the person to send.
+    if (/^mailto:/i.test(url)) {
+      const fields = parseMailto(url);
+      if (fields) navigate({ route: mailtoRoute(fields), source: 'deep-link' });
+      else windows.showMain();
+      return;
+    }
     // A passkey sign-in coming back from the browser. Handled before the link
     // grammar, and never logged: it carries a one-time code.
     if (/^worksuite:\/\/auth\/callback\?/i.test(url)) {
@@ -1264,6 +1272,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     // FR-OFF-06: prune mail bodies beyond the cache window.
     const days = settings.effective().mailCacheDays;
     if (days > 0) cache.pruneModuleOlderThan('mail', days);
+    // A mailbox's own keep period (Settings › Mail › Storage & sync, D09).
+    const me = sessionCtl.current()?.user?.id;
+    for (const [box, d] of Object.entries(settings.effective().mailCacheDaysByMailbox ?? {})) if (me) cache.pruneMailbox(String(me), box, d);
     emitStatus();
   };
   const stopServices = (): void => {
@@ -1558,7 +1569,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         const pol = sessionCtl.current()?.policy;
         return { enabled: caps.offlineCache, maxBytes: (pol?.offline_storage_max_mb ?? 2048) * 1024 * 1024 };
       },
-      mailBodiesCached: () => settings.effective().mailCacheDays !== 0,
+      mailBodiesCached: (path) => mailBodiesKept(settings.effective(), path),
       // SalonMate's desk calls carry the key this computer was paired with.
       extraHeaders: (path) => {
         const key = salonDesk.keyFor(path);
@@ -1819,7 +1830,23 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   rebuildMenu(sessionCtl.visibleApps());
 
+  // Open mailto: links in WorkSuite (D04): only when the person turned it on, and only for an installed copy.
+  const applyMailtoHandler = (on: boolean): void => {
+    const dev = !app.isPackaged && process.env.WS_REGISTER_PROTOCOL === '1' && process.argv.length >= 2;
+    if (!app.isPackaged && !dev) return;
+    const path = dev ? process.execPath : undefined;
+    const args = dev ? [resolve(process.argv[1]!)] : undefined;
+    try {
+      const registered = app.isDefaultProtocolClient('mailto', path, args);
+      if (on && !registered) app.setAsDefaultProtocolClient('mailto', path, args);
+      else if (!on && registered) app.removeAsDefaultProtocolClient('mailto', path, args);
+    } catch (e) {
+      log.warn('mailto handler', { error: String(e) });
+    }
+  };
+  applyMailtoHandler(settings.effective().mailtoHandler === true);
   settings.onChange((prefs) => {
+    applyMailtoHandler(prefs.mailtoHandler === true);
     webchat.refresh();
     syncQuickAsk();
     broadcast('settings:changed', prefs);
@@ -1830,7 +1857,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   // ── lifecycle ──────────────────────────────────────────────────────────
   app.on('second-instance', (_e, argv) => {
-    const link = findDeepLinkInArgv(argv);
+    const link = findDeepLinkInArgv(argv) ?? findMailtoInArgv(argv);
     const pdfs = pdfPathsInArgv(argv);
     if (pdfs.length) handPdfs(pdfs);
     const docs = officePathsInArgv(argv);

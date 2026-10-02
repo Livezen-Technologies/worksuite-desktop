@@ -248,6 +248,10 @@ export interface Preferences {
   openFilesLocally: 'ask' | 'always' | 'never';
   downloadFolder: string;
   mailCacheDays: 7 | 30 | 90 | 0;
+  /** Open mailto: links in WorkSuite: it registers as the system's mail app (Settings › Mail, D04). Off until the person turns it on. */
+  mailtoHandler?: boolean;
+  /** Per mailbox, how long its mail is kept on this computer (D09), overriding `mailCacheDays`. */
+  mailCacheDaysByMailbox?: Record<string, 7 | 30 | 90 | 0>;
   tabSuspendMinutes: number;
   language: string;
   updateChannel: UpdateChannel;
@@ -1092,4 +1096,19 @@ export interface SpeechSegment {
 /** Whether this computer can transcribe on its own, and if not why. */
 export interface SpeechStatus {
   local: { ready: boolean; model: { name: string; size: number } | null; why: string | null };
+}
+
+/** What Mail keeps on this computer (offline:mailStats; Settings › Mail, D04 and D09). */
+export interface MailStoreStats {
+  total: number;
+  /** Opened messages and what is read beside them. */
+  messages: number;
+  /** Message lists, folders, labels and counts. */
+  lists: number;
+  search: number;
+  other: number;
+  /** Per mailbox id: messages kept to read offline, and their bytes. */
+  byMailbox: Record<string, { messages: number; bytes: number }>;
+  /** The organization's limit for everything this computer keeps offline (all apps). */
+  limitBytes?: number;
 }

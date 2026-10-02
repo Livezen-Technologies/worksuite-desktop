@@ -124,7 +124,7 @@ export interface ProxyDeps {
   cacheModuleFor: (path: string) => string | null;
   cacheLimits: () => CacheLimits;
   /** Mail bodies are cached only when the mail cache window is not "headers only". */
-  mailBodiesCached: () => boolean;
+  mailBodiesCached: (path: string) => boolean;
   /** Headers the main process adds to a request — credentials the renderer must not hold (a salon desk's key). */
   extraHeaders?: (path: string) => Record<string, string> | null;
 }
@@ -163,7 +163,7 @@ export function createApiProxy(deps: ProxyDeps) {
 
     const cacheModule = method === 'GET' ? deps.cacheModuleFor(apiPath) : null;
     const isMailBody = /^\/api\/mail\/messages\/\d+/.test(apiPath);
-    const cacheable = cacheModule !== null && (!isMailBody || deps.mailBodiesCached());
+    const cacheable = cacheModule !== null && (!isMailBody || deps.mailBodiesCached(apiPath));
 
     let upstream: Response;
     try {

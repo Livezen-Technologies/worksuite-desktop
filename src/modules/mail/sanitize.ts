@@ -45,19 +45,30 @@ export function sanitizeMailHtml(input: string): SanitizedMail {
 }
 
 /**
- * The frame document: light background (mail expects it — an email designed
- * with its own colours stays readable in the dark theme), readable defaults,
- * and the reader's zoom (75–200 %).
+ * An email designed with its own colours — a background, coloured text, a
+ * coloured table — rather than plain words. Turning such a message dark would
+ * leave dark logos on a dark page, so it keeps a light card (design D10).
  */
-export function mailFrameDoc(bodyHtml: string, zoom = 100): string {
+export function isDesignedMail(html: string): boolean {
+  return /\bbgcolor\s*=|\bbackground(-color)?\s*:|<font[^>]+color\s*=|(^|[\s;"'])color\s*:/i.test(html || '');
+}
+
+/**
+ * The frame document: readable defaults and the reader's zoom (75–200 %).
+ * Light, as mail expects — unless the reader asked for dark email content
+ * (Settings › Reading) while the app is dark and the message is plain words;
+ * a designed email stays on its light card so it remains readable.
+ */
+export function mailFrameDoc(bodyHtml: string, zoom = 100, dark = false): string {
   const z = Math.max(50, Math.min(300, Math.round(Number.isFinite(zoom) ? zoom : 100)));
-  return `<!doctype html><html><head><meta charset="utf-8"><style>
-    html,body{margin:0;padding:0;background:#fff;color:#151A2D;font:14px/1.55 'Plus Jakarta Sans Variable',system-ui,sans-serif;word-wrap:break-word}
+  const c = dark ? { bg: '#171E33', ink: '#E7EAF3', link: '#9DB2FF', quote: '#33405F', quoteInk: '#B4BCD0' } : { bg: '#fff', ink: '#151A2D', link: '#23349E', quote: '#E3E6EE', quoteInk: '#4A5168' };
+  return `<!doctype html><html><head><meta charset="utf-8">${dark ? '<meta name="color-scheme" content="dark">' : ''}<style>
+    html,body{margin:0;padding:0;background:${c.bg};color:${c.ink};font:14px/1.55 'Plus Jakarta Sans Variable',system-ui,sans-serif;word-wrap:break-word}
     body{zoom:${z}%}
     body{padding:4px 2px 24px}
     img{max-width:100%;height:auto}
-    a{color:#23349E}
-    blockquote{margin:8px 0;padding-left:12px;border-left:3px solid #E3E6EE;color:#4A5168}
+    a{color:${c.link}}
+    blockquote{margin:8px 0;padding-left:12px;border-left:3px solid ${c.quote};color:${c.quoteInk}}
     table{max-width:100%}
     pre{white-space:pre-wrap}
   </style></head><body>${bodyHtml}</body></html>`;

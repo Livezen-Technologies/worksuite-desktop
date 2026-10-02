@@ -101,6 +101,7 @@ import type {
   QuickAskContext,
   Transfer,
   UpdateStatus,
+  MailStoreStats,
 } from '../types';
 
 const none = z.undefined().or(z.null()).optional();
@@ -155,6 +156,8 @@ export const preferencesPatchSchema = z
     lockedNotificationPreview: z.boolean(),
     openFilesLocally: z.enum(['ask', 'always', 'never']),
     mailCacheDays: z.union([z.literal(7), z.literal(30), z.literal(90), z.literal(0)]),
+    mailtoHandler: z.boolean(),
+    mailCacheDaysByMailbox: z.record(z.string().regex(/^\d{1,12}$/), z.union([z.literal(7), z.literal(30), z.literal(90), z.literal(0)])).refine((r) => Object.keys(r).length <= 200),
     tabSuspendMinutes: z.number().int().min(5).max(480),
     language: z.string().regex(/^[a-z]{2}(-[A-Z]{2})?$/),
     updateChannel: z.enum(['stable', 'beta', 'dev', 'org']),
@@ -1008,6 +1011,8 @@ export const contract = {
   'offline:moduleBytes': ch(z.object({ module: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/) }), { session: true }),
   /** Remove one app's saved answers from this computer (Mail › Clear). */
   'offline:clearModule': ch(z.object({ module: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/) }), { session: true, sensitive: true, rate: 1 }),
+  /** What Mail keeps on this computer, by kind and by mailbox (Settings › Mail). */
+  'offline:mailStats': ch(none, { session: true }),
   'offline:submit': ch(mutationInputSchema, { session: true, rate: 20 }),
   'offline:retry': ch(z.object({ id: idString }), { session: true }),
   'offline:discard': ch(z.object({ id: idString }), { session: true }),
@@ -1412,6 +1417,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'offline:pending': OfflineMutation[];
   'offline:moduleBytes': number;
   'offline:clearModule': number;
+  'offline:mailStats': MailStoreStats;
   'offline:submit': SubmitResult;
   'offline:retry': void;
   'offline:discard': void;

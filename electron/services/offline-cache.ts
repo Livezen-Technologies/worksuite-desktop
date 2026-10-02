@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Database } from './db';
 import type { Vault } from './vault';
+import type { MailStoreStats } from '@shared/types';
 
 /**
  * READ_CACHE (FR-OFF-01): the last good answer to a module's GET request,
@@ -18,6 +19,22 @@ export interface CachedResponse {
 export interface CacheLimits {
   enabled: boolean;
   maxBytes: number;
+}
+
+/** Which part of Mail a saved answer is, by its path. */
+export function mailPathKind(path: string): 'messages' | 'lists' | 'search' | 'other' {
+  if (/^\/api\/mail\/messages\/\d+/.test(path)) return 'messages';
+  if (/^\/api\/mail\/(messages|folders|folders-tree|labels|views|mailboxes|sidebar)(\/|\?|$)/.test(path)) return 'lists';
+  if (/^\/api\/mail\/search(\?|$)/.test(path)) return 'search';
+  return 'other';
+}
+
+/** The mailbox a saved answer belongs to (its `mailbox=` parameter), or null for the combined view. */
+export function mailboxOfPath(path: string): string | null {
+  const q = path.indexOf('?');
+  if (q < 0) return null;
+  const m = new URLSearchParams(path.slice(q + 1)).get('mailbox');
+  return m && /^\d{1,12}$/.test(m) ? m : null;
 }
 
 export class OfflineCache {
@@ -92,6 +109,42 @@ export class OfflineCache {
   moduleBytes(userId: string, module: string): number {
     const r = this.db.get<{ n: number | null }>('SELECT SUM(bytes) AS n FROM cached_records WHERE user_id = ? AND module = ?', userId, module);
     return Number(r?.n ?? 0);
+  }
+
+  /**
+   * What Mail keeps on this computer, by kind and by mailbox (Settings ›
+   * Mail, D04 and D09): opened messages, lists and folders, search answers,
+   * and the rest — measured from the saved answers themselves.
+   */
+  mailStats(userId: string): MailStoreStats {
+    const rows = this.db.all<{ path: string; bytes: number }>('SELECT path, bytes FROM cached_records WHERE user_id = ? AND module = ?', userId, 'mail');
+    const out: MailStoreStats = { total: 0, messages: 0, lists: 0, search: 0, other: 0, byMailbox: {} };
+    for (const r of rows) {
+      const kind = mailPathKind(r.path);
+      const n = Number(r.bytes) || 0;
+      out.total += n;
+      out[kind] += n;
+      const box = mailboxOfPath(r.path);
+      if (box) {
+        const b = (out.byMailbox[box] ??= { messages: 0, bytes: 0 });
+        b.bytes += n;
+        if (kind === 'messages' && /^\/api\/mail\/messages\/\d+(\?|$)/.test(r.path)) b.messages++;
+      }
+    }
+    return out;
+  }
+
+  /** One mailbox's saved mail older than N days (its own keep period, D09); 0 days keeps none of its messages. */
+  pruneMailbox(userId: string, mailbox: string, days: number): number {
+    const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
+    const rows = this.db.all<{ key: string; path: string; cached_at: string }>('SELECT key, path, cached_at FROM cached_records WHERE user_id = ? AND module = ?', userId, 'mail');
+    let removed = 0;
+    for (const r of rows) {
+      if (mailboxOfPath(r.path) !== mailbox) continue;
+      const old = days > 0 ? r.cached_at < cutoff : mailPathKind(r.path) === 'messages';
+      if (old) removed += this.db.run('DELETE FROM cached_records WHERE key = ?', r.key).changes;
+    }
+    return removed;
   }
 
   totalBytes(): number {

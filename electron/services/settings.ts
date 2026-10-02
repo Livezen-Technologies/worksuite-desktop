@@ -54,6 +54,8 @@ export function defaultPreferences(): Preferences {
     openFilesLocally: 'ask',
     downloadFolder: downloads,
     mailCacheDays: 30,
+    mailtoHandler: false,
+    mailCacheDaysByMailbox: {},
     tabSuspendMinutes: 30,
     language: 'en',
     updateChannel: 'stable',

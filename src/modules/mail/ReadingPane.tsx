@@ -39,7 +39,7 @@ export function afterClose(tabs: OpenTab[], key: string, activeKey: string | nul
   return { tabs: rest, active: next?.key ?? null };
 }
 
-export function ReadingPane({ tabs, activeKey, onActivate, onClose, children, empty }: { tabs: OpenTab[]; activeKey: string | null; onActivate: (t: OpenTab) => void; onClose: (key: string) => void; children: ReactNode; empty: ReactNode }) {
+export function ReadingPane({ tabs, activeKey, onActivate, onClose, children, empty, strip = true }: { tabs: OpenTab[]; activeKey: string | null; onActivate: (t: OpenTab) => void; onClose: (key: string) => void; children: ReactNode; empty: ReactNode; /** Settings › Reading › Open messages in tabs: off, one message at a time and no strip. */ strip?: boolean }) {
   const [overflowOpen, setOverflowOpen] = useState(false);
   const more = useRef<HTMLButtonElement>(null);
   const activeAt = tabs.findIndex((t) => t.key === activeKey);
@@ -48,7 +48,7 @@ export function ReadingPane({ tabs, activeKey, onActivate, onClose, children, em
   const hidden = tabs.filter((t) => !shown.includes(t));
   return (
     <section aria-label="Reading pane" className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface">
-      {tabs.length ? (
+      {strip && tabs.length ? (
         <div role="tablist" aria-label="Open messages" className="flex h-10 shrink-0 items-end gap-1 border-b border-line bg-subtle px-2 pt-1.5">
           {shown.map((t) => {
             const on = t.key === activeKey;

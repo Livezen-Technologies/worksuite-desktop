@@ -12,10 +12,14 @@ import { Select } from '../../components/Select';
 import { Button, Chip, ErrorNote, Modal, Spinner, Switch, TextField, cx } from '../../components/ui';
 import type { Preferences } from '@shared/types';
 import { AddMailbox } from './AddMailbox';
-import { mailKeys, useLocalStore, useMailPrefs, useMailboxes, useSyncStatus } from './api';
+import { AppPasswords } from './AppPasswords';
+import { ImportMail } from './Import';
+import { Rules, Signatures } from './MailRules';
+import { mailKeys, useLocalStore, useMailPrefs, useMailStats, useMailboxes, useSyncStatus } from './api';
 import { mailboxLetter } from './model';
 import { AccountAvatar } from './parts';
 import type { MailPrefs, Mailbox, SyncMailbox } from './types';
+import type { MailStoreStats } from '@shared/types';
 
 /**
  * Settings › Mail: the accounts and what this computer keeps (Accounts &
@@ -23,7 +27,16 @@ import type { MailPrefs, Mailbox, SyncMailbox } from './types';
  * and how the Mail screen is laid out (Layout & reading).
  */
 
-type Tab = 'accounts' | 'storage' | 'layout';
+type Tab = 'accounts' | 'storage' | 'import' | 'signatures' | 'rules' | 'layout';
+
+const TABS: Array<[Tab, string]> = [
+  ['accounts', 'Accounts & offline'],
+  ['storage', 'Storage & sync'],
+  ['import', 'Import mail'],
+  ['signatures', 'Signatures'],
+  ['rules', 'Rules'],
+  ['layout', 'Appearance & reading'],
+];
 
 const MAIL_DAYS: Array<{ value: Preferences['mailCacheDays']; label: string }> = [
   { value: 7, label: 'Last 7 days' },
@@ -32,24 +45,35 @@ const MAIL_DAYS: Array<{ value: Preferences['mailCacheDays']; label: string }> =
   { value: 0, label: 'Headers only' },
 ];
 
-export function MailSettings() {
-  const [tab, setTab] = useState<Tab>('accounts');
+/** The tab a link names (`/settings/mail?tab=import&id=4`, an import's notification), else Accounts. */
+export function mailSettingsTab(q: string | null): Tab {
+  return TABS.some(([id]) => id === q) ? (q as Tab) : 'accounts';
+}
+
+/** `query`: the Settings tab's route query (`?tab=import&id=4`), when there is one. */
+export function MailSettings({ query = new URLSearchParams() }: { query?: URLSearchParams } = {}) {
+  const asked = query.get('tab');
+  const [tab, setTab] = useState<Tab>(() => mailSettingsTab(asked));
+  // A new link (an import's notification) chooses its tab again.
+  const [linked, setLinked] = useState(asked);
+  if (asked !== linked) {
+    setLinked(asked);
+    if (asked) setTab(mailSettingsTab(asked));
+  }
+  const id = query.get('id');
+  const importId = id && /^\d+$/.test(id) ? Number(id) : null;
+  const boxes = useMailboxes();
+  const defaultBox = (boxes.data?.mailboxes ?? []).find((b) => b.is_default) ?? null;
   return (
     <div>
-      <div role="tablist" aria-label="Mail settings" className="mb-5 flex gap-1 border-b border-line">
-        {(
-          [
-            ['accounts', 'Accounts & offline'],
-            ['storage', 'Storage & sync'],
-            ['layout', 'Layout & reading'],
-          ] as const
-        ).map(([id, label]) => (
-          <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={cx('-mb-px h-9 border-b-2 px-3 text-[13.5px] font-semibold', tab === id ? 'border-primary text-primary' : 'border-transparent text-ink-2 hover:text-ink')}>
+      <div role="tablist" aria-label="Mail settings" className="mb-5 flex flex-wrap gap-1 border-b border-line">
+        {TABS.map(([t, label]) => (
+          <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={cx('-mb-px h-9 border-b-2 px-3 text-[13.5px] font-semibold', tab === t ? 'border-primary text-primary' : 'border-transparent text-ink-2 hover:text-ink')}>
             {text(label)}
           </button>
         ))}
       </div>
-      {tab === 'accounts' ? <Accounts /> : tab === 'storage' ? <Storage /> : <Layout />}
+      {tab === 'accounts' ? <Accounts /> : tab === 'storage' ? <Storage /> : tab === 'import' ? <ImportMail openId={importId} /> : tab === 'signatures' ? <Signatures /> : tab === 'rules' ? <Rules mailbox={defaultBox ? String(defaultBox.id) : null} /> : <Layout />}
     </div>
   );
 }
@@ -63,6 +87,32 @@ export function syncWords(b: Mailbox, s: SyncMailbox | undefined): { label: stri
   return { label: text('When opened'), tone: 'muted' };
 }
 
+/** "Pushed instantly · 1,284 offline": how it syncs, and how many of its messages read offline here. */
+export function offlineWords(sync: string, messages: number | null): string {
+  return messages ? `${sync} · ${text('{n} offline', { n: messages.toLocaleString() })}` : sync;
+}
+
+/** What the organization keeps of a mailbox on the WorkSuite server, in words (D09). */
+export function copyWords(mode: string, months: number | undefined): string {
+  if (mode === 'headers') return text('Headers only — messages open from the provider');
+  if (mode === 'everything') return text('Everything');
+  if (mode === 'archive') return text('Everything, kept after it is deleted at the provider');
+  return text('Recent mail · last {n} months', { n: months ?? 12 });
+}
+
+/** The bar's parts on this computer (D09), each a share of the limit. */
+export function storeParts(s: MailStoreStats): Array<{ key: 'messages' | 'lists' | 'search' | 'other'; label: string; bytes: number; percent: number }> {
+  const limit = s.limitBytes && s.limitBytes > 0 ? s.limitBytes : Math.max(1, s.total);
+  return (
+    [
+      ['messages', 'Messages'],
+      ['lists', 'Lists & folders'],
+      ['search', 'Search'],
+      ['other', 'Other'],
+    ] as const
+  ).map(([key, label]) => ({ key, label: text(label), bytes: s[key], percent: Math.min(100, (s[key] / limit) * 100) }));
+}
+
 function kindOf(b: Mailbox): string {
   if (b.account_type === 'local_mailbox') return text('WorkSuite Local · managed by your administrator');
   if (b.shared) return text('Shared mailbox');
@@ -74,8 +124,10 @@ function Accounts() {
   const sync = useSyncStatus(true);
   const prefs = useStore(app, (s) => s.prefs);
   const store = useLocalStore();
+  const stats = useMailStats();
   const qc = useQueryClient();
   const [adding, setAdding] = useState(false);
+  const [passwords, setPasswords] = useState(false);
   const [managing, setManaging] = useState<Mailbox | null>(null);
   const [repairing, setRepairing] = useState<Mailbox | null>(null);
   const list = (boxes.data?.mailboxes ?? []).filter((b) => !b.archived);
@@ -113,7 +165,7 @@ function Accounts() {
                   <span className="block truncate text-[12.5px] text-ink-3">{kindOf(b)}</span>
                 </span>
                 <Chip tone={problem ? 'danger' : b.sync_paused ? 'warning' : 'success'}>{problem ? text('Authentication problem') : b.sync_paused ? text('Paused') : text('Live')}</Chip>
-                <span className="w-[170px] shrink-0 text-right text-[12px] text-ink-3">{problem && b.last_sync_at ? text('since {time} · settings unchanged', { time: timeLabel(b.last_sync_at) }) : words.label}</span>
+                <span className="w-[190px] shrink-0 text-right text-[12px] text-ink-3">{problem && b.last_sync_at ? text('since {time} · settings unchanged', { time: timeLabel(b.last_sync_at) }) : offlineWords(words.label, stats.data?.byMailbox[String(b.id)]?.messages ?? null)}</span>
                 {problem ? (
                   <Button variant="danger" onClick={() => void repair(b)}>
                     Repair
@@ -133,6 +185,10 @@ function Accounts() {
             <Select label="Keep messages from the last" value={prefs.mailCacheDays} options={MAIL_DAYS.map((d) => ({ ...d, label: text(d.label) }))} onValueChange={(v) => void updatePrefs({ mailCacheDays: v as Preferences['mailCacheDays'] })} />
           </div>
           <p className="mt-2 text-[12.5px] text-ink-3">{prefs.mailCacheDays === 0 ? text('Only the lists are kept; a message is read from the server.') : text('Lists and the messages you open are kept, encrypted, so they read offline.')}</p>
+          <label className="mt-3 flex items-center gap-2.5 text-[13.5px] text-ink">
+            <Checkbox checked={prefs.mailCacheDays !== 0} onChange={(e) => void updatePrefs({ mailCacheDays: e.target.checked ? 30 : 0 })} />
+            Download message bodies
+          </label>
           <div className="mt-3 flex items-center justify-between border-t border-line pt-3 text-[13px] text-ink-2">
             <span>{text('Using {size} · encrypted on this device', { size: bytes(store.data ?? 0) })}</span>
             <Button
@@ -150,8 +206,8 @@ function Accounts() {
             </Button>
           </div>
         </section>
-        <section aria-label="Notifications" className="rounded-[12px] border border-line bg-surface p-4">
-          <h3 className="text-[15px] font-bold text-ink">Notifications</h3>
+        <section aria-label="Notifications and other apps" className="rounded-[12px] border border-line bg-surface p-4">
+          <h3 className="text-[15px] font-bold text-ink">Notifications & other apps</h3>
           <div className="mt-3 flex flex-col gap-3 text-[13.5px] text-ink">
             <label className="flex items-center gap-2.5">
               <Checkbox checked={prefs.moduleNotifications.mail !== false} onChange={(e) => void updatePrefs({ moduleNotifications: { ...prefs.moduleNotifications, mail: e.target.checked } })} />
@@ -161,10 +217,21 @@ function Accounts() {
               <Checkbox checked={prefs.badgeCount} onChange={(e) => void updatePrefs({ badgeCount: e.target.checked })} />
               Unread count on the dock / taskbar
             </label>
+            <label className="flex items-center gap-2.5">
+              <Checkbox checked={prefs.mailtoHandler === true} onChange={(e) => void updatePrefs({ mailtoHandler: e.target.checked })} />
+              Open mailto: links in WorkSuite
+            </label>
           </div>
-          <p className="mt-3 text-[12.5px] text-ink-3">Each mailbox can be left out of notifications in Manage.</p>
+          <p className="mt-3 text-[12.5px] text-ink-3">Each mailbox can be left out of notifications in Manage. With mailto: links on, WorkSuite is this computer’s mail app: a link opens a new message here.</p>
+          <p className="mt-3 rounded-[10px] bg-subtle p-3 text-[12.5px] leading-relaxed text-ink-2">
+            {text('Using Apple Mail or Outlook too? Create an app password for it. Your WorkSuite password never works for mail.')}{' '}
+            <button type="button" className="font-semibold text-primary underline" onClick={() => setPasswords(true)}>
+              Mail app passwords
+            </button>
+          </p>
         </section>
       </div>
+      {passwords ? <AppPasswords onClose={() => setPasswords(false)} /> : null}
       {adding ? <AddMailbox onClose={() => setAdding(false)} /> : null}
       {managing ? <ManageMailbox box={managing} onClose={() => setManaging(null)} /> : null}
       {repairing ? <RepairPassword box={repairing} onClose={() => setRepairing(null)} /> : null}
@@ -288,21 +355,49 @@ function RepairPassword({ box, onClose }: { box: Mailbox; onClose: () => void })
   );
 }
 
+const KEEP: Array<{ value: 7 | 30 | 90 | 0; label: string }> = [
+  { value: 7, label: '7 days' },
+  { value: 30, label: '30 days' },
+  { value: 90, label: '90 days' },
+  { value: 0, label: 'Headers only' },
+];
+
+const PART_BG: Record<string, string> = { messages: 'bg-primary', lists: 'bg-[var(--ws-acct-teal)]', search: 'bg-warning', other: 'bg-ink-3' };
+
 function Storage() {
   const boxes = useMailboxes();
   const sync = useSyncStatus(true);
-  const store = useLocalStore();
+  const stats = useMailStats();
   const prefs = useStore(app, (s) => s.prefs);
   const qc = useQueryClient();
-  const list = (boxes.data?.mailboxes ?? []).filter((b) => !b.archived) as Array<Mailbox & { copy?: { copy_mode: string; stored_bytes: number } | null; download_attachments?: boolean }>;
+  const [clearing, setClearing] = useState(false);
+  const list = (boxes.data?.mailboxes ?? []).filter((b) => !b.archived);
   const copies = list.filter((b) => b.copy);
   const stored = copies.reduce((n, b) => n + (b.copy?.stored_bytes ?? 0), 0);
+  const opens = copies.map((b) => b.copy?.opens_from_copy).filter((x): x is number => typeof x === 'number');
+  const opened = opens.length ? opens.reduce((n, x) => n + x, 0) / opens.length : null;
+  const mode = copies[0]?.copy ?? null;
+  const s = stats.data ?? null;
+  const byBox = prefs?.mailCacheDaysByMailbox ?? {};
   const syncAll = async () => {
     const r = await Promise.allSettled(list.filter((b) => !b.shared).map((b) => apiPost(`/api/mail/mailboxes/${b.id}/sync`)));
     void qc.invalidateQueries({ queryKey: ['mail'] });
     const failed = r.filter((x) => x.status === 'rejected').length;
     toast(failed ? 'error' : 'success', failed ? text('{n} mailboxes could not be asked now.', { n: failed }) : text('Checking every mailbox for new mail.'));
   };
+  const keep = (id: number, v: 7 | 30 | 90 | 0) => {
+    const next = { ...byBox, [String(id)]: v };
+    if (prefs && v === prefs.mailCacheDays) delete next[String(id)];
+    void updatePrefs({ mailCacheDaysByMailbox: next });
+  };
+  const clearAll = () =>
+    void call('offline:clearModule', { module: 'mail' })
+      .then(() => {
+        void qc.invalidateQueries({ queryKey: mailKeys.localStore });
+        toast('success', text('Mail saved on this computer was removed.'));
+        setClearing(false);
+      })
+      .catch((e) => toast('error', errorMessage(e)));
   return (
     <>
       <div className="mb-4 flex items-center justify-between">
@@ -310,50 +405,83 @@ function Storage() {
         <Button onClick={() => void syncAll()}>Sync all now</Button>
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <section aria-label="On this computer" className="rounded-[12px] border border-line bg-surface p-4">
-          <div className="flex items-baseline justify-between">
-            <h3 className="text-[15px] font-bold text-ink">On this computer</h3>
-            <span className="font-mono text-[13px] font-semibold text-ink">{bytes(store.data ?? 0)}</span>
+        <section aria-label="On this computer" className="flex flex-col gap-2.5 rounded-[12px] border border-line bg-surface p-[18px]">
+          <div className="flex items-baseline gap-2">
+            <h3 className="flex-1 text-[14.5px] font-bold text-ink">On this computer</h3>
+            <b className="font-mono text-[13px] text-ink">{bytes(s?.total ?? 0)}</b>
+            {s?.limitBytes ? <span className="text-[12.5px] text-ink-3">{text('of {size} limit', { size: bytes(s.limitBytes) })}</span> : null}
           </div>
-          <p className="mt-2 text-[12.5px] text-ink-3">Encrypted with a key kept in your system keychain. Removed when you sign out.</p>
-          <p className="mt-1 text-[12.5px] text-ink-3">{prefs?.mailCacheDays ? text('Keeps the last {n} days of every mailbox.', { n: prefs.mailCacheDays }) : text('Keeps the lists only.')}</p>
-        </section>
-        <section aria-label="In WorkSuite storage" className="rounded-[12px] border border-line bg-surface p-4">
-          <h3 className="text-[15px] font-bold text-ink">In WorkSuite storage</h3>
-          {copies.length ? (
+          {s ? (
             <>
-              <p className="mt-2 text-[12.5px] text-ink-2">Your organization keeps a copy of your mail on the WorkSuite server, so it opens fast on every device and while a provider is down.</p>
-              <p className="mt-2 text-[13px] text-ink-3">
-                {text('Your mailboxes')} <span className="ml-1 font-mono font-semibold text-ink">{bytes(stored)}</span>
-              </p>
+              <div aria-hidden className="flex h-2.5 overflow-hidden rounded-full bg-subtle">
+                {storeParts(s).map((p) => (
+                  <span key={p.key} className={PART_BG[p.key]} style={{ width: `${p.percent}%` }} />
+                ))}
+              </div>
+              <ul role="list" className="flex flex-wrap gap-x-3.5 gap-y-1.5 text-[12px] text-ink-2">
+                {storeParts(s).map((p) => (
+                  <li key={p.key} className="flex items-center gap-1.5 whitespace-nowrap">
+                    <span aria-hidden className={cx('h-2 w-2 rounded-[2px]', PART_BG[p.key])} />
+                    {p.label} {bytes(p.bytes)}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+          <p className="text-[12px] text-ink-3">Encrypted with a key kept in your system keychain. Removed when you sign out.</p>
+        </section>
+        <section aria-label="In WorkSuite storage" className="flex flex-col gap-2.5 rounded-[12px] border border-line bg-surface p-[18px]">
+          <div className="flex items-center gap-2">
+            <h3 className="flex-1 text-[14.5px] font-bold text-ink">In WorkSuite storage</h3>
+            {mode ? <Chip tone="success">{text('Set by your admin')}</Chip> : null}
+          </div>
+          {mode ? (
+            <>
+              <p className="text-[13px] leading-relaxed text-ink-2">{text('Your organization keeps a copy of {what} on the WorkSuite server, so mail opens fast on every device and while a provider is down.', { what: copyWords(mode.copy_mode, mode.window_months) })}</p>
+              <div className="flex gap-5 text-[12px]">
+                <span className="flex flex-col">
+                  <span className="text-ink-3">Your mailboxes</span>
+                  <b className="font-mono text-[15px] text-ink">{bytes(stored)}</b>
+                </span>
+                <span className="flex flex-col">
+                  <span className="text-ink-3">Opened from copy</span>
+                  <b className="font-mono text-[15px] text-ink">{opened === null ? '—' : `${(opened * 100).toFixed(1)}%`}</b>
+                </span>
+                <span className="flex flex-col">
+                  <span className="text-ink-3">Counts against</span>
+                  <b className="text-[13px] text-ink">Organization, not your Files</b>
+                </span>
+              </div>
             </>
           ) : (
-            <p className="mt-2 text-[12.5px] text-ink-3">Your organization does not keep a copy of this mail on the WorkSuite server.</p>
+            <p className="text-[12.5px] text-ink-3">Your organization does not keep a copy of this mail on the WorkSuite server.</p>
           )}
         </section>
       </div>
       {list.length ? (
         <table className="mt-5 w-full overflow-hidden rounded-[12px] border border-line bg-surface text-left text-[13px]">
-          <thead className="text-[12px] text-ink-3">
+          <thead className="bg-subtle text-[11.5px] text-ink-3">
             <tr className="border-b border-line">
-              <th className="px-4 py-2 font-semibold">Mailbox</th>
-              <th className="px-4 py-2 font-semibold">New mail</th>
-              <th className="px-4 py-2 font-semibold">Attachments</th>
-              <th className="px-4 py-2 text-right font-semibold">On the server</th>
+              <th className="px-4 py-2 font-bold">Mailbox</th>
+              <th className="px-4 py-2 font-bold">New mail</th>
+              <th className="w-[180px] px-4 py-2 font-bold">Keep on this computer</th>
+              <th className="px-4 py-2 font-bold">On the server</th>
+              <th className="px-4 py-2 text-right font-bold">Size here</th>
             </tr>
           </thead>
           <tbody>
             {list.map((b) => {
-              const s = sync.data?.mailboxes.find((m) => m.mailbox === b.id);
-              const w = syncWords(b, s);
+              const sm = sync.data?.mailboxes.find((m) => m.mailbox === b.id);
+              const w = syncWords(b, sm);
+              const days = (byBox[String(b.id)] ?? prefs?.mailCacheDays ?? 30) as 7 | 30 | 90 | 0;
               return (
                 <tr key={b.id} className="border-b border-line last:border-b-0">
                   <td className="px-4 py-2.5">
                     <span className="flex items-center gap-2.5">
-                      <AccountAvatar letter={mailboxLetter(b)} colour={b.colour} size={24} className="rounded-[6px]" />
+                      <AccountAvatar letter={mailboxLetter(b)} colour={b.colour} size={26} className="rounded-[7px]" />
                       <span className="min-w-0">
                         <span className="block truncate font-semibold text-ink">{b.email}</span>
-                        <span className="block truncate text-[12px] text-ink-3">{b.account_type === 'local_mailbox' ? text('WorkSuite Local') : b.shared ? text('Shared mailbox') : (b.provider_label ?? '')}</span>
+                        <span className="block truncate text-[11.5px] text-ink-3">{b.account_type === 'local_mailbox' ? text('WorkSuite Local') : b.shared ? text('Shared mailbox') : (b.provider_label ?? '')}</span>
                       </span>
                     </span>
                   </td>
@@ -363,14 +491,29 @@ function Storage() {
                       {w.label}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-ink-2">{b.download_attachments ? text('Downloaded with the message') : text('When opened')}</td>
-                  <td className="px-4 py-2.5 text-right font-mono text-ink-2">{b.copy ? bytes(b.copy.stored_bytes) : '—'}</td>
+                  <td className="px-4 py-2">
+                    <Select aria-label={text('Keep {email} on this computer', { email: b.email })} value={days} options={KEEP.map((k) => ({ ...k, label: text(k.label) }))} onValueChange={(v) => keep(b.id, v as 7 | 30 | 90 | 0)} />
+                  </td>
+                  <td className="px-4 py-2.5 font-mono text-ink-2">{b.copy ? bytes(b.copy.stored_bytes) : '—'}</td>
+                  <td className="px-4 py-2.5 text-right font-mono font-semibold text-ink">{bytes(s?.byMailbox[String(b.id)]?.bytes ?? 0)}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       ) : null}
+      <div className="mt-4 flex items-center gap-3 rounded-[10px] border border-line bg-surface px-3.5 py-3 text-[13px]">
+        <span className="flex-1 text-ink-2">Short on disk space? Choose a shorter keep period above; older mail stays searchable on the server and downloads when you open it.</span>
+        {clearing ? (
+          <Button size="sm" variant="danger" onClick={clearAll}>
+            Clear everything now
+          </Button>
+        ) : (
+          <Button size="sm" variant="ghost" className="!text-danger" onClick={() => setClearing(true)}>
+            Clear everything
+          </Button>
+        )}
+      </div>
     </>
   );
 }
@@ -392,7 +535,7 @@ function Layout() {
   );
   return (
     <>
-      <h2 className="mb-4 text-[20px] font-bold text-ink">Layout & reading</h2>
+      <h2 className="mb-4 text-[20px] font-bold text-ink">Appearance & reading</h2>
       <section aria-label="Theme" className="rounded-[12px] border border-line bg-surface p-4">
         <h3 className="text-[15px] font-bold text-ink">Theme</h3>
         <p className="text-[12.5px] text-ink-3">Applies to Mail and every WorkSuite app on this computer.</p>
@@ -417,7 +560,25 @@ function Layout() {
         {seg('view', prefs.view, 'compact', [['classic', 'Classic'], ['compact', 'Compact'], ['super', 'Super compact'], ['table', 'Full list']], 'Density')}
         {seg('zoom', prefs.zoom, 100, [[90, 'Small'], [100, 'Default'], [120, 'Large']], 'Text size')}
         {seg('toolbar', prefs.toolbar, 'docked', [['docked', 'Docked'], ['floating', 'Floating'], ['compact', 'Compact'], ['minimal', 'Minimal']], 'Action bar')}
-        <p className="mt-2 text-[12px] text-ink-3">Kept with your WorkSuite account, so every computer you use shows Mail the same way. Emails designed with their own colours are shown on a light card so logos and tables stay readable.</p>
+        <p className="mt-2 text-[12px] text-ink-3">Kept with your WorkSuite account, so every computer you use shows Mail the same way.</p>
+      </section>
+      <section aria-label="Reading" className="mt-4 flex flex-col gap-3 rounded-[12px] border border-line bg-surface p-4 text-[13.5px] text-ink">
+        <h3 className="text-[15px] font-bold text-ink">Reading</h3>
+        <label className="flex items-center gap-2.5">
+          <Checkbox checked={prefs.tabs !== false} onChange={(e) => set({ tabs: e.target.checked })} />
+          Open messages in tabs
+        </label>
+        <label className="flex items-center gap-2.5">
+          <Checkbox checked={prefs.previews !== false} onChange={(e) => set({ previews: e.target.checked })} />
+          Show message previews in the list
+        </label>
+        <label className="flex items-center gap-2.5">
+          <Checkbox checked={prefs.darkBody === true} onChange={(e) => set({ darkBody: e.target.checked })} aria-describedby="mail-dark-body-hint" />
+          Dark mode for email content too
+        </label>
+        <p id="mail-dark-body-hint" className="pl-[26px] text-[12px] leading-relaxed text-ink-3">
+          Emails designed with their own colours are shown on a light card so logos and tables stay readable.
+        </p>
       </section>
     </>
   );

@@ -337,7 +337,7 @@ describe('settings › mail', () => {
     fireEvent.change(within(dialog).getByLabelText('Password'), { target: { value: 'new' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Test and save' }));
     await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/mailboxes/2', { password: 'new' }));
-    fireEvent.click(screen.getByRole('tab', { name: 'Layout & reading' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Appearance & reading' }));
     fireEvent.click(await screen.findByRole('radio', { name: 'Bottom' }));
     await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/prefs', { pane: 'bottom' }));
   });

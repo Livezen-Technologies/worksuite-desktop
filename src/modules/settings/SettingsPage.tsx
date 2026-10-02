@@ -51,7 +51,7 @@ const SECTIONS = [
 
 export default function SettingsPage(_props: ModuleProps) {
   useTabTitle('Settings');
-  const { path, go } = useTab();
+  const { path, go, query } = useTab();
   const section = SECTIONS.find((s) => s.id === path[1])?.id ?? 'general';
   const prefs = useStore(app, (s) => s.prefs);
   const hasMail = useCanOpen('mail');
@@ -76,7 +76,7 @@ export default function SettingsPage(_props: ModuleProps) {
           {section === 'desktop' ? <DesktopSection prefs={prefs} /> : null}
           {section === 'files' ? <FilesSection /> : null}
           {section === 'offline' ? <OfflineSection prefs={prefs} /> : null}
-          {section === 'mail' && hasMail ? <MailSettings /> : null}
+          {section === 'mail' && hasMail ? <MailSettings query={query} /> : null}
           {section === 'ai' ? <AiSection prefs={prefs} /> : null}
           {section === 'local-ai' ? <LocalAISection /> : null}
           {section === 'meet' ? <MeetSection /> : null}

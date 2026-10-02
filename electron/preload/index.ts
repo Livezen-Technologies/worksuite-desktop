@@ -419,6 +419,7 @@ const api = {
     pending: call('offline:pending'),
     moduleBytes: call('offline:moduleBytes'),
     clearModule: call('offline:clearModule'),
+    mailStats: call('offline:mailStats'),
     submit: call('offline:submit'),
     retry: call('offline:retry'),
     discard: call('offline:discard'),
