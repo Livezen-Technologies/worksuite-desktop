@@ -1,9 +1,10 @@
 import { lockedScope, lockedApi, lockedIpc } from '@shared/locked-access';
 import { lockedClickTarget } from '../services/locked-notifications';
 import { accessibilityDiagnostics } from '../services/remote-control/accessibility-diagnostics';
-import { LocalWorkspace } from '../services/local-workspace';
+import { LocalAccess, LocalWorkspace } from '../services/local-workspace';
 import { LocalWorkspaceImport, type ImportAccount } from '../services/local-workspace-import';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { localize } from '@shared/localization';
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { GuestMeetService } from '../services/guest-meet';
 import { app, Notification, clipboard, crashReporter, dialog, globalShortcut, ipcMain, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents, webContents } from 'electron';
@@ -1664,8 +1665,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   router.handle('ai:ocr', (input, c) => ocr.recognize(c.sender.id, input));
   router.handle('ai:ocrCancel', (input) => ocr.cancel(input.id));
   router.handle('ai:ocrStatus', () => ocr.status());
-  const openGuest = async (input: string, server?: string) => {
-    const info = await guests.prepare(input, server);
+  const openGuest = async (input: string, server?: string, localName?: string) => {
+    const prepared = await guests.prepare(input, server);
+    const info = localName ? { ...prepared, localName } : prepared;
     const w = windows.open('meet', `/guest-meet/${info.uuid}?server=${encodeURIComponent(info.origin)}`, info.title ?? 'WorkSuite Meet · Guest');
     const senderId = w.webContents.id;
     guests.bind(senderId, info);
@@ -1678,12 +1680,15 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     const w = windows.open('meet', '/guest-workspace', 'WorkSuite · Guest workspace');
     const id = w.webContents.id;
     localWindows.add(id); guestWindowIds.add(id);
-    w.once('closed', () => { localWindows.delete(id); guestWindowIds.delete(id); });
+    w.once('closed', () => { localWindows.delete(id); guestWindowIds.delete(id); localAccess.forget(id); });
     return { id: w.id };
   };
-  const localOnly = (senderId: number) => {
+  // Windows past the Local Profile's PIN (or with none set); wrong PINs wait a minute after five.
+  const localAccess = new LocalAccess(local);
+  const localWindow = (senderId: number) => {
     if (!localWindows.has(senderId)) throw new DesktopError('PERMISSION_DENIED', 'Open the local guest workspace first.');
   };
+  const localOnly = (senderId: number) => { localWindow(senderId); localAccess.require(senderId); };
   const currentImportAccount = (): ImportAccount | null => {
     const b = sessionCtl.current();
     const origin = auth.getServer()?.origin;
@@ -1693,11 +1698,26 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   };
   const importer = new LocalWorkspaceImport(local, currentImportAccount);
   router.handle('local:open', () => openLocal());
+  router.handle('local:status', (_input, c) => {
+    localWindow(c.sender.id);
+    const profile = local.profile();
+    return { profile, locked: localAccess.locked(c.sender.id), language: settings.effective().language };
+  });
+  router.handle('local:profile', (input, c) => {
+    localWindow(c.sender.id);
+    // Creating the profile needs nothing; changing one that has a PIN needs it entered first.
+    if (local.profile()) localOnly(c.sender.id);
+    const profile = local.saveProfile(input);
+    localAccess.grant(c.sender.id);
+    return profile;
+  });
+  router.handle('local:unlock', (input, c) => { localWindow(c.sender.id); return localAccess.unlock(c.sender.id, input.pin); });
   router.handle('local:read', (_input, c) => { localOnly(c.sender.id); return local.read(); });
   router.handle('local:save', (input, c) => { localOnly(c.sender.id); return local.save(input); });
   router.handle('local:remove', (input, c) => { localOnly(c.sender.id); local.remove(input.id); });
   router.handle('local:meeting', (input, c) => { localOnly(c.sender.id); local.meeting(input.input, input.server); });
-  router.handle('local:deleteAll', (_input, c) => { localOnly(c.sender.id); local.deleteAll(); });
+  router.handle('local:deleteAll', (_input, c) => { localOnly(c.sender.id); local.deleteAll(); localAccess.clear(); });
+  router.handle('local:joinMeeting', (input, c) => { localOnly(c.sender.id); return openGuest(input.input, input.server, local.profile()?.name); });
   router.handle('local:signIn', (_input, c) => { localOnly(c.sender.id); windows.showMain(); BrowserWindow.fromWebContents(c.sender)?.close(); });
   router.handle('local:export', async (_input, c) => {
     localOnly(c.sender.id);
@@ -1706,16 +1726,38 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     writeFileSync(chosen.filePath, local.export(), { mode: 0o600, flush: true });
     return { saved: true };
   });
-  router.handle('local:restore', async (_input, c) => {
+  // Restore is two steps: choose and validate a file (counts only, nothing written), then confirm that preview.
+  let pendingRestore: { token: string; sender: number; text: string } | null = null;
+  router.handle('local:restorePreview', async (_input, c) => {
     localOnly(c.sender.id);
     const chosen = await dialog.showOpenDialog(BrowserWindow.fromWebContents(c.sender)!, { title: 'Restore guest workspace backup', properties: ['openFile'], filters: [{ name: 'Guest workspace backup', extensions: ['json'] }] });
     if (chosen.canceled || !chosen.filePaths[0]) return null;
     if (statSync(chosen.filePaths[0]).size > 20_000_000) throw new DesktopError('IPC_VALIDATION_FAILED', 'Backup files must be under 20 MB.');
-    try { return local.restore(readFileSync(chosen.filePaths[0], 'utf8')); }
+    const text = readFileSync(chosen.filePaths[0], 'utf8');
+    let counts: ReturnType<typeof local.preview>;
+    try { counts = local.preview(text); }
+    catch { throw new DesktopError('IPC_VALIDATION_FAILED', 'This is not a valid guest workspace backup. Nothing was changed.'); }
+    pendingRestore = { token: randomUUID(), sender: c.sender.id, text };
+    return { token: pendingRestore.token, ...counts };
+  });
+  router.handle('local:restore', (input, c) => {
+    localOnly(c.sender.id);
+    const pending = pendingRestore;
+    if (!pending || pending.token !== input.token || pending.sender !== c.sender.id) throw new DesktopError('PERMISSION_DENIED', 'Choose the backup again before restoring.');
+    pendingRestore = null;
+    try { return local.restore(pending.text); }
     catch { throw new DesktopError('IPC_VALIDATION_FAILED', 'This is not a valid guest workspace backup. Nothing was changed.'); }
   });
-  router.handle('local:importOffer', () => ({ count: local.read().items.length }));
-  router.handle('local:reviewImport', () => {
+  router.handle('local:importOffer', () => {
+    const profile = local.profile();
+    return { count: local.read().items.length, pinRequired: !!profile?.hasPin, profileName: profile?.name ?? null };
+  });
+  router.handle('local:reviewImport', (input) => {
+    // A Local Profile with a PIN shows its items to an account only after that PIN.
+    if (local.profile()?.hasPin) {
+      const result = localAccess.tryPin(input.pin ?? '');
+      if (!result.unlocked) throw new DesktopError('PERMISSION_DENIED', result.retryAfter ? `Too many wrong PINs. Try again in ${result.retryAfter} seconds.` : 'Enter the Local Profile PIN to review its items.');
+    }
     const origin = auth.getServer()?.origin;
     const token = auth.accessToken();
     if (!origin || !token) throw new DesktopError('NOT_SIGNED_IN', 'Refresh your sign-in before importing.');
@@ -1727,7 +1769,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   router.handle('local:import', (input) => importer.run(input.token, input.ids, input.createCopies));
   const localReminderTimer = setInterval(() => local.reminders(Date.now(), (item) => {
     if (!Notification.isSupported()) return false;
-    try { const reminder = new Notification({ title: `Guest reminder · ${item.title}`, body: item.kind === 'event' ? 'Your local calendar reminder is due.' : 'Your local task reminder is due.' }); reminder.on('click', () => openLocal()); reminder.show(); return true; }
+    try { const reminder = new Notification({ title: `${localize('Local reminder', settings.effective().language)} · ${item.title}`, body: localize(item.kind === 'event' ? 'Your local calendar reminder is due.' : 'Your local task reminder is due.', settings.effective().language) }); reminder.on('click', () => openLocal()); reminder.show(); return true; }
     catch { return false; }
   }), 15000);
   app.on('before-quit', () => { clearInterval(localReminderTimer); local.close(); });

@@ -13,6 +13,8 @@ export interface GuestMeetInfo {
   chat: 'everyone' | 'hosts' | 'off';
   livestream?: { active: boolean; live: boolean; count: number };
   recording?: { active: boolean; since: string | null };
+  /** The Local Profile's display name, when the meeting was opened from it: suggested, still editable. */
+  localName?: string;
 }
 export interface GuestMeetToken { url: string; token: string; identity: string; door: 'waiting_room' | 'no_host' | null }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

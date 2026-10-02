@@ -8,10 +8,13 @@ export interface GuestMeetDeps {
 }
 export class GuestMeetService {
   readonly media = new Set<string>();
-  private windows = new Map<number, { origin: string; uuid: string }>();
+  private windows = new Map<number, { origin: string; uuid: string; localName?: string }>();
   constructor(private readonly deps: GuestMeetDeps) {}
   isGuest(id: number): boolean { return this.windows.has(id); }
-  bind(id: number, destination: { origin: string; uuid: string }): void { this.windows.set(id, destination); }
+  /** Keeps only the destination (and a Local Profile's name), so later info is always the server's current state. */
+  bind(id: number, destination: { origin: string; uuid: string; localName?: string }): void {
+    this.windows.set(id, { origin: destination.origin, uuid: destination.uuid, ...(destination.localName ? { localName: destination.localName } : {}) });
+  }
   forget(id: number): void { this.windows.delete(id); }
   private scope(id: number) {
     const scope = this.windows.get(id);

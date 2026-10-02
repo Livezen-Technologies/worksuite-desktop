@@ -26,7 +26,7 @@ describe('device-only guest persistence', () => {
   it('backs up, merges and skips identical content without overwriting original IDs', () => {
     const source = new LocalWorkspace(':memory:'); const target = new LocalWorkspace(':memory:');
     source.save(input()); source.save(input('event')); const existing = target.save(input());
-    const backup = source.export(); expect(JSON.parse(backup)).toMatchObject({ format: 'worksuite-local', version: 1 });
+    const backup = source.export(); expect(JSON.parse(backup)).toMatchObject({ format: 'worksuite-local', version: 2 });
     expect(target.restore(backup)).toEqual({ added: 1, skipped: 1 });
     expect(target.read().items.some((item) => item.id === existing.id)).toBe(true);
     expect(target.restore(backup)).toEqual({ added: 0, skipped: 2 });

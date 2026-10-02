@@ -36,7 +36,10 @@ export function Onboarding({ auth }: { auth: AuthState }) {
         </div>
         <Select label="Language" aria-label="Choose your language" className="mb-4 w-full" value={language} options={LANGUAGES.map((l) => ({ value: l.id, label: l.label }))} onValueChange={(value) => void updatePrefs({ language: value }).catch((e) => toast('error', errorMessage(e)))} />
         {language !== 'en' ? <p className="mb-4 text-xs text-ink-3">Some screens still use English.</p> : null}
-        {(auth.stage === 'no-server' || auth.stage === 'signed-out' || auth.stage === 'expired') ? <Button className="mb-4 w-full" variant="secondary" onClick={() => void call('local:open').catch((e) => toast('error', errorMessage(e)))}>Continue Without Signing In</Button> : null}
+        {(auth.stage === 'no-server' || auth.stage === 'signed-out' || auth.stage === 'expired') ? <div className="mb-4">
+          <Button className="w-full" variant="secondary" icon="user" onClick={() => void call('local:open').catch((e) => toast('error', errorMessage(e)))}>Continue as Guest</Button>
+          <p className="mt-1 text-center text-[12px] text-ink-3">Notes, Tasks and Calendar in a Local Profile saved on this device. No account or email needed.</p>
+        </div> : null}
         {guest ? <GuestJoinForm key={destination?.input} initialInput={destination?.input} server={destination?.server ?? auth.server?.origin} onBack={() => setGuest(false)} /> : null}
         {!guest ? <>
         {auth.stage === 'no-server' ? <ServerStep /> : null}
