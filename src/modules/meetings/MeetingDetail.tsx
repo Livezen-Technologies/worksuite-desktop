@@ -13,7 +13,7 @@ import { useNow } from '../calls/parts';
 import { openMeeting } from '../meet/api';
 import { RecordingProgress } from '../meet/RecordingProgress';
 import type { Stroke } from '../meet/session';
-import { openRelatedLabel, providerLabel, RSVP_LABEL, typeLabel, type AgendaItem, type Detail, type Person, type Rsvp } from './api';
+import { openRelatedLabel, providerLabel, RSVP_LABEL, typeLabel, zoneNote, type AgendaItem, type Detail, type Person, type Rsvp } from './api';
 import { Select } from '../../components/Select';
 import { MinutesEditor } from './minutes/MinutesEditor';
 import { TranscriptsTab } from './transcripts/TranscriptsTab';
@@ -91,6 +91,8 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
   const organiser = m.organizer_id === me;
   const canEdit = organiser || d.can.manage || mine?.role === 'host';
   const joinable = m.live_status !== 'cancelled' && m.live_status !== 'completed' && (m.meet_uuid ? canMeet : m.online_url);
+  // Booked on another clock (a tender's meeting, on the buyer's company's): the time there as well (#100).
+  const booked = zoneNote(m.start_at, m.timezone);
   const rsvps = d.participants.reduce<Record<string, number>>((n, p) => ((n[p.rsvp] = (n[p.rsvp] ?? 0) + 1), n), {});
   const btn = 'h-9 rounded-[8px] border border-line bg-surface px-3 font-semibold text-ink hover:bg-subtle';
 
@@ -108,7 +110,8 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
               {m.live_status === 'ongoing' ? <Chip tone="danger">Happening now</Chip> : m.live_status === 'cancelled' ? <Chip>Cancelled</Chip> : m.live_status === 'completed' ? <Chip tone="success">Completed</Chip> : null}
             </div>
             <span className="text-ink-2">
-              {dateLabel(m.start_at)} {timeLabel(m.start_at)}–{timeLabel(m.end_at)} · {m.where || providerLabel(m)} · {organiser ? 'organised by you' : `organised by ${m.organizer ?? 'someone'}`}
+              {dateLabel(m.start_at)} {timeLabel(m.start_at)}–{timeLabel(m.end_at)}
+              {booked ? ` (${booked})` : ''} · {m.where || providerLabel(m)} · {organiser ? 'organised by you' : `organised by ${m.organizer ?? 'someone'}`}
               {m.project ? ` · Project: ${m.project}` : ''}
             </span>
           </div>
