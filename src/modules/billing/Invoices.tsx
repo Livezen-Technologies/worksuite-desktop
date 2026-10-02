@@ -19,10 +19,11 @@ import { Checkbox } from '../../components/Checkbox';
  */
 type Bulk = { action: 'sent' | 'cancel'; ids: number[] };
 
-export default function Invoices({ org, narrow, outstanding, currency, canCreate, canIssue, onOpen, onNew }: {
+export default function Invoices({ org, narrow, salesDate, outstanding, currency, canCreate, canIssue, onOpen, onNew }: {
   org: string;
   /** Where the list starts: a status ('draft', 'overdue'), unpaid, or everything. */
   narrow: string | null;
+  salesDate?: string | null;
   outstanding: number | null;
   currency: string | null;
   canCreate: boolean;
@@ -42,15 +43,17 @@ export default function Invoices({ org, narrow, outstanding, currency, canCreate
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   // The rail's "drafts" and the dashboard's tiles land here narrowed; a new narrowing replaces the filters.
-  const [seen, setSeen] = useState(narrow);
-  if (seen !== narrow) {
-    setSeen(narrow);
+  const scope = `${org}:${narrow ?? ''}:${salesDate ?? ''}`;
+  const [seen, setSeen] = useState(scope);
+  if (seen !== scope) {
+    setSeen(scope);
     setStatus(narrow && narrow !== 'unpaid' ? narrow : '');
     setUnpaid(narrow === 'unpaid');
     setPage(1);
+    setChosen([]);
   }
-  const f: ListFilters = { q, status, unpaid, sort, dir, page };
-  const list = useQuery({ queryKey: K.invoices(org, f), queryFn: ({ signal }) => fetchInvoices(org, f, signal), placeholderData: keepPreviousData });
+  const f: ListFilters = { q, status, unpaid, sort, dir, page, salesDate };
+  const list = useQuery({ queryKey: K.invoices(org, f), queryFn: ({ signal }) => fetchInvoices(org, f, signal), placeholderData: salesDate ? undefined : keepPreviousData });
   const rows = list.data?.invoices ?? [];
   const pages = Math.max(1, Math.ceil((list.data?.total ?? 0) / PER_PAGE));
   const reset = (fn: () => void) => {
@@ -84,8 +87,9 @@ export default function Invoices({ org, narrow, outstanding, currency, canCreate
 
   return (
     <div className="flex flex-col gap-3">
+      {salesDate ? <p role="status" className="px-4 py-2 text-[12px] text-ink-2">Supporting gross sales invoices dated {salesDate}. Drafts, cancellations, proformas, credit/debit notes and records without a company are excluded.</p> : null}
       <PageHead title="Invoices">
-        {outstanding !== null ? (
+        {!salesDate && outstanding !== null ? (
           <span className="mr-1.5 flex flex-col items-end">
             <span className="text-[11.5px] text-ink-3">Outstanding</span>
             <b className="text-ink tabular-nums">{money(outstanding, currency)}</b>

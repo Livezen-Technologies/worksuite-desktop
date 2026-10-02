@@ -1,3 +1,5 @@
+import { isTodaySales } from './intent';
+import { todaySales, type SalesAccess } from './sales';
 import { askLocal } from '../../core/local-ai';
 import { createStore, type Store } from '../../core/store';
 import { ask, assistantProblem, pickFile, type AskTurn, type Surface } from './assistant';
@@ -69,6 +71,10 @@ export interface SendOptions {
   moduleAccess?: { read: string[]; write: string[] };
   /** Said to the model before the question: the guide being followed, that instructions are wanted, the language. */
   context?: string;
+  /** Reporting reads use the same authorized server query for both engines. */
+  sales?: SalesAccess;
+  /** The latest request, separate from guide/selection context, also retained for retries. */
+  request?: string;
 }
 
 const LOCAL_SYSTEM = 'You are WorkSuite\'s assistant, running on this computer. Answer clearly and briefly. You cannot see the person\'s WorkSuite data or change anything right now (WorkSuite\'s module functions need a connection, and the modules turned on in Settings › AI Assistant › Module Access); say so when a question needs it.';
@@ -177,6 +183,11 @@ export function createAskSession(): AskSession {
     const retry = { full, opts };
     store.set({ busy: true });
     try {
+      if (isTodaySales(opts.request ?? full)) {
+        const report = await todaySales(opts.sales);
+        answered({ role: 'assistant', text: report.text, turn: { conversation_id: null, ok: true, reply: report.text, error: null, sources: report.sources, tool_runs: [] } });
+        return;
+      }
       // Files and the tab beside it are read by WorkSuite AI; the model on this computer cannot see them.
       const needsServer = opts.refs.length > 0;
       let why: string;
@@ -223,7 +234,7 @@ export function createAskSession(): AskSession {
     const asked = selection && selection.trim() && s.entries.length === 0 ? `${q}\n\nThe text I selected:\n"""\n${selection.trim().slice(0, 6000)}\n"""` : q;
     const full = opts.context ? `${opts.context}\n\nQuestion: ${asked}` : asked;
     store.set({ text: question === undefined ? '' : s.text, entries: [...s.entries, { role: 'user', text: q }] });
-    await run(full, opts, s.entries);
+    await run(full, { ...opts, request: q }, s.entries);
   };
 
   // The guide's own text is the entry's text: what a follow-up question is answered from, here or online.

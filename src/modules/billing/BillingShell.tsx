@@ -50,7 +50,13 @@ export default function BillingShell(_props: ModuleProps) {
   const { query, path, go, navigate } = useTab();
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
   const has = (p: string) => (p.startsWith('billing.') ? can(perms, p) : !!perms && (perms.includes('*') || perms.includes(p)));
-  const [org, setOrg] = useState(savedOrg);
+  const requestedOrg = query.get('org');
+  const [org, setOrg] = useState(() => requestedOrg ?? savedOrg());
+  const [seenOrg, setSeenOrg] = useState(requestedOrg);
+  if (seenOrg !== requestedOrg) {
+    setSeenOrg(requestedOrg);
+    if (requestedOrg !== null) setOrg(requestedOrg);
+  }
   const fromPath = path[path.length - 2] === 'invoices' ? num(path[path.length - 1]) : null;
   const invoice = num(query.get('invoice')) ?? fromPath;
   const creating = query.get('new') === '1';
@@ -69,6 +75,9 @@ export default function BillingShell(_props: ModuleProps) {
   const counts = { overdue: k?.overdue_count ?? 0, unallocated: k?.unallocated_count ?? 0, drafts: k?.draft_count ?? 0 };
   const chooseOrg = (v: string) => {
     setOrg(v);
+    if (requestedOrg !== null) {
+      const next = new URLSearchParams(query); next.set('org', v); go(`/billing?${next.toString()}`);
+    }
     try {
       localStorage.setItem(ORG_KEY, v);
     } catch {
@@ -143,7 +152,7 @@ export default function BillingShell(_props: ModuleProps) {
                     onCredit={has('billing.credit') ? () => go(`/billing?tab=cn&new=1&against=${invoice}`) : undefined}
                   />
                 ) : (
-                  <Invoices org={org} narrow={narrow} outstanding={k?.outstanding ?? null} currency={dash.data?.base_currency ?? null} canCreate={canCreate} canIssue={has('billing.issue')} onOpen={openInvoice} onNew={() => go(`${here}&new=1`)} />
+                  <Invoices org={org} narrow={narrow} salesDate={query.get('sales_date')} outstanding={k?.outstanding ?? null} currency={dash.data?.base_currency ?? null} canCreate={canCreate} canIssue={has('billing.issue')} onOpen={openInvoice} onNew={() => go(`${here}&new=1`)} />
                 )}
               </div>
             </div>

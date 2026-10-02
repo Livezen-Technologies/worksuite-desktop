@@ -37,7 +37,7 @@ export interface Guide {
  * Questions that ask how to do something or where it is — instructions. Not every question: "What is 2+2?" or
  * "Why was the order late?" are for the assistant, not a guide.
  */
-const HOW = /^\s*how\b|\bhow (do|can|should|would|to|does one)\b|\bwhere (is|are|do|can)\b|\b(steps?|instructions?|walk ?through|tutorial|guide) (to|for|on)\b|\bshow me how\b|\bis (it|there a way)( possible)? to\b|^\s*(can|could) i\b/i;
+const HOW = /^\s*how\b|\bhow (do|can|should|would|to|does one)\b|\bwhere (is|are|do|can)\b|\b(steps?|instructions?|walk ?through|tutorial|guide) (to|for|on)\b|\bshow me how\b|\bis (it|there a way)( possible)? to\b|^\s*(can|could) i (create|make|send|add|schedule|book|share|delete|remove|update|change|set|assign|use|find)\b/i;
 /** A request to do it now: an imperative with a concrete object, without asking how. */
 const DO = /^\s*(please\s+)?(create|make|send|add|schedule|book|share|delete|remove|update|change|set|assign|approve|reject|pay|invoice|email|message|open|close|move|rename|cancel)\b/i;
 
@@ -45,6 +45,8 @@ const DO = /^\s*(please\s+)?(create|make|send|add|schedule|book|share|delete|rem
 export function isHowTo(text: string): boolean {
   const t = text.trim();
   if (!t) return false;
+  if (/^\s*how (much|many)\b/i.test(t)) return false;
+  if (/^\s*(can|could|would|will) you\s+(please\s+)?(create|make|send|add|schedule|book|share|delete|remove|update|change|set|assign|approve|reject|pay|cancel)\b/i.test(t)) return false;
   if (HOW.test(t)) return true;
   if (DO.test(t)) return false;
   return /\?\s*$/.test(t) && /\b(create|make|send|add|share|set up|change|find|use|turn on|turn off)\b/i.test(t);
@@ -68,6 +70,7 @@ export function findGuides(guides: Guide[], question: string, module: string | n
   if (!q.size) return [];
   return guides
     .map((g) => {
+      if (/\b(reports?|totals?|revenue|analytics)\b/i.test(question) && !/\b(reports?|totals?|revenue|analytics)\b/i.test([g.title, ...g.keywords].join(' '))) return { g, score: 0 };
       const title = words(g.title);
       const keys = g.keywords.flatMap(words);
       let score = 0;

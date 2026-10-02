@@ -4,6 +4,11 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.4.0 — 2026-10-02
+
+- Fix #96: separate reporting, how-to guidance and action requests; carry guide instructions only into relevant follow-ups and prioritize the latest topic.
+- Both local AI and online fallback retrieve today’s authorized gross invoiced sales through the same server query, with separate currency totals, company, timezone, reporting basis and supporting invoice links. Denied/offline/unsupported data is an explicit limitation; no guide or invented total is substituted.
+
 ## 1.3.1 — 2026-10-01
 
 - Drafted minutes (worksuite-desktop#80) list the agenda too, and their actions as what | who | when; the instruction forbids inventing decisions, people or dates, and parseAction keeps who and when only as the draft gives them.

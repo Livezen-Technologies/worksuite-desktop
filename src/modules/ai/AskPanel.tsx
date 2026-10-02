@@ -12,6 +12,8 @@ import { LocalSetup } from './LocalSetup';
 import { useAssistant, type PendingAction, type Surface } from './assistant';
 import { createAskSession, type AskEntry, type AskSession } from './session';
 import { effective, personalOff, toolAllowed, useLocalTools, useOrgAccess } from './tools';
+import { guideFollowUp, intentContext } from './intent';
+import { salesAccess } from './sales';
 import { Checkbox } from '../../components/Checkbox';
 import { GUIDES } from './help/catalog';
 import { findGuides, guideText, isHowTo, moduleOf, suggestions, type Guide } from './help/guides';
@@ -119,7 +121,7 @@ export function AskPanel({
   const [helpOpen, setHelpOpen] = useState(false);
   const [support, setSupport] = useState<{ kind: SupportKind; question?: string } | null>(null);
   const languageNote = language !== 'en' ? ` Answer in ${(LANGUAGES.find((l) => l.id === language)?.label ?? language).replace(/^.*\((.*)\)$/, '$1')}.` : '';
-  const base = () => ({ surface, refs, local, online, onlineWhy, selection, localTools, moduleAccess: personalOff(accessPrefs, 'worksuite') });
+  const base = () => ({ surface, refs, local, online, onlineWhy, selection, localTools, moduleAccess: personalOff(accessPrefs, 'worksuite'), sales: salesAccess(local ? 'local' : 'worksuite', org.data, accessPrefs, !offline) });
   const openGuide = (g: Guide, question: string | null = null) => {
     toEnd();
     setHelpOpen(false);
@@ -142,13 +144,15 @@ export function AskPanel({
       return Promise.resolve();
     }
     // A follow-up while a guide is open: answered from that guide, by the model here first.
-    const lastGuide = guideById([...entries].reverse().find((e) => e.role === 'assistant' && !e.error)?.guide);
+    const recent = entries.at(-1);
+    const candidate = recent?.role === 'assistant' ? guideById(recent.guide) : null;
+    const lastGuide = guideFollowUp(q, candidate) ? candidate : null;
     const context = lastGuide
       ? `The person is following this WorkSuite guide and asks a follow-up question. Answer from the guide, use the names on screen exactly as written in “ ”, and say so if the guide does not cover it. Do not do anything for them.${languageNote}\n${guideText(lastGuide)}`
       : languageNote
         ? languageNote.trim()
         : undefined;
-    return session.send({ ...base(), context });
+    return session.send({ ...base(), context: [intentContext(q), context].filter(Boolean).join('\n') });
   };
   /** No guide covers it: the assistant explains in general terms, and is told this is not a request to act. */
   const askAnyway = (question: string) =>

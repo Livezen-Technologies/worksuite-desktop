@@ -147,6 +147,7 @@ export interface InvoiceDetail extends Invoice {
 }
 
 export interface ListFilters {
+  salesDate?: string | null;
   q?: string;
   status?: string;
   unpaid?: boolean;
@@ -167,7 +168,7 @@ export const PER_PAGE = 50;
 export const fetchInvoices = (org: string, f: ListFilters, signal?: AbortSignal) =>
   apiGet<InvoiceList>(
     '/api/billing/invoices',
-    withOrg(org, { q: f.q?.trim() || undefined, status: f.status || undefined, unpaid: f.unpaid ? 1 : undefined, sort: f.sort || undefined, dir: f.dir, page: f.page ?? 1, per_page: PER_PAGE }),
+    withOrg(org, { sales_date: f.salesDate || undefined, q: f.q?.trim() || undefined, status: f.status || undefined, unpaid: f.unpaid ? 1 : undefined, sort: f.sort || undefined, dir: f.dir, page: f.page ?? 1, per_page: PER_PAGE }),
     signal,
   );
 export const fetchInvoice = (id: number, signal?: AbortSignal) => apiGet<{ invoice: InvoiceDetail; editable: boolean }>(`/api/billing/invoices/${id}`, undefined, signal);

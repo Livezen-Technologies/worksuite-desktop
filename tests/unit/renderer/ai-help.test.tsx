@@ -148,6 +148,23 @@ describe('Help & Guide in the assistant', () => {
     expect(await screen.findByRole('dialog', { name: 'Contact Support' })).toBeTruthy();
   });
 
+  it('routes sales totals after an order guide to authorized data, and keeps later actions out of guide context', async () => {
+    app.set({ organizationId: '7' });
+    vi.mocked(apiPost).mockResolvedValue({ company: { id: 7, name: 'Acme' }, date: '2026-10-02', timezone: 'Asia/Colombo', basis: 'Gross issued invoices by invoice date.', totals: [{ currency: 'USD', total: '50.00', count: 1 }], records_url: '/billing?tab=inv&org=7&sales_date=2026-10-02' } as never);
+    mount(); ask('How do I create an order?');
+    await screen.findByRole('region', { name: 'Guide: Create a sales order' });
+    ask('Can I know today’s total sales?');
+    expect(await screen.findByText(/USD 50.00/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Supporting sales invoices/ })).toBeTruthy();
+    expect(askLocal).not.toHaveBeenCalled();
+    expect(screen.getAllByRole('region', { name: 'Guide: Create a sales order' })).toHaveLength(1);
+    local.answers.push('Please provide the customer and order items.');
+    ask('Create a sales order.');
+    await screen.findByText('Please provide the customer and order items.');
+    const sent = (local.asked[0] as Array<{ content: string }>).at(-1)!.content;
+    expect(sent).toContain('Current intent: action'); expect(sent).not.toContain('following this WorkSuite guide');
+  });
+
   it('records Was this helpful?', async () => {
     vi.mocked(apiPost).mockResolvedValue({} as never);
     mount();
