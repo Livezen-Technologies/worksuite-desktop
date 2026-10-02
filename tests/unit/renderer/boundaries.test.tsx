@@ -49,6 +49,7 @@ const { AppBoundary, LockBoundary } = await import('../../../src/app/Boundaries'
 const signedIn = () =>
   app.set({
     ready: true,
+    prefs: { ai: { display: 'drawer' } } as never,
     apps: visibleApps({ apps: '*', permissions: ['*'] }),
     bootstrap: { permissions: ['*'], apps: ['*'], user: { id: '5', name: 'Hasarinda' } } as never,
     auth: { stage: 'ready', user: { id: '5', name: 'Hasarinda' } } as never,
