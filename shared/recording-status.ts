@@ -10,7 +10,7 @@ import type { LocalRecording, Transfer } from './types';
  * apart from it being ready to play: one is about the copy on this computer, the other about the recording.
  */
 
-export type RecordingPhase = 'recording' | 'finalizing' | 'queued' | 'processing' | 'uploading' | 'ready' | 'paused' | 'failed';
+export type RecordingPhase = 'starting' | 'stopping' | 'recording' | 'finalizing' | 'queued' | 'processing' | 'uploading' | 'ready' | 'paused' | 'failed';
 export type RecordingAction = 'retry' | 'pause' | 'resume' | 'cancel' | 'play' | 'openInDrive' | 'reveal';
 export type DownloadAction = 'pause' | 'resume' | 'cancel' | 'retry' | 'open' | 'reveal';
 
@@ -48,6 +48,8 @@ export interface DownloadStatus {
 }
 
 export const PHASE_LABEL: Record<RecordingPhase, string> = {
+  starting: 'Starting Recording…',
+  stopping: 'Stopping Recording…',
   recording: 'Recording',
   finalizing: 'Finalizing',
   queued: 'Queued',
@@ -130,6 +132,7 @@ export function localRecordingStatus(r: LocalRecording, t: Transfer | null | und
   const base = { savedLocally: local, savedToDrive: !!r.driveFileId, playable: false, stalled: false, note: null as string | null, progress: null as MeasuredProgress | null };
   const out = (phase: RecordingPhase, tone: RecordingStatus['tone'], actions: RecordingAction[], patch: Partial<RecordingStatus> = {}): RecordingStatus => ({ ...base, phase, label: PHASE_LABEL[phase], tone, actions, ...patch });
 
+  if (r.state === 'starting') return out('starting', 'progress', [], { progress: { percent: null, done: null, total: null, etaSeconds: null } });
   if (r.state === 'recording') return out('recording', 'progress', [], { progress: { percent: null, done: r.bytes, total: null, etaSeconds: null } });
 
   if (r.state === 'processing') {
@@ -196,6 +199,9 @@ export function serverRecordingStatus(r: ServerRecordingLike): RecordingStatus {
   });
 
   switch (status) {
+    case 'starting':
+    case 'stopping':
+      return out(status, 'progress', [], { progress: moving });
     case 'recording':
       return out('recording', 'progress', [], { progress: moving });
     case 'processing':

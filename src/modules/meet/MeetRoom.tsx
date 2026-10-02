@@ -1,3 +1,4 @@
+import { RecordingFeedback } from './RecordingFeedback';
 import { GuestChat } from './GuestChat';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState, useSyncExternalStore } from 'react';
@@ -159,8 +160,8 @@ export function MeetRoom() {
     ...(meet.mayRecord || (meet.mayStopRecording && rec && (rec.mine || meet.rec?.cloud || room.isRecording))
       ? [
           rec && (rec.mine || meet.rec?.cloud || room.isRecording)
-            ? { label: 'Stop recording', hint: rec.mine ? 'It is finished and uploaded to your Drive after' : undefined, icon: 'stop', danger: true, onClick: () => void meet.stopRecording() }
-            : { label: 'Record the meeting', hint: recordHint, icon: 'film', onClick: () => void meet.startRecording() },
+            ? { label: meet.recordingCommand === 'stopping' ? 'Stopping Recording…' : 'Stop Recording', disabled: meet.recordingCommand === 'starting' || meet.recordingCommand === 'stopping', hint: rec.mine ? 'It is finished and uploaded to your Drive after' : undefined, icon: 'stop', danger: true, onClick: () => void meet.stopRecording() }
+            : { label: meet.recordingCommand === 'starting' ? 'Starting Recording…' : 'Record the meeting', disabled: meet.recordingCommand === 'starting' || meet.recordingCommand === 'stopping', hint: recordHint, icon: 'film', onClick: () => void meet.startRecording() },
           { label: 'Recording settings…', icon: 'settings', onClick: () => setRecSettings(true) },
         ]
       : []),
@@ -228,17 +229,9 @@ export function MeetRoom() {
         clock={clock}
         badges={
           <>
-            {rec ? (
-              <span
-                role="status"
-                title={rec.mine ? (rec.local ? 'You are recording this meeting on this computer' : 'You are recording this meeting') : rec.who.length ? `Recorded by ${rec.who.join(', ')}` : 'This meeting is being recorded'}
-                className="flex items-center gap-1.5 rounded-full bg-[#3A1A14] px-2 py-0.5 text-[11.5px] font-bold text-[#FFB4A2]"
-              >
-                <span className="h-2 w-2 animate-pulse rounded-full bg-[#E0522F]" />
-                Recording{rec.since ? ` ${hms(now - rec.since)}` : ''}
-                {rec.local ? <span className="font-semibold text-[#FFD2C4]">· on {rec.mine ? 'this computer' : 'a computer'}</span> : null}
-              </span>
-            ) : null}
+            <RecordingFeedback active={!!rec} since={rec?.since ?? null} now={now} phase={meet.recordingCommand !== 'idle' ? meet.recordingCommand : meet.rec?.pending?.some((r) => r.phase === 'stopping') ? 'stopping' : meet.rec?.pending?.some((r) => r.phase === 'starting') ? 'starting' : 'idle'} error={meet.recordingError} stopped={meet.recordingStopped}
+              retry={() => void (meet.recordingRetry === 'start' ? meet.startRecording() : meet.stopRecording())}
+              stopPending={meet.rec?.pending?.some((r) => r.phase === 'starting') ? () => void meet.stopRecording() : undefined} />
             {meet.transcribing ? (
               <span role="status" title={meet.transcribing.by ? `Transcribed by ${meet.transcribing.by}` : 'What is said is being transcribed'} className="flex items-center gap-1.5 rounded-full bg-[#1E3A5F] px-2 py-0.5 text-[11.5px] font-bold text-[#BFD7FF]">
                 <span className="h-2 w-2 rounded-full bg-[#5B9BFF]" />

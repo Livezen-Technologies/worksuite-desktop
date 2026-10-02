@@ -447,6 +447,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('meetrec:preflight', () => ctx.meetRecorder.preflight());
   router.handle('meetrec:start', (input) => ctx.meetRecorder.start(input));
   router.handle('meetrec:chunk', (input) => ctx.meetRecorder.chunk(input.id, input.data));
+  router.handle('meetrec:active', (input) => ctx.meetRecorder.active(input.id));
+  router.handle('meetrec:abort', (input) => ctx.meetRecorder.abort(input.id));
   router.handle('meetrec:stop', (input) => ctx.meetRecorder.stop(input.id, input.durationMs));
   router.handle('meetrec:list', () => ctx.meetRecorder.list());
   router.handle('meetrec:retry', (input) => ctx.meetRecorder.retry(input.id));

@@ -24,7 +24,7 @@ export interface ControlButton {
   disabled?: boolean;
 }
 
-export type MenuEntry = { label: string; hint?: string; icon?: string; checked?: boolean; danger?: boolean; onClick: () => void } | { heading: string } | 'sep';
+export type MenuEntry = { label: string; hint?: string; icon?: string; checked?: boolean; danger?: boolean; disabled?: boolean; onClick: () => void } | { heading: string } | 'sep';
 
 export function CoreCallControls({
   buttons,
@@ -143,8 +143,9 @@ function Menu({ entries, onDone, right }: { entries: MenuEntry[]; onDone: () => 
             type="button"
             role={e.checked !== undefined ? 'menuitemcheckbox' : 'menuitem'}
             aria-checked={e.checked}
+            disabled={e.disabled}
             onClick={() => (onDone(), e.onClick())}
-            className={cx('flex min-h-8 w-full items-center gap-2.5 rounded-[8px] px-2.5 py-1.5 text-left hover:bg-white/10', e.danger && 'text-[#FFB4A2]')}
+            className={cx('flex min-h-8 w-full items-center gap-2.5 rounded-[8px] px-2.5 py-1.5 text-left hover:bg-white/10 disabled:opacity-40 disabled:cursor-wait', e.danger && 'text-[#FFB4A2]')}
           >
             {e.icon ? <Icon name={e.icon} size={15} className="shrink-0 text-[#AFC0E8]" /> : null}
             <span className="min-w-0 flex-1">

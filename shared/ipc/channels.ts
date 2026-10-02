@@ -98,6 +98,8 @@ export const INVOKE_CHANNELS = [
   'calls:focus',
   'meetrec:preflight',
   'meetrec:start',
+  'meetrec:active',
+  'meetrec:abort',
   'meetrec:chunk',
   'meetrec:stop',
   'meetrec:list',

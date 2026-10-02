@@ -73,6 +73,7 @@ export class LocalRecorder {
   private videos = new Map<string, HTMLVideoElement>();
   private rec: MediaRecorder | null = null;
   private timers: Array<ReturnType<typeof setInterval>> = [];
+  private cancelled = false;
   private writing: Promise<unknown> = Promise.resolve();
 
   constructor(
@@ -91,6 +92,7 @@ export class LocalRecorder {
     if (!pre.ok) throw new Error(pre.why ?? 'A recording cannot start now.');
     const { id } = await call('meetrec:start', { meeting, title, layout: this.opts.layout, mime });
     this.id = id;
+    if (this.cancelled) { await call('meetrec:abort', { id }); throw new Error('Recording startup was cancelled.'); }
 
     const [w, h] = this.opts.quality === '1080p' ? [1920, 1080] : [1280, 720];
     const canvas = document.createElement('canvas');
@@ -98,7 +100,13 @@ export class LocalRecorder {
     canvas.height = h;
     this.canvas = canvas;
     this.audio = new AudioContext();
+    await this.audio.resume();
     this.dest = this.audio.createMediaStreamDestination();
+    // Keep audio frames flowing even when every participant is muted.
+    const silence = this.audio.createOscillator();
+    const muted = this.audio.createGain();
+    muted.gain.value = 0;
+    silence.connect(muted); muted.connect(this.dest); silence.start();
     this.syncAudio();
     this.draw();
     this.timers.push(setInterval(() => this.draw(), 1000 / 30), setInterval(() => this.syncAudio(), 500));
@@ -116,8 +124,24 @@ export class LocalRecorder {
         });
     };
     this.rec = rec;
-    rec.start(2_000);
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('The recorder did not start. Check microphone permissions and retry.')), 10_000);
+      rec.onstart = () => { clearTimeout(timer); resolve(); };
+      rec.onerror = () => { clearTimeout(timer); reject(new Error('The recorder could not capture this meeting. Check permissions and retry.')); };
+      rec.start(2_000);
+    });
+    if (this.cancelled) { await this.abort(); throw new Error('Recording startup was cancelled.'); }
     this.startedAt = Date.now();
+    await call('meetrec:active', { id });
+    rec.onerror = () => { this.error = 'Recording capture failed. Check device permissions and retry.'; this.opts.onError(this.error); void this.abort(); };
+  }
+
+  async abort(): Promise<void> {
+    this.cancelled = true;
+    const id = this.id;
+    if (this.rec && this.rec.state !== 'inactive') this.rec.stop();
+    this.cleanup();
+    if (id) await call('meetrec:abort', { id }).catch(() => undefined);
   }
 
   /** Stop, hand the last piece over, and let the main process finish and upload it. */
@@ -132,7 +156,7 @@ export class LocalRecorder {
       });
     }
     await this.writing.catch(() => undefined);
-    await call('meetrec:stop', { id, durationMs: Date.now() - this.startedAt }).catch(() => undefined);
+    await call('meetrec:stop', { id, durationMs: Date.now() - this.startedAt });
     this.cleanup();
   }
 
@@ -145,6 +169,8 @@ export class LocalRecorder {
     this.videos.clear();
     void this.audio?.close().catch(() => undefined);
     this.audio = null;
+    this.rec?.stream.getTracks().forEach((track) => track.stop());
+    this.canvas = null;
     this.rec = null;
     this.id = null;
   }

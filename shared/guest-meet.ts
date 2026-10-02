@@ -11,6 +11,7 @@ export interface GuestMeetInfo {
   guests: boolean;
   sfu_url: string;
   chat: 'everyone' | 'hosts' | 'off';
+  recording?: { active: boolean; since: string | null };
 }
 export interface GuestMeetToken { url: string; token: string; identity: string; door: 'waiting_room' | 'no_host' | null }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

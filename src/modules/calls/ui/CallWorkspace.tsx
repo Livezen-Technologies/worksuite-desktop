@@ -403,7 +403,7 @@ function Strip({ tiles, collapsed, top }: { tiles: CallPerson[]; collapsed: bool
  * the few controls a person reaches for without going back: mute, camera,
  * chat, back to the call, hang up.
  */
-function FloatingCard({ title, clock, buttons, end, star, self, remoteScreen, board, onReturn, onChat }: WorkspaceProps & { star: CallPerson | null; self: CallPerson | null; remoteScreen: CallPerson | null; onReturn: () => void; onChat: () => void }) {
+function FloatingCard({ title, clock, badges, buttons, end, star, self, remoteScreen, board, onReturn, onChat }: WorkspaceProps & { star: CallPerson | null; self: CallPerson | null; remoteScreen: CallPerson | null; onReturn: () => void; onChat: () => void }) {
   const mic = buttons.find((b) => b.id === 'mic');
   const cam = buttons.find((b) => b.id === 'camera');
   const who = star && !star.self ? star : self;
@@ -415,6 +415,7 @@ function FloatingCard({ title, clock, buttons, end, star, self, remoteScreen, bo
         <b className="min-w-0 truncate text-[12.5px]">{title}</b>
         {clock ? <span className="font-mono text-[11.5px] text-[#AFC0E8]">{clock}</span> : null}
       </div>
+      {badges ? <div className="shrink-0 px-2 pb-1">{badges}</div> : null}
       <button type="button" onClick={onReturn} title="Back to the call" className="no-drag relative min-h-0 flex-1 overflow-hidden bg-[#16254F]">
         {board ? (
           <span className="flex h-full items-center justify-center gap-2 text-[#C9D3EE]">

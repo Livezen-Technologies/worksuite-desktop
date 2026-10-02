@@ -143,7 +143,7 @@ export class MeetRecorder {
   pending(): { recording: number; working: number } {
     this.load();
     return {
-      recording: this.entries.filter((e) => e.state === 'recording').length,
+      recording: this.entries.filter((e) => ['starting', 'recording'].includes(e.state)).length,
       working: this.entries.filter((e) => e.state === 'processing' || e.state === 'uploading').length,
     };
   }
@@ -167,7 +167,7 @@ export class MeetRecorder {
   }
 
   /** Tell the server a step; it keeps the meeting's list and tells the others. Never stops the recording. */
-  private async tell(e: Entry, action: 'start' | 'stop' | 'uploading' | 'ready' | 'failed', extra: Record<string, unknown> = {}): Promise<unknown> {
+  private async tell(e: Entry, action: 'prepare' | 'active' | 'start' | 'stop' | 'uploading' | 'ready' | 'failed', extra: Record<string, unknown> = {}): Promise<unknown> {
     return this.deps.http.post(`/api/meet/${e.meeting}/recordings/local`, { client_id: e.id, action, ...extra });
   }
 
@@ -200,7 +200,7 @@ export class MeetRecorder {
       id: randomUUID(),
       meeting: input.meeting,
       title: input.title.slice(0, 190) || 'Meeting',
-      state: 'recording',
+      state: 'starting',
       error: null,
       failedAt: null,
       bytes: 0,
@@ -218,21 +218,36 @@ export class MeetRecorder {
     };
     // The server decides who may record, and tells everybody in the meeting; nothing is written before it agrees.
     try {
-      await this.tell(e, 'start', { title: e.title, layout: input.layout });
+      await this.tell(e, 'prepare', { title: e.title, layout: input.layout });
     } catch (err) {
       throw isDesktopError(err) ? err : new DesktopError('SERVER_ERROR', 'WorkSuite could not start the recording.');
     }
-    await writeFile(e.path, Buffer.alloc(0), { flag: 'wx', mode: 0o600 });
+    try { await writeFile(e.path, Buffer.alloc(0), { flag: 'wx', mode: 0o600 }); }
+    catch (error) { await this.tell(e, 'failed', { error: 'The recording file could not be created. Check disk access and free space.' }).catch(() => undefined); throw error; }
     this.entries.unshift(e);
     this.save();
     log.info('local recording started', { id: e.id });
     return { id: e.id };
   }
 
+  async active(id: string): Promise<void> {
+    const e = this.entry(id);
+    if (e.state !== 'starting') return;
+    await this.tell(e, 'active');
+    this.set(e, { state: 'recording', startedAt: new Date().toISOString() });
+  }
+
+  async abort(id: string): Promise<void> {
+    const e = this.entry(id);
+    if (e.state !== 'starting' && !['starting', 'recording'].includes(e.state)) return;
+    this.fail(e, 'recording', 'Recording startup failed or was cancelled. Check permissions and retry.');
+    await this.tell(e, 'failed', { error: e.error });
+  }
+
   /** A piece of the recording, written at once. */
   chunk(id: string, data: Uint8Array): Promise<void> {
     const e = this.entry(id);
-    if (e.state !== 'recording') throw new DesktopError('IPC_VALIDATION_FAILED', 'That recording has stopped.');
+    if (!['starting', 'recording'].includes(e.state)) throw new DesktopError('IPC_VALIDATION_FAILED', 'That recording has stopped.');
     if (data.byteLength > MAX_CHUNK) throw new DesktopError('IPC_VALIDATION_FAILED', 'That piece is too large.');
     const prev = this.writes.get(id) ?? Promise.resolve();
     const next = prev.then(async () => {
@@ -251,12 +266,15 @@ export class MeetRecorder {
 
   async stop(id: string, durationMs: number): Promise<void> {
     const e = this.entry(id);
-    if (e.state !== 'recording') return;
+    if (!['starting', 'recording'].includes(e.state)) {
+      if (e.endedAt) await this.tell(e, 'stop', { duration: Math.round((e.durationMs ?? 0) / 1000) });
+      return;
+    }
     await this.writes.get(id)?.catch(() => undefined);
     this.writes.delete(id);
     this.set(e, { state: 'processing', endedAt: new Date().toISOString(), durationMs: Math.max(0, Math.round(durationMs)) || null });
-    void this.tell(e, 'stop', { duration: Math.round((e.durationMs ?? 0) / 1000) }).catch(() => undefined);
-    void this.process(e);
+    try { await this.tell(e, 'stop', { duration: Math.round((e.durationMs ?? 0) / 1000) }); }
+    finally { void this.process(e); }
   }
 
   // ── after: processing, uploading, checking ──────────────────────────────
@@ -373,7 +391,7 @@ export class MeetRecorder {
   /** Delete the local copy (and the entry): never while recording, never before Drive has it unless asked. */
   async discard(id: string): Promise<void> {
     const e = this.entry(id);
-    if (e.state === 'recording' || e.state === 'uploading' || e.state === 'processing') throw new DesktopError('IPC_VALIDATION_FAILED', 'Wait until it has finished, or stop the upload first.');
+    if (['starting', 'recording'].includes(e.state) || e.state === 'uploading' || e.state === 'processing') throw new DesktopError('IPC_VALIDATION_FAILED', 'Wait until it has finished, or stop the upload first.');
     await this.removeLocal(e);
     this.entries = this.entries.filter((x) => x.id !== id);
     this.save();
@@ -387,7 +405,7 @@ export class MeetRecorder {
   /** Play the copy on this computer in the system's player — only once it is a whole file, never one being written. */
   async openLocal(id: string): Promise<boolean> {
     const e = this.entry(id);
-    if (!e.fileName || e.state === 'recording' || e.path.endsWith('.part')) throw new DesktopError('NOT_FOUND', 'There is no finished copy of this recording on this computer.');
+    if (!e.fileName || ['starting', 'recording'].includes(e.state) || e.path.endsWith('.part')) throw new DesktopError('NOT_FOUND', 'There is no finished copy of this recording on this computer.');
     const failed = await (this.deps.openPath ?? ((p: string) => shell.openPath(p)))(e.path);
     if (failed) throw new DesktopError('NOT_FOUND', 'The recording could not be opened. It may have been moved or deleted.');
     return true;
@@ -407,7 +425,7 @@ export class MeetRecorder {
     this.load();
     for (const e of this.entries) {
       try {
-        if (e.state === 'recording') {
+        if (['starting', 'recording'].includes(e.state)) {
           this.set(e, { recovered: true, endedAt: e.endedAt ?? new Date().toISOString(), durationMs: e.durationMs ?? Math.max(0, Date.now() - Date.parse(e.startedAt)) });
           void this.tell(e, 'stop').catch(() => undefined);
           void this.process(e);

@@ -162,6 +162,8 @@ const api = {
   meetrec: {
     preflight: call('meetrec:preflight'),
     start: call('meetrec:start'),
+    active: call('meetrec:active'),
+    abort: call('meetrec:abort'),
     chunk: call('meetrec:chunk'),
     stop: call('meetrec:stop'),
     list: call('meetrec:list'),

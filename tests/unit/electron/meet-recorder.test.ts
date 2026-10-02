@@ -118,8 +118,10 @@ describe('recording a meeting on this computer', () => {
   it('writes as it goes, then finishes, uploads to Drive, checks it, and deletes the local copy as chosen', async () => {
     const rec = make();
     const { id } = await rec.start({ meeting: 'm-uuid-123', title: 'Board', layout: 'grid', mime: 'video/mp4' });
-    expect(http.post).toHaveBeenCalledWith('/api/meet/m-uuid-123/recordings/local', expect.objectContaining({ client_id: id, action: 'start' }));
+    expect(http.post).toHaveBeenCalledWith('/api/meet/m-uuid-123/recordings/local', expect.objectContaining({ client_id: id, action: 'prepare' }));
+    await rec.active(id);
     await rec.chunk(id, new Uint8Array(MP4.subarray(0, 30)));
+    await rec.active(id);
     await rec.chunk(id, new Uint8Array(MP4.subarray(30)));
     const part = rec.list()[0]!;
     expect(part.state).toBe('recording');
@@ -147,6 +149,7 @@ describe('recording a meeting on this computer', () => {
     http.post.mockImplementation(async (path: string, body?: { action?: string }) => (path.endsWith('/folder') ? { id: 44 } : body?.action === 'ready' ? { size: 999 } : {}));
     const rec = make();
     const { id } = await rec.start({ meeting: 'm-uuid-123', title: 'Board', layout: 'grid', mime: 'video/mp4' });
+    await rec.active(id);
     await rec.chunk(id, new Uint8Array(MP4));
     await rec.stop(id, 1000);
     await vi.waitFor(() => expect(uploaded.size).toBe(1));
@@ -167,6 +170,7 @@ describe('recording a meeting on this computer', () => {
   it('a failed upload is tried again as the same upload, never a second file', async () => {
     const rec = make();
     const { id } = await rec.start({ meeting: 'm-uuid-123', title: 'Board', layout: 'grid', mime: 'video/mp4' });
+    await rec.active(id);
     await rec.chunk(id, new Uint8Array(MP4));
     await rec.stop(id, 1000);
     await vi.waitFor(() => expect(uploaded.size).toBe(1));
@@ -184,6 +188,7 @@ describe('recording a meeting on this computer', () => {
     const { id } = await rec.start({ meeting: 'm-uuid-123', title: 'Board', layout: 'grid', mime: 'video/mp4' });
     // The fragment being written when WorkSuite closed is cut short: the whole ones before it still play.
     const cut = Buffer.concat([MP4, box('moof', 'ffff').subarray(0, 6)]);
+    await rec.active(id);
     await rec.chunk(id, new Uint8Array(cut));
     // WorkSuite closes without stopping; it opens again.
     const after = make();
@@ -200,6 +205,7 @@ describe('recording a meeting on this computer', () => {
     prefs.keepLocal = '7';
     const rec = make();
     const { id } = await rec.start({ meeting: 'm-uuid-123', title: 'Board', layout: 'grid', mime: 'video/mp4' });
+    await rec.active(id);
     await rec.chunk(id, new Uint8Array(MP4));
     await rec.stop(id, 1000);
     await vi.waitFor(() => expect(uploaded.size).toBe(1));
@@ -222,6 +228,7 @@ describe('recording a meeting on this computer', () => {
   it('never uploads a file that is not a whole video: it fails, says why, keeps the file and tells the person', async () => {
     const rec = make();
     const { id } = await rec.start({ meeting: 'm-uuid-123', title: 'Board', layout: 'grid', mime: 'video/mp4' });
+    await rec.active(id);
     await rec.chunk(id, new Uint8Array([1, 2, 3, 4, 5]));
     await rec.stop(id, 1000);
     await vi.waitFor(() => expect(rec.list()[0]!.state).toBe('failed'));
@@ -236,6 +243,7 @@ describe('recording a meeting on this computer', () => {
   it('a cancelled upload keeps the recording on this computer, quietly, and Try again uploads it anew', async () => {
     const rec = make();
     const { id } = await rec.start({ meeting: 'm-uuid-123', title: 'Board', layout: 'grid', mime: 'video/mp4' });
+    await rec.active(id);
     await rec.chunk(id, new Uint8Array(MP4));
     await rec.stop(id, 1000);
     await vi.waitFor(() => expect(uploaded.size).toBe(1));
@@ -255,6 +263,7 @@ describe('recording a meeting on this computer', () => {
     const { id } = await rec.start({ meeting: 'm-uuid-123', title: 'Board', layout: 'grid', mime: 'video/mp4' });
     expect(rec.list()[0]!.stepAt).toBeTruthy();
     await expect(rec.openLocal(id)).rejects.toThrow(/no finished copy/);
+    await rec.active(id);
     await rec.chunk(id, new Uint8Array(MP4));
     const before = rec.list()[0]!.stepAt!;
     await new Promise((r) => setTimeout(r, 5));

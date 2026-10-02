@@ -1,3 +1,5 @@
+import { RecordingFeedback } from './RecordingFeedback';
+import { announceRecording } from './recording-notice';
 import { useEffect, useRef, useState } from 'react';
 import { DisconnectReason, Room, RoomEvent, Track, type Participant, type Track as MediaTrack } from 'livekit-client';
 import type { GuestMeetInfo } from '@shared/guest-meet';
@@ -16,6 +18,9 @@ export function GuestMeeting() {
   const [error, setError] = useState('');
   const [farewell, setFarewell] = useState('You left the meeting.');
   const [room, setRoom] = useState<Room | null>(null);
+  const [capture, setCapture] = useState<{ active: boolean; since: number | null }>({ active: false, since: null });
+  const [captureNow, setCaptureNow] = useState(() => Date.now());
+  const lastCapture = useRef(false);
   const connection = useRef<Room | null>(null);
   const mounted = useRef(true);
   const [another, setAnother] = useState(false);
@@ -47,6 +52,7 @@ export function GuestMeeting() {
   }, [room]);
   const join = async () => {
     if (!info || !name.trim() || phase !== 'lobby' || info.locked || !info.guests || info.ended) return;
+    lastCapture.current = false; setCapture({ active: false, since: null });
     setPhase('joining'); setError('');
     let active: Room | null = null;
     try {
@@ -101,6 +107,26 @@ export function GuestMeeting() {
     try { await call('media:screenPick', { id, audio: false }); await room.localParticipant.setScreenShareEnabled(true, { audio: false }); sources[1](null); }
     catch (e) { setError(errorMessage(e)); }
   };
+  useEffect(() => {
+    if (!room || phase !== 'in') return;
+    let alive = true;
+    const refresh = async () => {
+      try {
+        const next = await call('guest:info');
+        if (!alive) return;
+        const active = next.recording?.active ?? room.isRecording;
+        const at = next.recording?.since;
+        const since = at ? Date.parse(`${at.replace(' ', 'T')}${/Z|[+-]\d\d:?\d\d$/.test(at) ? '' : 'Z'}`) : null;
+        setCapture({ active, since });
+        if (active !== lastCapture.current) { lastCapture.current = active; announceRecording(active); }
+      } catch { /* Reconnection retains the last confirmed capture state. */ }
+    };
+    void refresh();
+    const timer = setInterval(() => { setCaptureNow(Date.now()); void refresh(); }, 3_000);
+    const changed = () => void refresh();
+    room.on(RoomEvent.RecordingStatusChanged, changed).on(RoomEvent.Reconnected, changed).on(RoomEvent.DataReceived, changed);
+    return () => { alive = false; clearInterval(timer); room.off(RoomEvent.RecordingStatusChanged, changed).off(RoomEvent.Reconnected, changed).off(RoomEvent.DataReceived, changed); };
+  }, [room, phase]);
   const terminal = ['left', 'ended', 'removed', 'error'].includes(phase);
   return <main className="flex h-full flex-col overflow-y-auto bg-ground p-5 text-ink">
     <header className="drag mb-4 flex items-center justify-between gap-4 pl-16"><h1 className="font-bold">{info?.title || 'WorkSuite Meet'} · Guest</h1><Button className="no-drag" size="sm" onClick={() => run(call('windows:close'))}>Close</Button></header>
@@ -123,7 +149,8 @@ export function GuestMeeting() {
         <p className="text-ink-3">The host controls admission and meeting permissions.</p>
       </form>
     </section> : room ? <>
-      {reconnecting ? <p role="status">Reconnecting… Your guest session is being restored.</p> : null}
+      {phase === 'in' ? <RecordingFeedback active={capture.active} since={capture.since} now={captureNow} /> : null}
+    {reconnecting ? <p role="status">Reconnecting… Your guest session is being restored.</p> : null}
       {phase === 'waiting' ? <p role="status">Waiting for the host to let you in. Your camera and microphone are not shared.</p> : <>
         <div className="mb-4 flex flex-wrap gap-2">
           <Button onClick={() => run(room.localParticipant.setMicrophoneEnabled(!room.localParticipant.isMicrophoneEnabled))}>{room.localParticipant.isMicrophoneEnabled ? 'Mute' : 'Unmute'}</Button>

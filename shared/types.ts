@@ -973,7 +973,7 @@ export interface SalonPrintOutcome {
 }
 
 /** A meeting recorded on this computer, through its steps (worksuite-desktop#68). */
-export type LocalRecordingState = 'recording' | 'processing' | 'uploading' | 'ready' | 'failed';
+export type LocalRecordingState = 'starting' | 'recording' | 'processing' | 'uploading' | 'ready' | 'failed';
 
 export interface LocalRecording {
   id: string;

@@ -421,6 +421,8 @@ export const contract = {
     { session: true, rate: 4 },
   ),
   'meetrec:chunk': ch(z.object({ id: z.string().uuid(), data: z.instanceof(Uint8Array).refine((b) => b.byteLength > 0 && b.byteLength <= 16 * 1024 * 1024, 'A piece is at most 16 MB.') }), { session: true, whileLocked: true, rate: 120 }),
+  'meetrec:active': ch(z.object({ id: z.string().uuid() }), { session: true, whileLocked: true, rate: 10 }),
+  'meetrec:abort': ch(z.object({ id: z.string().uuid() }), { session: true, whileLocked: true, rate: 10 }),
   'meetrec:stop': ch(z.object({ id: z.string().uuid(), durationMs: z.number().int().min(0).max(24 * 3600 * 1000) }), { session: true, whileLocked: true, rate: 10 }),
   'meetrec:list': ch(none, { session: true }),
   'meetrec:retry': ch(z.object({ id: z.string().uuid() }), { session: true, rate: 10 }),
@@ -1123,6 +1125,8 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'calls:list': ActiveCall[];
   'meetrec:preflight': { folder: string; free: number | null; ok: boolean; why: string | null };
   'meetrec:start': { id: string };
+  'meetrec:active': void;
+  'meetrec:abort': void;
   'meetrec:chunk': void;
   'meetrec:stop': void;
   'meetrec:list': LocalRecording[];
