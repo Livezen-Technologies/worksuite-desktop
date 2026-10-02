@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useCanOpen } from '../../core/access';
+import { useGuest } from '../../core/session';
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
 import { useTab } from '../../core/tab-context';
@@ -26,6 +27,8 @@ export function NoteEditor({ id, notebooks, sections, ownerName, onGone, onOpen 
   const canCalendar = useCanOpen('calendar');
   const canTasks = useCanOpen('tasks');
   const canContacts = useCanOpen('contacts');
+  // Guest mode (#149): the note is on this device; sharing, versions, notebooks and links need an account.
+  const guest = useGuest();
   const detail = useQuery({ queryKey: ['notes', 'detail', id], queryFn: ({ signal }) => apiGet<NoteDetail>(`/api/notes/${id}`, undefined, signal), retry: (n, e) => !(e instanceof ApiError && e.status === 404) && n < 2 });
   const n = detail.data;
   const owner = n?.my_role === 'owner';
@@ -180,8 +183,10 @@ export function NoteEditor({ id, notebooks, sections, ownerName, onGone, onOpen 
       {owner ? (
         <>
           <Button size="sm" aria-pressed={n.is_favorite} onClick={() => void toggle('favorite')} className={n.is_favorite ? '!border-[#E9B949] !bg-warning-bg !text-[#9A4A06] dark:!border-warning/40 dark:!text-warning' : ''}>{n.is_favorite ? '★ Favorite' : '☆ Favorite'}</Button>
-          <Button size="sm" onClick={() => setDialog('history')}>Version history</Button>
-          <Button size="sm" variant="primary" onClick={() => setDialog('share')}>Share{n.shares?.length ? ` · ${n.shares.length}` : ''}</Button>
+          {guest ? null : <Button size="sm" onClick={() => setDialog('history')}>Version history</Button>}
+          {guest ? null : <Button size="sm" onClick={() => setDialog('share')}>Share{n.shares?.length ? ` · ${n.shares.length}` : ''}</Button>}
+          {/* Saves now (it also saves itself as you type): the normal primary button, never drawn as disabled. */}
+          <Button size="sm" variant="primary" aria-label="Save note" onClick={() => draft && void save(draft)}>Save</Button>
           <span className="relative">
             <Button size="sm" aria-label="More actions" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}>⋯</Button>
             {menu ? (
@@ -189,9 +194,13 @@ export function NoteEditor({ id, notebooks, sections, ownerName, onGone, onOpen 
                 <button type="button" role="menuitem" className={item} onClick={() => void toggle('pin')}>{n.is_pinned ? 'Unpin' : 'Pin'}</button>
                 <button type="button" role="menuitem" className={item} onClick={() => void toggle('favorite')}>{n.is_favorite ? 'Unfavorite' : 'Favorite'}</button>
                 <button type="button" role="menuitem" className={item} onClick={() => void act(async () => onOpen((await apiPost<{ id: number }>(`/api/notes/${id}/duplicate`)).id), 'Duplicated.')}>Duplicate</button>
-                <button type="button" role="menuitem" className={item} onClick={() => (setMenu(false), setDialog('share'))}>Share</button>
-                <button type="button" role="menuitem" className={item} onClick={() => (setMenu(false), setDialog('history'))}>Version history</button>
-                <button type="button" role="menuitem" className={item} onClick={() => (setMenu(false), setDialog('move'))}>Move to…</button>
+                {guest ? null : (
+                  <>
+                    <button type="button" role="menuitem" className={item} onClick={() => (setMenu(false), setDialog('share'))}>Share</button>
+                    <button type="button" role="menuitem" className={item} onClick={() => (setMenu(false), setDialog('history'))}>Version history</button>
+                    <button type="button" role="menuitem" className={item} onClick={() => (setMenu(false), setDialog('move'))}>Move to…</button>
+                  </>
+                )}
                 {canTasks ? <button type="button" role="menuitem" className={item} onClick={() => void convert()}>Convert to task</button> : null}
                 <button type="button" role="menuitem" className={item} onClick={() => void toggle('archive')}>{n.is_archived ? 'Unarchive' : 'Archive'}</button>
                 <button type="button" role="menuitem" className={cx(item, 'font-semibold text-danger')} onClick={() => (setMenu(false), setDialog('delete'))}>Delete</button>
@@ -203,7 +212,7 @@ export function NoteEditor({ id, notebooks, sections, ownerName, onGone, onOpen 
     </div>
   );
 
-  const linked = owner ? (
+  const linked = owner && !guest ? (
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-ground px-[18px] py-2 text-[12px]">
       <span className="text-ink-3">Linked:</span>
       {(links.data ?? []).filter(opens).map((l) => (

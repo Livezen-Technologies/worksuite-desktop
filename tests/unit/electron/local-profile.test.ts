@@ -6,7 +6,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LOCAL_SCHEMA_VERSION, LocalAccess, LocalWorkspace } from '../../../electron/services/local-workspace';
 import { GuestMeetService } from '../../../electron/services/guest-meet';
 import { GUEST_CHANNELS } from '@shared/guest-meet';
-import { LOCAL_CHANNELS, ONLINE_ONLY_FEATURES, localBackup, searchLocalItems, type LocalItemInput } from '@shared/local-workspace';
+import { LOCAL_CHANNELS, localBackup, searchLocalItems, type LocalItemInput } from '@shared/local-workspace';
+import { GUEST_LOCKED_APPS } from '@shared/apps';
 import { INVOKE_CHANNELS } from '@shared/ipc/channels';
 
 const folders: string[] = [];
@@ -92,7 +93,7 @@ describe('Local Profile backup, restore preview and deletion', () => {
     store.save(item('note', 'One'));
     const text = store.export();
     const backup = JSON.parse(text);
-    expect(backup).toMatchObject({ format: 'worksuite-local', version: 2, profile: { name: 'Ravi', picture: PICTURE } });
+    expect(backup).toMatchObject({ format: 'worksuite-local', version: 3, profile: { name: 'Ravi', picture: PICTURE } });
     expect(text).not.toContain('salt');
     expect(text).not.toContain('"pin"');
     expect(localBackup.safeParse(backup).success).toBe(true);
@@ -105,7 +106,7 @@ describe('Local Profile backup, restore preview and deletion', () => {
     const target = open();
     target.save(item('note', 'N1'));
     const before = target.export();
-    expect(target.preview(source.export())).toEqual({ notes: 0, tasks: 2, events: 1, duplicates: 1, profileName: 'Backup owner' });
+    expect(target.preview(source.export())).toEqual({ notes: 0, tasks: 2, events: 1, contacts: 0, duplicates: 1, profileName: 'Backup owner' });
     expect(target.export()).toBe(before);
     expect(() => target.preview('{"format":"other"}')).toThrow();
     expect(target.restore(source.export())).toEqual({ added: 3, skipped: 1 });
@@ -135,12 +136,11 @@ describe('Local Profile backup, restore preview and deletion', () => {
 });
 
 describe('Local Profile isolation and online-only features', () => {
-  it('lets a Local Profile window reach only local, meeting and window channels', () => {
-    for (const channel of GUEST_CHANNELS) expect(channel).toMatch(/^(local|guest|media|windows|security):/);
+  it('lets a guest meeting window reach only meeting and window channels: no account and no Local Profile data (#149)', () => {
+    for (const channel of GUEST_CHANNELS) expect(channel).toMatch(/^(guest|media|windows|security):/);
     for (const channel of LOCAL_CHANNELS) expect(INVOKE_CHANNELS as readonly string[]).toContain(channel);
-    // Account data, Drive, chat, AI and the API proxy are never reachable from it.
-    for (const channel of ['session:get', 'files:list', 'chat:send', 'ai:ask', 'api:request', 'auth:signIn', 'local:importOffer', 'local:reviewImport', 'local:import']) expect(GUEST_CHANNELS.has(channel)).toBe(false);
-    expect(ONLINE_ONLY_FEATURES).toEqual(expect.arrayContaining(['Company records', 'Drive & Files', 'Shared workspaces']));
+    for (const channel of ['session:get', 'files:list', 'chat:send', 'ai:ask', 'api:request', 'auth:signIn', 'local:api', 'local:move', 'local:status']) expect(GUEST_CHANNELS.has(channel)).toBe(false);
+    expect(GUEST_LOCKED_APPS.map((a) => a.guestLabel ?? a.label)).toEqual(expect.arrayContaining(['Chat', 'Mail', 'Drive & Files', 'Company records', 'Shared workspaces', 'HR & People', 'CRM & Sales', 'AI Assistant']));
   });
 
   it('suggests the Local Profile name in a guest meeting while info stays the server’s current state', async () => {

@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react';
 import type { AiHandoff, NavigateRequest } from '@shared/types';
 import { canOpen, canOpenWeb, refuse, useCanOpen, useVisibleIds } from '../core/access';
-import { app } from '../core/app-state';
+import { app, isGuest } from '../core/app-state';
+import { useGuest } from '../core/session';
+import { GuestProfileMenu } from '../modules/guest/GuestProfileMenu';
 import { call, errorMessage, on } from '../core/bridge';
 import { accelerator, commandForAccelerator, effectiveShortcuts, getCommand, registerCommand, runCommand } from '../core/commands';
 import { noteRecentApp } from '../core/recent-apps';
@@ -42,6 +44,7 @@ export function Shell() {
   const ringWindow = useStore(app, (s) => s.prefs?.webchatRinging?.window ?? true);
   const info = useStore(app, (s) => s.info);
   const restored = useRef(false);
+  const guest = useGuest();
   const knownApps = useRef<Set<string> | null>(null);
 
   // Settings › AI Assistant: the assistant open from the start, where the person keeps it (#61).
@@ -63,7 +66,8 @@ export function Shell() {
       if (!ok || tabsStore.get().tabs.length === 0) resetTabs();
       // And the tabs torn off into their own windows (FR-NAV-05/07), where they were.
       void call('windows:restoreDetached').catch(() => undefined);
-      if (!tabsStore.get().tabs.some((t) => t.app === 'home')) openTab('/home', { background: true });
+      // Guest mode (#149) has no Home: it starts on Notes.
+      if (!isGuest() && !tabsStore.get().tabs.some((t) => t.app === 'home')) openTab('/home', { background: true });
       if (info?.restoredFromCrash) toast('info', 'WorkSuite closed unexpectedly. Your tabs, drafts and unsent changes have been restored.');
     });
   }, [apps, visible, info]);
@@ -108,16 +112,16 @@ export function Shell() {
         },
       }),
       registerCommand({ id: 'settings', label: 'Settings', group: 'Navigate', run: () => navigate('/settings') }),
-      registerCommand({ id: 'account', label: 'My account', group: 'Navigate', keywords: 'profile picture password two-factor passkey sessions', run: () => navigate('/account/profile') }),
-      registerCommand({ id: 'account-security', label: 'Change my password', group: 'Navigate', keywords: 'security two-factor 2fa passkey sessions sign out', run: () => navigate('/account/security') }),
+      registerCommand({ id: 'account', label: 'My account', group: 'Navigate', keywords: 'profile picture password two-factor passkey sessions', run: () => navigate('/account/profile'), when: () => !isGuest() }),
+      registerCommand({ id: 'account-security', label: 'Change my password', group: 'Navigate', keywords: 'security two-factor 2fa passkey sessions sign out', run: () => navigate('/account/security'), when: () => !isGuest() }),
       registerCommand({ id: 'ai', label: 'Open AI Assistant', group: 'Shell', run: () => toggleAssistant(), when: () => canOpen('ai') }),
-      registerCommand({ id: 'switch-org', label: 'Switch organization', group: 'Shell', run: () => openOverlay('org') }),
-      registerCommand({ id: 'lock', label: 'Lock WorkSuite', group: 'Shell', run: () => void call('security:lock') }),
+      registerCommand({ id: 'switch-org', label: 'Switch organization', group: 'Shell', run: () => openOverlay('org'), when: () => !isGuest() }),
+      registerCommand({ id: 'lock', label: 'Lock WorkSuite', group: 'Shell', run: () => void call('security:lock'), when: () => !isGuest() }),
       registerCommand({ id: 'help', label: 'Help & Diagnostics', group: 'Navigate', run: () => navigate('/diagnostics') }),
       registerCommand({ id: 'launcher', label: 'All apps', group: 'Navigate', run: () => openOverlay('launcher') }),
-      registerCommand({ id: 'notifications', label: 'Notifications', group: 'Navigate', run: () => navigate('/notifications') }),
+      registerCommand({ id: 'notifications', label: 'Notifications', group: 'Navigate', run: () => navigate('/notifications'), when: () => !isGuest() }),
       registerCommand({ id: 'theme', label: 'Change theme', group: 'Shell', keywords: 'dark light appearance', run: () => navigate('/settings/preferences') }),
-      registerCommand({ id: 'pause-notifications', label: 'Pause notifications for an hour', group: 'Shell', run: () => void call('notifications:pause', { minutes: 60 }).then(() => toast('info', 'Notifications paused for an hour.')) }),
+      registerCommand({ id: 'pause-notifications', label: 'Pause notifications for an hour', group: 'Shell', run: () => void call('notifications:pause', { minutes: 60 }).then(() => toast('info', 'Notifications paused for an hour.')), when: () => !isGuest() }),
       registerCommand({ id: 'new', label: 'New (in this app)', group: 'Create', run: () => { const t = activeTab(); if (t) navigate(`/${t.app}?new=1`); } }),
       registerCommand({ id: 'new-task', label: 'Create task', group: 'Create', run: () => navigate('/tasks?new=1'), when: () => canOpen('tasks') }),
       registerCommand({ id: 'new-email', label: 'New email', group: 'Create', run: () => navigate('/mail?compose=1'), when: () => canOpen('mail') }),
@@ -193,7 +197,7 @@ export function Shell() {
       on<NavigateRequest>('navigate', (req) => {
         const target = req.route.replace(/^\/+/, '').split(/[/?]/)[0] || 'home';
         if (moduleFor(target) ? !canOpen(target) : !canOpenWeb(req.route)) {
-          refuse();
+          refuse(req.route);
           return;
         }
         if (!moduleFor(target)) {
@@ -290,7 +294,7 @@ export function Shell() {
         {overlay === 'notifications' ? <NotificationCenter /> : null}
         {overlay === 'transfers' ? <TransferCenter /> : null}
         {overlay === 'org' ? <OrgSwitcher /> : null}
-        {overlay === 'profile' ? <ProfileMenu /> : null}
+        {overlay === 'profile' ? guest ? <GuestProfileMenu /> : <ProfileMenu /> : null}
         {overlay === 'network' ? <NetworkPopover /> : null}
         {overlay === 'clock' ? <ClockPopover /> : null}
       </PanelBoundary>

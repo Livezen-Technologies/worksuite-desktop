@@ -1,6 +1,7 @@
 import { channelAppOfRoute, redirectRoute } from '@shared/channels';
 import type { TabRecord } from '@shared/ipc/contract';
 import { canOpen, refuse } from './access';
+import { startRoute } from './session';
 import { call } from './bridge';
 import { createStore } from './store';
 import { appForRoute, titleForRoute } from '../modules/registry';
@@ -170,7 +171,7 @@ export function activate(id: string): void {
 /** Whether a route's app may be opened; says no when it may not. A channel in its host is the channel's to allow. */
 function allowed(route: string): boolean {
   if (canOpen(channelAppOfRoute(route) ?? appForRoute(route))) return true;
-  refuse();
+  refuse(route);
   return false;
 }
 
@@ -234,7 +235,7 @@ function remove(s: TabsState, id: string, remember: boolean): Partial<TabsState>
   const tabs = s.tabs.filter((t) => t.id !== id);
   const closed = remember ? [...s.closed.slice(-19), tab] : s.closed;
   if (tabs.length === 0) {
-    const home = make('/home', null);
+    const home = make(startRoute(), null);
     return { tabs: [home], activeId: home.id, closed, sideId: null };
   }
   const sideId = s.sideId === id ? null : s.sideId;
@@ -385,7 +386,7 @@ export function restoreClosed(): void {
   if (!canOpen(t.app)) {
     // Closed while the app was still the person's: it goes, rather than coming back.
     tabsStore.set({ closed: s.closed.slice(0, -1) });
-    refuse();
+    refuse(t.app);
     return;
   }
   update((st) => ({ closed: st.closed.slice(0, -1), tabs: [...st.tabs, { ...t, id: newId(), lastActive: Date.now(), suspended: false }] }));
@@ -423,7 +424,7 @@ export function closeTabsOutside(organizationId: string | null): number {
   // A document of the organisation left behind closes as such (OO-DSK-060: `DELETE …?reason=ORG_SWITCH`).
   for (const t of gone) if (guards.has(t.id)) closeReasons.set(t.id, 'ORG_SWITCH');
   const tabs = s.tabs.filter((t) => !gone.includes(t));
-  const home = tabs.length ? null : make('/home', null);
+  const home = tabs.length ? null : make(startRoute(), null);
   update(() => ({ tabs: home ? [home] : tabs, activeId: home ? home.id : tabs.some((t) => t.id === s.activeId) ? s.activeId : (tabs[0]?.id ?? null) }));
   return gone.length;
 }
@@ -441,7 +442,7 @@ export function closeTabsForApps(allowed: Set<string>): string[] {
     return [];
   }
   const tabs = s.tabs.filter((t) => allowed.has(t.app));
-  const home = tabs.length ? null : make('/home', null);
+  const home = tabs.length ? null : make(startRoute(), null);
   update(() => ({ tabs: home ? [home] : tabs, closed, activeId: home ? home.id : tabs.some((t) => t.id === s.activeId) ? s.activeId : (tabs[0]?.id ?? null) }));
   return [...new Set(gone.map((t) => t.app))];
 }
@@ -470,6 +471,6 @@ export async function restoreTabs(allowed: Set<string>): Promise<boolean> {
 }
 
 export function resetTabs(): void {
-  const home = make('/home', null);
+  const home = make(startRoute(), null);
   tabsStore.set({ tabs: [home], activeId: home.id, closed: [], sideId: null, split: 0.5 });
 }
