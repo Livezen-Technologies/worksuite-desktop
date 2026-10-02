@@ -69,6 +69,15 @@ import {
   Underline,
   ListOrdered,
   TextQuote,
+  Strikethrough,
+  ListIndentIncrease,
+  ListIndentDecrease,
+  Redo2,
+  Undo2,
+  Unlink,
+  Baseline,
+  RemoveFormatting,
+  Heading,
   Activity, Archive, ArrowLeft, ArrowUpDown, Banknote, Bell, Box, Briefcase, Building2, Calendar, CalendarClock, Check, ChevronDown, ChevronLeft,
   ChevronRight, CircleAlert, CircleCheck, Clock, Cloud, CloudOff, Coffee, Contact, Copy, Download, Ellipsis, ExternalLink, Eye, File, FileImage,
   FileSpreadsheet, FileText, Filter, Fingerprint, Flag, Folder, FolderOpen, FolderUp, Globe, HardDrive, Hash, History, House, IdCard, Inbox, Info,
@@ -113,6 +122,7 @@ const ICONS: Record<string, LucideIcon> = {
   'arrow-down': ArrowDown, 'arrow-right': ArrowRight, 'arrow-up': ArrowUp, sliders: SlidersHorizontal, image: Image, 'rotate-cw': RotateCw, help: CircleHelp, shield: Shield, dice: Dices, crop: Crop, cpu: Cpu,
   'folder-input': FolderInput, spam: OctagonAlert, code: Code, table: Table, 'align-justify': AlignJustify, rows: Rows3, 'mail-check': MailCheck,
   bold: Bold, italic: Italic, underline: Underline, 'list-ordered': ListOrdered, quote: TextQuote,
+  strikethrough: Strikethrough, indent: ListIndentIncrease, outdent: ListIndentDecrease, 'undo-edit': Undo2, 'redo-edit': Redo2, unlink: Unlink, 'text-colour': Baseline, 'clear-format': RemoveFormatting, heading: Heading,
 };
 
 export function Icon({ name, size = 18, className, strokeWidth = 1.8, label }: { name: string; size?: number; className?: string; strokeWidth?: number; label?: string }) {

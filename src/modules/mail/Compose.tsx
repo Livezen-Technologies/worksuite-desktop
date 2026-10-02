@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { apiPost, request } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
 import { useDraft } from '../../core/drafts';
@@ -8,43 +8,36 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Menu, type MenuSection } from '../../components/Menu';
 import { Select } from '../../components/Select';
+import { DriveFilePicker, type DriveFileRow } from '../../components/DriveFilePicker';
+import { RichTextEditor } from '../../components/RichTextEditor';
 import { Button, Chip, ErrorNote, FileBadge, Spinner, cx } from '../../components/ui';
 import { AiMenuButton } from '../ai/AiMenuButton';
 import { AiTextDialog } from '../ai/AiTextDialog';
 import { WRITING_TASKS, type TextTask } from '../ai/textTools';
 import { sendMessage, useSignatures, useTemplates } from './api';
-import { mailboxLetter, plainText } from './model';
+import { cleanComposeHtml, composeBody, composeText, migrateDraft, parseQuote, signatureBlock, splitSignature, textToComposeHtml, type ComposeDraft } from './composeHtml';
+import { mailboxLetter } from './model';
 import { sendAfterUndoWindow } from './outgoing';
 import { AccountAvatar } from './parts';
-import { joinQuote, splitQuote, unquote } from './quote';
-import { parseAddresses, textToHtml } from './sanitize';
+import { RecipientField } from './Recipients';
+import { unquote } from './quote';
+import { parseAddresses } from './sanitize';
 import type { ComposeSeed, Mailbox, Template } from './types';
 
 /**
  * Writing an email, in the page's own tab (UI-07): From, To, Cc and Bcc, the
- * subject, the message with AI writing tools, attachments from this computer,
+ * subject, the message in a formatted-text editor (the shared RichTextEditor)
+ * with AI writing tools, recipients as chips with contact suggestions,
+ * attachments from this computer or from Files (a pasted picture becomes
+ * one), the quoted email in a collapsible block below it,
  * templates, and Send — now, with a few seconds to undo, or later, from the
  * server so this computer can be off. The draft is kept on this computer as
- * it is typed (FR-OFF-07); offline, Send queues the message and it goes when
- * the connection returns.
+ * it is typed (FR-OFF-07) — cleaned HTML, with older plain-text drafts brought
+ * forward; offline, Send queues the message and it goes when the connection
+ * returns. It goes as HTML with a plain-text alternative.
  */
 
-interface Attached {
-  token: string;
-  name: string;
-  size: number;
-}
-
-interface DraftValue {
-  to: string;
-  cc: string;
-  bcc: string;
-  subject: string;
-  body: string;
-  from: string;
-  attachments?: Attached[];
-  signed?: boolean;
-}
+type Attached = NonNullable<ComposeDraft['attachments']>[number];
 
 /** The draft's key on this computer: one per new message, one per message replied to. */
 export function draftContext(seed: ComposeSeed): string {
@@ -65,7 +58,8 @@ export function laterChoices(today = todayInZone()): Array<{ id: string; label: 
 
 export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }: { seed: ComposeSeed; boxes: Mailbox[]; defaultBox: string | null; offline: boolean; onClose: () => void; onReopen: (seed: ComposeSeed) => void }) {
   const context = draftContext(seed);
-  const draft = useDraft<DraftValue>('mail', context, { to: seed.to ?? '', cc: seed.cc ?? '', bcc: '', subject: seed.subject ?? '', body: seed.quote ?? '', from: seed.mailbox ?? defaultBox ?? '', attachments: [] });
+  const seedQuote = seed.quote ?? '';
+  const draft = useDraft<ComposeDraft>('mail', context, { to: seed.to ?? '', cc: seed.cc ?? '', bcc: '', subject: seed.subject ?? '', html: '', quote: seedQuote, from: seed.mailbox ?? defaultBox ?? '', attachments: [], v: 2 });
   const [error, setError] = useState<string | null>(null);
   const [showCc, setShowCc] = useState(!!seed.cc);
   const [showBcc, setShowBcc] = useState(false);
@@ -76,34 +70,46 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   const [busy, setBusy] = useState(false);
   const [menu, setMenu] = useState(false);
   const [tplQuery, setTplQuery] = useState('');
+  const [quoteOpen, setQuoteOpen] = useState(false);
+  const [drive, setDrive] = useState(false);
+  const tplSearch = useRef<HTMLInputElement>(null);
   const sendMenu = useRef<HTMLButtonElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const v = draft.value;
-  const set = (patch: Partial<DraftValue>) => {
-    draft.setValue({ ...v, ...patch });
+  // A draft saved by an older version (plain text with the quote inside) comes back as rich text and a separate quote.
+  const v = useMemo(() => migrateDraft(draft.value, seedQuote), [draft.value, seedQuote]);
+  // The draft as of the last change, for handlers that run before the next render (an upload finishing, Send right after a chip).
+  const latest = useRef(v);
+  useLayoutEffect(() => {
+    latest.current = v;
+  }, [v]);
+  const set = (patch: Partial<ComposeDraft>) => {
+    draft.setValue({ ...latest.current, ...patch });
+    latest.current = { ...latest.current, ...patch };
     setSavedAt(new Date().toISOString());
   };
+  // The names behind chosen addresses, so a chip reads "Nimal Perera" rather than the address (kept with the draft).
+  const named = (email: string, name: string) => set({ names: { ...(latest.current.names ?? {}), [email.toLowerCase()]: name } });
   const templates = useTemplates(true);
   const signatures = useSignatures(true);
   // The mailbox it goes from: the draft's, else the one the page names, else the first (the list may arrive after the composer opens).
   const from = boxes.find((b) => String(b.id) === v.from) ?? boxes.find((b) => String(b.id) === defaultBox) ?? boxes.find((b) => b.is_default) ?? boxes[0] ?? null;
   const fromId = from ? String(from.id) : v.from;
+  // What the person wrote, and the signature below it: AI and templates work on the first and keep the second.
+  const [mine, signature] = splitSignature(v.html);
+  const own = composeText(mine);
 
-  // The default signature goes in once, above the quoted email, on a message that has none yet.
+  // The default signature goes in once, below the message, on a message that has none yet.
   const sig = signatures.data?.signatures.find((s) => s.is_default) ?? null;
   useEffect(() => {
-    if (!sig || v.signed || draft.restored) return;
-    const [own, quoted] = splitQuote(v.body, seed.quote);
-    if (own.trim()) return;
-    draft.setValue({ ...v, signed: true, body: `\n\n-- \n${plainText(sig.html)}${quoted ? `\n${quoted}` : ''}` });
+    if (!sig || v.signed || draft.restored || own.trim() || signature) return;
+    draft.setValue({ ...v, signed: true, html: `${mine}${signatureBlock(sig.html)}` });
     // Only when the signature arrives.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sig?.id]);
 
-  // AI writing tools (worksuite-desktop#53) work on what the person wrote, never on the quoted email below it.
+  // AI writing tools (worksuite-desktop#53) work on what the person wrote — never on the signature or the quoted email.
   const [ai, setAi] = useState<{ task: TextTask; title: string } | null>(null);
-  const [own, quoted] = splitQuote(v.body, seed.quote);
-  const original = seed.quote ? unquote(seed.quote) : '';
+  const original = v.quote ? unquote(v.quote) : '';
   const aiItems = [
     ...(original && seed.mode !== 'forward' ? [{ label: text('Draft a reply'), icon: 'reply', run: () => setAi({ task: 'reply', title: text('Draft a reply') }) }] : []),
     ...WRITING_TASKS.map((w) => ({ label: w.label, disabled: !own.trim(), run: () => setAi({ task: w.task, title: w.label }) })),
@@ -111,9 +117,13 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   const choices = useMemo(() => laterChoices(), []);
   const laterAt = later === 'pick' ? (pick ? new Date(pick).toISOString() : null) : (choices.find((c) => c.id === later)?.at ?? null);
 
-  const attach = async (files: FileList | null) => {
-    if (!files?.length) return;
-    for (const file of [...files]) {
+  const attach = async (files: File[]) => {
+    if (!files.length) return;
+    if (offline) {
+      toast('error', text('Attaching needs WorkSuite.'));
+      return;
+    }
+    for (const file of files) {
       if (file.size > 25 * 1024 * 1024) {
         toast('error', text('{name} is over the 25 MB limit.', { name: file.name }));
         continue;
@@ -124,7 +134,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
         form.set('file', file, file.name);
         form.set('kind', 'attach');
         const r = await request<Attached>('POST', '/api/mail/upload', { body: form });
-        draft.setValue({ ...draft.value, attachments: [...(draft.value.attachments ?? []), { token: r.data.token, name: r.data.name, size: r.data.size }] });
+        set({ attachments: [...(latest.current.attachments ?? []), { token: r.data.token, name: r.data.name, size: r.data.size }] });
       } catch (e) {
         toast('error', errorMessage(e));
       } finally {
@@ -133,25 +143,54 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
     }
   };
 
-  const payload = (scheduleAt?: string) => ({
-    to: parseAddresses(v.to),
-    cc: parseAddresses(v.cc),
-    bcc: parseAddresses(v.bcc),
-    subject: v.subject,
-    body_html: textToHtml(v.body),
-    in_reply_to: seed.inReplyTo,
-    reply_mode: seed.mode === 'new' ? undefined : seed.mode,
-    mailbox: fromId || undefined,
-    attachments: (v.attachments ?? []).map((a) => a.token),
-    ...(scheduleAt ? { schedule_at: scheduleAt } : {}),
-  });
+  /** Files from the Drive go as copies, staged on the server like an upload (the Drive's download permission decides). */
+  const attachFromDrive = async (files: DriveFileRow[]) => {
+    setDrive(false);
+    for (const f of files) {
+      setUploading((u) => [...u, f.name]);
+      try {
+        const r = await apiPost<Attached>('/api/mail/upload/from-drive', { file_id: Number(f.id) });
+        set({ attachments: [...(latest.current.attachments ?? []), { token: r.token, name: r.name, size: r.size, source: 'drive' }] });
+      } catch (e) {
+        toast('error', text('“{name}” was not attached: {reason}', { name: f.name, reason: errorMessage(e) }));
+      } finally {
+        setUploading((u) => u.filter((n) => n !== f.name));
+      }
+    }
+  };
+
+  /** Pictures pasted or dropped into the message go as attachments: the send path has no inline (CID) pictures. */
+  const filesIntoMessage = (files: File[]) => {
+    if (files.some((f) => f.type.startsWith('image/'))) toast('info', text('Pictures are added as attachments — they cannot go inside the message yet.'));
+    void attach(files);
+  };
+
+  // Read at the moment of sending: an address committed by the same keystroke is in it.
+  const payload = (scheduleAt?: string) => {
+    const d = latest.current;
+    const body = composeBody(d.html, d.quote);
+    return {
+      to: parseAddresses(d.to),
+      cc: parseAddresses(d.cc),
+      bcc: parseAddresses(d.bcc),
+      subject: d.subject,
+      body_html: body.html,
+      body_text: body.text,
+      in_reply_to: seed.inReplyTo,
+      reply_mode: seed.mode === 'new' ? undefined : seed.mode,
+      mailbox: fromId || undefined,
+      attachments: (d.attachments ?? []).map((a) => a.token),
+      ...(scheduleAt ? { schedule_at: scheduleAt } : {}),
+    };
+  };
 
   const sendNow = () => {
     setError(null);
-    if (!parseAddresses(v.to).length) return setError(text('Add at least one recipient.'));
+    const d = latest.current;
+    if (!parseAddresses(d.to).length) return setError(text('Add at least one recipient.'));
     const body = payload();
-    const subject = v.subject || text('(no subject)');
-    const toList = parseAddresses(v.to).join(', ');
+    const subject = d.subject || text('(no subject)');
+    const toList = parseAddresses(d.to).join(', ');
     // The window to take it back; the composer closes now and the draft stays until it has gone.
     sendAfterUndoWindow(
       subject,
@@ -173,7 +212,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   const sendLater = async (at: string | null) => {
     setError(null);
     if (!at) return setError(text('Choose when to send it.'));
-    if (!parseAddresses(v.to).length) return setError(text('Add at least one recipient.'));
+    if (!parseAddresses(latest.current.to).length) return setError(text('Add at least one recipient.'));
     if (offline) return setError(text('Scheduling needs WorkSuite: try again when you are back online.'));
     setBusy(true);
     try {
@@ -191,13 +230,15 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   const applyTemplate = async (t: Template) => {
     try {
       const r = await apiPost<{ subject?: string; body_html?: string }>('/api/mail/templates/render', { subject: t.subject ?? '', body_html: t.body_html, to: parseAddresses(v.to) });
-      const body = plainText(r.body_html ?? t.body_html);
-      set({ subject: v.subject.trim() ? v.subject : (r.subject ?? t.subject ?? ''), body: joinQuote(`${own.trimEnd()}${own.trim() ? '\n\n' : ''}${body}\n`, quoted) });
+      // The template keeps its formatting; it goes after what is written, above the signature.
+      const body = cleanComposeHtml(r.body_html ?? t.body_html);
+      set({ subject: v.subject.trim() ? v.subject : (r.subject ?? t.subject ?? ''), html: `${mine}${own.trim() ? '<div><br></div>' : ''}${body}${signature}` });
     } catch (e) {
       toast('error', errorMessage(e));
     }
   };
 
+  const quote = parseQuote(v.quote);
   const list = (templates.data?.templates ?? []).filter((t) => !tplQuery.trim() || t.name.toLowerCase().includes(tplQuery.trim().toLowerCase()));
   const sendSections: MenuSection[] = [
     {
@@ -238,7 +279,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
           {from ? <Chip tone="indigo">{from.account_type === 'local_mailbox' ? text('WorkSuite Local') : from.shared ? text('Shared') : (from.provider_label ?? '')}</Chip> : null}
         </Field>
         <Field label="To">
-          <input aria-label="To" value={v.to} onChange={(e) => set({ to: e.target.value })} placeholder="name@company.com, …" autoFocus={!v.to} className="bare-focus min-w-0 flex-1 bg-transparent text-[13.5px] text-ink outline-none placeholder:text-ink-3" />
+          <RecipientField label="To" value={v.to} onChange={(to) => set({ to })} names={v.names ?? {}} onName={named} placeholder="name@company.com, …" autoFocus={!v.to} />
           {!showCc ? (
             <button type="button" onClick={() => setShowCc(true)} className="text-[13px] font-semibold text-primary hover:underline">
               Cc
@@ -252,69 +293,102 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
         </Field>
         {showCc ? (
           <Field label="Cc">
-            <input aria-label="Cc" value={v.cc} onChange={(e) => set({ cc: e.target.value })} className="bare-focus min-w-0 flex-1 bg-transparent text-[13.5px] text-ink outline-none" />
+            <RecipientField label="Cc" value={v.cc} onChange={(cc) => set({ cc })} names={v.names ?? {}} onName={named} />
           </Field>
         ) : null}
         {showBcc ? (
           <Field label="Bcc">
-            <input aria-label="Bcc" value={v.bcc} onChange={(e) => set({ bcc: e.target.value })} className="bare-focus min-w-0 flex-1 bg-transparent text-[13.5px] text-ink outline-none" />
+            <RecipientField label="Bcc" value={v.bcc} onChange={(bcc) => set({ bcc })} names={v.names ?? {}} onName={named} />
           </Field>
         ) : null}
         <Field label="Subject">
           <input aria-label="Subject" value={v.subject} onChange={(e) => set({ subject: e.target.value })} className="bare-focus min-w-0 flex-1 bg-transparent text-[14px] font-bold text-ink outline-none" />
         </Field>
-        <div className="flex items-center gap-2 border-b border-line px-4 py-2">
-          <AiMenuButton items={aiItems} label={text('Write with AI')} />
-          <Button size="sm" icon="paperclip" onClick={() => fileInput.current?.click()} disabled={offline} title={offline ? text('Attaching needs WorkSuite.') : text('Attach from this computer')}>
-            Attach
-          </Button>
-          <input ref={fileInput} type="file" multiple hidden aria-hidden onChange={(e) => void attach(e.target.files).then(() => (e.target.value = ''))} />
-          <span className="truncate text-[11.5px] text-ink-3">{own.trim() ? text('AI works on what you wrote; the quoted email is left as it is.') : original ? text('Draft a reply from the email below, or write and then improve it.') : text('Write something, then improve it.')}</span>
-        </div>
         {ai ? (
           <AiTextDialog
             title={ai.title}
             task={ai.task}
             input={() => (ai.task === 'reply' ? `Subject: ${v.subject}\n\nThe email I am replying to:\n${original}${own.trim() ? `\n\nWhat I want to say (my notes):\n${own.trim()}` : ''}` : own.trim())}
-            actions={[{ label: own.trim() ? text('Replace my text') : text('Use this'), primary: true, run: (t) => set({ body: joinQuote(t, quoted) }) }]}
+            actions={[{ label: own.trim() ? text('Replace my text') : text('Use this'), primary: true, run: (t) => set({ html: `${textToComposeHtml(t)}${signature}` }) }]}
             onClose={() => setAi(null)}
           />
         ) : null}
-        <textarea value={v.body} onChange={(e) => set({ body: e.target.value })} aria-label="Message" autoFocus={!!v.to} className="bare-focus min-h-[160px] flex-1 resize-none bg-surface px-5 py-4 text-[14px] leading-relaxed text-ink outline-none" />
-        {(v.attachments?.length ?? 0) > 0 || uploading.length ? (
-          <ul role="list" aria-label="Attachments" className="flex flex-wrap gap-2 border-t border-line px-4 py-3">
-            {(v.attachments ?? []).map((a) => (
-              <li key={a.token} className="flex items-center gap-2.5 rounded-[10px] border border-line px-3 py-2">
-                <FileBadge name={a.name} size={30} />
-                <span>
-                  <span className="block max-w-[200px] truncate text-[13px] font-semibold text-ink">{a.name}</span>
-                  <span className="block text-[11.5px] text-ink-3">{text('{size} · from this computer', { size: bytes(a.size) })}</span>
-                </span>
-                <button type="button" onClick={() => set({ attachments: (v.attachments ?? []).filter((x) => x.token !== a.token) })} aria-label={text('Remove {name}', { name: a.name })} className="text-ink-3 hover:text-danger">
-                  <Icon name="x" size={14} />
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto bg-ground/40 px-4 py-3 scroll-thin">
+          <RichTextEditor
+            value={v.html}
+            onChange={(html) => set({ html })}
+            clean={cleanComposeHtml}
+            label={text('Message')}
+            placeholder={text('Write your message…')}
+            markdownShortcuts
+            toolLabels={{ link: text('Insert link') }}
+            onFiles={filesIntoMessage}
+            autoFocus={!!v.to}
+            fill
+            minHeight={220}
+            className="min-h-[280px] shadow-sm"
+            toolbarEnd={
+              <>
+                <AiMenuButton items={aiItems} label={text('Write with AI')} className="h-7 text-[12.5px]" />
+                <Button size="sm" onClick={() => tplSearch.current?.focus()} title={text('Choose a template on the right')}>
+                  Insert template
+                </Button>
+                <Button size="sm" icon="folder" onClick={() => setDrive(true)} disabled={offline} title={offline ? text('Attaching needs WorkSuite.') : text('Attach a copy of a file from Files')}>
+                  Attach from Files
+                </Button>
+                <Button size="sm" icon="paperclip" onClick={() => fileInput.current?.click()} disabled={offline} title={offline ? text('Attaching needs WorkSuite.') : text('Attach from this computer')}>
+                  Attach
+                </Button>
+              </>
+            }
+          />
+          <input ref={fileInput} type="file" multiple hidden aria-hidden onChange={(e) => void attach(e.target.files ? [...e.target.files] : []).then(() => (e.target.value = ''))} />
+          {(v.attachments?.length ?? 0) > 0 || uploading.length ? (
+            <ul role="list" aria-label="Attachments" className="flex shrink-0 flex-wrap gap-2">
+              {(v.attachments ?? []).map((a) => (
+                <li key={a.token} className="flex items-center gap-2.5 rounded-[10px] border border-line bg-surface px-3 py-2">
+                  <FileBadge name={a.name} size={30} />
+                  <span>
+                    <span className="block max-w-[200px] truncate text-[13px] font-semibold text-ink">{a.name}</span>
+                    <span className="block text-[11.5px] text-ink-3">{a.source === 'drive' ? text('{size} · from Files', { size: bytes(a.size) }) : text('{size} · from this computer', { size: bytes(a.size) })}</span>
+                  </span>
+                  <button type="button" onClick={() => set({ attachments: (v.attachments ?? []).filter((x) => x.token !== a.token) })} aria-label={text('Remove {name}', { name: a.name })} className="text-ink-3 hover:text-danger">
+                    <Icon name="x" size={14} />
+                  </button>
+                </li>
+              ))}
+              {uploading.map((n) => (
+                <li key={n} className="flex items-center gap-2 rounded-[10px] border border-dashed border-line px-3 py-2 text-[12.5px] text-ink-3">
+                  <Icon name="spinner" size={14} className="animate-spin" /> {text('Uploading {name}…', { name: n })}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {v.quote.trim() ? (
+            <section aria-label={text('Quoted email')} className="shrink-0 rounded-[10px] border border-dashed border-line bg-surface">
+              <div className="flex items-center gap-2 px-3 py-1.5">
+                <button type="button" aria-expanded={quoteOpen} onClick={() => setQuoteOpen(!quoteOpen)} className="flex min-w-0 flex-1 items-center gap-1.5 rounded-[6px] py-1 text-left text-[12.5px] font-semibold text-ink-2 hover:text-ink">
+                  <Icon name={quoteOpen ? 'chevron-down' : 'chevron-right'} size={14} />
+                  <span className="truncate">{quote.attribution || (seed.mode === 'forward' ? text('Forwarded email') : text('Quoted email'))}</span>
                 </button>
-              </li>
-            ))}
-            {uploading.map((n) => (
-              <li key={n} className="flex items-center gap-2 rounded-[10px] border border-dashed border-line px-3 py-2 text-[12.5px] text-ink-3">
-                <Icon name="spinner" size={14} className="animate-spin" /> {text('Uploading {name}…', { name: n })}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        {error ? <div className="px-4 pb-2"><ErrorNote error={error} /></div> : null}
-        <div className="flex h-[58px] shrink-0 items-center gap-2 border-t border-line px-4">
-          <div className="flex">
-            <Button type="submit" variant="primary" icon="send" className="rounded-r-none" disabled={uploading.length > 0} title={text('Send (Ctrl+Enter) — you have {n} seconds to undo', { n: 8 })}>
-              Send
-            </Button>
-            <button ref={sendMenu} type="button" onClick={() => setMenu(true)} aria-label="Send later options" aria-haspopup="menu" className="inline-flex h-9 items-center rounded-r-[8px] border-l border-white/25 bg-primary px-2 text-[var(--ws-on-primary)] hover:bg-primary-hover">
-              <Icon name="chevron-down" size={14} />
-            </button>
-          </div>
-          <Button onClick={() => void sendLater(laterAt)} loading={busy} disabled={!later || uploading.length > 0}>
-            Send later…
-          </Button>
+                <span className="hidden shrink-0 text-[11.5px] text-ink-3 sm:inline">{text('AI works on what you wrote; the quoted email is left as it is.')}</span>
+                <button type="button" onClick={() => set({ quote: '' })} className="shrink-0 rounded-[6px] px-2 py-1 text-[12px] font-semibold text-ink-3 hover:bg-subtle hover:text-danger">
+                  {text('Remove quoted email')}
+                </button>
+              </div>
+              {quoteOpen ? (
+                <blockquote className="selectable mx-3 mb-3 max-h-[320px] overflow-y-auto border-l-[3px] border-line pl-3 text-[13px] leading-[1.55] whitespace-pre-wrap text-ink-2 scroll-thin">{quote.lines.join('\n')}</blockquote>
+              ) : null}
+            </section>
+          ) : null}
+        </div>
+        {error ? <div className="px-4 pt-2"><ErrorNote error={error} /></div> : null}
+        <div className="flex h-[60px] shrink-0 items-center gap-2.5 border-t border-line px-4">
+          <SendSplit menuRef={sendMenu} disabled={uploading.length > 0} onMenu={() => setMenu(true)} />
+          <button type="button" onClick={() => void sendLater(laterAt)} disabled={busy || !later || uploading.length > 0} className={SECONDARY}>
+            {busy ? <Icon name="spinner" size={15} className="animate-spin-slow" /> : null}
+            {text('Send later…')}
+          </button>
           <span className="min-w-0 flex-1 truncate text-[12px] text-ink-3">
             {draft.restored && !savedAt ? text('Draft restored from this computer') : savedAt ? text('Draft saved on this computer · {time}', { time: timeLabel(savedAt) }) : text('Saved on this computer as you type')}
           </span>
@@ -324,17 +398,18 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
               await draft.clear();
               onClose();
             }}
-            className="h-9 rounded-[8px] px-3 text-[13.5px] font-semibold text-danger hover:bg-danger-bg"
+            aria-label={text('Discard draft')}
+            className="h-[34px] shrink-0 rounded-[8px] px-2.5 text-[13.5px] font-semibold text-danger hover:bg-danger-bg"
           >
             Discard
           </button>
         </div>
       </form>
-      <aside aria-label="Templates and send later" className="flex w-[290px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-surface p-4 scroll-thin">
+      <aside aria-label="Templates and send later" className="flex w-[300px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-surface p-4 scroll-thin">
         <h3 className="text-[14px] font-bold text-ink">Templates</h3>
         <label className="flex h-9 items-center gap-2 rounded-[8px] border border-line px-2.5 text-[13px]">
           <Icon name="search" size={14} className="text-ink-3" />
-          <input value={tplQuery} onChange={(e) => setTplQuery(e.target.value)} placeholder="Search templates" aria-label="Search templates" className="bare-focus min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-ink-3" />
+          <input ref={tplSearch} value={tplQuery} onChange={(e) => setTplQuery(e.target.value)} placeholder="Search templates" aria-label="Search templates" className="bare-focus min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-ink-3" />
         </label>
         {templates.isLoading ? <Spinner label="" /> : null}
         {!templates.isLoading && list.length === 0 ? <p className="text-[12.5px] text-ink-3">{tplQuery ? text('No template matches.') : text('No templates yet. Make them in WorkSuite Mail on the web.')}</p> : null}
@@ -361,7 +436,31 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
         </div>
         <p className="text-[12px] text-ink-3">Scheduled mail is sent by the WorkSuite server, so this computer can be off.</p>
       </aside>
+      {drive ? <DriveFilePicker title={text('Attach from Files')} confirmLabel={text('Attach')} onChoose={(files) => void attachFromDrive(files)} onClose={() => setDrive(false)} /> : null}
       {menu ? <Menu sections={sendSections} label={text('Send later')} anchor={sendMenu} prefer="top" align="start" onClose={() => setMenu(false)} /> : null}
+    </div>
+  );
+}
+
+/*
+ * The bottom bar's buttons, kept local and plain until the shared
+ * primary/secondary button styles land: both halves of Send are one control —
+ * the same height, one rounded outline, a hairline between them.
+ */
+const PRIMARY_HALF = 'inline-flex h-full items-center justify-center gap-1.5 bg-primary text-[13.5px] font-bold text-[var(--ws-on-primary)] transition-colors hover:bg-primary-hover focus-visible:relative focus-visible:z-10 disabled:cursor-not-allowed disabled:opacity-60';
+const SECONDARY = 'inline-flex h-[38px] shrink-0 items-center gap-1.5 rounded-[9px] border border-line bg-surface px-3.5 text-[13.5px] font-semibold text-ink transition-colors hover:bg-subtle disabled:cursor-not-allowed disabled:opacity-50';
+
+export function SendSplit({ menuRef, disabled, onMenu }: { menuRef: React.RefObject<HTMLButtonElement | null>; disabled?: boolean; onMenu: () => void }) {
+  return (
+    <div role="group" aria-label={text('Send options')} data-testid="send-split" className="inline-flex h-[38px] shrink-0 items-stretch overflow-hidden rounded-[9px] shadow-sm">
+      <button type="submit" disabled={disabled} title={text('Send (Ctrl+Enter) — you have {n} seconds to undo', { n: 8 })} className={cx(PRIMARY_HALF, 'px-[18px]')}>
+        <Icon name="send" size={15} />
+        {text('Send')}
+      </button>
+      <span aria-hidden className="w-px bg-[var(--ws-on-primary)] opacity-25" />
+      <button ref={menuRef} type="button" onClick={onMenu} aria-label={text('Send later options')} aria-haspopup="menu" title={text('Send later options')} className={cx(PRIMARY_HALF, 'w-8')}>
+        <Icon name="chevron-down" size={15} />
+      </button>
     </div>
   );
 }
