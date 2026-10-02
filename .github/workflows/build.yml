@@ -70,14 +70,19 @@ jobs:
         # ("allow to specify as empty string") and then fails to read the project folder as a certificate
         # ("… not a file"). So an empty one is unset: no certificate means an unsigned build, as intended.
         run: |
-          for v in CSC_LINK CSC_KEY_PASSWORD WIN_CSC_LINK WIN_CSC_KEY_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER; do
+          # A tagged release must be Developer ID-signed on macOS: build/mac-signing.cjs
+          # fails it otherwise, because ad-hoc builds lose Accessibility on every update (worksuite-desktop#147).
+          for v in CSC_LINK CSC_KEY_PASSWORD CSC_NAME WIN_CSC_LINK WIN_CSC_KEY_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER APPLE_TEAM_ID; do
             if [ -z "${!v}" ]; then unset "$v"; fi
           done
           npx electron-builder --config build/electron-builder.config.cjs ${{ matrix.target }} --publish never
         env:
-          # macOS signing + notarization (Developer ID). Unset → unsigned build.
+          # macOS signing + notarization (Developer ID Application). Unset → an ad-hoc build, refused for releases.
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          CSC_NAME: ${{ secrets.MAC_CSC_NAME }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WS_RELEASE_BUILD: ${{ startsWith(github.ref, 'refs/tags/v') && '1' || '0' }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}

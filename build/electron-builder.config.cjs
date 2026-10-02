@@ -16,7 +16,15 @@
  *
  * An unsigned build still packages; it just cannot update itself (the
  * updater refuses to trust a publisher it cannot identify).
+ *
+ * Except a macOS release (worksuite-desktop#147): it must be signed with a stable
+ * Developer ID (CSC_LINK + CSC_KEY_PASSWORD, or CSC_NAME for an identity in the
+ * keychain; APPLE_TEAM_ID is checked against the result). Ad-hoc signing ties
+ * Accessibility to one exact build, so permission is lost on every update.
+ * build/mac-signing.cjs refuses such a release (a tagged CI build, or
+ * WS_RELEASE_BUILD=1) and warns loudly for any other build.
  */
+const macSigning = require('./mac-signing.cjs');
 const notarize = !!(process.env.APPLE_TEAM_ID || process.env.APPLE_API_KEY);
 const azure = process.env.AZURE_TRUSTED_SIGNING_ACCOUNT
   ? {
@@ -66,8 +74,13 @@ module.exports = {
   // FR-DL-06: only WorkSuite's own reference file type; common formats are never claimed.
   fileAssociations: [{ ext: 'worksuite', name: 'WorkSuite reference', description: 'A link to a WorkSuite record', role: 'Viewer', mimeType: 'application/x-worksuite-reference' }],
 
+  beforePack: macSigning.beforePack,
+  afterSign: macSigning.afterSign,
+
   mac: {
     category: 'public.app-category.business',
+    // A named Developer ID Application identity when several are in the keychain; otherwise CSC_LINK's certificate.
+    ...(process.env.CSC_NAME ? { identity: process.env.CSC_NAME } : {}),
     // The universal merge refuses a Mach-O file that is the same in the x64 and arm64 builds unless it is named
     // here. node-llama-cpp and @reflink ship each Mac's binaries as their own package (mac-arm64-metal, mac-x64;
     // reflink-darwin-arm64, -x64), installed in both builds and loaded by the one that matches at run time, so
@@ -79,6 +92,10 @@ module.exports = {
       { target: 'zip', arch: ['universal'] },
       { target: 'pkg', arch: ['universal'] },
     ],
+    // The remote-control input helper is Apple's /usr/bin/osascript, started as a direct child of the app: macOS
+    // counts WorkSuite as responsible for it, so WorkSuite's own Accessibility entry covers it and nothing else
+    // needs signing. Every binary inside the bundle (Electron's helpers, native modules) is signed with this same
+    // identity, hardened runtime and the inherited entitlements.
     hardenedRuntime: true,
     gatekeeperAssess: false,
     entitlements: 'build/entitlements.mac.plist',
