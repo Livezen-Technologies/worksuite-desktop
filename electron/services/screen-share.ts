@@ -1,6 +1,7 @@
 import { BrowserWindow, desktopCapturer, systemPreferences, webContents, type Session } from 'electron';
 import type { ScreenSources } from '@shared/types';
 import { logger } from '../main/log';
+import { DesktopError } from '../main/errors';
 
 const log = logger('screen-share');
 
@@ -25,6 +26,9 @@ export interface GrantedSource {
 }
 
 export class ScreenShare {
+  private previousPermission: string | null = null;
+  private permissionProblem: string | null = null;
+  private generations = new Map<number, number>();
   private picks = new Map<number, { id: string; at: number; audio: boolean }>();
   private granted = new Map<number, GrantedSource>();
   /** A source picked by this process rather than the person (a controller switching screens). */
@@ -46,11 +50,15 @@ export class ScreenShare {
   async sources(): Promise<ScreenSources> {
     const platform = process.platform;
     const permission = platform === 'darwin' ? this.permission() : 'granted';
+    const changedToGranted = this.previousPermission === 'denied' && permission === 'granted';
+    this.previousPermission = permission;
+    const permissionStatus = platform !== 'darwin' ? 'not_required' as const : permission === 'granted' ? 'granted' as const : permission === 'denied' || permission === 'restricted' ? 'denied' as const : 'unknown' as const;
+    const permissionProblem = this.permissionProblem;
     if (permission === 'denied' || permission === 'restricted') {
       log.info('screen sources: permission off', { permission });
-      return { permission, sources: [], state: 'denied', problem: null, restartMayHelp: true, platform };
+      return { permission, sources: [], state: 'denied', problem: null, restartMayHelp: false, platform, permissionStatus, permissionProblem };
     }
-    const ask = (types: Array<'screen' | 'window'>) => this.capturer.getSources({ types, thumbnailSize: { width: 320, height: 200 }, fetchWindowIcons: false });
+    const ask = (types: Array<'screen' | 'window'>) => this.getSources(types, true);
     const [screens, windows] = await Promise.allSettled([ask(['screen']), ask(['window'])]);
     const own = new Set(this.ownSources());
     const shape = (list: Electron.DesktopCapturerSource[], kind: 'screen' | 'window') =>
@@ -62,7 +70,7 @@ export class ScreenShare {
     const failed = [why(screens), why(windows)].filter(Boolean) as string[];
     const state: ScreenSources['state'] = failed.length === 2 ? 'failed' : failed.length ? 'partial' : 'ok';
     // No screen at all on a Mac is the permission not yet in effect: macOS applies it to a newly started app.
-    const restartMayHelp = platform === 'darwin' && (state === 'failed' || !sources.some((x) => x.kind === 'screen'));
+    const restartMayHelp = platform === 'darwin' && changedToGranted && (state === 'failed' || !sources.some((x) => x.kind === 'screen'));
     log.info('screen sources', {
       platform,
       permission,
@@ -71,15 +79,44 @@ export class ScreenShare {
       windows: windows.status === 'fulfilled' ? windows.value.length : -1,
       error: failed[0] ?? null,
     });
-    return { permission, sources, state, problem: failed[0] ?? null, restartMayHelp, platform };
+    return { permission, sources, state, problem: failed[0] ?? null, restartMayHelp, platform, permissionStatus, permissionProblem };
   }
 
   private permission(): string {
+    this.permissionProblem = null;
     try {
       return systemPreferences.getMediaAccessStatus('screen');
     } catch {
+      this.permissionProblem = 'The running app could not verify Screen Recording access.';
       return 'unknown';
     }
+  }
+
+  /** Bound native discovery so a hung OS callback cannot leave the picker or capture waiting forever. */
+  private getSources(types: Array<'screen' | 'window'>, thumbnails = false): Promise<Electron.DesktopCapturerSource[]> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Screen source discovery timed out. Check again.')), 10_000);
+      timer.unref?.();
+      try {
+        this.capturer.getSources({ types, thumbnailSize: { width: thumbnails ? 320 : 0, height: thumbnails ? 200 : 0 }, fetchWindowIcons: false }).then(resolve, reject).finally(() => clearTimeout(timer));
+      } catch (error) { clearTimeout(timer); reject(error); }
+    });
+  }
+
+  /** Revalidate the selected kind before requesting media, yielding a specific IPC error instead of Chromium's generic rejection. */
+  async preparePick(webContentsId: number, id: string, audio = false): Promise<void> {
+    this.forget(webContentsId);
+    const generation = this.generations.get(webContentsId);
+    const kind = id.startsWith('screen:') ? 'screen' : id.startsWith('window:') ? 'window' : null;
+    if (!kind) throw new DesktopError('IPC_VALIDATION_FAILED', 'Choose a screen or window from the sharing picker.');
+    const permission = process.platform === 'darwin' ? this.permission() : 'granted';
+    if (permission === 'denied' || permission === 'restricted') throw new DesktopError('PERMISSION_DENIED', 'Screen Recording access is denied for the running WorkSuite app. Open Privacy & Security → Screen Recording / Screen & System Audio Recording, then check again. Accessibility is separate.');
+    let sources: Electron.DesktopCapturerSource[];
+    try { sources = await this.getSources([kind]); }
+    catch (e) { throw new DesktopError('INTERNAL', `The selected ${kind} could not be discovered: ${e instanceof Error ? e.message : String(e)}`); }
+    if (this.generations.get(webContentsId) !== generation) throw new DesktopError('CANCELLED', 'Screen selection changed. Choose again.');
+    if (!sources.some((source) => source.id === id) || this.ownSources().includes(id)) throw new DesktopError('NOT_FOUND', 'The selected screen or window is no longer available. Refresh the sharing picker and choose again.');
+    this.pick(webContentsId, id, audio);
   }
 
   /**
@@ -88,13 +125,14 @@ export class ScreenShare {
    * picker does not offer it.
    */
   pick(webContentsId: number, id: string, audio = false): void {
+    this.generations.set(webContentsId, (this.generations.get(webContentsId) ?? 0) + 1);
     this.picks.set(webContentsId, { id, at: Date.now(), audio });
     this.chosenHere.delete(webContentsId);
   }
 
   /** Remote control's monitor switch: this process picks the next screen for the page, not the person. */
   pickForController(webContentsId: number, id: string): void {
-    this.picks.set(webContentsId, { id, at: Date.now(), audio: false });
+    this.pick(webContentsId, id, false);
     this.chosenHere.set(webContentsId, id);
   }
 
@@ -105,6 +143,7 @@ export class ScreenShare {
   }
 
   forget(webContentsId: number): void {
+    this.generations.set(webContentsId, (this.generations.get(webContentsId) ?? 0) + 1);
     this.picks.delete(webContentsId);
     this.granted.delete(webContentsId);
     this.chosenHere.delete(webContentsId);
@@ -112,25 +151,27 @@ export class ScreenShare {
 
   /** The screens, in the order the system lists them, for "Screen 2" when a controller switches. */
   async screens(): Promise<Array<{ id: string; name: string }>> {
-    const list = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } });
+    const list = await this.getSources(['screen']);
     return list.map((s) => ({ id: s.id, name: s.name }));
   }
 
   install(ses: Session): void {
     ses.setDisplayMediaRequestHandler((request, callback) => {
       const wc = request.frame ? webContents.fromFrame(request.frame) : undefined;
+      const generation = wc ? this.generations.get(wc.id) : undefined;
       const pick = wc ? this.picks.get(wc.id) : undefined;
-      if (wc) this.picks.delete(wc.id);
+      if (wc) { this.picks.delete(wc.id); this.granted.delete(wc.id); }
       const url = request.frame?.url ?? wc?.getURL() ?? '';
       if (!wc || !pick || Date.now() - pick.at > PICK_TTL || !this.trusted(url)) {
         log.info('display capture refused', { picked: !!pick, url });
         callback({});
         return;
       }
-      void desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 0, height: 0 } }).then(
+      void this.getSources([pick.id.startsWith('screen:') ? 'screen' : 'window']).then(
         (all) => {
-          if (!this.trusted(wc.getURL())) { callback({}); return; }
-          const source = all.find((s) => s.id === pick.id);
+          if (this.generations.get(wc.id) !== generation || wc.isDestroyed?.() || !this.trusted(wc.getURL()) || wc.getURL() !== url) { callback({}); return; }
+          const permission = process.platform === 'darwin' ? this.permission() : 'granted';
+          const source = permission === 'denied' || permission === 'restricted' ? undefined : all.find((s) => s.id === pick.id && !this.ownSources().includes(s.id));
           if (!source) log.info('picked source is gone', { id: pick.id });
           else {
             const kind = source.id.startsWith('screen:') ? ('screen' as const) : ('window' as const);
@@ -145,7 +186,7 @@ export class ScreenShare {
           }
           callback(source ? { video: source, ...(pick.audio && process.platform === 'win32' ? { audio: 'loopback' as const } : {}) } : {});
         },
-        () => callback({}),
+        (error) => { log.warn('capture source discovery failed', { error: error instanceof Error ? error.message : String(error) }); callback({}); },
       );
     });
   }

@@ -9,10 +9,16 @@ function inputTrusted() {
 }
 `;
 
+export interface HelperPermission {
+  trusted: boolean | null;
+  accessibility: boolean | null;
+  error: string | null;
+}
+
 export interface AccessibilityDeps {
   platform: string;
   appTrusted: () => boolean;
-  helperTrusted: () => Promise<boolean | null>;
+  helperTrusted: () => Promise<boolean | null | HelperPermission>;
   now: () => number;
 }
 export interface AccessibilityState {
@@ -21,6 +27,8 @@ export interface AccessibilityState {
   appTrusted?: boolean | null;
   helperTrusted?: boolean | null;
   checkedAt?: number;
+  helperAccessibility?: boolean | null;
+  problem?: string | null;
 }
 
 /** The event-posting helper is authoritative. Failed checks never become permission denials. */
@@ -43,11 +51,12 @@ export class AccessibilityCheck {
     await this.ask();
     // Another refresh may have superseded ours. Wait for its result too.
     while (this.asking) await this.asking;
-    return this.result!;
+    if (!this.result) return this.refresh();
+    return this.result;
   }
 
   /** Returning from Settings is handled by a fresh check, never blanket reset advice. */
-  openedSettings(): void { this.result = null; }
+  openedSettings(): void { this.generation++; this.result = null; this.asking = null; }
 
   private ask(): Promise<void> {
     const generation = ++this.generation;
@@ -55,10 +64,13 @@ export class AccessibilityCheck {
     try { app = this.deps.appTrusted(); } catch { /* Preserve unknown. */ }
     const run = Promise.resolve().then(() => this.deps.helperTrusted()).catch(() => null).then((trusted) => {
       if (generation !== this.generation) return;
+      const helper = typeof trusted === 'object' && trusted !== null ? trusted : { trusted, accessibility: null, error: null };
+      const disagreement = helper.accessibility === true && helper.trusted === false;
       this.result = {
-        status: trusted === null ? 'unknown' : trusted ? 'granted' : 'denied',
-        hint: app === true && trusted === false ? 'restart' : null,
-        appTrusted: app, helperTrusted: trusted, checkedAt: this.deps.now(),
+        status: helper.trusted === null || disagreement ? 'unknown' : helper.trusted ? 'granted' : 'denied',
+        hint: app === true && helper.trusted === false ? 'restart' : null,
+        appTrusted: app, helperTrusted: helper.trusted, helperAccessibility: helper.accessibility, checkedAt: this.deps.now(),
+        problem: disagreement ? 'The helper reports Accessibility enabled, but macOS event-posting preflight disagrees. Reopen the running copy of WorkSuite and check again.' : helper.error,
       };
     }).finally(() => { if (this.asking === run) this.asking = null; });
     this.asking = run;
@@ -66,13 +78,18 @@ export class AccessibilityCheck {
   }
 }
 
-export function askHelper(timeoutMs = 4_000): Promise<boolean | null> {
+export function askHelper(timeoutMs = 4_000): Promise<HelperPermission> {
   return new Promise((resolve) => {
-    execFile('/usr/bin/osascript', ['-l', 'JavaScript', '-e', `${MAC_PERMISSION_SCRIPT}\ninputTrusted()`],
+    // Same binary, native APIs and launch context as the real injector; never posts input or prompts for consent.
+    const script = `${MAC_PERMISSION_SCRIPT}\nJSON.stringify({ trusted: inputTrusted(), accessibility: !!$.AXIsProcessTrusted() })`;
+    execFile('/usr/bin/osascript', ['-l', 'JavaScript', '-e', script],
       { timeout: timeoutMs, env: { ...process.env, WS_OWNER_PID: String(process.pid) } }, (err, stdout) => {
-        if (err) return resolve(null);
-        const out = String(stdout).trim();
-        resolve(out === 'true' ? true : out === 'false' ? false : null);
+        if (err) return resolve({ trusted: null, accessibility: null, error: err.killed ? 'The input-helper permission check timed out.' : 'The input-helper permission check could not run.' });
+        try {
+          const value = JSON.parse(String(stdout).trim()) as HelperPermission;
+          if (typeof value.trusted === 'boolean' && typeof value.accessibility === 'boolean') return resolve({ trusted: value.trusted, accessibility: value.accessibility, error: null });
+        } catch { /* Malformed output is unknown, never denial. */ }
+        resolve({ trusted: null, accessibility: null, error: 'The input-helper permission check returned an invalid response.' });
       });
   });
 }

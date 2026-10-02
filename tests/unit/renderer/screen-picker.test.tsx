@@ -76,18 +76,16 @@ describe('the share picker', () => {
   });
 
   it('Screen Recording off: says so (not Accessibility), with Open System Settings, Restart and Check again', async () => {
-    answer = { permission: 'denied', state: 'denied', sources: [], platform: 'darwin', restartMayHelp: true };
+    answer = { permission: 'denied', state: 'denied', sources: [], platform: 'darwin', restartMayHelp: false };
     mount();
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toMatch(/isn’t allowed to record the screen/);
     expect(alert.textContent).toMatch(/Screen Recording/);
     expect(alert.textContent).toMatch(/separate from Accessibility/);
-    expect(alert.textContent).toMatch(/restarts/);
+    expect(screen.queryByRole('button', { name: 'Restart WorkSuite' })).toBeNull();
     expect(screen.queryByText(/Nothing to share|No screen could be found/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Open System Settings' }));
     expect(call).toHaveBeenCalledWith('media:privacySettings', { pane: 'screen' });
-    fireEvent.click(screen.getByRole('button', { name: 'Restart WorkSuite' }));
-    expect(call).toHaveBeenCalledWith('app:relaunch', undefined);
     answer = ok;
     fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
     expect(await screen.findByRole('option', { name: /Screen 1/ })).toBeTruthy();
@@ -147,4 +145,15 @@ describe('the share picker', () => {
     fireEvent.doubleClick(await screen.findByRole('option', { name: /Screen 1/ }));
     expect(onPick).toHaveBeenCalledWith(expect.objectContaining({ quality: 'performance', allowRequests: false }));
   });
+});
+
+
+it('keeps Screen Recording unknown separate from denial and allows discovered sources without Accessibility', async () => {
+  answer = { ...ok, permission: 'unknown', permissionStatus: 'unknown' };
+  const pick = mount({ control: { allowRequests: false, unavailable: 'Accessibility is denied.' } });
+  fireEvent.click(await screen.findByRole('option', { name: /Screen 1/ }));
+  expect(screen.getByText(/Screen Recording.*Unable to Verify/)).toBeTruthy();
+  expect(screen.queryByText(/isn’t allowed to record the screen/)).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+  expect(pick).toHaveBeenCalledWith(expect.objectContaining({ id: 'screen:1:0', allowRequests: false }));
 });

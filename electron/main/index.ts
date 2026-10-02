@@ -38,7 +38,7 @@ import { AuthService } from '../services/auth';
 import { BootstrapService } from '../services/bootstrap';
 import { CallService } from '../services/calls';
 import { ScreenShare } from '../services/screen-share';
-import { createRemoteControl } from '../services/remote-control/host';
+import { accessibility, createRemoteControl } from '../services/remote-control/host';
 import { DEFAULT_POLICY } from '../services/policy';
 import { Database } from '../services/db';
 import { archName, DeviceService, platformName } from '../services/device';
@@ -1808,7 +1808,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     notifications.markGap();
   });
   powerMonitor.on('user-did-resign-active', () => remoteControl.onSystem('user-did-resign-active'));
+  app.on('browser-window-focus', () => { if (process.platform === 'darwin') accessibility.openedSettings(); });
   powerMonitor.on('resume', () => {
+    if (process.platform === 'darwin') accessibility.openedSettings();
     device.poke();
     sync.kick('resume');
     realtime.kick();
