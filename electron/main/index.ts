@@ -1808,9 +1808,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     notifications.markGap();
   });
   powerMonitor.on('user-did-resign-active', () => remoteControl.onSystem('user-did-resign-active'));
-  app.on('browser-window-focus', () => { if (process.platform === 'darwin') accessibility.openedSettings(); });
+  app.on('browser-window-focus', () => { if (process.platform === 'darwin') { accessibility.openedSettings(); void accessibility.refresh(); } });
   powerMonitor.on('resume', () => {
-    if (process.platform === 'darwin') accessibility.openedSettings();
+    if (process.platform === 'darwin') { accessibility.openedSettings(); void accessibility.refresh(); }
     device.poke();
     sync.kick('resume');
     realtime.kick();

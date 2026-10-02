@@ -157,3 +157,13 @@ it('keeps Screen Recording unknown separate from denial and allows discovered so
   fireEvent.click(screen.getByRole('button', { name: 'Share' }));
   expect(pick).toHaveBeenCalledWith(expect.objectContaining({ id: 'screen:1:0', allowRequests: false }));
 });
+
+
+it('allows sharing while the independent remote-control check is still pending', async () => {
+  answer = ok;
+  const pick = mount({ inMeeting: true });
+  expect(screen.getByText(/Checking whether others can ask/)).toBeTruthy();
+  fireEvent.click(await screen.findByRole('option', { name: /Screen 1/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+  expect(pick).toHaveBeenCalledWith(expect.objectContaining({ id: 'screen:1:0', allowRequests: false }));
+});

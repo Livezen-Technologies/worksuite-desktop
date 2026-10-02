@@ -623,7 +623,7 @@ export interface ScreenSources {
    */
   state?: 'ok' | 'denied' | 'failed' | 'partial';
   problem?: string | null;
-  /** macOS applies a changed Screen Recording permission only to a newly started app. */
+  /** Permission changed during this run, but capture remains unavailable; a restart may help. */
   restartMayHelp?: boolean;
   platform?: string;
 }

@@ -69,7 +69,7 @@ export class ScreenShare {
     const why = (r: PromiseSettledResult<unknown>) => (r.status === 'rejected' ? (r.reason instanceof Error ? r.reason.message : String(r.reason)) : null);
     const failed = [why(screens), why(windows)].filter(Boolean) as string[];
     const state: ScreenSources['state'] = failed.length === 2 ? 'failed' : failed.length ? 'partial' : 'ok';
-    // No screen at all on a Mac is the permission not yet in effect: macOS applies it to a newly started app.
+    // A failed or empty list alone is not evidence for restart. Require an observed permission transition.
     const restartMayHelp = platform === 'darwin' && changedToGranted && (state === 'failed' || !sources.some((x) => x.kind === 'screen'));
     log.info('screen sources', {
       platform,
