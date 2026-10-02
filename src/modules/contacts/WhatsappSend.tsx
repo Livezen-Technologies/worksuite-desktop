@@ -1,8 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
+import { whatsappRoute } from '@shared/channels';
 import { useState } from 'react';
 import { useCanOpen } from '../../core/access';
 import { apiGet, apiPost } from '../../core/api';
-import { call, errorMessage } from '../../core/bridge';
+import { errorMessage } from '../../core/bridge';
+import { navigate } from '../../core/tabs';
 import { toast } from '../../core/toasts';
 import { Button, Modal } from '../../components/ui';
 import { digits } from './api';
@@ -29,7 +31,7 @@ export function WhatsappSend({ phone, name, contactId, onClose }: { phone: strin
   const [text, setText] = useState('');
   const [picked, setPicked] = useState<number | null>(null);
   const [sending, setSending] = useState(false);
-  // The conversation lives in WhatsApp (in the browser): offered only to whoever has it.
+  // The conversation lives in Chat › WhatsApp: offered only to whoever has WhatsApp.
   const whatsapp = useCanOpen('whatsapp');
   // The connected one somebody uses, not merely the first: a "setup" account cannot carry a message.
   const fallback = accounts.find((a) => a.is_default && a.ready) ?? accounts.find((a) => a.ready) ?? accounts[0];
@@ -53,7 +55,7 @@ export function WhatsappSend({ phone, name, contactId, onClose }: { phone: strin
         return;
       }
       onClose();
-      toast('success', 'Sent on WhatsApp', r.chat_id && whatsapp ? { label: 'Open the conversation', run: () => void call('app:openInBrowser', { path: `/whatsapp?chat=${r.chat_id}` }) } : undefined);
+      toast('success', 'Sent on WhatsApp', r.chat_id && whatsapp ? { label: 'Open the conversation', run: () => navigate(whatsappRoute({ chat: String(r.chat_id) })) } : undefined);
     } catch (e) {
       toast('error', `Not sent. ${errorMessage(e)}`);
     } finally {

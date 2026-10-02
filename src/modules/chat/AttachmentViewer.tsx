@@ -2,15 +2,15 @@ import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { apiUrl } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
-import { isOfficeFile, mediaToken, openDocument } from '../../core/open-document';
+import { isOfficeFile, mediaToken, openDocument, openInOffice } from '../../core/open-document';
 import { bytes } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Spinner, cx } from '../../components/ui';
 import { mediaUrl, openAttachment, type ChatFile } from './types';
 
-/** An attachment as Chat and Web Chat both have it. */
-export type Attachment = Pick<ChatFile, 'filename' | 'mime' | 'size' | 'url' | 'download_url'> & Partial<Pick<ChatFile, 'id' | 'preview' | 'is_image' | 'poster_url'>>;
+/** An attachment as Chat, Web Chat and WhatsApp have it. A WhatsApp one is a Drive file (`driveFile`), downloaded by its id. */
+export type Attachment = Pick<ChatFile, 'filename' | 'mime' | 'size' | 'url' | 'download_url'> & Partial<Pick<ChatFile, 'id' | 'preview' | 'is_image' | 'poster_url'>> & { driveFile?: number };
 
 export type PreviewKind = 'image' | 'video' | 'audio' | 'pdf' | 'office' | 'csv' | 'text' | 'other';
 
@@ -54,6 +54,16 @@ function readUrl(f: Attachment): string | null {
  */
 export function openChatAttachment(f: Attachment, link: (url: string) => void, gallery?: Attachment[]): void {
   const kind = previewKind(f);
+  // A Drive file (a WhatsApp attachment) with no preview here: a Word, Excel or PowerPoint file in a WorkSuite tab, a
+  // PDF in PDF Studio and the rest in its app on this computer.
+  if (f.driveFile && isOfficeFile(f.filename)) {
+    openInOffice({ kind: 'api', path: `/api/files/${f.driveFile}/download`, name: f.filename });
+    return;
+  }
+  if (f.driveFile && (kind === 'pdf' || kind === 'office' || kind === 'other')) {
+    void openDocument({ fileId: String(f.driveFile) }, f.filename);
+    return;
+  }
   if (kind === 'pdf' || kind === 'office') {
     openAttachment(f, link);
     return;
@@ -96,16 +106,17 @@ export function closePreview(): void {
 
 const download = (f: Attachment, link: (url: string) => void) => {
   const token = mediaToken(f.download_url) ?? mediaToken(f.url);
-  if (token) {
-    void call('transfers:download', { chatMedia: token, name: f.filename, open: false })
+  if (token || f.driveFile) {
+    void call('transfers:download', { ...(token ? { chatMedia: token } : { fileId: String(f.driveFile) }), name: f.filename, open: false })
       .then(() => toast('info', `Downloading ${f.filename}…`))
       .catch((e) => toast('error', errorMessage(e)));
   } else if (f.download_url) link(f.download_url);
 };
-const canOpenElsewhere = (f: Attachment) => !!(mediaToken(f.download_url) ?? mediaToken(f.url));
+const canOpenElsewhere = (f: Attachment) => !!(mediaToken(f.download_url) ?? mediaToken(f.url) ?? f.driveFile);
 const openElsewhere = (f: Attachment) => {
   const token = mediaToken(f.download_url) ?? mediaToken(f.url);
   if (token) void openDocument({ chatMedia: token }, f.filename);
+  else if (f.driveFile) void openDocument({ fileId: String(f.driveFile) }, f.filename);
 };
 
 const ZOOMS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];

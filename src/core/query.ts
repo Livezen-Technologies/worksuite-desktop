@@ -27,6 +27,11 @@ const WEBSITE_EVENTS = new Set(['chat.widget.message', 'chat.widget.activity', '
 /** Events that change nothing a list or thread shows; refetching every message on each keystroke was waste. */
 const QUIET_CHAT_EVENTS = /^chat\.(typing\.|presence$|call\.)/;
 
+/** A realtime event about an announcement: the server's own nudge, or the notification that one was published. */
+export function touchesAnnouncements(e: { type: string; event?: string }): boolean {
+  return e.type === 'hr.announcement.changed' || (e.type === 'notification' && e.event === 'hr.announcement_published');
+}
+
 export function wireQueryInvalidation(): void {
   on('realtime:resync', () => void queryClient.invalidateQueries());
   on('organization:changed', () => void queryClient.invalidateQueries());
@@ -55,6 +60,9 @@ export function wireQueryInvalidation(): void {
     if (touchesInvitations(e)) for (const queryKey of [['meetings'], ['calendar'], ['home']]) void queryClient.invalidateQueries({ queryKey });
     if (e.type === 'activity.new') void queryClient.invalidateQueries({ queryKey: ['home'] });
     if (e.type === 'hr.attendance.changed') void queryClient.invalidateQueries({ queryKey: ['hr'] });
+    // An announcement was published, edited, withdrawn, expired or deleted (worksuite-desktop#98): Home's block, an open
+    // reader (which then says it is no longer available) and HR's console ask again.
+    if (touchesAnnouncements(e)) for (const queryKey of [['announcements'], ['hr', 'announcements']]) void queryClient.invalidateQueries({ queryKey });
     // Hotel PMS's live nudges (`pms.room`, `pms.hk_task`, `pms.request`): the rack and the desk's lists ask again (PMS-ARC-030).
     if (e.type.startsWith('pms.')) void queryClient.invalidateQueries({ queryKey: ['pms', 'live'] });
   });

@@ -8,6 +8,8 @@
  * and the target is then permission-checked like any other navigation.
  */
 
+import { whatsappRoute } from './channels';
+
 export const MAX_LINK_LENGTH = 2048;
 
 export interface DeepLink {
@@ -51,6 +53,9 @@ export const DEEP_LINK_RULES: RouteRule[] = [
   { pattern: 'mail/:id', module: 'mail', route: (p) => `/mail/${p.id}` },
   { pattern: 'chat', module: 'chat', route: () => '/chat' },
   { pattern: 'chat/:id', module: 'chat', route: (p) => `/chat/${p.id}` },
+  // WhatsApp is a channel of Chat (worksuite-desktop#35): its links open there, on the same conversation.
+  { pattern: 'whatsapp', module: 'whatsapp', route: () => whatsappRoute() },
+  { pattern: 'whatsapp/:id', module: 'whatsapp', route: (p) => whatsappRoute({ chat: p.id }) },
   { pattern: 'calendar', module: 'calendar', route: () => '/calendar' },
   { pattern: 'tasks', module: 'tasks', route: () => '/tasks' },
   { pattern: 'tasks/:id', module: 'tasks', route: (p) => `/tasks/${p.id}` },
