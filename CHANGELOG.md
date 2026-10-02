@@ -5,6 +5,19 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.95: macOS remote control sees the permission you granted
+
+On a Mac, Settings › Remote control could keep saying **Accessibility: Denied** after WorkSuite was switched on in System Settings (#147):
+
+- **Check again checks again** — WorkSuite and its input helper are asked afresh each time; nothing is cached. The status also refreshes on its own when you come back to WorkSuite, and every 2 seconds while access is missing.
+- **When macOS needs a relaunch**, it says *Access granted — restart WorkSuite to finish* with a **Restart WorkSuite** button, instead of Denied.
+- **Which copy is running** is shown: its location, bundle ID, Team ID and signing identity, with a warning for an unsigned build, a copy macOS has moved to a temporary place, a second copy in Applications or a development build — the usual reasons the switch in System Settings belongs to a different WorkSuite. Help explains removing and re-adding WorkSuite there.
+- **Releases are signed with the Developer ID** so the permission carries over to updates; a tagged macOS release without the signing certificate now stops instead of shipping unsigned.
+
+Release builds need `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD` and `APPLE_TEAM_ID` (plus the notarization keys). A test checklist for a real Mac is in `docs/MACOS_PERMISSIONS.md`.
+
+---
+
 ## 2026-10-03 — 0.2.94: a clean Home after signing in
 
 After signing in — from the login screen, the lock screen or a Local Profile — Home now opens with nothing on top of it (#150):
