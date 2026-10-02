@@ -9,6 +9,12 @@ the root CHANGELOG.md.
 **Added**
 
 - Q&A, Polls and Raise hand in the meeting (worksuite-desktop#92). Participants ask and upvote questions; hosts and co-hosts answer, mark answered and hide them. Hosts create single- or multiple-choice polls, launch them, close voting and share the results, and each person votes once while everyone sees how many have voted. Before you send, each question and poll says whether your name will be shown. Raised hands show on tiles and in People, in the order they went up. Hosts are told when a hand goes up and can lower one or all, and raising a hand never turns the microphone on. Host Controls switch each one on or off, and the state is kept across devices and reconnects. Labels are in English, Sinhala and Tamil.
+- **New meeting menu** (worksuite-desktop#90): each choice is an icon beside its title, with a short description underneath (Start now, Create link for later, Schedule in Calendar).
+  - One option is highlighted at a time, following the pointer or the arrow keys.
+  - The shadow is lighter.
+  - The menu opens above the button when there is no room below.
+  - Choosing twice before the menu closes starts only one meeting.
+  - Labels are in English, Sinhala and Tamil.
 
 ## 1.3.0 — 2026-10-01
 

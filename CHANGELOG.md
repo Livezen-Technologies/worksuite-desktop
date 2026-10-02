@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-10-02 — 0.2.75: Q&A, polls and raise hand in meetings
+## 2026-10-02 — 0.2.75: Q&A, polls and raise hand in meetings; a clearer New meeting menu
 
 - **Q&A** (#92):
   - Participants ask questions and upvote them, one vote each.
@@ -24,6 +24,13 @@ person who has to live with the change — what it does, and where it bites.
 - **Sync:** everything stays the same across devices and reconnects.
 - **Meeting details:** a new **Q&A & Polls** tab. The organiser, hosts and co-hosts see everything. Participants
   see the visible questions, without anonymous names, and the poll results that were shared.
+- **New meeting menu** (#90):
+  - Each choice is an icon beside its title with a short description underneath: Start now, Create link for later,
+    Schedule in Calendar.
+  - One option is highlighted at a time, by mouse or arrow keys, and the shadow is lighter.
+  - The menu opens above the button when there is no room below.
+  - Choosing twice quickly starts only one meeting.
+  - Every menu opened from a button now flips above it when it would not fit below.
 - Where it bites:
   - This needs WorkSuite Communication 1.3.0 and Meeting 1.4.0 on the server. Run its migrations.
   - Against an older server, Raise hand is greyed out, and Q&A and Polls have nothing to show.

@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.0 — 2026-10-02
+
+**Added**
+
+- a stacked style for menus opened from a button: an icon tile beside a title and a description, one highlight that follows the pointer and the keyboard, and a lighter shadow (worksuite-desktop#90).
+
+**Changed**
+
+- a menu opened from a button now opens above it when there is no room below, is never wider than the window, and acts only once per opening.
+
 ## 1.2.0 — 2026-10-01
 
 **Added**
