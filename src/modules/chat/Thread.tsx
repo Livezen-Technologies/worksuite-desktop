@@ -1,3 +1,5 @@
+import { OutgoingMediaBubble, useOutgoingMedia } from './OutgoingMedia';
+import { outgoing } from './outgoing';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { canOpenLink } from '@shared/access';
@@ -73,6 +75,7 @@ export function Thread({
   onToggleDetails?: () => void;
 }) {
   const qc = useQueryClient();
+  const outgoingCount = useStore(outgoing, (s) => s.jobs.filter((j) => j.roomId === roomId).length);
   const me = useStore(app, (s) => s.auth?.user?.id);
   const meetAllowed = useCanOpen('meet');
   // Making a task or a note from here crosses into Tasks or Notes: only for whoever has them.
@@ -106,6 +109,12 @@ export function Thread({
   const pending = useQuery({ queryKey: ['offline', 'pending'], queryFn: () => call('offline:pending') });
   const mine = (pending.data ?? []).filter((m: OfflineMutation) => m.module === 'chat' && m.entityId === roomId && m.state !== 'DONE');
   const messages = useMemo(() => [...(msgs.data?.pages ?? [])].reverse().flatMap((p) => p.messages), [msgs.data]);
+  const pendingMedia = useOutgoingMedia(roomId, messages);
+  const mediaTransfers = useStore(app, (s) => s.transfers);
+  const timeline = [
+    ...messages.map((m, index) => ({ message: m, index, job: null, time: m.client_message_id ? Date.parse(mediaTransfers.find((t) => t.chat?.clientMessageId === m.client_message_id)?.createdAt ?? '') || parseTs(m.created_at).getTime() : parseTs(m.created_at).getTime() })),
+    ...pendingMedia.map((job) => ({ message: null, index: 0, job, time: Date.parse(job.createdAt) })),
+  ].sort((a, b) => a.time - b.time);
   // The conversation's pictures, oldest first: ‹ › in the attachment preview goes through them (#38).
   const pictures = useMemo(() => messages.flatMap((m) => (m.file && !m.deleted && m.file.preview === 'image' ? [m.file] : [])), [messages]);
 
@@ -119,7 +128,7 @@ export function Thread({
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
-  }, [messages.length, mine.length]);
+  }, [messages.length, mine.length, outgoingCount]);
 
   // Who is typing here, each until they stop, send, or go quiet.
   useEffect(() => {
@@ -286,7 +295,10 @@ export function Thread({
         ) : null}
         {msgs.isLoading ? <Spinner /> : msgs.error ? <ErrorNote error={msgs.error} onRetry={() => void msgs.refetch()} /> : null}
         <AttachmentGallery.Provider value={pictures}>
-        {messages.map((m, i) => {
+        {timeline.map((entry) => {
+          if (entry.job) return <OutgoingMediaBubble key={entry.job.id} job={entry.job} />;
+          const m = entry.message!;
+          const i = entry.index;
           const header = days[i];
           const prev = messages[i - 1];
           const first = !!header || !prev || prev.sender_id !== m.sender_id || prev.type === 'system' || prev.type === 'call';
@@ -468,7 +480,9 @@ function Bubble({ m, own, roomId, onReply, onForward, onEdit }: { m: ChatMessage
           </div>
         ) : null}
         {f && !m.deleted ? (
-          voice && mediaUrl(f.url) ? (
+          (f.status === 'processing' || ((f.preview === 'video' || voice) && !f.url)) ? (
+            <span role="status" className="flex items-center gap-2 p-2 text-[12px] text-ink-2"><span aria-hidden="true" className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />Media processing…</span>
+          ) : voice && mediaUrl(f.url) ? (
             <VoicePlayer src={mediaUrl(f.url)!} ms={f.duration_ms} seed={m.id} own={own} />
           ) : f.preview === 'image' && src ? (
             <button type="button" className="overflow-hidden rounded-[12px] border border-line" onClick={() => openChatAttachment(f, openLink, gallery)} aria-label={`Open ${f.filename}`}>
@@ -779,7 +793,9 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
                 </div>
               ) : null}
               {f ? (
-                voice && mediaUrl(f.url) ? (
+                (f.status === 'processing' || ((f.preview === 'video' || voice) && !f.url)) ? (
+                  <span role="status" className="flex items-center gap-2 p-2 text-[12px] text-ink-2"><span aria-hidden="true" className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />Media processing…</span>
+                ) : voice && mediaUrl(f.url) ? (
                   <VoicePlayer src={mediaUrl(f.url)!} ms={f.duration_ms} seed={m.id} own={own} bare />
                 ) : f.preview === 'image' && src ? (
                   <button type="button" className="block overflow-hidden rounded-[8px]" onClick={() => openChatAttachment(f, openLink, gallery)} aria-label={`Open ${f.filename}`}>

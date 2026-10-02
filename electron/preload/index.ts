@@ -202,6 +202,7 @@ const api = {
     list: call('transfers:list'),
     download: call('transfers:download'),
     upload: call('transfers:upload'),
+    prepareMedia: call('transfers:prepareMedia'),
     pause: call('transfers:pause'),
     resume: call('transfers:resume'),
     cancel: call('transfers:cancel'),

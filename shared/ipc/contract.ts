@@ -214,7 +214,7 @@ export const uploadTargetSchema = z.discriminatedUnion('kind', [
     name: z.string().min(1).max(255).regex(/^[^/\\]+$/).optional(),
   }),
   /** A chat attachment; the caption and the reply go with it (the first of several files carries them). */
-  z.object({ kind: z.literal('chat'), roomId: z.string().max(64), caption: z.string().max(4000).optional(), replyTo: z.number().int().positive().optional() }),
+  z.object({ kind: z.literal('chat'), roomId: z.string().max(64), caption: z.string().max(4000).optional(), replyTo: z.number().int().positive().optional(), clientMessageId: z.string().regex(/^desktop-[a-zA-Z0-9-]{1,80}$/).optional(), voice: z.boolean().optional(), durationMs: z.number().int().min(0).max(86400000).optional(), submittedAt: z.string().datetime().optional() }),
   /** A task's attachment (or a comment's, with its id): stored in Drive, then linked to the task. */
   z.object({ kind: z.literal('task'), taskId: z.number().int().positive(), commentId: z.number().int().positive().optional() }),
   /**
@@ -643,6 +643,10 @@ export const contract = {
    * main process builds the address, refuses without `desktop.downloads` (here and in the handler) and audits it.
    */
   'pms:download': ch(pmsDownloadInput, { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 }),
+  'transfers:prepareMedia': ch(
+    z.strictObject({ handle: idString.optional(), data: z.instanceof(Uint8Array).refine((b) => b.byteLength > 0 && b.byteLength <= 100 * 1024 * 1024).optional(), name: z.string().min(1).max(255).regex(/^[^/\\]+$/), originalQuality: z.boolean() }).refine((v) => !!v.handle !== !!v.data, 'Give a picked handle or recorded bytes.'),
+    { session: true, rate: 30 },
+  ),
   'transfers:upload': ch(
     z.object({ handles: z.array(idString).min(1).max(200), target: uploadTargetSchema }),
     { session: true, rate: 5 },
@@ -1174,6 +1178,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'transfers:download': Transfer;
   'pms:download': Transfer;
   'transfers:upload': Transfer[];
+  'transfers:prepareMedia': PickedFile & { preview?: string; mime?: string };
   'transfers:pause': void;
   'transfers:resume': void;
   'transfers:cancel': void;

@@ -1,7 +1,7 @@
-import { shell } from 'electron';
+import { app, nativeImage, shell } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { createWriteStream, existsSync, openAsBlob } from 'node:fs';
-import { lstat, mkdir, open, readdir, realpath, rename, stat, unlink } from 'node:fs/promises';
+import { lstat, mkdir, open, readdir, realpath, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import type { PickedFile, UploadTarget } from '@shared/ipc/contract';
 import type { DrivePrefs, Transfer, TransferState } from '@shared/types';
@@ -45,6 +45,7 @@ interface Handle {
   name: string;
   size: number;
   relativePath?: string;
+  owned?: boolean;
 }
 
 interface Meta {
@@ -78,6 +79,8 @@ interface Meta {
   exactPath?: string | null;
   /** The server has the whole upload (`complete` answered): trying again never sends it a second time. */
   completed?: boolean;
+  ownedSource?: boolean;
+  phase?: Transfer['phase'];
 }
 
 /**
@@ -267,6 +270,8 @@ export class TransferManager {
   private cfg: QueueConfig = { maxConcurrent: 2, maxUploads: null, maxDownloads: null, uploadBps: null, downloadBps: null, autoRetry: true, autoResume: true, metered: 'limit' };
   /** One cap for every upload and one for every download, whatever module started them. */
   private buckets = { upload: new TokenBucket(null), download: new TokenBucket(null) };
+  private chatOrderWaiters = new Set<() => void>();
+  private previewPaths = new Map<string, { path: string; owner: string; mime: string }>();
   private offline = false;
   private metered = false;
   private retryTimer: NodeJS.Timeout | null = null;
@@ -275,6 +280,86 @@ export class TransferManager {
   onChanged: (list: Transfer[]) => void = () => undefined;
 
   constructor(private readonly deps: TransferDeps) {}
+
+  /** Native image decoding/thumbnails run asynchronously; picked paths never reach the renderer. */
+  async prepareMedia(input: { handle?: string; data?: Uint8Array; name: string; originalQuality: boolean }): Promise<PickedFile & { preview?: string; mime?: string }> {
+    let file = input.handle ? this.handles.get(input.handle) : undefined;
+    const uid = this.deps.userId();
+    if (!uid) throw new DesktopError('IPC_VALIDATION_FAILED', 'Sign in before sending media.');
+    const make = async (data: Uint8Array, name: string): Promise<PickedFile> => {
+      const folder = join(app.getPath('userData'), 'chat-media', randomUUID());
+      await mkdir(folder, { recursive: true, mode: 0o700 });
+      const path = join(folder, safeFileName(name));
+      await writeFile(path, data, { mode: 0o600 });
+      const handle = randomUUID();
+      this.handles.set(handle, { path, name: basename(path), size: data.byteLength, owned: true });
+      setTimeout(() => {
+        if (this.handles.delete(handle)) void unlink(path).catch(() => undefined);
+      }, 30 * 60_000).unref?.();
+      return { handle, name: basename(path), size: data.byteLength };
+    };
+    let picked: PickedFile;
+    if (input.data) {
+      picked = await make(input.data, input.name);
+      file = this.handles.get(picked.handle);
+    } else {
+      if (!file || !input.handle) throw new DesktopError('IPC_VALIDATION_FAILED', 'That file is no longer available; choose it again.');
+      picked = { handle: input.handle, name: file.name, size: file.size };
+    }
+    // Preserve animated GIFs, SVGs and unknown formats; optional processing never blocks delivery.
+    const mime = mimeFor(picked.name) ?? '';
+    if (/^(video|audio)\//.test(mime)) {
+      const token = randomUUID();
+      this.previewPaths.set(token, { path: file!.path, owner: uid, mime });
+      setTimeout(() => this.previewPaths.delete(token), 12 * 60 * 60_000).unref?.();
+      return { ...picked, mime, preview: `app://bundle/__local/chat-media/${token}` };
+    }
+    if (!/\.(jpe?g|png|webp)$/i.test(picked.name) || picked.size > 50 * 1024 * 1024) return picked;
+    try {
+      let image;
+      try { image = await nativeImage.createThumbnailFromPath(file!.path, { width: 2048, height: 2048 }); }
+      catch {
+        // Electron's async OS thumbnail API is unavailable on Linux. Decode in main, never in the composer's UI thread.
+        image = nativeImage.createFromPath(file!.path);
+        const { width, height } = image.getSize();
+        if (width > 2048 || height > 2048) image = image.resize(width >= height ? { width: 2048 } : { height: 2048 });
+      }
+      if (image.isEmpty()) return picked;
+      const preview = image.resize({ width: 320 }).toDataURL();
+      if (!input.originalQuality) {
+        const jpeg = /\.jpe?g$/i.test(picked.name);
+        const data = jpeg ? image.toJPEG(82) : image.toPNG();
+        if (data.byteLength < picked.size) {
+          const compressed = await make(data, picked.name.replace(/\.[^.]+$/, jpeg ? '.jpg' : '.png'));
+          this.handles.delete(picked.handle);
+          if (file!.owned) void unlink(file!.path).catch(() => undefined);
+          return { ...compressed, preview };
+        }
+      }
+      return { ...picked, preview };
+    } catch { return picked; }
+  }
+
+  /** Capability-scoped local video/audio streams, with ranges; never accept a renderer path. */
+  async serveMediaPreview(request: Request, path: string): Promise<Response> {
+    const token = /^\/chat-media\/([a-f0-9-]{36})$/.exec(path)?.[1];
+    const picked = token ? this.previewPaths.get(token) : undefined;
+    if (!picked || picked.owner !== this.deps.userId()) return new Response('Not found', { status: 404 });
+    if (request.method !== 'GET' && request.method !== 'HEAD') return new Response(null, { status: 405 });
+    try {
+      const blob = await openAsBlob(picked.path, { type: picked.mime });
+      const headers = { 'Content-Type': picked.mime, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
+      const range = request.headers.get('Range');
+      if (range) {
+        const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+        const start = match?.[1] ? Number(match[1]) : Math.max(0, blob.size - Number(match?.[2]));
+        const end = match?.[2] && match[1] ? Math.min(blob.size - 1, Number(match[2])) : blob.size - 1;
+        if (!match || (!match[1] && !match[2]) || !Number.isSafeInteger(start) || start > end || start >= blob.size) return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${blob.size}` } });
+        return new Response(request.method === 'HEAD' ? null : blob.slice(start, end + 1), { status: 206, headers: { ...headers, 'Content-Range': `bytes ${start}-${end}/${blob.size}`, 'Content-Length': String(end - start + 1) } });
+      }
+      return new Response(request.method === 'HEAD' ? null : blob, { headers: { ...headers, 'Content-Length': String(blob.size) } });
+    } catch { return new Response('Not found', { status: 404 }); }
+  }
 
   // ── handles ────────────────────────────────────────────────────────────
 
@@ -395,7 +480,18 @@ export class TransferManager {
       attempts: l.meta.attempts ?? 0,
       movedAt: l.t.state === 'running' && l.movedAt ? new Date(l.movedAt).toISOString() : null,
       held,
+      phase: l.meta.phase,
+      ...(l.meta.target?.kind === 'chat' ? { chat: this.chatInfo(l.t.id, l.meta.target) } : {}),
     };
+  }
+
+  private chatInfo(id: string, target: Extract<UploadTarget, { kind: 'chat' }>): NonNullable<Transfer['chat']> {
+    return { roomId: target.roomId, clientMessageId: target.clientMessageId ?? `desktop-${id}`, caption: target.caption, voice: target.voice, durationMs: target.durationMs };
+  }
+
+  private phase(l: Live, phase: NonNullable<Transfer['phase']>): void {
+    l.meta.phase = phase;
+    this.persist(l); this.emit();
   }
 
   list(): Transfer[] {
@@ -424,6 +520,8 @@ export class TransferManager {
         position: null,
         retryAt: null,
         attempts: m?.attempts ?? 0,
+        phase: m?.phase,
+        ...(m?.target?.kind === 'chat' ? { chat: this.chatInfo(r.id, m.target) } : {}),
       };
     });
   }
@@ -490,6 +588,12 @@ export class TransferManager {
     if (state !== 'queued') l.meta.retryAt = null;
     this.dequeue(l.t.id);
     this.persist(l);
+    for (const wake of [...this.chatOrderWaiters]) wake();
+    if (state === 'done' && l.meta.ownedSource && l.meta.path) {
+      const path = l.meta.path;
+      // Keep the local preview usable until server history replaces the optimistic bubble.
+      setTimeout(() => void unlink(path).catch(() => undefined), 30 * 60_000).unref?.();
+    }
     if (state !== 'running' && state !== 'queued') this.live.delete(l.t.id);
     this.emit();
     const waited = this.uploadDone.has(l.t.id) || this.whenDone.has(l.t.id);
@@ -568,6 +672,8 @@ export class TransferManager {
     const n = { all: 0, upload: 0, download: 0 };
     for (const l of this.live.values()) {
       if (l.t.state !== 'running') continue;
+      // Posting a chat message moves no file bytes; waiting for an earlier message must not hold an upload slot.
+      if (l.meta.target?.kind === 'chat' && l.meta.completed) continue;
       n.all++;
       n[l.t.direction]++;
     }
@@ -846,6 +952,10 @@ export class TransferManager {
   async upload(handles: string[], target: UploadTarget): Promise<Transfer[]> {
     const out: Transfer[] = [];
     for (const h of handles) {
+      if (target.kind === 'chat' && target.clientMessageId) {
+        const existing = this.list().find((t) => t.chat?.clientMessageId === target.clientMessageId && t.chat?.roomId === target.roomId);
+        if (existing) { out.push(existing); continue; }
+      }
       const file = this.handles.get(h);
       if (!file) throw new DesktopError('IPC_VALIDATION_FAILED', 'That file is no longer available; choose it again.');
       // A handle is used once: asking twice never uploads the file twice.
@@ -861,9 +971,9 @@ export class TransferManager {
         state: 'queued',
         speed: 0,
         error: null,
-        createdAt: new Date().toISOString(),
+        createdAt: target.kind === 'chat' && target.submittedAt ? target.submittedAt : new Date().toISOString(),
       };
-      const meta: Meta = { path: file.path, fileId: null, uploadId: null, target, chunkSize: null, totalChunks: null, sha256: null, tempPath: null, finalPath: null, openWhenDone: false, relativePath: target.kind === 'files' ? (file.relativePath ?? null) : null };
+      const meta: Meta = { path: file.path, fileId: null, uploadId: null, target, chunkSize: null, totalChunks: null, sha256: null, tempPath: null, finalPath: null, openWhenDone: false, relativePath: target.kind === 'files' ? (file.relativePath ?? null) : null, ownedSource: file.owned };
       const l: Live = { t, meta, abort: null, samples: [] };
       this.enqueue(l);
       out.push(this.view(l));
@@ -915,6 +1025,7 @@ export class TransferManager {
     const { meta } = l;
     if (!meta.path || !meta.target) return this.settle(l, abort, 'failed', 'Nothing to upload.');
     try {
+      this.phase(l, 'preparing');
       if (!meta.completed) {
         const st = await stat(meta.path);
         if (st.size !== l.t.total) return this.settle(l, abort, 'failed', 'The file changed on disk; choose it again.');
@@ -935,11 +1046,32 @@ export class TransferManager {
         await fileOnTender(this.deps.http, meta.target, Number(meta.fileId), basename(meta.path));
       }
       if (meta.target.kind === 'chat') {
+        const roomId = meta.target.roomId;
+        this.phase(l, 'waiting');
+        this.pump();
+        // Concurrent byte uploads, ordered posting within a room. A waiting post occupies no byte-upload slot.
+        while (!abort.signal.aborted) {
+          const rows = this.rows("direction = 'upload' AND state IN ('queued', 'running', 'paused')");
+          const at = rows.findIndex((r) => r.id === l.t.id);
+          const earlier = rows.slice(0, Math.max(0, at)).some((r) => {
+            const m = this.deps.vault().decrypt<Meta>(r.meta);
+            return m?.target?.kind === 'chat' && m.target.roomId === roomId;
+          });
+          if (!earlier) break;
+          await new Promise<void>((resolve) => {
+            const wake = () => { this.chatOrderWaiters.delete(wake); abort.signal.removeEventListener('abort', wake); resolve(); };
+            this.chatOrderWaiters.add(wake);
+            abort.signal.addEventListener('abort', wake, { once: true });
+          });
+        }
+        if (abort.signal.aborted) return;
+        this.phase(l, 'sending');
         await this.deps.http.post('/api/chat/messages/attachments', {
           room_id: meta.target.roomId,
           upload_id: meta.uploadId,
           // The same message id on every try: the server posts it once.
-          client_message_id: `desktop-${l.t.id}`,
+          client_message_id: meta.target.clientMessageId ?? `desktop-${l.t.id}`,
+          ...(meta.target.voice ? { voice: true, duration_ms: meta.target.durationMs ?? 0 } : {}),
           ...(meta.target.caption ? { caption: meta.target.caption } : {}),
           ...(meta.target.replyTo ? { reply_to: meta.target.replyTo } : {}),
         });
@@ -1005,6 +1137,7 @@ export class TransferManager {
     }
     const part = meta.chunkSize ?? CHUNK;
     const total = meta.totalChunks ?? Math.max(1, Math.ceil(size / part));
+    this.phase(l, 'uploading');
     const fh = await open(path, 'r');
     try {
       let sent = [...received].reduce((a, i) => a + Math.min(part, size - i * part), 0);
@@ -1024,6 +1157,7 @@ export class TransferManager {
     } finally {
       await fh.close();
     }
+    this.phase(l, 'processing');
     const done = await this.deps.http.post<{ file_id?: number | string }>(`/api/uploads/${meta.uploadId}/complete`, {});
     meta.fileId = done.file_id !== undefined ? String(done.file_id) : null;
     meta.completed = true;
@@ -1241,6 +1375,10 @@ export class TransferManager {
   clearFinished(): void {
     const uid = this.deps.userId();
     if (!uid) return;
+    for (const r of this.rows("state IN ('done', 'cancelled', 'failed')")) {
+      const m = this.deps.vault().decrypt<Meta>(r.meta);
+      if (m?.ownedSource && m.path) void unlink(m.path).catch(() => undefined);
+    }
     this.deps.db.run("DELETE FROM transfers WHERE user_id = ? AND state IN ('done', 'cancelled', 'failed')", uid);
     this.emit();
   }
@@ -1307,5 +1445,6 @@ export class TransferManager {
     this.stopAll();
     this.deps.db.run('DELETE FROM transfers WHERE user_id = ?', userId);
     this.handles.clear();
+    this.previewPaths.clear();
   }
 }

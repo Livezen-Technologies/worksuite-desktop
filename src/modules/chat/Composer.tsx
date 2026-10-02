@@ -1,3 +1,4 @@
+import { queueMedia } from './outgoing';
 import { useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { useEffect, useImperativeHandle, useRef, useState, type Ref, type ReactNode } from 'react';
 import type { PickedFile } from '@shared/ipc/contract';
@@ -97,6 +98,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const origin = useStore(app, (s) => s.auth?.server?.origin);
   const [recording, setRecording] = useState(false);
   const [staged, setStaged] = useState<Staged[]>([]);
+  const [originalQuality, setOriginalQuality] = useState(false);
   const [asking, setAsking] = useState<{ start: number; word: string; left: number } | null>(null);
   const [pick, setPick] = useState(0);
   const [slash, setSlash] = useState<{ start: number; word: string } | null>(null);
@@ -322,6 +324,12 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
     setSending(true);
     try {
       if (wordsAlone && !(await sendWords(words, urgent))) return;
+      if (!site && files.length) {
+        queueMedia(roomId, files, { ...(wordsAlone ? {} : { ...(words ? { caption: words } : {}), ...(reply ? { replyTo: reply.id } : {}) }) }, originalQuality);
+        setStaged((all) => all.filter((s) => !files.some((f) => f.key === s.key)));
+        draft.setValue(''); void draft.clear(); picked.current = []; setUrgent(false); onClearReply();
+        return;
+      }
       if (files.length) {
         const first: Extra = wordsAlone ? {} : { ...(words ? { caption: words } : {}), ...(reply ? { replyTo: reply.id } : {}) };
         const lead = files[0]!;
@@ -366,25 +374,11 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
     }
   };
 
-  const sendVoice = (blob: Blob, ms: number) => holdWhileSending(sendVoiceNow(blob, ms));
-  const sendVoiceNow = async (blob: Blob, ms: number) => {
+  const sendVoice = (blob: Blob, ms: number) => {
     setRecording(false);
     const ext = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm';
-    try {
-      const { uploadId } = await uploadBlob(blob, `Voice message ${new Date().toISOString().slice(0, 19).replace('T', ' ')}.${ext}`, { kind: 'chat', roomId });
-      await apiPost('/api/chat/messages/attachments', {
-        room_id: Number(roomId),
-        upload_id: uploadId,
-        voice: true,
-        duration_ms: Math.round(ms),
-        client_message_id: `desktop-${crypto.randomUUID()}`,
-        ...(reply ? { reply_to: reply.id } : {}),
-      });
-      onClearReply();
-      refresh();
-    } catch (e) {
-      toast('error', `The voice message was not sent: ${errorMessage(e)}`);
-    }
+    queueMedia(roomId, [{ key: crypto.randomUUID(), kind: 'blob', blob, name: `Voice message.${ext}`, state: 'ready', progress: 0, error: null, extra: null }], { voice: true, durationMs: Math.round(ms), ...(reply ? { replyTo: reply.id } : {}) }, true);
+    onClearReply();
   };
 
   const attach = async (c: AttachChoice) => {
@@ -742,6 +736,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       ) : null;
   const trayEl = tray.length && !editing && !recording ? (
           <div className="px-1 pt-1">
+            {!site ? <label className="flex items-center gap-1 px-1 text-[11px] text-ink-2"><input type="checkbox" checked={originalQuality} onChange={(e) => setOriginalQuality(e.target.checked)} />Original Quality</label> : null}
             <Tray items={tray} transfers={transfers} onRemove={remove} onRetry={retry} compact={compact} />
           </div>
         ) : null;

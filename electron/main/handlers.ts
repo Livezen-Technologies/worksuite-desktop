@@ -665,6 +665,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('elearning:offlineDownload', (input) => ctx.elearning.download(input.courseId, input.title));
   router.handle('elearning:offlineRemove', (input) => ctx.elearning.remove(input.courseId));
   router.handle('elearning:offlineValidate', () => ctx.elearning.validate());
+  router.handle('transfers:prepareMedia', (input) => ctx.transfers.prepareMedia(input));
   router.handle('transfers:upload', (input, c) => {
     // A file for a remote-control session goes only from the meeting window that controls it; the shared
     // computer's own offers are chosen in the main process's dialog, never through here.

@@ -1,3 +1,4 @@
+import { ChatSendingStatus } from '../modules/chat/OutgoingMedia';
 import { Suspense, useEffect, useState } from 'react';
 import type { ToastMessage } from '@shared/types';
 import { app } from '../core/app-state';
@@ -66,6 +67,7 @@ export function App() {
       ) : (
         body
       )}
+      {!locked && auth.stage === 'ready' ? <ChatSendingStatus /> : null}
       <Toasts />
       <ShowMeHost />
     </Suspense>

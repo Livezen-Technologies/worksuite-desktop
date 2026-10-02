@@ -4,6 +4,17 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.5.0 — 2026-10-01
+
+**Added**
+
+- Instant outgoing media bubbles with previews, accurate upload stages, cancellation and retry (#83)
+- Original Quality option and background image optimization
+
+**Changed**
+
+- Voice, camera and pasted media use durable native chunk uploads with ordered message confirmation and background sending
+
 ## 1.4.0 — 2026-10-01
 
 - Chats open in windows of their own: Open in New Window from the drawer and conversation, Open in main app, several at once, drafts and uploads kept on close, closed on sign-out (#103).
