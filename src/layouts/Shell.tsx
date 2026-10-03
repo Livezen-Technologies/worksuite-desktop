@@ -26,8 +26,8 @@ import { ClockPopover } from '../app/overlays/ClockPopover';
 import { ItemLinkDialog } from '../app/overlays/ItemLinkDialog';
 import { closeItemDialog, openItemLink } from '../core/item-links';
 import { SearchOverlay } from '../app/overlays/SearchOverlay';
-import { UpdateBanner } from '../app/screens/UpdateScreens';
-import { UpdateNotices } from '../app/overlays/UpdatePill';
+import { UpdateBanner, UpdatePopover } from '../app/screens/UpdateScreens';
+import { UpdateNotices } from '../app/overlays/UpdateControls';
 import { ChatDrawer, MinimisedChats } from '../modules/chat/ChatDrawer';
 import { RingingBar } from '../modules/chat/website/Ringing';
 import { watchMicrophone } from '../modules/chat/website/mic';
@@ -315,6 +315,7 @@ export function Shell() {
         {overlay === 'profile' ? guest ? <GuestProfileMenu /> : <ProfileMenu /> : null}
         {overlay === 'network' ? <NetworkPopover /> : null}
         {overlay === 'clock' ? <ClockPopover /> : null}
+        {overlay === 'update' ? <UpdatePopover /> : null}
       </PanelBoundary>
       <PanelBoundary name="This link" onClose={closeItemDialog} floating>
         <ItemLinkDialog />

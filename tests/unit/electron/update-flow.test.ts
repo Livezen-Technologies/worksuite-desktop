@@ -2,7 +2,8 @@ import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { UpdateActivity } from '../../../shared/types';
+import type { UpdateActivity, UpdateStatus } from '../../../shared/types';
+import { announce, type AnnounceDeps } from '../../../electron/updater/notice';
 import {
   CHECK_AFTER_LAUNCH_MS,
   CHECK_AFTER_WAKE_MS,
@@ -74,17 +75,13 @@ describe('telling the person an update is ready', () => {
     const values = new Map<string, unknown>();
     const store = { get: <T,>(k: string) => values.get(k) as T | undefined, set: (k: string, v: unknown) => void values.set(k, structuredClone(v)) };
     const activity: UpdateActivity = { meeting: false, call: false, screenShare: false, remoteControl: false };
-    const desktop = vi.fn();
-    const bell = vi.fn();
     let now = new Date(2026, 9, 3, 10, 0);
     const timers: Array<{ fn: () => void; at: number }> = [];
     const deps: NotifierDeps = {
       store,
       now: () => now,
       activity: () => activity,
-      notifyEnabled: () => true,
-      desktop,
-      bell,
+      announce: vi.fn(),
       setTimeout: (fn, ms) => {
         const t = { fn, at: now.getTime() + ms };
         timers.push(t);
@@ -102,50 +99,67 @@ describe('telling the person an update is ready', () => {
       now = new Date(now.getTime() + ms);
       for (const t of [...timers]) if (t.at <= now.getTime()) t.fn();
     };
-    return { n, desktop, bell, activity, store, deps, advance, values };
+    return { n, activity, store, deps, advance, values };
   }
 
-  it('shows a desktop notification and a bell entry once per version', () => {
-    const { n, desktop, bell } = notifier();
-    n.onReady({ version: '0.2.127', critical: false, summary: 'Faster mail search.' });
-    n.onReady({ version: '0.2.127', critical: false, summary: 'Faster mail search.' });
-    expect(desktop).toHaveBeenCalledTimes(1);
-    expect(desktop).toHaveBeenCalledWith('WorkSuite 0.2.127 is ready', 'WorkSuite 0.2.127 is ready. Restart to update.', false);
-    expect(bell).toHaveBeenCalledTimes(1);
-    expect(bell).toHaveBeenCalledWith('update:0.2.127', 'WorkSuite 0.2.127 is ready', 'WorkSuite 0.2.127 is ready. Restart to update. Faster mail search.');
-    n.onReady({ version: '0.2.128', critical: false, summary: null });
-    expect(desktop).toHaveBeenCalledTimes(2);
-    expect(n.pillVisible()).toBe(true);
+  function announcer(over: Partial<AnnounceDeps> = {}) {
+    let told: string[] = [];
+    const show = vi.fn();
+    const bell = vi.fn();
+    const deps: AnnounceDeps = { autoDownload: true, held: () => false, silent: () => false, systemEnabled: () => true, told: { get: () => told, set: (k) => void (told = k) }, show, bell, ...over };
+    return { deps, show, bell, told: () => told };
+  }
+  const staged = (over: Partial<UpdateStatus> = {}): UpdateStatus =>
+    ({ state: 'STAGED', availableVersion: '0.2.127', currentVersion: '0.2.126', required: false, critical: false, installBlockedReason: null, ...over }) as UpdateStatus;
+
+  it('shows one system notification and one bell entry per version and stage', () => {
+    const a = announcer();
+    expect(announce(staged(), a.deps)).toBe('shown');
+    expect(announce(staged(), a.deps)).toBe('none');
+    expect(a.show).toHaveBeenCalledTimes(1);
+    expect(a.show).toHaveBeenCalledWith({ key: 'ready:0.2.127', title: 'Update ready', body: 'WorkSuite 0.2.127 is ready. Restart to update.' });
+    expect(a.bell).toHaveBeenCalledTimes(1);
+    announce(staged({ availableVersion: '0.2.128' }), a.deps);
+    expect(a.show).toHaveBeenCalledTimes(2);
   });
 
-  it('remembers what it told across restarts', () => {
-    const first = notifier();
-    first.n.onReady({ version: '0.2.127', critical: false, summary: null });
-    const again = notifier({ store: first.deps.store });
-    again.n.onReady({ version: '0.2.127', critical: false, summary: null });
-    expect(again.desktop).not.toHaveBeenCalled();
-    expect(again.bell).not.toHaveBeenCalled();
+  it('says a security update is one, and keeps it on screen', () => {
+    const a = announcer();
+    announce(staged({ security: true, critical: true }), a.deps);
+    expect(a.show).toHaveBeenCalledWith({ key: 'ready:0.2.127', title: 'Security update ready', body: 'WorkSuite 0.2.127 is ready. Restart to update.', critical: true });
   });
 
-  it('keeps the bell entry but no desktop notification when that setting is off', () => {
-    const { n, desktop, bell } = notifier({ notifyEnabled: () => false });
-    n.onReady({ version: '0.2.127', critical: false, summary: null });
-    expect(desktop).not.toHaveBeenCalled();
-    expect(bell).toHaveBeenCalledTimes(1);
+  it('keeps the bell entry but no system notification when Update notifications is off', () => {
+    const a = announcer({ systemEnabled: () => false });
+    announce(staged(), a.deps);
+    expect(a.show).not.toHaveBeenCalled();
+    expect(a.bell).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays silent in quiet hours or paused notifications, and says it later', () => {
+    let quiet = true;
+    const a = announcer({ silent: () => quiet });
+    expect(announce(staged(), a.deps)).toBe('silent');
+    expect(a.told()).toEqual([]);
+    quiet = false;
+    expect(announce(staged(), a.deps)).toBe('shown');
   });
 
   it.each([['meeting'], ['call'], ['screenShare'], ['remoteControl']] as const)('never interrupts during a %s, and notifies after it ends', (what) => {
-    const { n, desktop, bell, activity } = notifier();
+    const { n, activity, deps } = notifier();
+    const a = announcer({ held: () => n.quietReason() !== null });
+    (deps.announce as ReturnType<typeof vi.fn>).mockImplementation(() => announce(staged(), a.deps));
     activity[what] = true;
     n.onReady({ version: '0.2.127', critical: false, summary: null });
-    expect(desktop).not.toHaveBeenCalled();
-    expect(bell).not.toHaveBeenCalled();
+    expect(announce(staged(), a.deps)).toBe('held');
+    expect(a.show).not.toHaveBeenCalled();
+    expect(a.bell).not.toHaveBeenCalled();
     expect(n.pillVisible()).toBe(false);
     expect(n.quietReason()).toBeTruthy();
     activity[what] = false;
     n.activityChanged();
-    expect(desktop).toHaveBeenCalledTimes(1);
-    expect(bell).toHaveBeenCalledTimes(1);
+    expect(a.show).toHaveBeenCalledTimes(1);
+    expect(a.bell).toHaveBeenCalledTimes(1);
     expect(n.pillVisible()).toBe(true);
   });
 
@@ -184,9 +198,8 @@ describe('telling the person an update is ready', () => {
   });
 
   it('a critical update put off more than once installs at the next launch', () => {
-    const { n, desktop } = notifier();
+    const { n } = notifier();
     n.onReady({ version: '0.2.127', critical: true, summary: null });
-    expect(desktop).toHaveBeenCalledWith('Security update: WorkSuite 0.2.127', 'WorkSuite 0.2.127 is ready. Restart to update.', true);
     expect(n.later('hour').installOnNextLaunch).toBe(false);
     expect(n.installAtLaunch()).toBeNull();
     expect(n.later('hour').installOnNextLaunch).toBe(true);

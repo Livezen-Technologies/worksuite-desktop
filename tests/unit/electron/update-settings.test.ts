@@ -35,28 +35,34 @@ function database() {
 }
 
 describe('Settings › About › Updates switches (worksuite-desktop#205)', () => {
-  it('are on by default and saved per device', () => {
+  it('are on by default and saved per device, one preference each', () => {
     const db = database();
     const s = new SettingsService(db);
-    expect(s.effective().updates).toEqual({ autoDownload: true, installOnQuit: true, notifyReady: true });
-    s.update({ updates: { autoDownload: false } as Preferences['updates'] });
-    expect(s.effective().updates).toEqual({ autoDownload: false, installOnQuit: true, notifyReady: true });
-    s.update({ updates: { notifyReady: false } as Preferences['updates'] });
-    expect(new SettingsService(db).effective().updates).toEqual({ autoDownload: false, installOnQuit: true, notifyReady: false });
+    expect(s.effective()).toMatchObject({ autoUpdate: true, updateNotifications: true, updateInstallOnQuit: true });
+    s.update({ updateInstallOnQuit: false });
+    expect(new SettingsService(db).effective()).toMatchObject({ autoUpdate: true, updateNotifications: true, updateInstallOnQuit: false });
+  });
+
+  it('carries the switches of an earlier #205 build (updates: {...}) over to the flat keys', () => {
+    const db = database();
+    db.setConfig('preferences', { updates: { autoDownload: false, installOnQuit: false, notifyReady: false } });
+    const p = new SettingsService(db).effective() as Preferences & { updates?: unknown };
+    expect(p).toMatchObject({ autoUpdate: false, updateNotifications: false, updateInstallOnQuit: false });
+    expect(p.updates).toBeUndefined();
   });
 
   it('are accepted one at a time over IPC', () => {
-    expect(preferencesPatchSchema.safeParse({ updates: { installOnQuit: false } }).success).toBe(true);
-    expect(preferencesPatchSchema.safeParse({ updates: { installOnQuit: 'no' } }).success).toBe(false);
+    expect(preferencesPatchSchema.safeParse({ updateInstallOnQuit: false }).success).toBe(true);
+    expect(preferencesPatchSchema.safeParse({ updateInstallOnQuit: 'no' }).success).toBe(false);
   });
 
   it('downloads always when the organisation enforces updates, and keeps its channel', () => {
     const s = new SettingsService(database());
-    s.update({ updates: { autoDownload: false, installOnQuit: false, notifyReady: true }, updateChannel: 'dev' });
+    s.update({ autoUpdate: false, updateInstallOnQuit: false, updateChannel: 'dev' });
     s.setPolicy({ ...DEFAULT_POLICY, auto_update: 'enforced', update_channel: 'beta' });
-    expect(s.effective()).toMatchObject({ updateChannel: 'beta', updates: { autoDownload: true, installOnQuit: false } });
+    expect(s.effective()).toMatchObject({ updateChannel: 'beta', autoUpdate: true, updateInstallOnQuit: false });
     expect(s.locks().map((l) => l.key)).toContain('updateChannel');
-    expect(s.raw().updates.autoDownload).toBe(false);
+    expect(s.raw().autoUpdate).toBe(false);
   });
 
   it('falls back to the most stable allowed channel when the policy no longer allows the saved one, keeping the choice', () => {

@@ -1,17 +1,17 @@
-import { useEffect, useRef, useState, type ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import type { UpdateStatus } from '@shared/types';
-import { LATER_LABELS, type LaterChoice } from '@shared/updates';
+import { LATER_LABELS, restartCheck, type LaterChoice } from '@shared/updates';
 import { app } from '../../core/app-state';
 import { call, errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
-import { checkBeforeRestart, restartToUpdate } from '../../core/update-restart';
+import { restartToUpdate } from '../../core/update-restart';
 import { Icon } from '../../components/Icon';
-import { Button, Modal, cx } from '../../components/ui';
+import { Button, Modal } from '../../components/ui';
 
 /**
- * Update ready (worksuite-desktop#205): the pill in the top bar beside the notifications bell, its popover
- * (version, a short summary, Restart to update / Later), the question asked before restarting, and the
+ * The update controls shared by the title-bar indicator, its panel, the security banner and the updates card
+ * (worksuite-desktop#205): Restart to update with the question asked over work in progress, Later, and the
  * "Updated to X · What's new" notice shown once after the restart.
  */
 
@@ -26,29 +26,33 @@ export function summaryOf(u: UpdateStatus): string | null {
 }
 
 /**
- * Restart to update, with the checks before it: drafts and tabs are saved by main; changes still to sync or a
- * call in progress are asked about first ("3 changes waiting to sync. Restart anyway?").
+ * Restart to update, with the checks before it: the main process refuses while something would be interrupted and
+ * says what; changes still to sync or a call in progress are then asked about ("3 changes waiting to sync. Restart
+ * anyway?"). Drafts and tabs are saved by main before it restarts.
  */
-export function useRestartToUpdate(): { start: () => Promise<void>; busy: boolean; dialog: ReactElement | null } {
+export function useRestartToUpdate(onDone?: () => void): { start: () => Promise<void>; busy: boolean; dialog: ReactElement | null } {
   const [question, setQuestion] = useState<{ text: string; call: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
-  const go = async () => {
+  const install = async (force: boolean) => {
     setQuestion(null);
     setBusy(true);
     try {
-      const r = await restartToUpdate();
-      if (!r.started && r.message) toast('warning', r.message);
+      const r = await restartToUpdate(force);
+      if (r.started) {
+        onDone?.();
+        return;
+      }
+      const c = r.busy ? restartCheck(r.busy) : null;
+      if (c?.question) setQuestion({ text: c.question, call: c.waiting.length ? c.callWarning : null });
+      else if (r.message) toast('warning', r.message);
     } catch (e) {
       toast('error', errorMessage(e));
     } finally {
       setBusy(false);
     }
   };
-  const start = async () => {
-    const c = await checkBeforeRestart();
-    if (c.question) setQuestion({ text: c.question, call: c.waiting.length ? c.callWarning : null });
-    else await go();
-  };
+  const go = () => install(true);
+  const start = () => install(false);
   const dialog = question ? (
     <Modal
       title="Restart to update?"
@@ -98,69 +102,6 @@ export function LaterMenu({ onDone, compact }: { onDone?: () => void; compact?: 
           ))}
         </div>
       ) : null}
-    </div>
-  );
-}
-
-/** The "Update ready" pill beside the notifications bell, and its popover. */
-export function UpdatePill() {
-  const u = useStore(app, (s) => s.update);
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const restart = useRestartToUpdate();
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    window.addEventListener('mousedown', onDown);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('mousedown', onDown);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-  if (!pillVisible(u) || !u) return restart.dialog;
-  const summary = summaryOf(u);
-  return (
-    <div ref={ref} className="no-drag relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-haspopup="dialog"
-        className={cx('flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold', u.security ? 'bg-[#F0A04B]/20 text-[#F7C68A] hover:bg-[#F0A04B]/30' : 'bg-[#43B581]/15 text-[#7EE2B0] hover:bg-[#43B581]/25')}
-      >
-        <Icon name={u.security ? 'shield-alert' : 'download'} size={14} /> Update ready
-      </button>
-      {open ? (
-        <div role="dialog" aria-label="Update ready" className="absolute right-0 top-[40px] z-50 w-[320px] rounded-[12px] border border-line bg-surface p-4 text-ink shadow-2xl">
-          <div className="text-[14.5px] font-bold">WorkSuite {u.availableVersion}</div>
-          <div className="text-[12.5px] text-ink-3">{u.security ? 'Security update · ready to install' : 'Ready to install'}</div>
-          {summary ? <p className="mt-2 text-[13px] text-ink-2">{summary}</p> : null}
-          {u.notes?.url ? (
-            <button type="button" className="mt-1 text-[12.5px] font-semibold text-primary hover:underline" onClick={() => void call('app:openExternal', { url: u.notes!.url! })}>
-              What&apos;s new
-            </button>
-          ) : null}
-          <div className="mt-4 flex items-center justify-end gap-2">
-            <LaterMenu compact onDone={() => setOpen(false)} />
-            <Button
-              size="sm"
-              variant="primary"
-              loading={restart.busy}
-              onClick={() => {
-                setOpen(false);
-                void restart.start();
-              }}
-            >
-              Restart to update
-            </Button>
-          </div>
-        </div>
-      ) : null}
-      {restart.dialog}
     </div>
   );
 }

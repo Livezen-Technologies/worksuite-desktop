@@ -117,20 +117,17 @@ export interface NotifierDeps {
   now: () => Date;
   /** A meeting, call, screen share or remote control in progress. */
   activity: () => UpdateActivity;
-  /** Settings › About › Updates › Show a notification when an update is ready. */
-  notifyEnabled: () => boolean;
-  /** The desktop notification ("WorkSuite X is ready. Restart to update."). */
-  desktop: (title: string, body: string, critical: boolean) => void;
-  /** The entry in the notifications bell. */
-  bell: (id: string, title: string, body: string) => void;
+  /**
+   * Says where updates stand (the one notification path, electron/updater/notice.ts: once per version and stage,
+   * a system notification and a bell entry). Called again when a meeting, call, share or remote control ends.
+   */
+  announce: () => void;
   setTimeout: (fn: () => void, ms: number) => unknown;
   clear: (handle: unknown) => void;
   onChange: () => void;
 }
 
 interface NotifierState {
-  /** Versions whose desktop notification and bell entry went out (once each). */
-  notified: string[];
   /** Times each version was put off with Later. */
   postponed: Record<string, number>;
   /** Later: the reminder comes back at (ms). */
@@ -142,14 +139,13 @@ interface NotifierState {
 const STATE_KEY = 'updates:notices';
 
 /**
- * Once an update is downloaded: the "Update ready" pill, a desktop notification and a bell entry — each once per
- * version, never during a meeting, call, screen share or remote control (they wait until it ends). Later puts the
- * pill and reminder off for an hour, until tonight or until the next launch. A critical update put off more than
- * once installs by itself when WorkSuite next starts.
+ * Once an update is downloaded: whether the title-bar indicator shows as the "Update ready" pill (not during a
+ * meeting, call, screen share or remote control, and not while put off with Later), Later itself (an hour, tonight,
+ * the next launch), and the critical escalation: put off more than once, it installs when WorkSuite next starts.
+ * The notifications themselves go through notice.ts (`announce`), which this asks again when the activity ends.
  */
 export class UpdateNotifier {
   private ready: ReadyUpdate | null = null;
-  private pending = false;
   private timer: unknown = null;
   /** "On next app launch" lasts for this run only. */
   private untilNextLaunch = new Set<string>();
@@ -158,53 +154,34 @@ export class UpdateNotifier {
 
   private state(): NotifierState {
     const s = this.deps.store.get<Partial<NotifierState>>(STATE_KEY) ?? {};
-    return { notified: s.notified ?? [], postponed: s.postponed ?? {}, snoozedUntil: s.snoozedUntil ?? {}, installOnNextLaunch: s.installOnNextLaunch ?? null };
+    return { postponed: s.postponed ?? {}, snoozedUntil: s.snoozedUntil ?? {}, installOnNextLaunch: s.installOnNextLaunch ?? null };
   }
 
   private save(s: NotifierState): void {
-    this.deps.store.set(STATE_KEY, { ...s, notified: s.notified.slice(-20) });
+    this.deps.store.set(STATE_KEY, s);
   }
 
-  /** The updater staged a version: tell the person, now or when what they are doing ends. */
+  /** The updater staged a version (the notification itself goes out with the status, through notice.ts). */
   onReady(u: ReadyUpdate): void {
     this.ready = u;
-    this.pending = true;
-    this.flush();
     this.deps.onChange();
   }
 
   /** Nothing is ready any more (installed, failed, replaced). */
   clear(): void {
     this.ready = null;
-    this.pending = false;
     if (this.timer) this.deps.clear(this.timer);
     this.timer = null;
   }
 
   /** Call when a meeting, call, share or remote control starts or ends. */
   activityChanged(): void {
-    this.flush();
+    if (!this.quietReason()) this.deps.announce();
     this.deps.onChange();
   }
 
   quietReason(): string | null {
     return quietReason(this.deps.activity());
-  }
-
-  private flush(): void {
-    const u = this.ready;
-    if (!u || !this.pending) return;
-    if (this.quietReason()) return;
-    if (this.snoozed(u.version)) return;
-    this.pending = false;
-    const s = this.state();
-    if (s.notified.includes(u.version)) return;
-    s.notified.push(u.version);
-    this.save(s);
-    const title = u.critical ? `Security update: WorkSuite ${u.version}` : `WorkSuite ${u.version} is ready`;
-    const body = `WorkSuite ${u.version} is ready. Restart to update.`;
-    if (this.deps.notifyEnabled()) this.deps.desktop(title, body, u.critical);
-    this.deps.bell(`update:${u.version}`, title, u.summary ? `${body} ${u.summary}` : body);
   }
 
   private snoozed(version: string): boolean {

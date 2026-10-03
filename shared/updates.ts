@@ -1,4 +1,4 @@
-import type { BusyReport, DesktopPolicy, UpdateActivity, UpdateChannel, UpdatePrefs } from './types';
+import type { BusyReport, DesktopPolicy, Preferences, UpdateActivity, UpdateChannel } from './types';
 import { channelAccepts } from './release';
 import { parseVersion } from './version';
 
@@ -22,7 +22,20 @@ export const CHANNEL_INFO: Record<UpdateChannel, { label: string; description: s
   org: { label: 'Organization', description: 'The builds your organization chose.' },
 };
 
-export const DEFAULT_UPDATE_PREFS: UpdatePrefs = { autoDownload: true, installOnQuit: true, notifyReady: true };
+/**
+ * The update switches are three flat preferences: `autoUpdate` (download automatically), `updateNotifications` and
+ * `updateInstallOnQuit`. A build of #205 before they were merged kept them as `updates: {autoDownload, notifyReady,
+ * installOnQuit}`; those carry over once, and the object goes.
+ */
+export function migrateUpdatePrefs(stored: Partial<Preferences> & { updates?: { autoDownload?: boolean; notifyReady?: boolean; installOnQuit?: boolean } }): Partial<Preferences> & { updates?: undefined } {
+  const old = stored.updates;
+  return {
+    autoUpdate: stored.autoUpdate ?? old?.autoDownload ?? true,
+    updateNotifications: stored.updateNotifications ?? old?.notifyReady ?? true,
+    updateInstallOnQuit: stored.updateInstallOnQuit ?? old?.installOnQuit ?? true,
+    updates: undefined,
+  };
+}
 
 /** The Update Center's channel name (it decides; a tenant policy there wins). The organisation channel sends none. */
 export function updateCenterChannel(channel: UpdateChannel): 'STABLE' | 'BETA' | 'DEV' | null {

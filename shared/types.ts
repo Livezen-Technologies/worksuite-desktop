@@ -283,8 +283,12 @@ export interface Preferences {
   updateChannel: UpdateChannel;
   /** The person picked the channel themselves (else the organisation's default channel applies). */
   updateChannelChosen?: boolean;
-  /** Settings › About › Updates on this computer (worksuite-desktop#205). */
-  updates: UpdatePrefs;
+  /** New versions download by themselves and wait for a restart (Settings › Desktop › Updates). Unset: on. An organization that enforces updates keeps it on. */
+  autoUpdate?: boolean;
+  /** A system notification when a new version is available or ready to install. Unset: on. */
+  updateNotifications?: boolean;
+  /** A downloaded update installs when WorkSuite quits (worksuite-desktop#205). Unset: on. */
+  updateInstallOnQuit?: boolean;
   sidebarMode: 'expanded' | 'collapsed' | 'auto-hide';
   pinnedApps: string[];
   shortcuts: Record<string, string>;
@@ -720,15 +724,6 @@ export interface ReleaseNotes {
   summary: string | null;
   highlights: string[];
   url: string | null;
-}
-
-export interface UpdatePrefs {
-  /** Download updates in the background as soon as they are found. */
-  autoDownload: boolean;
-  /** Install a downloaded update when WorkSuite quits. */
-  installOnQuit: boolean;
-  /** Show a desktop notification when an update is ready. */
-  notifyReady: boolean;
 }
 
 /** What would be interrupted by a restart right now. */

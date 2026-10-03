@@ -179,7 +179,9 @@ export const preferencesPatchSchema = z
     tabSuspendMinutes: z.number().int().min(5).max(480),
     language: z.string().regex(/^[a-z]{2}(-[A-Z]{2})?$/),
     updateChannel: z.enum(['stable', 'beta', 'dev', 'org']),
-    updates: z.object({ autoDownload: z.boolean(), installOnQuit: z.boolean(), notifyReady: z.boolean() }).partial(),
+    autoUpdate: z.boolean(),
+    updateNotifications: z.boolean(),
+    updateInstallOnQuit: z.boolean(),
     sidebarMode: z.enum(['expanded', 'collapsed', 'auto-hide']),
     pinnedApps: z.array(z.string().max(64)).max(64),
     shortcuts: z.record(z.string().max(64), z.string().max(64)),
@@ -1164,12 +1166,12 @@ export const contract = {
   'updates:status': ch(none, { whileLocked: true }),
   'updates:check': ch(none, { whileLocked: true, rate: 1 }),
   'updates:installNow': ch(z.object({ force: z.boolean().optional() }).optional(), { whileLocked: true }),
+  'updates:download': ch(none, { whileLocked: true, rate: 1 }),
   'updates:restartLater': ch(none),
   // A less stable channel needs `confirmed` (Settings asks first); the organisation's policy limits the choice (#205).
   'updates:setChannel': ch(z.object({ channel: z.enum(['stable', 'beta', 'dev', 'org']), confirmed: z.boolean().optional() })),
   'updates:setActiveCall': ch(z.object({ active: z.boolean() }), { session: true }),
   'updates:busy': ch(none, { whileLocked: true }),
-  'updates:download': ch(none, { rate: 1 }),
   'updates:later': ch(z.object({ choice: z.enum(['hour', 'tonight', 'next-launch']) })),
   'updates:reinstall': ch(none, { rate: 1 }),
   'updates:dismissNotice': ch(none),
@@ -1602,11 +1604,11 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'updates:status': UpdateStatus;
   'updates:check': UpdateStatus;
   'updates:installNow': { started: boolean; busy: BusyReport | null; message: string | null };
+  'updates:download': UpdateStatus;
   'updates:restartLater': UpdateStatus;
   'updates:setChannel': UpdateStatus;
   'updates:setActiveCall': void;
   'updates:busy': BusyReport;
-  'updates:download': UpdateStatus;
   'updates:later': UpdateStatus;
   'updates:reinstall': UpdateStatus;
   'updates:dismissNotice': UpdateStatus;

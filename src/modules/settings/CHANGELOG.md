@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.15.0 — 2026-10-03
+
+- Settings › Desktop › Updates: where updates stand with the next step (Check, Download, Restart to update), Download updates automatically (locked on where the organisation enforces updates) and Update notifications; the update channel follows them.
+
 ## 1.14.0 — 2026-10-03
 
 - Settings › App launcher (#201): size, popover or full screen, recent apps, badges, browser mark and names, pinned apps with drag to reorder (up to 8), show or hide each app, group by, sort, open in, keyboard shortcut and Reset to default — synced to all your devices; administrators set the organisation's default pinned apps and order.

@@ -1,5 +1,4 @@
 import type { BusyReport } from '@shared/types';
-import { restartCheck, type RestartCheck } from '@shared/updates';
 import { call, on } from './bridge';
 import { flushDrafts } from './drafts';
 import { flushTabs } from './tabs';
@@ -21,14 +20,11 @@ export function wireUpdatePrepare(): () => void {
   return on<{ token: string }>('update:prepare', (m) => void prepareForRestart(m.token));
 }
 
-/** What a restart would interrupt now: the question to ask first, if any ("3 changes waiting to sync. Restart anyway?"). */
-export async function checkBeforeRestart(): Promise<RestartCheck & { busy: BusyReport | null }> {
-  const busy = await call('updates:busy').catch(() => null);
-  return { ...restartCheck(busy), busy };
-}
-
-/** Installs the downloaded update and restarts (the person has answered any question already). */
-export async function restartToUpdate(): Promise<{ started: boolean; message: string | null }> {
-  const r = await call('updates:installNow', { force: true });
-  return { started: r.started, message: r.message };
+/**
+ * Installs the downloaded update and restarts. Not forced, the main process refuses over work in progress and
+ * says what (`busy`); forced, the person has answered that question already.
+ */
+export async function restartToUpdate(force: boolean): Promise<{ started: boolean; busy: BusyReport | null; message: string | null }> {
+  const r = await call('updates:installNow', { force });
+  return { started: !!r?.started, busy: r?.busy ?? null, message: r?.message ?? null };
 }

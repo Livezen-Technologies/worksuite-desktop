@@ -80,13 +80,20 @@ On a Mac the updater takes the `.app` out of the DMG (mounted read-only and
 hidden), checks its code signature against the running app's Team ID, and
 swaps it in after quit.
 
+A new version downloads by itself and waits for the person's restart. People
+can turn that off (Settings › Desktop › Download updates automatically) only
+where the server's desktop policy sets `auto_update` to `user_choice`; the
+default, `enforced`, keeps it on. Critical and required releases download
+either way. The title-bar update icon and one system notification per version
+tell people when a new version is available or ready.
+
 The older self-hosted manifest (`scripts/release-manifest.mjs`, the
 `RELEASE_PUBLIC_KEY` in `electron/updater/keys.ts`) is no longer read by the
 app.
 
 ## 4a. Channels, notices and the first run (worksuite-desktop#205)
 
-**Channels.** Settings › About › Channel offers Stable, Beta and Dev / Nightly — only those the
+**Channels.** The updates card (Settings › Desktop and Settings › About) offers Stable, Beta and Dev / Nightly — only those the
 organisation's desktop policy allows (`auto_update: enforced` locks the channel to `update_channel`;
 `user_choice` offers `allowed_update_channels` — Stable always, default all three — and starts a computer on
 `update_channel_default` until its person picks one; a channel the organisation stops allowing is shown as

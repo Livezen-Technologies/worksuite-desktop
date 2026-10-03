@@ -24,7 +24,7 @@ import { networkStatus } from '@shared/network';
 import { pmsCached } from '@shared/pms-cache';
 import { eventsCached } from '@shared/event-desk';
 import { redactUrl } from '@shared/redact';
-import type { Bootstrap, BusyReport, UpdateActivity, NavigateRequest, RealtimeState, ServiceHealth, StatusSnapshot, WebchatOnCall, WebchatRingState } from '@shared/types';
+import type { Bootstrap, BusyReport, UpdateActivity, NavigateRequest, RealtimeState, ServiceHealth, StatusSnapshot, UpdateStatus, WebchatOnCall, WebchatRingState } from '@shared/types';
 import { AccessWatch, NO_ACCESS } from './access';
 import { applyAutostart, startedHidden } from './autostart';
 import { evaluateBoot, markCleanExit, markRunning, clearCrashes, writeBootConfig } from './boot';
@@ -103,6 +103,7 @@ import { Vault } from '../services/vault';
 import { TrayService } from '../tray/tray';
 import { POLICY_PUBLIC_KEY } from '../updater/keys';
 import { UPDATE_CENTER_RESPONSE_KEYS, UPDATE_CENTER_URL, ucInstallType, updateCheckUrl } from '../updater/update-center';
+import { announce } from '../updater/notice';
 import { UpdaterService } from '../updater/updater';
 import { UpdateHealth, UpdateHistory, UpdateNotifier } from '../updater/update-flow';
 import { allowedChannels, channelLockReason } from '@shared/updates';
@@ -737,17 +738,6 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     store: { get: (k) => db.getConfig(k), set: (k, v) => db.setConfig(k, v) },
     now: () => new Date(),
     activity: updateActivity,
-    notifyEnabled: () => settings.effective().updates.notifyReady,
-    desktop: (title, body, critical) => {
-      if (!Notification.isSupported()) return;
-      const note = new Notification({ title, body, urgency: critical ? 'critical' : 'normal', timeoutType: critical ? 'never' : 'default' });
-      note.on('click', () => navigate({ route: '/settings/about', source: 'notification' }));
-      note.show();
-    },
-    bell: (id, title, body) => {
-      notifications.addLocal({ id, title, body, link: '/settings/about' });
-      emitStatus();
-    },
     setTimeout: (fn, ms) => {
       const t = setTimeout(fn, ms);
       t.unref?.();
@@ -755,7 +745,32 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
     clear: (h) => clearTimeout(h as NodeJS.Timeout),
     onChange: () => updater.publish(),
+    // A meeting, call, share or remote control ended: a held notice goes out now.
+    announce: () => announceUpdate(updater.get()),
   });
+
+  // One notification path (electron/updater/notice.ts): once per version and stage, a system notification and a
+  // bell entry. Quiet hours, paused notifications and development builds stay silent (the title-bar icon still
+  // shows); a meeting, call, screen share or remote control holds it until it ends.
+  const announceUpdate = (s: UpdateStatus): void => {
+    const p = settings.effective();
+    announce(s, {
+      autoDownload: p.autoUpdate !== false,
+      held: () => updateNotifier.quietReason() !== null,
+      silent: () => !app.isPackaged || (p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) || notifications.pausedUntilIso() !== null,
+      systemEnabled: () => p.notificationsEnabled && p.updateNotifications !== false && Notification.isSupported(),
+      told: { get: () => db.getConfig<string[]>('update_notices') ?? [], set: (keys) => db.setConfig('update_notices', keys) },
+      show: (n) => {
+        const note = new Notification({ title: n.title, body: n.body, urgency: n.critical ? 'critical' : 'normal', timeoutType: n.critical ? 'never' : 'default' });
+        note.on('click', () => navigate({ route: '/settings/desktop', source: 'notification' }));
+        note.show();
+      },
+      bell: (n) => {
+        notifications.addLocal({ id: `update:${n.key}`, title: n.title, body: n.body, link: '/settings/desktop' });
+        emitStatus();
+      },
+    });
+  };
 
   const updater: UpdaterService = new UpdaterService({
     fetch: fetchImpl,
@@ -784,8 +799,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       return { allowed: allowedChannels(pol), lockReason: channelLockReason(pol) };
     },
     savedChannel: () => settings.raw().updateChannel,
-    autoDownload: () => settings.effective().updates.autoDownload,
-    installOnQuit: () => settings.effective().updates.installOnQuit,
+    autoDownload: () => settings.effective().autoUpdate !== false,
+    installOnQuit: () => settings.effective().updateInstallOnQuit !== false,
     activity: updateActivity,
     busy,
     deadlineHours: () => sessionCtl.current()?.policy.forced_update_deadline_hours ?? 24,
@@ -794,6 +809,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     onStatus: (s) => {
       broadcast('update:changed', s);
       tray.update({ updateReady: s.state === 'STAGED' });
+      announceUpdate(s);
     },
     onWarning: (text) => broadcast('toast', { kind: 'warning', text }),
     prepareRestart,

@@ -1,6 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
-import { generateKeyPairSync, sign } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { app } from 'electron';
+import type { UpdateStatus } from '../../../shared/types';
+import { createHash, generateKeyPairSync, sign } from 'node:crypto';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -19,6 +21,7 @@ import {
   verifyUcDocument,
 } from '../../../electron/updater/update-center';
 import { UpdaterService, type UpdaterDeps } from '../../../electron/updater/updater';
+import { updateNotice } from '../../../electron/updater/notice';
 import type { FetchLike } from '../../../electron/services/http';
 
 /** A real answer from download.worksuitecloud.com, signed with ws-uc-resp-1. */
@@ -154,6 +157,7 @@ describe('UpdaterService against the Update Center', () => {
       responseKeys: keys,
       updateUrl: () => 'https://download.worksuitecloud.com/api/v1/desktop/update?app_id=lk.worksuite.desktop',
       channel: () => 'beta',
+      autoDownload: () => true,
       busy: () => ({ uploads: 0, downloads: 0, pendingMutations: 0, drafts: 0, activeCall: false }),
       deadlineHours: () => 24,
       allowInsecure: false,
@@ -189,5 +193,128 @@ describe('UpdaterService against the Update Center', () => {
     const { signDoc } = signer();
     const { updater } = service(signDoc(base), UPDATE_CENTER_RESPONSE_KEYS);
     expect(await updater.check()).toMatchObject({ state: 'FAILED', availableVersion: null, signatureVerified: false });
+  });
+});
+
+describe('Downloading by itself, or on the person\'s Download (Settings › Desktop › Updates)', () => {
+  // A packaged AppImage: the one build these tests can install into, with the signed answer and its SHA-256 as the trust.
+  const bytes = Buffer.from('#!/bin/sh\necho WorkSuite 0.2.124\n');
+  const appImage = {
+    ...base.package,
+    type: 'appimage',
+    size: bytes.length,
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+    file_name: 'WorkSuite-0.2.124-x86_64.AppImage',
+    download_url: 'https://cdn.example/WorkSuite-0.2.124-x86_64.AppImage?sig=x',
+  };
+  let dir = '';
+  const env = process.env.APPIMAGE;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'ws-updates-'));
+    (app as { isPackaged: boolean }).isPackaged = true;
+    process.env.APPIMAGE = join(dir, 'WorkSuite.AppImage');
+  });
+  afterEach(() => {
+    (app as { isPackaged: boolean }).isPackaged = false;
+    if (env === undefined) delete process.env.APPIMAGE;
+    else process.env.APPIMAGE = env;
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  function service(answer: Record<string, unknown>, keys: Record<string, string>, auto: boolean) {
+    const fetch = vi.fn(async (url: string) =>
+      url.includes('/api/v1/desktop/update') ? new Response(JSON.stringify(answer), { status: 200 }) : new Response(bytes, { status: 200 }),
+    ) as unknown as FetchLike;
+    const updater = new UpdaterService({
+      fetch,
+      platform: 'linux',
+      arch: 'x64',
+      responseKeys: keys,
+      updateUrl: () => 'https://download.worksuitecloud.com/api/v1/desktop/update?app_id=lk.worksuite.desktop',
+      channel: () => 'beta',
+      autoDownload: () => auto,
+      busy: () => ({ uploads: 0, downloads: 0, pendingMutations: 0, drafts: 0, activeCall: false }),
+      deadlineHours: () => 24,
+      allowInsecure: false,
+      updatesDir: dir,
+      onStatus: () => undefined,
+      onWarning: () => undefined,
+      beforeQuit: async () => undefined,
+    });
+    const downloads = () => (fetch as unknown as { mock: { calls: string[][] } }).mock.calls.filter(([u]) => u!.startsWith('https://cdn.example/')).length;
+    return { updater, downloads };
+  }
+
+  it('downloads and stages a new version by itself when that is on', async () => {
+    const { keys, signDoc } = signer();
+    const { updater, downloads } = service(signDoc({ ...base, package: appImage }), keys, true);
+    expect(await updater.check()).toMatchObject({ state: 'STAGED', availableVersion: '0.2.124', installSupported: true, progress: 100 });
+    expect(downloads()).toBe(1);
+  });
+
+  it('turned off, offers the version and waits; Download fetches and stages it', async () => {
+    const { keys, signDoc } = signer();
+    const { updater, downloads } = service(signDoc({ ...base, package: appImage }), keys, false);
+    expect(await updater.check()).toMatchObject({ state: 'AVAILABLE', availableVersion: '0.2.124', installSupported: true, installBlockedReason: null });
+    expect(downloads()).toBe(0);
+    expect(await updater.downloadNow()).toMatchObject({ state: 'STAGED', availableVersion: '0.2.124' });
+    expect(downloads()).toBe(1);
+  });
+
+  it('turned off, still downloads a critical update', async () => {
+    const { keys, signDoc } = signer();
+    const { updater, downloads } = service(signDoc({ ...base, release_type: 'CRITICAL', package: appImage }), keys, false);
+    expect(await updater.check()).toMatchObject({ state: 'STAGED', critical: true });
+    expect(downloads()).toBe(1);
+  });
+
+  it('Download with nothing newer on offer asks the Update Center and leaves it at that', async () => {
+    const { keys, signDoc } = signer();
+    const { updater, downloads } = service(signDoc({ ...base, status: 'CURRENT', latest_version: null, package: null }), keys, false);
+    expect(await updater.downloadNow()).toMatchObject({ state: 'IDLE', availableVersion: null });
+    expect(downloads()).toBe(0);
+  });
+});
+
+describe('What a new version tells the person outside the window', () => {
+  const status = (patch: Partial<UpdateStatus>): UpdateStatus => ({
+    state: 'IDLE',
+    channel: 'stable',
+    currentVersion: '0.2.131',
+    availableVersion: '0.2.132',
+    minimumVersion: null,
+    required: false,
+    critical: false,
+    progress: 0,
+    error: null,
+    lastCheckedAt: null,
+    deadline: null,
+    signatureVerified: true,
+    notesUrl: null,
+    installSupported: true,
+    installBlockedReason: null,
+    ...patch,
+  });
+
+  it('says a downloaded version is ready, once per version', () => {
+    expect(updateNotice(status({ state: 'STAGED' }), true)).toEqual({ key: 'ready:0.2.132', title: 'Update ready', body: 'WorkSuite 0.2.132 is ready. Restart to update.' });
+    expect(updateNotice(status({ state: 'STAGED', required: true }), true)?.title).toBe('Update required');
+  });
+
+  it('says nothing while a version downloads by itself', () => {
+    expect(updateNotice(status({ state: 'AVAILABLE' }), true)).toBeNull();
+    expect(updateNotice(status({ state: 'DOWNLOADING' }), false)).toBeNull();
+    expect(updateNotice(status({ state: 'AVAILABLE', critical: true }), false)).toBeNull();
+  });
+
+  it('offers a version that waits for the person, or that this build cannot install', () => {
+    expect(updateNotice(status({ state: 'AVAILABLE' }), false)).toEqual({ key: 'available:0.2.132', title: 'Update available', body: 'WorkSuite 0.2.132 is available. Click to download it.' });
+    expect(updateNotice(status({ state: 'AVAILABLE', installSupported: false, installBlockedReason: 'WorkSuite was installed from a package; update it with your package manager.' }), true)?.body).toBe(
+      'WorkSuite 0.2.132 is available. WorkSuite was installed from a package; update it with your package manager.',
+    );
+  });
+
+  it('has nothing to say without a newer version', () => {
+    expect(updateNotice(status({ availableVersion: null, state: 'IDLE' }), false)).toBeNull();
   });
 });

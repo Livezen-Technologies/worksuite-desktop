@@ -36,12 +36,16 @@ const run = promisify(execFile);
  *     (BETA, DEV, INTERNAL), where steps 1 and 2 are the trust — as they are
  *     for a Linux AppImage. A signed build never takes an unsigned update.
  *
+ * A new version downloads by itself unless the person turned that off in
+ * Settings › Desktop (and their organization lets them): then it stays
+ * AVAILABLE until they press Download. A critical or required one downloads
+ * either way.
+ *
  * Channels (#205): Stable takes no pre-release version, Beta takes beta ones,
  * Dev takes everything; a version is never taken backwards except by an
  * explicit "Reinstall …", which asks the Update Center with allow_downgrade.
  * Checks run at launch, every 4 hours and after the computer wakes
- * (UpdateScheduler); downloads run by themselves unless Settings › About ›
- * Updates turns that off (a required or security update downloads anyway).
+ * (UpdateScheduler).
  *
  * Before restarting it asks what would be interrupted (uploads, queued
  * changes, drafts, a call) and offers Restart later / Review activity. A
@@ -60,6 +64,11 @@ export interface UpdaterDeps {
   /** The update check for this channel, or null when no Update Center is configured. */
   updateUrl: (channel: UpdateChannel, opts?: { allowDowngrade?: boolean }) => string | null;
   channel: () => UpdateChannel;
+  /**
+   * Whether a new version downloads by itself (Settings › Desktop › Updates). Off, it is offered and waits for the
+   * person's Download; a critical or required update downloads either way.
+   */
+  autoDownload: () => boolean;
   busy: () => BusyReport;
   deadlineHours: () => number;
   allowInsecure: boolean;
@@ -67,8 +76,6 @@ export interface UpdaterDeps {
   onStatus: (s: UpdateStatus) => void;
   onWarning: (text: string) => void;
   beforeQuit: () => Promise<void>;
-  /** Settings › About › Updates › Download updates automatically (default on). */
-  autoDownload?: () => boolean;
   /** Settings › About › Updates › Install when quitting (default on). */
   installOnQuit?: () => boolean;
   /** The channels this computer may follow, and why it may not choose (organisation policy). */
@@ -421,17 +428,31 @@ export class UpdaterService {
         installBlockedReason: blocked,
         lastCheckedAt: new Date().toISOString(),
       });
-      // In the background, unless downloads are left to the person — a required or security update downloads anyway,
+      // In the background, unless downloads are left to the person — a required or critical update downloads anyway,
       // and so does a reinstall the person just asked for.
-      const auto = this.deps.autoDownload?.() ?? true;
-      if (blocked === null && (auto || security || this.status.required || isDowngrade)) await this.download();
+      if (blocked === null && (this.deps.autoDownload() || security || this.status.required || isDowngrade)) await this.download();
       return this.get();
     } catch (e) {
       log.info('update check failed', { error: errorText(e) });
       this.record('check-failed', errorText(e), null);
-      this.set({ state: 'FAILED', error: 'Could not check for updates.', lastCheckedAt: new Date().toISOString() });
+      // A check that failed is not a download that failed: nothing stays on offer until the next check answers.
+      this.offer = null;
+      this.set({ state: 'FAILED', availableVersion: null, notes: null, error: 'Could not check for updates.', lastCheckedAt: new Date().toISOString() });
       return this.get();
     }
+  }
+
+  /**
+   * The person's Download: fetches the offered version now (asking the Update Center first when nothing current is
+   * on offer) and stages it, for Restart to update. A build that cannot install updates, or nothing newer, leaves the
+   * status as it is.
+   */
+  async downloadNow(): Promise<UpdateStatus> {
+    if (this.checking) await this.checking;
+    if (this.status.state !== 'AVAILABLE' || !this.offer) await this.check();
+    if (this.status.state !== 'AVAILABLE' || !this.offer || this.status.installBlockedReason) return this.get();
+    await this.download();
+    return this.get();
   }
 
   /** An unsigned build may take an update only from a test channel, and only when this computer asked for one. */

@@ -39,7 +39,7 @@ import { LauncherSettings, ShortcutRecorder } from './LauncherSettings';
 import { updateLauncherPrefs, useLauncherPrefs } from '../../core/launcher-prefs';
 import { DEFAULT_LAUNCHER_SHORTCUT } from '@shared/launcher';
 import { SyncButton } from '../../components/SyncButton';
-import { AboutUpdates } from './AboutUpdates';
+import { UpdatesCard } from './UpdatesCard';
 
 /** Settings / profile tree (§4.9). Anything the organization's policy decides is shown locked, with the reason. */
 const SECTIONS = [
@@ -922,14 +922,12 @@ function Devices() {
 }
 
 function DesktopSection({ prefs }: { prefs: Preferences }) {
-  const { go } = useTab();
   const info = useStore(app, (s) => s.info);
   return (
     <>
       <H title="Desktop" />
-      <Row label="Updates" hint="The update channel, automatic downloads and installing on quit are in Settings › About.">
-        <Button onClick={() => go('/settings/about')}>Update settings</Button>
-      </Row>
+      {/* Updates: where they stand, the next step, the channel, what's new and the switches (#204, #205). */}
+      <UpdatesCard />
       <Row label="Tab suspension" hint="Tabs you haven't looked at for this long are unloaded to save memory, and reload when you return.">
         <Select label="Tab suspension" value={prefs.tabSuspendMinutes} options={[15, 30, 60, 120, 480].map((m) => ({ value: m, label: m < 60 ? `${m} minutes` : `${m / 60} hour${m === 60 ? '' : 's'}` }))} onValueChange={(v) => void updatePrefs({ tabSuspendMinutes: v })} />
       </Row>
@@ -1600,8 +1598,8 @@ export function About() {
           {info?.version} ({info?.platform} {info?.arch})
         </span>
       </Row>
-      {/* Channel, update state, what's new and the update switches (worksuite-desktop#205). */}
-      <AboutUpdates />
+      {/* Channel, update state, what's new and the update switches — the same card as Settings › Desktop (#205). */}
+      <UpdatesCard />
       <Row label="Components">
         <span className="font-mono text-[12px] text-ink-3">
           Electron {info?.electron} · Chromium {info?.chrome} · Node {info?.node}

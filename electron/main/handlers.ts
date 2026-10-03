@@ -1062,10 +1062,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('updates:installNow', (input) => ctx.updater.install(!!input?.force));
   router.handle('updates:restartLater', () => ctx.updater.later('hour'));
   router.handle('updates:later', (input) => ctx.updater.later(input.choice));
-  router.handle('updates:download', async () => {
-    await ctx.updater.download();
-    return ctx.updater.get();
-  });
+  router.handle('updates:download', () => ctx.updater.downloadNow());
   router.handle('updates:reinstall', () => ctx.updater.reinstall());
   router.handle('updates:dismissNotice', () => ctx.updater.dismissNotice());
   router.handle('updates:prepared', (input) => ctx.updatePrepared(input.token));
@@ -1096,6 +1093,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     const prefs = ctx.settings.update(patch);
     if (before.startWithOs !== prefs.startWithOs || before.startMinimized !== prefs.startMinimized) applyAutostart(prefs.startWithOs, prefs.startMinimized);
     if (before.hardwareAcceleration !== prefs.hardwareAcceleration) writeBootConfig(paths().bootConfig, { hardwareAcceleration: prefs.hardwareAcceleration });
+    // Turned back on with a version on offer: it downloads now rather than at the next check.
+    if (before.autoUpdate === false && prefs.autoUpdate !== false && ctx.updater.get().state === 'AVAILABLE') void ctx.updater.check();
     return { preferences: prefs, locks: ctx.settings.locks() };
   });
 

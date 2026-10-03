@@ -6,7 +6,7 @@ import type { DesktopPolicy, Preferences, PreferenceLock } from '@shared/types';
 import { defaultDrivePrefs, normalizeDrivePrefs } from '@shared/transfers';
 import type { Database } from './db';
 import { stricterPrivacy } from './policy';
-import { DEFAULT_UPDATE_PREFS, effectiveChannel } from '@shared/updates';
+import { effectiveChannel, migrateUpdatePrefs } from '@shared/updates';
 
 /** §11.1 defaults. */
 export function defaultPreferences(): Preferences {
@@ -60,7 +60,9 @@ export function defaultPreferences(): Preferences {
     tabSuspendMinutes: 30,
     language: 'en',
     updateChannel: 'stable',
-    updates: { ...DEFAULT_UPDATE_PREFS },
+    autoUpdate: true,
+    updateNotifications: true,
+    updateInstallOnQuit: true,
     sidebarMode: 'expanded',
     pinnedApps: [],
     shortcuts: {},
@@ -92,7 +94,7 @@ export class SettingsService {
     const savedLanguage = db.getConfig<unknown>('interface_language_default');
     this.defaultLanguage = normalizeLanguage(typeof savedLanguage === 'string' ? savedLanguage : stored.language);
     // The AI settings are one object: one saved before a field was added takes that field's default.
-    this.prefs = { ...defaults, ...stored, appLockEnabled: stored.appLockEnabled ?? (stored.appLockMinutes !== undefined && stored.appLockMinutes > 0), appLockMinutes: stored.appLockMinutes === 0 && stored.appLockEnabled === undefined ? 15 : stored.appLockMinutes ?? defaults.appLockMinutes, darkColorProfile: normalizeDarkProfile(stored.darkColorProfile), ai: { ...defaults.ai, ...stored.ai, display: stored.ai?.display ?? defaults.ai.display }, meetRecording: { ...defaults.meetRecording, ...stored.meetRecording }, drive: normalizeDrivePrefs(stored.drive), updates: { ...DEFAULT_UPDATE_PREFS, ...stored.updates } };
+    this.prefs = { ...defaults, ...stored, appLockEnabled: stored.appLockEnabled ?? (stored.appLockMinutes !== undefined && stored.appLockMinutes > 0), appLockMinutes: stored.appLockMinutes === 0 && stored.appLockEnabled === undefined ? 15 : stored.appLockMinutes ?? defaults.appLockMinutes, darkColorProfile: normalizeDarkProfile(stored.darkColorProfile), ai: { ...defaults.ai, ...stored.ai, display: stored.ai?.display ?? defaults.ai.display }, meetRecording: { ...defaults.meetRecording, ...stored.meetRecording }, drive: normalizeDrivePrefs(stored.drive), ...migrateUpdatePrefs(stored) };
   }
 
   /** Interface language is isolated by server and user, while device policy stays computer-wide. */
@@ -138,6 +140,7 @@ export class SettingsService {
     if (p.notification_min_privacy === 'GENERIC') out.push({ key: 'lockedNotificationSender', reason: 'Your organization limits what notifications may show.' });
     if (p.auto_update === 'enforced') {
       out.push({ key: 'updateChannel', reason: 'Your organization chooses the update channel.' });
+      out.push({ key: 'autoUpdate', reason: 'Your organization keeps WorkSuite up to date automatically.' });
     }
     if (p.required_background_services.includes('notifications')) {
       out.push({ key: 'backgroundServices', reason: 'Your organization requires background notifications.' });
@@ -150,7 +153,7 @@ export class SettingsService {
 
   /** Preferences as they take effect, with policy constraints applied. */
   effective(): Preferences {
-    const p = { ...this.prefs, backgroundServices: { ...this.prefs.backgroundServices }, updates: { ...this.prefs.updates } };
+    const p = { ...this.prefs, backgroundServices: { ...this.prefs.backgroundServices } };
     const pol = this.policy;
     if (!pol) return p;
     if (pol.locked_answer_calls === false) p.lockedAnswerCalls = false;
@@ -168,8 +171,8 @@ export class SettingsService {
     // Enforced: the organisation's channel. Each person's choice: theirs while allowed, else the organisation's
     // default, else the most stable allowed channel — never a downgrade (the updater waits for it to catch up).
     p.updateChannel = effectiveChannel(this.prefs.updateChannel, !!this.prefs.updateChannelChosen, pol);
-    // Enforced updates download by themselves (worksuite-desktop#205); installing on quit and the notice stay each person's.
-    if (pol.auto_update === 'enforced') p.updates.autoDownload = true;
+    // Enforced updates download by themselves; installing on quit and the notifications stay each person's.
+    if (pol.auto_update === 'enforced') p.autoUpdate = true;
     if (pol.required_background_services.includes('notifications')) p.backgroundServices.notifications = true;
     if (pol.required_background_services.includes('realtime')) p.backgroundServices.realtime = true;
     return p;
@@ -186,9 +189,7 @@ export class SettingsService {
     const drive = patch.drive ? normalizeDrivePrefs({ ...this.prefs.drive, ...patch.drive }) : this.prefs.drive;
     // And the link settings (#170).
     const links = patch.links ? { ...this.prefs.links, ...patch.links } : this.prefs.links;
-    // And the update switches (worksuite-desktop#205).
-    const updates = patch.updates ? { ...this.prefs.updates, ...patch.updates } : this.prefs.updates;
-    this.prefs = { ...this.prefs, ...patch, meetRecording, drive, updates, ...(links ? { links } : {}) };
+    this.prefs = { ...this.prefs, ...patch, meetRecording, drive, ...(links ? { links } : {}) };
     if (patch.language !== undefined) {
       this.prefs.language = normalizeLanguage(patch.language);
       if (this.languageScope) {
