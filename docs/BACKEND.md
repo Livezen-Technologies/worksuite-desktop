@@ -37,7 +37,9 @@ sign-in) and, once the laptop is registered, `X-WS-Device: <device id>`.
 | Apps | `GET /desktop/v1/apps` → `{apps_gated, apps:[{id: "worksuite.<slug>", slug, name, route, desktop:{native}}]}` |
 | Policy only | `GET /desktop/v1/policies?organization_id=` |
 | Open a `worksuite://` link | `GET /desktop/v1/links/resolve?url=` → `{valid, module, route, window, allowed, organization_id}` |
-| Device-side audit | `POST /desktop/v1/audit` `{events:[{id, action, at, details}]}` (idempotent on `id`) |
+| An item link's item (#170) | `GET /api/links/items/{org}/{type}/{id}` → `{allowed, state, state_label?, title?, kind_label?, size?, sharer?, task_id?, can_request_access}`; `POST …/request-access` |
+| Item link in a browser (#170) | `GET /o/{org}/{type}/{id}?action=` (public): hands `worksuite://{org}/{type}/{id}` to the app, "Open in browser instead" |
+| Device-side audit | `POST /desktop/v1/audit` `{events:[{id, action, at, details}]}` (idempotent on `id`); item links log `desktop.link.opened` |
 | Drive change feed | `GET /desktop/v1/sync/changes?cursor=&limit=`, `POST /desktop/v1/sync/events` |
 | File locks | `POST` / `DELETE /desktop/v1/files/{id}/lock` |
 | Release manifest | `GET /desktop/v1/releases/manifest?platform=&arch=&channel=` (no sign-in; served exactly as signed) |

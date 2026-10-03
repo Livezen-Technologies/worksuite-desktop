@@ -97,6 +97,13 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     return openExternalSafely(`${origin}${input.path}`, winOf(c.sender));
   });
 
+  // An item link opened from an email, a chat or another program (#170): the audit trail says which item, which
+  // action and where from — the server's copy is what an administrator reads.
+  router.handle('links:audit', async (input) => {
+    ctx.audit.record(ctx.session.userId(), 'desktop.link.opened', { org_id: input.org, item_type: input.type, item_id: input.id, action: input.action, source: input.source, outcome: input.outcome });
+    void ctx.audit.flush();
+  });
+
   // ── auth / session ─────────────────────────────────────────────────────
   router.handle('auth:state', () => ctx.session.get());
   router.handle('auth:setServer', async (input) => {

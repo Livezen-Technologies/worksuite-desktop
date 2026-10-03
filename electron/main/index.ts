@@ -14,6 +14,8 @@ import { hkdfSync } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { canOpenApp, canOpenLink, canOpenRoute, notificationAllowed, visibleAppIds } from '@shared/access';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
+import { itemApp, itemRoute, looksLikeItemLink, parseItemLink } from '@shared/item-links';
+import { linkPrefs } from '@shared/link-prefs';
 import { findMailtoInArgv, mailBodiesKept, mailListKept, mailtoRoute, parseMailto } from '@shared/mailto';
 import { resolveWebLink } from '@shared/links';
 import { redirectRoute } from '@shared/channels';
@@ -162,6 +164,14 @@ function main(): void {
   const pendingLinks: string[] = [];
   let handleLink: (url: string) => void = (url) => pendingLinks.push(url);
   app.on('open-url', (e, url) => {
+    e.preventDefault();
+    handleLink(url);
+  });
+  // Universal Links (#170): an https://app.worksuite.lk/o/… link macOS hands to the app instead of the browser,
+  // once the server's apple-app-site-association names this app. Held to the same grammar as any other link.
+  app.on('continue-activity', (e, type, details) => {
+    const url = (details as { webpageURL?: unknown } | undefined)?.webpageURL;
+    if (type !== 'NSUserActivityTypeBrowsingWeb' || typeof url !== 'string') return;
     e.preventDefault();
     handleLink(url);
   });
@@ -763,6 +773,32 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         main.webContents.send('guest:destination', destination);
         broadcast('toast', { kind: 'error', text: String(e.message) });
       });
+      return;
+    }
+    // An item link (#170): worksuite://{org}/{type}/{id} or https://app.worksuite.lk/o/{org}/{type}/{id}.
+    if (looksLikeItemLink(url)) {
+      const serverHost = (() => {
+        try {
+          const origin = auth.getServer()?.origin;
+          return origin ? new URL(origin).hostname : null;
+        } catch {
+          return null;
+        }
+      })();
+      const item = parseItemLink(url, { hosts: [serverHost] });
+      if (!item.ok) {
+        log.warn('item link rejected', { reason: item.reason, url: redactUrl(url) });
+        windows.showMain();
+        broadcast('toast', { kind: 'error', text: 'That WorkSuite link could not be opened.' });
+        return;
+      }
+      // "Open WorkSuite links in the desktop app" off: a web link the system handed over goes on to the browser.
+      if (item.link.format === 'web' && !linkPrefs(settings.effective()).openInApp) {
+        void openExternalSafely(url);
+        return;
+      }
+      log.info('item link', { type: item.link.type, action: item.link.action });
+      navigate({ route: itemRoute(item.link), organizationId: item.link.org, source: 'deep-link', item: { link: item.link, source: item.link.source ?? 'external', app: itemApp(item.link) } });
       return;
     }
     const parsed = parseDeepLink(url);

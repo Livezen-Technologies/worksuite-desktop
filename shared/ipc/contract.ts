@@ -159,6 +159,7 @@ export const preferencesPatchSchema = z
     openFilesLocally: z.enum(['ask', 'always', 'never']),
     mailCacheDays: z.union([z.literal(7), z.literal(30), z.literal(90), z.literal(0)]),
     mailtoHandler: z.boolean(),
+    links: z.object({ openInApp: z.boolean(), mailLinks: z.enum(['new-tab', 'current-tab']), confirmActions: z.boolean() }).partial(),
     mailCacheDaysByMailbox: z.record(z.string().regex(/^\d{1,12}$/), z.union([z.literal(7), z.literal(30), z.literal(90), z.literal(0)])).refine((r) => Object.keys(r).length <= 200),
     mailFolderOffline: z.record(z.string().regex(/^(\d{1,12}|local):[A-Za-z0-9._\-/ :]{1,128}$/), z.enum(['recent', 'headers', 'online'])).refine((r) => Object.keys(r).length <= 500),
     mailAlerts: z.enum(['all', 'focused', 'vip', 'none']),
@@ -298,6 +299,19 @@ export const contract = {
   'app:relaunch': ch(none, { whileLocked: true }),
   'app:openExternal': ch(z.object({ url: z.string().url().max(2048) }), { rate: 5 }),
   'app:openInBrowser': ch(z.object({ path: z.string().regex(/^\/[A-Za-z0-9/_\-.?=&]*$/).max(512) }), { session: true, rate: 5 }),
+  // An item link opened (#170): written to the audit outbox and sent to the server's audit trail — the item, the
+  // action and where the link was found; never the link itself.
+  'links:audit': ch(
+    z.object({
+      org: z.string().regex(/^[1-9]\d{0,11}$/),
+      type: z.string().regex(/^[a-z]{2,16}$/),
+      id: z.string().regex(/^[A-Za-z0-9-]{1,64}$/),
+      action: z.string().regex(/^[a-z-]{2,20}$/),
+      source: z.enum(['email', 'chat', 'notification', 'external']),
+      outcome: z.enum(['opened', 'confirmed', 'cancelled', 'refused', 'offline']),
+    }),
+    { session: true, rate: 20 },
+  ),
   /** macOS: the Dock icon with the unread count painted on (the renderer draws it; see core/dock-badge). */
   'app:setDockIcon': ch(z.object({ png: z.string().regex(/^data:image\/png;base64,[A-Za-z0-9+/=]+$/).max(4_000_000) }), { whileLocked: true, rate: 30 }),
 
@@ -1188,6 +1202,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'app:relaunch': void;
   'app:openExternal': boolean;
   'app:openInBrowser': boolean;
+  'links:audit': void;
   'app:setDockIcon': boolean;
   'local:enter': LocalStatus;
   'local:leave': void;

@@ -445,6 +445,8 @@ export default function FilesPage(_props: ModuleProps) {
   useEffect(() => {
     if (!fileParam || !/^\d+$/.test(fileParam) || openedFile.current === fileParam) return;
     openedFile.current = fileParam;
+    // Shared with me, with the item picked out (#170): it stays in that list rather than going to its folder.
+    if (place.view === 'shared') return;
     void apiGet<DriveFile>(`/api/files/${fileParam}`)
       .then((f) => {
         onPlace(f.folder_id ? { view: 'folder', folder: f.folder_id } : { view: 'home', folder: null });
