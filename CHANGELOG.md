@@ -5,6 +5,10 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## Unreleased — WhatsApp number identity
+
+- Hide unconfirmed phone values while linking WhatsApp, format confirmed Sri Lankan numbers, show available connection metadata and check results, and move unlink behind an action menu and confirmation (#157). The organisation-scoped duplicate repair and uniqueness migration remain pending ownership mapping.
+
 ## 0.2.100 — 2026-10-03
 
 - Keep a new Chat, WhatsApp or website reply draft when an earlier send finishes, and prevent repeated Enter presses from submitting the same pending message twice (#156).
