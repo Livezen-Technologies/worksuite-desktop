@@ -94,8 +94,11 @@ export function usePendingMail() {
   });
 }
 
-/** What Mail keeps on this computer, by kind and by mailbox, and the organization's limit (D04, D09). */
-export function useMailStats(enabled = true) {
+/**
+ * What Mail keeps on this computer, by kind and by mailbox, and the organization's limit (D04, D09).
+ * `live`: refreshed every few seconds while bodies are downloading, else every half minute (#190).
+ */
+export function useMailStats(enabled = true, live = false) {
   return useQuery({
     queryKey: [...mailKeys.localStore, 'stats'],
     queryFn: async () => {
@@ -106,12 +109,13 @@ export function useMailStats(enabled = true) {
       }
     },
     enabled,
-    staleTime: 60_000,
+    staleTime: live ? 2_000 : 60_000,
+    refetchInterval: live ? (q) => (Object.values(q.state.data?.bodies ?? {}).some((b) => b.running) ? 3_000 : 30_000) : false,
   });
 }
 
-/** How much mail this computer keeps (the offline cache's mail answers). */
-export function useLocalStore() {
+/** How much mail this computer keeps (the offline cache's mail answers); `live` keeps it current while Settings is open (#190). */
+export function useLocalStore(live = false) {
   return useQuery({
     queryKey: mailKeys.localStore,
     queryFn: async () => {
@@ -121,7 +125,8 @@ export function useLocalStore() {
         return null;
       }
     },
-    staleTime: 60_000,
+    staleTime: live ? 2_000 : 60_000,
+    refetchInterval: live ? 10_000 : false,
   });
 }
 
