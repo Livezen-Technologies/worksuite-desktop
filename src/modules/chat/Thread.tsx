@@ -24,6 +24,8 @@ import { openMeeting } from '../meet/api';
 import { startMeetingFromChat } from '../meet/start';
 import { LinkedText } from '../../components/LinkedText';
 import { DriveShareCard, type DriveCard } from './cards/DriveMeetCards';
+import { RecordMessage } from './cards/RecordMessage';
+import { CardFrame } from './cards/CardFrame';
 import { RecordCards } from './cards/RecordCards';
 import { recordsIn, withoutRecordLines } from './cards/recordLinks';
 import { Composer, type ComposerHandle } from './Composer';
@@ -77,6 +79,7 @@ export function Thread({
   const qc = useQueryClient();
   const outgoingCount = useStore(outgoing, (s) => s.jobs.filter((j) => j.roomId === roomId).length);
   const me = useStore(app, (s) => s.auth?.user?.id);
+  const cardOrigin = useStore(app, (s) => s.auth?.server?.origin);
   const meetAllowed = useCanOpen('meet');
   // Making a task or a note from here crosses into Tasks or Notes: only for whoever has them.
   const tasksAllowed = useCanOpen('tasks');
@@ -299,12 +302,17 @@ export function Thread({
         ) : null}
         {msgs.isLoading ? <Spinner /> : msgs.error ? <ErrorNote error={msgs.error} onRetry={() => void msgs.refetch()} /> : null}
         <AttachmentGallery.Provider value={pictures}>
-        {timeline.map((entry) => {
+        {timeline.map((entry, timelineIndex) => {
           if (entry.job) return <OutgoingMediaBubble key={entry.job.id} job={entry.job} />;
           const m = entry.message!;
           const i = entry.index;
           const header = days[i];
           const prev = messages[i - 1];
+          const isCard = (x: (ChatMessage & { card?: Card | null }) | null | undefined) => !!x && !x.deleted && x.type !== 'system' && x.type !== 'call' && (!!x.card || recordsIn(x.message, cardOrigin).length > 0);
+          const before = timeline[timelineIndex - 1]?.message;
+          const after = timeline[timelineIndex + 1]?.message;
+          const cardContinuation = !!(isCard(m) && isCard(before) && before && before.sender_id === m.sender_id && dayKey(parseTs(before.created_at)) === dayKey(parseTs(m.created_at)));
+          const lastCard = !(isCard(m) && isCard(after) && after && after.sender_id === m.sender_id && dayKey(parseTs(after.created_at)) === dayKey(parseTs(m.created_at)));
           const first = !!header || !prev || prev.sender_id !== m.sender_id || prev.type === 'system' || prev.type === 'call';
           return (
             <div key={m.id} id={`msg-${m.id}`}>
@@ -318,9 +326,9 @@ export function Thread({
                 )
               ) : null}
               {drawer ? (
-                <DrawerBubble m={m} own={String(m.sender_id) === me} group={group} first={first} roomId={roomId} roomName={room?.name ?? 'conversation'} onReply={setReply} onForward={setForwarding} onEdit={(x) => composer.current?.edit({ id: x.id, message: x.message ?? '' })} />
+                <DrawerBubble m={m} lastCard={lastCard} cardContinuation={cardContinuation} own={String(m.sender_id) === me} group={group} first={first} roomId={roomId} roomName={room?.name ?? 'conversation'} onReply={setReply} onForward={setForwarding} onEdit={(x) => composer.current?.edit({ id: x.id, message: x.message ?? '' })} />
               ) : (
-                <Bubble m={m} own={String(m.sender_id) === me} roomId={roomId} onReply={setReply} onForward={setForwarding} onEdit={(x) => composer.current?.edit({ id: x.id, message: x.message ?? '' })} />
+                <Bubble m={m} lastCard={lastCard} cardContinuation={cardContinuation} own={String(m.sender_id) === me} roomId={roomId} onReply={setReply} onForward={setForwarding} onEdit={(x) => composer.current?.edit({ id: x.id, message: x.message ?? '' })} />
               )}
             </div>
           );
@@ -387,7 +395,18 @@ export function Thread({
 
 type Card = { kind: string; available?: boolean; why?: string; heading?: string; name?: string; owner?: string; who?: string; what?: string; link?: string };
 
-function Bubble({ m, own, roomId, onReply, onForward, onEdit }: { m: ChatMessage & { starred?: boolean; pinned?: unknown; card?: Card | null }; own: boolean; roomId: string; onReply: (r: ReplyTarget) => void; onForward: (m: ChatMessage) => void; onEdit: (m: ChatMessage) => void }) {
+function MessageRecords({ m, named, openLink, visible }: { m: ChatMessage & { card?: Card | null }; named: boolean; openLink: (link: string) => void; visible: ReadonlySet<string> }) {
+  if (named) return <RecordCards text={m.message} />;
+  const card = m.card;
+  if (!card) return null;
+  if (card.kind.startsWith('drive.')) return <DriveShareCard card={card as DriveCard} onOpen={openLink} />;
+  return <CardFrame kind="link" label={card.heading ?? card.kind.split('.')[0]} state={card.available === false ? 'noaccess' : 'ok'} gone={card.available === false ? { title: 'You don’t have access', sub: card.why ?? '' } : undefined}
+    actions={card.available !== false && card.link && canOpenLink(card.link, visible) ? [{ label: 'Open', onClick: () => openLink(card.link!) }] : []}>
+    <div className="flex flex-col gap-1.5 px-3.5 py-3"><b className="text-[13px]">{card.name ?? card.what ?? ''}{card.who ? ` · ${card.who}` : ''}</b>{card.owner ? <span className="text-[12px] text-ink-3">{card.owner}</span> : null}</div>
+  </CardFrame>;
+}
+
+function Bubble({ m, own, lastCard, cardContinuation, roomId, onReply, onForward, onEdit }: { m: ChatMessage & { starred?: boolean; pinned?: unknown; card?: Card | null }; own: boolean; lastCard: boolean; cardContinuation: boolean; roomId: string; onReply: (r: ReplyTarget) => void; onForward: (m: ChatMessage) => void; onEdit: (m: ChatMessage) => void }) {
   const gallery = useAttachmentGallery();
   const qc = useQueryClient();
   const { openLink } = useTab();
@@ -398,7 +417,7 @@ function Bubble({ m, own, roomId, onReply, onForward, onEdit }: { m: ChatMessage
   const origin = useStore(app, (x) => x.auth?.server?.origin);
   const named = !m.deleted && !m.card && recordsIn(m.message, origin).length > 0;
   const shownText = named && m.message ? withoutRecordLines(m.message, origin) : m.message;
-  // A card is 440 wide; the bubble takes that width and gives it up in a narrow column.
+  // Record messages give up their width in a narrow column.
   const carded = named || (!!m.card && !m.deleted);
   const can = m.can ?? {};
   const refresh = () => {
@@ -428,83 +447,99 @@ function Bubble({ m, own, roomId, onReply, onForward, onEdit }: { m: ChatMessage
   const src = mediaUrl(f?.mime === 'image/gif' ? f.url : (f?.thumb_url ?? f?.url));
   const voice = !!f && (m.type === 'voice' || f.preview === 'audio');
   const bubble = own ? 'rounded-[12px_4px_12px_12px] bg-primary text-white' : 'rounded-[4px_12px_12px_12px] border border-line bg-surface text-ink';
+  const attachment =
+    f && !m.deleted ? (
+      f.status === 'processing' || ((f.preview === 'video' || voice) && !f.url) ? (
+        <span role="status" className="flex items-center gap-2 p-2 text-[12px] text-ink-2">
+          <span aria-hidden="true" className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          Media processing…
+        </span>
+      ) : voice && mediaUrl(f.url) ? (
+        <VoicePlayer src={mediaUrl(f.url)!} ms={f.duration_ms} seed={m.id} own={own} />
+      ) : f.preview === 'image' && src ? (
+        <button
+          type="button"
+          className="overflow-hidden rounded-[12px] border border-line"
+          onClick={() => openChatAttachment(f, openLink, gallery)}
+          aria-label={`Open ${f.filename}`}
+        >
+          <img src={src} alt={f.filename} loading="lazy" className="max-h-[260px] max-w-[320px] object-cover" />
+        </button>
+      ) : f.preview === 'video' && mediaUrl(f.url) ? (
+        <video
+          src={mediaUrl(f.url)!}
+          poster={mediaUrl(f.poster_url) ?? undefined}
+          controls
+          preload="metadata"
+          className="max-h-[260px] max-w-[360px] rounded-[12px] border border-line"
+        />
+      ) : (
+        <div className="flex w-[320px] items-center gap-2.5 rounded-[10px] border border-line bg-surface px-3 py-2.5">
+          <FileBadge name={f.filename} size={34} />
+          <span className="min-w-0 flex-1">
+            <b className="block truncate text-[12px] text-ink">{f.filename}</b>
+            <span className="block text-[12px] text-ink-3">
+              {Math.max(1, Math.round(f.size / 1024))} KB{f.status !== 'ready' ? ` · ${f.status}` : ''}
+            </span>
+          </span>
+          <button type="button" onClick={() => openChatAttachment(f, openLink, gallery)} className="text-[12px] font-semibold text-primary hover:underline">
+            Open
+          </button>
+        </div>
+      )
+    ) : null;
+  const messageActions = !m.deleted ? (
+    <MessageMenu
+      own={own}
+      named={!own && !carded}
+      open={more}
+      setOpen={setMore}
+      reactions={can.react !== false ? REACTION_BAR : []}
+      onReact={react}
+      onMoreReactions={() => (setMore(false), setPicker(true))}
+      items={[
+        can.reply !== false
+          ? { icon: 'reply', label: 'Reply', run: () => onReply({ id: m.id, sender_name: m.sender_name, snippet: (m.message ?? m.file?.filename ?? '').slice(0, 120) }) }
+          : null,
+        can.forward ? { icon: 'forward', label: 'Forward…', run: () => onForward(m) } : null,
+        { icon: 'link', label: 'Copy link', run: () => void navigator.clipboard.writeText(`worksuite://chat/${roomId}`).then(() => toast('success', 'Link copied.')) },
+        {
+          icon: 'star',
+          label: m.starred ? 'Unstar message' : 'Star message',
+          run: () => void act(() => apiPut(`/api/chat/messages/${m.id}/star`, { starred: !m.starred }), m.starred ? 'Unstarred.' : 'Starred.'),
+        },
+        {
+          icon: m.pinned ? 'pin-off' : 'pin',
+          label: m.pinned ? 'Unpin message' : 'Pin message',
+          run: () => void act(() => apiPut(`/api/chat/messages/${m.id}/pin`, { pinned: !m.pinned }), m.pinned ? 'Unpinned.' : 'Pinned for everyone.'),
+        },
+        can.edit ? { icon: 'compose', label: 'Edit', run: () => onEdit(m) } : null,
+        m.message ? { icon: 'copy', label: 'Copy text', run: () => void navigator.clipboard.writeText(m.message ?? '').then(() => toast('success', 'Copied.')) } : null,
+        can.delete_me || can.delete_everyone ? { icon: 'trash', label: 'Delete…', danger: true, run: () => setDeleting(can.delete_everyone ? 'everyone' : 'me') } : null,
+      ]}
+    />
+  ) : null;
   return (
-    <div className={cx('group relative mt-3 flex gap-2.5', own && 'flex-row-reverse')}>
+    <div className={cx('group relative flex gap-2.5', cardContinuation ? 'mt-1.5' : 'mt-3', own && 'flex-row-reverse')}>
       {!own ? <UserAvatar userId={m.sender_id} name={m.sender_name} size={30} /> : null}
-      <div data-bubble className={cx('relative flex min-w-0 max-w-[560px] flex-col gap-1', own && 'items-end', carded && 'w-[440px]')}>
-        {!m.deleted ? (
-          <MessageMenu
-            own={own}
-            named={!own}
-            open={more}
-            setOpen={setMore}
-            reactions={can.react !== false ? REACTION_BAR : []}
-            onReact={react}
-            onMoreReactions={() => (setMore(false), setPicker(true))}
-            items={[
-              can.reply !== false ? { icon: 'reply', label: 'Reply', run: () => onReply({ id: m.id, sender_name: m.sender_name, snippet: (m.message ?? m.file?.filename ?? '').slice(0, 120) }) } : null,
-              can.forward ? { icon: 'forward', label: 'Forward…', run: () => onForward(m) } : null,
-              { icon: 'link', label: 'Copy link', run: () => void navigator.clipboard.writeText(`worksuite://chat/${roomId}`).then(() => toast('success', 'Link copied.')) },
-              { icon: 'star', label: m.starred ? 'Unstar message' : 'Star message', run: () => void act(() => apiPut(`/api/chat/messages/${m.id}/star`, { starred: !m.starred }), m.starred ? 'Unstarred.' : 'Starred.') },
-              { icon: m.pinned ? 'pin-off' : 'pin', label: m.pinned ? 'Unpin message' : 'Pin message', run: () => void act(() => apiPut(`/api/chat/messages/${m.id}/pin`, { pinned: !m.pinned }), m.pinned ? 'Unpinned.' : 'Pinned for everyone.') },
-              can.edit ? { icon: 'compose', label: 'Edit', run: () => onEdit(m) } : null,
-              m.message ? { icon: 'copy', label: 'Copy text', run: () => void navigator.clipboard.writeText(m.message ?? '').then(() => toast('success', 'Copied.')) } : null,
-              can.delete_me || can.delete_everyone ? { icon: 'trash', label: 'Delete…', danger: true, run: () => setDeleting(can.delete_everyone ? 'everyone' : 'me') } : null,
-            ]}
-          />
-        ) : null}
-        {!own ? (
+      <div data-bubble className={cx('relative flex min-w-0 flex-col gap-1', own ? 'items-end' : 'items-start', carded ? 'w-[400px] max-w-full' : 'max-w-[560px]')}>
+        {!carded ? messageActions : null}
+        {!own && !cardContinuation ? (
           <span className="text-[12px]">
-            <b className="text-ink">{m.sender_name}</b> <span className="text-ink-3">{timeLabel(m.created_at)}</span>
+            <b className="text-ink">{m.sender_name}</b> <span className="text-ink-3">{!carded ? timeLabel(m.created_at) : null}</span>
           </span>
         ) : null}
         {m.reply_preview ? <div className="rounded-[6px] border-l-[3px] border-[#7FA2FF] bg-selection px-2.5 py-1.5 text-[12px] text-ink-2">Replying to {m.reply_preview.sender_name}: “{m.reply_preview.snippet}”</div> : null}
         {m.urgent && !m.deleted ? <span className="text-[10.5px] font-bold tracking-[0.5px] text-danger uppercase">Urgent</span> : null}
-        {shownText && !m.deleted ? (
+        {shownText && !m.deleted && !carded ? (
           <div className={cx('whitespace-pre-wrap break-words px-[13px] py-[9px] text-[13.5px] leading-[1.55] selectable', bubble)}>
             <LinkedText text={shownText} className={own ? 'text-white' : 'text-primary'} />
           </div>
         ) : m.deleted ? (
           <div className="rounded-[12px] border border-line px-3 py-2 text-[12.5px] text-ink-3 italic">Message deleted</div>
         ) : null}
-        {named ? <RecordCards text={m.message} /> : null}
-        {m.card && !m.deleted && m.card.kind.startsWith('drive.') ? <DriveShareCard card={m.card as DriveCard} onOpen={openLink} /> : null}
-        {m.card && !m.deleted && !m.card.kind.startsWith('drive.') ? (
-          <div className="flex w-[380px] flex-col gap-1.5 rounded-[12px] border border-line bg-surface px-3.5 py-3">
-            {m.card.available === false ? (
-              <span className="text-[12.5px] text-ink-3">{m.card.why}</span>
-            ) : (
-              <>
-                <span className="text-[11px] font-bold tracking-[0.5px] text-[#9A4A06] uppercase dark:text-warning">{m.card.heading ?? m.card.kind.split('.')[0]}</span>
-                <b className="text-[13px] text-ink">{m.card.name ?? m.card.what ?? ''}{m.card.who ? ` · ${m.card.who}` : ''}</b>
-                {m.card.owner ? <span className="text-[12px] text-ink-3">{m.card.owner}</span> : null}
-                {m.card.link && canOpenLink(m.card.link, visible) ? <button type="button" onClick={() => openLink(m.card!.link!)} className="self-start text-[12px] font-semibold text-primary hover:underline">Open</button> : null}
-              </>
-            )}
-          </div>
-        ) : null}
-        {f && !m.deleted ? (
-          (f.status === 'processing' || ((f.preview === 'video' || voice) && !f.url)) ? (
-            <span role="status" className="flex items-center gap-2 p-2 text-[12px] text-ink-2"><span aria-hidden="true" className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />Media processing…</span>
-          ) : voice && mediaUrl(f.url) ? (
-            <VoicePlayer src={mediaUrl(f.url)!} ms={f.duration_ms} seed={m.id} own={own} />
-          ) : f.preview === 'image' && src ? (
-            <button type="button" className="overflow-hidden rounded-[12px] border border-line" onClick={() => openChatAttachment(f, openLink, gallery)} aria-label={`Open ${f.filename}`}>
-              <img src={src} alt={f.filename} loading="lazy" className="max-h-[260px] max-w-[320px] object-cover" />
-            </button>
-          ) : f.preview === 'video' && mediaUrl(f.url) ? (
-            <video src={mediaUrl(f.url)!} poster={mediaUrl(f.poster_url) ?? undefined} controls preload="metadata" className="max-h-[260px] max-w-[360px] rounded-[12px] border border-line" />
-          ) : (
-            <div className="flex w-[320px] items-center gap-2.5 rounded-[10px] border border-line bg-surface px-3 py-2.5">
-              <FileBadge name={f.filename} size={34} />
-              <span className="min-w-0 flex-1">
-                <b className="block truncate text-[12px] text-ink">{f.filename}</b>
-                <span className="block text-[12px] text-ink-3">{Math.max(1, Math.round(f.size / 1024))} KB{f.status !== 'ready' ? ` · ${f.status}` : ''}</span>
-              </span>
-              <button type="button" onClick={() => openChatAttachment(f, openLink, gallery)} className="text-[12px] font-semibold text-primary hover:underline">Open</button>
-            </div>
-          )
-        ) : null}
+        {carded ? <RecordMessage own={own} text={shownText} actions={messageActions} footer={lastCard ? <Meta m={m} own={own} /> : null}><MessageRecords m={m} named={named} openLink={openLink} visible={visible} />{attachment}</RecordMessage> : null}
+        {!carded ? attachment : null}
         {m.reactions.length ? (
           <div className="flex flex-wrap gap-1">
             {m.reactions.map((r) => (
@@ -522,14 +557,14 @@ function Bubble({ m, own, roomId, onReply, onForward, onEdit }: { m: ChatMessage
             ))}
           </div>
         ) : null}
-        {own ? (
+        {own && !carded ? (
           <span className="text-[11.5px] text-ink-3">
             {timeLabel(m.created_at)}
             {m.edited ? ' · edited' : ''}
             {m.starred ? ' · ★' : ''}
             {m.receipt ? ` · ${m.receipt.status === 'read' ? `Read by ${m.receipt.read} ✓✓` : m.receipt.status === 'delivered' ? 'Delivered ✓✓' : 'Sent ✓'}` : ''}
           </span>
-        ) : m.edited || m.starred ? (
+        ) : !carded && (m.edited || m.starred) ? (
           <span className="text-[11.5px] text-ink-3">{[m.edited ? 'edited' : null, m.starred ? '★ starred' : null].filter(Boolean).join(' · ')}</span>
         ) : null}
       </div>
@@ -649,7 +684,7 @@ function useDismiss(open: boolean, box: React.RefObject<HTMLElement | null>, clo
  * The reactions pill and the menu float, stay inside the drawer, and the menu
  * opens upward when the message is down by the message box.
  */
-function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForward, onEdit }: { m: ChatMessage & { starred?: boolean; pinned?: unknown; card?: Card | null }; own: boolean; group: boolean; first: boolean; roomId: string; roomName: string; onReply: (r: ReplyTarget) => void; onForward: (m: ChatMessage) => void; onEdit: (m: ChatMessage) => void }) {
+function DrawerBubble({ m, own, lastCard, cardContinuation, group, first, roomId, roomName, onReply, onForward, onEdit }: { m: ChatMessage & { starred?: boolean; pinned?: unknown; card?: Card | null }; own: boolean; lastCard: boolean; cardContinuation: boolean; group: boolean; first: boolean; roomId: string; roomName: string; onReply: (r: ReplyTarget) => void; onForward: (m: ChatMessage) => void; onEdit: (m: ChatMessage) => void }) {
   const gallery = useAttachmentGallery();
   const qc = useQueryClient();
   const { openLink } = useTab();
@@ -728,38 +763,91 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
   const accent = own ? 'text-primary dark:text-[#B4C3FF]' : 'text-primary';
   const toolBtn = 'flex h-7 w-7 items-center justify-center rounded-[7px] text-ink-2 hover:bg-subtle hover:text-ink';
 
+  const carded = cards || (!!m.card && !m.deleted);
+  const attachment = f ? (
+    f.status === 'processing' || ((f.preview === 'video' || voice) && !f.url) ? (
+      <span role="status" className="flex items-center gap-2 p-2 text-[12px] text-ink-2">
+        <span aria-hidden="true" className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        Media processing…
+      </span>
+    ) : voice && mediaUrl(f.url) ? (
+      <VoicePlayer src={mediaUrl(f.url)!} ms={f.duration_ms} seed={m.id} own={own} bare />
+    ) : f.preview === 'image' && src ? (
+      <button type="button" className="block overflow-hidden rounded-[8px]" onClick={() => openChatAttachment(f, openLink, gallery)} aria-label={`Open ${f.filename}`}>
+        <img src={src} alt={f.filename} loading="lazy" className="max-h-[220px] max-w-[260px] object-cover" />
+      </button>
+    ) : f.preview === 'video' && mediaUrl(f.url) ? (
+      <video src={mediaUrl(f.url)!} poster={mediaUrl(f.poster_url) ?? undefined} controls preload="metadata" className="max-h-[220px] max-w-[280px] rounded-[8px]" />
+    ) : (
+      <div className="flex w-[250px] max-w-full items-center gap-2.5 rounded-[8px] bg-surface/70 px-2 py-2 dark:bg-white/5">
+        <FileBadge name={f.filename} size={32} />
+        <span className="min-w-0 flex-1">
+          <b className="block truncate text-[12px] text-ink">{f.filename}</b>
+          <span className="block text-[11.5px] text-ink-3">
+            {Math.max(1, Math.round(f.size / 1024))} KB{f.status !== 'ready' ? ` · ${f.status}` : ''}
+          </span>
+        </span>
+        <button type="button" onClick={() => openChatAttachment(f, openLink, gallery)} className={cx('text-[12px] font-semibold hover:underline', accent)}>
+          Open
+        </button>
+      </div>
+    )
+  ) : null;
+  const messageActions = !m.deleted ? (
+    <div
+      role="toolbar"
+      aria-label="Message actions"
+      className={cx(
+        'absolute -top-[15px] z-20 flex items-center gap-0.5 rounded-[10px] bg-surface p-[3px] shadow-[0_4px_14px_rgb(var(--ws-shadow-rgb)/.16),0_0_0_1px_var(--ws-edge)]',
+        own ? 'right-1.5' : 'left-1.5',
+        pop ? 'visible' : 'invisible group-hover:visible group-focus-within:visible',
+      )}
+    >
+      {can.react !== false ? (
+        <button
+          type="button"
+          aria-label="React"
+          title="React"
+          aria-expanded={pop?.kind === 'react'}
+          onClick={(e) => open('react', e.currentTarget)}
+          className={cx(toolBtn, pop?.kind === 'react' && '!bg-selection !text-primary')}
+        >
+          <Icon name="smile" size={15} />
+        </button>
+      ) : null}
+      {can.reply !== false ? (
+        <button type="button" aria-label="Reply" title="Reply" onClick={() => onReply({ id: m.id, sender_name: m.sender_name, snippet })} className={toolBtn}>
+          <Icon name="reply" size={15} />
+        </button>
+      ) : null}
+      <button
+        type="button"
+        aria-label={m.starred ? 'Unstar message' : 'Star message'}
+        title={m.starred ? 'Unstar' : 'Star'}
+        aria-pressed={!!m.starred}
+        onClick={() => void act(() => apiPut(`/api/chat/messages/${m.id}/star`, { starred: !m.starred }), m.starred ? 'Unstarred.' : 'Starred.')}
+        className={cx(toolBtn, m.starred && '!text-[#CA8A04]')}
+      >
+        <Icon name="star" size={15} />
+      </button>
+      <button
+        type="button"
+        aria-label="More actions"
+        title="More"
+        aria-haspopup="menu"
+        aria-expanded={pop?.kind === 'more'}
+        onClick={(e) => open('more', e.currentTarget)}
+        className={cx(toolBtn, pop?.kind === 'more' && '!bg-selection !text-primary')}
+      >
+        <Icon name="more" size={15} />
+      </button>
+    </div>
+  ) : null;
   return (
-    <div className={cx('group relative flex', own ? 'justify-end' : 'justify-start', first ? 'mt-2.5' : 'mt-1')}>
-      <div ref={box} data-bubble className={cx('relative flex min-w-0 max-w-[84%] flex-col', own ? 'items-end' : 'items-start', (cards || (m.card && !m.deleted)) && 'w-[456px]')}>
-        {!m.deleted ? (
-          <div
-            role="toolbar"
-            aria-label="Message actions"
-            className={cx(
-              'absolute -top-[15px] z-20 flex items-center gap-0.5 rounded-[10px] bg-surface p-[3px] shadow-[0_4px_14px_rgb(var(--ws-shadow-rgb)/.16),0_0_0_1px_var(--ws-edge)]',
-              own ? 'right-1.5' : 'left-1.5',
-              pop ? 'visible' : 'invisible group-hover:visible group-focus-within:visible',
-            )}
-          >
-            {can.react !== false ? (
-              <button type="button" aria-label="React" title="React" aria-expanded={pop?.kind === 'react'} onClick={(e) => open('react', e.currentTarget)} className={cx(toolBtn, pop?.kind === 'react' && '!bg-selection !text-primary')}>
-                <Icon name="smile" size={15} />
-              </button>
-            ) : null}
-            {can.reply !== false ? (
-              <button type="button" aria-label="Reply" title="Reply" onClick={() => onReply({ id: m.id, sender_name: m.sender_name, snippet })} className={toolBtn}>
-                <Icon name="reply" size={15} />
-              </button>
-            ) : null}
-            <button type="button" aria-label={m.starred ? 'Unstar message' : 'Star message'} title={m.starred ? 'Unstar' : 'Star'} aria-pressed={!!m.starred} onClick={() => void act(() => apiPut(`/api/chat/messages/${m.id}/star`, { starred: !m.starred }), m.starred ? 'Unstarred.' : 'Starred.')} className={cx(toolBtn, m.starred && '!text-[#CA8A04]')}>
-              <Icon name="star" size={15} />
-            </button>
-            <button type="button" aria-label="More actions" title="More" aria-haspopup="menu" aria-expanded={pop?.kind === 'more'} onClick={(e) => open('more', e.currentTarget)} className={cx(toolBtn, pop?.kind === 'more' && '!bg-selection !text-primary')}>
-              <Icon name="more" size={15} />
-            </button>
-          </div>
-        ) : null}
-        <div className={cx('min-w-[64px] rounded-[10px] text-[13px] leading-[1.45] text-ink shadow-[0_1px_1px_rgb(var(--ws-shadow-rgb)/.1)]', tone, media || m.card || cards ? 'p-1' : 'px-2.5 py-1.5', (cards || (m.card && !m.deleted)) && 'w-full')}>
+    <div className={cx('group relative flex', own ? 'justify-end' : 'justify-start', cardContinuation ? 'mt-1.5' : first ? 'mt-2.5' : 'mt-1')}>
+      <div ref={box} data-bubble className={cx('relative flex min-w-0 flex-col', own ? 'items-end' : 'items-start', carded ? 'w-[400px] max-w-full' : 'max-w-[84%]')}>
+        {!carded ? messageActions : null}
+        <div className={carded ? 'w-full text-ink' : cx('min-w-[64px] rounded-[10px] text-[13px] leading-[1.45] text-ink shadow-[0_1px_1px_rgb(var(--ws-shadow-rgb)/.1)]', tone, media ? 'p-1' : 'px-2.5 py-1.5')}>
           {group && !own && first ? (
             <b className={cx('block text-[11.5px]', DATA_TEXT, (media || m.card) && 'px-1.5 pt-0.5')} style={{ ['--c' as string]: nameColour(m.sender_name) }}>
               {m.sender_name}
@@ -777,54 +865,11 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
               <span className="text-ink-3 italic">Message deleted</span>
               <Meta m={m} own={own} />
             </div>
+          ) : carded ? (
+            <RecordMessage own={own} text={shownText} actions={messageActions} footer={lastCard ? <Meta m={m} own={own} /> : null}><MessageRecords m={m} named={cards} openLink={openLink} visible={visible} />{attachment}</RecordMessage>
           ) : (
             <>
-              {m.card && m.card.kind.startsWith('drive.') ? <DriveShareCard card={m.card as DriveCard} onOpen={openLink} /> : null}
-              {m.card && !m.card.kind.startsWith('drive.') ? (
-                <div className={cx('flex w-[270px] max-w-full flex-col gap-0.5 rounded-[8px] border-l-[3px] border-[#E0522F] bg-surface px-2.5 py-2', own && 'dark:bg-black/25')}>
-                  {m.card.available === false ? (
-                    <span className="text-[12.5px] text-ink-3">{m.card.why}</span>
-                  ) : (
-                    <>
-                      <span className="text-[10.5px] font-bold tracking-[0.5px] text-[#E0522F] uppercase dark:text-[#FF8A6B]">{(m.card.heading ?? m.card.kind.split('.')[0])?.replace('.', ' · ')}</span>
-                      <b className="text-[13px] text-ink">
-                        {m.card.name ?? m.card.what ?? ''}
-                        {m.card.who ? ` · ${m.card.who}` : ''}
-                      </b>
-                      {m.card.owner ? <span className="text-[12px] text-ink-3">{m.card.owner}</span> : null}
-                    </>
-                  )}
-                </div>
-              ) : null}
-              {f ? (
-                (f.status === 'processing' || ((f.preview === 'video' || voice) && !f.url)) ? (
-                  <span role="status" className="flex items-center gap-2 p-2 text-[12px] text-ink-2"><span aria-hidden="true" className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />Media processing…</span>
-                ) : voice && mediaUrl(f.url) ? (
-                  <VoicePlayer src={mediaUrl(f.url)!} ms={f.duration_ms} seed={m.id} own={own} bare />
-                ) : f.preview === 'image' && src ? (
-                  <button type="button" className="block overflow-hidden rounded-[8px]" onClick={() => openChatAttachment(f, openLink, gallery)} aria-label={`Open ${f.filename}`}>
-                    <img src={src} alt={f.filename} loading="lazy" className="max-h-[220px] max-w-[260px] object-cover" />
-                  </button>
-                ) : f.preview === 'video' && mediaUrl(f.url) ? (
-                  <video src={mediaUrl(f.url)!} poster={mediaUrl(f.poster_url) ?? undefined} controls preload="metadata" className="max-h-[220px] max-w-[280px] rounded-[8px]" />
-                ) : (
-                  <div className="flex w-[250px] max-w-full items-center gap-2.5 rounded-[8px] bg-surface/70 px-2 py-2 dark:bg-white/5">
-                    <FileBadge name={f.filename} size={32} />
-                    <span className="min-w-0 flex-1">
-                      <b className="block truncate text-[12px] text-ink">{f.filename}</b>
-                      <span className="block text-[11.5px] text-ink-3">{Math.max(1, Math.round(f.size / 1024))} KB{f.status !== 'ready' ? ` · ${f.status}` : ''}</span>
-                    </span>
-                    <button type="button" onClick={() => openChatAttachment(f, openLink, gallery)} className={cx('text-[12px] font-semibold hover:underline', accent)}>
-                      Open
-                    </button>
-                  </div>
-                )
-              ) : null}
-              {cards ? (
-                <div className="p-0.5">
-                  <RecordCards text={m.message} />
-                </div>
-              ) : null}
+              {attachment}
               <div className={cx('flex flex-wrap items-end gap-x-2', (media || m.card || cards) && 'px-1.5 pb-0.5')}>
                 {shownText ? (
                   <span className={cx('min-w-0 whitespace-pre-wrap break-words selectable', (media || m.card || cards) && 'pt-1')}>
@@ -842,7 +887,7 @@ function DrawerBubble({ m, own, group, first, roomId, roomName, onReply, onForwa
           )}
         </div>
         {m.reactions.length ? (
-          <div className={cx('relative z-10 -mt-1.5 flex flex-wrap gap-1', own ? 'mr-2' : 'ml-2')}>
+          <div className={cx('relative z-10 flex flex-wrap gap-1', carded ? 'mt-1' : '-mt-1.5', own ? 'mr-2' : 'ml-2')}>
             {m.reactions.map((r) => (
               <button
                 key={r.emoji}

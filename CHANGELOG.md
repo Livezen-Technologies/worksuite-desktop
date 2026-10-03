@@ -5,6 +5,10 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.101 — 2026-10-03
+
+- Show shared record cards directly in Chat and the conversation drawer, with short captions below, longer messages above, and one timestamp per consecutive card group. Completed tasks use neutral priority and due-date labels (#173).
+
 ## 0.2.100 — 2026-10-03
 
 - Keep a new Chat, WhatsApp or website reply draft when an earlier send finishes, and prevent repeated Enter presses from submitting the same pending message twice (#156).

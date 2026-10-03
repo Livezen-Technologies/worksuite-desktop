@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.10.2 — 2026-10-03
+
+- Show every shared record card without a coloured message frame, with grouped captions and receipts; quiet completed task urgency (#173).
+
 ## 1.10.1 — 2026-10-03
 
 - Keep newer composer drafts when a pending send finishes and prevent duplicate submissions (#156).
