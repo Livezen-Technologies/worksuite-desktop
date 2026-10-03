@@ -139,7 +139,7 @@ export function Rail({
         {item('folder', 'My Drive', 'folder', counts?.files)}
         {item('recent', 'Recent', 'clock', counts?.recent)}
         {item('starred', 'Starred', 'star', counts?.starred)}
-        {item('shared', 'Shared with me', 'users')}
+        {item('shared', 'Shared with me', 'users', counts?.shared_new)}
         {item('my_shares', 'Shared by me', 'send')}
         {head('fold', 'Folders', tree.length)}
         {!shut.fold ? (tree.length ? branch(tree, 0) : <span className="px-2.5 py-1 text-[12px] text-ink-3">No folders yet.</span>) : null}

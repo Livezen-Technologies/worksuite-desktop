@@ -18,6 +18,7 @@ import { Card, SettingRow } from '../account/parts';
 import { computerZone, useZones } from '../account/regional';
 import { appOf } from './api';
 import { Checkbox } from '../../components/Checkbox';
+import { FilesNotifications, type EventChoices } from './FilesPrefs';
 
 /**
  * Notification settings (NotifSettings): which kinds of notification reach
@@ -33,7 +34,7 @@ import { Checkbox } from '../../components/Checkbox';
  * `PUT /notifications/preferences` replaces the whole row, so every change
  * sends every setting.
  */
-type Prefs = Record<string, unknown> & { categories?: Record<string, Record<string, boolean>> | unknown[] };
+type Prefs = Record<string, unknown> & { categories?: Record<string, Record<string, unknown>> | unknown[] };
 interface Channel {
   channel: string;
   label: string;
@@ -174,6 +175,8 @@ export default function NotificationSettings() {
             </table>
           </div>
         </Card>
+
+        {categoryVisible('files', visible) ? <FilesNotifications categories={cats as Record<string, EventChoices>} commit={commit} /> : null}
 
         <div className="grid items-start gap-4 lg:grid-cols-2">
           <QuietHours p={p} commit={commit} prefs={prefs} local={local} />
