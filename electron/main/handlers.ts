@@ -14,6 +14,7 @@ import { assertRoute, assertWebPath } from './access';
 import { windowRoute } from '../windows/manager';
 import { attachmentRisk } from '@shared/attachments';
 import { DesktopError, isDesktopError } from './errors';
+import { saveLauncherDefaults } from '../services/launcher-defaults';
 import type { AppContext } from './context';
 import type { IpcRouter } from '../ipc/router';
 import { applyAutostart } from './autostart';
@@ -1090,6 +1091,14 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     if (before.startWithOs !== prefs.startWithOs || before.startMinimized !== prefs.startMinimized) applyAutostart(prefs.startWithOs, prefs.startMinimized);
     if (before.hardwareAcceleration !== prefs.hardwareAcceleration) writeBootConfig(paths().bootConfig, { hardwareAcceleration: prefs.hardwareAcceleration });
     return { preferences: prefs, locks: ctx.settings.locks() };
+  });
+
+  router.handle('settings:launcherDefaults', async (input) => {
+    if (ctx.session.get().server?.api !== 'desktop-v1') throw new DesktopError('UNSUPPORTED', 'This WorkSuite server does not take launcher defaults.');
+    const saved = await saveLauncherDefaults(ctx.http, input.organizationId, input);
+    // Everyone's next bootstrap carries them; this window's at once.
+    void ctx.session.refreshBootstrap().catch(() => undefined);
+    return saved;
   });
 
   router.handle('status:snapshot', () => ctx.status());

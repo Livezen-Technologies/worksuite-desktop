@@ -116,6 +116,8 @@ import {
   SlidersHorizontal, Image, ImageOff, RotateCw, CircleHelp, Shield, Dices, Crop,
   Scissors,
   Forward, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Mic, MicOff, VideoOff, PhoneOff, PhoneIncoming, MonitorUp, Maximize2, Camera, Film, Music, Square, AtSign, MessageCircle, Cake, Smartphone, MapPin, Tag, List, type LucideIcon,
+  EyeOff,
+  GripVertical,
 } from 'lucide-react';
 
 /**
@@ -135,7 +137,7 @@ const ICONS: Record<string, LucideIcon> = {
   grid: LayoutGrid, stethoscope: Stethoscope, 'shield-check': ShieldCheck, 'shield-alert': ShieldAlert, wifi: Wifi, 'wifi-off': WifiOff,
   warning: TriangleAlert, info: Info, alert: CircleAlert, clock: Clock, 'bell-off': BellOff, snooze: AlarmClock, scan: ScanLine, truck: Truck, 'mail-open': MailOpen, logout: LogOut, moon: Moon, sun: Sun, monitor: Monitor,
   keyboard: Keyboard, globe: Globe, disk: HardDrive, pause: Pause, play: Play, undo: RotateCcw, file: File, 'file-image': FileImage,
-  'file-sheet': FileSpreadsheet, filter: Filter, more: Ellipsis, smile: Smile, timer: Timer, coffee: Coffee, eye: Eye, laptop: Laptop,
+  'file-sheet': FileSpreadsheet, filter: Filter, more: Ellipsis, smile: Smile, timer: Timer, coffee: Coffee, eye: Eye, 'eye-off': EyeOff, grip: GripVertical, laptop: Laptop,
   server: Server, link: Link, history: History, zap: Zap, hash: Hash, compose: SquarePen, user: UserRound, building: Building2,
   briefcase: Briefcase, 'list-todo': ListTodo, spinner: LoaderCircle, back: ArrowLeft, 'panel-close': PanelLeftClose, 'panel-open': PanelLeftOpen, 'panel-right-close': PanelRightClose, 'panel-right-open': PanelRightOpen,
   mic: Mic, 'mic-off': MicOff, 'video-off': VideoOff, 'phone-off': PhoneOff, 'phone-incoming': PhoneIncoming, 'screen-share': MonitorUp, maximize: Maximize2,

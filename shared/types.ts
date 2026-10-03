@@ -133,6 +133,12 @@ export interface DesktopPolicy {
   ai_quick_ask: boolean;
   ai_insert: boolean;
   ai_local_files: boolean;
+  /**
+   * The app launcher's organization defaults (worksuite-desktop#201): the pinned apps (at most 8) and the order of the
+   * grid, for everyone who has not chosen their own. Apps the person may not open are never shown, whatever is here.
+   */
+  launcher_pinned?: string[];
+  launcher_order?: string[];
 }
 
 export interface MonitoringPolicySummary {

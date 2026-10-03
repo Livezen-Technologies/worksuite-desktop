@@ -497,6 +497,7 @@ const api = {
   settings: {
     get: call('settings:get'),
     set: call('settings:set'),
+    launcherDefaults: call('settings:launcherDefaults'),
   },
   status: {
     snapshot: call('status:snapshot'),
