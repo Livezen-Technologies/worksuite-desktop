@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import type { OfflineMutation } from '@shared/types';
+import { WEBSITE_REPLY_LABEL } from '@shared/website-reply';
 import { useCanOpen } from '../../../core/access';
 import { ApiError, apiPost } from '../../../core/api';
 import { app } from '../../../core/app-state';
@@ -16,6 +17,7 @@ import { PRIORITIES, useAgents, useCanned, useWebsiteConversation, websiteAction
 import { Select } from '../../../components/Select';
 import { SidePanel } from '../../../components/SidePanel';
 import { openChatAttachment } from '../AttachmentViewer';
+import { openWebsiteChatWindow } from '../window';
 
 const control = 'h-[30px] rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink disabled:opacity-60';
 
@@ -30,7 +32,7 @@ const control = 'h-[30px] rounded-[7px] border border-line bg-surface px-1.5 tex
  * "/"; files a visitor cannot receive refused before upload; replies through
  * the outbox, shown here as pending until they are sent.
  */
-export function WebsiteThread({ id, row }: { id: string; row?: WebsiteRow }) {
+export function WebsiteThread({ id, row, mini = false }: { id: string; row?: WebsiteRow; mini?: boolean }) {
   const qc = useQueryClient();
   const me = useStore(app, (s) => (s.auth?.user?.id ? Number(s.auth.user.id) : null));
   const q = useWebsiteConversation(id);
@@ -90,25 +92,30 @@ export function WebsiteThread({ id, row }: { id: string; row?: WebsiteRow }) {
         }}
       >
         {/* The controls move to a second line rather than squeeze the name away. */}
-        <div className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b border-line bg-surface px-3.5 py-[11px]">
-          <Avatar name={name} size={34} presence={c.status === 'closed' ? null : online ? 'online' : 'away'} />
-          <span className="flex min-w-[150px] flex-1 flex-col">
+        <div className={cx('flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-surface', mini ? 'min-h-12 px-3 py-2' : 'min-h-14 px-3.5 py-[11px]')}>
+          <Avatar name={name} size={mini ? 30 : 34} presence={c.status === 'closed' ? null : online ? 'online' : 'away'} />
+          <span className={cx('flex flex-1 flex-col', mini ? 'min-w-[120px]' : 'min-w-[150px]')}>
             <b className="truncate text-ink">{name}{v?.company ? ` · ${v.company}` : ''}</b>
             <span className={cx('truncate text-[11.5px] font-semibold', c.visitor_typing ? 'text-primary' : online && c.status !== 'closed' ? 'text-success' : 'text-ink-3')}>
               {c.visitor_typing ? 'Typing…' : c.status === 'closed' ? `Closed${c.closed_at ? ` ${dateLabel(c.closed_at)}` : ''}` : online ? `On the site now${page ? ` · reading ${page}` : ''}` : 'Left the site'}
             </span>
           </span>
           <span className="flex flex-wrap items-center gap-2">
-            <Controls data={data} row={row} me={me} canReply={canReply} onDone={refresh} />
+            <Controls data={data} row={row} me={me} canReply={canReply} onDone={refresh} compact={mini} />
+            {!mini ? (
+              <button type="button" aria-label="Open in new window" title="Open in new window" onClick={() => void openWebsiteChatWindow(c.id, name)} className="flex h-[30px] w-[30px] items-center justify-center rounded-[7px] border border-line bg-surface text-ink hover:bg-subtle">
+                <Icon name="external" size={14} />
+              </button>
+            ) : null}
           </span>
         </div>
-        <div ref={scroller} className="flex min-h-0 flex-1 flex-col gap-[9px] overflow-y-auto px-4 py-3 scroll-thin">
+        <div ref={scroller} className={cx('flex min-h-0 flex-1 flex-col gap-[9px] overflow-y-auto py-3 scroll-thin', mini ? 'px-3' : 'px-4')}>
           {c.started_at ? <div className="self-center text-[11px] text-ink-3">Started a chat on {c.website ?? c.widget ?? 'the website'}{data.journey?.[0]?.url ? pathOf(data.journey[0].url) : ''} · {timeLabel(c.started_at)}</div> : null}
           {data.messages.length === 0 ? <Empty icon="chat" title="No messages yet" hint="The visitor has opened the chat but not written anything." /> : null}
           {data.messages.map((m) => <Message key={m.id} m={m} />)}
           {waiting.map((p) => (
             <div key={p.id} className="flex flex-col items-end gap-1 self-end">
-              <div className="max-w-[360px] rounded-[12px_4px_12px_12px] border border-dashed border-[#8C9AD3] bg-[#DDE3F7] px-3 py-2 text-ink dark:bg-selection">{p.label.replace(/^Reply to a website visitor: /, '')}</div>
+              <div className="max-w-[min(360px,85%)] rounded-[12px_4px_12px_12px] border border-dashed border-[#8C9AD3] bg-[#DDE3F7] px-3 py-2 text-ink dark:bg-selection">{p.label.startsWith(WEBSITE_REPLY_LABEL) ? p.label.slice(WEBSITE_REPLY_LABEL.length) : p.label}</div>
               <span className="text-[11.5px] font-semibold text-[#9A4A06] dark:text-warning">
                 {p.state === 'FAILED' || p.state === 'CONFLICT' ? (
                   <>
@@ -139,6 +146,7 @@ export function WebsiteThread({ id, row }: { id: string; row?: WebsiteRow }) {
             ref={composer}
             roomId={`website-${c.id}`}
             roomName={name}
+            compact={mini}
             group={false}
             reply={null}
             onClearReply={() => undefined}
@@ -148,7 +156,7 @@ export function WebsiteThread({ id, row }: { id: string; row?: WebsiteRow }) {
           <div className="border-t border-line bg-surface px-3.5 py-2.5 text-[13px] text-ink-3">You can read this chat but not reply to it.</div>
         )}
       </section>
-      <VisitorPanel v={v} data={data} online={online} onDone={refresh} />
+      {!mini ? <VisitorPanel v={v} data={data} online={online} onDone={refresh} /> : null}
     </div>
   );
 }
@@ -161,7 +169,8 @@ function pathOf(url: string): string {
   }
 }
 
-function Controls({ data, row, me, canReply, onDone }: { data: WebsiteConversation; row?: WebsiteRow; me: number | null; canReply: boolean; onDone: () => void }) {
+/** The header's actions. `compact`, in a small window (RDC-16): only taking the chat and closing it. */
+function Controls({ data, row, me, canReply, onDone, compact = false }: { data: WebsiteConversation; row?: WebsiteRow; me: number | null; canReply: boolean; onDone: () => void; compact?: boolean }) {
   const c = data.conversation;
   const [busy, setBusy] = useState(false);
   const agents = useAgents(canReply);
@@ -181,13 +190,28 @@ function Controls({ data, row, me, canReply, onDone }: { data: WebsiteConversati
   const priority = c.priority ?? row?.priority ?? 'normal';
   const others = (agents.data?.agents ?? []).filter((a) => a.id !== me);
   const closed = c.status === 'closed';
+  const accept =
+    !closed && c.assigned_to === null ? (
+      <Button variant="primary" size="sm" loading={busy} onClick={() => void run(() => apiPost(`${WEBSITE}/conversations/${c.id}/accept`), 'The chat is yours.')}>
+        Accept
+      </Button>
+    ) : null;
+  const close = !closed ? (
+    <button type="button" disabled={busy} onClick={() => void run(() => websiteAction(c.id, 'close'), 'Chat closed.')} className="h-[30px] rounded-[7px] bg-ink px-2.5 text-[12px] font-bold text-surface hover:opacity-90">
+      Close
+    </button>
+  ) : null;
+  if (compact) {
+    return (
+      <>
+        {accept}
+        {close}
+      </>
+    );
+  }
   return (
     <>
-      {!closed && c.assigned_to === null ? (
-        <Button variant="primary" size="sm" loading={busy} onClick={() => void run(() => apiPost(`${WEBSITE}/conversations/${c.id}/accept`), 'The chat is yours.')}>
-          Accept
-        </Button>
-      ) : null}
+      {accept}
       <Select
         aria-label="Assignee"
         disabled={busy || closed}
@@ -210,11 +234,7 @@ function Controls({ data, row, me, canReply, onDone }: { data: WebsiteConversati
       <button type="button" aria-pressed={c.is_starred} disabled={busy} onClick={() => void run(() => websiteAction(c.id, 'star', { on: !c.is_starred }))} className={cx('h-[30px] rounded-[7px] border px-2 text-[12px]', c.is_starred ? 'border-warning bg-warning-bg font-semibold text-[#9A4A06] dark:text-warning' : 'border-line bg-surface text-ink hover:bg-subtle')}>
         {c.is_starred ? '★ Starred' : 'Star'}
       </button>
-      {!closed ? (
-        <button type="button" disabled={busy} onClick={() => void run(() => websiteAction(c.id, 'close'), 'Chat closed.')} className="h-[30px] rounded-[7px] bg-ink px-2.5 text-[12px] font-bold text-surface hover:opacity-90">
-          Close
-        </button>
-      ) : null}
+      {close}
     </>
   );
 }
@@ -234,7 +254,7 @@ function Message({ m }: { m: WebsiteMessage }) {
   return (
     <>
       {m.body ? (
-        <div className={cx('max-w-[360px] whitespace-pre-wrap break-words px-3 py-2 leading-[1.5] selectable', shape)} title={`${m.from === 'agent' ? (m.agent ?? 'Agent') : m.from === 'bot' ? 'Automated message' : 'Visitor'} · ${timeLabel(m.at)}`}>
+        <div className={cx('max-w-[min(360px,85%)] whitespace-pre-wrap break-words px-3 py-2 leading-[1.5] selectable', shape)} title={`${m.from === 'agent' ? (m.agent ?? 'Agent') : m.from === 'bot' ? 'Automated message' : 'Visitor'} · ${timeLabel(m.at)}`}>
           {m.from === 'bot' ? <b className="block">Automated message{m.agent ? ` · ${m.agent}` : ''}</b> : null}
           {m.body}
         </div>

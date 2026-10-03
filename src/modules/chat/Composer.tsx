@@ -5,6 +5,7 @@ import { queueMedia } from './outgoing';
 import { useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { useEffect, useImperativeHandle, useRef, useState, type Ref, type ReactNode } from 'react';
 import type { PickedFile } from '@shared/ipc/contract';
+import { websiteDraftKey, websiteReplyMutation } from '@shared/website-reply';
 import { app } from '../../core/app-state';
 import { apiGet, apiPost, request } from '../../core/api';
 import { call, errorMessage, registerDropped } from '../../core/bridge';
@@ -106,7 +107,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const qc = useQueryClient();
   const site = website ?? null;
   // A website draft keeps the key the website thread always used, so none is lost in the move (RDC-06).
-  const draft = useDraft<string>(channel?.draftModule ?? (site ? 'website-chat' : 'chat'), channel?.draftContext ?? (site ? `conversation:${site.conversationId}` : `room:${roomId}`), '');
+  const draft = useDraft<string>(channel?.draftModule ?? (site ? websiteDraftKey(site.conversationId).module : 'chat'), channel?.draftContext ?? (site ? websiteDraftKey(site.conversationId).context : `room:${roomId}`), '');
   const canUrgent = useStore(app, (s) => !site && !channel && !!s.bootstrap?.permissions.some((p) => p === '*' || p === URGENT));
   const transfers = useStore(app, (s) => s.transfers);
   const [sending, setSending] = useState(false);
@@ -297,16 +298,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const sendWords = async (words: string, asUrgent: boolean): Promise<boolean> => {
     if (site) {
       // A reply to a visitor goes through the outbox too: pending while offline, sent once on reconnecting (RDC-07).
-      const r = await call('offline:submit', {
-        module: 'website-chat',
-        entity: 'reply',
-        entityId: String(site.conversationId),
-        label: `Reply to a website visitor: ${words.slice(0, 160)}`,
-        method: 'POST',
-        path: `/api/chat/widget-admin/conversations/${site.conversationId}/reply`,
-        body: { message: words.slice(0, 4000) },
-        queueIfOffline: true,
-      });
+      const r = await call('offline:submit', websiteReplyMutation(site.conversationId, words));
       if (!r.delivered && !r.queued) {
         toast('error', r.error ?? 'Not sent.');
         return false;

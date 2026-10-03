@@ -5,6 +5,22 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.104: Answer a website visitor from the notification, or in a small window
+
+The last two desktop parts of the Website Live Chat SRS's shared chat kit (ENH-WCHAT-02):
+
+- **Reply from the notification** (RDC-15). On macOS and Windows a visitor's message arrives as a banner with a
+  reply box. What you type is sent exactly as if you had typed it in the conversation: through the outbox, so offline
+  it waits and goes once WorkSuite is back. If the server refuses it, nothing is lost — the conversation opens with
+  your words in its message box and the reason. Locked, with notification content hidden, or on Linux (whose
+  notifications have no reply box), the banner opens the conversation instead.
+- **A website chat in its own window** (RDC-16). **Open in new window** in a website conversation's header opens just
+  that conversation — the thread and Team Chat's composer in its window look, with Accept and Close — in a small
+  window you can keep on top. Opening it again brings the same window forward; **Open in main app** takes it back to
+  the Website Chats workspace. A half-written reply goes with it.
+
+---
+
 ## 2026-10-03 — 0.2.103: The Website Chats inbox, as drawn in the Website Live Chat SRS v1.5
 
 The SRS's v1.5 redrew every staff screen on the app as it looks today. The desktop's shell already had that look;

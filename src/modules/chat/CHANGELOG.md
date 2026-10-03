@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.12.0 — 2026-10-03
+
+**Added**
+
+- a website chat in a small window of its own (WS-WCHAT RDC-16): Open in new window from the conversation's header opens just the thread with Team Chat's composer in its window look, Accept and Close in its header; one window per conversation, its draft carried over, Open in main app back to the workspace
+
+**Changed**
+
+- the composer and a notification's reply build the same outbox reply to a visitor (shared/website-reply.ts)
+
 ## 1.11.0 — 2026-10-03
 
 **Added**

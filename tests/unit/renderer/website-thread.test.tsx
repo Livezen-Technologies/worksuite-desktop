@@ -11,7 +11,8 @@ import type * as CoreApi from '../../../src/core/api';
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiPost: vi.fn(async () => ({})) }));
 vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(async () => []), on: () => () => undefined, errorMessage: (e: unknown) => String(e), isMac: false, registerDropped: vi.fn() }));
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
-vi.mock('../../../src/modules/chat/Composer', () => ({ Composer: () => <div>The composer</div> }));
+vi.mock('../../../src/modules/chat/Composer', () => ({ Composer: ({ compact }: { compact?: boolean }) => <div>{compact ? 'The compact composer' : 'The composer'}</div> }));
+vi.mock('../../../src/modules/chat/window', () => ({ openWebsiteChatWindow: vi.fn(async () => undefined) }));
 vi.mock('../../../src/modules/chat/AttachmentViewer', () => ({ openChatAttachment: vi.fn() }));
 vi.mock('../../../src/core/tab-context', () => ({
   useTab: () => ({ query: new URLSearchParams('view=website&website=41'), path: ['chat'], go: vi.fn(), active: true, openLink: vi.fn() }),
@@ -20,6 +21,7 @@ vi.mock('../../../src/core/tab-context', () => ({
 
 import { apiGet } from '../../../src/core/api';
 import { openChatAttachment } from '../../../src/modules/chat/AttachmentViewer';
+import { openWebsiteChatWindow } from '../../../src/modules/chat/window';
 import type { WebsiteConversation } from '../../../src/modules/chat/website/api';
 import { WebsiteThread } from '../../../src/modules/chat/website/WebsiteThread';
 
@@ -55,6 +57,34 @@ beforeEach(() => {
   vi.mocked(openChatAttachment).mockClear();
 });
 afterEach(() => cleanup());
+
+const mount = (mini = false) =>
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <WebsiteThread id="41" mini={mini} />
+    </QueryClientProvider>,
+  );
+
+describe('a website chat in its own small window (RDC-16)', () => {
+  it('the full thread opens the conversation in a window of its own', async () => {
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Open in new window' }));
+    expect(openWebsiteChatWindow).toHaveBeenCalledWith(41, 'Visitor 4F2A');
+    expect(screen.getByText('The composer')).toBeTruthy();
+  });
+
+  it('in the window: the conversation and the compact composer, taking and closing the chat, nothing else', async () => {
+    mount(true);
+    expect(await screen.findByText('Hi, is the Adobe licence lifetime or yearly?')).toBeTruthy();
+    expect(screen.getByText('The compact composer')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Close' })).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: 'Assignee' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Priority' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open in new window' })).toBeNull();
+    expect(screen.queryByRole('complementary', { name: 'Visitor details' })).toBeNull();
+  });
+});
 
 describe('the website thread (CHAT-UI-01)', () => {
   it('shows who the visitor is, their journey and the files shared in the chat', async () => {

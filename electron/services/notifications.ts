@@ -4,6 +4,7 @@ import { inDnd } from '@shared/notification-block';
 import { reminderAction } from '@shared/task-reminders';
 import { Notification, app, nativeImage } from 'electron';
 import { join } from 'node:path';
+import type { SubmitResult } from '@shared/ipc/contract';
 import type { NotificationItem, NotificationPermission, NotificationPrivacy, Preferences, RealtimeState } from '@shared/types';
 import { isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
@@ -64,6 +65,33 @@ export interface Incoming {
   call?: boolean;
   /** One new email: its banner offers Reply, Archive and Mark read, which act on this message. */
   mail?: MailNotice | null;
+  /** A website visitor's message: its banner takes a reply where the system has one (RDC-15). */
+  website?: WebsiteNotice | null;
+}
+
+/** The website conversation a visitor's message came in on. */
+export interface WebsiteNotice {
+  conversationId: number;
+  visitor: string;
+}
+
+/**
+ * Whether a banner can take a typed reply: macOS and Windows have one (Electron's `hasReply`), Linux's notification
+ * daemons do not, so there the banner opens the conversation. Never while locked or with content hidden: nobody
+ * answers a message they cannot read.
+ */
+export function inlineReply(platform: NodeJS.Platform, privacy: NotificationPrivacy, locked: boolean): boolean {
+  return (platform === 'darwin' || platform === 'win32') && privacy === 'FULL' && !locked;
+}
+
+/** What to do with an inline reply: nothing typed opens the conversation, anything else is sent as it is. */
+export function replyText(details: { reply?: unknown } | null | undefined, legacy?: unknown): string | null {
+  // Electron passes the words twice: in the event's details, and in an older second argument some versions still fill.
+  for (const raw of [details?.reply, legacy]) {
+    const text = typeof raw === 'string' ? raw.trim() : '';
+    if (text) return text;
+  }
+  return null;
 }
 
 /** The new email a mail banner is about. */
@@ -196,6 +224,10 @@ export class NotificationService {
   prefs: () => Preferences;
   /** Whether the person may open the app a notification is about (main wires shared/access `notificationAllowed`). */
   moduleEnabled: (n: Pick<Incoming, 'module' | 'category' | 'link'>) => boolean = () => true;
+  /** Sends a reply to a website visitor the way the thread's composer does, through the outbox (RDC-15). */
+  sendWebsiteReply: ((conversationId: number, text: string) => Promise<SubmitResult>) | null = null;
+  /** A reply typed in a banner that was not sent: main keeps it as the conversation's draft and opens it. */
+  websiteReplyRefused: (notice: WebsiteNotice, text: string, error: string) => void = () => undefined;
 
   constructor(
     private readonly db: Database,
@@ -506,6 +538,7 @@ export class NotificationService {
       case 'chat.widget.message': {
         const conv = String(e.conversation_id ?? '');
         const visitor = String(e.visitor ?? 'Visitor');
+        const id = Number(conv);
         this.notify({
           id: `webchat:${conv}:${String(e.message_id ?? e.event_id ?? Date.now())}`,
           module: 'chat',
@@ -514,6 +547,7 @@ export class NotificationService {
           sender: visitor,
           link: `/chat?website=${conv}`,
           critical: false,
+          website: Number.isSafeInteger(id) && id > 0 ? { conversationId: id, visitor } : null,
         });
         break;
       }
@@ -579,6 +613,7 @@ export class NotificationService {
     const locked = this.isLocked();
     const privacy: NotificationPrivacy = locked ? 'GENERIC' : this.prefs().notificationPrivacy;
     const shown = locked ? presentLocked(n, this.prefs()) : present(n, privacy, MODULE_LABELS[n.module] ?? n.module.charAt(0).toUpperCase() + n.module.slice(1), this.prefs().language);
+    const replyable = !!n.website && !!this.sendWebsiteReply && inlineReply(process.platform, privacy, locked);
     const icon = process.platform === 'darwin' ? undefined : nativeImage.createFromPath(join(app.isPackaged ? process.resourcesPath : join(__dirname, '../../resources'), 'icons', '128x128.png'));
     const note = new Notification({
       title: shown.title,
@@ -586,6 +621,8 @@ export class NotificationService {
       silent: !this.prefs().notificationSounds || locked && this.prefs().lockedNotificationSounds === false,
       icon,
       urgency: n.critical ? 'critical' : 'normal',
+      hasReply: replyable,
+      replyPlaceholder: replyable && n.website ? localize('Reply to {visitor}', this.prefs().language, { visitor: n.website.visitor }) : undefined,
       actions:
         privacy !== 'FULL'
           ? undefined
@@ -629,6 +666,10 @@ export class NotificationService {
         this.onClick(n.link, n.module);
       });
     });
+    note.on('reply', (details, legacy) => {
+      if (!n.website || recipient !== this.userId) return;
+      void this.websiteReply(n, n.website, replyText(details, legacy)).then(() => note.close());
+    });
     note.on('close', () => this.live.delete(n.id));
     note.on('show', () => (this.lastFailure = null));
     note.on('failed', (_event, error) => {
@@ -655,6 +696,25 @@ export class NotificationService {
       log.debug('Mail notification action failed', { error: String(error) });
       this.onClick(mailRoute(m), 'mail');
     }
+  }
+
+  /**
+   * A reply typed in a website visitor's banner (RDC-15): sent through the outbox like one from the conversation, so
+   * offline it waits and is sent once. Locked, without Chat any more, or with nothing typed, it opens the conversation
+   * instead; a refusal keeps the words as the conversation's draft and opens it, so nothing typed is lost.
+   */
+  async websiteReply(n: Incoming, w: WebsiteNotice, text: string | null): Promise<void> {
+    if (!text || this.isLocked() || !this.moduleEnabled(n) || !this.sendWebsiteReply) return this.onClick(n.link, n.module);
+    let error: string;
+    try {
+      const r = await this.sendWebsiteReply(w.conversationId, text);
+      if (r.delivered || r.queued) return;
+      error = r.error ?? 'The server refused it.';
+    } catch (e) {
+      error = isDesktopError(e) ? e.message : String(e);
+    }
+    log.info('a reply from a notification was not sent', { code: error.slice(0, 120) });
+    this.websiteReplyRefused(w, text, error);
   }
 
   /**

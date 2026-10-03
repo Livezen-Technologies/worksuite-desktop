@@ -15,6 +15,7 @@ import { join, resolve } from 'node:path';
 import { canOpenApp, canOpenLink, canOpenRoute, notificationAllowed, visibleAppIds } from '@shared/access';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
 import { findMailtoInArgv, mailBodiesKept, mailtoRoute, parseMailto } from '@shared/mailto';
+import { websiteDraftKey, websiteReplyMutation } from '@shared/website-reply';
 import { resolveWebLink } from '@shared/links';
 import { redirectRoute } from '@shared/channels';
 import { networkStatus } from '@shared/network';
@@ -889,6 +890,20 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // An app the person may not open never alerts (and Mail is not polled for them).
   notifications.moduleEnabled = (n) => notificationAllowed(n, sessionCtl.visibleApps());
   notifications.isLocked = () => lock.isLocked();
+  // A reply typed in a website visitor's banner goes the way the conversation's composer sends one (RDC-15).
+  notifications.sendWebsiteReply = async (conversationId, text) => {
+    const me = sessionCtl.userId();
+    if (!me) return { delivered: false, queued: false, id: null, status: null, data: null, error: 'You are signed out.', code: 'NOT_SIGNED_IN' };
+    return queue.submit(me, websiteReplyMutation(conversationId, text));
+  };
+  notifications.websiteReplyRefused = (w, text, error) => {
+    const me = sessionCtl.userId();
+    const key = websiteDraftKey(w.conversationId);
+    // Signed out meanwhile: there is no draft to keep it in.
+    if (me) queue.saveDraft(me, key.module, key.context, text);
+    openLink(`/chat?website=${w.conversationId}`);
+    broadcast('toast', { kind: 'error', text: `Your reply to ${w.visitor} was not sent: ${error} It is in the message box to send again.` });
+  };
   queue.onChanged = () => {
     emitStatus();
     broadcast('offline:changed');

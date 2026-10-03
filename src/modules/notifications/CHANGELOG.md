@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.5.0 — 2026-10-03
+
+**Added**
+
+- reply to a website visitor from the notification (WS-WCHAT RDC-15) on macOS and Windows: the reply goes through the outbox like one typed in the conversation (waiting while offline, sent once); a refused reply is kept as the conversation's draft, which opens with the reason; locked, with content hidden, or on Linux, the banner opens the conversation instead
+
 ## 1.4.3 — 2026-10-03
 
 - New-mail notifications have Reply, Archive and Mark read; a mail push refreshes Mail's counts.
