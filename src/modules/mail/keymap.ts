@@ -56,7 +56,7 @@ export const SCHEMES: Record<Scheme, Partial<Record<MailCommandId, string[]>>> =
     reply: ['R'],
     replyAll: ['A'],
     forward: ['F'],
-    delete: ['#', 'Delete'],
+    delete: ['Delete', 'Backspace', '#'],
     deleteForever: ['Shift+Delete'],
     archive: ['E'],
     spam: ['!'],

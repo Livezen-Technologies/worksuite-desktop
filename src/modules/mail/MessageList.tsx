@@ -3,6 +3,7 @@ import { text } from '../../core/i18n';
 import { bytes } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { Menu, type MenuSection } from '../../components/Menu';
+import { Checkbox } from '../../components/Checkbox';
 import { Avatar, Empty, ErrorNote, Spinner, cx } from '../../components/ui';
 import { VirtualList } from '../../components/VirtualList';
 import { CHIPS, mailboxBadge, rowStamp, type ChipId, type QueuedAction, type RowGroup } from './model';
@@ -68,6 +69,19 @@ export interface MessageListProps {
   /** Rows selected besides the open one (DMO-INB-15). */
   selection?: ReadonlySet<string>;
   onSelect?: (r: ListRow, how: 'toggle' | 'range') => void;
+  /** The row's hover buttons, in place of its time (worksuite-desktop#161). */
+  rowActions?: (r: ListRow) => RowAction[];
+  /** Over the rows while some are selected: "Archive 12", Select all… */
+  toolbar?: ReactNode;
+}
+
+export interface RowAction {
+  id: string;
+  label: string;
+  icon: string;
+  pressed?: boolean;
+  /** The button pressed: a menu (Snooze) opens under it. */
+  onSelect: (button: HTMLElement) => void;
 }
 
 export { sortLabel };
@@ -238,6 +252,7 @@ export function MessageList(p: MessageListProps) {
         </div>
         {p.notice ? <p className="mt-1.5 text-[12px] text-ink-3">{p.notice}</p> : null}
       </div>
+      {p.toolbar}
       {view === 'table' && flat.length ? <TableHead unified={p.unified} /> : null}
       <div className="min-h-0 flex-1 border-t border-line" role="listbox" tabIndex={0} aria-label="Messages" aria-activedescendant={p.selectedKey && flat.some((r) => r.key === p.selectedKey) ? `mail-row-${p.selectedKey}` : undefined}>
         {p.loading ? <Spinner /> : p.error && flat.length === 0 ? <div className="p-4"><ErrorNote error={p.error} onRetry={p.onRetry} /></div> : flat.length === 0 ? <Empty icon="inbox" title={p.search ? text('No messages match') : text('Nothing here')} hint={p.search ? text('Press Enter to search every mailbox, older mail too.') : undefined} /> : null}
@@ -314,11 +329,12 @@ function StateMarks({ m }: { m: MessageRow }) {
   );
 }
 
-function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs, onRowMenu, selection, onSelect }: MessageListProps & { r: ListRow; view: NonNullable<MailPrefs['view']> }) {
+function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs, onRowMenu, selection, onSelect, rowActions }: MessageListProps & { r: ListRow; view: NonNullable<MailPrefs['view']> }) {
   const m = r.row;
   // Settings › Reading › Show message previews in the list (D10).
   const preview = prefs.previews === false ? '' : m.preview;
-  const selected = r.key === selectedKey || !!selection?.has(r.key);
+  const picked = !!selection?.has(r.key);
+  const selected = r.key === selectedKey || picked;
   const unread = !m.is_read;
   // Conditional formatting (DMO-INB-18): the row's colour and weight, by the first rule that takes it.
   const fmt = rowFormat(m, prefs.formatRules);
@@ -331,6 +347,40 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs, onRo
   const subject = m.subject || text('(no subject)');
   const stamp = rowStamp(m.created_at);
   const team = m.team ? <TeamTag t={m.team} /> : null;
+  const actions = rowActions?.(r) ?? [];
+  // The time makes room for the hover buttons.
+  const stampCls = actions.length ? 'group-hover:invisible group-focus-within:invisible' : undefined;
+  const middle = view === 'super' || view === 'table';
+  const extras = (
+    <>
+      {onSelect ? (
+        <span className={cx('absolute left-[3px] flex items-center', middle ? 'top-1/2 -translate-y-1/2' : 'top-2.5', picked || (selection?.size ?? 0) > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100')}>
+          <Checkbox checked={picked} onChange={() => onSelect(r, 'toggle')} aria-label={text('Select “{subject}”', { subject })} />
+        </span>
+      ) : null}
+      {actions.length ? (
+        <span role="group" aria-label={text('Actions for “{subject}”', { subject })} className={cx('absolute right-2 z-[1] hidden items-center gap-0.5 rounded-[8px] border border-line bg-surface px-0.5 shadow-sm group-hover:flex group-focus-within:flex', middle ? 'top-1/2 -translate-y-1/2' : 'top-1')}>
+          {actions.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              aria-label={a.label}
+              title={a.label}
+              aria-pressed={a.pressed}
+              data-row-action={a.id}
+              onClick={(e) => {
+                e.stopPropagation();
+                a.onSelect(e.currentTarget);
+              }}
+              className={cx('inline-flex h-7 w-7 items-center justify-center rounded-[6px] hover:bg-subtle', a.pressed ? 'text-warning' : 'text-ink-2 hover:text-ink')}
+            >
+              <Icon name={a.icon} size={15} className={a.pressed ? 'fill-current' : undefined} />
+            </button>
+          ))}
+        </span>
+      ) : null}
+    </>
+  );
   const common = {
     id: `mail-row-${r.key}`,
     role: 'option',
@@ -354,7 +404,7 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs, onRo
           onRowMenu(r, e.clientX, e.clientY);
         }
       : undefined,
-    className: cx('relative w-full cursor-default border-b border-line text-left', selected ? 'bg-selection' : 'hover:bg-subtle', r.queued && r.queued !== 'read' && r.queued !== 'star' && r.queued !== 'unstar' && 'opacity-60'),
+    className: cx('group relative w-full cursor-default border-b border-line text-left', selected ? 'bg-selection' : 'hover:bg-subtle', r.queued && r.queued !== 'read' && r.queued !== 'star' && r.queued !== 'unstar' && 'opacity-60'),
   } as const;
   const dot = <span aria-hidden className={cx('h-[7px] w-[7px] shrink-0 rounded-full', unread ? 'bg-primary' : 'bg-transparent')} />;
   const count = m.count && m.count > 1 ? <span className="shrink-0 text-[12px] font-semibold text-ink-3">{m.count}</span> : null;
@@ -363,6 +413,7 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs, onRo
   if (view === 'table') {
     return (
       <div {...common} aria-label={label} className={cx(common.className, 'grid h-[36px] items-center gap-3 px-4 text-[13px]')} style={{ gridTemplateColumns: unified ? '20px 220px 1fr 170px 64px 70px' : '20px 220px 1fr 64px 70px' }}>
+        {extras}
         <button
           type="button"
           onClick={(e) => {
@@ -381,6 +432,7 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs, onRo
           <StateMarks m={m} />
           <span className={cx('truncate', strong ? cx('font-bold', ink) : cx('font-semibold', ink))}>{subject}</span>
           {preview ? <span className="truncate text-ink-3">— {preview}</span> : null}
+          {m.has_attachment ? <Icon name="paperclip" size={13} className="shrink-0 text-ink-3" label="Has attachments" /> : null}
         </span>
         {unified ? (m.mailbox ? (
           <span className="flex min-w-0 items-center gap-1.5" title={m.mailbox.email}>
@@ -389,13 +441,14 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs, onRo
           </span>
         ) : <span />) : null}
         <span className="text-right font-mono text-[12px] text-ink-2 tabular">{m.size ? bytes(m.size) : ''}</span>
-        <span className="text-right text-[12px] text-ink-3">{stamp}</span>
+        <span className={cx('text-right text-[12px] text-ink-3', stampCls)}>{stamp}</span>
       </div>
     );
   }
   if (view === 'super') {
     return (
       <div {...common} aria-label={label} className={cx(common.className, 'flex h-[34px] items-center gap-2.5 px-4 text-[13px]')}>
+        {extras}
         {dot}
         <span className={cx('w-[34%] shrink-0 truncate', strong ? cx('font-bold', ink) : ink)}>{sender}</span>
         {count}
@@ -403,16 +456,18 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs, onRo
           <span className={cx(strong ? cx('font-bold', ink) : cx('font-semibold', ink))}>{subject}</span>
           {preview ? <span className="text-ink-3"> — {preview}</span> : null}
         </span>
+        {m.has_attachment ? <Icon name="paperclip" size={13} className="shrink-0 text-ink-3" label="Has attachments" /> : null}
         <StateMarks m={m} />
         {queued}
         {badge}
-        <span className="shrink-0 text-[12px] text-ink-3">{stamp}</span>
+        <span className={cx('shrink-0 text-[12px] text-ink-3', stampCls)}>{stamp}</span>
       </div>
     );
   }
   if (view === 'classic') {
     return (
       <div {...common} aria-label={label} className={cx(common.className, 'flex gap-3 px-4 py-2.5')}>
+        {extras}
         <Avatar name={sender} size={36} className="mt-0.5" />
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="flex items-center gap-2">
@@ -420,7 +475,7 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs, onRo
             {count}
             {queued}
             {badge}
-            <span className="shrink-0 text-[12px] text-ink-3">{stamp}</span>
+            <span className={cx('shrink-0 text-[12px] text-ink-3', stampCls)}>{stamp}</span>
           </span>
           <span className={cx('truncate text-[13.5px]', strong ? cx('font-bold', ink) : ink)}>{subject}</span>
           <span className="flex items-center gap-2">
@@ -436,6 +491,7 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs, onRo
   }
   return (
     <div {...common} aria-label={label} className={cx(common.className, 'flex flex-col gap-0.5 px-4 py-2')}>
+      {extras}
       <span className="flex items-center gap-2">
         {dot}
         <span className={cx('min-w-0 flex-1 truncate text-[13.5px]', strong ? cx('font-bold', ink) : ink)}>{sender}</span>
@@ -444,7 +500,7 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs, onRo
         {m.is_starred ? <Icon name="star" size={13} className="shrink-0 fill-current text-warning" label="Starred" /> : null}
         {queued}
         {badge}
-        <span className="shrink-0 text-[12px] text-ink-3">{stamp}</span>
+        <span className={cx('shrink-0 text-[12px] text-ink-3', stampCls)}>{stamp}</span>
       </span>
       <span className="flex items-center gap-2 pl-[15px]">
         <span className="min-w-0 flex-1 truncate text-[13px]">
