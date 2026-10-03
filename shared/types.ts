@@ -94,6 +94,10 @@ export interface DesktopPolicy {
   minimum_version: Partial<Record<Platform, string>>;
   update_channel: UpdateChannel;
   auto_update: 'enforced' | 'user_choice';
+  /** The channels people may pick while auto_update is user_choice (worksuite-desktop#205). Absent: all three. */
+  allowed_update_channels?: UpdateChannel[];
+  /** The channel a computer follows until its person picks one (user_choice); must be allowed, else Stable. */
+  update_channel_default?: UpdateChannel;
   forced_update_deadline_hours: number;
   file_sync: 'allowed' | 'managed_only' | 'disabled';
   offline_files: 'allowed' | 'managed_only' | 'disabled';
@@ -277,6 +281,10 @@ export interface Preferences {
   tabSuspendMinutes: number;
   language: string;
   updateChannel: UpdateChannel;
+  /** The person picked the channel themselves (else the organisation's default channel applies). */
+  updateChannelChosen?: boolean;
+  /** Settings › About › Updates on this computer (worksuite-desktop#205). */
+  updates: UpdatePrefs;
   sidebarMode: 'expanded' | 'collapsed' | 'auto-hide';
   pinnedApps: string[];
   shortcuts: Record<string, string>;
@@ -680,6 +688,55 @@ export interface UpdateStatus {
   installSupported: boolean;
   /** Why the build cannot install updates itself, when it cannot. */
   installBlockedReason: string | null;
+  /** The channels this computer may follow (organisation policy), and why it may not choose, when it may not. */
+  allowedChannels?: UpdateChannel[];
+  channelLockReason?: string | null;
+  /** "What's new" for the version on offer, from the Update Center's signed answer. */
+  notes?: ReleaseNotes | null;
+  /** A security fix (the Update Center's release type SECURITY or CRITICAL). */
+  security?: boolean;
+  /** The channel this computer was on is no longer allowed: it follows `to` now, without a downgrade. */
+  channelFallback?: { from: UpdateChannel; to: UpdateChannel } | null;
+  /** Later: when the reminder comes back (ISO), or 'next-launch'. */
+  snoozedUntil?: string | null;
+  /** How many times this version was put off. */
+  postponed?: number;
+  /** A critical update put off more than once installs when WorkSuite next starts. */
+  installOnNextLaunch?: boolean;
+  /** Moved to a more stable channel: this build is ahead of it until it catches up. */
+  waitingForChannel?: { channel: UpdateChannel; version: string } | null;
+  /** The offer is an older build, asked for with "Reinstall …" (a downgrade). */
+  downgrade?: boolean;
+  /** Updated and started: shown once as "Updated to X · What's new". */
+  justUpdated?: { version: string; notesUrl: string | null } | null;
+  /** The last update failed to start and the previous version came back (or could not). */
+  rollback?: { failedVersion: string; restored: boolean; message: string } | null;
+  /** Notifications wait while this is going on (a meeting, a call, a screen share, remote control). */
+  quietReason?: string | null;
+}
+
+export interface ReleaseNotes {
+  version: string;
+  summary: string | null;
+  highlights: string[];
+  url: string | null;
+}
+
+export interface UpdatePrefs {
+  /** Download updates in the background as soon as they are found. */
+  autoDownload: boolean;
+  /** Install a downloaded update when WorkSuite quits. */
+  installOnQuit: boolean;
+  /** Show a desktop notification when an update is ready. */
+  notifyReady: boolean;
+}
+
+/** What would be interrupted by a restart right now. */
+export interface UpdateActivity {
+  meeting: boolean;
+  call: boolean;
+  screenShare: boolean;
+  remoteControl: boolean;
 }
 
 export interface BusyReport {
@@ -688,6 +745,8 @@ export interface BusyReport {
   pendingMutations: number;
   drafts: number;
   activeCall: boolean;
+  /** A meeting, screen share or remote-control session (worksuite-desktop#205); absent from older callers. */
+  activity?: UpdateActivity;
 }
 
 export interface DiagnosticCheck {

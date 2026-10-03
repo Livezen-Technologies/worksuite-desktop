@@ -13,6 +13,7 @@ import { UserPicture, useMe } from '../components/UserPicture';
 import { unreadLabel, useAssistantActivity } from '../app/overlays/AiDock';
 import { phaseLabel } from '../modules/ai/session';
 import { useGuest } from '../core/session';
+import { UpdatePill } from '../app/overlays/UpdatePill';
 
 /**
  * Title / top bar, 52 px (§4.12 shared shell components): WorkSuite mark,
@@ -84,6 +85,8 @@ export function TitleBar() {
 
       {guest ? null : <TopButton icon="transfers" label={t('shell.transfers')} onClick={() => openOverlay('transfers')} active={overlay === 'transfers'} count={activeTransfers} countTone="indigo" />}
       {hasChat ? <TopButton icon="chat" label="Chat" onClick={() => (dock === 'chat' ? minimiseChatDrawer() : openChatDrawer(null))} active={dock === 'chat'} count={status?.unread.chat ?? 0} /> : null}
+      {/* Update ready (#205): beside the bell, until the update is installed or put off. */}
+      <UpdatePill />
       {guest ? null : <TopButton icon="bell" label={t('nav.notifications')} onClick={() => openOverlay('notifications')} active={overlay === 'notifications'} count={unread} />}
       {hasAi && aiDisplay === 'drawer' ? (
         <button

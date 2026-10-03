@@ -7,6 +7,7 @@ import { navigate } from '../../core/tabs';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button } from '../../components/ui';
+import { LaterMenu, useRestartToUpdate } from '../overlays/UpdatePill';
 
 function busyLine(b: BusyReport | null): string {
   if (!b) return 'Checking…';
@@ -99,47 +100,29 @@ export function UpdateRequired() {
   );
 }
 
-/** Non-blocking banner for an update that is ready (FR-UPD-04). */
+/**
+ * A critical or security update that is ready (FR-UPD-04, worksuite-desktop#205): a stronger banner than the
+ * "Update ready" pill, which ordinary updates use. Put off more than once, it installs when WorkSuite next starts.
+ * It waits, like every update notice, while a meeting, call, screen share or remote control is going on.
+ */
 export function UpdateBanner() {
   const u = useStore(app, (s) => s.update);
-  const [dismissed, setDismissed] = useState<string | null>(null);
-  const [busy, setBusy] = useState<BusyReport | null>(null);
-  if (!u || u.state !== 'STAGED' || u.required || dismissed === u.availableVersion) return null;
-  const install = async (force: boolean) => {
-    const r = await call('updates:installNow', { force });
-    if (!r.started && r.busy) setBusy(r.busy);
-  };
+  const restart = useRestartToUpdate();
+  if (!u || u.state !== 'STAGED' || u.required || !u.security || u.snoozedUntil || u.quietReason) return restart.dialog;
+  const when = u.deadline ? new Date(u.deadline).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : null;
   return (
-    <div className="flex items-center gap-3 border-b border-line bg-selection px-4 py-2 text-[13px] text-ink">
-      <Icon name="download" size={16} className="text-primary" />
+    <div role="alert" className="flex items-center gap-3 border-b border-danger/30 bg-danger-bg px-4 py-2.5 text-[13px] text-ink">
+      <Icon name="shield-alert" size={18} className="text-danger" />
       <span className="flex-1">
-        WorkSuite {u.availableVersion} is ready.{u.deadline ? ` It installs automatically by ${new Date(u.deadline).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}.` : ''}
-        {busy ? <span className="ml-1 text-warning">WorkSuite is busy: {busyLine(busy)}.</span> : null}
+        <strong>Security update: WorkSuite {u.availableVersion} is ready.</strong> Restart to install it now.
+        {u.installOnNextLaunch || (u.postponed ?? 0) >= 1 ? ' If you put it off again, it installs the next time WorkSuite starts.' : ''}
+        {when ? ` It installs automatically by ${when}.` : ''}
       </span>
-      {busy ? (
-        <>
-          <Button size="sm" onClick={() => navigate('/notifications')}>
-            Review activity
-          </Button>
-          <Button size="sm" variant="primary" onClick={() => void install(true)}>
-            Restart anyway
-          </Button>
-        </>
-      ) : (
-        <Button size="sm" variant="primary" onClick={() => void install(false)}>
-          Restart to update
-        </Button>
-      )}
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={() => {
-          void call('updates:restartLater');
-          setDismissed(u.availableVersion);
-        }}
-      >
-        Later
+      <LaterMenu compact />
+      <Button size="sm" variant="danger" loading={restart.busy} onClick={() => void restart.start()}>
+        Restart to update
       </Button>
+      {restart.dialog}
     </div>
   );
 }

@@ -84,6 +84,54 @@ The older self-hosted manifest (`scripts/release-manifest.mjs`, the
 `RELEASE_PUBLIC_KEY` in `electron/updater/keys.ts`) is no longer read by the
 app.
 
+## 4a. Channels, notices and the first run (worksuite-desktop#205)
+
+**Channels.** Settings › About › Channel offers Stable, Beta and Dev / Nightly — only those the
+organisation's desktop policy allows (`auto_update: enforced` locks the channel to `update_channel`;
+`user_choice` offers `allowed_update_channels` — Stable always, default all three — and starts a computer on
+`update_channel_default` until its person picks one; a channel the organisation stops allowing is shown as
+"Not allowed by your organisation", and the computer falls back to Stable at the next check without a downgrade,
+saying so once). Each channel has its own release line:
+
+| Channel | Update Center | electron-updater-style feed | Version format | Pre-releases |
+|---|---|---|---|---|
+| Stable | `STABLE` | `latest` | `0.2.126` | never |
+| Beta | `BETA` | `beta` | `0.2.127-beta.1` | beta / rc |
+| Dev / Nightly | `DEV` | `alpha` | `0.2.127-dev.20261003` | all |
+
+Publish each build to its channel with `--channel STABLE|BETA|DEV`. The app refuses a pre-release version on
+Stable even if one were offered, and never installs an older version except after the person chooses
+**Reinstall Stable now**: that check carries `allow_downgrade=1`, and the Update Center must then answer with
+the channel's current build and package even though it is older (status `UPDATE_AVAILABLE`). Without that,
+the app says there is nothing to reinstall and waits for the channel to catch up.
+
+**What the app reads from the signed answer.** `release_type` `CRITICAL` or `SECURITY` marks a security update
+(stronger banner; downloads even when automatic downloads are off; put off twice, it installs at the next
+launch). `highlights` (up to 8 lines) and an optional `summary` are "What's new in X"; `release_notes_url` is
+"View full release notes". Pass `--summary` and `--notes` to the publish script so these are filled.
+
+**Checks** run 30 s after launch, every 4 hours and 15 s after the computer wakes. Every check, download,
+install, Later, rollback and channel change is written to `updates/history.jsonl` and is `updates.json` in the
+Diagnostics report.
+
+**First run and rollback.** Before installing, the app writes `updates/install-marker.json`. The new version
+is healthy once its main window has loaded and stayed up 10 s (`health-<version>.ok`).
+
+| Platform | What happens if the new version does not start |
+|---|---|
+| macOS | The previous `WorkSuite.app` is kept in `updates/rollback/`. The swap script waits up to 180 s for the health file and otherwise puts the previous app back and opens it; the new version also rolls itself back if it starts three times without becoming healthy. |
+| Linux AppImage | The previous image is kept as `<AppImage>.previous`; a watchdog script does the same as on macOS. |
+| Windows (NSIS) | Not possible automatically: the per-user NSIS installer replaces the previous version and no copy is kept. The failure is reported in the app and in Diagnostics; Safe Mode follows repeated crashes; the person can reinstall from the Update Center. |
+
+The person sees "Updated to X · What's new" once, or a notice that the update was rolled back.
+
+**Signing and installer formats.** Nothing here changes signing. macOS updates still need Developer ID +
+notarisation for Stable (section 2); the updater checks the new app's Team ID against the running one. Windows
+updates download the full NSIS installer and run it silently (`/S`): NSIS differential downloads
+(`.blockmap`) belong to electron-updater, which this app does not use, so they do not apply. Publish one DMG per
+Mac architecture as above (`build/electron-builder.config.cjs` still lists `universal` targets; the release
+command overrides them with `--arm64 --x64`).
+
 ## 5. Enterprise deployment (§16.2)
 
 - Windows: the `.msi` is machine-wide (Intune, GPO, SCCM); policy in

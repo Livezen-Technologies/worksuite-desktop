@@ -29,10 +29,29 @@ export interface GrantedSource {
 export class ScreenShare {
   private readonly outline = new ShareOutline();
 
+  /** The pages sharing their screen now: update notices wait until they stop (worksuite-desktop#205). */
+  private sharing = new Set<number>();
+  onSharingChanged: (sharing: boolean) => void = () => undefined;
+
   indicate(webContentsId: number, active: boolean): void {
     const source = this.granted.get(webContentsId);
     if (active && source) this.outline.start(webContentsId, source);
     else this.outline.stop(webContentsId);
+    const before = this.sharing.size > 0;
+    if (active && !this.sharing.has(webContentsId)) {
+      this.sharing.add(webContentsId);
+      // A window that closes mid-share ends its share.
+      try {
+        webContents.fromId(webContentsId)?.once('destroyed', () => this.indicate(webContentsId, false));
+      } catch {
+        /* not a live page (tests) */
+      }
+    } else if (!active) this.sharing.delete(webContentsId);
+    if (before !== this.sharing.size > 0) this.onSharingChanged(this.sharing.size > 0);
+  }
+
+  isSharing(): boolean {
+    return this.sharing.size > 0;
   }
 
   private previousPermission: string | null = null;

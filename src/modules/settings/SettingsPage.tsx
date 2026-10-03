@@ -39,6 +39,7 @@ import { LauncherSettings, ShortcutRecorder } from './LauncherSettings';
 import { updateLauncherPrefs, useLauncherPrefs } from '../../core/launcher-prefs';
 import { DEFAULT_LAUNCHER_SHORTCUT } from '@shared/launcher';
 import { SyncButton } from '../../components/SyncButton';
+import { AboutUpdates } from './AboutUpdates';
 
 /** Settings / profile tree (§4.9). Anything the organization's policy decides is shown locked, with the reason. */
 const SECTIONS = [
@@ -921,19 +922,13 @@ function Devices() {
 }
 
 function DesktopSection({ prefs }: { prefs: Preferences }) {
-  const lock = isLocked('updateChannel');
+  const { go } = useTab();
   const info = useStore(app, (s) => s.info);
   return (
     <>
       <H title="Desktop" />
-      <Row label="Update channel" lock={lock} hint="Beta and Development receive new versions earlier.">
-        <Select
-          label="Update channel"
-          disabled={!!lock}
-          value={prefs.updateChannel}
-          options={[{ value: 'stable', label: 'Stable' }, { value: 'beta', label: 'Beta' }, { value: 'dev', label: 'Development' }]}
-          onValueChange={(v) => void call('updates:setChannel', { channel: v }).catch((e) => toast('error', errorMessage(e)))}
-        />
+      <Row label="Updates" hint="The update channel, automatic downloads and installing on quit are in Settings › About.">
+        <Button onClick={() => go('/settings/about')}>Update settings</Button>
       </Row>
       <Row label="Tab suspension" hint="Tabs you haven't looked at for this long are unloaded to save memory, and reload when you return.">
         <Select label="Tab suspension" value={prefs.tabSuspendMinutes} options={[15, 30, 60, 120, 480].map((m) => ({ value: m, label: m < 60 ? `${m} minutes` : `${m / 60} hour${m === 60 ? '' : 's'}` }))} onValueChange={(v) => void updatePrefs({ tabSuspendMinutes: v })} />
@@ -1597,8 +1592,6 @@ function Monitoring() {
 export function About() {
   const { navigate } = useTab();
   const info = useStore(app, (s) => s.info);
-  const u = useStore(app, (s) => s.update);
-  const [checking, setChecking] = useState(false);
   return (
     <>
       <H title="About WorkSuite Desktop" />
@@ -1607,40 +1600,8 @@ export function About() {
           {info?.version} ({info?.platform} {info?.arch})
         </span>
       </Row>
-      <Row label="Channel">
-        <span className="text-[13px] text-ink-2 capitalize">{u?.channel}</span>
-      </Row>
-      <Row
-        label="Updates"
-        hint={
-          u
-            ? u.state === 'STAGED'
-              ? `Version ${u.availableVersion} is ready to install.`
-              : u.state === 'DOWNLOADING'
-                ? `Downloading ${u.availableVersion}… ${u.progress}%`
-                : u.state === 'AVAILABLE'
-                  ? `Version ${u.availableVersion} is available.${u.installBlockedReason ? ` ${u.installBlockedReason}` : ''}`
-                  : (u.error ?? (u.lastCheckedAt ? `Up to date · checked ${relative(u.lastCheckedAt)}` : 'Not checked yet'))
-            : undefined
-        }
-      >
-        {u?.state === 'STAGED' ? (
-          <Button variant="primary" onClick={() => void call('updates:installNow', {})}>
-            Restart to update
-          </Button>
-        ) : (
-          <Button
-            loading={checking}
-            onClick={async () => {
-              setChecking(true);
-              await call('updates:check').catch(() => undefined);
-              setChecking(false);
-            }}
-          >
-            Check for updates
-          </Button>
-        )}
-      </Row>
+      {/* Channel, update state, what's new and the update switches (worksuite-desktop#205). */}
+      <AboutUpdates />
       <Row label="Components">
         <span className="font-mono text-[12px] text-ink-3">
           Electron {info?.electron} · Chromium {info?.chrome} · Node {info?.node}

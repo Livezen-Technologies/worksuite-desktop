@@ -493,6 +493,11 @@ const api = {
     setChannel: call('updates:setChannel'),
     setActiveCall: call('updates:setActiveCall'),
     busy: call('updates:busy'),
+    download: call('updates:download'),
+    later: call('updates:later'),
+    reinstall: call('updates:reinstall'),
+    dismissNotice: call('updates:dismissNotice'),
+    prepared: call('updates:prepared'),
   },
   settings: {
     get: call('settings:get'),
