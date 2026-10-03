@@ -5,6 +5,14 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.113 — 2026-10-03
+
+- **Contacts sync with Google, Outlook and iCloud (#175).** Connect Google Contacts, Outlook / Microsoft 365, iCloud or another CardDAV address book (several per provider) in **Settings › Contacts › Accounts & sync**, and contacts stay in step both ways — only changes are fetched each time. The first sync shows what it will do before writing anything ("320 found · 210 new · 95 match existing · 15 possible duplicates"). People you already have are linked, not copied, and WorkSuite's own fields (type, company links, CRM) are never overwritten. When both sides change the same field the newest wins, or it goes to a Sync conflicts list. Something deleted at the provider is archived (if it has CRM links) rather than lost. Each account shows its status, last sync, count and errors, with Sync now, settings, a log and Disconnect (keep the contacts or remove the ones only it brought).
+- **Tidy up › Possible duplicates** merges two contacts side by side, field by field, with Undo. The sidebar has an **Accounts** filter, and each contact shows where it is synced, with Unlink.
+- Synced phone numbers name WhatsApp chats, and synced birthdays fill the Birthdays card.
+- Also: New contact, Import and Export appear once each; a contact's name is no longer repeated as its subtitle; phone numbers are formatted the same way everywhere; imported contacts no longer default to Customer.
+- Needs the server update (Contacts migration, the `contacts:sync` cron line, and the People API / `Contacts.ReadWrite` permissions on the Google and Microsoft sign-in apps). iCloud needs an Apple app-specific password. **Mac Contacts** (on this Mac) is not available yet — it needs a native add-on — and the app says so. Contact photos and group memberships are not sent back to the provider yet.
+
 ## 0.2.112 — 2026-10-03
 
 - **Sync buttons show what they're doing (#165).** Every Sync now / Sync all button — Mail, Drive's Sync devices and Settings, Sales channels and Events — starts spinning the moment you click it and can't be pressed twice, then shows a green "Synced just now" for two seconds, or "Sync failed · Retry". The button keeps the same width throughout, screen readers hear "Syncing" and "Sync complete", and with reduced motion the icon stays still. Mail's ↻ icons in the folder pane show the same states.

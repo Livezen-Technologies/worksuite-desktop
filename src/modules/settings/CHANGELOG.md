@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.13.0 — 2026-10-03
+
+- Settings › Contacts › Accounts & sync: connect, sync now, settings, log and disconnect each address-book account (#175).
+
 ## 1.12.1 — 2026-10-03
 
 - Sync buttons use the shared Sync button: they spin from the click, can't be pressed twice, show Synced just now or Sync failed · Retry, and keep one width (#165).
