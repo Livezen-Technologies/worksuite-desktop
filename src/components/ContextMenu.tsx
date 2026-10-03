@@ -11,7 +11,7 @@ export function ContextMenu({ x, y, sections, label, onClose, width = 260 }: { x
   return (
     <>
       <span ref={anchor} aria-hidden style={{ position: 'fixed', left: x, top: y, width: 1, height: 1 }} />
-      <Menu sections={sections} label={label} anchor={anchor} prefer="bottom" align="start" width={width} onClose={onClose} />
+      <Menu sections={sections} label={label} anchor={anchor} prefer="bottom" align="start" width={width} gap={0} onClose={onClose} />
     </>
   );
 }

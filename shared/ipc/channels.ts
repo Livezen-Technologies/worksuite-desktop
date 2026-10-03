@@ -331,6 +331,7 @@ export const INVOKE_CHANNELS = [
   'offline:peek',
   'offline:clearMailbox',
   'offline:mailSearch',
+  'offline:mailList',
   'offline:submit',
   'offline:retry',
   'offline:discard',

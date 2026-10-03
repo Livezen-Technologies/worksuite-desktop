@@ -7,8 +7,22 @@
  *
  * `avoid` is an area the menu must not cover when it opens above or below
  * (the call controls the trigger sits in): the room is measured from its edge
- * rather than the trigger's.
+ * rather than the trigger's. Only the toolbar the trigger sits in counts: an
+ * edge further from the trigger than the trigger is tall (or `AVOID_REACH`) is
+ * ignored on that side. A whole panel header passed as `avoid` (search box,
+ * tabs and chips under the button) used to push a dropdown far below its
+ * button, over the list (worksuite-desktop#208).
+ *
+ * The defaults are the app's one dropdown geometry: 6px from the trigger and
+ * at least 8px inside the window.
  */
+
+/** The most an `avoid` edge may stand off the trigger and still count as its toolbar. */
+export const AVOID_REACH = 48;
+/** Between a trigger and its menu. */
+export const MENU_GAP = 6;
+/** Kept free of the window's edges. */
+export const MENU_MARGIN = 8;
 export interface Rect {
   left: number;
   top: number;
@@ -52,15 +66,19 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(v, Ma
 
 export function placeMenu(input: PlaceInput): Placement {
   const { trigger, menu, viewport, prefer, align = 'center', rtl = false } = input;
-  const margin = input.margin ?? 8;
-  const gap = input.gap ?? 8;
+  const margin = input.margin ?? MENU_MARGIN;
+  const gap = input.gap ?? MENU_GAP;
   const maxWidth = Math.max(0, viewport.width - margin * 2);
   const width = Math.min(menu.width, maxWidth);
   const maxTall = Math.max(0, viewport.height - margin * 2);
 
   if (prefer === 'top' || prefer === 'bottom') {
-    const upper = Math.min(trigger.top, input.avoid ? input.avoid.top : Infinity);
-    const lower = Math.max(trigger.top + trigger.height, input.avoid ? input.avoid.top + input.avoid.height : -Infinity);
+    const reach = Math.max(trigger.height, AVOID_REACH);
+    const av = input.avoid ?? null;
+    const avTop = av && trigger.top - av.top <= reach ? av.top : Infinity;
+    const avBottom = av && av.top + av.height - (trigger.top + trigger.height) <= reach ? av.top + av.height : -Infinity;
+    const upper = Math.min(trigger.top, avTop);
+    const lower = Math.max(trigger.top + trigger.height, avBottom);
     const room = { top: Math.max(0, upper - gap - margin), bottom: Math.max(0, viewport.height - lower - gap - margin) };
     const other: Side = prefer === 'top' ? 'bottom' : 'top';
     // The preferred side while the menu fits there; else whichever side has more room.

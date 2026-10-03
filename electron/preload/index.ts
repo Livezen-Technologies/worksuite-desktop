@@ -464,6 +464,7 @@ const api = {
     peek: call('offline:peek'),
     clearMailbox: call('offline:clearMailbox'),
     mailSearch: call('offline:mailSearch'),
+    mailList: call('offline:mailList'),
     submit: call('offline:submit'),
     retry: call('offline:retry'),
     discard: call('offline:discard'),

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { text } from '../core/i18n';
 import { Icon } from './Icon';
 import { cx } from './ui';
-import { placeMenu, sheetMode, SHEET_BELOW, type Placement, type Side } from './menuPlacement';
+import { MENU_GAP, placeMenu, sheetMode, SHEET_BELOW, type Placement, type Side } from './menuPlacement';
 
 /**
  * Menu: an accessible action menu (WAI-ARIA menu pattern) for a trigger
@@ -17,10 +17,22 @@ import { placeMenu, sheetMode, SHEET_BELOW, type Placement, type Side } from './
  * left); Escape closes the menu and puts focus back on the trigger; Tab
  * closes it. A click outside closes it too.
  *
- * Placement (menuPlacement): above or beside the trigger, flipped and shifted
- * to stay on screen, no taller than the room it has, scrolling inside. Below
+ * Placement (menuPlacement): above, below or beside the trigger — 6px from
+ * it, flipped when the other side has the room, at least 8px inside the
+ * window, no taller than the room it has, scrolling inside. Every dropdown,
+ * select and right-click menu in the app is placed by the same geometry
+ * (worksuite-desktop#208). Below
  * `sheetBelow` px of window width the menu is a bottom sheet instead, and a
  * submenu replaces the sheet's list with a Back row.
+ *
+ * Selected and focused never look alike (worksuite-desktop#208): the chosen
+ * option has a tick and accent text; the item under the pointer or the
+ * keyboard has a light background only. Opening a menu focuses the chosen
+ * option when there is one, else the first item.
+ *
+ * A section can be `segmented`: its radio items drawn as one compact row
+ * (Reading pane: Right · Below · Hidden), still menu items for the keyboard —
+ * Up/Down move through them like any other, Left/Right move within the row.
  *
  * It is drawn into the full-screen element when there is one (so it shows in
  * full screen) and into the body otherwise, in the theme's colours.
@@ -49,6 +61,8 @@ export interface MenuSection {
   id: string;
   label?: string;
   items: MenuItem[];
+  /** The items as one compact row of choices (radio items with short labels). */
+  segmented?: boolean;
 }
 
 export type MenuCloseReason = 'select' | 'escape' | 'outside' | 'tab';
@@ -73,6 +87,8 @@ export interface MenuProps {
   sheetBelow?: number;
   /** The menu's width before the viewport limits it. */
   width?: number;
+  /** Between the trigger and the menu: 6px by default, 0 at the pointer (a right-click menu). */
+  gap?: number;
 }
 
 const SUB_WIDTH = 264;
@@ -87,7 +103,7 @@ function isRtl() {
 
 const visible = (sections: MenuSection[]) => sections.filter((s) => s.items.length > 0);
 
-export function Menu({ sections, label, anchor, avoid, prefer = 'top', align = 'center', onClose, sheetBelow = SHEET_BELOW, width = 288 }: MenuProps) {
+export function Menu({ sections, label, anchor, avoid, prefer = 'top', align = 'center', onClose, sheetBelow = SHEET_BELOW, width = 288, gap = MENU_GAP }: MenuProps) {
   const menuId = useId().replace(/:/g, '');
   const [open, setOpen] = useState<OpenSub[]>([]);
   const [viewport, setViewport] = useState(viewportSize);
@@ -180,6 +196,16 @@ export function Menu({ sections, label, anchor, avoid, prefer = 'top', align = '
     const forward = rtl ? 'ArrowLeft' : 'ArrowRight';
     const back = rtl ? 'ArrowRight' : 'ArrowLeft';
     let handled = true;
+    // In a segmented row, Left and Right move between its choices.
+    const row = at >= 0 ? items[at]!.closest('[data-menu-segmented]') : null;
+    if (row && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      const seg = Array.from(row.querySelectorAll<HTMLElement>('[data-menu-item]'));
+      const i = seg.indexOf(items[at]!);
+      seg[(i + ((e.key === forward) ? 1 : -1) + seg.length) % seg.length]?.focus();
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     switch (e.key) {
       case 'ArrowDown':
         move(at + 1);
@@ -288,6 +314,7 @@ export function Menu({ sections, label, anchor, avoid, prefer = 'top', align = '
           prefer={level === 0 ? prefer : 'end'}
           align={level === 0 ? align : 'start'}
           width={level === 0 ? width : SUB_WIDTH}
+          gap={level === 0 ? gap : 2}
           viewport={viewport}
           rtl={rtl}
           focus={level === 0 ? true : open[level - 1]!.focus}
@@ -318,9 +345,12 @@ export function Menu({ sections, label, anchor, avoid, prefer = 'top', align = '
 
 const contentKey = (sections: MenuSection[]) => sections.map((s) => `${s.id}:${s.label ?? ''}:${s.items.map((i) => `${i.id}|${i.label}|${i.description ?? ''}|${i.reason ?? ''}`).join(',')}`).join(';');
 
+/** The chosen option when the menu has one (the first radio that is checked), else the first item that can be used. */
 function focusFirst(list: HTMLElement | null) {
   const items = list ? Array.from(list.querySelectorAll<HTMLElement>('[data-menu-item]')) : [];
-  (items.find((el) => el.getAttribute('aria-disabled') !== 'true') ?? items[0])?.focus({ preventScroll: true });
+  const usable = items.filter((el) => el.getAttribute('aria-disabled') !== 'true');
+  const chosen = usable.find((el) => el.getAttribute('role') === 'menuitemradio' && el.getAttribute('aria-checked') === 'true');
+  (chosen ?? usable[0] ?? items[0])?.focus({ preventScroll: true });
 }
 
 function Floating({
@@ -331,6 +361,7 @@ function Floating({
   prefer,
   align,
   width,
+  gap,
   viewport,
   rtl,
   focus,
@@ -345,6 +376,7 @@ function Floating({
   prefer: Side;
   align: 'center' | 'start' | 'end';
   width: number;
+  gap: number;
   viewport: { width: number; height: number };
   rtl: boolean;
   focus: boolean;
@@ -376,12 +408,11 @@ function Floating({
       prefer,
       align,
       rtl,
-      // A submenu lines its first item up with the item that opened it.
-      gap: level === 0 ? 10 : 2,
+      gap,
       avoid: av ? { left: av.left, top: av.top, width: av.width, height: av.height } : null,
     });
     setPlace((p) => (p && p.left === next.left && p.top === next.top && p.maxHeight === next.maxHeight && p.maxWidth === next.maxWidth && p.side === next.side ? p : next));
-  }, [viewport, width, prefer, align, rtl, level, contentKey]);
+  }, [viewport, width, prefer, align, rtl, level, gap, contentKey]);
 
   // Once it is placed (an element hidden while it is measured cannot take focus).
   const placed = place !== null;
@@ -477,7 +508,7 @@ function MenuList({
   onHover: (item: MenuItem, el: HTMLElement) => void;
 }) {
   // The icon column only where some item at this level has an icon: no blank gap before every label (worksuite-desktop#168).
-  const iconSlot = sections.some((s) => s.items.some((i) => !!i.icon));
+  const iconSlot = sections.some((s) => !s.segmented && s.items.some((i) => !!i.icon));
   return (
     <div ref={listRef} id={id} role="menu" aria-label={label} onKeyDown={onKeyDown} className="outline-none">
       {sections.map((s, si) => (
@@ -488,11 +519,52 @@ function MenuList({
               {s.label}
             </div>
           ) : null}
-          {s.items.map((item) => (
-            <Row key={item.id} item={item} iconSlot={iconSlot} domId={domId(level, item.id)} sheet={sheet} expanded={openId === item.id} rtl={rtl} onActivate={onActivate} onHover={onHover} />
-          ))}
+          {s.segmented ? (
+            <Segmented items={s.items} level={level} domId={domId} sheet={sheet} onActivate={onActivate} onHover={onHover} />
+          ) : (
+            s.items.map((item) => <Row key={item.id} item={item} iconSlot={iconSlot} domId={domId(level, item.id)} sheet={sheet} expanded={openId === item.id} rtl={rtl} onActivate={onActivate} onHover={onHover} />)
+          )}
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * A segmented row: radio choices side by side. The chosen one is a raised
+ * segment in accent text with a tick; focus and hover are a light tint only.
+ */
+function Segmented({ items, level, domId, sheet, onActivate, onHover }: { items: MenuItem[]; level: number; domId: (level: number, itemId: string) => string; sheet: boolean; onActivate: (item: MenuItem) => void; onHover: (item: MenuItem, el: HTMLElement) => void }) {
+  return (
+    <div data-menu-segmented="" className="mx-1.5 mb-1 flex gap-0.5 rounded-[9px] bg-subtle p-0.5">
+      {items.map((item) => {
+        const id = domId(level, item.id);
+        return (
+          <div
+            key={item.id}
+            id={id}
+            role="menuitemradio"
+            tabIndex={-1}
+            data-menu-item=""
+            aria-checked={!!item.checked}
+            aria-disabled={item.disabled ? true : undefined}
+            aria-label={item.label}
+            title={item.disabled && item.reason ? item.reason : undefined}
+            onClick={() => onActivate(item)}
+            onMouseEnter={(e) => onHover(item, e.currentTarget)}
+            className={cx(
+              'flex min-w-0 flex-1 cursor-default items-center justify-center gap-1 rounded-[7px] px-1.5 text-[12.5px] outline-none select-none',
+              sheet ? 'h-10' : 'h-7',
+              'focus-visible:shadow-[inset_0_0_0_2px_var(--ws-focus)]',
+              item.checked ? 'bg-surface font-semibold text-primary shadow-[0_1px_2px_rgb(var(--ws-shadow-rgb)/.15)]' : 'text-ink-2 hover:bg-surface/60 hover:text-ink focus:bg-surface/60',
+              item.disabled && 'opacity-50',
+            )}
+          >
+            {item.checked ? <Icon name="check" size={13} className="shrink-0 text-primary" /> : null}
+            <span className="truncate">{item.label}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -518,15 +590,17 @@ function Row({ item, iconSlot = true, domId, sheet, expanded, rtl, onActivate, o
       className={cx(
         'flex w-full cursor-default items-start gap-2.5 rounded-[8px] px-2.5 text-start text-[13px] leading-[18px] outline-none select-none',
         sheet ? 'min-h-11 py-[11px]' : 'min-h-9 py-[9px]',
-        'focus:bg-selection focus-visible:shadow-[inset_0_0_0_2px_var(--ws-focus)]',
+        // Focus and hover: a light background only. Chosen: a tick and accent text, never a background (#208).
+        'focus:bg-subtle focus-visible:shadow-[inset_0_0_0_2px_var(--ws-focus)]',
         !item.disabled && 'hover:bg-subtle',
         expanded && 'bg-subtle',
-        item.disabled ? 'text-ink-3' : item.danger ? 'text-danger' : 'text-ink',
+        item.disabled ? 'text-ink-3' : item.danger ? 'text-danger' : item.checked ? 'font-semibold text-primary' : 'text-ink',
       )}
+      data-checked={item.checked ? '' : undefined}
     >
       {iconSlot || item.icon ? (
         <span className="flex h-[18px] w-4 shrink-0 items-center justify-center">
-          {item.icon ? <Icon name={item.icon} size={16} className={cx(item.disabled ? 'text-ink-3 opacity-70' : item.danger ? 'text-danger' : 'text-ink-2')} /> : null}
+          {item.icon ? <Icon name={item.icon} size={16} className={cx(item.disabled ? 'text-ink-3 opacity-70' : item.danger ? 'text-danger' : item.checked ? 'text-primary' : 'text-ink-2')} /> : null}
         </span>
       ) : null}
       <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">

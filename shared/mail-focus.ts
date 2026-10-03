@@ -13,8 +13,32 @@ export interface FocusContext {
   moves: Record<string, { focused: number; other: number }>;
 }
 
-const BULK = /^(no-?reply|do-?not-?reply|newsletters?|news|notifications?|notify|alerts?|mailer(-daemon)?|marketing|promo(tions)?|offers|deals|updates|info|hello|digest|bounce)[@+._-]/i;
-const BULK_DOMAIN = /@(e\.|em\.|email\.|mail\.|mailer\.|news\.|newsletter\.|marketing\.|info\.)|@.*(mailchimp|sendgrid|mailgun|amazonses|sparkpost|hubspot|substack|mcsv)\./i;
+/*
+ * Bulk senders (worksuite-desktop#208). `info@` and `hello@` are where most small businesses write from —
+ * a registrar's account notice, a supplier's quote — so they are not bulk on their own. A sending
+ * subdomain (`@mail.shop.com`, `@em.brand.com`) is; a mail provider's own domain (`@mail.com`,
+ * `@mail.ru`, `@email.com`) is people, and is not.
+ */
+const BULK = /^(no-?reply|do-?not-?reply|newsletters?|news|notifications?|notify|alerts?|mailer(-daemon)?|marketing|promo(tions)?|offers|deals|updates|digest|bounce)[@+._-]/i;
+const BULK_DOMAIN = /@(e|em|email|mail|mailer|news|newsletter|marketing|info)\.[^.@\s]+\.[^@\s]+$|@.*(mailchimp|sendgrid|mailgun|amazonses|sparkpost|hubspot|substack|mcsv)\./i;
+
+const lowered = new WeakMap<FocusContext['moves'], Map<string, { focused: number; other: number }>>();
+/** Moves by sender, compared without case (the server kept the address as it came), worked out once per context. */
+const NO_MOVES: FocusContext['moves'] = {};
+function movesOf(ctx: FocusContext): Map<string, { focused: number; other: number }> {
+  const src = ctx.moves ?? NO_MOVES;
+  let m = lowered.get(src);
+  if (!m) {
+    m = new Map();
+    for (const [k, v] of Object.entries(src)) {
+      const key = k.toLowerCase();
+      const had = m.get(key);
+      m.set(key, had ? { focused: had.focused + v.focused, other: had.other + v.other } : { focused: v.focused, other: v.other });
+    }
+    lowered.set(src, m);
+  }
+  return m;
+}
 
 /**
  * Focused or Other for one message. In order: the message was moved by hand;
@@ -31,7 +55,7 @@ export function classifyFocus(m: { from_email?: string | null; focus?: 'focused'
   if (over) return { focus: over.target, why: 'override' };
   if (ctx?.vips.includes(from)) return { focus: 'focused', why: 'vip' };
   if (ctx?.known.includes(from)) return { focus: 'focused', why: 'known' };
-  const moves = ctx?.moves[from];
+  const moves = ctx ? movesOf(ctx).get(from) : undefined;
   if (moves && moves.other !== moves.focused) return { focus: moves.other > moves.focused ? 'other' : 'focused', why: 'moves' };
   if (BULK.test(from) || BULK_DOMAIN.test(from)) return { focus: 'other', why: 'bulk' };
   return { focus: 'focused', why: 'default' };

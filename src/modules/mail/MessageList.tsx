@@ -4,7 +4,7 @@ import { bytes } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { Menu, type MenuSection } from '../../components/Menu';
 import { Checkbox } from '../../components/Checkbox';
-import { Avatar, Empty, ErrorNote, Spinner, cx } from '../../components/ui';
+import { Avatar, Empty, ErrorNote, cx } from '../../components/ui';
 import { VirtualList } from '../../components/VirtualList';
 import { CHIPS, mailboxBadge, rowStamp, type ChipId, type QueuedAction, type RowGroup } from './model';
 import { AccountBadge, CategoryChip } from './parts';
@@ -12,6 +12,7 @@ import { MAIL_DRAG } from './TodoPane';
 import { rowFormat } from './ReadingSettings';
 import type { MailPrefs, Mailbox, MessageRow } from './types';
 import { SortMenu, sortLabel } from './SortMenu';
+import type { EmptyReason } from './listLoading';
 
 /**
  * The message list (UI-07): its title and controls, the instant search over
@@ -63,7 +64,14 @@ export interface MessageListProps {
   team?: ReactNode;
   fill?: boolean;
   /** Focused Inbox (DMO-INB-01/03): the two tabs, and the line about new Other mail. */
-  focusTabs?: { value: 'focused' | 'other'; onChange: (v: 'focused' | 'other') => void; banner: string | null; unread: { focused: number; other: number } } | null;
+  focusTabs?: {
+    value: 'focused' | 'other';
+    onChange: (v: 'focused' | 'other') => void;
+    banner: string | null;
+    unread: { focused: number; other: number };
+    /** Focused holds almost nothing while Other holds more (#208): offer to turn it off, or to teach it. */
+    hint?: { onTurnOff: () => void; onTeach: () => void } | null;
+  } | null;
   /** Right-click on a row (DMO-SHL-08). */
   onRowMenu?: (r: ListRow, x: number, y: number) => void;
   /** Rows selected besides the open one (DMO-INB-15). */
@@ -73,6 +81,12 @@ export interface MessageListProps {
   rowActions?: (r: ListRow) => RowAction[];
   /** Over the rows while some are selected: "Archive 12", Select all… */
   toolbar?: ReactNode;
+  /** The View menu's link to Settings › Mail › Appearance & reading. */
+  onViewSettings?: () => void;
+  /** Why the list is empty, in words (#208). */
+  empty?: EmptyReason;
+  /** Turns every quick filter off: shown beside the chips while one is on. */
+  onClearFilters?: () => void;
 }
 
 export interface RowAction {
@@ -85,6 +99,57 @@ export interface RowAction {
 }
 
 export { sortLabel };
+
+/**
+ * The View menu (worksuite-desktop#208): the choices people change often, compact. Density as a list,
+ * the reading pane as one segmented row (Right · Below · Hidden), conversations for this folder, and a
+ * link to Settings › Mail › Appearance & reading for the rest (the action bar, text size, Focused Inbox).
+ * No item has an icon, so no section has some and not others. It is anchored to its own button — no
+ * `avoid` area: the header under the button is not the toolbar it sits in (that pushed it over the list).
+ */
+export function viewMenuSections(p: Pick<MessageListProps, 'prefs' | 'onPrefs' | 'conversations' | 'onConversations' | 'onViewSettings'>): MenuSection[] {
+  const view = p.prefs.view ?? 'compact';
+  const pane = p.prefs.pane ?? 'right';
+  return [
+    {
+      id: 'density',
+      label: text('Density'),
+      items: [
+        { id: 'classic', label: text('Classic'), radio: true, checked: view === 'classic', onSelect: () => p.onPrefs({ view: 'classic' }) },
+        { id: 'compact', label: text('Compact'), radio: true, checked: view === 'compact', onSelect: () => p.onPrefs({ view: 'compact' }) },
+        { id: 'super', label: text('Super compact'), radio: true, checked: view === 'super', onSelect: () => p.onPrefs({ view: 'super' }) },
+        { id: 'table', label: text('Full list'), radio: true, checked: view === 'table', onSelect: () => p.onPrefs({ view: 'table' }) },
+      ],
+    },
+    {
+      id: 'pane',
+      label: text('Reading pane'),
+      segmented: true,
+      items: [
+        { id: 'right', label: text('Right'), radio: true, checked: pane === 'right', onSelect: () => p.onPrefs({ pane: 'right' }) },
+        { id: 'bottom', label: text('Below'), radio: true, checked: pane === 'bottom', onSelect: () => p.onPrefs({ pane: 'bottom' }) },
+        { id: 'hidden', label: text('Hidden'), radio: true, checked: pane === 'hidden', onSelect: () => p.onPrefs({ pane: 'hidden' }) },
+      ],
+    },
+    {
+      id: 'conversations',
+      items: [
+        {
+          id: 'threads',
+          label: text('Group into conversations'),
+          checked: !!p.conversations,
+          disabled: p.conversations === null,
+          reason: text('A combined list or a filtered one is not grouped into conversations.'),
+          onSelect: () => p.onConversations(!p.conversations),
+        },
+        { id: 'all-folders', label: text('Apply this view to all folders'), onSelect: () => p.onPrefs({ applyToAll: true }) },
+      ],
+    },
+    ...(p.onViewSettings
+      ? [{ id: 'more', items: [{ id: 'view-settings', label: text('More view settings…'), description: text('Action bar, text size, Focused Inbox'), onSelect: p.onViewSettings }] }]
+      : []),
+  ];
+}
 
 export function MessageList(p: MessageListProps) {
   const view = p.prefs.view ?? 'compact';
@@ -100,67 +165,16 @@ export function MessageList(p: MessageListProps) {
     setSortAt(at);
     setMenu('sort');
   };
-  const bar = useRef<HTMLDivElement>(null);
   const items: Array<{ kind: 'head'; g: RowGroup & { items: ListRow[] } } | { kind: 'row'; r: ListRow }> = [];
   for (const g of p.groups) {
     if (g.label && view !== 'table') items.push({ kind: 'head', g });
     for (const r of g.items) items.push({ kind: 'row', r });
   }
 
-  const densitySections: MenuSection[] = [
-    {
-      id: 'density',
-      label: text('Density'),
-      items: [
-        { id: 'classic', label: text('Classic'), icon: 'grid', radio: true, checked: view === 'classic', onSelect: () => p.onPrefs({ view: 'classic' }) },
-        { id: 'compact', label: text('Compact'), icon: 'align-justify', radio: true, checked: view === 'compact', onSelect: () => p.onPrefs({ view: 'compact' }) },
-        { id: 'super', label: text('Super compact'), icon: 'rows', radio: true, checked: view === 'super', onSelect: () => p.onPrefs({ view: 'super' }) },
-        { id: 'table', label: text('Full list'), icon: 'table', radio: true, checked: view === 'table', onSelect: () => p.onPrefs({ view: 'table' }) },
-      ],
-    },
-    {
-      id: 'pane',
-      label: text('Reading pane'),
-      items: [
-        { id: 'right', label: text('Right of the list'), radio: true, checked: (p.prefs.pane ?? 'right') === 'right', onSelect: () => p.onPrefs({ pane: 'right' }) },
-        { id: 'bottom', label: text('Below the list'), radio: true, checked: p.prefs.pane === 'bottom', onSelect: () => p.onPrefs({ pane: 'bottom' }) },
-        { id: 'hidden', label: text('Hidden'), radio: true, checked: p.prefs.pane === 'hidden', onSelect: () => p.onPrefs({ pane: 'hidden' }) },
-      ],
-    },
-    {
-      id: 'toolbar',
-      label: text('Action bar'),
-      items: [
-        { id: 'docked', label: text('Docked across the pane'), radio: true, checked: (p.prefs.toolbar ?? 'docked') === 'docked', onSelect: () => p.onPrefs({ toolbar: 'docked' }) },
-        { id: 'floating', label: text('Floating pill'), radio: true, checked: p.prefs.toolbar === 'floating', onSelect: () => p.onPrefs({ toolbar: 'floating' }) },
-        { id: 'compact', label: text('Compact'), radio: true, checked: p.prefs.toolbar === 'compact', onSelect: () => p.onPrefs({ toolbar: 'compact' }) },
-        { id: 'minimal', label: text('Minimal'), radio: true, checked: p.prefs.toolbar === 'minimal', onSelect: () => p.onPrefs({ toolbar: 'minimal' }) },
-      ],
-    },
-    {
-      id: 'conversations',
-      label: text('Conversations'),
-      items: [
-        {
-          id: 'threads',
-          label: text('Group into conversations'),
-          icon: 'message-circle',
-          checked: !!p.conversations,
-          disabled: p.conversations === null,
-          reason: text('A combined list or a filtered one is not grouped into conversations.'),
-          description: text('Remembered separately for each folder.'),
-          onSelect: () => p.onConversations(!p.conversations),
-        },
-      ],
-    },
-    {
-      id: 'remember',
-      items: [{ id: 'all-folders', label: text('Apply this view to all folders'), icon: 'check-check', description: text('These settings are remembered for each folder.'), onSelect: () => p.onPrefs({ applyToAll: true }) }],
-    },
-  ];
+  const densitySections = viewMenuSections(p);
   return (
     <section aria-label="Messages" className={cx('flex min-h-0 flex-col bg-surface', p.fill ? 'min-w-0 flex-1' : 'w-[420px] shrink-0 border-r border-line')}>
-      <div ref={bar} className="px-4 pt-3 pb-2">
+      <div className="px-4 pt-3 pb-2">
         <div className="flex items-center gap-2">
           <h1 className="min-w-0 flex-1 truncate text-[19px] font-bold text-ink selectable" title={p.aside ? `${p.title} · ${p.aside}` : p.title}>
             {p.title}
@@ -233,17 +247,35 @@ export function MessageList(p: MessageListProps) {
                 <span className="min-w-0 flex-1 truncate">{p.focusTabs.banner}</span>
               </button>
             ) : null}
+            {p.focusTabs.value === 'focused' && p.focusTabs.hint ? (
+              <p role="note" data-focused-hint className="mt-1.5 flex flex-wrap items-center gap-x-1.5 rounded-[8px] border border-line px-2.5 py-1.5 text-[12.5px] text-ink-2">
+                <span>{text('Most new mail is in Other.')}</span>
+                <button type="button" onClick={p.focusTabs.hint.onTurnOff} className="font-semibold text-primary hover:underline">
+                  {text('Turn off Focused Inbox')}
+                </button>
+                <span aria-hidden>·</span>
+                <button type="button" onClick={p.focusTabs.hint.onTeach} title={text('Open Other and move what matters to Focused: it learns from each move.')} className="font-semibold text-primary hover:underline">
+                  {text('Teach Focused')}
+                </button>
+              </p>
+            ) : null}
           </div>
         ) : null}
         <div className="mt-2 flex items-center gap-1.5" role="group" aria-label="Quick filters">
           {CHIPS.map((c) => {
             const on = p.chips.includes(c.id);
             return (
-              <button key={c.id} type="button" aria-pressed={on} onClick={() => p.onChips(on ? p.chips.filter((x) => x !== c.id) : [...p.chips, c.id])} className={cx('h-[26px] shrink-0 rounded-full border px-2.5 text-[12.5px] font-semibold', on ? 'border-ink bg-ink text-surface' : 'border-line text-ink hover:bg-subtle')}>
+              <button key={c.id} type="button" aria-pressed={on} data-chip={c.id} onClick={() => p.onChips(on ? p.chips.filter((x) => x !== c.id) : [...p.chips, c.id])} className={cx('inline-flex h-[26px] shrink-0 items-center gap-1 rounded-full border px-2.5 text-[12.5px] font-semibold', on ? 'border-primary bg-primary text-white' : 'border-line text-ink hover:bg-subtle')}>
+                {on ? <Icon name="check" size={12} /> : null}
                 {c.label}
               </button>
             );
           })}
+          {p.onClearFilters ? (
+            <button type="button" onClick={p.onClearFilters} className="shrink-0 px-1 text-[12.5px] font-semibold text-primary hover:underline">
+              {text('Clear filters')}
+            </button>
+          ) : null}
           <span className="flex-1" />
           <button ref={sortChip} type="button" aria-haspopup="menu" aria-expanded={menu === 'sort' && sortAt === 'chip'} onClick={() => toggleSort('chip')} title={text('Sort and group')} className={cx('inline-flex shrink-0 items-center gap-1 rounded-[6px] px-1 text-[12.5px] text-ink-3 hover:bg-subtle hover:text-ink', menu === 'sort' && sortAt === 'chip' && 'bg-subtle text-ink')}>
             <Icon name="transfers" size={13} />
@@ -255,17 +287,36 @@ export function MessageList(p: MessageListProps) {
       {p.toolbar}
       {view === 'table' && flat.length ? <TableHead unified={p.unified} /> : null}
       <div className="min-h-0 flex-1 border-t border-line" role="listbox" tabIndex={0} aria-label="Messages" aria-activedescendant={p.selectedKey && flat.some((r) => r.key === p.selectedKey) ? `mail-row-${p.selectedKey}` : undefined}>
-        {p.loading ? <Spinner /> : p.error && flat.length === 0 ? <div className="p-4"><ErrorNote error={p.error} onRetry={p.onRetry} /></div> : flat.length === 0 ? <Empty icon="inbox" title={p.search ? text('No messages match') : text('Nothing here')} hint={p.search ? text('Press Enter to search every mailbox, older mail too.') : undefined} /> : null}
+        {p.loading ? (
+          <Placeholders view={view} label={text('Loading the latest messages…')} />
+        ) : p.error && flat.length === 0 ? (
+          <div className="p-4">
+            <ErrorNote error={p.error} onRetry={p.onRetry} />
+          </div>
+        ) : flat.length === 0 && p.loadingMore ? (
+          <Placeholders view={view} label={text('Loading more…')} />
+        ) : flat.length === 0 ? (
+          <EmptyList reason={p.empty ?? { kind: p.search ? 'search' : 'caught-up', title: p.search ? text('No messages match') : text('All caught up'), hint: p.search ? text('Press Enter to search every mailbox, older mail too.') : null }} onClearFilters={p.onClearFilters} />
+        ) : null}
         {items.length > 0 ? (
           items.length > 150 ? (
             <VirtualList items={items} estimate={view === 'classic' ? 78 : view === 'compact' ? 52 : 36} getKey={(it) => (it.kind === 'head' ? `h:${it.g.key}` : it.r.key)} onEndReached={() => p.hasMore && !p.loadingMore && p.onMore()} render={(it) => (it.kind === 'head' ? <GroupHead g={it.g} /> : <Row r={it.r} {...p} view={view} />)} />
           ) : (
-            <div className="h-full overflow-y-auto scroll-thin">
+            <div
+              className="h-full overflow-y-auto scroll-thin"
+              data-mail-scroll
+              onScroll={(e) => {
+                // The next 100 as the end comes into view, not on a click (#208).
+                const el = e.currentTarget;
+                if (p.hasMore && !p.loadingMore && el.scrollTop + el.clientHeight >= el.scrollHeight - NEAR_END) p.onMore();
+              }}
+            >
               {items.map((it) => (it.kind === 'head' ? <GroupHead key={`h:${it.g.key}`} g={it.g} /> : <Row key={it.r.key} r={it.r} {...p} view={view} />))}
-              {p.hasMore ? (
+              {p.loadingMore ? <Placeholders view={view} label={text('Loading more…')} rows={3} /> : null}
+              {p.hasMore && !p.loadingMore ? (
                 <div className="p-3 text-center">
-                  <button type="button" onClick={p.onMore} disabled={p.loadingMore} className="text-[12.5px] font-semibold text-primary hover:underline">
-                    {p.loadingMore ? text('Loading more…') : text('Show more')}
+                  <button type="button" onClick={p.onMore} className="text-[12.5px] font-semibold text-primary hover:underline">
+                    {text('Show more')}
                   </button>
                 </div>
               ) : null}
@@ -273,15 +324,50 @@ export function MessageList(p: MessageListProps) {
           )
         ) : null}
       </div>
-      {menu === 'density' ? <Menu sections={densitySections} label={text('Layout and density')} anchor={densityBtn} avoid={bar} prefer="bottom" align="end" width={270} onClose={() => setMenu(null)} /> : null}
+      {menu === 'density' ? <Menu sections={densitySections} label={text('Layout and density')} anchor={densityBtn} prefer="bottom" align="end" width={264} onClose={() => setMenu(null)} /> : null}
       {menu === 'sort' ? <SortMenu anchor={sortAt === 'chip' ? sortChip : sortBtn} prefs={p.prefs} conversations={p.conversations} onPrefs={p.onPrefs} onConversations={p.onConversations} onClose={() => setMenu(null)} /> : null}
     </section>
   );
 }
 
+/** How close to the end (px) scrolling asks for the next page. */
+const NEAR_END = 600;
+
+/** Rows in the shape of the list while its messages load (#208): never a blank pane. */
+function Placeholders({ view, label, rows = 8 }: { view: NonNullable<MailPrefs['view']>; label: string; rows?: number }) {
+  const h = view === 'classic' ? 'h-[72px]' : view === 'compact' ? 'h-[52px]' : 'h-[34px]';
+  return (
+    <div role="status" aria-label={label} data-placeholder-rows>
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} aria-hidden data-placeholder-row className={cx('flex flex-col justify-center gap-1.5 border-b border-line px-4', h)}>
+          <span className="h-2.5 w-2/5 animate-pulse rounded bg-subtle motion-reduce:animate-none" />
+          {view === 'super' || view === 'table' ? null : <span className="h-2.5 w-4/5 animate-pulse rounded bg-subtle motion-reduce:animate-none" />}
+        </div>
+      ))}
+      <span className="sr-only">{label}</span>
+    </div>
+  );
+}
+
+/** An empty list says why (#208): headers still arriving, filters, a search, or all caught up. */
+function EmptyList({ reason, onClearFilters }: { reason: EmptyReason; onClearFilters?: () => void }) {
+  return (
+    <div data-empty-reason={reason.kind}>
+      <Empty icon={reason.kind === 'syncing' ? 'refresh' : reason.kind === 'caught-up' ? 'check' : 'inbox'} title={reason.title} hint={reason.hint ?? undefined} />
+      {reason.kind === 'filtered' && onClearFilters ? (
+        <div className="-mt-2 text-center">
+          <button type="button" onClick={onClearFilters} className="text-[13px] font-semibold text-primary hover:underline">
+            {text('Clear filters')}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function GroupHead({ g }: { g: RowGroup & { items: ListRow[] } }) {
   return (
-    <div role="presentation" className="flex h-7 items-center justify-between border-b border-line bg-subtle px-4 text-[11.5px] font-bold uppercase tracking-wide text-ink-2">
+    <div role="presentation" data-group-head={g.key} className="flex h-7 items-center justify-between border-b border-line bg-subtle px-4 text-[11.5px] font-bold uppercase tracking-wide text-ink-2">
       <span className="truncate">{g.label}</span>
       <span className="tabular">{g.items.length}</span>
     </div>

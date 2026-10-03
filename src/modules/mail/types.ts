@@ -124,6 +124,11 @@ export interface MessageRow {
   focus?: 'focused' | 'other';
   /** In the Snoozed view: when it comes back. */
   snoozed_until?: string | null;
+  /** The message's own identity, which survives a move or a UIDVALIDITY change (worksuite-desktop#209). */
+  message_id?: string | null;
+  /** sha1 of the lower-cased Message-ID, from a mirrored list (which keeps no raw header). */
+  message_id_hash?: string | null;
+  uidvalidity?: number | null;
 }
 
 export interface MessagePage {
@@ -138,6 +143,10 @@ export interface MessagePage {
   unsearched?: string[];
   team?: boolean;
   threaded?: boolean;
+  /** The next page's position (a mirror's cursor, or All Accounts' place in each account). */
+  next_cursor?: string | null;
+  /** Read from this computer while the server is asked (worksuite-desktop#208). */
+  local?: boolean;
 }
 
 export interface Attachment {
@@ -501,6 +510,14 @@ export interface MessageRef {
   uid: string;
   folder: string;
   mailbox: string | null;
+  /**
+   * The stable identity besides account, folder and UID (worksuite-desktop#209): the Message-ID (or its
+   * hash, from a mirrored list) and the UIDVALIDITY the UID belongs to. With them the server finds a
+   * message that was moved, or renumbered, instead of answering "not found".
+   */
+  mid?: string | null;
+  midHash?: string | null;
+  uidvalidity?: number | null;
 }
 
 export interface ComposeSeed {
