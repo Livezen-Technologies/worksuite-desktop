@@ -14,6 +14,19 @@ person who has to live with the change — what it does, and where it bites.
   if you were already near the bottom. Delta sync, offline search and media, and the outbox are still to come (see
   docs/WHATSAPP_LOCAL_SYNC.md).
 
+## 0.2.128 — 2026-10-03
+
+Website chats: saved replies counted, and each website's own file limit.
+
+With WorkSuite's Communication 1.13.0:
+
+- **Saved replies you use most come first.** Sending a reply you started from a saved reply ("/" or a chip) counts it,
+  and the chips above the box are the six your team uses most.
+- **Files follow the website's own limit.** A website set to take larger files no longer has them refused at 5 MB on
+  this computer; one set lower refuses a bigger file before it uploads.
+- **A chat whose owner went offline comes to you** as a Transfer to you card from WorkSuite, with "<owner> went offline",
+  when you have been in that chat longest; if nobody takes it, it goes to everybody covering the website.
+
 ## 0.2.127 — 2026-10-03
 
 - **Act on mail from the list (#161).** Hover a message for Archive, Delete, Mark read/unread, Snooze and Star, and a checkbox to select it. Right-click for Reply, Reply all, Forward, Archive, Delete, Move to folder, Mark as junk, read/unread, star, pin, snooze, flag, categories, Quick Steps, Always move mail from this sender, Block sender, Create task, Add to calendar, Save attachments to Files, Open in new window, Copy link, View original, and Select all in this folder or from this sender — handy for repeated bank alerts. Deleted Items offers Restore and Delete permanently; Junk offers Not junk. With several selected, a toolbar says "Archive 12". Archived, deleted, junked or moved mail leaves the list at once with **Undo** for 5 seconds, then goes to its own account — queued when offline, and back with Retry if the server refuses. Backspace now deletes too. Right-clicking a message that isn't selected acts on that message.
