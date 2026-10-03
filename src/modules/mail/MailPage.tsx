@@ -19,7 +19,7 @@ import { TodoPane, nextSlot } from './TodoPane';
 import type { ModuleProps } from '../registry';
 import { AddMailbox } from './AddMailbox';
 import { PREFETCH_AHEAD, prefetchMessages, useForgetRemovedMailboxes, useLocalFirst, useServerStateOnRefusal } from './localFirst';
-import { messageAction, moveMessage, useTemplates, useLocalStore, useMailPrefs, useMailboxes, usePendingMail, useViewCounts, type MessageActionName } from './api';
+import { messageAction, moveMessage, useTemplates, useLocalStore, useMailPrefs, useMailboxes, usePendingMail, useViewCounts } from './api';
 import { registerCommand, runCommand } from '../../core/commands';
 import { MAIL_COMMANDS, bindings, commandFor, isPlain, keyLabel, keyOf, type MailCommandId } from './keymap';
 import { GoToFolder, ShortcutSheet } from './Shortcuts';
@@ -33,8 +33,10 @@ import { SelectionPane } from './SelectionPane';
 import { SweepDialog } from './SweepDialog';
 import { FirstRun, FirstRunOffers } from './FirstRun';
 import { classifyFocus, flagChoices, otherBanner, pinnedFirst, stateKey, useCategories, useFocusContext, useMessageStates, withStates } from './states';
-import { MessageList, type ListRow } from './MessageList';
-import { MessageView, windowRoute, type ViewControls } from './MessageView';
+import { MessageList, type ListRow, type RowAction } from './MessageList';
+import { MessageView, SourceDialog, windowRoute, type ViewControls } from './MessageView';
+import { LIST_ACTIONS, MoveDialog, SelectionBar, actionLabel, hoverIds, listMenuSections, placeOf, useListActions, type ListActionId } from './listActions';
+import { TaskFromMessage, messageLink } from './MessageTask';
 import { applyFilters, filtersFor, serverFilters, folderName, folderViewPatch, groupRows, queueKey, queuedByMessage, rowMailbox, smartView, sortRows, step, withFolderView, type ChipId } from './model';
 import { sendAfterUndoWindow, useOutgoing, undoSend } from './outgoing';
 import { needsAsking, removesMessages, runQuickStep, saveAnswers, useQuickSteps, type QuickStep } from './quickSteps';
@@ -208,7 +210,8 @@ function MailWorkspace({ active }: ModuleProps) {
   // Archive from a combined view: the account's own Archive, or — where it has none — a folder chosen once (DMO-ALL-11).
   const [archiveAsk, setArchiveAsk] = useState<{ box: Mailbox; resolve: (v: { slug: string; name: string } | 'default' | null) => void } | null>(null);
   const archiveTo = (ref: MessageRef): Promise<{ slug: string; name: string } | 'default' | null> | 'default' => {
-    if (!unified || !ref.mailbox) return 'default';
+    // Any view, not only a combined one: an account with no Archive folder is asked the same once (worksuite-desktop#161).
+    if (!ref.mailbox) return 'default';
     const box = boxes.find((b) => String(b.id) === ref.mailbox);
     const known = allCounts.data?.roles.archive.mailboxes.find((m) => String(m.id) === ref.mailbox);
     if (!box || !known || /gmail|google/i.test(`${box.provider ?? ''} ${box.oauth_provider ?? ''}`)) return 'default';
@@ -309,7 +312,42 @@ function MailWorkspace({ active }: ModuleProps) {
     const picked = flat.filter((r) => selection.has(r.key));
     return (picked.length ? picked : fallback ? [fallback] : []).map(targetOf);
   };
-  const [rowMenu, setRowMenu] = useState<{ r: ListRow; x: number; y: number } | null>(null);
+  const [rowMenu, setRowMenu] = useState<{ targets: Target[]; x: number; y: number } | null>(null);
+  // The list's actions (worksuite-desktop#161): hover buttons, the right-click menu, the selection's toolbar and the keys.
+  const listActs = useListActions({
+    keyOf: (t) => queueKey(t.mailbox, t.folder, t.row.id),
+    setHidden,
+    archiveTo,
+    onRemoved: (keys) => {
+      setSelection((s) => (keys.some((k) => s.has(k)) ? new Set([...s].filter((k) => !keys.includes(k))) : s));
+      if (currentKey && keys.includes(currentKey)) goneFrom(keys);
+    },
+  });
+  const [moving, setMoving] = useState<Target[] | null>(null);
+  const [snoozeAt, setSnoozeAt] = useState<{ targets: Target[]; x: number; y: number } | null>(null);
+  const [taskFor, setTaskFor] = useState<Target | null>(null);
+  const [sourceOf, setSourceOf] = useState<MessageRef | null>(null);
+  const keyFor = (command: string) => {
+    const k = keyMap[command]?.[0];
+    return k ? keyLabel(k, isMac) : undefined;
+  };
+  const selectFolder = () => setSelection(new Set(flat.map((r) => r.key)));
+  const rowActions = (r: ListRow): RowAction[] => {
+    const t = targetOf(r);
+    return hoverIds(t).map((id) =>
+      id === 'snooze'
+        ? {
+            id,
+            label: text('Snooze'),
+            icon: 'snooze',
+            onSelect: (el: HTMLElement) => {
+              const b = el.getBoundingClientRect();
+              setSnoozeAt({ targets: [t], x: b.left, y: b.bottom });
+            },
+          }
+        : { id, label: actionLabel(id), icon: LIST_ACTIONS[id].icon, pressed: id === 'unstar', onSelect: () => void listActs.run(id, [t]) },
+    );
+  };
   const [custom, setCustom] = useState<{ what: 'snooze' | 'flag' | 'categories' | 'sweep'; targets: Target[] } | null>(null);
   // Export a folder (ENH-MAIL-03 DMO-DAT-03).
   const [exporting, setExporting] = useState<{ mailbox: string; folder: string; name: string } | null>(null);
@@ -334,9 +372,10 @@ function MailWorkspace({ active }: ModuleProps) {
     if (next.label !== null) q.set('label', String(next.label));
     return q;
   };
-  const openRef = (ref: MessageRef) => {
+  const openRef = (ref: MessageRef, reply?: 'reply' | 'reply_all' | 'forward') => {
     const q = placeQuery();
     q.set('msg', ref.uid);
+    if (reply) q.set('reply', reply === 'reply' ? '1' : reply === 'reply_all' ? 'all' : 'fwd');
     if (ref.mailbox) q.set('mbx', ref.mailbox);
     if (ref.folder !== place.folder) q.set('mf', ref.folder);
     go(`/mail?${q}`);
@@ -397,8 +436,9 @@ function MailWorkspace({ active }: ModuleProps) {
     }
   };
   // After archive or delete: the next message in the list, as a mail app does.
-  const gone = () => {
-    const next = flat[at + 1] ?? flat[at - 1] ?? null;
+  const gone = () => goneFrom(currentKey ? [currentKey] : []);
+  const goneFrom = (keys: string[]) => {
+    const next = flat.slice(at + 1).find((r) => !keys.includes(r.key)) ?? flat.slice(0, Math.max(at, 0)).reverse().find((r) => !keys.includes(r.key)) ?? null;
     if (currentKey) setTabs((ts) => ts.filter((t) => t.key !== currentKey));
     if (next && next.key !== currentKey) openRow(next);
     else closeMessage();
@@ -416,7 +456,8 @@ function MailWorkspace({ active }: ModuleProps) {
     const key = keyOf(e);
     if (!key) return;
     const t = e.target as HTMLElement | null;
-    const typing = !!t && typeof t.closest === 'function' && (!!t.closest('input, textarea, select, [contenteditable="true"]') || t.isContentEditable);
+    // A row's selection checkbox is not a field: E, Delete and the rest still act on what is selected.
+    const typing = !!t && typeof t.closest === 'function' && (!!t.closest('input:not([type=checkbox]), textarea, select, [contenteditable="true"]') || t.isContentEditable);
     const inLayer = !!t && typeof t.closest === 'function' && !!t.closest('[role="dialog"], [role="menu"]');
     if (key === 'Escape') {
       if (inLayer || typing) return;
@@ -433,6 +474,8 @@ function MailWorkspace({ active }: ModuleProps) {
     pendingKey.current = hit.pending ? { key: hit.pending, at: now } : null;
     if (hit.pending) return e.preventDefault();
     if (!hit.id) return;
+    // Ctrl+A in the search box selects its text, not the list.
+    if (typing && hit.id === 'selectAll') return;
     const ran = runMailCommand(hit.id as MailCommandId);
     if (ran) e.preventDefault();
   };
@@ -508,14 +551,13 @@ function MailWorkspace({ active }: ModuleProps) {
         break;
     }
     if (id.startsWith('quickStep')) return runQuickStepKey(Number(id.slice(9)));
-    if (many.length > 1) {
-      const bulk: Partial<Record<MailCommandId, MessageActionName>> = { archive: 'archive', delete: 'trash', read: 'read', unread: 'unread', spam: 'spam' };
-      const action = bulk[id];
-      if (!action) return false;
-      void Promise.all(many.map((x) => messageAction({ uid: String(x.row.id), folder: x.folder, mailbox: x.mailbox }, action, x.row.subject).catch(() => undefined))).then(() => {
-        void qc.invalidateQueries({ queryKey: ['mail'] });
-        if (action === 'archive' || action === 'trash' || action === 'spam') setSelection(new Set());
-      });
+    // Archive, delete, junk, star and move: the list's actions, on the selection or the open message — with Undo (worksuite-desktop#161).
+    const listTargets = many.length ? many : currentRow ? [targetOf(currentRow)] : [];
+    const listAct = listTargets.length ? listCommand(id, listTargets, many.length > 0) : null;
+    if (listAct === 'none') return false;
+    if (listAct) {
+      if (listAct === 'move') setMoving(listTargets);
+      else void listActs.run(listAct, listTargets);
       return true;
     }
     if (!current || !c) return false;
@@ -673,9 +715,27 @@ function MailWorkspace({ active }: ModuleProps) {
         team={allRole === 'drafts' ? <LocalDraftRows drafts={localDrafts.data ?? []} onOpen={(d) => openCompose(d.seed)} /> : teamTabs}
         fill={pane === 'hidden' || pane === 'bottom'}
         focusTabs={focusOn ? { value: focusTab, onChange: setFocusTab, banner: otherBanner(decorated, focusCtx.data), unread: focusUnread } : null}
-        onRowMenu={(r, x, y) => setRowMenu({ r, x, y })}
+        onRowMenu={(r, x, y) => {
+          // A row outside the selection: the menu is for that row alone, as in other mail apps.
+          const inSelection = selection.has(r.key);
+          if (selection.size && !inSelection) setSelection(new Set());
+          setRowMenu({ targets: inSelection ? selectedTargets() : [targetOf(r)], x, y });
+        }}
         selection={selection}
         onSelect={selectRow}
+        rowActions={rowActions}
+        toolbar={
+          selection.size ? (
+            <SelectionBar
+              targets={selectedTargets()}
+              total={flat.length}
+              run={(id, ts) => (id === 'move' ? setMoving(ts) : void listActs.run(id, ts))}
+              more={(x, y) => setRowMenu({ targets: selectedTargets(), x, y })}
+              onSelectAll={selectFolder}
+              onClear={() => setSelection(new Set())}
+            />
+          ) : null
+        }
       />
     );
 
@@ -706,11 +766,15 @@ function MailWorkspace({ active }: ModuleProps) {
       toast('success', text('“{subject}” is a task due today, linked to the message.', { subject: r.row.subject || text('(no subject)') }));
       return;
     }
+    await addToCalendar(t);
+  };
+  /** An event at the next free-ish slot with the message's text (My Day's drop, and the list's Add to calendar). */
+  const addToCalendar = async ({ row }: Target) => {
     const slot = nextSlot();
     try {
       await apiPost('/api/calendar/events', {
-        title: (r.row.subject || text('(no subject)')).slice(0, 250),
-        description: `${text('From {sender} <{email}>', { sender: r.row.from_name || r.row.from_email, email: r.row.from_email })}\n\n${r.row.preview ?? ''}`.slice(0, 4000),
+        title: (row.subject || text('(no subject)')).slice(0, 250),
+        description: `${text('From {sender} <{email}>', { sender: row.from_name || row.from_email, email: row.from_email })}\n\n${row.preview ?? ''}`.slice(0, 4000),
         start: `${slot.date}T${slot.start}`,
         end: `${slot.date}T${slot.end}`,
         all_day: false,
@@ -720,6 +784,36 @@ function MailWorkspace({ active }: ModuleProps) {
     } catch (e) {
       toast('error', errorMessage(e));
     }
+  };
+  /** Every attachment into the person's Files, server side (the reader's Save to Files, for all of them). */
+  const saveAttachments = async (t: Target) => {
+    try {
+      const r = await apiGetMeta<MessageDetail>(`/api/mail/messages/${t.row.id}`, withMailbox({ folder: t.folder, peek: 1 }, t.mailbox));
+      const all = r.data.attachments ?? [];
+      if (!all.length) return void toast('info', text('This message has no attachments to save.'));
+      const box = t.mailbox ? { mailbox: t.mailbox } : {};
+      const done = await Promise.allSettled(all.map((a) => apiPost(`/api/mail/messages/${t.row.id}/attachments/${encodeURIComponent(a.ref)}/save`, box, { folder: t.folder, mime: a.mime || 'application/octet-stream', ...box })));
+      const saved = done.filter((d) => d.status === 'fulfilled').length;
+      if (saved === all.length) toast('success', all.length === 1 ? text('{name} is in your Files.', { name: all[0]!.name }) : text('{n} attachments are in your Files.', { n: saved }));
+      else toast('error', text('{n} of {total} attachments were saved to your Files.', { n: saved, total: all.length }), { label: text('Retry'), run: () => void saveAttachments(t) });
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
+  const blockSender = async (t: Target) => {
+    try {
+      await apiPost('/api/mail/rules/sender', { email: t.row.from_email, action: 'block', ...(t.mailbox ? { mailbox: t.mailbox } : {}) });
+      void qc.invalidateQueries({ queryKey: ['mail', 'rules'] });
+      toast('success', text('Mail from {email} now goes to Spam.', { email: t.row.from_email }));
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
+  const refOfTarget = (t: Target): MessageRef => ({ uid: String(t.row.id), folder: t.folder, mailbox: t.mailbox });
+  const copyLink = (t: Target) => {
+    const link = messageLink(refOfTarget(t));
+    if (!link) return void toast('error', text('Could not copy.'));
+    void navigator.clipboard.writeText(link).then(() => toast('success', text('Link copied.')), () => toast('error', text('Could not copy.')));
   };
   const clientRuleRows = folder === 'inbox' && !view ? decorated : null;
   useEffect(() => {
@@ -774,9 +868,34 @@ function MailWorkspace({ active }: ModuleProps) {
     }
   };
 
+  const quickStepSections = (targets: Target[]): MenuSection[] => (quickSteps.data?.length ? [{ id: 'qs', label: text('Quick Steps'), items: quickSteps.data.slice(0, 12).map((q) => ({ id: `qs${q.id}`, label: q.name, icon: q.icon, shortcut: q.shortcut ? `Ctrl+Shift+${q.shortcut}` : undefined, onSelect: () => runStep(q, targets) })) }] : []);
+  const statesFor = (targets: Target[]) => stateSections(targets, stateActs, cats.data ?? null, { focusTabs: focusOn ? focusTab : null, onCustom: (what) => setCustom({ what, targets }) });
+  // The list's right-click menu, and the selection's More (worksuite-desktop#161).
+  const rowSections = (targets: Target[]) =>
+    listMenuSections(targets, {
+      run: (id, ts) => void listActs.run(id, ts),
+      keyFor,
+      offline: networkOffline,
+      respond: (t, mode) => openRef(refOfTarget(t), mode),
+      move: (ts) => setMoving(ts),
+      state: statesFor(targets),
+      quickSteps: quickStepSections(targets),
+      rule: (t) => setRuleFor(t.row),
+      block: (t) => void blockSender(t),
+      conversation: targets.length === 1 ? conversationItems(targets[0]!) : [],
+      task: canOpen('tasks') ? (t) => setTaskFor(t) : undefined,
+      calendar: canOpen('calendar') ? (t) => void addToCalendar(t) : undefined,
+      saveAttachments: canOpen('files') ? (t) => void saveAttachments(t) : undefined,
+      window: (t) => openInWindow(windowRoute(refOfTarget(t)), t.row.subject),
+      copyLink,
+      source: (t) => setSourceOf(refOfTarget(t)),
+      selectFolder,
+      selectSender: (t) => setSelection(new Set(flat.filter((r) => r.row.from_email.toLowerCase() === t.row.from_email.toLowerCase()).map((r) => r.key))),
+    });
+  // The reader's own menu of WorkSuite states.
   const menuSections = (targets: Target[]) => [
-    ...(quickSteps.data?.length ? [{ id: 'qs', label: text('Quick Steps'), items: quickSteps.data.slice(0, 12).map((q) => ({ id: `qs${q.id}`, label: q.name, icon: q.icon, shortcut: q.shortcut ? `Ctrl+Shift+${q.shortcut}` : undefined, onSelect: () => runStep(q, targets) })) }] : []),
-    ...stateSections(targets, stateActs, cats.data ?? null, { focusTabs: focusOn ? focusTab : null, onCustom: (what) => setCustom({ what, targets }) }),
+    ...quickStepSections(targets),
+    ...statesFor(targets),
     ...(targets.length === 1 ? [{ id: 'rule', items: [{ id: 'rule', label: text('Create rule…'), icon: 'filter', description: targets[0]!.row.from_email, onSelect: () => setRuleFor(targets[0]!.row) }, ...conversationItems(targets[0]!)] }] : []),
   ];
   const multi = flat.filter((r) => selection.has(r.key));
@@ -791,7 +910,16 @@ function MailWorkspace({ active }: ModuleProps) {
   });
 
   const reader = multi.length > 1 ? (
-    <SelectionPane targets={multi.map(targetOf)} sections={menuSections(multi.map(targetOf))} onClear={() => setSelection(new Set())} onDone={() => setSelection(new Set())} />
+    <SelectionPane
+      targets={multi.map(targetOf)}
+      sections={rowSections(multi.map(targetOf))}
+      onAction={(cmd) => {
+        const ts = multi.map(targetOf);
+        const id = listCommand(cmd, ts, true);
+        if (id && id !== 'none' && id !== 'move') void listActs.run(id, ts);
+      }}
+      onClear={() => setSelection(new Set())}
+    />
   ) : (
     <ReadingPane
       tabs={prefs.tabs === false ? tabs.filter((t) => t.key === currentKey) : tabs}
@@ -822,7 +950,7 @@ function MailWorkspace({ active }: ModuleProps) {
           onControls={(c) => {
             controls.current = c;
           }}
-          autoReply={query.get('reply') === '1'}
+          autoReply={query.get('reply') === 'all' ? 'reply_all' : query.get('reply') === 'fwd' ? 'forward' : query.get('reply') === '1'}
           onLoaded={nameTab}
           archiveTo={archiveTo}
           marks={currentRow?.row ?? null}
@@ -963,7 +1091,7 @@ function MailWorkspace({ active }: ModuleProps) {
         <div role="status" aria-live="polite" className="pointer-events-none fixed bottom-14 left-1/2 z-40 flex -translate-x-1/2 flex-col gap-2">
           {outgoing.map((o) => (
             <div key={o.id} className="pointer-events-auto flex items-center gap-3 rounded-[10px] bg-navy px-4 py-2.5 text-[13.5px] text-white shadow-lg">
-              <SendingLabel subject={o.subject} at={o.at} label={o.label} />
+              {o.plain ? <span>{o.label}</span> : <SendingLabel subject={o.subject} at={o.at} label={o.label} />}
               <button type="button" onClick={() => undoSend(o.id)} className="rounded-[6px] bg-primary px-3 py-1 text-[13px] font-bold text-[var(--ws-on-primary)] hover:bg-primary-hover">
                 {text('Undo')}
               </button>
@@ -1047,10 +1175,26 @@ function MailWorkspace({ active }: ModuleProps) {
           x={rowMenu.x}
           y={rowMenu.y}
           label={text('Message actions')}
-          sections={menuSections(selectedTargets(rowMenu.r))}
+          sections={rowSections(rowMenu.targets)}
           onClose={() => setRowMenu(null)}
         />
       ) : null}
+      {snoozeAt ? <ContextMenu x={snoozeAt.x} y={snoozeAt.y} label={text('Snooze')} sections={statesFor(snoozeAt.targets)[0]?.items.find((i) => i.id === 'snooze')?.submenu ?? []} onClose={() => setSnoozeAt(null)} /> : null}
+      {moving && moving[0]?.mailbox ? (
+        <MoveDialog
+          mailbox={moving[0].mailbox}
+          from={moving[0].folder}
+          onClose={() => setMoving(null)}
+          onPick={(to) => {
+            const ts = moving;
+            setMoving(null);
+            void listActs.run('move', ts, to);
+          }}
+        />
+      ) : null}
+      {taskFor ? <TaskFromMessage message={taskFor.row} msgRef={refOfTarget(taskFor)} onClose={() => setTaskFor(null)} /> : null}
+      {sourceOf ? <SourceDialog msgRef={sourceOf} onClose={() => setSourceOf(null)} /> : null}
+      {listActs.dialog}
       {custom?.what === 'categories' ? <CategoriesDialog cats={cats.data ?? []} onClose={() => setCustom(null)} /> : null}
       {exporting ? <ExportDialog mailbox={exporting.mailbox} folder={exporting.folder} folderName={exporting.name} onClose={() => setExporting(null)} /> : null}
       {custom?.what === 'sweep' && custom.targets[0]?.mailbox ? <SweepDialog mailbox={custom.targets[0].mailbox} folder={custom.targets[0].folder} sender={custom.targets[0].row.from_email} name={custom.targets[0].row.from_name} onClose={() => setCustom(null)} /> : null}
@@ -1081,6 +1225,36 @@ function MailWorkspace({ active }: ModuleProps) {
       ) : null}
     </div>
   );
+}
+
+/**
+ * A key's command as one of the list's actions (worksuite-desktop#161), for
+ * the selection (`selected`) or the open message: Delete in Deleted Items is
+ * Delete permanently, ! in Junk is Not junk. Null leaves the command to the
+ * reader (read and unread on the open message keep its mark-as-read rules);
+ * 'none' is a key that does nothing here.
+ */
+export function listCommand(id: string, targets: Array<{ folder: string; row: { is_starred: boolean } }>, selected: boolean): ListActionId | 'none' | null {
+  const place = placeOf(targets);
+  switch (id) {
+    case 'archive':
+      return place === 'trash' || place === 'junk' || place === 'archive' ? 'none' : 'archive';
+    case 'delete':
+      return place === 'trash' ? 'deleteForever' : 'delete';
+    case 'deleteForever':
+      return place === 'trash' ? 'deleteForever' : null;
+    case 'spam':
+      return place === 'junk' ? 'notJunk' : place === 'trash' ? 'none' : 'junk';
+    case 'flag':
+      return targets.every((t) => t.row.is_starred) ? 'unstar' : 'star';
+    case 'read':
+    case 'unread':
+      return selected ? id : null;
+    case 'move':
+      return selected ? 'move' : null;
+    default:
+      return null;
+  }
 }
 
 const ADDRESS = /^[^\s@<>,;]+@[^\s@<>,;]+$/;
