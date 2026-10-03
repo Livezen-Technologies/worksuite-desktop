@@ -18,7 +18,7 @@ vi.mock('../../../src/modules/calls/tones', () => ({ playTone: vi.fn(() => ({ st
 
 import { call } from '../../../src/core/bridge';
 import { playTone } from '../../../src/modules/calls/tones';
-import { RingingBar, WebchatRingWindow, stageLabel, waited } from '../../../src/modules/chat/website/Ringing';
+import { RingingBar, WebchatRingWindow, clock, stageLabel, waited } from '../../../src/modules/chat/website/Ringing';
 
 const chat = (over: Partial<WebchatRingChat>): WebchatRingChat => ({
   id: 7, visitor: 'Nimali', site: 'creativefx.lk', page: 'Pricing', place: 'Kandy, Sri Lanka', device: 'desktop · Chrome', returning: true, preview: 'Do you ship to Galle?',
@@ -67,6 +67,24 @@ describe('the website-chat call window (RING-UI-06)', () => {
     expect((screen.getByRole('button', { name: 'Join chat' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it('a chat given to me counts down to its handover, and passes straight on (RING-UI-02)', async () => {
+    const at = new Date(Date.now() + 18_000).toISOString();
+    vi.mocked(call).mockResolvedValue(state({ chats: [chat({ mine: true, by: 'Dilini', handoverAt: at })] }) as never);
+    render(<WebchatRingWindow />);
+    await screen.findByText(/Passes to the next available agent in 0:1[78] if you don't join/);
+    expect(screen.queryByRole('button', { name: 'Silence' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Pass to next' }));
+    expect(call).toHaveBeenCalledWith('ring:pass', { id: 7 });
+    expect(clock(78)).toBe('1:18');
+  });
+
+  it('says when another of my devices has the ring', async () => {
+    vi.mocked(call).mockResolvedValue(state({ tone: 'off', elsewhere: true }) as never);
+    render(<WebchatRingWindow />);
+    await screen.findByText('Ringing on your other device — shown here without sound');
+    expect(vi.mocked(playTone)).not.toHaveBeenCalled();
+  });
+
   it('shows how the ring ended', async () => {
     vi.mocked(call).mockResolvedValue(state({ chats: [], tone: 'off', outcome: { id: 7, text: 'Dilini joined the chat.', at: Date.now() } }) as never);
     render(<WebchatRingWindow />);
@@ -92,5 +110,88 @@ describe('ringing words', () => {
     expect(stageLabel({ atRisk: false, mine: false, offline: false, stage: 'everyone' })).toBe('Everyone');
     expect(stageLabel({ atRisk: false, mine: true, offline: false, stage: 'first' })).toBe('Assigned to you');
     expect(waited(new Date(Date.now() - 3_725_000).toISOString(), Date.now())).toBe('1:02:05');
+  });
+});
+
+describe('invitations and transfers in the call window (ENH-WCHAT-03, TEAM-UI-02)', () => {
+  const handoff = (over: Partial<NonNullable<WebchatRingState['handoffs']>[number]>) => ({
+    id: 21, conversationId: 3, kind: 'invite' as const, mode: 'warm' as const, visitor: 'Visitor 4F2A', site: 'techubiz.com', page: 'Pricing', from: 'Nuwan',
+    department: null, toAny: false, note: 'Can you take the education pricing?', expiresAt: new Date(Date.now() + 95_000).toISOString(), createdAt: new Date(Date.now() - 25_000).toISOString(), ...over,
+  });
+
+  it('an INVITATION card: who asks, the note, the countdown, Join chat and Decline', async () => {
+    vi.mocked(call).mockResolvedValue(state({ chats: [], handoffs: [handoff({})] }) as never);
+    render(<WebchatRingWindow />);
+    await screen.findByText('Invitation');
+    expect(screen.getByText('Nuwan invites you to join')).toBeTruthy();
+    expect(screen.getByText('“Can you take the education pricing?”')).toBeTruthy();
+    expect(screen.getByRole('timer').getAttribute('aria-label')).toMatch(/^Rings for 1:3\d more$/);
+    fireEvent.click(screen.getByRole('button', { name: 'Join chat' }));
+    expect(call).toHaveBeenCalledWith('ring:handoff', { id: 21, accept: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Decline' }));
+    expect(call).toHaveBeenCalledWith('ring:handoff', { id: 21, accept: false });
+  });
+
+  it('a TRANSFER TO YOU card says warm or handed over now, and Accept', async () => {
+    vi.mocked(call).mockResolvedValue(state({ chats: [], handoffs: [handoff({ kind: 'transfer', mode: 'cold', from: 'Dilini' })] }) as never);
+    render(<WebchatRingWindow />);
+    await screen.findByText('Transfer to you');
+    expect(screen.getByText('Handed over now')).toBeTruthy();
+    expect(screen.getByText('Dilini handed this chat over')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
+    expect(call).toHaveBeenCalledWith('ring:handoff', { id: 21, accept: true });
+  });
+
+  it('under a ringing chat, an invitation is a row with Join and Decline; the bar shows one when nothing else rings', async () => {
+    vi.mocked(call).mockResolvedValue(state({ handoffs: [handoff({})] }) as never);
+    render(<WebchatRingWindow />);
+    await screen.findByText('Nimali');
+    const rows = screen.getByRole('list', { name: 'Invitations and transfers' });
+    expect(rows.textContent).toContain('Visitor 4F2A · Invitation from Nuwan');
+    fireEvent.click(screen.getByRole('button', { name: 'Decline invitation for Visitor 4F2A' }));
+    expect(call).toHaveBeenCalledWith('ring:handoff', { id: 21, accept: false });
+    cleanup();
+
+    vi.mocked(call).mockResolvedValue(state({ chats: [], handoffs: [handoff({})] }) as never);
+    render(<RingingBar tone={false} />);
+    const bar = await screen.findByRole('status', { name: 'Website chat invitation' });
+    expect(bar.textContent).toContain('Nuwan invites you to join · Visitor 4F2A');
+  });
+});
+
+describe('a visitor\'s voice call in the call window and the bar (ENH-WCHAT-05, VOICE-UI-03)', () => {
+  const voice = { id: 31, conversationId: 3, visitor: 'Kamal', site: 'creativefx.lk', page: 'Pricing', place: 'Colombo, Sri Lanka', preview: 'Can I call you?', owner: 'Samali Perera', stage: 'first' as const, requestedAt: new Date(Date.now() - 12_000).toISOString() };
+
+  it('comes before chats: who, where, whose chat, what they last wrote, Answer and Decline', async () => {
+    vi.mocked(call).mockResolvedValue(state({ tone: 'strong', calls: [voice], answerShortcut: true }) as never);
+    render(<WebchatRingWindow />);
+    await screen.findByText('Kamal');
+    expect(screen.getByText('Incoming voice call')).toBeTruthy();
+    expect(screen.getByText('creativefx.lk · Colombo, Sri Lanka · With Samali Perera')).toBeTruthy();
+    expect(screen.getByText('“Can I call you?”')).toBeTruthy();
+    expect(screen.getByText(/1 more waiting · Audio only, in WorkSuite · Ctrl\+Shift\+A to answer/)).toBeTruthy();
+    expect(screen.queryByText('Nimali')).toBeNull();
+    await waitFor(() => expect(vi.mocked(playTone)).toHaveBeenCalledWith('webchat-strong', 0.8));
+    fireEvent.click(screen.getByRole('button', { name: 'Answer' }));
+    expect(call).toHaveBeenCalledWith('ring:call', { id: 31, accept: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Decline' }));
+    expect(call).toHaveBeenCalledWith('ring:call', { id: 31, accept: false });
+  });
+
+  it('locked, says a visitor is calling and nothing about who', async () => {
+    vi.mocked(call).mockResolvedValue(state({ hidden: true, chats: [], calls: [{ ...voice, visitor: 'A visitor', page: null, place: null, preview: null, owner: null }] }) as never);
+    render(<WebchatRingWindow />);
+    await screen.findByText('A website visitor');
+    expect(screen.getByText('Unlock WorkSuite to see who.')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Answer' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('the bar under the tabs answers too', async () => {
+    vi.mocked(call).mockResolvedValue(state({ calls: [voice] }) as never);
+    render(<RingingBar tone={false} />);
+    await screen.findByText('Incoming voice call');
+    expect(screen.getByRole('status', { name: 'Voice call ringing' }).textContent).toContain('Kamal · creativefx.lk');
+    fireEvent.click(screen.getByRole('button', { name: 'Answer' }));
+    expect(call).toHaveBeenCalledWith('ring:call', { id: 31, accept: true });
   });
 });

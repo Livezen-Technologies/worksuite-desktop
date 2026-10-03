@@ -4,6 +4,24 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.12.0 — 2026-10-03
+
+**Added**
+
+- Settings › Notifications › Website chats says whether this computer rings for you, and Where to ring — this app when it is running, the browser first, or every device — kept on the server for all your devices (RING-UI-08)
+
+## 1.11.5 — 2026-10-03
+
+- High contrast in Appearance; Sinhala and Tamil text for the Outlook-class Mail features (ENH-MAIL-03).
+
+## 1.11.4 — 2026-10-03
+
+- Make app locking opt-in by default, preserve saved choices and explicit policies, and disable inactive automatic-lock controls (#181).
+
+## 1.11.3 — 2026-10-03
+
+- Command palette shows a command's shortcut hint; Mail commands, Quick Steps, automatic replies and rules can be run from it.
+
 ## 1.11.2 — 2026-10-03
 
 - Sinhala and Tamil text for the Manage dialog's hints.
@@ -29,11 +47,11 @@ the root CHANGELOG.md.
 
 - Default new or missing AI display preferences to the floating widget without opening chat at startup (#127).
 
-## 1.10.0 — 2026-10-02
+## 1.10.0 — 2026-10-03
 
 - Modernized global search filters, responsive result details, file metadata and stable selection (#129).
 
-## 1.9.6 — 2026-10-02
+## 1.9.6 — 2026-10-03
 
 - Sinhala and Tamil text for the Messenger and Instagram channels (#36).
 

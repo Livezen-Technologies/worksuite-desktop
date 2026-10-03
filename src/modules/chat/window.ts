@@ -13,3 +13,12 @@ export async function openChatWindow(roomId: string | number, title?: string, op
   if (!app.get().lock?.locked) await flushDrafts();
   await call('windows:open', { kind: 'chat-mini', route: `/chat?room=${roomId}`, title: title ?? 'Chat', alwaysOnTop: !!opts.onTop });
 }
+
+/**
+ * A website visitor's conversation in its own small window (WS-WCHAT RDC-16): the thread and Team Chat's composer in
+ * its window look, nothing else. Its draft is saved first, as for a Team Chat conversation.
+ */
+export async function openWebsiteChatWindow(conversationId: string | number, title?: string): Promise<void> {
+  if (!app.get().lock?.locked) await flushDrafts();
+  await call('windows:open', { kind: 'chat-mini', route: `/chat?website=${conversationId}`, title: title ?? 'Website chat', alwaysOnTop: false });
+}

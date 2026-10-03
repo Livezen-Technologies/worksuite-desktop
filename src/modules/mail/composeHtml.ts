@@ -232,10 +232,45 @@ export interface ComposeDraft {
   /** Display names of chosen recipients, by lower-cased address. */
   names?: Record<string, string>;
   signed?: boolean;
+  /** Importance, sensitivity and receipts (DMO-CMP-11/13). */
+  options?: { importance?: 'high' | 'low'; sensitivity?: 'personal' | 'private' | 'confidential'; read_receipt?: boolean; delivery_receipt?: boolean; vote?: string[] };
   v: 2;
 }
 
 /** A draft as this version keeps it — an older plain-text one (`body`, quote included) brought forward. */
+/** Message options kept with a draft, only the known values (DMO-CMP-10). */
+function draftOptions(o: Record<string, unknown>): NonNullable<ComposeDraft['options']> {
+  return {
+    ...(o.importance === 'high' || o.importance === 'low' ? { importance: o.importance } : {}),
+    ...(o.sensitivity === 'personal' || o.sensitivity === 'private' || o.sensitivity === 'confidential' ? { sensitivity: o.sensitivity } : {}),
+    ...(o.read_receipt === true ? { read_receipt: true } : {}),
+    ...(o.delivery_receipt === true ? { delivery_receipt: true } : {}),
+    ...(voteChoices(o.vote).length ? { vote: voteChoices(o.vote) } : {}),
+  };
+}
+
+/** Voting buttons' choices (DMO-CMP-12): two to six short plain lines, no repeats. */
+export function voteChoices(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  const out: string[] = [];
+  for (const c of v) {
+    const t = String(c).replace(/[\p{Cc};]+/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
+    if (t && !out.some((o) => o.toLowerCase() === t.toLowerCase())) out.push(t);
+  }
+  return out.length >= 2 ? out.slice(0, 6) : [];
+}
+
+/**
+ * The line that lets anybody vote, whatever their mail app (DMO-CMP-12): a
+ * recipient on this WorkSuite server sees buttons; everybody else replies
+ * with a choice.
+ */
+export function withVotePrompt(body: { html: string; text: string }, choices: string[], prompt: string): { html: string; text: string } {
+  if (choices.length < 2) return body;
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return { html: `${body.html}<p style="color:#555">${esc(prompt)}</p>`, text: `${body.text}\n\n${prompt}` };
+}
+
 export function migrateDraft(raw: unknown, seedQuote = ''): ComposeDraft {
   const d = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const str = (k: string) => (typeof d[k] === 'string' ? (d[k] as string) : '');
@@ -248,9 +283,35 @@ export function migrateDraft(raw: unknown, seedQuote = ''): ComposeDraft {
     attachments: Array.isArray(d.attachments) ? (d.attachments as ComposeDraft['attachments']) : [],
     names: d.names && typeof d.names === 'object' ? Object.fromEntries(Object.entries(d.names as Record<string, unknown>).filter(([, n]) => typeof n === 'string') as Array<[string, string]>) : {},
     signed: !!d.signed,
+    ...(d.options && typeof d.options === 'object' ? { options: draftOptions(d.options as Record<string, unknown>) } : {}),
     v: 2 as const,
   };
   if (typeof d.html === 'string') return { ...base, html: cleanComposeHtml(d.html), quote: typeof d.quote === 'string' ? d.quote : seedQuote };
   const [own, quoted] = splitQuote(str('body'), seedQuote || undefined);
   return { ...base, html: textToComposeHtml(own.replace(/\s+$/, '')), quote: quoted || (str('body') ? '' : seedQuote) };
+}
+
+/** Words that say a file is attached, in English, Sinhala and Tamil. */
+const ATTACH_WORDS = /\b(attach(ed|ment|ments|ing)?|enclos(ed|ure)|see (the )?attach(ed|ment))\b|ඇමුණුම|අමුණා|இணைப்ப|இணைத்துள்ள/i;
+
+/**
+ * Before sending (DMO-CMP-16): a file promised and none attached, or no
+ * subject. Only what the person wrote is read — never the quoted email.
+ */
+export function sendChecks(d: Pick<ComposeDraft, 'subject' | 'attachments'>, ownText: string): Array<'attachment' | 'subject'> {
+  const out: Array<'attachment' | 'subject'> = [];
+  if (!d.attachments?.length && ATTACH_WORDS.test(ownText)) out.push('attachment');
+  if (!d.subject.trim()) out.push('subject');
+  return out;
+}
+
+/**
+ * The signature for this account and this kind of message (DMO-CMP-06): the
+ * account's own default for new mail or replies, else the one for every
+ * account, else the old single default.
+ */
+export function pickSignature<S extends { is_default: boolean; mailbox?: number | null; default_new?: boolean; default_reply?: boolean }>(list: S[], mailbox: string | null, mode: 'new' | 'reply' | 'reply_all' | 'forward'): S | null {
+  const key = mode === 'new' ? 'default_new' : 'default_reply';
+  const box = mailbox ? Number(mailbox) : null;
+  return list.find((s) => s[key] && box !== null && s.mailbox === box) ?? list.find((s) => s[key] && (s.mailbox ?? null) === null) ?? list.find((s) => s.is_default) ?? null;
 }

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -234,6 +234,34 @@ describe('the message’s menus (D13, D14)', () => {
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/mail/messages/201/save', { folder: 'inbox', subject: 'Support packages', mailbox: '3' }, { folder: 'inbox' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save Brief.pdf to Files' }));
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/mail/messages/201/attachments/2/save', { mailbox: '3' }, { folder: 'inbox', mime: 'application/pdf', mailbox: '3' }));
+  });
+});
+
+describe('reading in plain text and the immersive reader (ENH-MAIL-03 DMO-RD-04, DMO-RD-09)', () => {
+  it('shows the message as plain text, remembers the sender, and opens the words full window', async () => {
+    app.set({ apps: [] as never });
+    routes['/api/mail/prefs'] = { prefs: [] };
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <Page initial="/mail?box=3&msg=201&mbx=3" />
+      </QueryClientProvider>,
+    );
+    const frame = () => (screen.getByTitle('Message') as HTMLIFrameElement).getAttribute('srcdoc') ?? '';
+    await screen.findByTitle('Message');
+    expect(frame()).toContain('<p>Can you share your support packages?</p>');
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Show as plain text' }));
+    expect(frame()).not.toContain('<p>');
+    expect(frame()).toContain('white-space:pre-wrap">Can you share your support packages?</div>');
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Always show plain text from ishara@customer.test' }));
+    await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/prefs', expect.objectContaining({ plainTextSenders: ['ishara@customer.test'] })));
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Immersive reader' }));
+    const reader = screen.getByRole('dialog', { name: 'Immersive reader' });
+    expect(reader.textContent).toContain('Can you share your support packages?');
+    fireEvent.click(within(reader).getByRole('button', { name: 'Close the reader' }));
+    expect(screen.queryByRole('dialog', { name: 'Immersive reader' })).toBeNull();
   });
 });
 

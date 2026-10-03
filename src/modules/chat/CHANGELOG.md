@@ -4,6 +4,98 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.17.0 — 2026-10-03
+
+**Added**
+
+- voice calls from the website chat widget, with the server's Communication 1.11.0 (WS-WCHAT ENH-WCHAT-05, VOICE-10…16,
+  VOICE-UI-02/03): a visitor calling rings the call window and the bar under the tabs as an INCOMING VOICE CALL card,
+  before chats and invitations, with who, where, whose chat it is, their last words, how long they have waited, Answer
+  and Decline (`ring:call`), the strong tone (through Do not disturb unless it shows cards only), the tray's "Answer —"
+  and Ctrl/Cmd+Shift+A; a colleague answering first, or the visitor hanging up, is said in the window
+- answering joins the call's own LiveKit room with the microphone only (`website/call.ts`), and the thread shows the
+  in-call bar: the time, the connection, the visitor speaking, Mute (Ctrl/Cmd+Shift+M), Hold (the microphone off and
+  the visitor hearing the hold tone), Invite, Transfer and End, which asks for call notes kept as a note only staff see
+  and offers Leave the call when a colleague is on it too; a colleague's call in my chat offers Join call, and a call I
+  am on elsewhere offers Rejoin audio or Leave; the tray says "On a call with …" with Return to the call, and the
+  updater waits
+- Offer call in the thread's header (VOICE-15); rows say "On a call · 2:14" or "Calling"; Missed chats lists the visitors
+  waiting to be called back, with their number and best time, logged as Answered, No answer or Wrong number (VOICE-16)
+- the ring heartbeat says whether this computer has a microphone (`ring:mic`, from the main window's devices): one
+  without is not rung for calls (VOICE-11)
+
+## 1.16.0 — 2026-10-03
+
+**Added**
+
+- live typing, delivered and read in website chats, with the server's Communication 1.11.0 (WS-WCHAT ENH-WCHAT-04,
+  LIVE-02…08, LIVE-12): the composer says typing started and stopped (a note's typing marked internal, never shown to
+  the visitor); the thread reports the visitor's messages delivered, and read while it is in front, and shows the
+  visitor's typing and colleagues' ("Nimal and Dilini are typing…") from the live frames at once; each team message
+  is ticked sent, delivered or read, the latest says Delivered or Read with the time, and the visitor's latest says who
+  read it; a row in the list says Typing… while its visitor types; unread counts come from the server's read marks
+
+## 1.15.0 — 2026-10-03
+
+**Added**
+
+- several staff in one website chat, with the server's Communication 1.11.0 (WS-WCHAT ENH-WCHAT-03, TEAM-UI-01/02):
+  the thread's header shows everybody in it, owner first, with Invite and Transfer; the details panel's "In this chat"
+  lists each person's role, when they joined and who invited them, invitations and transfers still waiting with Cancel,
+  Leave chat (an owner is offered Transfer or Close instead), Remove for the owner, and a supervisor's Monitor, Join and
+  Take over; the Invite dialog picks colleagues by availability, open chats and department (offline people and those
+  already in it cannot be picked; somebody not on the site's staff is marked) or a department, with a note; the
+  Transfer dialog sends to a colleague, a department or the next available agent, warm or handed over now, with a
+  handover note
+- the composer's Reply to visitor / Internal note tabs: a note only staff see, amber, with @mentions; notes and the
+  staff-only event lines are drawn as such in the thread, and each person signs their first message in a run
+- invitations and transfers ring in the call window and the bar under the tabs as INVITATION and TRANSFER TO YOU cards
+  with who asks, the note, a countdown, Join chat or Accept, and Decline (`ring:handoff`); the inbox's new Invited
+  section lists them; Mine includes chats I take part in, marked Participant, and a row several staff are in shows their
+  faces; a declined or unanswered invitation is said in the thread with Try someone else; somebody removed from a chat
+  is told and their draft to the visitor is dropped
+
+## 1.14.0 — 2026-10-03
+
+**Added**
+
+- website chats, with the server's Communication 1.11.0: each row in the list says what was said last (who said it,
+  unless it was the visitor) and how many visitor messages wait unread; search, after a pause in typing, goes to the
+  server and covers what was said and closed chats; Reply on a message quotes it above the answer, for the visitor
+  too (RDC-10); From Drive sends the visitor a copy of a Drive file, never a link, refused with the server's reason
+  when the visitor cannot receive it (RDC-05)
+
+## 1.13.0 — 2026-10-03
+
+**Added**
+
+- website chats ring through the server's ring sessions (WS-WCHAT RING-49, RING-10/11/05/12): this computer heartbeats as a ringing device and stays silent, window still showing, while another of your devices has the ring; Silence goes to the server and holds on all your devices until at risk; a chat given to you counts down to its handover with Pass to next; the window says why a ring stopped — the visitor left, ended it, it was closed or blocked, or who joined. An older server without ring sessions rings as before
+
+## 1.12.0 — 2026-10-03
+
+**Added**
+
+- a website chat in a small window of its own (WS-WCHAT RDC-16): Open in new window from the conversation's header opens just the thread with Team Chat's composer in its window look, Accept and Close in its header; one window per conversation, its draft carried over, Open in main app back to the workspace
+
+**Changed**
+
+- the composer and a notification's reply build the same outbox reply to a visitor (shared/website-reply.ts)
+
+## 1.11.0 — 2026-10-03
+
+**Added**
+
+- the Website Chats inbox as drawn in WS-WCHAT-SRS v1.5 (CHAT-UI-00): Open, Mine and Closed with counts over the list; rows with the visitor's on-site dot, a live waiting timer, Awaiting reply / You / At risk / Offline / priority chips, the site and whether they are away; a bell on a chat ringing here and amber with the bell struck through when silenced on this computer (RING-UI-04)
+- "Pick a conversation" says how many visitors are waiting and how long the longest has, with Open the longest waiting and Visitors online; J and K move through the list
+
+**Changed**
+
+- the website thread's details panel (CHAT-UI-01): the visitor at the top with their email, then Visitor, Journey (each page with its time) and Shared files (open from the panel); the header's avatar shows whether the visitor is on the site
+
+## 1.10.2 — 2026-10-03
+
+- Show every shared record card without a coloured message frame, with grouped captions and receipts; quiet completed task urgency (#173).
+
 ## 1.10.1 — 2026-10-03
 
 - Keep newer composer drafts when a pending send finishes and prevent duplicate submissions (#156).

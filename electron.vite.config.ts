@@ -58,6 +58,8 @@ export default defineConfig({
           'pdf-worker': resolve(__dirname, 'electron/workers/pdf-worker.ts'),
           // Local AI (WS-SRS-LAI §3.2): llama.cpp, started on first use, away from the UI.
           'local-ai-worker': resolve(__dirname, 'electron/workers/local-ai-worker.ts'),
+          // Mail data files (ENH-MAIL-03 §3.1): .pst, .mbox, .eml and .msg read away from the UI, one file per process.
+          'datafile-worker': resolve(__dirname, 'electron/workers/datafile-worker.ts'),
         },
       },
     },

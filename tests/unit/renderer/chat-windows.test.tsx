@@ -18,7 +18,7 @@ vi.mock('../../../src/modules/registry', async (orig) => {
 import { call } from '../../../src/core/bridge';
 import { flushDrafts, hasPendingDrafts, useDraft } from '../../../src/core/drafts';
 import { guardWindowClose, holdWhileSending } from '../../../src/core/closeGuard';
-import { openChatWindow } from '../../../src/modules/chat/window';
+import { openChatWindow, openWebsiteChatWindow } from '../../../src/modules/chat/window';
 import { WindowRoot } from '../../../src/app/WindowRoot';
 
 /**
@@ -54,6 +54,16 @@ describe('a chat in its own window', () => {
     expect(calls('windows:open')[0]?.[1]).toEqual({ kind: 'chat-mini', route: '/chat?room=5', title: 'Design team', alwaysOnTop: false });
     expect(order('offline:saveDraft')).toBeLessThan(order('windows:open'));
     expect(hasPendingDrafts()).toBe(false);
+  });
+
+  it('a website visitor\'s conversation opens the same way, its reply draft saved first (RDC-16)', async () => {
+    const { result } = renderHook(() => useDraft('website-chat', 'conversation:41', ''));
+    await act(async () => undefined);
+    act(() => result.current.setValue('With the education'));
+    await openWebsiteChatWindow(41, 'Visitor 4F2A');
+    expect(calls('offline:saveDraft')[0]?.[1]).toEqual({ module: 'website-chat', context: 'conversation:41', content: 'With the education' });
+    expect(calls('windows:open')[0]?.[1]).toEqual({ kind: 'chat-mini', route: '/chat?website=41', title: 'Visitor 4F2A', alwaysOnTop: false });
+    expect(order('offline:saveDraft')).toBeLessThan(order('windows:open'));
   });
 
   it('a call keeps its chat on top, beside it', async () => {

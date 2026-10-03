@@ -233,6 +233,18 @@ describe('the tray and the menu', () => {
     expect(actions.openRoute).toHaveBeenLastCalledWith('/chat');
   });
 
+  it('puts a visitor calling first, with Answer, and the call I am on with a way back (ENH-WCHAT-05)', () => {
+    const answerWebchatCall = vi.fn();
+    const items = trayMenu({ ...model, apps: ['chat'], webchatCalls: [{ id: 31, label: 'Kamal · creativefx.lk' }], webchatOnCall: { conversationId: 4, label: 'Nimali', held: true } }, { ...actions, answerWebchatCall });
+    expect(items.slice(0, 6).map((i) => i.label ?? i.type)).toEqual(['Voice call ringing', 'Answer — Kamal · creativefx.lk', 'separator', 'On a call with Nimali · on hold', 'Return to the call', 'separator']);
+    (items[1]!.click as () => void)();
+    expect(answerWebchatCall).toHaveBeenCalledWith(31);
+    (items[4]!.click as () => void)();
+    expect(actions.openRoute).toHaveBeenLastCalledWith('/chat?view=website&website=4');
+    // Website calls are Chat's.
+    expect(trayMenu({ ...model, apps: ['hr'], webchatCalls: [{ id: 31, label: 'Kamal' }] }, actions).some((i) => String(i.label).includes('Kamal'))).toBe(false);
+  });
+
   it('puts View › AI Assistant in the menu only for whoever has the AI app', () => {
     const view = (ai: boolean) => (menuTemplate(() => undefined, { checkUpdates: () => undefined, diagnostics: () => undefined, quit: () => undefined }, { ai }).find((m) => m.label === 'View')!.submenu as Array<{ label?: string }>).map((i) => i.label);
     expect(view(true)).toContain('AI Assistant');

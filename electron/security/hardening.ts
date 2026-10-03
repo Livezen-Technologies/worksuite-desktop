@@ -1,5 +1,6 @@
 import { app, dialog, protocol, session, shell, type Session, type WebContents } from 'electron';
 import { logger } from '../main/log';
+import { parseSafeLink } from '@shared/mail-files';
 import { OFFICE_SCHEME } from './office-policy';
 
 const log = logger('security');
@@ -147,6 +148,12 @@ export function setNavigationRule(contents: WebContents, rule: NavigationRule): 
 /** Applied to every WebContents the app creates. */
 export function hardenWebContents(contents: WebContents): void {
   contents.setWindowOpenHandler(({ url }) => {
+    // A link in a message: the window checks it first and shows a warning when it is suspicious (ENH-MAIL-03 DMO-SEC-03).
+    const link = parseSafeLink(url);
+    if (link) {
+      if (!contents.isDestroyed()) contents.send('mail:link', link);
+      return { action: 'deny' };
+    }
     // New windows are created by the window manager, never by content.
     void openExternalSafely(url);
     return { action: 'deny' };

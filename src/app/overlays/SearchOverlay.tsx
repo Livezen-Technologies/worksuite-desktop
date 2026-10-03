@@ -341,7 +341,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
           colour: '#23349E',
           icon: 'zap',
           action: true,
-          hint: shortcuts[c.id] ? prettyAccelerator(shortcuts[c.id]!) : undefined,
+          hint: c.hint ?? (shortcuts[c.id] ? prettyAccelerator(shortcuts[c.id]!) : undefined),
           kv: [['Command', c.group]],
           verb: `Run “${c.label}”`,
           run: c.run,

@@ -19,6 +19,7 @@ import { lastOrRecent, roomFromRoute } from './routes';
 import { Thread } from './Thread';
 import { roomPerson, type Room } from './types';
 import { useWebsiteAccess, useWebsiteInbox, type WebsiteRow } from './website/api';
+import { WebsiteThread } from './website/WebsiteThread';
 import { WebsiteWorkspace } from './website/WebsiteWorkspace';
 import { SidePanel } from '../../components/SidePanel';
 import { ResizeDivider, useResizableWidth } from '../../components/ResizeDivider';
@@ -159,8 +160,10 @@ export default function ChatPage({ tabId }: ModuleProps) {
   return (
     <div className="flex h-full">
       {!mini ? <ChannelBar channels={channels} active={channel} onPick={(id) => go(channelRoute(id))} onAdd={() => setAdding({ at: 'list' })} /> : null}
-      {/* Every website chat opens in its workspace, wherever the link came from. */}
-      {channel === 'website' ? (
+      {/* Every website chat opens in its workspace, wherever the link came from; in a window of its own, just the conversation (RDC-16). */}
+      {channel === 'website' && mini ? (
+        <WebsiteMini id={query.get('website')} />
+      ) : channel === 'website' ? (
         <WebsiteWorkspace />
       ) : channel === 'whatsapp' ? (
         whatsappAccess ? (
@@ -242,6 +245,15 @@ export default function ChatPage({ tabId }: ModuleProps) {
           }}
         />
       ) : null}
+    </div>
+  );
+}
+
+/** A website conversation in a small window of its own (RDC-16): the thread alone, in the window look. */
+function WebsiteMini({ id }: { id: string | null }) {
+  return (
+    <div className="flex min-w-0 flex-1 bg-ground">
+      {id && /^\d+$/.test(id) ? <WebsiteThread key={id} id={id} mini /> : <Empty icon="globe" title="This website chat is not available" />}
     </div>
   );
 }

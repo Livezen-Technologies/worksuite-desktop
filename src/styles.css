@@ -195,6 +195,26 @@ textarea,
   }
 }
 
+/* High contrast chosen in Settings (ENH-MAIL-03 DMO-ACC-01): stronger lines,
+   darker secondary text and a heavier focus ring, in either theme, whatever
+   the system says. */
+html[data-contrast='more'] {
+  --ws-line: #6b7287;
+  --ws-ink-2: #262b3d;
+  --ws-ink-3: #303649;
+  --ws-focus: #1a2a8c;
+}
+/* !important: a dark colour profile writes these on the root element itself. */
+html[data-contrast='more'][data-theme='dark'] {
+  --ws-line: #a7b0c9 !important;
+  --ws-ink-2: #e6e9f2 !important;
+  --ws-ink-3: #d3d8e5 !important;
+  --ws-focus: #b4c3ff !important;
+}
+html[data-contrast='more'] :focus-visible {
+  outline-width: 3px;
+}
+
 .drag {
   -webkit-app-region: drag;
 }

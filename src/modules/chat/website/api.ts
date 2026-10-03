@@ -1,5 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { ApiError, apiGet, request } from '../../../core/api';
+import { text } from '../../../core/i18n';
+import { parseTs } from '../../../core/time';
 
 /**
  * Website chat (UI-08: "group, direct and website-chat conversations") — the
@@ -44,6 +46,107 @@ export interface WebsiteRow {
   rating: number | null;
   is_starred: boolean;
   tags: string[] | null;
+  /** What was said last, notices aside (CHAT-UI-00): the row's preview. */
+  last_message?: (Omit<WebsiteQuote, 'file'> & { file: string | null; at: string }) | null;
+  /** What the visitor has written since staff last answered. */
+  unread?: number;
+  /** Who is in the chat, the owner first (ENH-WCHAT-03, TEAM-04); observers are not listed. */
+  team?: Array<Pick<WebsitePerson, 'user_id' | 'name' | 'avatar' | 'role'>>;
+  /** What I am in this chat, if anything (TEAM-09). */
+  my_role?: TeamRole | null;
+  /** A voice call on in this chat now (ENH-WCHAT-05, VOICE-UI-02): "On a call · 02:14". */
+  call?: { status: 'ringing' | 'active' | 'on_hold'; since: string | null } | null;
+}
+
+/** Message-id marks that only move forward (LIVE-05): how far the visitor has the team's messages, and each person the visitor's. */
+export interface WebsiteMarks {
+  visitor: { delivered: number | null; read: number | null; delivered_at: string | null; read_at: string | null };
+  staff: Array<{ user_id: number; name: string; delivered: number | null; read: number | null; read_at: string | null }>;
+}
+
+/** A team message's state for the visitor (LIVE-08): sent, delivered to their widget, or read with its panel open. */
+export function visitorHas(id: number, marks: WebsiteMarks | null | undefined): 'sent' | 'delivered' | 'read' {
+  const v = marks?.visitor;
+  if (v?.read && v.read >= id) return 'read';
+  if (v?.delivered && v.delivered >= id) return 'delivered';
+  return 'sent';
+}
+
+/** Who of the team has read the visitor's message (LIVE-08): "you" first. */
+export function readBy(id: number, marks: WebsiteMarks | null | undefined, me: number | null): string[] {
+  const who = (marks?.staff ?? []).filter((s) => s.read !== null && s.read >= id);
+  return [...who.filter((s) => s.user_id === me).map(() => 'you'), ...who.filter((s) => s.user_id !== me).map((s) => s.name)];
+}
+
+/** "Nimal is typing", "Nimal and Dilini are typing". */
+export function typingWords(names: string[]): string {
+  if (!names.length) return '';
+  if (names.length === 1) return `${names[0]} is typing…`;
+  if (names.length === 2) return `${names[0]} and ${names[1]} are typing…`;
+  return `${names[0]}, ${names[1]} and ${names.length - 2} more are typing…`;
+}
+
+/** A role in one website chat (TEAM-01): who answers for it, who is helping, who is reading along unseen. */
+export type TeamRole = 'owner' | 'participant' | 'observer';
+
+export interface WebsitePerson {
+  user_id: number;
+  name: string;
+  avatar: string | null;
+  role: TeamRole;
+  invited_by?: number | null;
+  invited_by_name?: string | null;
+  joined_at?: string | null;
+}
+
+/** An invitation or transfer still waiting for an answer, in its chat's "In this chat" panel. */
+export interface WebsitePending {
+  id: number;
+  kind: 'invite' | 'transfer';
+  mode: 'warm' | 'cold';
+  from: number | null;
+  from_name: string | null;
+  to: string;
+  to_users: number[];
+  note: string | null;
+  expires_at: string | null;
+  created_at: string | null;
+}
+
+/** Several staff in one chat (TEAM-UI-01): who is in it, what is pending, and what I may do. */
+export interface WebsiteTeam {
+  people: WebsitePerson[];
+  pending: WebsitePending[];
+  my_role: TeamRole | null;
+  max: number;
+  transfer_count: number;
+  can: { invite: boolean; transfer: boolean; leave: boolean; remove: boolean; note: boolean; monitor: boolean; join: boolean; take_over: boolean };
+}
+
+/** A colleague for the invite and transfer pickers (TEAM-20, TEAM-21). */
+export interface Colleague {
+  id: number;
+  name: string;
+  email: string | null;
+  status?: 'available' | 'busy' | 'away' | 'offline';
+  open_chats?: number;
+  department_id?: number | null;
+  department?: string | null;
+  /** Staffs this chat's website; somebody who does not can still be asked, and is marked. */
+  on_staff?: boolean;
+  in_chat?: TeamRole | null;
+}
+
+/** Whether I own or take part in a chat: Mine (TEAM-09). */
+export function isMine(r: Pick<WebsiteRow, 'assigned_to' | 'my_role'>, me: number | null): boolean {
+  return me !== null && (r.assigned_to === me || r.my_role === 'owner' || r.my_role === 'participant');
+}
+
+/** A row's preview: who said it last, unless it was the visitor, then the words or the file. */
+export function lastSaid(m: NonNullable<WebsiteRow['last_message']>, myName: string | null): string {
+  const what = m.body ?? (m.file ? `📎 ${m.file}` : '');
+  const who = m.from === 'visitor' ? null : m.from === 'bot' ? text('Bot') : m.agent && m.agent === myName ? text('You') : (m.agent ?? text('Agent'));
+  return who ? `${who}: ${what}` : what;
 }
 
 export interface WebsiteCan {
@@ -59,6 +162,28 @@ export interface WebsiteMessage {
   agent: string | null;
   at: string;
   file: { url: string; filename: string; mime: string; size: number; is_image: boolean } | null;
+  /** Who wrote it, and their photo (TEAM-05). */
+  agent_id?: number | null;
+  avatar?: string | null;
+  /** `internal`: a note only staff see, never sent to the visitor (TEAM-60). */
+  visibility?: 'public' | 'internal';
+  /** The message this one answers (RDC-10): an excerpt both the agent and the visitor see above it. */
+  reply_to?: number | null;
+  reply?: WebsiteQuote | null;
+}
+
+/** A quoted message: its first words, who wrote it, and its file's name. */
+export interface WebsiteQuote {
+  id: number;
+  body: string | null;
+  from: 'visitor' | 'agent' | 'bot';
+  agent: string | null;
+  file: string | null;
+}
+
+/** Who wrote a message, as a quote or a preview says it. */
+export function quoteAuthor(q: Pick<WebsiteQuote, 'from' | 'agent'>, visitor: string): string {
+  return q.from === 'visitor' ? visitor : q.from === 'bot' ? 'Automated message' : (q.agent ?? 'Agent');
 }
 
 export interface WebsiteVisitor {
@@ -109,7 +234,66 @@ export interface WebsiteConversation {
   messages: WebsiteMessage[];
   journey?: Array<{ url: string | null; title: string | null; at: string }>;
   history?: Array<{ id: number; status: string; started_at: string | null; rating: number | null; other_device: boolean }>;
+  /** Null or absent on a server without team chats. */
+  team?: WebsiteTeam | null;
+  /** Delivered and read, both ways (ENH-WCHAT-04, LIVE-08); null on a server without them. */
+  marks?: WebsiteMarks | null;
+  /** Who else of the team is typing here now. */
+  agents_typing?: string[];
+  /** The latest voice call in this chat (ENH-WCHAT-05); null when there has been none, absent on a server without calls. */
+  call?: WebsiteCall | null;
+  /** Whether I take website voice calls here: answer, join, hold, offer. */
+  can_call?: boolean;
   can?: WebsiteCan;
+}
+
+/** A voice call in a website chat as the thread has it (WidgetCalls::forThread). */
+export interface WebsiteCall {
+  call_id: number;
+  conversation_id: number;
+  status: 'ringing' | 'active' | 'on_hold' | 'ended' | 'missed' | 'cancelled' | 'declined' | 'dropped';
+  call_stage?: 'first' | 'everyone' | null;
+  requested_at: string | null;
+  answered_at: string | null;
+  answered_by: number | null;
+  answered_by_name: string | null;
+  duration: number | null;
+  visitor?: string | null;
+  /** I am in the call's room, as the server has it. */
+  on_call: boolean;
+  /** It rings for me now. */
+  rings_me: boolean;
+  /** Who of the team is on it. */
+  on: Array<{ user_id: number; name: string }>;
+}
+
+/** Whether a call is ringing or on. */
+export const callLive = (c: Pick<WebsiteCall, 'status'> | null | undefined): boolean => !!c && (c.status === 'ringing' || c.status === 'active' || c.status === 'on_hold');
+
+/** A visitor waiting to be called back (VOICE-16). */
+export interface WebsiteCallback {
+  id: number;
+  conversation_id: number;
+  phone: string;
+  best_time: string | null;
+  visitor: string;
+  site: string | null;
+  /** Asked for after a call nobody answered. */
+  missed_call: boolean;
+  created_at: string;
+}
+
+export type CallbackOutcome = 'answered' | 'no_answer' | 'wrong_number';
+
+export function useCallbacks(enabled: boolean) {
+  return useQuery({
+    queryKey: ['website', 'callbacks'],
+    queryFn: ({ signal }) => apiGet<{ callbacks: WebsiteCallback[] }>(`${WEBSITE}/callbacks`, undefined, signal).then((d) => d.callbacks ?? []),
+    enabled,
+    staleTime: 15_000,
+    // An older server has no call backs: nothing to list.
+    retry: false,
+  });
 }
 
 export const PRIORITIES: Array<{ id: string; label: string }> = [
@@ -121,7 +305,7 @@ export const PRIORITIES: Array<{ id: string; label: string }> = [
 ];
 
 /** The workspace's sections (WebChatInbox, left). */
-export type Section = 'inbox' | 'live' | 'offline' | 'missed' | 'mine' | 'unassigned' | 'awaiting' | 'starred' | 'closed';
+export type Section = 'inbox' | 'live' | 'offline' | 'missed' | 'mine' | 'invited' | 'unassigned' | 'awaiting' | 'starred' | 'closed';
 
 /** Which open rows a section shows. */
 export function sectionRows(rows: WebsiteRow[], section: Section, me: number | null): WebsiteRow[] {
@@ -131,7 +315,7 @@ export function sectionRows(rows: WebsiteRow[], section: Section, me: number | n
     case 'offline':
       return rows.filter((r) => r.is_offline);
     case 'mine':
-      return rows.filter((r) => me !== null && r.assigned_to === me);
+      return rows.filter((r) => isMine(r, me));
     case 'unassigned':
       return rows.filter((r) => r.assigned_to === null);
     case 'awaiting':
@@ -155,7 +339,7 @@ export const WEBSITE_FILTERS: Array<{ id: WebsiteFilter; label: string }> = [
 /** The rows a filter shows, from the open list (or the closed one). */
 export function filterRows(rows: WebsiteRow[], filter: WebsiteFilter, me: number | null): WebsiteRow[] {
   if (filter === 'waiting') return rows.filter((r) => r.awaiting_reply);
-  if (filter === 'mine') return rows.filter((r) => me !== null && r.assigned_to === me);
+  if (filter === 'mine') return rows.filter((r) => isMine(r, me));
   return rows;
 }
 
@@ -163,6 +347,66 @@ export function filterRows(rows: WebsiteRow[], filter: WebsiteFilter, me: number
 export function sortRows(rows: WebsiteRow[], filter: WebsiteFilter): WebsiteRow[] {
   const key = (r: WebsiteRow) => (filter === 'waiting' ? (r.waiting_since ?? r.last_visitor_at ?? r.started_at ?? '') : r.updated_at);
   return [...rows].sort((a, b) => (filter === 'waiting' ? key(a).localeCompare(key(b)) : key(b).localeCompare(key(a))));
+}
+
+/** The pills over the workspace's list (CHAT-UI-00): Open, Mine and Closed. */
+export type ListPill = 'open' | 'mine' | 'closed';
+
+/** When a visitor started waiting: the ring's own stamp, else their last message. */
+export function waitingSince(r: Pick<WebsiteRow, 'waiting_since' | 'last_visitor_at'>): string | null {
+  return r.waiting_since ?? r.last_visitor_at ?? null;
+}
+
+/** The visitor who has waited longest for a reply, the one "Open the longest waiting" opens. */
+export function longestWaiting(rows: WebsiteRow[]): WebsiteRow | null {
+  let best: WebsiteRow | null = null;
+  let bestAt = Number.NaN;
+  for (const r of rows) {
+    if (!r.awaiting_reply) continue;
+    const since = waitingSince(r);
+    const at = since ? parseTs(since).getTime() : Number.NaN;
+    // A row without a stamp still counts, but any stamped one has waited longer as far as anybody can tell.
+    if (best === null || (!Number.isNaN(at) && (Number.isNaN(bestAt) || at < bestAt))) {
+      best = r;
+      bestAt = at;
+    }
+  }
+  return best;
+}
+
+function minutesText(m: number): string {
+  if (m < 60) return m === 1 ? text('1 minute') : text('{n} minutes', { n: m });
+  if (m >= 1440) {
+    const d = Math.floor(m / 1440);
+    return d === 1 ? text('1 day') : text('{n} days', { n: d });
+  }
+  const h = Math.floor(m / 60);
+  const hours = h === 1 ? text('1 hour') : text('{n} hours', { n: h });
+  const rest = m % 60;
+  return rest ? `${hours} ${rest === 1 ? text('1 minute') : text('{n} minutes', { n: rest })}` : hours;
+}
+
+/** The "Pick a conversation" line (CHAT-UI-00): how many are waiting, and for how long the longest has. */
+export function waitingSummary(rows: WebsiteRow[], now: number): string {
+  const n = rows.filter((r) => r.awaiting_reply).length;
+  if (!n) return text('Nobody is waiting for a reply.');
+  const head = n === 1 ? text('1 visitor is waiting for a reply.') : text('{n} visitors are waiting for a reply.', { n });
+  const since = waitingSince(longestWaiting(rows) ?? { waiting_since: null, last_visitor_at: null });
+  const at = since ? parseTs(since).getTime() : Number.NaN;
+  if (Number.isNaN(at)) return head;
+  const waited = minutesText(Math.max(1, Math.floor((now - at) / 60_000)));
+  return `${head} ${n === 1 ? text('They have waited {time}.', { time: waited }) : text('The longest has waited {time}.', { time: waited })}`;
+}
+
+/**
+ * J and K move through the list (CHAT-UI-00): the next or the previous conversation, stopping at either end. With
+ * nothing open, either key opens the first.
+ */
+export function stepRow(ids: number[], current: number | null, step: 1 | -1): number | null {
+  if (!ids.length) return null;
+  const at = current === null ? -1 : ids.indexOf(current);
+  if (at < 0) return ids[0]!;
+  return ids[Math.min(ids.length - 1, Math.max(0, at + step))]!;
 }
 
 export function useWebsiteInbox(closed: boolean, enabled = true) {
@@ -173,6 +417,21 @@ export function useWebsiteInbox(closed: boolean, enabled = true) {
     // Somebody who does not staff website chat is told once, not every 15 s.
     refetchInterval: (query) => (query.state.error instanceof ApiError && (query.state.error.forbidden || query.state.error.status === 404) ? false : 15_000),
     retry: (n, e) => !(e instanceof ApiError && (e.forbidden || e.status === 404)) && n < 2,
+  });
+}
+
+/**
+ * A search of every conversation, closed ones too, by visitor, email, site, page and what was said (CHAT-UI-00).
+ * Two characters at least, as the server asks; the last results stay while the next ones load.
+ */
+export function useWebsiteSearch(needle: string, closed: boolean) {
+  return useQuery({
+    queryKey: ['website', 'inbox', 'search', closed ? 'closed' : 'all', needle],
+    queryFn: ({ signal }) => apiGet<{ conversations: WebsiteRow[]; can: WebsiteCan }>(`${WEBSITE}/conversations`, closed ? { q: needle, status: 'closed' } : { q: needle }, signal),
+    enabled: needle.length >= 2,
+    placeholderData: keepPreviousData,
+    staleTime: 10_000,
+    retry: false,
   });
 }
 
@@ -194,12 +453,14 @@ export function useWebsiteConversation(id: string) {
   });
 }
 
-export function useAgents(enabled: boolean) {
+export function useAgents(enabled: boolean, conversationId?: number) {
   return useQuery({
-    queryKey: ['website', 'agents'],
-    queryFn: ({ signal }) => apiGet<{ agents: Array<{ id: number; name: string; email: string }> }>(`${WEBSITE}/agents`, undefined, signal),
+    queryKey: ['website', 'agents', conversationId ?? 'all'],
+    queryFn: ({ signal }) =>
+      apiGet<{ agents: Colleague[]; departments?: Array<{ id: number; name: string; available: number }> }>(`${WEBSITE}/agents`, conversationId ? { conversation_id: String(conversationId) } : undefined, signal),
     enabled,
-    staleTime: 5 * 60_000,
+    // For a picker, who is available now matters: asked again each time it opens.
+    staleTime: conversationId ? 0 : 5 * 60_000,
   });
 }
 
@@ -216,6 +477,26 @@ export function useCanned(enabled: boolean) {
 export async function websiteAction(id: number | string, action: string, extra: Record<string, unknown> = {}): Promise<void> {
   await request('POST', `${WEBSITE}/conversations/${id}/action`, { body: { action, ...extra } });
 }
+
+/**
+ * Several staff in one chat (ENH-WCHAT-03): invite, transfer, leave, remove, a note, and a supervisor's monitor,
+ * join and take over — each the server's own answer, refusals with its sentence.
+ */
+export const team = {
+  invite: (id: number, body: { user_ids?: number[]; department_id?: number; note?: string }) => request('POST', `${WEBSITE}/conversations/${id}/invites`, { body }),
+  transfer: (id: number, body: { to_user_id?: number; department_id?: number; any?: boolean; mode: 'warm' | 'cold'; note?: string }) =>
+    request('POST', `${WEBSITE}/conversations/${id}/transfer`, { body }),
+  leave: (id: number) => request('POST', `${WEBSITE}/conversations/${id}/leave`),
+  remove: (id: number, userId: number) => request('DELETE', `${WEBSITE}/conversations/${id}/participants/${userId}`),
+  note: (id: number, message: string, mentions: number[]) => request<{ id: number; at: string; mentioned: number[] }>('POST', `${WEBSITE}/conversations/${id}/note`, { body: { message, mentions } }),
+  cancel: (handoffId: number) => request('DELETE', `${WEBSITE}/handoffs/${handoffId}`),
+  monitor: (id: number) => request('POST', `${WEBSITE}/conversations/${id}/monitor`),
+  join: (id: number) => request('POST', `${WEBSITE}/conversations/${id}/join`),
+  takeOver: (id: number) => request('POST', `${WEBSITE}/conversations/${id}/take-over`),
+};
+
+/** A role in words, as the "In this chat" panel says it. */
+export const ROLE_LABEL: Record<TeamRole, string> = { owner: 'Owner', participant: 'Participant', observer: 'Monitoring' };
 
 /** What a visitor is doing, in the list's one word. */
 export function visitorStatus(v: { conversation_status: string | null; idle_seconds: number }): ['Chatting' | 'Active' | 'Inactive', string] {

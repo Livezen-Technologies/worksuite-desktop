@@ -5,9 +5,234 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.114: Present your screen and still be seen
+
+For meetings and calls (#146):
+
+- **What you share is on the stage.** When you share a screen or a window, you now see it live in the middle of the
+  meeting, framed in red, with **Stop presenting** above it. It used to show your camera there instead. Your camera
+  moves to its own small tile, which you can drag, resize or minimise as before. It also stays separate in the
+  floating card, and ahead of a whiteboard. When you stop, by the button or by the system's own Stop sharing, the
+  normal layout comes back.
+- **Others see the same.** Viewers get your shared screen on the stage and your camera beside it, separately.
+- **A red outline around what you share,** on the desktop itself, so you can see what others can see. It follows the
+  window you share as it moves (Windows, macOS and Linux on X11), lets clicks through, and goes when sharing stops. It
+  reads where the window is and nothing more: it never asks for Accessibility or controls the mouse. Where the
+  system can't say where the window is (Wayland, for one), only the red frame in WorkSuite shows.
+
+Still to check on installed apps before #146 closes: sharing each monitor and a window between two computers,
+monitors with different scaling, and the system's Stop sharing button. See `docs/MEETING_SCREEN_SHARE_QA.md`.
+
+---
+
+## 2026-10-03 — 0.2.113: Website chat ringing says what happened
+
+- When a visitor leaves the site before anyone joins their chat, the call window now says just that. It used to add
+  "The chat is in Missed chats", which is only true once the website's missed time has passed.
+
+---
+
+## 2026-10-03 — 0.2.112: Website visitors can call you
+
+With WorkSuite's Communication 1.11.0 and its voice calls migration (Website Live Chat SRS ENH-WCHAT-05), a website's
+chat widget can offer visitors a voice call — audio only, in the browser, no phone number. Somebody has to switch it on
+for the website and give you the **Take website voice calls** permission first.
+
+- **A visitor calling rings like a call**, before any chat: the call window shows **Incoming voice call** with who,
+  which site and page, whose chat it is and what they last wrote, with **Answer** and **Decline**. It rings through Do
+  not disturb unless you chose cards only. **Ctrl/Cmd+Shift+A** answers, and the tray has **Answer —** too. If a
+  colleague answers first, or the visitor hangs up, the window says so.
+- **Answering** brings WorkSuite forward on the chat, already on the call: microphone only, through the speaker you chose
+  for calls. The bar over the thread shows the time and the connection, with **Mute** (Ctrl/Cmd+Shift+M), **Hold** (the
+  visitor hears a soft tone and nothing from you), **Invite**, **Transfer** and **End**, which asks for call notes —
+  kept on the chat as a note only staff see. The chat goes on under the call.
+- **A colleague on a call in your chat** shows with **Join call**; with someone else on it, End offers **Leave the call**.
+  The tray says who you are on a call with, and WorkSuite will not restart to update during it.
+- **Offer call**, in the thread's header, offers the visitor a call that rings only you. Rows in the list say **On a
+  call · 2:14**. **Missed chats** lists visitors who asked to be called back, with their number and best time; log each
+  as Answered, No answer or Wrong number.
+- A computer without a microphone says so to WorkSuite and is not rung for calls.
+
+**Where it bites:** calls ring only people who are online, not already on a call and with a microphone; on the web
+WorkSuite they do not ring at all yet. Calls are not recorded. With an older WorkSuite server none of this shows.
+
+---
+
+## 2026-10-03 — 0.2.111: Website chats show typing and read receipts as they happen
+
+With WorkSuite's Communication 1.11.0 and its live status migration (Website Live Chat SRS ENH-WCHAT-04):
+
+- **The visitor typing** shows in the thread and on their row in the list the moment they start, and goes the moment
+  they stop or send — not on the next refresh.
+- **Colleagues typing** in the same chat are named under the thread: "Nimal and Dilini are typing…"; somebody writing a
+  note says so. The visitor never sees a note being written.
+- **Ticks on your messages**: sent, delivered to the visitor's widget, or read with the time — read only when the
+  visitor had the chat open and in front. Under the visitor's latest message: who of you has read it.
+- **Your reading counts**: while the thread is in front, the visitor's messages are marked read for you, and the
+  visitor sees "Read by" your name (when the website shows receipts). A supervisor monitoring a chat never makes it
+  read. Unread counts in the list come from your own read mark.
+
+With an older WorkSuite server, typing and the list work as before and no ticks show.
+
+---
+
+## 2026-10-03 — 0.2.110: Several staff in one website chat
+
+With WorkSuite's Communication 1.11.0 and its team chats migration, a website chat can have more than one of you in it
+(Website Live Chat SRS ENH-WCHAT-03):
+
+- **Invite a colleague**, or a whole department, from the thread's header or its **In this chat** panel. The picker
+  shows who is available, how many chats they have open and their department; offline people cannot be picked. Add a
+  note — only staff see it. Their call window rings with an **Invitation** card for two minutes; Join chat puts them
+  in the chat, and the visitor sees them arrive. If they decline or don't answer, the thread says so, with **Try someone
+  else**.
+- **Transfer** to a colleague, a department or the next available agent: **warm** — you keep answering until they
+  accept, then stay in as a participant — or **hand over now**, which takes you out at once. Their call window rings
+  with a **Transfer to you** card. The visitor sees "You're now chatting with …".
+- **Internal note**, beside Reply to visitor under the thread: a note only staff see, amber in the thread, with
+  @mentions that notify. It never reaches the visitor.
+- **In this chat** lists everybody with their role and when they joined, what is still waiting with Cancel, and Leave
+  chat. The owner can remove someone; an owner who tries to leave is offered Transfer or Close. Supervisors can
+  Monitor a chat unseen, Join it or Take it over.
+- **Invited**, a new section of Website Chats, lists invitations and transfers waiting for you. **Mine** now includes
+  chats you take part in, and a row several of you are in shows your faces.
+
+**Where it bites:** with WorkSuite's team chats, opening a chat nobody owns makes it yours, and a reply to a chat that
+already has four staff in it is refused, with the number. With an older WorkSuite server none of this shows.
+
+---
+
+## 2026-10-03 — 0.2.109: Website chat list previews, search, reply quotes and Drive files
+
+With WorkSuite's Communication 1.11.0:
+
+- **Each row says what was said last** — "You: …", the agent's name, or the visitor's own words — with a count of the
+  visitor's messages nobody has answered yet.
+- **Search finds what was said**, not only who said it, and looks in closed chats too. It asks WorkSuite once you
+  pause typing; until it answers, the list narrows by what it already shows.
+- **Reply to one message.** Hover a message and choose Reply: your answer shows the words it answers above it, in your
+  thread and in the visitor's chat window.
+- **From Drive** in the attach menu sends the visitor a copy of a Drive file — they can never open a Drive link. A file
+  the visitor cannot receive (an SVG, one over the site's size limit) or one you may not download is refused with the
+  reason.
+
+With an older WorkSuite server the rows read as in 0.2.103, search is over visitors only, and From Drive and Reply are
+refused with the server's message.
+
+---
+
+## 2026-10-03 — 0.2.108: Website chats ring on one device, and stop for a reason
+
+With WorkSuite's ring sessions (the server's Communication 1.11.0 and its migration), the call-style ringing of the
+Website Live Chat SRS works across your devices:
+
+- **One device rings.** This computer tells WorkSuite it is here to ring, every 20 seconds. While it runs it plays the
+  ring and your browser tabs stay quiet; choose the browser, or every device, in **Settings › Notifications › Website
+  chats › Where to ring**, which also says whether this computer is the one that rings. If this computer sleeps, your
+  browser takes the ring within 45 seconds. When another device has it, the call window still shows the chat, without
+  sound, and says so.
+- **Silence follows you.** Silencing a chat here silences it on your other devices too, until it is at risk — then it
+  rings again, louder, everywhere. An at-risk chat cannot be silenced.
+- **A chat given to you** shows how long until it passes on, and **Pass to next** hands it straight to the next
+  available agent (or to everybody, when nobody else is available).
+- **Why it stopped** is said: who joined, the visitor left the site before anyone joined (the chat is then in Missed
+  chats), the visitor ended it, it was closed, or the visitor was blocked.
+
+With an older WorkSuite server, ringing works as in 0.2.44.
+
+---
+
+## 2026-10-03 — 0.2.107: Answer a website visitor from the notification, or in a small window
+
+The last two desktop parts of the Website Live Chat SRS's shared chat kit (ENH-WCHAT-02):
+
+- **Reply from the notification** (RDC-15). On macOS and Windows a visitor's message arrives as a banner with a
+  reply box. What you type is sent exactly as if you had typed it in the conversation: through the outbox, so offline
+  it waits and goes once WorkSuite is back. If the server refuses it, nothing is lost — the conversation opens with
+  your words in its message box and the reason. Locked, with notification content hidden, or on Linux (whose
+  notifications have no reply box), the banner opens the conversation instead.
+- **A website chat in its own window** (RDC-16). **Open in new window** in a website conversation's header opens just
+  that conversation — the thread and Team Chat's composer in its window look, with Accept and Close — in a small
+  window you can keep on top. Opening it again brings the same window forward; **Open in main app** takes it back to
+  the Website Chats workspace. A half-written reply goes with it.
+
+---
+
+## 0.2.106 — 2026-10-03
+
+- Keep tab menus, dialogs, search, notifications, AI surfaces and toasts above the native Office editor. Hide and restore the existing view with a captured document image while overlapping shell surfaces are open (#184). Reserve a footer for the persistent AI launcher so the editor stays usable.
+- Expand the tab menu with close-all, reopen, copy-link and left/right movement actions, and scroll long menus within the window. Office record links open in the app without transient editor parameters.
+
+## 2026-10-03 — 0.2.105: Mail that works like Outlook, finished
+
+Phases 4 and 5 of the Outlook-class Mail enhancement (ENH-MAIL-03):
+
+- **Your old mail files.** Import **PST**, **MBOX**, **EML** and **MSG** files (read in a separate, locked-down process; importing the same file again adds nothing twice), export mail, and open .eml/.msg files. Each folder shows what it keeps offline and its archive rule.
+- **Safer mail.** **Report phishing** (it goes to your administrators' queue), **safe links** checked on this computer and against your organisation's blocked list — nothing is sent to anyone else — pictures loaded only when you ask, and attachments that could harm the computer saved but never opened. **S/MIME** signatures are checked and shown.
+- **Recall, voting and read receipts.** Recall a message, add voting buttons, and answer read-receipt requests your way. These are only guaranteed between WorkSuite mailboxes, and the app says so.
+- **From a message:** create a task, a contact or a meeting; **Reply with meeting**; contact groups; add a sender from their signature; **Mentioned me**. Quick Steps can copy to a folder, log in CRM or open a helpdesk ticket.
+- **Reading.** **Ignore** or **clean up** a conversation, **conditional formatting**, plain text for chosen senders, and the **immersive reader**.
+- **Staying on top.** A reminder window and reminders that work offline; choose which mail raises a banner, let VIPs through quiet hours, more banner actions; **Catch up** on what you missed; decline invitations automatically while you're away; a Calendar peek from the sidebar.
+- **Writing.** **Mail merge**, **Suggest times** with a meeting link, and more drafting tools (draft from notes, tone, length, coaching).
+- **Apps pane** beside a message with WorkSuite information about the sender, **High contrast**, and new mail announced to screen readers.
+
+Needs the server update (Mail 1.5.0 and its migration). Not included: delegating a personal mailbox, S/MIME signing and encryption, sensitivity labels, and sending to WorkSuite from other apps' Share menus.
+
+---
+
+## 0.2.104 — 2026-10-03
+
+- Default app locking to Off for new users without a saved preference. Preserve saved lock choices and explicit organization rules; automatic-lock controls are inactive while locking is off (#181). Deploy the companion server policy-default update to stop the old default 15-minute enforcement.
+
+---
+
+## 2026-10-03 — 0.2.103: The Website Chats inbox, as drawn in the Website Live Chat SRS v1.5
+
+The SRS's v1.5 redrew every staff screen on the app as it looks today. The desktop's shell already had that look;
+this release brings the Website Chats workspace in line with the new inbox design (CHAT-UI-00) and the thread's
+details panel (CHAT-UI-01):
+
+- **Open · Mine · Closed** over the conversation list, each with its count, and the site picker and search beside them.
+- **Each conversation** shows the visitor with a dot for whether they are on the site, a live timer while they wait
+  for a reply (red, minutes and seconds, for the first hour), what they asked or the page they are reading, and
+  **Awaiting reply**, **You**, **At risk**, **Offline** or **VIP / Urgent / High** chips beside the site — "away"
+  when they have left it. The open conversation has the accent bar down its left edge.
+- **A chat ringing on this computer** has a bell in the list; one you **silenced** here turns amber with the bell
+  struck through, until it rings again at risk.
+- **Pick a conversation**: with nothing open, the workspace says how many visitors are waiting and how long the
+  longest has, with **Open the longest waiting** and **Visitors online · n**.
+- **J / K** move to the next or previous conversation, when you are not typing.
+- **The visitor's details** start with who they are and their email, then Visitor, **Journey** (each page with its
+  time, and the one they are reading now) and **Shared files** — every file either side sent in the chat, opened
+  from there.
+
+Where it bites: the server's inbox does not send a conversation's last message or an unread count, so a row shows
+what the visitor asked only while the chat rings, and the page they are reading otherwise; search covers visitors,
+email, site and page, not messages. Invite, Transfer and the Invited view (ENH-WCHAT-03) wait for their server API.
+
+---
+
+## 2026-10-03 — 0.2.102: Mail that works like Outlook
+
+The first three phases of the Outlook-class Mail enhancement (ENH-MAIL-03):
+
+- **All Accounts.** Inbox, Sent, Drafts, Archive and the other standard folders combine every account you have. **Sync all** refreshes them all; the status bar, footer and Settings show one sync status, with each account's details and a sync log. A failed sync no longer counts as "last synced".
+- **Organise like Outlook.** **Focused / Other** (with Move and Always move), **pin** to the top, **snooze** until later (a Snoozed view shows what's waiting), **flags with due dates** that appear in Tasks and complete both ways, **categories** shared with Calendar and Tasks, **Sweep** a sender's mail, select many and act on them at once, and view settings remembered per folder.
+- **Your keyboard.** Choose WorkSuite, **Outlook** or Gmail shortcuts; a shortcut sheet lists them and lets you change any. Favorites, Go to folder and Find in message are there too.
+- **Faster everyday work.** **Quick Steps** (several actions in one click, Ctrl+Shift+1…9, one Undo) and **Quick Parts**; importance, sensitivity and read/delivery receipts; a signature per account filled from your profile; reminders before sending without the attachment you mentioned or without a subject; @mentions.
+- **Rules** gain exceptions, rules that run only on this computer (with an alert or sound), **Run now** on a folder, and a clear error when a rule fails.
+- **Meetings in your inbox.** An invitation shows its time, place, join link, attendees and clashes, with **Accept / Tentative / Decline / Propose a new time**; updates and cancellations are applied. **My Day** beside the mail lists today's events, flagged mail and tasks — drop a message on it to schedule it.
+- **People.** A person's card shows their title, company, phone, out-of-office and recent mail; a **VIP** view; recipient suggestions from the people you write to.
+- **Automatic replies** with separate messages for colleagues and for outside senders.
+- **Safer mail.** Messages from outside your organisation are tagged, and a first-time sender is pointed out.
+
+Needs the server update (Mail 1.4.0 with four migrations, and the `mail:snoozes` schedule). Still to come: data files (PST/MBOX), report phishing, safe links, S/MIME, recall, voting and more.
+
+---
+
 ## 0.2.101 — 2026-10-03
 
-- Show the presenter's live shared screen on the meeting stage with their camera in a separate draggable tile, a red preview border and Stop presenting. Add a click-through desktop outline for captured screens and windows where native bounds are available (#146).
+- Show shared record cards directly in Chat and the conversation drawer, with short captions below, longer messages above, and one timestamp per consecutive card group. Completed tasks use neutral priority and due-date labels (#173).
 
 ## 0.2.100 — 2026-10-03
 

@@ -6,7 +6,9 @@ the root CHANGELOG.md.
 
 ## 1.10.3 — 2026-10-03
 
-- Add Stop presenting to the shared-screen preview (#146).
+**Fixed**
+
+- In a meeting, a presenter sees what they share on the stage, with Stop presenting, and their camera in a separate tile (#146); the call workspace and the outline are calls 1.5.3
 
 ## 1.10.2 — 2026-10-03
 

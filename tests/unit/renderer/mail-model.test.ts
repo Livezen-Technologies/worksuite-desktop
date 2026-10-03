@@ -36,7 +36,7 @@ afterEach(() => {
 
 describe('smart views and quick filters', () => {
   it('maps each smart view to what the server is asked, and merges the chips once', () => {
-    expect(SMART_VIEWS.map((v) => v.id)).toEqual(['unread', 'starred', 'important', 'today', 'attachments', 'scheduled', 'drafts']);
+    expect(SMART_VIEWS.map((v) => v.id)).toEqual(['unread', 'starred', 'important', 'today', 'attachments', 'scheduled', 'drafts', 'vip']);
     expect(smartView('unread')).toMatchObject({ folder: 'inbox', filters: ['unread'] });
     expect(smartView('drafts')).toMatchObject({ folder: 'drafts', filters: [] });
     expect(smartView('nope')).toBeNull();

@@ -40,3 +40,14 @@ it('explains and disables the organization-required enable toggle', () => {
   expect(screen.getByRole('switch', { name: 'Enable Lock Screen' })).toHaveProperty('disabled', true);
   expect(screen.getByText('Your organization requires app locking.')).toBeTruthy();
 });
+
+it('keeps absent preferences off and disables automatic triggers without an organization badge', () => {
+  const unset = { ...prefs, appLockEnabled: undefined };
+  render(<SecuritySection prefs={unset} />);
+  expect(screen.getByRole('switch', { name: 'Enable Lock Screen' }).getAttribute('aria-checked')).toBe('false');
+  expect(screen.getByRole('combobox', { name: 'App lock' })).toHaveProperty('disabled', true);
+  for (const name of ['Lock after computer sleep', 'Lock after operating-system lock']) expect(screen.getByRole('switch', { name })).toHaveProperty('disabled', true);
+  expect(screen.queryByText(/Set by your organization/)).toBeNull();
+  fireEvent.click(screen.getByRole('switch', { name: 'Enable Lock Screen' }));
+  expect(bridge.call).toHaveBeenCalledWith('settings:set', { appLockEnabled: true });
+});

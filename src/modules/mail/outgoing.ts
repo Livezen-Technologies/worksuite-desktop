@@ -11,6 +11,8 @@ export const UNDO_SECONDS = 8;
 export interface OutgoingSend {
   id: string;
   subject: string;
+  /** Not a send: what is about to happen (a Quick Step's run, DMO-QS-06), shown with its Undo. */
+  label?: string;
   /** When it goes, as epoch milliseconds. */
   at: number;
 }
@@ -26,19 +28,19 @@ let snapshot: OutgoingSend[] = [];
 let seq = 0;
 
 function changed(): void {
-  snapshot = [...entries.values()].map(({ id, subject, at }) => ({ id, subject, at }));
+  snapshot = [...entries.values()].map(({ id, subject, at, label }) => ({ id, subject, at, ...(label ? { label } : {}) }));
   for (const fn of subs) fn();
 }
 
 /** Send after the undo window; `undo` runs if the person takes it back. */
-export function sendAfterUndoWindow(subject: string, send: () => Promise<void>, undo: () => void, seconds = UNDO_SECONDS): string {
+export function sendAfterUndoWindow(subject: string, send: () => Promise<void>, undo: () => void, seconds = UNDO_SECONDS, label?: string): string {
   const id = `send-${Date.now()}-${++seq}`;
   const timer = setTimeout(() => {
     entries.delete(id);
     changed();
     void send();
   }, seconds * 1000);
-  entries.set(id, { id, subject, at: Date.now() + seconds * 1000, timer, undo });
+  entries.set(id, { id, subject, at: Date.now() + seconds * 1000, timer, undo, ...(label ? { label } : {}) });
   changed();
   return id;
 }

@@ -129,6 +129,11 @@ const api = {
     state: call('ring:state'),
     join: call('ring:join'),
     silence: call('ring:silence'),
+    pass: call('ring:pass'),
+    handoff: call('ring:handoff'),
+    call: call('ring:call'),
+    mic: call('ring:mic'),
+    onCall: call('ring:onCall'),
   },
   tabs: {
     save: call('tabs:save'),
@@ -246,6 +251,7 @@ const api = {
     test: call('notifications:test'),
     permission: call('notifications:permission'),
     refresh: call('notifications:refresh'),
+    reminder: call('notifications:reminder'),
   },
   clipboard: {
     readForPaste: call('clipboard:readForPaste'),
@@ -414,6 +420,25 @@ const api = {
     openDrawer: call('pos:openDrawer'),
     displayOpen: call('pos:displayOpen'),
     displayClose: call('pos:displayClose'),
+  },
+  // Mail data files, export, safe links and S/MIME (ENH-MAIL-03 P4).
+  mailfile: {
+    pick: call('mailfile:pick'),
+    scan: call('mailfile:scan'),
+    import: call('mailfile:import'),
+    progress: call('mailfile:progress'),
+    cancel: call('mailfile:cancel'),
+    view: call('mailfile:view'),
+    saveAttachment: call('mailfile:saveAttachment'),
+    close: call('mailfile:close'),
+  },
+  mail: {
+    export: call('mail:export'),
+    exportCancel: call('mail:exportCancel'),
+    openLink: call('mail:openLink'),
+  },
+  smime: {
+    verify: call('smime:verify'),
   },
   offline: {
     status: call('offline:status'),
