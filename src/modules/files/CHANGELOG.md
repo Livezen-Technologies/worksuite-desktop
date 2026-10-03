@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.6.2 — 2026-10-03
+
+- Keep local WhatsApp cache reads scoped by server and organisation and support clearing refused API prefixes (#158).
+
 ## 1.6.1 — 2026-10-03
 
 - The API proxy decides per mailbox whether a message body is kept offline (each mailbox can now have its own keep period).
