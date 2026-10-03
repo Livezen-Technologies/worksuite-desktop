@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 0.2.114 — 2026-10-03
+## 0.2.122 — 2026-10-03
 
 - **You hear when someone shares a file with you (#164).** A file or folder shared from Files shows up as a card in your chat with that person — or in the team's chat for a team share — with Open, Download, Show in Files and, if you can only view it, Request edit access. Several files shared together make one card, folders show how many items they hold, and the card changes to "Access changed to …" or "No longer shared" when that happens. You also get a bell entry ("Dinusha shared "Report.docx" with you (Full access)"), a desktop notification, a count on **Shared with me** until you open it, and an email with an Open file button — shares made within a couple of minutes come as one email, or in a daily summary if you prefer.
 - The share dialog has **Notify people** (on by default), a message box, and choices to post in chat and send an email.
@@ -13,7 +13,7 @@ person who has to live with the change — what it does, and where it bites.
 - In the chat drawer, the "… is open — messages can link to it" notice is now a small chip in the message box instead of a bar over the conversation.
 - Needs the server update (Files migration). People outside WorkSuite are not invited by email, because Drive shares only with people in your company or partner companies.
 
-## 0.2.113 — 2026-10-03
+## 0.2.121 — 2026-10-03
 
 - **Contacts sync with Google, Outlook and iCloud (#175).** Connect Google Contacts, Outlook / Microsoft 365, iCloud or another CardDAV address book (several per provider) in **Settings › Contacts › Accounts & sync**, and contacts stay in step both ways — only changes are fetched each time. The first sync shows what it will do before writing anything ("320 found · 210 new · 95 match existing · 15 possible duplicates"). People you already have are linked, not copied, and WorkSuite's own fields (type, company links, CRM) are never overwritten. When both sides change the same field the newest wins, or it goes to a Sync conflicts list. Something deleted at the provider is archived (if it has CRM links) rather than lost. Each account shows its status, last sync, count and errors, with Sync now, settings, a log and Disconnect (keep the contacts or remove the ones only it brought).
 - **Tidy up › Possible duplicates** merges two contacts side by side, field by field, with Undo. The sidebar has an **Accounts** filter, and each contact shows where it is synced, with Unlink.
@@ -21,22 +21,22 @@ person who has to live with the change — what it does, and where it bites.
 - Also: New contact, Import and Export appear once each; a contact's name is no longer repeated as its subtitle; phone numbers are formatted the same way everywhere; imported contacts no longer default to Customer.
 - Needs the server update (Contacts migration, the `contacts:sync` cron line, and the People API / `Contacts.ReadWrite` permissions on the Google and Microsoft sign-in apps). iCloud needs an Apple app-specific password. **Mac Contacts** (on this Mac) is not available yet — it needs a native add-on — and the app says so. Contact photos and group memberships are not sent back to the provider yet.
 
-## 0.2.112 — 2026-10-03
+## 0.2.120 — 2026-10-03
 
 - **Sync buttons show what they're doing (#165).** Every Sync now / Sync all button — Mail, Drive's Sync devices and Settings, Sales channels and Events — starts spinning the moment you click it and can't be pressed twice, then shows a green "Synced just now" for two seconds, or "Sync failed · Retry". The button keeps the same width throughout, screen readers hear "Syncing" and "Sync complete", and with reduced motion the icon stays still. Mail's ↻ icons in the folder pane show the same states.
 
-## 0.2.111 — 2026-10-03
+## 0.2.119 — 2026-10-03
 
 - **Mail's setup banner (#187).** After you choose Outlook shortcuts, the banner says "Outlook shortcuts enabled." with a short line of guidance, offers **Import email** first (the tooltip says .pst and .mbox work), with **Add signature** and **Set as default mail app** beside it — in a **More** menu when the window is narrow — and has a dismiss icon instead of "Close". Once dismissed it stays gone, after navigation and restarts.
 
-## 0.2.110 — 2026-10-03
+## 0.2.118 — 2026-10-03
 
 - **Right-click a conversation (#183).** Chat, WhatsApp and Website chats share one menu. Direct chats: Open in new window, Mark as read/unread, Pin (up to 5, with a pin icon), Archive (into an Archived section with a count; a new message brings it back unless it's muted), Favourite, Mute for 8 hours, a week or until you turn it back on, Contact info, Start call or video call, Block (shows "You blocked … · Unblock"), Export as .txt or .zip with or without media (recorded in the audit log), Clear chat for you (keeping starred messages if you like) and Delete chat for you with a 5-second Undo. Groups add Group info, Add members, Leave and — for the owner only — Delete for everyone; meeting chats get Open meeting details, Rename and Leave; the System channel only Mark read, Archive and Mute. WhatsApp adds Assign, Mark as waiting/done and Add/Link/Open contact; Website chats add Assign, Transfer and Close.
 - Select several chats with Ctrl/⌘- or Shift-click (or Select) to mark read, archive, mute or delete them together; Ctrl+Shift+U, Ctrl+E, Ctrl+Shift+M, Ctrl+Backspace and Ctrl+Shift+P work on the focused or selected chats. Muted chats are grey and left out of the total unread badge, unless they mention you. Changes show at once, wait in the offline queue when you're offline, and sync to your other devices.
 - Online/offline is now the same in the list, the header and the details panel.
 - Needs the server update (Communication migration). Blocking does not stop calls; muting from the keyboard mutes until you turn it back on.
 
-## 0.2.109 — 2026-10-03
+## 0.2.117 — 2026-10-03
 
 - **WorkSuite links open in the app (#170).** A link to a WorkSuite item — from a notification email, Apple Mail, Outlook, a browser or chat (`https://…/o/{org}/{type}/{id}` or `worksuite://…`) — opens it in the right module tab: files and folders, shared items, meetings (join screen), events (accept / decline / maybe), notes, tasks, reminders, alerts, chats, tenders, invoices, expenses and CRM records. The app comes to the front, switches organisation, waits for sign-in or unlock when needed, opens the item's existing tab if there is one, and asks before anything that changes data. No access shows **Request access** in the app; offline opens the stored copy or says "Available when online". Every link is checked against strict rules and its opening is audit-logged.
 - **In Mail,** WorkSuite links open in an app tab. Verified WorkSuite notification emails show an action card above the message with the item's current state and real buttons; a mail that only pretends to be from WorkSuite gets a warning and no buttons.
@@ -44,17 +44,170 @@ person who has to live with the change — what it does, and where it bites.
 - Needs the server update. On macOS, https links open the app directly only in a build signed with a provisioning profile for Associated Domains; until then they go through the web page, which hands over to the app.
 - Not yet: chat links don't scroll to the message, and approve/reject from a link opens the record's own approval panel rather than deciding in place.
 
-## 0.2.108 — 2026-10-03
+## 0.2.116 — 2026-10-03
 
 - **WhatsApp shows who you're talking to (#176).** A number that is in Contacts shows the contact's name, company and photo or initials — in the list, the header, group messages, mentions, search and the tab title — whatever way the number was typed (07x, +94, spaces, dashes). Unknown numbers show the person's WhatsApp name as "~Name · Not in contacts", or a formatted number; never a bare "+". Groups show their real name and member count, not "Group" and an @g.us id. **Add to contacts** and **Link to existing contact** are in the header and the row's right-click menu, and clicking the header opens the contact's details with deals, invoices, tenders and notes. Changing a contact updates the names straight away.
 - Also fixed in WhatsApp: "is not connected · Starting the session" while messages were arriving, previews that said "Message", and photos listed as "📎 Photo" (now an image icon with the caption).
 - Needs the server update (Contacts and WhatsApp migrations, then `php spark whatsapp:match-contacts` once). WhatsApp profile and group photos are not fetched yet.
 
-## 0.2.107 — 2026-10-03
+## 0.2.115 — 2026-10-03
 
 - **One New button everywhere (#171).** Mail, Files, Tasks, Notes, Calendar, Contacts, CRM, Billing, Sales, Tenders and Expenses use the same primary button: 40 px, plus icon, quiet shadow, with the shortcut in its tooltip instead of a chip. Mail's is a split button — New email, from a template, in a new window, an event invite or a contact — and Search beside it matches Files' Upload button.
 - **Mail sync status you can trust (#172).** The card and the status bar always say the same thing. An account that is out of date is amber, never green; "N of M mailboxes live" comes from the real connections, and "New mail pushed" shows only while one is up. A mailbox kept current by push no longer shows a days-old sync time (needs the server update). Click the card to see each account's state, last sync and error, with Sync now, Fix and Sync all.
 - **Sort & Group menu (#168).** Every choice has its icon; the direction is a switch in the field's own words (Newest/Oldest, A → Z/Z → A, Largest/Smallest); the toolbar says what the list is sorted by. Show conversations, Apply to all folders and Reset to default are at the bottom, and the list can be grouped by conversation. Menus elsewhere no longer leave a blank gap where an icon would go.
+
+## 2026-10-03 — 0.2.114: Present your screen and still be seen
+
+For meetings and calls (#146):
+
+- **What you share is on the stage.** When you share a screen or a window, you now see it live in the middle of the
+  meeting, framed in red, with **Stop presenting** above it. It used to show your camera there instead. Your camera
+  moves to its own small tile, which you can drag, resize or minimise as before. It also stays separate in the
+  floating card, and ahead of a whiteboard. When you stop, by the button or by the system's own Stop sharing, the
+  normal layout comes back.
+- **Others see the same.** Viewers get your shared screen on the stage and your camera beside it, separately.
+- **A red outline around what you share,** on the desktop itself, so you can see what others can see. It follows the
+  window you share as it moves (Windows, macOS and Linux on X11), lets clicks through, and goes when sharing stops. It
+  reads where the window is and nothing more: it never asks for Accessibility or controls the mouse. Where the
+  system can't say where the window is (Wayland, for one), only the red frame in WorkSuite shows.
+
+Still to check on installed apps before #146 closes: sharing each monitor and a window between two computers,
+monitors with different scaling, and the system's Stop sharing button. See `docs/MEETING_SCREEN_SHARE_QA.md`.
+
+---
+
+## 2026-10-03 — 0.2.113: Website chat ringing says what happened
+
+- When a visitor leaves the site before anyone joins their chat, the call window now says just that. It used to add
+  "The chat is in Missed chats", which is only true once the website's missed time has passed.
+
+---
+
+## 2026-10-03 — 0.2.112: Website visitors can call you
+
+With WorkSuite's Communication 1.11.0 and its voice calls migration (Website Live Chat SRS ENH-WCHAT-05), a website's
+chat widget can offer visitors a voice call — audio only, in the browser, no phone number. Somebody has to switch it on
+for the website and give you the **Take website voice calls** permission first.
+
+- **A visitor calling rings like a call**, before any chat: the call window shows **Incoming voice call** with who,
+  which site and page, whose chat it is and what they last wrote, with **Answer** and **Decline**. It rings through Do
+  not disturb unless you chose cards only. **Ctrl/Cmd+Shift+A** answers, and the tray has **Answer —** too. If a
+  colleague answers first, or the visitor hangs up, the window says so.
+- **Answering** brings WorkSuite forward on the chat, already on the call: microphone only, through the speaker you chose
+  for calls. The bar over the thread shows the time and the connection, with **Mute** (Ctrl/Cmd+Shift+M), **Hold** (the
+  visitor hears a soft tone and nothing from you), **Invite**, **Transfer** and **End**, which asks for call notes —
+  kept on the chat as a note only staff see. The chat goes on under the call.
+- **A colleague on a call in your chat** shows with **Join call**; with someone else on it, End offers **Leave the call**.
+  The tray says who you are on a call with, and WorkSuite will not restart to update during it.
+- **Offer call**, in the thread's header, offers the visitor a call that rings only you. Rows in the list say **On a
+  call · 2:14**. **Missed chats** lists visitors who asked to be called back, with their number and best time; log each
+  as Answered, No answer or Wrong number.
+- A computer without a microphone says so to WorkSuite and is not rung for calls.
+
+**Where it bites:** calls ring only people who are online, not already on a call and with a microphone; on the web
+WorkSuite they do not ring at all yet. Calls are not recorded. With an older WorkSuite server none of this shows.
+
+---
+
+## 2026-10-03 — 0.2.111: Website chats show typing and read receipts as they happen
+
+With WorkSuite's Communication 1.11.0 and its live status migration (Website Live Chat SRS ENH-WCHAT-04):
+
+- **The visitor typing** shows in the thread and on their row in the list the moment they start, and goes the moment
+  they stop or send — not on the next refresh.
+- **Colleagues typing** in the same chat are named under the thread: "Nimal and Dilini are typing…"; somebody writing a
+  note says so. The visitor never sees a note being written.
+- **Ticks on your messages**: sent, delivered to the visitor's widget, or read with the time — read only when the
+  visitor had the chat open and in front. Under the visitor's latest message: who of you has read it.
+- **Your reading counts**: while the thread is in front, the visitor's messages are marked read for you, and the
+  visitor sees "Read by" your name (when the website shows receipts). A supervisor monitoring a chat never makes it
+  read. Unread counts in the list come from your own read mark.
+
+With an older WorkSuite server, typing and the list work as before and no ticks show.
+
+---
+
+## 2026-10-03 — 0.2.110: Several staff in one website chat
+
+With WorkSuite's Communication 1.11.0 and its team chats migration, a website chat can have more than one of you in it
+(Website Live Chat SRS ENH-WCHAT-03):
+
+- **Invite a colleague**, or a whole department, from the thread's header or its **In this chat** panel. The picker
+  shows who is available, how many chats they have open and their department; offline people cannot be picked. Add a
+  note — only staff see it. Their call window rings with an **Invitation** card for two minutes; Join chat puts them
+  in the chat, and the visitor sees them arrive. If they decline or don't answer, the thread says so, with **Try someone
+  else**.
+- **Transfer** to a colleague, a department or the next available agent: **warm** — you keep answering until they
+  accept, then stay in as a participant — or **hand over now**, which takes you out at once. Their call window rings
+  with a **Transfer to you** card. The visitor sees "You're now chatting with …".
+- **Internal note**, beside Reply to visitor under the thread: a note only staff see, amber in the thread, with
+  @mentions that notify. It never reaches the visitor.
+- **In this chat** lists everybody with their role and when they joined, what is still waiting with Cancel, and Leave
+  chat. The owner can remove someone; an owner who tries to leave is offered Transfer or Close. Supervisors can
+  Monitor a chat unseen, Join it or Take it over.
+- **Invited**, a new section of Website Chats, lists invitations and transfers waiting for you. **Mine** now includes
+  chats you take part in, and a row several of you are in shows your faces.
+
+**Where it bites:** with WorkSuite's team chats, opening a chat nobody owns makes it yours, and a reply to a chat that
+already has four staff in it is refused, with the number. With an older WorkSuite server none of this shows.
+
+---
+
+## 2026-10-03 — 0.2.109: Website chat list previews, search, reply quotes and Drive files
+
+With WorkSuite's Communication 1.11.0:
+
+- **Each row says what was said last** — "You: …", the agent's name, or the visitor's own words — with a count of the
+  visitor's messages nobody has answered yet.
+- **Search finds what was said**, not only who said it, and looks in closed chats too. It asks WorkSuite once you
+  pause typing; until it answers, the list narrows by what it already shows.
+- **Reply to one message.** Hover a message and choose Reply: your answer shows the words it answers above it, in your
+  thread and in the visitor's chat window.
+- **From Drive** in the attach menu sends the visitor a copy of a Drive file — they can never open a Drive link. A file
+  the visitor cannot receive (an SVG, one over the site's size limit) or one you may not download is refused with the
+  reason.
+
+With an older WorkSuite server the rows read as in 0.2.103, search is over visitors only, and From Drive and Reply are
+refused with the server's message.
+
+---
+
+## 2026-10-03 — 0.2.108: Website chats ring on one device, and stop for a reason
+
+With WorkSuite's ring sessions (the server's Communication 1.11.0 and its migration), the call-style ringing of the
+Website Live Chat SRS works across your devices:
+
+- **One device rings.** This computer tells WorkSuite it is here to ring, every 20 seconds. While it runs it plays the
+  ring and your browser tabs stay quiet; choose the browser, or every device, in **Settings › Notifications › Website
+  chats › Where to ring**, which also says whether this computer is the one that rings. If this computer sleeps, your
+  browser takes the ring within 45 seconds. When another device has it, the call window still shows the chat, without
+  sound, and says so.
+- **Silence follows you.** Silencing a chat here silences it on your other devices too, until it is at risk — then it
+  rings again, louder, everywhere. An at-risk chat cannot be silenced.
+- **A chat given to you** shows how long until it passes on, and **Pass to next** hands it straight to the next
+  available agent (or to everybody, when nobody else is available).
+- **Why it stopped** is said: who joined, the visitor left the site before anyone joined (the chat is then in Missed
+  chats), the visitor ended it, it was closed, or the visitor was blocked.
+
+With an older WorkSuite server, ringing works as in 0.2.44.
+
+---
+
+## 2026-10-03 — 0.2.107: Answer a website visitor from the notification, or in a small window
+
+The last two desktop parts of the Website Live Chat SRS's shared chat kit (ENH-WCHAT-02):
+
+- **Reply from the notification** (RDC-15). On macOS and Windows a visitor's message arrives as a banner with a
+  reply box. What you type is sent exactly as if you had typed it in the conversation: through the outbox, so offline
+  it waits and goes once WorkSuite is back. If the server refuses it, nothing is lost — the conversation opens with
+  your words in its message box and the reason. Locked, with notification content hidden, or on Linux (whose
+  notifications have no reply box), the banner opens the conversation instead.
+- **A website chat in its own window** (RDC-16). **Open in new window** in a website conversation's header opens just
+  that conversation — the thread and Team Chat's composer in its window look, with Accept and Close — in a small
+  window you can keep on top. Opening it again brings the same window forward; **Open in main app** takes it back to
+  the Website Chats workspace. A half-written reply goes with it.
+
+---
 
 ## 0.2.106 — 2026-10-03
 
@@ -81,6 +234,8 @@ Needs the server update (Mail 1.5.0 and its migration). Not included: delegating
 ## 0.2.104 — 2026-10-03
 
 - Default app locking to Off for new users without a saved preference. Preserve saved lock choices and explicit organization rules; automatic-lock controls are inactive while locking is off (#181). Deploy the companion server policy-default update to stop the old default 15-minute enforcement.
+
+---
 
 ## 2026-10-03 — 0.2.103: The Website Chats inbox, as drawn in the Website Live Chat SRS v1.5
 

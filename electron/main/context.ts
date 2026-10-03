@@ -47,7 +47,7 @@ export interface ClockExtra {
 import type { WindowManager } from '../windows/manager';
 import type { BootState } from './boot';
 import type { SessionController } from './session';
-import type { StatusSnapshot } from '@shared/types';
+import type { StatusSnapshot, WebchatOnCall } from '@shared/types';
 import type { Vault } from '../services/vault';
 
 /** Every main-process service, for the IPC handlers. */
@@ -105,6 +105,8 @@ export interface AppContext {
   navigate: (req: NavigateRequest) => void;
   /** Website chats ringing on this computer (ENH-WCHAT-01). */
   webchat: WebchatRinger;
+  /** The website voice call the main window is on, or none: the tray says so (ENH-WCHAT-05). */
+  webchatOnCall: (call: WebchatOnCall | null) => void;
   /** Quick Ask over any app (AI Assistant). */
   quickAsk: QuickAsk;
   /** The assistant's rules here, confirming its proposals, files from this computer (DSK-2…7). */

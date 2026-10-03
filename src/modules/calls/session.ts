@@ -131,7 +131,7 @@ export const RECONNECT_MS = 30_000;
 const RETRY_MS = 3_000;
 const SPEAKER_KEY = 'ws.calls.speaker';
 
-function savedSpeaker(): string {
+export function savedSpeaker(): string {
   try {
     return localStorage.getItem(SPEAKER_KEY) ?? '';
   } catch {
@@ -140,7 +140,7 @@ function savedSpeaker(): string {
 }
 
 /** Play into this output device ('' for the system's). Not every element or system can: then the default plays. */
-async function sinkTo(el: HTMLMediaElement, id: string): Promise<void> {
+export async function sinkTo(el: HTMLMediaElement, id: string): Promise<void> {
   const sink = el as HTMLMediaElement & { setSinkId?: (id: string) => Promise<void> };
   await sink.setSinkId?.(id).catch(() => undefined);
 }

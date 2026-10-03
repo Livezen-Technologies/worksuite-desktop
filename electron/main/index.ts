@@ -17,13 +17,14 @@ import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
 import { itemApp, itemRoute, looksLikeItemLink, parseItemLink } from '@shared/item-links';
 import { linkPrefs } from '@shared/link-prefs';
 import { findMailtoInArgv, mailBodiesKept, mailListKept, mailtoRoute, parseMailto } from '@shared/mailto';
+import { websiteDraftKey, websiteReplyMutation } from '@shared/website-reply';
 import { resolveWebLink } from '@shared/links';
 import { redirectRoute } from '@shared/channels';
 import { networkStatus } from '@shared/network';
 import { pmsCached } from '@shared/pms-cache';
 import { eventsCached } from '@shared/event-desk';
 import { redactUrl } from '@shared/redact';
-import type { Bootstrap, NavigateRequest, RealtimeState, ServiceHealth, StatusSnapshot } from '@shared/types';
+import type { Bootstrap, NavigateRequest, RealtimeState, ServiceHealth, StatusSnapshot, WebchatOnCall, WebchatRingState } from '@shared/types';
 import { AccessWatch, NO_ACCESS } from './access';
 import { applyAutostart, startedHidden } from './autostart';
 import { evaluateBoot, markCleanExit, markRunning, clearCrashes, writeBootConfig } from './boot';
@@ -949,6 +950,20 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // An app the person may not open never alerts (and Mail is not polled for them).
   notifications.moduleEnabled = (n) => notificationAllowed(n, sessionCtl.visibleApps());
   notifications.isLocked = () => lock.isLocked();
+  // A reply typed in a website visitor's banner goes the way the conversation's composer sends one (RDC-15).
+  notifications.sendWebsiteReply = async (conversationId, text) => {
+    const me = sessionCtl.userId();
+    if (!me) return { delivered: false, queued: false, id: null, status: null, data: null, error: 'You are signed out.', code: 'NOT_SIGNED_IN' };
+    return queue.submit(me, websiteReplyMutation(conversationId, text));
+  };
+  notifications.websiteReplyRefused = (w, text, error) => {
+    const me = sessionCtl.userId();
+    const key = websiteDraftKey(w.conversationId);
+    // Signed out meanwhile: there is no draft to keep it in.
+    if (me) queue.saveDraft(me, key.module, key.context, text);
+    openLink(`/chat?website=${w.conversationId}`);
+    broadcast('toast', { kind: 'error', text: `Your reply to ${w.visitor} was not sent: ${error} It is in the message box to send again.` });
+  };
   queue.onChanged = () => {
     emitStatus();
     broadcast('offline:changed');
@@ -1084,6 +1099,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
     stopRemoteControl: () => void remoteControl.stopAll('stopped'),
     joinWebchat: (id) => void webchat.join(id),
+    answerWebchatCall: (id) => void webchat.answerCall(id, true),
     quickAsk: () => void quickAsk.open(),
     aiChanges: () => openAiChanges(),
     ringingSettings: () => navigate({ route: '/settings/notifications', source: 'tray' }),
@@ -1091,6 +1107,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   // ── website chats ring like calls (WS-WCHAT ENH-01, R3) ─────────────────
   const JOIN_SHORTCUT = 'CommandOrControl+Shift+J';
+  // Answers a visitor's voice call (ENH-WCHAT-05), held only while one rings.
+  const ANSWER_SHORTCUT = 'CommandOrControl+Shift+A';
+  let answerHeld = false;
+  let onCall: WebchatOnCall | null = null;
   let bounceId: number | null = null;
   let flashing = false;
   let shortcutHeld = false;
@@ -1125,6 +1145,27 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     }
     return shortcutHeld;
   };
+  const answerShortcut = (on: boolean): boolean => {
+    if (on && !answerHeld) {
+      try {
+        answerHeld = globalShortcut.register(ANSWER_SHORTCUT, () => {
+          const top = webchat.topCall();
+          if (top) void webchat.answerCall(top.id, true);
+        });
+      } catch {
+        answerHeld = false;
+      }
+    } else if (!on && answerHeld) {
+      globalShortcut.unregister(ANSWER_SHORTCUT);
+      answerHeld = false;
+    }
+    return answerHeld;
+  };
+  const trayCalls = (s: WebchatRingState) => ({
+    webchatRinging: s.chats.map((c) => ({ id: c.id, label: c.site ? `${c.visitor} · ${c.site}` : c.visitor })),
+    webchatCalls: (s.calls ?? []).map((c) => ({ id: c.id, label: c.site ? `${c.visitor} · ${c.site}` : c.visitor })),
+    webchatOnCall: onCall ? { conversationId: onCall.conversationId, label: onCall.visitor, held: onCall.held } : null,
+  });
   const webchat: WebchatRinger = new WebchatRinger({
     http,
     signedIn: () => sessionCtl.isReady(),
@@ -1138,19 +1179,31 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       const p = settings.effective();
       return (p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) || notifications.pausedUntilIso() !== null;
     },
-    open: (id) => navigate({ route: `/chat?view=website&website=${id}`, source: 'notification' }),
+    // With a call just answered, the thread joins its audio (`call=`).
+    open: (id, callId) => navigate({ route: `/chat?view=website&website=${id}${callId ? `&call=${callId}` : ''}`, source: 'notification' }),
+    // This installation as a ringing device (RING-10): the registered device's id, stable across restarts.
+    deviceId: () => {
+      const d = Number(device.current()?.id);
+      return Number.isInteger(d) && d > 0 ? `desktop-${d}` : 'desktop-unregistered';
+    },
+    focused: () => !!windows.getMain()?.isFocused(),
     onChanged: (s) => {
       broadcast('ring:changed', s);
       const prefs = settings.effective().webchatRinging;
-      if ((s.chats.length || s.outcome) && prefs.window && (!lock.isLocked() || settings.effective().lockedChatNotifications !== false)) windows.showRinger(ringerHeight(s));
+      if ((s.chats.length || s.handoffs?.length || s.calls?.length || s.outcome) && prefs.window && (!lock.isLocked() || settings.effective().lockedChatNotifications !== false)) windows.showRinger(ringerHeight(s));
       else windows.hideRinger();
-      tray.update({ webchatRinging: s.chats.map((c) => ({ id: c.id, label: c.site ? `${c.visitor} · ${c.site}` : c.visitor })) });
-      const live = s.chats.some((c) => !c.silenced);
-      attention(live);
+      tray.update(trayCalls(s));
+      const live = s.chats.some((c) => !c.silenced) || !!s.handoffs?.length;
+      attention(live || !!s.calls?.length);
       webchat.shortcut = joinShortcut(live && prefs.shortcut);
+      webchat.answerShortcut = answerShortcut(!!s.calls?.length && prefs.shortcut);
     },
   });
-  notifications.ringerShowing = () => settings.effective().webchatRinging.window && webchat.state().chats.length > 0;
+  notifications.ringerShowing = () => settings.effective().webchatRinging.window && (webchat.state().chats.length > 0 || !!webchat.state().handoffs?.length || !!webchat.state().calls?.length);
+  const webchatOnCall = (c: WebchatOnCall | null): void => {
+    onCall = c;
+    tray.update(trayCalls(webchat.state()));
+  };
 
   // ── Quick Ask over any app (AI Assistant) ───────────────────────────────
   // The keyboard helper remote control uses, started once, on first use, for copy and paste only.
@@ -1772,6 +1825,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     flushNavigation,
     navigate,
     webchat,
+    webchatOnCall,
     quickAsk,
     ai,
     office,

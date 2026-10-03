@@ -7,18 +7,15 @@ the root CHANGELOG.md.
 ## 1.13.0 — 2026-10-03
 
 - Settings › Contacts › Accounts & sync: connect, sync now, settings, log and disconnect each address-book account (#175).
-
-## 1.12.1 — 2026-10-03
-
 - Sync buttons use the shared Sync button: they spin from the click, can't be pressed twice, show Synced just now or Sync failed · Retry, and keep one width (#165).
+- Settings › Desktop › Links: open WorkSuite links in the app, Mail links in a new or the current tab, ask before running actions from links (#170).
+- Menus draw the icon column only when an item has an icon, so no blank gap before labels (#168); the shared primary New button and menu-open animation (#171, #168).
 
 ## 1.12.0 — 2026-10-03
 
-- Settings › Desktop › Links: open WorkSuite links in the app, Mail links in a new or the current tab, ask before running actions from links (#170).
+**Added**
 
-## 1.11.6 — 2026-10-03
-
-- Menus draw the icon column only when an item has an icon, so no blank gap before labels (#168); the shared primary New button and menu-open animation (#171, #168).
+- Settings › Notifications › Website chats says whether this computer rings for you, and Where to ring — this app when it is running, the browser first, or every device — kept on the server for all your devices (RING-UI-08)
 
 ## 1.11.5 — 2026-10-03
 

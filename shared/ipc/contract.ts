@@ -418,6 +418,16 @@ export const contract = {
   'ring:state': ch(none, { session: true, whileLocked: true }),
   'ring:join': ch(z.object({ id: z.number().int().positive() }), { session: true, rate: 4 }),
   'ring:silence': ch(z.object({ id: z.number().int().positive(), on: z.boolean() }), { session: true, rate: 10 }),
+  'ring:pass': ch(z.object({ id: z.number().int().positive() }), { session: true, rate: 4 }),
+  // An invitation or transfer into a website chat (ENH-WCHAT-03): Join chat / Accept, or Decline.
+  'ring:handoff': ch(z.object({ id: z.number().int().positive(), accept: z.boolean() }), { session: true, rate: 6 }),
+  // A visitor's voice call (ENH-WCHAT-05): Answer or Decline; whether this computer has a microphone; the call it is on.
+  'ring:call': ch(z.object({ id: z.number().int().positive(), accept: z.boolean() }), { session: true, rate: 6 }),
+  'ring:mic': ch(z.object({ has: z.boolean() }), { session: true, rate: 10 }),
+  'ring:onCall': ch(
+    z.object({ conversationId: z.number().int().positive(), visitor: z.string().max(120), since: z.number().int().nonnegative(), held: z.boolean() }).nullable(),
+    { session: true, rate: 20 },
+  ),
   // Multi-window docking (FR-NAV-05/07): tear a tab off into its own window, and dock it back.
   'windows:detach': ch(
     z.object({ route, title: z.string().max(200).optional(), at: z.object({ x: z.number().int(), y: z.number().int() }).optional() }),
@@ -446,6 +456,7 @@ export const contract = {
   'files:pickFolder': ch(z.object({ title: z.string().max(100).optional() }), { session: true, rate: 2 }),
 
   'media:access': ch(z.object({ kind: z.enum(['microphone', 'camera']) }), { session: true, rate: 5 }),
+  'media:screenIndicator': ch(z.object({ active: z.boolean() }), { session: true, rate: 12 }),
   'media:screenSources': ch(none, { session: true, rate: 3 }),
   'media:screenPick': ch(z.object({ id: z.string().min(1).max(200), audio: z.boolean().optional() }), { session: true, rate: 6 }),
   'media:privacySettings': ch(z.object({ pane: z.enum(['microphone', 'camera', 'screen', 'accessibility']) }), { session: true, rate: 2 }),
@@ -1240,6 +1251,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'hr:clock': { ok: true };
   'hr:break': { ok: true };
   'media:access': { granted: boolean };
+  'media:screenIndicator': void;
   'media:screenSources': ScreenSources;
   'media:screenPick': void;
   'media:privacySettings': void;
@@ -1329,6 +1341,11 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'ring:state': WebchatRingState;
   'ring:join': boolean;
   'ring:silence': void;
+  'ring:pass': boolean;
+  'ring:handoff': boolean;
+  'ring:call': boolean;
+  'ring:mic': void;
+  'ring:onCall': void;
   'windows:detach': { id: number };
   'windows:dock': void;
   'windows:toMain': void;

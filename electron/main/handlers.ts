@@ -121,6 +121,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     if (systemPreferences.getMediaAccessStatus(kind) === 'granted') return { granted: true };
     return { granted: await systemPreferences.askForMediaAccess(kind) };
   });
+  router.handle('media:screenIndicator', (input, c) => ctx.screenShare.indicate(c.sender.id, input.active));
   router.handle('media:screenSources', () => ctx.screenShare.sources());
   router.handle('media:screenPick', (input, c) => ctx.screenShare.preparePick(c.sender.id, input.id, !!input.audio));
   router.handle('media:privacySettings', async (input) => {
@@ -357,6 +358,11 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('ring:state', () => ctx.webchat.state());
   router.handle('ring:join', (input) => ctx.webchat.join(input.id));
   router.handle('ring:silence', (input) => ctx.webchat.silence(input.id, input.on));
+  router.handle('ring:pass', (input) => ctx.webchat.pass(input.id));
+  router.handle('ring:handoff', (input) => ctx.webchat.answer(input.id, input.accept));
+  router.handle('ring:call', (input) => ctx.webchat.answerCall(input.id, input.accept));
+  router.handle('ring:mic', (input) => ctx.webchat.setMic(input.has));
+  router.handle('ring:onCall', (input) => ctx.webchatOnCall(input));
 
   // ── multi-window docking (FR-NAV-05/07) ─────────────────────────────────
   const fromMain = (sender: WebContents) => {

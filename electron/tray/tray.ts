@@ -31,6 +31,10 @@ export interface TrayModel {
   remoteControl: { controller: string; paused: boolean } | null;
   /** Website chats ringing for me (RING-43): listed first, with Join; the icon shows it. */
   webchatRinging: Array<{ id: number; label: string }>;
+  /** Visitors' voice calls ringing for me (VOICE-10): first of all, with Answer. Optional for older callers. */
+  webchatCalls?: Array<{ id: number; label: string }>;
+  /** The website call this computer is on (VOICE-UI-03), with a way back to it. */
+  webchatOnCall?: { conversationId: number; label: string; held: boolean } | null;
   /** Quick Ask's shortcut while it is registered, or null (AI Assistant). */
   quickAsk: string | null;
   /** Changes the assistant proposed that wait for a decision (DSK-5): opened in the main window, never confirmed here. */
@@ -61,6 +65,8 @@ export interface TrayActions {
   pauseRemoteControl: () => void;
   stopRemoteControl: () => void;
   joinWebchat: (conversationId: number) => void;
+  /** Answer a visitor's voice call (ENH-WCHAT-05). Optional for older callers. */
+  answerWebchatCall?: (callId: number) => void;
   quickAsk: () => void;
   aiChanges: () => void;
   ringingSettings: () => void;
@@ -106,6 +112,8 @@ export class TrayService {
     updateReady: false,
     remoteControl: null,
     webchatRinging: [],
+    webchatCalls: [],
+    webchatOnCall: null,
     quickAsk: null,
     aiChanges: 0,
     apps: [],
@@ -145,7 +153,7 @@ export class TrayService {
     const hasChat = m.apps.includes('chat');
     const unread = attentionCount(hasChat ? m.unreadChat : 0, m.unreadOther);
     // A website chat ringing shows as something waiting for you, whatever else is going on (RING-43) — Chat's, so only with Chat.
-    const ringing = m.signedIn && hasChat ? m.webchatRinging.length : 0;
+    const ringing = m.signedIn && hasChat ? m.webchatRinging.length + (m.webchatCalls?.length ?? 0) : 0;
     const state = ringing ? 'unread' : trayState({ error: !!m.error, offline: m.offline && m.signedIn, monitoring: false, syncing: false, unread });
     try {
       app.setBadgeCount(m.signedIn && m.badge && process.platform !== 'darwin' ? unread : 0);
@@ -170,7 +178,8 @@ export class TrayService {
       }),
     );
     if (process.platform === 'darwin') this.tray.setTitle(ringing ? ` ${ringing} ringing` : '');
-    if (ringing) this.tray.setToolTip(`WorkSuite — ${ringing === 1 ? 'a website chat is' : `${ringing} website chats are`} ringing`);
+    if (ringing) this.tray.setToolTip(m.webchatCalls?.length ? 'WorkSuite — a website visitor is calling' : `WorkSuite — ${ringing === 1 ? 'a website chat is' : `${ringing} website chats are`} ringing`);
+    else if (m.signedIn && hasChat && m.webchatOnCall) this.tray.setToolTip(`WorkSuite — on a call with ${m.webchatOnCall.label}${m.webchatOnCall.held ? ' (on hold)' : ''}`);
     this.tray.setContextMenu(Menu.buildFromTemplate(trayMenu(m, this.actions)));
   }
 
@@ -192,6 +201,18 @@ export function trayMenu(m: TrayModel, a: TrayActions): MenuItemConstructorOptio
     items.push({ label: `${m.remoteControl.controller} ${m.remoteControl.paused ? 'had control — paused' : 'is controlling this computer'}`, enabled: false });
     if (!m.remoteControl.paused) items.push({ label: 'Pause remote control', click: a.pauseRemoteControl });
     items.push({ label: 'Stop remote control', click: a.stopRemoteControl });
+    items.push({ type: 'separator' });
+  }
+  // A visitor calling, and the call I am on (ENH-WCHAT-05): first of all.
+  if (m.signedIn && has('chat') && m.webchatCalls?.length) {
+    items.push({ label: m.webchatCalls.length === 1 ? 'Voice call ringing' : `${m.webchatCalls.length} voice calls ringing`, enabled: false });
+    for (const c of m.webchatCalls.slice(0, 3)) items.push({ label: `Answer — ${c.label}`, click: () => a.answerWebchatCall?.(c.id) });
+    items.push({ type: 'separator' });
+  }
+  if (m.signedIn && has('chat') && m.webchatOnCall) {
+    const call = m.webchatOnCall;
+    items.push({ label: `On a call with ${call.label}${call.held ? ' · on hold' : ''}`, enabled: false });
+    items.push({ label: 'Return to the call', click: () => a.openRoute(`/chat?view=website&website=${call.conversationId}`) });
     items.push({ type: 'separator' });
   }
   // Website chats are Chat's: rung, listed and joined only for somebody who has it.

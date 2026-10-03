@@ -131,6 +131,11 @@ const api = {
     state: call('ring:state'),
     join: call('ring:join'),
     silence: call('ring:silence'),
+    pass: call('ring:pass'),
+    handoff: call('ring:handoff'),
+    call: call('ring:call'),
+    mic: call('ring:mic'),
+    onCall: call('ring:onCall'),
   },
   tabs: {
     save: call('tabs:save'),
@@ -156,6 +161,7 @@ const api = {
   },
   media: {
     access: call('media:access'),
+    screenIndicator: call('media:screenIndicator'),
     screenSources: call('media:screenSources'),
     screenPick: call('media:screenPick'),
     privacySettings: call('media:privacySettings'),
