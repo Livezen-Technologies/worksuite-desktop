@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.12.0 — 2026-10-03
+
+**Added**
+
+- Settings › Notifications › Website chats says whether this computer rings for you, and Where to ring — this app when it is running, the browser first, or every device — kept on the server for all your devices (RING-UI-08)
+
 ## 1.11.5 — 2026-10-03
 
 - High contrast in Appearance; Sinhala and Tamil text for the Outlook-class Mail features (ENH-MAIL-03).
