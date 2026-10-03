@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.13.0 — 2026-10-03
+
+- Right-click any conversation (Chat, WhatsApp, Website): Open in new window, Mark read/unread, Pin (max 5), Archive with an Archived section, Favourite, Mute for 8 hours / 1 week / always, Contact info, calls, Block, Export (.txt or .zip, audited), Clear (keep starred) and Delete with 5-second Undo; group, meeting and System chats get their own actions; WhatsApp adds Assign, waiting/done and Add/Link/Open contact, Website adds Assign, Transfer and Close. Multi-select with Ctrl/Shift-click or Select mode, keyboard shortcuts, muted chats left out of the badge, and one presence source everywhere (#183).
+
 ## 1.12.0 — 2026-10-03
 
 - WhatsApp shows contact names: numbers are matched to Contacts in any format (07x, +94, spaces, dashes) and named contact first (with company), then the saved name, then ~WhatsApp name (Not in contacts), then a formatted number — in the list, header, group senders, mentions, search and tab title. Groups show their real name and member count. Add to contacts and Link to existing contact for unknown numbers, a contact side panel from the header, and live updates when a contact changes. Fixed: "is not connected" while messages arrive, "Message" previews, and photo previews (#176).

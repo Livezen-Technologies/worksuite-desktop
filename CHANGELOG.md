@@ -5,6 +5,13 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.110 — 2026-10-03
+
+- **Right-click a conversation (#183).** Chat, WhatsApp and Website chats share one menu. Direct chats: Open in new window, Mark as read/unread, Pin (up to 5, with a pin icon), Archive (into an Archived section with a count; a new message brings it back unless it's muted), Favourite, Mute for 8 hours, a week or until you turn it back on, Contact info, Start call or video call, Block (shows "You blocked … · Unblock"), Export as .txt or .zip with or without media (recorded in the audit log), Clear chat for you (keeping starred messages if you like) and Delete chat for you with a 5-second Undo. Groups add Group info, Add members, Leave and — for the owner only — Delete for everyone; meeting chats get Open meeting details, Rename and Leave; the System channel only Mark read, Archive and Mute. WhatsApp adds Assign, Mark as waiting/done and Add/Link/Open contact; Website chats add Assign, Transfer and Close.
+- Select several chats with Ctrl/⌘- or Shift-click (or Select) to mark read, archive, mute or delete them together; Ctrl+Shift+U, Ctrl+E, Ctrl+Shift+M, Ctrl+Backspace and Ctrl+Shift+P work on the focused or selected chats. Muted chats are grey and left out of the total unread badge, unless they mention you. Changes show at once, wait in the offline queue when you're offline, and sync to your other devices.
+- Online/offline is now the same in the list, the header and the details panel.
+- Needs the server update (Communication migration). Blocking does not stop calls; muting from the keyboard mutes until you turn it back on.
+
 ## 0.2.109 — 2026-10-03
 
 - **WorkSuite links open in the app (#170).** A link to a WorkSuite item — from a notification email, Apple Mail, Outlook, a browser or chat (`https://…/o/{org}/{type}/{id}` or `worksuite://…`) — opens it in the right module tab: files and folders, shared items, meetings (join screen), events (accept / decline / maybe), notes, tasks, reminders, alerts, chats, tenders, invoices, expenses and CRM records. The app comes to the front, switches organisation, waits for sign-in or unlock when needed, opens the item's existing tab if there is one, and asks before anything that changes data. No access shows **Request access** in the app; offline opens the stored copy or says "Available when online". Every link is checked against strict rules and its opening is audit-logged.
