@@ -1045,7 +1045,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('settings:get', () => ({ preferences: ctx.settings.effective(), locks: ctx.settings.locks() }));
   router.handle('settings:set', async (input) => {
     const { verificationPassword, ...choices } = input;
-    if (choices.appLockEnabled === false && ctx.settings.effective().appLockEnabled !== false) {
+    if (choices.appLockEnabled === false && ctx.settings.effective().appLockEnabled === true) {
       await verifyLockChange(() => ({ id: ctx.session.userId() ? `${ctx.session.get().server?.origin}:${ctx.session.userId()}` : null, email: ctx.session.get().user?.email ?? null }), (email, password) => ctx.auth.verifyPassword(email, password), verificationPassword);
     }
     const locked = new Set(ctx.settings.locks().map((l) => l.key));

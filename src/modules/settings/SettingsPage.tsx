@@ -134,11 +134,11 @@ function Row({ label, hint, children, lock }: { label: string; hint?: ReactNode;
   );
 }
 
-function Toggle({ k, prefs, label, hint }: { k: keyof Preferences; prefs: Preferences; label: string; hint?: string }) {
+function Toggle({ k, prefs, label, hint, disabled }: { k: keyof Preferences; prefs: Preferences; label: string; hint?: string; disabled?: boolean }) {
   const lock = isLocked(k);
   return (
     <Row label={label} hint={hint} lock={lock}>
-      <Switch label={label} checked={Boolean(prefs[k])} disabled={!!lock} onChange={(v) => void updatePrefs({ [k]: v } as Partial<Preferences>)} />
+      <Switch label={label} checked={Boolean(prefs[k])} disabled={disabled || !!lock} onChange={(v) => void updatePrefs({ [k]: v } as Partial<Preferences>)} />
     </Row>
   );
 }
@@ -539,6 +539,7 @@ export function AiSection({ prefs }: { prefs: Preferences }) {
 export function SecuritySection({ prefs }: { prefs: Preferences }) {
   const { navigate } = useTab();
   const lock = isLocked('appLockMinutes');
+  const enabled = prefs.appLockEnabled === true;
   const lockState = useStore(app, (s) => s.lock);
   const max = useStore(app, (s) => s.bootstrap?.policy.app_lock_max_minutes ?? 0);
   const [verify, setVerify] = useState<'disable' | null>(null);
@@ -555,7 +556,7 @@ export function SecuritySection({ prefs }: { prefs: Preferences }) {
       <Row label="Enable Lock Screen" lock={isLocked('appLockEnabled')}>
         <Switch
           label="Enable Lock Screen"
-          checked={prefs.appLockEnabled !== false}
+          checked={enabled}
           disabled={!!isLocked('appLockEnabled')}
           onChange={(v) => (v ? void updatePrefs({ appLockEnabled: true }) : setVerify('disable'))}
         />
@@ -570,34 +571,37 @@ export function SecuritySection({ prefs }: { prefs: Preferences }) {
           }}
         />
       ) : null}
-      <Row label="Automatically lock after" hint="Immediately locks when all WorkSuite windows lose focus; other intervals measure inactivity in WorkSuite." lock={lock}>
-        <Select
-          label="App lock"
-          value={custom ? 'custom' : String(prefs.appLockMinutes)}
-          options={options}
-          onValueChange={(v) => {
-            setCustom(v === 'custom');
-            if (v !== 'custom') void updatePrefs({ appLockMinutes: Number(v) });
-          }}
-        />
-      </Row>
-      {custom ? (
-        <Row label="Custom timeout" hint={`Whole minutes from 1 to ${max || 1440}.`}>
-          <form
-            className="flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const n = Number(minutes);
-              if (Number.isInteger(n) && n >= 1 && n <= (max || 1440)) void updatePrefs({ appLockMinutes: n });
+      <fieldset disabled={!enabled}>
+        <Row label="Automatically lock after" hint="Immediately locks when all WorkSuite windows lose focus; other intervals measure inactivity in WorkSuite." lock={lock}>
+          <Select
+            label="App lock"
+            disabled={!enabled}
+            value={custom ? 'custom' : String(prefs.appLockMinutes)}
+            options={options}
+            onValueChange={(v) => {
+              setCustom(v === 'custom');
+              if (v !== 'custom') void updatePrefs({ appLockMinutes: Number(v) });
             }}
-          >
-            <TextField label="Minutes" type="number" min={1} max={max || 1440} value={minutes} onChange={(e) => setMinutes(e.target.value)} />
-            <Button type="submit">Save</Button>
-          </form>
+          />
         </Row>
-      ) : null}
-      <Toggle k="lockOnSystemLock" prefs={prefs} label="Lock after operating-system lock" />
-      <Toggle k="lockOnSleep" prefs={prefs} label="Lock after computer sleep" />
+        {custom ? (
+          <Row label="Custom timeout" hint={`Whole minutes from 1 to ${max || 1440}.`}>
+            <form
+              className="flex gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const n = Number(minutes);
+                if (Number.isInteger(n) && n >= 1 && n <= (max || 1440)) void updatePrefs({ appLockMinutes: n });
+              }}
+            >
+              <TextField label="Minutes" type="number" min={1} max={max || 1440} value={minutes} onChange={(e) => setMinutes(e.target.value)} />
+              <Button type="submit">Save</Button>
+            </form>
+          </Row>
+        ) : null}
+        <Toggle k="lockOnSystemLock" prefs={prefs} label="Lock after operating-system lock" disabled={!enabled} />
+        <Toggle k="lockOnSleep" prefs={prefs} label="Lock after computer sleep" disabled={!enabled} />
+      </fieldset>
       <H
         title="Notifications While Locked"
         hint="Message delivery and unread counts keep working when banners are hidden. Message content is hidden by default. Organization privacy policies still apply."
