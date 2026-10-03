@@ -5,6 +5,10 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.127 — 2026-10-03
+
+- **Act on mail from the list (#161).** Hover a message for Archive, Delete, Mark read/unread, Snooze and Star, and a checkbox to select it. Right-click for Reply, Reply all, Forward, Archive, Delete, Move to folder, Mark as junk, read/unread, star, pin, snooze, flag, categories, Quick Steps, Always move mail from this sender, Block sender, Create task, Add to calendar, Save attachments to Files, Open in new window, Copy link, View original, and Select all in this folder or from this sender — handy for repeated bank alerts. Deleted Items offers Restore and Delete permanently; Junk offers Not junk. With several selected, a toolbar says "Archive 12". Archived, deleted, junked or moved mail leaves the list at once with **Undo** for 5 seconds, then goes to its own account — queued when offline, and back with Retry if the server refuses. Backspace now deletes too. Right-clicking a message that isn't selected acts on that message.
+
 ## 0.2.126 — 2026-10-03
 
 - **The AI Assistant waits to be asked (#153).** It starts minimised after launch, sign-in and every module change, never opens by itself, and shows a dot or count on its launcher when something new arrives. The launcher now also steps aside while you're writing an email, so it no longer covers Send later or the status bar — Write with AI is in the editor's toolbar. **Maximise** opens it as a side panel that pushes your work aside instead of covering it, and **⌘J / Ctrl+J** opens or minimises it (in the mail editor, ⌘J is Write with AI).
