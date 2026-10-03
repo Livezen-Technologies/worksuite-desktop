@@ -18,7 +18,7 @@ export function RecordCards({ text }: { text: string | null | undefined }) {
   const refs = recordsIn(text, origin);
   if (!refs.length) return null;
   return (
-    <div className="flex w-full flex-col gap-2 pt-1.5">
+    <div className="flex w-full flex-col gap-1.5">
       {refs.map((r) => (
         <RecordCard key={'uuid' in r ? r.uuid : `${r.kind}-${r.id}`} r={r} />
       ))}
