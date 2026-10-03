@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { apiDelete, apiGet } from '../../core/api';
 import { text } from '../../core/i18n';
 import { Icon } from '../../components/Icon';
+import { UserPicture } from '../../components/UserPicture';
 import { cx } from '../../components/ui';
 import { parseAddresses } from './sanitize';
 
@@ -15,6 +16,11 @@ import { parseAddresses } from './sanitize';
  * its members in the field; a distribution list is an address and goes in
  * as one. The value stays the plain comma list the draft and the send
  * already use, so nothing downstream changes.
+ *
+ * worksuite-desktop#213: a chip carries the person's photo when the lookup
+ * had one (initials otherwise), an address that is not one has a red
+ * outline, and one outside the sender's own domains an amber outline and a
+ * warning in its tooltip.
  */
 
 export interface Suggestion {
@@ -25,9 +31,32 @@ export interface Suggestion {
   subtitle?: string | null;
   /** A contact group's size (kind `group`). */
   members?: number;
+  /** The person's picture, as the server hands it out (`/avatars/…`). */
+  avatar?: string | null;
+  photo_url?: string | null;
 }
 
 const EMAIL = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/;
+
+export function isValidAddress(a: string): boolean {
+  return EMAIL.test(a);
+}
+
+/** The address's domain, lower case ('' when it has none). */
+export function domainOf(address: string): string {
+  const at = address.lastIndexOf('@');
+  return at < 0 ? '' : address.slice(at + 1).trim().toLowerCase();
+}
+
+/** Outside the sender's own domains: a valid address whose domain is none of `internal` (nothing is external when there are none). */
+export function isExternal(address: string, internal: string[]): boolean {
+  if (!internal.length || !EMAIL.test(address)) return false;
+  const d = domainOf(address);
+  return !internal.some((x) => x.toLowerCase() === d);
+}
+
+/** Pictures of people chosen from the suggestions, by address, for their chips (this window only). */
+const pictures = new Map<string, string>();
 
 export function initials(nameOrEmail: string): string {
   const base = nameOrEmail.includes('@') && !nameOrEmail.includes(' ') ? nameOrEmail.split('@')[0]!.replace(/[._-]+/g, ' ') : nameOrEmail;
@@ -41,7 +70,7 @@ export function addressOf(entry: string): string {
   return (m ? m[1]! : entry).trim();
 }
 
-export function RecipientField({ label, value, onChange, names, onName, autoFocus, placeholder }: { label: string; value: string; onChange: (v: string) => void; names: Record<string, string>; onName: (email: string, name: string) => void; autoFocus?: boolean; placeholder?: string }) {
+export function RecipientField({ label, value, onChange, names, onName, autoFocus, placeholder, internal = [] }: { label: string; value: string; onChange: (v: string) => void; names: Record<string, string>; onName: (email: string, name: string) => void; autoFocus?: boolean; placeholder?: string; internal?: string[] }) {
   const list = parseAddresses(value);
   const [typed, setTyped] = useState('');
   const [found, setFound] = useState<Suggestion[]>([]);
@@ -118,6 +147,8 @@ export function RecipientField({ label, value, onChange, names, onName, autoFocu
       return;
     }
     if (!s.email) return;
+    const picture = s.avatar ?? s.photo_url;
+    if (picture) pictures.set(s.email.toLowerCase(), picture);
     if (s.name) onName(s.email, s.name);
     add([s.email]);
     input.current?.focus();
@@ -137,10 +168,22 @@ export function RecipientField({ label, value, onChange, names, onName, autoFocu
       {list.map((a) => {
         const name = names[a.toLowerCase()];
         const valid = EMAIL.test(a);
+        const external = valid && isExternal(a, internal);
+        const full = name ? `${name} <${a}>` : a;
+        const tip = !valid ? text('{address} is not a valid email address', { address: a }) : external ? text('{who} is outside your organisation', { who: full }) : full;
         return (
-          <span key={a} title={name ? `${name} <${a}>` : a} className={cx('inline-flex h-7 max-w-[280px] items-center gap-1.5 rounded-full border pr-1 pl-0.5 text-[13px] font-semibold', valid ? 'border-line bg-subtle text-ink' : 'border-danger bg-danger-bg text-danger')}>
-            <span aria-hidden className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-[var(--ws-on-primary)]">{initials(name ?? a)}</span>
+          <span
+            key={a}
+            title={tip}
+            data-recipient={a}
+            data-invalid={!valid || undefined}
+            data-external={external || undefined}
+            className={cx('inline-flex h-7 max-w-[280px] items-center gap-1.5 rounded-full border pr-1 pl-0.5 text-[13px] font-semibold', !valid ? 'border-danger bg-danger-bg text-danger' : external ? 'border-warning bg-warning-bg text-ink' : 'border-line bg-subtle text-ink')}
+          >
+            {valid ? <UserPicture name={name ?? a} src={pictures.get(a.toLowerCase()) ?? null} size={24} className="shrink-0 text-[10px]" /> : <Icon name="warning" size={14} className="ml-1 shrink-0" />}
             <span className="truncate">{name ?? a}</span>
+            {external ? <Icon name="globe" size={12} className="shrink-0 text-warning" label={text('Outside your organisation')} /> : null}
+            {!valid ? <span className="sr-only">{text('Not a valid address')}</span> : null}
             <button type="button" aria-label={text('Remove {name}', { name: name ?? a })} onClick={() => remove(a)} className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-ink-3 hover:bg-surface hover:text-danger">
               <Icon name="x" size={12} />
             </button>
@@ -193,6 +236,7 @@ export function RecipientField({ label, value, onChange, names, onName, autoFocu
             remove(list[list.length - 1]!);
           }
         }}
+        aria-invalid={list.some((a) => !EMAIL.test(a)) || undefined}
         className="bare-focus h-7 min-w-[140px] flex-1 bg-transparent text-[13.5px] text-ink outline-none placeholder:text-ink-3"
       />
       {shown.length ? (
@@ -205,7 +249,13 @@ export function RecipientField({ label, value, onChange, names, onName, autoFocu
                 </button>
               ) : null}
               <button type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => choose(s)} className={cx('flex w-full items-center gap-2.5 rounded-[7px] px-2 py-1.5 text-left', i === pick ? 'bg-selection' : 'hover:bg-subtle')}>
-                <span aria-hidden className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-[var(--ws-on-primary)]">{s.kind === 'group' || s.kind === 'list' ? <Icon name="users" size={13} /> : initials(s.name || s.email || '')}</span>
+                {s.kind === 'group' || s.kind === 'list' ? (
+                  <span aria-hidden className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-[var(--ws-on-primary)]">
+                    <Icon name="users" size={13} />
+                  </span>
+                ) : (
+                  <UserPicture name={s.name || s.email || ''} src={s.avatar ?? s.photo_url ?? null} size={28} className="shrink-0" />
+                )}
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px] font-semibold text-ink">{s.name || s.email}</span>
                   <span className="block truncate text-[11.5px] text-ink-3">{[s.email, s.subtitle].filter(Boolean).join(' · ')}</span>

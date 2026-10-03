@@ -1085,6 +1085,20 @@ export const contract = {
   'offline:clearMailbox': ch(z.strictObject({ mailbox: z.string().regex(/^\d{1,12}$/) }), { session: true, sensitive: true, rate: 5 }),
   /** Mail search over what this computer keeps (lists and opened messages), for when the server cannot be reached. */
   'offline:mailSearch': ch(z.strictObject({ q: z.string().min(1).max(200) }), { session: true, rate: 30 }),
+  /**
+   * A folder's list from what this computer keeps (worksuite-desktop#208): every saved page of it, one row per
+   * message, newest first, `limit` from `offset`. `mailbox` null is every account (All Accounts, with `role`).
+   */
+  'offline:mailList': ch(
+    z.strictObject({
+      mailbox: z.string().regex(/^\d{1,12}$/).nullable(),
+      folder: z.string().min(1).max(500),
+      role: z.enum(['inbox', 'drafts', 'archive', 'sent', 'trash', 'junk']).nullable().optional(),
+      limit: z.number().int().min(1).max(500),
+      offset: z.number().int().min(0).max(100_000).optional(),
+    }),
+    { session: true, rate: 60 },
+  ),
   // Mail data files (ENH-MAIL-03 DMO-DAT-01…04): the main process picks, the worker reads, the server receives.
   'mailfile:pick': ch(z.strictObject({ mode: z.enum(['file', 'folder', 'view']) }), { session: true, rate: 2 }),
   'mailfile:scan': ch(z.strictObject({ handle: mailFileHandle }), { session: true, rate: 5 }),
@@ -1567,6 +1581,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'offline:peek': Array<{ body: string; cachedAt: string } | null>;
   'offline:clearMailbox': number;
   'offline:mailSearch': Array<Record<string, unknown>>;
+  'offline:mailList': { messages: Array<Record<string, unknown>>; total: number };
   'mailfile:pick': MailFileHandle | null;
   'mailfile:scan': { folders: DataFolder[]; unreadable: string[] };
   'mailfile:import': ImportProgress;

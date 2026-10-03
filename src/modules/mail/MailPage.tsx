@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiGetMeta, apiPost, apiPut, setDefaultMailbox, withMailbox } from '../../core/api';
 import { canOpen } from '../../core/access';
@@ -46,14 +46,15 @@ import { alertFor, chime, deviceId, freshRows, markSeen, myRules, ruleTakes } fr
 import { CreateRule, useRules } from './MailRules';
 import { CatchUp } from './CatchUp';
 import { CleanupDialog, IgnoreDialog, conversationKeyOf, ignoreConversation, ignoredKeys, redundantInThread, stopIgnoring } from './Conversations';
-import { ReadingPane, afterClose, withTab, type OpenTab } from './ReadingPane';
+import { ReadingPane, afterClose, loadTabs, saveTabs, withTab, type OpenTab } from './ReadingPane';
 import { ScheduledList } from './Scheduled';
 import { SearchView } from './SearchView';
 import { MailFileViewer } from './FileViewer';
 import { ExportDialog } from './DataFiles';
 import { MailSidebar, unreadOf, type Place } from './Sidebar';
 import { StatusBar, WaitingPanel } from './StatusBar';
-import type { ComposeSeed, Label, MailPrefs, Mailbox, MessageDetail, MessagePage, MessageRef, MessageRow } from './types';
+import type { AllRole, ComposeSeed, Label, MailPrefs, Mailbox, MessageDetail, MessagePage, MessageRef, MessageRow } from './types';
+import { FIRST_PAGE, LIST_PAGE, emptyReason, needsFill, nextListParam, readFolder, seedListFromLocal, showFocusedHint, syncingLine, type ListPageParam } from './listLoading';
 
 
 export { joinQuote, splitQuote, unquote } from './quote';
@@ -88,7 +89,7 @@ function MailWorkspace({ active }: ModuleProps) {
   };
   const msg = query.get('msg');
   const msgBox = query.get('mbx');
-  const msgFolder = query.get('mf') ?? place.folder;
+  const msgFolder = query.get('mf') ?? readFolder({}, place.folder);
   const status = useStore(app, (s) => s.status);
   const cacheDays = useStore(app, (s) => s.prefs?.mailCacheDays ?? 30);
   const networkOffline = status?.network === 'OFFLINE';
@@ -96,7 +97,8 @@ function MailWorkspace({ active }: ModuleProps) {
   const [chips, setChips] = useState<ChipId[]>([]);
   const [search, setSearch] = useState('');
   const [searching, setSearching] = useState<string | null>(null);
-  const [tabs, setTabs] = useState<OpenTab[]>([]);
+  const [tabs, setTabs] = useState<OpenTab[]>(loadTabs);
+  useEffect(() => saveTabs(tabs), [tabs]);
   const [compose, setCompose] = useState<{ seed: ComposeSeed; shown: boolean; n: number } | null>(null);
   const [adding, setAdding] = useState(false);
   const [focus, setFocus] = useState(false);
@@ -173,26 +175,37 @@ function MailWorkspace({ active }: ModuleProps) {
   const virtualOutbox = allRole === 'outbox';
 
   const listKey = ['mail', 'messages', unified ? 'unified' : effectiveBox, folder, serverFilters(filters).join(','), threaded];
-  const listQuery = (pageParam: number) =>
+  // The latest 100 at once, newest first, and 100 more at a time (worksuite-desktop#208): by the server's
+  // cursor where it gives one (a mirrored folder; All Accounts' place in each account), else by page.
+  const listQuery = ({ page, cursor }: ListPageParam) =>
     unified
-      ? { unified: 1, folder, page: pageParam, per_page: 50, ...(serverFilters(filters).length ? { filters: serverFilters(filters).join(',') } : {}) }
+      ? { unified: 1, folder, page, per_page: LIST_PAGE, ...(cursor ? { cursor } : {}), ...(serverFilters(filters).length ? { filters: serverFilters(filters).join(',') } : {}) }
       : place.label !== null
-        ? { folder, page: pageParam, per_page: 50 }
-        : withMailbox({ folder, page: pageParam, per_page: 50, ...(serverFilters(filters).length ? { filters: serverFilters(filters).join(',') } : {}), ...(threaded ? { threaded: 1 } : {}), sort: prefs.sort ?? 'date', dir: prefs.dir ?? 'desc' }, effectiveBox);
+        ? { folder, page, per_page: LIST_PAGE }
+        : withMailbox({ folder, page, per_page: LIST_PAGE, ...(cursor ? { cursor } : {}), ...(serverFilters(filters).length ? { filters: serverFilters(filters).join(',') } : {}), ...(threaded ? { threaded: 1 } : {}), sort: prefs.sort ?? 'date', dir: prefs.dir ?? 'desc' }, effectiveBox);
   const list = useInfiniteQuery({
     queryKey: listKey,
-    initialPageParam: 1,
+    initialPageParam: FIRST_PAGE,
     queryFn: ({ pageParam, signal }) => {
-      const combined = { page: pageParam, per_page: 50, ...(serverFilters(filters).length ? { filters: serverFilters(filters).join(',') } : {}) };
+      const combined = { page: pageParam.page, per_page: LIST_PAGE, ...(pageParam.cursor ? { cursor: pageParam.cursor } : {}), ...(serverFilters(filters).length ? { filters: serverFilters(filters).join(',') } : {}) };
       const byName = () => apiGetMeta<MessagePage>('/api/mail/messages', listQuery(pageParam), signal);
       return allRole ? allAccountsPage(allRole, combined, signal, byName) : byName();
     },
-    getNextPageParam: (last, pages) => (last.data.has_more ? pages.length + 1 : undefined),
+    getNextPageParam: nextListParam,
     enabled: (mailboxes.isSuccess || mailboxes.isError) && folder !== 'outbox',
   });
-  // The list's first page from this computer at once, then the server's (worksuite-desktop#162). All Accounts' folders
-  // are assembled from several answers, so they wait for the server.
-  useLocalFirst<MessagePage>(listKey, folder !== 'outbox' && !allRole && (unified || place.label !== null || !!effectiveBox) ? { path: '/api/mail/messages', query: listQuery(1) } : null, (r) => ({ pages: [r], pageParams: [1] }));
+  // The list from this computer at once — every saved page of this folder, the latest 100 — then the server's
+  // (worksuite-desktop#162, #208). All Accounts reads every account's saved pages for the role.
+  const localWhere = folder === 'outbox' || place.label !== null || view || (!unified && !effectiveBox) ? null : { mailbox: unified ? null : effectiveBox, folder, role: allRole };
+  const localWhereKey = localWhere ? JSON.stringify(localWhere) : null;
+  const listKeyId = JSON.stringify(listKey);
+  useEffect(() => {
+    if (!localWhereKey || filters.length || threaded) return;
+    void seedListFromLocal(qc, JSON.parse(listKeyId) as QueryKey, JSON.parse(localWhereKey) as { mailbox: string | null; folder: string; role: AllRole | null });
+    // The key and the place decide when to read again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qc, listKeyId, localWhereKey]);
+  useLocalFirst<MessagePage>(listKey, folder !== 'outbox' && !allRole && (unified || place.label !== null || !!effectiveBox) ? { path: '/api/mail/messages', query: listQuery(FIRST_PAGE) } : null, (r) => ({ pages: [r], pageParams: [FIRST_PAGE] }));
   const localDrafts = useLocalDrafts(active && (allRole === 'drafts' || boxes.length > 1));
   const sending = queuedSends(pending.data ?? []);
   const running = shared.running;
@@ -225,7 +238,7 @@ function MailWorkspace({ active }: ModuleProps) {
   const isTeam = !!firstPage?.data.team;
 
   const queued = useMemo(() => queuedByMessage(pending.data ?? []), [pending.data]);
-  const rowKey = (m: MessageRow) => queueKey(rowMailbox(m, effectiveBox), m.folder_slug ?? folder, m.id);
+  const rowKey = (m: MessageRow) => queueKey(rowMailbox(m, effectiveBox), readFolder(m, folder), m.id);
   // WorkSuite's states for what is listed: pins, snoozes, flags, categories, Focused moves.
   const statesScope = unified || place.label !== null ? null : effectiveBox;
   const states = useMessageStates(active && (mailboxes.isSuccess || mailboxes.isError) && folder !== 'outbox', statesScope, statesScope ? folder : null);
@@ -257,6 +270,18 @@ function MailWorkspace({ active }: ModuleProps) {
   const top = rows.filter((m) => m.pinned || m.returned);
   const groups = [...(top.length ? [{ key: 'pinned', label: text('Pinned'), rows: top, items: top.map(toItem) }] : []), ...groupRows(rows.filter((m) => !m.pinned && !m.returned), prefs.group ?? 'date').map((g) => ({ ...g, items: g.rows.map(toItem) }))];
   const flat = groups.flatMap((g) => g.items);
+  // Fewer than 100 to show because this computer narrowed what came — the Focused tab, a filter the server could not
+  // apply, the instant search, a team queue: more pages are asked for until there are 100 or the folder ends (#208).
+  const narrowed = focusOn || isTeam || !!search.trim() || !!firstPage?.data.quick_failed || filters.some((f) => !(firstPage?.data.quick ?? serverFilters(filters)).includes(f));
+  const pagesLoaded = list.data?.pages.length ?? 0;
+  const fill = active && needsFill({ shown: rows.length, hasMore: !!list.hasNextPage, fetching: list.isFetching, pages: pagesLoaded, narrowed });
+  const fetchNext = list.fetchNextPage;
+  useEffect(() => {
+    // Never restarts a page already on its way.
+    if (fill) void fetchNext({ cancelRefetch: false });
+  }, [fill, pagesLoaded, fetchNext]);
+  // Focused Inbox: how the loaded mail divides, for the hint when Focused holds almost nothing (#208).
+  const focusSplit = focusOn ? decorated.reduce((n, m) => (classifyFocus(m, focusCtx.data).focus === 'focused' ? { ...n, focused: n.focused + 1 } : { ...n, other: n.other + 1 }), { focused: 0, other: 0 }) : null;
 
   // Several selected (Ctrl/Shift-click, Ctrl+A): every action applies to each, in its own account (DMO-INB-15).
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
@@ -308,7 +333,7 @@ function MailWorkspace({ active }: ModuleProps) {
     runStep(step, ts);
     return true;
   };
-  const targetOf = (r: ListRow): Target => ({ row: r.row, mailbox: rowMailbox(r.row, effectiveBox), folder: r.row.folder_slug ?? folder });
+  const targetOf = (r: ListRow): Target => ({ row: r.row, mailbox: rowMailbox(r.row, effectiveBox), folder: readFolder(r.row, folder) });
   const selectedTargets = (fallback?: ListRow): Target[] => {
     const picked = flat.filter((r) => selection.has(r.key));
     return (picked.length ? picked : fallback ? [fallback] : []).map(targetOf);
@@ -357,7 +382,7 @@ function MailWorkspace({ active }: ModuleProps) {
   const [exporting, setExporting] = useState<{ mailbox: string; folder: string; name: string } | null>(null);
 
   // The open message: the URL names it; its tab joins the strip.
-  const current: MessageRef | null = msg ? { uid: msg, folder: msgFolder, mailbox: msgBox ?? effectiveBox } : null;
+  const current: MessageRef | null = msg ? { uid: msg, folder: msgFolder, mailbox: msgBox ?? effectiveBox, mid: query.get('mid'), midHash: query.get('mih'), uidvalidity: query.get('uv') ? Number(query.get('uv')) : null } : null;
   const currentKey = current ? queueKey(current.mailbox, current.folder, current.uid) : null;
   const known = current ? flat.find((r) => r.key === currentKey)?.row : undefined;
   if (current && currentKey && !tabs.some((t) => t.key === currentKey)) {
@@ -376,9 +401,15 @@ function MailWorkspace({ active }: ModuleProps) {
     if (next.label !== null) q.set('label', String(next.label));
     return q;
   };
+  // A listed message's whole identity (#209): its own account and folder — never a view's name — with its
+  // Message-ID and UIDVALIDITY, so the server can find it again when it has moved or been renumbered.
+  const refOfRow = (m: MessageRow): MessageRef => ({ uid: String(m.id), folder: readFolder(m, folder), mailbox: rowMailbox(m, effectiveBox), mid: m.message_id ?? null, midHash: m.message_id_hash ?? null, uidvalidity: m.uidvalidity ?? null });
   const openRef = (ref: MessageRef, reply?: 'reply' | 'reply_all' | 'forward') => {
     const q = placeQuery();
     q.set('msg', ref.uid);
+    if (ref.mid) q.set('mid', ref.mid);
+    else if (ref.midHash) q.set('mih', ref.midHash);
+    if (ref.uidvalidity) q.set('uv', String(ref.uidvalidity));
     if (reply) q.set('reply', reply === 'reply' ? '1' : reply === 'reply_all' ? 'all' : 'fwd');
     if (ref.mailbox) q.set('mbx', ref.mailbox);
     if (ref.folder !== place.folder) q.set('mf', ref.folder);
@@ -387,7 +418,7 @@ function MailWorkspace({ active }: ModuleProps) {
   const openRow = (r: ListRow) => {
     setSearching(null);
     setCompose((c) => (c ? { ...c, shown: false } : c));
-    const ref = { uid: String(r.row.id), folder: r.row.folder_slug ?? folder, mailbox: rowMailbox(r.row, effectiveBox) };
+    const ref = refOfRow(r.row);
     setSelection(new Set());
     // Open messages in windows (DMO-SHL-06): each in its own window, which reopens where it was.
     if (prefs.openIn === 'windows') return void openInWindow(windowRoute(ref), r.row.subject);
@@ -418,7 +449,7 @@ function MailWorkspace({ active }: ModuleProps) {
   const nameTab = (subject: string, from: string) => setTabs((ts) => (ts.some((t) => t.key === currentKey && (!t.subject || !t.from)) ? ts.map((t) => (t.key === currentKey ? { ...t, subject: t.subject || subject, from: t.from || from } : t)) : ts));
   const at = flat.findIndex((r) => r.key === currentKey);
   // The next few messages are fetched ahead (unread stays unread), so moving down the list opens each at once (#162).
-  const ahead = at >= 0 && !offline && active ? flat.slice(at + 1, at + 1 + PREFETCH_AHEAD).map((r) => ({ uid: String(r.row.id), folder: r.row.folder_slug ?? folder, mailbox: rowMailbox(r.row, effectiveBox) })) : [];
+  const ahead = at >= 0 && !offline && active ? flat.slice(at + 1, at + 1 + PREFETCH_AHEAD).map((r) => refOfRow(r.row)) : [];
   const aheadKey = ahead.map((r) => `${r.mailbox ?? ''}:${r.folder}:${r.uid}`).join(',');
   useEffect(() => {
     if (!aheadKey) return;
@@ -432,7 +463,7 @@ function MailWorkspace({ active }: ModuleProps) {
   };
   const star = async (r: ListRow) => {
     try {
-      await messageAction({ uid: String(r.row.id), folder: r.row.folder_slug ?? folder, mailbox: rowMailbox(r.row, effectiveBox) }, r.row.is_starred ? 'unstar' : 'star', r.row.subject);
+      await messageAction(refOfRow(r.row), r.row.is_starred ? 'unstar' : 'star', r.row.subject);
       void qc.invalidateQueries({ queryKey: ['mail'] });
       void qc.invalidateQueries({ queryKey: ['offline'] });
     } catch (e) {
@@ -679,6 +710,12 @@ function MailWorkspace({ active }: ModuleProps) {
     </div>
   ) : null;
 
+  // Why a short or empty list is so, in words (#208): headers still arriving, filters, or all caught up.
+  const syncing = syncingLine(shared.status?.accounts, unified ? included.map((b) => b.id) : effectiveBox ? [effectiveBox] : null, firstPage?.data.total ?? null);
+  const empty = emptyReason({ syncing, filtered: chips.length > 0, search: search.trim(), focusedTab: focusOn && focusTab === 'focused', otherCount: focusSplit?.other ?? 0 });
+  const focusHint = focusOn && focusTab === 'focused' && focusSplit && showFocusedHint(focusSplit.focused, focusSplit.other, !list.isLoading && !fill)
+    ? { onTurnOff: () => setPrefs({ focused: false }), onTeach: () => setFocusTab('other') }
+    : null;
   const listEl = virtualOutbox ? (
     <OutboxView active={active} pending={pending.data ?? []} onEdit={openCompose} />
   ) : folder === 'outbox' ? (
@@ -714,11 +751,14 @@ function MailWorkspace({ active }: ModuleProps) {
         }}
         hasMore={!!list.hasNextPage}
         loadingMore={list.isFetchingNextPage}
-        onMore={() => void list.fetchNextPage()}
-        notice={notice}
+        onMore={() => void list.fetchNextPage({ cancelRefetch: false })}
+        notice={notice ?? (flat.length > 0 ? syncing : null)}
+        empty={empty}
+        onClearFilters={chips.length ? () => setChips([]) : undefined}
         team={allRole === 'drafts' ? <LocalDraftRows drafts={localDrafts.data ?? []} onOpen={(d) => openCompose(d.seed)} /> : teamTabs}
         fill={pane === 'hidden' || pane === 'bottom'}
-        focusTabs={focusOn ? { value: focusTab, onChange: setFocusTab, banner: otherBanner(decorated, focusCtx.data), unread: focusUnread } : null}
+        focusTabs={focusOn ? { value: focusTab, onChange: setFocusTab, banner: otherBanner(decorated, focusCtx.data), unread: focusUnread, hint: focusHint } : null}
+        onViewSettings={() => navigate('/settings/mail?tab=layout')}
         onRowMenu={(r, x, y) => {
           // A row outside the selection: the menu is for that row alone, as in other mail apps.
           const inSelection = selection.has(r.key);
@@ -813,7 +853,7 @@ function MailWorkspace({ active }: ModuleProps) {
       toast('error', errorMessage(e));
     }
   };
-  const refOfTarget = (t: Target): MessageRef => ({ uid: String(t.row.id), folder: t.folder, mailbox: t.mailbox });
+  const refOfTarget = (t: Target): MessageRef => ({ uid: String(t.row.id), folder: t.folder, mailbox: t.mailbox, mid: t.row.message_id ?? null, midHash: t.row.message_id_hash ?? null, uidvalidity: t.row.uidvalidity ?? null });
   const copyLink = (t: Target) => {
     const link = messageLink(refOfTarget(t));
     if (!link) return void toast('error', text('Could not copy.'));
@@ -959,6 +999,23 @@ function MailWorkspace({ active }: ModuleProps) {
           onLoaded={nameTab}
           archiveTo={archiveTo}
           marks={currentRow?.row ?? null}
+          onRelocated={(to, where) => {
+            // Found in another folder, or under a new UID (#209): the list drops the old row and the tab follows it.
+            const toKey = queueKey(to.mailbox, to.folder, to.uid);
+            if (currentKey) setHidden((h) => new Set([...h, currentKey]));
+            setTabs((ts) => ts.map((t) => (t.key === currentKey ? { ...t, key: toKey, ref: to } : t)));
+            if (to.folder !== current.folder) toast('info', where ? text('This email was moved to {folder}.', { folder: where }) : text('This email was moved to another folder.'));
+            void qc.invalidateQueries({ queryKey: ['mail', 'messages'] });
+            openRef(to);
+          }}
+          onMissing={() => {
+            if (currentKey) setHidden((h) => new Set([...h, currentKey]));
+          }}
+          onFixAccount={() => navigate('/settings/mail?tab=accounts')}
+          onRefreshFolder={() => {
+            void qc.invalidateQueries({ queryKey: ['mail', 'messages'] });
+            closeMessage();
+          }}
           quickStepButtons={(quickSteps.data ?? []).map((q) => ({ id: q.id, name: q.name, icon: q.icon, run: () => runStep(q, currentRow ? [targetOf(currentRow)] : []) }))}
           stateMenu={() => menuSections(currentRow ? [targetOf(currentRow)] : current ? [{ row: { id: Number(current.uid) || 0, subject: tabs.find((t) => t.key === currentKey)?.subject ?? '', from_name: '', from_email: '', preview: '', is_read: true, is_starred: false, has_attachment: false, created_at: '' }, mailbox: current.mailbox, folder: current.folder }] : [])}
         />
@@ -1076,7 +1133,7 @@ function MailWorkspace({ active }: ModuleProps) {
           <CatchUp enabled={active && boxes.length > 0 && globalPrefs.catchUp !== false && !networkOffline} rows={folder === 'inbox' ? decorated : []} vips={(vips.data ?? []).map((v) => v.address)} states={states.data} onOpen={openRef} />
           <div className="flex min-h-0 flex-1">
             {compose?.shown ? (
-              <Compose key={compose.n} seed={compose.seed} boxes={boxes} defaultBox={current?.mailbox ?? effectiveBox ?? (defaultBox ? String(defaultBox.id) : null)} offline={offline} onClose={() => setCompose(null)} onReopen={openCompose} />
+              <Compose key={compose.n} seed={compose.seed} boxes={boxes} defaultBox={current?.mailbox ?? effectiveBox ?? (defaultBox ? String(defaultBox.id) : null)} offline={offline} onClose={() => setCompose(null)} onReopen={openCompose} onMinimise={() => setCompose((c) => (c ? { ...c, shown: false } : c))} onPopOut={(route, title) => void openInWindow(route, title)} />
             ) : (
               main
             )}
@@ -1091,7 +1148,7 @@ function MailWorkspace({ active }: ModuleProps) {
         </div>
       </div>
       <div aria-live="polite" className="sr-only">{heard.say}</div>
-      <StatusBar summary={summary} sync={shared.status} waiting={mailPending.length} zoom={prefs.zoom ?? 100} localBytes={localBytes.data ?? null} items={virtualOutbox || folder === 'outbox' ? null : (firstPage?.data.total ?? null)} notice={brokenRules ? { text: brokenRules === 1 ? text('1 rule was switched off') : text('{n} rules were switched off', { n: brokenRules }), onClick: () => navigate('/settings/mail?tab=rules') } : null} unread={allRole === 'inbox' ? unifiedUnread : null} onOpenSync={() => navigate('/settings/mail?tab=accounts')} />
+      <StatusBar summary={summary} sync={shared.status} waiting={mailPending.length} zoom={prefs.zoom ?? 100} localBytes={localBytes.data ?? null} items={virtualOutbox || folder === 'outbox' || firstPage?.data.local ? null : (firstPage?.data.total ?? null)} notice={brokenRules ? { text: brokenRules === 1 ? text('1 rule was switched off') : text('{n} rules were switched off', { n: brokenRules }), onClick: () => navigate('/settings/mail?tab=rules') } : null} unread={allRole === 'inbox' ? unifiedUnread : null} onOpenSync={() => navigate('/settings/mail?tab=accounts')} />
       {outgoing.length ? (
         <div role="status" aria-live="polite" className="pointer-events-none fixed bottom-14 left-1/2 z-40 flex -translate-x-1/2 flex-col gap-2">
           {outgoing.map((o) => (

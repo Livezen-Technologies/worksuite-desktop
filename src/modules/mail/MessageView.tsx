@@ -38,6 +38,7 @@ import { AppsPane } from './AppsPane';
 import { LinkRecordDialog, LinkedRecordChips, type LinkItem } from './recordLinks';
 import { MarkerChips, RecallDialog, ReceiptBar, ReportDialog, SmimeChip, VoteBar, VoteTally, sendReceipt } from './MessageExtras';
 import type { ComposeSeed, MailPrefs, Mailbox, MessageContext, MessageDetail, MessageRef, MessageRow } from './types';
+import { identityQuery, lookupProblem, problemDetails, problemTitle, type MovedTo } from './messageLookup';
 
 /** A PDF attachment, by its type or its name. */
 const isPdf = (a: { name: string; mime: string }) => a.mime === 'application/pdf' || /\.pdf$/i.test(a.name);
@@ -80,6 +81,14 @@ export interface MessageViewProps {
   /** The row as the list knows it, with WorkSuite's states on it. */
   marks?: MessageRow | null;
   archiveTo?: (ref: MessageRef) => Promise<{ slug: string; name: string } | 'default' | null> | 'default';
+  /** The server found the message somewhere else (moved, or renumbered): open it there (#209). */
+  onRelocated?: (to: MessageRef, folderName: string | null) => void;
+  /** The message is gone at the server: take it off the list (#209). */
+  onMissing?: () => void;
+  /** Settings › Mail › Accounts, for an account whose sign-in failed. */
+  onFixAccount?: () => void;
+  /** Ask the server for this folder's list again. */
+  onRefreshFolder?: () => void;
 }
 
 export interface ViewControls {
@@ -123,10 +132,34 @@ export function MessageView(p: MessageViewProps) {
   const darkTheme = useStore(app, (s) => s.resolvedTheme === 'dark');
   // Mark as read (DMO-INB-12): when opened (the server does it), after N seconds, when moving on, or never.
   const markRead = p.prefs.markRead ?? 'open';
+  // Retry runs the whole lookup at the server — by Message-ID in this folder, then the account's others — not the same request (#209).
+  const locate = useRef(false);
   const q = useQuery({
     queryKey: messageKey(ref),
-    queryFn: ({ signal }) => apiGetMeta<MessageDetail>(`/api/mail/messages/${ref.uid}`, withMailbox({ folder: ref.folder, ...(markRead !== 'open' ? { peek: 1 } : {}) }, ref.mailbox), signal),
+    queryFn: ({ signal }) =>
+      apiGetMeta<MessageDetail & { moved?: MovedTo | null }>(`/api/mail/messages/${ref.uid}`, withMailbox({ folder: ref.folder, ...identityQuery(ref, locate.current), ...(markRead !== 'open' ? { peek: 1 } : {}) }, ref.mailbox), signal),
   });
+  const retryLookup = () => {
+    locate.current = true;
+    void q.refetch();
+  };
+  const networkOffline = useStore(app, (s) => s.status?.network === 'OFFLINE');
+  // Found somewhere else: the reader follows it there, and the list drops the old row (#209).
+  const moved = (q.data?.data as { moved?: MovedTo | null } | undefined)?.moved ?? null;
+  const onRelocated = p.onRelocated;
+  useEffect(() => {
+    if (!moved) return;
+    const to: MessageRef = { ...ref, uid: String(moved.uid), folder: moved.folder };
+    qc.setQueryData(messageKey(to), q.data);
+    onRelocated?.(to, moved.name ?? null);
+    // Once per answer that says it moved.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moved?.folder, moved?.uid]);
+  const problem = q.error ? lookupProblem(q.error, networkOffline || p.offline) : null;
+  const onMissing = p.onMissing;
+  useEffect(() => {
+    if (problem === 'gone') onMissing?.();
+  }, [problem, onMissing]);
   // Opened or fetched ahead before: shown from this computer at once, while the server is asked (worksuite-desktop#162).
   const refKey = `${ref.mailbox ?? ''}:${ref.folder}:${ref.uid}`;
   // eslint-disable-next-line react-hooks/exhaustive-deps -- the message is named by refKey; the object is new each render
@@ -267,7 +300,7 @@ export function MessageView(p: MessageViewProps) {
     if (!m) return;
     if (mode === 'forward') return p.onReply({ mode, subject: /^fwd?:/i.test(m.subject) ? m.subject : `Fwd: ${m.subject}`, quote, mailbox: ref.mailbox });
     const others = mode === 'reply_all' ? [m.from_email, ...m.to].filter((a, i, all) => a && all.indexOf(a) === i && a.toLowerCase() !== (p.account?.email ?? '').toLowerCase()) : [m.from_email];
-    p.onReply({ mode, to: others.join(', '), cc: mode === 'reply_all' ? m.cc.join(', ') : undefined, subject: re(m.subject), quote, inReplyTo: m.message_id, mailbox: ref.mailbox });
+    p.onReply({ mode, to: others.join(', '), cc: mode === 'reply_all' ? m.cc.join(', ') : undefined, subject: re(m.subject), quote, inReplyTo: m.message_id, mailbox: ref.mailbox, source: ref });
   };
   const addContact = async () => {
     if (!m) return;
@@ -379,8 +412,9 @@ export function MessageView(p: MessageViewProps) {
     }
   });
 
-  if (q.isLoading) return <Spinner />;
-  if (q.error) return <div className="p-6"><ErrorNote error={q.error} onRetry={() => void q.refetch()} /></div>;
+  if (q.isLoading) return <MessagePending row={p.marks ?? null} />;
+  if (q.error && problem)
+    return <MessageProblem problem={problem} error={q.error} msgRef={ref} row={p.marks ?? null} retrying={q.isFetching} onRetry={retryLookup} onFixAccount={p.onFixAccount} onRefreshFolder={p.onRefreshFolder} />;
   if (!m || !clean) return null;
 
   const fromCache = !!q.data?.offline;
@@ -1010,5 +1044,88 @@ export function SourceDialog({ msgRef, onClose }: { msgRef: MessageRef; onClose:
         {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} /> : <pre className="max-h-[60vh] overflow-auto rounded-[8px] bg-subtle p-3 font-mono text-[12px] leading-relaxed whitespace-pre-wrap text-ink selectable">{q.data?.source}</pre>}
       </div>
     </Modal>
+  );
+}
+
+/** The header a list row already has, shown while the body downloads or when only it is here (#209). */
+function SavedHeader({ row }: { row: MessageRow }) {
+  return (
+    <div data-saved-header className="flex items-start gap-3">
+      <Avatar name={row.from_name || row.from_email} size={36} />
+      <div className="min-w-0 flex-1">
+        <h2 className="truncate text-[17px] font-bold text-ink selectable">{row.subject || text('(no subject)')}</h2>
+        <p className="truncate text-[13px] text-ink-2">
+          {row.from_name || row.from_email}
+          {row.from_name && row.from_email ? <span className="text-ink-3"> &lt;{row.from_email}&gt;</span> : null}
+        </p>
+        <p className="text-[12px] text-ink-3">{whenLabel(row.created_at)}</p>
+        {row.preview ? <p className="mt-2 text-[13px] text-ink-2">{row.preview}</p> : null}
+        {row.has_attachment ? (
+          <p className="mt-1 flex items-center gap-1 text-[12px] text-ink-3">
+            <Icon name="paperclip" size={13} />
+            {text('Has attachments')}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/** Downloading: the saved header at once, the body as a placeholder until it arrives. */
+function MessagePending({ row }: { row: MessageRow | null }) {
+  if (!row) return <Spinner />;
+  return (
+    <div className="p-6" role="status" aria-label={text('Downloading…')}>
+      <SavedHeader row={row} />
+      <div className="mt-5 flex flex-col gap-2" aria-hidden>
+        <span className="h-3 w-11/12 animate-pulse rounded bg-subtle motion-reduce:animate-none" />
+        <span className="h-3 w-4/5 animate-pulse rounded bg-subtle motion-reduce:animate-none" />
+        <span className="h-3 w-2/3 animate-pulse rounded bg-subtle motion-reduce:animate-none" />
+      </div>
+      <p className="mt-3 text-[12.5px] text-ink-3">{text('Downloading…')}</p>
+    </div>
+  );
+}
+
+/** Why a message did not open, each case with its own way forward (#209). */
+function MessageProblem({ problem, error, msgRef, row, retrying, onRetry, onFixAccount, onRefreshFolder }: { problem: ReturnType<typeof lookupProblem>; error: unknown; msgRef: MessageRef; row: MessageRow | null; retrying: boolean; onRetry: () => void; onFixAccount?: () => void; onRefreshFolder?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const details = problemDetails(error, msgRef);
+  const tone = problem === 'offline' ? 'border-[var(--ws-note-line)] bg-[var(--ws-note-bg)] text-ink' : 'border-line bg-danger-bg text-danger';
+  return (
+    <div className="p-6" data-message-problem={problem}>
+      {row && (problem === 'offline' || problem === 'signin') ? (
+        <div className="mb-4">
+          <SavedHeader row={row} />
+        </div>
+      ) : null}
+      <div role="alert" className={cx('flex flex-col gap-2 rounded-[10px] border px-3 py-2.5 text-[13px]', tone)}>
+        <span className="flex items-center gap-2 font-semibold">
+          <Icon name={problem === 'offline' ? 'wifi-off' : 'alert'} size={15} />
+          {problemTitle(problem)}
+        </span>
+        {problem === 'gone' ? <span className="text-[12.5px] text-ink-2">{text('It is no longer in this folder or any other folder of the account. It has been taken off the list.')}</span> : null}
+        <span className="flex flex-wrap items-center gap-2">
+          {problem === 'signin' && onFixAccount ? <Button size="sm" variant="primary" onClick={onFixAccount}>{text('Fix account')}</Button> : null}
+          {problem === 'gone' && onRefreshFolder ? <Button size="sm" variant="primary" onClick={onRefreshFolder}>{text('Refresh folder')}</Button> : null}
+          {problem !== 'gone' ? (
+            <Button size="sm" variant="secondary" onClick={onRetry} disabled={retrying}>
+              {retrying ? text('Looking for it…') : text('Retry')}
+            </Button>
+          ) : null}
+          {problem === 'server' ? (
+            <>
+              <Button size="sm" variant="secondary" onClick={() => void navigator.clipboard?.writeText(details).then(() => toast('success', text('Copied')), () => toast('error', text('Could not copy.')))}>
+                {text('Copy')}
+              </Button>
+              <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="text-[12.5px] font-semibold underline">
+                {open ? text('Hide technical details') : text('Technical details')}
+              </button>
+            </>
+          ) : null}
+        </span>
+        {problem === 'server' && open ? <pre data-technical-details className="overflow-auto rounded-[6px] bg-surface p-2 font-mono text-[11.5px] whitespace-pre-wrap text-ink selectable">{details}</pre> : null}
+      </div>
+    </div>
   );
 }

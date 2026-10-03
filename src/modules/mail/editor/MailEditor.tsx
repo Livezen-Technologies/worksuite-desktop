@@ -191,6 +191,15 @@ export interface MailEditorProps {
   imageMaxBytes?: number;
   /** More tool groups after the editor's own. */
   extraGroups?: ToolGroup[];
+  /** Tool groups before the editor's own (the composer's actions, in one row on a wide screen). */
+  leadingGroups?: () => ToolGroup[];
+  /**
+   * The editor takes all the height it is given (worksuite-desktop#213): the
+   * toolbar stays put and the text scrolls inside, with `below` (the quoted
+   * email) scrolling with it. Drawn flat, without the card's border.
+   */
+  fill?: boolean;
+  below?: ReactNode;
   /** Puts HTML in at the caret (or at the end), for tools outside the editor. */
   insertRef?: React.MutableRefObject<((html: string) => void) | null>;
 }
@@ -201,7 +210,7 @@ const SIGNATURE_TOOLS = new Set(['undo', 'redo', 'font', 'size', 'bold', 'italic
 type Panel = 'link' | 'colour' | 'highlight' | 'table' | 'emoji' | 'chars' | 'image-url' | null;
 type Dialog = 'table' | 'button' | 'crop' | 'drive' | null;
 
-export function MailEditor({ value, onChange, clean, label, placeholder, editorRef, autoFocus, onFiles, aiSections, mergeFields, onMeetingLink, onAttachInstead, offline, minHeight = 260, className, footer, variant = 'compose', imageMaxBytes, extraGroups, insertRef }: MailEditorProps) {
+export function MailEditor({ value, onChange, clean, label, placeholder, editorRef, autoFocus, onFiles, aiSections, mergeFields, onMeetingLink, onAttachInstead, offline, minHeight = 260, className, footer, variant = 'compose', imageMaxBytes, extraGroups, leadingGroups, fill, below, insertRef }: MailEditorProps) {
   const signature = variant === 'signature';
   const box = useRef<HTMLDivElement | null>(null);
   const wrap = useRef<HTMLDivElement | null>(null);
@@ -763,8 +772,9 @@ export function MailEditor({ value, onChange, clean, label, placeholder, editorR
       : []),
   ];
 
-  const groups: ToolGroup[] = [...allGroups, ...(extraGroups ?? [])];
-  const extraIds = new Set((extraGroups ?? []).flatMap((g) => g.items.map((i) => i.id)));
+  const leading = leadingGroups?.() ?? [];
+  const groups: ToolGroup[] = [...leading, ...allGroups, ...(extraGroups ?? [])];
+  const extraIds = new Set([...(extraGroups ?? []), ...leading].flatMap((g) => g.items.map((i) => i.id)));
   const keepTool = (id: string) => (signature ? SIGNATURE_TOOLS.has(id) || extraIds.has(id) : id !== 'divider');
 
   /** The keys (worksuite-desktop#188); they stop here so the app's own (Mod+K is Search) do not also run. */
@@ -902,8 +912,8 @@ export function MailEditor({ value, onChange, clean, label, placeholder, editorR
   const handle = picked ? frameOf(picked) : null;
 
   return (
-    <div className={cx('relative flex flex-col rounded-[10px] border border-line bg-surface transition-shadow focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25', className)}>
-      <div className="sticky top-0 z-10 flex flex-col rounded-t-[10px] border-b border-line bg-surface">
+    <div data-editor-fill={fill || undefined} className={cx(fill ? 'relative flex min-h-0 flex-1 flex-col bg-surface' : 'relative flex flex-col rounded-[10px] border border-line bg-surface transition-shadow focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25', className)}>
+      <div className={cx('z-10 flex shrink-0 flex-col border-b border-line bg-surface', fill ? '' : 'sticky top-0 rounded-t-[10px]')}>
         <div className="flex min-w-0 items-center px-1.5 py-1">
           <ToolbarRow groups={groups} keep={keepTool} label={text('{label} formatting', { label })} request={request} className="min-w-0 flex-1" />
         </div>
@@ -1002,7 +1012,8 @@ export function MailEditor({ value, onChange, clean, label, placeholder, editorR
           </div>
         ) : null}
       </div>
-      <div ref={wrap} data-editor-frame className="relative flex flex-1 flex-col">
+      <ScrollIf fill={fill} below={below}>
+      <div ref={wrap} data-editor-frame className={cx('relative flex flex-1 flex-col', fill && 'shrink-0')}>
         {empty && placeholder ? <span aria-hidden className="pointer-events-none absolute top-4 left-5 text-[14.5px] text-ink-3">{placeholder}</span> : null}
         <div
           ref={(el) => {
@@ -1118,6 +1129,7 @@ export function MailEditor({ value, onChange, clean, label, placeholder, editorR
           </>
         ) : null}
       </div>
+      </ScrollIf>
       {footer}
       <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" multiple hidden aria-hidden onChange={(e) => void insertImages(fileList(e.target.files)).then(() => (e.target.value = ''))} />
       <input
@@ -1177,6 +1189,24 @@ export function MailEditor({ value, onChange, clean, label, placeholder, editorR
         />
       ) : null}
       {dialog === 'drive' ? <DriveFilePicker title={text('Insert a picture from Files')} confirmLabel={text('Insert')} onChoose={(f) => void fromDrive(f)} onClose={() => setDialog(null)} /> : null}
+    </div>
+  );
+}
+
+/** The text's own scroll area when the editor fills its space; otherwise the text as it is, with `below` after it. */
+function ScrollIf({ fill, below, children }: { fill?: boolean; below?: ReactNode; children: ReactNode }) {
+  if (!fill) {
+    return (
+      <>
+        {children}
+        {below}
+      </>
+    );
+  }
+  return (
+    <div data-editor-scroll className="flex min-h-0 flex-1 flex-col overflow-y-auto scroll-thin">
+      {children}
+      {below}
     </div>
   );
 }

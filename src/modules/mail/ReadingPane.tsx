@@ -30,6 +30,36 @@ export function withTab(tabs: OpenTab[], tab: OpenTab, activeKey: string | null)
   return next;
 }
 
+/**
+ * The reading pane's tabs are kept on this computer (worksuite-desktop#209), each with the message's whole
+ * identity (account, folder, UID, UIDVALIDITY, Message-ID), so they come back after a restart and still open
+ * after a re-sync renumbered the folder: the server finds the message again by its Message-ID.
+ */
+export const TABS_STORAGE_KEY = 'ws.mail.tabs.v1';
+
+function isTab(t: unknown): t is OpenTab {
+  const x = t as OpenTab | null;
+  return !!x && typeof x.key === 'string' && typeof x.subject === 'string' && typeof x.from === 'string' && !!x.ref && typeof x.ref.uid === 'string' && typeof x.ref.folder === 'string' && (x.ref.mailbox === null || typeof x.ref.mailbox === 'string');
+}
+
+export function loadTabs(): OpenTab[] {
+  try {
+    const raw = window.localStorage.getItem(TABS_STORAGE_KEY);
+    const v = raw ? (JSON.parse(raw) as unknown) : [];
+    return Array.isArray(v) ? v.filter(isTab).slice(0, MAX_TABS) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveTabs(tabs: OpenTab[]): void {
+  try {
+    window.localStorage.setItem(TABS_STORAGE_KEY, JSON.stringify(tabs.slice(0, MAX_TABS)));
+  } catch {
+    // Storage blocked: the tabs simply last as long as the window.
+  }
+}
+
 /** Which tab shows after closing one: its right-hand neighbour, else the left. */
 export function afterClose(tabs: OpenTab[], key: string, activeKey: string | null): { tabs: OpenTab[]; active: string | null } {
   const at = tabs.findIndex((t) => t.key === key);
