@@ -114,6 +114,16 @@ export interface MessageRow {
   team?: TeamState;
   /** A search result's files, named from WorkSuite's copy (search only). */
   attachments?: Attachment[];
+  /** WorkSuite's states (GET api/mail/states), put on the row by the list. */
+  pinned?: boolean;
+  /** Back from snooze within the last day and still unread: on top. */
+  returned?: boolean;
+  flag?: { start_at: string | null; due_at: string | null; reminder_at: string | null; completed_at: string | null; task_id: number | null } | null;
+  categories?: Array<{ id: number; name: string; colour: string }>;
+  /** Moved by hand to a Focused Inbox tab. */
+  focus?: 'focused' | 'other';
+  /** In the Snoozed view: when it comes back. */
+  snoozed_until?: string | null;
 }
 
 export interface MessagePage {
@@ -169,8 +179,43 @@ export interface MessageSecurity {
 }
 
 export interface MessageContext {
-  sender: { email: string; name: string | null; contact_id: number | null; user_id: number | null; is_colleague: boolean; company: string | null } | null;
+  sender: {
+    email: string;
+    name: string | null;
+    contact_id: number | null;
+    user_id: number | null;
+    is_colleague: boolean;
+    company: string | null;
+    job_title?: string | null;
+    department?: string | null;
+    phone?: string | null;
+    mobile?: string | null;
+    is_customer?: boolean;
+    is_vip?: boolean;
+    client_id?: number | null;
+  } | null;
+  /** Recent mail with the sender, newest first. */
+  history?: { total: number; first: string | null; last: string | null; messages: Array<{ id: number; subject: string; at: string; is_read: boolean; has_attachment: boolean; folder: string | null; slug: string | null }> };
+  related?: { meetings?: Array<{ id: number; title: string; at: string | null; status: string | null }>; tasks?: Array<{ id: number; title: string; status: string | null; due: string | null }> };
   security: MessageSecurity;
+  /**
+   * A WorkSuite notification email's item (#170): the X-WorkSuite-Item header as received, and whether the server
+   * found the message genuinely from WorkSuite (its sender, SPF, DKIM and DMARC). Absent for other mail.
+   */
+  worksuite_item?: { header: string; verified: boolean } | null;
+  /** What the message asks of its reader, from its headers (ENH-MAIL-03 P4); absent from an older server. */
+  markers?: MessageMarkers;
+}
+
+export interface MessageMarkers {
+  /** Voting buttons (DMO-CMP-12). */
+  vote: string[];
+  /** Who asked for a read receipt (DMO-CMP-11). */
+  read_receipt_to: string | null;
+  /** S/MIME, as the message says — checked against its bytes before anything is claimed (DMO-SEC-05). */
+  smime: 'signed' | 'encrypted' | null;
+  sensitivity: 'personal' | 'private' | 'confidential' | null;
+  importance: 'high' | 'low' | null;
 }
 
 /** GET /api/mail/views: the sidebar's numbers. Null is "not counted", never zero. */
@@ -191,13 +236,108 @@ export interface SyncMailbox {
   last_sync_at: string | null;
 }
 
+/** One account's row in the shared sync status (ENH-MAIL-03 v1.1 DMO-SYN). */
+export interface SyncAccount {
+  mailbox: number;
+  email: string;
+  name: string;
+  /** In All Accounts (and Sync all). */
+  included: boolean;
+  paused: boolean;
+  mode: 'push' | 'interval' | 'manual' | string;
+  interval_min: number;
+  /** The last successful sync — never a failed attempt. */
+  last_ok_at: string | null;
+  last_attempt_at: string | null;
+  last_result: 'ok' | 'failed' | 'partial' | 'running' | 'never' | string;
+  error_code: string | null;
+  /** In plain words: "Password or app password rejected", "Google sign-in expired — sign in again". */
+  error: string | null;
+  running: boolean;
+  mirror: boolean;
+  pushed: boolean;
+  folders: number;
+  folders_done: number;
+  /** A run is going now (`running` is also true while a first sync is still building). */
+  syncing_now?: boolean;
+  /** Every folder's headers are in (#190). */
+  complete?: boolean;
+  /** Messages mirrored, and bodies kept, on the WorkSuite server. */
+  messages?: number;
+  bodies?: number;
+}
+
+export interface SyncOverall {
+  state: 'up_to_date' | 'syncing' | 'attention' | 'paused' | string;
+  syncing: number;
+  total: number;
+  last_ok_at: string | null;
+  failed: number[];
+  stale: number[];
+  stale_minutes: number;
+}
+
 export interface SyncStatus {
   enabled: boolean;
   mailboxes: SyncMailbox[];
+  /** An older server sends neither. */
+  accounts?: SyncAccount[];
+  overall?: SyncOverall;
+}
+
+/** One run in an account's sync log (GET mailboxes/{id}/sync-log). */
+export interface SyncRun {
+  id: number;
+  started_by: string;
+  started_at: string | null;
+  finished_at: string | null;
+  duration_ms: number | null;
+  result: string;
+  folders: number;
+  folders_total: number;
+  added: number;
+  changed: number;
+  removed: number;
+  error_code: string | null;
+  error: string | null;
+  /** Message bodies the run downloaded (#190; absent from older servers). */
+  bodies?: number;
+  /** Folders that failed in this run. */
+  errors?: number;
+  /** One entry per folder, in the order the run took them (#190). */
+  details?: SyncRunFolder[];
+}
+
+/** One folder's part in a sync run (GET mailboxes/{id}/sync-log, #190). */
+export interface SyncRunFolder {
+  folder: string;
+  path: string;
+  role: string | null;
+  /** ok · pending (more to fetch next run) · not_reached (out of time) · error. */
+  status: 'ok' | 'pending' | 'not_reached' | 'error' | string;
+  added: number;
+  changed: number;
+  removed: number;
+  ms?: number;
+  error?: string;
+  /** "unchanged": the server said nothing had moved. */
+  note?: string;
+}
+
+/** The All Accounts folders (DMO-ALL-01), in the order the pane lists them. */
+export type AllRole = 'inbox' | 'drafts' | 'outbox' | 'archive' | 'sent' | 'snoozed' | 'trash' | 'junk';
+
+/** GET views/all/counts. */
+export interface AllCounts {
+  roles: Record<AllRole, { count: number | null; kind: 'unread' | 'total' | 'none'; mailboxes: Array<{ id: number; count: number | null; folder: string | null; source: string | null; ambiguous: boolean }> }>;
+  unknown: string[];
+  partial: boolean;
 }
 
 /** The list's layout, kept on the server (GET/PUT /api/mail/prefs). */
 export interface MailPrefs {
+  /** My Day on the right of Mail (DMO-TSK-04). */
+  todoPane?: boolean;
   view?: 'classic' | 'compact' | 'super' | 'table';
   pane?: 'right' | 'bottom' | 'hidden';
   sort?: SortKey;
@@ -211,10 +351,58 @@ export interface MailPrefs {
   tabs?: boolean;
   previews?: boolean;
   darkBody?: boolean;
+  /** Warn when an account has not synced successfully for this many minutes (DMO-SYN-06; 15…1440). */
+  staleMinutes?: number;
+  /** Show a desktop notification when an account's sync fails. */
+  notifySyncFailure?: boolean;
+  /** Focused Inbox on (default) or off, and the accounts it is off for (DMO-INB-01). */
+  focused?: boolean;
+  focusedOff?: number[];
+  /** Keyboard scheme (DMO-KEY-01) and the keys someone rebound (DMO-KEY-02). */
+  keyScheme?: 'worksuite' | 'outlook' | 'gmail';
+  keyBindings?: Record<string, string>;
+  /** Command bar: one row with an overflow, or grouped labelled buttons (DMO-SHL-03); commands pinned to it. */
+  commandBar?: 'simplified' | 'classic';
+  commandPins?: string[];
+  /** Open messages in tabs, windows or both (DMO-SHL-06). */
+  openIn?: 'tabs' | 'windows' | 'both';
+  /** Mark as read: when opened, after a delay, when the selection changes, or never (DMO-INB-12). */
+  markRead?: 'open' | 'delay' | 'change' | 'never';
+  /** Senders whose pictures are always shown, through WorkSuite's image proxy (DMO-RD-02). */
+  imageSenders?: string[];
+  /** Answering a read-receipt request (DMO-CMP-11): ask each time (the default), always, or never. */
+  readReceipts?: 'ask' | 'always' | 'never';
+  markReadDelay?: number;
+  /** Favourites in the folder pane: "box:folder" keys and smart views (DMO-NAV-01). */
+  favorites?: string[];
+  /** View settings remembered per folder (DMO-INB-16). */
+  folderViews?: Record<string, Partial<Pick<MailPrefs, 'view' | 'pane' | 'sort' | 'dir' | 'group' | 'toolbar'>>>;
+  /** First run: "Coming from Outlook?" answered (WF-DO12). */
+  firstRun?: 'done' | 'outlook' | 'skipped';
+  /** Conditional formatting of list rows (DMO-INB-18). */
+  formatRules?: FormatRule[];
+  /** Senders always shown as plain text (DMO-RD-09). */
+  plainTextSenders?: string[];
+  /** The Apps pane beside the message (DMO-INT-01). */
+  appsPane?: boolean;
+  /** Catch up after an absence (DMO-AI-01): on unless turned off. */
+  catchUp?: boolean;
+  /** Immersive reader settings (DMO-RD-04). */
+  immersive?: { size?: number; spacing?: 'normal' | 'wide'; width?: 'narrow' | 'wide'; focusLine?: boolean };
+}
+
+/** "When the row is from x / says y / has category z / is unread → colour, bold" (DMO-INB-18). */
+export interface FormatRule {
+  id: string;
+  when: 'from' | 'subject' | 'category' | 'unread' | 'flagged' | 'important';
+  value: string;
+  colour: 'red' | 'orange' | 'green' | 'blue' | 'teal' | null;
+  bold: boolean;
+  enabled: boolean;
 }
 
 export type SortKey = 'date' | 'sender' | 'subject' | 'size' | 'read' | 'attachment' | 'flag' | 'star';
-export type GroupKey = 'none' | 'date' | 'sender' | 'folder' | 'label' | 'priority';
+export type GroupKey = 'none' | 'date' | 'sender' | 'folder' | 'label' | 'priority' | 'conversation';
 
 export interface LocalMailbox {
   id: number;
@@ -249,7 +437,57 @@ export interface Signature {
   id: number;
   name: string;
   html: string;
+  /** The html with {name}, {title}, {phone}, {email} filled from the profile (newer servers). */
+  filled?: string;
   is_default: boolean;
+  /** The account it belongs to; null or absent: every account (DMO-CMP-06). */
+  mailbox?: number | null;
+  default_new?: boolean;
+  default_reply?: boolean;
+  /** worksuite-desktop#166 (newer servers): the plain-text version. */
+  text?: string;
+  /** personal, or the organisation's (made by an administrator). */
+  scope?: 'personal' | 'company';
+  /** An organisation signature people use with their own details and cannot change. */
+  locked?: boolean;
+  editable?: boolean;
+  /** hosted: pictures by their public WorkSuite link; embedded: inside the message (cid:). */
+  image_mode?: 'hosted' | 'embedded';
+  dark_logo?: string | null;
+  images?: string[];
+  variables_used?: string[];
+  /** Embedded mode: each hosted picture's address and the picture as a data: URL. */
+  embedded?: Record<string, string>;
+  updated_at?: string | null;
+}
+
+/** Which signature an account uses (mailbox null: every account without its own choice). */
+export interface SignatureSetting {
+  mailbox: number | null;
+  new_id: number | null;
+  /** null: no signature on replies and forwards. */
+  reply_id: number | null;
+  /** above_quote: below the reply, above the quoted message; below_quote: at the very end. */
+  placement: 'above_quote' | 'below_quote';
+}
+
+export interface SignatureTemplate {
+  id: number;
+  name: string;
+  html: string;
+  scope: 'personal' | 'company';
+  editable: boolean;
+}
+
+/** GET /api/mail/signatures: older servers send only `signatures`. */
+export interface SignaturesData {
+  signatures: Signature[];
+  settings?: SignatureSetting[];
+  templates?: SignatureTemplate[];
+  values?: Record<string, string>;
+  details?: Record<string, string>;
+  assets?: { social_base: string; social: string[] };
+  can_manage_company?: boolean;
 }
 
 /** A message's address: which mailbox, which folder, which uid. */
@@ -270,4 +508,6 @@ export interface ComposeSeed {
   quote?: string;
   inReplyTo?: string;
   mailbox?: string | null;
+  /** A template to put in once it has loaded (a Quick Step's reply with template). */
+  templateId?: number;
 }

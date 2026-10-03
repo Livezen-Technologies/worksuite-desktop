@@ -18,6 +18,7 @@ import { eventKey, WeekGrid } from './WeekGrid';
 import { SidePanel } from '../../components/SidePanel';
 import { Checkbox } from '../../components/Checkbox';
 import { ConflictDialog, checkConflicts, type ConflictResult } from './conflicts';
+import { PrimaryActionButton } from '../../components/PrimaryAction';
 
 const VIEWS: Array<[View, string]> = [
   ['day', 'Day'],
@@ -119,7 +120,7 @@ export default function CalendarPage(_props: ModuleProps) {
   const want = linked ? `event:${linked}` : wantNew ? 'new' : null;
   if (want && handled !== want && (want === 'new' ? canOpenApp('calendar', visible) && !offline : linkedEvent.data)) {
     setHandled(want);
-    setDrawer(want === 'new' ? { event: null, draft: { ...nextDraft(), title: (query.get('title') ?? '').slice(0, 200) || undefined } } : { event: { ...linkedEvent.data!, source: 'event' }, draft: null });
+    setDrawer(want === 'new' ? { event: null, draft: { ...nextDraft(), title: (query.get('title') ?? '').slice(0, 200) || undefined, people: (query.get('people') ?? '').split(',').map((a) => a.trim()).filter((a) => /^[^\s@]+@[^\s@]+$/.test(a)).slice(0, 50), description: (query.get('description') ?? '').slice(0, 2000) || undefined } } : { event: { ...linkedEvent.data!, source: 'event' }, draft: null });
   }
 
   const canCreate = canOpenApp('calendar', visible);
@@ -280,9 +281,7 @@ export default function CalendarPage(_props: ModuleProps) {
     <div className="relative flex h-full bg-surface text-[13px]">
       <SidePanel id="calendar" label="the calendars">
         <aside aria-label="Calendars" className="flex w-[250px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-line px-3 py-3.5 scroll-thin">
-          <button type="button" data-guide="calendar.new-event" disabled={!canCreate || offline} onClick={newEvent} title="New event (N)" className="flex h-[38px] shrink-0 items-center justify-center gap-1.5 rounded-[9px] bg-primary font-bold text-white hover:bg-primary-hover">
-            <Icon name="plus" size={16} /> New event
-          </button>
+          <PrimaryActionButton data-guide="calendar.new-event" disabled={!canCreate || offline} label="New event" shortcut="N" onClick={newEvent} />
           <MiniMonth month={mini} today={today} range={view === 'month' ? [] : days} selected={date} onMonth={(n) => setMini(addMonths(mini, n))} onPick={(x) => set(view === 'month' ? 'day' : view, x)} />
           <div className="flex flex-col gap-[5px]">
             <b className="text-[11px] tracking-[0.5px] text-ink-3">SHOW</b>

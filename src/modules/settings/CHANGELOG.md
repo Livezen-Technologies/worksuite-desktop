@@ -4,6 +4,31 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.13.0 — 2026-10-03
+
+- Settings › Contacts › Accounts & sync: connect, sync now, settings, log and disconnect each address-book account (#175).
+- Sync buttons use the shared Sync button: they spin from the click, can't be pressed twice, show Synced just now or Sync failed · Retry, and keep one width (#165).
+- Settings › Desktop › Links: open WorkSuite links in the app, Mail links in a new or the current tab, ask before running actions from links (#170).
+- Menus draw the icon column only when an item has an icon, so no blank gap before labels (#168); the shared primary New button and menu-open animation (#171, #168).
+
+## 1.12.0 — 2026-10-03
+
+**Added**
+
+- Settings › Notifications › Website chats says whether this computer rings for you, and Where to ring — this app when it is running, the browser first, or every device — kept on the server for all your devices (RING-UI-08)
+
+## 1.11.5 — 2026-10-03
+
+- High contrast in Appearance; Sinhala and Tamil text for the Outlook-class Mail features (ENH-MAIL-03).
+
+## 1.11.4 — 2026-10-03
+
+- Make app locking opt-in by default, preserve saved choices and explicit policies, and disable inactive automatic-lock controls (#181).
+
+## 1.11.3 — 2026-10-03
+
+- Command palette shows a command's shortcut hint; Mail commands, Quick Steps, automatic replies and rules can be run from it.
+
 ## 1.11.2 — 2026-10-03
 
 - Sinhala and Tamil text for the Manage dialog's hints.
@@ -29,11 +54,11 @@ the root CHANGELOG.md.
 
 - Default new or missing AI display preferences to the floating widget without opening chat at startup (#127).
 
-## 1.10.0 — 2026-10-02
+## 1.10.0 — 2026-10-03
 
 - Modernized global search filters, responsive result details, file metadata and stable selection (#129).
 
-## 1.9.6 — 2026-10-02
+## 1.9.6 — 2026-10-03
 
 - Sinhala and Tamil text for the Messenger and Instagram channels (#36).
 

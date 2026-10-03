@@ -1,4 +1,5 @@
 import type { OfficeLocalFiles } from '../services/office-local';
+import type { MailBodies } from '../services/mail-bodies';
 import type { QuickAsk } from '../services/quick-ask';
 import type { AiService } from '../services/ai';
 import type { WebchatRinger } from '../services/webchat-ring';
@@ -47,7 +48,7 @@ export interface ClockExtra {
 import type { WindowManager } from '../windows/manager';
 import type { BootState } from './boot';
 import type { SessionController } from './session';
-import type { StatusSnapshot } from '@shared/types';
+import type { StatusSnapshot, WebchatOnCall } from '@shared/types';
 import type { Vault } from '../services/vault';
 
 /** Every main-process service, for the IPC handlers. */
@@ -78,6 +79,8 @@ export interface AppContext {
   realtime: RealtimeService;
   notifications: NotificationService;
   cache: OfflineCache;
+  /** "Download message bodies": Mail's bodies fetched ahead into the offline cache (#190). */
+  mailBodies?: MailBodies;
   queue: OfflineQueue;
   transfers: TransferManager;
   /** Meetings recorded on this computer (worksuite-desktop#68). */
@@ -105,6 +108,8 @@ export interface AppContext {
   navigate: (req: NavigateRequest) => void;
   /** Website chats ringing on this computer (ENH-WCHAT-01). */
   webchat: WebchatRinger;
+  /** The website voice call the main window is on, or none: the tray says so (ENH-WCHAT-05). */
+  webchatOnCall: (call: WebchatOnCall | null) => void;
   /** Quick Ask over any app (AI Assistant). */
   quickAsk: QuickAsk;
   /** The assistant's rules here, confirming its proposals, files from this computer (DSK-2…7). */

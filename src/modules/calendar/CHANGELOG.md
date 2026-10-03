@@ -4,7 +4,15 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
-## 1.5.0 — 2026-10-02
+## 1.5.2 — 2026-10-03
+
+- The sidebar's New button is the shared primary action button: same size, colour, plus icon and quiet shadow as every module; the shortcut is in its tooltip (#171).
+
+## 1.5.1 — 2026-10-03
+
+- Calendar peek from the sidebar; Reply with meeting and Suggest times from Mail (ENH-MAIL-03).
+
+## 1.5.0 — 2026-10-03
 
 **Added**
 

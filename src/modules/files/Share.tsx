@@ -43,6 +43,8 @@ interface AccessInfo {
   grants: Grant[] | null;
   inherited: Inherited[] | null;
   public_links: { active: number; shares: number; download_links: number; protected: number; never_expire: number; next_expiry: string | null } | null;
+  /** What "Send a chat message" and "Send an email" start as: the organisation's Drive settings (worksuite-desktop#164). */
+  notify_defaults?: { chat: boolean; email: boolean };
 }
 interface Effective {
   person: { id: number; name: string; detail: string | null };
@@ -101,6 +103,11 @@ export function ShareDialog({ item, onClose, onSecureLink, onPublicLink, onSendT
   const [noDownload, setNoDownload] = useState(false);
   const [busy, setBusy] = useState(false);
   const [effective, setEffective] = useState(false);
+  // Telling them (worksuite-desktop#164): on by default, with an optional message, by chat and email as the organisation sets.
+  const [notify, setNotify] = useState(true);
+  const [note, setNote] = useState('');
+  const [byChat, setByChat] = useState<boolean | null>(null);
+  const [byEmail, setByEmail] = useState<boolean | null>(null);
   const field = TABS[tab]![2];
   const found = useQuery({
     queryKey: ['files', 'principals', item.type, item.f.id, term.trim()],
@@ -109,6 +116,8 @@ export function ShareDialog({ item, onClose, onSecureLink, onPublicLink, onSendT
   });
   const eff = useQuery({ queryKey: ['files', 'effective', item.type, item.f.id], queryFn: ({ signal }) => apiGet<{ people: Effective[]; refused: Effective[]; truncated: boolean }>(`${base}/effective`, undefined, signal), enabled: effective });
   const a = q.data;
+  const chatOn = byChat ?? a?.notify_defaults?.chat ?? true;
+  const emailOn = byEmail ?? a?.notify_defaults?.email ?? true;
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: key });
     void qc.invalidateQueries({ queryKey: ['files', 'list'] });
@@ -128,10 +137,18 @@ export function ShareDialog({ item, onClose, onSecureLink, onPublicLink, onSendT
   const share = () =>
     picked &&
     void run(async () => {
-      await apiPost(`${base}/grants`, { principal_type: picked.type, principal_id: picked.id, level, can_download: !noDownload, notify: true });
+      await apiPost(`${base}/grants`, {
+        principal_type: picked.type,
+        principal_id: picked.id,
+        level,
+        can_download: !noDownload,
+        notify,
+        ...(notify ? { message: note.trim(), notify_chat: chatOn, notify_email: emailOn } : {}),
+      });
       setPicked(null);
       setTerm('');
       setNoDownload(false);
+      setNote('');
     }, `Shared with ${picked.name}`);
   const results = (found.data?.[field] as Principal[] | undefined) ?? [];
   const allowed = (a?.grants ?? []).filter((g) => g.effect === 'allow');
@@ -216,6 +233,41 @@ export function ShareDialog({ item, onClose, onSecureLink, onPublicLink, onSendT
                 {LEVELS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </Select>
               <Button variant="primary" disabled={!picked || busy} onClick={share}>Share</Button>
+            </div>
+            <div data-share-notify className="flex flex-col gap-2 px-5 pt-2.5">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12.5px] text-ink">
+                <label className="flex items-center gap-1.5 font-semibold">
+                  <Checkbox checked={notify} onChange={(e) => setNotify(e.target.checked)} />
+                  Notify people
+                </label>
+                {notify ? (
+                  <>
+                    {chat ? (
+                      <label className="flex items-center gap-1.5 text-ink-2">
+                        <Checkbox checked={chatOn} onChange={(e) => setByChat(e.target.checked)} />
+                        Send a chat message
+                      </label>
+                    ) : null}
+                    <label className="flex items-center gap-1.5 text-ink-2">
+                      <Checkbox checked={emailOn} onChange={(e) => setByEmail(e.target.checked)} />
+                      Send an email
+                    </label>
+                  </>
+                ) : (
+                  <span className="text-ink-3">They will find it in Shared with me, without being told.</span>
+                )}
+              </div>
+              {notify ? (
+                <textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  maxLength={500}
+                  rows={2}
+                  aria-label="Message"
+                  placeholder="Add a message (optional)"
+                  className="w-full resize-none rounded-[8px] border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-primary"
+                />
+              ) : null}
             </div>
             {term.trim().length >= 2 ? (
               <div className="flex max-h-[140px] flex-col gap-0.5 overflow-y-auto px-5 pt-2 scroll-thin">

@@ -10,6 +10,7 @@ import { UserAvatar } from '../../components/UserAvatar';
 import { GroupDetails, NotifySettings, type RoomDetail } from './NewChat';
 import { openChatAttachment } from './AttachmentViewer';
 import { mediaUrl, roomPerson, type ChatFile, type ChatMessage, type Room } from './types';
+import { usePresence } from './presence';
 
 type Shared = Record<'media' | 'files' | 'links' | 'audio', Array<{ message_id: number; sender_name: string; created_at: string; file?: ChatFile; url?: string }>>;
 
@@ -31,13 +32,12 @@ export function Details({ room, onClose }: { room: Room; onClose: () => void }) 
   const [tab, setTab] = useState<Tab>('Members');
   const [dialog, setDialog] = useState<'group' | 'notify' | null>(null);
   const detail = useQuery({ queryKey: ['chat', 'room', String(room.id)], queryFn: ({ signal }) => apiGet<RoomDetail>(`/api/chat/rooms/${room.id}`, undefined, signal) });
-  const ids = (detail.data?.members ?? []).map((m) => m.id).join(',');
-  const presence = useQuery({ queryKey: ['chat', 'presence', ids], queryFn: ({ signal }) => apiGet<{ presence: Record<string, string> }>('/api/chat/presence', { ids }, signal), enabled: ids !== '', refetchInterval: 60_000 });
+  const presenceOf = usePresence((detail.data?.members ?? []).map((m) => m.id));
   const shared = useQuery({ queryKey: ['chat', 'shared', String(room.id)], queryFn: ({ signal }) => apiGet<Shared>(`/api/chat/rooms/${room.id}/shared`, undefined, signal), enabled: tab !== 'Members' && tab !== 'Pinned' && tab !== 'Notifications' });
   const pins = useQuery({ queryKey: ['chat', 'pins', String(room.id)], queryFn: ({ signal }) => apiGet<{ messages: ChatMessage[] }>(`/api/chat/rooms/${room.id}/pins`, undefined, signal), enabled: tab === 'Pinned' });
   const group = room.type !== 'direct';
   const members = detail.data?.members ?? [];
-  const online = members.filter((m) => presence.data?.presence[String(m.id)] === 'online').length;
+  const online = members.filter((m) => presenceOf(m.id) === 'online').length;
 
   const mute = async () => {
     try {
@@ -73,7 +73,7 @@ export function Details({ room, onClose }: { room: Room; onClose: () => void }) 
           detail.isLoading ? <Spinner /> : (
             <div className="flex flex-col gap-2.5">
               {members.map((m) => {
-                const st = PRESENCE[presence.data?.presence[String(m.id)] ?? ''];
+                const st = PRESENCE[presenceOf(m.id) ?? ''];
                 return (
                   <div key={m.id} className="flex items-center gap-2.5">
                     <span className="relative">

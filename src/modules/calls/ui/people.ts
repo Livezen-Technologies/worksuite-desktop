@@ -54,3 +54,8 @@ export function featured(people: CallPerson[], last: string | null): CallPerson 
   if (speaking) return speaking;
   return others.find((p) => p.id === last) ?? others[0]!;
 }
+
+/** Preview our own share first; otherwise follow the remote presenter. */
+export function screenPresenter(people: CallPerson[]): CallPerson | null {
+  return people.find((p) => p.self && p.screen) ?? people.find((p) => p.screen) ?? null;
+}

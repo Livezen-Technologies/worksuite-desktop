@@ -10,7 +10,7 @@ import { CoreCallControls, type ControlButton, type MenuEntry } from './CoreCall
 import type { MenuSection } from '../../../components/Menu';
 import { text } from '../../../core/i18n';
 import { computeLayout, HEADER, SIDE_COLUMN, STRIP, type LayoutOutput } from './layout';
-import { featured, type CallPerson } from './people';
+import { featured, screenPresenter, type CallPerson } from './people';
 import { callUi, type LayoutMode } from './state';
 
 /**
@@ -53,6 +53,8 @@ export interface WorkspaceProps {
   lastSpeaker?: string | null;
   /** Drawn over another person's shared screen on the stage (Meet's remote control). */
   screenLayer?: (sharer: CallPerson) => ReactNode;
+  /** The session owns stopping its local screen track. */
+  stopPresenting?: () => void;
 }
 
 const IDLE_MS = 3_000;
@@ -162,8 +164,13 @@ export function CallWorkspace(props: WorkspaceProps) {
 
   const people = props.people;
   const self = people.find((p) => p.self) ?? null;
-  const remoteScreen = people.find((p) => !p.self && p.screen) ?? null;
-  const primary = !!props.board || !!remoteScreen;
+  const presenter = screenPresenter(people);
+  const localScreen = self?.screen;
+  useEffect(() => {
+    void call('media:screenIndicator', { active: !!localScreen }).catch(() => undefined);
+    return () => { void call('media:screenIndicator', { active: false }).catch(() => undefined); };
+  }, [localScreen]);
+  const primary = !!props.board || !!presenter;
   const star = featured(people, props.lastSpeaker ?? null);
 
   const layout = computeLayout({
@@ -182,7 +189,7 @@ export function CallWorkspace(props: WorkspaceProps) {
   if (floating) {
     return (
       <div ref={setRoot} className="relative flex h-full flex-col overflow-hidden bg-[#0B1226] text-[13px] text-[#E6ECFA]">
-        <FloatingCard {...props} star={star} self={self} remoteScreen={remoteScreen} onReturn={() => setFloating(false)} onChat={() => (callUi.set({ panelOpen: true, panelTab: props.tabs.find((t) => t.id === 'Chat')?.id ?? props.tabs[0]?.id ?? 'Chat' }), setFloating(false))} />
+        <FloatingCard {...props} star={star} self={self} presenter={presenter} onReturn={() => setFloating(false)} onChat={() => (callUi.set({ panelOpen: true, panelTab: props.tabs.find((t) => t.id === 'Chat')?.id ?? props.tabs[0]?.id ?? 'Chat' }), setFloating(false))} />
       </div>
     );
   }
@@ -229,7 +236,7 @@ export function CallWorkspace(props: WorkspaceProps) {
 
       <div className="absolute z-[10]" style={{ left: stageRect.x, top: stageRect.y, width: stageRect.width, height: stageRect.height }}>
         <div className="absolute top-0 left-0 overflow-hidden" style={{ width: mainWidth, height: inner.height }}>
-          <Stage layout={layout} people={people} tiles={tiles} star={star} self={self} remoteScreen={remoteScreen} board={props.board ?? null} size={{ width: mainWidth, height: inner.height }} screenLayer={props.screenLayer} />
+          <Stage layout={layout} people={people} tiles={tiles} star={star} self={self} presenter={presenter} board={props.board ?? null} size={{ width: mainWidth, height: inner.height }} screenLayer={props.screenLayer} stopPresenting={props.stopPresenting} />
           {props.alerts ? <div className="absolute inset-x-3 top-3 z-[25] flex flex-col gap-2">{props.alerts}</div> : null}
           {props.overlay ? <div className="absolute inset-0 z-[25] flex items-center justify-center bg-[rgba(11,18,38,.72)] p-6">{props.overlay}</div> : null}
         </div>
@@ -284,26 +291,29 @@ function Header({ title, clock, badges, headerExtra, pinnable = true, pinned, ma
   );
 }
 
-function Stage({ layout, people, tiles, star, self, remoteScreen, board, size, screenLayer }: { layout: LayoutOutput; people: CallPerson[]; tiles: CallPerson[]; star: CallPerson | null; self: CallPerson | null; remoteScreen: CallPerson | null; board: ReactNode | null; size: { width: number; height: number }; screenLayer?: (sharer: CallPerson) => ReactNode }) {
+function Stage({ layout, people, tiles, star, self, presenter, board, size, screenLayer, stopPresenting }: { layout: LayoutOutput; people: CallPerson[]; tiles: CallPerson[]; star: CallPerson | null; self: CallPerson | null; presenter: CallPerson | null; board: ReactNode | null; size: { width: number; height: number }; screenLayer?: (sharer: CallPerson) => ReactNode; stopPresenting?: () => void }) {
   const ui = callUi.get();
   if (layout.resolved.startsWith('screen')) {
-    const pipPerson = remoteScreen ?? star;
+    const pipPerson = presenter ?? star;
     return (
       <>
-        {board ? (
+        {board && !presenter?.screen ? (
           <div className="absolute inset-0">{board}</div>
-        ) : remoteScreen?.screen ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-[#070C1A]">
-            <VideoView track={remoteScreen.screen} className="h-full w-full object-contain" />
-            <span className="absolute top-3 left-3 rounded-[8px] bg-[rgba(11,18,38,.8)] px-2.5 py-1 text-[12px] font-semibold">{remoteScreen.name} is sharing their screen</span>
-            {remoteScreen.screenPaused ? (
+        ) : presenter?.screen ? (
+          <div aria-label="Shared screen preview" className="absolute inset-0 flex items-center justify-center border-[3px] border-[#E5484D] bg-[#070C1A]">
+            <VideoView track={presenter.screen} className="h-full w-full object-contain" />
+            <div className="absolute top-3 left-3 z-[15] flex items-center gap-3 rounded-[8px] bg-[rgba(11,18,38,.8)] px-2.5 py-1 text-[12px] font-semibold">
+              <span>{presenter.self ? 'You are presenting' : `${presenter.name} is sharing their screen`}</span>
+              {presenter.self && stopPresenting ? <button type="button" onClick={stopPresenting} className="rounded px-2 py-1 bg-[#E5484D] text-white">Stop presenting</button> : null}
+            </div>
+            {presenter.screenPaused ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[rgba(7,12,26,.82)]">
                 <Icon name="pause" size={28} />
                 <b className="text-[15px]">Screen sharing paused.</b>
-                <span className="text-[12.5px] text-[#AFC0E8]">{remoteScreen.name} will pick it up again in a moment.</span>
+                <span className="text-[12.5px] text-[#AFC0E8]">{presenter.name} will pick it up again in a moment.</span>
               </div>
             ) : null}
-            {screenLayer?.(remoteScreen)}
+            {!presenter.self ? screenLayer?.(presenter) : null}
           </div>
         ) : null}
         {layout.pip ? <CallVideoPip person={pipPerson && pipPerson.self && !ui.selfView ? null : pipPerson} self={self} stage={size} inset={layout.controlsInset} /> : null}
@@ -410,7 +420,7 @@ function Strip({ tiles, collapsed, top }: { tiles: CallPerson[]; collapsed: bool
  * the few controls a person reaches for without going back: mute, camera,
  * chat, back to the call, hang up.
  */
-function FloatingCard({ title, clock, badges, buttons, end, star, self, remoteScreen, board, onReturn, onChat }: WorkspaceProps & { star: CallPerson | null; self: CallPerson | null; remoteScreen: CallPerson | null; onReturn: () => void; onChat: () => void }) {
+function FloatingCard({ title, clock, badges, buttons, end, star, self, presenter, board, onReturn, onChat }: WorkspaceProps & { star: CallPerson | null; self: CallPerson | null; presenter: CallPerson | null; onReturn: () => void; onChat: () => void }) {
   const mic = buttons.find((b) => b.id === 'mic');
   const cam = buttons.find((b) => b.id === 'camera');
   const who = star && !star.self ? star : self;
@@ -424,12 +434,12 @@ function FloatingCard({ title, clock, badges, buttons, end, star, self, remoteSc
       </div>
       {badges ? <div className="shrink-0 px-2 pb-1">{badges}</div> : null}
       <button type="button" onClick={onReturn} title="Back to the call" className="no-drag relative min-h-0 flex-1 overflow-hidden bg-[#16254F]">
-        {board ? (
+        {board && !presenter?.screen ? (
           <span className="flex h-full items-center justify-center gap-2 text-[#C9D3EE]">
             <Icon name="board" size={18} /> Whiteboard on stage
           </span>
-        ) : remoteScreen?.screen ? (
-          <VideoView track={remoteScreen.screen} className="h-full w-full object-contain" />
+        ) : presenter?.screen ? (
+          <VideoView track={presenter.screen} className="h-full w-full border-[3px] border-[#E5484D] object-contain" />
         ) : who?.camera ? (
           <VideoView track={who.camera} mirror={who.self && callUi.get().mirror} className="h-full w-full object-cover" />
         ) : (
@@ -437,9 +447,9 @@ function FloatingCard({ title, clock, badges, buttons, end, star, self, remoteSc
             <CallAvatar name={who?.name ?? title} size={64} glow={who?.speaking ? 'speaking' : null} />
           </span>
         )}
-        {remoteScreen && star?.camera ? (
+        {presenter?.camera ? (
           <span className="absolute right-2 bottom-2 h-[38%] w-[30%] overflow-hidden rounded-[8px] border border-white/25">
-            <VideoView track={star.camera} className="h-full w-full object-cover" />
+            <VideoView track={presenter.camera} mirror={presenter.self && callUi.get().mirror} className="h-full w-full object-cover" />
           </span>
         ) : null}
       </button>

@@ -4,6 +4,14 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.8.5 — 2026-10-03
+
+- Keep the AI launcher and answer notice accessible beside the native Office editor without hiding the document indefinitely (#184).
+
+## 1.8.4 — 2026-10-03
+
+- More drafting tools for Mail: draft from notes, tone and length, coaching comments (ENH-MAIL-03).
+
 ## 1.8.3 — 2026-10-03
 
 - Hide the floating launcher while a shared chat composer is visible (#156).
@@ -24,7 +32,7 @@ the root CHANGELOG.md.
 
 - Use the minimized floating Ask AI widget when no display preference is saved; preserve explicit display choices (#127).
 
-## 1.7.0 — 2026-10-02
+## 1.7.0 — 2026-10-03
 
 - Images in the AI Assistant (#59): upload, drag-and-drop and paste; thumbnails with preview and remove; PNG/JPEG/WebP/GIF/BMP checked by content, 10 MB each, 5 per message; Extract Text reads English, Sinhala and Tamil on this computer (language data ~5.5 MB downloaded once from cdn.jsdelivr.net, size and SHA-256 pinned) with Copy Text and uncertain/[unreadable] marking; image questions go online only to a server model verified to read images and only when online fallback is on, otherwise a card offers Extract Text, answering from the image's text locally, settings or Local AI setup; text in images is quoted as reference, never followed; Reading image → Extracting text → Preparing reply; Stop and failures put the question and images back, Try again resends.
 

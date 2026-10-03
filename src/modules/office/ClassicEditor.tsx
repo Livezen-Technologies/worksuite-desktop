@@ -48,7 +48,7 @@ export function ClassicEditor({ tabKey, fileId, routeName, active }: { tabKey: s
   const [state, setState] = useState<'loading' | 'ready' | 'editing'>('loading');
   const [problem, setProblem] = useState<string | null>(null);
   const [builtin, setBuiltin] = useState(false);
-  const covered = useStore(ui, (x) => x.overlay !== null || x.dock === 'chat');
+  const covered = useStore(ui, (x) => x.dock === 'chat');
   const ref = useRef<HTMLDivElement>(null);
   const cfg = q.data;
   const name = cfg?.config.document?.title ?? routeName ?? 'Document';
@@ -93,7 +93,7 @@ export function ClassicEditor({ tabKey, fileId, routeName, active }: { tabKey: s
     };
   }, [builtin, cfg, fileId, orgId, tabKey]);
 
-  useEditorPlacement(ref, viewId, active && !covered && !problem);
+  const overlayStill = useEditorPlacement(ref, viewId, active && !covered && !problem);
 
   const installed = () => void openInApp({ id: fileId, name, folderId: null, version: 0 }, 'default');
 
@@ -136,7 +136,9 @@ export function ClassicEditor({ tabKey, fileId, routeName, active }: { tabKey: s
           Open in desktop app
         </Button>
       </header>
-      <div ref={ref} data-office-editor className="relative min-h-0 min-w-0 flex-1 bg-white" />
+      <div ref={ref} data-office-editor className="relative min-h-0 min-w-0 flex-1 bg-white">
+        {overlayStill ? <img src={overlayStill} alt="" aria-hidden draggable={false} className="pointer-events-none absolute inset-0 h-full w-full object-contain object-left-top select-none" /> : null}
+      </div>
     </div>
   );
 }

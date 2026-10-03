@@ -8,28 +8,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * toolbar marks, link checks, the composer's allow-list, HTML + text on the
  * way out, drafts (including plain-text ones from before), AI on the
  * person's own words only, the quoted email left alone, recipient chips,
- * pasted pictures as attachments, and the Send split control.
+ * pasted pictures inside the message (worksuite-desktop#188; before, they
+ * became attachments), and the Send split control.
  */
 
-const net = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), request: vi.fn(), call: vi.fn(), toast: vi.fn(), send: vi.fn(), ai: null as null | { input: () => string; actions: Array<{ run: (t: string) => void }> }, sigs: [] as Array<{ id: number; name: string; html: string; is_default: boolean }> }));
+const net = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), request: vi.fn(), call: vi.fn(), toast: vi.fn(), send: vi.fn(), ai: null as null | { input: () => string; actions: Array<{ run: (t: string) => void }> }, sigs: [] as Array<{ id: number; name: string; html: string; is_default: boolean; mailbox?: number | null; default_new?: boolean; default_reply?: boolean; image_mode?: 'hosted' | 'embedded'; embedded?: Record<string, string> }>, sigExtra: {} as Record<string, unknown>, parts: [] as Array<{ id: number; name: string; html: string; org: boolean }> }));
 vi.mock('../../../src/core/api', () => ({ apiGet: net.get, apiPost: net.post, request: net.request, apiUrl: (s: string) => s }));
 vi.mock('../../../src/core/bridge', () => ({ call: net.call, errorMessage: (e: Error) => e.message }));
 vi.mock('../../../src/core/toasts', () => ({ toast: net.toast }));
 vi.mock('../../../src/modules/mail/api', () => ({
   sendMessage: net.send,
   useTemplates: () => ({ data: { templates: [] }, isLoading: false }),
-  useSignatures: () => ({ data: { signatures: net.sigs } }),
+  useSignatures: () => ({ data: { signatures: net.sigs, ...net.sigExtra } }),
+  useQuickParts: () => ({ data: net.parts }),
 }));
-vi.mock('../../../src/modules/ai/AiMenuButton', () => ({
-  AiMenuButton: ({ items }: { items: Array<{ label: string; run: () => void; disabled?: boolean }> }) => (
-    <span>
-      {items.map((i) => (
-        <button key={i.label} type="button" disabled={i.disabled} onClick={i.run}>
-          {`AI: ${i.label}`}
-        </button>
-      ))}
-    </span>
-  ),
+// Pictures are decoded and made smaller with the browser's canvas, which jsdom does not have.
+vi.mock('../../../src/modules/mail/editor/images', async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  prepareImage: vi.fn(async () => ({ src: 'data:image/png;base64,iVBORw0KGgo=', width: 120, height: 80, bytes: 8, shrunk: false })),
 }));
 vi.mock('../../../src/components/DriveFilePicker', () => ({
   DriveFilePicker: ({ onChoose }: { onChoose: (f: Array<{ id: number; name: string; size: number; extension: string }>) => void }) => (
@@ -63,6 +59,8 @@ beforeEach(() => {
   net.send.mockReset().mockResolvedValue('sent');
   net.ai = null;
   net.sigs = [];
+  net.sigExtra = {};
+  net.parts = [];
   exec = vi.fn((cmd: string, _ui: boolean, value?: string) => {
     const box = document.querySelector<HTMLElement>('[contenteditable]');
     if (!box) return false;
@@ -316,7 +314,9 @@ describe('composing', () => {
       box.innerHTML = `<div>Mine <b>here</b></div>${box.innerHTML}`;
       fireEvent.input(box);
     });
-    fireEvent.click(screen.getByRole('button', { name: 'AI: Improve writing' }));
+    // The AI tools are behind the toolbar's "Write with AI" (they were buttons of their own before #188).
+    fireEvent.click(screen.getByRole('button', { name: 'Write with AI' }));
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: /Improve writing/ }));
     expect(net.ai!.input()).toBe('Mine here');
     fireEvent.click(screen.getByRole('button', { name: 'Apply AI text' }));
     expect(box.innerHTML).toBe('<div>Rewritten by AI</div><div>Second line</div><div><br></div><div><br></div><div>-- </div><div>Hasarinda</div><div>Livezen</div>');
@@ -359,7 +359,9 @@ describe('composing', () => {
   it('attaches a copy of a file from Files', async () => {
     net.post.mockImplementation(async (path: string) => (path === '/api/mail/upload/from-drive' ? { token: 'd1', name: 'Training_plan.pdf', size: 4096 } : {}));
     compose({ mode: 'new', to: 'a@b.co' });
-    fireEvent.click(screen.getByRole('button', { name: 'Attach from Files' }));
+    // Attach ▾ › From WorkSuite Files (a button of its own before #188).
+    fireEvent.click(screen.getByRole('button', { name: 'Attach' }));
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: /From WorkSuite Files/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Pick Training_plan.pdf' }));
     expect(await screen.findByText('Training_plan.pdf')).toBeTruthy();
     expect(net.post).toHaveBeenCalledWith('/api/mail/upload/from-drive', { file_id: 41 });
@@ -369,15 +371,20 @@ describe('composing', () => {
     await waitFor(() => expect(net.post).toHaveBeenCalledWith('/api/mail/send', expect.objectContaining({ attachments: ['d1'] })));
   });
 
-  it('attaches a pasted picture instead of putting it inline', async () => {
-    net.request.mockResolvedValue({ data: { token: 't1', name: 'shot.png', size: 2048 } });
-    compose({ mode: 'new', to: 'a@b.co' });
+  it('puts a pasted picture inside the message (sent as an inline part), and other files as attachments', async () => {
+    net.request.mockResolvedValue({ data: { token: 't1', name: 'notes.pdf', size: 2048 } });
+    compose({ mode: 'new', to: 'a@b.co', subject: 'Plan' });
     const pic = new File(['x'], 'shot.png', { type: 'image/png' });
     fireEvent.paste(screen.getByRole('textbox', { name: 'Message' }), { clipboardData: { files: [pic], getData: () => '' } });
-    expect(await screen.findByText('shot.png')).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' }).querySelector('img')?.getAttribute('src')).toBe('data:image/png;base64,iVBORw0KGgo='));
+    expect(net.request).not.toHaveBeenCalled();
+    const pdf = new File(['%PDF'], 'notes.pdf', { type: 'application/pdf' });
+    fireEvent.paste(screen.getByRole('textbox', { name: 'Message' }), { clipboardData: { files: [pdf], getData: () => '' } });
+    expect(await screen.findByText('notes.pdf')).toBeTruthy();
     expect(net.request).toHaveBeenCalledWith('POST', '/api/mail/upload', expect.anything());
-    expect(net.toast).toHaveBeenCalledWith('info', expect.stringMatching(/attachments/));
-    expect(screen.getByRole('textbox', { name: 'Message' }).querySelector('img')).toBeNull();
+    fireEvent.click(screen.getByRole('radio', { name: /Tomorrow morning/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send later…' }));
+    await waitFor(() => expect(net.post).toHaveBeenCalledWith('/api/mail/send', expect.objectContaining({ attachments: ['t1'], body_html: expect.stringContaining('<img src="data:image/png;base64,iVBORw0KGgo=" alt="shot" width="120"') })));
   });
 
   it('shows Send as one split control of equal halves, with later options behind the chevron', () => {
@@ -397,5 +404,161 @@ describe('composing', () => {
     expect(screen.getByRole('menu')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Send later…' }).className).toContain('h-[38px]');
     expect(screen.getByRole('button', { name: 'Discard draft' }).className).toContain('text-danger');
+  });
+});
+
+describe('message options, Quick Parts and send checks (ENH-MAIL-03 P2)', () => {
+  it('sends importance, sensitivity and receipt requests with the message (DMO-CMP-10)', async () => {
+    compose({ mode: 'new', to: 'ann@example.org', subject: 'Plan' });
+    fireEvent.click(screen.getByRole('button', { name: /Options/ }));
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitemradio', { name: /High/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Options/ }));
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitemradio', { name: /Confidential/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Options/ }));
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitemcheckbox', { name: /Request a read receipt/ }));
+    fireEvent.click(screen.getByRole('radio', { name: /Tomorrow morning/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send later…' }));
+    await waitFor(() => expect(net.post).toHaveBeenCalledWith('/api/mail/send', expect.objectContaining({ options: { importance: 'high', sensitivity: 'confidential', read_receipt: true } })));
+  });
+
+  it('puts a Quick Part into the message above the signature (DMO-CMP-07)', async () => {
+    net.sigs = [{ id: 4, name: 'Default', html: '<div>Hasarinda</div>', is_default: true }];
+    net.parts = [{ id: 5, name: 'Directions', html: '<div>Gate 2</div><script>x()</script>', org: false }];
+    const { box } = compose({ mode: 'new', to: 'ann@example.org' });
+    await waitFor(() => expect(box().innerHTML).toContain('<div>Hasarinda</div>'));
+    // Quick Parts are under Template ▾ now (a button of their own before #188).
+    fireEvent.click(screen.getByRole('button', { name: 'Template' }));
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: /Quick Parts/ }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Directions/ }));
+    await waitFor(() => expect(box().innerHTML.startsWith('<div>Gate 2</div>')).toBe(true));
+    expect(box().innerHTML).not.toContain('script');
+    expect(box().innerHTML.indexOf('Gate 2')).toBeLessThan(box().innerHTML.indexOf('Hasarinda'));
+  });
+
+  it('keeps the actions in one row of their own, and says why Quick Parts and S/MIME cannot be used (#188)', () => {
+    net.parts = [];
+    compose({ mode: 'new', to: 'ann@example.org' });
+    const actions = screen.getByRole('toolbar', { name: 'Message actions' });
+    expect(within(actions).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Attach', 'Template', 'Signature', 'Mail merge', 'Options']);
+    fireEvent.click(within(actions).getByRole('button', { name: 'Template' }));
+    const parts = within(screen.getByRole('menu')).getByRole('menuitem', { name: /Quick Parts/ });
+    expect(parts.getAttribute('aria-disabled')).toBe('true');
+    expect(parts.textContent).toMatch(/create them in Settings › Mail › Quick Steps/);
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+    fireEvent.click(within(actions).getByRole('button', { name: 'Options' }));
+    const sign = within(screen.getByRole('menu')).getByRole('menuitem', { name: /Sign \(S\/MIME\)/ });
+    expect(sign.getAttribute('aria-disabled')).toBe('true');
+    expect(sign.textContent).toMatch(/not available yet/);
+  });
+
+  it('warns when pictures and attachments come near the 25 MB most servers allow (#188)', async () => {
+    // Counted from the attachments here (an embedded picture counts the same way: see embeddedBytes).
+    net.call.mockImplementation(async (ch: string) => (ch === 'offline:getDraft' ? { content: { to: 'a@b.co', cc: '', bcc: '', subject: 'S', html: '<div>Files</div>', attachments: [{ token: 't9', name: 'site.zip', size: 21 * 1024 * 1024 }], quote: '', from: '1', v: 2 } } : null));
+    compose({ mode: 'new' });
+    expect(await screen.findByText(/most mail servers refuse messages over 25 MB/)).toBeTruthy();
+  });
+
+  it('asks once when the message mentions an attachment that is not there, and sends on "Send anyway" (DMO-CMP-16)', async () => {
+    const { close, box } = compose({ mode: 'new', to: 'ann@example.org', subject: 'Plan', body: 'Please see the attached plan' });
+    await waitFor(() => expect(box().textContent).toContain('attached'));
+    fireEvent.click(within(screen.getByRole('group', { name: 'Send options' })).getByRole('button', { name: 'Send' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Did you mean to attach a file?' });
+    expect(close).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send anyway' }));
+    expect(close).toHaveBeenCalled();
+  });
+});
+
+describe('@mentions (DMO-CMP-14)', () => {
+  it('offers people after "@", writes the name as a link and adds them to To', async () => {
+    net.get.mockImplementation(async (path: string, q: { q: string }) => (path === '/api/contacts/lookup' && q.q === 'Nim' ? { results: [{ kind: 'employee', id: 7, name: 'Nimal Perera', email: 'nimal@example.org' }] } : { results: [] }));
+    const { box } = compose({ mode: 'new', to: 'ann@example.org', subject: 'Plan' });
+    act(() => {
+      box().innerHTML = '<div>Thanks @Nim</div>';
+      const t = box().firstChild!.firstChild!;
+      placeCaretIn(t, t.textContent!.length);
+      fireEvent.input(box());
+    });
+    const list = await screen.findByRole('listbox', { name: 'Mention someone' });
+    fireEvent.mouseDown(within(list).getByRole('option', { name: /Nimal Perera/ }));
+    await waitFor(() => expect(box().innerHTML).toContain('<a href="mailto:nimal@example.org">@Nimal Perera</a>'));
+    expect(box().textContent).not.toContain('@Nim\u00a0');
+    expect(await screen.findByText('Nimal Perera')).toBeTruthy();
+    fireEvent.click(screen.getByRole('radio', { name: /Tomorrow morning/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send later…' }));
+    await waitFor(() => expect(net.post).toHaveBeenCalledWith('/api/mail/send', expect.objectContaining({ to: ['ann@example.org', 'nimal@example.org'] })));
+  });
+
+  it('does not offer anyone for an address being typed or a lone "@"', async () => {
+    const { box } = compose({ mode: 'new', to: 'ann@example.org' });
+    act(() => {
+      box().innerHTML = '<div>mail me at a@b</div>';
+      const t = box().firstChild!.firstChild!;
+      placeCaretIn(t, t.textContent!.length);
+      fireEvent.input(box());
+    });
+    await new Promise((r) => setTimeout(r, 250));
+    expect(net.get).not.toHaveBeenCalledWith('/api/contacts/lookup', expect.anything(), expect.anything());
+  });
+});
+
+describe('signatures in the composer (worksuite-desktop#166)', () => {
+  const TWO = [
+    { id: 1, email: 'me@example.test', display_name: 'Me', is_default: true, colour: 'blue' },
+    { id: 2, email: 'sales@example.test', display_name: 'Sales', is_default: false, colour: 'teal' },
+  ] as unknown as Mailbox[];
+
+  it('fills the fields for the From account, and changing From switches the signature', async () => {
+    net.sigs = [
+      { id: 1, name: 'Mine', html: '<div>{name}</div><div><a href="mailto:{email}">{email}</a></div><div>{mobile}</div>', is_default: true },
+      { id: 2, name: 'Sales', html: '<div>{name} · Sales desk</div><div>{email}</div>', is_default: false },
+    ];
+    net.sigExtra = { settings: [{ mailbox: null, new_id: 1, reply_id: 1, placement: 'above_quote' }, { mailbox: 2, new_id: 2, reply_id: null, placement: 'above_quote' }], values: { name: 'Asha Perera', email: 'asha@example.test', mobile: '' } };
+    const { box } = compose({ mode: 'new' }, { boxes: TWO });
+    await waitFor(() => expect(box().innerHTML).toContain('<div>-- </div><div>Asha Perera</div><div><a href="mailto:me@example.test">me@example.test</a></div>'));
+    expect(box().innerHTML).not.toContain('{mobile}');
+    fireEvent.click(screen.getByRole('combobox', { name: 'From' }));
+    fireEvent.click(await screen.findByRole('option', { name: /sales@example.test/ }));
+    await waitFor(() => expect(box().innerHTML).toContain('<div>-- </div><div>Asha Perera · Sales desk</div><div>sales@example.test</div>'));
+    expect(box().innerHTML).not.toContain('me@example.test');
+  });
+
+  it('leaves a signature chosen by hand alone when From changes', async () => {
+    net.sigs = [
+      { id: 1, name: 'Mine', html: '<div>Long one</div>', is_default: true },
+      { id: 2, name: 'Short', html: '<div>Short one</div>', is_default: false },
+    ];
+    net.sigExtra = { settings: [{ mailbox: null, new_id: 1, reply_id: 1, placement: 'above_quote' }, { mailbox: 2, new_id: 1, reply_id: 1, placement: 'above_quote' }], values: {} };
+    const { box } = compose({ mode: 'new' }, { boxes: TWO });
+    await waitFor(() => expect(box().innerHTML).toContain('Long one'));
+    fireEvent.click(screen.getByRole('button', { name: 'Signature' }));
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitemradio', { name: 'Short' }));
+    await waitFor(() => expect(box().innerHTML).toContain('Short one'));
+    fireEvent.click(screen.getByRole('combobox', { name: 'From' }));
+    fireEvent.click(await screen.findByRole('option', { name: /sales@example.test/ }));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'From' }).textContent).toContain('sales@example.test'));
+    expect(box().innerHTML).toContain('Short one');
+  });
+
+  it('goes below the quoted message when the account says so, with its pictures inside in embedded mode', async () => {
+    net.sigs = [{ id: 3, name: 'Reply', html: '<div>Asha</div><img src="https://ws.example/s/t?inline=1" alt="Logo" width="80">', is_default: true, image_mode: 'embedded', embedded: { 'https://ws.example/s/t?inline=1': 'data:image/png;base64,iVBORw0KGgo=' } }];
+    net.sigExtra = { settings: [{ mailbox: null, new_id: null, reply_id: 3, placement: 'below_quote' }], values: {} };
+    const { box } = compose({ mode: 'reply', to: 'pat@example.org', subject: 'Re: BOQ', quote: QUOTE, inReplyTo: '<m@x>' });
+    await waitFor(() => expect(box().innerHTML).toContain('<div>Asha</div>'));
+    fireEvent.click(screen.getByRole('radio', { name: /Tomorrow morning/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send later…' }));
+    await waitFor(() => expect(net.post).toHaveBeenCalled());
+    const sent = net.post.mock.calls.find((c) => c[0] === '/api/mail/send')![1] as { body_html: string; body_text: string };
+    expect(sent.body_html.indexOf('<blockquote')).toBeLessThan(sent.body_html.indexOf('<div>Asha</div>'));
+    expect(sent.body_html).toContain('src="data:image/png;base64,iVBORw0KGgo="');
+    expect(sent.body_text.endsWith('> Thanks\n\n--\nAsha\n[Logo]')).toBe(true);
+  });
+
+  it('writes no signature on a new message when the account’s choice for new mail is none', async () => {
+    net.sigs = [{ id: 3, name: 'Reply', html: '<div>Asha</div>', is_default: true }];
+    net.sigExtra = { settings: [{ mailbox: null, new_id: null, reply_id: 3, placement: 'above_quote' }], values: {} };
+    const { box } = compose({ mode: 'new' });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(box().innerHTML).not.toContain('Asha');
   });
 });

@@ -4,7 +4,8 @@ import { call } from '../../core/bridge';
 import { text } from '../../core/i18n';
 import type { OfflineMutation } from '@shared/types';
 import { queueKey, type QueuedAction } from './model';
-import type { Folder, Label, LocalMailbox, MailPrefs, Mailbox, MessageContext, MessageRef, OutboxRow, Signature, SyncStatus, Template, ViewCounts } from './types';
+import { useLocalFirst } from './localFirst';
+import type { Folder, Label, LocalMailbox, MailPrefs, Mailbox, MessageContext, MessageRef, OutboxRow, SignaturesData, SyncStatus, Template, ViewCounts } from './types';
 
 /**
  * Mail's server calls. Reads go through the API proxy, which answers from the
@@ -27,11 +28,14 @@ export const mailKeys = {
 };
 
 export function useMailboxes() {
+  // Cached first (worksuite-desktop#162): the accounts show from this computer before the server answers.
+  useLocalFirst(mailKeys.mailboxes, { path: '/api/mail/mailboxes' });
   return useQuery({ queryKey: mailKeys.mailboxes, queryFn: () => apiGet<{ mailboxes: Mailbox[] }>('/api/mail/mailboxes'), staleTime: 5 * 60_000 });
 }
 
 /** The sidebar's numbers. An older server has no such call: then there are none, not zeros. */
 export function useViewCounts(enabled: boolean) {
+  useLocalFirst(mailKeys.views, enabled ? { path: '/api/mail/views' } : null);
   return useQuery({
     queryKey: mailKeys.views,
     queryFn: async () => {
@@ -49,6 +53,7 @@ export function useViewCounts(enabled: boolean) {
 }
 
 export function useFolders(box: number, enabled: boolean) {
+  useLocalFirst(mailKeys.folders(box), enabled ? { path: '/api/mail/folders', query: { mailbox: box } } : null);
   return useQuery({ queryKey: mailKeys.folders(box), queryFn: () => apiGet<{ folders: Folder[] }>('/api/mail/folders', { mailbox: box }), enabled, staleTime: 60_000 });
 }
 
@@ -94,8 +99,11 @@ export function usePendingMail() {
   });
 }
 
-/** What Mail keeps on this computer, by kind and by mailbox, and the organization's limit (D04, D09). */
-export function useMailStats(enabled = true) {
+/**
+ * What Mail keeps on this computer, by kind and by mailbox, and the organization's limit (D04, D09).
+ * `live`: refreshed every few seconds while bodies are downloading, else every half minute (#190).
+ */
+export function useMailStats(enabled = true, live = false) {
   return useQuery({
     queryKey: [...mailKeys.localStore, 'stats'],
     queryFn: async () => {
@@ -106,12 +114,13 @@ export function useMailStats(enabled = true) {
       }
     },
     enabled,
-    staleTime: 60_000,
+    staleTime: live ? 2_000 : 60_000,
+    refetchInterval: live ? (q) => (Object.values(q.state.data?.bodies ?? {}).some((b) => b.running) ? 3_000 : 30_000) : false,
   });
 }
 
-/** How much mail this computer keeps (the offline cache's mail answers). */
-export function useLocalStore() {
+/** How much mail this computer keeps (the offline cache's mail answers); `live` keeps it current while Settings is open (#190). */
+export function useLocalStore(live = false) {
   return useQuery({
     queryKey: mailKeys.localStore,
     queryFn: async () => {
@@ -121,7 +130,8 @@ export function useLocalStore() {
         return null;
       }
     },
-    staleTime: 60_000,
+    staleTime: live ? 2_000 : 60_000,
+    refetchInterval: live ? 10_000 : false,
   });
 }
 
@@ -143,8 +153,25 @@ export function useTemplates(enabled: boolean) {
   return useQuery({ queryKey: ['mail', 'templates'], queryFn: () => apiGet<{ templates: Template[] }>('/api/mail/templates'), enabled, staleTime: 5 * 60_000 });
 }
 
+/** Quick Parts (DMO-CMP-07): saved snippets inserted by name; none from an older server. */
+export function useQuickParts(enabled: boolean) {
+  return useQuery({
+    queryKey: ['mail', 'quick-parts'],
+    queryFn: async () => {
+      try {
+        return (await apiGet<{ quick_parts: Array<{ id: number; name: string; html: string; org: boolean }> }>('/api/mail/quick-parts')).quick_parts;
+      } catch (e) {
+        if (e instanceof ApiError && (e.status === 404 || e.status === 503)) return [];
+        throw e;
+      }
+    },
+    enabled,
+    staleTime: 5 * 60_000,
+  });
+}
+
 export function useSignatures(enabled: boolean) {
-  return useQuery({ queryKey: ['mail', 'signatures'], queryFn: () => apiGet<{ signatures: Signature[] }>('/api/mail/signatures'), enabled, staleTime: 5 * 60_000 });
+  return useQuery({ queryKey: ['mail', 'signatures'], queryFn: () => apiGet<SignaturesData>('/api/mail/signatures'), enabled, staleTime: 5 * 60_000 });
 }
 
 export function useLocalMailboxes(enabled: boolean) {
@@ -222,7 +249,129 @@ export async function sendMessage(body: Record<string, unknown>, label: string):
   return submit({ entity: 'message.send', entityId: null, label, path: '/api/mail/send', body });
 }
 
+export type StateAction = 'pin' | 'unpin' | 'snooze' | 'unsnooze' | 'flag' | 'unflag' | 'complete' | 'focus' | 'categorise' | 'uncategorise';
+
+const STATE_LABELS: Record<StateAction, string> = {
+  pin: 'Pin {what}',
+  unpin: 'Unpin {what}',
+  snooze: 'Snooze {what}',
+  unsnooze: 'Unsnooze {what}',
+  flag: 'Flag {what}',
+  unflag: 'Clear the flag on {what}',
+  complete: 'Mark {what} complete',
+  focus: 'Move {what} to another tab',
+  categorise: 'Categorise {what}',
+  uncategorise: 'Remove a category from {what}',
+};
+
+/**
+ * Pin, snooze, flag, Focused and categories on one or more messages
+ * (POST api/mail/states) — through the offline queue, so they work offline
+ * and go in order when the connection returns (DMO-OFF-03, AC-DMO-12).
+ */
+export function stateAction(action: StateAction, items: Array<Record<string, unknown>>, extra: Record<string, unknown> = {}, subject = ''): Promise<Outcome> {
+  const what = items.length === 1 ? `“${subject || text('(no subject)')}”` : text('{n} messages', { n: items.length });
+  return submit({
+    entity: `state.${action}`,
+    entityId: items.length === 1 ? `${String(items[0]!.mailbox ?? 0)}:${String(items[0]!.folder)}:${String(items[0]!.uid)}`.slice(0, 128) : null,
+    label: text(STATE_LABELS[action], { what }),
+    path: '/api/mail/states',
+    body: { action, items, ...extra },
+  });
+}
+
 /** Withdraw a change that has not gone yet. */
 export async function undoQueued(id: string): Promise<void> {
   await call('offline:discard', { id });
+}
+
+/** A folder's right-click menu (worksuite-desktop#162): the calls that change a folder. */
+export type FolderOp = 'read-all' | 'create' | 'rename' | 'move' | 'delete';
+
+const FOLDER_LABELS: Record<FolderOp, string> = {
+  'read-all': 'Mark everything in {folder} as read',
+  create: 'Create the folder {name}',
+  rename: 'Rename {folder} to {name}',
+  move: 'Move the folder {folder}',
+  delete: 'Delete the folder {folder}',
+};
+
+/**
+ * A change to a folder of a connected mailbox, by its slug — through the
+ * offline queue, so it is made now or when the connection returns, in order
+ * with the other changes, and can be undone while it waits.
+ */
+export function folderOp(op: FolderOp, mailbox: number, folder: string, folderLabel: string, extra: Record<string, unknown> = {}): Promise<Outcome> {
+  return submit({
+    entity: `folder.${op}`,
+    entityId: `${mailbox}:${folder}`.slice(0, 128),
+    label: text(FOLDER_LABELS[op], { folder: folderLabel, name: String(extra.name ?? '') }),
+    path: `/api/mail/folder-ops/${op}`,
+    body: { mailbox, folder, ...extra },
+  });
+}
+
+/** Core folders are never renamed, moved or deleted (the server refuses them too). */
+export const CORE_FOLDERS = ['inbox', 'sent', 'drafts', 'trash', 'spam', 'junk', 'archive', 'outbox', 'starred', 'important'];
+
+export function isCoreFolder(slug: string): boolean {
+  if (CORE_FOLDERS.includes(slug.toLowerCase())) return true;
+  if (!slug.startsWith('label:')) return true;
+  const path = slug.slice(6).toUpperCase();
+  return path === '' || path === '[GMAIL]' || path.startsWith('[GMAIL]/') || ['SENT ITEMS', 'SENT MESSAGES', 'JUNK E-MAIL', 'DELETED ITEMS', 'DELETED MESSAGES'].includes(path);
+}
+
+/** Only Deleted Items and Junk are emptied. */
+export function isEmptyableFolder(slug: string): boolean {
+  return ['trash', 'spam', 'junk'].includes(slug.toLowerCase());
+}
+
+/**
+ * Empty Deleted Items or Junk: permanently, a batch per call until none are left.
+ * Online only — a permanent delete is not something to leave waiting in a queue.
+ */
+export async function emptyFolder(mailbox: number, folder: string, onProgress?: (done: number, total: number) => void): Promise<number> {
+  let done = 0;
+  for (let i = 0; i < 1000; i++) {
+    const r = await apiPost<{ deleted: number; remaining: number; total: number }>('/api/mail/folder-ops/empty', { mailbox, folder });
+    done += r.deleted;
+    onProgress?.(done, done + r.remaining);
+    if (r.remaining === 0 || r.deleted === 0) break;
+  }
+  return done;
+}
+
+/** Sync one folder now: it is walked first on a pass that runs now. */
+export async function syncFolder(mailbox: number, folder: string): Promise<void> {
+  await apiPost('/api/mail/folder-ops/sync', { mailbox, folder });
+}
+
+export interface FolderInfo {
+  folder: string;
+  account: string;
+  messages: number | null;
+  unread: number | null;
+  bytes: number | null;
+  /** The size counts only what the server's copy holds of the folder. */
+  bytes_partial: boolean;
+  synced_at: string | null;
+  source: 'mirror' | 'server';
+}
+
+/** A folder's size, counts and last sync; null from a server without the call. */
+export function useFolderInfo(mailbox: number, folder: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['mail', 'folder-info', mailbox, folder],
+    queryFn: async () => {
+      try {
+        return await apiGet<FolderInfo>('/api/mail/folder-ops/properties', { mailbox, folder });
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 404) return null;
+        throw e;
+      }
+    },
+    enabled,
+    staleTime: 30_000,
+    retry: false,
+  });
 }

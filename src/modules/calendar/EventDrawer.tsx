@@ -4,6 +4,7 @@ import { canOpenRoute, canOpenWebPath } from '@shared/access';
 import { useCanOpen, useVisibleIds } from '../../core/access';
 import { ApiError, apiDelete, apiGet, apiGetMeta, apiPost, apiPut } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
+import { text } from '../../core/i18n';
 import { useTab } from '../../core/tab-context';
 import { currentZone, dayLabel, wallTimeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
@@ -20,6 +21,10 @@ export interface Draft {
   allDay: boolean;
   /** A title to start from (a contact's "Schedule"). */
   title?: string;
+  /** People to invite, by address (Mail's Reply with meeting): colleagues are invited, others named as not invited. */
+  people?: string[];
+  /** A description to start from. */
+  description?: string;
 }
 
 const RSVP: Array<[string, string]> = [
@@ -175,7 +180,7 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
   const [category, setCategory] = useState(e?.category ?? '');
   const [colour, setColour] = useState(e?.color && /^#[0-9a-f]{6}$/i.test(e.color) ? e.color : SWATCHES[0]!);
   const [location, setLocation] = useState(e?.location ?? '');
-  const [description, setDescription] = useState(e?.description ?? '');
+  const [description, setDescription] = useState(e?.description ?? draft?.description ?? '');
   const [meetUuid, setMeetUuid] = useState<string | null>(e?.meeting_uuid ?? null);
   const [invite, setInvite] = useState<Array<{ id: number; name: string }>>([]);
   const [inviteAs, setInviteAs] = useState<'viewer' | 'editor'>('viewer');
@@ -185,6 +190,16 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
   const [deleting, setDeleting] = useState(false);
   const [loaded, setLoaded] = useState(!id);
   const directory = useQuery({ queryKey: ['chat', 'directory'], queryFn: ({ signal }) => apiGet<{ users: Array<{ id: number; name: string; email?: string }> }>('/api/chat/directory', undefined, signal), staleTime: 5 * 60_000, enabled: owner && editable });
+  // A meeting from an email thread: its colleagues are invited; anyone else is named, not dropped silently.
+  const [outside, setOutside] = useState<string[]>([]);
+  const [peopled, setPeopled] = useState(false);
+  if (!e && draft?.people?.length && directory.data && !peopled) {
+    setPeopled(true);
+    const byEmail = new Map(directory.data.users.filter((u) => u.email).map((u) => [u.email!.toLowerCase(), u]));
+    const found = draft.people.map((a) => byEmail.get(a.toLowerCase())).filter((u): u is { id: number; name: string; email?: string } => !!u);
+    setInvite(found.filter((u, i) => found.findIndex((x) => x.id === u.id) === i).map((u) => ({ id: u.id, name: u.name })));
+    setOutside(draft.people.filter((a) => !byEmail.has(a.toLowerCase())));
+  }
 
   // The feed row is enough to draw; the full record fills in when it arrives.
   // Its times are the series' own: an occurrence's times, saved back, would
@@ -445,6 +460,11 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
             <button type="button" aria-label={`Do not invite ${p.name}`} onClick={() => setInvite(invite.filter((x) => x.id !== p.id))} className="text-ink-3 hover:text-danger">×</button>
           </div>
         ))}
+        {outside.length ? (
+          <p className="rounded-[7px] bg-subtle px-2 py-1.5 text-[12px] text-ink-2">
+            {text('Not invited — not in WorkSuite: {people}. Send them the time by email.', { people: outside.join(', ') })}
+          </p>
+        ) : null}
         {owner && editable ? (
           <input value={q} onChange={(ev) => setQ(ev.target.value)} aria-label="Invite people" placeholder="Invite people…" className={field} />
         ) : null}

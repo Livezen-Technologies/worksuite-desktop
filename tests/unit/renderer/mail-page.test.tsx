@@ -50,12 +50,14 @@ const DETAIL = {
 };
 let offline = false;
 let pending: unknown[] = [];
+const account = (id: number, over: Record<string, unknown> = {}) => ({ mailbox: id, email: BOXES[id - 1]!.email, name: BOXES[id - 1]!.display_name, included: true, paused: false, mode: 'push', interval_min: 5, last_ok_at: '2026-10-02 10:28:00', last_attempt_at: '2026-10-02 10:28:00', last_result: 'ok', error_code: null, error: null, running: false, mirror: true, pushed: true, folders: 9, folders_done: 9, ...over });
+let syncAccounts: unknown[] = [];
 
 function respond(path: string, params?: Record<string, unknown>) {
   if (path === '/api/mail/mailboxes') return { mailboxes: BOXES };
   if (path === '/api/mail/views') return { mailboxes: [{ id: 1, unread: 5, counted: true }, { id: 2, unread: 14, counted: true }, { id: 3, unread: 7, counted: true }], views: { unread: 21, starred: 6, today: 3, attachments: 1, drafts: 2, important: null, scheduled: 2 }, partial: false, unknown: [] };
   if (path === '/api/mail/folders') return { folders: [{ id: 1, name: 'Inbox', slug: 'inbox', type: 'system', total: 9, unread: 5 }, { id: 2, name: 'Sent', slug: 'sent', type: 'system', total: 3, unread: 0 }, { id: 3, name: 'Clients/Acme', slug: 'label:Clients/Acme', type: 'custom', total: 3, unread: 3 }] };
-  if (path === '/api/mail/sync/status') return { enabled: true, mailboxes: BOXES.map((b) => ({ mailbox: b.id, status: 'live', serving: true, lag_seconds: 12, pushed: true, problem: null })) };
+  if (path === '/api/mail/sync/status') return { enabled: true, mailboxes: BOXES.map((b) => ({ mailbox: b.id, status: 'live', serving: true, lag_seconds: 12, pushed: true, problem: null })), accounts: syncAccounts, overall: { state: 'up_to_date', syncing: 0, total: 3, last_ok_at: '2026-10-02 10:28:00', failed: [], stale: [], stale_minutes: 60 } };
   if (path === '/api/mail/prefs') return { prefs: [], filters: [] };
   if (path === '/api/mail/labels') return { labels: [] };
   if (path === '/api/mail/messages/101/context') return { sender: { email: 'it@example.test', name: null, contact_id: null, user_id: null, is_colleague: false, company: null }, security: { available: true, spf: 'pass', dkim: 'pass', dmarc: 'pass' } };
@@ -90,6 +92,8 @@ beforeEach(() => {
   setRegional({ timezone: 'UTC', locale: 'en-GB', timeFormat: '24' });
   offline = false;
   pending = [];
+  syncAccounts = [account(1), account(2), account(3)];
+  window.localStorage.clear();
   app.set({ status: { network: 'ONLINE' } as never, prefs: { mailCacheDays: 30, moduleNotifications: {}, badgeCount: true, theme: 'light' } as never, bootstrap: { user: { id: '9', name: 'Me', email: 'me@example.test' } } as never, apps: [] });
   vi.mocked(apiGet).mockReset().mockImplementation((async (path: string, params?: Record<string, unknown>) => respond(path, params)) as never);
   vi.mocked(apiGetMeta).mockReset().mockImplementation((async (path: string, params?: Record<string, unknown>) => {
@@ -119,9 +123,10 @@ describe('the sidebar', () => {
   it('lists the mailboxes, smart views with their counts, the folders and the sync card', async () => {
     show();
     const nav = await screen.findByRole('navigation', { name: 'Mail' });
-    // Unified inbox: each account's count as the mirror counted it.
-    await waitFor(() => expect(within(nav).getByRole('button', { name: /Unified inbox/ }).textContent).toContain('26'));
-    expect(within(nav).getByRole('button', { name: /sales@example.test · shared/ }).textContent).toContain('7');
+    // All Accounts › Inbox (the old Unified inbox): each account's count as the mirror counted it.
+    const all = await within(nav).findByRole('list', { name: 'All Accounts' });
+    await waitFor(() => expect(within(all).getByRole('button', { name: /^Inbox/ }).textContent).toContain('26'));
+    expect(within(nav).getByRole('button', { name: /^sales@example.test · shared/ }).textContent).toContain('7');
     const views = within(nav).getByRole('button', { name: /^Unread/ });
     expect(views.textContent).toContain('21');
     expect(within(nav).getByRole('button', { name: /^Starred/ }).textContent).toContain('6');
@@ -129,33 +134,47 @@ describe('the sidebar', () => {
     // Importance is not something the mirror knows: no Important view rather than a wrong one.
     expect(within(nav).queryByRole('button', { name: /^Important/ })).toBeNull();
     expect(await within(nav).findByRole('button', { name: /Clients › Acme/ })).toBeTruthy();
-    expect(within(nav).getByText(/All mailboxes synced · 12 s ago/)).toBeTruthy();
-    expect(within(nav).getByText(/Pushed \(IDLE\) · offline cache 30 days/)).toBeTruthy();
-    // The status bar.
-    expect(screen.getByText('3 of 3 mailboxes live')).toBeTruthy();
+    // One sync status in the footer and the status bar (DMO-SYN-05/07), with the real live count (#172).
+    expect(within(nav).getByText('Synced 2 min ago')).toBeTruthy();
+    expect(within(nav).getByText(/3 of 3 mailboxes live · offline cache 30 days/)).toBeTruthy();
+    const bar = screen.getByRole('status', { name: 'Mail status' });
+    // The status bar follows the card: every push connection is really live (#172).
+    expect(within(bar).getByText('Synced 2 min ago · 3 of 3 mailboxes live')).toBeTruthy();
     expect(await screen.findByText('Local store 412 MB')).toBeTruthy();
   });
 
-  it('leads with an accent New email button whose N chip is the wired shortcut, and a glass search button (#148)', async () => {
+  it('leads with the shared primary New email split button, the shortcut in its tooltip, and a Files-style search button (#171)', async () => {
     show();
     const nav = await screen.findByRole('navigation', { name: 'Mail' });
     const compose = within(nav).getByRole('button', { name: 'New email' });
-    // The chip is decoration; the shortcut is named for assistive tech, and N really composes.
+    // The shortcut is in the tooltip and named for assistive tech; no chip inside the button.
     expect(compose.getAttribute('aria-keyshortcuts')).toBe('N');
-    const chip = compose.querySelector('kbd')!;
-    expect(chip.textContent).toBe('N');
-    expect(chip.getAttribute('aria-hidden')).toBe('true');
-    expect(compose.className).toContain('text-white');
+    expect(compose.getAttribute('title')).toBe('New email (N)');
+    expect(compose.querySelector('kbd')).toBeNull();
+    expect(compose.className).toContain('bg-primary');
+    expect(compose.className).toContain('h-10');
     expect(compose.className).toContain('focus-visible:outline-2');
-    expect(compose.className).toContain('motion-safe:enabled:hover:-translate-y-px');
-    expect(compose.className).not.toMatch(/(^|\s)(enabled:)?hover:-translate-y-px/);
+    // Flat with a quiet shadow: no brand glow.
+    expect(compose.className).not.toContain('color-mix');
     const search = within(nav).getByRole('button', { name: 'Search mail' });
     expect(search.getAttribute('title')).toBe('Search mail (/)');
-    expect(search.className).toContain('bg-glass');
-    expect(search.className).toContain('h-11 w-11');
-    expect(search.querySelector('kbd')).toBeNull();
+    expect(search.className).toContain('h-10 w-10');
+    expect(search.className).toContain('border-line');
     fireEvent.keyDown(document.body, { key: 'n' });
     expect(await screen.findByRole('form', { name: 'New email' })).toBeTruthy();
+  });
+
+  it('offers the New email dropdown: template, new window, event invite and contact (#171)', async () => {
+    show();
+    const side = await screen.findByRole('navigation', { name: 'Mail' });
+    fireEvent.click(within(side).getByRole('button', { name: 'More new email options' }));
+    const menu = await screen.findByRole('menu', { name: 'New' });
+    for (const label of ['New email', 'New email from template…', 'New email in a new window', 'New event invite', 'New contact']) {
+      expect(within(menu).getAllByRole('menuitem', { name: new RegExp(`^${label}`) })[0]).toBeTruthy();
+    }
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /^New event invite/ }));
+    // Another module's route opens through the app's tabs.
+    await waitFor(() => expect(nav.navigate.mock.calls.some((c) => c[0] === '/calendar?new=1')).toBe(true));
   });
 
   it('opens a smart view as the combined list narrowed', async () => {
@@ -184,11 +203,48 @@ describe('the list', () => {
     expect(vi.mocked(apiGetMeta)).toHaveBeenCalledWith('/api/mail/messages', expect.objectContaining({ filters: 'unread' }), expect.anything());
   });
 
-  it('keeps the layout chosen in the density menu on the server', async () => {
+  it('keeps the layout chosen in the density menu on the server, for this folder (DMO-INB-16)', async () => {
     show();
     fireEvent.click(await screen.findByRole('button', { name: 'Layout and density' }));
     fireEvent.click(await screen.findByRole('menuitemradio', { name: /Super compact/ }));
-    await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/prefs', { view: 'super' }));
+    await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/prefs', { folderViews: { 'unified:inbox': { view: 'super' } } }));
+    // …or for every folder.
+    fireEvent.click(await screen.findByRole('button', { name: 'Layout and density' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Apply this view to all folders/ }));
+    await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/prefs', { view: 'super', folderViews: {} }));
+  });
+
+  it('sorts and groups from a menu with an icon on every choice, a direction switch in the field\'s words and Reset (#168)', async () => {
+    show();
+    await screen.findByRole('listbox', { name: 'Messages' });
+    const chip = screen.getByRole('button', { name: /Date · Newest/ });
+    fireEvent.click(chip);
+    const menu = await screen.findByRole('menu', { name: 'Sort and group' });
+    const radios = within(menu).getAllByRole('menuitemradio');
+    // 8 sorts, 2 directions, 7 groupings — each sort and group row with its icon.
+    expect(radios).toHaveLength(17);
+    for (const r of radios) expect(r.querySelector('svg')).not.toBeNull();
+    const sortBy = () => within(within(screen.getByRole('menu', { name: 'Sort and group' })).getByRole('group', { name: 'Sort by' }));
+    const date = sortBy().getByRole('menuitemradio', { name: 'Date' });
+    expect(date.getAttribute('aria-checked')).toBe('true');
+    expect(document.activeElement).toBe(date);
+    expect(within(menu).getByRole('menuitemradio', { name: 'Newest' }).getAttribute('aria-checked')).toBe('true');
+    // Arrow keys move; Escape closes and puts focus back.
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(document.activeElement?.textContent).toBe('Sender');
+    fireEvent.click(within(menu).getByRole('menuitemradio', { name: 'Oldest' }));
+    await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/prefs', { folderViews: { 'unified:inbox': { dir: 'asc' } } }));
+    expect(await screen.findByRole('button', { name: /Date · Oldest/ })).toBeTruthy();
+    // A new field starts in its natural direction, worded for it; picking it again reverses it.
+    fireEvent.click(sortBy().getByRole('menuitemradio', { name: 'Sender' }));
+    expect(await screen.findByRole('button', { name: /Sender · A → Z/ })).toBeTruthy();
+    expect(within(screen.getByRole('menu', { name: 'Sort and group' })).getByRole('menuitemradio', { name: /Z → A/ })).toBeTruthy();
+    fireEvent.click(sortBy().getByRole('menuitemradio', { name: 'Sender' }));
+    expect(await screen.findByRole('button', { name: /Sender · Z → A/ })).toBeTruthy();
+    fireEvent.click(within(screen.getByRole('menu', { name: 'Sort and group' })).getByRole('button', { name: 'Reset to default' }));
+    expect(await screen.findByRole('button', { name: /Date · Newest/ })).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole('menu', { name: 'Sort and group' }), { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('menu', { name: 'Sort and group' })).toBeNull());
   });
 });
 
@@ -218,6 +274,8 @@ describe('the reading pane', () => {
     await waitFor(() =>
       expect(call).toHaveBeenCalledWith('offline:submit', expect.objectContaining({ module: 'mail', entity: 'message.archive', entityId: '1:inbox:101', method: 'POST', path: '/api/mail/messages/101/action', body: { action: 'archive', folder: 'inbox', mailbox: '1' }, queueIfOffline: true })),
     );
+    // A fresh page: the first one is gone, so the key reaches the message that is open.
+    cleanup();
     vi.mocked(call).mockClear();
     show('/mail?msg=101&mbx=1');
     await screen.findAllByRole('heading', { name: 'Welcome to your mailbox' });
@@ -327,14 +385,21 @@ describe('settings › mail', () => {
   it('lists the accounts with their state, repairs a refused sign-in, and keeps the layout', async () => {
     const problem = { ...BOXES[1]!, auth_state: 'problem', auth_type: 'password', last_error: 'Login failed' };
     vi.mocked(apiGet).mockImplementation((async (path: string, params?: Record<string, unknown>) => (path === '/api/mail/mailboxes' ? { mailboxes: [BOXES[0], problem] } : respond(path, params))) as never);
+    syncAccounts = [account(1), account(2, { last_result: 'failed', error_code: 'auth', error: 'Password or app password rejected', last_ok_at: '2026-10-02 07:30:00', last_attempt_at: '2026-10-02 10:20:00' })];
     render(
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
         <MailSettings />
       </QueryClientProvider>,
     );
-    expect(await screen.findByText('Authentication problem')).toBeTruthy();
-    expect(screen.getByText('Pushed instantly')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Repair' }));
+    // Accounts & sync (D04 v1.1): last successful sync, last attempt and result, in plain words (DMO-SYN-09).
+    const card = await screen.findByRole('listitem', { name: 'me@contoso.test' });
+    expect(within(card).getByText('Sync failed')).toBeTruthy();
+    expect(within(card).getByText(/Failed — Password or app password rejected/)).toBeTruthy();
+    expect(within(card).getByText(/2 Oct 2026 7:30 \(3 h ago\)/)).toBeTruthy();
+    expect(within(await screen.findByRole('listitem', { name: 'me@example.test' })).getByText('Up to date')).toBeTruthy();
+    // The same one status as the folder pane and the status bar.
+    expect(screen.getByText('Needs attention · me · Microsoft 365 failed')).toBeTruthy();
+    fireEvent.click(within(card).getByRole('button', { name: 'Sign in again' }));
     const dialog = await screen.findByRole('dialog', { name: 'Repair me@contoso.test' });
     fireEvent.change(within(dialog).getByLabelText('Password'), { target: { value: 'new' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Test and save' }));
@@ -352,12 +417,12 @@ describe('settings › mail', () => {
     );
     fireEvent.click((await screen.findAllByRole('button', { name: 'Manage' }))[0]!);
     const dialog = await screen.findByRole('dialog');
-    for (const name of ['Show in the unified inbox', 'Notify me about new mail']) {
+    for (const name of ['Include in All Accounts', 'Notify me about new mail']) {
       expect(within(dialog).getByRole('switch', { name })).toBeTruthy();
       expect(within(dialog).getByText(name)).toBeTruthy();
     }
-    expect(within(dialog).getByText('Mix its mail into Unified inbox with your other mailboxes.')).toBeTruthy();
-    fireEvent.click(within(dialog).getByRole('switch', { name: 'Show in the unified inbox' }));
+    expect(within(dialog).getByText('Show its Inbox, Drafts, Sent and other folders in All Accounts, and sync it with Sync all.')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('switch', { name: 'Include in All Accounts' }));
     await waitFor(() => expect(apiPut).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/mail\/mailboxes\/\d+$/), { in_unified: false }));
   });
 });

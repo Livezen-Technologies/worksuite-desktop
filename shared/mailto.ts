@@ -78,9 +78,60 @@ export function findMailtoInArgv(argv: readonly string[]): string | null {
  * mailbox — or Mail as a whole — keeps headers only (D09). Lives here, beside
  * Mail's other main-process rules, so the API proxy and the tests share it.
  */
-export function mailBodiesKept(prefs: { mailCacheDays: number; mailCacheDaysByMailbox?: Record<string, number> }, path: string): boolean {
+export function mailBodiesKept(prefs: { mailCacheDays: number; mailCacheDaysByMailbox?: Record<string, number>; mailFolderOffline?: Record<string, FolderOffline> }, path: string): boolean {
   const q = path.indexOf('?');
-  const box = q >= 0 ? new URLSearchParams(path.slice(q + 1)).get('mailbox') : null;
+  const params = q >= 0 ? new URLSearchParams(path.slice(q + 1)) : null;
+  const box = params?.get('mailbox') ?? null;
   const own = box ? prefs.mailCacheDaysByMailbox?.[box] : undefined;
+  const folder = params?.get('folder') ?? null;
+  // A folder's own offline policy (ENH-MAIL-03 DMO-OFF-01): headers only, or online only, keep no bodies; all keeps every one.
+  const policy = folder ? folderOffline(prefs, box, folder) : null;
+  if (policy === 'all') return true;
+  if (policy && policy !== 'recent') return false;
   return (own ?? prefs.mailCacheDays) !== 0;
+}
+
+/**
+ * What this computer keeps of a folder (ENH-MAIL-03 DMO-OFF-01, §3.3):
+ * `all` — every message opened or fetched ahead, whatever its age
+ * (worksuite-desktop#162); `recent` — messages within the mailbox's keep
+ * period (30 days unless changed); `headers` — the
+ * list only, messages open from the server; `online` — nothing, the folder
+ * is read from the server each time.
+ */
+export type FolderOffline = 'all' | 'recent' | 'headers' | 'online';
+
+/** The default for a folder: Inbox, Sent and Drafts keep recent mail, Archive is online only, the rest headers only. */
+export function defaultFolderOffline(folder: string): FolderOffline {
+  const f = folder.toLowerCase();
+  if (f === 'inbox' || f === 'sent' || f === 'drafts') return 'recent';
+  if (f === 'archive') return 'online';
+  return 'headers';
+}
+
+export function folderOffline(prefs: { mailFolderOffline?: Record<string, FolderOffline> }, mailbox: string | null, folder: string): FolderOffline {
+  return prefs.mailFolderOffline?.[`${mailbox ?? 'local'}:${folder}`] ?? defaultFolderOffline(folder);
+}
+
+/** Whether a folder's list may be kept on this computer: not when it is online only. */
+export function mailListKept(prefs: { mailFolderOffline?: Record<string, FolderOffline> }, path: string): boolean {
+  if (!/^\/api\/mail\/messages(\?|$)/.test(path)) return true;
+  const q = path.indexOf('?');
+  const params = q >= 0 ? new URLSearchParams(path.slice(q + 1)) : null;
+  const folder = params?.get('folder');
+  // The combined views (Unified, All Accounts) follow their folders' own policies at the server; kept as before.
+  if (!folder || params?.get('unified')) return true;
+  return folderOffline(prefs, params?.get('mailbox') ?? null, folder) !== 'online';
+}
+
+/**
+ * A saved message body that the keep period does not remove: its folder keeps
+ * all of its mail on this computer (worksuite-desktop#162).
+ */
+export function mailKeptForever(prefs: { mailFolderOffline?: Record<string, FolderOffline> }, path: string): boolean {
+  if (!/^\/api\/mail\/messages\/\d+/.test(path)) return false;
+  const q = path.indexOf('?');
+  const params = q >= 0 ? new URLSearchParams(path.slice(q + 1)) : null;
+  const folder = params?.get('folder');
+  return !!folder && folderOffline(prefs, params?.get('mailbox') ?? null, folder) === 'all';
 }

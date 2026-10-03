@@ -22,10 +22,13 @@ import { NetworkPopover, NotificationCenter, ProfileMenu, TransferCenter } from 
 import { OrgSwitcher } from '../app/overlays/OrgSwitcher';
 import { switchOrganization } from '../core/orgs';
 import { ClockPopover } from '../app/overlays/ClockPopover';
+import { ItemLinkDialog } from '../app/overlays/ItemLinkDialog';
+import { closeItemDialog, openItemLink } from '../core/item-links';
 import { SearchOverlay } from '../app/overlays/SearchOverlay';
 import { UpdateBanner } from '../app/screens/UpdateScreens';
 import { ChatDrawer, MinimisedChats } from '../modules/chat/ChatDrawer';
 import { RingingBar } from '../modules/chat/website/Ringing';
+import { watchMicrophone } from '../modules/chat/website/mic';
 import { Sidebar } from './Sidebar';
 import { StatusBar } from './StatusBar';
 import { TabStrip } from './TabStrip';
@@ -55,6 +58,8 @@ export function Shell() {
   useAutoMinimize();
   // Only when WorkSuite starts, as the setting says; a menu closes when the screen changes under it (#150).
   useEffect(() => void openAssistantAtStart(), []);
+  // Whether this computer can take a visitor's voice call (ENH-WCHAT-05, VOICE-11).
+  useEffect(() => (hasChat ? watchMicrophone() : undefined), [hasChat]);
   useEffect(() => closeMenuOnRouteChange(), []);
 
   // Tab restore at start (FR-NAV-04) — only apps the user can still open.
@@ -115,6 +120,7 @@ export function Shell() {
       registerCommand({ id: 'account', label: 'My account', group: 'Navigate', keywords: 'profile picture password two-factor passkey sessions', run: () => navigate('/account/profile'), when: () => !isGuest() }),
       registerCommand({ id: 'account-security', label: 'Change my password', group: 'Navigate', keywords: 'security two-factor 2fa passkey sessions sign out', run: () => navigate('/account/security'), when: () => !isGuest() }),
       registerCommand({ id: 'ai', label: 'Open AI Assistant', group: 'Shell', run: () => toggleAssistant(), when: () => canOpen('ai') }),
+      registerCommand({ id: 'ai-alt', label: 'Open AI Assistant', group: 'Shell', hidden: true, run: () => toggleAssistant(), when: () => canOpen('ai') }),
       registerCommand({ id: 'switch-org', label: 'Switch organization', group: 'Shell', run: () => openOverlay('org'), when: () => !isGuest() }),
       registerCommand({ id: 'lock', label: 'Lock WorkSuite', group: 'Shell', run: () => void call('security:lock'), when: () => !isGuest() }),
       registerCommand({ id: 'help', label: 'Help & Diagnostics', group: 'Navigate', run: () => navigate('/diagnostics') }),
@@ -195,6 +201,11 @@ export function Shell() {
         }
       }),
       on<NavigateRequest>('navigate', (req) => {
+        // A WorkSuite item link (#170): its organisation, access, offline copy and action are settled there.
+        if (req.item) {
+          void openItemLink(req.item.link, { source: req.item.source });
+          return;
+        }
         const target = req.route.replace(/^\/+/, '').split(/[/?]/)[0] || 'home';
         if (moduleFor(target) ? !canOpen(target) : !canOpenWeb(req.route)) {
           refuse(req.route);
@@ -297,6 +308,9 @@ export function Shell() {
         {overlay === 'profile' ? guest ? <GuestProfileMenu /> : <ProfileMenu /> : null}
         {overlay === 'network' ? <NetworkPopover /> : null}
         {overlay === 'clock' ? <ClockPopover /> : null}
+      </PanelBoundary>
+      <PanelBoundary name="This link" onClose={closeItemDialog} floating>
+        <ItemLinkDialog />
       </PanelBoundary>
     </div>
   );

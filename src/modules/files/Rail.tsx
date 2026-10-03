@@ -2,6 +2,7 @@ import { useState, type DragEvent, type ReactNode } from 'react';
 import { bytes } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
+import { PrimaryActionButton, SidebarIconButton } from '../../components/PrimaryAction';
 import { GROUPS, type Counts, type TreeNode, type View } from './api';
 import { PopMenu, below, type MenuItem } from './Menu';
 import { useSync, useSyncAvailable } from './sync';
@@ -130,28 +131,15 @@ export function Rail({
   return (
     <nav aria-label="Drive" className="flex w-[240px] shrink-0 flex-col border-r border-line bg-surface text-[13px]">
       <div className="flex gap-1.5 px-3 pt-3 pb-2">
-        <button
-          type="button"
-          aria-label="New file, folder or document"
-          aria-haspopup="menu"
-          onClick={(e) => setMenu(below(e.currentTarget, 'left', 300))}
-          className="flex h-[38px] flex-1 items-center gap-2 rounded-[10px] bg-primary pr-2.5 pl-3.5 font-bold text-white shadow-[0_1px_2px_rgb(var(--ws-shadow-rgb)/.18),0_4px_12px_rgba(35,52,158,.22)] hover:bg-primary-hover"
-        >
-          <Icon name="plus" size={16} />
-          <span className="flex-1 text-left">New</span>
-          <span className="h-[18px] w-px bg-white/30" />
-          <Icon name="chevron-down" size={14} />
-        </button>
-        <button type="button" aria-label="Upload files" title="Upload files" onClick={onUpload} className="flex h-[38px] w-[38px] items-center justify-center rounded-[10px] border border-line bg-surface text-primary hover:bg-subtle">
-          <Icon name="upload" size={16} />
-        </button>
+        <PrimaryActionButton label="New" hint="New file, folder or document" onMenu={(el) => setMenu(below(el, 'left', 300))} className="flex-1" />
+        <SidebarIconButton icon="upload" label="Upload files" onClick={onUpload} />
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2.5 pt-0.5 pb-1.5 scroll-thin">
         {item('home', 'Home', 'home')}
         {item('folder', 'My Drive', 'folder', counts?.files)}
         {item('recent', 'Recent', 'clock', counts?.recent)}
         {item('starred', 'Starred', 'star', counts?.starred)}
-        {item('shared', 'Shared with me', 'users')}
+        {item('shared', 'Shared with me', 'users', counts?.shared_new)}
         {item('my_shares', 'Shared by me', 'send')}
         {head('fold', 'Folders', tree.length)}
         {!shut.fold ? (tree.length ? branch(tree, 0) : <span className="px-2.5 py-1 text-[12px] text-ink-3">No folders yet.</span>) : null}

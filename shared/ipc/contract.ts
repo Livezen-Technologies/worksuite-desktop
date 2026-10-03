@@ -2,6 +2,8 @@ import { MAX_CONCURRENT } from '../transfers';
 import { DARK_PROFILE_IDS } from '../theme-profiles';
 import { localProfileInput, type LocalOverview, type LocalProfile, type LocalStatus, type MoveOffer, type MoveResult, type RestorePreview } from '../local-workspace';
 import type { GuestMeetInfo, GuestMeetToken } from '../guest-meet';
+import type { DataFolder, ImportProgress, MailFileHandle, MailFileView } from '../mail-files';
+import type { SmimeVerdict } from '../smime';
 /**
  * The typed IPC contract (§3.4, §8.4, WF-05).
  *
@@ -57,6 +59,7 @@ import {
   type RestaurantStatus,
 } from '../restaurant';
 import { MAX_OFFICE_LOCAL_BYTES, OFFICE_EDITOR_EVENTS, OFFICE_EXPORT_TOKEN, officeCommandSchema, type ExternalApp, type OfficeLocalCopy, type OfficeLocalPick } from '../office';
+import { contactSyncContract, type ContactSyncOutputs } from '../contact-sync';
 import { pmsLocksContract, type PmsLocksOutputs } from '../pms-locks';
 import { posContract, type PosOutputs } from '../pos';
 import { pdfEditOpSchema, pdfPrintSchema, pdfSearchOptionsSchema, pdfSourceSchema, SEARCH_MAX_QUERY, type PdfAnnotView, type PdfAttachmentView, type PdfBitmap, type PdfDiagnosticCheck, type PdfDriveDetails, type PdfFailureReport, type PdfLinkView, type PdfLocalPick, type PdfOutlineNode, type PdfRect, type PdfSessionView } from '../pdf';
@@ -157,7 +160,12 @@ export const preferencesPatchSchema = z
     openFilesLocally: z.enum(['ask', 'always', 'never']),
     mailCacheDays: z.union([z.literal(7), z.literal(30), z.literal(90), z.literal(0)]),
     mailtoHandler: z.boolean(),
+    links: z.object({ openInApp: z.boolean(), mailLinks: z.enum(['new-tab', 'current-tab']), confirmActions: z.boolean() }).partial(),
     mailCacheDaysByMailbox: z.record(z.string().regex(/^\d{1,12}$/), z.union([z.literal(7), z.literal(30), z.literal(90), z.literal(0)])).refine((r) => Object.keys(r).length <= 200),
+    mailFolderOffline: z.record(z.string().regex(/^(\d{1,12}|local):[A-Za-z0-9._\-/ :]{1,128}$/), z.enum(['all', 'recent', 'headers', 'online'])).refine((r) => Object.keys(r).length <= 500),
+    mailAlerts: z.enum(['all', 'focused', 'vip', 'none']),
+    mailVipBreakthrough: z.boolean(),
+    highContrast: z.boolean(),
     tabSuspendMinutes: z.number().int().min(5).max(480),
     language: z.string().regex(/^[a-z]{2}(-[A-Z]{2})?$/),
     updateChannel: z.enum(['stable', 'beta', 'dev', 'org']),
@@ -284,12 +292,27 @@ const coverId = z.string().regex(/^drive:\d{1,12}:[A-Za-z0-9:.-]{1,40}$/);
 /** An Office document's bytes from the editor (a ZIP package, an OLE file, RTF or CSV), at most the local limit. */
 const officeBytes = z.instanceof(Uint8Array).refine((b) => b.byteLength > 0 && b.byteLength <= MAX_OFFICE_LOCAL_BYTES, 'The document is empty or too large.');
 
+const mailFileHandle = z.string().uuid();
+
 export const contract = {
   'app:info': ch(none, { whileLocked: true }),
   'app:quit': ch(none, { whileLocked: true }),
   'app:relaunch': ch(none, { whileLocked: true }),
   'app:openExternal': ch(z.object({ url: z.string().url().max(2048) }), { rate: 5 }),
   'app:openInBrowser': ch(z.object({ path: z.string().regex(/^\/[A-Za-z0-9/_\-.?=&]*$/).max(512) }), { session: true, rate: 5 }),
+  // An item link opened (#170): written to the audit outbox and sent to the server's audit trail — the item, the
+  // action and where the link was found; never the link itself.
+  'links:audit': ch(
+    z.object({
+      org: z.string().regex(/^[1-9]\d{0,11}$/),
+      type: z.string().regex(/^[a-z]{2,16}$/),
+      id: z.string().regex(/^[A-Za-z0-9-]{1,64}$/),
+      action: z.string().regex(/^[a-z-]{2,20}$/),
+      source: z.enum(['email', 'chat', 'notification', 'external']),
+      outcome: z.enum(['opened', 'confirmed', 'cancelled', 'refused', 'offline']),
+    }),
+    { session: true, rate: 20 },
+  ),
   /** macOS: the Dock icon with the unread count painted on (the renderer draws it; see core/dock-badge). */
   'app:setDockIcon': ch(z.object({ png: z.string().regex(/^data:image\/png;base64,[A-Za-z0-9+/=]+$/).max(4_000_000) }), { whileLocked: true, rate: 30 }),
 
@@ -395,6 +418,16 @@ export const contract = {
   'ring:state': ch(none, { session: true, whileLocked: true }),
   'ring:join': ch(z.object({ id: z.number().int().positive() }), { session: true, rate: 4 }),
   'ring:silence': ch(z.object({ id: z.number().int().positive(), on: z.boolean() }), { session: true, rate: 10 }),
+  'ring:pass': ch(z.object({ id: z.number().int().positive() }), { session: true, rate: 4 }),
+  // An invitation or transfer into a website chat (ENH-WCHAT-03): Join chat / Accept, or Decline.
+  'ring:handoff': ch(z.object({ id: z.number().int().positive(), accept: z.boolean() }), { session: true, rate: 6 }),
+  // A visitor's voice call (ENH-WCHAT-05): Answer or Decline; whether this computer has a microphone; the call it is on.
+  'ring:call': ch(z.object({ id: z.number().int().positive(), accept: z.boolean() }), { session: true, rate: 6 }),
+  'ring:mic': ch(z.object({ has: z.boolean() }), { session: true, rate: 10 }),
+  'ring:onCall': ch(
+    z.object({ conversationId: z.number().int().positive(), visitor: z.string().max(120), since: z.number().int().nonnegative(), held: z.boolean() }).nullable(),
+    { session: true, rate: 20 },
+  ),
   // Multi-window docking (FR-NAV-05/07): tear a tab off into its own window, and dock it back.
   'windows:detach': ch(
     z.object({ route, title: z.string().max(200).optional(), at: z.object({ x: z.number().int(), y: z.number().int() }).optional() }),
@@ -423,6 +456,7 @@ export const contract = {
   'files:pickFolder': ch(z.object({ title: z.string().max(100).optional() }), { session: true, rate: 2 }),
 
   'media:access': ch(z.object({ kind: z.enum(['microphone', 'camera']) }), { session: true, rate: 5 }),
+  'media:screenIndicator': ch(z.object({ active: z.boolean() }), { session: true, rate: 12 }),
   'media:screenSources': ch(none, { session: true, rate: 3 }),
   'media:screenPick': ch(z.object({ id: z.string().min(1).max(200), audio: z.boolean().optional() }), { session: true, rate: 6 }),
   'media:privacySettings': ch(z.object({ pane: z.enum(['microphone', 'camera', 'screen', 'accessibility']) }), { session: true, rate: 2 }),
@@ -695,10 +729,12 @@ export const contract = {
         chatMedia: z.string().regex(ELEARNING_MEDIA_TOKEN).optional(),
         /** A task's attachment: the main process asks for its short-lived link (`POST /api/tasks/{task}/attachments/{id}/link`). */
         taskAttachment: z.object({ task: z.number().int().positive(), id: z.number().int().positive() }).optional(),
+        /** A chat conversation exported as text, or as a zip with or without its media (worksuite-desktop#183); the server checks the policy and audits it. */
+        chatExport: z.object({ room: z.number().int().positive(), format: z.enum(['txt', 'zip']), media: z.boolean() }).optional(),
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => [v.fileId, v.mail, v.mailSource, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.minutesExport, v.transcriptExport, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.elearningMedia, v.officeExport, v.chatMedia, v.taskAttachment].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment or original, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, the minutes or a transcript of a meeting, a payment slip, an order list, an Orders report, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, an eLearning lesson file, an Office export, a chat attachment or a task attachment'),
+      .refine((v) => [v.fileId, v.mail, v.mailSource, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.minutesExport, v.transcriptExport, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.elearningMedia, v.officeExport, v.chatMedia, v.taskAttachment, v.chatExport].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment or original, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, the minutes or a transcript of a meeting, a payment slip, an order list, an Orders report, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, an eLearning lesson file, an Office export, a chat attachment, a task attachment or a chat export'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   /**
@@ -755,6 +791,16 @@ export const contract = {
   'notifications:markAllRead': ch(none, { session: true }),
   'notifications:pause': ch(z.object({ minutes: z.number().int().min(0).max(60 * 24 * 7).nullable() }), { session: true }),
   'notifications:test': ch(none, { session: true, rate: 1 }),
+  'notifications:reminder': ch(
+    z.strictObject({
+      id: z.string().regex(/^[A-Za-z0-9:._\-/ ]{1,200}$/),
+      title: z.string().max(200),
+      body: z.string().max(300),
+      route: z.string().regex(/^\/(mail|calendar)\?[A-Za-z0-9%=&._\-:]{1,400}$/),
+      flag: z.strictObject({ mailbox: z.number().int().min(0), folder: z.string().regex(/^[A-Za-z0-9._\-/ :]{1,128}$/), uid: z.string().regex(/^\d{1,20}$/) }).optional(),
+    }),
+    { session: true, rate: 5 },
+  ),
   'notifications:permission': ch(none, { session: true }),
   /** The bell's count again, now: after the notification centre read, snoozed or archived something. */
   'notifications:refresh': ch(none, { session: true, rate: 10 }),
@@ -1015,6 +1061,50 @@ export const contract = {
   'offline:clearModule': ch(z.object({ module: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/) }), { session: true, sensitive: true, rate: 1 }),
   /** What Mail keeps on this computer, by kind and by mailbox (Settings › Mail). */
   'offline:mailStats': ch(none, { session: true }),
+  /**
+   * Mail's saved answers for these GET paths, read from this computer without asking the server: the page shows
+   * them at once and refreshes from the server behind them (worksuite-desktop#162). Null where nothing is saved.
+   */
+  'offline:peek': ch(z.strictObject({ paths: z.array(z.string().regex(/^\/api\/mail\/[A-Za-z0-9/_\-.,:@~]*(\?[^\s]*)?$/).max(2048)).min(1).max(12) }), { session: true, rate: 60 }),
+  /** Remove one mailbox's saved mail from this computer (the mailbox was removed from the account). */
+  'offline:clearMailbox': ch(z.strictObject({ mailbox: z.string().regex(/^\d{1,12}$/) }), { session: true, sensitive: true, rate: 5 }),
+  /** Mail search over what this computer keeps (lists and opened messages), for when the server cannot be reached. */
+  'offline:mailSearch': ch(z.strictObject({ q: z.string().min(1).max(200) }), { session: true, rate: 30 }),
+  // Mail data files (ENH-MAIL-03 DMO-DAT-01…04): the main process picks, the worker reads, the server receives.
+  'mailfile:pick': ch(z.strictObject({ mode: z.enum(['file', 'folder', 'view']) }), { session: true, rate: 2 }),
+  'mailfile:scan': ch(z.strictObject({ handle: mailFileHandle }), { session: true, rate: 5 }),
+  'mailfile:import': ch(
+    z.strictObject({
+      handle: mailFileHandle,
+      importId: z.number().int().positive(),
+      plan: z.array(z.strictObject({ folder: z.number().int().positive(), source: z.string().max(500), destination: z.string().min(1).max(500).regex(/^[\x20-\x7e]+$/) })).max(5000),
+    }),
+    { session: true, sensitive: true, rate: 2 },
+  ),
+  'mailfile:progress': ch(z.strictObject({ handle: mailFileHandle }), { session: true }),
+  'mailfile:cancel': ch(z.strictObject({ handle: mailFileHandle }), { session: true }),
+  'mailfile:view': ch(z.strictObject({ handle: mailFileHandle }), { session: true, rate: 5 }),
+  'mailfile:saveAttachment': ch(z.strictObject({ handle: mailFileHandle, index: z.number().int().min(0).max(10_000) }), { session: true, rate: 3 }),
+  'mailfile:close': ch(z.strictObject({ handle: mailFileHandle }), { session: true }),
+  // Export a folder or search result (DMO-DAT-03): only when the organisation allows it, and audited.
+  'mail:export': ch(
+    z.strictObject({
+      mailbox: z.string().regex(/^\d{1,20}$/).nullable(),
+      folder: z.string().regex(/^[A-Za-z0-9._\-/ :]{1,128}$/),
+      folderName: z.string().max(200),
+      format: z.enum(['mbox', 'eml']),
+      items: z.array(z.strictObject({ uid: z.string().regex(/^\d{1,20}$/), folder: z.string().regex(/^[A-Za-z0-9._\-/ :]{1,128}$/), mailbox: z.string().regex(/^\d{1,20}$/).nullable() })).max(10_000).optional(),
+    }),
+    { session: true, sensitive: true, rate: 1 },
+  ),
+  'mail:exportCancel': ch(none, { session: true }),
+  // A link in a message, after the safe-link check (DMO-SEC-03): `confirmed` when the person chose to go on past a warning.
+  'mail:openLink': ch(z.strictObject({ url: z.string().url().max(4096), confirmed: z.boolean() }), { session: true, rate: 5 }),
+  // Spell check's languages (worksuite-desktop#188): what this computer has, and the choice.
+  'mail:spellLanguages': ch(none, { session: true }),
+  'mail:setSpellLanguages': ch(z.strictObject({ languages: z.array(z.string().regex(/^[a-z]{2,3}(-[A-Z]{2})?$/)).max(4) }), { session: true, rate: 5 }),
+  // S/MIME (DMO-SEC-05): a signed message checked against its own bytes, in the main process.
+  'smime:verify': ch(z.strictObject({ uid: z.string().regex(/^\d{1,20}$/), folder: z.string().regex(/^[A-Za-z0-9._\-/ :]{1,128}$/), mailbox: z.string().regex(/^\d{1,20}$/).nullable() }), { session: true, rate: 5 }),
   'offline:submit': ch(mutationInputSchema, { session: true, rate: 20 }),
   'offline:retry': ch(z.object({ id: idString }), { session: true }),
   'offline:discard': ch(z.object({ id: idString }), { session: true }),
@@ -1061,6 +1151,7 @@ export const contract = {
   // POS: the till on this computer — its credential stays in the main process (shared/pos.ts, pos-ipc.ts).
   ...posContract,
   ...pmsLocksContract,
+  ...contactSyncContract,
 } satisfies Record<InvokeChannel, ChannelSpec>;
 
 export type Contract = typeof contract;
@@ -1132,12 +1223,13 @@ export interface WindowState {
   fullScreen?: boolean;
 }
 
-export interface Outputs extends PosOutputs, PmsLocksOutputs {
+export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs {
   'app:info': AppInfo;
   'app:quit': void;
   'app:relaunch': void;
   'app:openExternal': boolean;
   'app:openInBrowser': boolean;
+  'links:audit': void;
   'app:setDockIcon': boolean;
   'local:enter': LocalStatus;
   'local:leave': void;
@@ -1171,6 +1263,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'hr:clock': { ok: true };
   'hr:break': { ok: true };
   'media:access': { granted: boolean };
+  'media:screenIndicator': void;
   'media:screenSources': ScreenSources;
   'media:screenPick': void;
   'media:privacySettings': void;
@@ -1260,6 +1353,11 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'ring:state': WebchatRingState;
   'ring:join': boolean;
   'ring:silence': void;
+  'ring:pass': boolean;
+  'ring:handoff': boolean;
+  'ring:call': boolean;
+  'ring:mic': void;
+  'ring:onCall': void;
   'windows:detach': { id: number };
   'windows:dock': void;
   'windows:toMain': void;
@@ -1306,6 +1404,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'notifications:markAllRead': void;
   'notifications:pause': { pausedUntil: string | null };
   'notifications:test': boolean;
+  'notifications:reminder': void;
   'notifications:permission': NotificationPermission;
   'notifications:refresh': void;
   'clipboard:readForPaste': { text: string | null; image: string | null; files: PickedFile[] };
@@ -1419,6 +1518,23 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'offline:moduleBytes': number;
   'offline:clearModule': number;
   'offline:mailStats': MailStoreStats;
+  'offline:peek': Array<{ body: string; cachedAt: string } | null>;
+  'offline:clearMailbox': number;
+  'offline:mailSearch': Array<Record<string, unknown>>;
+  'mailfile:pick': MailFileHandle | null;
+  'mailfile:scan': { folders: DataFolder[]; unreadable: string[] };
+  'mailfile:import': ImportProgress;
+  'mailfile:progress': ImportProgress | null;
+  'mailfile:cancel': void;
+  'mailfile:view': MailFileView;
+  'mailfile:saveAttachment': boolean;
+  'mailfile:close': void;
+  'mail:export': { count: number; failed: number; cancelled: boolean; name: string } | null;
+  'mail:exportCancel': void;
+  'mail:openLink': boolean;
+  'mail:spellLanguages': { choices: Array<{ code: string; label: string; available: boolean; reason?: string }>; current: string[]; system: boolean };
+  'mail:setSpellLanguages': string[];
+  'smime:verify': SmimeVerdict;
   'offline:submit': SubmitResult;
   'offline:retry': void;
   'offline:discard': void;

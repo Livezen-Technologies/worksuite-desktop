@@ -358,7 +358,7 @@ export function Notifications() {
               {l}
             </label>
           ))}
-          <span className="text-[12px] text-ink-3">Someone sharing a file with you is always in Notifications.</span>
+          <span className="text-[12px] text-ink-3">How you hear about files shared with you — in Chat, in the app, by email — is in Notification settings › Files.</span>
         </div>
       ) : null}
     </main>

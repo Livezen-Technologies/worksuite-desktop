@@ -1,6 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
+import { useCanOpen } from '../../../core/access';
 import { call, errorMessage } from '../../../core/bridge';
+import { navigate } from '../../../core/tabs';
+import { usePhoneIndex, type PhoneIndex } from '../../contacts/phones';
 import type { ReplyTarget } from '../Thread';
 import { useDraft } from '../../../core/drafts';
 import { Checkbox } from '../../../components/Checkbox';
@@ -13,12 +16,15 @@ import { Icon } from '../../../components/Icon';
 import { ResizeDivider, useResizableWidth } from '../../../components/ResizeDivider';
 import { Select } from '../../../components/Select';
 import { SidePanel } from '../../../components/SidePanel';
-import { Avatar, Button, Empty, ErrorNote, Modal, Spinner, cx } from '../../../components/ui';
+import { Button, Empty, ErrorNote, Modal, Spinner, cx } from '../../../components/ui';
 import { openChatAttachment, previewKind, type Attachment } from '../AttachmentViewer';
 import { mediaUrl } from '../types';
+import { ConversationMenu } from '../ConversationMenu';
 import { LIST_WIDTH, rememberWhatsapp } from './channels';
+import { fullName, previewParts, whoIs, whoSent, withMentionNames, type WaWho } from './wa-names';
+import { AddToContacts, ContactPanel, LinkToContact, WaAvatar, contactRoute, waContactMenuItems } from './WaContact';
 import {
-  fileRefusal, isConnected, messageText, preview, readWa, sendWa, sendWaFiles, sendWaTemplate, startWa, useWaChats, useWaSettings, useWaTemplates, useWaThread, waAttachment, waLimits, WA_SCOPES,
+  fileRefusal, isConnected, isConnecting, messageText, readWa, sendWa, sendWaFiles, sendWaTemplate, startWa, useWaChats, useWaSettings, useWaTemplates, useWaThread, waAttachment, waLimits, WA_SCOPES,
   type WaAccount, type WaChat, type WaMessage, type WaScope, type WaTemplate,
 } from './whatsapp';
 
@@ -41,14 +47,20 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
   const selected = query.get('wa');
   const to = query.get('to');
   const [starting, setStarting] = useState(false);
+  // The conversation menu at the mouse (worksuite-desktop#183).
   const senders = accounts.filter((a) => a.can_send !== false && isConnected(a));
   const [account, setAccount] = useState(0);
   const [scope, setScope] = useState<WaScope>('all');
   const [q, setQ] = useState('');
   const chats = useWaChats({ account, scope, q }, accounts.length > 0);
   const rows = chats.data?.chats ?? [];
+  // Names come from Contacts, kept here and re-read whenever a contact changes (#176).
+  const index = usePhoneIndex(useCanOpen('contacts') && accounts.length > 0).data;
+  const [picks, pick] = usePicks();
+  const [action, setAction] = useState<{ kind: 'add' | 'link'; who: WaWho } | null>(null);
+  const [menu, setMenu] = useState<{ who: WaWho; c: WaChat; x: number; y: number } | null>(null);
   const current = rows.find((c) => String(c.id) === selected);
-  useTabTitle(current ? `WhatsApp · ${current.name}` : selected ? null : 'WhatsApp');
+  useTabTitle(current ? `WhatsApp · ${fullName(whoIs(current, index, picks[current.id]))}` : selected ? null : 'WhatsApp');
   const list = useResizableWidth('chat.list', LIST_WIDTH);
   const down = accounts.filter((a) => !isConnected(a));
 
@@ -71,7 +83,11 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
         <div key={a.id} role="status" className="mx-3 mb-2 flex items-start gap-2 rounded-[8px] bg-warning-bg p-2.5 text-[12px] text-[#9A4A06] dark:text-warning">
           <Icon name="wifi-off" size={14} className="mt-px shrink-0" />
           <span className="min-w-0 flex-1">
-            <b className="font-semibold">{a.name} is not connected.</b> {a.status_note ?? 'Messages to and from it wait until it is linked again.'}
+            {isConnecting(a) ? (
+              <><b className="font-semibold">{a.name} is connecting.</b> {a.status_note || 'Messages arrive as soon as the session is up.'}</>
+            ) : (
+              <><b className="font-semibold">{a.name} is not connected.</b> {a.status_note ?? 'Messages to and from it wait until it is linked again.'}</>
+            )}
           </span>
           {a.provider === 'web_js' && a.can_connect ? (
             <button type="button" onClick={() => onRelink(a)} className="shrink-0 font-bold underline">Link again</button>
@@ -81,25 +97,26 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
         </div>
       ))}
       <div className="min-h-0 flex-1 overflow-y-auto pb-2 scroll-thin">
-        {chats.isLoading ? <Spinner /> : chats.error ? <div className="p-4"><ErrorNote error={chats.error} onRetry={() => void chats.refetch()} /></div> : null}
+        {chats.isLoading ? <Spinner /> : chats.error && !chats.data ? <div className="p-4"><ErrorNote error={chats.error} onRetry={() => void chats.refetch()} /></div> : null}
         {chats.isSuccess && !rows.length ? (
           <Empty icon="phone" title={q.trim() ? 'Nothing matches' : scope === 'unread' ? 'Nothing unread' : scope === 'waiting' ? 'Nobody is waiting' : scope === 'mine' ? 'No conversations assigned to you' : 'No WhatsApp conversations yet'} hint={scope === 'all' && !q.trim() ? 'Messages to your numbers appear here.' : undefined} />
         ) : null}
-        {rows.map((c) => (
-          <ChatRow key={c.id} c={c} active={String(c.id) === selected} many={accounts.length > 1 && !account} onOpen={() => go(`/chat?channel=whatsapp&wa=${c.id}`)} />
-        ))}
+        {rows.map((c) => {
+          const who = whoIs(c, index, picks[c.id]);
+          return <ChatRow key={c.id} c={c} who={who} active={String(c.id) === selected} many={accounts.length > 1 && !account} onOpen={() => go(`/chat?channel=whatsapp&wa=${c.id}`)} onMenu={(x, y) => setMenu({ who, c, x, y })} />;
+        })}
       </div>
     </>
   );
 
   return (
-    <div className="flex h-full min-w-0 flex-1">
+    <div className="relative flex h-full min-w-0 flex-1">
       <SidePanel id="chat" label="the conversations">
         <aside aria-label="WhatsApp conversations" className="relative flex shrink-0 flex-col border-r border-line bg-surface" style={{ width: list.width }}>
           <ResizeDivider state={list} label="Resize the conversation list" />
           <div className="flex flex-col gap-2 px-3 pt-3 pb-2">
             <div className="flex items-center gap-2">
-              <b className="flex-1 truncate text-[15px] text-ink">WhatsApp</b>
+              <b className="flex-1 truncate text-[15px] text-ink">WhatsApp</b>{chats.isFetching && chats.data ? <span role="status" className="text-[11px] text-ink-3">Updating…</span> : null}
               {accounts.length > 1 ? (
                 <Select aria-label="Number" value={account} onChange={(e) => setAccount(Number(e.target.value))} className="h-7 max-w-[150px] rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink">
                   <option value={0}>All numbers</option>
@@ -137,8 +154,18 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
         </aside>
       </SidePanel>
       <div className="flex min-w-0 flex-1 bg-ground">
-        {selected ? <WhatsappThread key={selected} id={selected} onRelink={onRelink} /> : <Empty icon="phone" title="Pick a conversation" hint={accounts.length ? 'Your WhatsApp conversations are in the list.' : undefined} />}
+        {selected ? <WhatsappThread key={selected} id={selected} onRelink={onRelink} index={index} picked={picks[Number(selected)] ?? null} onPick={(c) => pick(Number(selected), c)} onAction={(kind, who) => setAction({ kind, who })} /> : <Empty icon="phone" title="Pick a conversation" hint={accounts.length ? 'Your WhatsApp conversations are in the list.' : undefined} />}
       </div>
+      {menu ? (
+        <ConversationMenu
+          x={menu.x}
+          y={menu.y}
+          target={{ kind: 'whatsapp', chat: menu.c, contactItems: waContactMenuItems(menu.who, { add: () => setAction({ kind: 'add', who: menu.who }), link: () => setAction({ kind: 'link', who: menu.who }), open: (id) => navigate(contactRoute(id)) }) }}
+          onClose={() => setMenu(null)}
+        />
+      ) : null}
+      {action?.kind === 'add' ? <AddToContacts who={action.who} onClose={() => setAction(null)} /> : null}
+      {action?.kind === 'link' ? <LinkToContact who={action.who} onClose={() => setAction(null)} /> : null}
       {(starting || (to && !selected)) && !loading ? (
         <StartConversation
           accounts={senders}
@@ -220,17 +247,67 @@ function StartConversation({ accounts, phone, onClose, onStarted }: { accounts: 
   );
 }
 
-function ChatRow({ c, active, many, onOpen }: { c: WaChat; active: boolean; many: boolean; onOpen: () => void }) {
+/** The contact chosen for a number several contacts share, per conversation, remembered on this computer. */
+function usePicks(): [Record<number, number>, (chat: number, contact: number) => void] {
+  const [picks, setPicks] = useState<Record<number, number>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(PICKS) ?? '{}') as Record<number, number>;
+    } catch {
+      return {};
+    }
+  });
+  const pick = (chat: number, contact: number) =>
+    setPicks((p) => {
+      const next = { ...p, [chat]: contact };
+      try {
+        localStorage.setItem(PICKS, JSON.stringify(next));
+      } catch {
+        // A convenience: the best match is shown instead.
+      }
+      return next;
+    });
+  return [picks, pick];
+}
+
+const PICKS = 'ws.chat.whatsapp.picks';
+
+function ChatRow({ c, who, active, many, onOpen, onMenu }: { c: WaChat; who: WaWho; active: boolean; many: boolean; onOpen: () => void; onMenu: (x: number, y: number) => void }) {
   const waiting = c.waiting_minutes !== null && c.status !== 'resolved';
+  const p = previewParts(c);
+  // A photo reads as a picture and its caption, not the word "Photo" (#176).
+  const lead = `${many ? `${c.account_name} · ` : ''}${c.is_muted ? 'Muted · ' : ''}${p.you ? 'You: ' : ''}`;
   return (
-    <button type="button" onClick={onOpen} aria-current={active ? 'true' : undefined} className={cx('flex w-full items-center gap-2.5 px-3.5 py-[7px] text-left', active ? 'bg-selection' : 'hover:bg-subtle')}>
-      <Avatar name={c.name} size={34} src={mediaUrl(c.avatar_url)} className={c.kind === 'group' ? '!rounded-[9px]' : ''} />
+    <button
+      type="button"
+      onClick={onOpen}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onMenu(e.clientX, e.clientY);
+      }}
+      aria-current={active ? 'true' : undefined}
+      className={cx('flex w-full items-center gap-2.5 px-3.5 py-[7px] text-left', active ? 'bg-selection' : 'hover:bg-subtle')}
+    >
+      <WaAvatar who={who} size={34} />
       <span className="min-w-0 flex-1">
-        <span className="flex gap-1.5">
-          <b className={cx('flex-1 truncate text-[13px] text-ink', !c.unread && 'font-semibold')}>{c.name}</b>
+        <span className="flex items-baseline gap-1.5">
+          <span className="flex min-w-0 flex-1 items-baseline gap-1 truncate">
+            <b className={cx('truncate text-[13px] text-ink', !c.unread && 'font-semibold')}>{who.name}</b>
+            {who.source === 'contact' && who.subtitle ? <span className="truncate text-[11.5px] text-ink-3">· {who.subtitle}</span> : null}
+            {who.candidates.length > 1 ? <span title={who.candidates.map((x) => x.name).join(', ')} className="shrink-0 rounded-full bg-subtle px-1.5 text-[10.5px] font-semibold text-ink-2">{who.candidates.length} contacts</span> : null}
+          </span>
           <span className="shrink-0 text-[11px] text-ink-3">{c.last_message_at ? listStamp(c.last_message_at) : ''}</span>
         </span>
-        <span className="block truncate text-[12px] text-ink-3">{many ? `${c.account_name} · ` : ''}{c.is_muted ? 'Muted · ' : ''}{preview(c)}</span>
+        <span className="flex min-w-0 items-center gap-1 text-[12px] text-ink-3">
+          {p.icon ? (
+            <>
+              {lead ? <span className="shrink-0">{lead}</span> : null}
+              <Icon name={p.icon} size={12} className="shrink-0" />
+              <span className="truncate">{p.text}</span>
+            </>
+          ) : (
+            <span className="truncate">{lead}{p.text}</span>
+          )}
+        </span>
       </span>
       {c.unread ? (
         <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10.5px] font-bold text-white">{c.unread}</span>
@@ -241,13 +318,16 @@ function ChatRow({ c, active, many, onOpen }: { c: WaChat; active: boolean; many
   );
 }
 
-function WhatsappThread({ id, onRelink }: { id: string; onRelink: (a: WaAccount) => void }) {
+function WhatsappThread({ id, onRelink, index, picked, onPick, onAction }: { id: string; onRelink: (a: WaAccount) => void; index: PhoneIndex | undefined; picked: number | null; onPick: (contact: number) => void; onAction: (kind: 'add' | 'link', who: WaWho) => void }) {
   const qc = useQueryClient();
   const thread = useWaThread(id);
   const [reply, setReply] = useState<ReplyTarget | null>(null);
+  const [panel, setPanel] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const data = thread.data;
   const count = data?.messages.length ?? 0;
+  const firstScroll = useRef(true);
+  const atBottom = useRef(true);
   const unread = data?.chat.unread ?? 0;
 
   // Reading a conversation reads it: the list, the toolbar badge and the customer's ticks follow. Not while the
@@ -262,35 +342,58 @@ function WhatsappThread({ id, onRelink }: { id: string; onRelink: (a: WaAccount)
 
   useEffect(() => {
     const el = scroller.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el && (firstScroll.current || atBottom.current)) { el.scrollTop = el.scrollHeight; firstScroll.current = false; }
   }, [count]);
 
   if (thread.isLoading) return <Spinner />;
-  if (thread.error || !data) return <div className="p-6"><ErrorNote error={thread.error} onRetry={() => void thread.refetch()} /></div>;
+  if (!data) return <div className="p-6"><ErrorNote error={thread.error} onRetry={() => void thread.refetch()} /></div>;
   const { chat } = data;
+  const who = whoIs(chat, index, picked);
+  const group = who.group;
   const down = !isConnected(chat.account);
   // Text and files need the 24-hour window; an approved template does not (the rule WhatsApp enforces, and the server).
-  const blocked = !data.can_send ? 'You can read this number’s conversations but not answer them.' : down ? `${chat.account.name} is not connected, so nothing can be sent until it is linked again.` : null;
+  const blocked = !data.can_send ? 'You can read this number’s conversations but not answer them.' : down ? (isConnecting(chat.account) ? `${chat.account.name} is connecting. Messages can be sent once it is up.` : `${chat.account.name} is not connected, so nothing can be sent until it is linked again.`) : null;
   const refusal = blocked ?? (!chat.window.allowed ? `${chat.window.reason ?? 'Only an approved template can be sent now.'} ${l10n('Send an approved template instead.')}` : null);
-  const gallery: Attachment[] = data.messages.flatMap((m) => waAttachment(m) ?? []);
+  // Security-code notices and other empty markers are not messages anybody wrote.
+  const shown = data.messages.filter((m) => !(m.kind === 'text' && !(m.body ?? '').trim() && !m.file_id && !(m.caption ?? '').trim()));
+  const gallery: Attachment[] = shown.flatMap((m) => waAttachment(m) ?? []);
+  // What goes under the name: the company or "Not in contacts" · the number (a group: its size) · the number it is on.
+  const under = [group ? who.subtitle : who.source === 'contact' ? who.subtitle : who.source === 'number' ? null : who.subtitle, group ? null : who.source === 'number' ? who.subtitle : who.phoneDisplay, `on ${chat.account.name}`].filter(Boolean).join(' · ');
 
   return (
-    <section aria-label={`WhatsApp with ${chat.name}`} className="flex min-w-0 flex-1 flex-col">
-      <header className="flex items-center gap-2.5 border-b border-line bg-surface px-4 py-2.5">
-        <Avatar name={chat.name} size={34} src={mediaUrl(chat.avatar_url)} />
-        <span className="min-w-0 flex-1">
-          <b className="block truncate text-[14px] text-ink">{chat.name}</b>
-          <span className="block truncate text-[12px] text-ink-3">+{chat.wa_id} · on {chat.account.name}</span>
-        </span>
-        <Button size="sm" icon="external" onClick={() => void call('app:openInBrowser', { path: `/whatsapp?chat=${chat.id}` })}>Open on the web</Button>
-      </header>
-      <div ref={scroller} className="flex min-h-0 flex-1 flex-col gap-[9px] overflow-y-auto px-4 py-3 scroll-thin">
-        {data.has_more ? <div className="self-center text-[11px] text-ink-3">Earlier messages are on the web.</div> : null}
-        {!data.messages.length ? <Empty icon="phone" title="No messages yet" /> : null}
-        {data.messages.map((m) => <Bubble key={m.id} m={m} gallery={gallery} onReply={() => setReply({ id: m.id, sender_name: m.sender_name ?? chat.name, snippet: messageText(m).slice(0, 120) })} />)}
-      </div>
-      <WhatsappComposer chatId={chat.id} accountId={chat.account_id} name={chat.name} messages={data.messages} reply={reply} onClearReply={() => setReply(null)} reconnect={down ? () => onRelink(chat.account) : undefined} refusal={refusal} templates={!blocked} onSent={() => void qc.invalidateQueries({ queryKey: ['whatsapp'] })} />
-    </section>
+    <div className="flex min-w-0 flex-1">
+      <section aria-label={`WhatsApp with ${who.name}`} className="flex min-w-0 flex-1 flex-col">
+        <header className="flex items-center gap-2.5 border-b border-line bg-surface px-4 py-2.5">
+          <button type="button" aria-label={`About ${who.name}`} aria-expanded={panel} onClick={() => setPanel(!panel)} className="flex min-w-0 flex-1 items-center gap-2.5 rounded-[8px] text-left hover:opacity-90">
+            <WaAvatar who={who} size={34} />
+            <span className="min-w-0 flex-1">
+              <b className="flex items-center gap-1.5 truncate text-[14px] text-ink">
+                <span className="truncate">{who.name}</span>
+                {who.candidates.length > 1 ? <span className="shrink-0 rounded-full bg-subtle px-1.5 text-[10.5px] font-semibold text-ink-2">{who.candidates.length} contacts</span> : null}
+              </b>
+              <span className="block truncate text-[12px] text-ink-3">{under}</span>
+            </span>
+          </button>
+          {!group && !who.contact && who.e164 ? (
+            <>
+              <Button size="sm" icon="user-plus" onClick={() => onAction('add', who)}>Add to contacts</Button>
+              <Button size="sm" icon="link" onClick={() => onAction('link', who)}>Link to contact</Button>
+            </>
+          ) : null}
+          <Button size="sm" icon="external" onClick={() => void call('app:openInBrowser', { path: `/whatsapp?chat=${chat.id}` })}>Open on the web</Button>
+        </header>
+        <div ref={scroller} onScroll={() => { const el = scroller.current; if (el) atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }} className="flex min-h-0 flex-1 flex-col gap-[9px] overflow-y-auto px-4 py-3 scroll-thin">
+          {data.has_more ? <div className="self-center text-[11px] text-ink-3">Earlier messages are on the web.</div> : null}
+          {!shown.length ? <Empty icon="phone" title="No messages yet" /> : null}
+          {shown.map((m) => {
+            const author = group && m.direction === 'in' ? whoSent(m, index) : null;
+            return <Bubble key={m.id} m={m} author={author?.name ?? null} index={index} gallery={gallery} onReply={() => setReply({ id: m.id, sender_name: m.direction === 'out' ? (m.sender_name ?? 'You') : (author?.name ?? who.name), snippet: messageText(m).slice(0, 120) })} />;
+          })}
+        </div>
+        <WhatsappComposer chatId={chat.id} accountId={chat.account_id} name={who.name} messages={shown} reply={reply} onClearReply={() => setReply(null)} reconnect={down ? () => onRelink(chat.account) : undefined} refusal={refusal} templates={!blocked} onSent={() => void qc.invalidateQueries({ queryKey: ['whatsapp'] })} />
+      </section>
+      {panel ? <ContactPanel who={who} chatId={chat.id} onClose={() => setPanel(false)} onPick={onPick} onAdd={() => onAction('add', who)} onLink={() => onAction('link', who)} /> : null}
+    </div>
   );
 }
 
@@ -312,14 +415,18 @@ function sentAt(stamp: string): string {
 
 const TICKS: Record<string, string> = { sent: 'Sent', delivered: 'Delivered', read: 'Read', failed: 'Not sent', queued: 'Sending', pending: 'Sending' };
 
+/** A message whose file was not kept (history imports leave pictures on the phone): its kind, by icon. */
+const MEDIA_ICON: Record<string, string> = { image: 'image', video: 'video', audio: 'mic', document: 'file-text', sticker: 'image', location: 'map-pin', contacts: 'contact' };
+
 const linkOut = (url: string) => void call('app:openInBrowser', { path: url });
 
 /** A message: its words, and its attachment — a picture shown, anything else by its name — opened in the shared preview. */
-function Bubble({ m, gallery, onReply }: { m: WaMessage; gallery: Attachment[]; onReply: () => void }) {
+function Bubble({ m, author, index, gallery, onReply }: { m: WaMessage; author: string | null; index: PhoneIndex | undefined; gallery: Attachment[]; onReply: () => void }) {
   const ours = m.direction === 'out';
   const file = waAttachment(m);
   return (
     <div className={cx('flex max-w-[75%] flex-col gap-0.5', ours ? 'items-end self-end' : 'items-start self-start')}>
+      {author ? <span className="px-1 text-[11.5px] font-semibold text-primary">{author}</span> : null}
       <div className={cx('px-3 py-2 text-[13px] whitespace-pre-wrap break-words text-ink', ours ? 'rounded-[12px_4px_12px_12px] bg-selection' : 'rounded-[4px_12px_12px_12px] border border-line bg-surface')}>
         {file && previewKind(file) === 'image' ? (
           <button type="button" aria-label={`${l10n('Open')} ${file.filename}`} onClick={() => openChatAttachment(file, linkOut, gallery)} className="mb-1 block overflow-hidden rounded-[8px]">
@@ -331,9 +438,9 @@ function Bubble({ m, gallery, onReply }: { m: WaMessage; gallery: Attachment[]; 
             <span className="min-w-0 truncate font-semibold">{file.filename}</span>
           </button>
         ) : m.kind !== 'text' && m.kind !== 'template' ? (
-          <Icon name="paperclip" size={13} className="mr-1 inline text-ink-3" />
+          <Icon name={MEDIA_ICON[m.kind] ?? 'paperclip'} size={13} className="mr-1 inline text-ink-3" />
         ) : null}
-        {file ? (m.caption ?? '') : messageText(m)}
+        {withMentionNames(file ? (m.caption ?? '') : messageText(m), index)}
         {!file && m.media_note ? <span className="block text-[11.5px] text-ink-3">{m.media_note}</span> : null}
       </div>
       <span className={cx('text-[11px]', m.status === 'failed' ? 'font-semibold text-danger' : 'text-ink-3')}>

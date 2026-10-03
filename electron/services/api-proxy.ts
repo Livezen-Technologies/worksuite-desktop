@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { restaurantMainOnly } from '@shared/restaurant';
 import { UNREACHABLE_MESSAGE, isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
@@ -123,8 +124,11 @@ export interface ProxyDeps {
   /** Which module's READ_CACHE covers this GET path, if any. */
   cacheModuleFor: (path: string) => string | null;
   cacheLimits: () => CacheLimits;
+  cacheScope?: () => string;
   /** Mail bodies are cached only when the mail cache window is not "headers only". */
   mailBodiesCached: (path: string) => boolean;
+  /** A folder that is online only keeps not even its list (ENH-MAIL-03 DMO-OFF-01). */
+  mailListCached?: (path: string) => boolean;
   /** Headers the main process adds to a request — credentials the renderer must not hold (a salon desk's key). */
   extraHeaders?: (path: string) => Record<string, string> | null;
 }
@@ -163,14 +167,27 @@ export function createApiProxy(deps: ProxyDeps) {
 
     const cacheModule = method === 'GET' ? deps.cacheModuleFor(apiPath) : null;
     const isMailBody = /^\/api\/mail\/messages\/\d+/.test(apiPath);
-    const cacheable = cacheModule !== null && (!isMailBody || deps.mailBodiesCached(apiPath));
+    const cacheable = cacheModule !== null && (isMailBody ? deps.mailBodiesCached(apiPath) : (deps.mailListCached?.(apiPath) ?? true));
+
+    const whatsapp = /^\/api\/whatsapp(?:\/|\?|$)/.test(apiPath);
+    const scope = whatsapp ? (deps.cacheScope?.() ?? deps.http.url('/')) : '';
+    const namespace = whatsapp ? `/scope/${createHash('sha256').update(scope).digest('hex')}` : '';
+    const cachePath = `${namespace}${apiPath}`;
+
+    // Explicit local-only read: no network, no writes and no arbitrary cache paths.
+    if (request.headers.get('X-WS-Local-Read') === '1') {
+      if (!cacheable || !deps.cacheLimits().enabled) return envelope(404, 'No saved conversation.', 'CACHE_MISS');
+      const hit = deps.cache.get(userId, cachePath);
+      return hit ? new Response(hit.body, { status: hit.status, headers: { 'Content-Type': hit.contentType, 'X-WS-Offline': '1', 'X-WS-Cached-At': hit.cachedAt } }) : envelope(404, 'No saved conversation.', 'CACHE_MISS');
+    }
 
     let upstream: Response;
     try {
       upstream = await deps.http.raw(method, deps.http.url(apiPath), { headers, body, timeoutMs: 60_000, signal: request.signal });
     } catch (e) {
-      if (cacheable || cacheModule) {
-        const hit = deps.cache.get(userId, apiPath);
+      if (whatsapp && (deps.userId() !== userId || (deps.cacheScope?.() ?? deps.http.url('/')) !== scope)) return envelope(401, 'The account changed.', 'NOT_SIGNED_IN');
+      if ((cacheable || cacheModule) && (!whatsapp || deps.cacheLimits().enabled)) {
+        const hit = deps.cache.get(userId, cachePath);
         if (hit) {
           return new Response(hit.body, {
             status: hit.status,
@@ -183,6 +200,9 @@ export function createApiProxy(deps: ProxyDeps) {
       return envelope(code === 'CANCELLED' ? 499 : 503, message, code);
     }
 
+    if (whatsapp && (deps.userId() !== userId || (deps.cacheScope?.() ?? deps.http.url('/')) !== scope)) return envelope(401, 'The account changed.', 'NOT_SIGNED_IN');
+    if (cacheModule && whatsapp && [403, 404].includes(upstream.status)) deps.cache.clearPrefix(userId, `${namespace}/api/whatsapp`);
+
     const out = new Headers();
     for (const h of RETURN_HEADERS) {
       const v = upstream.headers.get(h);
@@ -193,7 +213,7 @@ export function createApiProxy(deps: ProxyDeps) {
     if (cacheable && upstream.status === 200 && type.includes('json')) {
       const text = await upstream.text();
       try {
-        deps.cache.put(userId, cacheModule!, apiPath, { status: 200, contentType: type, body: text }, deps.cacheLimits());
+        deps.cache.put(userId, cacheModule!, cachePath, { status: 200, contentType: type, body: text }, deps.cacheLimits());
       } catch (e) {
         log.warn('cache write failed', { error: String(e) });
       }

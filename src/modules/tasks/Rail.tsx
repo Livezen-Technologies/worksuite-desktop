@@ -6,6 +6,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, Modal, cx } from '../../components/ui';
 import { SCOPES, type Scope, type TaskList } from './api';
+import { PrimaryActionButton } from '../../components/PrimaryAction';
 
 const SWATCHES = ['#0E7C86', '#23349E', '#B45309', '#6B3FB5', '#1F7A4D', '#B42318', '#B83280', '#4A5168'];
 
@@ -19,9 +20,7 @@ export function Rail({ scope, counts, lists, onScope, onNew }: { scope: Scope; c
 
   return (
     <nav aria-label="Task views and lists" className="flex w-[220px] shrink-0 flex-col gap-px overflow-y-auto border-r border-line bg-surface px-2.5 py-3.5 scroll-thin">
-      <button type="button" data-guide="tasks.new-task" onClick={onNew} title="New task (N)" className="mb-2.5 flex h-[38px] shrink-0 items-center justify-center gap-1.5 rounded-[9px] bg-primary font-bold text-white hover:bg-primary-hover">
-        <Icon name="plus" size={16} /> New task
-      </button>
+      <PrimaryActionButton data-guide="tasks.new-task" label="New task" shortcut="N" onClick={onNew} className="mb-2.5" />
       {SCOPES.map((s) => (
         <button key={s.id} type="button" aria-current={scope === s.id ? 'page' : undefined} onClick={() => onScope(s.id)} className={row(scope === s.id)}>
           <span className="min-w-0 flex-1 truncate">{s.label}</span>

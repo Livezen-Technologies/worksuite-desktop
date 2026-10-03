@@ -12,6 +12,7 @@ import { safeFileName } from '@shared/filename';
 import type { AppInfo, BusyReport, DetachedWindow, SyncPolicy } from '@shared/types';
 import { assertRoute, assertWebPath } from './access';
 import { windowRoute } from '../windows/manager';
+import { attachmentRisk } from '@shared/attachments';
 import { DesktopError, isDesktopError } from './errors';
 import type { AppContext } from './context';
 import type { IpcRouter } from '../ipc/router';
@@ -96,6 +97,13 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     return openExternalSafely(`${origin}${input.path}`, winOf(c.sender));
   });
 
+  // An item link opened from an email, a chat or another program (#170): the audit trail says which item, which
+  // action and where from — the server's copy is what an administrator reads.
+  router.handle('links:audit', async (input) => {
+    ctx.audit.record(ctx.session.userId(), 'desktop.link.opened', { org_id: input.org, item_type: input.type, item_id: input.id, action: input.action, source: input.source, outcome: input.outcome });
+    void ctx.audit.flush();
+  });
+
   // ── auth / session ─────────────────────────────────────────────────────
   router.handle('auth:state', () => ctx.session.get());
   router.handle('auth:setServer', async (input) => {
@@ -113,6 +121,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     if (systemPreferences.getMediaAccessStatus(kind) === 'granted') return { granted: true };
     return { granted: await systemPreferences.askForMediaAccess(kind) };
   });
+  router.handle('media:screenIndicator', (input, c) => ctx.screenShare.indicate(c.sender.id, input.active));
   router.handle('media:screenSources', () => ctx.screenShare.sources());
   router.handle('media:screenPick', (input, c) => ctx.screenShare.preparePick(c.sender.id, input.id, !!input.audio));
   router.handle('media:privacySettings', async (input) => {
@@ -349,6 +358,11 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('ring:state', () => ctx.webchat.state());
   router.handle('ring:join', (input) => ctx.webchat.join(input.id));
   router.handle('ring:silence', (input) => ctx.webchat.silence(input.id, input.on));
+  router.handle('ring:pass', (input) => ctx.webchat.pass(input.id));
+  router.handle('ring:handoff', (input) => ctx.webchat.answer(input.id, input.accept));
+  router.handle('ring:call', (input) => ctx.webchat.answerCall(input.id, input.accept));
+  router.handle('ring:mic', (input) => ctx.webchat.setMic(input.has));
+  router.handle('ring:onCall', (input) => ctx.webchatOnCall(input));
 
   // ── multi-window docking (FR-NAV-05/07) ─────────────────────────────────
   const fromMain = (sender: WebContents) => {
@@ -506,6 +520,12 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('files:registerDropped', (input) => ctx.transfers.register(input.paths));
   router.handle('transfers:list', () => ctx.transfers.list());
   router.handle('transfers:download', async (input, c) => {
+    // A mail attachment that runs as a program is never saved from a message; one with macros never opens elsewhere (ENH-MAIL-03 DMO-SEC-04).
+    if (input.mail) {
+      const risk = attachmentRisk(input.name);
+      if (risk === 'blocked') throw new DesktopError('POLICY_DENIED', 'WorkSuite blocks this kind of attachment: it can run as a program on your computer.');
+      if (risk === 'macro' && input.open) throw new DesktopError('POLICY_DENIED', 'Files with macros open only in WorkSuite, where macros do not run.');
+    }
     // Drive › Settings › Ask where to save each time: the place comes from this process's own dialog, never the page.
     let saveAs: string | undefined;
     if (!input.open && ctx.settings.effective().drive.askWhereToSave) {
@@ -543,6 +563,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       ? `/media/${input.elearningMedia}?download=1`
       : input.chatMedia
       ? `/media/${input.chatMedia}?download=1`
+      : input.chatExport
+      ? `/api/chat/rooms/${input.chatExport.room}/export?${new URLSearchParams({ format: input.chatExport.format, media: input.chatExport.media ? '1' : '0' })}`
       : input.garageDoc
       ? garageDocPath(input.garageDoc)
       : ef
@@ -794,6 +816,9 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('notifications:test', () => ctx.notifications.test());
   router.handle('notifications:permission', () => ctx.notifications.permission());
   router.handle('notifications:refresh', () => ctx.notifications.refreshCounts());
+  router.handle('notifications:reminder', (input) =>
+    ctx.notifications.notify({ id: `reminder:${input.id}`, module: 'mail', title: input.title, body: input.body, sender: null, link: input.route, critical: false, flag: input.flag ?? null }),
+  );
 
   // ── clipboard (FR-XFR-05; never monitored, FR-XFR-06) ──────────────────
   router.handle('clipboard:readForPaste', async (_i, c) => {
@@ -877,7 +902,18 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('offline:pending', () => ctx.queue.list(uid()));
   router.handle('offline:moduleBytes', (input) => ctx.cache.moduleBytes(uid(), input.module));
   router.handle('offline:clearModule', (input) => ctx.cache.clearModule(uid(), input.module));
-  router.handle('offline:mailStats', () => ({ ...ctx.cache.mailStats(uid()), limitBytes: (ctx.session.current()?.policy?.offline_storage_max_mb ?? 2048) * 1024 * 1024 }));
+  router.handle('offline:mailStats', () => ({ ...ctx.cache.mailStats(uid()), limitBytes: (ctx.session.current()?.policy?.offline_storage_max_mb ?? 2048) * 1024 * 1024, bodies: ctx.mailBodies?.progress() ?? {} }));
+  // Cached first (worksuite-desktop#162): Mail's saved answers, read without the network; the page refreshes behind them.
+  router.handle('offline:peek', (input) => {
+    if (!canOpenApp('mail', ctx.session.visibleApps())) return input.paths.map(() => null);
+    return input.paths.map((path) => {
+      if (path.includes('..') || path.includes('//')) return null;
+      const hit = ctx.cache.get(uid(), path);
+      return hit && hit.status === 200 ? { body: hit.body, cachedAt: hit.cachedAt } : null;
+    });
+  });
+  router.handle('offline:clearMailbox', (input) => ctx.cache.clearMailbox(uid(), input.mailbox));
+  router.handle('offline:mailSearch', (input) => (canOpenApp('mail', ctx.session.visibleApps()) ? ctx.cache.mailSearch(uid(), input.q) : []));
   router.handle('offline:submit', (input) => ctx.queue.submit(uid(), input));
   router.handle('offline:retry', async (input) => {
     ctx.queue.retry(uid(), input.id);
@@ -1035,7 +1071,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('settings:get', () => ({ preferences: ctx.settings.effective(), locks: ctx.settings.locks() }));
   router.handle('settings:set', async (input) => {
     const { verificationPassword, ...choices } = input;
-    if (choices.appLockEnabled === false && ctx.settings.effective().appLockEnabled !== false) {
+    if (choices.appLockEnabled === false && ctx.settings.effective().appLockEnabled === true) {
       await verifyLockChange(() => ({ id: ctx.session.userId() ? `${ctx.session.get().server?.origin}:${ctx.session.userId()}` : null, email: ctx.session.get().user?.email ?? null }), (email, password) => ctx.auth.verifyPassword(email, password), verificationPassword);
     }
     const locked = new Set(ctx.settings.locks().map((l) => l.key));

@@ -36,9 +36,13 @@ export interface ApiResult<T> {
   cachedAt: string | null;
   /** The server's own sentence about what it did, when it sent one. */
   message?: string | null;
+  /** Read from this computer while the server's answer is on its way (worksuite-desktop#162). */
+  local?: boolean;
+  /** Fetched ahead with `peek`, so opening it has not marked it read at the server. */
+  peeked?: boolean;
 }
 
-type Query = Record<string, string | number | boolean | null | undefined>;
+export type Query = Record<string, string | number | boolean | null | undefined>;
 
 let mailboxHint: string | null = null;
 /** Mail writes on a multi-mailbox account must name the mailbox. */
@@ -132,6 +136,36 @@ export async function apiPut<T = unknown>(path: string, body?: unknown): Promise
 
 export async function apiDelete<T = unknown>(path: string, body?: unknown): Promise<T> {
   return (await request<T>('DELETE', path, { body })).data;
+}
+
+/** The path the main process sees for a request — what its saved answers are keyed by. */
+export function apiPathOf(path: string, query?: Query): string {
+  const u = new URL(buildUrl(path, query));
+  return u.pathname.slice('/__api'.length) + u.search;
+}
+
+/**
+ * Saved answers for these GET requests, read from this computer without asking
+ * the server (Mail only; `offline:peek`). Null for each one not saved, and for
+ * all of them where there is no desktop shell or no account.
+ */
+export async function peekCached<T = unknown>(requests: Array<{ path: string; query?: Query }>): Promise<Array<ApiResult<T> | null>> {
+  if (app.get().session.mode === 'guest' || !requests.length) return requests.map(() => null);
+  try {
+    const hits = await call('offline:peek', { paths: requests.map((r) => apiPathOf(r.path, r.query)) });
+    return hits.map((h) => {
+      if (!h) return null;
+      try {
+        const json = JSON.parse(h.body) as Record<string, unknown> | null;
+        if (!json || json.status === 'error') return null;
+        return { data: ('data' in json ? json.data : json) as T, offline: false, cachedAt: h.cachedAt, message: null, local: true };
+      } catch {
+        return null;
+      }
+    });
+  } catch {
+    return requests.map(() => null);
+  }
 }
 
 export function withMailbox(query: Query = {}, mailbox?: string | null): Query {

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { CalendarPeek } from './CalendarPeek';
 import { GUEST_LOCKED_APPS, appRoute, navApps, type AppDefinition } from '@shared/apps';
 import { app, updatePrefs } from '../core/app-state';
 import { apiGet } from '../core/api';
@@ -167,11 +168,37 @@ function OrgCard({ collapsed }: { collapsed: boolean }) {
 
 function Item({ a, active, collapsed, badge, onClick, locked }: { a: AppDefinition; active: boolean; collapsed: boolean; badge: number; onClick: () => void; locked?: boolean }) {
   const label = locked ? text(a.guestLabel ?? a.label) : appLabel(a);
+  // Calendar peek (DMO-CAL-05): today's agenda beside the icon, after a short rest on it.
+  const peekable = a.id === 'calendar' && !locked;
+  const [peek, setPeek] = useState<{ top: number; left: number } | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const show = (el: HTMLElement, wait: number) => {
+    if (!peekable) return;
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      const r = el.getBoundingClientRect();
+      setPeek({ top: Math.max(8, r.top - 8), left: r.right + 8 });
+    }, wait);
+  };
+  const hide = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    setPeek(null);
+  };
+  useEffect(() => hide, []);
   return (
-    <li>
+    <li onMouseLeave={peekable ? hide : undefined}>
+      {peek ? <CalendarPeek at={peek} onClose={hide} /> : null}
       <button
         type="button"
-        onClick={onClick}
+        onMouseEnter={peekable ? (e) => show(e.currentTarget, 450) : undefined}
+        onFocus={peekable ? (e) => show(e.currentTarget, 0) : undefined}
+        onBlur={peekable ? hide : undefined}
+        onKeyDown={peekable ? (e) => e.key === 'Escape' && hide() : undefined}
+        onClick={() => {
+          hide();
+          onClick();
+        }}
         aria-current={active ? 'page' : undefined}
         title={locked ? text('Sign in to use {app}', { app: label }) : collapsed ? label : undefined}
         aria-label={locked ? `${label} (${text('needs a WorkSuite account')})` : undefined}
