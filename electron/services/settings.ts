@@ -6,6 +6,7 @@ import type { DesktopPolicy, Preferences, PreferenceLock } from '@shared/types';
 import { defaultDrivePrefs, normalizeDrivePrefs } from '@shared/transfers';
 import type { Database } from './db';
 import { stricterPrivacy } from './policy';
+import { effectiveChannel, migrateUpdatePrefs } from '@shared/updates';
 
 /** §11.1 defaults. */
 export function defaultPreferences(): Preferences {
@@ -61,6 +62,7 @@ export function defaultPreferences(): Preferences {
     updateChannel: 'stable',
     autoUpdate: true,
     updateNotifications: true,
+    updateInstallOnQuit: true,
     sidebarMode: 'expanded',
     pinnedApps: [],
     shortcuts: {},
@@ -92,7 +94,7 @@ export class SettingsService {
     const savedLanguage = db.getConfig<unknown>('interface_language_default');
     this.defaultLanguage = normalizeLanguage(typeof savedLanguage === 'string' ? savedLanguage : stored.language);
     // The AI settings are one object: one saved before a field was added takes that field's default.
-    this.prefs = { ...defaults, ...stored, appLockEnabled: stored.appLockEnabled ?? (stored.appLockMinutes !== undefined && stored.appLockMinutes > 0), appLockMinutes: stored.appLockMinutes === 0 && stored.appLockEnabled === undefined ? 15 : stored.appLockMinutes ?? defaults.appLockMinutes, darkColorProfile: normalizeDarkProfile(stored.darkColorProfile), ai: { ...defaults.ai, ...stored.ai, display: stored.ai?.display ?? defaults.ai.display }, meetRecording: { ...defaults.meetRecording, ...stored.meetRecording }, drive: normalizeDrivePrefs(stored.drive) };
+    this.prefs = { ...defaults, ...stored, appLockEnabled: stored.appLockEnabled ?? (stored.appLockMinutes !== undefined && stored.appLockMinutes > 0), appLockMinutes: stored.appLockMinutes === 0 && stored.appLockEnabled === undefined ? 15 : stored.appLockMinutes ?? defaults.appLockMinutes, darkColorProfile: normalizeDarkProfile(stored.darkColorProfile), ai: { ...defaults.ai, ...stored.ai, display: stored.ai?.display ?? defaults.ai.display }, meetRecording: { ...defaults.meetRecording, ...stored.meetRecording }, drive: normalizeDrivePrefs(stored.drive), ...migrateUpdatePrefs(stored) };
   }
 
   /** Interface language is isolated by server and user, while device policy stays computer-wide. */
@@ -166,10 +168,11 @@ export class SettingsService {
     // What a banner shows while locked is never more than the organization lets any banner show (#114).
     if (pol.notification_min_privacy !== 'FULL') p.lockedNotificationPreview = false;
     if (pol.notification_min_privacy === 'GENERIC') p.lockedNotificationSender = false;
-    if (pol.auto_update === 'enforced') {
-      p.updateChannel = pol.update_channel;
-      p.autoUpdate = true;
-    }
+    // Enforced: the organisation's channel. Each person's choice: theirs while allowed, else the organisation's
+    // default, else the most stable allowed channel — never a downgrade (the updater waits for it to catch up).
+    p.updateChannel = effectiveChannel(this.prefs.updateChannel, !!this.prefs.updateChannelChosen, pol);
+    // Enforced updates download by themselves; installing on quit and the notifications stay each person's.
+    if (pol.auto_update === 'enforced') p.autoUpdate = true;
     if (pol.required_background_services.includes('notifications')) p.backgroundServices.notifications = true;
     if (pol.required_background_services.includes('realtime')) p.backgroundServices.realtime = true;
     return p;

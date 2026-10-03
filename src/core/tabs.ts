@@ -133,14 +133,27 @@ function make(at: string, organizationId: string | null, title?: string): Tab {
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+function saveTabs(): Promise<void> {
+  const s = tabsStore.get();
+  const records: TabRecord[] = s.tabs.slice(0, 64).map((t) => ({ id: t.id, route: t.route, title: t.title.slice(0, 200), pinned: t.pinned, organizationId: t.organizationId, app: t.app }));
+  const side = s.sideId && records.some((r) => r.id === s.sideId) ? { id: s.sideId, split: s.split } : null;
+  return call('tabs:save', { tabs: records, activeId: s.activeId, side }).then(() => undefined, () => undefined);
+}
+
 function persist(): void {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    const s = tabsStore.get();
-    const records: TabRecord[] = s.tabs.slice(0, 64).map((t) => ({ id: t.id, route: t.route, title: t.title.slice(0, 200), pinned: t.pinned, organizationId: t.organizationId, app: t.app }));
-    const side = s.sideId && records.some((r) => r.id === s.sideId) ? { id: s.sideId, split: s.split } : null;
-    void call('tabs:save', { tabs: records, activeId: s.activeId, side }).catch(() => undefined);
+    saveTimer = null;
+    void saveTabs();
   }, 500);
+}
+
+/** Writes the open tabs now if a save is still waiting (before an update's restart, worksuite-desktop#205). */
+export async function flushTabs(): Promise<void> {
+  if (!saveTimer) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  await saveTabs();
 }
 
 /** A docked tab that closed, or became the active one, is no longer beside it. */

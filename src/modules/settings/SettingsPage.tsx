@@ -39,7 +39,7 @@ import { LauncherSettings, ShortcutRecorder } from './LauncherSettings';
 import { updateLauncherPrefs, useLauncherPrefs } from '../../core/launcher-prefs';
 import { DEFAULT_LAUNCHER_SHORTCUT } from '@shared/launcher';
 import { SyncButton } from '../../components/SyncButton';
-import { UpdateActions, updateHint } from '../../app/screens/UpdateScreens';
+import { UpdatesCard } from './UpdatesCard';
 
 /** Settings / profile tree (§4.9). Anything the organization's policy decides is shown locked, with the reason. */
 const SECTIONS = [
@@ -922,37 +922,12 @@ function Devices() {
 }
 
 function DesktopSection({ prefs }: { prefs: Preferences }) {
-  const lock = isLocked('updateChannel');
-  const autoLock = isLocked('autoUpdate');
   const info = useStore(app, (s) => s.info);
-  const u = useStore(app, (s) => s.update);
-  const auto = prefs.autoUpdate !== false;
   return (
     <>
       <H title="Desktop" />
-      {/* Updates: whether new versions download by themselves, whether they say so, and where they stand now. */}
-      <Row label="Updates" hint={updateHint(u, auto)}>
-        <UpdateActions />
-      </Row>
-      <Row
-        label="Download updates automatically"
-        lock={autoLock}
-        hint="New versions download in the background and install when you restart WorkSuite. Off: WorkSuite tells you about each one and waits for you to download it. Security and required updates download either way."
-      >
-        <Switch label="Download updates automatically" checked={auto} disabled={!!autoLock} onChange={(v) => void updatePrefs({ autoUpdate: v })} />
-      </Row>
-      <Row label="Update notifications" hint="A notification when a new version is available or ready to install. The update icon in the title bar shows either way.">
-        <Switch label="Update notifications" checked={prefs.updateNotifications !== false} onChange={(v) => void updatePrefs({ updateNotifications: v })} />
-      </Row>
-      <Row label="Update channel" lock={lock} hint="Beta and Development receive new versions earlier.">
-        <Select
-          label="Update channel"
-          disabled={!!lock}
-          value={prefs.updateChannel}
-          options={[{ value: 'stable', label: 'Stable' }, { value: 'beta', label: 'Beta' }, { value: 'dev', label: 'Development' }]}
-          onValueChange={(v) => void call('updates:setChannel', { channel: v }).catch((e) => toast('error', errorMessage(e)))}
-        />
-      </Row>
+      {/* Updates: where they stand, the next step, the channel, what's new and the switches (#204, #205). */}
+      <UpdatesCard />
       <Row label="Tab suspension" hint="Tabs you haven't looked at for this long are unloaded to save memory, and reload when you return.">
         <Select label="Tab suspension" value={prefs.tabSuspendMinutes} options={[15, 30, 60, 120, 480].map((m) => ({ value: m, label: m < 60 ? `${m} minutes` : `${m / 60} hour${m === 60 ? '' : 's'}` }))} onValueChange={(v) => void updatePrefs({ tabSuspendMinutes: v })} />
       </Row>
@@ -1615,8 +1590,6 @@ function Monitoring() {
 export function About() {
   const { navigate } = useTab();
   const info = useStore(app, (s) => s.info);
-  const u = useStore(app, (s) => s.update);
-  const auto = useStore(app, (s) => s.prefs?.autoUpdate !== false);
   return (
     <>
       <H title="About WorkSuite Desktop" />
@@ -1625,12 +1598,8 @@ export function About() {
           {info?.version} ({info?.platform} {info?.arch})
         </span>
       </Row>
-      <Row label="Channel">
-        <span className="text-[13px] text-ink-2 capitalize">{u?.channel}</span>
-      </Row>
-      <Row label="Updates" hint={updateHint(u, auto)}>
-        <UpdateActions />
-      </Row>
+      {/* Channel, update state, what's new and the update switches — the same card as Settings › Desktop (#205). */}
+      <UpdatesCard />
       <Row label="Components">
         <span className="font-mono text-[12px] text-ink-3">
           Electron {info?.electron} · Chromium {info?.chrome} · Node {info?.node}

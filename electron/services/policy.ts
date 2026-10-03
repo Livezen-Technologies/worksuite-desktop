@@ -23,6 +23,8 @@ export const DEFAULT_POLICY: DesktopPolicy = {
   minimum_version: {},
   update_channel: 'stable',
   auto_update: 'enforced',
+  allowed_update_channels: ['stable', 'beta', 'dev'],
+  update_channel_default: 'stable',
   forced_update_deadline_hours: 24,
   file_sync: 'allowed',
   offline_files: 'allowed',
@@ -104,6 +106,8 @@ export function normalizePolicy(input: Record<string, unknown> | null | undefine
     minimum_version: minVersion,
     update_channel: pick(p.update_channel, ['stable', 'beta', 'dev', 'org'], d.update_channel),
     auto_update: pick(p.auto_update, ['enforced', 'user_choice'], d.auto_update),
+    allowed_update_channels: updateChannels(p.allowed_update_channels),
+    update_channel_default: defaultChannel(p.update_channel_default, updateChannels(p.allowed_update_channels)),
     forced_update_deadline_hours: clamp(p.forced_update_deadline_hours, 1, 168, d.forced_update_deadline_hours),
     file_sync: pick(p.file_sync, ['allowed', 'managed_only', 'disabled'], d.file_sync),
     offline_files: pick(p.offline_files, ['allowed', 'managed_only', 'disabled'], d.offline_files),
@@ -140,6 +144,18 @@ export function normalizePolicy(input: Record<string, unknown> | null | undefine
     launcher_pinned: cleanIds(p.launcher_pinned, PIN_MAX),
     launcher_order: cleanIds(p.launcher_order, 300),
   };
+}
+
+/** The channels people may choose (worksuite-desktop#205): known ones, in order, Stable always; none listed: all three. */
+function updateChannels(v: unknown): DesktopPolicy['update_channel'][] {
+  const all = ['stable', 'beta', 'dev'] as const;
+  const listed = Array.isArray(v) ? all.filter((c) => v.includes(c)) : [];
+  return listed.length ? all.filter((c) => c === 'stable' || listed.includes(c)) : [...all];
+}
+
+/** The organisation's default channel, when it is one of the allowed ones; else Stable. */
+function defaultChannel(v: unknown, allowed: DesktopPolicy['update_channel'][]): DesktopPolicy['update_channel'] {
+  return typeof v === 'string' && (allowed as string[]).includes(v) ? (v as DesktopPolicy['update_channel']) : 'stable';
 }
 
 /** `ai.quick_ask` or `ai_quick_ask` — the policy file is written by people, in either shape. */

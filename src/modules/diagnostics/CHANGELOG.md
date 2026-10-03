@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.0.3 — 2026-10-03
+
+- The Diagnostics report includes the update history: every check, download, install and rollback (#205).
+
 ## 1.0.2 — 2026-10-02
 
 - Include independent Screen Recording status and actual running-app signature verification (#132).

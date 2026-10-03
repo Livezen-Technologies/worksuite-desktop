@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.5.4 — 2026-10-03
+
+- Update notices wait until a call ends (#205).
+
 ## 1.5.3 — 2026-10-03
 
 **Fixed**

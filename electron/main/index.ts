@@ -24,7 +24,7 @@ import { networkStatus } from '@shared/network';
 import { pmsCached } from '@shared/pms-cache';
 import { eventsCached } from '@shared/event-desk';
 import { redactUrl } from '@shared/redact';
-import type { Bootstrap, NavigateRequest, RealtimeState, ServiceHealth, StatusSnapshot, UpdateStatus, WebchatOnCall, WebchatRingState } from '@shared/types';
+import type { Bootstrap, BusyReport, UpdateActivity, NavigateRequest, RealtimeState, ServiceHealth, StatusSnapshot, UpdateStatus, WebchatOnCall, WebchatRingState } from '@shared/types';
 import { AccessWatch, NO_ACCESS } from './access';
 import { applyAutostart, startedHidden } from './autostart';
 import { evaluateBoot, markCleanExit, markRunning, clearCrashes, writeBootConfig } from './boot';
@@ -103,8 +103,10 @@ import { Vault } from '../services/vault';
 import { TrayService } from '../tray/tray';
 import { POLICY_PUBLIC_KEY } from '../updater/keys';
 import { UPDATE_CENTER_RESPONSE_KEYS, UPDATE_CENTER_URL, ucInstallType, updateCheckUrl } from '../updater/update-center';
-import { updateNotice } from '../updater/notice';
+import { announce } from '../updater/notice';
 import { UpdaterService } from '../updater/updater';
+import { UpdateHealth, UpdateHistory, UpdateNotifier } from '../updater/update-flow';
+import { allowedChannels, channelLockReason } from '@shared/updates';
 import { WindowManager } from '../windows/manager';
 
 /**
@@ -340,6 +342,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const screenShare = new ScreenShare(url => !lock.isLocked() && isTrustedShellUrl(url));
   screenShare.install(session.defaultSession);
   // Meet remote control on this computer (WS-MEET-ENH-01): the share, consent, grant and input live here.
+  // A meeting, call, share or remote control started or ended: update notices wait for it (#205; set below).
+  let onUpdateActivity: () => void = () => undefined;
+  // A website visitor's call in progress (set by webchatOnCall below).
+  let webchatCallLive = false;
   const remoteControl = createRemoteControl({
     db,
     http,
@@ -357,6 +363,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     broadcast: (view) => {
       broadcast('rc:changed', view);
       tray.update({ remoteControl: view.session ? { controller: view.session.controller, paused: view.session.status === 'CONTROL_PAUSED' } : null });
+      onUpdateActivity();
     },
     toast: (text) => broadcast('toast', { kind: 'info', text }),
   });
@@ -690,29 +697,82 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // Updates wait while a call is on (FR-UPD); the call windows say when.
   calls.onActiveChanged = (a) => {
     activeCall = a;
+    onUpdateActivity();
   };
   calls.onListChanged = (list) => broadcast('calls:changed', list);
-  const busy = () => {
+  // What an update must not interrupt (#205): a meeting, a call (chat, website visitor), a screen share, remote control.
+  const updateActivity = (): UpdateActivity => {
+    const list = calls.list();
+    return {
+      meeting: list.some((c) => c.kind === 'meet'),
+      call: activeCall || list.some((c) => c.kind === 'call') || webchatCallLive,
+      screenShare: screenShare.isSharing(),
+      remoteControl: !!remoteControl.view().session,
+    };
+  };
+  screenShare.onSharingChanged = () => onUpdateActivity();
+  const busy = (): BusyReport => {
     const id = sessionCtl.userId();
     const c = transfers.activeCounts();
-    return { uploads: c.uploads, downloads: c.downloads, pendingMutations: id ? queue.pendingCount(id) : 0, drafts: id ? queue.draftCount(id) : 0, activeCall };
+    return { uploads: c.uploads, downloads: c.downloads, pendingMutations: id ? queue.pendingCount(id) : 0, drafts: id ? queue.draftCount(id) : 0, activeCall, activity: updateActivity() };
   };
 
-  // A new version tells the person once per version and stage, beside the title-bar icon (Settings › Desktop ›
-  // Updates). Quiet hours, paused notifications and a development build stay silent; the icon still shows.
+  // Before an update's restart every window saves its drafts and tabs (`update:prepare` → `updates:prepared`).
+  const prepareWaits = new Map<string, () => void>();
+  const updatePrepared = (token: string): void => {
+    prepareWaits.get(token)?.();
+  };
+  const prepareRestart = async (): Promise<void> => {
+    const token = Math.random().toString(36).slice(2, 12);
+    const answered = new Promise<void>((resolve) => prepareWaits.set(token, resolve));
+    broadcast('update:prepare', { token });
+    // The main window answers once its drafts and tabs are written; secondary windows get a moment more.
+    await Promise.race([answered, new Promise((r) => setTimeout(r, 5_000))]);
+    await new Promise((r) => setTimeout(r, 400));
+    prepareWaits.delete(token);
+  };
+
+  const updateHistory = new UpdateHistory(p.updates);
+  const updateHealth = new UpdateHealth(p.updates);
+  const updateNotifier: UpdateNotifier = new UpdateNotifier({
+    store: { get: (k) => db.getConfig(k), set: (k, v) => db.setConfig(k, v) },
+    now: () => new Date(),
+    activity: updateActivity,
+    setTimeout: (fn, ms) => {
+      const t = setTimeout(fn, ms);
+      t.unref?.();
+      return t;
+    },
+    clear: (h) => clearTimeout(h as NodeJS.Timeout),
+    onChange: () => updater.publish(),
+    // A meeting, call, share or remote control ended: a held notice goes out now.
+    announce: () => announceUpdate(updater.get()),
+  });
+
+  // One notification path (electron/updater/notice.ts): once per version and stage, a system notification and a
+  // bell entry. Quiet hours, paused notifications and development builds stay silent (the title-bar icon still
+  // shows); a meeting, call, screen share or remote control holds it until it ends.
   const announceUpdate = (s: UpdateStatus): void => {
     const p = settings.effective();
-    if (!app.isPackaged || !p.notificationsEnabled || p.updateNotifications === false || !Notification.isSupported()) return;
-    if ((p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) || notifications.pausedUntilIso() !== null) return;
-    const notice = updateNotice(s, p.autoUpdate !== false);
-    const told = db.getConfig<string[]>('update_notices') ?? [];
-    if (!notice || told.includes(notice.key)) return;
-    db.setConfig('update_notices', [...told, notice.key].slice(-10));
-    const note = new Notification({ title: notice.title, body: notice.body });
-    note.on('click', () => navigate({ route: '/settings/desktop', source: 'notification' }));
-    note.show();
+    announce(s, {
+      autoDownload: p.autoUpdate !== false,
+      held: () => updateNotifier.quietReason() !== null,
+      silent: () => !app.isPackaged || (p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) || notifications.pausedUntilIso() !== null,
+      systemEnabled: () => p.notificationsEnabled && p.updateNotifications !== false && Notification.isSupported(),
+      told: { get: () => db.getConfig<string[]>('update_notices') ?? [], set: (keys) => db.setConfig('update_notices', keys) },
+      show: (n) => {
+        const note = new Notification({ title: n.title, body: n.body, urgency: n.critical ? 'critical' : 'normal', timeoutType: n.critical ? 'never' : 'default' });
+        note.on('click', () => navigate({ route: '/settings/desktop', source: 'notification' }));
+        note.show();
+      },
+      bell: (n) => {
+        notifications.addLocal({ id: `update:${n.key}`, title: n.title, body: n.body, link: '/settings/desktop' });
+        emitStatus();
+      },
+    });
   };
-  const updater = new UpdaterService({
+
+  const updater: UpdaterService = new UpdaterService({
     fetch: fetchImpl,
     platform: platformName(),
     arch: archName(),
@@ -720,7 +780,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     // The WorkSuite Update Center decides (a tenant policy there wins over the
     // channel asked for). WS_UPDATE_CENTER points a development build at a
     // local or staging Update Center.
-    updateUrl: (channel) =>
+    updateUrl: (channel, opts) =>
       updateCheckUrl({
         base: (allowInsecure && process.env.WS_UPDATE_CENTER) || UPDATE_CENTER_URL,
         version: app.getVersion(),
@@ -730,9 +790,18 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         channel,
         installId: device.installId(),
         osVersion: process.getSystemVersion(),
+        allowDowngrade: opts?.allowDowngrade,
       }),
     channel: () => settings.effective().updateChannel,
+    // Organisation policy (signed bootstrap policy, #205): which channels people may pick.
+    channels: () => {
+      const pol = sessionCtl?.current()?.policy ?? null;
+      return { allowed: allowedChannels(pol), lockReason: channelLockReason(pol) };
+    },
+    savedChannel: () => settings.raw().updateChannel,
     autoDownload: () => settings.effective().autoUpdate !== false,
+    installOnQuit: () => settings.effective().updateInstallOnQuit !== false,
+    activity: updateActivity,
     busy,
     deadlineHours: () => sessionCtl.current()?.policy.forced_update_deadline_hours ?? 24,
     allowInsecure,
@@ -743,11 +812,16 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       announceUpdate(s);
     },
     onWarning: (text) => broadcast('toast', { kind: 'warning', text }),
+    prepareRestart,
     beforeQuit: async () => {
       // WF-26 step 6: queues and drafts are already durable; pause transfers cleanly.
       transfers.stopAll();
     },
+    history: updateHistory,
+    health: updateHealth,
+    notifier: updateNotifier,
   });
+  onUpdateActivity = () => updateNotifier.activityChanged();
 
   // ── navigation (deep links, notifications, tray) ──────────────────────
   const pendingNav: NavigateRequest[] = [];
@@ -1272,7 +1346,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   notifications.ringerShowing = () => settings.effective().webchatRinging.window && (webchat.state().chats.length > 0 || !!webchat.state().handoffs?.length || !!webchat.state().calls?.length);
   const webchatOnCall = (c: WebchatOnCall | null): void => {
     onCall = c;
+    webchatCallLive = !!c;
     tray.update(trayCalls(webchat.state()));
+    onUpdateActivity();
   };
 
   // ── Quick Ask over any app (AI Assistant) ───────────────────────────────
@@ -1753,6 +1829,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       const u = updater.get();
       return { state: u.state, error: u.error, lastCheckedAt: u.lastCheckedAt, channel: u.channel };
     },
+    updateHistory: () => updateHistory.entries(),
     services: () => supervisor.health(),
     dbCheck: () => db.integrityCheck(),
     secureStorage: () => secrets.getStatus(),
@@ -1901,8 +1978,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     status: snapshot,
     setActiveCall: (a) => {
       activeCall = a;
+      onUpdateActivity();
     },
     activeCall: () => activeCall,
+    updateBusy: busy,
+    updatePrepared,
     lastPasteGesture: (id) => pasteGestures.get(id) ?? 0,
     flushNavigation,
     navigate,
@@ -2121,6 +2201,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   });
   app.on('before-quit', () => {
     windows.quitting = true;
+    // Settings › About › Updates › Install when quitting (#205): the installer starts now and finishes after we exit.
+    updater.installOnQuitSync();
     // The Document Server saves after the last editor leaves; the sessions are ended on the way out.
     office.closeAll(true);
     officeLocal.stop();
@@ -2158,6 +2240,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // Back from System Settings, or WorkSuite brought to the front: Accessibility is asked again and every window told.
   watchAccessibility({ app, platform: process.platform, recheck: () => accessibility.refresh(), changed: () => broadcast('rc:changed', remoteControl.view()) });
   powerMonitor.on('resume', () => {
+    // After waking: check for updates (#205).
+    updater.wake();
     if (process.platform === 'darwin') void accessibility.refresh().then(() => broadcast('rc:changed', remoteControl.view()));
     device.poke();
     sync.kick('resume');
@@ -2180,7 +2264,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   applyAutostartOnce(settings);
 
   const hidden = startedHidden() || settings.effective().startMinimized;
-  windows.createMain(!hidden);
+  const mainWindow = windows.createMain(!hidden);
+  // The first-run health check (#205): the window loaded and stayed up, so an update that brought this version is good.
+  mainWindow.webContents.once('did-finish-load', () => setTimeout(() => updater.healthy(), 10_000).unref?.());
   if (devOrigin()) log.info('development renderer', { url: process.env.ELECTRON_RENDERER_URL });
 
   void sessionCtl.init().then(() => {

@@ -6,7 +6,7 @@ import { toast } from '../../../../core/toasts';
 import { useTabTitle } from '../../../../core/tab-context';
 import { Select } from '../../../../components/Select';
 import { Button, Empty, ErrorNote, Spinner, Switch, TextField, cx } from '../../../../components/ui';
-import { DAYS, MAX_LINKS, designOf, hoursOf, hoursText, palette, previewPeople, problems, saveDesign, saveHours, weekOf, widgetsList, type DesignPayload, type HoursDay, type HoursSummary, type QuickLink, type WidgetDesign } from './design';
+import { DAYS, MAX_LINKS, OFFSET_MAX, clampOffset, designOf, hoursOf, hoursText, palette, previewPeople, problems, saveDesign, saveHours, siteNameOf, weekOf, widgetsList, withDefaults, type DesignPayload, type HoursDay, type HoursSummary, type QuickLink, type Theme, type WidgetDesign } from './design';
 import { WidgetPreview, type PreviewScreen } from './WidgetPreview';
 
 /**
@@ -17,7 +17,14 @@ import { WidgetPreview, type PreviewScreen } from './WidgetPreview';
  * Saving sends only these settings (`PUT widgets/{id}/design`, and the hours to `widgets/{id}/hours`); the widget's
  * domains, status and routing stay with the web's widget form, where they are edited. Anybody who can see website
  * chats can look; only somebody who may configure widgets can save, and the screen says so.
+ *
+ * #207: the theme the header and body share, where the launcher sits (its offsets from the bottom and the side), and a
+ * company name that is never a web address — the preview shows the organisation's name the header falls back to.
  */
+
+/** Whether this computer prefers a dark theme: what "Match the visitor" looks like to the person editing. */
+const prefersDark = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches;
+const darkFor = (theme: Theme) => theme === 'dark' || (theme === 'auto' && prefersDark());
 
 const SCREENS: Array<{ id: PreviewScreen; label: string }> = [
   { id: 'home', label: 'Home' },
@@ -118,7 +125,8 @@ function WidgetEditor({ id }: { id: number }) {
   const [screen, setScreen] = useState<PreviewScreen>('home');
   const [busy, setBusy] = useState(false);
 
-  const design = draft ?? q.data?.design ?? null;
+  const saved = useMemo(() => (q.data?.design ? withDefaults(q.data.design) : null), [q.data]);
+  const design = draft ?? saved;
   const savedWeek = useMemo(() => (hq.data ? weekOf(hq.data) : null), [hq.data]);
   const week = weekDraft ?? savedWeek;
   const hoursOn = hoursDraft ?? Boolean(savedWeek?.configured);
@@ -183,7 +191,15 @@ function WidgetEditor({ id }: { id: number }) {
         {p && !p.installed ? <p role="note" className="mb-4 rounded-[8px] bg-warning-bg px-3 py-2 text-[12.5px] text-ink-2">The server has not been updated for the new widget yet: only the colour, position, theme and away message can be saved.</p> : null}
         <fieldset disabled={!can || busy} className="flex flex-col">
           <Section title="Brand" hint="The header, buttons and launcher use the brand colour. Text on it is chosen for contrast.">
-            <TextField label="Company name" value={design.website_name ?? ''} maxLength={190} onChange={(e) => set('website_name', e.target.value || null)} placeholder="Livezen Technologies" />
+            <TextField
+              label="Company name"
+              value={design.website_name ?? ''}
+              maxLength={190}
+              onChange={(e) => set('website_name', e.target.value || null)}
+              placeholder={p?.fallback_name || 'Livezen Technologies'}
+              hint={p?.fallback_name ? text('Shown in the widget\'s header. Empty, it says {name}.', { name: p.fallback_name }) : 'Shown in the widget\'s header: the name, not the web address.'}
+              error={issues.website_name ?? null}
+            />
             <span className="flex items-end gap-2">
               <label className="flex flex-col gap-1">
                 <span className="text-[12.5px] font-semibold text-ink-2">Brand colour</span>
@@ -193,7 +209,8 @@ function WidgetEditor({ id }: { id: number }) {
             </span>
             {brand.lightBrand && !issues.brand_color ? <span className="text-[12px] text-ink-3">A light colour: text on it will be dark, so it stays readable.</span> : null}
             <TextField label="Logo" value={design.logo_url ?? ''} maxLength={500} onChange={(e) => set('logo_url', e.target.value || null)} placeholder="https://example.com/logo.png" hint="A square image at a web address. Without one, the company's initial is shown." error={issues.logo_url ?? null} />
-            <Choice label="Theme" value={design.dark_mode} onChange={(v) => set('dark_mode', v)} options={[{ value: 'auto', label: 'Match the visitor' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} />
+            <Choice label="Theme" value={design.theme} onChange={(v) => set('theme', v)} options={[{ value: 'auto', label: 'Match the visitor' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} />
+            <span className="text-[12px] text-ink-3">The header and the body follow it: white under the brand colour, or dark under a darker one.</span>
           </Section>
 
           <Section title="Home screen">
@@ -283,6 +300,24 @@ function WidgetEditor({ id }: { id: number }) {
           <Section title="Launcher">
             <Choice label="Style" value={design.launcher_style} onChange={(v) => set('launcher_style', v)} options={[{ value: 'pill', label: 'Photos and “Chat with us”' }, { value: 'bubble', label: 'Round button' }]} />
             <Choice label="Position" value={design.position} onChange={(v) => set('position', v)} options={[{ value: 'bottom_right', label: 'Bottom right' }, { value: 'bottom_left', label: 'Bottom left' }]} />
+            <span className="flex gap-3">
+              <TextField
+                label="From the bottom (px)"
+                type="number"
+                min={0}
+                max={OFFSET_MAX}
+                value={String(design.launcher_offset_bottom)}
+                onChange={(e) => set('launcher_offset_bottom', clampOffset(Number(e.target.value) || 0))}
+                error={issues.launcher_offset_bottom ?? null}
+                className="flex-1"
+              />
+              {design.position === 'bottom_left' ? (
+                <TextField label="From the left (px)" type="number" min={0} max={OFFSET_MAX} value={String(design.launcher_offset_left)} onChange={(e) => set('launcher_offset_left', clampOffset(Number(e.target.value) || 0))} error={issues.launcher_offset_left ?? null} className="flex-1" />
+              ) : (
+                <TextField label="From the right (px)" type="number" min={0} max={OFFSET_MAX} value={String(design.launcher_offset_right)} onChange={(e) => set('launcher_offset_right', clampOffset(Number(e.target.value) || 0))} error={issues.launcher_offset_right ?? null} className="flex-1" />
+              )}
+            </span>
+            <span className="text-[12px] text-ink-3">{text('0 to {max}px. Move the launcher clear of your site\'s own buttons; the chat opens 16px above it.', { max: OFFSET_MAX })}</span>
             <TextField label="Greeting card after (seconds)" type="number" min={0} max={300} value={String(design.greeting_delay)} onChange={(e) => set('greeting_delay', Math.max(0, Math.min(300, Number(e.target.value) || 0)))} hint="0 is off. Shown once a visit, while the team is online; the visitor can dismiss it." />
             <Area label="Greeting card message" value={design.greeting_text ?? ''} max={300} onChange={(v) => set('greeting_text', v || null)} placeholder="Hi there. Looking for hosting, a website or WorkSuite? Ask us anything." hint="Its quick replies are the widget's conversation starters." />
           </Section>
@@ -313,8 +348,8 @@ function WidgetEditor({ id }: { id: number }) {
             </button>
           ))}
         </div>
-        <WidgetPreview design={design} people={people} replyTime={p?.reply_time ?? 'Usually replies in a few minutes'} hours={hoursPreview} screen={screen} dark={design.dark_mode === 'dark'} />
-        <p className="text-[12px] text-ink-3">Below 480px wide the widget fills the screen. Visitors who prefer a dark theme see it dark when the theme matches the visitor.</p>
+        <WidgetPreview design={design} siteName={siteNameOf(design, p?.fallback_name)} people={people} replyTime={p?.reply_time ?? 'Usually replies in a few minutes'} hours={hoursPreview} screen={screen} dark={darkFor(design.theme)} />
+        <p className="text-[12px] text-ink-3">Visitors minimise and maximise the chat from its header and close it with the launcher. Below 480px wide it fills the screen. With the theme matching the visitor, it is dark for visitors who prefer dark.</p>
       </aside>
     </div>
   );

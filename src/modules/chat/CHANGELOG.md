@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.22.0 — 2026-10-03
+
+- Website chats › Widget (#207): choose Auto, Light or Dark for the widget, move the launcher with bottom/right/left offsets, see the organisation name used when the website name is empty, and preview the polished widget — one set of controls, no web address in the header.
+
 ## 1.21.1 — 2026-10-03
 
 - Chat drawer (#211): a 1px left border and soft shadow, one container with one left edge, 16px either side of the messages, and a header with room for the name — Open in new window and Minimise are in More; the width is kept between 360 and 640px.

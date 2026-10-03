@@ -1,13 +1,18 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { Icon } from '../../../../components/Icon';
+import { text } from '../../../../core/i18n';
 import { cx } from '../../../../components/ui';
-import { firstName, initialsOf, namesLine, palette, type HoursSummary, type PreviewPerson, type WidgetDesign } from './design';
+import { clampOffset, firstName, initialsOf, namesLine, palette, type HoursSummary, type PreviewPerson, type WidgetDesign } from './design';
 
 /**
  * A live preview of the visitor widget (worksuite-desktop#199): the home screen, a conversation, the away screen and
  * the launcher, drawn from the design being edited, before it is saved. The same sizes, colours and words as the
  * widget itself (`public/widget.js` on the server): a 380px panel with a 20px radius, 40px overlapping photos with
- * green dots, a 60px launcher, and text on the brand colour chosen for contrast.
+ * green dots, a 56px launcher, and text on the brand colour chosen for contrast.
+ *
+ * As #207 left it: the header names the company (never its web address), with minimise and maximise at its top right;
+ * one status line; a start card that is just the message box; a dark theme with a darker brand header; and on the
+ * Launcher screen, the launcher where its offsets put it.
  *
  * Nothing in it can be focused or pressed: it is a picture of a page, described for a screen reader by its label.
  */
@@ -82,13 +87,23 @@ function Svg({ d, size = 18, color }: { d: string; size?: number; color?: string
   );
 }
 
-function Logo({ design, color }: { design: WidgetDesign; color: string }) {
-  const name = (design.website_name || 'Your company').trim();
+/** The logo, or the company's initial; without a company name, a chat mark rather than the initial of anything else. */
+function Logo({ design, name, color }: { design: WidgetDesign; name: string | null; color: string }) {
   return design.logo_url ? (
     <img src={design.logo_url} alt="" className="h-8 w-8 shrink-0 rounded-[9px] bg-white object-cover" />
   ) : (
-    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-white text-[16px] font-extrabold" style={{ color }}>
-      {name.charAt(0).toUpperCase()}
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-white text-[16px] font-extrabold" style={{ color }} data-testid="preview-logo">
+      {name ? name.charAt(0).toUpperCase() : <Icon name="message-circle" size={17} />}
+    </span>
+  );
+}
+
+/** Minimise and maximise, as the widget draws them at the top right of its header (#207). */
+function Controls({ bg, color }: { bg: string; color?: string }) {
+  return (
+    <span className="flex shrink-0 items-center gap-1.5" data-testid="preview-controls" style={{ color }}>
+      <span className="flex h-8 w-8 items-center justify-center rounded-[8px]" style={{ background: bg }} title="Minimise chat"><Icon name="minus" size={16} /></span>
+      <span className="flex h-8 w-8 items-center justify-center rounded-[8px]" style={{ background: bg }} title="Maximise chat"><Icon name="maximize" size={16} /></span>
     </span>
   );
 }
@@ -112,23 +127,24 @@ const LINK_ICON = (label: string, url: string): string => {
 };
 const LINK_TINTS: Array<(soft: string, text: string) => [string, string]> = [(s, a) => [s, a], () => ['#FFF1E6', '#B4540E'], () => ['#E7F7EC', '#15803D']];
 
-function Hero({ design, people, replyTime, away, hours, accent, onAccent }: { design: WidgetDesign; people: PreviewPerson[]; replyTime: string | null; away: boolean; hours: HoursSummary | null; accent: string; onAccent: string }) {
+function Hero({ design, name, people, replyTime, away, hours, accent, onAccent }: { design: WidgetDesign; name: string | null; people: PreviewPerson[]; replyTime: string | null; away: boolean; hours: HoursSummary | null; accent: string; onAccent: string }) {
   const bg = away ? '#121633' : accent;
   const fg = away ? '#ffffff' : onAccent;
+  const ctl = fg === '#ffffff' ? 'rgba(255,255,255,.16)' : 'rgba(18,22,51,.08)';
   const greeting = away ? 'We are away\nright now' : design.greeting || 'Hi there,\nhow can we help?';
   const tag = away ? design.offline_message || 'Leave a message and we will reply by email when we are back.' : design.header_subtitle || 'Ask us anything, and someone from the team will reply here.';
-  const line1 = away ? (hours?.back_at ? `Back at ${hours.back_at}` : 'We will reply as soon as we are back') : people.length ? `${namesLine(people.map((p) => firstName(p.name)))} ${people.length === 1 ? 'is' : 'are'} online` : 'We are online';
-  const line2 = away ? (hours ? `Business hours: ${hours.text}${hours.zone ? ` (${hours.zone})` : ''}` : '') : replyTime ?? '';
+  const online = people.length ? `${namesLine(people.map((p) => firstName(p.name)))} ${people.length === 1 ? 'is' : 'are'} online` : 'We are online';
+  // One status line while the team is here (#207): "Hasarinda is online · usually replies in a few minutes".
+  const line1 = away ? (hours?.back_at ? `Back at ${hours.back_at}` : 'We will reply as soon as we are back') : replyTime ? `${online} · ${replyTime.charAt(0).toLowerCase()}${replyTime.slice(1)}` : online;
+  const line2 = away ? (hours ? `Business hours: ${hours.text}${hours.zone ? ` (${hours.zone})` : ''}` : '') : '';
   return (
-    <div className="flex shrink-0 flex-col gap-[18px] px-5 pt-5 pb-16" style={{ background: bg, color: fg }}>
+    <div className="flex shrink-0 flex-col gap-[18px] px-5 pt-5 pb-[60px]" style={{ background: bg, color: fg }}>
       <div className="flex items-center justify-between gap-2.5">
         <span className="flex min-w-0 items-center gap-2.5">
-          <Logo design={design} color={away ? '#121633' : palette(design.brand_color).accentText} />
-          <span className="truncate text-[15px] font-bold">{design.website_name || 'Your company'}</span>
+          <Logo design={design} name={name} color={palette(design.brand_color).accentText} />
+          <span className="truncate text-[15px] font-bold">{name ?? 'Chat with us'}</span>
         </span>
-        <span className="flex h-8 w-8 items-center justify-center rounded-[8px]" style={{ background: 'rgba(255,255,255,.14)' }}>
-          <Icon name="chevron-down" size={16} />
-        </span>
+        <Controls bg={away ? 'rgba(255,255,255,.16)' : ctl} />
       </div>
       <div>
         <div className="text-[26px] leading-[1.15] font-extrabold tracking-[-0.02em] whitespace-pre-line">{greeting}</div>
@@ -162,14 +178,15 @@ function Pill({ t, on, children }: { t: Tokens; on: boolean; children: ReactNode
   );
 }
 
-function HomeScreen({ design, people, replyTime, hours, away, t }: { design: WidgetDesign; people: PreviewPerson[]; replyTime: string | null; hours: HoursSummary | null; away: boolean; t: Tokens }) {
+function HomeScreen({ design, name, people, replyTime, hours, away, dark, t }: { design: WidgetDesign; name: string | null; people: PreviewPerson[]; replyTime: string | null; hours: HoursSummary | null; away: boolean; dark: boolean; t: Tokens }) {
   const p = palette(design.brand_color);
   const links = design.quick_links.filter((l) => l.label.trim() && l.url.trim());
   const field = { background: t.fl, border: `1px solid ${t.fln}`, color: t.mut };
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ background: t.bg }}>
-      <Hero design={design} people={people} replyTime={replyTime} away={away} hours={hours} accent={p.accent} onAccent={p.onAccent} />
-      <div className="-mt-11 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-4 pb-4">
+      {/* Dark: a darker brand header over the dark body, white on it (#207). */}
+      <Hero design={design} name={name} people={people} replyTime={replyTime} away={away} hours={hours} accent={dark ? p.darkHeader : p.accent} onAccent={dark ? '#ffffff' : p.onAccent} />
+      <div className="-mt-10 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-4 pb-4">
         {away ? (
           <Card t={t}>
             <div className="flex items-center justify-between">
@@ -185,13 +202,9 @@ function HomeScreen({ design, people, replyTime, hours, away, t }: { design: Wid
             <span className="flex h-[42px] items-center justify-center rounded-[12px] text-[14px] font-bold" style={{ background: p.accent, color: p.onAccent }}>Send message</span>
           </Card>
         ) : (
+          // Just the message box (#207): the header already says who is here and when they reply.
           <Card t={t}>
-            <div className="flex items-center justify-between">
-              <span className="text-[15px] font-bold">Start a conversation</span>
-              <Pill t={t} on>We are online</Pill>
-            </div>
-            <span className="text-[13px]" style={{ color: t.sub }}>Type your question and someone from the team will reply here.</span>
-            <span className="flex items-center gap-2 rounded-[12px] py-1.5 pr-1.5 pl-3.5" style={field}>
+            <span className="flex items-center gap-2 rounded-[12px] py-1.5 pr-1.5 pl-3.5" style={field} data-testid="preview-start">
               <span className="flex-1 text-[14px]">Write a message…</span>
               <span className="flex h-10 w-10 items-center justify-center rounded-[10px]" style={{ background: p.accent, color: p.onAccent }}><Svg d={SEND} /></span>
             </span>
@@ -228,6 +241,7 @@ function HomeScreen({ design, people, replyTime, hours, away, t }: { design: Wid
 }
 
 function ChatScreen({ design, people, t }: { design: WidgetDesign; people: PreviewPerson[]; t: Tokens }) {
+  const ctl = t === DARK ? '#232849' : '#F1F3F9';
   const p = palette(design.brand_color);
   const who = people[0] ?? { name: 'Alex Morgan', role: 'Support', avatar: null, online: true };
   const bubbleThem = { background: t.sf, boxShadow: '0 0 0 1px rgba(18,22,51,.06)', borderRadius: '16px 16px 16px 4px' };
@@ -241,6 +255,7 @@ function ChatScreen({ design, people, t }: { design: WidgetDesign; people: Previ
           <span className="truncate text-[12px] font-semibold" style={{ color: t.ok }}>Online{who.role ? ` · ${who.role}` : ''}</span>
         </span>
         <Icon name="more" size={18} />
+        <Controls bg={ctl} color={t.sub} />
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden p-4 text-[14px] leading-[1.45]">
         <span className="self-center rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: t.day, color: t.mut }}>Today</span>
@@ -289,13 +304,13 @@ function ChatScreen({ design, people, t }: { design: WidgetDesign; people: Previ
   );
 }
 
-function Launcher({ design, people }: { design: WidgetDesign; people: PreviewPerson[] }) {
+function Launcher({ design, people, style }: { design: WidgetDesign; people: PreviewPerson[]; style?: CSSProperties }) {
   const p = palette(design.brand_color);
   const round = design.launcher_style === 'bubble' || people.length === 0;
   return (
     <span
-      className={cx('relative flex h-[60px] items-center gap-2.5 rounded-full text-[15px] font-bold', round ? 'w-[60px] justify-center' : 'pr-5 pl-2')}
-      style={{ background: p.accent, color: p.onAccent, boxShadow: `0 12px 28px -8px ${p.accent}99` }}
+      className={cx('relative flex h-[56px] items-center gap-2.5 rounded-full text-[15px] font-bold', round ? 'w-[56px] justify-center' : 'pr-5 pl-2')}
+      style={{ background: p.accent, color: p.onAccent, boxShadow: `0 10px 24px -8px ${p.accent}8C, 0 2px 6px rgba(18,22,51,.14)`, ...style }}
       data-testid="preview-launcher"
     >
       {round ? <Icon name="message-circle" size={24} /> : <><Stack people={people} size={40} ring={p.accent} /><span>Chat with us</span></>}
@@ -304,15 +319,16 @@ function Launcher({ design, people }: { design: WidgetDesign; people: PreviewPer
   );
 }
 
-function Greeting({ design, people, t }: { design: WidgetDesign; people: PreviewPerson[]; t: Tokens }) {
+function Greeting({ design, name, people, t }: { design: WidgetDesign; name: string | null; people: PreviewPerson[]; t: Tokens }) {
   const p = palette(design.brand_color);
   const who = people[0];
+  const company = name ?? 'Chat with us';
   return (
     <div className="flex w-[300px] flex-col gap-3 rounded-[18px] p-3.5" style={{ background: t.sf, color: t.ink, boxShadow: '0 18px 40px -14px rgba(18,22,51,.3), 0 0 0 1px rgba(18,22,51,.06)' }}>
       <div className="flex items-center gap-2.5">
-        {who ? <Face p={who} size={36} dot="on" ring={t.sf} /> : <Logo design={design} color={p.accentText} />}
+        {who ? <Face p={who} size={36} dot="on" ring={t.sf} /> : <Logo design={design} name={name} color={p.accentText} />}
         <span className="flex min-w-0 flex-1 flex-col">
-          <b className="text-[13px]">{who ? `${firstName(who.name)} from ${design.website_name || 'Your company'}` : design.website_name || 'Your company'}</b>
+          <b className="text-[13px]">{who ? `${firstName(who.name)} from ${company}` : company}</b>
           <span className="text-[12px] font-semibold" style={{ color: t.ok }}>Online now</span>
         </span>
         <Icon name="x" size={14} />
@@ -322,10 +338,13 @@ function Greeting({ design, people, t }: { design: WidgetDesign; people: Preview
   );
 }
 
-export function WidgetPreview({ design, people, replyTime, hours, screen, dark }: { design: WidgetDesign; people: PreviewPerson[]; replyTime: string | null; hours: HoursSummary | null; screen: PreviewScreen; dark: boolean }) {
+export function WidgetPreview({ design, siteName, people, replyTime, hours, screen, dark }: { design: WidgetDesign; siteName: string | null; people: PreviewPerson[]; replyTime: string | null; hours: HoursSummary | null; screen: PreviewScreen; dark: boolean }) {
   const t = dark ? DARK : LIGHT;
   const p = palette(design.brand_color);
   const left = design.position === 'bottom_left';
+  // Where the launcher sits on the page: its offsets from the bottom and from its side (#207).
+  const bottom = clampOffset(design.launcher_offset_bottom);
+  const side = clampOffset(left ? design.launcher_offset_left : design.launcher_offset_right);
   const label = { home: 'the home screen', chat: 'a conversation', away: 'the away screen', launcher: 'the launcher' }[screen];
   return (
     <div
@@ -336,17 +355,21 @@ export function WidgetPreview({ design, people, replyTime, hours, screen, dark }
       style={{ background: dark ? '#05060F' : '#E9ECF5', color: t.ink, fontFamily: '"Plus Jakarta Sans", -apple-system, "Segoe UI", system-ui, sans-serif', ['--at' as string]: p.accentText }}
     >
       {screen === 'launcher' ? (
-        <>
-          <div className="h-[300px]" />
-          {design.greeting_delay > 0 ? <Greeting design={design} people={people} t={t} /> : <span className="text-[12px]" style={{ color: t.mut }}>No greeting card: its delay is off.</span>}
-          <Launcher design={design} people={people} />
-        </>
+        // The corner of a page, to scale: the launcher sits where its offsets put it, the greeting card 16px above it.
+        <div className="relative h-[560px] w-full rounded-[10px]" style={{ outline: `1px dashed ${t.fln}` }} data-testid="preview-page">
+          <div className={cx('absolute flex flex-col gap-4', left ? 'items-start' : 'items-end')} style={{ bottom, [left ? 'left' : 'right']: side }} data-testid="preview-corner">
+            {design.greeting_delay > 0 ? <Greeting design={design} name={siteName} people={people} t={t} /> : <span className="text-[12px]" style={{ color: t.mut }}>No greeting card: its delay is off.</span>}
+            <Launcher design={design} people={people} />
+          </div>
+          <span className="absolute top-2 text-[11px]" style={{ color: t.mut, [left ? 'right' : 'left']: 8 }}>{text('{bottom}px from the bottom, {side}px from the {edge}', { bottom, side, edge: left ? text('left') : text('right') })}</span>
+        </div>
       ) : (
         <>
           <div className="flex h-[600px] w-[380px] flex-col overflow-hidden rounded-[20px]" style={{ boxShadow: '0 24px 60px -16px rgba(18,22,51,.35), 0 0 0 1px rgba(18,22,51,.06)' }}>
-            {screen === 'chat' ? <ChatScreen design={design} people={people} t={t} /> : <HomeScreen design={design} people={people} replyTime={replyTime} hours={hours} away={screen === 'away'} t={t} />}
+            {screen === 'chat' ? <ChatScreen design={design} people={people} t={t} /> : <HomeScreen design={design} name={siteName} people={people} replyTime={replyTime} hours={hours} away={screen === 'away'} dark={dark} t={t} />}
           </div>
-          <span className="flex h-[60px] w-[60px] items-center justify-center rounded-full" style={{ background: p.accent, color: p.onAccent }}><Icon name="x" size={22} /></span>
+          {/* Open, the launcher is the cross that closes it, 16px under the panel. */}
+          <span className="flex h-[56px] w-[56px] items-center justify-center rounded-full" style={{ background: p.accent, color: p.onAccent }} title="Close chat"><Icon name="x" size={22} /></span>
         </>
       )}
     </div>

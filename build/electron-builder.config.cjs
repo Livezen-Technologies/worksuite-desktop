@@ -2,7 +2,8 @@
  * Packaging (FR-SHL-01/02, §16). One codebase, every platform:
  *
  *   Windows  NSIS .exe (per-user) + .msi (machine-wide, Intune/GPO/RMM)
- *   macOS    universal .dmg + .pkg (Jamf/MDM) + .zip (what the updater installs)
+ *   macOS    .dmg (what the updater installs; one per architecture for releases,
+ *            see docs/RELEASING.md) + .pkg (Jamf/MDM) + .zip
  *   Linux    .AppImage (self-updating) + .deb + .rpm
  *
  * Signing is driven entirely by environment/CI secrets and never lives in
@@ -174,7 +175,7 @@ module.exports = {
   deb: { depends: ['libsecret-1-0', 'libnotify4', 'libxss1', 'libnss3'], recommends: ['xdotool', 'x11-utils'] },
   rpm: { depends: ['libsecret', 'libnotify', 'libXScrnSaver', 'nss'] },
 
-  // Releases are published by the pipeline with a signed manifest
-  // (scripts/release-manifest.mjs), not by electron-updater feeds.
+  // Releases are published to the WorkSuite Update Center (docs/RELEASING.md, one channel each:
+  // STABLE, BETA, DEV), not by electron-updater feeds.
   publish: null,
 };

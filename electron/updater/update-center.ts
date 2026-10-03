@@ -2,6 +2,7 @@ import { createHmac, createPublicKey, verify, type KeyObject } from 'node:crypto
 import { z } from 'zod';
 import { canonicalJson } from '@shared/canonical-json';
 import type { Arch, Platform, UpdateChannel } from '@shared/types';
+import { updateCenterChannel } from '@shared/updates';
 
 /**
  * The WorkSuite Update Center (download.worksuitecloud.com) — where desktop
@@ -81,6 +82,10 @@ export const updateResponseSchema = z.object({
   mandatory: z.boolean().optional(),
   effective_minimum: z.string().nullable().optional(),
   release_notes_url: z.string().nullable().optional(),
+  /** "What's new" lines for the version on offer (worksuite-desktop#205). */
+  highlights: z.array(z.string().max(500)).max(20).nullable().optional(),
+  /** A one-line summary of the release, when the Update Center has one. */
+  summary: z.string().max(500).nullable().optional(),
   package: ucPackageSchema.nullable().optional(),
   message: z.string().nullable().optional(),
   issued_at: z.string(),
@@ -103,7 +108,12 @@ export function isRequired(r: UpdateResponse): boolean {
  * organisation's own channel, which only a tenant policy can name.
  */
 export function ucChannel(channel: UpdateChannel): string | null {
-  return channel === 'org' ? null : channel.toUpperCase();
+  return updateCenterChannel(channel);
+}
+
+/** A security fix: the Update Center's release type CRITICAL or SECURITY. */
+export function isSecurityRelease(r: Pick<UpdateResponse, 'release_type'>): boolean {
+  return r.release_type === 'CRITICAL' || r.release_type === 'SECURITY';
 }
 
 /**
@@ -135,6 +145,8 @@ export interface UpdateQuery {
   channel: UpdateChannel;
   installId: string | null;
   osVersion: string | null;
+  /** "Reinstall Stable now": ask for the channel's build even when it is older than this one. */
+  allowDowngrade?: boolean;
 }
 
 export function updateCheckUrl(q: UpdateQuery): string {
@@ -148,6 +160,7 @@ export function updateCheckUrl(q: UpdateQuery): string {
   if (ch) u.searchParams.set('channel', ch);
   if (q.installId && q.installId !== 'unknown') u.searchParams.set('device_id', deviceRef(q.installId));
   if (q.osVersion) u.searchParams.set('os_version', q.osVersion);
+  if (q.allowDowngrade) u.searchParams.set('allow_downgrade', '1');
   return u.toString();
 }
 

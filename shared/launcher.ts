@@ -28,16 +28,56 @@ const ID = /^[a-z][a-z0-9_-]{0,39}$/;
 
 /** Icon sizes, in px, per launcher size; the bottom sheet's own. */
 export const ICON_PX: Record<LauncherSize, number> = { compact: 44, comfortable: 52, large: 64 };
+/** Full screen draws every size one step larger (worksuite-desktop#206). */
+export const FULL_ICON_PX: Record<LauncherSize, number> = { compact: 52, comfortable: 56, large: 72 };
 export const SHEET_ICON_PX = 48;
 export const SHEET_COLUMNS = 4;
 /** Narrower than this, the launcher is a bottom sheet. */
 export const SHEET_BELOW = 480;
-/** The grid's `repeat(auto-fill, minmax(88px, 1fr))`. */
+/** The popover grid's `repeat(auto-fill, minmax(88px, 1fr))`. */
 export const TILE_MIN_PX = 88;
 export const GRID_GAP_PX = 2;
-export const POPOVER_PX = { width: 760, height: 600 } as const;
-/** Never more of the window than this. */
+/** Full screen's `repeat(auto-fill, minmax(104px, 1fr))`. */
+export const FULL_TILE_MIN_PX = 104;
+export const FULL_GRID_GAP_PX = 4;
+/** The popover: `width: min(880px, 100vw - 48px)`, `max-height: min(640px, 100vh - 96px)`. */
+export const POPOVER_MAX = { width: 880, height: 640 } as const;
+export const POPOVER_GUTTER = { x: 48, y: 96 } as const;
+/** Never closer than this to the window's edges, the Dock or the taskbar. */
+export const EDGE_MARGIN = 24;
+/** The popover's top, as a share of the window's height (Spotlight-style), so the search field never moves. */
+export const POPOVER_TOP_FRACTION = 0.12;
+/** The shell's top bar (layouts/TitleBar), which holds the window controls: the traffic lights on macOS. */
+export const TOP_BAR_PX = 52;
+/** Full screen's column: `max-width: 1080px; margin: 0 auto`, 48px above, 32px each side. */
+export const FULL_COLUMN = { maxWidth: 1080, padTop: 48, padSide: 32, padBottom: 24 } as const;
+export const FULL_SEARCH = { maxWidth: 640, height: 52 } as const;
+/** Never more of the window than this (the bottom sheet). */
 export const MAX_FRACTION = 0.9;
+
+/**
+ * The fixed parts of the launcher, in px. The renderer draws each at exactly this height, so the room left for the
+ * grid, and so how many whole rows fit, is known before anything is drawn.
+ */
+export const LAUNCHER_PARTS = {
+  /** The popover's 1px border, top and bottom. */
+  border: 2,
+  /** The popover's search row. */
+  header: 66,
+  /** Full screen's search row: 52px, and 16px under it. */
+  fullHeader: 68,
+  /** The Pinned and the Recent rows, each. */
+  row: 40,
+  /** The category chips. */
+  chips: 40,
+  divider: 1,
+  footer: 40,
+  /** A category heading in full screen. */
+  heading: 32,
+} as const;
+/** The grid's padding inside its scroller; the bottom fade sits over the bottom padding. */
+export const GRID_PAD = { top: 8, bottom: 12, x: 10 } as const;
+export const FADE_PX = 20;
 
 export const DEFAULT_LAUNCHER_SHORTCUT = 'Mod+Shift+K';
 
@@ -445,38 +485,233 @@ export function visibleArea(win: WindowGeometry, screen?: ScreenWorkArea | null)
   return { left, top: topIn, width: right - left, height: bottom - topIn };
 }
 
+/** A tile's height: its padding, the icon, and the name's one line under it (none when names are off). */
+export function tileHeight(icon: number, names: boolean): number {
+  return names ? icon + 40 : icon + 20;
+}
+
+/** The grid's scroller: as many whole rows as fit in `available`, never a row cut through. At least one row. */
+export function wholeRows(available: number, rowHeight: number, gap: number, pad: { top: number; bottom: number } = GRID_PAD): { rows: number; height: number } {
+  const rows = Math.max(1, Math.floor((available - pad.top - pad.bottom + gap) / (rowHeight + gap)));
+  return { rows, height: pad.top + rows * rowHeight + (rows - 1) * gap + pad.bottom };
+}
+
+/** Which of the launcher's optional fixed parts are showing. */
+export interface LauncherParts {
+  pinned: boolean;
+  recent: boolean;
+  chips: boolean;
+}
+
+/** The height of everything in the popover but the grid. */
+export function popoverChrome(p: LauncherParts): number {
+  const P = LAUNCHER_PARTS;
+  return P.border + P.header + (p.pinned ? P.row : 0) + (p.recent ? P.row : 0) + (p.chips ? P.chips : 0) + P.divider + P.footer;
+}
+
+/** The height of everything in full screen's column but the grid, its padding included. */
+export function fullscreenChrome(p: LauncherParts): number {
+  const P = LAUNCHER_PARTS;
+  return FULL_COLUMN.padTop + P.fullHeader + (p.pinned ? P.row : 0) + (p.recent ? P.row : 0) + (p.chips ? P.chips : 0) + P.divider + P.footer + FULL_COLUMN.padBottom;
+}
+
 export interface LauncherLayout {
   kind: 'popover' | 'sheet' | 'fullscreen';
+  /** The launcher's box in the window's content, in CSS px. */
   left: number;
   top: number;
   width: number;
   height: number;
   /** Icon size in px. */
   icon: number;
-  /** A fixed column count (the sheet's 4); null: as many 88px columns as fit. */
-  columns: number | null;
+  /** A tile's height. */
+  rowHeight: number;
+  /** A tile's narrowest width (`minmax(tileMin, 1fr)`), and the gap between tiles. */
+  tileMin: number;
+  gap: number;
+  /** A fixed column count (the sheet's 4); null: as many `tileMin` columns as fit. */
+  fixedColumns: number | null;
+  /** How many columns the grid has. */
+  columns: number;
+  /** The popover's grid scroller: its height, in whole rows, and how many rows that is. Null: what is left. */
+  grid: { height: number; rows: number } | null;
+  /** Full screen: its centred column's width, and the most of it the grid may take. */
+  column: { width: number; gridRoom: number } | null;
 }
 
-/** Room left above and below the popover. */
-const EDGE = 8;
+/** The size of the window's content, in CSS px. */
+export interface WindowSize {
+  width: number;
+  height: number;
+}
 
 /**
- * Where the launcher goes and how big it is: a 760×600 popover just under the title bar, never more than 90% of the
- * visible area either way and always inside it; a bottom sheet below 480px; or all of the visible area.
+ * The popover (worksuite-desktop#206). `width: min(880px, 100vw - 48px)`, centred on the window itself, never on a
+ * part of it; if the Dock or a taskbar covers one side, narrower on both sides alike so it stays centred and clear of
+ * it. Its top is 12% of the way down the window (Spotlight-style), at least 24px inside the visible area and 16px
+ * under the top bar, so the search field does not move whatever is listed. Its height is the fixed parts plus as many
+ * whole rows as fit in `min(640px, 100vh - 96px)` and 24px above the bottom of the visible area.
  */
-export function launcherLayout(area: Rect, prefs: Pick<LauncherPrefs, 'mode' | 'size'>, anchorTop = 56): LauncherLayout {
-  if (area.width < SHEET_BELOW) {
+export function popoverRect(win: WindowSize, area: Rect, parts: LauncherParts, row: { height: number; gap?: number }): Rect & { grid: { height: number; rows: number } } {
+  const W = win.width;
+  const H = win.height;
+  let width = Math.min(POPOVER_MAX.width, W - POPOVER_GUTTER.x);
+  const safeLeft = Math.max(0, area.left) + EDGE_MARGIN;
+  const safeRight = Math.min(W, area.left + area.width) - EDGE_MARGIN;
+  const half = Math.min(W / 2 - safeLeft, safeRight - W / 2);
+  if (2 * half >= SHEET_BELOW) width = Math.min(width, 2 * half);
+  width = Math.max(0, Math.floor(width));
+  const left = Math.round((W - width) / 2);
+  const visBottom = Math.min(H, area.top + area.height);
+  const top = Math.max(area.top + EDGE_MARGIN, TOP_BAR_PX + 16, Math.round(H * POPOVER_TOP_FRACTION));
+  const max = Math.min(POPOVER_MAX.height, H - POPOVER_GUTTER.y, visBottom - EDGE_MARGIN - top);
+  const chrome = popoverChrome(parts);
+  const grid = wholeRows(max - chrome, row.height, row.gap ?? GRID_GAP_PX);
+  return { left, top, width, height: chrome + grid.height, grid };
+}
+
+/**
+ * Full screen (worksuite-desktop#206): the window's content below the top bar, so never over the traffic lights or
+ * the window buttons, and above the Dock; in it, one column at most 1080px wide, centred.
+ */
+export function fullscreenRect(win: WindowSize, area: Rect): Rect & { column: number } {
+  const top = Math.max(TOP_BAR_PX, area.top);
+  const bottom = Math.min(win.height, area.top + area.height);
+  return { left: 0, top, width: win.width, height: Math.max(0, bottom - top), column: Math.min(FULL_COLUMN.maxWidth, win.width) };
+}
+
+/**
+ * Where the launcher goes and how big it is: the popover (`popoverRect`), a bottom sheet in a window narrower than
+ * 480px, or full screen (`fullscreenRect`). `area` is the part of the window the person can see (`visibleArea`);
+ * `parts`, which of the fixed rows are showing.
+ */
+export function launcherLayout(
+  win: WindowSize,
+  area: Rect,
+  prefs: Pick<LauncherPrefs, 'mode' | 'size'> & { toggles?: Pick<LauncherToggles, 'names'> },
+  parts: LauncherParts = { pinned: false, recent: false, chips: true },
+): LauncherLayout {
+  const names = prefs.toggles?.names ?? true;
+  if (win.width < SHEET_BELOW) {
     const height = Math.floor(area.height * MAX_FRACTION);
-    return { kind: 'sheet', left: area.left, top: area.top + area.height - height, width: area.width, height, icon: SHEET_ICON_PX, columns: SHEET_COLUMNS };
+    return { kind: 'sheet', left: area.left, top: area.top + area.height - height, width: area.width, height, icon: SHEET_ICON_PX, rowHeight: tileHeight(SHEET_ICON_PX, names), tileMin: 0, gap: GRID_GAP_PX, fixedColumns: SHEET_COLUMNS, columns: SHEET_COLUMNS, grid: null, column: null };
+  }
+  if (prefs.mode === 'fullscreen') {
+    const icon = FULL_ICON_PX[prefs.size];
+    const r = fullscreenRect(win, area);
+    return {
+      kind: 'fullscreen',
+      left: r.left,
+      top: r.top,
+      width: r.width,
+      height: r.height,
+      icon,
+      rowHeight: tileHeight(icon, names),
+      tileMin: FULL_TILE_MIN_PX,
+      gap: FULL_GRID_GAP_PX,
+      fixedColumns: null,
+      columns: columnsFor(r.column - 2 * FULL_COLUMN.padSide, FULL_TILE_MIN_PX, FULL_GRID_GAP_PX),
+      grid: null,
+      column: { width: r.column, gridRoom: Math.max(0, r.height - fullscreenChrome(parts)) },
+    };
   }
   const icon = ICON_PX[prefs.size];
-  if (prefs.mode === 'fullscreen') return { kind: 'fullscreen', ...area, icon, columns: null };
-  const width = Math.min(POPOVER_PX.width, Math.floor(area.width * MAX_FRACTION));
-  const height = Math.min(POPOVER_PX.height, Math.floor(area.height * MAX_FRACTION));
-  const left = area.left + Math.round((area.width - width) / 2);
-  const lowest = area.top + area.height - height - EDGE;
-  const top = Math.max(area.top + Math.min(EDGE, area.height - height), Math.min(area.top + anchorTop, lowest));
-  return { kind: 'popover', left, top, width, height, icon, columns: null };
+  const rowHeight = tileHeight(icon, names);
+  const p = popoverRect(win, area, parts, { height: rowHeight });
+  return {
+    kind: 'popover',
+    left: p.left,
+    top: p.top,
+    width: p.width,
+    height: p.height,
+    icon,
+    rowHeight,
+    tileMin: TILE_MIN_PX,
+    gap: GRID_GAP_PX,
+    fixedColumns: null,
+    columns: columnsFor(p.width - LAUNCHER_PARTS.border - 2 * GRID_PAD.x),
+    grid: p.grid,
+    column: null,
+  };
+}
+
+/** A row of tiles, or a category's heading, in full screen's grid. */
+export interface GridBlock {
+  height: number;
+  /** The gap above it. */
+  gapBefore: number;
+  heading?: boolean;
+}
+
+/**
+ * How tall full screen's grid is: all of it when it fits in `room`; otherwise down to the end of the last whole row
+ * that fits, so it never stops through a row, nor on a heading with none of its row under it. `blocks` are the
+ * grid's rows and headings, top to bottom.
+ */
+export function fitGridHeight(blocks: ReadonlyArray<GridBlock>, room: number, pad: { top: number; bottom: number } = GRID_PAD): number {
+  let y = 0;
+  let fit = 0;
+  let all = true;
+  for (const b of blocks) {
+    y += b.gapBefore + b.height;
+    if (pad.top + y + pad.bottom <= room) {
+      if (!b.heading) fit = y;
+    }
+    else {
+      all = false;
+      break;
+    }
+  }
+  if (all) return pad.top + y + pad.bottom;
+  // Not even one row fits: all the room there is.
+  return fit > 0 ? pad.top + fit + pad.bottom : Math.max(0, room);
+}
+
+/** One section of the grid: a category under its heading, or every tile under none. */
+export interface LauncherSection {
+  id: string;
+  label: string | null;
+  /** Each tile, and its place in `view.tiles` (for the keyboard). */
+  items: Array<{ app: AppDefinition; index: number }>;
+}
+
+/**
+ * The grid in sections. With `headings` (All apps, nothing searched, more than one category): category by category,
+ * each under its name: Communication, Work, Business, People, Operations, Admin, or the person's own groups. Without:
+ * one section, no heading.
+ */
+export function launcherSections(view: Pick<LauncherView, 'tiles' | 'categories'>, prefs: Pick<LauncherPrefs, 'groupBy' | 'groups'>, headings: boolean): LauncherSection[] {
+  if (!headings) return [{ id: ALL_CATEGORY, label: null, items: view.tiles.map((app, index) => ({ app, index })) }];
+  const out: LauncherSection[] = [];
+  view.tiles.forEach((app, index) => {
+    const c = categoryOf(app, prefs);
+    const last = out.at(-1);
+    if (last?.id === c) last.items.push({ app, index });
+    else out.push({ id: c, label: view.categories.find((x) => x.id === c)?.label ?? null, items: [{ app, index }] });
+  });
+  return out;
+}
+
+/** A grid in sections as rows and headings, top to bottom, for `fitGridHeight`. */
+export function sectionBlocks(
+  sections: ReadonlyArray<{ label: string | null; items: readonly unknown[] }>,
+  columns: number,
+  rowHeight: number,
+  gap: number,
+  heading: number = LAUNCHER_PARTS.heading,
+): GridBlock[] {
+  const out: GridBlock[] = [];
+  for (const s of sections) {
+    if (s.label) out.push({ height: heading, gapBefore: 0, heading: true });
+    const rows = Math.ceil(s.items.length / Math.max(1, columns));
+    for (let r = 0; r < rows; r++) out.push({ height: rowHeight, gapBefore: r === 0 ? 0 : gap });
+  }
+  return out;
+}
+
+/** Whether a scroller has more below what shows: when the bottom fade is drawn. */
+export function hasMoreBelow(el: { scrollTop: number; clientHeight: number; scrollHeight: number }): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight > 1;
 }
 
 /** How many columns `repeat(auto-fill, minmax(88px, 1fr))` makes in a grid this wide. */
@@ -494,6 +729,28 @@ export function gridStep(index: number, key: string, count: number, columns: num
   if (move === undefined) return index;
   const next = index + move;
   return next < 0 || next >= count ? index : next;
+}
+
+/**
+ * `gridStep` for a grid in sections (`sizes`: how many tiles each has), where every section starts a new row: up and
+ * down go to the row above or below, the next section's too, in the same column or the row's last tile if it is
+ * shorter. Left, right, Home and End go through the tiles in order.
+ */
+export function sectionStep(index: number, key: string, sizes: readonly number[], columns: number): number {
+  const count = sizes.reduce((n, s) => n + s, 0);
+  if (key !== 'ArrowDown' && key !== 'ArrowUp') return gridStep(index, key, count, columns);
+  if (count === 0) return index;
+  const cols = Math.max(1, columns);
+  const rows: Array<{ start: number; length: number }> = [];
+  let start = 0;
+  for (const s of sizes) {
+    for (let r = 0; r * cols < s; r++) rows.push({ start: start + r * cols, length: Math.min(cols, s - r * cols) });
+    start += s;
+  }
+  const at = rows.findIndex((r) => index >= r.start && index < r.start + r.length);
+  const to = rows[at + (key === 'ArrowDown' ? 1 : -1)];
+  if (at < 0 || !to) return index;
+  return to.start + Math.min(index - rows[at]!.start, to.length - 1);
 }
 
 // ── its shortcut ────────────────────────────────────────────────────────

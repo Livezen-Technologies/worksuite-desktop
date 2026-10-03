@@ -7,6 +7,10 @@ import { WEBSITE } from '../api';
  * The server owns the rules (`WidgetDesign` in the Communication module) and refuses anything they forbid; the checks
  * here mirror them so a mistake is shown beside the field before Save, not after it. The preview's colours are worked
  * out exactly as the widget works them out, so what is previewed is what a visitor sees.
+ *
+ * #207 adds the theme the header and body share (`theme`, which the server keeps in `dark_mode`), the launcher's
+ * offsets from the page's corner, and a company name that is never a web address: the header falls back to the
+ * organisation's name (`fallback_name`), and an address typed into the name is refused, here and by the server.
  */
 
 export interface QuickLink {
@@ -34,7 +38,13 @@ export interface WidgetDesign {
   position: Position;
   greeting_delay: number;
   greeting_text: string | null;
-  dark_mode: Theme;
+  theme: Theme;
+  /** The same setting under its name from before #207: read, never saved. */
+  dark_mode?: Theme;
+  /** Where the launcher sits, in pixels from the bottom and from the side it is on, 0–200 (#207). */
+  launcher_offset_bottom: number;
+  launcher_offset_right: number;
+  launcher_offset_left: number;
 }
 
 /** Somebody staffed on the widget, whether visitors see their photo, and whether they are here now. */
@@ -76,6 +86,8 @@ export interface DesignPayload {
   reply_time: string | null;
   installed: boolean;
   can_manage: boolean;
+  /** What the header says without a company name of its own: the organisation's name, or null (#207). */
+  fallback_name?: string | null;
 }
 
 export interface WidgetRow {
@@ -99,6 +111,39 @@ export interface HoursPayload {
 }
 
 export const MAX_LINKS = 5;
+export const OFFSET_MAX = 200;
+
+/** A launcher offset as the server keeps it: whole pixels, 0–200, 20 when there is nothing to go on. */
+export const clampOffset = (v: number) => Math.max(0, Math.min(OFFSET_MAX, Math.round(Number.isFinite(v) ? v : 20)));
+
+/**
+ * The design as this screen edits it, from what the server sent: a server from before #207 sends the theme as
+ * `dark_mode` only, and no offsets.
+ */
+export function withDefaults(d: WidgetDesign): WidgetDesign {
+  return {
+    ...d,
+    theme: d.theme ?? d.dark_mode ?? 'auto',
+    launcher_offset_bottom: d.launcher_offset_bottom ?? 20,
+    launcher_offset_right: d.launcher_offset_right ?? 20,
+    launcher_offset_left: d.launcher_offset_left ?? 20,
+  };
+}
+
+/**
+ * Is this a web address rather than a company's name? "https://tenderhub.lk/", "www.tenderhub.lk", "tenderhub.lk/x".
+ * The widget's header shows the name; an address there was the "https://tenderhub.lk/" beside an "H" tile (#207).
+ */
+export const looksLikeAddress = (s: string | null | undefined) => {
+  const v = (s ?? '').trim().toLowerCase();
+  return /^[a-z][a-z0-9+.-]*:\/\//.test(v) || v.startsWith('www.') || /^[^\s/]+\.[a-z]{2,}(:\d+)?\//.test(v);
+};
+
+/** What the widget's header will call the company: the name set here unless it is an address, else the organisation's. */
+export function siteNameOf(design: Pick<WidgetDesign, 'website_name'>, fallback: string | null | undefined): string | null {
+  const own = (design.website_name ?? '').trim();
+  return (own && !looksLikeAddress(own) ? own : (fallback ?? '').trim()) || null;
+}
 export const DEFAULT_TIMEZONE = 'Asia/Colombo';
 export const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -109,8 +154,11 @@ export const hoursOf = (id: number, signal?: AbortSignal) => apiGet<HoursPayload
 
 /** Save the design: only the design's own fields and the photos shown, never the widget's domains or its name. */
 export function saveDesign(id: number, design: WidgetDesign, shown: Record<number, boolean>): Promise<DesignPayload> {
+  // `theme` is the setting; `dark_mode` is only its older name and is not sent back.
+  const { dark_mode: _older, ...fields } = design;
+  void _older;
   return apiPut<DesignPayload>(`${WEBSITE}/widgets/${id}/design`, {
-    ...design,
+    ...fields,
     quick_links: design.quick_links.filter((l) => l.label.trim() || l.url.trim()),
     agents: Object.entries(shown).map(([user_id, on]) => ({ user_id: Number(user_id), shown: on })),
   });
@@ -164,7 +212,11 @@ export function hoursText(days: HoursDay[]): string {
 /** What is wrong with the design, field by field, before the server is asked. */
 export function problems(d: WidgetDesign): Partial<Record<keyof WidgetDesign | 'quick_links', string>> {
   const out: Partial<Record<keyof WidgetDesign | 'quick_links', string>> = {};
+  if (looksLikeAddress(d.website_name)) out.website_name = 'Enter the company\'s name, not its web address: the widget shows it in its header';
   if (!/^#[0-9a-f]{6}$/i.test(d.brand_color)) out.brand_color = 'Use a six-digit hex colour, like #2F3FB5';
+  for (const k of ['launcher_offset_bottom', 'launcher_offset_right', 'launcher_offset_left'] as const) {
+    if (!Number.isInteger(d[k]) || d[k] < 0 || d[k] > OFFSET_MAX) out[k] = `A number of pixels, 0 to ${OFFSET_MAX}`;
+  }
   if (d.logo_url && !/^https?:\/\/[^\s<>"']+$/i.test(d.logo_url)) out.logo_url = 'The logo must be a web address starting with https://';
   const links = d.quick_links.filter((l) => l.label.trim() || l.url.trim());
   if (links.length > MAX_LINKS) out.quick_links = `Up to ${MAX_LINKS} quick links`;
@@ -216,13 +268,18 @@ export interface Palette {
   accentSoft: string;
   /** Whether white text would have failed WCAG AA on this brand colour. */
   lightBrand: boolean;
+  /** The dark theme's header: the brand, darker, with white on it at 5.5:1 or better (#207). */
+  darkHeader: string;
 }
 
 export function palette(brand: string): Palette {
   const a = rgb(brand) ?? rgb('#2F3FB5')!;
   const white: Rgb = [255, 255, 255];
   const lightBrand = contrast(white, a) < 4.5;
-  return { accent: hex(a), onAccent: lightBrand ? '#121633' : '#ffffff', accentText: hex(readable(a, white, [0, 0, 0])), accentSoft: hex(mix(a, white, 0.9)), lightBrand };
+  const night: Rgb = [14, 16, 38];
+  let hd = mix(a, night, 0.35);
+  for (let i = 0; i < 20 && contrast(white, hd) < 5.5; i++) hd = mix(hd, night, 0.1);
+  return { accent: hex(a), onAccent: lightBrand ? '#121633' : '#ffffff', accentText: hex(readable(a, white, [0, 0, 0])), accentSoft: hex(mix(a, white, 0.9)), lightBrand, darkHeader: hex(hd) };
 }
 
 // ---- who the preview shows -----------------------------------------------------------------------
