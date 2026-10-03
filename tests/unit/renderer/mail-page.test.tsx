@@ -134,12 +134,12 @@ describe('the sidebar', () => {
     // Importance is not something the mirror knows: no Important view rather than a wrong one.
     expect(within(nav).queryByRole('button', { name: /^Important/ })).toBeNull();
     expect(await within(nav).findByRole('button', { name: /Clients › Acme/ })).toBeTruthy();
-    // One sync status in the footer and the status bar (DMO-SYN-05/07): no "mailboxes live" next to "synced".
+    // One sync status in the footer and the status bar (DMO-SYN-05/07), with the real live count (#172).
     expect(within(nav).getByText('Synced 2 min ago')).toBeTruthy();
-    expect(within(nav).getByText(/3 of 3 accounts · offline cache 30 days/)).toBeTruthy();
+    expect(within(nav).getByText(/3 of 3 mailboxes live · offline cache 30 days/)).toBeTruthy();
     const bar = screen.getByRole('status', { name: 'Mail status' });
-    expect(within(bar).getByText('Synced 2 min ago · 3 of 3 accounts')).toBeTruthy();
-    expect(within(bar).queryByText(/mailboxes live/)).toBeNull();
+    // The status bar follows the card: every push connection is really live (#172).
+    expect(within(bar).getByText('Synced 2 min ago · 3 of 3 mailboxes live')).toBeTruthy();
     expect(await screen.findByText('Local store 412 MB')).toBeTruthy();
   });
 

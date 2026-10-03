@@ -280,9 +280,7 @@ export function MailSidebar(p: SidebarProps) {
 
         {p.showLabels ? <LabelSection open={memory.labels} onToggle={() => remember({ labels: !memory.labels })} onAdd={() => setNaming({ kind: 'label', box: null })} place={p.place} active={p.active} onPick={p.onPick} /> : null}
       </div>
-      <button type="button" onClick={p.onSettings} title={text('Mail accounts, offline and storage settings')} className="block text-left">
-        <SyncCard summary={p.summary} pending={p.pending} cacheDays={p.cacheDays} />
-      </button>
+      <SyncDetails summary={p.summary} pending={p.pending} cacheDays={p.cacheDays} accounts={p.accounts} boxes={p.boxes} running={p.running} syncingAll={p.syncingAll} offline={p.offline} onSyncAll={p.onSyncAll} onSyncAccount={p.onSyncAccount} onSettings={p.onSettings} />
       {naming ? <NameDialog kind={naming.kind} mailbox={naming.box} onClose={() => setNaming(null)} /> : null}
       {folderMenu ? (
         <ContextMenu
@@ -401,32 +399,95 @@ function SyncAllButton({ summary, accounts, boxes, running, syncingAll, offline,
             <b className="text-ink">{spin ? summary.headline : text('Sync all accounts')}</b>
             <Kbd aria-hidden>{text('Ctrl+Shift+R')}</Kbd>
           </div>
-          <ul role="list" className="flex flex-col gap-0.5">
-            {rows.map((a) => {
-              const b = boxes.find((x) => x.id === a.mailbox);
-              const st = accountState(running.has(a.mailbox) ? { ...a, running: true } : a);
-              return (
-                <li key={a.mailbox} className={cx('flex items-center gap-2 rounded-[8px] px-1.5 py-1', st.tone === 'danger' && 'bg-danger-bg')}>
-                  {b ? <AccountAvatar letter={mailboxLetter(b)} colour={b.colour} size={18} /> : null}
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-semibold text-ink">{accountName(a, b)}</span>
-                    <span className={cx('block truncate', st.tone === 'danger' ? 'text-danger' : 'text-ink-3')} title={a.last_ok_at ? text('Last successful sync: {at}', { at: syncAt(a.last_ok_at) }) : undefined}>
-                      {st.label}
-                    </span>
-                  </span>
-                  {st.tone === 'danger' && !offline ? (
-                    <button type="button" onClick={() => onRetry(a.mailbox)} className="h-6 shrink-0 rounded-[6px] bg-danger px-2 text-[11.5px] font-bold text-white hover:brightness-95">
-                      {text('Retry')}
-                    </button>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
+          <AccountRows accounts={rows} boxes={boxes} running={running} offline={offline} onSync={onRetry} />
           <p className="mt-1.5 border-t border-line px-1.5 pt-1.5 text-[11.5px] text-ink-3">{offline ? text('You’re offline — mail will sync when you reconnect') : spin ? text('Sync is running — pressing again won’t start another.') : text('Last successful sync per account. Click to sync all now.')}</p>
         </div>
       ) : null}
     </span>
+  );
+}
+
+/**
+ * Each account's sync state: name, state, last synced (in the tooltip), the error and Retry. With `onFix`
+ * (the card's details) every account gets Sync now and a failed one Fix (worksuite-desktop#172).
+ */
+function AccountRows({ accounts, boxes, running, offline, onSync, onFix }: { accounts: SyncAccount[]; boxes: Mailbox[]; running: ReadonlySet<number>; offline: boolean; onSync: (id: number) => void; onFix?: () => void }) {
+  return (
+    <ul role="list" className="flex flex-col gap-0.5">
+      {accounts.map((a) => {
+        const b = boxes.find((x) => x.id === a.mailbox);
+        const busy = running.has(a.mailbox) || a.running;
+        const st = accountState(busy ? { ...a, running: true } : a);
+        const name = accountName(a, b);
+        return (
+          <li key={a.mailbox} className={cx('flex items-center gap-2 rounded-[8px] px-1.5 py-1', st.tone === 'danger' && 'bg-danger-bg')}>
+            {b ? <AccountAvatar letter={mailboxLetter(b)} colour={b.colour} size={18} /> : null}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-semibold text-ink" title={name}>{name}</span>
+              <span className={cx('block', onFix ? 'break-words' : 'truncate', st.tone === 'danger' ? 'text-danger' : st.tone === 'warning' ? 'text-warning' : 'text-ink-3')} title={a.last_ok_at ? text('Last successful sync: {at}', { at: syncAt(a.last_ok_at) }) : st.label}>
+                {st.label}
+              </span>
+            </span>
+            {st.tone === 'danger' && !offline ? (
+              <button type="button" onClick={() => onSync(a.mailbox)} className="h-6 shrink-0 rounded-[6px] bg-danger px-2 text-[11.5px] font-bold text-white hover:brightness-95">
+                {text('Retry')}
+              </button>
+            ) : onFix && !offline ? (
+              <button type="button" disabled={busy} onClick={() => onSync(a.mailbox)} aria-label={text('Sync {name} now', { name })} className="h-6 shrink-0 rounded-[6px] border border-line px-2 text-[11.5px] font-semibold text-ink hover:bg-subtle disabled:opacity-50">
+                {text('Sync now')}
+              </button>
+            ) : null}
+            {onFix && st.tone === 'danger' ? (
+              <button type="button" onClick={onFix} aria-label={text('Fix {name}', { name })} className="h-6 shrink-0 rounded-[6px] border border-line px-2 text-[11.5px] font-semibold text-ink hover:bg-subtle">
+                {text('Fix')}
+              </button>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** The footer card, with every account's details on click (worksuite-desktop#172): Sync all, Sync now, Fix. */
+function SyncDetails(p: { summary: SyncSummary; pending: number; cacheDays: number; accounts: SyncAccount[]; boxes: Mailbox[]; running: ReadonlySet<number>; syncingAll: boolean; offline: boolean; onSyncAll: () => void; onSyncAccount: (id: number) => void; onSettings: () => void }) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => (root.current && !root.current.contains(e.target as Node) ? setOpen(false) : undefined);
+    const esc = (e: KeyboardEvent) => (e.key === 'Escape' ? setOpen(false) : undefined);
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('mousedown', away);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [open]);
+  const spin = p.syncingAll || p.summary.state === 'syncing';
+  const rows = p.accounts.filter((a) => a.included || p.boxes.length <= 1);
+  return (
+    <div ref={root} className="relative">
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls="mail-sync-details" title={text('Each account’s sync status')} className="block w-full text-left">
+        <SyncCard summary={p.summary} pending={p.pending} cacheDays={p.cacheDays} />
+      </button>
+      {open ? (
+        <div id="mail-sync-details" role="dialog" aria-label={text('Sync status')} className="absolute right-2 bottom-full left-2 z-30 mb-1 rounded-[10px] border border-line bg-surface p-2 text-[12.5px] shadow-lg">
+          <div className="flex items-center justify-between gap-2 px-1.5 pb-1.5">
+            <b className="min-w-0 break-words text-ink">{p.summary.headline}</b>
+            <button type="button" onClick={p.onSyncAll} disabled={p.offline} aria-label={spin ? text('Syncing — pressing again won’t start another') : text('Sync all accounts')} className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-[7px] border border-line px-2 font-semibold text-ink hover:bg-subtle disabled:opacity-50">
+              <Icon name="refresh" size={13} className={spin ? 'animate-spin motion-reduce:animate-none' : undefined} />
+              {text('Sync all')}
+            </button>
+          </div>
+          {p.summary.liveLine ? <p className={cx('px-1.5 pb-1 text-[11.5px]', p.summary.live < p.summary.pushTotal ? 'text-warning' : 'text-ink-3')}>{p.summary.liveLine}</p> : null}
+          <AccountRows accounts={rows} boxes={p.boxes} running={p.running} offline={p.offline} onSync={p.onSyncAccount} onFix={p.onSettings} />
+          <button type="button" onClick={p.onSettings} className="mt-1.5 w-full border-t border-line px-1.5 pt-1.5 text-left text-[11.5px] font-semibold text-primary hover:underline">
+            {text('Mail accounts, offline and storage settings')}
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -606,7 +667,7 @@ function LabelSection({ open, onToggle, onAdd, place, active, onPick }: { open: 
 export function SyncCard({ summary, pending, cacheDays }: { summary: SyncSummary; pending: number; cacheDays: number }) {
   const cache = cacheDays === 0 ? text('headers only offline') : text('offline cache {n} days', { n: cacheDays });
   const tone = summary.tone;
-  const icon = summary.state === 'offline' || tone === 'danger' ? 'warning' : summary.state === 'syncing' ? 'refresh' : summary.state === 'paused' ? 'pause' : 'check';
+  const icon = summary.state === 'offline' || tone === 'danger' || tone === 'warning' ? 'warning' : summary.state === 'syncing' ? 'refresh' : summary.state === 'paused' ? 'pause' : 'check';
   const headline = summary.state === 'offline' && pending ? text('Offline · {n} actions waiting', { n: pending }) : summary.headline;
   return (
     <span role="status" aria-live="polite" className="m-2 mt-0 flex items-start gap-2.5 rounded-[10px] border border-line bg-surface p-2.5 text-[12px] leading-snug hover:bg-subtle">

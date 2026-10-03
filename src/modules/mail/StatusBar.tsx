@@ -17,8 +17,9 @@ import type { SyncStatus } from './types';
  * selection, the reading zoom and how much mail this computer keeps.
  */
 export function StatusBar({ summary, sync, waiting, zoom, localBytes, items, unread, selected, onOpenSync, notice }: { summary: SyncSummary; sync: SyncStatus | null; waiting: number; zoom: number; localBytes: number | null; items?: number | null; unread?: number | null; selected?: number; onOpenSync?: () => void; notice?: { text: string; onClick: () => void } | null }) {
-  const pushed = !!sync?.enabled && sync.mailboxes.some((m) => m.pushed);
-  const dot = summary.state === 'offline' ? 'bg-warning' : summary.tone === 'danger' ? 'bg-danger' : summary.state === 'syncing' ? 'bg-primary' : 'bg-success';
+  // "New mail pushed" only while a push connection is really up (worksuite-desktop#172).
+  const pushed = !!sync?.enabled && summary.live > 0;
+  const dot = summary.state === 'offline' || summary.tone === 'warning' ? 'bg-warning' : summary.tone === 'danger' ? 'bg-danger' : summary.state === 'syncing' ? 'bg-primary' : 'bg-success';
   const line = summary.state === 'up_to_date' ? `${summary.headline} · ${summary.detail}` : summary.state === 'attention' ? (summary.lastOk ? text('Synced {ago}', { ago: syncAgo(summary.lastOk) }) : text('Needs attention')) : summary.headline;
   return (
     <footer role="status" aria-label={text('Mail status')} className="flex h-7 shrink-0 items-center gap-4 border-t border-line bg-surface px-3 text-[12px] text-ink-3">
@@ -27,7 +28,7 @@ export function StatusBar({ summary, sync, waiting, zoom, localBytes, items, unr
         {line}
       </button>
       {summary.warning && summary.state !== 'offline' ? (
-        <button type="button" onClick={onOpenSync} className="flex items-center gap-1 font-semibold text-danger hover:underline">
+        <button type="button" onClick={onOpenSync} className={cx('flex items-center gap-1 font-semibold hover:underline', summary.tone === 'danger' ? 'text-danger' : 'text-warning')}>
           <Icon name="warning" size={12} />
           {text('{warning} — fix', { warning: summary.warning })}
         </button>
@@ -38,6 +39,7 @@ export function StatusBar({ summary, sync, waiting, zoom, localBytes, items, unr
           {notice.text}
         </button>
       ) : null}
+      {summary.liveLine && summary.state !== 'offline' && summary.detail !== summary.liveLine ? <span className={summary.live < summary.pushTotal ? 'text-warning' : undefined}>{summary.liveLine}</span> : null}
       {summary.state === 'up_to_date' && pushed ? <span>{text('New mail pushed')}</span> : null}
       {typeof items === 'number' ? <span>{text('Items: {n}', { n: items.toLocaleString() })}</span> : null}
       {typeof unread === 'number' && unread > 0 ? <span>{text('Unread: {n}', { n: unread.toLocaleString() })}</span> : null}
