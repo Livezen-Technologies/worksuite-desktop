@@ -19,8 +19,9 @@ const log = logger('mail-bodies');
  * fetched — unread Inbox mail first, then newest first — through the same
  * API the reader uses, with `peek=1` so nothing is marked read, and saved
  * encrypted in the offline cache under the key an offline open looks for.
- * Inline pictures travel inside the body; attachments stay on the server
- * until opened.
+ * Inline pictures travel inside the body (the server puts each `cid:` part
+ * into it, #163); attachments are downloaded with it when Settings › Mail ›
+ * Images & media says so (`afterBody`, mail-media.ts), else when opened.
  *
  * Polite by design: one pass at a time, two requests at once at most, a
  * pause between them, at most PER_PASS bodies a pass, and it stops as soon as
@@ -43,6 +44,8 @@ export interface MailBodiesDeps {
   now?: () => number;
   /** Pause between downloads, in milliseconds (tests: 0). */
   pauseMs?: number;
+  /** A body just kept: its attachments are downloaded ahead as Settings › Mail › Images & media says (#163). */
+  afterBody?: (user: string, path: string, body: string) => Promise<unknown>;
 }
 
 interface ListedMailbox {
@@ -254,6 +257,7 @@ export class MailBodies {
     if (res.status !== 200 || !type.includes('json')) return false;
     const body = await res.text();
     this.deps.cache.put(user, 'mail', path, { status: 200, contentType: type, body }, this.deps.limits());
+    if (this.deps.afterBody) await this.deps.afterBody(user, path, body).catch(() => undefined);
     return true;
   }
 

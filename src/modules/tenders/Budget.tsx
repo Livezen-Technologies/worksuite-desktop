@@ -8,6 +8,7 @@ import { Select } from '../../components/Select';
 import { cx } from '../../components/ui';
 import { btnPrimary, btnSmall, Empty, input, Panel } from '../hr/parts';
 import { K, money, type Budget as Data } from './api';
+import { amount, KE, overBy, saveBidBudget, varianceLine, type BidCostSummary } from './bidcost';
 import { addBudgetLine, budgetLineBody, COST_KINDS, fetchCosts, K2, labelOf, removeBudgetLine } from './work';
 
 /**
@@ -17,7 +18,23 @@ import { addBudgetLine, budgetLineBody, COST_KINDS, fetchCosts, K2, labelOf, rem
  * to invent. Below it, what has actually been spent chasing the bid: the
  * expense claims filed against it, for those who may see Expenses.
  */
-export default function Budget({ id, budget, canManage }: { id: number; budget: Data; canManage: boolean }) {
+export default function Budget({
+  id,
+  budget,
+  canManage,
+  bidCost,
+  currency,
+  onExpenses,
+}: {
+  id: number;
+  budget: Data;
+  canManage: boolean;
+  /** What chasing the bid has cost against its bid budget, from the tender's own payload. */
+  bidCost?: BidCostSummary | null;
+  currency?: string;
+  /** Opens the Expenses tab, for those who may see it. */
+  onExpenses?: () => void;
+}) {
   const qc = useQueryClient();
   const costs = useQuery({ queryKey: K2.costs(id), queryFn: ({ signal }) => fetchCosts(id, signal) });
   const [d, setD] = useState({ label: '', category: 'labour', quantity: '1', unit_cost: '', note: '' });
@@ -132,6 +149,8 @@ export default function Budget({ id, budget, canManage }: { id: number; budget: 
         </Panel>
       </div>
 
+      <BidBudget id={id} bidCost={bidCost ?? null} currency={currency ?? budget.currency} canManage={canManage} onExpenses={onExpenses} />
+
       <Panel title="Spent so far" sub="Expense claims filed against this tender" bodyClassName="flex flex-col">
         {costs.isLoading ? (
           <Empty text="Reading the claims…" />
@@ -162,5 +181,91 @@ export default function Budget({ id, budget, canManage }: { id: number; budget: 
         )}
       </Panel>
     </div>
+  );
+}
+
+/**
+ * The bid budget — what pursuing this bid should cost: the fee for the
+ * documents, the bond, printing, travel — and what has been spent against it.
+ * "Spent LKR 18,500 of LKR 25,000 planned (74%)", the same line the Expenses
+ * tab shows, from the same server figure. Not the delivery estimate above,
+ * which is what the work costs if it is won.
+ */
+export function BidBudget({ id, bidCost, currency, canManage, onExpenses }: { id: number; bidCost: BidCostSummary | null; currency: string; canManage: boolean; onExpenses?: () => void }) {
+  const qc = useQueryClient();
+  const planned = bidCost?.planned ?? null;
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(planned?.amount ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const ccy = bidCost?.totals?.currency ?? bidCost?.currency ?? planned?.currency ?? currency;
+  const v = bidCost?.variance ?? null;
+  const over = overBy(v, ccy);
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await saveBidBudget(id, value);
+      setEditing(false);
+      void qc.invalidateQueries({ queryKey: K.tender(id) });
+      void qc.invalidateQueries({ queryKey: KE.tab(id) });
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Panel
+      title="Bid budget"
+      sub="What pursuing this bid should cost, against what its expenses have cost"
+      action={
+        onExpenses ? (
+          <button type="button" className="text-[12.5px] font-semibold text-primary hover:underline" onClick={onExpenses}>
+            Expenses
+          </button>
+        ) : undefined
+      }
+      bodyClassName="flex flex-col gap-2 px-3.5 py-3 text-[12.5px]"
+    >
+      {editing ? (
+        <span className="flex flex-wrap items-center gap-2">
+          <input
+            aria-label="Bid budget"
+            autoFocus
+            inputMode="decimal"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && void save()}
+            placeholder={`e.g. 25000 (${ccy})`}
+            className={input + ' !w-[180px]'}
+          />
+          <button type="button" className={btnPrimary} disabled={busy} onClick={() => void save()}>
+            {busy ? 'Saving…' : value.trim() ? 'Save' : 'Clear it'}
+          </button>
+          <button type="button" className={btnSmall} onClick={() => (setEditing(false), setError(null))}>
+            Cancel
+          </button>
+        </span>
+      ) : (
+        <span className="flex flex-wrap items-center gap-2">
+          <b className="text-[16px] text-ink tabular-nums">{planned ? amount(planned.amount, ccy) : 'Not set'}</b>
+          {canManage ? (
+            <button type="button" className={btnSmall + ' !h-7'} onClick={() => (setValue(planned?.amount ?? ''), setEditing(true))}>
+              {planned ? 'Change' : 'Set a bid budget'}
+            </button>
+          ) : null}
+        </span>
+      )}
+      {error ? <span className="text-[12px] text-danger">{error}</span> : null}
+      {v ? (
+        <span aria-label="Budget variance" className={cx(v.over ? 'text-danger' : 'text-ink-2')}>
+          {varianceLine(v, ccy)}
+          {over ? ` · ${over}` : ''}
+        </span>
+      ) : bidCost?.visible && bidCost.totals ? (
+        <span className="text-ink-2">Spent {amount(bidCost.totals.spent, ccy)} so far{planned ? '' : '; set a bid budget to see it against a plan'}.</span>
+      ) : null}
+    </Panel>
   );
 }

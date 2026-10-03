@@ -165,6 +165,16 @@ export const preferencesPatchSchema = z
     mailFolderOffline: z.record(z.string().regex(/^(\d{1,12}|local):[A-Za-z0-9._\-/ :]{1,128}$/), z.enum(['all', 'recent', 'headers', 'online'])).refine((r) => Object.keys(r).length <= 500),
     mailAlerts: z.enum(['all', 'focused', 'vip', 'none']),
     mailVipBreakthrough: z.boolean(),
+    // Settings › Mail › Images & media, this computer's part (worksuite-desktop#163).
+    mailMedia: z
+      .object({
+        autoDownload: z.enum(['off', '5', '25', 'all']),
+        network: z.enum(['any', 'unmetered']),
+        types: z.array(z.enum(['images', 'pdf', 'office', 'all'])).min(1).max(4),
+        saveTo: z.enum(['local', 'files']),
+        filesFolder: z.object({ id: z.number().int().positive(), name: z.string().max(255) }).nullable(),
+      })
+      .partial(),
     highContrast: z.boolean(),
     tabSuspendMinutes: z.number().int().min(5).max(480),
     language: z.string().regex(/^[a-z]{2}(-[A-Z]{2})?$/),
@@ -1102,6 +1112,25 @@ export const contract = {
   'mail:openLink': ch(z.strictObject({ url: z.string().url().max(4096), confirmed: z.boolean() }), { session: true, rate: 5 }),
   // Spell check's languages (worksuite-desktop#188): what this computer has, and the choice.
   'mail:spellLanguages': ch(none, { session: true }),
+  /**
+   * A message's allowed pictures as data: URLs (worksuite-desktop#163): those kept in the local mail store at once;
+   * with `fetch`, the rest through WorkSuite's image proxy, then kept. Never fetched from the sender directly.
+   */
+  'mail:images': ch(z.strictObject({ urls: z.array(z.string().regex(/^https?:\/\/\S+$/i).max(2000)).max(60), mailbox: z.string().regex(/^\d{1,12}$/).nullable(), fetch: z.boolean() }), { session: true, rate: 30 }),
+  /**
+   * Which of a message's attachments are kept in the local mail store (they open at once, also offline); with
+   * `auto`, those Settings › Mail › Images & media downloads ahead are downloaded first (#163).
+   */
+  'mail:keptAttachments': ch(
+    z.strictObject({
+      uid: z.string().regex(/^\d{1,20}$/),
+      folder: z.string().regex(/^[A-Za-z0-9._\-/ :]{1,128}$/),
+      mailbox: z.string().regex(/^\d{1,20}$/).nullable(),
+      items: z.array(z.strictObject({ ref: z.string().min(1).max(512), name: z.string().max(512), mime: z.string().max(255), size: z.number().int().min(0) })).max(50),
+      auto: z.boolean(),
+    }),
+    { session: true, rate: 30 },
+  ),
   'mail:setSpellLanguages': ch(z.strictObject({ languages: z.array(z.string().regex(/^[a-z]{2,3}(-[A-Z]{2})?$/)).max(4) }), { session: true, rate: 5 }),
   // S/MIME (DMO-SEC-05): a signed message checked against its own bytes, in the main process.
   'smime:verify': ch(z.strictObject({ uid: z.string().regex(/^\d{1,20}$/), folder: z.string().regex(/^[A-Za-z0-9._\-/ :]{1,128}$/), mailbox: z.string().regex(/^\d{1,20}$/).nullable() }), { session: true, rate: 5 }),
@@ -1534,6 +1563,8 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'mail:openLink': boolean;
   'mail:spellLanguages': { choices: Array<{ code: string; label: string; available: boolean; reason?: string }>; current: string[]; system: boolean };
   'mail:setSpellLanguages': string[];
+  'mail:images': { enabled: boolean; images: Record<string, string> };
+  'mail:keptAttachments': string[];
   'smime:verify': SmimeVerdict;
   'offline:submit': SubmitResult;
   'offline:retry': void;

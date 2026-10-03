@@ -257,7 +257,9 @@ describe('the reading pane', () => {
     expect(within(pane).getByRole('tab', { name: /Welcome to your mailbox/ })).toBeTruthy();
     expect(await within(pane).findByText('Verified · SPF, DKIM, DMARC')).toBeTruthy();
     expect(within(pane).getByText('WorkSuite Local')).toBeTruthy();
-    expect(within(pane).getByText('1 remote image was blocked to protect your privacy.')).toBeTruthy();
+    // A colleague on the organisation's own domain, verified: trusted, so no "Images are hidden" bar (#163; it used to
+    // say "1 remote image was blocked"). The picture still never goes into the frame by its own address.
+    expect(within(pane).queryByText('Images are hidden to protect your privacy.')).toBeNull();
     const doc = pane.querySelector('iframe')!.getAttribute('srcdoc')!;
     expect(doc).toContain('Hi there');
     expect(doc).not.toContain('<script');

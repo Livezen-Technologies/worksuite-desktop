@@ -246,7 +246,7 @@ export function accountTone(colour: string | null | undefined): string {
   return TONES[(colour ?? '').toLowerCase()] ?? 'slate';
 }
 
-/** "Verified · SPF, DKIM, DMARC" only when every check the server recorded passed. */
+/** "Verified" when the sender is proven (DMARC passed, or SPF and DKIM both did); "Not verified" when any check failed; else "Partly verified". */
 export function securityVerdict(s: MessageSecurity | null | undefined): { tone: 'success' | 'warning' | 'muted'; label: string; title: string } | null {
   if (!s || !s.available) return null;
   const checks = [
@@ -257,10 +257,22 @@ export function securityVerdict(s: MessageSecurity | null | undefined): { tone: 
   const known = checks.filter(([, v]) => v && v !== 'unknown');
   if (known.length === 0) return null;
   const title = checks.map(([k, v]) => `${k}: ${v ?? 'unknown'}`).join(' · ');
-  if (known.every(([, v]) => v === 'pass' || v === 'bestguesspass')) return { tone: 'success', label: text('Verified · {checks}', { checks: known.map(([k]) => k).join(', ') }), title };
+  const pass = (v: string | undefined) => v === 'pass' || v === 'bestguesspass';
+  // Any check that failed outright says so, whatever else passed.
   const failed = known.filter(([, v]) => v === 'fail' || v === 'softfail' || v === 'permerror');
   if (failed.length) return { tone: 'warning', label: text('Not verified · {checks} failed', { checks: failed.map(([k]) => k).join(', ') }), title };
+  if (known.every(([, v]) => pass(v))) return { tone: 'success', label: text('Verified · {checks}', { checks: known.map(([k]) => k).join(', ') }), title };
+  // A DMARC pass means the sender's own domain was proven — by an aligned SPF or DKIM; the other being "none" (the
+  // message was not DKIM-signed, say) does not make it less so (#163: such mail read "Partly verified").
+  if (pass(s.dmarc)) return { tone: 'success', label: text('Verified · {checks}', { checks: known.filter(([, v]) => pass(v)).map(([k]) => k).join(', ') }), title };
+  // No DMARC answer, or the domain publishes no DMARC policy ("none"): SPF and DKIM both passing still proves the sender.
+  if (pass(s.spf) && pass(s.dkim)) return { tone: 'success', label: text('Verified · {checks}', { checks: 'SPF, DKIM' }), title };
   return { tone: 'muted', label: text('Partly verified'), title };
+}
+
+/** Mail whose sender could not be proven: SPF, DKIM or DMARC failed (#163: its pictures never load on their own). */
+export function authFailed(s: MessageSecurity | null | undefined): boolean {
+  return securityVerdict(s)?.tone === 'warning';
 }
 
 /** The view settings kept per folder (DMO-INB-16). */

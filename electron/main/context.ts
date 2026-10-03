@@ -1,5 +1,6 @@
 import type { OfficeLocalFiles } from '../services/office-local';
 import type { MailBodies } from '../services/mail-bodies';
+import type { MailMedia } from '../services/mail-media';
 import type { QuickAsk } from '../services/quick-ask';
 import type { AiService } from '../services/ai';
 import type { WebchatRinger } from '../services/webchat-ring';
@@ -81,6 +82,8 @@ export interface AppContext {
   cache: OfflineCache;
   /** "Download message bodies": Mail's bodies fetched ahead into the offline cache (#190). */
   mailBodies?: MailBodies;
+  /** Mail's pictures and attachments kept on this computer (#163). */
+  mailMedia?: MailMedia;
   queue: OfflineQueue;
   transfers: TransferManager;
   /** Meetings recorded on this computer (worksuite-desktop#68). */

@@ -23,6 +23,7 @@ import { DataFileImport } from './DataFiles';
 import { Rules } from './MailRules';
 import { Signatures } from './signatures/SignaturesSettings';
 import { SpellingSettings } from './SpellingSettings';
+import { MediaSettings } from './MediaSettings';
 import { mailKeys, useLocalStore, useMailPrefs, useMailStats, useMailboxes, useSyncStatus } from './api';
 import { mailboxLetter } from './model';
 import { AccountAvatar } from './parts';
@@ -34,14 +35,16 @@ import { forgetMailbox } from './localFirst';
 /**
  * Settings › Mail: the accounts and what this computer keeps (Accounts &
  * offline), how each mailbox syncs and what is stored where (Storage & sync),
+ * pictures from the web and attachments kept ahead (Images & media, #163),
  * and how the Mail screen is laid out (Layout & reading).
  */
 
-type Tab = 'accounts' | 'storage' | 'import' | 'signatures' | 'rules' | 'quicksteps' | 'layout';
+type Tab = 'accounts' | 'storage' | 'media' | 'import' | 'signatures' | 'rules' | 'quicksteps' | 'layout';
 
 const TABS: Array<[Tab, string]> = [
   ['accounts', 'Accounts & offline'],
   ['storage', 'Storage & sync'],
+  ['media', 'Images & media'],
   ['import', 'Import mail'],
   ['signatures', 'Signatures'],
   ['rules', 'Rules'],
@@ -84,7 +87,7 @@ export function MailSettings({ query = new URLSearchParams() }: { query?: URLSea
           </button>
         ))}
       </div>
-      {tab === 'accounts' ? <Accounts /> : tab === 'storage' ? <Storage /> : tab === 'import' ? (
+      {tab === 'accounts' ? <Accounts /> : tab === 'storage' ? <Storage /> : tab === 'media' ? <MediaSettings /> : tab === 'import' ? (
         <>
           <DataFileImport />
           <ImportMail openId={importId} />

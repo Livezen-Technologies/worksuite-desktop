@@ -259,6 +259,8 @@ export interface MenuContext {
   task?: (t: Target) => void;
   calendar?: (t: Target) => void;
   saveAttachments?: (t: Target) => void;
+  /** Link to tender, customer or deal… — one message or all those selected. */
+  linkRecord?: (targets: Target[]) => void;
   window?: (t: Target) => void;
   copyLink?: (t: Target) => void;
   source?: (t: Target) => void;
@@ -310,6 +312,7 @@ export function listMenuSections(targets: Target[], c: MenuContext): MenuSection
     if (c.task) ws.push({ id: 'task', label: text('Create task…'), icon: 'list-todo', onSelect: () => c.task!(one) });
     if (c.calendar) ws.push({ id: 'calendar', label: text('Add to calendar'), icon: 'calendar-plus', disabled: c.offline, reason: text('Available when you are back online.'), onSelect: () => c.calendar!(one) });
     if (c.saveAttachments && one.row.has_attachment && one.mailbox) ws.push({ id: 'attachments', label: text('Save attachments to Files'), icon: 'paperclip', disabled: c.offline, reason: text('Available when you are back online.'), onSelect: () => c.saveAttachments!(one) });
+    if (c.linkRecord) ws.push(linkItem(targets, c));
     if (ws.length) sections.push({ id: 'worksuite', label: text('WorkSuite'), items: ws });
     const other: MenuItem[] = [];
     if (c.window) other.push({ id: 'window', label: text('Open in new window'), icon: 'app-window', shortcut: c.keyFor('openWindow'), onSelect: () => c.window!(one) });
@@ -317,11 +320,23 @@ export function listMenuSections(targets: Target[], c: MenuContext): MenuSection
     if (c.source) other.push({ id: 'source', label: text('View original'), icon: 'external', disabled: c.offline, reason: text('Available when you are back online.'), onSelect: () => c.source!(one) });
     if (other.length) sections.push({ id: 'other', label: text('Other'), items: other });
   }
+  if (!one && c.linkRecord) sections.push({ id: 'worksuite', label: text('WorkSuite'), items: [linkItem(targets, c)] });
   const select: MenuItem[] = [];
   if (c.selectFolder) select.push({ id: 'select-all', label: text('Select all in this folder'), icon: 'check-check', shortcut: c.keyFor('selectAll'), onSelect: c.selectFolder });
   if (c.selectSender && one?.row.from_email) select.push({ id: 'select-sender', label: text('Select all from this sender'), icon: 'users', description: one.row.from_email, onSelect: () => c.selectSender!(one) });
   if (select.length) sections.push({ id: 'select', label: text('Select'), items: select });
   return sections;
+}
+
+function linkItem(targets: Target[], c: MenuContext): MenuItem {
+  return {
+    id: 'link-record',
+    label: targets.length === 1 ? text('Link to tender, customer or deal…') : text('Link {n} to tender, customer or deal…', { n: targets.length }),
+    icon: 'link',
+    disabled: c.offline,
+    reason: text('Available when you are back online.'),
+    onSelect: () => c.linkRecord!(targets),
+  };
 }
 
 /**

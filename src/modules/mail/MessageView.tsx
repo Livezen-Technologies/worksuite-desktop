@@ -9,7 +9,7 @@ import { isOfficeFile, openInOffice } from '../../core/open-document';
 import { useStore } from '../../core/store';
 import { attachmentRisk } from '@shared/attachments';
 import { useTab } from '../../core/tab-context';
-import { dateLabel, dayKey, parseTs, timeLabel, todayInZone } from '../../core/time';
+import { bytes, dateLabel, dayKey, parseTs, timeLabel, todayInZone } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Menu, type MenuItem, type MenuSection } from '../../components/Menu';
@@ -24,14 +24,18 @@ import { createTask } from '../tasks/actions';
 import { createMeeting, invitation, openMeeting } from '../meet/api';
 import { messageAction, moveMessage, setLabel, useFolders, useLabels, useMessageContext, type MessageActionName } from './api';
 import { messageKey, seedMessage } from './localFirst';
-import { folderName, plainText, securityVerdict } from './model';
-import { blockedImageUrls, escapeHtml, highlightText, isDesignedMail, mailFrameDoc, sanitizeMailHtml, withProxiedImages } from './sanitize';
+import { authFailed, folderName, plainText, securityVerdict } from './model';
+import { blockedImageUrls, escapeHtml, highlightText, isDesignedMail, mailFrameDoc, sanitizeMailHtml, withLoadedImages, withProxiedImages } from './sanitize';
+import { emailDomain, imageVerdict, isJunkFolder, ownDomains, readableName, trustedBy, withTrusted } from './images';
+import { ImageNotice } from './ImageNotice';
+import { attachmentKind } from '@shared/mail-media';
 import { TeamBar, TeamWork } from './Team';
 import { CategoryChip } from './parts';
 import { TaskFromMessage, meetingRoute, messageLink } from './MessageTask';
 import { AddContactDialog, parseSignature, type SignatureGuess } from './AddContact';
 import { ImmersiveReader } from './ImmersiveReader';
 import { AppsPane } from './AppsPane';
+import { LinkRecordDialog, LinkedRecordChips, type LinkItem } from './recordLinks';
 import { MarkerChips, RecallDialog, ReceiptBar, ReportDialog, SmimeChip, VoteBar, VoteTally, sendReceipt } from './MessageExtras';
 import type { ComposeSeed, MailPrefs, Mailbox, MessageContext, MessageDetail, MessageRef, MessageRow } from './types';
 
@@ -100,6 +104,7 @@ export function MessageView(p: MessageViewProps) {
   const { openInWindow, navigate } = useTab();
   const [ai, setAi] = useState<{ task: TextTask; title: string; lang?: string } | null>(null);
   const [source, setSource] = useState(false);
+  const [linking, setLinking] = useState(false);
   // Report phishing or junk, and recall (ENH-MAIL-03 DMO-SEC-02, DMO-CMP-10).
   const [extra, setExtra] = useState<'phishing' | 'junk' | 'recall' | 'task' | null>(null);
   const [contactGuess, setContactGuess] = useState<SignatureGuess | null>(null);
@@ -136,19 +141,46 @@ export function MessageView(p: MessageViewProps) {
   const plainBody = useMemo(() => (clean ? plainText(clean.html) : ''), [clean]);
   const [immersive, setImmersive] = useState(false);
   const found = useMemo(() => highlightText(plainOn ? `<div style="white-space:pre-wrap">${escapeHtml(plainBody)}</div>` : (clean?.html ?? ''), find ?? ''), [clean, find, plainOn, plainBody]);
-  // Pictures, when the reader asks — always through WorkSuite's image proxy (DMO-SEC-07, DMO-RD-02).
+  const context = useMessageContext(ref, m?.from_email ?? null, !!m && !p.offline);
+  /*
+   * Pictures from the web (DMO-SEC-07, DMO-RD-02, #163): Settings › Mail › Images & media decides — Always, Ask,
+   * Only from trusted senders, Never — and they never load on their own in Junk or in mail that failed its
+   * authentication checks. Allowed pictures come through WorkSuite's image proxy into the local mail store, so
+   * they show at once next time and offline; tracking pixels were removed when the body was cleaned.
+   */
   const [picturesAsked, setPicturesAsked] = useState(false);
-  const imageSenders = p.prefs.imageSenders ?? [];
-  const picturesWanted = !!m && (picturesAsked || imageSenders.includes(m.from_email.toLowerCase())) && (clean?.blockedImages ?? 0) > 0 && !p.offline;
-  const imageUrls = useMemo(() => (picturesWanted && clean ? blockedImageUrls(clean) : []), [picturesWanted, clean]);
-  const proxied = useQuery({
-    queryKey: ['mail', 'image-links', ref.mailbox, ref.folder, ref.uid],
-    queryFn: () => apiPost<{ enabled: boolean; links: Record<string, string> }>('/api/mail/image-links', { urls: imageUrls }),
-    enabled: imageUrls.length > 0,
+  const boxEmails = p.boxes.map((b) => b.email).join(',');
+  const own = useMemo(() => ownDomains([...boxEmails.split(','), me?.email]), [boxEmails, me?.email]);
+  const verdict = imageVerdict({
+    mode: p.prefs.remoteImages ?? 'ask',
+    remote: clean?.blockedImages ?? 0,
+    trusted: m ? trustedBy(m.from_email, p.prefs, own) : null,
+    junk: isJunkFolder(ref.folder),
+    authFailed: authFailed(context.data?.security),
+    pending: !p.offline && !context.isFetched,
+    asked: picturesAsked,
+  });
+  const imageUrls = useMemo(() => (clean ? blockedImageUrls(clean) : []), [clean]);
+  const pictures = useQuery({
+    queryKey: ['mail', 'images', ref.mailbox, ref.folder, ref.uid, p.offline],
+    queryFn: async () => {
+      try {
+        const r = await call('mail:images', { urls: imageUrls, mailbox: ref.mailbox ?? null, fetch: !p.offline });
+        return { enabled: r.enabled, images: r.images, links: {} as Record<string, string> };
+      } catch {
+        // Not in the desktop shell (a test, an older shell): the signed proxy links, straight from the server.
+        const r = await apiPost<{ enabled: boolean; links: Record<string, string> }>('/api/mail/image-links', { urls: imageUrls });
+        return { enabled: r.enabled, images: {} as Record<string, string>, links: r.links ?? {} };
+      }
+    },
+    enabled: verdict.load && imageUrls.length > 0,
     staleTime: 30 * 60_000,
   });
-  const shownHtml = useMemo(() => (!plainOn && proxied.data?.enabled && origin && clean ? withProxiedImages(found.html, clean.remoteImages, proxied.data.links, origin) : found.html), [proxied.data, found.html, origin, clean, plainOn]);
-  const context = useMessageContext(ref, m?.from_email ?? null, !!m && !p.offline);
+  const shownHtml = useMemo(() => {
+    if (plainOn || !clean || !pictures.data?.enabled) return found.html;
+    const kept = withLoadedImages(found.html, clean.remoteImages, pictures.data.images);
+    return origin ? withProxiedImages(kept, clean.remoteImages, pictures.data.links, origin) : kept;
+  }, [pictures.data, found.html, origin, clean, plainOn]);
   const folders = useFolders(Number(ref.mailbox ?? 0), !!ref.mailbox && menu === 'move');
   const labels = useLabels(p.localStore && menu === 'label');
   // Opening a message reads it: the list's dot and the counts follow.
@@ -352,6 +384,7 @@ export function MessageView(p: MessageViewProps) {
   if (!m || !clean) return null;
 
   const fromCache = !!q.data?.offline;
+  const linkItem: LinkItem = { mailbox: ref.mailbox ? Number(ref.mailbox) : 0, folder: ref.folder, uid: String(ref.uid), subject: m.subject, from_name: m.from_name ?? undefined, from_email: m.from_email, received_at: m.created_at, ...(m.message_id ? { message_id: m.message_id } : {}) };
   // Dark email content (Settings › Reading) in the dark theme — but a designed email keeps its light card (D10).
   const darkBody = darkTheme && p.prefs.darkBody === true && !isDesignedMail(clean.html);
   const security = securityVerdict(context.data?.security);
@@ -365,6 +398,7 @@ export function MessageView(p: MessageViewProps) {
     if (canOpen('calendar')) keep.push({ id: 'meeting', label: text('Reply with meeting'), description: text('A Calendar event with everyone on this email'), icon: 'calendar', disabled: p.offline, onSelect: () => navigate(meetingRoute(m, p.account?.email ?? null, messageLink(ref))) });
     if (canOpen('tasks')) keep.push({ id: 'task', label: text('Create task…'), description: text('With assignee, list and due date'), icon: 'list-todo', onSelect: () => setExtra('task') });
     if (where === 'bottom' && canOpen('tasks')) keep.push({ id: 'remind', label: text('Remind me about this'), description: text('A task for tomorrow'), icon: 'bell', onSelect: () => void remind() });
+    if (canOpen('tenders') || canOpen('crm')) keep.push({ id: 'link-record', label: text('Link to tender, customer or deal…'), icon: 'link', disabled: p.offline, reason: text('Available when you are back online.'), onSelect: () => setLinking(true) });
     if (canOpen('notes')) keep.push({ id: 'note', label: text('Save as note'), icon: 'file-text', onSelect: () => void saveNote() });
     // Reading (DMO-RD-04, DMO-RD-09).
     keep.push({ id: 'immersive', label: text('Immersive reader'), icon: 'book-open', onSelect: () => setImmersive(true) });
@@ -517,6 +551,7 @@ export function MessageView(p: MessageViewProps) {
               </span>
             ) : null}
             <MarkerChips markers={context.data?.markers} />
+            {canOpen('tenders') || canOpen('crm') ? <LinkedRecordChips item={linkItem} navigate={navigate} offline={p.offline} /> : null}
             {context.data?.markers?.smime === 'signed' && !p.offline ? <SmimeChip msgRef={ref} from={m.from_email} mailbox={ref.mailbox ?? null} /> : null}
             {context.data?.markers?.smime === 'encrypted' ? <Chip tone="warning">{text('Encrypted (S/MIME)')}</Chip> : null}
             {p.account ? <Chip tone="indigo">{p.account.account_type === 'local_mailbox' ? text('WorkSuite Local') : p.account.shared ? p.account.email : p.account.provider_label ?? p.account.email}</Chip> : null}
@@ -600,18 +635,20 @@ export function MessageView(p: MessageViewProps) {
           <AiChip label="Summarise" onClick={() => setAi({ task: 'summarize', title: text('Summary of this email') })} />
           <AiChip label="Action items" onClick={() => setAi({ task: 'actions', title: text('Action items in this email') })} />
           <AiChip ref={translateBtn} label="Translate" onClick={() => setMenu('translate')} />
-          {clean.blockedImages > 0 && !(proxied.data?.enabled && picturesWanted) ? (
-            <span className="flex flex-wrap items-center gap-2 text-[12px] text-ink-3">
-              {proxied.data && !proxied.data.enabled ? text('Pictures are shown only through WorkSuite, and your organisation has turned that off.') : text(clean.blockedImages === 1 ? '1 remote image was blocked to protect your privacy.' : '{n} remote images were blocked to protect your privacy.', { n: clean.blockedImages })}
-              {!p.offline && !(proxied.data && !proxied.data.enabled) ? (
-                <>
-                  <button type="button" className="font-semibold text-primary hover:underline" onClick={() => setPicturesAsked(true)}>{text('Show pictures')}</button>
-                  <button type="button" className="font-semibold text-primary hover:underline" onClick={() => p.onPrefs({ imageSenders: [...imageSenders.filter((x) => x !== m.from_email.toLowerCase()), m.from_email.toLowerCase()].slice(-500) })}>{text('Always show from {email}', { email: m.from_email })}</button>
-                </>
-              ) : null}
-            </span>
-          ) : null}
         </div>
+        {!plainOn ? (
+          <ImageNotice
+            verdict={verdict}
+            sender={m.from_email.toLowerCase()}
+            trackers={clean.trackers}
+            proxyOff={!!pictures.data && !pictures.data.enabled}
+            offline={p.offline}
+            onShow={() => setPicturesAsked(true)}
+            onTrustSender={() => p.onPrefs({ imageSenders: withTrusted(p.prefs.imageSenders, m.from_email.toLowerCase()) })}
+            onTrustDomain={() => p.onPrefs({ imageDomains: withTrusted(p.prefs.imageDomains, emailDomain(m.from_email)) })}
+            onSettings={() => navigate('/settings/mail?tab=media')}
+          />
+        ) : null}
         {find !== null ? (
           <div role="search" aria-label={text('Find in message')} className="mx-5 mt-3 flex items-center gap-2 rounded-[8px] border border-line bg-subtle px-2 py-1 text-[12.5px]">
             <Icon name="search" size={13} className="text-ink-3" />
@@ -671,6 +708,7 @@ export function MessageView(p: MessageViewProps) {
       ) : null}
       {immersive ? <ImmersiveReader subject={m.subject} from={m.from_name ? `${m.from_name} <${m.from_email}>` : m.from_email} plain={plainBody} prefs={p.prefs.immersive ?? {}} onPrefs={(v) => p.onPrefs({ immersive: v })} onClose={() => setImmersive(false)} /> : null}
       {extra === 'task' ? <TaskFromMessage message={m} msgRef={ref} onClose={() => setExtra(null)} /> : null}
+      {linking ? <LinkRecordDialog items={[linkItem]} onClose={() => setLinking(false)} /> : null}
     </article>
   );
 }
@@ -814,10 +852,51 @@ function useSecurityPolicy() {
   });
 }
 
+/**
+ * The message's attachments (#163): real attachments only — pictures inside the body are in the body — each
+ * under a readable name, with a thumbnail or its file type, its size, and Open, Download and Save to Files.
+ * One kept on this computer (downloaded ahead by Settings › Mail › Images & media, or opened before) opens at
+ * once, also offline.
+ */
 function Attachments({ m, msgRef, offline }: { m: MessageDetail; msgRef: MessageRef; offline: boolean }) {
   const { uid, folder, mailbox } = msgRef;
   const policy = useSecurityPolicy();
   const extra = policy.data?.blocked_extensions ?? [];
+  const items = useMemo(() => m.attachments.map((a, i) => ({ ...a, name: readableName(a.name, a.mime, i + 1) })), [m.attachments]);
+  const kept = useQuery({
+    queryKey: ['mail', 'kept-attachments', mailbox ?? null, folder, uid, items.map((a) => a.ref).join(','), offline],
+    queryFn: async () => {
+      try {
+        return new Set(await call('mail:keptAttachments', { uid: String(uid), folder, mailbox: mailbox ?? null, items: items.slice(0, 50).map((a) => ({ ref: a.ref, name: a.name, mime: a.mime || '', size: Math.max(0, Math.round(a.size || 0)) })), auto: !offline }));
+      } catch {
+        return new Set<string>();
+      }
+    },
+    staleTime: 60_000,
+  });
+  const keptRefs = [...(kept.data ?? [])].join(',');
+  const thumbs = useQuery({
+    queryKey: ['mail', 'attachment-thumbs', mailbox ?? null, folder, uid, keptRefs],
+    queryFn: async () => {
+      const pics = items.filter((a) => kept.data?.has(a.ref) && attachmentKind(a.name, a.mime) === 'images' && a.size <= 3 * 1024 * 1024).slice(0, 12);
+      const out: Record<string, string> = {};
+      if (!pics.length) return out;
+      const path = (a: { ref: string }) => `/api/mail/messages/${uid}/attachments/${encodeURIComponent(a.ref)}?${new URLSearchParams({ folder, ...(mailbox ? { mailbox: String(mailbox) } : {}), local: '1' }).toString()}`;
+      try {
+        const hits = await call('offline:peek', { paths: pics.map(path) });
+        pics.forEach((a, i) => {
+          const type = (a.mime || '').toLowerCase();
+          const hit = hits[i];
+          if (hit && THUMB_TYPES.test(type)) out[a.ref] = `data:${type};base64,${hit.body}`;
+        });
+      } catch {
+        // No thumbnail: the file type's badge.
+      }
+      return out;
+    },
+    enabled: keptRefs !== '',
+    staleTime: 5 * 60_000,
+  });
   /** "Save to Files" (MAIL-RD-03): the server copies it into the person's Files; nothing goes through this computer. */
   const save = async (a: MessageDetail['attachments'][number]) => {
     try {
@@ -827,11 +906,19 @@ function Attachments({ m, msgRef, offline }: { m: MessageDetail; msgRef: Message
       toast('error', errorMessage(e));
     }
   };
+  const download = (a: MessageDetail['attachments'][number], open: boolean) =>
+    call('transfers:download', { mail: { uid, ref: a.ref, folder, mailbox }, name: a.name, ...(open ? { open: true } : {}) })
+      .then(() => toast('info', open ? text('Opening {name}…', { name: a.name }) : text('Downloading {name}…', { name: a.name })))
+      .catch((e) => toast('error', errorMessage(e)));
+  const iconButton = 'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle';
   return (
-    <div className="flex max-h-[30%] shrink-0 flex-col gap-2 overflow-y-auto border-t border-line px-6 py-3 scroll-thin">
-      {m.attachments.map((a) => {
-        const size = `${Math.max(1, Math.round(a.size / 1024))} KB`;
+    <div className="flex max-h-[30%] shrink-0 flex-col gap-2 overflow-y-auto border-t border-line px-6 py-3 scroll-thin" aria-label={text('Attachments')}>
+      {items.map((a) => {
+        const size = bytes(a.size);
         const risk = attachmentRisk(a.name, extra);
+        const here = !!kept.data?.has(a.ref);
+        const thumb = thumbs.data?.[a.ref];
+        const badge = thumb ? <img src={thumb} alt="" className="h-9 w-9 shrink-0 rounded-[6px] object-cover" /> : <FileBadge name={a.name} />;
         if (risk === 'blocked') {
           return (
             <div key={a.ref} className="flex w-full max-w-[520px] items-center gap-3 rounded-[10px] border border-line bg-subtle px-3 py-2 text-[13px]" title={text('WorkSuite blocks this kind of attachment: it can run as a program on your computer.')}>
@@ -846,10 +933,10 @@ function Attachments({ m, msgRef, offline }: { m: MessageDetail; msgRef: Message
             </div>
           );
         }
-        if (offline) {
+        if (offline && !here) {
           return (
             <div key={a.ref} className="flex items-center gap-3 rounded-[10px] border border-dashed border-line px-3 py-2.5 text-[13px]">
-              <FileBadge name={a.name} />
+              {badge}
               <span className="min-w-0 truncate">
                 <span className="font-semibold text-ink">{a.name}</span>
                 <span className="text-ink-3"> · {size} · {text('not downloaded — available when you’re back online')}</span>
@@ -857,49 +944,58 @@ function Attachments({ m, msgRef, offline }: { m: MessageDetail; msgRef: Message
             </div>
           );
         }
+        // Kept here while offline: opened from this computer as a file (PDF Studio and the editors read from the server).
+        const local = offline && here;
         return (
-          <div key={a.ref} className="flex w-full max-w-[560px] items-center gap-1">
-          <button
-            type="button"
-            draggable
-            onClick={() =>
-              // A PDF opens in PDF Studio, preview only (PDF-OPEN-004); a Word, Excel or PowerPoint file in a
-              // WorkSuite DOC / Sheet / Slides tab; a file with macros is saved, never opened elsewhere (DMO-SEC-04);
-              // anything else downloads and opens.
-              risk === 'macro'
-                ? void call('transfers:download', { mail: { uid, ref: a.ref, folder, mailbox }, name: a.name })
-                    .then(() => toast('info', text('{name} has macros: it is saved, not opened. Open it only if you trust the sender.', { name: a.name })))
-                    .catch((e) => toast('error', errorMessage(e)))
-                : isPdf(a)
-                ? openPdf({ kind: 'mail', uid: String(uid), ref: a.ref, folder, mailbox: mailbox ?? null, name: a.name }, a.name)
-                : isOfficeFile(a.name)
-                  ? openInOffice({ kind: 'api', name: a.name, path: `/api/mail/messages/${uid}/attachments/${encodeURIComponent(a.ref)}?${new URLSearchParams({ folder, dl: '1', ...(mailbox ? { mailbox } : {}) })}` })
-                  : void call('transfers:download', { mail: { uid, ref: a.ref, folder, mailbox }, name: a.name, open: true })
-                      .then(() => toast('info', text('Downloading {name}…', { name: a.name })))
+          <div key={a.ref} className="flex w-full max-w-[600px] items-center gap-1">
+            <button
+              type="button"
+              draggable
+              onClick={() =>
+                // A PDF opens in PDF Studio, preview only (PDF-OPEN-004); a Word, Excel or PowerPoint file in a
+                // WorkSuite DOC / Sheet / Slides tab; a file with macros is saved, never opened elsewhere (DMO-SEC-04);
+                // anything else downloads and opens.
+                risk === 'macro'
+                  ? void call('transfers:download', { mail: { uid, ref: a.ref, folder, mailbox }, name: a.name })
+                      .then(() => toast('info', text('{name} has macros: it is saved, not opened. Open it only if you trust the sender.', { name: a.name })))
                       .catch((e) => toast('error', errorMessage(e)))
-            }
-            className="flex w-full max-w-[520px] items-center gap-3 rounded-[10px] border border-line px-3 py-2 text-left hover:bg-subtle"
-            title={isPdf(a) ? text('Open in PDF Studio') : text('Download and open')}
-          >
-            <FileBadge name={a.name} />
-            <span className="min-w-0">
-              <span className="block truncate text-[13px] font-semibold text-ink">{a.name}</span>
-              <span className="block text-[11.5px] text-ink-3">
-                {size} · {risk === 'macro' ? text('has macros — save only') : isPdf(a) ? text('open') : text('download')}
+                  : !local && isPdf(a)
+                    ? openPdf({ kind: 'mail', uid: String(uid), ref: a.ref, folder, mailbox: mailbox ?? null, name: a.name }, a.name)
+                    : !local && isOfficeFile(a.name)
+                      ? openInOffice({ kind: 'api', name: a.name, path: `/api/mail/messages/${uid}/attachments/${encodeURIComponent(a.ref)}?${new URLSearchParams({ folder, dl: '1', ...(mailbox ? { mailbox } : {}) })}` })
+                      : void download(a, true)
+              }
+              className="flex min-w-0 flex-1 items-center gap-3 rounded-[10px] border border-line px-3 py-2 text-left hover:bg-subtle"
+              title={isPdf(a) && !local ? text('Open in PDF Studio') : text('Open')}
+            >
+              {badge}
+              <span className="min-w-0">
+                <span className="block truncate text-[13px] font-semibold text-ink">{a.name}</span>
+                <span className="block text-[11.5px] text-ink-3">
+                  {size} · {risk === 'macro' ? text('has macros — save only') : text('open')}
+                  {here ? ` · ${text('on this computer')}` : ''}
+                </span>
               </span>
-            </span>
-          </button>
-          {canOpen('files') ? (
-            <button type="button" onClick={() => void save(a)} aria-label={text('Save {name} to Files', { name: a.name })} title={text('Save to Files')} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle">
-              <Icon name="folder-input" size={16} />
             </button>
-          ) : null}
+            {risk !== 'macro' ? (
+              <button type="button" onClick={() => void download(a, false)} aria-label={text('Download {name}', { name: a.name })} title={text('Download')} className={iconButton}>
+                <Icon name="download" size={16} />
+              </button>
+            ) : null}
+            {canOpen('files') && !offline ? (
+              <button type="button" onClick={() => void save(a)} aria-label={text('Save {name} to Files', { name: a.name })} title={text('Save to Files')} className={iconButton}>
+                <Icon name="folder-input" size={16} />
+              </button>
+            ) : null}
           </div>
         );
       })}
     </div>
   );
 }
+
+/** Picture attachments shown as thumbnails from the local store: bitmaps only, never SVG. */
+const THUMB_TYPES = /^image\/(png|jpe?g|gif|webp|bmp)$/;
 
 /** The original as the server holds it, headers and all — read-only text, never rendered. */
 export function SourceDialog({ msgRef, onClose }: { msgRef: MessageRef; onClose: () => void }) {

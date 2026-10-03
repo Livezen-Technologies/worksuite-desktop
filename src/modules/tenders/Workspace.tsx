@@ -3,6 +3,9 @@ import { useState, type ReactNode } from 'react';
 import { call, errorMessage } from '../../core/bridge';
 import { dateLabel, relative, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
+import { app } from '../../core/app-state';
+import { useStore } from '../../core/store';
+import { can } from '../expenses/api';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Empty, Facts, Field, input, Panel, Sheet } from '../hr/parts';
@@ -11,6 +14,8 @@ import { addNote, fetchBlockers, fetchTender, K, money, moveStage, recordLoss, r
 import Approvals from './Approvals';
 import Bonds from './Bonds';
 import Budget from './Budget';
+import Expenses from './Expenses';
+import { amount, expensesTabLabel, varianceLine } from './bidcost';
 import Checklist from './Checklist';
 import ContactPersons from './ContactPersons';
 import { fetchContactPersons, K3, tabLabel } from './persons';
@@ -18,6 +23,8 @@ import Decision from './Decision';
 import Documents from './Documents';
 import Meetings from './Meetings';
 import Notice from './Notice';
+import { useCanOpen } from '../../core/access';
+import { RecordMail } from '../mail/recordLinks';
 import { Left, openWeb, OutcomePill, PriorityPill, Score, StagePill, subline } from './parts';
 
 /**
@@ -33,8 +40,8 @@ import { Left, openWeb, OutcomePill, PriorityPill, Score, StagePill, subline } f
  * The working tabs — checklist, documents, bonds, meetings, budget, costs and
  * approvals — open in the browser for now.
  */
-type Tab = 'overview' | 'checklist' | 'documents' | 'contacts' | 'bonds' | 'meetings' | 'budget' | 'approvals' | 'notice' | 'decision' | 'history' | 'activity';
-const TABS: Tab[] = ['overview', 'checklist', 'documents', 'contacts', 'bonds', 'meetings', 'budget', 'approvals', 'notice', 'decision', 'history', 'activity'];
+type Tab = 'overview' | 'checklist' | 'documents' | 'contacts' | 'bonds' | 'meetings' | 'budget' | 'expenses' | 'mail' | 'approvals' | 'notice' | 'decision' | 'history' | 'activity';
+const TABS: Tab[] = ['overview', 'checklist', 'documents', 'contacts', 'bonds', 'meetings', 'budget', 'expenses', 'mail', 'approvals', 'notice', 'decision', 'history', 'activity'];
 
 type Ask = { kind: 'move'; to: string; label: string; blockers: string[] } | { kind: 'cancel' } | { kind: 'win' } | { kind: 'lose' };
 
@@ -58,13 +65,15 @@ export default function Workspace({
   onEdit: () => void;
 }) {
   const qc = useQueryClient();
+  // Mail linked to this tender, from Mail's "Link to tender, customer or deal".
+  const mailOn = useCanOpen('mail');
   // Opened means read afresh: a tender moved by somebody else a moment ago must not show its old stage and moves.
   const q = useQuery({ queryKey: K.tender(id), queryFn: ({ signal }) => fetchTender(id, signal), refetchOnMount: 'always' });
   // For the tab's count; the tab itself reads the same query.
   const persons = useQuery({ queryKey: K3.persons(id), queryFn: ({ signal }) => fetchContactPersons(id, signal), refetchOnMount: 'always' });
   const [ask, setAsk] = useState<Ask | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const t: Tab = (TABS as string[]).includes(tab) ? (tab as Tab) : 'overview';
+  const perms = useStore(app, (s) => s.bootstrap?.permissions);
   const refresh = () => void qc.invalidateQueries({ queryKey: K.all });
 
   if (q.isLoading) return <Spinner />;
@@ -81,6 +90,13 @@ export default function Workspace({
   // Owners, approvers and who chases a line are asked of the tender's own company.
   const org = r.org_id ? String(r.org_id) : '';
   const decided = r.outcome !== 'open';
+  /*
+   * The Expenses tab needs the tender's view AND the Expenses module's: the
+   * first is already true here, `expense.view` is the person's, and the server
+   * says whether this tender's expenses are theirs to see (`bid_cost.visible`).
+   */
+  const showExpenses = can(perms, 'expense.view') && d.bid_cost?.visible !== false;
+  const t: Tab = (TABS as string[]).includes(tab) && (tab !== 'expenses' || showExpenses) ? (tab as Tab) : 'overview';
 
   const act = async (key: string, fn: () => Promise<unknown>, done: string) => {
     setBusy(key);
@@ -208,7 +224,7 @@ export default function Workspace({
             {req.missing === 0 ? 'Every mandatory requirement is satisfied.' : `Outstanding: ${req.missing} of ${req.mandatory} mandatory ${req.mandatory === 1 ? 'requirement' : 'requirements'}.`}
           </button>
         ) : d.requirements.note && !decided ? (
-          <p className="m-0 text-[12px] text-ink-3">{d.requirements.note}</p>
+          <MandatoryNotice note={d.requirements.note} onChecklist={() => onTab('checklist')} />
         ) : null}
       </section>
 
@@ -222,6 +238,8 @@ export default function Workspace({
             ['bonds', 'Bonds'],
             ['meetings', 'Meetings'],
             ['budget', 'Budget'],
+            ...(showExpenses ? ([['expenses', expensesTabLabel(d.bid_cost?.totals?.count)]] as Array<[Tab, string]>) : []),
+            ...(mailOn ? ([['mail', 'Mail']] as Array<[Tab, string]>) : []),
             ['approvals', d.approvals.some((a) => a.status === 'pending') ? `Approvals · ${d.approvals.filter((a) => a.status === 'pending').length} pending` : 'Approvals'],
             ['notice', 'Notice'],
             ['decision', 'Submission'],
@@ -242,13 +260,17 @@ export default function Workspace({
         ))}
       </nav>
 
-      {t === 'overview' ? <Overview d={d} canManage={canManage} busy={busy === 'score'} onRescore={() => void act('score', () => rescore(id), 'Scored again.')} onApprovals={() => onTab('approvals')} /> : null}
+      {t === 'overview' ? (
+        <Overview d={d} canManage={canManage} busy={busy === 'score'} onRescore={() => void act('score', () => rescore(id), 'Scored again.')} onApprovals={() => onTab('approvals')} onExpenses={showExpenses ? () => onTab('expenses') : undefined} />
+      ) : null}
       {t === 'checklist' ? <Checklist id={id} org={org} canManage={canManage} canApprove={canApprove} can={d.can} /> : null}
       {t === 'documents' ? <Documents id={id} docs={d.documents} can={d.can} /> : null}
       {t === 'contacts' ? <ContactPersons tender={{ id, title: r.title, reference: r.reference }} /> : null}
       {t === 'bonds' ? <Bonds id={id} currency={r.currency} canManage={canManage} can={d.can} /> : null}
       {t === 'meetings' ? <Meetings id={id} tender={r.title} canManage={canManage} /> : null}
-      {t === 'budget' ? <Budget id={id} budget={d.budget} canManage={canManage} /> : null}
+      {t === 'budget' ? <Budget id={id} budget={d.budget} canManage={canManage} bidCost={d.bid_cost} currency={r.currency} onExpenses={showExpenses ? () => onTab('expenses') : undefined} /> : null}
+      {t === 'mail' ? <RecordMail kind="tender" id={id} /> : null}
+      {t === 'expenses' ? <Expenses id={id} tender={{ title: r.title, reference: r.reference, currency: r.currency }} /> : null}
       {t === 'approvals' ? <Approvals id={id} org={org} rows={d.approvals} canManage={canManage} canApprove={canApprove} /> : null}
       {t === 'notice' ? <Notice id={id} canManage={canManage} /> : null}
       {t === 'decision' ? <Decision d={d} canManage={canManage} /> : null}
@@ -280,8 +302,10 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function Overview({ d, canManage, busy, onRescore, onApprovals }: { d: Data; canManage: boolean; busy: boolean; onRescore: () => void; onApprovals: () => void }) {
+function Overview({ d, canManage, busy, onRescore, onApprovals, onExpenses }: { d: Data; canManage: boolean; busy: boolean; onRescore: () => void; onApprovals: () => void; onExpenses?: () => void }) {
   const r = d.tender;
+  const cost = onExpenses && d.bid_cost?.visible ? d.bid_cost : null;
+  const ccy = cost?.totals?.currency ?? cost?.currency ?? r.currency;
   const applied = d.score?.reasons.filter((x) => x.applied) ?? [];
   const unjudged = d.score?.reasons.filter((x) => !x.applied) ?? [];
   return (
@@ -357,6 +381,31 @@ function Overview({ d, canManage, busy, onRescore, onApprovals }: { d: Data; can
             <Empty text="No scoring rules apply yet." />
           )}
         </Panel>
+        {cost ? (
+          <Panel
+            title="Bid cost so far"
+            action={
+              <button type="button" className="text-[12.5px] font-semibold text-primary hover:underline" onClick={onExpenses}>
+                Open
+              </button>
+            }
+            bodyClassName="flex flex-col gap-1.5 px-3.5 py-3 text-[12.5px]"
+          >
+            <b className="text-[18px] text-ink tabular-nums" aria-label="Bid cost so far">
+              {amount(cost.totals?.spent ?? '0', ccy)}
+            </b>
+            <span className="text-ink-3">
+              {cost.totals?.count ?? 0} {cost.totals?.count === 1 ? 'expense' : 'expenses'}
+              {cost.totals && Number(cost.totals.pending) > 0 ? ` · ${amount(cost.totals.pending, ccy)} pending approval` : ''}
+            </span>
+            {cost.variance ? <span className={cx(cost.variance.over ? 'text-danger' : 'text-ink-2')}>{varianceLine(cost.variance, ccy)}</span> : null}
+            {cost.written_off !== null && (r.outcome === 'lost' || r.outcome === 'cancelled') ? (
+              <span className="rounded-[8px] bg-subtle px-2.5 py-1.5 text-ink-2">
+                Bid cost written off: <b className="text-ink">{amount(cost.written_off, ccy)}</b>
+              </span>
+            ) : null}
+          </Panel>
+        ) : null}
         {d.approvals.length ? (
           <Panel
             title="Approvals"
@@ -384,14 +433,25 @@ function Overview({ d, canManage, busy, onRescore, onApprovals }: { d: Data; can
   );
 }
 
+/**
+ * The stage moves and, beside them, what was spent chasing the bid — "Expense
+ * LKR 2,500 (Courier) added by Dimuthu" — newest first. The expense lines are
+ * the tender's own record, written when the expense was added, linked,
+ * unlinked or refunded, so they stay after the expense itself is taken off.
+ */
 function History({ d }: { d: Data }) {
+  const rows = [
+    ...d.history.map((h) => ({ key: `m${h.id}`, title: h.from ? `${h.from} → ${h.to}` : h.to, note: h.note, actor: h.actor, at: h.at, expense: false })),
+    ...d.expense_history.map((h) => ({ key: `e${h.id}`, title: h.body, note: null as string | null, actor: h.actor ?? 'the system', at: h.at, expense: true })),
+  ].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
   return (
     <div className="overflow-hidden rounded-[12px] border border-line bg-surface" aria-label="Stage history">
-      {d.history.length ? (
-        d.history.map((h) => (
-          <div key={h.id} className="flex items-start gap-3 border-b border-line/60 px-3.5 py-2.5 text-[12.5px] last:border-b-0">
+      {rows.length ? (
+        rows.map((h) => (
+          <div key={h.key} className="flex items-start gap-3 border-b border-line/60 px-3.5 py-2.5 text-[12.5px] last:border-b-0">
+            {h.expense ? <Icon name="receipt" size={14} className="mt-0.5 shrink-0 text-ink-3" /> : null}
             <span className="flex min-w-0 flex-1 flex-col">
-              <b className="text-ink">{h.from ? `${h.from} → ${h.to}` : h.to}</b>
+              <b className={cx(h.expense ? 'font-semibold' : '', 'text-ink')}>{h.title}</b>
               {h.note ? <span className="text-[12px] text-ink-2">{h.note}</span> : null}
             </span>
             <span className="flex shrink-0 flex-col items-end text-[11.5px] text-ink-3">
@@ -403,6 +463,24 @@ function History({ d }: { d: Data }) {
       ) : (
         <Empty text="No moves yet." />
       )}
+    </div>
+  );
+}
+
+/**
+ * "Nothing is marked mandatory yet…" — a small notice that says where to fix
+ * it, rather than a line of grey text with no way there.
+ */
+export function MandatoryNotice({ note, onChecklist }: { note: string; onChecklist: () => void }) {
+  return (
+    <div role="note" className="flex items-start gap-2 rounded-[9px] border border-line bg-ground px-3 py-2 text-[12.5px] text-ink-2">
+      <Icon name="info" size={15} className="mt-px shrink-0 text-ink-3" />
+      <span className="min-w-0 flex-1">
+        {note}{' '}
+        <button type="button" className="font-semibold text-primary hover:underline" onClick={onChecklist}>
+          Open the Checklist
+        </button>
+      </span>
     </div>
   );
 }
