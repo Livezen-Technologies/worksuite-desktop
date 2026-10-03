@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.11.0 — 2026-10-03
+
+- Signatures (#166): written in the mail editor with a smaller toolbar (formatting, alignment, links incl. mailto: and tel:, dividers, tables, pictures with size, alt text and link, compressed to about 500 KB, SVG saved as PNG), social icons, profile fields ({name} {job_title} {department} {company} {phone} {mobile} {email} {website} {address} {photo} {company_logo}), an HTML source view and a live preview (light/dark, desktop/mobile); 8 templates filled from the profile and company branding; save as template; locked organisation signatures; per account a signature for new mail and one for replies (or none) and where it goes; the compose Signature menu, switching with From; a list with preview, defaults, Edit, Duplicate, Set default and Delete; pictures hosted (default) or embedded; a plain-text version; a dark-logo warning and dark-mode logo; Save enabled once there's content and a warning before closing with unsaved changes.
+
 ## 1.10.0 — 2026-10-03
 
 - Fixed (#190): mail bodies for the keep period now download in the background — unread Inbox first, then newest, never marking anything read — so local storage fills and opened mail is instant; a body is saved under one key however it was opened. Settings › Mail › Accounts shows "Headers 12 of 27 folders · Bodies 340 of 1,200 · 17.4 MB on this computer" and Partly synced; the sync log has one row per run (Success / Partial / Failed / Running, folders, added, updated, removed, bodies, errors) that expands to each folder's details, wraps its text, and can be copied or exported.
