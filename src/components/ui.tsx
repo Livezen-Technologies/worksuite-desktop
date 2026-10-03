@@ -124,6 +124,13 @@ const AVATAR_TONES = [
   'bg-[#E7F4ED] text-[#1F7A4D] dark:bg-[#12301F] dark:text-[#86D8AE]',
 ];
 
+/** The avatar colour that always goes with the same key (a name, a number): for an avatar drawn without initials. */
+export function avatarTone(key: string | null | undefined): string {
+  let h = 0;
+  for (const ch of key ?? '?') h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return AVATAR_TONES[h % AVATAR_TONES.length]!;
+}
+
 export function initials(name: string | null | undefined): string {
   const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return '?';
@@ -136,11 +143,9 @@ export function initials(name: string | null | undefined): string {
  */
 export function Avatar({ name, size = 32, className, presence, src }: { name: string | null | undefined; size?: number; className?: string; presence?: 'online' | 'away' | 'offline' | null; src?: string | null }) {
   const n = name ?? '?';
-  let h = 0;
-  for (const ch of n) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   const [failed, setFailed] = useState<string | null>(null);
   return (
-    <span className={cx('relative inline-flex shrink-0 items-center justify-center rounded-full font-bold', AVATAR_TONES[h % AVATAR_TONES.length], className)} style={{ width: size, height: size, fontSize: Math.max(10, size * 0.36) }} aria-hidden>
+    <span className={cx('relative inline-flex shrink-0 items-center justify-center rounded-full font-bold', avatarTone(n), className)} style={{ width: size, height: size, fontSize: Math.max(10, size * 0.36) }} aria-hidden>
       {initials(n)}
       {src && failed !== src ? <img src={src} alt="" draggable={false} decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(src)} className="absolute inset-0 h-full w-full rounded-[inherit] object-cover" /> : null}
       {presence ? (

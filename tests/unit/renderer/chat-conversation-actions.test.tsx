@@ -368,7 +368,7 @@ describe('the same menu on the other channels', () => {
     const wa = { id: 7, account_id: 1, kind: 'direct', name: 'Nimal Perera', phone: '94770000007', status: 'open', unread: 0, is_pinned: 0, is_muted: 0, last_message: 'Hi', last_message_at: '2026-10-01 09:00:00', last_direction: 'in', awaiting_since: null, waiting_minutes: null, overdue: false, account_name: 'Sales', assigned_name: null };
     vi.mocked(apiGet).mockImplementation(async (path: string) => (path === '/api/whatsapp/chats' ? { chats: [wa] } : {}) as never);
     const account = { id: 1, name: 'Sales', provider: 'web_js', phone: '94771234567', status: 'connected', status_note: null, is_default: true, can_send: true, can_connect: true, unread: 0 } as WaAccount;
-    wrap(<WhatsappChannel accounts={[account]} loading={false} error={null} retry={() => undefined} onConnect={null} onRelink={() => undefined} />);
+    wrap(<WhatsappChannel accounts={[account]} loading={false} error={null} retry={() => undefined} onConnect={null} />);
     const name = await screen.findByText('Nimal Perera');
     fireEvent.contextMenu(name.closest('button')!);
     const menu = await screen.findByRole('menu', { name: 'Actions — Nimal Perera' });

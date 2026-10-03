@@ -77,7 +77,7 @@ export function WhatsappSettings({ accounts, loading, onConnect, onRelink, onClo
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-center gap-1.5">
                       <b className="text-[13.5px] text-ink">{a.name}</b>
-                      <span className={cx('rounded-full px-2 py-px text-[11px] font-semibold', up ? 'bg-success-bg text-success' : 'bg-warning-bg text-[#9A4A06] dark:text-warning')}>{up ? text('Connected') : text('Not connected')}</span>
+                      <span className={cx('rounded-full px-2 py-px text-[11px] font-semibold', up ? 'bg-success-bg text-success' : 'bg-warning-bg text-warning-ink')}>{up ? text('Connected') : text('Not connected')}</span>
                       {a.is_default ? <span className="rounded-full bg-subtle px-2 py-px text-[11px] font-semibold text-ink-2">{text('Default')}</span> : null}
                     </span>
                     <span className="block text-ink-3">

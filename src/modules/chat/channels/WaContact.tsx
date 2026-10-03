@@ -7,7 +7,7 @@ import { navigate } from '../../../core/tabs';
 import { toast } from '../../../core/toasts';
 import { Icon } from '../../../components/Icon';
 import type { MenuItem } from '../../../components/Menu';
-import { Avatar, Button, ErrorNote, Modal, Spinner, cx } from '../../../components/ui';
+import { Avatar, Button, ErrorNote, Modal, Spinner, avatarTone, cx } from '../../../components/ui';
 import { pillOf, SOCIAL, typeOf, type Contact, type ContactForm, type ContactType } from '../../contacts/api';
 import { EditDrawer } from '../../contacts/EditDrawer';
 import { addPhoneToContact } from '../../contacts/phones';
@@ -24,12 +24,16 @@ import type { WaWho } from './wa-names';
 /** Where a contact opens in Contacts. */
 export const contactRoute = (id: number) => `/contacts?open=${id}`;
 
-/** The conversation's picture: the contact's photo, then the WhatsApp one, then initials — a person icon, never "+". */
-export function WaAvatar({ who, size = 34, className }: { who: Pick<WaWho, 'name' | 'avatars' | 'initialsOf' | 'group'>; size?: number; className?: string }) {
+/**
+ * The conversation's picture: the contact's photo, then the WhatsApp one, then initials — a person icon, never "+".
+ * The icon sits on the colour that always goes with that number (#155), so an unknown number looks the same in every
+ * row and every time, and two of them side by side can be told apart.
+ */
+export function WaAvatar({ who, size = 34, className }: { who: Pick<WaWho, 'name' | 'avatars' | 'initialsOf' | 'group'> & Partial<Pick<WaWho, 'e164'>>; size?: number; className?: string }) {
   const src = who.avatars.map((u) => mediaUrl(u)).find(Boolean) ?? null;
   if (!who.initialsOf && !src) {
     return (
-      <span aria-hidden className={cx('inline-flex shrink-0 items-center justify-center rounded-full bg-subtle text-ink-3', who.group && '!rounded-[9px]', className)} style={{ width: size, height: size }}>
+      <span aria-hidden className={cx('inline-flex shrink-0 items-center justify-center rounded-full', avatarTone(who.e164 ?? who.name), who.group && '!rounded-[9px]', className)} style={{ width: size, height: size }}>
         <Icon name={who.group ? 'users' : 'user'} size={Math.round(size * 0.5)} />
       </span>
     );

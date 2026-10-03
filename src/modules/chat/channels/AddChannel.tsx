@@ -89,7 +89,7 @@ export function AddChannel({ website, whatsapp, meta, initial = { at: 'list' }, 
             <span className="font-normal text-ink-3">So people know which number they are answering from.</span>
           </label>
           <p className="text-ink-2">Next, scan a QR code with the phone that owns the number, the way you link WhatsApp Web.</p>
-          <p className="rounded-[8px] bg-warning-bg p-2.5 text-[12px] text-[#9A4A06] dark:text-warning">
+          <p className="rounded-[8px] bg-warning-bg p-2.5 text-[12px] text-warning-ink">
             This links an ordinary WhatsApp number, not the official Business Platform: the link can drop and need scanning again, and bulk sending can get a number banned.{' '}
             <button type="button" className="font-semibold underline" onClick={() => web('/whatsapp')}>Connect a Business Platform number on the web</button> instead.
           </p>
