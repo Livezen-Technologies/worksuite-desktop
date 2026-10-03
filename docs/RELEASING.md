@@ -52,8 +52,9 @@ not public there falls back to Stable unless a tenant policy names it.
 
 Publish a build with the Update Center's script (from that repo; Node 20, no
 dependencies). Each `--file` is `platform:arch:type:path`; Windows x64, macOS
-arm64, macOS x64 and Linux x64 are required. The universal DMG fills both macOS
-slots. The build number must rise per channel — use the patch number.
+arm64, macOS x64 and Linux x64 are required. Build one DMG per Mac architecture
+(`electron-builder --mac dmg --arm64 --x64`): the universal merge currently
+fails with "pattern is too long". The build number must rise per channel — use the patch number.
 
 ```bash
 UC_CI_TOKEN_FILE=~/.config/worksuite-release/ci-token \
@@ -61,8 +62,8 @@ UC_CI_KEY_FILE=~/.config/worksuite-release/ci-attestation.key \
 node scripts/publish-release.mjs --app desktop --app-id lk.worksuite.desktop --channel BETA \
   --version 0.2.124 --build 124 --commit <sha> --summary "WorkSuite Desktop 0.2.124" --notes notes.md \
   --file windows:x64:exe:release/0.2.124/WorkSuite-Setup-0.2.124-x64.exe \
-  --file macos:arm64:dmg:release/0.2.124/WorkSuite-0.2.124-universal.dmg \
-  --file macos:x64:dmg:release/0.2.124/WorkSuite-0.2.124-universal.dmg \
+  --file macos:arm64:dmg:release/0.2.124/WorkSuite-0.2.124-arm64.dmg \
+  --file macos:x64:dmg:release/0.2.124/WorkSuite-0.2.124-x64.dmg \
   --file linux:x64:appimage:release/0.2.124/WorkSuite-0.2.124-x86_64.AppImage
 ```
 
