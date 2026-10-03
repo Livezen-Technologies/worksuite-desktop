@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.8.5 — 2026-10-03
+
+- Keep the AI launcher and answer notice accessible beside the native Office editor without hiding the document indefinitely (#184).
+
 ## 1.8.4 — 2026-10-03
 
 - More drafting tools for Mail: draft from notes, tone and length, coaching comments (ENH-MAIL-03).
