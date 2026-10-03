@@ -5,6 +5,10 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.141 — 2026-10-03
+
+- **A tidier website chat widget (#207).** The widget's header shows your site's name and logo — never its web address — falling back to your organisation's name. There's one set of controls (Minimise and Maximise in the header, and the launcher closes it), no repeated text, and the header and body always share one Light or Dark look. Opening, minimising and maximising animate like the AI Assistant panel, messages that arrive while it's minimised pop up as a preview above the launcher, and the chat stays as visitors left it when they move between pages. In **Website chats › Setup › Widget** you can pick Auto, Light or Dark and move the launcher with bottom, right and left offsets, with a live preview. Needs the server update (Communication 1.19.0, migration `2026-10-13-000100_WidgetLauncherOffsets`).
+
 ## 0.2.140 — 2026-10-03
 
 - **The chat drawer looks like a layer, not part of the page (#211).** It has a clear left edge and a soft shadow in both themes, the header, messages and message box line up on one edge, and messages have the same space on both sides. The header leaves room for the name — the full name shows on hover — with Open in new window and Minimise now under **⋯**. Drag the left edge to resize between 360 and 640px; the width is remembered.
