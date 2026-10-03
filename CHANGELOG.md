@@ -5,6 +5,12 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.124 — 2026-10-03
+
+- **Updates come from the WorkSuite Update Center.** WorkSuite now asks https://download.worksuitecloud.com whether a newer version is out, instead of a manifest file on your WorkSuite server. The answer is signed by the Update Center and checked against a key built into the app, and the download must match the size and SHA-256 inside that signed answer, or it is deleted. Your channel (Stable, Beta, Dev) is sent as a request; the Update Center decides, and your organisation's policy there wins. The computer is identified only by a one-way code made from its install ID.
+- On a Mac the update now comes as the disk image: WorkSuite opens it out of sight, read-only, checks that the app inside is signed by the same publisher as the one running, and swaps it in when you restart.
+- Builds that are not code-signed still never install an update by themselves — they say a new version is out and leave installing it to you. Only the Linux AppImage updates itself without a code signature, trusting the signed answer and its checksum.
+
 ## 0.2.123 — 2026-10-03
 
 - **A cleaner, fuller mail editor (#188).** Formatting is one row of grouped buttons — undo, paragraph style, font, size, bold/italic/underline/strikethrough, colour, highlight, clear, format painter, alignment, lists, checklist, indent and line spacing — with each button's shortcut in its tooltip. Attach, Template (with Quick Parts — which now says why when there are none), Signature, Suggest times, Mail merge and Options sit in their own row, and anything that doesn't fit goes into **More**. Insert pictures from the computer, Files, a link, or by pasting or dropping them, then resize, align, crop and add alt text or a link; big pictures are shrunk automatically and sent inside the message. Tables have a grid picker and tools to add or remove rows and columns, merge cells, set borders, colours and alignment, and Tab moves between cells. Also: emoji, horizontal line, quote, code, date and time, special characters, an email-safe button, a meeting link and mail merge fields; Word and Excel paste is cleaned up; right-click a misspelt word for suggestions. Needs the server update for pictures inside messages.

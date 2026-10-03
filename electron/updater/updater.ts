@@ -6,12 +6,13 @@ import { chmod, copyFile, mkdir, readdir, rename, rm, stat, writeFile } from 'no
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { canonicalJson } from '@shared/canonical-json';
-import { channelAccepts, DEADLINE_WARNINGS_MS, installableKinds, isNewer, manifestSchema, resolveArtifactUrl, selectArtifact, type ReleaseArtifact, type ReleaseManifest } from '@shared/release';
+import { DEADLINE_WARNINGS_MS, isNewer, resolveArtifactUrl } from '@shared/release';
 import type { Arch, BusyReport, Platform, UpdateChannel, UpdateStatus } from '@shared/types';
 import { compareVersions, isBelowMinimum } from '@shared/version';
 import { createPublicKey, verify } from 'node:crypto';
 import { logger } from '../main/log';
 import type { FetchLike } from '../services/http';
+import { acceptUpdateResponse, isRequired, ucInstallType, type UcPackage } from './update-center';
 
 const log = logger('updater');
 const run = promisify(execFile);
@@ -21,9 +22,11 @@ const run = promisify(execFile);
  *
  *   IDLE → CHECKING → AVAILABLE → DOWNLOADING → VERIFIED → STAGED → INSTALLING
  *
- * Trust chain, in order, and each step fails closed:
- *  1. the manifest's Ed25519 signature against the pinned release key;
- *  2. the artifact's SHA-256 and size against the signed manifest;
+ * It asks the WorkSuite Update Center (update-center.ts). Trust chain, in
+ * order, and each step fails closed:
+ *  1. the update response's Ed25519 signature against the pinned Update
+ *     Center response key — for this app, this version, and not expired;
+ *  2. the package's SHA-256 and size against that signed response;
  *  3. the operating system's code signature on the new build, from the same
  *     publisher as the running one (macOS Developer ID team, Windows
  *     Authenticode signer). An unsigned running build cannot establish a
@@ -40,8 +43,10 @@ export interface UpdaterDeps {
   fetch: FetchLike;
   platform: Platform;
   arch: Arch;
-  publicKeyPem: string;
-  feedUrl: (channel: UpdateChannel) => string | null;
+  /** Pinned Update Center response keys, key_id → base64url raw Ed25519. */
+  responseKeys: Readonly<Record<string, string>>;
+  /** The update check for this channel, or null when no Update Center is configured. */
+  updateUrl: (channel: UpdateChannel) => string | null;
   channel: () => UpdateChannel;
   busy: () => BusyReport;
   deadlineHours: () => number;
@@ -52,6 +57,15 @@ export interface UpdaterDeps {
   beforeQuit: () => Promise<void>;
 }
 
+/** What the Update Center offered: the version, and the package for this computer. */
+interface Offer {
+  version: string;
+  critical: boolean;
+  pkg: UcPackage;
+  checkUrl: string;
+}
+
+/** A self-hosted manifest's signature (the feed before the Update Center; kept for its tests). */
 export function verifyManifestSignature(raw: Record<string, unknown>, publicKeyPem: string): boolean {
   const { signature, ...rest } = raw;
   if (typeof signature !== 'string') return false;
@@ -93,8 +107,7 @@ async function winSigner(file: string): Promise<{ valid: boolean; subject: strin
 
 export class UpdaterService {
   private status: UpdateStatus;
-  private manifest: ReleaseManifest | null = null;
-  private artifact: ReleaseArtifact | null = null;
+  private offer: Offer | null = null;
   private stagedPath: string | null = null;
   private minimum: string | null = null;
   private checkTimer: NodeJS.Timeout | null = null;
@@ -180,7 +193,7 @@ export class UpdaterService {
     if (['DOWNLOADING', 'INSTALLING'].includes(this.status.state)) return this.get();
     if (this.status.state === 'STAGED') return this.get();
     const channel = this.deps.channel();
-    const url = this.deps.feedUrl(channel);
+    const url = this.deps.updateUrl(channel);
     if (!url) {
       this.set({ state: 'IDLE', error: 'No update feed is configured.', lastCheckedAt: new Date().toISOString() });
       return this.get();
@@ -188,42 +201,38 @@ export class UpdaterService {
     this.set({ state: 'CHECKING', error: null });
     try {
       const res = await this.deps.fetch(url, { method: 'GET', headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(30_000) });
-      if (res.status === 404) {
-        this.set({ state: 'IDLE', lastCheckedAt: new Date().toISOString(), error: null });
-        return this.get();
-      }
-      if (!res.ok) throw new Error(`update feed answered ${res.status}`);
+      if (!res.ok) throw new Error(`update center answered ${res.status}`);
       const raw = (await res.json()) as Record<string, unknown>;
-      if (!verifyManifestSignature(raw, this.deps.publicKeyPem)) {
-        // Fail closed: an unverifiable manifest is ignored entirely.
-        log.error('release manifest signature invalid; ignoring it');
+      const accepted = acceptUpdateResponse(raw, this.deps.responseKeys, app.getVersion());
+      if (!accepted.ok) {
+        // Fail closed: an answer that does not verify is ignored entirely.
+        log.error('update response refused; ignoring it', { reason: accepted.reason });
         this.set({ state: 'FAILED', error: 'The update could not be verified and was ignored.', signatureVerified: false, lastCheckedAt: new Date().toISOString() });
         return this.get();
       }
-      const parsed = manifestSchema.safeParse(raw);
-      if (!parsed.success) throw new Error('release manifest is malformed');
-      const m = parsed.data;
-      if (m.minimum_version) this.setMinimum(m.minimum_version);
-      if (!channelAccepts(channel, m.channel) || !isNewer(m.version, app.getVersion())) {
-        this.set({ state: 'IDLE', availableVersion: null, lastCheckedAt: new Date().toISOString(), signatureVerified: true });
+      const r = accepted.response;
+      if (r.effective_minimum) this.setMinimum(r.effective_minimum);
+      if (isRequired(r)) this.set({ required: true });
+      const pkg = r.package ?? null;
+      const version = r.latest_version ?? null;
+      if (r.status === 'CURRENT' || !pkg || !version || !isNewer(version, app.getVersion())) {
+        this.offer = null;
+        this.set({ state: 'IDLE', availableVersion: null, error: r.status === 'CURRENT' ? null : r.message ?? null, lastCheckedAt: new Date().toISOString(), signatureVerified: true });
         return this.get();
       }
-      const kinds = installableKinds(this.deps.platform, !!process.env.APPIMAGE);
-      const artifact = selectArtifact(m, this.deps.platform, this.deps.arch, kinds);
-      this.manifest = m;
-      this.artifact = artifact;
-      const blocked = await this.installBlockedReason(artifact);
+      this.offer = { version, critical: r.release_type === 'CRITICAL', pkg, checkUrl: url };
+      const blocked = await this.installBlockedReason(pkg);
       this.set({
         state: 'AVAILABLE',
-        availableVersion: m.version,
-        critical: m.critical,
-        notesUrl: m.notes_url ?? null,
+        availableVersion: version,
+        critical: this.offer.critical,
+        notesUrl: r.release_notes_url ?? null,
         signatureVerified: true,
         installSupported: blocked === null,
         installBlockedReason: blocked,
         lastCheckedAt: new Date().toISOString(),
       });
-      if (blocked === null && artifact) await this.download(artifact, url);
+      if (blocked === null) await this.download(this.offer);
       return this.get();
     } catch (e) {
       log.info('update check failed', { error: String((e as Error).message ?? e) });
@@ -232,12 +241,11 @@ export class UpdaterService {
     }
   }
 
-  private async installBlockedReason(artifact: ReleaseArtifact | null): Promise<string | null> {
+  private async installBlockedReason(pkg: UcPackage): Promise<string | null> {
     if (!app.isPackaged) return 'Development builds do not install updates.';
-    if (!artifact) {
-      if (this.deps.platform === 'linux' && !process.env.APPIMAGE) return 'WorkSuite was installed from a package; update it with your package manager.';
-      return 'No installer for this computer is included in the release.';
-    }
+    const wanted = ucInstallType(this.deps.platform, !!process.env.APPIMAGE);
+    if (this.deps.platform === 'linux' && !wanted) return 'WorkSuite was installed from a package; update it with your package manager.';
+    if (pkg.type !== wanted) return 'No installer for this computer is included in the release.';
     if (this.deps.platform === 'macos') {
       const bundle = bundlePath();
       if (!bundle) return 'The application bundle could not be located.';
@@ -250,19 +258,25 @@ export class UpdaterService {
     return null;
   }
 
-  private async download(artifact: ReleaseArtifact, manifestUrl: string): Promise<void> {
-    const url = resolveArtifactUrl(artifact.url, manifestUrl, this.deps.allowInsecure);
+  private async download(offer: Offer): Promise<void> {
+    const { pkg } = offer;
+    const url = resolveArtifactUrl(pkg.download_url, offer.checkUrl, this.deps.allowInsecure);
     if (!url) {
       this.set({ state: 'FAILED', error: 'The update is not served over HTTPS.' });
       return;
     }
-    const dir = join(this.deps.updatesDir, this.manifest!.version);
+    const dir = join(this.deps.updatesDir, offer.version);
     await mkdir(dir, { recursive: true });
-    const name = url.split('/').pop()?.split('?')[0]?.replace(/[^A-Za-z0-9._-]/g, '_') || `update-${artifact.kind}`;
+    const name = pkg.file_name.replace(/[^A-Za-z0-9._-]/g, '_') || `update-${pkg.type}`;
     const final = join(dir, name);
     const partial = `${final}.partial`;
     this.set({ state: 'DOWNLOADING', progress: 0 });
-    const res = await this.deps.fetch(url, { method: 'GET', signal: AbortSignal.timeout(2 * 3600_000) });
+    let res = await this.deps.fetch(url, { method: 'GET', signal: AbortSignal.timeout(2 * 3600_000) });
+    if (!res.ok && pkg.download_grant) {
+      // The signed URL lasts 15 minutes; the grant buys a fresh one for the same file.
+      const fresh = await this.redeemGrant(pkg.download_grant, offer.checkUrl);
+      if (fresh) res = await this.deps.fetch(fresh, { method: 'GET', signal: AbortSignal.timeout(2 * 3600_000) });
+    }
     if (!res.ok || !res.body) {
       this.set({ state: 'FAILED', error: `Download failed (${res.status}).` });
       return;
@@ -278,37 +292,70 @@ export class UpdaterService {
         hash.update(value);
         if (!out.write(value)) await new Promise<void>((r) => out.once('drain', () => r()));
         bytes += value.byteLength;
-        if (bytes > artifact.size) throw new Error('update larger than announced');
-        this.set({ progress: Math.round((bytes / artifact.size) * 100) });
+        if (bytes > pkg.size) throw new Error('update larger than announced');
+        this.set({ progress: Math.round((bytes / pkg.size) * 100) });
       }
     } finally {
       await new Promise<void>((r) => out.end(() => r()));
     }
     const digest = hash.digest('hex');
-    if (bytes !== artifact.size || digest !== artifact.sha256) {
+    if (bytes !== pkg.size || digest !== pkg.sha256) {
       await rm(partial, { force: true });
-      log.error('update checksum mismatch', { expected: artifact.sha256, got: digest, bytes });
+      log.error('update checksum mismatch', { expected: pkg.sha256, got: digest, bytes });
       this.set({ state: 'FAILED', error: 'The downloaded update did not match its checksum and was deleted.' });
       return;
     }
     await rename(partial, final);
     this.set({ state: 'VERIFIED', progress: 100 });
-    const staged = await this.stage(final, artifact, dir);
+    const staged = await this.stage(final, dir);
     if (!staged) return;
     this.stagedPath = staged;
-    const deadline = this.manifest?.critical || this.status.required ? new Date(Date.now() + this.deps.deadlineHours() * 3600_000).toISOString() : null;
+    const deadline = offer.critical || this.status.required ? new Date(Date.now() + this.deps.deadlineHours() * 3600_000).toISOString() : null;
     this.set({ state: 'STAGED', deadline });
     if (deadline) this.armDeadline(new Date(deadline).getTime());
   }
 
+  /** POST /api/v1/downloads/grant → a fresh signed URL, still checked against the signed SHA-256. */
+  private async redeemGrant(grant: string, checkUrl: string): Promise<string | null> {
+    try {
+      const res = await this.deps.fetch(new URL('/api/v1/downloads/grant', checkUrl).toString(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ grant }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { download_url?: unknown };
+      return typeof data.download_url === 'string' ? resolveArtifactUrl(data.download_url, checkUrl, this.deps.allowInsecure) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Copies the .app out of a downloaded disk image (read-only, never shown in Finder). */
+  private async extractFromDmg(dmg: string, target: string, dir: string): Promise<void> {
+    const mount = join(dir, 'mnt');
+    await rm(mount, { recursive: true, force: true });
+    await mkdir(mount, { recursive: true });
+    await run('/usr/bin/hdiutil', ['attach', '-nobrowse', '-readonly', '-noautoopen', '-mountpoint', mount, dmg], { timeout: 5 * 60_000 });
+    try {
+      const appName = (await readdir(mount)).find((n) => n.endsWith('.app'));
+      if (!appName) throw new Error('the disk image contains no application');
+      await run('/usr/bin/ditto', [join(mount, appName), join(target, appName)], { timeout: 10 * 60_000 });
+    } finally {
+      await run('/usr/bin/hdiutil', ['detach', mount, '-force'], { timeout: 60_000 }).catch(() => undefined);
+    }
+  }
+
   /** Step 3 of the trust chain: the OS code signature, same publisher as us. */
-  private async stage(file: string, artifact: ReleaseArtifact, dir: string): Promise<string | null> {
+  private async stage(file: string, dir: string): Promise<string | null> {
     try {
       if (this.deps.platform === 'macos') {
         const target = join(dir, 'staged');
         await rm(target, { recursive: true, force: true });
         await mkdir(target, { recursive: true });
-        await run('/usr/bin/ditto', ['-x', '-k', file, target], { timeout: 10 * 60_000 });
+        if (file.toLowerCase().endsWith('.dmg')) await this.extractFromDmg(file, target, dir);
+        else await run('/usr/bin/ditto', ['-x', '-k', file, target], { timeout: 10 * 60_000 });
         const appName = (await readdir(target)).find((n) => n.endsWith('.app'));
         if (!appName) throw new Error('the update archive contains no application');
         const newApp = join(target, appName);
@@ -324,9 +371,8 @@ export class UpdaterService {
         if (!theirs.valid || !mine.subject || mine.subject !== theirs.subject) throw new Error('the installer is not signed by the same publisher');
         return file;
       }
-      // Linux AppImage: the signed manifest and its SHA-256 are the trust.
+      // Linux AppImage: the signed update response and its SHA-256 are the trust.
       await chmod(file, 0o755);
-      void artifact;
       return file;
     } catch (e) {
       log.error('update failed code-signature verification', { error: String((e as Error).message ?? e) });
