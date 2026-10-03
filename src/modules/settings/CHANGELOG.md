@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.11.3 — 2026-10-03
+
+- Command palette shows a command's shortcut hint; Mail commands, Quick Steps, automatic replies and rules can be run from it.
+
 ## 1.11.2 — 2026-10-03
 
 - Sinhala and Tamil text for the Manage dialog's hints.
@@ -29,7 +33,7 @@ the root CHANGELOG.md.
 
 - Default new or missing AI display preferences to the floating widget without opening chat at startup (#127).
 
-## 1.10.0 — 2026-10-02
+## 1.10.0 — 2026-10-03
 
 - Modernized global search filters, responsive result details, file metadata and stable selection (#129).
 

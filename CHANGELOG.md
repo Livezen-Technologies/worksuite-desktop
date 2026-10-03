@@ -5,6 +5,24 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.99: Mail that works like Outlook
+
+The first three phases of the Outlook-class Mail enhancement (ENH-MAIL-03):
+
+- **All Accounts.** Inbox, Sent, Drafts, Archive and the other standard folders combine every account you have. **Sync all** refreshes them all; the status bar, footer and Settings show one sync status, with each account's details and a sync log. A failed sync no longer counts as "last synced".
+- **Organise like Outlook.** **Focused / Other** (with Move and Always move), **pin** to the top, **snooze** until later (a Snoozed view shows what's waiting), **flags with due dates** that appear in Tasks and complete both ways, **categories** shared with Calendar and Tasks, **Sweep** a sender's mail, select many and act on them at once, and view settings remembered per folder.
+- **Your keyboard.** Choose WorkSuite, **Outlook** or Gmail shortcuts; a shortcut sheet lists them and lets you change any. Favorites, Go to folder and Find in message are there too.
+- **Faster everyday work.** **Quick Steps** (several actions in one click, Ctrl+Shift+1…9, one Undo) and **Quick Parts**; importance, sensitivity and read/delivery receipts; a signature per account filled from your profile; reminders before sending without the attachment you mentioned or without a subject; @mentions.
+- **Rules** gain exceptions, rules that run only on this computer (with an alert or sound), **Run now** on a folder, and a clear error when a rule fails.
+- **Meetings in your inbox.** An invitation shows its time, place, join link, attendees and clashes, with **Accept / Tentative / Decline / Propose a new time**; updates and cancellations are applied. **My Day** beside the mail lists today's events, flagged mail and tasks — drop a message on it to schedule it.
+- **People.** A person's card shows their title, company, phone, out-of-office and recent mail; a **VIP** view; recipient suggestions from the people you write to.
+- **Automatic replies** with separate messages for colleagues and for outside senders.
+- **Safer mail.** Messages from outside your organisation are tagged, and a first-time sender is pointed out.
+
+Needs the server update (Mail 1.4.0 with four migrations, and the `mail:snoozes` schedule). Still to come: data files (PST/MBOX), report phishing, safe links, S/MIME, recall, voting and more.
+
+---
+
 ## 2026-10-03 — 0.2.98: Mail, the rest of the way
 
 Mail now covers the WorkSuite Mail SRS v2.2 and every screen of the desktop design:
