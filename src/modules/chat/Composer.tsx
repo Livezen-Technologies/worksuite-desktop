@@ -34,6 +34,7 @@ import { AiTextDialog } from '../ai/AiTextDialog';
 import { AiMenuButton } from '../ai/AiMenuButton';
 import { WRITING_TASKS, type TextTask } from '../ai/textTools';
 import type { WebsiteConversation } from './website/api';
+import { usePresence } from './presence';
 
 /**
  * The website channel (WS-WCHAT ENH-02, RDC-01/02): the same composer, for a
@@ -142,13 +143,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const found = asking ? suggestions.data : undefined;
   const people = found?.people ?? [];
   const options = found ? [...found.everyone, ...people, ...found.teams, ...found.departments].slice(0, 10) : [];
-  const ids = people.map((p) => p.id).join(',');
-  const presence = useQuery({
-    queryKey: ['chat', 'presence', ids],
-    queryFn: ({ signal }) => apiGet<{ presence: Record<string, string> }>('/api/chat/presence', { ids }, signal),
-    enabled: ids !== '',
-    staleTime: 30_000,
-  });
+  const presenceOf = usePresence(people.map((p) => p.id));
 
   const text = editing ? editing.text : draft.value;
   const setText = (v: string) => {
@@ -760,7 +755,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                 t.type === 'user' && options.findIndex((o) => o.type === 'user') === i ? 'PEOPLE IN THIS CHAT'
                   : t.type !== 'user' && t.type !== 'everyone' && options.findIndex((o) => o.type !== 'user' && o.type !== 'everyone') === i ? 'TEAMS AND DEPARTMENTS'
                     : null;
-              const state = t.type === 'user' ? (presence.data?.presence[String(t.id)] ?? 'offline') : '';
+              const state = t.type === 'user' ? (presenceOf(t.id) ?? 'offline') : '';
               const sub = t.type === 'user'
                 ? [t.detail, (PRESENCE[state]?.label ?? state).toLowerCase()].filter(Boolean).join(' · ')
                 : (t.detail ?? (t.type === 'department' ? 'Department' : 'Team'));
