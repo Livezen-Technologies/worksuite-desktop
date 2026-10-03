@@ -87,7 +87,7 @@ export interface ComposerHandle {
  * an edit shown above it; files wait in a tray until Send; a voice message
  * records in its place. `compact` is the drawer's and the call panel's size.
  */
-export function Composer({ roomId, roomName, group, reply, onClearReply, typing = [], compact, look = 'box', extras, website, channel, ref }: {
+export function Composer({ roomId, roomName, group, reply, onClearReply, typing = [], compact, look = 'box', extras, inside, website, channel, ref }: {
   roomId: string;
   roomName: string;
   group: boolean;
@@ -99,6 +99,8 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   look?: 'box' | 'pill';
   /** Actions above the box (the chat drawer's quick actions). */
   extras?: ReactNode;
+  /** A small chip inside the box, above the line you type in (the drawer's open record). */
+  inside?: ReactNode;
   /** A website visitor's conversation rather than a Team Chat room. */
   website?: WebsiteChannel;
   channel?: ComposerChannel;
@@ -825,6 +827,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
               urgent && !editing ? 'ring-danger' : editing ? 'ring-[#D97706]' : 'ring-line focus-within:ring-primary/50',
             )}
           >
+            {inside}
             {trayEl}
             <div className="flex items-end gap-0.5">
               {recording ? (
@@ -887,6 +890,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
               : 'border-line focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15',
         )}
       >
+        {inside}
         {trayEl}
         {channel ? <div className="flex gap-1" aria-label="Message formatting">{[{ label: 'Bold', mark: '*' }, { label: 'Italic', mark: '_' }, { label: 'Strikethrough', mark: '~' }, { label: 'Monospace', mark: '```' }].map(({ label, mark }) => <button key={label} type="button" className="rounded px-2 text-[11px] text-ink-2 hover:bg-subtle" onClick={() => { const el = input.current; const start = el?.selectionStart ?? text.length; const end = el?.selectionEnd ?? start; setText(`${text.slice(0, start)}${mark}${text.slice(start, end)}${mark}${text.slice(end)}`); focus(start + mark.length); }}>{label}</button>)}</div> : null}
         <div className="flex items-end gap-1">

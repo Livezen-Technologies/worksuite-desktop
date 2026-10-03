@@ -295,19 +295,20 @@ function Conversation({ roomId }: { roomId: string }) {
     }
   };
   const recordApp = tab ? APP_CATALOGUE.find((x) => x.id === tab.app) : undefined;
-  const banner =
+  // A small chip inside the message box rather than a card over the conversation (worksuite-desktop#164).
+  const chip =
     link && tab && hiddenFor !== tab.id ? (
-      <div className="relative z-10 mx-2.5 mt-2.5 flex shrink-0 items-center gap-2.5 rounded-[12px] bg-surface py-2 pr-2 pl-2.5 shadow-[0_1px_3px_rgb(var(--ws-shadow-rgb)/.12)]">
-        <AppTile icon={recordApp?.icon ?? 'link'} colour={appColour(recordApp?.id ?? 'crm')} size={30} radius={8} iconSize={15} />
-        <span className="min-w-0 flex-1 text-[12px] leading-snug text-ink-2">
-          <b className="text-ink">{tab.title}</b> is open — messages can link to it
+      <div data-record-chip className="mx-1 mb-1 flex max-w-full items-center gap-1.5 self-start rounded-full bg-subtle py-0.5 pr-0.5 pl-1 text-[11.5px] text-ink-2">
+        <AppTile icon={recordApp?.icon ?? 'link'} colour={appColour(recordApp?.id ?? 'crm')} size={18} radius={9} iconSize={10} />
+        <span className="min-w-0 truncate" title={`${tab.title} is open — messages can link to it`}>
+          <b className="text-ink">{tab.title}</b> is open
         </span>
-        <button type="button" onClick={() => void attach()} className="flex h-[30px] shrink-0 items-center gap-1.5 rounded-full bg-selection px-3 text-[12px] font-bold text-primary hover:brightness-95">
-          <Icon name="link" size={13} />
+        <button type="button" onClick={() => void attach()} title="Attach a link to it to the conversation" className="flex h-5 shrink-0 items-center gap-1 rounded-full bg-selection px-2 text-[11px] font-bold text-primary hover:brightness-95">
+          <Icon name="link" size={11} />
           Attach record
         </button>
-        <button type="button" aria-label="Hide" title="Hide" onClick={() => setHiddenFor(tab.id)} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-ink-3 hover:bg-subtle hover:text-ink">
-          <Icon name="x" size={13} />
+        <button type="button" aria-label="Hide" title="Hide" onClick={() => setHiddenFor(tab.id)} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-ink-3 hover:bg-surface hover:text-ink">
+          <Icon name="x" size={11} />
         </button>
       </div>
     ) : null;
@@ -365,7 +366,7 @@ function Conversation({ roomId }: { roomId: string }) {
         </button>
       </div>
       <div className="min-h-0 flex-1">
-        <Thread roomId={roomId} room={room} mini bare drawer banner={banner} onTyping={setTyping} rooms={rooms.data?.data.rooms ?? []} />
+        <Thread roomId={roomId} room={room} mini bare drawer boxChip={chip} onTyping={setTyping} rooms={rooms.data?.data.rooms ?? []} />
       </div>
     </>
   );
