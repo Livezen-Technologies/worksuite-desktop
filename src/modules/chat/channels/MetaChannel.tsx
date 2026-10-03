@@ -67,7 +67,7 @@ export function MetaChannel({ platform, accounts, loading, error, retry, onConne
   ) : (
     <>
       {down.map((a) => (
-        <div key={a.id} role="status" className="mx-3 mb-2 flex items-start gap-2 rounded-[8px] bg-warning-bg p-2.5 text-[12px] text-[#9A4A06] dark:text-warning">
+        <div key={a.id} role="status" className="mx-3 mb-2 flex items-start gap-2 rounded-[8px] bg-warning-bg p-2.5 text-[12px] text-warning-ink">
           <Icon name="wifi-off" size={14} className="mt-px shrink-0" />
           <span className="min-w-0 flex-1">
             <b className="font-semibold">{text('{name} is not connected.', { name: a.name })}</b> {a.status_note ?? text('Messages to it are not arriving here.')}
@@ -204,7 +204,7 @@ function MetaThreadView({ id, onReconnect }: { id: string; onReconnect: (a: Meta
             <span className="truncate">{[c.username ? `@${c.username}` : null, text('{platform} · on {account}', { platform: label, account: c.account.name })].filter(Boolean).join(' · ')}</span>
           </span>
         </span>
-        {!isMetaConnected(c.account) ? <span className="rounded-full bg-warning-bg px-2 py-px text-[11px] font-semibold text-[#9A4A06] dark:text-warning">{text('Not connected')}</span> : null}
+        {!isMetaConnected(c.account) ? <span className="rounded-full bg-warning-bg px-2 py-px text-[11px] font-semibold text-warning-ink">{text('Not connected')}</span> : null}
       </header>
       <div ref={scroller} className="flex min-h-0 flex-1 flex-col gap-[9px] overflow-y-auto px-4 py-3 scroll-thin">
         {data.has_more ? <div className="self-center text-[11px] text-ink-3">{text('Only the latest 100 messages are shown.')}</div> : null}

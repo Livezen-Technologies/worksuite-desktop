@@ -182,8 +182,33 @@ AES-256-GCM under the database-derived key, only with offline storage allowed).
 
 Modules' side menus and panes are wrapped in `SidePanel` (`src/components/SidePanel.tsx`): a handle on the inner
 edge hides the panel, a 36 px strip with the panel icon shows it again, and the choice is kept per panel id in
-`localStorage` (`ws.panel.<id>`, a view preference, never data). Panels with a toggle of their own (Chat's and
-Drive's details, PDF Studio's panels) keep it.
+`localStorage` (`ws.panel.<id>`, a view preference, never data). The handle is invisible until the pointer is over
+the panel or the handle has keyboard focus (worksuite-desktop#155), in every module alike, so it never sits over a
+list or the content beside it. Panels with a toggle of their own (Chat's and Drive's details, PDF Studio's panels)
+keep it.
+
+## Theme
+
+One rule (worksuite-desktop#155): **every module's content follows the app theme** — Light, Dark, or the system's,
+set in Settings and written as `data-theme` on `<html>` (`src/core/app-state.ts`). Only the shell's chrome (title
+bar and sidebar, `bg-navy`) is the same navy in both themes; it is the frame, not content. Inside it:
+
+- Colours come from the tokens in `src/styles.css` (`bg-surface`, `bg-ground`, `bg-subtle`, `bg-selection`,
+  `text-ink`/`-2`/`-3`, `border-line`, `bg-rail` for a module's narrow rail, `bg-warning-bg` with
+  `text-warning-ink` for a warning banner, the `success`/`warning`/`danger` tones for status). Each token has its
+  dark value, so a screen built from them is right in both themes with no `dark:` variant.
+- A hex colour (`bg-[#FBFBFD]`, `text-[#9A4A06]`) or `bg-white` in module content is a bug unless it has its
+  `dark:` partner — and a new one should be a token instead. Data that brings its colour (an app, a calendar, a
+  person) uses `DATA_TEXT` / `avatarTone` (`src/components/ui.tsx`).
+- The exceptions are deliberate and few: a QR code is black on a white plate in both themes (a camera needs the
+  contrast — `QrCode` in `src/modules/chat/channels/LinkPhone.tsx`), and so is content somebody else designed.
+
+Where Mail differs today: a message's body is drawn on a white plate in the dark theme unless "Dark mode for
+email content too" is on (Mail settings; off by default), and a designed (HTML-template) mail always is (`MessageView.tsx`, `FileViewer.tsx`,
+`SignaturePreview.tsx`), so a dark Mail shows a light reading pane. That is the "content somebody else designed"
+exception applied to every message by default; making the dark body the default for plain mail is a preference
+change in Mail, not a token, and is left to Mail's own work. WhatsApp follows the rule throughout: its list, rail,
+banners and empty states use the tokens above.
 
 ## Checkboxes
 
