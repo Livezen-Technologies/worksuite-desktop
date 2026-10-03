@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.15.0 — 2026-10-03
+
+- Setup banner (#210): one quiet 56–64px row on the new shared InfoBanner — Import email as the one primary action, Add signature and Make default mail app secondary, steps already done ticked, gone by itself when all three are done; Dismiss collapses it smoothly, is saved per person with Undo for five seconds, and Settings › Mail › Appearance & reading › Show setup tips brings it back.
+
 ## 1.14.0 — 2026-10-03
 
 - Link to tender, customer or deal: from the list's right-click menu (one message or a selection) and the reader's More; the picker searches tenders, customers and deals with the sender's own records first; the reader shows linked records as chips that open them and unlink with ✕.

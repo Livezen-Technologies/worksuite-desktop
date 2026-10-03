@@ -5,6 +5,14 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.140 — 2026-10-03
+
+- **The chat drawer looks like a layer, not part of the page (#211).** It has a clear left edge and a soft shadow in both themes, the header, messages and message box line up on one edge, and messages have the same space on both sides. The header leaves room for the name — the full name shows on hover — with Open in new window and Minimise now under **⋯**. Drag the left edge to resize between 360 and 640px; the width is remembered.
+
+## 0.2.139 — 2026-10-03
+
+- **A quieter setup banner in Mail (#210).** "Outlook shortcuts are on · Finish setting up Mail" is now one slim row with a little space around it, so it no longer runs into the mailbox header. **Import email** is the main button, Add signature and Make default mail app sit beside it, and steps you've already done show a tick; once all three are done the banner goes by itself. Dismissing it slides it away smoothly with **Undo** for five seconds, and it stays gone on every computer — turn it back on in **Settings › Mail › Appearance & reading › Show setup tips**. In a narrow window the extra buttons move into **More**.
+
 ## 0.2.138 — 2026-10-03
 
 - **You choose whether updates download by themselves.** Settings › Desktop now starts with the updates: where they
