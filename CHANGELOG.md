@@ -5,6 +5,13 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.135 — 2026-10-03
+
+- **WhatsApp, tidied up (#155).** Each of your numbers sits in the left rail under WhatsApp, with a green, orange or red dot for its connection and its own unread count; click one to see only its chats, click again for all. When a number is disconnected, **Link again** shows the QR code right in the side pane, and that number's conversations are dimmed with a note that you can't reply until it's linked. Conversation rows are easier to scan: the time, unread count and "waiting" state share one column, times read today / Yesterday / weekday / date, voice messages say "Voice note", unknown numbers get a steady colour, and the number's name shows only when you're looking at all numbers. With nothing open, the pane says **Pick a conversation** — and **⌘N / Ctrl+N** now really starts a new WhatsApp chat.
+- **Tabs:** there's only ever one Home tab — "+", ⌘T and Duplicate switch to it instead of opening another — and tabs are as wide as their title.
+- **Side panels:** the collapse handle appears only when you hover the panel or tab to it, in every module.
+- **Dark mode:** WhatsApp and the channel settings now follow the light and dark theme; only the title bar and sidebar stay navy.
+
 ## 0.2.134 — 2026-10-03
 
 - **Link mail to a tender, customer or deal.** Right-click a message (or a selection) or open the reader's **More** and choose **Link to tender, customer or deal…**: pick the kind, search by name or reference, and the sender's own customer record and tenders are suggested first. Linked records show as chips under the subject — click to open the tender or deal, ✕ to unlink — and everyone who can read the mailbox sees them. A tender's new **Mail** tab lists the email linked to it; click one to open it in Mail. Offered to people who can open Tenders or the CRM; the server decides which kinds each person may link. Needs the server update (Mail 1.12.0, migration `2026-10-12-000100_MailRecordLinks`).
