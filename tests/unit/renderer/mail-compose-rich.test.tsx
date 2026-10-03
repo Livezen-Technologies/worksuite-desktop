@@ -270,7 +270,7 @@ describe('composing', () => {
     net.call.mockImplementation(async (ch: string) => (ch === 'offline:getDraft' ? { content: { to: 'pat@example.org', cc: '', bcc: '', subject: 'Re: BOQ', body: `Will do\nTomorrow${QUOTE}`, from: '1' } } : null));
     const { box } = compose({ mode: 'reply', to: 'pat@example.org', subject: 'Re: BOQ', quote: QUOTE, inReplyTo: '<m@x>' });
     await waitFor(() => expect(box().innerHTML).toBe('<div>Will do</div><div>Tomorrow</div>'));
-    expect(screen.getByText('Draft restored from this computer')).toBeTruthy();
+    expect(screen.getByText('Restored from this computer')).toBeTruthy();
     const quoted = screen.getByRole('region', { name: 'Quoted email' });
     expect(within(quoted).getByRole('button', { name: /On Thu 1 Oct Pat Lee wrote:/ }).getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(within(quoted).getByRole('button', { name: /On Thu 1 Oct Pat Lee wrote:/ }));
@@ -301,7 +301,7 @@ describe('composing', () => {
     }
     fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Plan' } });
     fireEvent.click(screen.getByRole('radio', { name: /Tomorrow morning/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Send later…' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule' }));
     await waitFor(() => expect(net.post).toHaveBeenCalledWith('/api/mail/send', expect.objectContaining({ to: ['ann@example.org'], subject: 'Plan', body_html: '<div>Hi <b>Ann</b></div><ul><li>One</li></ul>', body_text: 'Hi Ann\n- One', schedule_at: expect.any(String) })));
   });
 
@@ -322,7 +322,7 @@ describe('composing', () => {
     expect(box.innerHTML).toBe('<div>Rewritten by AI</div><div>Second line</div><div><br></div><div><br></div><div>-- </div><div>Hasarinda</div><div>Livezen</div>');
     // The quote is untouched and still goes out below.
     fireEvent.click(screen.getByRole('radio', { name: /Tomorrow morning/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Send later…' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule' }));
     await waitFor(() => expect(net.post).toHaveBeenCalled());
     const sent = net.post.mock.calls.find((c) => c[0] === '/api/mail/send')![1] as { body_html: string; body_text: string };
     expect(sent.body_html).toContain('<blockquote style="margin: 0 0 0 0.8ex; border-left: 1px solid #cccccc; padding-left: 1ex">Could you confirm the BOQ?<br>Thanks</blockquote>');
@@ -334,7 +334,7 @@ describe('composing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove quoted email' }));
     expect(screen.queryByRole('region', { name: 'Quoted email' })).toBeNull();
     fireEvent.click(screen.getByRole('radio', { name: /Tomorrow morning/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Send later…' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule' }));
     await waitFor(() => expect(net.post).toHaveBeenCalledWith('/api/mail/send', expect.objectContaining({ body_html: '', body_text: '' })));
   });
 
@@ -352,7 +352,7 @@ describe('composing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove ann@example.org' }));
     expect(screen.queryByText('ann@example.org')).toBeNull();
     fireEvent.click(screen.getByRole('radio', { name: /Tomorrow morning/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Send later…' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule' }));
     await waitFor(() => expect(net.post).toHaveBeenCalledWith('/api/mail/send', expect.objectContaining({ to: ['nimal@example.org'] })));
   });
 
@@ -367,7 +367,7 @@ describe('composing', () => {
     expect(net.post).toHaveBeenCalledWith('/api/mail/upload/from-drive', { file_id: 41 });
     expect(screen.getByText(/ · from Files$/)).toBeTruthy();
     fireEvent.click(screen.getByRole('radio', { name: /Tomorrow morning/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Send later…' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule' }));
     await waitFor(() => expect(net.post).toHaveBeenCalledWith('/api/mail/send', expect.objectContaining({ attachments: ['d1'] })));
   });
 
@@ -383,27 +383,28 @@ describe('composing', () => {
     expect(await screen.findByText('notes.pdf')).toBeTruthy();
     expect(net.request).toHaveBeenCalledWith('POST', '/api/mail/upload', expect.anything());
     fireEvent.click(screen.getByRole('radio', { name: /Tomorrow morning/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Send later…' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule' }));
     await waitFor(() => expect(net.post).toHaveBeenCalledWith('/api/mail/send', expect.objectContaining({ attachments: ['t1'], body_html: expect.stringContaining('<img src="data:image/png;base64,iVBORw0KGgo=" alt="shot" width="120"') })));
   });
 
-  it('shows Send as one split control of equal halves, with later options behind the chevron', () => {
+  // #213: the shared split button; Send later is in its menu (and the side panel) — the separate "Send later…" button is gone.
+  it('shows Send as the shared split button, with Send later behind its chevron and no second Send later button', () => {
     compose({ mode: 'new', to: 'a@b.co' });
     const group = screen.getByRole('group', { name: 'Send options' });
     const [send, more] = within(group).getAllByRole('button');
     expect(send!.textContent).toBe('Send');
-    expect(send!.getAttribute('type')).toBe('submit');
-    expect(more!.getAttribute('aria-label')).toBe('Send later options');
-    // Both halves take the group's height; neither sets its own.
-    expect(group.className).toContain('h-[38px]');
-    for (const b of [send!, more!]) {
-      expect(b.className).toContain('h-full');
-      expect(b.className).not.toMatch(/\bh-(8|9|\[\d+px\])\b/);
-    }
+    expect(more!.getAttribute('aria-label')).toBe('More send options');
+    // Both halves are the shared primary action's (one height, one rounded outline).
+    expect(send!.className).toContain('h-10');
+    expect(more!.className).toContain('h-10');
+    expect(screen.queryByRole('button', { name: /^Send later/ })).toBeNull();
     fireEvent.click(more!);
-    expect(screen.getByRole('menu')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Send later…' }).className).toContain('h-[38px]');
-    expect(screen.getByRole('button', { name: 'Discard draft' }).className).toContain('text-danger');
+    const menu = screen.getByRole('menu');
+    expect(within(menu).getAllByRole('menuitem').map((i) => i.textContent)).toEqual([expect.stringMatching(/^Tomorrow morning/), expect.stringMatching(/^Monday morning/), expect.stringMatching(/^Pick a date and time/)]);
+    // A ghost Discard: no red until hovered.
+    const discard = screen.getByRole('button', { name: 'Discard draft' });
+    expect(discard.className).not.toMatch(/(^| )text-danger/);
+    expect(discard.textContent).toBe('Discard');
   });
 });
 
@@ -417,7 +418,7 @@ describe('message options, Quick Parts and send checks (ENH-MAIL-03 P2)', () => 
     fireEvent.click(screen.getByRole('button', { name: /Options/ }));
     fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitemcheckbox', { name: /Request a read receipt/ }));
     fireEvent.click(screen.getByRole('radio', { name: /Tomorrow morning/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Send later…' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule' }));
     await waitFor(() => expect(net.post).toHaveBeenCalledWith('/api/mail/send', expect.objectContaining({ options: { importance: 'high', sensitivity: 'confidential', read_receipt: true } })));
   });
 
@@ -485,7 +486,7 @@ describe('@mentions (DMO-CMP-14)', () => {
     expect(box().textContent).not.toContain('@Nim\u00a0');
     expect(await screen.findByText('Nimal Perera')).toBeTruthy();
     fireEvent.click(screen.getByRole('radio', { name: /Tomorrow morning/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Send later…' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule' }));
     await waitFor(() => expect(net.post).toHaveBeenCalledWith('/api/mail/send', expect.objectContaining({ to: ['ann@example.org', 'nimal@example.org'] })));
   });
 
@@ -546,7 +547,7 @@ describe('signatures in the composer (worksuite-desktop#166)', () => {
     const { box } = compose({ mode: 'reply', to: 'pat@example.org', subject: 'Re: BOQ', quote: QUOTE, inReplyTo: '<m@x>' });
     await waitFor(() => expect(box().innerHTML).toContain('<div>Asha</div>'));
     fireEvent.click(screen.getByRole('radio', { name: /Tomorrow morning/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Send later…' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule' }));
     await waitFor(() => expect(net.post).toHaveBeenCalled());
     const sent = net.post.mock.calls.find((c) => c[0] === '/api/mail/send')![1] as { body_html: string; body_text: string };
     expect(sent.body_html.indexOf('<blockquote')).toBeLessThan(sent.body_html.indexOf('<div>Asha</div>'));

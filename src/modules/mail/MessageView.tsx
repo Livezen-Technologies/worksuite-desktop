@@ -267,7 +267,7 @@ export function MessageView(p: MessageViewProps) {
     if (!m) return;
     if (mode === 'forward') return p.onReply({ mode, subject: /^fwd?:/i.test(m.subject) ? m.subject : `Fwd: ${m.subject}`, quote, mailbox: ref.mailbox });
     const others = mode === 'reply_all' ? [m.from_email, ...m.to].filter((a, i, all) => a && all.indexOf(a) === i && a.toLowerCase() !== (p.account?.email ?? '').toLowerCase()) : [m.from_email];
-    p.onReply({ mode, to: others.join(', '), cc: mode === 'reply_all' ? m.cc.join(', ') : undefined, subject: re(m.subject), quote, inReplyTo: m.message_id, mailbox: ref.mailbox });
+    p.onReply({ mode, to: others.join(', '), cc: mode === 'reply_all' ? m.cc.join(', ') : undefined, subject: re(m.subject), quote, inReplyTo: m.message_id, mailbox: ref.mailbox, source: ref });
   };
   const addContact = async () => {
     if (!m) return;
