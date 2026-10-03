@@ -39,6 +39,7 @@ import { LauncherSettings, ShortcutRecorder } from './LauncherSettings';
 import { updateLauncherPrefs, useLauncherPrefs } from '../../core/launcher-prefs';
 import { DEFAULT_LAUNCHER_SHORTCUT } from '@shared/launcher';
 import { SyncButton } from '../../components/SyncButton';
+import { UpdateActions, updateHint } from '../../app/screens/UpdateScreens';
 
 /** Settings / profile tree (§4.9). Anything the organization's policy decides is shown locked, with the reason. */
 const SECTIONS = [
@@ -922,10 +923,27 @@ function Devices() {
 
 function DesktopSection({ prefs }: { prefs: Preferences }) {
   const lock = isLocked('updateChannel');
+  const autoLock = isLocked('autoUpdate');
   const info = useStore(app, (s) => s.info);
+  const u = useStore(app, (s) => s.update);
+  const auto = prefs.autoUpdate !== false;
   return (
     <>
       <H title="Desktop" />
+      {/* Updates: whether new versions download by themselves, whether they say so, and where they stand now. */}
+      <Row label="Updates" hint={updateHint(u, auto)}>
+        <UpdateActions />
+      </Row>
+      <Row
+        label="Download updates automatically"
+        lock={autoLock}
+        hint="New versions download in the background and install when you restart WorkSuite. Off: WorkSuite tells you about each one and waits for you to download it. Security and required updates download either way."
+      >
+        <Switch label="Download updates automatically" checked={auto} disabled={!!autoLock} onChange={(v) => void updatePrefs({ autoUpdate: v })} />
+      </Row>
+      <Row label="Update notifications" hint="A notification when a new version is available or ready to install. The update icon in the title bar shows either way.">
+        <Switch label="Update notifications" checked={prefs.updateNotifications !== false} onChange={(v) => void updatePrefs({ updateNotifications: v })} />
+      </Row>
       <Row label="Update channel" lock={lock} hint="Beta and Development receive new versions earlier.">
         <Select
           label="Update channel"
@@ -1598,7 +1616,7 @@ export function About() {
   const { navigate } = useTab();
   const info = useStore(app, (s) => s.info);
   const u = useStore(app, (s) => s.update);
-  const [checking, setChecking] = useState(false);
+  const auto = useStore(app, (s) => s.prefs?.autoUpdate !== false);
   return (
     <>
       <H title="About WorkSuite Desktop" />
@@ -1610,36 +1628,8 @@ export function About() {
       <Row label="Channel">
         <span className="text-[13px] text-ink-2 capitalize">{u?.channel}</span>
       </Row>
-      <Row
-        label="Updates"
-        hint={
-          u
-            ? u.state === 'STAGED'
-              ? `Version ${u.availableVersion} is ready to install.`
-              : u.state === 'DOWNLOADING'
-                ? `Downloading ${u.availableVersion}… ${u.progress}%`
-                : u.state === 'AVAILABLE'
-                  ? `Version ${u.availableVersion} is available.${u.installBlockedReason ? ` ${u.installBlockedReason}` : ''}`
-                  : (u.error ?? (u.lastCheckedAt ? `Up to date · checked ${relative(u.lastCheckedAt)}` : 'Not checked yet'))
-            : undefined
-        }
-      >
-        {u?.state === 'STAGED' ? (
-          <Button variant="primary" onClick={() => void call('updates:installNow', {})}>
-            Restart to update
-          </Button>
-        ) : (
-          <Button
-            loading={checking}
-            onClick={async () => {
-              setChecking(true);
-              await call('updates:check').catch(() => undefined);
-              setChecking(false);
-            }}
-          >
-            Check for updates
-          </Button>
-        )}
+      <Row label="Updates" hint={updateHint(u, auto)}>
+        <UpdateActions />
       </Row>
       <Row label="Components">
         <span className="font-mono text-[12px] text-ink-3">

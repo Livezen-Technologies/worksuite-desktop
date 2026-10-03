@@ -59,6 +59,8 @@ export function defaultPreferences(): Preferences {
     tabSuspendMinutes: 30,
     language: 'en',
     updateChannel: 'stable',
+    autoUpdate: true,
+    updateNotifications: true,
     sidebarMode: 'expanded',
     pinnedApps: [],
     shortcuts: {},
@@ -136,6 +138,7 @@ export class SettingsService {
     if (p.notification_min_privacy === 'GENERIC') out.push({ key: 'lockedNotificationSender', reason: 'Your organization limits what notifications may show.' });
     if (p.auto_update === 'enforced') {
       out.push({ key: 'updateChannel', reason: 'Your organization chooses the update channel.' });
+      out.push({ key: 'autoUpdate', reason: 'Your organization keeps WorkSuite up to date automatically.' });
     }
     if (p.required_background_services.includes('notifications')) {
       out.push({ key: 'backgroundServices', reason: 'Your organization requires background notifications.' });
@@ -163,7 +166,10 @@ export class SettingsService {
     // What a banner shows while locked is never more than the organization lets any banner show (#114).
     if (pol.notification_min_privacy !== 'FULL') p.lockedNotificationPreview = false;
     if (pol.notification_min_privacy === 'GENERIC') p.lockedNotificationSender = false;
-    if (pol.auto_update === 'enforced') p.updateChannel = pol.update_channel;
+    if (pol.auto_update === 'enforced') {
+      p.updateChannel = pol.update_channel;
+      p.autoUpdate = true;
+    }
     if (pol.required_background_services.includes('notifications')) p.backgroundServices.notifications = true;
     if (pol.required_background_services.includes('realtime')) p.backgroundServices.realtime = true;
     return p;

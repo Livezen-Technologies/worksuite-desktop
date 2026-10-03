@@ -8,6 +8,7 @@ import { prettyAccelerator } from '../core/commands';
 import { Icon } from '../components/Icon';
 import { ClockControl } from '../app/overlays/ClockPopover';
 import { ActiveCalls } from '../app/ActiveCalls';
+import { UpdateIndicator } from '../app/screens/UpdateScreens';
 import { CountBadge, cx } from '../components/ui';
 import { UserPicture, useMe } from '../components/UserPicture';
 import { unreadLabel, useAssistantActivity } from '../app/overlays/AiDock';
@@ -16,9 +17,10 @@ import { useGuest } from '../core/session';
 
 /**
  * Title / top bar, 52 px (§4.12 shared shell components): WorkSuite mark,
- * organization selector, global search, clock in / out, network pill, transfers,
- * notifications, AI, profile — and the window controls (native traffic
- * lights on macOS, the OS overlay controls elsewhere).
+ * organization selector, global search, clock in / out, network pill, a new
+ * version (the update icon), transfers, notifications, AI, profile — and the
+ * window controls (native traffic lights on macOS, the OS overlay controls
+ * elsewhere).
  */
 export function TitleBar() {
   const status = useStore(app, (s) => s.status);
@@ -82,6 +84,8 @@ export function TitleBar() {
         {pill.text}
       </button>
 
+      {/* A newer version: on offer, on its way or ready to install (Settings › Desktop › Updates). */}
+      <UpdateIndicator />
       {guest ? null : <TopButton icon="transfers" label={t('shell.transfers')} onClick={() => openOverlay('transfers')} active={overlay === 'transfers'} count={activeTransfers} countTone="indigo" />}
       {hasChat ? <TopButton icon="chat" label="Chat" onClick={() => (dock === 'chat' ? minimiseChatDrawer() : openChatDrawer(null))} active={dock === 'chat'} count={status?.unread.chat ?? 0} /> : null}
       {guest ? null : <TopButton icon="bell" label={t('nav.notifications')} onClick={() => openOverlay('notifications')} active={overlay === 'notifications'} count={unread} />}

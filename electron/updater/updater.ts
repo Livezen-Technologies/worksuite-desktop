@@ -34,6 +34,11 @@ const run = promisify(execFile);
  *     (BETA, DEV, INTERNAL), where steps 1 and 2 are the trust — as they are
  *     for a Linux AppImage. A signed build never takes an unsigned update.
  *
+ * A new version downloads by itself unless the person turned that off in
+ * Settings › Desktop (and their organization lets them): then it stays
+ * AVAILABLE until they press Download. A critical or required one downloads
+ * either way.
+ *
  * Before restarting it asks what would be interrupted (uploads, queued
  * changes, drafts, a call) and offers Restart later / Review activity. A
  * critical update installs at its deadline (default 24 h) after warnings at
@@ -50,6 +55,11 @@ export interface UpdaterDeps {
   /** The update check for this channel, or null when no Update Center is configured. */
   updateUrl: (channel: UpdateChannel) => string | null;
   channel: () => UpdateChannel;
+  /**
+   * Whether a new version downloads by itself (Settings › Desktop › Updates). Off, it is offered and waits for the
+   * person's Download; a critical or required update downloads either way.
+   */
+  autoDownload: () => boolean;
   busy: () => BusyReport;
   deadlineHours: () => number;
   allowInsecure: boolean;
@@ -236,13 +246,35 @@ export class UpdaterService {
         installBlockedReason: blocked,
         lastCheckedAt: new Date().toISOString(),
       });
-      if (blocked === null) await this.download(this.offer);
+      if (blocked === null && (this.deps.autoDownload() || this.offer.critical || this.status.required)) await this.download(this.offer);
       return this.get();
     } catch (e) {
       log.info('update check failed', { error: String((e as Error).message ?? e) });
       this.set({ state: 'IDLE', error: 'Could not check for updates.', lastCheckedAt: new Date().toISOString() });
       return this.get();
     }
+  }
+
+  /**
+   * The person's Download: fetches the offered version now (asking the Update Center first when nothing current is
+   * on offer) and stages it, for Restart to update. A build that cannot install updates, or nothing newer, leaves the
+   * status as it is.
+   */
+  async downloadNow(): Promise<UpdateStatus> {
+    if (this.checking) await this.checking;
+    if (this.status.state !== 'AVAILABLE' || !this.offer) await this.check();
+    const offer = this.offer;
+    if (this.status.state !== 'AVAILABLE' || !offer || this.status.installBlockedReason) return this.get();
+    this.checking = this.download(offer)
+      .catch((e: unknown) => {
+        log.info('update download failed', { error: String((e as Error).message ?? e) });
+        this.set({ state: 'FAILED', error: 'The update could not be downloaded.' });
+      })
+      .then(() => this.get())
+      .finally(() => {
+        this.checking = null;
+      });
+    return this.checking;
   }
 
   /** An unsigned build may take an update only from a test channel, and only when this computer asked for one. */

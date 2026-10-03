@@ -5,6 +5,22 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.138 — 2026-10-03
+
+- **You choose whether updates download by themselves.** Settings › Desktop now starts with the updates: where they
+  stand, with the one next step (Check for updates, Download, or Restart to update), a **Download updates
+  automatically** switch, and the update channel. Turned off, WorkSuite tells you about a new version and waits for
+  you to press Download. Security and required updates still download either way. Where your organisation's policy
+  enforces updates (the server's default, `auto_update: enforced`), the switch stays on and says so; an
+  administrator sets the policy to `user_choice` to leave it to each person.
+- **A new version shows in the title bar.** A download icon appears beside the connection pill while a newer version
+  is on offer (blue dot), downloading, or ready to install (green). It opens a panel with the installed and new
+  versions, the download's progress, What's new, Update settings, and Download or Restart to update. Restarting still
+  asks first if uploads, queued changes or a call would be interrupted.
+- **And as a notification.** WorkSuite sends one system notification per version: when it is ready to install, or,
+  with automatic downloads off, when it is available to download. Clicking it opens the update settings. Quiet hours
+  and paused notifications keep it silent (the title-bar icon still shows), and **Update notifications** in
+  Settings › Desktop turns it off.
 ## 0.2.137 — 2026-10-03
 
 - **A new website chat widget, with your team's faces (#199).** Visitors now see who's online — up to three real profile photos with green dots — and how quickly you usually reply, can type their question straight into the home screen, and see the agent who joins their chat with photo, name and role. Outside business hours, or when nobody's online, the widget says when you're back and offers a leave-a-message form and WhatsApp; replies to those messages are emailed to the visitor. Set it up under **Website chats › Setup › Widget**: brand colour, logo, greeting, quick links, which staff are shown and how, business hours, away message, WhatsApp number, launcher style and greeting card — with a live preview. Staff no longer show as Online on the widget for minutes after they've gone offline. Needs the server update (Communication 1.18.0, migration `2026-10-12-000100_WidgetModernDesign`).
@@ -45,6 +61,9 @@ person who has to live with the change — what it does, and where it bites.
 - Builds that are not code-signed still never install an update by themselves — they say a new version is out and leave installing it to you. Only the Linux AppImage updates itself without a code signature, trusting the signed answer and its checksum.
 - **Beta builds update themselves on Windows, Mac and Linux.** A build that is not code-signed (today's Beta builds) now downloads and installs a new version by itself when it comes from a test channel — Beta, Dev or Internal — and this computer is set to that channel. It trusts the Update Center's signed answer and the file's SHA-256, the same as the Linux AppImage already did; on a Mac the app inside the disk image must still pass macOS's own integrity check. Stable never installs an unsigned update, and a signed build never takes an unsigned one.
 - Installing still waits for you: WorkSuite asks before restarting if uploads, queued changes, drafts or a call would be interrupted.
+- **Getting there from an older version (#192).** Installs older than 0.2.131 still look for updates in the old place,
+  the release manifest on your WorkSuite server. Publish 0.2.131 there as well as in the Update Center, or they never
+  hear of it. From 0.2.131 on, only the Update Center is read.
 
 ## 0.2.130 — 2026-10-03
 
@@ -53,6 +72,8 @@ person who has to live with the change — what it does, and where it bites.
   read as +94 7x xxx xxxx, with the connection time and device where the server gives them. Check connection reports
   the provider's answer, settings actions no longer overlap, and Unlink from phone moves into an action menu (still
   asking first). Duplicate account cards and organisation ownership are still to come.
+- The connection time and device appear only once the server sends them (its companion change,
+  Livezen-Technologies/worksuite#74, is not merged yet). Until then those lines are simply left out.
 
 ## 0.2.129 — 2026-10-03
 
@@ -65,16 +86,14 @@ person who has to live with the change — what it does, and where it bites.
 
 ## 0.2.128 — 2026-10-03
 
-Website chats: saved replies counted, and each website's own file limit.
-
-With WorkSuite's Communication 1.13.0:
-
-- **Saved replies you use most come first.** Sending a reply you started from a saved reply ("/" or a chip) counts it,
-  and the chips above the box are the six your team uses most.
+- **Website chats: the saved replies your team uses most come first.** Sending a reply you started from a saved reply
+  ("/" or a chip) counts it, and the six chips above the box are the ones used most.
 - **Files follow the website's own limit.** A website set to take larger files no longer has them refused at 5 MB on
   this computer; one set lower refuses a bigger file before it uploads.
 - **A chat whose owner went offline comes to you** as a Transfer to you card from WorkSuite, with "<owner> went offline",
   when you have been in that chat longest; if nobody takes it, it goes to everybody covering the website.
+- Needs the server update (Communication 1.13.0). An older server ignores the count and sends no file limit, and this
+  computer keeps the 5 MB it used before.
 
 ## 0.2.127 — 2026-10-03
 

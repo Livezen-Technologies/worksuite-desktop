@@ -1058,6 +1058,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('updates:status', () => ctx.updater.get());
   router.handle('updates:check', () => ctx.updater.check());
   router.handle('updates:installNow', (input) => ctx.updater.install(!!input?.force));
+  router.handle('updates:download', () => ctx.updater.downloadNow());
   router.handle('updates:restartLater', () => ctx.updater.restartLater());
   router.handle('updates:setChannel', (input) => {
     if (ctx.settings.locks().some((l) => l.key === 'updateChannel')) throw new DesktopError('POLICY_DENIED', 'Your organization chooses the update channel.');
@@ -1090,6 +1091,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     const prefs = ctx.settings.update(patch);
     if (before.startWithOs !== prefs.startWithOs || before.startMinimized !== prefs.startMinimized) applyAutostart(prefs.startWithOs, prefs.startMinimized);
     if (before.hardwareAcceleration !== prefs.hardwareAcceleration) writeBootConfig(paths().bootConfig, { hardwareAcceleration: prefs.hardwareAcceleration });
+    // Turned back on with a version on offer: it downloads now rather than at the next check.
+    if (before.autoUpdate === false && prefs.autoUpdate !== false && ctx.updater.get().state === 'AVAILABLE') void ctx.updater.check();
     return { preferences: prefs, locks: ctx.settings.locks() };
   });
 

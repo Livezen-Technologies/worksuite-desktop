@@ -2,7 +2,7 @@ import type { AiDisplay } from '@shared/types';
 import { app, type AppState } from './app-state';
 import { createStore, useStore } from './store';
 
-export type Overlay = 'search' | 'palette' | 'launcher' | 'notifications' | 'transfers' | 'org' | 'profile' | 'network' | 'clock' | null;
+export type Overlay = 'search' | 'palette' | 'launcher' | 'notifications' | 'transfers' | 'org' | 'profile' | 'network' | 'clock' | 'update' | null;
 export type Dock = 'ai' | 'activity' | 'chat' | null;
 
 export const ui = createStore<{ overlay: Overlay; dock: Dock; sidebarCollapsed: boolean; searchSeed: string; chatRoom: string | null; chatMinimised: string[] }>({
