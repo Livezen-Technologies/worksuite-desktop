@@ -166,6 +166,9 @@ export interface MessageDetail {
   subject: string;
   to: string[];
   cc: string[];
+  /** Blind copies, on mail the reader sent; Reply-To when the sender set one (#212: the header's details). */
+  bcc?: string[];
+  reply_to?: string | null;
   body_html: string;
   is_starred: boolean;
   is_important?: boolean;
@@ -202,6 +205,8 @@ export interface MessageContext {
     is_customer?: boolean;
     is_vip?: boolean;
     client_id?: number | null;
+    /** The contact's or colleague's photo, when the server has one (#212). */
+    photo_url?: string | null;
   } | null;
   /** Recent mail with the sender, newest first. */
   history?: { total: number; first: string | null; last: string | null; messages: Array<{ id: number; subject: string; at: string; is_read: boolean; has_attachment: boolean; folder: string | null; slug: string | null }> };
@@ -400,6 +405,8 @@ export interface MailPrefs {
   plainTextSenders?: string[];
   /** The Apps pane beside the message (DMO-INT-01). */
   appsPane?: boolean;
+  /** The reading pane header (#212): Star and More only (the default), or more of the actions as buttons too. */
+  headerIcons?: 'few' | 'more';
   /** Catch up after an absence (DMO-AI-01): on unless turned off. */
   catchUp?: boolean;
   /** Immersive reader settings (DMO-RD-04). */

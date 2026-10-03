@@ -992,6 +992,8 @@ function MailWorkspace({ active }: ModuleProps) {
           localStore={localStore}
           offline={offline}
           account={account}
+          combined={unified}
+          onOpenFolder={(r) => pick({ box: r.mailbox ?? place.box, folder: r.folder })}
           onControls={(c) => {
             controls.current = c;
           }}
