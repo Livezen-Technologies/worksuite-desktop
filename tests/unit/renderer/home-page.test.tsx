@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as CoreApi from '../../../src/core/api';
 import type * as Tabs from '../../../src/core/tabs';
@@ -24,6 +26,7 @@ import { current, ranked, type MyAnnouncement } from '../../../src/modules/home/
 import { touchesAnnouncements } from '../../../src/core/query';
 import { assistantSession } from '../../../src/modules/ai/session';
 import { compactCount, taskBuckets } from '../../../src/modules/home/today';
+import { resetOrgPrefsForTests } from '../../../src/core/org-prefs';
 import type { Task } from '../../../src/modules/tasks/api';
 
 /**
@@ -124,7 +127,7 @@ function show(route = '/home') {
     </QueryClientProvider>
   );
   const view = render(tree());
-  return { go };
+  return { go, unmount: () => view.unmount() };
 }
 
 const regions = () => screen.getAllByRole('region').map((r) => r.getAttribute('aria-label'));
@@ -143,6 +146,7 @@ beforeEach(() => {
   aiWidget.set({ open: false, maximized: false });
   failDash = false;
   localStorage.clear();
+  resetOrgPrefsForTests();
   nav.navigate.mockReset();
   vi.mocked(call).mockReset().mockResolvedValue(null as never);
   vi.mocked(apiPost).mockReset().mockResolvedValue({} as never);
@@ -162,12 +166,73 @@ describe('Home header', () => {
     show();
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Good morning, Ada');
     expect(screen.getByText('Friday, October 2')).toBeTruthy();
-    expect((screen.getByLabelText('Organization') as HTMLSelectElement).value).toBe('1');
+    expect(screen.getByRole('button', { name: 'Organisations: Livezen' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'New' }));
     expect(nav.navigate).toHaveBeenCalledWith('/tasks?new=1');
     fireEvent.click(screen.getByRole('button', { name: 'More new items' }));
     fireEvent.click(within(screen.getByRole('menu', { name: 'New' })).getByRole('menuitem', { name: 'Event' }));
     expect(nav.navigate).toHaveBeenCalledWith('/calendar?new=1');
+  });
+});
+
+describe('Home organisation switcher (#214)', () => {
+  it('is a pill on the date line with what is due today in each organisation', async () => {
+    show();
+    const pill = screen.getByRole('button', { name: 'Organisations: Livezen' });
+    expect(pill.parentElement!.textContent).toContain('Friday, October 2');
+    expect(pill.className.split(' ')).toContain('h-7');
+    await screen.findByRole('button', { name: 'Due today: 2' });
+    fireEvent.click(pill);
+    const menu = screen.getByRole('menu', { name: 'Organisations' });
+    // Livezen: tasks 2 and 3 due today; Asterix: task 7. Done ones do not count.
+    expect(within(within(menu).getByRole('menuitemcheckbox', { name: 'Livezen' })).getByLabelText('2 due today')).toBeTruthy();
+    expect(within(within(menu).getByRole('menuitemcheckbox', { name: 'Asterix' })).getByLabelText('1 due today')).toBeTruthy();
+  });
+
+  it('asks again for the organisations chosen, with loading placeholders, and updates the cards and counts', async () => {
+    show();
+    expect(await screen.findByRole('button', { name: 'Due today: 2' })).toBeTruthy();
+    expect(vi.mocked(apiGetMeta)).toHaveBeenCalledWith('/api/dashboard/home', { org: '1' });
+    expect(vi.mocked(apiGet)).toHaveBeenCalledWith('/api/dashboard/summary', { org: '1' });
+    let answerDash: () => void = () => undefined;
+    const before = vi.mocked(apiGetMeta).getMockImplementation()!;
+    vi.mocked(apiGetMeta).mockImplementation(((path: string, q?: Record<string, unknown>) =>
+      path === '/api/dashboard/home' && q?.org === '1,2' ? new Promise((resolve) => (answerDash = () => resolve(before(path, q as never)))) : before(path, q as never)) as never);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Organisations: Livezen' }));
+    const menu = screen.getByRole('menu', { name: 'Organisations' });
+    fireEvent.click(within(menu).getByRole('menuitemcheckbox', { name: 'Asterix' }).querySelector('[data-menu-check]')!);
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Apply (2)' }));
+
+    expect(screen.getByRole('button', { name: 'Organisations: 2 organisations' })).toBeTruthy();
+    // The tiles and lists follow at once; the cards the server answers show their placeholders until it does.
+    expect(await screen.findByRole('button', { name: 'Due today: 3' })).toBeTruthy();
+    expect(vi.mocked(apiGetMeta)).toHaveBeenCalledWith('/api/dashboard/home', { org: '1,2' });
+    const activity = screen.getByRole('region', { name: 'Recent activity' });
+    expect(within(activity).getByLabelText('Loading Recent activity').getAttribute('aria-busy')).toBe('true');
+    await act(async () => answerDash());
+    expect(await within(activity).findByText(/uploaded files to Marketing/)).toBeTruthy();
+  });
+
+  it('remembers the selection for the person', async () => {
+    const first = show();
+    fireEvent.click(screen.getByRole('button', { name: 'Organisations: Livezen' }));
+    fireEvent.click(within(screen.getByRole('menu', { name: 'Organisations' })).getByRole('menuitemcheckbox', { name: 'All organisations' }));
+    expect(await screen.findByRole('button', { name: 'Due today: 3' })).toBeTruthy();
+    first.unmount();
+    show();
+    expect(screen.getByRole('button', { name: 'Organisations: All organisations' })).toBeTruthy();
+    expect(JSON.parse(localStorage.getItem('ws.orgs.5')!).prefs.selections).toEqual({ '*': 'all' });
+  });
+
+  it('draws the stat numbers in the app font with tabular figures', async () => {
+    show();
+    const due = await screen.findByRole('button', { name: 'Due today: 2' });
+    const n = due.querySelector('[data-stat-number]')!;
+    expect(n.classList.contains('stat-number')).toBe(true);
+    expect(n.className).not.toMatch(/font-mono/);
+    const css = readFileSync(join(__dirname, '../../../src/styles.css'), 'utf8');
+    expect(css).toMatch(/\.stat-number \{\s*font-family: 'Plus Jakarta Sans Variable', var\(--font-sans\);\s*font-variant-numeric: tabular-nums;/);
   });
 });
 
@@ -191,7 +256,8 @@ describe('Home stat tiles', () => {
     fireEvent.click(unread);
     expect(nav.navigate).toHaveBeenCalledWith('/chat');
 
-    fireEvent.change(screen.getByLabelText('Organization'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Organisations: Livezen' }));
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'All organisations' }));
     expect(await screen.findByRole('button', { name: 'Due today: 3' })).toBeTruthy();
   });
 

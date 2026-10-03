@@ -5,6 +5,7 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { cx } from '../../components/ui';
 import { HIT_LABEL, HIT_VIEW, hitProduct, K, searchInventory, WEB_VIEW, type Company, type SearchHit, type Warehouse } from './api';
+import { OrgSwitcher } from '../../components/OrgSwitcher';
 
 /**
  * The Inventory rail (InvRail): the company and warehouse pickers, a box that
@@ -143,14 +144,7 @@ export function InvRail({
     <nav aria-label="Inventory" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
       <div className="flex flex-col gap-2 px-2.5 pt-3.5 pb-1">
         {companies.length > 1 ? (
-          <Select aria-label="Companies" searchable value={org} onChange={(e) => onOrg(e.target.value)} className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink">
-            <option value="">Every company</option>
-            {companies.map((c) => (
-              <option key={c.id} value={String(c.id)}>
-                {c.name}
-              </option>
-            ))}
-          </Select>
+          <OrgSwitcher variant="field" orgs={companies.map((c) => ({ id: String(c.id), name: c.name }))} value={org ? [org] : []} onChange={(ids) => onOrg(ids[0] ?? '')} />
         ) : null}
         <Select
           aria-label="Warehouses"

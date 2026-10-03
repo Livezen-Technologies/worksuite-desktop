@@ -1,7 +1,7 @@
 import { Icon } from '../../components/Icon';
-import { Select } from '../../components/Select';
 import { cx } from '../../components/ui';
 import type { Company } from './api';
+import { OrgSwitcher } from '../../components/OrgSwitcher';
 
 /**
  * The Finance rail, in the web's order: the company first, because it changes
@@ -144,20 +144,14 @@ export function FinanceRail({
           <div className="text-[11px] text-ink-3">Accounts, journals and the ledger</div>
         </div>
         {companies.length ? (
-          <Select
-            aria-label="Company"
-            searchable
-            value={company ? String(company.id) : ''}
-            onChange={(e) => e.target.value && onCompany(Number(e.target.value))}
-            className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink"
-          >
-            {company ? null : <option value="">Choose a company</option>}
-            {companies.map((c) => (
-              <option key={c.id} value={String(c.id)}>
-                {c.has_books ? c.name : `${c.name} — no books yet`}
-              </option>
-            ))}
-          </Select>
+          <OrgSwitcher
+            variant="field"
+            allowAll={false}
+            placeholder="Choose a company"
+            orgs={companies.map((c) => ({ id: String(c.id), name: c.name, hint: c.has_books ? null : 'No books yet' }))}
+            value={company ? [String(company.id)] : []}
+            onChange={(ids) => ids[0] && onCompany(Number(ids[0]))}
+          />
         ) : null}
         {company?.base_currency ? <div className="px-1 text-[11px] text-ink-3">Books kept in {company.base_currency}</div> : null}
       </div>

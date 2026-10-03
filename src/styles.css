@@ -189,6 +189,16 @@ textarea,
   outline-offset: 2px;
 }
 
+/*
+ * Focus put back on a trigger after a choice made with the pointer draws no ring (worksuite-desktop#214): the ring
+ * is for the keyboard. The thick ring that stayed on Home's organisation filter after a click came from the rule
+ * above meeting a native <select>, which Chromium treats as focus-visible even when clicked; the filter is a button
+ * now, and this covers the programmatic focus a menu gives back on closing.
+ */
+[data-pointer-focus]:focus-visible {
+  outline: none;
+}
+
 /* A field inside a box that shows focus itself (a composer) draws no second ring. */
 .bare-focus:focus-visible {
   outline: none;
@@ -244,6 +254,17 @@ html[data-contrast='more'] :focus-visible {
 
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * A big number in a stat card (worksuite-desktop#214): the app's own face, Plus Jakarta Sans, with tabular figures so
+ * the digits line up — named first so a Sinhala or Tamil interface, whose font stack leads with Noto, does not draw
+ * the figures in another face from the rest of the card.
+ */
+.stat-number {
+  font-family: 'Plus Jakarta Sans Variable', var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
 }
 
 /* Menus open with a short fade and scale (worksuite-desktop#168); `motion-safe:` leaves it out for reduced motion. */

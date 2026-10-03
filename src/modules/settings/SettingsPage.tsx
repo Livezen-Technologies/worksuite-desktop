@@ -37,6 +37,7 @@ import { useGuest } from '../../core/session';
 import { LinksSettings } from './LinksSettings';
 import { LauncherSettings, ShortcutRecorder } from './LauncherSettings';
 import { updateLauncherPrefs, useLauncherPrefs } from '../../core/launcher-prefs';
+import { setOrgSelectionShared, useOrgPrefs } from '../../core/org-prefs';
 import { DEFAULT_LAUNCHER_SHORTCUT } from '@shared/launcher';
 import { SyncButton } from '../../components/SyncButton';
 import { UpdatesCard } from './UpdatesCard';
@@ -240,12 +241,34 @@ function PreferencesSection({ prefs }: { prefs: Preferences }) {
           <Row label="Download folder" hint={<span className="font-mono">{prefs.downloadFolder}</span>}>
             <Button onClick={() => void call('files:chooseDownloadFolder').then((p) => p && toast('success', 'Download folder changed.'))}>Change…</Button>
           </Row>
+          <OrgFilterSetting />
         </>
       )}
       <Toggle k="notificationSounds" prefs={prefs} label="Sounds" />
       <Toggle k="hardwareAcceleration" prefs={prefs} label="Hardware acceleration" hint="Turn off if the window flickers or draws badly. Takes effect after a restart." />
       <Shortcuts prefs={prefs} />
     </>
+  );
+}
+
+/**
+ * The organisation filter (worksuite-desktop#214): one selection that every app follows — choose CreativeFX on Home
+ * and Expenses opens on it — or each app keeping its own. Synced with the person's other preferences.
+ */
+export function OrgFilterSetting() {
+  const orgPrefs = useOrgPrefs();
+  return (
+    <Row label="Organisation filter" hint="Which organisations Home and the apps show.">
+      <Select
+        label="Organisation filter"
+        value={orgPrefs.shared ? 'shared' : 'apart'}
+        options={[
+          { value: 'shared', label: 'Same in every app' },
+          { value: 'apart', label: 'Separate in each app' },
+        ]}
+        onValueChange={(v) => setOrgSelectionShared(v === 'shared')}
+      />
+    </Row>
   );
 }
 
