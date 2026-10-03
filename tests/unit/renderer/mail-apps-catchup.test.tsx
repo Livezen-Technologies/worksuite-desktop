@@ -142,7 +142,7 @@ describe('while away: decline meeting invitations (DMO-OOF-02)', () => {
       { source: 'event', id: 6, invited: true, status: 'cancelled' },
       { source: 'event', id: 7, invited: true, my_rsvp: null },
     ] }, offline: false, cachedAt: null }));
-    const post = vi.fn(async (path: string) => {
+    const post = vi.fn(async (path: string, _body?: unknown) => {
       if (path.includes('/7/')) throw new Error('refused');
       return {};
     });

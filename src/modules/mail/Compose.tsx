@@ -14,6 +14,7 @@ import { Button, Chip, ErrorNote, FileBadge, Modal, Spinner, TextField, cx } fro
 import { AiMenuButton } from '../ai/AiMenuButton';
 import { AiTextDialog } from '../ai/AiTextDialog';
 import { SuggestTimes } from './SuggestTimes';
+import { MailMerge } from './MailMerge';
 import { canOpen } from '../../core/access';
 import { MAIL_TASKS, WRITING_TASKS, type TextTask } from '../ai/textTools';
 import { sendMessage, useQuickParts, useSignatures, useTemplates } from './api';
@@ -104,6 +105,8 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   const [voteDialog, setVoteDialog] = useState(false);
   const [partsOpen, setPartsOpen] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
+  // Mail merge works on the message as it is when opened (DMO-CMP-18).
+  const [merging, setMerging] = useState<ReturnType<typeof payload> | null>(null);
   const optionsBtn = useRef<HTMLSpanElement>(null);
   // A choice from the Options and Quick Parts menus, put into the draft right after (menus hand over data, not the draft's ref).
   const [pending, setPending] = useState<{ options?: NonNullable<ComposeDraft['options']>; part?: string } | null>(null);
@@ -355,6 +358,15 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
         <Field label="Subject">
           <input aria-label="Subject" value={v.subject} onChange={(e) => set({ subject: e.target.value })} className="bare-focus min-w-0 flex-1 bg-transparent text-[14px] font-bold text-ink outline-none" />
         </Field>
+        {merging ? (
+          <MailMerge
+            message={{ subject: merging.subject, html: merging.body_html, text: merging.body_text }}
+            onSendOne={async (row, m) => {
+              await sendMessage({ ...merging, to: [row.email], cc: [], bcc: [], subject: m.subject, body_html: m.html, body_text: m.text, in_reply_to: undefined, reply_mode: undefined }, text('Send “{subject}” to {to}', { subject: m.subject, to: row.email }));
+            }}
+            onClose={() => setMerging(null)}
+          />
+        ) : null}
         {suggesting ? <SuggestTimes recipients={[...parseAddresses(v.to ?? ''), ...parseAddresses(v.cc ?? '')].map(addressOf).filter((a) => a.includes('@'))} subject={v.subject} onInsert={(html) => setPending({ part: html })} onClose={() => setSuggesting(false)} /> : null}
         {ai ? (
           <AiTextDialog
@@ -404,6 +416,11 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
                     {text('Quick Parts')}
                   </Button>
                 </span>
+                {seed.mode === 'new' ? (
+                  <Button size="sm" icon="users" onClick={() => setMerging(payload())} disabled={offline} title={offline ? text('Mail merge needs WorkSuite.') : text('Send this as a separate message to each person on a list')}>
+                    {text('Mail merge')}
+                  </Button>
+                ) : null}
                 {canOpen('calendar') ? (
                   <Button size="sm" icon="calendar" onClick={() => setSuggesting(true)} disabled={offline} title={offline ? text('Suggesting times needs WorkSuite.') : text('Free times for everyone on this message, and a Meet link')}>
                     {text('Suggest times')}
