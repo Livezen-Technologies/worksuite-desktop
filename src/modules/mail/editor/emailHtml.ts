@@ -340,14 +340,15 @@ const borderColourOf = (table: HTMLTableElement) => {
 /** Which borders the table draws: every cell's, only around the outside, or none. */
 export function setBorders(table: HTMLTableElement, mode: BorderMode, colour: string = borderColourOf(table)): void {
   const line = `1px solid ${colour}`;
-  setStyle(table, { 'border-collapse': 'collapse', border: mode === 'none' ? null : line });
+  setStyle(table, { 'border-collapse': 'collapse', border: null, 'border-style': null, 'border-width': null, 'border-color': null });
+  if (mode !== 'none') setStyle(table, { border: line });
   table.setAttribute('border', mode === 'all' ? '1' : '0');
   table.setAttribute('cellspacing', '0');
   if (!table.getAttribute('cellpadding')) table.setAttribute('cellpadding', '6');
   for (const c of table.querySelectorAll<HTMLElement>('td, th')) {
     if (c.closest('table') !== table) continue;
-    setStyle(c, { border: mode === 'all' ? line : null, 'border-top': null, 'border-bottom': null, 'border-left': null, 'border-right': null });
-    if (mode !== 'all') c.style.setProperty('border', 'none');
+    setStyle(c, { border: null, 'border-top': null, 'border-bottom': null, 'border-left': null, 'border-right': null, 'border-style': null, 'border-width': null, 'border-color': null });
+    if (mode === 'all') setStyle(c, { border: line });
   }
 }
 

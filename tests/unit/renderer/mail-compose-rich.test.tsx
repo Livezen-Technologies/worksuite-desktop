@@ -24,7 +24,7 @@ vi.mock('../../../src/modules/mail/api', () => ({
 }));
 // Pictures are decoded and made smaller with the browser's canvas, which jsdom does not have.
 vi.mock('../../../src/modules/mail/editor/images', async (orig) => ({
-  ...(await orig<typeof import('../../../src/modules/mail/editor/images')>()),
+  ...(await orig<Record<string, unknown>>()),
   prepareImage: vi.fn(async () => ({ src: 'data:image/png;base64,iVBORw0KGgo=', width: 120, height: 80, bytes: 8, shrunk: false })),
 }));
 vi.mock('../../../src/components/DriveFilePicker', () => ({
@@ -432,6 +432,29 @@ describe('message options, Quick Parts and send checks (ENH-MAIL-03 P2)', () => 
     await waitFor(() => expect(box().innerHTML.startsWith('<div>Gate 2</div>')).toBe(true));
     expect(box().innerHTML).not.toContain('script');
     expect(box().innerHTML.indexOf('Gate 2')).toBeLessThan(box().innerHTML.indexOf('Hasarinda'));
+  });
+
+  it('keeps the actions in one row of their own, and says why Quick Parts and S/MIME cannot be used (#188)', () => {
+    net.parts = [];
+    compose({ mode: 'new', to: 'ann@example.org' });
+    const actions = screen.getByRole('toolbar', { name: 'Message actions' });
+    expect(within(actions).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Attach', 'Template', 'Signature', 'Mail merge', 'Options']);
+    fireEvent.click(within(actions).getByRole('button', { name: 'Template' }));
+    const parts = within(screen.getByRole('menu')).getByRole('menuitem', { name: /Quick Parts/ });
+    expect(parts.getAttribute('aria-disabled')).toBe('true');
+    expect(parts.textContent).toMatch(/create them in Settings › Mail › Quick Steps/);
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+    fireEvent.click(within(actions).getByRole('button', { name: 'Options' }));
+    const sign = within(screen.getByRole('menu')).getByRole('menuitem', { name: /Sign \(S\/MIME\)/ });
+    expect(sign.getAttribute('aria-disabled')).toBe('true');
+    expect(sign.textContent).toMatch(/not available yet/);
+  });
+
+  it('warns when pictures and attachments come near the 25 MB most servers allow (#188)', async () => {
+    // Counted from the attachments here (an embedded picture counts the same way: see embeddedBytes).
+    net.call.mockImplementation(async (ch: string) => (ch === 'offline:getDraft' ? { content: { to: 'a@b.co', cc: '', bcc: '', subject: 'S', html: '<div>Files</div>', attachments: [{ token: 't9', name: 'site.zip', size: 21 * 1024 * 1024 }], quote: '', from: '1', v: 2 } } : null));
+    compose({ mode: 'new' });
+    expect(await screen.findByText(/most mail servers refuse messages over 25 MB/)).toBeTruthy();
   });
 
   it('asks once when the message mentions an attachment that is not there, and sends on "Send anyway" (DMO-CMP-16)', async () => {

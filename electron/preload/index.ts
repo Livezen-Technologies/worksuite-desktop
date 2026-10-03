@@ -432,6 +432,8 @@ const api = {
     export: call('mail:export'),
     exportCancel: call('mail:exportCancel'),
     openLink: call('mail:openLink'),
+    spellLanguages: call('mail:spellLanguages'),
+    setSpellLanguages: call('mail:setSpellLanguages'),
   },
   smime: {
     verify: call('smime:verify'),

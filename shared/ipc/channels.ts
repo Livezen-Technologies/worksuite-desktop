@@ -308,6 +308,9 @@ export const INVOKE_CHANNELS = [
   'mail:export',
   'mail:exportCancel',
   'mail:openLink',
+  // Spell check's languages (worksuite-desktop#188).
+  'mail:spellLanguages',
+  'mail:setSpellLanguages',
   // S/MIME (ENH-MAIL-03 DMO-SEC-05): a signature checked in the main process against the message's own bytes.
   'smime:verify',
 

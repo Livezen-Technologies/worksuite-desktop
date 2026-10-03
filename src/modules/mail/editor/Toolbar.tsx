@@ -114,7 +114,7 @@ export function ToolbarRow({ groups, label, size = 'md', className, end, request
 
   return (
     <div role="toolbar" aria-label={label} className={cx('flex min-w-0 items-center', className)}>
-      <div ref={row} className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden">
+      <div ref={row} data-ov-row className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden">
         {flat.map((f, i) => {
           const visible = i < fit;
           if (!f.item) return <span key={f.key} data-ov={f.key} aria-hidden className={cx('mx-1 h-5 w-px shrink-0 bg-line', !visible && 'hidden')} />;

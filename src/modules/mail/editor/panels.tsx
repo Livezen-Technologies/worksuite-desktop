@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { text } from '../../../core/i18n';
+import { Checkbox } from '../../../components/Checkbox';
 import { Icon } from '../../../components/Icon';
 import { Button, Modal, TextField, cx } from '../../../components/ui';
 import { frequentEmoji, noteEmojiUsed, searchEmoji } from '../../chat/emoji';
@@ -92,7 +93,7 @@ export function InsertTableDialog({ onInsert, onClose }: { onInsert: (o: { rows:
         <TextField label={text('Rows')} type="number" min={1} max={50} value={rows} onChange={(e) => setRows(e.target.value)} autoFocus />
         <TextField label={text('Columns')} type="number" min={1} max={20} value={cols} onChange={(e) => setCols(e.target.value)} />
         <label className="col-span-2 flex items-center gap-2 text-ink">
-          <input type="checkbox" checked={header} onChange={(e) => setHeader(e.target.checked)} />
+          <Checkbox checked={header} onChange={(e) => setHeader(e.target.checked)} />
           {text('Header row')}
         </label>
         <label className="col-span-2 flex flex-col gap-1">

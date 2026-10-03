@@ -21,6 +21,7 @@ import { AppPasswords } from './AppPasswords';
 import { ImportMail } from './Import';
 import { DataFileImport } from './DataFiles';
 import { Rules, Signatures } from './MailRules';
+import { SpellingSettings } from './SpellingSettings';
 import { mailKeys, useLocalStore, useMailPrefs, useMailStats, useMailboxes, useSyncStatus } from './api';
 import { mailboxLetter } from './model';
 import { AccountAvatar } from './parts';
@@ -86,7 +87,12 @@ export function MailSettings({ query = new URLSearchParams() }: { query?: URLSea
           <ImportMail openId={importId} />
           <AutocompleteSettings />
         </>
-      ) : tab === 'signatures' ? <Signatures /> : tab === 'rules' ? <Rules mailbox={defaultBox ? String(defaultBox.id) : null} /> : tab === 'quicksteps' ? <QuickStepsSettings /> : <Layout />}
+      ) : tab === 'signatures' ? (
+        <>
+          <Signatures />
+          <SpellingSettings />
+        </>
+      ) : tab === 'rules' ? <Rules mailbox={defaultBox ? String(defaultBox.id) : null} /> : tab === 'quicksteps' ? <QuickStepsSettings /> : <Layout />}
     </div>
   );
 }

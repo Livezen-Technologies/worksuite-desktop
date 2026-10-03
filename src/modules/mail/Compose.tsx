@@ -15,7 +15,7 @@ import { SuggestTimes } from './SuggestTimes';
 import { createMeeting } from '../meet/api';
 import { ComposeActions, quickPartsReason } from './editor/ComposeActions';
 import { MailEditor } from './editor/MailEditor';
-import { MESSAGE_MAX_BYTES, MESSAGE_WARN_BYTES, embeddedBytes } from './editor/images';
+import { INLINE_MAX_BYTES, MESSAGE_MAX_BYTES, MESSAGE_WARN_BYTES, embeddedBytes } from './editor/images';
 import { meetingLinkHtml } from './editor/insert';
 import { MailMerge } from './MailMerge';
 import { canOpen } from '../../core/access';
@@ -47,6 +47,8 @@ import type { ComposeSeed, Mailbox, Signature, Template } from './types';
  */
 
 type Attached = NonNullable<ComposeDraft['attachments']>[number];
+
+const tooManyPictures = () => text('The pictures inside this message are too big to send together. Send some as attachments instead (select a picture › Send as attachment instead).');
 
 /** The draft's key on this computer: one per new message, one per message replied to. */
 export function draftContext(seed: ComposeSeed): string {
@@ -256,6 +258,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
     setError(null);
     const d = latest.current;
     if (!parseAddresses(d.to).length) return setError(text('Add at least one recipient.'));
+    if (embeddedBytes(d.html) > INLINE_MAX_BYTES) return setError(tooManyPictures());
     // Forgot the file? No subject? Asked once before it goes (DMO-CMP-16).
     const issues = checked ? [] : sendChecks(d, composeText(splitSignature(d.html)[0]));
     if (issues.length) return setChecks(issues);
@@ -284,6 +287,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
     setError(null);
     if (!at) return setError(text('Choose when to send it.'));
     if (!parseAddresses(latest.current.to).length) return setError(text('Add at least one recipient.'));
+    if (embeddedBytes(latest.current.html) > INLINE_MAX_BYTES) return setError(tooManyPictures());
     if (offline) return setError(text('Scheduling needs WorkSuite: try again when you are back online.'));
     setBusy(true);
     try {

@@ -1079,6 +1079,9 @@ export const contract = {
   'mail:exportCancel': ch(none, { session: true }),
   // A link in a message, after the safe-link check (DMO-SEC-03): `confirmed` when the person chose to go on past a warning.
   'mail:openLink': ch(z.strictObject({ url: z.string().url().max(4096), confirmed: z.boolean() }), { session: true, rate: 5 }),
+  // Spell check's languages (worksuite-desktop#188): what this computer has, and the choice.
+  'mail:spellLanguages': ch(none, { session: true }),
+  'mail:setSpellLanguages': ch(z.strictObject({ languages: z.array(z.string().regex(/^[a-z]{2,3}(-[A-Z]{2})?$/)).max(4) }), { session: true, rate: 5 }),
   // S/MIME (DMO-SEC-05): a signed message checked against its own bytes, in the main process.
   'smime:verify': ch(z.strictObject({ uid: z.string().regex(/^\d{1,20}$/), folder: z.string().regex(/^[A-Za-z0-9._\-/ :]{1,128}$/), mailbox: z.string().regex(/^\d{1,20}$/).nullable() }), { session: true, rate: 5 }),
   'offline:submit': ch(mutationInputSchema, { session: true, rate: 20 }),
@@ -1498,6 +1501,8 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'mail:export': { count: number; failed: number; cancelled: boolean; name: string } | null;
   'mail:exportCancel': void;
   'mail:openLink': boolean;
+  'mail:spellLanguages': { choices: Array<{ code: string; label: string; available: boolean; reason?: string }>; current: string[]; system: boolean };
+  'mail:setSpellLanguages': string[];
   'smime:verify': SmimeVerdict;
   'offline:submit': SubmitResult;
   'offline:retry': void;

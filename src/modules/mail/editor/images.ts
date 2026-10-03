@@ -15,6 +15,12 @@ export const IMAGE_MAX_WIDTH = 1600;
 /** Most servers refuse a message over 25 MB; this is when the composer says so. */
 export const MESSAGE_WARN_BYTES = 20 * 1024 * 1024;
 export const MESSAGE_MAX_BYTES = 25 * 1024 * 1024;
+/**
+ * Pictures inside the message travel in the send request as base64 (a
+ * third bigger), and the app's API proxy takes requests up to 25 MB: past
+ * this, some have to go as attachments (which are uploaded on their own).
+ */
+export const INLINE_MAX_BYTES = 17 * 1024 * 1024;
 
 const SAFE_TYPES = ['image/png', 'image/jpeg', 'image/gif'];
 

@@ -84,6 +84,7 @@ import { OfficeEditorHost } from '../services/office-editor';
 import { OfficeExternal } from '../services/office-external';
 import { createPdfStudio } from '../services/pdf/host';
 import { createMailFilesIpc } from '../services/mail-files/ipc';
+import { attachSpellingMenu } from '../services/spellcheck';
 import { markFromInternet } from '../services/quarantine';
 import { mailFilePathsInArgv } from '../services/mail-files/argv';
 import { createLocalAI } from '../services/local-ai/host';
@@ -1678,6 +1679,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     contents.on('before-input-event', (_ev, input) => {
       if (input.type === 'keyDown' && (input.control || input.meta) && input.key.toLowerCase() === 'v') pasteGestures.set(contents.id, Date.now());
     });
+    // A right-click on a misspelt word offers its corrections (worksuite-desktop#188).
+    attachSpellingMenu(contents);
   });
 
   const router = new IpcRouter(ipcMain, {
