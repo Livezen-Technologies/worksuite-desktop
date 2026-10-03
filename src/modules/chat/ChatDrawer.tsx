@@ -46,13 +46,17 @@ function recordLink(route: string): string | null {
  * conversation opens in place, and minimising leaves it in the corner.
  */
 const WIDTH_KEY = 'ws.chatDrawer.width';
+/** The drawer's width range and default (worksuite-desktop#211). */
+export const DRAWER_MIN = 360;
+export const DRAWER_MAX = 640;
+export const DRAWER_DEFAULT = 420;
 
-function savedWidth(): number {
+export function savedWidth(): number {
   try {
     const w = Number(localStorage.getItem(WIDTH_KEY));
-    return w >= 360 && w <= 900 ? w : 408;
+    return w >= DRAWER_MIN && w <= DRAWER_MAX ? w : DRAWER_DEFAULT;
   } catch {
-    return 408;
+    return DRAWER_DEFAULT;
   }
 }
 
@@ -65,7 +69,7 @@ export function ChatDrawer() {
     const right = (e.currentTarget.parentElement?.getBoundingClientRect().right ?? window.innerWidth);
     let last = width;
     const move = (m: MouseEvent) => {
-      last = Math.round(Math.max(360, Math.min(Math.min(900, window.innerWidth - 420), right - m.clientX)));
+      last = Math.round(Math.max(DRAWER_MIN, Math.min(Math.min(DRAWER_MAX, window.innerWidth - 420), right - m.clientX)));
       setWidth(last);
     };
     const up = () => {
@@ -83,8 +87,10 @@ export function ChatDrawer() {
     window.addEventListener('mouseup', up);
   };
   return (
-    <aside aria-label="Chat drawer" className="absolute top-0 right-0 bottom-0 z-30 flex flex-col bg-surface shadow-[-14px_0_36px_rgb(var(--ws-shadow-rgb)/.16)]" style={{ width }}>
-      <div aria-hidden onMouseDown={resize} onDoubleClick={() => setWidth(408)} title="Drag to resize" className="absolute top-0 bottom-0 -left-1.5 z-10 w-1.5 cursor-ew-resize bg-transparent hover:bg-line" />
+    // One container with one left edge (worksuite-desktop#211): a 1px border and a soft shadow so it reads as a
+    // layer over the app in both themes; every part inside (header, messages, composer) shares that edge.
+    <aside aria-label="Chat drawer" className="absolute top-0 right-0 bottom-0 z-30 flex flex-col overflow-hidden border-l border-line bg-surface shadow-[-12px_0_32px_-16px_rgb(0_0_0/.45)]" style={{ width }}>
+      <div aria-hidden onMouseDown={resize} onDoubleClick={() => setWidth(DRAWER_DEFAULT)} title="Drag to resize" className="absolute top-0 bottom-0 left-0 z-10 w-1.5 cursor-ew-resize bg-transparent hover:bg-primary/30" />
       <TabProvider tabId="chat-drawer" route={room ? `/chat?room=${room}` : '/chat'} active onGo={(r) => navigate(r)}>
         {room ? <Conversation roomId={room} /> : <Lists />}
       </TabProvider>
@@ -315,7 +321,7 @@ function Conversation({ roomId }: { roomId: string }) {
   const status = typing.length ? (typing.length === 1 ? 'typing…' : `${typing.length} people typing…`) : (st?.label ?? (room && room.type !== 'direct' ? 'Group' : ''));
   return (
     <>
-      <div className="flex h-[58px] shrink-0 items-center gap-1 border-b border-line pr-2 pl-2">
+      <div className="flex h-[58px] shrink-0 items-center gap-1 border-b border-line bg-surface pr-3 pl-2">
         <button type="button" aria-label="Back to chats" onClick={() => openChatDrawer(null)} className={hbtn}>
           <Icon name="chevron-left" size={18} />
         </button>
@@ -324,7 +330,9 @@ function Conversation({ roomId }: { roomId: string }) {
           {st ? <span className={cx('absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-surface', st.dot)} /> : null}
         </span>
         <span className="ml-1.5 flex min-w-0 flex-1 flex-col">
-          <b className="truncate text-[14px] text-ink">{room?.name ?? 'Conversation'}</b>
+          <b className="truncate text-[14px] text-ink" title={room?.name ?? undefined}>
+            {room?.name ?? 'Conversation'}
+          </b>
           <span className={cx('truncate text-[12px]', typing.length ? 'font-semibold text-success' : 'text-ink-3')}>{status}</span>
         </span>
         {canCall(room) ? (
@@ -338,7 +346,7 @@ function Conversation({ roomId }: { roomId: string }) {
           </>
         ) : null}
         <span className="relative">
-          <button type="button" aria-label="More" aria-expanded={menu} onClick={() => setMenu(!menu)} className={hbtn}>
+          <button type="button" aria-label="More" title="More" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)} className={hbtn}>
             <Icon name="more-vertical" size={17} />
           </button>
           {menu ? (
@@ -351,16 +359,18 @@ function Conversation({ roomId }: { roomId: string }) {
                 <Icon name={room?.muted ? 'volume' : 'volume-off'} size={14} className="text-ink-2" />
                 {room?.muted ? 'Unmute' : 'Mute'}
               </button>
+              <button type="button" role="menuitem" className="flex h-8 w-full items-center gap-2.5 rounded-[8px] px-2.5 text-left text-[13px] text-ink hover:bg-subtle" onClick={() => (setMenu(false), void openChatWindow(roomId, room?.name).then(minimiseChatDrawer, (e) => toast('error', errorMessage(e))))}>
+                <Icon name="external" size={14} className="text-ink-2" />
+                Open in new window
+              </button>
+              <button type="button" role="menuitem" className="flex h-8 w-full items-center gap-2.5 rounded-[8px] px-2.5 text-left text-[13px] text-ink hover:bg-subtle" onClick={() => (setMenu(false), minimiseChatDrawer())}>
+                <Icon name="minus" size={14} className="text-ink-2" />
+                Minimise to the corner
+              </button>
             </div>
           ) : null}
         </span>
-        <button type="button" aria-label="Open in new window" title="Open in new window" onClick={() => void openChatWindow(roomId, room?.name).then(minimiseChatDrawer, (e) => toast('error', errorMessage(e)))} className={hbtn}>
-          <Icon name="external" size={15} />
-        </button>
         <span className="mx-1 h-5 w-px bg-line" aria-hidden />
-        <button type="button" aria-label="Minimise" title="Minimise to the corner" onClick={minimiseChatDrawer} className={hbtn}>
-          <Icon name="minus" size={16} />
-        </button>
         <button type="button" aria-label="Close" title="Close" onClick={() => ui.set({ dock: null, chatRoom: null })} className={hbtn}>
           <Icon name="x" size={16} />
         </button>
