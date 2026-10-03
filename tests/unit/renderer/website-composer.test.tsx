@@ -171,4 +171,27 @@ describe('external channels on the shared composer (#156)', () => {
     expect(send.mock.calls[2]?.[0]).toBe('');
   });
 
+  it('keeps a newer draft written while a send is pending', async () => {
+    let delivered: (v: boolean) => void = () => undefined;
+    const send = vi.fn((_text: string, _files: File[]) => new Promise<boolean>((resolve) => { delivered = resolve; }));
+    external(null, true, send);
+    const box = screen.getByRole('textbox', { name: 'Message' });
+    fireEvent.change(box, { target: { value: 'First reply' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    fireEvent.change(box, { target: { value: 'Next reply' } });
+    await act(async () => delivered(true));
+    expect((box as HTMLTextAreaElement).value).toBe('Next reply');
+    expect(send).toHaveBeenCalledWith('First reply', []);
+  });
+  it('submits only once when Enter is pressed twice before sending finishes', async () => {
+    let delivered: (v: boolean) => void = () => undefined;
+    const send = vi.fn((_text: string, _files: File[]) => new Promise<boolean>((resolve) => { delivered = resolve; }));
+    external(null, true, send);
+    const box = screen.getByRole('textbox', { name: 'Message' });
+    fireEvent.change(box, { target: { value: 'Send once' } });
+    await act(async () => { fireEvent.keyDown(box, { key: 'Enter' }); fireEvent.keyDown(box, { key: 'Enter' }); });
+    expect(send).toHaveBeenCalledTimes(1);
+    await act(async () => delivered(true));
+  });
+
 });

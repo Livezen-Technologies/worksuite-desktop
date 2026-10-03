@@ -110,6 +110,8 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const canUrgent = useStore(app, (s) => !site && !channel && !!s.bootstrap?.permissions.some((p) => p === '*' || p === URGENT));
   const transfers = useStore(app, (s) => s.transfers);
   const [sending, setSending] = useState(false);
+  const sendingGate = useRef(false);
+  const draftRevision = useRef(0);
   const [editing, setEditing] = useState<{ id: number; original: string; text: string } | null>(null);
   const [urgent, setUrgent] = useState(false);
   const [menu, setMenu] = useState<'attach' | 'emoji' | 'share' | null>(null);
@@ -149,7 +151,11 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   });
 
   const text = editing ? editing.text : draft.value;
-  const setText = (v: string) => (editing ? setEditing({ ...editing, text: v }) : draft.setValue(v));
+  const setText = (v: string) => {
+    draftRevision.current++;
+    if (editing) setEditing({ ...editing, text: v });
+    else draft.setValue(v);
+  };
   const done = (s: Staged) => s.kind === 'disk' && !!s.transfer && transfers.find((t) => t.id === s.transfer)?.state === 'done';
   const tray = staged.filter((s) => !done(s));
   const ready = tray.filter((s) => (s.kind === 'disk' ? !s.transfer : s.state === 'ready'));
@@ -212,9 +218,8 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       typingSignal('stop');
     }
   };
-  const onTyped = () => {
-    const now = Date.now();
-    if (now - typingAt.current > TYPING_EVERY) {
+  const onTyped = (now: number) => {
+    if (!typingAt.current || now - typingAt.current > TYPING_EVERY) {
       typingAt.current = now;
       typingSignal('start');
     }
@@ -342,14 +347,21 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
    * urgent.
    */
   const send = async () => {
-    if (!canSend || sending || channel?.refusal) return;
+    if (!canSend || sending || sendingGate.current || channel?.refusal) return;
     if (limit && text.length > limit) { toast('error', `Keep this message within ${limit} characters.`); return; }
     stopTyping();
     setAsking(null);
     if (editing) return saveEdit();
     const words = text.trim();
+    const revision = draftRevision.current;
+    const clearSentDraft = async () => {
+      if (draftRevision.current !== revision) return;
+      draft.setValue('');
+      await draft.clear();
+    };
     const files = ready;
     const wordsAlone = words !== '' && (urgent || files.length === 0);
+    sendingGate.current = true;
     setSending(true);
     try {
       if (channel) {
@@ -360,15 +372,15 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
           const key = files[i]!.key;
           setStaged((all) => all.filter((s) => s.key !== key));
           // A delivered caption must not be repeated when retrying a later failed file.
-          if (i === 0) { draft.setValue(''); await draft.clear(); }
+          if (i === 0) await clearSentDraft();
         }
-        draft.setValue(''); await draft.clear(); onClearReply(); return;
+        await clearSentDraft(); onClearReply(); return;
       }
       if (wordsAlone && !(await sendWords(words, urgent))) return;
       if (!site && files.length) {
         queueMedia(roomId, files, { ...(wordsAlone ? {} : { ...(words ? { caption: words } : {}), ...(reply ? { replyTo: reply.id } : {}) }) }, originalQuality);
         setStaged((all) => all.filter((s) => !files.some((f) => f.key === s.key)));
-        draft.setValue(''); void draft.clear(); picked.current = []; setUrgent(false); onClearReply();
+        void clearSentDraft(); picked.current = []; setUrgent(false); onClearReply();
         return;
       }
       if (files.length) {
@@ -384,14 +396,14 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
         }
         for (const s of files.slice(1)) if (s.kind === 'blob') void sendBlob(s, null);
       }
-      draft.setValue('');
-      await draft.clear();
+      await clearSentDraft();
       picked.current = [];
       setUrgent(false);
       onClearReply();
     } catch (e) {
       toast('error', errorMessage(e));
     } finally {
+      sendingGate.current = false;
       setSending(false);
     }
   };
@@ -545,7 +557,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                 value={text}
                 onChange={(e) => {
                   setText(e.target.value);
-                  if (!editing) onTyped();
+                  if (!editing) onTyped(e.timeStamp);
                   if (!editing) setSlash(savedReplyQuery(e.target.value, e.target.selectionStart ?? e.target.value.length));
                   if (group) {
                     const q = mentionQuery(e.target.value, e.target.selectionStart ?? e.target.value.length);
