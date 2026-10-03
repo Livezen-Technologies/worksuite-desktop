@@ -9,6 +9,7 @@ import { useStore } from '../../../core/store';
 import { useTab, useTabTitle } from '../../../core/tab-context';
 import { bytes, dateLabel, parseTs, timeLabel } from '../../../core/time';
 import { toast } from '../../../core/toasts';
+import { Icon } from '../../../components/Icon';
 import { Avatar, Button, Chip, Empty, ErrorNote, Modal, Spinner, cx } from '../../../components/ui';
 import { Composer, type ComposerHandle } from '../Composer';
 import { PRIORITIES, useAgents, useCanned, useWebsiteConversation, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
@@ -90,7 +91,7 @@ export function WebsiteThread({ id, row }: { id: string; row?: WebsiteRow }) {
       >
         {/* The controls move to a second line rather than squeeze the name away. */}
         <div className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b border-line bg-surface px-3.5 py-[11px]">
-          <Avatar name={name} size={34} />
+          <Avatar name={name} size={34} presence={c.status === 'closed' ? null : online ? 'online' : 'away'} />
           <span className="flex min-w-[150px] flex-1 flex-col">
             <b className="truncate text-ink">{name}{v?.company ? ` · ${v.company}` : ''}</b>
             <span className={cx('truncate text-[11.5px] font-semibold', c.visitor_typing ? 'text-primary' : online && c.status !== 'closed' ? 'text-success' : 'text-ink-3')}>
@@ -249,6 +250,8 @@ function Message({ m }: { m: WebsiteMessage }) {
   );
 }
 
+const HEADING = 'text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase';
+
 function VisitorPanel({ v, data, online, onDone }: { v: WebsiteVisitor | null; data: WebsiteConversation; online: boolean; onDone: () => void }) {
   const [blocking, setBlocking] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -256,7 +259,6 @@ function VisitorPanel({ v, data, online, onDone }: { v: WebsiteVisitor | null; d
   const support = useCanOpen('support');
   const rows: Array<[string, string | null | undefined]> = v
     ? [
-        ['Email', v.email],
         ['Phone', v.phone],
         ['Company', v.company],
         ['Location', [v.city, v.country].filter(Boolean).join(', ') || null],
@@ -272,6 +274,10 @@ function VisitorPanel({ v, data, online, onDone }: { v: WebsiteVisitor | null; d
     : [];
   const journey = (data.journey ?? []).slice(-8);
   const history = (data.history ?? []).filter((h) => h.id !== data.conversation.id);
+  // Every file either side sent in this chat, newest first (CHAT-UI-01, SHARED FILES).
+  const files = data.messages.filter((m) => m.file).reverse();
+  const { openLink } = useTab();
+  const name = v?.name || v?.label || 'Visitor';
 
   const ticket = async () => {
     setBusy(true);
@@ -293,7 +299,15 @@ function VisitorPanel({ v, data, online, onDone }: { v: WebsiteVisitor | null; d
   return (
     <SidePanel id="website-visitor" label="the visitor details" side="right">
       <aside aria-label="Visitor details" className="flex w-[292px] shrink-0 flex-col gap-2.5 overflow-y-auto border-l border-line bg-surface p-3.5 text-[12.5px] scroll-thin">
-        <b className="flex items-center gap-2 text-[14px] text-ink">Visitor details {v?.is_blocked ? <Chip tone="danger">Blocked</Chip> : null}</b>
+        <div className="flex flex-col items-center gap-1 border-b border-line pb-3 text-center">
+          <Avatar name={name} size={48} presence={data.conversation.status === 'closed' ? null : online ? 'online' : 'away'} />
+          <b className="mt-1 flex items-center gap-1.5 text-[14px] text-ink">
+            <span className="break-words">{name}</span>
+            {v?.is_blocked ? <Chip tone="danger">Blocked</Chip> : null}
+          </b>
+          {v?.email ? <span className="break-all text-[12px] text-ink-3 selectable">{v.email}</span> : null}
+        </div>
+        <h3 className={HEADING}>Visitor</h3>
         {rows.filter(([, val]) => val).map(([k, val]) => (
           <div key={k} className="flex gap-2">
             <span className="w-24 shrink-0 text-ink-3">{k}</span>
@@ -302,15 +316,31 @@ function VisitorPanel({ v, data, online, onDone }: { v: WebsiteVisitor | null; d
         ))}
         {journey.length ? (
           <div className="flex flex-col gap-[5px] border-t border-line pt-2">
-            <b className="text-ink">Pages this visit</b>
-            <span className="break-words text-ink-2">
-              {journey.map((p) => (p.url ? pathOf(p.url) : (p.title ?? 'page'))).join(' → ')}
-              {online ? ' (reading now)' : ''}
-            </span>
+            <h3 className={HEADING}>Journey</h3>
+            <ol className="flex flex-col gap-[3px] text-ink-2">
+              {journey.map((p, i) => (
+                <li key={`${p.at}-${i}`} className="flex gap-2">
+                  <span className="min-w-0 flex-1 break-words">{p.url ? pathOf(p.url) : (p.title ?? 'page')}</span>
+                  <span className="shrink-0 text-[11px] text-ink-3">{i === journey.length - 1 && online ? 'Reading now' : timeLabel(p.at)}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
+        {files.length ? (
+          <div className="flex flex-col gap-[5px] border-t border-line pt-2">
+            <h3 className={HEADING}>Shared files · {files.length}</h3>
+            {files.slice(0, 8).map((m) => (
+              <button key={m.id} type="button" onClick={() => m.file && openWebsiteFile(m.file, openLink)} title={m.from === 'visitor' ? 'Sent by the visitor' : 'Sent to the visitor'} className="flex items-center gap-2 rounded-[6px] text-left hover:text-primary">
+                <Icon name="file" size={13} className="shrink-0 text-ink-3" />
+                <span className="min-w-0 flex-1 truncate font-semibold text-ink">{m.file?.filename}</span>
+                <span className="shrink-0 text-[11px] text-ink-3">{m.file ? bytes(m.file.size) : ''}</span>
+              </button>
+            ))}
           </div>
         ) : null}
         <div className="flex flex-col gap-[5px] border-t border-line pt-2">
-          <b className="text-ink">Previous chats · {history.length}</b>
+          <h3 className={HEADING}>Previous chats · {history.length}</h3>
           {history.slice(0, 5).map((h) => (
             <span key={h.id} className="text-ink-2">
               {h.started_at ? dateLabel(h.started_at) : 'Earlier'} · {h.status}{h.rating ? ` · rated ${h.rating}/5` : ''}{h.other_device ? ' · another device' : ''}

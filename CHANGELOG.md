@@ -5,6 +5,32 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.103: The Website Chats inbox, as drawn in the Website Live Chat SRS v1.5
+
+The SRS's v1.5 redrew every staff screen on the app as it looks today. The desktop's shell already had that look;
+this release brings the Website Chats workspace in line with the new inbox design (CHAT-UI-00) and the thread's
+details panel (CHAT-UI-01):
+
+- **Open · Mine · Closed** over the conversation list, each with its count, and the site picker and search beside them.
+- **Each conversation** shows the visitor with a dot for whether they are on the site, a live timer while they wait
+  for a reply (red, minutes and seconds, for the first hour), what they asked or the page they are reading, and
+  **Awaiting reply**, **You**, **At risk**, **Offline** or **VIP / Urgent / High** chips beside the site — "away"
+  when they have left it. The open conversation has the accent bar down its left edge.
+- **A chat ringing on this computer** has a bell in the list; one you **silenced** here turns amber with the bell
+  struck through, until it rings again at risk.
+- **Pick a conversation**: with nothing open, the workspace says how many visitors are waiting and how long the
+  longest has, with **Open the longest waiting** and **Visitors online · n**.
+- **J / K** move to the next or previous conversation, when you are not typing.
+- **The visitor's details** start with who they are and their email, then Visitor, **Journey** (each page with its
+  time, and the one they are reading now) and **Shared files** — every file either side sent in the chat, opened
+  from there.
+
+Where it bites: the server's inbox does not send a conversation's last message or an unread count, so a row shows
+what the visitor asked only while the chat rings, and the page they are reading otherwise; search covers visitors,
+email, site and page, not messages. Invite, Transfer and the Invited view (ENH-WCHAT-03) wait for their server API.
+
+---
+
 ## 2026-10-03 — 0.2.102: Mail that works like Outlook
 
 The first three phases of the Outlook-class Mail enhancement (ENH-MAIL-03):
