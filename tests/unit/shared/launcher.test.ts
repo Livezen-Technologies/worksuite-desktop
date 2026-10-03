@@ -5,8 +5,24 @@ import {
   cleanIds,
   columnsFor,
   defaultStoredPrefs,
+  fitGridHeight,
+  FULL_COLUMN,
+  FULL_SEARCH,
+  fullscreenChrome,
+  fullscreenRect,
+  GRID_GAP_PX,
+  GRID_PAD,
   gridStep,
+  hasMoreBelow,
+  LAUNCHER_SIZES,
   launcherLayout,
+  launcherSections,
+  popoverChrome,
+  sectionBlocks,
+  sectionStep,
+  tileHeight,
+  TOP_BAR_PX,
+  wholeRows,
   launcherShortcutProblem,
   launcherView,
   matchScore,
@@ -33,39 +49,92 @@ const apps: AppDefinition[] = navApps(APP_CATALOGUE).filter((a) => a.id !== 'hom
 const base = (patch: Partial<LauncherPrefs> = {}): LauncherPrefs => ({ ...resolvePrefs(null), ...patch });
 const ids = (list: AppDefinition[]) => list.map((a) => a.id);
 
-describe('launcher size and place', () => {
+describe('launcher size and place (worksuite-desktop#206)', () => {
   const full = (w: number, h: number) => ({ left: 0, top: 0, width: w, height: h });
+  const win = (w: number, h: number) => ({ width: w, height: h });
+  const parts = { pinned: false, recent: false, chips: true };
+  const SIZES: Array<[number, number]> = [
+    [1024, 700],
+    [1280, 800],
+    [1440, 900],
+    [1728, 1117],
+    [2560, 1440],
+  ];
 
-  it('is a 760×600 popover in a big window, centred under the title bar', () => {
-    const l = launcherLayout(full(1440, 900), { mode: 'popover', size: 'compact' });
-    expect(l).toMatchObject({ kind: 'popover', width: 760, height: 600, left: 340, top: 56, icon: 44, columns: null });
+  it('is a popover min(880px, 100vw − 48px) wide, centred, 12% down the window, of whole rows', () => {
+    // [width, height] → [left, top, grid rows, popover height], compact icons (84px tiles), the chips showing.
+    const expected: Record<string, [number, number, number, number]> = {
+      '1024x700': [72, 84, 4, 511],
+      '1280x800': [200, 96, 5, 597],
+      '1440x900': [280, 108, 5, 597],
+      '1728x1117': [424, 134, 5, 597],
+      '2560x1440': [840, 173, 5, 597],
+    };
+    for (const [w, h] of SIZES) {
+      const l = launcherLayout(win(w, h), full(w, h), { mode: 'popover', size: 'compact' }, parts);
+      const [left, top, rows, height] = expected[`${w}x${h}`]!;
+      expect(l).toMatchObject({ kind: 'popover', width: 880, left, top, height, icon: 44, rowHeight: 84 });
+      expect(l.grid!.rows).toBe(rows);
+    }
   });
 
-  it('never takes more than 90% of the window, and stays inside it, at every width from 1024 up', () => {
+  it('keeps a 24px margin, stays centred and inside min(640px, 100vh − 96px) at every size from 1024×700 up', () => {
     for (let w = 1024; w <= 2560; w += 37) {
-      for (const h of [640, 700, 768, 900, 1440]) {
-        const l = launcherLayout(full(w, h), { mode: 'popover', size: 'large' });
-        expect(l.width).toBeLessThanOrEqual(Math.floor(w * 0.9));
-        expect(l.height).toBeLessThanOrEqual(Math.floor(h * 0.9));
-        expect(l.left).toBeGreaterThanOrEqual(0);
-        expect(l.top).toBeGreaterThanOrEqual(0);
-        expect(l.left + l.width).toBeLessThanOrEqual(w);
-        expect(l.top + l.height).toBeLessThanOrEqual(h);
+      for (const h of [700, 768, 800, 900, 1117, 1440]) {
+        for (const size of LAUNCHER_SIZES) {
+          for (const names of [true, false]) {
+            for (const p of [parts, { pinned: true, recent: true, chips: true }, { pinned: false, recent: false, chips: false }]) {
+              const l = launcherLayout(win(w, h), full(w, h), { mode: 'popover', size, toggles: { names } }, p);
+              expect(l.width).toBe(Math.min(880, w - 48));
+              // Centred: as much room on the left as on the right (to the pixel, for odd widths).
+              expect(Math.abs(l.left - (w - l.left - l.width))).toBeLessThanOrEqual(1);
+              expect(l.left).toBeGreaterThanOrEqual(24);
+              expect(l.top).toBeGreaterThanOrEqual(52 + 16);
+              expect(l.top).toBe(Math.round(h * 0.12));
+              expect(l.top + l.height).toBeLessThanOrEqual(h - 24);
+              expect(l.height).toBeLessThanOrEqual(Math.min(640, h - 96));
+              // Whole rows: the scroller is the rows, their gaps and its padding, and one more row would not fit.
+              const g = l.grid!;
+              expect(g.height).toBe(GRID_PAD.top + GRID_PAD.bottom + g.rows * l.rowHeight + (g.rows - 1) * GRID_GAP_PX);
+              const room = Math.min(640, h - 96, h - 24 - l.top) - popoverChrome(p);
+              expect(g.height).toBeLessThanOrEqual(room);
+              expect(g.height + l.rowHeight + GRID_GAP_PX).toBeGreaterThan(room);
+              expect(l.height).toBe(popoverChrome(p) + g.height);
+            }
+          }
+        }
       }
     }
-    // The main window's smallest: 1024×640 → 576 high, not 600.
-    expect(launcherLayout(full(1024, 640), { mode: 'popover', size: 'compact' }).height).toBe(576);
   });
 
-  it('keeps clear of the Dock: the part of the window under it is not used', () => {
+  it('sizes a tile to its icon and its name, so a row always shows the names', () => {
+    expect(tileHeight(44, true)).toBe(84);
+    expect(tileHeight(44, false)).toBe(64);
+    expect(wholeRows(443, 84, 2)).toEqual({ rows: 4, height: 362 });
+    // One row at least, however little room.
+    expect(wholeRows(10, 84, 2).rows).toBe(1);
+    expect(popoverChrome({ pinned: false, recent: false, chips: true })).toBe(149);
+    expect(popoverChrome({ pinned: true, recent: true, chips: true })).toBe(229);
+  });
+
+  it('keeps clear of the Dock: never under it, and still centred', () => {
     // A 1440×900 window on a 1440×900 screen whose Dock takes the bottom 80px.
     const area = visibleArea({ innerWidth: 1440, innerHeight: 900, outerWidth: 1440, outerHeight: 900, screenX: 0, screenY: 0 }, { availLeft: 0, availTop: 0, availWidth: 1440, availHeight: 820 });
     expect(area).toEqual({ left: 0, top: 0, width: 1440, height: 820 });
-    const l = launcherLayout(area, { mode: 'popover', size: 'compact' });
-    expect(l.top + l.height).toBeLessThanOrEqual(820);
+    const l = launcherLayout(win(1440, 900), area, { mode: 'popover', size: 'compact' }, parts);
+    expect(l.top + l.height).toBeLessThanOrEqual(820 - 24);
+    // A 1024×700 window whose bottom 120px is under the Dock: shorter, whole rows still.
+    const low = launcherLayout(win(1024, 700), full(1024, 580), { mode: 'popover', size: 'compact' }, parts);
+    expect(low.top + low.height).toBeLessThanOrEqual(580 - 24);
+    expect(low.grid!.rows).toBe(3);
+    // A Dock down the right side, over the window's last 120px: narrower on both sides, so still centred.
+    const side = launcherLayout(win(1280, 800), full(1000, 800), { mode: 'popover', size: 'compact' }, parts);
+    expect(side.width).toBe(672);
+    expect(side.left + side.width).toBeLessThanOrEqual(1000 - 24);
+    expect(side.left).toBe(1280 - side.left - side.width);
     // A taskbar on the left, and the menu bar above a window that starts under it.
     expect(visibleArea({ innerWidth: 1200, innerHeight: 800, screenX: 0, screenY: 0 }, { availLeft: 60, availTop: 25, availWidth: 1860, availHeight: 1055 })).toEqual({ left: 60, top: 25, width: 1140, height: 775 });
-    const fs = launcherLayout(area, { mode: 'fullscreen', size: 'compact' });
+    const fs = launcherLayout(win(1440, 900), area, { mode: 'fullscreen', size: 'compact' });
     expect(fs.top + fs.height).toBe(820);
   });
 
@@ -77,25 +146,104 @@ describe('launcher size and place', () => {
   });
 
   it('is a bottom sheet of four columns and 48px icons below 480px', () => {
-    const l = launcherLayout(full(400, 800), { mode: 'popover', size: 'large' });
-    expect(l).toMatchObject({ kind: 'sheet', columns: 4, icon: 48, width: 400, left: 0, height: 720 });
+    const l = launcherLayout(win(400, 800), full(400, 800), { mode: 'popover', size: 'large' });
+    expect(l).toMatchObject({ kind: 'sheet', columns: 4, fixedColumns: 4, icon: 48, width: 400, left: 0, height: 720, grid: null });
     expect(l.top + l.height).toBe(800);
-    expect(launcherLayout(full(479, 700), { mode: 'fullscreen', size: 'compact' }).kind).toBe('sheet');
-    expect(launcherLayout(full(480, 700), { mode: 'popover', size: 'compact' }).kind).toBe('popover');
+    expect(launcherLayout(win(479, 700), full(479, 700), { mode: 'fullscreen', size: 'compact' }).kind).toBe('sheet');
+    expect(launcherLayout(win(480, 700), full(480, 700), { mode: 'popover', size: 'compact' }).kind).toBe('popover');
   });
 
-  it('has three icon sizes and a full-screen mode', () => {
-    expect(launcherLayout(full(1280, 800), { mode: 'popover', size: 'compact' }).icon).toBe(44);
-    expect(launcherLayout(full(1280, 800), { mode: 'popover', size: 'comfortable' }).icon).toBe(52);
-    expect(launcherLayout(full(1280, 800), { mode: 'popover', size: 'large' }).icon).toBe(64);
-    expect(launcherLayout(full(1280, 800), { mode: 'fullscreen', size: 'compact' })).toMatchObject({ kind: 'fullscreen', left: 0, top: 0, width: 1280, height: 800 });
+  it('has three icon sizes in the popover, each a step larger in full screen', () => {
+    const at = (mode: 'popover' | 'fullscreen', size: 'compact' | 'comfortable' | 'large') => launcherLayout(win(1280, 800), full(1280, 800), { mode, size }).icon;
+    expect([at('popover', 'compact'), at('popover', 'comfortable'), at('popover', 'large')]).toEqual([44, 52, 64]);
+    expect([at('fullscreen', 'compact'), at('fullscreen', 'comfortable'), at('fullscreen', 'large')]).toEqual([52, 56, 72]);
   });
 
-  it('fits as many 88px columns as the grid is wide', () => {
+  it('puts full screen under the top bar, in one centred column of at most 1080px with 104px tiles', () => {
+    // [width, height] → columns.
+    const cols: Record<string, number> = { '1024x700': 8, '1280x800': 9, '1440x900': 9, '1728x1117': 9, '2560x1440': 9 };
+    for (const [w, h] of SIZES) {
+      const l = launcherLayout(win(w, h), full(w, h), { mode: 'fullscreen', size: 'comfortable' }, parts);
+      // Never over the top bar, and so never over the traffic lights or the window buttons in it.
+      expect(l).toMatchObject({ kind: 'fullscreen', left: 0, top: TOP_BAR_PX, width: w, height: h - TOP_BAR_PX, icon: 56, tileMin: 104, rowHeight: 96 });
+      expect(l.column!.width).toBe(Math.min(1080, w));
+      expect(l.columns).toBe(cols[`${w}x${h}`]);
+      expect(l.column!.gridRoom).toBe(h - TOP_BAR_PX - fullscreenChrome(parts));
+    }
+    expect(TOP_BAR_PX).toBeGreaterThanOrEqual(52);
+    expect(FULL_COLUMN).toEqual({ maxWidth: 1080, padTop: 48, padSide: 32, padBottom: 24 });
+    expect(FULL_SEARCH).toEqual({ maxWidth: 640, height: 52 });
+    expect(fullscreenChrome(parts)).toBe(48 + 68 + 40 + 1 + 40 + 24);
+    // Under a menu bar or a work area that starts lower: lower too.
+    expect(fullscreenRect(win(1280, 800), { left: 0, top: 70, width: 1280, height: 730 }).top).toBe(70);
+  });
+
+  it('fits full screen\'s grid to its content, or to the whole rows and headings that fit', () => {
+    const blocks = sectionBlocks(
+      [
+        { label: 'Communication', items: [1, 2, 3] },
+        { label: 'Work', items: Array.from({ length: 12 }) },
+      ],
+      9,
+      96,
+      4,
+    );
+    // Heading, row; heading, row, row (12 tiles in 9 columns).
+    expect(blocks).toEqual([
+      { height: 32, gapBefore: 0, heading: true },
+      { height: 96, gapBefore: 0 },
+      { height: 32, gapBefore: 0, heading: true },
+      { height: 96, gapBefore: 0 },
+      { height: 96, gapBefore: 4 },
+    ]);
+    // Everything fits: all of it, no empty space under it.
+    expect(fitGridHeight(blocks, 1000)).toBe(8 + 32 + 96 + 32 + 96 + 4 + 96 + 12);
+    // Room for all but the last row: down to the end of the row before it, never through a row.
+    expect(fitGridHeight(blocks, 300)).toBe(8 + 32 + 96 + 32 + 96 + 12);
+    // Room for the second heading but none of its rows: it stops before that heading, not under it.
+    expect(fitGridHeight(blocks, 8 + 32 + 96 + 32 + 12)).toBe(8 + 32 + 96 + 12);
+    expect(fitGridHeight([], 300)).toBe(20);
+  });
+
+  it('fits as many columns as the grid is wide', () => {
     expect(columnsFor(728)).toBe(8);
     expect(columnsFor(88)).toBe(1);
     expect(columnsFor(178)).toBe(2);
     expect(columnsFor(0)).toBe(1);
+    expect(columnsFor(1016, 104, 4)).toBe(9);
+    expect(columnsFor(960, 104, 4)).toBe(8);
+  });
+
+  it('draws the bottom fade only while there is more below', () => {
+    expect(hasMoreBelow({ scrollTop: 0, clientHeight: 400, scrollHeight: 900 })).toBe(true);
+    expect(hasMoreBelow({ scrollTop: 500, clientHeight: 400, scrollHeight: 900 })).toBe(false);
+    expect(hasMoreBelow({ scrollTop: 0, clientHeight: 400, scrollHeight: 400 })).toBe(false);
+    expect(hasMoreBelow({ scrollTop: 0, clientHeight: 400, scrollHeight: 401 })).toBe(false);
+  });
+});
+
+describe('sections', () => {
+  it('groups All apps by category, in the categories\' order, under their names', () => {
+    const p = base();
+    const view = launcherView({ apps, prefs: p });
+    const sections = launcherSections(view, p, true);
+    expect(sections.map((s) => s.label)).toEqual(['Communication', 'Work', 'Business', 'People', 'Operations', 'Admin'].filter((l) => view.categories.some((c) => c.label === l)));
+    expect(sections.map((s) => s.label)).toContain('Communication');
+    // Every tile once, with its place in the grid, in order.
+    expect(sections.flatMap((s) => s.items.map((x) => x.index))).toEqual(view.tiles.map((_, i) => i));
+    for (const s of sections) for (const x of s.items) expect(x.app.group).toBe(s.id);
+    // No headings: one section.
+    expect(launcherSections(view, p, false)).toEqual([{ id: 'all', label: null, items: view.tiles.map((app, index) => ({ app, index })) }]);
+  });
+
+  it('uses the person\'s own groups when they group by them', () => {
+    let p = addGroup(base(), 'Daily')!.prefs;
+    p = { ...moveToGroup(p, 'mail', 'daily'), groupBy: 'mine' };
+    const view = launcherView({ apps, prefs: p });
+    const sections = launcherSections(view, p, true);
+    expect(sections[0]).toMatchObject({ id: 'daily', label: 'Daily' });
+    expect(sections[0]!.items.map((x) => x.app.id)).toEqual(['mail']);
+    expect(sections[1]).toMatchObject({ id: 'other', label: 'Other apps' });
   });
 });
 
@@ -109,6 +257,23 @@ describe('keyboard navigation', () => {
     expect(gridStep(4, 'Home', 30, 8)).toBe(0);
     expect(gridStep(4, 'End', 30, 8)).toBe(29);
     expect(gridStep(0, 'ArrowDown', 0, 4)).toBe(0);
+  });
+
+  it('moves between sections a row at a time, each section starting a row of its own', () => {
+    // Sections of 3, 12 and 2 tiles, 9 columns: rows [0–2], [3–11], [12–14], [15–16].
+    const sizes = [3, 12, 2];
+    expect(sectionStep(1, 'ArrowDown', sizes, 9)).toBe(4);
+    expect(sectionStep(2, 'ArrowDown', sizes, 9)).toBe(5);
+    expect(sectionStep(8, 'ArrowDown', sizes, 9)).toBe(14);
+    expect(sectionStep(14, 'ArrowDown', sizes, 9)).toBe(16);
+    expect(sectionStep(16, 'ArrowDown', sizes, 9)).toBe(16);
+    expect(sectionStep(11, 'ArrowUp', sizes, 9)).toBe(2);
+    expect(sectionStep(4, 'ArrowUp', sizes, 9)).toBe(1);
+    expect(sectionStep(0, 'ArrowUp', sizes, 9)).toBe(0);
+    expect(sectionStep(2, 'ArrowRight', sizes, 9)).toBe(3);
+    expect(sectionStep(5, 'End', sizes, 9)).toBe(16);
+    // One section: the same as gridStep.
+    expect(sectionStep(0, 'ArrowDown', [30], 8)).toBe(8);
   });
 });
 

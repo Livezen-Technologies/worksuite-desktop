@@ -149,7 +149,7 @@ export function LauncherSettings() {
         <Line label="Size" hint="Compact fits more apps on small screens.">
           <Segmented<LauncherSize> label="Size" value={prefs.size} options={[{ value: 'compact', label: 'Compact' }, { value: 'comfortable', label: 'Comfortable' }, { value: 'large', label: 'Large' }]} onChange={(v) => set((p) => ({ ...p, size: v }))} />
         </Line>
-        <Line label="Open as" hint="Popover sizes itself to the window. Full screen covers the app.">
+        <Line label="Open as" hint="Popover sits centred over the app and sizes itself to the window. Full screen fills the window under the top bar, with larger tiles.">
           <Segmented<LauncherMode> label="Open as" value={prefs.mode} options={[{ value: 'popover', label: 'Popover' }, { value: 'fullscreen', label: 'Full screen' }]} onChange={(v) => set((p) => ({ ...p, mode: v }))} />
         </Line>
         {TOGGLES.map(([k, label, hint]) => (

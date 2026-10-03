@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { visibleApps } from '@shared/apps';
 import type * as CoreApi from '../../../src/core/api';
 
-/** The app launcher (worksuite-desktop#201): its size, search, categories, keyboard, tiles and menus. */
+/** The app launcher (worksuite-desktop#201, #206): its size and place, search, categories, keyboard, tiles and menus. */
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(async () => ({ prefs: null })), apiPut: vi.fn(async () => ({})) }));
 
 const openInBrowser = vi.fn(async () => true);
@@ -18,7 +18,12 @@ window.worksuite = {
   files: { registerDropped: async () => [] },
   events: { on: () => () => undefined },
 };
-Object.defineProperty(window, 'matchMedia', { value: () => ({ matches: false, addEventListener: () => undefined, removeEventListener: () => undefined }) });
+/** Whether the tests' system asks for reduced motion. */
+let reducedMotion = false;
+Object.defineProperty(window, 'matchMedia', {
+  configurable: true,
+  value: (q: string) => ({ matches: reducedMotion && q.includes('reduced-motion'), addEventListener: () => undefined, removeEventListener: () => undefined }),
+});
 Element.prototype.scrollIntoView ??= () => undefined;
 
 const { app } = await import('../../../src/core/app-state');
@@ -38,6 +43,7 @@ function setSize(w: number, h: number) {
 }
 
 beforeEach(() => {
+  reducedMotion = false;
   localStorage.clear();
   resetLauncherPrefsForTests();
   setSize(1280, 800);
@@ -57,19 +63,70 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('the launcher\'s size and shape', () => {
-  it('is a popover of at most 760×600, inside the window', () => {
+  const px = (v: string) => parseInt(v, 10);
+
+  it('is a popover min(880px, 100vw − 48px) wide, centred, 12% down the window', () => {
     render(<Launcher />);
     const d = dialog();
     expect(d.dataset.layout).toBe('popover');
-    expect(d.style.width).toBe('760px');
-    expect(d.style.height).toBe('600px');
-    expect(parseInt(d.style.top) + 600).toBeLessThanOrEqual(800);
+    expect(d.style.width).toBe('880px');
+    expect(d.style.left).toBe('200px');
+    expect(px(d.style.left) * 2 + 880).toBe(1280);
+    expect(d.style.top).toBe('96px');
+    expect(px(d.style.top) + px(d.style.height)).toBeLessThanOrEqual(800 - 24);
   });
 
-  it('shrinks to 90% of a small window', () => {
-    setSize(1024, 640);
+  it('sizes the grid to whole rows of tiles, names and all', () => {
     render(<Launcher />);
-    expect(dialog().style.height).toBe('576px');
+    // 1280×800, compact: five rows of 84px tiles, 2px apart, in 8px + 12px of padding.
+    const area = dialog().querySelector<HTMLElement>('[data-grid-area]')!;
+    expect(area.style.height).toBe(`${8 + 5 * 84 + 4 * 2 + 12}px`);
+    expect(within(grid()).getAllByRole('option')[0]!.style.height).toBe('84px');
+    expect(dialog().style.height).toBe(`${149 + 448}px`);
+  });
+
+  it('lays itself out again when the window is resized while it is open', () => {
+    render(<Launcher />);
+    expect(dialog().style.left).toBe('200px');
+    setSize(1024, 700);
+    act(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+    const d = dialog();
+    expect(d.style.left).toBe('72px');
+    expect(d.style.top).toBe('84px');
+    expect(d.style.height).toBe(`${149 + 362}px`);
+    expect(dialog().querySelector<HTMLElement>('[data-grid-area]')!.style.height).toBe('362px');
+    setSize(1440, 900);
+    act(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+    expect(dialog().style.left).toBe('280px');
+  });
+
+  it('keeps search, the rows above the grid and the footer out of the grid\'s scroller', () => {
+    updateLauncherPrefs((p) => ({ ...p, pinned: ['mail'] }));
+    render(<Launcher />);
+    const scroller = grid();
+    expect(scroller.className).toContain('overflow-y-auto');
+    expect(scroller.contains(search())).toBe(false);
+    expect(scroller.contains(screen.getByRole('tablist', { name: 'Categories' }))).toBe(false);
+    expect(scroller.contains(screen.getByRole('button', { name: 'Open Mail' }))).toBe(false);
+    expect(scroller.contains(screen.getByRole('button', { name: 'Customise' }))).toBe(false);
+    // Nothing else in the popover scrolls up and down.
+    const others = Array.from(dialog().querySelectorAll<HTMLElement>('*')).filter((el) => el !== scroller && /overflow-(y-)?auto/.test(el.className) && !/overflow-x-auto/.test(el.className));
+    expect(others).toEqual([]);
+  });
+
+  it('dims and blurs what is under it, and closes on a click outside', async () => {
+    render(<Launcher />);
+    const backdrop = dialog().parentElement!;
+    expect(backdrop.className).toContain('bg-scrim');
+    expect(backdrop.className).toContain('backdrop-blur');
+    fireEvent.mouseDown(dialog());
+    expect(ui.get().overlay).toBe('launcher');
+    fireEvent.mouseDown(backdrop);
+    await waitFor(() => expect(ui.get().overlay).toBeNull());
   });
 
   it('is a bottom sheet with a category dropdown below 480px', () => {
@@ -96,12 +153,194 @@ describe('the launcher\'s size and shape', () => {
     expect((within(grid()).getAllByRole('option')[0]!.querySelector('[aria-hidden]') as HTMLElement).style.width).toBe('52px');
   });
 
-  it('covers the window in full-screen mode', () => {
-    updateLauncherPrefs((p) => ({ ...p, mode: 'fullscreen' }));
+});
+
+describe('full screen', () => {
+  beforeEach(() => {
+    updateLauncherPrefs((p) => ({ ...p, mode: 'fullscreen', size: 'comfortable' }));
+  });
+
+  it('fills the window under the top bar, never over the window controls', () => {
     render(<Launcher />);
-    expect(dialog().dataset.layout).toBe('fullscreen');
-    expect(dialog().style.width).toBe('1280px');
-    expect(dialog().style.height).toBe('800px');
+    const d = dialog();
+    expect(d.dataset.layout).toBe('fullscreen');
+    expect(d.style.top).toBe('52px');
+    expect(d.style.left).toBe('0px');
+    expect(d.style.width).toBe('1280px');
+    expect(d.style.height).toBe('748px');
+    // The top bar stays where it is, dimmed; a click on it closes the launcher.
+    const scrim = document.querySelector<HTMLElement>('[data-scrim]')!;
+    expect(scrim.style.height).toBe('52px');
+    expect(scrim.contains(d)).toBe(false);
+  });
+
+  it('is one centred column at most 1080px wide, 48px from the top and 32px from the sides', () => {
+    render(<Launcher />);
+    const column = dialog().querySelector<HTMLElement>('[data-column]')!;
+    expect(column.style.maxWidth).toBe('1080px');
+    expect(column.style.paddingTop).toBe('48px');
+    expect(column.style.paddingLeft).toBe('32px');
+    expect(column.style.paddingRight).toBe('32px');
+    expect(dialog().className).toContain('justify-center');
+    const field = search().closest('label')!;
+    expect(field.style.maxWidth).toBe('640px');
+    expect(field.style.height).toBe('52px');
+  });
+
+  it('draws larger tiles in 104px columns', () => {
+    render(<Launcher />);
+    const rows = within(grid()).getAllByRole('presentation').filter((el) => el.style.gridTemplateColumns);
+    expect(rows[0]!.style.gridTemplateColumns).toBe('repeat(auto-fill, minmax(104px, 1fr))');
+    const tile = within(grid()).getAllByRole('option')[0]!;
+    expect((tile.querySelector('[aria-hidden]') as HTMLElement).style.width).toBe('56px');
+    expect(tile.style.height).toBe('96px');
+  });
+
+  it('shows All apps category by category, under each one\'s name', () => {
+    render(<Launcher />);
+    const headings = () => Array.from(grid().querySelectorAll('[role="presentation"] > div:first-child:not([data-grid])')).map((h) => h.textContent);
+    expect(headings()).toEqual(expect.arrayContaining(['Communication', 'Work', 'Business']));
+    expect(headings()[0]).toBe('Communication');
+    // Communication's apps under it.
+    const first = grid().querySelector('[role="presentation"]')!;
+    expect(within(first as HTMLElement).getAllByRole('option').map((o) => o.getAttribute('aria-label'))).toEqual(['Mail', 'Chat']);
+    // One category, or a search: no headings.
+    fireEvent.click(screen.getByRole('tab', { name: /Work/ }));
+    expect(headings()).toEqual([]);
+    fireEvent.click(screen.getByRole('tab', { name: /All apps/ }));
+    fireEvent.change(search(), { target: { value: 'mail' } });
+    expect(headings()).toEqual([]);
+  });
+
+  it('keeps the footer right under the content: the grid is only as tall as what is in it', () => {
+    // A tall window: everything fits. Each section is its 32px heading and its rows of 96px tiles, 4px apart, in
+    // nine columns, with 8px above and 12px below; no room left over, so the footer sits right under the last row.
+    setSize(1280, 1000);
+    render(<Launcher />);
+    const area = () => parseInt(dialog().querySelector<HTMLElement>('[data-grid-area]')!.style.height, 10);
+    const content = Array.from(grid().querySelectorAll('[data-grid]')).reduce((sum, g) => {
+      const rows = Math.ceil(g.children.length / 9);
+      return sum + 32 + rows * 96 + (rows - 1) * 4;
+    }, 0);
+    expect(area()).toBe(8 + content + 12);
+    expect(area()).toBeLessThan(948 - 221);
+    // 800 high: not all of it fits, so the grid stops at the end of the last whole section row that does (three of
+    // the four sections here), and scrolls.
+    setSize(1280, 800);
+    act(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+    expect(area()).toBe(8 + 3 * (32 + 96) + 12);
+    expect(area()).toBeLessThanOrEqual(748 - 221);
+  });
+
+  it('is drawn on the app\'s dark, over a blur, and closes with × and with Esc', async () => {
+    render(<Launcher />);
+    expect(dialog().dataset.theme).toBe('dark');
+    expect(dialog().className).toContain('bg-launcher-full');
+    expect(dialog().className).toContain('backdrop-blur');
+    fireEvent.click(screen.getByRole('button', { name: 'Close launcher' }));
+    await waitFor(() => expect(ui.get().overlay).toBeNull());
+    openOverlay('launcher');
+    cleanup();
+    render(<Launcher />);
+    fireEvent.keyDown(search(), { key: 'Escape' });
+    await waitFor(() => expect(ui.get().overlay).toBeNull());
+  });
+
+  it('closes on a click outside the column, or on the top bar', async () => {
+    render(<Launcher />);
+    fireEvent.mouseDown(within(grid()).getAllByRole('option')[0]!);
+    fireEvent.mouseDown(search());
+    expect(ui.get().overlay).toBe('launcher');
+    fireEvent.mouseDown(dialog());
+    await waitFor(() => expect(ui.get().overlay).toBeNull());
+    openOverlay('launcher');
+    cleanup();
+    render(<Launcher />);
+    fireEvent.mouseDown(document.querySelector('[data-scrim]')!);
+    await waitFor(() => expect(ui.get().overlay).toBeNull());
+  });
+});
+
+describe('the grid\'s scrolling', () => {
+  const overflow = (el: HTMLElement, scrollHeight: number, clientHeight: number, scrollTop = 0) => {
+    Object.defineProperty(el, 'scrollHeight', { configurable: true, value: scrollHeight });
+    Object.defineProperty(el, 'clientHeight', { configurable: true, value: clientHeight });
+    Object.defineProperty(el, 'scrollTop', { configurable: true, writable: true, value: scrollTop });
+  };
+  const fade = () => dialog().querySelector('[data-fade]');
+
+  it('fades out at the bottom only while there is more to scroll to', () => {
+    render(<Launcher />);
+    // Everything shows (jsdom draws nothing): no fade.
+    expect(fade()).toBeNull();
+    overflow(grid(), 900, 448);
+    fireEvent.scroll(grid());
+    expect(fade()).toBeTruthy();
+    overflow(grid(), 900, 448, 452);
+    fireEvent.scroll(grid());
+    expect(fade()).toBeNull();
+    overflow(grid(), 448, 448);
+    fireEvent.scroll(grid());
+    expect(fade()).toBeNull();
+  });
+
+  it('brings the tile the keys move to into view, clear of the fade', () => {
+    const into = vi.spyOn(Element.prototype, 'scrollIntoView');
+    render(<Launcher />);
+    into.mockClear();
+    // 880px wide: nine 88px columns, so down goes from the first tile to the tenth.
+    fireEvent.keyDown(search(), { key: 'ArrowDown' });
+    expect(into).toHaveBeenCalledWith({ block: 'nearest' });
+    expect((into.mock.contexts.at(-1) as HTMLElement).dataset.index).toBe('9');
+    expect(grid().style.scrollPaddingBottom).toBe('20px');
+    into.mockRestore();
+  });
+});
+
+describe('opening and closing', () => {
+  it('fades and scales in and out, and focuses the search', async () => {
+    render(<Launcher />);
+    expect(dialog().className).toContain('launcher-in');
+    expect(document.activeElement).toBe(search());
+    fireEvent.keyDown(search(), { key: 'Escape' });
+    expect(dialog().className).toContain('launcher-out');
+    // Still there while it fades out, then gone.
+    expect(ui.get().overlay).toBe('launcher');
+    await waitFor(() => expect(ui.get().overlay).toBeNull());
+  });
+
+  it('does not move for reduced motion, and closes at once', () => {
+    reducedMotion = true;
+    render(<Launcher />);
+    const backdrop = dialog().parentElement!;
+    expect(backdrop.dataset.motion).toBe('reduce');
+    expect(dialog().className).not.toMatch(/launcher-(in|out)/);
+    expect(backdrop.className).not.toMatch(/launcher-scrim/);
+    fireEvent.keyDown(search(), { key: 'Escape' });
+    expect(ui.get().overlay).toBeNull();
+  });
+
+  it('opens Settings › App launcher from the settings button by the search', () => {
+    render(<Launcher />);
+    fireEvent.click(screen.getByRole('button', { name: 'App launcher settings' }));
+    expect(ui.get().overlay).toBeNull();
+    expect(tabsStore.get().tabs.some((t) => t.route === '/settings/launcher')).toBe(true);
+  });
+});
+
+describe('long names', () => {
+  it('are cut short on the tile, with the whole name in a tooltip', () => {
+    app.set({ ...app.get(), apps: visibleApps({ apps: ['mail', 'oms', 'appointments'], permissions: ['oms.view'] }) });
+    render(<Launcher />);
+    const sales = within(grid()).getByRole('option', { name: 'Sales & Orders' });
+    expect(sales.getAttribute('title')).toBe('Sales & Orders');
+    expect(sales.querySelector('[data-name]')!.className).toContain('truncate');
+    const appointments = within(grid()).getByRole('option', { name: 'Appointments' });
+    expect(appointments.getAttribute('title')).toBe('Appointments · Opens in your browser');
+    // The category chips and the pinned row say theirs too.
+    expect(screen.getByRole('tab', { name: /Business/ }).getAttribute('title')).toBe('Business');
   });
 });
 
@@ -167,10 +406,10 @@ describe('the keyboard', () => {
     expect(openWindow).toHaveBeenCalledWith(expect.objectContaining({ kind: 'record', route: '/mail' }));
   });
 
-  it('closes with Esc', () => {
+  it('closes with Esc, once it has faded out', async () => {
     render(<Launcher />);
     fireEvent.keyDown(search(), { key: 'Escape' });
-    expect(ui.get().overlay).toBeNull();
+    await waitFor(() => expect(ui.get().overlay).toBeNull());
   });
 
   it('counts uses for Most used', () => {

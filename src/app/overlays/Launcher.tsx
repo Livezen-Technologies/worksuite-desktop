@@ -1,12 +1,18 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from 'react';
 import { appRoute, navApps, type AppDefinition } from '@shared/apps';
 import {
   ALL_CATEGORY,
   addGroup,
   categoryOf,
-  columnsFor,
-  gridStep,
+  FADE_PX,
+  fitGridHeight,
+  FULL_COLUMN,
+  FULL_SEARCH,
+  GRID_PAD,
+  hasMoreBelow,
+  LAUNCHER_PARTS,
   launcherLayout,
+  launcherSections,
   launcherView,
   moveToGroup,
   movePinned,
@@ -14,12 +20,15 @@ import {
   OTHER_GROUP,
   pinApp,
   reorderApps,
+  sectionBlocks,
+  sectionStep,
   setHidden,
   unpinApp,
   visibleArea,
   PIN_MAX,
   type LauncherPrefs,
   type Rect,
+  type WindowSize,
 } from '@shared/launcher';
 import { app, updatePrefs } from '../../core/app-state';
 import { appColour } from '../../core/app-look';
@@ -38,30 +47,52 @@ import { Select } from '../../components/Select';
 import { cx } from '../../components/ui';
 
 /**
- * App launcher (AppLauncher, §4.3, FR-NAV-02; redesigned in worksuite-desktop#201): find an app, the ones pinned and
- * used lately, and every app the person may open, by category, as tiles.
+ * App launcher (AppLauncher, §4.3, FR-NAV-02; redesigned in worksuite-desktop#201, laid out again in worksuite-desktop#206):
+ * find an app, the ones pinned and used lately, and every app the person may open, by category, as tiles.
  *
- * A popover of about 760×600 under the title bar, never more than 90% of the visible window and never under the
- * Dock or taskbar; a bottom sheet in a window narrower than 480px; or all of the window, as the person chooses in
- * Settings › App launcher (core/launcher-prefs, synced between their devices). The grid takes as many 88px columns as
- * fit. Typing searches at once — names and keywords, hidden apps too; the arrow keys move over the grid, Enter opens,
- * ⌘Enter opens in a new window, Esc closes. Right-click a tile, or drag it, to pin it, hide it, move it to a group of
- * one's own or open it in a new window. Apps the person may not open are never here (`app.apps` is through the gates).
+ * Three shapes, as the person chooses in Settings › App launcher (core/launcher-prefs, synced between their devices):
+ *  - a popover, `min(880px, 100vw - 48px)` wide, centred on the window and 12% down it, over a dimmed and blurred
+ *    app. Its height is the fixed parts plus whole rows of tiles, never a row cut through; only the grid scrolls,
+ *    with a fade at the bottom while there is more;
+ *  - full screen: the window below the top bar (never over the traffic lights or the window buttons), the app's
+ *    dark over a blur, with one centred column at most 1080px wide, larger tiles and, under All apps, each category
+ *    under its heading;
+ *  - a bottom sheet in a window narrower than 480px.
+ * Geometry is `launcherLayout` (shared/launcher), worked out again whenever the window is resized or moved.
+ *
+ * Typing searches at once (names and keywords, hidden apps too); the arrow keys move over the grid, Enter opens,
+ * ⌘Enter opens in a new window, Esc closes, as does a click outside. Right-click a tile, or drag it, to pin it, hide
+ * it, move it to a group of one's own or open it in a new window. Apps the person may not open are never here
+ * (`app.apps` is through the gates). It fades and scales in and out over 120ms, not at all for reduced motion.
  */
 
-const ANCHOR_TOP = 56;
 const EMPTY: string[] = [];
 const DRAG_TYPE = 'application/x-worksuite-app';
+/** How long the launcher takes to close: its fade out. */
+export const LAUNCHER_CLOSE_MS = 120;
 
-/** The visible part of the window, kept current as it is resized or moved. */
-function useVisibleArea(): Rect {
-  const read = () => visibleArea(window, window.screen as unknown as Parameters<typeof visibleArea>[1]);
-  const [area, setArea] = useState<Rect>(read);
+interface WindowArea {
+  win: WindowSize;
+  /** The part of the window the person can see: not under the Dock or a taskbar. */
+  area: Rect;
+}
+
+function readWindowArea(): WindowArea {
+  return { win: { width: window.innerWidth, height: window.innerHeight }, area: visibleArea(window, window.screen as unknown as Parameters<typeof visibleArea>[1]) };
+}
+
+const sameArea = (a: WindowArea, b: WindowArea) =>
+  a.win.width === b.win.width && a.win.height === b.win.height && a.area.left === b.area.left && a.area.top === b.area.top && a.area.width === b.area.width && a.area.height === b.area.height;
+
+/** The window's size and its visible part, kept current while the launcher is open, as the window is resized or moved. */
+function useWindowArea(): WindowArea {
+  const [now, setNow] = useState<WindowArea>(readWindowArea);
   useEffect(() => {
-    const on = () => setArea((prev) => {
-      const next = read();
-      return prev.left === next.left && prev.top === next.top && prev.width === next.width && prev.height === next.height ? prev : next;
-    });
+    const on = () =>
+      setNow((prev) => {
+        const next = readWindowArea();
+        return sameArea(prev, next) ? prev : next;
+      });
     window.addEventListener('resize', on);
     // A window dragged under the Dock moves without resizing: look again now and then while open.
     const t = setInterval(on, 1000);
@@ -70,7 +101,22 @@ function useVisibleArea(): Rect {
       clearInterval(t);
     };
   }, []);
-  return area;
+  return now;
+}
+
+const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
+
+/** Whether the person asked for reduced motion; the launcher then opens and closes without moving. */
+function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(() => (typeof window.matchMedia === 'function' ? window.matchMedia(REDUCED_MOTION).matches : false));
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const m = window.matchMedia(REDUCED_MOTION);
+    const on = () => setReduced(m.matches);
+    m.addEventListener?.('change', on);
+    return () => m.removeEventListener?.('change', on);
+  }, []);
+  return reduced;
 }
 
 type OpenHow = 'window' | 'new-tab' | 'current-tab';
@@ -87,32 +133,68 @@ export function Launcher() {
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
+  const [more, setMore] = useState(false);
+  const [measuredColumns, setMeasuredColumns] = useState<number | null>(null);
+  const [closing, setClosing] = useState(false);
   const grid = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const [recentIds] = useState(() => readRecentApps(userId));
-  const area = useVisibleArea();
-  const layout = launcherLayout(area, prefs, ANCHOR_TOP);
-  const sheet = layout.kind === 'sheet';
+  const { win, area } = useWindowArea();
+  const reduced = useReducedMotion();
 
   useEffect(() => syncLauncherPrefsIfStale(), []);
+  // Closing: gone once it has faded out. Unmounted sooner (another overlay opened), nothing is closed.
+  useEffect(() => {
+    if (!closing) return;
+    const t = setTimeout(() => closeOverlay(), LAUNCHER_CLOSE_MS);
+    return () => clearTimeout(t);
+  }, [closing]);
 
   // A channel is in its host (WhatsApp, in Chat: #35), not an app of its own here.
   const all = useMemo(() => navApps(apps).filter((a) => a.id !== 'home'), [apps]);
   const view = launcherView({ apps: all, prefs, query, category: cat, label: appLabel });
   const list = view.tiles;
   const searching = query.trim() !== '';
-  const columns = layout.columns ?? columnsFor(layout.width - 32);
-  const selected = Math.min(sel, Math.max(0, list.length - 1));
   const recent = prefs.toggles.recent
     ? recentIds
         .map((r) => all.find((a) => a.id === r.id))
         .filter((a): a is AppDefinition => !!a)
         .slice(0, 6)
     : [];
+  const showPinned = !searching && (view.pinned.length > 0 || !!dragging);
+  const showRecent = !searching && recent.length > 0;
+  const hasChips = view.categories.length > 1;
+  const layout = launcherLayout(win, area, prefs, { pinned: showPinned, recent: showRecent, chips: hasChips });
+  const sheet = layout.kind === 'sheet';
+  const full = layout.kind === 'fullscreen';
+  // Under All apps, with nothing searched, full screen and the sheet read category by category, each under its name.
+  const sections = launcherSections(view, prefs, !searching && view.current === ALL_CATEGORY && hasChips && layout.kind !== 'popover');
+  // The columns the grid really has, when the browser says (a scrollbar can take one); else as worked out.
+  const columns = measuredColumns ?? layout.columns;
+  const selected = Math.min(sel, Math.max(0, list.length - 1));
 
   useEffect(() => {
     grid.current?.querySelector<HTMLElement>(`[data-index="${selected}"]`)?.scrollIntoView?.({ block: 'nearest' });
   }, [selected]);
+
+  // Whenever what is listed or the launcher's size changes: is there more below (the fade), and how many columns?
+  useLayoutEffect(() => {
+    const el = grid.current;
+    setMore(!!el && hasMoreBelow(el));
+    const g = el?.querySelector<HTMLElement>('[data-grid]');
+    const tpl = g ? getComputedStyle(g).gridTemplateColumns : '';
+    const n = tpl && !tpl.includes('(') ? tpl.trim().split(/\s+/).length : 0;
+    setMeasuredColumns(n > 0 ? n : null);
+  }, [list.length, cat, query, layout.kind, layout.width, layout.height, layout.rowHeight, showPinned, showRecent]);
+
+  /** Closes with the launcher's fade out; at once for reduced motion. */
+  const dismiss = () => {
+    if (reduced) {
+      closeOverlay();
+      return;
+    }
+    setClosing(true);
+  };
 
   const badge = (a: AppDefinition): number => (prefs.toggles.badges && status && a.badge ? (status.unread[a.badge] ?? 0) : 0);
 
@@ -152,6 +234,7 @@ export function Launcher() {
     }, 'That group could not be made.');
   const toggleSidebarPin = (a: AppDefinition) => void updatePrefs({ pinnedApps: sidebarPins.includes(a.id) ? sidebarPins.filter((p) => p !== a.id) : [...sidebarPins, a.id] });
 
+  /** Settings › App launcher: the settings button by the search, and Customise in the footer. */
   const customise = () => {
     closeOverlay();
     navigate('/settings/launcher');
@@ -162,11 +245,18 @@ export function Launcher() {
     if (e.key === 'Escape') {
       e.preventDefault();
       if (menu) setMenu(null);
-      else closeOverlay();
+      else dismiss();
     } else if (e.key.startsWith('Arrow') || (!inInput && (e.key === 'Home' || e.key === 'End'))) {
       if (menu) return;
       e.preventDefault();
-      setSel(gridStep(selected, e.key, list.length, columns));
+      setSel(
+        sectionStep(
+          selected,
+          e.key,
+          sections.map((s) => s.items.length),
+          columns,
+        ),
+      );
     } else if (e.key === 'Enter') {
       if (menu || (e.target instanceof HTMLElement && e.target.closest('[role="menu"]'))) return;
       e.preventDefault();
@@ -242,6 +332,8 @@ export function Launcher() {
   const menuApp = menu ? byId(menu.id) : undefined;
   const draggedApp = dragging ? byId(dragging) : undefined;
   const shortcut = prettyAccelerator(prefs.shortcut);
+  const names = prefs.toggles.names;
+  const padX = sheet ? 'px-2' : full ? 'px-0' : 'px-3.5';
 
   const tile = (a: AppDefinition, i: number) => {
     const n = badge(a);
@@ -257,6 +349,7 @@ export function Launcher() {
         aria-selected={sel}
         aria-label={name}
         tabIndex={-1}
+        // The whole name, however much of it the tile shows.
         title={web ? `${name} · Opens in your browser` : name}
         onMouseEnter={() => setSel(i)}
         onClick={() => open(a)}
@@ -267,14 +360,16 @@ export function Launcher() {
         }}
         {...dragProps(a)}
         {...dropZone(`tile:${a.id}`, dropOnTile(a))}
+        style={{ height: layout.rowHeight }}
         className={cx(
-          'relative flex min-w-0 flex-col items-center gap-1.5 rounded-[12px] px-1 pt-2.5 pb-2 text-ink outline-none',
+          'relative flex min-w-0 flex-col items-center gap-1.5 overflow-hidden rounded-[12px] px-1 text-ink outline-none',
+          names ? 'pt-2.5 pb-2' : 'py-2.5',
           sel ? 'bg-selection shadow-[inset_0_0_0_2px_var(--color-primary)]' : 'hover:bg-subtle',
           over === `tile:${a.id}` && dragging !== a.id && 'shadow-[inset_3px_0_0_var(--color-primary)]',
           dragging === a.id && 'opacity-40',
         )}
       >
-        <span className="relative">
+        <span className="relative shrink-0">
           <AppTile icon={a.icon} colour={appColour(a.id)} size={layout.icon} radius={Math.round(layout.icon * 0.27)} iconSize={Math.round(layout.icon * 0.45)} />
           {n > 0 ? (
             <span data-badge className="absolute -top-1.5 -right-2.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-surface bg-badge px-[5px] text-[10px] font-bold text-white">
@@ -287,19 +382,26 @@ export function Launcher() {
             </span>
           ) : null}
         </span>
-        <span className={cx('max-w-full truncate text-[12px] font-medium', !prefs.toggles.names && 'sr-only')}>{name}</span>
+        <span data-name className={cx('block max-w-full truncate text-[12px] leading-4 font-medium', full && 'text-[12.5px]', !names && 'sr-only')}>
+          {name}
+        </span>
       </button>
     );
   };
 
   const chipRow = (label: string, items: AppDefinition[], opts: { pinned?: boolean } = {}) => (
-    <div className={cx('flex min-w-0 items-center gap-1.5 overflow-x-auto scroll-thin', sheet ? 'px-2' : 'px-3.5')} {...(opts.pinned ? dropZone('pinned', dropOnPinned(null)) : {})}>
-      <span className="mr-1 shrink-0 text-[11px] font-semibold tracking-[0.06em] text-ink-3 uppercase">{label}</span>
+    <div
+      style={{ height: LAUNCHER_PARTS.row }}
+      className={cx('flex min-w-0 shrink-0 items-start gap-1.5 overflow-x-auto scroll-thin', padX, full && 'justify-center')}
+      {...(opts.pinned ? dropZone('pinned', dropOnPinned(null)) : {})}
+    >
+      <span className="mr-1 flex h-8 shrink-0 items-center text-[11px] font-semibold tracking-[0.06em] text-ink-3 uppercase">{label}</span>
       {items.map((a) => (
         <button
           key={a.id}
           type="button"
           aria-label={`Open ${appLabel(a)}`}
+          title={appLabel(a)}
           onClick={() => open(a)}
           onContextMenu={(e) => {
             e.preventDefault();
@@ -307,10 +409,10 @@ export function Launcher() {
           }}
           {...dragProps(a)}
           {...(opts.pinned ? dropZone(`pin:${a.id}`, dropOnPinned(a.id)) : {})}
-          className={cx('flex h-8 shrink-0 items-center gap-1.5 rounded-[9px] border border-line bg-surface pr-2.5 pl-1 text-[12px] font-semibold text-ink hover:bg-subtle', over === `pin:${a.id}` && 'border-primary')}
+          className={cx('flex h-8 max-w-[180px] shrink-0 items-center gap-1.5 rounded-[9px] border border-line bg-surface pr-2.5 pl-1 text-[12px] font-semibold text-ink hover:bg-subtle', over === `pin:${a.id}` && 'border-primary')}
         >
           <AppTile icon={a.icon} colour={appColour(a.id)} size={24} radius={7} iconSize={14} />
-          {appLabel(a)}
+          <span className="min-w-0 truncate">{appLabel(a)}</span>
         </button>
       ))}
       {opts.pinned && dragging && !items.some((a) => a.id === dragging) ? (
@@ -319,37 +421,37 @@ export function Launcher() {
     </div>
   );
 
-  const showPinned = !searching && (view.pinned.length > 0 || !!dragging);
-  const showRecent = !searching && recent.length > 0;
+  const chips = hasChips ? (
+    <div role="tablist" aria-label="Categories" style={{ height: LAUNCHER_PARTS.chips }} className={cx('flex shrink-0 items-start gap-1.5 overflow-x-auto scroll-thin', padX, full && 'justify-center')}>
+      {view.categories.map((c) => {
+        const on = c.id === view.current;
+        return (
+          <button
+            key={c.id}
+            type="button"
+            role="tab"
+            aria-selected={on}
+            title={c.label}
+            onClick={() => (setCat(c.id), setSel(0))}
+            {...dropZone(`cat:${c.id}`, dropOnCategory(c.id))}
+            className={cx(
+              'flex h-[30px] max-w-[200px] shrink-0 items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold',
+              on ? 'border-primary bg-primary text-white' : 'border-line bg-surface text-ink-2 hover:text-ink',
+              over === `cat:${c.id}` && prefs.groupBy === 'mine' && c.id !== ALL_CATEGORY && 'ring-2 ring-primary',
+            )}
+          >
+            <span className="min-w-0 truncate">{c.label}</span>
+            <span className="text-[11px] opacity-75">{c.count}</span>
+          </button>
+        );
+      })}
+    </div>
+  ) : null;
 
-  const chips =
-    view.categories.length > 1 ? (
-      <div role="tablist" aria-label="Categories" className={cx('flex shrink-0 gap-1.5 overflow-x-auto pb-2.5 scroll-thin', sheet ? 'px-2' : 'px-3.5')}>
-        {view.categories.map((c) => {
-          const on = c.id === view.current;
-          return (
-            <button
-              key={c.id}
-              type="button"
-              role="tab"
-              aria-selected={on}
-              onClick={() => (setCat(c.id), setSel(0))}
-              {...dropZone(`cat:${c.id}`, dropOnCategory(c.id))}
-              className={cx(
-                'flex h-[30px] shrink-0 items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold',
-                on ? 'border-primary bg-primary text-white' : 'border-line bg-surface text-ink-2 hover:text-ink',
-                over === `cat:${c.id}` && prefs.groupBy === 'mine' && c.id !== ALL_CATEGORY && 'ring-2 ring-primary',
-              )}
-            >
-              {c.label}
-              <span className="text-[11px] opacity-75">{c.count}</span>
-            </button>
-          );
-        })}
-      </div>
-    ) : null;
-
-  const gridStyle: CSSProperties = { gridTemplateColumns: layout.columns ? `repeat(${layout.columns}, minmax(0, 1fr))` : 'repeat(auto-fill, minmax(88px, 1fr))' };
+  const gridStyle: CSSProperties = {
+    gridTemplateColumns: layout.fixedColumns ? `repeat(${layout.fixedColumns}, minmax(0, 1fr))` : `repeat(auto-fill, minmax(${layout.tileMin}px, 1fr))`,
+    gap: layout.gap,
+  };
   const empty = (
     <div className="col-span-full flex flex-col items-center gap-2 py-14 text-center">
       <b className="text-[14px] text-ink">No apps match that search.</b>
@@ -359,57 +461,83 @@ export function Launcher() {
     </div>
   );
 
-  // The bottom sheet reads category by category, each under its name.
-  const sections: Array<{ id: string; label: string | null; items: Array<{ a: AppDefinition; i: number }> }> = [];
-  if (sheet && !searching && view.current === ALL_CATEGORY && view.categories.length > 1) {
-    list.forEach((a, i) => {
-      const c = categoryOf(a, prefs);
-      const last = sections.at(-1);
-      if (last?.id === c) last.items.push({ a, i });
-      else sections.push({ id: c, label: view.categories.find((x) => x.id === c)?.label ?? null, items: [{ a, i }] });
-    });
-  } else sections.push({ id: 'all', label: null, items: list.map((a, i) => ({ a, i })) });
+  // The grid's height: whole rows in the popover; in full screen, all of it, or the whole rows and headings that fit.
+  const gridHeight = layout.grid
+    ? layout.grid.height
+    : layout.column && list.length
+      ? fitGridHeight(
+          sectionBlocks(
+            sections.map((s) => ({ label: s.label, items: s.items })),
+            columns,
+            layout.rowHeight,
+            layout.gap,
+          ),
+          layout.column.gridRoom,
+        )
+      : null;
 
   const body = (
-    <div ref={grid} role="listbox" aria-label="Apps" className={cx('min-h-0 flex-1 overflow-y-auto scroll-thin', sheet ? 'px-2 pb-3' : 'px-2.5 pt-2.5 pb-1.5')}>
-      {sections.map((s) => (
-        <div key={s.id} role="presentation">
-          {s.label ? <div className="px-2 pt-2.5 pb-0.5 text-[11px] font-semibold tracking-[0.06em] text-ink-3 uppercase">{s.label}</div> : null}
-          <div role="presentation" className="grid gap-0.5" style={gridStyle}>
-            {s.items.map(({ a, i }) => tile(a, i))}
+    <div
+      data-grid-area
+      className={cx('relative min-h-0', sheet ? 'flex-1' : full ? 'shrink' : 'shrink-0')}
+      style={gridHeight === null ? undefined : { height: gridHeight }}
+    >
+      <div
+        ref={grid}
+        role="listbox"
+        aria-label="Apps"
+        onScroll={(e) => setMore(hasMoreBelow(e.currentTarget))}
+        className={cx('h-full overflow-y-auto overscroll-contain scroll-thin', sheet && 'px-2 pb-3')}
+        style={sheet ? undefined : { paddingTop: GRID_PAD.top, paddingBottom: GRID_PAD.bottom, paddingLeft: full ? 0 : GRID_PAD.x, paddingRight: full ? 0 : GRID_PAD.x, scrollPaddingTop: GRID_PAD.top, scrollPaddingBottom: FADE_PX }}
+      >
+        {sections.map((s) => (
+          <div key={s.id} role="presentation">
+            {s.label ? (
+              <div style={{ height: LAUNCHER_PARTS.heading }} className="flex items-end px-2 pb-1.5 text-[11px] font-semibold tracking-[0.06em] text-ink-3 uppercase">
+                <span className="truncate">{s.label}</span>
+              </div>
+            ) : null}
+            <div role="presentation" data-grid className="grid" style={gridStyle}>
+              {s.items.map(({ app: a, index }) => tile(a, index))}
+            </div>
           </div>
-        </div>
-      ))}
-      {!list.length ? (searching ? empty : <div className="py-14 text-center text-[13px] text-ink-3">Every app is hidden. Search finds them, or show them again in Customise.</div>) : null}
+        ))}
+        {!list.length ? searching ? empty : <div className="py-14 text-center text-[13px] text-ink-3">Every app is hidden. Search finds them, or show them again in Customise.</div> : null}
+      </div>
+      {more ? <div aria-hidden data-fade className="pointer-events-none absolute inset-x-0 bottom-0" style={{ height: FADE_PX, background: `linear-gradient(to bottom, transparent, ${full ? 'var(--ws-launcher-full)' : 'var(--ws-surface)'})` }} /> : null}
     </div>
   );
 
-  const footer = dragging && draggedApp ? (
-    <DragActions
-      app={draggedApp}
-      pinned={prefs.pinned.includes(draggedApp.id)}
-      hidden={prefs.hidden.includes(draggedApp.id)}
-      zone={dropZone}
-      over={over}
-      onPin={() => togglePin(draggedApp)}
-      onHide={() => toggleHidden(draggedApp)}
-      onWindow={() => open(draggedApp, 'window')}
-    />
-  ) : (
-    <div className="flex shrink-0 items-center justify-between gap-3 border-t border-line px-3.5 py-2 text-[11px] text-ink-3">
-      <span className="min-w-0 truncate">
-        {list.length} {list.length === 1 ? 'app' : 'apps'}
-        {sheet ? null : ` · Arrow keys to move · Enter to open · ${isMac ? '⌘' : 'Ctrl+'}Enter for a new window · Esc to close`}
-      </span>
-      <button type="button" onClick={customise} className="shrink-0 font-semibold text-primary hover:underline">
-        Customise
-      </button>
-    </div>
-  );
+  const footer =
+    dragging && draggedApp ? (
+      <DragActions
+        app={draggedApp}
+        pinned={prefs.pinned.includes(draggedApp.id)}
+        hidden={prefs.hidden.includes(draggedApp.id)}
+        zone={dropZone}
+        over={over}
+        onPin={() => togglePin(draggedApp)}
+        onHide={() => toggleHidden(draggedApp)}
+        onWindow={() => open(draggedApp, 'window')}
+      />
+    ) : (
+      <div style={{ height: LAUNCHER_PARTS.footer }} className={cx('flex shrink-0 items-center justify-between gap-3 border-t border-line text-[11px] text-ink-3', full ? 'px-1' : 'px-3.5')}>
+        <span className="min-w-0 truncate">
+          {list.length} {list.length === 1 ? 'app' : 'apps'}
+          {sheet ? null : ` · Arrow keys to move · Enter to open · ${isMac ? '⌘' : 'Ctrl+'}Enter for a new window · Esc to close`}
+        </span>
+        <button type="button" onClick={customise} className="shrink-0 font-semibold text-primary hover:underline">
+          Customise
+        </button>
+      </div>
+    );
 
   const search = (
-    <label className={cx('flex min-w-0 flex-1 items-center gap-2.5 rounded-[11px] border bg-well px-3 text-ink-3', sheet ? 'h-11 border-line' : 'h-[42px] border-primary')}>
-      <Icon name="search" size={17} />
+    <label
+      className={cx('flex min-w-0 flex-1 items-center gap-2.5 rounded-[11px] border bg-well px-3 text-ink-3', sheet ? 'h-11 border-line' : 'border-primary', !sheet && !full && 'h-[42px]')}
+      style={full ? { height: FULL_SEARCH.height, maxWidth: FULL_SEARCH.maxWidth } : undefined}
+    >
+      <Icon name="search" size={full ? 19 : 17} />
       <input
         ref={input}
         autoFocus
@@ -420,31 +548,111 @@ export function Launcher() {
         }}
         placeholder="Find an app"
         aria-label="Find an app"
-        className="bare-focus min-w-0 flex-1 bg-transparent text-[14px] text-ink outline-none placeholder:text-ink-3"
+        className={cx('bare-focus min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-ink-3', full ? 'text-[16px]' : 'text-[14px]')}
       />
-      {sheet ? null : <span className="shrink-0 rounded-[6px] border border-line px-1.5 py-0.5 font-mono text-[11px] text-ink-3" title="Opens and closes the launcher">{shortcut}</span>}
+      {sheet ? null : (
+        <span className="shrink-0 rounded-[6px] border border-line px-1.5 py-0.5 font-mono text-[11px] text-ink-3" title="Opens and closes the launcher">
+          {shortcut}
+        </span>
+      )}
     </label>
   );
   const squareButton = (label: string, icon: string, onClick: () => void) => (
-    <button type="button" aria-label={label} title={label} onClick={onClick} className={cx('flex shrink-0 items-center justify-center rounded-[11px] bg-subtle text-ink-2 hover:text-ink', sheet ? 'h-11 w-11' : 'h-[42px] w-[42px]')}>
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className={cx('flex shrink-0 items-center justify-center rounded-[11px] bg-subtle text-ink-2 hover:text-ink', sheet ? 'h-11 w-11' : full ? 'h-[52px] w-[52px]' : 'h-[42px] w-[42px]')}
+    >
       <Icon name={icon} size={icon === 'x' ? 16 : 18} />
     </button>
   );
+  const settingsButton = squareButton('App launcher settings', 'settings', customise);
+  const closeButton = squareButton('Close launcher', 'x', dismiss);
 
   const frame: CSSProperties = { left: layout.left, top: layout.top, width: layout.width, height: layout.height };
+  const motion = reduced ? null : closing ? 'launcher-out' : 'launcher-in';
+  const scrimMotion = reduced ? null : closing ? 'launcher-scrim-out' : 'launcher-scrim-in';
+  const outside = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) dismiss();
+  };
+
+  const menuEl =
+    menu && menuApp ? (
+      <TileMenu
+        app={menuApp}
+        at={menu}
+        prefs={prefs}
+        sidebarPinned={sidebarPins.includes(menuApp.id)}
+        onClose={() => setMenu(null)}
+        onOpen={(how) => open(menuApp, how)}
+        onPin={() => (setMenu(null), togglePin(menuApp))}
+        onHide={() => (setMenu(null), toggleHidden(menuApp))}
+        onGroup={(g) => (setMenu(null), toGroup(menuApp, g))}
+        onNewGroup={(name) => (setMenu(null), toNewGroup(menuApp, name))}
+        onSidebar={() => (setMenu(null), toggleSidebarPin(menuApp))}
+      />
+    ) : null;
+
+  if (full) {
+    // Full screen: the window below the top bar. The top bar, and the window controls in it, stay where they are,
+    // dimmed; a click there closes the launcher like any click outside the column.
+    return (
+      <div className="no-drag fixed inset-0 z-50" data-motion={reduced ? 'reduce' : 'full'} onKeyDown={onKey}>
+        <div data-scrim className={cx('absolute inset-x-0 top-0 bg-scrim', scrimMotion)} style={{ height: layout.top }} onMouseDown={outside} />
+        <div
+          role="dialog"
+          aria-label="Apps"
+          aria-modal="true"
+          data-layout="fullscreen"
+          data-size={prefs.size}
+          // The app's own dark, whichever theme is on: everything in it is drawn in the dark theme's colours.
+          data-theme="dark"
+          className={cx('absolute flex justify-center overflow-hidden bg-launcher-full text-ink backdrop-blur-xl', motion)}
+          style={frame}
+          onMouseDown={(e) => {
+            if (menu) setMenu(null);
+            outside(e);
+          }}
+        >
+          <div className="absolute top-4 right-4">{closeButton}</div>
+          <div
+            data-column
+            className="flex max-h-full w-full min-w-0 flex-col self-start"
+            style={{ maxWidth: FULL_COLUMN.maxWidth, paddingTop: FULL_COLUMN.padTop, paddingLeft: FULL_COLUMN.padSide, paddingRight: FULL_COLUMN.padSide, paddingBottom: FULL_COLUMN.padBottom }}
+            onMouseDown={outside}
+          >
+            <div style={{ height: LAUNCHER_PARTS.fullHeader }} className="flex shrink-0 items-start justify-center gap-2" onMouseDown={outside}>
+              {search}
+              {settingsButton}
+            </div>
+            {showPinned ? chipRow('Pinned', view.pinned, { pinned: true }) : null}
+            {showRecent ? chipRow('Recent', recent) : null}
+            {chips}
+            <div className="h-px shrink-0 bg-line" />
+            {body}
+            {footer}
+          </div>
+        </div>
+        {menuEl}
+      </div>
+    );
+  }
 
   return (
-    <div className="no-drag fixed inset-0 z-50 bg-[rgba(15,27,61,.32)] backdrop-blur-[2px]" onMouseDown={(e) => e.target === e.currentTarget && closeOverlay()} onKeyDown={onKey}>
+    <div className={cx('no-drag fixed inset-0 z-50 bg-scrim backdrop-blur-[3px]', scrimMotion)} data-motion={reduced ? 'reduce' : 'full'} onMouseDown={outside} onKeyDown={onKey}>
       <div
         role="dialog"
         aria-label="Apps"
+        aria-modal="true"
         data-layout={layout.kind}
         data-size={prefs.size}
         className={cx(
-          'animate-in absolute flex flex-col overflow-hidden border border-line bg-surface text-ink shadow-[0_30px_80px_-20px_rgb(var(--ws-shadow-rgb)/.45)]',
+          'absolute flex flex-col overflow-hidden border border-line bg-surface text-ink shadow-[0_30px_80px_-20px_rgb(var(--ws-shadow-rgb)/.45)]',
+          motion,
           layout.kind === 'popover' && 'rounded-[18px]',
-          layout.kind === 'sheet' && 'rounded-t-[18px] border-b-0',
-          layout.kind === 'fullscreen' && 'rounded-none border-0',
+          sheet && 'rounded-t-[18px] border-b-0',
         )}
         style={frame}
         onMouseDown={() => menu && setMenu(null)}
@@ -457,29 +665,29 @@ export function Launcher() {
             <div className="flex items-center justify-between px-3.5 pt-3 pb-2">
               <div className="text-[18px] font-bold">Apps</div>
               <div className="flex gap-1.5">
-                {squareButton('Customise launcher', 'sliders', customise)}
-                {squareButton('Close launcher', 'x', closeOverlay)}
+                {settingsButton}
+                {closeButton}
               </div>
             </div>
             <div className="flex gap-2 px-3.5 pb-2.5">
               {search}
-              {view.categories.length > 1 ? (
+              {hasChips ? (
                 <div className="w-[120px] shrink-0">
                   <Select label="Category" value={view.current} options={view.categories.map((c) => ({ value: c.id, label: c.id === ALL_CATEGORY ? 'All' : c.label }))} onValueChange={(v) => (setCat(String(v)), setSel(0))} />
                 </div>
               ) : null}
             </div>
-            {showPinned ? <div className="pb-2">{chipRow('Pinned', view.pinned, { pinned: true })}</div> : null}
+            {showPinned ? chipRow('Pinned', view.pinned, { pinned: true }) : null}
           </>
         ) : (
           <>
-            <div className="flex items-center gap-2 px-3.5 pt-3.5 pb-2.5">
+            <div style={{ height: LAUNCHER_PARTS.header }} className="flex shrink-0 items-center gap-2 px-3.5">
               {search}
-              {squareButton('Customise launcher', 'sliders', customise)}
-              {squareButton('Close launcher', 'x', closeOverlay)}
+              {settingsButton}
+              {closeButton}
             </div>
-            {showPinned ? <div className="pb-2">{chipRow('Pinned', view.pinned, { pinned: true })}</div> : null}
-            {showRecent ? <div className="pb-2">{chipRow('Recent', recent)}</div> : null}
+            {showPinned ? chipRow('Pinned', view.pinned, { pinned: true }) : null}
+            {showRecent ? chipRow('Recent', recent) : null}
             {chips}
             <div className="h-px shrink-0 bg-line" />
           </>
@@ -487,21 +695,7 @@ export function Launcher() {
         {body}
         {footer}
       </div>
-      {menu && menuApp ? (
-        <TileMenu
-          app={menuApp}
-          at={menu}
-          prefs={prefs}
-          sidebarPinned={sidebarPins.includes(menuApp.id)}
-          onClose={() => setMenu(null)}
-          onOpen={(how) => open(menuApp, how)}
-          onPin={() => (setMenu(null), togglePin(menuApp))}
-          onHide={() => (setMenu(null), toggleHidden(menuApp))}
-          onGroup={(g) => (setMenu(null), toGroup(menuApp, g))}
-          onNewGroup={(name) => (setMenu(null), toNewGroup(menuApp, name))}
-          onSidebar={() => (setMenu(null), toggleSidebarPin(menuApp))}
-        />
-      ) : null}
+      {menuEl}
     </div>
   );
 }
@@ -519,13 +713,13 @@ function DragActions(props: {
 }) {
   const target = (key: string, icon: string, label: string, run: () => void, show = true) =>
     show ? (
-      <div key={key} {...props.zone(`act:${key}`, run)} className={cx('flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[9px] border border-dashed text-[12px] font-semibold', props.over === `act:${key}` ? 'border-primary bg-selection text-primary' : 'border-line text-ink-2')}>
+      <div key={key} {...props.zone(`act:${key}`, run)} className={cx('flex h-7 flex-1 items-center justify-center gap-1.5 rounded-[9px] border border-dashed text-[12px] font-semibold', props.over === `act:${key}` ? 'border-primary bg-selection text-primary' : 'border-line text-ink-2')}>
         <Icon name={icon} size={14} />
         {label}
       </div>
     ) : null;
   return (
-    <div className="flex shrink-0 gap-2 border-t border-line px-3.5 py-2" aria-label={`Drop ${appLabel(props.app)} to`}>
+    <div style={{ height: LAUNCHER_PARTS.footer }} className="flex shrink-0 items-center gap-2 border-t border-line px-3.5" aria-label={`Drop ${appLabel(props.app)} to`}>
       {target('pin', props.pinned ? 'pin-off' : 'pin', props.pinned ? 'Unpin' : 'Pin', props.onPin)}
       {target('hide', props.hidden ? 'eye' : 'eye-off', props.hidden ? 'Show' : 'Hide', props.onHide)}
       {target('window', 'external', 'Open in new window', props.onWindow, props.app.surface === 'native')}
