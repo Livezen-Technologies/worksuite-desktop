@@ -114,6 +114,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     if (systemPreferences.getMediaAccessStatus(kind) === 'granted') return { granted: true };
     return { granted: await systemPreferences.askForMediaAccess(kind) };
   });
+  router.handle('media:screenIndicator', (input, c) => ctx.screenShare.indicate(c.sender.id, input.active));
   router.handle('media:screenSources', () => ctx.screenShare.sources());
   router.handle('media:screenPick', (input, c) => ctx.screenShare.preparePick(c.sender.id, input.id, !!input.audio));
   router.handle('media:privacySettings', async (input) => {

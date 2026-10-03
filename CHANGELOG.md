@@ -5,6 +5,26 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.114: Present your screen and still be seen
+
+For meetings and calls (#146):
+
+- **What you share is on the stage.** When you share a screen or a window, you now see it live in the middle of the
+  meeting, framed in red, with **Stop presenting** above it. It used to show your camera there instead. Your camera
+  moves to its own small tile, which you can drag, resize or minimise as before. It also stays separate in the
+  floating card, and ahead of a whiteboard. When you stop, by the button or by the system's own Stop sharing, the
+  normal layout comes back.
+- **Others see the same.** Viewers get your shared screen on the stage and your camera beside it, separately.
+- **A red outline around what you share,** on the desktop itself, so you can see what others can see. It follows the
+  window you share as it moves (Windows, macOS and Linux on X11), lets clicks through, and goes when sharing stops. It
+  reads where the window is and nothing more: it never asks for Accessibility or controls the mouse. Where the
+  system can't say where the window is (Wayland, for one), only the red frame in WorkSuite shows.
+
+Still to check on installed apps before #146 closes: sharing each monitor and a window between two computers,
+monitors with different scaling, and the system's Stop sharing button. See `docs/MEETING_SCREEN_SHARE_QA.md`.
+
+---
+
 ## 2026-10-03 — 0.2.113: Website chat ringing says what happened
 
 - When a visitor leaves the site before anyone joins their chat, the call window now says just that. It used to add

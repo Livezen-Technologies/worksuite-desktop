@@ -100,6 +100,7 @@ export const INVOKE_CHANNELS = [
   'hr:clock',
   'hr:break',
   'media:access',
+  'media:screenIndicator',
   'media:screenSources',
   'media:screenPick',
   'media:privacySettings',

@@ -1,6 +1,7 @@
 import { BrowserWindow, desktopCapturer, systemPreferences, webContents, type Session } from 'electron';
 import type { ScreenSources } from '@shared/types';
 import { logger } from '../main/log';
+import { ShareOutline } from './share-outline';
 import { DesktopError } from '../main/errors';
 
 const log = logger('screen-share');
@@ -26,6 +27,14 @@ export interface GrantedSource {
 }
 
 export class ScreenShare {
+  private readonly outline = new ShareOutline();
+
+  indicate(webContentsId: number, active: boolean): void {
+    const source = this.granted.get(webContentsId);
+    if (active && source) this.outline.start(webContentsId, source);
+    else this.outline.stop(webContentsId);
+  }
+
   private previousPermission: string | null = null;
   private permissionProblem: string | null = null;
   private generations = new Map<number, number>();
@@ -143,6 +152,7 @@ export class ScreenShare {
   }
 
   forget(webContentsId: number): void {
+    this.outline.stop(webContentsId);
     this.generations.set(webContentsId, (this.generations.get(webContentsId) ?? 0) + 1);
     this.picks.delete(webContentsId);
     this.granted.delete(webContentsId);

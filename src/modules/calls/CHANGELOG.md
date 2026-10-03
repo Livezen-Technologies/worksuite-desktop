@@ -4,6 +4,19 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.5.3 — 2026-10-03
+
+**Fixed**
+
+- A presenter's own shared screen is on the stage, with a red frame and Stop presenting, and their camera stays in its
+  own movable tile, also in the floating card (#146). Before, the stage showed the presenter's camera.
+
+**Added**
+
+- A click-through red outline on the desktop around the shared screen or window (`electron/services/share-outline.ts`,
+  IPC `media:screenIndicator`). It reads window bounds only (User32, CoreGraphics, xwininfo), polls once a second,
+  hides when they are unknown, and is never shown on Wayland
+
 ## 1.5.2 — 2026-10-03
 
 **Changed**

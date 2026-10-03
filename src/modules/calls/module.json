@@ -1,8 +1,9 @@
 {
     "module": "calls",
-    "version": "1.5.2",
+    "version": "1.5.3",
     "paths": [
         "electron/services/calls.ts",
-        "electron/services/screen-share.ts"
+        "electron/services/screen-share.ts",
+        "electron/services/share-outline.ts"
     ]
 }
