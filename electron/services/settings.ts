@@ -40,7 +40,7 @@ export function defaultPreferences(): Preferences {
     dndFrom: '22:00',
     dndTo: '07:00',
     appLockMinutes: 15,
-    appLockEnabled: true,
+    appLockEnabled: false,
     lockOnSleep: true,
     lockedChatNotifications: true,
     lockedCallNotifications: true,
@@ -90,7 +90,7 @@ export class SettingsService {
     const savedLanguage = db.getConfig<unknown>('interface_language_default');
     this.defaultLanguage = normalizeLanguage(typeof savedLanguage === 'string' ? savedLanguage : stored.language);
     // The AI settings are one object: one saved before a field was added takes that field's default.
-    this.prefs = { ...defaults, ...stored, appLockEnabled: stored.appLockEnabled ?? stored.appLockMinutes !== 0, appLockMinutes: stored.appLockMinutes === 0 && stored.appLockEnabled === undefined ? 15 : stored.appLockMinutes ?? defaults.appLockMinutes, darkColorProfile: normalizeDarkProfile(stored.darkColorProfile), ai: { ...defaults.ai, ...stored.ai, display: stored.ai?.display ?? defaults.ai.display }, meetRecording: { ...defaults.meetRecording, ...stored.meetRecording }, drive: normalizeDrivePrefs(stored.drive) };
+    this.prefs = { ...defaults, ...stored, appLockEnabled: stored.appLockEnabled ?? (stored.appLockMinutes !== undefined && stored.appLockMinutes > 0), appLockMinutes: stored.appLockMinutes === 0 && stored.appLockEnabled === undefined ? 15 : stored.appLockMinutes ?? defaults.appLockMinutes, darkColorProfile: normalizeDarkProfile(stored.darkColorProfile), ai: { ...defaults.ai, ...stored.ai, display: stored.ai?.display ?? defaults.ai.display }, meetRecording: { ...defaults.meetRecording, ...stored.meetRecording }, drive: normalizeDrivePrefs(stored.drive) };
   }
 
   /** Interface language is isolated by server and user, while device policy stays computer-wide. */

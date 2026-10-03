@@ -33,7 +33,7 @@ export const DEFAULT_POLICY: DesktopPolicy = {
   external_file_open: 'allowed',
   downloads: 'allowed',
   screen_capture_share: 'allowed',
-  app_lock_max_minutes: 15,
+  app_lock_max_minutes: 0,
   notification_min_privacy: 'FULL',
   required_background_services: [],
   personal_device_mode: 'online_only',

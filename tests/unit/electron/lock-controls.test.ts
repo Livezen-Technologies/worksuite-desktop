@@ -22,12 +22,60 @@ describe('lock-screen protection (#115)', () => {
     settings.setUserLanguageScope('https://one.example', '1');
     settings.update({ appLockEnabled: false, appLockMinutes: 23, lockOnSleep: false, lockedChatNotifications: false });
     settings.setUserLanguageScope('https://one.example', '2');
-    expect(settings.effective()).toMatchObject({ appLockEnabled: true, appLockMinutes: 15, lockOnSleep: true, lockedChatNotifications: true });
+    expect(settings.effective()).toMatchObject({ appLockEnabled: false, appLockMinutes: 15, lockOnSleep: true, lockedChatNotifications: true });
     settings.setUserLanguageScope('https://two.example', '1');
-    expect(settings.effective().appLockEnabled).toBe(true);
+    expect(settings.effective().appLockEnabled).toBe(false);
     const restored = new SettingsService(db);
     restored.setUserLanguageScope('https://one.example', '1');
     expect(restored.effective()).toMatchObject({ appLockEnabled: false, appLockMinutes: 23, lockOnSleep: false, lockedChatNotifications: false });
+  });
+  it('defaults to off across fresh startup, accounts, unrelated preferences and default policies', () => {
+    const db = database();
+    db.setConfig('preferences', { theme: 'dark' });
+    for (const policy of [null, normalizePolicy(undefined, false), normalizePolicy({}, true), normalizePolicy({ downloads: 'disabled' }, true)]) {
+      const settings = new SettingsService(db);
+      settings.setPolicy(policy);
+      settings.setUserLanguageScope('https://one.example', '1');
+      expect(settings.effective().appLockEnabled).toBe(false);
+      expect(settings.locks().map(x => x.key)).not.toContain('appLockEnabled');
+      expect(settings.locks().map(x => x.key)).not.toContain('appLockMinutes');
+      settings.update({ theme: 'light' });
+      const restarted = new SettingsService(db);
+      restarted.setUserLanguageScope('https://one.example', '1');
+      expect(restarted.effective().appLockEnabled).toBe(false);
+    }
+  });
+  it.each([true, false])('preserves an explicitly saved enable preference (%s) across restart and policy removal', (enabled) => {
+    const db = database();
+    db.setConfig('preferences', { appLockEnabled: enabled, appLockMinutes: 23 });
+    const settings = new SettingsService(db);
+    settings.setUserLanguageScope('https://one.example', '1');
+    settings.setPolicy(normalizePolicy({ app_lock_max_minutes: 5 }, true));
+    expect(settings.effective().appLockEnabled).toBe(true);
+    settings.setPolicy(null);
+    expect(settings.effective()).toMatchObject({ appLockEnabled: enabled, appLockMinutes: 23 });
+    const restarted = new SettingsService(db);
+    restarted.setUserLanguageScope('https://one.example', '1');
+    expect(restarted.effective().appLockEnabled).toBe(enabled);
+  });
+  it.each([0, 23])('preserves a legacy saved lock timeout (%s) without treating a missing timeout as enabled', (minutes) => {
+    const db = database(); db.setConfig('preferences', { appLockMinutes: minutes });
+    expect(new SettingsService(db).effective().appLockEnabled).toBe(minutes > 0);
+  });
+  it('ignores automatic timeout, sleep and OS lock while off, then activates them when manually enabled', () => {
+    vi.useFakeTimers();
+    const settings = new SettingsService(database());
+    const lock = new LockService();
+    lock.enabled = () => settings.effective().appLockEnabled === true;
+    lock.minutes = () => settings.effective().appLockMinutes;
+    lock.start();
+    vi.advanceTimersByTime(60 * 60_000); power.get('suspend')!(); power.get('lock-screen')!();
+    expect(lock.isLocked()).toBe(false);
+    settings.update({ appLockEnabled: true, appLockMinutes: 1 }); lock.activity();
+    vi.advanceTimersByTime(60_000); expect(lock.state().reason).toBe('timeout');
+    lock.unlock(); power.get('suspend')!(); expect(lock.state().reason).toBe('system');
+    lock.unlock(); power.get('lock-screen')!(); expect(lock.state().reason).toBe('system');
+    lock.stop();
   });
   it('enforces organization locking and timeout limits while allowing shorter and immediate intervals', () => {
     const settings = new SettingsService(database());

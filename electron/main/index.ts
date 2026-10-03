@@ -1430,7 +1430,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     );
   };
 
-  lock.enabled = () => sessionCtl.isReady() && settings.effective().appLockEnabled !== false;
+  lock.enabled = () => sessionCtl.isReady() && settings.effective().appLockEnabled === true;
   app.on('browser-window-blur', () => {
     setImmediate(() => {
       if (lock.enabled() && lock.minutes() === 0 && !BrowserWindow.getAllWindows().some(win => win.isFocused())) lock.lock('timeout');

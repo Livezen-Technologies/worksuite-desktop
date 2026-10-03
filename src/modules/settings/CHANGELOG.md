@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.11.4 — 2026-10-03
+
+- Make app locking opt-in by default, preserve saved choices and explicit policies, and disable inactive automatic-lock controls (#181).
+
 ## 1.11.3 — 2026-10-03
 
 - Command palette shows a command's shortcut hint; Mail commands, Quick Steps, automatic replies and rules can be run from it.

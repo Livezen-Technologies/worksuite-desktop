@@ -229,8 +229,9 @@ export interface Preferences {
   dndEnabled: boolean;
   dndFrom: string;
   dndTo: string;
-  /** Minutes of inactivity before the app locks; 0 = never. */
+  /** Minutes of inactivity while app locking is enabled; 0 = lock on loss of focus. */
   appLockMinutes: number;
+  /** App locking is opt-in when no saved preference or enforced policy exists. */
   appLockEnabled?: boolean;
   lockOnSleep?: boolean;
   lockedChatNotifications?: boolean;
