@@ -1060,7 +1060,7 @@ function MailWorkspace({ active }: ModuleProps) {
             </div>
           ) : null}
           {prefsLoaded && boxes.length > 0 && !globalPrefs.firstRun ? <FirstRun onPrefs={(patch) => setGlobalPrefs(patch)} /> : null}
-          {globalPrefs.firstRun === 'outlook' ? <FirstRunOffers onImport={() => navigate('/settings/mail?tab=import')} onSignatures={() => navigate('/settings/mail?tab=signatures')} onDone={() => setGlobalPrefs({ firstRun: 'done' })} /> : null}
+          {globalPrefs.firstRun === 'outlook' ? <FirstRunOffers outlook={globalPrefs.keyScheme === 'outlook'} onImport={() => navigate('/settings/mail?tab=import')} onSignatures={() => navigate('/settings/mail?tab=signatures')} onDone={() => setGlobalPrefs({ firstRun: 'done' })} onRestore={() => setGlobalPrefs({ firstRun: 'outlook' })} /> : null}
           {away ? (
             <div role="status" className="flex shrink-0 items-center gap-3 border-b border-line bg-warning-bg px-4 py-2 text-[13px] text-warning">
               <Icon name="bell-off" size={15} />
