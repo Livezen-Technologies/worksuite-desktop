@@ -9,8 +9,12 @@ import { parseAddresses } from './sanitize';
  * To, Cc and Bcc as chips: each address a chip with its initials and name
  * (× takes it off), and what is being typed below, with suggestions from the
  * one recipient lookup the product has (`/contacts/lookup`: contacts,
- * colleagues, customers, vendors). The value stays the plain comma list the
- * draft and the send already use, so nothing downstream changes.
+ * colleagues, customers, vendors), your contact groups and the
+ * organisation's distribution lists (ENH-MAIL-03 DMO-PPL-02). A contact
+ * group is a personal list with no address of its own, so choosing it puts
+ * its members in the field; a distribution list is an address and goes in
+ * as one. The value stays the plain comma list the draft and the send
+ * already use, so nothing downstream changes.
  */
 
 export interface Suggestion {
@@ -19,6 +23,8 @@ export interface Suggestion {
   name: string | null;
   email: string | null;
   subtitle?: string | null;
+  /** A contact group's size (kind `group`). */
+  members?: number;
 }
 
 const EMAIL = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/;
@@ -54,7 +60,7 @@ export function RecipientField({ label, value, onChange, names, onName, autoFocu
       const recent = apiGet<{ suggestions?: Array<{ email: string; name: string | null }> }>('/api/mail/autocomplete', { q, limit: 5 }, ctl.signal)
         .then((r) => (r?.suggestions ?? []).map((x): Suggestion => ({ kind: 'recent', id: x.email, name: x.name, email: x.email, subtitle: text('Recent') })))
         .catch(() => [] as Suggestion[]);
-      const directory = apiGet<{ results?: Suggestion[] }>('/api/contacts/lookup', { q, kinds: 'contact,employee,customer,vendor', limit: 8 }, ctl.signal)
+      const directory = apiGet<{ results?: Suggestion[] }>('/api/contacts/lookup', { q, kinds: 'contact,employee,customer,vendor,group,list', limit: 8 }, ctl.signal)
         .then((r) => r?.results ?? [])
         .catch(() => [] as Suggestion[]);
       void Promise.all([recent, directory]).then(([a, b]) => {
@@ -62,6 +68,10 @@ export function RecipientField({ label, value, onChange, names, onName, autoFocu
         const taken = new Set(list.map((x) => x.toLowerCase()));
         const out: Suggestion[] = [];
         for (const s of [...a, ...b]) {
+          if (s.kind === 'group') {
+            if (s.members) out.push({ ...s, subtitle: text('Contact group · {n} people', { n: s.members }) });
+            continue;
+          }
           const e = s.email?.toLowerCase();
           if (!e || taken.has(e)) continue;
           taken.add(e);
@@ -89,7 +99,24 @@ export function RecipientField({ label, value, onChange, names, onName, autoFocu
     setTyped('');
     setFound([]);
   };
+  /** A contact group goes in as its members, each with their name. */
+  const expandGroup = async (s: Suggestion) => {
+    try {
+      const r = await apiGet<{ members?: Array<{ name: string | null; email: string }> }>('/api/contacts/expand', { kind: 'group', id: s.id });
+      const members = r?.members ?? [];
+      for (const m of members) if (m.name) onName(m.email, m.name);
+      if (members.length) add(members.map((m) => m.email));
+      else setTyped('');
+    } catch {
+      // Left as typed, so nothing is lost.
+    }
+    input.current?.focus();
+  };
   const choose = (s: Suggestion) => {
+    if (s.kind === 'group') {
+      void expandGroup(s);
+      return;
+    }
     if (!s.email) return;
     if (s.name) onName(s.email, s.name);
     add([s.email]);
@@ -178,7 +205,7 @@ export function RecipientField({ label, value, onChange, names, onName, autoFocu
                 </button>
               ) : null}
               <button type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => choose(s)} className={cx('flex w-full items-center gap-2.5 rounded-[7px] px-2 py-1.5 text-left', i === pick ? 'bg-selection' : 'hover:bg-subtle')}>
-                <span aria-hidden className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-[var(--ws-on-primary)]">{initials(s.name || s.email || '')}</span>
+                <span aria-hidden className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-[var(--ws-on-primary)]">{s.kind === 'group' || s.kind === 'list' ? <Icon name="users" size={13} /> : initials(s.name || s.email || '')}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px] font-semibold text-ink">{s.name || s.email}</span>
                   <span className="block truncate text-[11.5px] text-ink-3">{[s.email, s.subtitle].filter(Boolean).join(' · ')}</span>

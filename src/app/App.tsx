@@ -26,6 +26,9 @@ import { WindowRoot } from './WindowRoot';
 import { RemoteControlWindow } from './RemoteControlWindow';
 import { WebchatRingWindow } from '../modules/chat/website/Ringing';
 import { QuickAskWindow } from './QuickAskWindow';
+import { MailLinkGuard } from '../modules/mail/LinkGuard';
+import { MailReminders } from '../modules/mail/Reminders';
+import { canOpen } from '../core/access';
 
 const GuestMeeting = lazy(() => import('../modules/meet/GuestMeeting').then((module) => ({ default: module.GuestMeeting })));
 
@@ -94,6 +97,10 @@ export function App() {
       {!locked && auth.stage === 'ready' ? <ChatSendingStatus /> : null}
       {guest ? <SignInPanel /> : null}
       {auth.stage === 'ready' && !locked && !hash.startsWith('#/window/') ? <MoveLocalData /> : null}
+      {/* Links clicked in a message are checked here, in the window they were clicked in (ENH-MAIL-03 DMO-SEC-03). */}
+      {auth.stage === 'ready' && !locked ? <MailLinkGuard /> : null}
+      {/* Due flags, snoozes and events, in the main window only (ENH-MAIL-03 DMO-NTF-05). */}
+      {auth.stage === 'ready' && !locked && !guest && !hash.startsWith('#/window/') && canOpen('mail') ? <MailReminders /> : null}
       <Toasts />
       <ShowMeHost />
     </Suspense>

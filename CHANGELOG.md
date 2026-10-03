@@ -5,14 +5,14 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-10-03 — 0.2.110: Website chat ringing says what happened
+## 2026-10-03 — 0.2.113: Website chat ringing says what happened
 
 - When a visitor leaves the site before anyone joins their chat, the call window now says just that. It used to add
   "The chat is in Missed chats", which is only true once the website's missed time has passed.
 
 ---
 
-## 2026-10-03 — 0.2.109: Website visitors can call you
+## 2026-10-03 — 0.2.112: Website visitors can call you
 
 With WorkSuite's Communication 1.11.0 and its voice calls migration (Website Live Chat SRS ENH-WCHAT-05), a website's
 chat widget can offer visitors a voice call — audio only, in the browser, no phone number. Somebody has to switch it on
@@ -38,7 +38,7 @@ WorkSuite they do not ring at all yet. Calls are not recorded. With an older Wor
 
 ---
 
-## 2026-10-03 — 0.2.108: Website chats show typing and read receipts as they happen
+## 2026-10-03 — 0.2.111: Website chats show typing and read receipts as they happen
 
 With WorkSuite's Communication 1.11.0 and its live status migration (Website Live Chat SRS ENH-WCHAT-04):
 
@@ -56,7 +56,7 @@ With an older WorkSuite server, typing and the list work as before and no ticks 
 
 ---
 
-## 2026-10-03 — 0.2.107: Several staff in one website chat
+## 2026-10-03 — 0.2.110: Several staff in one website chat
 
 With WorkSuite's Communication 1.11.0 and its team chats migration, a website chat can have more than one of you in it
 (Website Live Chat SRS ENH-WCHAT-03):
@@ -82,7 +82,7 @@ already has four staff in it is refused, with the number. With an older WorkSuit
 
 ---
 
-## 2026-10-03 — 0.2.106: Website chat list previews, search, reply quotes and Drive files
+## 2026-10-03 — 0.2.109: Website chat list previews, search, reply quotes and Drive files
 
 With WorkSuite's Communication 1.11.0:
 
@@ -101,7 +101,7 @@ refused with the server's message.
 
 ---
 
-## 2026-10-03 — 0.2.105: Website chats ring on one device, and stop for a reason
+## 2026-10-03 — 0.2.108: Website chats ring on one device, and stop for a reason
 
 With WorkSuite's ring sessions (the server's Communication 1.11.0 and its migration), the call-style ringing of the
 Website Live Chat SRS works across your devices:
@@ -122,7 +122,7 @@ With an older WorkSuite server, ringing works as in 0.2.44.
 
 ---
 
-## 2026-10-03 — 0.2.104: Answer a website visitor from the notification, or in a small window
+## 2026-10-03 — 0.2.107: Answer a website visitor from the notification, or in a small window
 
 The last two desktop parts of the Website Live Chat SRS's shared chat kit (ENH-WCHAT-02):
 
@@ -135,6 +135,34 @@ The last two desktop parts of the Website Live Chat SRS's shared chat kit (ENH-W
   that conversation — the thread and Team Chat's composer in its window look, with Accept and Close — in a small
   window you can keep on top. Opening it again brings the same window forward; **Open in main app** takes it back to
   the Website Chats workspace. A half-written reply goes with it.
+
+---
+
+## 0.2.106 — 2026-10-03
+
+- Keep tab menus, dialogs, search, notifications, AI surfaces and toasts above the native Office editor. Hide and restore the existing view with a captured document image while overlapping shell surfaces are open (#184). Reserve a footer for the persistent AI launcher so the editor stays usable.
+- Expand the tab menu with close-all, reopen, copy-link and left/right movement actions, and scroll long menus within the window. Office record links open in the app without transient editor parameters.
+
+## 2026-10-03 — 0.2.105: Mail that works like Outlook, finished
+
+Phases 4 and 5 of the Outlook-class Mail enhancement (ENH-MAIL-03):
+
+- **Your old mail files.** Import **PST**, **MBOX**, **EML** and **MSG** files (read in a separate, locked-down process; importing the same file again adds nothing twice), export mail, and open .eml/.msg files. Each folder shows what it keeps offline and its archive rule.
+- **Safer mail.** **Report phishing** (it goes to your administrators' queue), **safe links** checked on this computer and against your organisation's blocked list — nothing is sent to anyone else — pictures loaded only when you ask, and attachments that could harm the computer saved but never opened. **S/MIME** signatures are checked and shown.
+- **Recall, voting and read receipts.** Recall a message, add voting buttons, and answer read-receipt requests your way. These are only guaranteed between WorkSuite mailboxes, and the app says so.
+- **From a message:** create a task, a contact or a meeting; **Reply with meeting**; contact groups; add a sender from their signature; **Mentioned me**. Quick Steps can copy to a folder, log in CRM or open a helpdesk ticket.
+- **Reading.** **Ignore** or **clean up** a conversation, **conditional formatting**, plain text for chosen senders, and the **immersive reader**.
+- **Staying on top.** A reminder window and reminders that work offline; choose which mail raises a banner, let VIPs through quiet hours, more banner actions; **Catch up** on what you missed; decline invitations automatically while you're away; a Calendar peek from the sidebar.
+- **Writing.** **Mail merge**, **Suggest times** with a meeting link, and more drafting tools (draft from notes, tone, length, coaching).
+- **Apps pane** beside a message with WorkSuite information about the sender, **High contrast**, and new mail announced to screen readers.
+
+Needs the server update (Mail 1.5.0 and its migration). Not included: delegating a personal mailbox, S/MIME signing and encryption, sensitivity labels, and sending to WorkSuite from other apps' Share menus.
+
+---
+
+## 0.2.104 — 2026-10-03
+
+- Default app locking to Off for new users without a saved preference. Preserve saved lock choices and explicit organization rules; automatic-lock controls are inactive while locking is off (#181). Deploy the companion server policy-default update to stop the old default 15-minute enforcement.
 
 ---
 

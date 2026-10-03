@@ -46,7 +46,7 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
   {
     input: defineDesktopManifest({
       id: 'mail', name: 'Mail', icon: 'mail', contractVersion: 1, desktop: { enabled: true },
-      offline: { mode: 'DRAFTS', entities: ['draft'], cache: ['/api/mail/folders', '/api/mail/messages', '/api/mail/mailboxes', '/api/mail/views', '/api/mail/labels', '/api/mail/prefs', '/api/mail/sync/status'] },
+      offline: { mode: 'DRAFTS', entities: ['draft'], cache: ['/api/mail/folders', '/api/mail/messages', '/api/mail/mailboxes', '/api/mail/views', '/api/mail/labels', '/api/mail/prefs', '/api/mail/sync/status', '/api/mail/states'] },
       native: ['notifications', 'file-drop', 'printing'],
       quickActions: [{ id: 'compose', label: 'New Email', route: '/mail?compose=1' }],
       deepLinks: ['mail', 'mail/:id'],

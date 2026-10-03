@@ -134,6 +134,8 @@ export interface TransferDeps {
   openInApp?: (path: string) => boolean;
   /** Says that a transfer the person started has finished or failed (Drive › Settings › Notifications). */
   notify?: (t: Transfer, how: 'done' | 'failed') => void;
+  /** A finished download, by where it was saved and where it came from: mail's attachments are marked as from the internet (ENH-MAIL-03 DMO-SEC-04). */
+  downloaded?: (path: string, source: string) => void | Promise<void>;
   /** How long before the n-th automatic retry (0 first); tests make it short. */
   retryDelay?: (attempt: number) => number;
 }
@@ -596,6 +598,7 @@ export class TransferManager {
     this.dequeue(l.t.id);
     this.persist(l);
     for (const wake of [...this.chatOrderWaiters]) wake();
+    if (state === 'done' && l.meta.finalPath && l.meta.source && this.deps.downloaded) void Promise.resolve(this.deps.downloaded(l.meta.finalPath, l.meta.source)).catch(() => undefined);
     if (state === 'done' && l.meta.ownedSource && l.meta.path) {
       const path = l.meta.path;
       // Keep the local preview usable until server history replaces the optimistic bubble.

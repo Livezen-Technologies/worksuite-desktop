@@ -31,13 +31,14 @@ import type { Vault } from '../../../electron/services/vault';
  * with Reply, Archive and Mark read — which act on that message without
  * opening the app, Reply opening it with the reply started.
  */
-function setup(top: Record<string, unknown> | null = { id: 41, from_name: 'Pat Lee', from_email: 'pat@example.org', subject: 'Revised BOQ', preview: 'The committee reviewed it', is_read: false, mailbox: { id: 3 }, folder_slug: 'inbox' }) {
-  const prefs = { notificationsEnabled: true, backgroundServices: { notifications: true }, moduleNotifications: {}, notificationPrivacy: 'FULL', notificationSounds: false, dndEnabled: false, language: 'en' } as unknown as Preferences;
+function setup(top: Record<string, unknown> | null = { id: 41, from_name: 'Pat Lee', from_email: 'pat@example.org', subject: 'Revised BOQ', preview: 'The committee reviewed it', is_read: false, mailbox: { id: 3 }, folder_slug: 'inbox' }, over: Partial<Preferences> = {}, rest: Array<Record<string, unknown>> = []) {
+  const prefs = { notificationsEnabled: true, backgroundServices: { notifications: true }, moduleNotifications: {}, notificationPrivacy: 'FULL', notificationSounds: false, dndEnabled: false, language: 'en', ...over } as unknown as Preferences;
   let count = 2;
   const http = {
     get: vi.fn(async (path: string): Promise<Record<string, unknown>> => {
       if (path === '/api/mail/unread') return { count };
-      if (path === '/api/mail/messages') return { messages: top ? [top] : [] };
+      if (path === '/api/mail/messages') return { messages: top ? [top, ...rest] : rest };
+      if (path === '/api/mail/focus/context') return { overrides: [{ sender: '@shop.example', target: 'other' }], vips: ['boss@example.org'], known: [], moves: {} };
       return {};
     }),
     post: vi.fn(async () => ({})),
@@ -70,6 +71,8 @@ describe('new mail banners', () => {
       actions: [
         { type: 'button', text: 'Reply' },
         { type: 'button', text: 'Archive' },
+        { type: 'button', text: 'Delete' },
+        { type: 'button', text: 'Flag' },
         { type: 'button', text: 'Mark read' },
       ],
     });
@@ -84,8 +87,13 @@ describe('new mail banners', () => {
     notes[0]!.events.action!({}, 1);
     await vi.waitFor(() => expect(http.post).toHaveBeenCalledWith('/api/mail/messages/41/action', { action: 'archive', folder: 'inbox', mailbox: 3 }));
     await vi.waitFor(() => expect(notes[0]!.closed).toBe(true));
-    notes[0]!.events.action!({}, 2);
+    notes[0]!.events.action!({}, 4);
     await vi.waitFor(() => expect(http.post).toHaveBeenCalledWith('/api/mail/messages/41/action', { action: 'read', folder: 'inbox', mailbox: 3 }));
+    notes[0]!.events.action!({}, 2);
+    await vi.waitFor(() => expect(http.post).toHaveBeenCalledWith('/api/mail/messages/41/action', { action: 'trash', folder: 'inbox', mailbox: 3 }));
+    notes[0]!.events.action!({}, 3);
+    await vi.waitFor(() => expect(http.post).toHaveBeenCalledWith('/api/mail/states', expect.objectContaining({ action: 'flag', items: [{ mailbox: 3, folder: 'inbox', uid: '41' }] })));
+    expect(http.post).toHaveBeenCalledWith('/api/mail/messages/41/action', { action: 'star', folder: 'inbox', mailbox: 3 });
     notes[0]!.events.action!({}, 0);
     expect(service.onClick).toHaveBeenCalledWith('/mail?msg=41&mbx=3&reply=1', 'mail');
     notes[0]!.events.click!();
@@ -131,5 +139,46 @@ describe('new mail banners', () => {
     await vi.advanceTimersByTimeAsync(3_100);
     expect(http.get.mock.calls.filter(([p]) => p === '/api/mail/unread')).toHaveLength(1);
     service.stop();
+  });
+});
+
+describe('which new mail alerts, and quiet hours (ENH-MAIL-03 DMO-NTF-02/03)', () => {
+  const shop = { id: 50, from_name: 'Shop', from_email: 'deals@shop.example', subject: 'Sale', preview: '', is_read: false, mailbox: { id: 3 }, folder_slug: 'inbox' };
+  const boss = { id: 51, from_name: 'Boss', from_email: 'Boss@example.org', subject: 'Now', preview: '', is_read: false, mailbox: { id: 3 }, folder_slug: 'inbox' };
+  const run = async (top: Record<string, unknown>, over: Partial<Preferences>, rest: Array<Record<string, unknown>> = [], n = 1) => {
+    notes.length = 0;
+    const s = setup(top, over, rest);
+    await s.poll(true);
+    s.more(n);
+    await s.poll(false);
+    return s;
+  };
+
+  it('Focused only: Other mail stays quiet; the newest Focused one of several is named', async () => {
+    await run(shop, { mailAlerts: 'focused' });
+    expect(notes).toHaveLength(0);
+    await run(shop, { mailAlerts: 'focused' }, [boss], 2);
+    expect(notes[0]!.options).toMatchObject({ title: 'Boss', body: 'Now' });
+  });
+
+  it('VIPs only, none, and every message', async () => {
+    await run(shop, { mailAlerts: 'vip' });
+    expect(notes).toHaveLength(0);
+    await run(boss, { mailAlerts: 'vip' });
+    expect(notes[0]!.options.title).toBe('Boss');
+    await run(boss, { mailAlerts: 'none' });
+    expect(notes).toHaveLength(0);
+    await run(shop, { mailAlerts: 'all' });
+    expect(notes[0]!.options.title).toBe('Shop');
+  });
+
+  it('a VIP breaks through quiet hours only when allowed; others wait', async () => {
+    const quiet = { dndEnabled: true, dndFrom: '00:00', dndTo: '23:59' } as Partial<Preferences>;
+    await run(boss, quiet);
+    expect(notes).toHaveLength(0);
+    await run(boss, { ...quiet, mailVipBreakthrough: true });
+    expect(notes[0]!.options.title).toBe('Boss');
+    await run(shop, { ...quiet, mailVipBreakthrough: true });
+    expect(notes).toHaveLength(0);
   });
 });

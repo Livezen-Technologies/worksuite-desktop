@@ -4,6 +4,7 @@ import { apiGet, apiGetMeta } from '../../core/api';
 import { text } from '../../core/i18n';
 import { addDays, parseTs, todayInZone } from '../../core/time';
 import { Icon } from '../../components/Icon';
+import { ExportDialog } from './DataFiles';
 import { Menu, type MenuSection } from '../../components/Menu';
 import { Avatar, Empty, ErrorNote, FileBadge, Spinner, cx } from '../../components/ui';
 import { folderName, rowStamp, sortRows } from './model';
@@ -28,11 +29,13 @@ export interface ParsedQuery {
   after: string | null;
   folder: string | null;
   label: string | null;
+  /** is:mentioned — mail that @mentions you (DMO-CMP-14), answered by the index. */
+  mentioned: boolean;
 }
 
 /** "BOQ from:sfcl.lk has:attachment" → the words and the operators. */
 export function parseQuery(q: string): ParsedQuery {
-  const out: ParsedQuery = { words: '', from: null, to: null, attachment: false, unread: false, starred: false, before: null, after: null, folder: null, label: null };
+  const out: ParsedQuery = { words: '', from: null, to: null, attachment: false, unread: false, starred: false, before: null, after: null, folder: null, label: null, mentioned: false };
   const words: string[] = [];
   for (const token of q.match(/(?:[^\s"]+|"[^"]*")+/g) ?? []) {
     const m = /^(from|to|has|is|before|after|folder|in|label):(.+)$/i.exec(token);
@@ -43,6 +46,7 @@ export function parseQuery(q: string): ParsedQuery {
     else if (key === 'has' && /^attach/i.test(value)) out.attachment = true;
     else if (key === 'is' && value.toLowerCase() === 'unread') out.unread = true;
     else if (key === 'is' && /^(starred|flagged)$/i.test(value)) out.starred = true;
+    else if (key === 'is' && /^mentioned$/i.test(value)) out.mentioned = true;
     else if (key === 'before' && /^\d{4}-\d{2}-\d{2}$/.test(value)) out.before = value;
     else if (key === 'after' && /^\d{4}-\d{2}-\d{2}$/.test(value)) out.after = value;
     else if (key === 'folder' || key === 'in') out.folder = value.toLowerCase();
@@ -139,21 +143,23 @@ export function SearchView({ initial, boxes, current, onOpen, onClose }: { initi
   const parsed = useMemo(() => parseQuery(asked), [asked]);
   const term = serverTerm(parsed);
   const scopeBox = !all && current && current !== 'unified' ? current : null;
+  const mentioned = parsed.mentioned;
   const local = useQuery({
-    queryKey: ['mail', 'search', term, scopeBox],
+    queryKey: ['mail', 'search', term, scopeBox, mentioned],
     queryFn: async () => {
       const t0 = performance.now();
-      const r = await apiGet<{ messages: MessageRow[]; total: number; unsearched: string[] }>('/api/mail/search', scopeBox ? { q: term, mailbox: scopeBox } : { q: term, scope: 'all' });
+      const r = await apiGet<{ messages: MessageRow[]; total: number; unsearched: string[] }>('/api/mail/search', { ...(scopeBox ? { mailbox: scopeBox } : { scope: 'all' }), q: term, ...(mentioned ? { mentioned: 1 } : {}) });
       return { ...r, ms: performance.now() - t0 };
     },
-    enabled: term.length >= 2,
+    enabled: term.length >= 2 || mentioned,
     staleTime: 30_000,
     retry: false,
   });
   const remote = useQuery({
     queryKey: ['mail', 'search-server', term, scopeBox],
     queryFn: async () => (await apiGetMeta<MessagePage>('/api/mail/messages', scopeBox ? { mailbox: scopeBox, folder: 'inbox', q: term, tail: 1, per_page: 50 } : { unified: 1, folder: 'inbox', q: term, per_page: 50 })).data,
-    enabled: server && term.length >= 2,
+    // The provider's own search cannot tell a mention from a name.
+    enabled: server && term.length >= 2 && !mentioned,
     retry: false,
   });
   const rows = useMemo(() => {
@@ -166,6 +172,9 @@ export function SearchView({ initial, boxes, current, onOpen, onClose }: { initi
     });
     return sortResults(merged, sort, parsed.words);
   }, [local.data, remote.data, parsed, sort]);
+  // The results that came from a mailbox on the server, to export (ENH-MAIL-03 DMO-DAT-03).
+  const exportable = useMemo(() => rows.flatMap((m) => (m.mailbox?.id && m.folder_slug ? [{ uid: String(m.id), folder: m.folder_slug, mailbox: String(m.mailbox.id) }] : [])).slice(0, 10_000), [rows]);
+  const [exporting, setExporting] = useState(false);
   // What the results hold, for the chips' menus: their folders, labels and files.
   const facets = useMemo(() => {
     const folders = new Map<string, string>();
@@ -261,21 +270,31 @@ export function SearchView({ initial, boxes, current, onOpen, onClose }: { initi
         <Chip on={parsed.unread} onClick={() => toggle('is:unread')}>
           Unread
         </Chip>
+        <Chip on={mentioned} onClick={() => toggle('is:mentioned')}>
+          Mentioned me
+        </Chip>
         <span className="flex-1" />
         <button ref={sortBtn} type="button" onClick={() => setMenu('sort')} aria-haspopup="menu" className="inline-flex h-8 items-center gap-1 rounded-[8px] px-2 text-[12.5px] text-ink-3 hover:bg-subtle hover:text-ink">
           {text('Sort: {how}', { how: sort === 'best' ? text('Best match') : sort === 'newest' ? text('Newest first') : text('Oldest first') })}
           <Icon name="chevron-down" size={12} />
         </button>
       </div>
+      {exporting ? <ExportDialog mailbox={null} folder="inbox" folderName={text('Search results')} items={exportable} onClose={() => setExporting(false)} /> : null}
       {menu ? <Menu sections={menus[menu]} label={text('Search filters')} anchor={menu === 'time' ? timeBtn : menu === 'from' ? fromBtn : menu === 'folder' ? folderBtn : menu === 'label' ? labelBtn : sortBtn} prefer="bottom" align={menu === 'sort' ? 'end' : 'start'} width={menu === 'from' ? 280 : 220} onClose={() => setMenu(null)} /> : null}
       <div className="mt-3 flex min-h-0 flex-1 gap-4">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] border border-line bg-surface">
           <header className="flex items-center justify-between border-b border-line px-4 py-2.5">
             <h2 className="text-[14px] font-bold text-ink">{text('Messages · {n}', { n: rows.length })}</h2>
+            {exportable.length ? (
+              <button type="button" onClick={() => setExporting(true)} className="inline-flex h-7 items-center gap-1 rounded-[8px] px-2 text-[12.5px] text-ink-2 hover:bg-subtle hover:text-ink">
+                <Icon name="download" size={13} />
+                {text('Export results…')}
+              </button>
+            ) : null}
             {local.data ? <span className="text-[12px] font-semibold text-success">{text('Searched {n} mailboxes on this computer · {s} s', { n: searched, s: (local.data.ms / 1000).toFixed(2) })}</span> : null}
           </header>
           <div className="min-h-0 flex-1 overflow-y-auto scroll-thin">
-            {term.length < 2 ? <Empty icon="search" title={text('Type at least two letters')} hint={text('Try from: to: has:attachment before:2026-09-01 or is:unread.')} /> : local.isLoading ? <Spinner /> : local.error ? <div className="p-4"><ErrorNote error={local.error} onRetry={() => void local.refetch()} /></div> : rows.length === 0 && !remote.isLoading ? <Empty icon="search" title={text('Nothing found on this computer')} hint={text('Search the server for older mail.')} /> : null}
+            {term.length < 2 && !mentioned ? <Empty icon="search" title={text('Type at least two letters')} hint={text('Try from: to: has:attachment before:2026-09-01 or is:unread.')} /> : local.isLoading ? <Spinner /> : local.error ? <div className="p-4"><ErrorNote error={local.error} onRetry={() => void local.refetch()} /></div> : rows.length === 0 && !remote.isLoading ? <Empty icon="search" title={text('Nothing found on this computer')} hint={text('Search the server for older mail.')} /> : null}
             <ul role="list">
               {rows.map((m) => (
                 <li key={m.uid_key ?? `${m.mailbox?.id ?? ''}:${m.id}`}>

@@ -1,10 +1,30 @@
+import { createPortal } from 'react-dom';
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../core/store';
-import { activate, adoptWindow, closeOthers, closeTab, closeToRight, detachTab, dockSide, duplicateTab, moveTab, openTab, reloadTab, tabsStore, togglePin, undockSide, type Tab } from '../core/tabs';
+import {
+  activate,
+  adoptWindow,
+  closeOthers,
+  closeTab,
+  closeToRight,
+  detachTab,
+  dockSide,
+  duplicateTab,
+  moveTab,
+  openTab,
+  reloadTab,
+  restoreClosed,
+  tabsStore,
+  togglePin,
+  undockSide,
+  type Tab,
+} from '../core/tabs';
 import { TAB_DRAG, WINDOW_DRAG, dragHas, dropPoint, droppedWindow, releasedOutside, watchDragPointer } from '../core/dock-drag';
 import { Icon } from '../components/Icon';
 import { cx } from '../components/ui';
 import { t } from '../core/i18n';
+import { isMac } from '../core/bridge';
+import { parseDeepLink } from '@shared/deeplink';
 
 /**
  * Tab strip, 40 px (§4.12, FR-NAV-03): drag to reorder, middle-click to
@@ -17,8 +37,10 @@ import { t } from '../core/i18n';
 export function TabStrip() {
   const tabs = useStore(tabsStore, (s) => s.tabs);
   const activeId = useStore(tabsStore, (s) => s.activeId);
+  const closed = useStore(tabsStore, (s) => s.closed);
   const sideId = useStore(tabsStore, (s) => s.sideId);
   const [menu, setMenu] = useState<{ tab: Tab; x: number; y: number } | null>(null);
+  const menuLink = menu ? tabLink(menu.tab) : null;
   const [overflow, setOverflow] = useState(false);
   const dragFrom = useRef<number | null>(null);
   const [windowOver, setWindowOver] = useState(false);
@@ -43,16 +65,24 @@ export function TabStrip() {
       setOverflow(false);
     };
     window.addEventListener('mousedown', close);
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close();
+    };
+    window.addEventListener('keydown', escape);
     window.addEventListener('blur', close);
     return () => {
       window.removeEventListener('mousedown', close);
+      window.removeEventListener('keydown', escape);
       window.removeEventListener('blur', close);
     };
   }, [menu, overflow]);
 
   return (
     <div
-      className={cx('flex h-[40px] shrink-0 items-end gap-0.5 border-b border-line px-2', windowOver ? 'bg-selection' : 'bg-[color-mix(in_srgb,var(--ws-ground)_70%,var(--ws-line))]')}
+      className={cx(
+        'flex h-[40px] shrink-0 items-end gap-0.5 border-b border-line px-2',
+        windowOver ? 'bg-selection' : 'bg-[color-mix(in_srgb,var(--ws-ground)_70%,var(--ws-line))]',
+      )}
       role="tablist"
       aria-label="Open tabs"
       onDragOver={(e) => {
@@ -125,7 +155,10 @@ export function TabStrip() {
                   aria-label={`Close ${tab.title}`}
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={() => closeTab(tab.id)}
-                  className={cx('flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] text-ink-3 hover:bg-line hover:text-ink', !active && 'opacity-0 group-hover:opacity-100')}
+                  className={cx(
+                    'flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] text-ink-3 hover:bg-line hover:text-ink',
+                    !active && 'opacity-0 group-hover:opacity-100',
+                  )}
                 >
                   <Icon name="x" size={13} />
                 </button>
@@ -133,12 +166,24 @@ export function TabStrip() {
             </div>
           );
         })}
-        <button type="button" aria-label={t('shell.newTab')} title={t('shell.newTab')} onClick={() => openTab('/home')} className="mb-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] text-ink-2 hover:bg-ground/70">
+        <button
+          type="button"
+          aria-label={t('shell.newTab')}
+          title={t('shell.newTab')}
+          onClick={() => openTab('/home')}
+          className="mb-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] text-ink-2 hover:bg-ground/70"
+        >
           <Icon name="plus" size={16} />
         </button>
       </div>
       {tabs.length > 6 ? (
-        <button type="button" aria-label="All tabs" onMouseDown={(e) => e.stopPropagation()} onClick={() => setOverflow((v) => !v)} className="mb-1 flex h-7 w-7 items-center justify-center rounded-[7px] text-ink-2 hover:bg-ground/70">
+        <button
+          type="button"
+          aria-label="All tabs"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={() => setOverflow((v) => !v)}
+          className="mb-1 flex h-7 w-7 items-center justify-center rounded-[7px] text-ink-2 hover:bg-ground/70"
+        >
           <Icon name="chevron-down" size={16} />
         </button>
       ) : null}
@@ -146,13 +191,25 @@ export function TabStrip() {
       {menu ? (
         <Menu x={menu.x} y={menu.y}>
           <MenuItem onClick={() => closeTab(menu.tab.id)} disabled={menu.tab.pinned}>
-            Close
+            Close <span className="ml-auto text-ink-3">{isMac ? '⌘W' : 'Ctrl+W'}</span>
           </MenuItem>
           <MenuItem onClick={() => closeOthers(menu.tab.id)}>Close others</MenuItem>
           <MenuItem onClick={() => closeToRight(menu.tab.id)}>Close tabs to the right</MenuItem>
+          <MenuItem onClick={() => tabs.filter((tab) => !tab.pinned).forEach((tab) => closeTab(tab.id))}>Close all tabs</MenuItem>
+          <MenuItem onClick={restoreClosed} disabled={!closed.length}>
+            Reopen closed tab <span className="ml-auto text-ink-3">{isMac ? '⌘⇧T' : 'Ctrl+Shift+T'}</span>
+          </MenuItem>
           <hr className="my-1 border-line" />
           <MenuItem onClick={() => togglePin(menu.tab.id)}>{menu.tab.pinned ? 'Unpin' : 'Pin'}</MenuItem>
           <MenuItem onClick={() => duplicateTab(menu.tab.id)}>Duplicate</MenuItem>
+          <MenuItem
+            disabled={!menuLink}
+            onClick={() => {
+              if (menuLink) void navigator.clipboard.writeText(menuLink).catch(() => undefined);
+            }}
+          >
+            Copy link
+          </MenuItem>
           <MenuItem onClick={() => reloadTab(menu.tab.id)}>Reload</MenuItem>
           <hr className="my-1 border-line" />
           {menu.tab.id === sideId ? (
@@ -162,6 +219,29 @@ export function TabStrip() {
               Dock beside
             </MenuItem>
           )}
+          <MenuItem
+            onClick={() =>
+              moveTab(
+                tabs.findIndex((tab) => tab.id === menu.tab.id),
+                tabs.findIndex((tab) => tab.id === menu.tab.id) - 1,
+              )
+            }
+            disabled={tabs[0]?.id === menu.tab.id}
+          >
+            Move tab left
+          </MenuItem>
+          <MenuItem
+            onClick={() =>
+              moveTab(
+                tabs.findIndex((tab) => tab.id === menu.tab.id),
+                tabs.findIndex((tab) => tab.id === menu.tab.id) + 1,
+              )
+            }
+            disabled={tabs.at(-1)?.id === menu.tab.id}
+          >
+            Move tab right
+          </MenuItem>
+          <MenuItem onClick={() => void detachTab(menu.tab.id)}>Open in new window</MenuItem>
           <MenuItem onClick={() => void detachTab(menu.tab.id)}>Move to new window</MenuItem>
         </Menu>
       ) : null}
@@ -179,12 +259,26 @@ export function TabStrip() {
 }
 
 export function Menu({ x, y, children }: { x: number; y: number; children: React.ReactNode }) {
-  const left = Math.min(x, window.innerWidth - 260);
-  const top = Math.min(y, window.innerHeight - 320);
-  return (
-    <div role="menu" onMouseDown={(e) => e.stopPropagation()} className="animate-in fixed z-50 w-[240px] rounded-[10px] border border-line bg-surface p-1 shadow-xl" style={{ left, top }}>
+  const ref = useRef<HTMLDivElement>(null);
+  const [top, setTop] = useState(Math.max(8, y));
+  const left = Math.max(8, Math.min(x, window.innerWidth - 248));
+  useEffect(() => {
+    const place = () => setTop(Math.max(8, Math.min(y, window.innerHeight - (ref.current?.offsetHeight ?? 0) - 8)));
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [y]);
+  return createPortal(
+    <div
+      ref={ref}
+      role="menu"
+      onMouseDown={(e) => e.stopPropagation()}
+      className="animate-in fixed z-50 w-[240px] max-w-[calc(100vw-16px)] overflow-y-auto rounded-[10px] border border-line bg-surface p-1 shadow-xl"
+      style={{ left, top, maxHeight: 'calc(100vh - 16px)' }}
+    >
       {children}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -203,4 +297,14 @@ export function MenuItem({ onClick, children, disabled }: { onClick: () => void;
       {children}
     </button>
   );
+}
+
+/** Only copy links the app can open; titles and transient editor parameters are not part of a record link. */
+export function tabLink(tab: Pick<Tab, 'route' | 'organizationId'>): string | null {
+  const path = tab.route
+    .split(/[?#]/)[0]!
+    .replace(/^\/files\/file\//, '/files/')
+    .replace(/^\//, '');
+  const link = `worksuite://${path}${tab.organizationId ? `?org=${encodeURIComponent(tab.organizationId)}` : ''}`;
+  return parseDeepLink(link).ok ? link : null;
 }

@@ -179,7 +179,7 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
   );
   const s = useStore(session.store, (x) => x);
   const network = useStore(app, (x) => x.status?.network ?? 'ONLINE');
-  const covered = useStore(ui, (x) => x.overlay !== null || x.dock === 'chat');
+  const covered = useStore(ui, (x) => x.dock === 'chat');
   const me = useStore(app, (x) => x.bootstrap?.user.id ?? null);
   const boot = s.boot;
   const name = boot?.file.name ?? routeName ?? 'Document';

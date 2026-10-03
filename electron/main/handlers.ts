@@ -12,6 +12,7 @@ import { safeFileName } from '@shared/filename';
 import type { AppInfo, BusyReport, DetachedWindow, SyncPolicy } from '@shared/types';
 import { assertRoute, assertWebPath } from './access';
 import { windowRoute } from '../windows/manager';
+import { attachmentRisk } from '@shared/attachments';
 import { DesktopError, isDesktopError } from './errors';
 import type { AppContext } from './context';
 import type { IpcRouter } from '../ipc/router';
@@ -511,6 +512,12 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('files:registerDropped', (input) => ctx.transfers.register(input.paths));
   router.handle('transfers:list', () => ctx.transfers.list());
   router.handle('transfers:download', async (input, c) => {
+    // A mail attachment that runs as a program is never saved from a message; one with macros never opens elsewhere (ENH-MAIL-03 DMO-SEC-04).
+    if (input.mail) {
+      const risk = attachmentRisk(input.name);
+      if (risk === 'blocked') throw new DesktopError('POLICY_DENIED', 'WorkSuite blocks this kind of attachment: it can run as a program on your computer.');
+      if (risk === 'macro' && input.open) throw new DesktopError('POLICY_DENIED', 'Files with macros open only in WorkSuite, where macros do not run.');
+    }
     // Drive › Settings › Ask where to save each time: the place comes from this process's own dialog, never the page.
     let saveAs: string | undefined;
     if (!input.open && ctx.settings.effective().drive.askWhereToSave) {
@@ -799,6 +806,9 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('notifications:test', () => ctx.notifications.test());
   router.handle('notifications:permission', () => ctx.notifications.permission());
   router.handle('notifications:refresh', () => ctx.notifications.refreshCounts());
+  router.handle('notifications:reminder', (input) =>
+    ctx.notifications.notify({ id: `reminder:${input.id}`, module: 'mail', title: input.title, body: input.body, sender: null, link: input.route, critical: false, flag: input.flag ?? null }),
+  );
 
   // ── clipboard (FR-XFR-05; never monitored, FR-XFR-06) ──────────────────
   router.handle('clipboard:readForPaste', async (_i, c) => {
@@ -1040,7 +1050,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('settings:get', () => ({ preferences: ctx.settings.effective(), locks: ctx.settings.locks() }));
   router.handle('settings:set', async (input) => {
     const { verificationPassword, ...choices } = input;
-    if (choices.appLockEnabled === false && ctx.settings.effective().appLockEnabled !== false) {
+    if (choices.appLockEnabled === false && ctx.settings.effective().appLockEnabled === true) {
       await verifyLockChange(() => ({ id: ctx.session.userId() ? `${ctx.session.get().server?.origin}:${ctx.session.userId()}` : null, email: ctx.session.get().user?.email ?? null }), (email, password) => ctx.auth.verifyPassword(email, password), verificationPassword);
     }
     const locked = new Set(ctx.settings.locks().map((l) => l.key));

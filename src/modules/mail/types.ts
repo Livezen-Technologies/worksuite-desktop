@@ -198,6 +198,19 @@ export interface MessageContext {
   history?: { total: number; first: string | null; last: string | null; messages: Array<{ id: number; subject: string; at: string; is_read: boolean; has_attachment: boolean; folder: string | null; slug: string | null }> };
   related?: { meetings?: Array<{ id: number; title: string; at: string | null; status: string | null }>; tasks?: Array<{ id: number; title: string; status: string | null; due: string | null }> };
   security: MessageSecurity;
+  /** What the message asks of its reader, from its headers (ENH-MAIL-03 P4); absent from an older server. */
+  markers?: MessageMarkers;
+}
+
+export interface MessageMarkers {
+  /** Voting buttons (DMO-CMP-12). */
+  vote: string[];
+  /** Who asked for a read receipt (DMO-CMP-11). */
+  read_receipt_to: string | null;
+  /** S/MIME, as the message says — checked against its bytes before anything is claimed (DMO-SEC-05). */
+  smime: 'signed' | 'encrypted' | null;
+  sensitivity: 'personal' | 'private' | 'confidential' | null;
+  importance: 'high' | 'low' | null;
 }
 
 /** GET /api/mail/views: the sidebar's numbers. Null is "not counted", never zero. */
@@ -321,6 +334,10 @@ export interface MailPrefs {
   openIn?: 'tabs' | 'windows' | 'both';
   /** Mark as read: when opened, after a delay, when the selection changes, or never (DMO-INB-12). */
   markRead?: 'open' | 'delay' | 'change' | 'never';
+  /** Senders whose pictures are always shown, through WorkSuite's image proxy (DMO-RD-02). */
+  imageSenders?: string[];
+  /** Answering a read-receipt request (DMO-CMP-11): ask each time (the default), always, or never. */
+  readReceipts?: 'ask' | 'always' | 'never';
   markReadDelay?: number;
   /** Favourites in the folder pane: "box:folder" keys and smart views (DMO-NAV-01). */
   favorites?: string[];
@@ -328,6 +345,26 @@ export interface MailPrefs {
   folderViews?: Record<string, Partial<Pick<MailPrefs, 'view' | 'pane' | 'sort' | 'dir' | 'group' | 'toolbar'>>>;
   /** First run: "Coming from Outlook?" answered (WF-DO12). */
   firstRun?: 'done' | 'outlook' | 'skipped';
+  /** Conditional formatting of list rows (DMO-INB-18). */
+  formatRules?: FormatRule[];
+  /** Senders always shown as plain text (DMO-RD-09). */
+  plainTextSenders?: string[];
+  /** The Apps pane beside the message (DMO-INT-01). */
+  appsPane?: boolean;
+  /** Catch up after an absence (DMO-AI-01): on unless turned off. */
+  catchUp?: boolean;
+  /** Immersive reader settings (DMO-RD-04). */
+  immersive?: { size?: number; spacing?: 'normal' | 'wide'; width?: 'narrow' | 'wide'; focusLine?: boolean };
+}
+
+/** "When the row is from x / says y / has category z / is unread → colour, bold" (DMO-INB-18). */
+export interface FormatRule {
+  id: string;
+  when: 'from' | 'subject' | 'category' | 'unread' | 'flagged' | 'important';
+  value: string;
+  colour: 'red' | 'orange' | 'green' | 'blue' | 'teal' | null;
+  bold: boolean;
+  enabled: boolean;
 }
 
 export type SortKey = 'date' | 'sender' | 'subject' | 'size' | 'read' | 'attachment' | 'flag' | 'star';

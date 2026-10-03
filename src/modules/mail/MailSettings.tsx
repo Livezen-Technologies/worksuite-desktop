@@ -7,6 +7,7 @@ import { text } from '../../core/i18n';
 import { useStore } from '../../core/store';
 import { bytes, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
+import { FormattingSettings } from './ReadingSettings';
 import { Checkbox } from '../../components/Checkbox';
 import { Select } from '../../components/Select';
 import { Button, Chip, ErrorNote, Modal, Spinner, Switch, TextField, cx } from '../../components/ui';
@@ -18,6 +19,7 @@ import { QuickStepsSettings } from './QuickStepsUi';
 import { includedIds, runSync } from './sync';
 import { AppPasswords } from './AppPasswords';
 import { ImportMail } from './Import';
+import { DataFileImport } from './DataFiles';
 import { Rules, Signatures } from './MailRules';
 import { mailKeys, useLocalStore, useMailPrefs, useMailStats, useMailboxes, useSyncStatus } from './api';
 import { mailboxLetter } from './model';
@@ -80,6 +82,7 @@ export function MailSettings({ query = new URLSearchParams() }: { query?: URLSea
       </div>
       {tab === 'accounts' ? <Accounts /> : tab === 'storage' ? <Storage /> : tab === 'import' ? (
         <>
+          <DataFileImport />
           <ImportMail openId={importId} />
           <AutocompleteSettings />
         </>
@@ -225,6 +228,30 @@ function Accounts() {
               <Checkbox checked={prefs.moduleNotifications.mail !== false} onChange={(e) => void updatePrefs({ moduleNotifications: { ...prefs.moduleNotifications, mail: e.target.checked } })} />
               Desktop notifications for new mail
             </label>
+            {prefs.moduleNotifications.mail !== false ? (
+              <div className="flex flex-col gap-2 pl-[26px]">
+                <div className="flex items-center justify-between gap-4">
+                  <span>{text('Alert me for')}</span>
+                  <Select
+                    aria-label={text('Alert me for')}
+                    value={prefs.mailAlerts ?? 'all'}
+                    options={[
+                      { value: 'all', label: text('Every new message') },
+                      { value: 'focused', label: text('Focused Inbox only') },
+                      { value: 'vip', label: text('VIPs only') },
+                      { value: 'none', label: text('No banners (count only)') },
+                    ]}
+                    onValueChange={(v) => void updatePrefs({ mailAlerts: v as NonNullable<Preferences['mailAlerts']> })}
+                    className="h-8 w-[220px]"
+                  />
+                </div>
+                <label className="flex items-center gap-2.5">
+                  <Checkbox checked={prefs.mailVipBreakthrough === true} onChange={(e) => void updatePrefs({ mailVipBreakthrough: e.target.checked })} />
+                  {text('VIPs can break through quiet hours')}
+                </label>
+                <p className="text-[12px] text-ink-3">{text('Quiet hours are set under Settings › Notifications. Rules that run on this computer can also show an alert or play a sound.')}</p>
+              </div>
+            ) : null}
             <label className="flex items-center gap-2.5">
               <Checkbox checked={prefs.badgeCount} onChange={(e) => void updatePrefs({ badgeCount: e.target.checked })} />
               Unread count on the dock / taskbar
@@ -516,7 +543,7 @@ function Storage() {
         </table>
       ) : null}
       <div className="mt-4 flex items-center gap-3 rounded-[10px] border border-line bg-surface px-3.5 py-3 text-[13px]">
-        <span className="flex-1 text-ink-2">Short on disk space? Choose a shorter keep period above; older mail stays searchable on the server and downloads when you open it.</span>
+        <span className="flex-1 text-ink-2">Short on disk space? Choose a shorter keep period above; older mail stays searchable on the server and downloads when you open it. Each folder can also keep recent messages, headers only or nothing (right-click it › On this computer): Inbox, Sent and Drafts keep recent mail, Archive is online only, other folders keep headers.</span>
         {clearing ? (
           <Button size="sm" variant="danger" onClick={clearAll}>
             Clear everything now
@@ -534,6 +561,7 @@ function Storage() {
 function Layout() {
   const { prefs, set } = useMailPrefs();
   const theme = useStore(app, (s) => s.prefs?.theme ?? 'system');
+  const desktopPrefs = useStore(app, (s) => s.prefs);
   const seg = <K extends keyof MailPrefs>(key: K, value: MailPrefs[K] | undefined, fallback: MailPrefs[K], options: Array<[NonNullable<MailPrefs[K]>, string]>, label: string) => (
     <div className="flex items-center justify-between gap-4 py-2">
       <span className="text-[13.5px] font-semibold text-ink">{text(label)}</span>
@@ -567,6 +595,10 @@ function Layout() {
           ))}
         </div>
       </section>
+      <label className="mt-3 flex items-center gap-2.5 text-[13.5px] text-ink">
+        <Checkbox checked={desktopPrefs?.highContrast === true} onChange={(e) => void updatePrefs({ highContrast: e.target.checked })} />
+        {text('High contrast')}
+      </label>
       <section aria-label="Mail layout" className="mt-4 rounded-[12px] border border-line bg-surface p-4">
         <h3 className="text-[15px] font-bold text-ink">Mail layout</h3>
         {seg('pane', prefs.pane, 'right', [['right', 'Right'], ['bottom', 'Bottom'], ['hidden', 'Off']], 'Reading pane')}
@@ -597,6 +629,10 @@ function Layout() {
         {seg('openIn', prefs.openIn, 'tabs', [['tabs', 'Tabs'], ['windows', 'Windows'], ['both', 'Both']], 'Open messages in')}
       </section>
       <InboxAndKeyboard prefs={prefs} set={set} />
+      <FormattingSettings prefs={prefs} set={set} />
+      <section aria-label={text('Catch up')} className="mt-4 flex flex-col gap-3 rounded-[12px] border border-line bg-surface p-4 text-[13.5px] text-ink">
+        <SwitchRow label={text('Catch up after time away')} hint={text('Back after eight hours or more: unread mail from VIPs, mail that mentions you and flags due, at the top of Mail.')} checked={prefs.catchUp !== false} onChange={(v) => set({ catchUp: v })} />
+      </section>
     </>
   );
 }
@@ -639,6 +675,20 @@ function InboxAndKeyboard({ prefs, set }: { prefs: MailPrefs; set: (p: Partial<M
             </button>
           ))}
         </div>
+      </div>
+      <div className="flex items-center justify-between gap-4 py-1">
+        <span className="font-semibold">{text('When someone asks for a read receipt')}</span>
+        <Select
+          aria-label={text('Read receipts')}
+          value={prefs.readReceipts ?? 'ask'}
+          options={[
+            { value: 'ask', label: text('Ask me each time') },
+            { value: 'always', label: text('Always send one') },
+            { value: 'never', label: text('Never send one') },
+          ]}
+          onValueChange={(v) => set({ readReceipts: v as 'ask' | 'always' | 'never' })}
+          className="h-8 w-[200px]"
+        />
       </div>
     </section>
   );

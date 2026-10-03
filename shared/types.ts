@@ -229,8 +229,9 @@ export interface Preferences {
   dndEnabled: boolean;
   dndFrom: string;
   dndTo: string;
-  /** Minutes of inactivity before the app locks; 0 = never. */
+  /** Minutes of inactivity while app locking is enabled; 0 = lock on loss of focus. */
   appLockMinutes: number;
+  /** App locking is opt-in when no saved preference or enforced policy exists. */
   appLockEnabled?: boolean;
   lockOnSleep?: boolean;
   lockedChatNotifications?: boolean;
@@ -252,6 +253,14 @@ export interface Preferences {
   mailtoHandler?: boolean;
   /** Per mailbox, how long its mail is kept on this computer (D09), overriding `mailCacheDays`. */
   mailCacheDaysByMailbox?: Record<string, 7 | 30 | 90 | 0>;
+  /** Per folder ("<mailbox>:<folder>"), what this computer keeps (ENH-MAIL-03 DMO-OFF-01); unset folders follow the defaults. */
+  mailFolderOffline?: Record<string, 'recent' | 'headers' | 'online'>;
+  /** High contrast lines, text and focus ring, chosen here rather than by the system (ENH-MAIL-03 DMO-ACC-01). */
+  highContrast?: boolean;
+  /** New-mail banners on this computer (ENH-MAIL-03 DMO-NTF-02): every message, Focused only, VIPs only, or none. */
+  mailAlerts?: 'all' | 'focused' | 'vip' | 'none';
+  /** VIP mail shows a banner during quiet hours (DMO-NTF-03). */
+  mailVipBreakthrough?: boolean;
   tabSuspendMinutes: number;
   language: string;
   updateChannel: UpdateChannel;
