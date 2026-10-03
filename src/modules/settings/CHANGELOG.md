@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.12.1 — 2026-10-03
+
+- Sync buttons use the shared Sync button: they spin from the click, can't be pressed twice, show Synced just now or Sync failed · Retry, and keep one width (#165).
+
 ## 1.12.0 — 2026-10-03
 
 - Settings › Desktop › Links: open WorkSuite links in the app, Mail links in a new or the current tab, ask before running actions from links (#170).

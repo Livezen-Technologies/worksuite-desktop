@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.8.3 — 2026-10-03
+
+- Sync buttons use the shared Sync button: they spin from the click, can't be pressed twice, show Synced just now or Sync failed · Retry, and keep one width (#165). Mail's ↻ icons show the same states.
+
 ## 1.8.2 — 2026-10-03
 
 - The setup banner after choosing Outlook shortcuts is clearer and fits any window: Import email first, Add signature and Set as default mail app second (in More when narrow), and a dismiss icon; dismissing is remembered (#187).

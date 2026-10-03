@@ -5,6 +5,10 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.112 — 2026-10-03
+
+- **Sync buttons show what they're doing (#165).** Every Sync now / Sync all button — Mail, Drive's Sync devices and Settings, Sales channels and Events — starts spinning the moment you click it and can't be pressed twice, then shows a green "Synced just now" for two seconds, or "Sync failed · Retry". The button keeps the same width throughout, screen readers hear "Syncing" and "Sync complete", and with reduced motion the icon stays still. Mail's ↻ icons in the folder pane show the same states.
+
 ## 0.2.111 — 2026-10-03
 
 - **Mail's setup banner (#187).** After you choose Outlook shortcuts, the banner says "Outlook shortcuts enabled." with a short line of guidance, offers **Import email** first (the tooltip says .pst and .mbox work), with **Add signature** and **Set as default mail app** beside it — in a **More** menu when the window is narrow — and has a dismiss icon instead of "Close". Once dismissed it stays gone, after navigation and restarts.
