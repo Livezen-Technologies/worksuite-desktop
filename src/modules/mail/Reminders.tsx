@@ -10,7 +10,7 @@ import { navigate } from '../../core/tabs';
 import { addDays, dateLabel, timeLabel, todayInZone } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { Button, cx } from '../../components/ui';
-import { dueReminders, pruneMemory, snoozeUntil, type ReminderEvent, type ReminderItem, type ReminderMemory } from './reminders';
+import { dueReminders, pruneMemory, snoozeUntil, type ReminderEvent, type ReminderItem, type ReminderMemory } from './reminderTimes';
 import type { MessageStates } from './states';
 
 /**

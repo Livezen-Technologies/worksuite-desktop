@@ -2192,5 +2192,12 @@
   "Wide column": "පුළුල් තීරුව",
   "Wide spacing": "පුළුල් පරතරය",
   "client.lk": "client.lk",
-  "“{subject}”: the {n} message(s) here and every later message in this conversation go to Deleted Items. You can stop ignoring it from Deleted Items.": "“{subject}”: මෙහි ඇති පණිවිඩ {n} සහ මෙම සංවාදයේ සෑම පසු පණිවිඩයක්ම මකා දැමූ අයිතම වෙත යයි. මකා දැමූ අයිතම වෙතින් නොසලකා හැරීම නැවැත්විය හැක."
+  "“{subject}”: the {n} message(s) here and every later message in this conversation go to Deleted Items. You can stop ignoring it from Deleted Items.": "“{subject}”: මෙහි ඇති පණිවිඩ {n} සහ මෙම සංවාදයේ සෑම පසු පණිවිඩයක්ම මකා දැමූ අයිතම වෙත යයි. මකා දැමූ අයිතම වෙතින් නොසලකා හැරීම නැවැත්විය හැක.",
+  "Alert me for": "මට දැනුම් දෙන්න",
+  "Every new message": "සෑම නව පණිවිඩයක්ම",
+  "Focused Inbox only": "අවධානය යොමු එන ලිපි පමණි",
+  "No banners (count only)": "බැනර් නැත (ගණන පමණි)",
+  "Quiet hours are set under Settings › Notifications. Rules that run on this computer can also show an alert or play a sound.": "නිහඬ පැය සැකසීම් › දැනුම්දීම් යටතේ සකසා ඇත. මෙම පරිගණකයේ ධාවනය වන නීතිවලටද ඇඟවීමක් පෙන්වීමට හෝ ශබ්දයක් වාදනය කිරීමට හැක.",
+  "VIPs can break through quiet hours": "VIP අයට නිහඬ පැය බිඳ දැමිය හැක",
+  "VIPs only": "VIP පමණි"
 }

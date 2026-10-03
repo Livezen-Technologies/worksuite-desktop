@@ -228,6 +228,30 @@ function Accounts() {
               <Checkbox checked={prefs.moduleNotifications.mail !== false} onChange={(e) => void updatePrefs({ moduleNotifications: { ...prefs.moduleNotifications, mail: e.target.checked } })} />
               Desktop notifications for new mail
             </label>
+            {prefs.moduleNotifications.mail !== false ? (
+              <div className="flex flex-col gap-2 pl-[26px]">
+                <div className="flex items-center justify-between gap-4">
+                  <span>{text('Alert me for')}</span>
+                  <Select
+                    aria-label={text('Alert me for')}
+                    value={prefs.mailAlerts ?? 'all'}
+                    options={[
+                      { value: 'all', label: text('Every new message') },
+                      { value: 'focused', label: text('Focused Inbox only') },
+                      { value: 'vip', label: text('VIPs only') },
+                      { value: 'none', label: text('No banners (count only)') },
+                    ]}
+                    onValueChange={(v) => void updatePrefs({ mailAlerts: v as NonNullable<Preferences['mailAlerts']> })}
+                    className="h-8 w-[220px]"
+                  />
+                </div>
+                <label className="flex items-center gap-2.5">
+                  <Checkbox checked={prefs.mailVipBreakthrough === true} onChange={(e) => void updatePrefs({ mailVipBreakthrough: e.target.checked })} />
+                  {text('VIPs can break through quiet hours')}
+                </label>
+                <p className="text-[12px] text-ink-3">{text('Quiet hours are set under Settings › Notifications. Rules that run on this computer can also show an alert or play a sound.')}</p>
+              </div>
+            ) : null}
             <label className="flex items-center gap-2.5">
               <Checkbox checked={prefs.badgeCount} onChange={(e) => void updatePrefs({ badgeCount: e.target.checked })} />
               Unread count on the dock / taskbar

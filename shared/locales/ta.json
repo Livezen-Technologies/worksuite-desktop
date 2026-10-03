@@ -2192,5 +2192,12 @@
   "Wide column": "அகலமான நெடுவரிசை",
   "Wide spacing": "அகலமான இடைவெளி",
   "client.lk": "client.lk",
-  "“{subject}”: the {n} message(s) here and every later message in this conversation go to Deleted Items. You can stop ignoring it from Deleted Items.": "“{subject}”: இங்குள்ள {n} செய்தி(கள்) மற்றும் இந்த உரையாடலின் ஒவ்வொரு பிந்தைய செய்தியும் நீக்கப்பட்டவைக்குச் செல்லும். நீக்கப்பட்டவையிலிருந்து புறக்கணிப்பதை நிறுத்தலாம்."
+  "“{subject}”: the {n} message(s) here and every later message in this conversation go to Deleted Items. You can stop ignoring it from Deleted Items.": "“{subject}”: இங்குள்ள {n} செய்தி(கள்) மற்றும் இந்த உரையாடலின் ஒவ்வொரு பிந்தைய செய்தியும் நீக்கப்பட்டவைக்குச் செல்லும். நீக்கப்பட்டவையிலிருந்து புறக்கணிப்பதை நிறுத்தலாம்.",
+  "Alert me for": "எனக்கு அறிவி",
+  "Every new message": "ஒவ்வொரு புதிய செய்தியும்",
+  "Focused Inbox only": "கவனம் உள்பெட்டி மட்டும்",
+  "No banners (count only)": "பதாகைகள் இல்லை (எண்ணிக்கை மட்டும்)",
+  "Quiet hours are set under Settings › Notifications. Rules that run on this computer can also show an alert or play a sound.": "அமைதி நேரங்கள் அமைப்புகள் › அறிவிப்புகளில் அமைக்கப்படும். இந்தக் கணினியில் இயங்கும் விதிகளும் எச்சரிக்கை காட்டலாம் அல்லது ஒலி எழுப்பலாம்.",
+  "VIPs can break through quiet hours": "VIP கள் அமைதி நேரங்களை மீறலாம்",
+  "VIPs only": "VIP கள் மட்டும்"
 }

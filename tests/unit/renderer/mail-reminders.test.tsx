@@ -17,7 +17,7 @@ import { app } from '../../../src/core/app-state';
 import { call } from '../../../src/core/bridge';
 import { setRegional } from '../../../src/core/time';
 import { MailReminders, reminderWhen } from '../../../src/modules/mail/Reminders';
-import { dueReminders, pruneMemory, snoozeUntil } from '../../../src/modules/mail/reminders';
+import { dueReminders, pruneMemory, snoozeUntil } from '../../../src/modules/mail/reminderTimes';
 import type { MessageStates } from '../../../src/modules/mail/states';
 
 /**
