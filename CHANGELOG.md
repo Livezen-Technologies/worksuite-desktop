@@ -5,6 +5,11 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.130 — 2026-10-03
+
+- **Link mail to a tender, customer or deal.** Right-click a message (or a selection) or open the reader's **More** and choose **Link to tender, customer or deal…**: pick the kind, search by name or reference, and the sender's own customer record and tenders are suggested first. Linked records show as chips under the subject — click to open the tender or deal, ✕ to unlink — and everyone who can read the mailbox sees them. A tender's new **Mail** tab lists the email linked to it; click one to open it in Mail. Offered to people who can open Tenders or the CRM; the server decides which kinds each person may link. Needs the server update (Mail 1.12.0, migration `2026-10-12-000100_MailRecordLinks`).
+- Live mail lists show a **preview line and the paper clip** before the mailbox has synced (server Mail 1.10.0).
+
 ## 0.2.129 — 2026-10-03
 
 - **What a bid costs (#159).** Each tender has an **Expenses** tab beside Budget: total spent, pending approval, reimbursable, and spent against the planned bid budget ("Spent LKR 18,500 of LKR 25,000 planned (74%)", with a warning when over). **+ Add expense** and the quick categories (courier, travel, printing, bid bond / security, document purchase…) open the Expense form with the tender already filled in; **Link existing expense** picks one of your claims that isn't on a tender yet. Clicking a row opens the claim as Expenses shows it — approval stays there — with Open in Expenses, Mark refunded (for bid bonds) and Unlink. Overview shows **Bid cost so far**, a lost or cancelled tender shows what was written off, History records each expense, and Reports has **Bid cost by tender** with cost per win.

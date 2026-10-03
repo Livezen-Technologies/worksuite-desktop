@@ -23,6 +23,8 @@ import Decision from './Decision';
 import Documents from './Documents';
 import Meetings from './Meetings';
 import Notice from './Notice';
+import { useCanOpen } from '../../core/access';
+import { RecordMail } from '../mail/recordLinks';
 import { Left, openWeb, OutcomePill, PriorityPill, Score, StagePill, subline } from './parts';
 
 /**
@@ -38,8 +40,8 @@ import { Left, openWeb, OutcomePill, PriorityPill, Score, StagePill, subline } f
  * The working tabs — checklist, documents, bonds, meetings, budget, costs and
  * approvals — open in the browser for now.
  */
-type Tab = 'overview' | 'checklist' | 'documents' | 'contacts' | 'bonds' | 'meetings' | 'budget' | 'expenses' | 'approvals' | 'notice' | 'decision' | 'history' | 'activity';
-const TABS: Tab[] = ['overview', 'checklist', 'documents', 'contacts', 'bonds', 'meetings', 'budget', 'expenses', 'approvals', 'notice', 'decision', 'history', 'activity'];
+type Tab = 'overview' | 'checklist' | 'documents' | 'contacts' | 'bonds' | 'meetings' | 'budget' | 'expenses' | 'mail' | 'approvals' | 'notice' | 'decision' | 'history' | 'activity';
+const TABS: Tab[] = ['overview', 'checklist', 'documents', 'contacts', 'bonds', 'meetings', 'budget', 'expenses', 'mail', 'approvals', 'notice', 'decision', 'history', 'activity'];
 
 type Ask = { kind: 'move'; to: string; label: string; blockers: string[] } | { kind: 'cancel' } | { kind: 'win' } | { kind: 'lose' };
 
@@ -63,6 +65,8 @@ export default function Workspace({
   onEdit: () => void;
 }) {
   const qc = useQueryClient();
+  // Mail linked to this tender, from Mail's "Link to tender, customer or deal".
+  const mailOn = useCanOpen('mail');
   // Opened means read afresh: a tender moved by somebody else a moment ago must not show its old stage and moves.
   const q = useQuery({ queryKey: K.tender(id), queryFn: ({ signal }) => fetchTender(id, signal), refetchOnMount: 'always' });
   // For the tab's count; the tab itself reads the same query.
@@ -235,6 +239,7 @@ export default function Workspace({
             ['meetings', 'Meetings'],
             ['budget', 'Budget'],
             ...(showExpenses ? ([['expenses', expensesTabLabel(d.bid_cost?.totals?.count)]] as Array<[Tab, string]>) : []),
+            ...(mailOn ? ([['mail', 'Mail']] as Array<[Tab, string]>) : []),
             ['approvals', d.approvals.some((a) => a.status === 'pending') ? `Approvals · ${d.approvals.filter((a) => a.status === 'pending').length} pending` : 'Approvals'],
             ['notice', 'Notice'],
             ['decision', 'Submission'],
@@ -264,6 +269,7 @@ export default function Workspace({
       {t === 'bonds' ? <Bonds id={id} currency={r.currency} canManage={canManage} can={d.can} /> : null}
       {t === 'meetings' ? <Meetings id={id} tender={r.title} canManage={canManage} /> : null}
       {t === 'budget' ? <Budget id={id} budget={d.budget} canManage={canManage} bidCost={d.bid_cost} currency={r.currency} onExpenses={showExpenses ? () => onTab('expenses') : undefined} /> : null}
+      {t === 'mail' ? <RecordMail kind="tender" id={id} /> : null}
       {t === 'expenses' ? <Expenses id={id} tender={{ title: r.title, reference: r.reference, currency: r.currency }} /> : null}
       {t === 'approvals' ? <Approvals id={id} org={org} rows={d.approvals} canManage={canManage} canApprove={canApprove} /> : null}
       {t === 'notice' ? <Notice id={id} canManage={canManage} /> : null}

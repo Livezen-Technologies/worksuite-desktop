@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.0 — 2026-10-03
+
+- Mail tab: the email linked to this tender from Mail, newest first, each opening in Mail.
+
 ## 1.2.0 — 2026-10-03
 
 - Expenses tab (#159): bid costs linked from the Expense module, with totals, pending, reimbursable and spent against the planned bid budget; add an expense with the tender locked, quick categories, link an existing expense, Mark refunded for bid bonds, Unlink; Bid cost so far on Overview, written-off cost for lost or cancelled tenders, history lines, and a Bid cost by tender report.

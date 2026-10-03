@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.14.0 — 2026-10-03
+
+- Link to tender, customer or deal: from the list's right-click menu (one message or a selection) and the reader's More; the picker searches tenders, customers and deals with the sender's own records first; the reader shows linked records as chips that open them and unlink with ✕.
+
 ## 1.13.0 — 2026-10-03
 
 - Pictures in mail (#163): a notice bar with Show images, Always show from this sender or domain; remote pictures only through WorkSuite's proxy; tidy sized placeholders; tracking pixels removed and counted; Settings › Mail › Images & media (picture mode, trusted senders and domains, own domains, auto-download size, network, file types, Save to); never automatic in Junk or failed-authentication mail.

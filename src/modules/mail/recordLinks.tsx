@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ApiError, apiDelete, apiGet, apiPost } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
 import { text } from '../../core/i18n';
+import { useTab } from '../../core/tab-context';
 import { dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
@@ -264,7 +265,8 @@ export function LinkedRecordChips({ item, navigate, offline }: { item: LinkItem;
 }
 
 /** A record's page: the mail linked to it, newest first, each opening in Mail. */
-export function RecordMail({ kind, id, navigate }: { kind: RecordKind; id: number; navigate: (route: string) => void }) {
+export function RecordMail({ kind, id }: { kind: RecordKind; id: number }) {
+  const { navigate } = useTab();
   const q = useRecordMail(kind, id);
   if (q.isLoading) return <Spinner />;
   if (q.data === null) return <p className="p-4 text-[13px] text-ink-2">{text('This WorkSuite server cannot link mail to records yet.')}</p>;
