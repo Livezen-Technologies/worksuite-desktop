@@ -169,6 +169,8 @@ export const preferencesPatchSchema = z
     tabSuspendMinutes: z.number().int().min(5).max(480),
     language: z.string().regex(/^[a-z]{2}(-[A-Z]{2})?$/),
     updateChannel: z.enum(['stable', 'beta', 'dev', 'org']),
+    autoUpdate: z.boolean(),
+    updateNotifications: z.boolean(),
     sidebarMode: z.enum(['expanded', 'collapsed', 'auto-hide']),
     pinnedApps: z.array(z.string().max(64)).max(64),
     shortcuts: z.record(z.string().max(64), z.string().max(64)),
@@ -1132,6 +1134,7 @@ export const contract = {
   'updates:status': ch(none, { whileLocked: true }),
   'updates:check': ch(none, { whileLocked: true, rate: 1 }),
   'updates:installNow': ch(z.object({ force: z.boolean().optional() }).optional(), { whileLocked: true }),
+  'updates:download': ch(none, { whileLocked: true, rate: 1 }),
   'updates:restartLater': ch(none),
   'updates:setChannel': ch(z.object({ channel: z.enum(['stable', 'beta', 'dev', 'org']) }), { session: true }),
   'updates:setActiveCall': ch(z.object({ active: z.boolean() }), { session: true }),
@@ -1556,6 +1559,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'updates:status': UpdateStatus;
   'updates:check': UpdateStatus;
   'updates:installNow': { started: boolean; busy: BusyReport | null; message: string | null };
+  'updates:download': UpdateStatus;
   'updates:restartLater': UpdateStatus;
   'updates:setChannel': UpdateStatus;
   'updates:setActiveCall': void;

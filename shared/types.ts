@@ -268,6 +268,10 @@ export interface Preferences {
   tabSuspendMinutes: number;
   language: string;
   updateChannel: UpdateChannel;
+  /** New versions download by themselves and wait for a restart (Settings › Desktop › Updates). Unset: on. An organization that enforces updates keeps it on. */
+  autoUpdate?: boolean;
+  /** A system notification when a new version is available or ready to install. Unset: on. */
+  updateNotifications?: boolean;
   sidebarMode: 'expanded' | 'collapsed' | 'auto-hide';
   pinnedApps: string[];
   shortcuts: Record<string, string>;

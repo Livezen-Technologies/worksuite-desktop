@@ -352,6 +352,7 @@ export const INVOKE_CHANNELS = [
   'updates:status',
   'updates:check',
   'updates:installNow',
+  'updates:download',
   'updates:restartLater',
   'updates:setChannel',
   'updates:setActiveCall',

@@ -24,7 +24,7 @@ import { networkStatus } from '@shared/network';
 import { pmsCached } from '@shared/pms-cache';
 import { eventsCached } from '@shared/event-desk';
 import { redactUrl } from '@shared/redact';
-import type { Bootstrap, NavigateRequest, RealtimeState, ServiceHealth, StatusSnapshot, WebchatOnCall, WebchatRingState } from '@shared/types';
+import type { Bootstrap, NavigateRequest, RealtimeState, ServiceHealth, StatusSnapshot, UpdateStatus, WebchatOnCall, WebchatRingState } from '@shared/types';
 import { AccessWatch, NO_ACCESS } from './access';
 import { applyAutostart, startedHidden } from './autostart';
 import { evaluateBoot, markCleanExit, markRunning, clearCrashes, writeBootConfig } from './boot';
@@ -100,6 +100,7 @@ import { Vault } from '../services/vault';
 import { TrayService } from '../tray/tray';
 import { POLICY_PUBLIC_KEY } from '../updater/keys';
 import { UPDATE_CENTER_RESPONSE_KEYS, UPDATE_CENTER_URL, ucInstallType, updateCheckUrl } from '../updater/update-center';
+import { updateNotice } from '../updater/notice';
 import { UpdaterService } from '../updater/updater';
 import { WindowManager } from '../windows/manager';
 
@@ -663,6 +664,20 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     return { uploads: c.uploads, downloads: c.downloads, pendingMutations: id ? queue.pendingCount(id) : 0, drafts: id ? queue.draftCount(id) : 0, activeCall };
   };
 
+  // A new version tells the person once per version and stage, beside the title-bar icon (Settings › Desktop ›
+  // Updates). Quiet hours, paused notifications and a development build stay silent; the icon still shows.
+  const announceUpdate = (s: UpdateStatus): void => {
+    const p = settings.effective();
+    if (!app.isPackaged || !p.notificationsEnabled || p.updateNotifications === false || !Notification.isSupported()) return;
+    if ((p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) || notifications.pausedUntilIso() !== null) return;
+    const notice = updateNotice(s, p.autoUpdate !== false);
+    const told = db.getConfig<string[]>('update_notices') ?? [];
+    if (!notice || told.includes(notice.key)) return;
+    db.setConfig('update_notices', [...told, notice.key].slice(-10));
+    const note = new Notification({ title: notice.title, body: notice.body });
+    note.on('click', () => navigate({ route: '/settings/desktop', source: 'notification' }));
+    note.show();
+  };
   const updater = new UpdaterService({
     fetch: fetchImpl,
     platform: platformName(),
@@ -683,6 +698,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         osVersion: process.getSystemVersion(),
       }),
     channel: () => settings.effective().updateChannel,
+    autoDownload: () => settings.effective().autoUpdate !== false,
     busy,
     deadlineHours: () => sessionCtl.current()?.policy.forced_update_deadline_hours ?? 24,
     allowInsecure,
@@ -690,6 +706,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     onStatus: (s) => {
       broadcast('update:changed', s);
       tray.update({ updateReady: s.state === 'STAGED' });
+      announceUpdate(s);
     },
     onWarning: (text) => broadcast('toast', { kind: 'warning', text }),
     beforeQuit: async () => {

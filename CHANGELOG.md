@@ -5,6 +5,23 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.132 — 2026-10-03
+
+- **You choose whether updates download by themselves.** Settings › Desktop now starts with the updates: where they
+  stand, with the one next step (Check for updates, Download, or Restart to update), a **Download updates
+  automatically** switch, and the update channel. Turned off, WorkSuite tells you about a new version and waits for
+  you to press Download. Security and required updates still download either way. Where your organisation's policy
+  enforces updates (the server's default, `auto_update: enforced`), the switch stays on and says so; an
+  administrator sets the policy to `user_choice` to leave it to each person.
+- **A new version shows in the title bar.** A download icon appears beside the connection pill while a newer version
+  is on offer (blue dot), downloading, or ready to install (green). It opens a panel with the installed and new
+  versions, the download's progress, What's new, Update settings, and Download or Restart to update. Restarting still
+  asks first if uploads, queued changes or a call would be interrupted.
+- **And as a notification.** WorkSuite sends one system notification per version: when it is ready to install, or,
+  with automatic downloads off, when it is available to download. Clicking it opens the update settings. Quiet hours
+  and paused notifications keep it silent (the title-bar icon still shows), and **Update notifications** in
+  Settings › Desktop turns it off.
+
 ## 0.2.131 — 2026-10-03
 
 - **Updates come from the WorkSuite Update Center.** WorkSuite now asks https://download.worksuitecloud.com whether a newer version is out, instead of a manifest file on your WorkSuite server. The answer is signed by the Update Center and checked against a key built into the app, and the download must match the size and SHA-256 inside that signed answer, or it is deleted. Your channel (Stable, Beta, Dev) is sent as a request; the Update Center decides, and your organisation's policy there wins. The computer is identified only by a one-way code made from its install ID.

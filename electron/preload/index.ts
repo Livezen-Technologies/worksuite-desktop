@@ -487,6 +487,7 @@ const api = {
     status: call('updates:status'),
     check: call('updates:check'),
     installNow: call('updates:installNow'),
+    download: call('updates:download'),
     restartLater: call('updates:restartLater'),
     setChannel: call('updates:setChannel'),
     setActiveCall: call('updates:setActiveCall'),
