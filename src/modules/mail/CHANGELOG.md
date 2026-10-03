@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.18.0 — 2026-10-03
+
+- Reading-pane header (#212): about half the height — subject with folder and External badges on one row, the sender on one line with a verification shield, 'to me ▾' for full details, a short date, Star and ⋯ for everything else; the account dot only in combined views; Super compact, Compact and Classic follow the list density; it shrinks to a 48px bar when the message scrolls, and badges move under the subject in a narrow pane.
+
 ## 1.17.0 — 2026-10-03
 
 - Lists and menus (#208): menus open attached to their button (6px gap, flip above, 8px inside the window, scroll inside), selected options show a tick and accent text while hover and keyboard focus are a light background; a shorter View menu with a Right · Below · Hidden reading pane and a link to Appearance & reading; every folder and All Accounts open with at least the latest 100 messages, local first then the server, with placeholders, 100 more as you scroll, filters that fetch more, Clear filters, a Focused hint and reasons for short lists. Opening mail (#209): moved mail is followed by Message-ID, deleted mail leaves the list with Refresh folder, and sign-in, busy, offline and server errors each say what happened; reading tabs survive a restart.
