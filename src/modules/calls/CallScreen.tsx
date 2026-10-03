@@ -265,6 +265,7 @@ export function CallScreen() {
         buttons={buttons}
         more={more}
         end={{ label: outgoing ? 'Cancel the call' : 'Hang up', onClick: () => void s.hangUp() }}
+        stopPresenting={() => void s.share(null)}
         status={sharing ? (paused ? `Sharing ${s.shareLabel ?? 'your screen'} — paused` : `You are sharing ${s.shareLabel ?? 'your screen'}`) : null}
       />
       {picker}

@@ -127,6 +127,8 @@ export interface ProxyDeps {
   cacheScope?: () => string;
   /** Mail bodies are cached only when the mail cache window is not "headers only". */
   mailBodiesCached: (path: string) => boolean;
+  /** A folder that is online only keeps not even its list (ENH-MAIL-03 DMO-OFF-01). */
+  mailListCached?: (path: string) => boolean;
   /** Headers the main process adds to a request — credentials the renderer must not hold (a salon desk's key). */
   extraHeaders?: (path: string) => Record<string, string> | null;
 }
@@ -165,7 +167,7 @@ export function createApiProxy(deps: ProxyDeps) {
 
     const cacheModule = method === 'GET' ? deps.cacheModuleFor(apiPath) : null;
     const isMailBody = /^\/api\/mail\/messages\/\d+/.test(apiPath);
-    const cacheable = cacheModule !== null && (!isMailBody || deps.mailBodiesCached(apiPath));
+    const cacheable = cacheModule !== null && (isMailBody ? deps.mailBodiesCached(apiPath) : (deps.mailListCached?.(apiPath) ?? true));
 
     const whatsapp = /^\/api\/whatsapp(?:\/|\?|$)/.test(apiPath);
     const scope = whatsapp ? (deps.cacheScope?.() ?? deps.http.url('/')) : '';

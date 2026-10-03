@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useLocalFirstQuery } from '../../../core/local-first-query';
 import { ApiError, apiGet, apiPost } from '../../../core/api';
+import type { WaDisplay } from './wa-names';
 
 /**
  * WhatsApp as a channel of Chat (worksuite-desktop#33, #35): the numbers shared with this person, their
@@ -48,6 +49,14 @@ export interface WaChat {
   assigned_name: string | null;
   /** The contact's WhatsApp picture as a signed `/media/` address, when the server has one (it does not fetch them yet). */
   avatar_url?: string | null;
+  /** #176: the number (digits) or group id, the group's subject and size, and who the server says it is. */
+  wa_id?: string | null;
+  subject?: string | null;
+  member_count?: number | null;
+  display?: WaDisplay | null;
+  phone_e164?: string | null;
+  wa_profile_name?: string | null;
+  book_contact_id?: number | null;
 }
 
 export interface WaMessage {
@@ -69,6 +78,11 @@ export interface WaMessage {
   media_note?: string | null;
   created_at: string;
   sent_at: string | null;
+  /** In a group, who said it (#176): their number, and the name the server found for it. */
+  from_wa_id?: string | null;
+  author_name?: string | null;
+  author_e164?: string | null;
+  author_contact_id?: number | null;
 }
 
 export interface WaThread {
@@ -76,6 +90,12 @@ export interface WaThread {
     id: number;
     name: string;
     wa_id: string;
+    kind?: string;
+    subject?: string | null;
+    member_count?: number | null;
+    display?: WaDisplay | null;
+    phone_e164?: string | null;
+    wa_profile_name?: string | null;
     account_id: number;
     unread: number;
     window: { allowed: boolean; reason: string | null };
@@ -99,6 +119,14 @@ export const WA_SCOPES: Array<{ id: WaScope; label: string }> = [
 /** A number that can carry messages now. Anything else (being set up, unlinked, failing) needs somebody to act. */
 export function isConnected(a: WaAccount): boolean {
   return a.status === 'connected';
+}
+
+/**
+ * On its way up — the session is starting or signing in — rather than down: said as "connecting", not as a fault
+ * (#176: a number read "not connected · Starting the session" while its messages kept arriving).
+ */
+export function isConnecting(a: Pick<WaAccount, 'status'>): boolean {
+  return a.status === 'connecting' || a.status === 'authenticating';
 }
 
 /** A refusal is an answer, not a fault: somebody without WhatsApp is not asked again every few seconds. */

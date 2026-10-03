@@ -122,8 +122,8 @@ function TaskCard({ t, open }: { t: Rec; open: () => void }) {
         </div>
         <div className="flex flex-wrap gap-1.5 pl-8">
           <Chip tone={done ? 'green' : 'blue'}>{human(status) || 'Open'}</Chip>
-          {pri && pri !== 'normal' && pri !== 'medium' ? <Chip tone={/high|urgent/i.test(pri) ? 'red' : 'plain'}>{human(pri)}</Chip> : null}
-          {due ? <Chip tone="amber">Due {dateLabel(due)}</Chip> : null}
+          {pri && pri !== 'normal' && pri !== 'medium' ? <Chip tone={!done && /high|urgent/i.test(pri) ? 'red' : 'plain'}>{human(pri)}</Chip> : null}
+          {due ? <Chip tone={done ? 'plain' : 'amber'}>Due {dateLabel(due)}</Chip> : null}
         </div>
         <span className="pl-8">
           <Sub>

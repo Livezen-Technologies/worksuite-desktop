@@ -13,9 +13,14 @@ vi.mock('../../../src/core/bridge', () => ({
 }));
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(async () => ({})), apiPost: vi.fn(async () => ({})), request: vi.fn(async () => ({ data: {} })) }));
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
+vi.mock('../../../src/components/DriveFilePicker', () => ({
+  DriveFilePicker: ({ title, onChoose }: { title: string; onChoose: (f: Array<{ id: string; name: string }>) => void }) => (
+    <button type="button" onClick={() => onChoose([{ id: '11', name: 'Adobe CC Teams Quote.pdf' }, { id: '12', name: 'logo.svg' }])}>{title}</button>
+  ),
+}));
 vi.mock('../../../src/core/app-state', async () => {
   const { createStore } = await import('../../../src/core/store');
-  return { app: createStore({ apps: [], transfers: [], bootstrap: { permissions: ['*'] }, auth: { server: { origin: 'https://app.worksuite.lk' } } }) };
+  return { app: createStore({ apps: [{ id: 'files' }], transfers: [], bootstrap: { permissions: ['*'] }, auth: { server: { origin: 'https://app.worksuite.lk' } } }) };
 });
 
 import { apiPost } from '../../../src/core/api';
@@ -50,12 +55,12 @@ describe('the website channel profile (ENH-WCHAT-02)', () => {
 
 const calls = vi.mocked(call);
 
-function mount() {
+function mount(reply: { id: number; sender_name: string; snippet: string } | null = null, onClearReply = () => undefined) {
   const ref = { current: null as ComposerHandle | null };
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
-      <Composer ref={(h) => void (ref.current = h)} roomId="website-41" roomName="Visitor 4F2A" group={false} reply={null} onClearReply={() => undefined} website={{ conversationId: 41, replies }} />
+      <Composer ref={(h) => void (ref.current = h)} roomId="website-41" roomName="Visitor 4F2A" group={false} reply={reply} onClearReply={onClearReply} website={{ conversationId: 41, replies }} />
     </QueryClientProvider>,
   );
   return ref;
@@ -74,7 +79,7 @@ describe('the website thread on the shared composer (RDC-01/02)', () => {
   });
   afterEach(() => cleanup());
 
-  it('has no @mentions, urgent, sharing or voice; attach offers documents, images and the camera', () => {
+  it('has no @mentions, urgent, sharing or voice; attach offers documents, images, the camera and Drive', () => {
     mount();
     expect(screen.queryByRole('button', { name: 'Urgent' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Share from WorkSuite' })).toBeNull();
@@ -82,7 +87,8 @@ describe('the website thread on the shared composer (RDC-01/02)', () => {
     const items = screen.getAllByRole('menuitem').map((b) => b.textContent ?? '');
     expect(items.some((t) => t.startsWith('Document'))).toBe(true);
     expect(items.some((t) => t.startsWith('Image'))).toBe(true);
-    expect(items.some((t) => /Video|Audio|Drive|Voice/.test(t))).toBe(false);
+    expect(items.some((t) => t.startsWith('From Drive'))).toBe(true);
+    expect(items.some((t) => /Video|Audio|Voice/.test(t))).toBe(false);
     expect(screen.getByText(/for saved and suggested replies/)).toBeTruthy();
   });
 
@@ -101,13 +107,46 @@ describe('the website thread on the shared composer (RDC-01/02)', () => {
     mount();
     const box = screen.getByRole('textbox', { name: 'Message' });
     fireEvent.change(box, { target: { value: 'We can help with that.' } });
-    expect(vi.mocked(apiPost)).toHaveBeenCalledWith('/api/chat/widget-admin/conversations/41/typing');
+    expect(vi.mocked(apiPost)).toHaveBeenCalledWith('/api/chat/widget-admin/conversations/41/typing', { state: 'start' });
     await act(async () => {
       fireEvent.keyDown(box, { key: 'Enter' });
     });
     expect(calls).toHaveBeenCalledWith('offline:submit', expect.objectContaining({ module: 'website-chat', entityId: '41', path: '/api/chat/widget-admin/conversations/41/reply', body: { message: 'We can help with that.' }, queueIfOffline: true }));
+    // Sending stops it at once (LIVE-04).
+    expect(vi.mocked(apiPost)).toHaveBeenCalledWith('/api/chat/widget-admin/conversations/41/typing', { state: 'stop' });
     // Never Team Chat's message endpoint.
     expect(calls.mock.calls.filter(([c]) => c === 'offline:submit').map(([, x]) => (x as { path: string }).path)).toEqual(['/api/chat/widget-admin/conversations/41/reply']);
+  });
+
+  it('answers one visitor message with a quote of it (RDC-10)', async () => {
+    const clear = vi.fn();
+    mount({ id: 7, sender_name: 'Visitor 4F2A', snippet: 'And for students?' }, clear);
+    expect(screen.getByText('Replying to Visitor 4F2A')).toBeTruthy();
+    const box = screen.getByRole('textbox', { name: 'Message' });
+    fireEvent.change(box, { target: { value: 'Students get 50% off.' } });
+    await act(async () => {
+      fireEvent.keyDown(box, { key: 'Enter' });
+    });
+    expect(calls).toHaveBeenCalledWith('offline:submit', expect.objectContaining({ path: '/api/chat/widget-admin/conversations/41/reply', body: { message: 'Students get 50% off.', reply_to: 7 } }));
+    expect(clear).toHaveBeenCalled();
+  });
+
+  it('sends a Drive file to the visitor as a copy, saying why one is refused (RDC-05)', async () => {
+    vi.mocked(apiPost).mockReset().mockImplementation((async (_path: string, body?: { file_id?: number }) => {
+      if (body?.file_id === 12) throw new Error("SVG files can't be sent to a visitor.");
+      return {};
+    }) as never);
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Attach' }));
+    fireEvent.click(screen.getAllByRole('menuitem').find((b) => (b.textContent ?? '').startsWith('From Drive'))!);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Send a copy to the visitor' }));
+    });
+    expect(vi.mocked(apiPost)).toHaveBeenCalledWith('/api/chat/widget-admin/conversations/41/attach-drive', { file_id: 11 });
+    expect(vi.mocked(apiPost)).toHaveBeenCalledWith('/api/chat/widget-admin/conversations/41/attach-drive', { file_id: 12 });
+    expect(vi.mocked(toast)).toHaveBeenCalledWith('error', "logo.svg: Error: SVG files can't be sent to a visitor.");
+    // Never Drive's share-a-link endpoint.
+    expect(vi.mocked(apiPost).mock.calls.some(([p]) => String(p).startsWith('/api/drive/'))).toBe(false);
   });
 
   it('refuses a dropped file a visitor cannot receive before any upload, and sends the rest to the widget', async () => {
@@ -169,6 +208,29 @@ describe('external channels on the shared composer (#156)', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send' })); });
     expect(send.mock.calls[2]?.[1]?.[0]?.name).toBe('second.png');
     expect(send.mock.calls[2]?.[0]).toBe('');
+  });
+
+  it('keeps a newer draft written while a send is pending', async () => {
+    let delivered: (v: boolean) => void = () => undefined;
+    const send = vi.fn((_text: string, _files: File[]) => new Promise<boolean>((resolve) => { delivered = resolve; }));
+    external(null, true, send);
+    const box = screen.getByRole('textbox', { name: 'Message' });
+    fireEvent.change(box, { target: { value: 'First reply' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    fireEvent.change(box, { target: { value: 'Next reply' } });
+    await act(async () => delivered(true));
+    expect((box as HTMLTextAreaElement).value).toBe('Next reply');
+    expect(send).toHaveBeenCalledWith('First reply', []);
+  });
+  it('submits only once when Enter is pressed twice before sending finishes', async () => {
+    let delivered: (v: boolean) => void = () => undefined;
+    const send = vi.fn((_text: string, _files: File[]) => new Promise<boolean>((resolve) => { delivered = resolve; }));
+    external(null, true, send);
+    const box = screen.getByRole('textbox', { name: 'Message' });
+    fireEvent.change(box, { target: { value: 'Send once' } });
+    await act(async () => { fireEvent.keyDown(box, { key: 'Enter' }); fireEvent.keyDown(box, { key: 'Enter' }); });
+    expect(send).toHaveBeenCalledTimes(1);
+    await act(async () => delivered(true));
   });
 
 });

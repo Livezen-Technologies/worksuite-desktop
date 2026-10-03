@@ -545,7 +545,8 @@ describe('the Office tab', () => {
       expect(still()).not.toBeNull();
       expect(screen.queryByText('The document is behind this window.')).toBeNull();
       // Escape closes it from anywhere, the keyboard having been in the editor until a moment ago.
-      expect(document.activeElement?.getAttribute('role')).toBe('dialog');
+      // Focus moves into the dialog once it has painted, not in the same tick it appears.
+      await waitFor(() => expect(document.activeElement?.getAttribute('role')).toBe('dialog'));
       fireEvent.keyDown(document.body, { key: 'Escape' });
       await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
       await waitFor(() => expect(still()).toBeNull());

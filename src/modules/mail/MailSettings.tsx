@@ -7,19 +7,29 @@ import { text } from '../../core/i18n';
 import { useStore } from '../../core/store';
 import { bytes, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
+import { FormattingSettings } from './ReadingSettings';
 import { Checkbox } from '../../components/Checkbox';
 import { Select } from '../../components/Select';
 import { Button, Chip, ErrorNote, Modal, Spinner, Switch, TextField, cx } from '../../components/ui';
+import { AutocompleteSettings } from './AutocompleteSettings';
 import type { Preferences } from '@shared/types';
 import { AddMailbox } from './AddMailbox';
+import { AccountsSync } from './AccountsSync';
+import { QuickStepsSettings } from './QuickStepsUi';
+import { includedIds, runSync } from './sync';
 import { AppPasswords } from './AppPasswords';
 import { ImportMail } from './Import';
-import { Rules, Signatures } from './MailRules';
+import { DataFileImport } from './DataFiles';
+import { Rules } from './MailRules';
+import { Signatures } from './signatures/SignaturesSettings';
+import { SpellingSettings } from './SpellingSettings';
 import { mailKeys, useLocalStore, useMailPrefs, useMailStats, useMailboxes, useSyncStatus } from './api';
 import { mailboxLetter } from './model';
 import { AccountAvatar } from './parts';
 import type { MailPrefs, Mailbox, SyncMailbox } from './types';
 import type { MailStoreStats } from '@shared/types';
+import { SyncButton } from '../../components/SyncButton';
+import { forgetMailbox } from './localFirst';
 
 /**
  * Settings › Mail: the accounts and what this computer keeps (Accounts &
@@ -27,7 +37,7 @@ import type { MailStoreStats } from '@shared/types';
  * and how the Mail screen is laid out (Layout & reading).
  */
 
-type Tab = 'accounts' | 'storage' | 'import' | 'signatures' | 'rules' | 'layout';
+type Tab = 'accounts' | 'storage' | 'import' | 'signatures' | 'rules' | 'quicksteps' | 'layout';
 
 const TABS: Array<[Tab, string]> = [
   ['accounts', 'Accounts & offline'],
@@ -35,6 +45,7 @@ const TABS: Array<[Tab, string]> = [
   ['import', 'Import mail'],
   ['signatures', 'Signatures'],
   ['rules', 'Rules'],
+  ['quicksteps', 'Quick Steps'],
   ['layout', 'Appearance & reading'],
 ];
 
@@ -73,7 +84,18 @@ export function MailSettings({ query = new URLSearchParams() }: { query?: URLSea
           </button>
         ))}
       </div>
-      {tab === 'accounts' ? <Accounts /> : tab === 'storage' ? <Storage /> : tab === 'import' ? <ImportMail openId={importId} /> : tab === 'signatures' ? <Signatures /> : tab === 'rules' ? <Rules mailbox={defaultBox ? String(defaultBox.id) : null} /> : <Layout />}
+      {tab === 'accounts' ? <Accounts /> : tab === 'storage' ? <Storage /> : tab === 'import' ? (
+        <>
+          <DataFileImport />
+          <ImportMail openId={importId} />
+          <AutocompleteSettings />
+        </>
+      ) : tab === 'signatures' ? (
+        <>
+          <Signatures />
+          <SpellingSettings />
+        </>
+      ) : tab === 'rules' ? <Rules mailbox={defaultBox ? String(defaultBox.id) : null} /> : tab === 'quicksteps' ? <QuickStepsSettings /> : <Layout />}
     </div>
   );
 }
@@ -123,9 +145,10 @@ function Accounts() {
   const boxes = useMailboxes();
   const sync = useSyncStatus(true);
   const prefs = useStore(app, (s) => s.prefs);
-  const store = useLocalStore();
-  const stats = useMailStats();
+  const store = useLocalStore(true);
+  const stats = useMailStats(true, true);
   const qc = useQueryClient();
+  const mailPrefs = useMailPrefs();
   const [adding, setAdding] = useState(false);
   const [passwords, setPasswords] = useState(false);
   const [managing, setManaging] = useState<Mailbox | null>(null);
@@ -151,7 +174,8 @@ function Accounts() {
         </Button>
       </div>
       {boxes.isLoading ? <Spinner /> : boxes.error ? <ErrorNote error={boxes.error} onRetry={() => void boxes.refetch()} /> : null}
-      {list.length ? (
+      {list.length && sync.data?.accounts ? <AccountsSync boxes={list} prefs={mailPrefs.prefs} onPrefs={mailPrefs.set} onRepair={(b) => void repair(b)} onManage={setManaging} /> : null}
+      {list.length && sync.data && !sync.data.accounts ? (
         <ul role="list" className="overflow-hidden rounded-[12px] border border-line bg-surface">
           {list.map((b) => {
             const s = sync.data?.mailboxes.find((m) => m.mailbox === b.id);
@@ -184,7 +208,7 @@ function Accounts() {
           <div className="mt-3">
             <Select label="Keep messages from the last" value={prefs.mailCacheDays} options={MAIL_DAYS.map((d) => ({ ...d, label: text(d.label) }))} onValueChange={(v) => void updatePrefs({ mailCacheDays: v as Preferences['mailCacheDays'] })} />
           </div>
-          <p className="mt-2 text-[12.5px] text-ink-3">{prefs.mailCacheDays === 0 ? text('Only the lists are kept; a message is read from the server.') : text('Lists and the messages you open are kept, encrypted, so they read offline.')}</p>
+          <p className="mt-2 text-[12.5px] text-ink-3">{prefs.mailCacheDays === 0 ? text('Only the lists are kept; a message is read from the server.') : text('Messages from this period in Inbox, Sent and Drafts are downloaded in the background, newest and unread first, and kept encrypted so they read offline.')}</p>
           <label className="mt-3 flex items-center gap-2.5 text-[13.5px] text-ink">
             <Checkbox checked={prefs.mailCacheDays !== 0} onChange={(e) => void updatePrefs({ mailCacheDays: e.target.checked ? 30 : 0 })} />
             Download message bodies
@@ -213,6 +237,30 @@ function Accounts() {
               <Checkbox checked={prefs.moduleNotifications.mail !== false} onChange={(e) => void updatePrefs({ moduleNotifications: { ...prefs.moduleNotifications, mail: e.target.checked } })} />
               Desktop notifications for new mail
             </label>
+            {prefs.moduleNotifications.mail !== false ? (
+              <div className="flex flex-col gap-2 pl-[26px]">
+                <div className="flex items-center justify-between gap-4">
+                  <span>{text('Alert me for')}</span>
+                  <Select
+                    aria-label={text('Alert me for')}
+                    value={prefs.mailAlerts ?? 'all'}
+                    options={[
+                      { value: 'all', label: text('Every new message') },
+                      { value: 'focused', label: text('Focused Inbox only') },
+                      { value: 'vip', label: text('VIPs only') },
+                      { value: 'none', label: text('No banners (count only)') },
+                    ]}
+                    onValueChange={(v) => void updatePrefs({ mailAlerts: v as NonNullable<Preferences['mailAlerts']> })}
+                    className="h-8 w-[220px]"
+                  />
+                </div>
+                <label className="flex items-center gap-2.5">
+                  <Checkbox checked={prefs.mailVipBreakthrough === true} onChange={(e) => void updatePrefs({ mailVipBreakthrough: e.target.checked })} />
+                  {text('VIPs can break through quiet hours')}
+                </label>
+                <p className="text-[12px] text-ink-3">{text('Quiet hours are set under Settings › Notifications. Rules that run on this computer can also show an alert or play a sound.')}</p>
+              </div>
+            ) : null}
             <label className="flex items-center gap-2.5">
               <Checkbox checked={prefs.badgeCount} onChange={(e) => void updatePrefs({ badgeCount: e.target.checked })} />
               Unread count on the dock / taskbar
@@ -286,17 +334,29 @@ function ManageMailbox({ box, onClose }: { box: Mailbox; onClose: () => void }) 
   return (
     <Modal title={b.email} labelledBy="mail-manage-title" width={480} onClose={onClose} footer={<Button onClick={onClose}>Done</Button>}>
       <div className="flex flex-col gap-4 p-5 text-[13.5px]">
-        <SwitchRow label={text('Show in the unified inbox')} hint={text('Mix its mail into Unified inbox with your other mailboxes.')} checked={b.in_unified !== false} onChange={(v) => void save({ in_unified: v })} />
+        <SwitchRow label={text('Include in All Accounts')} hint={text('Show its Inbox, Drafts, Sent and other folders in All Accounts, and sync it with Sync all.')} checked={b.in_unified !== false} onChange={(v) => void save({ in_unified: v })} />
         <SwitchRow label={text('Notify me about new mail')} hint={text('Desktop notifications for mail arriving in this mailbox.')} checked={(b as Mailbox & { notify?: boolean }).notify !== false} onChange={(v) => void save({ notify: v } as Partial<Mailbox>)} />
         {!b.shared ? <SwitchRow label={text('Pause syncing')} hint={text('Stop checking for new mail until you turn this off.')} checked={!!b.sync_paused} onChange={(v) => void save({ sync_paused: v })} /> : null}
         <div className="flex flex-wrap gap-2 border-t border-line pt-4">
           {!b.is_default && !b.shared ? <Button onClick={() => void act(() => apiPost(`/api/mail/mailboxes/${b.id}/default`), text('Now your default mailbox.'))}>Make default</Button> : null}
-          <Button icon="refresh" onClick={() => void act(() => apiPost(`/api/mail/mailboxes/${b.id}/sync`), text('Checking for new mail.'))}>
-            Sync now
-          </Button>
+          <SyncButton
+            onSync={async () => {
+              try {
+                await apiPost(`/api/mail/mailboxes/${b.id}/sync`);
+                void qc.invalidateQueries({ queryKey: ['mail'] });
+              } catch (e) {
+                toast('error', errorMessage(e));
+                throw e;
+              }
+            }}
+          />
           {!b.shared ? (
             confirm ? (
-              <Button variant="danger" onClick={() => void act(() => apiDelete(`/api/mail/mailboxes/${b.id}`), text('Removed from WorkSuite. The mail stays with the provider.')).then(onClose)}>
+              <Button variant="danger" onClick={() => void act(async () => {
+                await apiDelete(`/api/mail/mailboxes/${b.id}`);
+                // Its mail kept on this computer goes with it (worksuite-desktop#162).
+                await forgetMailbox(b.id);
+              }, text('Removed from WorkSuite. The mail stays with the provider.')).then(onClose)}>
                 Remove for good
               </Button>
             ) : (
@@ -379,11 +439,13 @@ function Storage() {
   const mode = copies[0]?.copy ?? null;
   const s = stats.data ?? null;
   const byBox = prefs?.mailCacheDaysByMailbox ?? {};
+  // The same Sync all as the folder pane: single-flight, three accounts at a time (DMO-SYN-02/12).
   const syncAll = async () => {
-    const r = await Promise.allSettled(list.filter((b) => !b.shared).map((b) => apiPost(`/api/mail/mailboxes/${b.id}/sync`)));
+    const r = await runSync(includedIds(sync.data, list), { all: true, offline: app.get().status?.network === 'OFFLINE' });
     void qc.invalidateQueries({ queryKey: ['mail'] });
-    const failed = r.filter((x) => x.status === 'rejected').length;
-    toast(failed ? 'error' : 'success', failed ? text('{n} mailboxes could not be asked now.', { n: failed }) : text('Checking every mailbox for new mail.'));
+    if (!r.started.length) return;
+    toast(r.failed.length ? 'error' : 'success', r.failed.length ? text('{n} mailboxes could not be synced.', { n: r.failed.length }) : text('Every mailbox was synced.'));
+    if (r.failed.length) throw new Error('sync failed');
   };
   const keep = (id: number, v: 7 | 30 | 90 | 0) => {
     const next = { ...byBox, [String(id)]: v };
@@ -402,7 +464,7 @@ function Storage() {
     <>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-[20px] font-bold text-ink">Storage & sync</h2>
-        <Button onClick={() => void syncAll()}>Sync all now</Button>
+        <SyncButton label={text('Sync all now')} onSync={syncAll} />
       </div>
       <div className="grid grid-cols-2 gap-4">
         <section aria-label="On this computer" className="flex flex-col gap-2.5 rounded-[12px] border border-line bg-surface p-[18px]">
@@ -503,7 +565,7 @@ function Storage() {
         </table>
       ) : null}
       <div className="mt-4 flex items-center gap-3 rounded-[10px] border border-line bg-surface px-3.5 py-3 text-[13px]">
-        <span className="flex-1 text-ink-2">Short on disk space? Choose a shorter keep period above; older mail stays searchable on the server and downloads when you open it.</span>
+        <span className="flex-1 text-ink-2">Short on disk space? Choose a shorter keep period above; older mail stays searchable on the server and downloads when you open it. Each folder can also keep recent messages, headers only or nothing (right-click it › On this computer): Inbox, Sent and Drafts keep recent mail, Archive is online only, other folders keep headers.</span>
         {clearing ? (
           <Button size="sm" variant="danger" onClick={clearAll}>
             Clear everything now
@@ -521,6 +583,7 @@ function Storage() {
 function Layout() {
   const { prefs, set } = useMailPrefs();
   const theme = useStore(app, (s) => s.prefs?.theme ?? 'system');
+  const desktopPrefs = useStore(app, (s) => s.prefs);
   const seg = <K extends keyof MailPrefs>(key: K, value: MailPrefs[K] | undefined, fallback: MailPrefs[K], options: Array<[NonNullable<MailPrefs[K]>, string]>, label: string) => (
     <div className="flex items-center justify-between gap-4 py-2">
       <span className="text-[13.5px] font-semibold text-ink">{text(label)}</span>
@@ -554,6 +617,10 @@ function Layout() {
           ))}
         </div>
       </section>
+      <label className="mt-3 flex items-center gap-2.5 text-[13.5px] text-ink">
+        <Checkbox checked={desktopPrefs?.highContrast === true} onChange={(e) => void updatePrefs({ highContrast: e.target.checked })} />
+        {text('High contrast')}
+      </label>
       <section aria-label="Mail layout" className="mt-4 rounded-[12px] border border-line bg-surface p-4">
         <h3 className="text-[15px] font-bold text-ink">Mail layout</h3>
         {seg('pane', prefs.pane, 'right', [['right', 'Right'], ['bottom', 'Bottom'], ['hidden', 'Off']], 'Reading pane')}
@@ -579,7 +646,72 @@ function Layout() {
         <p id="mail-dark-body-hint" className="pl-[26px] text-[12px] leading-relaxed text-ink-3">
           Emails designed with their own colours are shown on a light card so logos and tables stay readable.
         </p>
+        {seg('markRead', prefs.markRead, 'open', [['open', 'When opened'], ['delay', 'After a few seconds'], ['change', 'When I move on'], ['never', 'Never']], 'Mark as read')}
+        {prefs.markRead === 'delay' ? seg('markReadDelay', prefs.markReadDelay, 5, [[0, '0 s'], [5, '5 s'], [10, '10 s'], [30, '30 s']], 'After') : null}
+        {seg('openIn', prefs.openIn, 'tabs', [['tabs', 'Tabs'], ['windows', 'Windows'], ['both', 'Both']], 'Open messages in')}
+      </section>
+      <InboxAndKeyboard prefs={prefs} set={set} />
+      <FormattingSettings prefs={prefs} set={set} />
+      <section aria-label={text('Catch up')} className="mt-4 flex flex-col gap-3 rounded-[12px] border border-line bg-surface p-4 text-[13.5px] text-ink">
+        <SwitchRow label={text('Catch up after time away')} hint={text('Back after eight hours or more: unread mail from VIPs, mail that mentions you and flags due, at the top of Mail.')} checked={prefs.catchUp !== false} onChange={(v) => set({ catchUp: v })} />
       </section>
     </>
+  );
+}
+
+/** Focused Inbox, the keyboard scheme and the command bar (DMO-INB-01, DMO-KEY-01, DMO-SHL-03; §9.1). */
+function InboxAndKeyboard({ prefs, set }: { prefs: MailPrefs; set: (p: Partial<MailPrefs>) => void }) {
+  const boxes = (useMailboxes().data?.mailboxes ?? []).filter((b) => !b.archived);
+  const off = prefs.focusedOff ?? [];
+  return (
+    <section aria-label={text('Inbox and keyboard')} className="mt-4 flex flex-col gap-3 rounded-[12px] border border-line bg-surface p-4 text-[13.5px] text-ink">
+      <h3 className="text-[15px] font-bold text-ink">{text('Inbox and keyboard')}</h3>
+      <SwitchRow label={text('Focused Inbox')} hint={text('Sort the inbox into Focused and Other. Moving a message between the tabs teaches it.')} checked={prefs.focused !== false} onChange={(v) => set({ focused: v })} />
+      {prefs.focused !== false && boxes.length > 1 ? (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 pl-1">
+          {boxes.map((b) => (
+            <label key={b.id} className="flex items-center gap-2 text-[12.5px]">
+              <Checkbox checked={!off.includes(b.id)} onChange={(e) => set({ focusedOff: e.target.checked ? off.filter((x) => x !== b.id) : [...off, b.id] })} />
+              {b.email}
+            </label>
+          ))}
+        </div>
+      ) : null}
+      <div className="flex items-center justify-between gap-4 py-1">
+        <span className="font-semibold">{text('Keyboard shortcuts')}</span>
+        <div role="radiogroup" aria-label={text('Keyboard scheme')} className="flex rounded-[10px] bg-subtle p-0.5">
+          {(['worksuite', 'outlook', 'gmail'] as const).map((s) => (
+            <button key={s} type="button" role="radio" aria-checked={(prefs.keyScheme ?? 'worksuite') === s} onClick={() => set({ keyScheme: s })} className={cx('h-8 rounded-[8px] px-3 text-[13px] font-semibold', (prefs.keyScheme ?? 'worksuite') === s ? 'bg-surface text-ink shadow-sm' : 'text-ink-2 hover:text-ink')}>
+              {s === 'worksuite' ? 'WorkSuite' : s === 'outlook' ? 'Outlook' : 'Gmail'}
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="text-[12px] text-ink-3">{text('Press ? (or Ctrl+/ in the Outlook scheme) in Mail to see every shortcut and change any of them.')}</p>
+      <div className="flex items-center justify-between gap-4 py-1">
+        <span className="font-semibold">{text('Command bar')}</span>
+        <div role="radiogroup" aria-label={text('Command bar')} className="flex rounded-[10px] bg-subtle p-0.5">
+          {(['simplified', 'classic'] as const).map((s) => (
+            <button key={s} type="button" role="radio" aria-checked={(prefs.commandBar ?? 'simplified') === s} onClick={() => set({ commandBar: s })} className={cx('h-8 rounded-[8px] px-3 text-[13px] font-semibold', (prefs.commandBar ?? 'simplified') === s ? 'bg-surface text-ink shadow-sm' : 'text-ink-2 hover:text-ink')}>
+              {s === 'simplified' ? text('Simplified') : text('Classic')}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-4 py-1">
+        <span className="font-semibold">{text('When someone asks for a read receipt')}</span>
+        <Select
+          aria-label={text('Read receipts')}
+          value={prefs.readReceipts ?? 'ask'}
+          options={[
+            { value: 'ask', label: text('Ask me each time') },
+            { value: 'always', label: text('Always send one') },
+            { value: 'never', label: text('Never send one') },
+          ]}
+          onValueChange={(v) => set({ readReceipts: v as 'ask' | 'always' | 'never' })}
+          className="h-8 w-[200px]"
+        />
+      </div>
+    </section>
   );
 }

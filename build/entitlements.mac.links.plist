@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hardened-runtime entitlements. JIT is required by V8; nothing else is
+  relaxed (no unsigned executable memory beyond JIT, no DYLD variables,
+  no library-validation exceptions). Camera and microphone are declared for
+  calls (Phase 2) and are still gated by macOS's own permission prompts and
+  the app's permission handler. Apple Events: remote control types text
+  through System Events, which macOS still asks about (Automation).
+-->
+<!--
+  The app's own entitlements when it is built with a provisioning profile
+  (WS_MAC_PROVISIONING_PROFILE): everything in entitlements.mac.plist, plus
+  Associated Domains, so https://app.worksuite.lk/o/… links open in the app
+  (Universal Links, worksuite-desktop#170). Associated Domains is a restricted
+  entitlement: without a profile that grants it macOS refuses to launch the
+  app, which is why it is not in the default file. Helpers inherit the default
+  file, without it.
+-->
+<plist version="1.0">
+  <dict>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.device.camera</key>
+    <true/>
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
+    <key>com.apple.developer.associated-domains</key>
+    <array>
+      <string>applinks:app.worksuite.lk</string>
+    </array>
+  </dict>
+</plist>

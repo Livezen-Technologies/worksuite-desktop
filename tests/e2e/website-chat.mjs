@@ -62,7 +62,7 @@ try {
 
   await t.evaluate(`[...document.querySelectorAll('section[aria-label="Conversations"] button')].find(b => b.textContent.includes(${JSON.stringify(visitorName)})).click()`);
   await t.waitFor(t.hasText(question), 'the visitor\'s message in the thread');
-  t.check('opening the chat shows the visitor\'s message and details', await t.evaluate(`${t.hasText('Visitor details')} && ${t.hasText('ada@example.com')} && ${t.hasText('Pages this visit')}`));
+  t.check('opening the chat shows the visitor\'s message and details', await t.evaluate(`${t.hasText('VISITOR')} && ${t.hasText('ada@example.com')} && ${t.hasText('JOURNEY')}`));
   t.check('the "joined the chat" notice is a notice, not an agent\'s message', await t.evaluate(`[...document.querySelectorAll('div')].some(d => d.className.includes('text-center') && d.textContent.includes('joined the chat'))`));
   await t.shot('w2-thread');
 

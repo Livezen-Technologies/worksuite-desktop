@@ -2,6 +2,7 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { cx } from '../../components/ui';
 import { FINISHED, MOVING, statusOf, type Status } from './api';
+import { PrimaryActionButton } from '../../components/PrimaryAction';
 
 /**
  * The Orders rail (OmsRail): a company picker, then the orders by who they
@@ -83,9 +84,7 @@ export function SalesRail({ view, status, onPick, onNew, counts, org, orgs, onOr
     <nav aria-label="Orders" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
       <div className="flex flex-col gap-2 px-2.5 pt-3.5 pb-1">
         {canCreate ? (
-          <button type="button" data-guide="sales.new-order" onClick={onNew} className="flex h-[38px] items-center justify-center gap-1.5 rounded-[9px] bg-primary font-bold text-white hover:bg-primary-hover">
-            <Icon name="plus" size={16} /> New order
-          </button>
+          <PrimaryActionButton data-guide="sales.new-order" label="New order" onClick={onNew} />
         ) : null}
         {orgs.length > 1 ? (
           <Select aria-label="Companies" searchable value={org} onChange={(e) => onOrg(e.target.value)} className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink">

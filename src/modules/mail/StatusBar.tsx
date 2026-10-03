@@ -7,23 +7,43 @@ import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import type { OfflineMutation } from '@shared/types';
 import { undoQueued } from './api';
+import { syncAgo, type SyncSummary } from './sync';
 import type { SyncStatus } from './types';
 
 /**
- * The strip under the reading pane: how many mailboxes are live, whether new
- * mail is pushed, what is waiting to go, the reading zoom and how much mail
- * this computer keeps.
+ * The strip under the reading pane: the one sync status — the same as the
+ * folder pane's footer and Settings (DMO-SYN-05/06) — with a warning naming
+ * an account that has not synced for too long, what is waiting to go, the
+ * selection, the reading zoom and how much mail this computer keeps.
  */
-export function StatusBar({ sync, mailboxes, offline, waiting, zoom, localBytes }: { sync: SyncStatus | null; mailboxes: number; offline: boolean; waiting: number; zoom: number; localBytes: number | null }) {
-  const live = sync?.enabled ? sync.mailboxes.filter((m) => m.serving).length : 0;
-  const pushed = !!sync?.enabled && sync.mailboxes.some((m) => m.pushed);
+export function StatusBar({ summary, sync, waiting, zoom, localBytes, items, unread, selected, onOpenSync, notice }: { summary: SyncSummary; sync: SyncStatus | null; waiting: number; zoom: number; localBytes: number | null; items?: number | null; unread?: number | null; selected?: number; onOpenSync?: () => void; notice?: { text: string; onClick: () => void } | null }) {
+  // "New mail pushed" only while a push connection is really up (worksuite-desktop#172).
+  const pushed = !!sync?.enabled && summary.live > 0;
+  const dot = summary.state === 'offline' || summary.tone === 'warning' ? 'bg-warning' : summary.tone === 'danger' ? 'bg-danger' : summary.state === 'syncing' ? 'bg-primary' : 'bg-success';
+  const line = summary.state === 'up_to_date' ? `${summary.headline} · ${summary.detail}` : summary.state === 'attention' ? (summary.lastOk ? text('Synced {ago}', { ago: syncAgo(summary.lastOk) }) : text('Needs attention')) : summary.headline;
   return (
-    <footer role="status" aria-label="Mail status" className="flex h-7 shrink-0 items-center gap-4 border-t border-line bg-surface px-3 text-[12px] text-ink-3">
-      <span className="flex items-center gap-1.5">
-        <span aria-hidden className={cx('h-[7px] w-[7px] rounded-full', offline ? 'bg-warning' : 'bg-success')} />
-        {offline ? text('Offline') : sync?.enabled ? text('{n} of {total} mailboxes live', { n: live, total: mailboxes }) : text('{n} mailboxes', { n: mailboxes })}
-      </span>
-      {!offline && sync?.enabled ? <span>{pushed ? text('New mail pushed · IDLE') : text('New mail checked regularly')}</span> : null}
+    <footer role="status" aria-label={text('Mail status')} className="flex h-7 shrink-0 items-center gap-4 border-t border-line bg-surface px-3 text-[12px] text-ink-3">
+      <button type="button" onClick={onOpenSync} title={text('Open Settings › Mail › Accounts')} className="flex items-center gap-1.5 hover:text-ink">
+        <span aria-hidden className={cx('h-[7px] w-[7px] rounded-full', dot)} />
+        {line}
+      </button>
+      {summary.warning && summary.state !== 'offline' ? (
+        <button type="button" onClick={onOpenSync} className={cx('flex items-center gap-1 font-semibold hover:underline', summary.tone === 'danger' ? 'text-danger' : 'text-warning')}>
+          <Icon name="warning" size={12} />
+          {text('{warning} — fix', { warning: summary.warning })}
+        </button>
+      ) : null}
+      {notice ? (
+        <button type="button" onClick={notice.onClick} className="flex items-center gap-1 font-semibold text-danger hover:underline">
+          <Icon name="filter" size={12} />
+          {notice.text}
+        </button>
+      ) : null}
+      {summary.liveLine && summary.state !== 'offline' && summary.detail !== summary.liveLine ? <span className={summary.live < summary.pushTotal ? 'text-warning' : undefined}>{summary.liveLine}</span> : null}
+      {summary.state === 'up_to_date' && pushed ? <span>{text('New mail pushed')}</span> : null}
+      {typeof items === 'number' ? <span>{text('Items: {n}', { n: items.toLocaleString() })}</span> : null}
+      {typeof unread === 'number' && unread > 0 ? <span>{text('Unread: {n}', { n: unread.toLocaleString() })}</span> : null}
+      {selected && selected > 1 ? <span className="font-semibold text-ink">{text('{n} selected', { n: selected })}</span> : null}
       <span className={waiting ? 'font-semibold text-warning' : undefined}>{waiting === 1 ? text('1 action waiting') : text('{n} actions waiting', { n: waiting })}</span>
       <span className="flex-1" />
       <span>{text('Zoom {n}%', { n: zoom })}</span>

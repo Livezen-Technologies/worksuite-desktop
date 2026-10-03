@@ -76,6 +76,8 @@ export interface Counts {
   recent: number;
   trash: number;
   used: number;
+  /** Shares with me not looked at yet: the badge on Shared with me, cleared when it is opened (worksuite-desktop#164). */
+  shared_new?: number;
 }
 
 export interface DriveList {

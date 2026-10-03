@@ -320,6 +320,7 @@ export function MeetRoom() {
           menu: meet.isHost ? [{ label: 'End for everyone', icon: 'phone-off', danger: true, onClick: () => setEnding(true) }] : undefined,
         }}
         status={sharing ? (paused ? `Sharing ${meet.shareLabel ?? 'your screen'} — paused` : `You are sharing ${meet.shareLabel ?? 'your screen'}${controlNote}${viewerNote}`) : null}
+        stopPresenting={() => void meet.share(null)}
         screenLayer={(sharer) => (
           <>
             <PointerLayer sharer={sharer} />

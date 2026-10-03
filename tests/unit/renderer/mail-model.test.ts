@@ -36,7 +36,7 @@ afterEach(() => {
 
 describe('smart views and quick filters', () => {
   it('maps each smart view to what the server is asked, and merges the chips once', () => {
-    expect(SMART_VIEWS.map((v) => v.id)).toEqual(['unread', 'starred', 'important', 'today', 'attachments', 'scheduled', 'drafts']);
+    expect(SMART_VIEWS.map((v) => v.id)).toEqual(['unread', 'starred', 'important', 'today', 'attachments', 'scheduled', 'drafts', 'vip']);
     expect(smartView('unread')).toMatchObject({ folder: 'inbox', filters: ['unread'] });
     expect(smartView('drafts')).toMatchObject({ folder: 'drafts', filters: [] });
     expect(smartView('nope')).toBeNull();
@@ -78,6 +78,9 @@ describe('sorting and grouping', () => {
     ]);
     expect(groupRows([row(1)], 'none')).toEqual([{ key: 'all', label: '', rows: [row(1)] }]);
     expect(groupRows([row(1, { from_email: 'a@x' }), row(2, { from_email: 'A@x' })], 'sender')).toHaveLength(1);
+    // By conversation (#168): one band per thread, named without Re:/Fwd:.
+    const threads = groupRows([row(1, { subject: 'Quote', conversation_key: 'q' }), row(2, { subject: 'Re: Quote', conversation_key: 'q' }), row(3, { subject: 'Fwd: Re: Invoice' })], 'conversation');
+    expect(threads.map((g) => [g.label, g.rows.length])).toEqual([['Quote', 2], ['Invoice', 1]]);
   });
 
   it('names nested folders with a chevron', () => {

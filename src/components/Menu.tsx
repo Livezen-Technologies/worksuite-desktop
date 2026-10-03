@@ -476,6 +476,8 @@ function MenuList({
   onActivate: (item: MenuItem) => void;
   onHover: (item: MenuItem, el: HTMLElement) => void;
 }) {
+  // The icon column only where some item at this level has an icon: no blank gap before every label (worksuite-desktop#168).
+  const iconSlot = sections.some((s) => s.items.some((i) => !!i.icon));
   return (
     <div ref={listRef} id={id} role="menu" aria-label={label} onKeyDown={onKeyDown} className="outline-none">
       {sections.map((s, si) => (
@@ -487,7 +489,7 @@ function MenuList({
             </div>
           ) : null}
           {s.items.map((item) => (
-            <Row key={item.id} item={item} domId={domId(level, item.id)} sheet={sheet} expanded={openId === item.id} rtl={rtl} onActivate={onActivate} onHover={onHover} />
+            <Row key={item.id} item={item} iconSlot={iconSlot} domId={domId(level, item.id)} sheet={sheet} expanded={openId === item.id} rtl={rtl} onActivate={onActivate} onHover={onHover} />
           ))}
         </div>
       ))}
@@ -495,7 +497,7 @@ function MenuList({
   );
 }
 
-function Row({ item, domId, sheet, expanded, rtl, onActivate, onHover }: { item: MenuItem; domId: string; sheet: boolean; expanded: boolean; rtl: boolean; onActivate: (item: MenuItem) => void; onHover: (item: MenuItem, el: HTMLElement) => void }) {
+function Row({ item, iconSlot = true, domId, sheet, expanded, rtl, onActivate, onHover }: { item: MenuItem; iconSlot?: boolean; domId: string; sheet: boolean; expanded: boolean; rtl: boolean; onActivate: (item: MenuItem) => void; onHover: (item: MenuItem, el: HTMLElement) => void }) {
   const role = item.checked === undefined ? 'menuitem' : item.radio ? 'menuitemradio' : 'menuitemcheckbox';
   const note = item.disabled && item.reason ? item.reason : item.description;
   return (
@@ -522,9 +524,11 @@ function Row({ item, domId, sheet, expanded, rtl, onActivate, onHover }: { item:
         item.disabled ? 'text-ink-3' : item.danger ? 'text-danger' : 'text-ink',
       )}
     >
-      <span className="flex h-[18px] w-4 shrink-0 items-center justify-center">
-        {item.icon ? <Icon name={item.icon} size={16} className={cx(item.disabled ? 'text-ink-3 opacity-70' : item.danger ? 'text-danger' : 'text-ink-2')} /> : null}
-      </span>
+      {iconSlot || item.icon ? (
+        <span className="flex h-[18px] w-4 shrink-0 items-center justify-center">
+          {item.icon ? <Icon name={item.icon} size={16} className={cx(item.disabled ? 'text-ink-3 opacity-70' : item.danger ? 'text-danger' : 'text-ink-2')} /> : null}
+        </span>
+      ) : null}
       <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
         <span id={`${domId}-label`} className={cx('block', item.disabled && 'opacity-80')}>
           {item.label}

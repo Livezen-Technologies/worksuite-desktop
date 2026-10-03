@@ -5,6 +5,7 @@ import { queueMedia } from './outgoing';
 import { useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { useEffect, useImperativeHandle, useRef, useState, type Ref, type ReactNode } from 'react';
 import type { PickedFile } from '@shared/ipc/contract';
+import { websiteDraftKey, websiteReplyMutation } from '@shared/website-reply';
 import { app } from '../../core/app-state';
 import { apiGet, apiPost, request } from '../../core/api';
 import { call, errorMessage, registerDropped } from '../../core/bridge';
@@ -34,6 +35,7 @@ import { AiTextDialog } from '../ai/AiTextDialog';
 import { AiMenuButton } from '../ai/AiMenuButton';
 import { WRITING_TASKS, type TextTask } from '../ai/textTools';
 import type { WebsiteConversation } from './website/api';
+import { usePresence } from './presence';
 
 /**
  * The website channel (WS-WCHAT ENH-02, RDC-01/02): the same composer, for a
@@ -78,6 +80,7 @@ type Extra = { caption?: string; replyTo?: number };
 export interface ComposerHandle {
   stage: (files: PickedFile[]) => void;
   edit: (m: { id: number; message: string }) => void;
+  focus: () => void;
 }
 
 /**
@@ -86,7 +89,7 @@ export interface ComposerHandle {
  * an edit shown above it; files wait in a tray until Send; a voice message
  * records in its place. `compact` is the drawer's and the call panel's size.
  */
-export function Composer({ roomId, roomName, group, reply, onClearReply, typing = [], compact, look = 'box', extras, website, channel, ref }: {
+export function Composer({ roomId, roomName, group, reply, onClearReply, typing = [], compact, look = 'box', extras, inside, website, channel, ref }: {
   roomId: string;
   roomName: string;
   group: boolean;
@@ -98,6 +101,8 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   look?: 'box' | 'pill';
   /** Actions above the box (the chat drawer's quick actions). */
   extras?: ReactNode;
+  /** A small chip inside the box, above the line you type in (the drawer's open record). */
+  inside?: ReactNode;
   /** A website visitor's conversation rather than a Team Chat room. */
   website?: WebsiteChannel;
   channel?: ComposerChannel;
@@ -106,10 +111,12 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const qc = useQueryClient();
   const site = website ?? null;
   // A website draft keeps the key the website thread always used, so none is lost in the move (RDC-06).
-  const draft = useDraft<string>(channel?.draftModule ?? (site ? 'website-chat' : 'chat'), channel?.draftContext ?? (site ? `conversation:${site.conversationId}` : `room:${roomId}`), '');
+  const draft = useDraft<string>(channel?.draftModule ?? (site ? websiteDraftKey(site.conversationId).module : 'chat'), channel?.draftContext ?? (site ? websiteDraftKey(site.conversationId).context : `room:${roomId}`), '');
   const canUrgent = useStore(app, (s) => !site && !channel && !!s.bootstrap?.permissions.some((p) => p === '*' || p === URGENT));
   const transfers = useStore(app, (s) => s.transfers);
   const [sending, setSending] = useState(false);
+  const sendingGate = useRef(false);
+  const draftRevision = useRef(0);
   const [editing, setEditing] = useState<{ id: number; original: string; text: string } | null>(null);
   const [urgent, setUrgent] = useState(false);
   const [menu, setMenu] = useState<'attach' | 'emoji' | 'share' | null>(null);
@@ -140,16 +147,14 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const found = asking ? suggestions.data : undefined;
   const people = found?.people ?? [];
   const options = found ? [...found.everyone, ...people, ...found.teams, ...found.departments].slice(0, 10) : [];
-  const ids = people.map((p) => p.id).join(',');
-  const presence = useQuery({
-    queryKey: ['chat', 'presence', ids],
-    queryFn: ({ signal }) => apiGet<{ presence: Record<string, string> }>('/api/chat/presence', { ids }, signal),
-    enabled: ids !== '',
-    staleTime: 30_000,
-  });
+  const presenceOf = usePresence(people.map((p) => p.id));
 
   const text = editing ? editing.text : draft.value;
-  const setText = (v: string) => (editing ? setEditing({ ...editing, text: v }) : draft.setValue(v));
+  const setText = (v: string) => {
+    draftRevision.current++;
+    if (editing) setEditing({ ...editing, text: v });
+    else draft.setValue(v);
+  };
   const done = (s: Staged) => s.kind === 'disk' && !!s.transfer && transfers.find((t) => t.id === s.transfer)?.state === 'done';
   const tray = staged.filter((s) => !done(s));
   const ready = tray.filter((s) => (s.kind === 'disk' ? !s.transfer : s.state === 'ready'));
@@ -193,13 +198,14 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       setRecording(false);
       focus(m.message.length);
     },
+    focus: () => focus(),
   }));
 
   const typingSignal = (state: 'start' | 'stop') => {
-    // The widget's typing stamp has no "stopped": it lapses by itself (LiveActivity::WINDOW).
     if (channel) return;
+    // A website visitor sees "Nuwan is typing…" at once, and it goes at once on send, clear or blur (LIVE-03, LIVE-04).
     if (site) {
-      if (state === 'start') void apiPost(`/api/chat/widget-admin/conversations/${site.conversationId}/typing`).catch(() => undefined);
+      void apiPost(`/api/chat/widget-admin/conversations/${site.conversationId}/typing`, { state }).catch(() => undefined);
       return;
     }
     void apiPost('/api/chat/typing', { room_id: Number(roomId), state }).catch(() => undefined);
@@ -212,9 +218,8 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       typingSignal('stop');
     }
   };
-  const onTyped = () => {
-    const now = Date.now();
-    if (now - typingAt.current > TYPING_EVERY) {
+  const onTyped = (now: number) => {
+    if (!typingAt.current || now - typingAt.current > TYPING_EVERY) {
       typingAt.current = now;
       typingSignal('start');
     }
@@ -292,16 +297,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const sendWords = async (words: string, asUrgent: boolean): Promise<boolean> => {
     if (site) {
       // A reply to a visitor goes through the outbox too: pending while offline, sent once on reconnecting (RDC-07).
-      const r = await call('offline:submit', {
-        module: 'website-chat',
-        entity: 'reply',
-        entityId: String(site.conversationId),
-        label: `Reply to a website visitor: ${words.slice(0, 160)}`,
-        method: 'POST',
-        path: `/api/chat/widget-admin/conversations/${site.conversationId}/reply`,
-        body: { message: words.slice(0, 4000) },
-        queueIfOffline: true,
-      });
+      const r = await call('offline:submit', websiteReplyMutation(site.conversationId, words, reply?.id ?? null));
       if (!r.delivered && !r.queued) {
         toast('error', r.error ?? 'Not sent.');
         return false;
@@ -342,14 +338,21 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
    * urgent.
    */
   const send = async () => {
-    if (!canSend || sending || channel?.refusal) return;
+    if (!canSend || sending || sendingGate.current || channel?.refusal) return;
     if (limit && text.length > limit) { toast('error', `Keep this message within ${limit} characters.`); return; }
     stopTyping();
     setAsking(null);
     if (editing) return saveEdit();
     const words = text.trim();
+    const revision = draftRevision.current;
+    const clearSentDraft = async () => {
+      if (draftRevision.current !== revision) return;
+      draft.setValue('');
+      await draft.clear();
+    };
     const files = ready;
     const wordsAlone = words !== '' && (urgent || files.length === 0);
+    sendingGate.current = true;
     setSending(true);
     try {
       if (channel) {
@@ -360,15 +363,15 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
           const key = files[i]!.key;
           setStaged((all) => all.filter((s) => s.key !== key));
           // A delivered caption must not be repeated when retrying a later failed file.
-          if (i === 0) { draft.setValue(''); await draft.clear(); }
+          if (i === 0) await clearSentDraft();
         }
-        draft.setValue(''); await draft.clear(); onClearReply(); return;
+        await clearSentDraft(); onClearReply(); return;
       }
       if (wordsAlone && !(await sendWords(words, urgent))) return;
       if (!site && files.length) {
         queueMedia(roomId, files, { ...(wordsAlone ? {} : { ...(words ? { caption: words } : {}), ...(reply ? { replyTo: reply.id } : {}) }) }, originalQuality);
         setStaged((all) => all.filter((s) => !files.some((f) => f.key === s.key)));
-        draft.setValue(''); void draft.clear(); picked.current = []; setUrgent(false); onClearReply();
+        void clearSentDraft(); picked.current = []; setUrgent(false); onClearReply();
         return;
       }
       if (files.length) {
@@ -384,14 +387,14 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
         }
         for (const s of files.slice(1)) if (s.kind === 'blob') void sendBlob(s, null);
       }
-      draft.setValue('');
-      await draft.clear();
+      await clearSentDraft();
       picked.current = [];
       setUrgent(false);
       onClearReply();
     } catch (e) {
       toast('error', errorMessage(e));
     } finally {
+      sendingGate.current = false;
       setSending(false);
     }
   };
@@ -432,8 +435,8 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       fileInput.current?.click(); return;
     }
     if (c === 'camera') return setModal(c);
-    // A Drive link is never sent to a visitor, and a visitor cannot play a voice message (RDC-02, RDC-05).
-    if (site && (c === 'drive' || c === 'voice')) return;
+    // A visitor cannot play a voice message (RDC-02); a Drive file goes to them as a copy, never a link (RDC-05).
+    if (site && c === 'voice') return;
     if (c === 'drive') return setModal(c);
     if (c === 'voice') return setRecording(true);
     try {
@@ -441,6 +444,28 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       stageDisk(files);
     } catch (e) {
       toast('error', errorMessage(e));
+    }
+  };
+
+  /**
+   * Drive files to a website visitor (RDC-05): the server copies each into the conversation — the visitor can never
+   * open a Drive link — under the visitor allowlist and size limit, and says why one is refused.
+   */
+  const sendDriveCopies = async (files: Array<{ id: number; name: string }>) => {
+    if (!site) return;
+    setModal(null);
+    setSending(true);
+    try {
+      for (const f of files) {
+        try {
+          await apiPost(`/api/chat/widget-admin/conversations/${site.conversationId}/attach-drive`, { file_id: f.id });
+        } catch (e) {
+          toast('error', `${f.name}: ${errorMessage(e)}`);
+        }
+      }
+      void qc.invalidateQueries({ queryKey: ['website'] });
+    } finally {
+      setSending(false);
     }
   };
 
@@ -528,7 +553,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                   <button type="button" aria-label="Attach" title="Attach" aria-haspopup="menu" aria-expanded={menu === 'attach'} onClick={() => setMenu(menu === 'attach' ? null : 'attach')} className={cx(tool, menu === 'attach' && '!bg-selection !text-primary')}>
                     <Icon name="paperclip" size={compact ? 16 : 18} />
                   </button>
-                  {menu === 'attach' ? <AttachMenu compact={compact} align={look === 'pill' ? 'right' : 'left'} only={channel ? channel.attachChoices ?? ['document', 'image', 'video', 'audio', 'camera', 'drive', ...(channel.voice ? ['voice' as const] : [])] : site ? ['document', 'image', 'camera'] : undefined} onPick={(c) => void attach(c)} onClose={() => setMenu(null)} /> : null}
+                  {menu === 'attach' ? <AttachMenu compact={compact} align={look === 'pill' ? 'right' : 'left'} only={channel ? channel.attachChoices ?? ['document', 'image', 'video', 'audio', 'camera', 'drive', ...(channel.voice ? ['voice' as const] : [])] : site ? ['document', 'image', 'camera', 'drive'] : undefined} onPick={(c) => void attach(c)} onClose={() => setMenu(null)} /> : null}
                 </span>
               ) : null;
   const shareBtn = !editing && !site && !channel ? (
@@ -545,7 +570,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                 value={text}
                 onChange={(e) => {
                   setText(e.target.value);
-                  if (!editing) onTyped();
+                  if (!editing) onTyped(e.timeStamp);
                   if (!editing) setSlash(savedReplyQuery(e.target.value, e.target.selectionStart ?? e.target.value.length));
                   if (group) {
                     const q = mentionQuery(e.target.value, e.target.selectionStart ?? e.target.value.length);
@@ -748,7 +773,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                 t.type === 'user' && options.findIndex((o) => o.type === 'user') === i ? 'PEOPLE IN THIS CHAT'
                   : t.type !== 'user' && t.type !== 'everyone' && options.findIndex((o) => o.type !== 'user' && o.type !== 'everyone') === i ? 'TEAMS AND DEPARTMENTS'
                     : null;
-              const state = t.type === 'user' ? (presence.data?.presence[String(t.id)] ?? 'offline') : '';
+              const state = t.type === 'user' ? (presenceOf(t.id) ?? 'offline') : '';
               const sub = t.type === 'user'
                 ? [t.detail, (PRESENCE[state]?.label ?? state).toLowerCase()].filter(Boolean).join(' · ')
                 : (t.detail ?? (t.type === 'department' ? 'Department' : 'Team'));
@@ -794,7 +819,9 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
         ) : null;
   const modalsEl = (
     <>
-      {modal === 'drive' && channel ? <DriveFilePicker title="Attach from WorkSuite Files" confirmLabel="Attach" onClose={() => setModal(null)} onChoose={(files) => { void (async () => { try { for (const f of files) { const response = await fetch(apiUrl(`/api/files/${f.id}/download`)); if (!response.ok) throw new Error('This file could not be downloaded.'); stageBlob(await response.blob(), f.name); } setModal(null); } catch (e) { toast('error', errorMessage(e)); } })(); }} /> : modal === 'drive' ? <DrivePicker roomId={roomId} onClose={() => setModal(null)} onSent={refresh} /> : null}
+      {modal === 'drive' && site ? (
+        <DriveFilePicker title="Send a copy to the visitor" confirmLabel="Send a copy" busy={sending} onClose={() => setModal(null)} onChoose={(files) => void sendDriveCopies(files.map((f) => ({ id: Number(f.id), name: f.name })))} />
+      ) : modal === 'drive' && channel ? <DriveFilePicker title="Attach from WorkSuite Files" confirmLabel="Attach" onClose={() => setModal(null)} onChoose={(files) => { void (async () => { try { for (const f of files) { const response = await fetch(apiUrl(`/api/files/${f.id}/download`)); if (!response.ok) throw new Error('This file could not be downloaded.'); stageBlob(await response.blob(), f.name); } setModal(null); } catch (e) { toast('error', errorMessage(e)); } })(); }} /> : modal === 'drive' ? <DrivePicker roomId={roomId} onClose={() => setModal(null)} onSent={refresh} /> : null}
       {modal === 'camera' ? <CameraCapture onTaken={stageBlob} onClose={() => setModal(null)} /> : null}
       {sharing ? <SharePicker kind={sharing} roomName={roomName} onClose={() => setSharing(null)} onDrive={() => (setSharing(null), setModal('drive'))} onShare={shareRecord} /> : null}
     </>
@@ -818,6 +845,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
               urgent && !editing ? 'ring-danger' : editing ? 'ring-[#D97706]' : 'ring-line focus-within:ring-primary/50',
             )}
           >
+            {inside}
             {trayEl}
             <div className="flex items-end gap-0.5">
               {recording ? (
@@ -880,6 +908,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
               : 'border-line focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15',
         )}
       >
+        {inside}
         {trayEl}
         {channel ? <div className="flex gap-1" aria-label="Message formatting">{[{ label: 'Bold', mark: '*' }, { label: 'Italic', mark: '_' }, { label: 'Strikethrough', mark: '~' }, { label: 'Monospace', mark: '```' }].map(({ label, mark }) => <button key={label} type="button" className="rounded px-2 text-[11px] text-ink-2 hover:bg-subtle" onClick={() => { const el = input.current; const start = el?.selectionStart ?? text.length; const end = el?.selectionEnd ?? start; setText(`${text.slice(0, start)}${mark}${text.slice(start, end)}${mark}${text.slice(end)}`); focus(start + mark.length); }}>{label}</button>)}</div> : null}
         <div className="flex items-end gap-1">

@@ -3,6 +3,7 @@
  * process and only these can be reached from the preload. This file is plain
  * data so the sandboxed preload can import it without pulling in zod.
  */
+import { CONTACT_SYNC_INVOKE_CHANNELS } from './contact-sync-channels';
 import { PMS_LOCKS_INVOKE_CHANNELS } from './pms-locks-channels';
 import { POS_EVENT_CHANNELS, POS_INVOKE_CHANNELS } from './pos-channels';
 
@@ -12,6 +13,7 @@ export const INVOKE_CHANNELS = [
   'app:relaunch',
   'app:openExternal',
   'app:openInBrowser',
+  'links:audit',
   'app:setDockIcon',
 
   'local:enter', 'local:leave', 'local:status', 'local:profile', 'local:unlock', 'local:api', 'local:overview', 'local:export', 'local:restorePreview', 'local:restore', 'local:deleteAll', 'local:meeting', 'local:joinMeeting', 'local:moveOffer', 'local:move', 'local:keep',
@@ -76,6 +78,11 @@ export const INVOKE_CHANNELS = [
   'ring:state',
   'ring:join',
   'ring:silence',
+  'ring:pass',
+  'ring:handoff',
+  'ring:call',
+  'ring:mic',
+  'ring:onCall',
   'windows:detach',
   'windows:dock',
   'windows:toMain',
@@ -95,6 +102,7 @@ export const INVOKE_CHANNELS = [
   'hr:clock',
   'hr:break',
   'media:access',
+  'media:screenIndicator',
   'media:screenSources',
   'media:screenPick',
   'media:privacySettings',
@@ -173,6 +181,8 @@ export const INVOKE_CHANNELS = [
   'notifications:test',
   'notifications:permission',
   'notifications:refresh',
+  // A reminder this computer worked out by itself, while WorkSuite could not send it (ENH-MAIL-03 DMO-TSK-02).
+  'notifications:reminder',
 
   'clipboard:readForPaste',
 
@@ -293,11 +303,32 @@ export const INVOKE_CHANNELS = [
   'office:readOffline',
   'office:writeOffline',
 
+  // Mail data files and safe links (ENH-MAIL-03 P4, shared/mail-files.ts): handles only, never a path or a file's bytes.
+  'mailfile:pick',
+  'mailfile:scan',
+  'mailfile:import',
+  'mailfile:progress',
+  'mailfile:cancel',
+  'mailfile:view',
+  'mailfile:saveAttachment',
+  'mailfile:close',
+  'mail:export',
+  'mail:exportCancel',
+  'mail:openLink',
+  // Spell check's languages (worksuite-desktop#188).
+  'mail:spellLanguages',
+  'mail:setSpellLanguages',
+  // S/MIME (ENH-MAIL-03 DMO-SEC-05): a signature checked in the main process against the message's own bytes.
+  'smime:verify',
+
   'offline:status',
   'offline:pending',
   'offline:moduleBytes',
   'offline:clearModule',
   'offline:mailStats',
+  'offline:peek',
+  'offline:clearMailbox',
+  'offline:mailSearch',
   'offline:submit',
   'offline:retry',
   'offline:discard',
@@ -340,6 +371,8 @@ export const INVOKE_CHANNELS = [
   ...POS_INVOKE_CHANNELS,
   // Hotel PMS door locks: the on-site lock server this desk talks to (pms-locks-channels.ts).
   ...PMS_LOCKS_INVOKE_CHANNELS,
+  // Contact sync: iCloud, CardDAV and Mac Contacts on this computer (contact-sync-channels.ts).
+  ...CONTACT_SYNC_INVOKE_CHANNELS,
 ] as const;
 
 export type InvokeChannel = (typeof INVOKE_CHANNELS)[number];
@@ -384,6 +417,9 @@ export const EVENT_CHANNELS = [
   'ai:localChanged',
   'ai:ocrProgress',
   'office:localChanged',
+  'mailfile:changed',
+  'mail:exportChanged',
+  'mail:link',
   ...POS_EVENT_CHANNELS,
 ] as const;
 

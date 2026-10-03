@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.10.3 — 2026-10-03
+
+**Fixed**
+
+- In a meeting, a presenter sees what they share on the stage, with Stop presenting, and their camera in a separate tile (#146); the call workspace and the outline are calls 1.5.3
+
 ## 1.10.2 — 2026-10-03
 
 - In guest mode Meet offers joining by link or code with the Local Profile's name; starting a meeting needs an account (#149).

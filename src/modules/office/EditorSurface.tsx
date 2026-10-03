@@ -98,7 +98,7 @@ export function EditorSurface({
     };
   }, [session, tabKey, organizationId]);
 
-  useEditorPlacement(ref, viewId, visible);
+  const overlayStill = useEditorPlacement(ref, viewId, visible);
 
   useEffect(() => {
     if (!snapshotRef) return;
@@ -110,7 +110,15 @@ export function EditorSurface({
 
   return (
     <div ref={ref} data-office-editor className="relative min-h-0 min-w-0 flex-1 bg-white">
-      {!visible && still ? <img src={still} alt="" aria-hidden draggable={false} className="pointer-events-none absolute inset-0 h-full w-full object-cover object-left-top select-none" /> : null}
+      {(!visible && still) || overlayStill ? (
+        <img
+          src={overlayStill ?? still!}
+          alt=""
+          aria-hidden
+          draggable={false}
+          className="pointer-events-none absolute inset-0 h-full w-full object-contain object-left-top select-none"
+        />
+      ) : null}
     </div>
   );
 }
@@ -119,17 +127,69 @@ export function EditorSurface({
  * Keeps an editor's view on its placeholder: its size, its place (the sidebar, a docked tab, a panel beside it),
  * and whether it shows.
  */
-export function useEditorPlacement(ref: RefObject<HTMLDivElement | null>, viewId: string | null, visible: boolean): void {
+export function useEditorPlacement(ref: RefObject<HTMLDivElement | null>, viewId: string | null, visible: boolean): string | null {
+  const [overlayStill, setOverlayStill] = useState<string | null>(null);
   useEffect(() => {
     if (!viewId) return;
     let last = '';
     let frame = 0;
+    let covered = false;
+    let capturing = false;
+    let captureTimer: ReturnType<typeof setTimeout> | null = null;
+    let disposed = false;
+    queueMicrotask(() => {
+      if (!disposed) setOverlayStill(null);
+    });
+    let generation = 0;
+    const blocked = () =>
+      Array.from(document.querySelectorAll<HTMLElement>('[role="menu"], [role="dialog"], [role="listbox"], [data-native-overlay], aside[data-ai-assistant]')).some((overlay) => {
+        if (overlay.closest('[hidden], [aria-hidden="true"]')) return false;
+        for (let node: HTMLElement | null = overlay; node; node = node.parentElement) {
+          const style = getComputedStyle(node);
+          if (style.display === 'none' || style.visibility === 'hidden') return false;
+        }
+        if (overlay.hasAttribute('data-ai-assistant')) {
+          const a = overlay.getBoundingClientRect();
+          const b = ref.current?.getBoundingClientRect();
+          return !!b && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+        }
+        return true;
+      });
     const send = () => {
       frame = 0;
       const el = ref.current;
       const r = el?.getBoundingClientRect();
-      const shown = visible && !!r && r.width > 0 && r.height > 0 && document.visibilityState !== 'hidden';
+      const nextCovered = visible && blocked();
+      if (nextCovered !== covered) {
+        covered = nextCovered;
+        const request = ++generation;
+        setOverlayStill(null);
+        capturing = covered;
+        if (captureTimer) clearTimeout(captureTimer);
+        if (covered) {
+          // Keep the view visible until its replacement image is ready, but never let a failed capture block a menu.
+          const timeout = new Promise<null>((resolve) => {
+            captureTimer = setTimeout(() => resolve(null), 250);
+          });
+          void Promise.race([call('office:snapshot', { viewId }).catch(() => null), timeout]).then((shot) => {
+            if (disposed || !covered || request !== generation) return;
+            if (captureTimer) clearTimeout(captureTimer);
+            setOverlayStill(shot);
+            capturing = false;
+            soon();
+          });
+        }
+      }
+      const shown = visible && (!covered || capturing) && !!r && r.width > 0 && r.height > 0 && document.visibilityState !== 'hidden';
       const bounds = r ? { x: r.left, y: r.top, width: r.width, height: r.height } : { x: 0, y: 0, width: 0, height: 0 };
+      // A persistent launcher must stay clickable without leaving the whole document hidden.
+      if (r)
+        for (const reserve of document.querySelectorAll<HTMLElement>('[data-native-reserve-space]')) {
+          const a = reserve.getBoundingClientRect();
+          if (a.width > 0 && a.height > 0 && a.left < r.right && a.right > r.left && a.top < r.bottom && a.bottom > r.top) {
+            bounds.height = Math.max(0, Math.min(bounds.height, a.top - r.top - 8));
+          }
+        }
       const key = `${shown}:${Math.round(bounds.x)}:${Math.round(bounds.y)}:${Math.round(bounds.width)}:${Math.round(bounds.height)}`;
       if (key === last) return;
       last = key;
@@ -139,6 +199,13 @@ export function useEditorPlacement(ref: RefObject<HTMLDivElement | null>, viewId
       if (!frame) frame = requestAnimationFrame(send);
     };
     send();
+    const overlays = new MutationObserver(send);
+    overlays.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['role', 'hidden', 'aria-hidden', 'class', 'style', 'data-native-overlay', 'data-native-reserve-space'],
+    });
     const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(soon) : null;
     if (ref.current && ro) ro.observe(ref.current);
     window.addEventListener('resize', soon);
@@ -146,6 +213,9 @@ export function useEditorPlacement(ref: RefObject<HTMLDivElement | null>, viewId
     // Moves that change no size (the sidebar folding, a docked tab's divider) are caught by looking again.
     const poll = setInterval(send, 400);
     return () => {
+      disposed = true;
+      if (captureTimer) clearTimeout(captureTimer);
+      overlays.disconnect();
       ro?.disconnect();
       window.removeEventListener('resize', soon);
       document.removeEventListener('visibilitychange', soon);
@@ -154,4 +224,5 @@ export function useEditorPlacement(ref: RefObject<HTMLDivElement | null>, viewId
       void call('office:place', { viewId, bounds: { x: 0, y: 0, width: 0, height: 0 }, visible: false }).catch(() => undefined);
     };
   }, [ref, viewId, visible]);
+  return visible ? overlayStill : null;
 }

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type DragEvent } from 'react';
 import type { PickedFile } from '@shared/ipc/contract';
 import { app } from '../../core/app-state';
 import { apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
-import { call, errorMessage, registerDropped } from '../../core/bridge';
+import { call, errorMessage, on, registerDropped } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
@@ -445,6 +445,12 @@ export default function FilesPage(_props: ModuleProps) {
   useEffect(() => {
     if (!fileParam || !/^\d+$/.test(fileParam) || openedFile.current === fileParam) return;
     openedFile.current = fileParam;
+    // Shared with me, with the item picked out (#170): it stays in that list rather than going to its folder — and
+    // with &play=1, from a share card's Open (#164), it is opened there too.
+    if (place.view === 'shared') {
+      if (playParam) void apiGet<DriveFile>(`/api/files/${fileParam}`).then((f) => d.open({ type: 'file', f }), (e: unknown) => toast('error', errorMessage(e)));
+      return;
+    }
     void apiGet<DriveFile>(`/api/files/${fileParam}`)
       .then((f) => {
         onPlace(f.folder_id ? { view: 'folder', folder: f.folder_id } : { view: 'home', folder: null });
@@ -455,6 +461,23 @@ export default function FilesPage(_props: ModuleProps) {
   }, [fileParam]);
 
   const view = place.view;
+  // Opening Shared with me sees what was new there: its badge clears (worksuite-desktop#164).
+  const newShares = treeQ.data?.counts.shared_new ?? 0;
+  useEffect(() => {
+    if (view !== 'shared' || !active || !newShares) return;
+    void apiPost('/api/drive/shared/seen', {}).then(
+      () => void qc.invalidateQueries({ queryKey: ['files', 'tree'] }),
+      () => undefined,
+    );
+  }, [view, active, newShares, qc]);
+  // Something shared with me just now: the badge counts it without waiting for the next refresh.
+  useEffect(
+    () =>
+      on<{ type?: string; event?: string }>('realtime:event', (e) => {
+        if (e.type === 'notification' && (e.event === 'files.shared' || e.event === 'files.access_revoked')) void qc.invalidateQueries({ queryKey: ['files', 'tree'] });
+      }),
+    [qc],
+  );
   const listView = !PAGES.includes(view);
   // /files?view=devices&sync=<folder id>: "Sync to this computer" from a folder's menu or details.
   const syncParam = query.get('sync');

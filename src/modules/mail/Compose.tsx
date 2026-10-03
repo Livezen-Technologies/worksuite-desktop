@@ -9,27 +9,37 @@ import { Icon } from '../../components/Icon';
 import { Menu, type MenuSection } from '../../components/Menu';
 import { Select } from '../../components/Select';
 import { DriveFilePicker, type DriveFileRow } from '../../components/DriveFilePicker';
-import { RichTextEditor } from '../../components/RichTextEditor';
-import { Button, Chip, ErrorNote, FileBadge, Spinner, cx } from '../../components/ui';
-import { AiMenuButton } from '../ai/AiMenuButton';
+import { Button, Chip, ErrorNote, FileBadge, Modal, Spinner, TextField, cx } from '../../components/ui';
 import { AiTextDialog } from '../ai/AiTextDialog';
-import { WRITING_TASKS, type TextTask } from '../ai/textTools';
-import { sendMessage, useSignatures, useTemplates } from './api';
-import { cleanComposeHtml, composeBody, composeText, migrateDraft, parseQuote, signatureBlock, splitSignature, textToComposeHtml, type ComposeDraft } from './composeHtml';
+import { SuggestTimes } from './SuggestTimes';
+import { createMeeting } from '../meet/api';
+import { ComposeActions, quickPartsReason } from './editor/ComposeActions';
+import { MailEditor } from './editor/MailEditor';
+import { INLINE_MAX_BYTES, MESSAGE_MAX_BYTES, MESSAGE_WARN_BYTES, embeddedBytes } from './editor/images';
+import { meetingLinkHtml } from './editor/insert';
+import { MailMerge } from './MailMerge';
+import { canOpen } from '../../core/access';
+import { MAIL_TASKS, WRITING_TASKS, type TextTask } from '../ai/textTools';
+import { sendMessage, useQuickParts, useSignatures, useTemplates } from './api';
+import { chooseSignature as signatureFor, cleanComposeHtml, composeBody, composeText, migrateDraft, parseQuote, sendChecks, signatureBlock, splitSignature, textToComposeHtml, voteChoices, withVotePrompt, type ComposeDraft } from './composeHtml';
+import { fillSignature, valuesFor, withEmbedded } from './signatures/signatureHtml';
+import { MentionPopup } from './Mentions';
 import { mailboxLetter } from './model';
 import { sendAfterUndoWindow } from './outgoing';
 import { AccountAvatar } from './parts';
-import { RecipientField } from './Recipients';
+import { RecipientField, addressOf } from './Recipients';
 import { unquote } from './quote';
-import { parseAddresses } from './sanitize';
-import type { ComposeSeed, Mailbox, Template } from './types';
+import { escapeHtml, parseAddresses } from './sanitize';
+import type { ComposeSeed, Mailbox, Signature, Template } from './types';
 
 /**
  * Writing an email, in the page's own tab (UI-07): From, To, Cc and Bcc, the
- * subject, the message in a formatted-text editor (the shared RichTextEditor)
- * with AI writing tools, recipients as chips with contact suggestions,
- * attachments from this computer or from Files (a pasted picture becomes
- * one), the quoted email in a collapsible block below it,
+ * subject, the message in Mail's own editor (editor/MailEditor: one row of
+ * formatting tools, pictures inside the message, tables, more to insert —
+ * worksuite-desktop#188) with AI writing tools, recipients as chips with
+ * contact suggestions, a row of actions (attach from this computer, from
+ * Files or as a cloud link, templates, signatures, Suggest times, Mail merge,
+ * options), the quoted email in a collapsible block below it,
  * templates, and Send — now, with a few seconds to undo, or later, from the
  * server so this computer can be off. The draft is kept on this computer as
  * it is typed (FR-OFF-07) — cleaned HTML, with older plain-text drafts brought
@@ -38,6 +48,8 @@ import type { ComposeSeed, Mailbox, Template } from './types';
  */
 
 type Attached = NonNullable<ComposeDraft['attachments']>[number];
+
+const tooManyPictures = () => text('The pictures inside this message are too big to send together. Send some as attachments instead (select a picture › Send as attachment instead).');
 
 /** The draft's key on this computer: one per new message, one per message replied to. */
 export function draftContext(seed: ComposeSeed): string {
@@ -89,7 +101,22 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   };
   // The names behind chosen addresses, so a chip reads "Nimal Perera" rather than the address (kept with the draft).
   const named = (email: string, name: string) => set({ names: { ...(latest.current.names ?? {}), [email.toLowerCase()]: name } });
+  // @mentions (DMO-CMP-14): the person goes on To, once.
+  const editorEl = useRef<HTMLDivElement | null>(null);
+  const mentioned = (p: { name: string; email: string }) => {
+    const to = parseAddresses(latest.current.to);
+    if (!to.some((a) => a.toLowerCase() === p.email.toLowerCase())) set({ to: [...to, p.email].join(', '), names: { ...(latest.current.names ?? {}), [p.email.toLowerCase()]: p.name } });
+  };
   const templates = useTemplates(true);
+  const quickParts = useQuickParts(true);
+  const [voteDialog, setVoteDialog] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
+  const [cloud, setCloud] = useState(false);
+  const [saveTpl, setSaveTpl] = useState(false);
+  // Mail merge works on the message as it is when opened (DMO-CMP-18).
+  const [merging, setMerging] = useState<ReturnType<typeof payload> | null>(null);
+  // A choice from the Options and Quick Parts menus, put into the draft right after (menus hand over data, not the draft's ref).
+  const [pending, setPending] = useState<{ options?: NonNullable<ComposeDraft['options']>; part?: string } | null>(null);
   const signatures = useSignatures(true);
   // The mailbox it goes from: the draft's, else the one the page names, else the first (the list may arrive after the composer opens).
   const from = boxes.find((b) => String(b.id) === v.from) ?? boxes.find((b) => String(b.id) === defaultBox) ?? boxes.find((b) => b.is_default) ?? boxes[0] ?? null;
@@ -98,14 +125,40 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   const [mine, signature] = splitSignature(v.html);
   const own = composeText(mine);
 
+  // A signature as it goes into this message: its fields filled for the From account and the profile
+  // (worksuite-desktop#166; an older server fills them itself), and, in embedded mode, its pictures inside.
+  const sigList = signatures.data?.signatures ?? [];
+  const sigValues = signatures.data?.values ? valuesFor(signatures.data.values, from) : null;
+  const blockOf = (s: Signature | null) => (s ? signatureBlock(withEmbedded(sigValues ? fillSignature(s.html, sigValues) : (s.filled ?? s.html), s.embedded)) : '');
+  const same = (a: string, b: string) => cleanComposeHtml(a) === cleanComposeHtml(b);
+
   // The default signature goes in once, below the message, on a message that has none yet.
-  const sig = signatures.data?.signatures.find((s) => s.is_default) ?? null;
+  // The account's own signature for new mail or for replies (DMO-CMP-06), and where it goes.
+  const choice = signatureFor(sigList, signatures.data?.settings, fromId || null, seed.mode);
+  const sig = choice.signature;
+  // The signature the composer put in itself: changing From switches it; one chosen or edited by hand stays.
+  const autoSig = useRef<string | null>(null);
   useEffect(() => {
     if (!sig || v.signed || draft.restored || own.trim() || signature) return;
-    draft.setValue({ ...v, signed: true, html: `${mine}${signatureBlock(sig.html)}` });
+    const block = blockOf(sig);
+    autoSig.current = block;
+    draft.setValue({ ...v, signed: true, html: `${mine}${block}` });
     // Only when the signature arrives.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sig?.id]);
+  const lastFrom = useRef(fromId);
+  useEffect(() => {
+    if (lastFrom.current === fromId) return;
+    lastFrom.current = fromId;
+    if (autoSig.current === null || !signatures.data) return;
+    const [mineNow, sigNow] = splitSignature(latest.current.html);
+    if (!same(sigNow, autoSig.current)) return;
+    const next = blockOf(sig);
+    autoSig.current = next;
+    set({ html: `${mineNow}${next}`, signed: true });
+    // When the From account changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromId]);
 
   // AI writing tools (worksuite-desktop#53) work on what the person wrote — never on the signature or the quoted email.
   const [ai, setAi] = useState<{ task: TextTask; title: string } | null>(null);
@@ -113,6 +166,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   const aiItems = [
     ...(original && seed.mode !== 'forward' ? [{ label: text('Draft a reply'), icon: 'reply', run: () => setAi({ task: 'reply', title: text('Draft a reply') }) }] : []),
     ...WRITING_TASKS.map((w) => ({ label: w.label, disabled: !own.trim(), run: () => setAi({ task: w.task, title: w.label }) })),
+    ...MAIL_TASKS.map((w) => ({ label: w.label, disabled: !own.trim(), run: () => setAi({ task: w.task, title: w.label }) })),
   ];
   const choices = useMemo(() => laterChoices(), []);
   const laterAt = later === 'pick' ? (pick ? new Date(pick).toISOString() : null) : (choices.find((c) => c.id === later)?.at ?? null);
@@ -159,16 +213,45 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
     }
   };
 
-  /** Pictures pasted or dropped into the message go as attachments: the send path has no inline (CID) pictures. */
-  const filesIntoMessage = (files: File[]) => {
-    if (files.some((f) => f.type.startsWith('image/'))) toast('info', text('Pictures are added as attachments — they cannot go inside the message yet.'));
-    void attach(files);
+  /** A link to a file in Files instead of a copy: a public share link, put into the message above the signature. */
+  const cloudLink = async (files: DriveFileRow[]) => {
+    setCloud(false);
+    for (const f of files) {
+      try {
+        const r = await apiPost<{ url: string }>('/api/shares', { file_id: Number(f.id), visibility: 'public' });
+        setPending({ part: `<div><a href="${escapeHtml(r.url)}">${escapeHtml(f.name)}</a></div>` });
+      } catch (e) {
+        toast('error', text('No link was made for “{name}”: {reason}', { name: f.name, reason: errorMessage(e) }));
+      }
+    }
   };
+
+  /** A signature chosen from the Signature menu replaces the one in the message (or takes it out). */
+  const chooseSignature = (s: Signature | null) => {
+    const [mineNow] = splitSignature(latest.current.html);
+    autoSig.current = null;
+    set({ html: `${mineNow}${blockOf(s)}`, signed: true });
+  };
+  const currentSignature = signature ? String(sigList.find((s) => same(blockOf(s), signature))?.id ?? 'custom') : '';
+
+  // The meeting link in the Insert menu: a WorkSuite Meet meeting for later, named after the subject.
+  const meetingLink = canOpen('meet')
+    ? async () => {
+        const m = await createMeeting({ title: latest.current.subject || text('Meeting'), later: true });
+        return meetingLinkHtml(m.join_url, m.join_url, text('Join with WorkSuite Meet:'));
+      }
+    : undefined;
+
+  const aiSections: MenuSection[] = [{ id: 'ai', items: aiItems.map((a, i) => ({ id: `ai-${i}`, label: a.label, icon: 'icon' in a ? a.icon : undefined, disabled: 'disabled' in a ? a.disabled : false, reason: text('Write something first.'), onSelect: a.run })) }];
+
+  // Pictures inside the message and attachments together: most servers refuse a message over 25 MB.
+  const totalBytes = embeddedBytes(v.html) + (v.attachments ?? []).reduce((n, a) => n + (a.size || 0), 0);
 
   // Read at the moment of sending: an address committed by the same keystroke is in it.
   const payload = (scheduleAt?: string) => {
     const d = latest.current;
-    const body = composeBody(d.html, d.quote);
+    const votes = voteChoices(d.options?.vote);
+    const body = withVotePrompt(composeBody(d.html, d.quote, choice.placement), votes, text('Vote by replying with one of: {choices}.', { choices: votes.join(', ') }));
     return {
       to: parseAddresses(d.to),
       cc: parseAddresses(d.cc),
@@ -180,14 +263,32 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
       reply_mode: seed.mode === 'new' ? undefined : seed.mode,
       mailbox: fromId || undefined,
       attachments: (d.attachments ?? []).map((a) => a.token),
+      ...(d.options && Object.keys(d.options).length ? { options: d.options } : {}),
       ...(scheduleAt ? { schedule_at: scheduleAt } : {}),
     };
   };
 
-  const sendNow = () => {
+  const [checks, setChecks] = useState<Array<'attachment' | 'subject'> | null>(null);
+  useEffect(() => {
+    if (!pending) return;
+    const d = latest.current;
+    if (pending.options) set({ options: { ...d.options, ...pending.options } });
+    if (pending.part) {
+      const [mineNow, sigNow] = splitSignature(d.html);
+      set({ html: `${mineNow}${composeText(mineNow).trim() ? '<div><br></div>' : ''}${cleanComposeHtml(pending.part)}${sigNow}` });
+    }
+    setPending(null);
+    // Only when a choice arrives.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending]);
+  const sendNow = (checked = false) => {
     setError(null);
     const d = latest.current;
     if (!parseAddresses(d.to).length) return setError(text('Add at least one recipient.'));
+    if (embeddedBytes(d.html) > INLINE_MAX_BYTES) return setError(tooManyPictures());
+    // Forgot the file? No subject? Asked once before it goes (DMO-CMP-16).
+    const issues = checked ? [] : sendChecks(d, composeText(splitSignature(d.html)[0]));
+    if (issues.length) return setChecks(issues);
     const body = payload();
     const subject = d.subject || text('(no subject)');
     const toList = parseAddresses(d.to).join(', ');
@@ -213,6 +314,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
     setError(null);
     if (!at) return setError(text('Choose when to send it.'));
     if (!parseAddresses(latest.current.to).length) return setError(text('Add at least one recipient.'));
+    if (embeddedBytes(latest.current.html) > INLINE_MAX_BYTES) return setError(tooManyPictures());
     if (offline) return setError(text('Scheduling needs WorkSuite: try again when you are back online.'));
     setBusy(true);
     try {
@@ -238,6 +340,55 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
     }
   };
 
+  // A Quick Step's "Reply with template": the template goes in once, when it has loaded.
+  const templated = useRef(false);
+  const seedTemplate = seed.templateId ? (templates.data?.templates ?? []).find((t) => t.id === seed.templateId) : undefined;
+  const applyRef = useRef(applyTemplate);
+  useEffect(() => {
+    applyRef.current = applyTemplate;
+  });
+  useEffect(() => {
+    if (!seedTemplate || templated.current || draft.restored) return;
+    templated.current = true;
+    void applyRef.current(seedTemplate);
+  }, [seedTemplate, draft.restored]);
+
+  /** Message options (DMO-CMP-10/11/12/13), and the S/MIME choices this composer does not have yet. */
+  const optionSections = (): MenuSection[] => [
+    { id: 'importance', label: text('Importance'), items: (['high', 'normal', 'low'] as const).map((l) => ({ id: l, label: l === 'high' ? text('High') : l === 'low' ? text('Low') : text('Normal'), radio: true, checked: (latest.current.options?.importance ?? 'normal') === l, onSelect: () => setPending({ options: { importance: l === 'normal' ? undefined : l } }) })) },
+    { id: 'sensitivity', label: text('Sensitivity'), items: (['normal', 'personal', 'private', 'confidential'] as const).map((l) => ({ id: l, label: { normal: text('Normal'), personal: text('Personal'), private: text('Private'), confidential: text('Confidential') }[l], radio: true, checked: (latest.current.options?.sensitivity ?? 'normal') === l, onSelect: () => setPending({ options: { sensitivity: l === 'normal' ? undefined : l } }) })) },
+    {
+      id: 'vote',
+      label: text('Voting buttons'),
+      items: [
+        ...([['none', text('None')], ['approve', text('Approve; Reject')], ['yesno', text('Yes; No')], ['yesnomaybe', text('Yes; No; Maybe')]] as const).map(([id, label]) => ({
+          id: `vote-${id}`,
+          label,
+          radio: true,
+          checked: id === 'none' ? !latest.current.options?.vote?.length : (latest.current.options?.vote ?? []).join('; ') === VOTE_PRESETS[id].join('; '),
+          onSelect: () => setPending({ options: { vote: id === 'none' ? undefined : [...VOTE_PRESETS[id]] } }),
+        })),
+        { id: 'vote-custom', label: text('Your own choices…'), description: text('Counted in WorkSuite for recipients on this server; anyone else replies with a choice.'), onSelect: () => setVoteDialog(true) },
+      ],
+    },
+    {
+      id: 'receipts',
+      label: text('Receipts'),
+      items: [
+        { id: 'read', label: text('Request a read receipt'), checked: !!latest.current.options?.read_receipt, description: text('Many mail apps ask the reader first, or never send one.'), onSelect: () => setPending({ options: { read_receipt: !latest.current.options?.read_receipt } }) },
+        { id: 'delivery', label: text('Request a delivery receipt'), checked: !!latest.current.options?.delivery_receipt, onSelect: () => setPending({ options: { delivery_receipt: !latest.current.options?.delivery_receipt } }) },
+      ],
+    },
+    {
+      id: 'security',
+      label: text('Security'),
+      items: [
+        { id: 'smime-sign', label: text('Sign (S/MIME)'), icon: 'shield-check', disabled: true, reason: text('Sending signed or encrypted mail is not available yet. Signed mail you receive is checked.') },
+        { id: 'smime-encrypt', label: text('Encrypt (S/MIME)'), icon: 'lock', disabled: true, reason: text('Sending signed or encrypted mail is not available yet. Signed mail you receive is checked.') },
+      ],
+    },
+  ];
+
   const quote = parseQuote(v.quote);
   const list = (templates.data?.templates ?? []).filter((t) => !tplQuery.trim() || t.name.toLowerCase().includes(tplQuery.trim().toLowerCase()));
   const sendSections: MenuSection[] = [
@@ -255,6 +406,8 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
     <div className="flex min-h-0 flex-1">
       <form
         aria-label={seed.mode === 'new' ? text('New email') : seed.mode === 'forward' ? text('Forward') : text('Reply')}
+        // Writing an email: the AI launcher stays out of the send options and status bar (#153); Write with AI is in the toolbar.
+        data-hide-ai-launcher
         className="flex min-w-0 flex-1 flex-col bg-surface"
         onSubmit={(e) => {
           e.preventDefault();
@@ -267,6 +420,27 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
           }
         }}
       >
+        <ComposeActions
+          offline={offline}
+          templates={templates.data?.templates ?? []}
+          onTemplate={(t) => void applyTemplate(t)}
+          onSaveTemplate={() => setSaveTpl(true)}
+          quickParts={quickParts.data ?? []}
+          quickPartsReason={quickPartsReason(quickParts.data, !!quickParts.isLoading, !!quickParts.error)}
+          onQuickPart={(q) => setPending({ part: q.html })}
+          signatures={signatures.data?.signatures ?? []}
+          currentSignature={currentSignature}
+          onSignature={chooseSignature}
+          onAttachComputer={() => fileInput.current?.click()}
+          onAttachFiles={() => setDrive(true)}
+          onCloudLink={() => setCloud(true)}
+          mailMerge={seed.mode === 'new'}
+          onMailMerge={() => setMerging(payload())}
+          suggestTimes={canOpen('calendar')}
+          onSuggestTimes={() => setSuggesting(true)}
+          options={optionSections}
+          important={v.options?.importance === 'high'}
+        />
         <Field label="From">
           {boxes.length > 1 ? (
             <Select aria-label="From" value={fromId} onValueChange={(x) => set({ from: String(x) })} options={boxes.map((b) => ({ value: String(b.id), label: b.display_name && b.display_name !== b.email ? `${b.display_name} <${b.email}>` : b.email }))} className="h-8 max-w-[360px]" />
@@ -304,43 +478,46 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
         <Field label="Subject">
           <input aria-label="Subject" value={v.subject} onChange={(e) => set({ subject: e.target.value })} className="bare-focus min-w-0 flex-1 bg-transparent text-[14px] font-bold text-ink outline-none" />
         </Field>
+        {merging ? (
+          <MailMerge
+            message={{ subject: merging.subject, html: merging.body_html, text: merging.body_text }}
+            onSendOne={async (row, m) => {
+              await sendMessage({ ...merging, to: [row.email], cc: [], bcc: [], subject: m.subject, body_html: m.html, body_text: m.text, in_reply_to: undefined, reply_mode: undefined }, text('Send “{subject}” to {to}', { subject: m.subject, to: row.email }));
+            }}
+            onClose={() => setMerging(null)}
+          />
+        ) : null}
+        {suggesting ? <SuggestTimes recipients={[...parseAddresses(v.to ?? ''), ...parseAddresses(v.cc ?? '')].map(addressOf).filter((a) => a.includes('@'))} subject={v.subject} onInsert={(html) => setPending({ part: html })} onClose={() => setSuggesting(false)} /> : null}
         {ai ? (
           <AiTextDialog
             title={ai.title}
             task={ai.task}
             input={() => (ai.task === 'reply' ? `Subject: ${v.subject}\n\nThe email I am replying to:\n${original}${own.trim() ? `\n\nWhat I want to say (my notes):\n${own.trim()}` : ''}` : own.trim())}
-            actions={[{ label: own.trim() ? text('Replace my text') : text('Use this'), primary: true, run: (t) => set({ html: `${textToComposeHtml(t)}${signature}` }) }]}
+            actions={
+              ai.task === 'coach'
+                ? [{ label: text('Copy'), icon: 'copy', primary: true, run: (t) => void navigator.clipboard.writeText(t).then(() => toast('success', text('Copied.'))) }]
+                : [{ label: own.trim() ? text('Replace my text') : text('Use this'), primary: true, run: (t) => set({ html: `${textToComposeHtml(t)}${signature}` }) }]
+            }
             onClose={() => setAi(null)}
           />
         ) : null}
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto bg-ground/40 px-4 py-3 scroll-thin">
-          <RichTextEditor
+          <MailEditor
             value={v.html}
             onChange={(html) => set({ html })}
             clean={cleanComposeHtml}
+            editorRef={editorEl}
             label={text('Message')}
             placeholder={text('Write your message…')}
-            markdownShortcuts
-            toolLabels={{ link: text('Insert link') }}
-            onFiles={filesIntoMessage}
+            onFiles={(files) => void attach(files)}
+            onAttachInstead={(file) => void attach([file])}
+            aiSections={aiSections}
+            mergeFields={seed.mode === 'new'}
+            onMeetingLink={meetingLink}
+            offline={offline}
             autoFocus={!!v.to}
-            fill
-            minHeight={220}
-            className="min-h-[280px] shadow-sm"
-            toolbarEnd={
-              <>
-                <AiMenuButton items={aiItems} label={text('Write with AI')} className="h-7 text-[12.5px]" />
-                <Button size="sm" onClick={() => tplSearch.current?.focus()} title={text('Choose a template on the right')}>
-                  Insert template
-                </Button>
-                <Button size="sm" icon="folder" onClick={() => setDrive(true)} disabled={offline} title={offline ? text('Attaching needs WorkSuite.') : text('Attach a copy of a file from Files')}>
-                  Attach from Files
-                </Button>
-                <Button size="sm" icon="paperclip" onClick={() => fileInput.current?.click()} disabled={offline} title={offline ? text('Attaching needs WorkSuite.') : text('Attach from this computer')}>
-                  Attach
-                </Button>
-              </>
-            }
+            minHeight={240}
+            className="shrink-0 shadow-sm"
           />
           <input ref={fileInput} type="file" multiple hidden aria-hidden onChange={(e) => void attach(e.target.files ? [...e.target.files] : []).then(() => (e.target.value = ''))} />
           {(v.attachments?.length ?? 0) > 0 || uploading.length ? (
@@ -382,6 +559,11 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
             </section>
           ) : null}
         </div>
+        {totalBytes > MESSAGE_WARN_BYTES ? (
+          <p role="status" className={cx('mx-4 mt-2 rounded-[8px] px-3 py-2 text-[12.5px]', totalBytes > MESSAGE_MAX_BYTES ? 'bg-danger-bg text-danger' : 'bg-warning-bg text-warning')}>
+            {text('This message is {size} with its pictures and attachments — most mail servers refuse messages over 25 MB. Send big files as a cloud link instead.', { size: bytes(totalBytes) })}
+          </p>
+        ) : null}
         {error ? <div className="px-4 pt-2"><ErrorNote error={error} /></div> : null}
         <div className="flex h-[60px] shrink-0 items-center gap-2.5 border-t border-line px-4">
           <SendSplit menuRef={sendMenu} disabled={uploading.length > 0} onMenu={() => setMenu(true)} />
@@ -438,6 +620,31 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
       </aside>
       {drive ? <DriveFilePicker title={text('Attach from Files')} confirmLabel={text('Attach')} onChoose={(files) => void attachFromDrive(files)} onClose={() => setDrive(false)} /> : null}
       {menu ? <Menu sections={sendSections} label={text('Send later')} anchor={sendMenu} prefer="top" align="start" onClose={() => setMenu(false)} /> : null}
+      {cloud ? <DriveFilePicker title={text('Share a link to a file')} confirmLabel={text('Insert link')} onChoose={(files) => void cloudLink(files)} onClose={() => setCloud(false)} /> : null}
+      {saveTpl ? <SaveTemplate subject={v.subject} html={mine} onClose={() => setSaveTpl(false)} onSaved={() => void templates.refetch?.()} /> : null}
+      <MentionPopup editor={editorEl} onMention={mentioned} />
+      {voteDialog ? <CustomVote initial={v.options?.vote ?? []} onSave={(choices) => (setPending({ options: { vote: choices.length ? choices : undefined } }), setVoteDialog(false))} onClose={() => setVoteDialog(false)} /> : null}
+      {checks ? (
+        <Modal
+          title={checks.includes('attachment') ? text('Did you mean to attach a file?') : text('Send without a subject?')}
+          labelledBy="mail-send-check"
+          width={420}
+          onClose={() => setChecks(null)}
+          footer={
+            <>
+              <Button onClick={() => setChecks(null)}>{checks.includes('attachment') ? text('Attach a file') : text('Add a subject')}</Button>
+              <Button variant="primary" onClick={() => (setChecks(null), sendNow(true))}>
+                {text('Send anyway')}
+              </Button>
+            </>
+          }
+        >
+          <ul className="flex list-disc flex-col gap-1 p-5 pl-9 text-[13.5px] text-ink">
+            {checks.includes('attachment') ? <li>{text('Your message mentions an attachment, but nothing is attached.')}</li> : null}
+            {checks.includes('subject') ? <li>{text('There is no subject.')}</li> : null}
+          </ul>
+        </Modal>
+      ) : null}
     </div>
   );
 }
@@ -471,5 +678,77 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       <span className="w-14 shrink-0 text-[13px] text-ink-3">{label}</span>
       <span className="flex min-w-0 flex-1 items-center gap-2">{children}</span>
     </div>
+  );
+}
+
+/** The voting buttons offered in the options menu (DMO-CMP-12). */
+const VOTE_PRESETS = { approve: ['Approve', 'Reject'], yesno: ['Yes', 'No'], yesnomaybe: ['Yes', 'No', 'Maybe'] } as const satisfies Record<string, readonly string[]>;
+
+/** Voting buttons in the sender's own words: two to six choices. */
+function CustomVote({ initial, onSave, onClose }: { initial: string[]; onSave: (choices: string[]) => void; onClose: () => void }) {
+  const [value, setValue] = useState(initial.join('; '));
+  const choices = voteChoices(value.split(/[;\n]/));
+  return (
+    <Modal
+      title={text('Your own voting buttons')}
+      labelledBy="mail-vote-title"
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={() => onSave(choices)} disabled={value.trim() !== '' && choices.length < 2}>
+            Use these
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-2 p-4 text-[13px]">
+        <TextField label={text('Choices, separated by ;')} value={value} onChange={(e) => setValue(e.target.value)} placeholder={text('Monday; Tuesday; Wednesday')} autoFocus />
+        <p className="text-[12px] text-ink-3">{text('Two to six choices. Recipients on this WorkSuite server vote with a button; anyone else replies with their choice.')}</p>
+      </div>
+    </Modal>
+  );
+}
+
+/** The message as a template of one's own (the server cleans it again). */
+function SaveTemplate({ subject, html, onClose, onSaved }: { subject: string; html: string; onClose: () => void; onSaved: () => void }) {
+  const [name, setName] = useState(subject);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await apiPost('/api/mail/templates', { name: name.trim(), subject, body_html: cleanComposeHtml(html) });
+      toast('success', text('Template saved.'));
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title={text('Save as template')}
+      labelledBy="mail-save-template"
+      width={420}
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose}>{text('Cancel')}</Button>
+          <Button variant="primary" loading={busy} disabled={!name.trim()} onClick={() => void save()}>
+            {text('Save template')}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-2 p-4">
+        <TextField label={text('Template name')} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+        <p className="text-[12px] text-ink-3">{text('The subject and what you wrote are saved; the signature and the quoted email are not.')}</p>
+        {error ? <ErrorNote error={error} /> : null}
+      </div>
+    </Modal>
   );
 }

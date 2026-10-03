@@ -6,21 +6,49 @@ import { splitQuote } from './quote';
  * goes with it, the quoted email below it, the signature inside it, and old
  * plain-text drafts brought forward.
  *
- * The allow-list is formatting only — no scripts, no styles but colour,
- * highlight, alignment, decoration and a table's borders and padding, no
- * event handlers, and links only to
- * http(s) and mailto. Pictures do not go inline (the send path has no
- * multipart/related part): pasted ones become attachments instead.
+ * The allow-list is formatting only — no scripts, no styles but the
+ * email-safe ones (colour, highlight, fonts and sizes, alignment, spacing,
+ * borders, a picture's size and float), no event handlers, links only to
+ * http(s), mailto and tel, and the table attributes Outlook reads (`border`,
+ * `cellpadding`, `width`, `bgcolor`…). Pictures stay: embedded ones (a
+ * `data:` PNG, JPEG, GIF or WebP, which the server sends as inline `cid:`
+ * parts — worksuite-desktop#188), `cid:` ones and remote http(s) ones; any
+ * other source drops the picture.
  */
 
-const KEEP = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'DEL', 'P', 'DIV', 'BR', 'SPAN', 'UL', 'OL', 'LI', 'A', 'BLOCKQUOTE', 'H1', 'H2', 'H3', 'H4', 'PRE', 'CODE', 'HR', 'SUB', 'SUP', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TD', 'TH']);
+const KEEP = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'DEL', 'P', 'DIV', 'BR', 'SPAN', 'UL', 'OL', 'LI', 'A', 'BLOCKQUOTE', 'H1', 'H2', 'H3', 'H4', 'PRE', 'CODE', 'HR', 'SUB', 'SUP', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TD', 'TH', 'IMG']);
 /** Removed with what is inside them: their content is not the message's words. */
-const DROP = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'FRAME', 'FRAMESET', 'OBJECT', 'EMBED', 'APPLET', 'TEMPLATE', 'NOSCRIPT', 'SVG', 'MATH', 'LINK', 'META', 'BASE', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'OPTION', 'IMG', 'PICTURE', 'VIDEO', 'AUDIO', 'SOURCE', 'TITLE', 'HEAD']);
-const STYLES = new Set(['color', 'background-color', 'text-align', 'text-decoration', 'text-decoration-line', 'font-weight', 'font-style', 'border', 'border-collapse', 'padding', 'vertical-align', 'width']);
+const DROP = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'FRAME', 'FRAMESET', 'OBJECT', 'EMBED', 'APPLET', 'TEMPLATE', 'NOSCRIPT', 'SVG', 'MATH', 'LINK', 'META', 'BASE', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'OPTION', 'PICTURE', 'VIDEO', 'AUDIO', 'SOURCE', 'TITLE', 'HEAD']);
+const STYLES = new Set([
+  'color', 'background-color', 'text-align', 'text-decoration', 'text-decoration-line', 'font-weight', 'font-style', 'font-family', 'font-size', 'line-height',
+  'border', 'border-top', 'border-right', 'border-bottom', 'border-left', 'border-color', 'border-style', 'border-width', 'border-radius', 'border-collapse',
+  'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+  'vertical-align', 'width', 'max-width', 'height', 'float', 'display', 'list-style-type', 'white-space',
+]);
+/** Attributes kept by element, each with the values it may have (everything else is removed). */
+const NUM = /^\d{1,4}(%|px)?$/;
+const ATTRS: Record<string, Record<string, RegExp>> = {
+  IMG: { alt: /^[^<>]{0,300}$/, title: /^[^<>]{0,300}$/, width: NUM, height: NUM, align: /^(left|right|middle|top|bottom)$/i, border: /^\d{1,2}$/ },
+  TABLE: { border: /^\d{1,2}$/, cellpadding: /^\d{1,2}$/, cellspacing: /^\d{1,2}$/, width: NUM, align: /^(left|right|center)$/i, bgcolor: /^#[0-9a-f]{3,8}$/i },
+  TR: { align: /^(left|right|center)$/i, valign: /^(top|middle|bottom|baseline)$/i, bgcolor: /^#[0-9a-f]{3,8}$/i },
+  TD: { colspan: /^\d{1,3}$/, rowspan: /^\d{1,3}$/, width: NUM, height: NUM, align: /^(left|right|center|justify)$/i, valign: /^(top|middle|bottom|baseline)$/i, bgcolor: /^#[0-9a-f]{3,8}$/i },
+  P: { align: /^(left|right|center|justify)$/i },
+  DIV: { align: /^(left|right|center|justify)$/i },
+};
+ATTRS.TH = ATTRS.TD!;
+/** `<font size>` (the browser's own sizes, 1–7) as the pixels it means. */
+const FONT_SIZES: Record<string, string> = { '1': '10px', '2': '13px', '4': '18px', '5': '24px', '6': '32px', '7': '48px' };
+
+/** A picture's source the composer keeps: embedded (sent as an inline part), inline by Content-ID, or remote. */
+export function safeImageSrc(src: string): string | null {
+  const s = src.trim();
+  return /^(https?:\/\/[^\s<>"]+|cid:[^\s<>"]+|data:image\/(png|jpe?g|gif|webp);base64,[a-z0-9+/=]+)$/i.test(s) ? s : null;
+}
 
 export function safeHref(href: string): string | null {
   const h = href.trim();
-  return /^(https?:\/\/[^\s<>"]+|mailto:[^\s<>"]+)$/i.test(h) ? h : null;
+  // tel: for a phone number (a signature's, worksuite-desktop#166).
+  return /^(https?:\/\/[^\s<>"]+|mailto:[^\s<>"]+|tel:\+?[\d\s().-]{3,})$/i.test(h) ? h : null;
 }
 
 function safeStyle(style: string): string {
@@ -43,9 +71,11 @@ function cleanInto(from: Node, to: Node, doc: Document): void {
     }
     if (!(node instanceof Element) || DROP.has(node.tagName)) continue;
     if (node.tagName === 'FONT') {
-      // The browser's colour command can write <font color>; it leaves as a span with a colour style.
+      // The browser's colour, font and size commands can write <font>; it leaves as a span with a style.
       const colour = node.getAttribute('color') ?? '';
-      const style = safeStyle(`color: ${colour}`);
+      const face = node.getAttribute('face') ?? '';
+      const size = FONT_SIZES[node.getAttribute('size') ?? ''] ?? '';
+      const style = safeStyle(`${colour ? `color: ${colour};` : ''}${face ? `font-family: ${face};` : ''}${size ? `font-size: ${size}` : ''}`);
       const span = doc.createElement('span');
       if (style) span.setAttribute('style', style);
       cleanInto(node, style ? span : to, doc);
@@ -58,6 +88,16 @@ function cleanInto(from: Node, to: Node, doc: Document): void {
       continue;
     }
     const el = doc.createElement(node.tagName === 'STRIKE' ? 's' : node.tagName.toLowerCase());
+    if (node.tagName === 'IMG') {
+      const src = safeImageSrc(node.getAttribute('src') ?? '');
+      // A picture with nowhere safe to come from is nothing.
+      if (!src) continue;
+      el.setAttribute('src', src);
+    }
+    for (const [name, ok] of Object.entries(ATTRS[node.tagName] ?? {})) {
+      const v = node.getAttribute(name);
+      if (v !== null && ok.test(v.trim())) el.setAttribute(name, v.trim());
+    }
     if (node.tagName === 'A') {
       const href = safeHref(node.getAttribute('href') ?? '');
       if (!href) {
@@ -121,7 +161,17 @@ export function composeText(html: string): string {
       if (!(c instanceof Element)) continue;
       const tag = c.tagName;
       if (tag === 'BR') flush(prefix);
-      else if (tag === 'A') {
+      else if (tag === 'IMG') {
+        const alt = (c.getAttribute('alt') ?? '').trim();
+        if (alt) line += `[${alt}]`;
+      } else if (tag === 'TD' || tag === 'TH') {
+        if (line.trim() && !/\|\s*$/.test(line)) line += ' | ';
+        walk(c, prefix, depth);
+      } else if (tag === 'TR') {
+        if (line.trim()) flush(prefix);
+        walk(c, prefix, depth);
+        if (line.trim()) flush(prefix);
+      } else if (tag === 'A') {
         const inner = (c.textContent ?? '').trim();
         const href = (c.getAttribute('href') ?? '').replace(/^mailto:/i, '');
         line += inner && inner !== href ? `${inner} <${href}>` : href || inner;
@@ -208,10 +258,23 @@ export function quoteToHtml(quote: string): string {
   return `<div><br></div>${attribution ? `<div>${esc(attribution)}</div>` : ''}<blockquote style="margin: 0 0 0 0.8ex; border-left: 1px solid #cccccc; padding-left: 1ex">${body}</blockquote>`;
 }
 
-/** What is sent: the message and the quote, as HTML and as plain text. */
-export function composeBody(html: string, quote: string): { html: string; text: string } {
-  const own = cleanComposeHtml(html);
+/**
+ * What is sent: the message and the quote, as HTML and as plain text. The
+ * signature sits above the quoted message, or — `below_quote`, an account's
+ * choice (worksuite-desktop#166) — at the very end, below it.
+ */
+export function composeBody(html: string, quote: string, placement: 'above_quote' | 'below_quote' = 'above_quote'): { html: string; text: string } {
   const q = quote.trim() ? quote.replace(/^\s+/, '') : '';
+  if (placement === 'below_quote' && q) {
+    const [mine, sig] = splitSignature(cleanComposeHtml(html));
+    if (sig) {
+      return {
+        html: `${mine}${quoteToHtml(q)}${sig}`,
+        text: [composeText(mine), q, composeText(sig)].filter(Boolean).join('\n\n'),
+      };
+    }
+  }
+  const own = cleanComposeHtml(html);
   return {
     html: `${own}${quoteToHtml(q)}`,
     text: [composeText(own), q].filter(Boolean).join('\n\n'),
@@ -232,10 +295,45 @@ export interface ComposeDraft {
   /** Display names of chosen recipients, by lower-cased address. */
   names?: Record<string, string>;
   signed?: boolean;
+  /** Importance, sensitivity and receipts (DMO-CMP-11/13). */
+  options?: { importance?: 'high' | 'low'; sensitivity?: 'personal' | 'private' | 'confidential'; read_receipt?: boolean; delivery_receipt?: boolean; vote?: string[] };
   v: 2;
 }
 
 /** A draft as this version keeps it — an older plain-text one (`body`, quote included) brought forward. */
+/** Message options kept with a draft, only the known values (DMO-CMP-10). */
+function draftOptions(o: Record<string, unknown>): NonNullable<ComposeDraft['options']> {
+  return {
+    ...(o.importance === 'high' || o.importance === 'low' ? { importance: o.importance } : {}),
+    ...(o.sensitivity === 'personal' || o.sensitivity === 'private' || o.sensitivity === 'confidential' ? { sensitivity: o.sensitivity } : {}),
+    ...(o.read_receipt === true ? { read_receipt: true } : {}),
+    ...(o.delivery_receipt === true ? { delivery_receipt: true } : {}),
+    ...(voteChoices(o.vote).length ? { vote: voteChoices(o.vote) } : {}),
+  };
+}
+
+/** Voting buttons' choices (DMO-CMP-12): two to six short plain lines, no repeats. */
+export function voteChoices(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  const out: string[] = [];
+  for (const c of v) {
+    const t = String(c).replace(/[\p{Cc};]+/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
+    if (t && !out.some((o) => o.toLowerCase() === t.toLowerCase())) out.push(t);
+  }
+  return out.length >= 2 ? out.slice(0, 6) : [];
+}
+
+/**
+ * The line that lets anybody vote, whatever their mail app (DMO-CMP-12): a
+ * recipient on this WorkSuite server sees buttons; everybody else replies
+ * with a choice.
+ */
+export function withVotePrompt(body: { html: string; text: string }, choices: string[], prompt: string): { html: string; text: string } {
+  if (choices.length < 2) return body;
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return { html: `${body.html}<p style="color:#555">${esc(prompt)}</p>`, text: `${body.text}\n\n${prompt}` };
+}
+
 export function migrateDraft(raw: unknown, seedQuote = ''): ComposeDraft {
   const d = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const str = (k: string) => (typeof d[k] === 'string' ? (d[k] as string) : '');
@@ -248,9 +346,54 @@ export function migrateDraft(raw: unknown, seedQuote = ''): ComposeDraft {
     attachments: Array.isArray(d.attachments) ? (d.attachments as ComposeDraft['attachments']) : [],
     names: d.names && typeof d.names === 'object' ? Object.fromEntries(Object.entries(d.names as Record<string, unknown>).filter(([, n]) => typeof n === 'string') as Array<[string, string]>) : {},
     signed: !!d.signed,
+    ...(d.options && typeof d.options === 'object' ? { options: draftOptions(d.options as Record<string, unknown>) } : {}),
     v: 2 as const,
   };
   if (typeof d.html === 'string') return { ...base, html: cleanComposeHtml(d.html), quote: typeof d.quote === 'string' ? d.quote : seedQuote };
   const [own, quoted] = splitQuote(str('body'), seedQuote || undefined);
   return { ...base, html: textToComposeHtml(own.replace(/\s+$/, '')), quote: quoted || (str('body') ? '' : seedQuote) };
+}
+
+/** Words that say a file is attached, in English, Sinhala and Tamil. */
+const ATTACH_WORDS = /\b(attach(ed|ment|ments|ing)?|enclos(ed|ure)|see (the )?attach(ed|ment))\b|ඇමුණුම|අමුණා|இணைப்ப|இணைத்துள்ள/i;
+
+/**
+ * Before sending (DMO-CMP-16): a file promised and none attached, or no
+ * subject. Only what the person wrote is read — never the quoted email.
+ */
+export function sendChecks(d: Pick<ComposeDraft, 'subject' | 'attachments'>, ownText: string): Array<'attachment' | 'subject'> {
+  const out: Array<'attachment' | 'subject'> = [];
+  if (!d.attachments?.length && ATTACH_WORDS.test(ownText)) out.push('attachment');
+  if (!d.subject.trim()) out.push('subject');
+  return out;
+}
+
+/**
+ * The signature for this account and this kind of message (DMO-CMP-06): the
+ * account's own default for new mail or replies, else the one for every
+ * account, else the old single default.
+ */
+export function pickSignature<S extends { is_default: boolean; mailbox?: number | null; default_new?: boolean; default_reply?: boolean }>(list: S[], mailbox: string | null, mode: 'new' | 'reply' | 'reply_all' | 'forward'): S | null {
+  const key = mode === 'new' ? 'default_new' : 'default_reply';
+  const box = mailbox ? Number(mailbox) : null;
+  return list.find((s) => s[key] && box !== null && s.mailbox === box) ?? list.find((s) => s[key] && (s.mailbox ?? null) === null) ?? list.find((s) => s.is_default) ?? null;
+}
+
+/**
+ * The signature for this account and this kind of message, and where it
+ * goes (worksuite-desktop#166): the account's own choice, else the one for
+ * every account — where a reply can have none — else, on a server without
+ * those choices, the older flags on the signatures (pickSignature).
+ */
+export function chooseSignature<S extends { id: number; is_default: boolean; mailbox?: number | null; default_new?: boolean; default_reply?: boolean }>(
+  list: S[],
+  settings: Array<{ mailbox: number | null; new_id: number | null; reply_id: number | null; placement: 'above_quote' | 'below_quote' }> | undefined,
+  mailbox: string | null,
+  mode: 'new' | 'reply' | 'reply_all' | 'forward',
+): { signature: S | null; placement: 'above_quote' | 'below_quote' } {
+  const box = mailbox ? Number(mailbox) : null;
+  const row = (box !== null ? settings?.find((s) => s.mailbox === box) : undefined) ?? settings?.find((s) => s.mailbox === null);
+  if (!row) return { signature: pickSignature(list, mailbox, mode), placement: 'above_quote' };
+  const id = mode === 'new' ? row.new_id : row.reply_id;
+  return { signature: id === null ? null : (list.find((s) => s.id === id) ?? null), placement: row.placement === 'below_quote' ? 'below_quote' : 'above_quote' };
 }

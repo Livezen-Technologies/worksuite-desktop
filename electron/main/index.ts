@@ -14,14 +14,17 @@ import { hkdfSync } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { canOpenApp, canOpenLink, canOpenRoute, notificationAllowed, visibleAppIds } from '@shared/access';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
-import { findMailtoInArgv, mailBodiesKept, mailtoRoute, parseMailto } from '@shared/mailto';
+import { itemApp, itemRoute, looksLikeItemLink, parseItemLink } from '@shared/item-links';
+import { linkPrefs } from '@shared/link-prefs';
+import { findMailtoInArgv, mailBodiesKept, mailKeptForever, mailListKept, mailtoRoute, parseMailto } from '@shared/mailto';
+import { websiteDraftKey, websiteReplyMutation } from '@shared/website-reply';
 import { resolveWebLink } from '@shared/links';
 import { redirectRoute } from '@shared/channels';
 import { networkStatus } from '@shared/network';
 import { pmsCached } from '@shared/pms-cache';
 import { eventsCached } from '@shared/event-desk';
 import { redactUrl } from '@shared/redact';
-import type { Bootstrap, NavigateRequest, RealtimeState, ServiceHealth, StatusSnapshot } from '@shared/types';
+import type { Bootstrap, NavigateRequest, RealtimeState, ServiceHealth, StatusSnapshot, WebchatOnCall, WebchatRingState } from '@shared/types';
 import { AccessWatch, NO_ACCESS } from './access';
 import { applyAutostart, startedHidden } from './autostart';
 import { evaluateBoot, markCleanExit, markRunning, clearCrashes, writeBootConfig } from './boot';
@@ -48,6 +51,7 @@ import { DEFAULT_POLICY } from '../services/policy';
 import { Database } from '../services/db';
 import { archName, DeviceService, platformName } from '../services/device';
 import { PmsLocks } from '../services/pms-locks';
+import { ContactSync } from '../services/contact-sync';
 import { createPos } from '../services/pos-ipc';
 import { SalonDesk } from '../services/salon-desk';
 import { SalonPrint } from '../services/salon-print';
@@ -65,6 +69,7 @@ import { AI_ANSWER_LINK, AI_CHANGES_LINK, AiPendingWatcher } from '../services/a
 import * as fsp from 'node:fs/promises';
 import { createInjector, type Injector } from '../services/remote-control/input';
 import { OfflineCache } from '../services/offline-cache';
+import { MailBodies } from '../services/mail-bodies';
 import { OfflineQueue } from '../services/offline-queue';
 import { RealtimeService } from '../services/realtime';
 import { SecureStore } from '../services/secure-store';
@@ -81,6 +86,10 @@ import { createRestaurant } from '../services/restaurant';
 import { OfficeEditorHost } from '../services/office-editor';
 import { OfficeExternal } from '../services/office-external';
 import { createPdfStudio } from '../services/pdf/host';
+import { createMailFilesIpc } from '../services/mail-files/ipc';
+import { attachSpellingMenu } from '../services/spellcheck';
+import { markFromInternet } from '../services/quarantine';
+import { mailFilePathsInArgv } from '../services/mail-files/argv';
 import { createLocalAI } from '../services/local-ai/host';
 import { OcrService } from '../services/ocr';
 import { OfficeLocalFiles, officePathsInArgv } from '../services/office-local';
@@ -120,6 +129,9 @@ let pdfOnline: () => void = () => undefined;
 /** Office files handed over before the app is running wait here, then open in WorkSuite DOC / Sheet / Slides tabs. */
 const pendingOffice: string[] = [];
 let handOffice: (paths: string[]) => void = (paths) => void pendingOffice.push(...paths);
+/** .eml and .msg files handed over before Mail's data-file service is running wait here (ENH-MAIL-03 DMO-DAT-04). */
+const pendingMailFiles: string[] = [];
+let handMailFiles: (paths: string[]) => void = (paths) => void pendingMailFiles.push(...paths);
 
 if (!app.requestSingleInstanceLock()) {
   // FR-DL-04: a second launch hands its arguments (and deep link) to the first.
@@ -159,16 +171,26 @@ function main(): void {
     e.preventDefault();
     handleLink(url);
   });
+  // Universal Links (#170): an https://app.worksuite.lk/o/… link macOS hands to the app instead of the browser,
+  // once the server's apple-app-site-association names this app. Held to the same grammar as any other link.
+  app.on('continue-activity', (e, type, details) => {
+    const url = (details as { webpageURL?: unknown } | undefined)?.webpageURL;
+    if (type !== 'NSUserActivityTypeBrowsingWeb' || typeof url !== 'string') return;
+    e.preventDefault();
+    handleLink(url);
+  });
   const argvLink = findDeepLinkInArgv(process.argv) ?? findMailtoInArgv(process.argv);
   if (argvLink) pendingLinks.push(argvLink);
   // PDFs the operating system hands over ("Open with"; a file dropped on the Dock icon): PDF Studio opens each.
   app.on('open-file', (e, path) => {
     e.preventDefault();
     if (/\.(docx|xlsx|pptx)$/i.test(path)) handOffice([path]);
+    else if (/\.(eml|msg)$/i.test(path)) handMailFiles([path]);
     else handPdfs([path]);
   });
   handPdfs(pdfPathsInArgv(process.argv));
   handOffice(officePathsInArgv(process.argv));
+  handMailFiles(mailFilePathsInArgv(process.argv));
 
   app.whenReady().then(() => start(boot, pendingLinks, (fn) => (handleLink = fn)));
 }
@@ -273,6 +295,19 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const salonPrint = new SalonPrint({ config: db, http, origin: () => auth.getServer()?.origin ?? null });
   const bootstrap = new BootstrapService(db, getVault, http, POLICY_PUBLIC_KEY);
   const cache = new OfflineCache(db, getVault);
+  // "Download message bodies" (#190): Mail's bodies within the keep period, fetched ahead into the offline cache.
+  const mailBodies = new MailBodies({
+    http,
+    cache,
+    userId: () => sessionCtl?.userId() ?? null,
+    prefs: () => settings.effective(),
+    limits: () => {
+      const caps = sessionCtl.capabilities();
+      const pol = sessionCtl.current()?.policy;
+      return { enabled: caps.offlineCache && canOpenApp('mail', sessionCtl.visibleApps()), maxBytes: (pol?.offline_storage_max_mb ?? 2048) * 1024 * 1024 };
+    },
+    online: () => apiReachable && !!sessionCtl?.isReady(),
+  });
   const audit = new AuditService(db, getVault, http, () => auth.getServer()?.api === 'desktop-v1');
   const supervisor = new ServiceSupervisor();
   const lock = new LockService();
@@ -388,6 +423,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     audit: (action, details) => audit.record(sessionCtl.userId(), action, details),
     // eLearning's offline copies are kept inside the app, sealed as they arrive.
     sink: (name): DownloadSink | null => elearning.sink(name),
+    // An attachment saved from mail carries the system's "from the internet" mark (ENH-MAIL-03 DMO-SEC-04).
+    downloaded: (path, source) => {
+      if (source.startsWith('/api/mail/messages/')) return markFromInternet(path).then(() => undefined);
+    },
     // Every module's PDFs open in PDF Studio, never in another application.
     openInApp: (path) => {
       if (!/\.pdf$/i.test(path)) return false;
@@ -506,6 +545,17 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     origin: () => auth.getServer()?.origin ?? null,
     allowed: () => sessionCtl.isReady() && canOpenApp('pms', sessionCtl.visibleApps()),
   });
+
+  // Contacts: iCloud, CardDAV and Mac Contacts synced from this computer (worksuite-desktop#175); passwords only in the OS keystore.
+  const contactSync = new ContactSync({
+    http,
+    fetch: fetchImpl,
+    secrets,
+    origin: () => auth.getServer()?.origin ?? null,
+    allowed: () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('contacts', sessionCtl.visibleApps()),
+    deviceId: () => device.installId(),
+  });
+  contactSync.start();
 
   // Restaurant Manager: this computer as a paired terminal — its key, menu and floor copy, outbox and print agent.
   const restaurant = createRestaurant({
@@ -753,6 +803,32 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       });
       return;
     }
+    // An item link (#170): worksuite://{org}/{type}/{id} or https://app.worksuite.lk/o/{org}/{type}/{id}.
+    if (looksLikeItemLink(url)) {
+      const serverHost = (() => {
+        try {
+          const origin = auth.getServer()?.origin;
+          return origin ? new URL(origin).hostname : null;
+        } catch {
+          return null;
+        }
+      })();
+      const item = parseItemLink(url, { hosts: [serverHost] });
+      if (!item.ok) {
+        log.warn('item link rejected', { reason: item.reason, url: redactUrl(url) });
+        windows.showMain();
+        broadcast('toast', { kind: 'error', text: 'That WorkSuite link could not be opened.' });
+        return;
+      }
+      // "Open WorkSuite links in the desktop app" off: a web link the system handed over goes on to the browser.
+      if (item.link.format === 'web' && !linkPrefs(settings.effective()).openInApp) {
+        void openExternalSafely(url);
+        return;
+      }
+      log.info('item link', { type: item.link.type, action: item.link.action });
+      navigate({ route: itemRoute(item.link), organizationId: item.link.org, source: 'deep-link', item: { link: item.link, source: item.link.source ?? 'external', app: itemApp(item.link) } });
+      return;
+    }
     const parsed = parseDeepLink(url);
     if (!parsed.ok) {
       log.warn('deep link rejected', { reason: parsed.reason, url: redactUrl(url) });
@@ -889,6 +965,20 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // An app the person may not open never alerts (and Mail is not polled for them).
   notifications.moduleEnabled = (n) => notificationAllowed(n, sessionCtl.visibleApps());
   notifications.isLocked = () => lock.isLocked();
+  // A reply typed in a website visitor's banner goes the way the conversation's composer sends one (RDC-15).
+  notifications.sendWebsiteReply = async (conversationId, text) => {
+    const me = sessionCtl.userId();
+    if (!me) return { delivered: false, queued: false, id: null, status: null, data: null, error: 'You are signed out.', code: 'NOT_SIGNED_IN' };
+    return queue.submit(me, websiteReplyMutation(conversationId, text));
+  };
+  notifications.websiteReplyRefused = (w, text, error) => {
+    const me = sessionCtl.userId();
+    const key = websiteDraftKey(w.conversationId);
+    // Signed out meanwhile: there is no draft to keep it in.
+    if (me) queue.saveDraft(me, key.module, key.context, text);
+    openLink(`/chat?website=${w.conversationId}`);
+    broadcast('toast', { kind: 'error', text: `Your reply to ${w.visitor} was not sent: ${error} It is in the message box to send again.` });
+  };
   queue.onChanged = () => {
     emitStatus();
     broadcast('offline:changed');
@@ -1024,6 +1114,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
     stopRemoteControl: () => void remoteControl.stopAll('stopped'),
     joinWebchat: (id) => void webchat.join(id),
+    answerWebchatCall: (id) => void webchat.answerCall(id, true),
     quickAsk: () => void quickAsk.open(),
     aiChanges: () => openAiChanges(),
     ringingSettings: () => navigate({ route: '/settings/notifications', source: 'tray' }),
@@ -1031,6 +1122,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   // ── website chats ring like calls (WS-WCHAT ENH-01, R3) ─────────────────
   const JOIN_SHORTCUT = 'CommandOrControl+Shift+J';
+  // Answers a visitor's voice call (ENH-WCHAT-05), held only while one rings.
+  const ANSWER_SHORTCUT = 'CommandOrControl+Shift+A';
+  let answerHeld = false;
+  let onCall: WebchatOnCall | null = null;
   let bounceId: number | null = null;
   let flashing = false;
   let shortcutHeld = false;
@@ -1065,6 +1160,27 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     }
     return shortcutHeld;
   };
+  const answerShortcut = (on: boolean): boolean => {
+    if (on && !answerHeld) {
+      try {
+        answerHeld = globalShortcut.register(ANSWER_SHORTCUT, () => {
+          const top = webchat.topCall();
+          if (top) void webchat.answerCall(top.id, true);
+        });
+      } catch {
+        answerHeld = false;
+      }
+    } else if (!on && answerHeld) {
+      globalShortcut.unregister(ANSWER_SHORTCUT);
+      answerHeld = false;
+    }
+    return answerHeld;
+  };
+  const trayCalls = (s: WebchatRingState) => ({
+    webchatRinging: s.chats.map((c) => ({ id: c.id, label: c.site ? `${c.visitor} · ${c.site}` : c.visitor })),
+    webchatCalls: (s.calls ?? []).map((c) => ({ id: c.id, label: c.site ? `${c.visitor} · ${c.site}` : c.visitor })),
+    webchatOnCall: onCall ? { conversationId: onCall.conversationId, label: onCall.visitor, held: onCall.held } : null,
+  });
   const webchat: WebchatRinger = new WebchatRinger({
     http,
     signedIn: () => sessionCtl.isReady(),
@@ -1078,19 +1194,31 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       const p = settings.effective();
       return (p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) || notifications.pausedUntilIso() !== null;
     },
-    open: (id) => navigate({ route: `/chat?view=website&website=${id}`, source: 'notification' }),
+    // With a call just answered, the thread joins its audio (`call=`).
+    open: (id, callId) => navigate({ route: `/chat?view=website&website=${id}${callId ? `&call=${callId}` : ''}`, source: 'notification' }),
+    // This installation as a ringing device (RING-10): the registered device's id, stable across restarts.
+    deviceId: () => {
+      const d = Number(device.current()?.id);
+      return Number.isInteger(d) && d > 0 ? `desktop-${d}` : 'desktop-unregistered';
+    },
+    focused: () => !!windows.getMain()?.isFocused(),
     onChanged: (s) => {
       broadcast('ring:changed', s);
       const prefs = settings.effective().webchatRinging;
-      if ((s.chats.length || s.outcome) && prefs.window && (!lock.isLocked() || settings.effective().lockedChatNotifications !== false)) windows.showRinger(ringerHeight(s));
+      if ((s.chats.length || s.handoffs?.length || s.calls?.length || s.outcome) && prefs.window && (!lock.isLocked() || settings.effective().lockedChatNotifications !== false)) windows.showRinger(ringerHeight(s));
       else windows.hideRinger();
-      tray.update({ webchatRinging: s.chats.map((c) => ({ id: c.id, label: c.site ? `${c.visitor} · ${c.site}` : c.visitor })) });
-      const live = s.chats.some((c) => !c.silenced);
-      attention(live);
+      tray.update(trayCalls(s));
+      const live = s.chats.some((c) => !c.silenced) || !!s.handoffs?.length;
+      attention(live || !!s.calls?.length);
       webchat.shortcut = joinShortcut(live && prefs.shortcut);
+      webchat.answerShortcut = answerShortcut(!!s.calls?.length && prefs.shortcut);
     },
   });
-  notifications.ringerShowing = () => settings.effective().webchatRinging.window && webchat.state().chats.length > 0;
+  notifications.ringerShowing = () => settings.effective().webchatRinging.window && (webchat.state().chats.length > 0 || !!webchat.state().handoffs?.length || !!webchat.state().calls?.length);
+  const webchatOnCall = (c: WebchatOnCall | null): void => {
+    onCall = c;
+    tray.update(trayCalls(webchat.state()));
+  };
 
   // ── Quick Ask over any app (AI Assistant) ───────────────────────────────
   // The keyboard helper remote control uses, started once, on first use, for copy and paste only.
@@ -1283,13 +1411,17 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     accessWatch.start();
     // FR-OFF-06: prune mail bodies beyond the cache window.
     const days = settings.effective().mailCacheDays;
-    if (days > 0) cache.pruneModuleOlderThan('mail', days);
+    // A folder kept whole on this computer is not pruned by age (worksuite-desktop#162).
+    const keepAll = (path: string) => mailKeptForever(settings.effective(), path);
+    if (days > 0) cache.pruneModuleOlderThan('mail', days, keepAll);
     // A mailbox's own keep period (Settings › Mail › Storage & sync, D09).
     const me = sessionCtl.current()?.user?.id;
-    for (const [box, d] of Object.entries(settings.effective().mailCacheDaysByMailbox ?? {})) if (me) cache.pruneMailbox(String(me), box, d);
+    for (const [box, d] of Object.entries(settings.effective().mailCacheDaysByMailbox ?? {})) if (me) cache.pruneMailbox(String(me), box, d, keepAll);
+    mailBodies.start();
     emitStatus();
   };
   const stopServices = (): void => {
+    mailBodies.stop();
     void remoteControl.shutdown('logout');
     webchat.stop();
     quickAsk.release();
@@ -1373,6 +1505,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         restaurant.forgetAll();
         // The door-lock servers this computer's front desk talked to, and their secrets.
         pmsLocks.wipe();
+        // The iCloud and CardDAV passwords contact sync kept for this computer.
+        contactSync.wipe();
       }
       log.info('local data removed', { scope });
     },
@@ -1432,7 +1566,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     );
   };
 
-  lock.enabled = () => sessionCtl.isReady() && settings.effective().appLockEnabled !== false;
+  lock.enabled = () => sessionCtl.isReady() && settings.effective().appLockEnabled === true;
   app.on('browser-window-blur', () => {
     setImmediate(() => {
       if (lock.enabled() && lock.minutes() === 0 && !BrowserWindow.getAllWindows().some(win => win.isFocused())) lock.lock('timeout');
@@ -1468,6 +1602,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   function onReconnect(): void {
     const uid = sessionCtl.userId();
     realtime.kick();
+    mailBodies.kick();
     if (!uid) return;
     void webchat.reconcile();
     void sessionCtl.revalidate();
@@ -1537,6 +1672,17 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       (e: unknown) => log.warn('office file handed over by the system not opened', { error: String((e as Error)?.message ?? e) }),
     );
   if (pendingOffice.length) handOffice(pendingOffice.splice(0));
+  // Mail data files, export, safe links and S/MIME (ENH-MAIL-03 P4).
+  const mailFiles = createMailFilesIpc({
+    http,
+    broadcast: (channel, payload) => broadcast(channel, payload),
+    navigate,
+    audit: (action, details) => audit.record(sessionCtl.userId(), action, details),
+    downloadFolder: () => settings.effective().downloadFolder,
+  });
+  handMailFiles = (paths) => mailFiles.openFromOs(paths);
+  if (pendingMailFiles.length) handMailFiles(pendingMailFiles.splice(0));
+  app.on('will-quit', () => mailFiles.closeAll());
 
   const diagnostics = new DiagnosticsService({
     serverOrigin: () => auth.getServer()?.origin ?? null,
@@ -1587,6 +1733,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       },
       cacheScope: () => `${auth.getServer()?.origin ?? ''}:${sessionCtl.current()?.user.organizationId ?? ''}`,
       mailBodiesCached: (path) => mailBodiesKept(settings.effective(), path),
+      mailListCached: (path) => mailListKept(settings.effective(), path),
       // SalonMate's desk calls carry the key this computer was paired with.
       extraHeaders: (path) => {
         const key = salonDesk.keyFor(path);
@@ -1621,6 +1768,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     contents.on('before-input-event', (_ev, input) => {
       if (input.type === 'keyDown' && (input.control || input.meta) && input.key.toLowerCase() === 'v') pasteGestures.set(contents.id, Date.now());
     });
+    // A right-click on a misspelt word offers its corrections (worksuite-desktop#188).
+    attachSpellingMenu(contents);
   });
 
   const router = new IpcRouter(ipcMain, {
@@ -1676,6 +1825,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     realtime,
     notifications,
     cache,
+    mailBodies,
     queue,
     transfers,
     meetRecorder,
@@ -1701,6 +1851,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     flushNavigation,
     navigate,
     webchat,
+    webchatOnCall,
     quickAsk,
     ai,
     office,
@@ -1713,8 +1864,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   };
   registerHandlers(router, ctx);
   pdfStudio.register(router);
+  mailFiles.register(router);
   pos.register(router);
   pmsLocks.register(router);
+  contactSync.register(router);
   restaurant.register(router);
   localAI.register(router);
   router.handle('ai:ocr', (input, c) => ocr.recognize(c.sender.id, input));
@@ -1875,7 +2028,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     }
   };
   applyMailtoHandler(settings.effective().mailtoHandler === true);
+  // What Mail keeps offline changed: its bodies are listed and fetched again soon (#190).
+  let bodyPrefs = JSON.stringify([settings.effective().mailCacheDays, settings.effective().mailCacheDaysByMailbox ?? {}, settings.effective().mailFolderOffline ?? {}]);
   settings.onChange((prefs) => {
+    const now = JSON.stringify([prefs.mailCacheDays, prefs.mailCacheDaysByMailbox ?? {}, prefs.mailFolderOffline ?? {}]);
+    if (now !== bodyPrefs) {
+      bodyPrefs = now;
+      mailBodies.kick(2_000, true);
+    }
     applyMailtoHandler(prefs.mailtoHandler === true);
     webchat.refresh();
     syncQuickAsk();
@@ -1892,6 +2052,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     if (pdfs.length) handPdfs(pdfs);
     const docs = officePathsInArgv(argv);
     if (docs.length) handOffice(docs);
+    const mails = mailFilePathsInArgv(argv);
+    if (mails.length) handMailFiles(mails);
     if (link) handleDeepLink(link);
     else windows.showMain();
   });

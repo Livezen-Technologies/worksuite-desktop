@@ -7,6 +7,7 @@ import type { DeskQueueItem } from '@shared/event-desk';
 import { at, eGet, ePost, errorText, K, type Paged, type ReconItem } from './api';
 import { DK, deskQueueResolve, deskSync, useDeskQueue, useDeskStatus } from './desk';
 import { Header, Refusal, useEvent } from './parts';
+import { SyncButton } from '../../components/SyncButton';
 
 /**
  * What offline check-in left to look at (EV-OFF-012/013): the server's
@@ -74,9 +75,19 @@ export default function Review() {
         title="To review"
         sub="Offline check-ins WorkSuite flagged, and this desk’s own queue"
         actions={
-          <Button size="sm" icon="refresh" disabled={!online} onClick={() => void deskSync(event.id).then(() => qc.invalidateQueries({ queryKey: DK.all }), (e) => toast('error', errorText(e)))}>
-            Sync now
-          </Button>
+          <SyncButton
+            size="sm"
+            disabled={!online}
+            onSync={() =>
+              deskSync(event.id).then(
+                () => qc.invalidateQueries({ queryKey: DK.all }),
+                (e) => {
+                  toast('error', errorText(e));
+                  throw e;
+                },
+              )
+            }
+          />
         }
       />
       <div className="flex flex-col gap-4 px-6">

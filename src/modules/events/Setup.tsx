@@ -9,6 +9,7 @@ import type { DeskPrintPatch } from '@shared/event-desk';
 import { at, eGet, errorText, K, type Device, type Gate } from './api';
 import { DK, deskForget, deskRegister, deskRotateKey, deskSync, setPrintSettings, useDeskStatus, usePrintSettings } from './desk';
 import { Facts, Header, Refusal, useEvent } from './parts';
+import { SyncButton } from '../../components/SyncButton';
 
 /**
  * This computer at the event (EV-CHK-031..033, EV-OFF-007, EV-BDG-013):
@@ -129,9 +130,7 @@ export default function Setup() {
             title="Check-in device"
             action={
               <div className="flex gap-2">
-                <Button size="sm" icon="refresh" disabled={!online || busy} onClick={() => void act(() => deskSync(event.id), 'Sent what waited and caught up.')}>
-                  Sync now
-                </Button>
+                <SyncButton size="sm" disabled={!online} running={busy} onSync={() => act(() => deskSync(event.id), 'Sent what waited and caught up.')} />
                 <Button size="sm" icon="key" disabled={!online || busy} onClick={() => void act(() => deskRotateKey(event.id), 'A new key: the offline copy is taken again.')}>
                   New key
                 </Button>

@@ -1,4 +1,6 @@
 import type { DarkColorProfile } from './theme-profiles';
+import type { ItemLink, ItemSource } from './item-links';
+import type { LinkPrefs } from './link-prefs';
 /**
  * Types shared by the main process and the renderer. Everything crossing the
  * IPC boundary is described here and validated by the zod schemas in
@@ -229,8 +231,9 @@ export interface Preferences {
   dndEnabled: boolean;
   dndFrom: string;
   dndTo: string;
-  /** Minutes of inactivity before the app locks; 0 = never. */
+  /** Minutes of inactivity while app locking is enabled; 0 = lock on loss of focus. */
   appLockMinutes: number;
+  /** App locking is opt-in when no saved preference or enforced policy exists. */
   appLockEnabled?: boolean;
   lockOnSleep?: boolean;
   lockedChatNotifications?: boolean;
@@ -250,8 +253,18 @@ export interface Preferences {
   mailCacheDays: 7 | 30 | 90 | 0;
   /** Open mailto: links in WorkSuite: it registers as the system's mail app (Settings › Mail, D04). Off until the person turns it on. */
   mailtoHandler?: boolean;
+  /** Settings › Desktop › Links (#170); unset fields take DEFAULT_LINK_PREFS (shared/link-prefs.ts). */
+  links?: Partial<LinkPrefs>;
   /** Per mailbox, how long its mail is kept on this computer (D09), overriding `mailCacheDays`. */
   mailCacheDaysByMailbox?: Record<string, 7 | 30 | 90 | 0>;
+  /** Per folder ("<mailbox>:<folder>"), what this computer keeps (ENH-MAIL-03 DMO-OFF-01); unset folders follow the defaults. */
+  mailFolderOffline?: Record<string, 'all' | 'recent' | 'headers' | 'online'>;
+  /** High contrast lines, text and focus ring, chosen here rather than by the system (ENH-MAIL-03 DMO-ACC-01). */
+  highContrast?: boolean;
+  /** New-mail banners on this computer (ENH-MAIL-03 DMO-NTF-02): every message, Focused only, VIPs only, or none. */
+  mailAlerts?: 'all' | 'focused' | 'vip' | 'none';
+  /** VIP mail shows a banner during quiet hours (DMO-NTF-03). */
+  mailVipBreakthrough?: boolean;
   tabSuspendMinutes: number;
   language: string;
   updateChannel: UpdateChannel;
@@ -471,13 +484,75 @@ export interface WebchatRingChat {
   mine: boolean;
   /** Who assigned it, for a chat that is mine. */
   by: string | null;
-  /** Silenced by me on this computer until it is at risk (RING-11, locally). */
+  /** Silenced by me until it is at risk: on all my devices where the server keeps ring sessions, else on this computer (RING-11). */
   silenced: boolean;
+  /** A chat given to me that I have not joined passes on to the next available agent at this server stamp (RING-05, RING-12). */
+  handoverAt?: string | null;
+}
+
+/**
+ * A colleague asks me into a website chat (WS-WCHAT ENH-WCHAT-03): an invitation to join it, or a transfer of it to
+ * me — warm (they keep it until I accept) or handed over now. It rings like a chat until I answer it, it is cancelled,
+ * or `expiresAt` passes (TEAM-23, TEAM-41).
+ */
+export interface WebchatHandoff {
+  id: number;
+  conversationId: number;
+  kind: 'invite' | 'transfer';
+  mode: 'warm' | 'cold';
+  visitor: string;
+  site: string | null;
+  page: string | null;
+  /** Who asks; null when WorkSuite sends it (a transfer nobody took, back to everybody). */
+  from: string | null;
+  /** The department it rings, when it was sent to one. */
+  department: string | null;
+  /** The next available agent, or everybody covering the website. */
+  toAny: boolean;
+  /** The note for staff, shown on the card (TEAM-22, TEAM-43). */
+  note: string | null;
+  /** Server stamp; null rings until somebody takes it. */
+  expiresAt: string | null;
+  createdAt: string | null;
+}
+
+/** A visitor's voice call ringing for me (WS-WCHAT ENH-WCHAT-05, VOICE-10). */
+export interface WebchatCall {
+  /** The call's id. */
+  id: number;
+  conversationId: number;
+  visitor: string;
+  site: string | null;
+  page: string | null;
+  place: string | null;
+  /** The visitor's latest words, for context. */
+  preview: string | null;
+  /** Who owns the chat, if anybody. */
+  owner: string | null;
+  /** Rung as one of the chat's people, or as one of everybody who takes calls. */
+  stage: 'first' | 'everyone';
+  /** Server stamp. */
+  requestedAt: string | null;
+}
+
+/** The website call this computer is on, as the tray says it (VOICE-UI-03). */
+export interface WebchatOnCall {
+  conversationId: number;
+  visitor: string;
+  /** Epoch ms it was answered. */
+  since: number;
+  held: boolean;
 }
 
 export interface WebchatRingState {
   /** Ordered: at risk, assigned to me, then oldest waiting (RING-23). */
   chats: WebchatRingChat[];
+  /** Invitations and transfers waiting for me, oldest first (TEAM-23). */
+  handoffs?: WebchatHandoff[];
+  /** Visitors' voice calls ringing for me, oldest first: shown before everything else (VOICE-10). */
+  calls?: WebchatCall[];
+  /** Ctrl/Cmd+Shift+A answers the top call now. */
+  answerShortcut?: boolean;
   /** What the tone does now: off (none left unsilenced, Do not disturb, the organisation's cap), or which tone. */
   tone: 'off' | 'normal' | 'strong';
   volume: number;
@@ -487,6 +562,10 @@ export interface WebchatRingState {
   hidden: boolean;
   /** Ctrl/Cmd+Shift+J is registered now. */
   shortcut: boolean;
+  /** Another of my devices plays the ring — the browser I chose, say — so this computer shows it without sound (RING-10). */
+  elsewhere?: boolean;
+  /** Whether the server has this computer play my ring (RING-10, RING-49); null where it does not choose. */
+  ringHere?: boolean | null;
 }
 
 export interface PreferenceLock {
@@ -654,6 +733,8 @@ export interface NavigateRequest {
   /** A window docked back into the main window (source 'dock'), or a file the OS handed over (source 'file', a tab of its own): its title, and whether it goes beside the open tab. */
   title?: string;
   side?: boolean;
+  /** A WorkSuite item link (#170): opened, org-switched, access-checked and its action confirmed by the main window. */
+  item?: { link: ItemLink; source: ItemSource; app: string };
 }
 
 /**
@@ -1111,4 +1192,20 @@ export interface MailStoreStats {
   byMailbox: Record<string, { messages: number; bytes: number }>;
   /** The organization's limit for everything this computer keeps offline (all apps). */
   limitBytes?: number;
+  /**
+   * "Download message bodies" (#190): per mailbox id, the bodies within the
+   * offline window this computer has (`stored`) of those it wants
+   * (`wanted`), and whether it is downloading them now.
+   */
+  bodies?: Record<string, MailBodiesProgress>;
+}
+
+/** One mailbox's body download on this computer (#190). */
+export interface MailBodiesProgress {
+  stored: number;
+  wanted: number;
+  running: boolean;
+  /** ISO time of the last pass that finished. */
+  doneAt: string | null;
+  error: string | null;
 }

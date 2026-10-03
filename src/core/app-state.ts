@@ -73,6 +73,8 @@ function applyTheme(prefs: Preferences | null): void {
   root.dataset.theme = dark ? 'dark' : 'light';
   applyDarkProfile(root, prefs?.darkColorProfile, dark);
   root.dataset.density = prefs?.density ?? 'comfortable';
+  if (prefs?.highContrast) root.dataset.contrast = 'more';
+  else delete root.dataset.contrast;
   app.set({ resolvedTheme: dark ? 'dark' : 'light' });
 }
 
