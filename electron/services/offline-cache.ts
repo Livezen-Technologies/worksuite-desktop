@@ -40,7 +40,8 @@ export function mailboxOfPath(path: string): string | null {
 /**
  * The key a saved answer is kept under. A message body is the same answer
  * however it was asked for — opened with `peek=1` or without, its parameters
- * in any order — so it is kept once, under its folder and mailbox: the body
+ * in any order, with or without the message's identity (Message-ID, UIDVALIDITY)
+ * — so it is kept once, under its folder and mailbox: the body
  * downloaded in the background (#190) is the one a later offline open finds.
  */
 export function cacheKeyPath(path: string): string {
@@ -49,6 +50,8 @@ export function cacheKeyPath(path: string): string {
   if (!/^\/api\/mail\/messages\/\d+$/.test(base) || q < 0) return path;
   const params = new URLSearchParams(path.slice(q + 1));
   params.delete('peek');
+  // The message's identity and a Retry's full lookup (worksuite-desktop#209) ask for the same body.
+  for (const k of ['message_id', 'mid_hash', 'uidvalidity', 'locate']) params.delete(k);
   const kept = [...params.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
   return kept.length ? `${base}?${new URLSearchParams(kept).toString()}` : base;
 }
@@ -275,6 +278,48 @@ export class OfflineCache {
       }
     }
     return [...out.values()];
+  }
+
+  /**
+   * A folder's list from this computer (worksuite-desktop#208): the rows of every saved page of it — the
+   * folder of one mailbox, or with `mailbox` null the folder (or All Accounts role) of every account —
+   * one per message, newest first, `limit` from `offset`. A search's pages are left out; a narrowed page's
+   * rows are still the folder's messages. What a message says is the newest saved page's word on it.
+   */
+  mailList(userId: string, opts: { mailbox: string | null; folder: string; role?: string | null; limit: number; offset?: number }, scan = 2000): { messages: Array<Record<string, unknown>>; total: number } {
+    const rows = this.db.all<{ path: string; payload: string; cached_at: string }>('SELECT path, payload, cached_at FROM cached_records WHERE user_id = ? AND module = ? ORDER BY cached_at DESC LIMIT ?', userId, 'mail', scan);
+    const out = new Map<string, Record<string, unknown>>();
+    for (const r of rows) {
+      const q = r.path.indexOf('?');
+      const base = q >= 0 ? r.path.slice(0, q) : r.path;
+      const params = new URLSearchParams(q >= 0 ? r.path.slice(q + 1) : '');
+      if (params.get('q')) continue;
+      const roleList = opts.role ? base === `/api/mail/views/all/${opts.role}` : false;
+      const folderList = base === '/api/mail/messages' && (params.get('folder') ?? 'inbox') === opts.folder && (opts.mailbox === null || params.get('mailbox') === opts.mailbox);
+      if (!roleList && !folderList) continue;
+      const value = this.vault().decrypt<CachedResponse>(r.payload);
+      if (!value || value.status !== 200) continue;
+      let data: { messages?: unknown } | null = null;
+      try {
+        data = ((JSON.parse(value.body) as { data?: unknown }).data ?? null) as { messages?: unknown } | null;
+      } catch {
+        continue;
+      }
+      if (!data || !Array.isArray(data.messages)) continue;
+      const box = params.get('mailbox');
+      for (const m of data.messages as Array<Record<string, unknown>>) {
+        if (!m || typeof m !== 'object' || m.id === undefined) continue;
+        const owner = String((m.mailbox as { id?: unknown } | undefined)?.id ?? box ?? '');
+        if (opts.mailbox !== null && owner !== '' && owner !== opts.mailbox) continue;
+        const key = `${owner}:${String(m.folder_slug ?? opts.folder)}:${String(m.id)}`;
+        // Pages are read newest first: the first word on a message is the newest.
+        if (out.has(key)) continue;
+        out.set(key, { ...m, ...(m.mailbox || !box ? {} : { mailbox: { id: Number(box) } }) });
+      }
+    }
+    const all = [...out.values()].sort((a, b) => Date.parse(String(b.created_at ?? '')) - Date.parse(String(a.created_at ?? '')) || 0);
+    const from = opts.offset ?? 0;
+    return { messages: all.slice(from, from + opts.limit), total: all.length };
   }
 
   /** Offline search over cached lists (FR-SRCH-02): titles only, labelled offline. */
