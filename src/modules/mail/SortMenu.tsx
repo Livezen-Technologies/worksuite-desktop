@@ -3,13 +3,16 @@ import { createPortal } from 'react-dom';
 import { text } from '../../core/i18n';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
+import { placeMenu } from '../../components/menuPlacement';
 import type { GroupKey, MailPrefs, SortKey } from './types';
 
 /**
  * Sort & Group (worksuite-desktop#168): every choice with its icon, the direction as a two-way switch whose
  * words follow the field (Newest/Oldest, A → Z/Z → A, Largest/Smallest), conversations as a switch, Apply
- * to all folders and Reset to default. It opens under its button, right edges lined up, never over the
- * toolbar; arrows move, Enter picks, Esc closes, and Tab stays inside until it closes.
+ * to all folders and Reset to default. It is placed like every other menu (menuPlacement, #208): under its
+ * button, right edges lined up, 6px below it, flipped above when there is no room, 8px inside the window,
+ * scrolling inside; arrows move, Enter picks, Esc closes, and Tab stays inside until it closes. The chosen
+ * sort has a tick and accent text; focus is a light background only.
  */
 
 export const SORTS: Array<{ id: SortKey; label: string; icon: string }> = [
@@ -89,18 +92,19 @@ export function SortMenu({
     closeRef.current = onClose;
   });
 
-  // Under the button, right edges lined up, inside the window; it scrolls when the window is short.
+  // The app's one menu geometry: under the button, right edges lined up, flipped above when short of room.
   useLayoutEffect(() => {
     const place = () => {
       const r = anchor.current?.getBoundingClientRect();
       if (!r) return;
-      const left = Math.max(8, Math.min(r.right - WIDTH, window.innerWidth - WIDTH - 8));
-      const top = r.bottom + 6;
-      setPos({
-        left,
-        top,
-        maxHeight: Math.max(160, window.innerHeight - top - 8),
+      const p = placeMenu({
+        trigger: { left: r.left, top: r.top, width: r.width, height: r.height },
+        menu: { width: WIDTH, height: ref.current?.scrollHeight ?? 0 },
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        prefer: 'bottom',
+        align: 'end',
       });
+      setPos({ left: p.left, top: p.top, maxHeight: p.maxHeight });
     };
     place();
     window.addEventListener('resize', place);
@@ -161,7 +165,8 @@ export function SortMenu({
     cx(
       'flex h-9 w-full shrink-0 items-center gap-2.5 rounded-[8px] px-2.5 text-left text-[13.5px] outline-none',
       'focus-visible:shadow-[inset_0_0_0_2px_var(--ws-focus)]',
-      on ? 'bg-selection font-semibold text-primary' : 'text-ink hover:bg-subtle focus:bg-subtle',
+      // Chosen: tick and accent text. Hover and focus: a light background. Never the same look (#208).
+      on ? 'font-semibold text-primary hover:bg-subtle focus:bg-subtle' : 'text-ink hover:bg-subtle focus:bg-subtle',
     );
   const head = (label: string, id: string) => (
     <div id={id} className="px-2.5 pt-2 pb-1 text-[11px] font-semibold tracking-[0.06em] text-ink-3 uppercase">

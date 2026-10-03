@@ -926,6 +926,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   });
   router.handle('offline:clearMailbox', (input) => ctx.cache.clearMailbox(uid(), input.mailbox));
   router.handle('offline:mailSearch', (input) => (canOpenApp('mail', ctx.session.visibleApps()) ? ctx.cache.mailSearch(uid(), input.q) : []));
+  router.handle('offline:mailList', (input) => (canOpenApp('mail', ctx.session.visibleApps()) ? ctx.cache.mailList(uid(), { mailbox: input.mailbox, folder: input.folder, role: input.role ?? null, limit: input.limit, offset: input.offset ?? 0 }) : { messages: [], total: 0 }));
   router.handle('offline:submit', (input) => ctx.queue.submit(uid(), input));
   router.handle('offline:retry', async (input) => {
     ctx.queue.retry(uid(), input.id);

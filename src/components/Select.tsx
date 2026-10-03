@@ -1,6 +1,7 @@
 import { Children, Fragment, isValidElement, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactElement, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
+import { placeMenu } from './menuPlacement';
 import { text, useLanguage } from '../core/i18n';
 
 /**
@@ -10,8 +11,10 @@ import { text, useLanguage } from '../core/i18n';
  * arrow keys, Home/End, Enter and Escape, type-ahead, and a search box once
  * a list is longer than six options (or whenever `searchable` is set). The
  * list is drawn in a portal so it is never clipped by a panel or a dialog,
- * sits below the button — or above it when there is no room — and follows
- * it on scroll.
+ * and placed like every menu in the app (menuPlacement, #208): 6px below the
+ * button — or above it when there is no room — 8px inside the window, no
+ * taller than the room, and it follows the button on scroll. The chosen
+ * option has a tick and accent text; the highlighted one a light background.
  *
  * Two ways to give it options, so converting a native select is a rename:
  *  - `<option>` / `<optgroup>` children, with `onChange(e)` reading
@@ -145,12 +148,11 @@ export function Select<T = string>(props: SelectProps<T>) {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const width = Math.min(Math.max(r.width, 200), 440, vw - 16);
-    const left = Math.min(Math.max(8, r.left), vw - width - 8);
-    const below = vh - r.bottom - 10;
-    const above = r.top - 10;
     const want = Math.min(340, 44 + options.length * 34 + (searchable ? 46 : 0));
-    if (below >= want || below >= above) setPos({ left, width, top: r.bottom + 4, maxHeight: Math.max(0, Math.min(340, below)) });
-    else setPos({ left, width, bottom: vh - r.top + 4, maxHeight: Math.max(0, Math.min(340, above)) });
+    const p = placeMenu({ trigger: { left: r.left, top: r.top, width: r.width, height: r.height }, menu: { width, height: want }, viewport: { width: vw, height: vh }, prefer: 'bottom', align: 'start' });
+    // Above the button, the list grows upwards from its bottom edge as the search narrows it.
+    if (p.side === 'top') setPos({ left: p.left, width, bottom: vh - (p.top + Math.min(want, p.maxHeight)), maxHeight: Math.min(340, p.maxHeight) });
+    else setPos({ left: p.left, width, top: p.top, maxHeight: Math.min(340, p.maxHeight) });
   }, [options.length, searchable]);
 
   const close = useCallback((refocus = true) => {
@@ -341,7 +343,7 @@ export function Select<T = string>(props: SelectProps<T>) {
                         onClick={() => choose(o)}
                         className={
                           'mx-1 flex min-h-[32px] cursor-pointer items-center gap-2 rounded-[6px] px-2.5 py-1 text-[13px] ' +
-                          (o.disabled ? 'cursor-default text-ink-3/60 ' : i === active ? 'bg-selection text-ink ' : 'text-ink ') +
+                          (o.disabled ? 'cursor-default text-ink-3/60 ' : (i === active ? 'bg-subtle ' : '') + (on ? 'text-primary ' : 'text-ink ')) +
                           (o.value === '' ? 'text-ink-3 ' : '')
                         }
                       >

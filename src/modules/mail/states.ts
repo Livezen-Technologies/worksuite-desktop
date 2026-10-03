@@ -48,7 +48,7 @@ export function stateKey(mailbox: string | number | null | undefined, folder: st
 }
 
 /** An item for POST api/mail/states, with the snapshot the Snoozed view and the linked task use. */
-export function stateItem(m: Pick<MessageRow, 'id' | 'subject' | 'from_name' | 'from_email' | 'created_at'> & { message_id?: string }, mailbox: string | null, folder: string) {
+export function stateItem(m: Pick<MessageRow, 'id' | 'subject' | 'from_name' | 'from_email' | 'created_at'> & { message_id?: string | null }, mailbox: string | null, folder: string) {
   return { mailbox: mailbox ? Number(mailbox) : 0, folder, uid: String(m.id), subject: m.subject, from_name: m.from_name, from_email: m.from_email, received_at: m.created_at, ...(m.message_id ? { message_id: m.message_id } : {}) };
 }
 

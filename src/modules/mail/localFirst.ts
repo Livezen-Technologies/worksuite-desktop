@@ -4,6 +4,7 @@ import { apiGetMeta, peekCached, withMailbox, type ApiResult, type Query } from 
 import { call } from '../../core/bridge';
 import type { OfflineMutation } from '@shared/types';
 import type { MessageDetail, MessageRef } from './types';
+import { identityQuery } from './messageLookup';
 
 /**
  * Cached first, then fresh (worksuite-desktop#162).
@@ -48,7 +49,7 @@ export function messageKey(ref: MessageRef): QueryKey {
 
 /** A message's request: `peek` leaves it unread at the server (fetching ahead, or marking read later). */
 export function messageRequest(ref: MessageRef, peek: boolean): { path: string; query: Query } {
-  return { path: `/api/mail/messages/${ref.uid}`, query: withMailbox({ folder: ref.folder, ...(peek ? { peek: 1 } : {}) }, ref.mailbox) };
+  return { path: `/api/mail/messages/${ref.uid}`, query: withMailbox({ folder: ref.folder, ...identityQuery(ref), ...(peek ? { peek: 1 } : {}) }, ref.mailbox) };
 }
 
 /** A message from this computer: as it was opened, or as it was fetched ahead. */
