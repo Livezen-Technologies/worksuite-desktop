@@ -294,6 +294,8 @@ function ch<S extends z.ZodType>(input: S, opts: Omit<ChannelSpec, 'input'> = {}
   return { input, ...opts };
 }
 
+const launcherAppId = z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/);
+
 const localModelId = z.string().regex(/^[a-z0-9][a-z0-9._-]{1,63}$/);
 
 /** A Drive file's cover in the thumbnail cache: `drive:<file id>:<version or change time>`. */
@@ -1168,6 +1170,11 @@ export const contract = {
 
   'settings:get': ch(none, { whileLocked: true }),
   'settings:set': ch(preferencesPatchSchema.extend({ verificationPassword: z.string().min(1).max(512).optional() }), { sensitive: true, rate: 10 }),
+  // The organization's app launcher defaults (#201): two keys of its desktop policy, for whoever may set that policy.
+  'settings:launcherDefaults': ch(
+    z.object({ organizationId: z.string().regex(/^\d{1,12}$/), pinned: z.array(launcherAppId).max(8), order: z.array(launcherAppId).max(300) }),
+    { permission: 'desktop.policies.manage', session: true, sensitive: true, rate: 5 },
+  ),
 
   'status:snapshot': ch(none, { whileLocked: true }),
 
@@ -1593,6 +1600,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'updates:busy': BusyReport;
   'settings:get': { preferences: Preferences; locks: PreferenceLock[] };
   'settings:set': { preferences: Preferences; locks: PreferenceLock[] };
+  'settings:launcherDefaults': { pinned: string[]; order: string[] };
   'status:snapshot': StatusSnapshot;
   'diagnostics:run': DiagnosticCheck[];
   'diagnostics:previewBundle': BundlePreview;

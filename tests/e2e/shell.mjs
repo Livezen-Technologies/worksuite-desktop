@@ -52,8 +52,10 @@ try {
   const cats = await t.evaluate(`[...${dialog('Apps')}.querySelectorAll('[role="tab"]')].map(b => b.textContent.trim())`);
   const tiles = await t.evaluate(`${dialog('Apps')}.querySelectorAll('[role="option"]').length`);
   t.check('the launcher shows every app as a tile, with categories and their counts', tiles >= 6 && cats[0]?.startsWith('All apps') && cats.some((c) => c.startsWith('Communication')), JSON.stringify({ tiles, cats }));
-  const web = await t.evaluate(`[...${dialog('Apps')}.querySelectorAll('[role="option"]')].some(b => b.textContent.includes('In browser') && !!b.querySelector('[title="Opens in your browser"]'))`);
-  t.check('apps without a desktop screen say they open in the browser', web);
+  const web = await t.evaluate(`[...${dialog('Apps')}.querySelectorAll('[role="option"]')].some(b => !!b.querySelector('[title="Opens in your browser"]'))`);
+  t.check('apps without a desktop screen carry the browser mark, and no tile says "Desktop app"', web && !(await t.evaluate(`${dialog('Apps')}.innerText.includes('Desktop app')`)));
+  const box = await t.evaluate(`(() => { const r = ${dialog('Apps')}.getBoundingClientRect(); return { w: r.width, h: r.height, b: r.bottom, vw: innerWidth, vh: innerHeight }; })()`);
+  t.check('the launcher is a popover of at most 760×600, inside the window', box.w <= 760 && box.h <= 600 && box.w <= box.vw * 0.9 + 1 && box.b <= box.vh, JSON.stringify(box));
 
   await t.evaluate(`[...${dialog('Apps')}.querySelectorAll('[role="tab"]')].find(b => b.textContent.trim().startsWith('Communication')).click()`);
   await sleep(150);
@@ -77,11 +79,12 @@ try {
   await t.evaluate(key('ArrowRight'));
   await t.evaluate(key('ArrowDown'));
   const after = await t.evaluate(`[...${dialog('Apps')}.querySelectorAll('[role="option"]')].findIndex(b => b.getAttribute('aria-selected') === 'true')`);
-  t.check('the arrow keys move over the grid, six to a row', before === 0 && after === 7, JSON.stringify({ before, after }));
+  const perRow = await t.evaluate(`(() => { const o = [...${dialog('Apps')}.querySelectorAll('[role="option"]')]; const top = o[0].getBoundingClientRect().top; return o.filter(b => b.getBoundingClientRect().top === top).length; })()`);
+  t.check('the arrow keys move over the grid, a row at a time', before === 0 && after === 1 + perRow, JSON.stringify({ before, after, perRow }));
   await t.evaluate(`[...${dialog('Apps')}.querySelectorAll('[role="option"]')][0].dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 400, clientY: 300 }))`);
   await t.waitFor(`!!document.querySelector('[role="menu"][aria-label$="options"]')`, 'the tile menu');
   await t.shot('l2-launcher-menu');
-  t.check('a tile\'s menu opens it in a new tab or window, or pins it', await t.evaluate(`(() => { const m = document.querySelector('[role="menu"][aria-label$="options"]').innerText; return m.includes('Open in a new tab') && m.includes('Pin to the sidebar') || m.includes('Unpin from the sidebar'); })()`));
+  t.check('a tile\'s menu opens it in a new tab or window, pins, hides or groups it', await t.evaluate(`(() => { const m = document.querySelector('[role="menu"][aria-label$="options"]').innerText; return m.includes('Open in a new tab') && m.includes('Open in new window') && m.includes('Pin') && m.includes('Hide') && m.toLowerCase().includes('move to group'); })()`));
   await t.evaluate(key('Escape'));
   await t.evaluate(key('Escape'));
   await t.waitFor(`!${dialog('Apps')}`, 'the launcher closed');

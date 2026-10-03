@@ -361,6 +361,7 @@ export const INVOKE_CHANNELS = [
 
   'settings:get',
   'settings:set',
+  'settings:launcherDefaults',
 
   'status:snapshot',
 
