@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.16.0 — 2026-10-03
+
+- Compose (#213): the editor fills the height and scrolls inside; Templates and Send later sit in a side panel that never clips, resizes from 260 to 380px, hides, and becomes a popover below 900px; To/Cc/Bcc chips with photos, invalid and other-domain warnings; a real Subject field; Send ▾ with Send later, Send and archive and Send as…; a calm draft status, a confirmed Discard, Pop out, attachment chips, ⌘⇧D and Esc, and a missing-attachment check that ignores quoted text.
+
 ## 1.15.0 — 2026-10-03
 
 - Setup banner (#210): one quiet 56–64px row on the new shared InfoBanner — Import email as the one primary action, Add signature and Make default mail app secondary, steps already done ticked, gone by itself when all three are done; Dismiss collapses it smoothly, is saved per person with Undo for five seconds, and Settings › Mail › Appearance & reading › Show setup tips brings it back.

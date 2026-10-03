@@ -5,6 +5,10 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.144 — 2026-10-03
+
+- **A roomier, calmer compose screen (#213).** The message area now fills the window down to the Send bar and scrolls inside itself, with no empty gap. **Templates** and **Send later** sit in a side panel that never gets cut off: drag it between 260 and 380px, hide it, and in a narrow window it opens as a popover instead. **To**, **Cc** and **Bcc** show people as chips with their photo or initials, with a red outline for a mistyped address and an amber one for another company's domain; **From** shows your name and address; **Subject** is a proper field and asks before sending without one. **Send ▾** holds Send later (Tomorrow morning, Monday morning, or a date and time), Send and archive when replying, and Send as… — the separate Send later button is gone. The footer says "Saving…", "Draft saved 12:41" or "Restored from this computer" quietly, **Discard** asks first (also ⌘⇧D / Ctrl+Shift+D), **Pop out** moves the email to its own window, attachments show as chips above the footer, and **Esc** minimises with the draft kept. The "forgot the attachment?" check now also catches "please find" and ignores the quoted email.
+
 ## 0.2.143 — 2026-10-03
 
 - **Pick your update channel, and update without losing your place (#205).** **Settings › About** (and Settings › Desktop) now have one updates card: where things stand with a progress bar, the channel — **Stable**, **Beta** (new features a week or two early) or **Dev** (daily builds) — limited to what your organisation allows and confirmed before you move to a less stable one, What's new, **Reinstall Stable**, and switches for downloading automatically, installing when you quit and update notifications. WorkSuite checks at launch, every 4 hours and when your computer wakes.
