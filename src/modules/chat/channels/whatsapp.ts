@@ -50,6 +50,7 @@ export interface WaChat {
 }
 
 export interface WaMessage {
+  external_id?: string | null;
   id: number;
   direction: 'in' | 'out';
   kind: string;
@@ -138,8 +139,8 @@ export function useWaThread(id: string) {
   });
 }
 
-export function sendWa(chatId: number | string, text: string) {
-  return apiPost<{ ok: boolean; error?: string }>(`${WA}/chats/${chatId}/messages`, { kind: 'text', text });
+export function sendWa(chatId: number | string, text: string, replyTo?: string) {
+  return apiPost<{ ok: boolean; error?: string }>(`${WA}/chats/${chatId}/messages`, { kind: 'text', text, ...(replyTo ? { reply_to: replyTo } : {}) });
 }
 
 /** An approved template, with its placeholders filled in order: what may be sent once the 24-hour window has closed. */
@@ -154,11 +155,11 @@ export interface WaSendResult {
 }
 
 /** Files from this computer, with a caption, as the web sends them (the server keeps each in the Drive). */
-export function sendWaFiles(chatId: number | string, files: File[], caption: string) {
+export function sendWaFiles(chatId: number | string, files: File[], caption: string, voice = false) {
   const form = new FormData();
   for (const f of files) form.append('files[]', f, f.name);
   form.append('caption', caption);
-  form.append('voice', '0');
+  form.append('voice', voice ? '1' : '0');
   return apiPost<WaSendResult>(`${WA}/chats/${chatId}/attachments`, form);
 }
 

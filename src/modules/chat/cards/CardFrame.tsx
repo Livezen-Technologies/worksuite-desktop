@@ -69,7 +69,7 @@ export function CardFrame({
     <div
       data-card={kind}
       className={cx(
-        'w-[440px] max-w-full overflow-hidden rounded-[14px] border bg-surface text-left text-ink shadow-[0_6px_18px_rgb(var(--ws-shadow-rgb)/.12)] dark:bg-[#131B33] dark:text-[#E8EBF7] dark:shadow-[0_8px_24px_rgba(0,0,0,.25)]',
+        'w-full max-w-[400px] overflow-hidden rounded-[12px] border bg-surface text-left text-ink shadow-[0_6px_18px_rgb(var(--ws-shadow-rgb)/.12)] dark:bg-[#131B33] dark:text-[#E8EBF7] dark:shadow-[0_8px_24px_rgba(0,0,0,.25)]',
         live ? 'border-[#34C38F]/60 dark:border-[#1F6B4E]' : 'border-line dark:border-[#26315A]',
       )}
     >

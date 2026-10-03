@@ -127,3 +127,71 @@ describe('the website thread on the shared composer (RDC-01/02)', () => {
     expect(calls).toHaveBeenCalledWith('transfers:upload', { handles: ['h2'], target: { kind: 'website', conversationId: 41 } });
   });
 });
+
+describe('external channels on the shared composer (#156)', () => {
+  afterEach(cleanup);
+  function external(refusal: string | null = null, allowBlockedDraft = true, send = vi.fn(async (_text: string, _files: File[]) => true)) {
+    calls.mockImplementation(async () => null as never);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={qc}><Composer roomId="whatsapp:7" roomName="Customer" group={false} reply={null} onClearReply={() => undefined} channel={{ draftModule: 'whatsapp', draftContext: 'chat:7', refusal, allowBlockedDraft, maxLength: 4000, voice: false, context: () => [], refuseFile: () => null, send }} /></QueryClientProvider>);
+    return send;
+  }
+  it('keeps a blocked draft and prevents Enter from sending', async () => {
+    const send = external('Disconnected');
+    const box = screen.getByRole('textbox', { name: 'Message' });
+    fireEvent.change(box, { target: { value: 'Keep this reply' } });
+    await act(async () => { fireEvent.keyDown(box, { key: 'Enter' }); });
+    expect(send).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
+    expect((box as HTMLTextAreaElement).value).toBe('Keep this reply');
+  });
+  it('can disable drafting while blocked', () => {
+    external('Disconnected', false);
+    expect((screen.getByRole('textbox', { name: 'Message' }) as HTMLTextAreaElement).disabled).toBe(true);
+  });
+  it('sends using the channel adapter and retains the existing draft namespace', async () => {
+    const send = external();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'Hello' } });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send' })); });
+    expect(send).toHaveBeenCalledWith('Hello', []);
+    expect(calls).toHaveBeenCalledWith('offline:getDraft', { module: 'whatsapp', context: 'chat:7' });
+    expect(screen.queryByRole('button', { name: 'Urgent' })).toBeNull();
+  });
+  it('does not resend delivered attachments when a later upload fails', async () => {
+    const send = vi.fn(async (_text: string, _files: File[]) => true).mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    external(null, true, send);
+    const box = screen.getByRole('textbox', { name: 'Message' });
+    fireEvent.change(box, { target: { value: 'Caption' } });
+    fireEvent.paste(box, { clipboardData: { files: [new File(['a'], 'first.png', { type: 'image/png' }), new File(['b'], 'second.png', { type: 'image/png' })] } });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send' })); });
+    expect(send).toHaveBeenCalledTimes(2);
+    expect((box as HTMLTextAreaElement).value).toBe('');
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send' })); });
+    expect(send.mock.calls[2]?.[1]?.[0]?.name).toBe('second.png');
+    expect(send.mock.calls[2]?.[0]).toBe('');
+  });
+
+  it('keeps a newer draft written while a send is pending', async () => {
+    let delivered: (v: boolean) => void = () => undefined;
+    const send = vi.fn((_text: string, _files: File[]) => new Promise<boolean>((resolve) => { delivered = resolve; }));
+    external(null, true, send);
+    const box = screen.getByRole('textbox', { name: 'Message' });
+    fireEvent.change(box, { target: { value: 'First reply' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    fireEvent.change(box, { target: { value: 'Next reply' } });
+    await act(async () => delivered(true));
+    expect((box as HTMLTextAreaElement).value).toBe('Next reply');
+    expect(send).toHaveBeenCalledWith('First reply', []);
+  });
+  it('submits only once when Enter is pressed twice before sending finishes', async () => {
+    let delivered: (v: boolean) => void = () => undefined;
+    const send = vi.fn((_text: string, _files: File[]) => new Promise<boolean>((resolve) => { delivered = resolve; }));
+    external(null, true, send);
+    const box = screen.getByRole('textbox', { name: 'Message' });
+    fireEvent.change(box, { target: { value: 'Send once' } });
+    await act(async () => { fireEvent.keyDown(box, { key: 'Enter' }); fireEvent.keyDown(box, { key: 'Enter' }); });
+    expect(send).toHaveBeenCalledTimes(1);
+    await act(async () => delivered(true));
+  });
+
+});

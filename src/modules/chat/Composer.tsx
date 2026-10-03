@@ -1,3 +1,5 @@
+import { DriveFilePicker } from '../../components/DriveFilePicker';
+import { apiUrl } from '../../core/api';
 import { Checkbox } from '../../components/Checkbox';
 import { queueMedia } from './outgoing';
 import { useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
@@ -39,6 +41,22 @@ import type { WebsiteConversation } from './website/api';
  * on; @mentions, voice messages, urgent, sharing records and Drive links are
  * not there at all — a visitor could receive none of them.
  */
+export interface ComposerChannel {
+  inputLabel?: string;
+  draftModule: string;
+  draftContext: string;
+  refusal: string | null;
+  allowBlockedDraft: boolean;
+  maxLength: number;
+  maxCaptionLength?: number;
+  voice: boolean;
+  attachChoices?: AttachChoice[];
+  notice?: ReactNode;
+  context: () => Turn[];
+  refuseFile: (file: File) => string | null;
+  send: (text: string, files: File[]) => Promise<boolean>;
+}
+
 export interface WebsiteChannel {
   conversationId: number;
   replies: SavedReply[];
@@ -68,7 +86,7 @@ export interface ComposerHandle {
  * an edit shown above it; files wait in a tray until Send; a voice message
  * records in its place. `compact` is the drawer's and the call panel's size.
  */
-export function Composer({ roomId, roomName, group, reply, onClearReply, typing = [], compact, look = 'box', extras, website, ref }: {
+export function Composer({ roomId, roomName, group, reply, onClearReply, typing = [], compact, look = 'box', extras, website, channel, ref }: {
   roomId: string;
   roomName: string;
   group: boolean;
@@ -82,15 +100,18 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   extras?: ReactNode;
   /** A website visitor's conversation rather than a Team Chat room. */
   website?: WebsiteChannel;
+  channel?: ComposerChannel;
   ref?: Ref<ComposerHandle>;
 }) {
   const qc = useQueryClient();
   const site = website ?? null;
   // A website draft keeps the key the website thread always used, so none is lost in the move (RDC-06).
-  const draft = useDraft<string>(site ? 'website-chat' : 'chat', site ? `conversation:${site.conversationId}` : `room:${roomId}`, '');
-  const canUrgent = useStore(app, (s) => !site && !!s.bootstrap?.permissions.some((p) => p === '*' || p === URGENT));
+  const draft = useDraft<string>(channel?.draftModule ?? (site ? 'website-chat' : 'chat'), channel?.draftContext ?? (site ? `conversation:${site.conversationId}` : `room:${roomId}`), '');
+  const canUrgent = useStore(app, (s) => !site && !channel && !!s.bootstrap?.permissions.some((p) => p === '*' || p === URGENT));
   const transfers = useStore(app, (s) => s.transfers);
   const [sending, setSending] = useState(false);
+  const sendingGate = useRef(false);
+  const draftRevision = useRef(0);
   const [editing, setEditing] = useState<{ id: number; original: string; text: string } | null>(null);
   const [urgent, setUrgent] = useState(false);
   const [menu, setMenu] = useState<'attach' | 'emoji' | 'share' | null>(null);
@@ -108,6 +129,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const slashMenu = useRef<SlashMenuHandle>(null);
   const root = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const typingAt = useRef(0);
   const idle = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -129,10 +151,15 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   });
 
   const text = editing ? editing.text : draft.value;
-  const setText = (v: string) => (editing ? setEditing({ ...editing, text: v }) : draft.setValue(v));
+  const setText = (v: string) => {
+    draftRevision.current++;
+    if (editing) setEditing({ ...editing, text: v });
+    else draft.setValue(v);
+  };
   const done = (s: Staged) => s.kind === 'disk' && !!s.transfer && transfers.find((t) => t.id === s.transfer)?.state === 'done';
   const tray = staged.filter((s) => !done(s));
   const ready = tray.filter((s) => (s.kind === 'disk' ? !s.transfer : s.state === 'ready'));
+  const limit = channel ? (ready.length ? channel.maxCaptionLength ?? channel.maxLength : channel.maxLength) : undefined;
   const canSend = editing ? editing.text.trim() !== '' : text.trim() !== '' || ready.length > 0;
 
   const focus = (at?: number) =>
@@ -145,7 +172,12 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
 
   const stage = (all: Staged[]) => {
     // What a visitor cannot receive is refused here, with the reason, before anything is uploaded (RDC-04).
-    const items = site
+    const items = channel ? all.filter((it) => {
+      if (it.kind !== 'blob') { toast('error', 'Choose channel files using Attach.'); return false; }
+      const why = channel.refuseFile(new File([it.blob], it.name, { type: it.blob.type }));
+      if (why) toast('error', why);
+      return !why;
+    }) : site
       ? all.filter((it) => {
           const why = it.kind === 'disk' ? refuseForVisitor(it.file.name, it.file.size, site.maxUploadKb) : refuseForVisitor(it.name, it.blob.size, site.maxUploadKb);
           if (why) toast('error', why);
@@ -171,6 +203,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
 
   const typingSignal = (state: 'start' | 'stop') => {
     // The widget's typing stamp has no "stopped": it lapses by itself (LiveActivity::WINDOW).
+    if (channel) return;
     if (site) {
       if (state === 'start') void apiPost(`/api/chat/widget-admin/conversations/${site.conversationId}/typing`).catch(() => undefined);
       return;
@@ -185,9 +218,8 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       typingSignal('stop');
     }
   };
-  const onTyped = () => {
-    const now = Date.now();
-    if (now - typingAt.current > TYPING_EVERY) {
+  const onTyped = (now: number) => {
+    if (!typingAt.current || now - typingAt.current > TYPING_EVERY) {
       typingAt.current = now;
       typingSignal('start');
     }
@@ -315,20 +347,40 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
    * urgent.
    */
   const send = async () => {
-    if (!canSend || sending) return;
+    if (!canSend || sending || sendingGate.current || channel?.refusal) return;
+    if (limit && text.length > limit) { toast('error', `Keep this message within ${limit} characters.`); return; }
     stopTyping();
     setAsking(null);
     if (editing) return saveEdit();
     const words = text.trim();
+    const revision = draftRevision.current;
+    const clearSentDraft = async () => {
+      if (draftRevision.current !== revision) return;
+      draft.setValue('');
+      await draft.clear();
+    };
     const files = ready;
     const wordsAlone = words !== '' && (urgent || files.length === 0);
+    sendingGate.current = true;
     setSending(true);
     try {
+      if (channel) {
+        const media = files.filter((f): f is BlobItem => f.kind === 'blob').map((f) => new File([f.blob], f.name, { type: f.blob.type }));
+        if (!media.length && !(await channel.send(words, []))) return;
+        for (let i = 0; i < media.length; i++) {
+          if (!(await channel.send(i === 0 ? words : '', [media[i]!]))) return;
+          const key = files[i]!.key;
+          setStaged((all) => all.filter((s) => s.key !== key));
+          // A delivered caption must not be repeated when retrying a later failed file.
+          if (i === 0) await clearSentDraft();
+        }
+        await clearSentDraft(); onClearReply(); return;
+      }
       if (wordsAlone && !(await sendWords(words, urgent))) return;
       if (!site && files.length) {
         queueMedia(roomId, files, { ...(wordsAlone ? {} : { ...(words ? { caption: words } : {}), ...(reply ? { replyTo: reply.id } : {}) }) }, originalQuality);
         setStaged((all) => all.filter((s) => !files.some((f) => f.key === s.key)));
-        draft.setValue(''); void draft.clear(); picked.current = []; setUrgent(false); onClearReply();
+        void clearSentDraft(); picked.current = []; setUrgent(false); onClearReply();
         return;
       }
       if (files.length) {
@@ -344,14 +396,14 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
         }
         for (const s of files.slice(1)) if (s.kind === 'blob') void sendBlob(s, null);
       }
-      draft.setValue('');
-      await draft.clear();
+      await clearSentDraft();
       picked.current = [];
       setUrgent(false);
       onClearReply();
     } catch (e) {
       toast('error', errorMessage(e));
     } finally {
+      sendingGate.current = false;
       setSending(false);
     }
   };
@@ -377,6 +429,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
 
   const sendVoice = (blob: Blob, ms: number) => {
     setRecording(false);
+    if (channel) { stageBlob(blob, `Voice message.${blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm'}`); return; }
     const ext = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm';
     queueMedia(roomId, [{ key: crypto.randomUUID(), kind: 'blob', blob, name: `Voice message.${ext}`, state: 'ready', progress: 0, error: null, extra: null }], { voice: true, durationMs: Math.round(ms), ...(reply ? { replyTo: reply.id } : {}) }, true);
     onClearReply();
@@ -384,6 +437,12 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
 
   const attach = async (c: AttachChoice) => {
     setMenu(null);
+    if (channel) {
+      if (c === 'drive') return setModal('drive');
+      if (c === 'voice' && channel.voice) return setRecording(true);
+      if (c === 'camera') return setModal(c);
+      fileInput.current?.click(); return;
+    }
     if (c === 'camera') return setModal(c);
     // A Drive link is never sent to a visitor, and a visitor cannot play a voice message (RDC-02, RDC-05).
     if (site && (c === 'drive' || c === 'voice')) return;
@@ -426,6 +485,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const myName = useStore(app, (s) => s.bootstrap?.user?.name ?? 'Me');
   /** The conversation as a suggestion reads it: what this composer's thread has loaded, oldest first. */
   const conversation = (): Turn[] => {
+    if (channel) return channel.context();
     if (site) {
       const c = qc.getQueryData<WebsiteConversation>(['website', 'conversation', String(site.conversationId)]);
       return (c?.messages ?? []).filter((m) => m.from === 'visitor' || m.from === 'agent').map((m) => ({ mine: m.from === 'agent', name: m.from === 'agent' ? (m.agent ?? myName) : (c?.visitor?.name ?? 'Visitor'), text: m.body ?? '' }));
@@ -480,10 +540,10 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                   <button type="button" aria-label="Attach" title="Attach" aria-haspopup="menu" aria-expanded={menu === 'attach'} onClick={() => setMenu(menu === 'attach' ? null : 'attach')} className={cx(tool, menu === 'attach' && '!bg-selection !text-primary')}>
                     <Icon name="paperclip" size={compact ? 16 : 18} />
                   </button>
-                  {menu === 'attach' ? <AttachMenu compact={compact} align={look === 'pill' ? 'right' : 'left'} only={site ? ['document', 'image', 'camera'] : undefined} onPick={(c) => void attach(c)} onClose={() => setMenu(null)} /> : null}
+                  {menu === 'attach' ? <AttachMenu compact={compact} align={look === 'pill' ? 'right' : 'left'} only={channel ? channel.attachChoices ?? ['document', 'image', 'video', 'audio', 'camera', 'drive', ...(channel.voice ? ['voice' as const] : [])] : site ? ['document', 'image', 'camera'] : undefined} onPick={(c) => void attach(c)} onClose={() => setMenu(null)} /> : null}
                 </span>
               ) : null;
-  const shareBtn = !editing && !site ? (
+  const shareBtn = !editing && !site && !channel ? (
                 <span className="relative">
                   <button type="button" aria-label="Share from WorkSuite" title="Share from WorkSuite" aria-haspopup="menu" aria-expanded={menu === 'share'} onClick={() => setMenu(menu === 'share' ? null : 'share')} className={cx(tool, menu === 'share' && '!bg-selection !text-primary')}>
                     <Icon name="plus" size={compact ? 16 : 18} />
@@ -497,7 +557,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                 value={text}
                 onChange={(e) => {
                   setText(e.target.value);
-                  if (!editing) onTyped();
+                  if (!editing) onTyped(e.timeStamp);
                   if (!editing) setSlash(savedReplyQuery(e.target.value, e.target.selectionStart ?? e.target.value.length));
                   if (group) {
                     const q = mentionQuery(e.target.value, e.target.selectionStart ?? e.target.value.length);
@@ -549,11 +609,14 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                     stageBlob(img, img.name && img.name !== 'image.png' ? img.name : `Screenshot ${new Date().toISOString().slice(0, 19).replace('T', ' ').replace(/:/g, '.')}.png`);
                   }
                   const onDisk = files.filter((f) => f.size > 0 && f.name && !f.type.startsWith('image/'));
-                  if (onDisk.length) void registerDropped(onDisk).then(stageDisk, (err: unknown) => toast('error', errorMessage(err)));
+                  if (channel) { for (const f of onDisk) stageBlob(f, f.name); }
+                  else if (onDisk.length) void registerDropped(onDisk).then(stageDisk, (err: unknown) => toast('error', errorMessage(err)));
                 }}
+                disabled={!!channel?.refusal && !channel.allowBlockedDraft}
+                maxLength={limit ?? (site ? 4000 : undefined)}
                 rows={1}
                 placeholder={editing ? 'Edit your message' : tray.length ? 'Add a caption…' : look === 'pill' ? 'Message' : 'Type a message…'}
-                aria-label="Message"
+                aria-label={channel?.inputLabel ?? "Message"}
                 className={cx('bare-focus field-sizing-content max-h-40 min-w-0 flex-1 resize-none bg-transparent px-1 outline-none', compact ? 'min-h-[30px] py-[5px] text-[13px]' : 'min-h-[34px] py-[7px] text-[13.5px]')}
               />
   );
@@ -605,7 +668,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                 <Icon name="smile" size={compact ? 16 : 18} />
               </button>
   );
-  const sendBtn = (
+  const sendBtn = channel?.refusal ? null : (
               <button
                 type="button"
                 aria-label={editing ? 'Save the change' : 'Send'}
@@ -652,7 +715,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
         </div>
       ) : null;
   // A visitor's widget shows a WorkSuite link as a link, never as a card.
-  const detected = !editing && !site ? recordsIn(text, origin) : [];
+  const detected = !editing && !site && !channel ? recordsIn(text, origin) : [];
   const repliesEl = slash && !editing ? (
         <SlashMenu
           ref={slashMenu}
@@ -737,13 +800,13 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       ) : null;
   const trayEl = tray.length && !editing && !recording ? (
           <div className="px-1 pt-1">
-            {!site ? <label className="flex items-center gap-1 px-1 text-[11px] text-ink-2"><Checkbox checked={originalQuality} onChange={(e) => setOriginalQuality(e.target.checked)} />Original Quality</label> : null}
+            {!site && !channel ? <label className="flex items-center gap-1 px-1 text-[11px] text-ink-2"><Checkbox checked={originalQuality} onChange={(e) => setOriginalQuality(e.target.checked)} />Original Quality</label> : null}
             <Tray items={tray} transfers={transfers} onRemove={remove} onRetry={retry} compact={compact} />
           </div>
         ) : null;
   const modalsEl = (
     <>
-      {modal === 'drive' ? <DrivePicker roomId={roomId} onClose={() => setModal(null)} onSent={refresh} /> : null}
+      {modal === 'drive' && channel ? <DriveFilePicker title="Attach from WorkSuite Files" confirmLabel="Attach" onClose={() => setModal(null)} onChoose={(files) => { void (async () => { try { for (const f of files) { const response = await fetch(apiUrl(`/api/files/${f.id}/download`)); if (!response.ok) throw new Error('This file could not be downloaded.'); stageBlob(await response.blob(), f.name); } setModal(null); } catch (e) { toast('error', errorMessage(e)); } })(); }} /> : modal === 'drive' ? <DrivePicker roomId={roomId} onClose={() => setModal(null)} onSent={refresh} /> : null}
       {modal === 'camera' ? <CameraCapture onTaken={stageBlob} onClose={() => setModal(null)} /> : null}
       {sharing ? <SharePicker kind={sharing} roomName={roomName} onClose={() => setSharing(null)} onDrive={() => (setSharing(null), setModal('drive'))} onShare={shareRecord} /> : null}
     </>
@@ -752,7 +815,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   if (look === 'pill') {
     const empty = !canSend && !editing;
     return (
-      <div ref={root} className="relative flex shrink-0 flex-col gap-1.5 px-2.5 pt-1 pb-2.5">
+      <div ref={root} data-chat-composer className="relative flex shrink-0 flex-col gap-1.5 px-2.5 pt-1 pb-2.5">
         {extras}
         {lineEl}
         {barEl}
@@ -807,8 +870,10 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   }
 
   return (
-    <div ref={root} className={cx('relative flex shrink-0 flex-col border-t border-line bg-surface', compact ? 'gap-1.5 px-2.5 pt-2 pb-2.5' : 'gap-2 px-4 pt-2.5 pb-3')}>
+    <div ref={root} data-chat-composer onDragOver={(e) => { if (channel && e.dataTransfer.types.includes('Files')) e.preventDefault(); }} onDrop={(e) => { if (!channel) return; e.preventDefault(); for (const f of Array.from(e.dataTransfer.files)) stageBlob(f, f.name); }} className={cx('relative flex shrink-0 flex-col border-t border-line bg-surface', compact ? 'gap-1.5 px-2.5 pt-2 pb-2.5' : 'gap-2 px-4 pt-2.5 pb-3')}>
       {extras}
+      {channel?.notice}
+      {channel ? <input ref={fileInput} type="file" multiple hidden onChange={(e) => { for (const f of Array.from(e.target.files ?? [])) stageBlob(f, f.name); e.target.value = ''; }} /> : null}
       {lineEl}
       {barEl}
       {detectedEl}
@@ -828,6 +893,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
         )}
       >
         {trayEl}
+        {channel ? <div className="flex gap-1" aria-label="Message formatting">{[{ label: 'Bold', mark: '*' }, { label: 'Italic', mark: '_' }, { label: 'Strikethrough', mark: '~' }, { label: 'Monospace', mark: '```' }].map(({ label, mark }) => <button key={label} type="button" className="rounded px-2 text-[11px] text-ink-2 hover:bg-subtle" onClick={() => { const el = input.current; const start = el?.selectionStart ?? text.length; const end = el?.selectionEnd ?? start; setText(`${text.slice(0, start)}${mark}${text.slice(start, end)}${mark}${text.slice(end)}`); focus(start + mark.length); }}>{label}</button>)}</div> : null}
         <div className="flex items-end gap-1">
           {recording ? (
             <VoiceRecorder compact={compact} onDone={(b, ms) => void sendVoice(b, ms)} onCancel={() => setRecording(false)} />
@@ -845,6 +911,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
         </div>
       </div>
       {!compact && !recording ? <div className={cx('px-1 text-[11px]', urgent && !editing ? 'font-semibold text-danger' : 'text-ink-3')}>{hint}</div> : null}
+      {channel ? <div className="text-right text-[11px] text-ink-3">{text.length}/{limit}</div> : null}
       {modalsEl}
       {aiEl}
     </div>

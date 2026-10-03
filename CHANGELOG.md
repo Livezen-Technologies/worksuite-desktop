@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 2026-10-03 — 0.2.99: Mail that works like Outlook
+## 2026-10-03 — 0.2.102: Mail that works like Outlook
 
 The first three phases of the Outlook-class Mail enhancement (ENH-MAIL-03):
 
@@ -22,6 +22,18 @@ The first three phases of the Outlook-class Mail enhancement (ENH-MAIL-03):
 Needs the server update (Mail 1.4.0 with four migrations, and the `mail:snoozes` schedule). Still to come: data files (PST/MBOX), report phishing, safe links, S/MIME, recall, voting and more.
 
 ---
+
+## 0.2.101 — 2026-10-03
+
+- Show shared record cards directly in Chat and the conversation drawer, with short captions below, longer messages above, and one timestamp per consecutive card group. Completed tasks use neutral priority and due-date labels (#173).
+
+## 0.2.100 — 2026-10-03
+
+- Keep a new Chat, WhatsApp or website reply draft when an earlier send finishes, and prevent repeated Enter presses from submitting the same pending message twice (#156).
+
+## 0.2.99 — 2026-10-03
+
+- WhatsApp now uses the shared Chat composer with emoji, AI writing, saved replies, attachment previews, paste/drop, Files selection, formatting and per-conversation drafts. Blocked channels hide Send and offer reconnect and a drafting preference; floating AI no longer covers the composer (#156).
 
 ## 2026-10-03 — 0.2.98: Mail, the rest of the way
 
