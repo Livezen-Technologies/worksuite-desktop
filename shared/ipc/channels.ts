@@ -12,6 +12,7 @@ export const INVOKE_CHANNELS = [
   'app:relaunch',
   'app:openExternal',
   'app:openInBrowser',
+  'links:audit',
   'app:setDockIcon',
 
   'local:enter', 'local:leave', 'local:status', 'local:profile', 'local:unlock', 'local:api', 'local:overview', 'local:export', 'local:restorePreview', 'local:restore', 'local:deleteAll', 'local:meeting', 'local:joinMeeting', 'local:moveOffer', 'local:move', 'local:keep',

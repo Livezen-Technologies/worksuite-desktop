@@ -198,6 +198,11 @@ export interface MessageContext {
   history?: { total: number; first: string | null; last: string | null; messages: Array<{ id: number; subject: string; at: string; is_read: boolean; has_attachment: boolean; folder: string | null; slug: string | null }> };
   related?: { meetings?: Array<{ id: number; title: string; at: string | null; status: string | null }>; tasks?: Array<{ id: number; title: string; status: string | null; due: string | null }> };
   security: MessageSecurity;
+  /**
+   * A WorkSuite notification email's item (#170): the X-WorkSuite-Item header as received, and whether the server
+   * found the message genuinely from WorkSuite (its sender, SPF, DKIM and DMARC). Absent for other mail.
+   */
+  worksuite_item?: { header: string; verified: boolean } | null;
   /** What the message asks of its reader, from its headers (ENH-MAIL-03 P4); absent from an older server. */
   markers?: MessageMarkers;
 }

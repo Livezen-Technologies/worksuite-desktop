@@ -178,7 +178,9 @@ export class SettingsService {
     const meetRecording = patch.meetRecording ? { ...this.prefs.meetRecording, ...patch.meetRecording } : this.prefs.meetRecording;
     // So do Drive's: a change to one of them leaves the others as they were.
     const drive = patch.drive ? normalizeDrivePrefs({ ...this.prefs.drive, ...patch.drive }) : this.prefs.drive;
-    this.prefs = { ...this.prefs, ...patch, meetRecording, drive };
+    // And the link settings (#170).
+    const links = patch.links ? { ...this.prefs.links, ...patch.links } : this.prefs.links;
+    this.prefs = { ...this.prefs, ...patch, meetRecording, drive, ...(links ? { links } : {}) };
     if (patch.language !== undefined) {
       this.prefs.language = normalizeLanguage(patch.language);
       if (this.languageScope) {

@@ -31,6 +31,7 @@ import { DriveSettings } from '../files/DriveSettings';
 import { MailSettings } from '../mail/MailSettings';
 import { LocalDataSection, LocalProfileSection } from '../guest/LocalSettings';
 import { useGuest } from '../../core/session';
+import { LinksSettings } from './LinksSettings';
 
 /** Settings / profile tree (§4.9). Anything the organization's policy decides is shown locked, with the reason. */
 const SECTIONS = [
@@ -879,6 +880,7 @@ function DesktopSection({ prefs }: { prefs: Preferences }) {
       <Row label="Safe Mode" hint={info?.safeMode ? 'Running in Safe Mode: no hardware acceleration and no tab restore.' : 'Starts without hardware acceleration or tab restore, for troubleshooting.'}>
         <Button onClick={() => void call('diagnostics:restartSafeMode', { safe: !info?.safeMode })}>{info?.safeMode ? 'Restart normally' : 'Restart in Safe Mode'}</Button>
       </Row>
+      <LinksSettings prefs={prefs} />
     </>
   );
 }

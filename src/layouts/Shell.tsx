@@ -22,6 +22,8 @@ import { NetworkPopover, NotificationCenter, ProfileMenu, TransferCenter } from 
 import { OrgSwitcher } from '../app/overlays/OrgSwitcher';
 import { switchOrganization } from '../core/orgs';
 import { ClockPopover } from '../app/overlays/ClockPopover';
+import { ItemLinkDialog } from '../app/overlays/ItemLinkDialog';
+import { closeItemDialog, openItemLink } from '../core/item-links';
 import { SearchOverlay } from '../app/overlays/SearchOverlay';
 import { UpdateBanner } from '../app/screens/UpdateScreens';
 import { ChatDrawer, MinimisedChats } from '../modules/chat/ChatDrawer';
@@ -195,6 +197,11 @@ export function Shell() {
         }
       }),
       on<NavigateRequest>('navigate', (req) => {
+        // A WorkSuite item link (#170): its organisation, access, offline copy and action are settled there.
+        if (req.item) {
+          void openItemLink(req.item.link, { source: req.item.source });
+          return;
+        }
         const target = req.route.replace(/^\/+/, '').split(/[/?]/)[0] || 'home';
         if (moduleFor(target) ? !canOpen(target) : !canOpenWeb(req.route)) {
           refuse(req.route);
@@ -297,6 +304,9 @@ export function Shell() {
         {overlay === 'profile' ? guest ? <GuestProfileMenu /> : <ProfileMenu /> : null}
         {overlay === 'network' ? <NetworkPopover /> : null}
         {overlay === 'clock' ? <ClockPopover /> : null}
+      </PanelBoundary>
+      <PanelBoundary name="This link" onClose={closeItemDialog} floating>
+        <ItemLinkDialog />
       </PanelBoundary>
     </div>
   );

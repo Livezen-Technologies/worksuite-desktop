@@ -10,6 +10,7 @@ import { Icon } from '../../components/Icon';
 import { Button, Modal } from '../../components/ui';
 import { checkLink, shownHost, type LinkVerdict, type MailLinkClick } from '@shared/mail-files';
 import { mailtoRoute, parseMailto } from '@shared/mailto';
+import { openWorkSuiteLinkFromMail } from './worksuiteLinks';
 
 /**
  * Safe links (ENH-MAIL-03 DMO-SEC-03, design O-UI-17): a link clicked in a
@@ -86,6 +87,8 @@ export function MailLinkGuard() {
           if (fields) navigate(mailtoRoute(fields));
           return;
         }
+        // A WorkSuite link opens in a tab here, not the browser (#170).
+        if (openWorkSuiteLinkFromMail(link.url)) return;
         if (/^tel:/i.test(link.url)) {
           void call('app:openExternal', { url: link.url }).catch(() => undefined);
           return;
