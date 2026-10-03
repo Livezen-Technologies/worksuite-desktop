@@ -131,7 +131,7 @@ export interface RowGroup {
   rows: MessageRow[];
 }
 
-/** The list in bands: by date, sender, folder, label or importance; or one band with no heading. */
+/** The list in bands: by date, sender, folder, label, importance or conversation; or one band with no heading. */
 export function groupRows(rows: MessageRow[], by: GroupKey = 'date', today = todayInZone()): RowGroup[] {
   if (by === 'none') return rows.length ? [{ key: 'all', label: '', rows }] : [];
   const groups = new Map<string, RowGroup>();
@@ -149,6 +149,10 @@ export function groupRows(rows: MessageRow[], by: GroupKey = 'date', today = tod
     else if (by === 'label') {
       const l = m.labels?.[0];
       add(l ? `l:${l.id}` : 'l:none', l ? l.name : text('No label'), m);
+    } else if (by === 'conversation') {
+      // One band per conversation, named by its subject without Re:/Fwd: (worksuite-desktop#168).
+      const subject = m.subject.replace(/^\s*((re|fwd?|aw|wg|sv|tr)\s*:\s*)+/i, '').trim();
+      add(`c:${m.conversation_key ?? subject.toLowerCase()}`, subject || text('(no subject)'), m);
     } else add(m.is_important || m.is_starred ? 'p:high' : 'p:normal', m.is_important || m.is_starred ? text('Important') : text('Everything else'), m);
   }
   // Groups keep the order their first message has in the sorted list — except the date bands, which keep their own.

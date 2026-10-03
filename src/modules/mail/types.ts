@@ -368,7 +368,7 @@ export interface FormatRule {
 }
 
 export type SortKey = 'date' | 'sender' | 'subject' | 'size' | 'read' | 'attachment' | 'flag' | 'star';
-export type GroupKey = 'none' | 'date' | 'sender' | 'folder' | 'label' | 'priority';
+export type GroupKey = 'none' | 'date' | 'sender' | 'folder' | 'label' | 'priority' | 'conversation';
 
 export interface LocalMailbox {
   id: number;

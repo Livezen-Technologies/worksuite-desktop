@@ -9,7 +9,8 @@ import { CHIPS, mailboxBadge, rowStamp, type ChipId, type QueuedAction, type Row
 import { AccountBadge, CategoryChip } from './parts';
 import { MAIL_DRAG } from './TodoPane';
 import { rowFormat } from './ReadingSettings';
-import type { GroupKey, MailPrefs, Mailbox, MessageRow, SortKey } from './types';
+import type { MailPrefs, Mailbox, MessageRow } from './types';
+import { SortMenu, sortLabel } from './SortMenu';
 
 /**
  * The message list (UI-07): its title and controls, the instant search over
@@ -69,33 +70,7 @@ export interface MessageListProps {
   onSelect?: (r: ListRow, how: 'toggle' | 'range') => void;
 }
 
-const SORTS: Array<{ id: SortKey; label: string }> = [
-  { id: 'date', label: 'Date' },
-  { id: 'sender', label: 'Sender' },
-  { id: 'subject', label: 'Subject' },
-  { id: 'size', label: 'Size' },
-  { id: 'read', label: 'Read status' },
-  { id: 'attachment', label: 'Attachments' },
-  { id: 'flag', label: 'Importance' },
-  { id: 'star', label: 'Starred' },
-];
-
-const GROUPS: Array<{ id: GroupKey; label: string }> = [
-  { id: 'none', label: 'No grouping' },
-  { id: 'date', label: 'Date' },
-  { id: 'sender', label: 'Sender' },
-  { id: 'folder', label: 'Folder' },
-  { id: 'label', label: 'Label' },
-  { id: 'priority', label: 'Importance' },
-];
-
-export function sortLabel(prefs: MailPrefs): string {
-  const s = prefs.sort ?? 'date';
-  const dir = prefs.dir ?? 'desc';
-  if (s === 'date') return dir === 'desc' ? text('Newest first') : text('Oldest first');
-  const name = SORTS.find((x) => x.id === s)?.label ?? s;
-  return `${text(name)} ${dir === 'desc' ? '↓' : '↑'}`;
-}
+export { sortLabel };
 
 export function MessageList(p: MessageListProps) {
   const view = p.prefs.view ?? 'compact';
@@ -103,6 +78,14 @@ export function MessageList(p: MessageListProps) {
   const [menu, setMenu] = useState<'density' | 'sort' | null>(null);
   const densityBtn = useRef<HTMLButtonElement>(null);
   const sortBtn = useRef<HTMLButtonElement>(null);
+  const sortChip = useRef<HTMLButtonElement>(null);
+  // Sort & Group opens under whichever button opened it: the toolbar's or the "Date · Newest" chip.
+  const [sortAt, setSortAt] = useState<'top' | 'chip'>('top');
+  const toggleSort = (at: 'top' | 'chip') => {
+    if (menu === 'sort' && sortAt === at) return setMenu(null);
+    setSortAt(at);
+    setMenu('sort');
+  };
   const bar = useRef<HTMLDivElement>(null);
   const items: Array<{ kind: 'head'; g: RowGroup & { items: ListRow[] } } | { kind: 'row'; r: ListRow }> = [];
   for (const g of p.groups) {
@@ -161,27 +144,6 @@ export function MessageList(p: MessageListProps) {
       items: [{ id: 'all-folders', label: text('Apply this view to all folders'), icon: 'check-check', description: text('These settings are remembered for each folder.'), onSelect: () => p.onPrefs({ applyToAll: true }) }],
     },
   ];
-  const sort = p.prefs.sort ?? 'date';
-  const dir = p.prefs.dir ?? 'desc';
-  const sortSections: MenuSection[] = [
-    {
-      id: 'sort',
-      label: text('Sort by'),
-      items: SORTS.map((s) => ({
-        id: s.id,
-        label: sort === s.id ? `${text(s.label)} ${dir === 'desc' ? '↓' : '↑'}` : text(s.label),
-        radio: true,
-        checked: sort === s.id,
-        onSelect: () => p.onPrefs(sort === s.id ? { dir: dir === 'desc' ? 'asc' : 'desc' } : { sort: s.id, dir: 'desc' }),
-      })),
-    },
-    {
-      id: 'group',
-      label: text('Group by'),
-      items: GROUPS.map((g) => ({ id: g.id, label: text(g.label), radio: true, checked: (p.prefs.group ?? 'date') === g.id, onSelect: () => p.onPrefs({ group: g.id }) })),
-    },
-  ];
-
   return (
     <section aria-label="Messages" className={cx('flex min-h-0 flex-col bg-surface', p.fill ? 'min-w-0 flex-1' : 'w-[420px] shrink-0 border-r border-line')}>
       <div ref={bar} className="px-4 pt-3 pb-2">
@@ -197,7 +159,7 @@ export function MessageList(p: MessageListProps) {
             <Icon name="grid" size={16} />
             <Icon name="chevron-down" size={12} />
           </button>
-          <button ref={sortBtn} type="button" aria-haspopup="menu" aria-expanded={menu === 'sort'} onClick={() => setMenu(menu === 'sort' ? null : 'sort')} aria-label="Sort and group" title="Sort and group" className={cx('inline-flex h-8 items-center gap-0.5 rounded-[8px] px-1.5 text-ink-2 hover:bg-subtle', menu === 'sort' && 'bg-subtle')}>
+          <button ref={sortBtn} type="button" aria-haspopup="menu" aria-expanded={menu === 'sort' && sortAt === 'top'} onClick={() => toggleSort('top')} aria-label={text('Sort and group')} title={text('Sort and group')} className={cx('inline-flex h-8 items-center gap-0.5 rounded-[8px] px-1.5 text-ink-2 hover:bg-subtle', menu === 'sort' && sortAt === 'top' && 'bg-subtle')}>
             <Icon name="transfers" size={16} />
             <Icon name="chevron-down" size={12} />
           </button>
@@ -269,8 +231,9 @@ export function MessageList(p: MessageListProps) {
             );
           })}
           <span className="flex-1" />
-          <button type="button" onClick={() => setMenu('sort')} className="shrink-0 truncate text-[12.5px] text-ink-3 hover:text-ink">
-            {sortLabel(p.prefs)}
+          <button ref={sortChip} type="button" aria-haspopup="menu" aria-expanded={menu === 'sort' && sortAt === 'chip'} onClick={() => toggleSort('chip')} title={text('Sort and group')} className={cx('inline-flex shrink-0 items-center gap-1 rounded-[6px] px-1 text-[12.5px] text-ink-3 hover:bg-subtle hover:text-ink', menu === 'sort' && sortAt === 'chip' && 'bg-subtle text-ink')}>
+            <Icon name="transfers" size={13} />
+            <span className="truncate">{sortLabel(p.prefs)}</span>
           </button>
         </div>
         {p.notice ? <p className="mt-1.5 text-[12px] text-ink-3">{p.notice}</p> : null}
@@ -296,7 +259,7 @@ export function MessageList(p: MessageListProps) {
         ) : null}
       </div>
       {menu === 'density' ? <Menu sections={densitySections} label={text('Layout and density')} anchor={densityBtn} avoid={bar} prefer="bottom" align="end" width={270} onClose={() => setMenu(null)} /> : null}
-      {menu === 'sort' ? <Menu sections={sortSections} label={text('Sort and group')} anchor={sortBtn} avoid={bar} prefer="bottom" align="end" width={250} onClose={() => setMenu(null)} /> : null}
+      {menu === 'sort' ? <SortMenu anchor={sortAt === 'chip' ? sortChip : sortBtn} prefs={p.prefs} conversations={p.conversations} onPrefs={p.onPrefs} onConversations={p.onConversations} onClose={() => setMenu(null)} /> : null}
     </section>
   );
 }

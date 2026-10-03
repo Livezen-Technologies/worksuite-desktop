@@ -213,6 +213,39 @@ describe('the list', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: /Apply this view to all folders/ }));
     await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/prefs', { view: 'super', folderViews: {} }));
   });
+
+  it('sorts and groups from a menu with an icon on every choice, a direction switch in the field\'s words and Reset (#168)', async () => {
+    show();
+    await screen.findByRole('listbox', { name: 'Messages' });
+    const chip = screen.getByRole('button', { name: /Date · Newest/ });
+    fireEvent.click(chip);
+    const menu = await screen.findByRole('menu', { name: 'Sort and group' });
+    const radios = within(menu).getAllByRole('menuitemradio');
+    // 8 sorts, 2 directions, 7 groupings — each sort and group row with its icon.
+    expect(radios).toHaveLength(17);
+    for (const r of radios) expect(r.querySelector('svg')).not.toBeNull();
+    const sortBy = () => within(within(screen.getByRole('menu', { name: 'Sort and group' })).getByRole('group', { name: 'Sort by' }));
+    const date = sortBy().getByRole('menuitemradio', { name: 'Date' });
+    expect(date.getAttribute('aria-checked')).toBe('true');
+    expect(document.activeElement).toBe(date);
+    expect(within(menu).getByRole('menuitemradio', { name: 'Newest' }).getAttribute('aria-checked')).toBe('true');
+    // Arrow keys move; Escape closes and puts focus back.
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(document.activeElement?.textContent).toBe('Sender');
+    fireEvent.click(within(menu).getByRole('menuitemradio', { name: 'Oldest' }));
+    await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/prefs', { folderViews: { 'unified:inbox': { dir: 'asc' } } }));
+    expect(await screen.findByRole('button', { name: /Date · Oldest/ })).toBeTruthy();
+    // A new field starts in its natural direction, worded for it; picking it again reverses it.
+    fireEvent.click(sortBy().getByRole('menuitemradio', { name: 'Sender' }));
+    expect(await screen.findByRole('button', { name: /Sender · A → Z/ })).toBeTruthy();
+    expect(within(screen.getByRole('menu', { name: 'Sort and group' })).getByRole('menuitemradio', { name: /Z → A/ })).toBeTruthy();
+    fireEvent.click(sortBy().getByRole('menuitemradio', { name: 'Sender' }));
+    expect(await screen.findByRole('button', { name: /Sender · Z → A/ })).toBeTruthy();
+    fireEvent.click(within(screen.getByRole('menu', { name: 'Sort and group' })).getByRole('button', { name: 'Reset to default' }));
+    expect(await screen.findByRole('button', { name: /Date · Newest/ })).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole('menu', { name: 'Sort and group' }), { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('menu', { name: 'Sort and group' })).toBeNull());
+  });
 });
 
 describe('the reading pane', () => {
