@@ -1,6 +1,6 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { apiDelete, apiPost, apiPut } from '../../core/api';
+import { apiDelete, apiGet, apiGetMeta, apiPost, apiPut } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
 import { text } from '../../core/i18n';
 import { toast } from '../../core/toasts';
@@ -279,6 +279,7 @@ function QuickStepEditor({ step, onClose }: { step: QuickStep | null; onClose: (
                     <Select label={text('When')} value={a.when ?? (def.needs === 'when' ? 'today' : 'tomorrow')} options={(def.needs === 'when' ? ['today', 'tomorrow', 'week', 'next-week', 'none'] : ['later', 'tomorrow', 'weekend', 'next-week']).map((w) => ({ value: w, label: text({ today: 'Today', tomorrow: 'Tomorrow', week: 'This week', 'next-week': 'Next week', none: 'No date', later: 'Later today', weekend: 'This weekend' }[w] ?? w) }))} onValueChange={(v) => setAction(i, { when: String(v) })} />
                   </div>
                 ) : null}
+                {def?.needs === 'task' ? <TaskActionFields action={a} onChange={(patch) => setAction(i, patch)} /> : null}
                 <button type="button" aria-label={text('Remove action {n}', { n: i + 1 })} onClick={() => setActions((xs) => xs.filter((_, j) => j !== i))} className="mb-1 ml-auto inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-ink-3 hover:bg-subtle hover:text-danger">
                   <Icon name="x" size={14} />
                 </button>
@@ -291,5 +292,24 @@ function QuickStepEditor({ step, onClose }: { step: QuickStep | null; onClose: (
         </Button>
       </div>
     </Modal>
+  );
+}
+
+/** A Quick Step's task (DMO-TSK-05): when it is due, who it is for, which list. */
+function TaskActionFields({ action, onChange }: { action: QuickStepAction; onChange: (patch: Partial<QuickStepAction>) => void }) {
+  const people = useQuery({ queryKey: ['chat', 'directory'], queryFn: ({ signal }) => apiGet<{ users: Array<{ id: number; name: string }> }>('/api/chat/directory', undefined, signal), staleTime: 5 * 60_000 });
+  const lists = useQuery({ queryKey: ['tasks', 'lists'], queryFn: ({ signal }) => apiGetMeta<{ lists: Array<{ id: number; name: string }> }>('/api/task-lists', undefined, signal), staleTime: 5 * 60_000 });
+  return (
+    <>
+      <div className="w-[130px]">
+        <Select label={text('Due')} value={action.when ?? 'none'} options={(['none', 'today', 'tomorrow', 'week', 'next-week'] as const).map((w) => ({ value: w, label: text({ today: 'Today', tomorrow: 'Tomorrow', week: 'This week', 'next-week': 'Next week', none: 'No date' }[w]) }))} onValueChange={(v) => onChange({ when: String(v) })} />
+      </div>
+      <div className="w-[150px]">
+        <Select label={text('Assignee')} value={action.assignee_id ?? ''} options={[{ value: '', label: text('Me') }, ...(people.data?.users ?? []).map((u) => ({ value: u.id, label: u.name }))]} onValueChange={(v) => onChange({ assignee_id: v === '' ? undefined : Number(v) })} />
+      </div>
+      <div className="w-[150px]">
+        <Select label={text('List')} value={action.list_id ?? ''} options={[{ value: '', label: text('No list') }, ...(lists.data?.data.lists ?? []).map((l) => ({ value: l.id, label: l.name }))]} onValueChange={(v) => onChange({ list_id: v === '' ? undefined : Number(v) })} />
+      </div>
+    </>
   );
 }

@@ -8,6 +8,7 @@ import { VirtualList } from '../../components/VirtualList';
 import { CHIPS, mailboxBadge, rowStamp, type ChipId, type QueuedAction, type RowGroup } from './model';
 import { AccountBadge, CategoryChip } from './parts';
 import { MAIL_DRAG } from './TodoPane';
+import { rowFormat } from './ReadingSettings';
 import type { GroupKey, MailPrefs, Mailbox, MessageRow, SortKey } from './types';
 
 /**
@@ -356,6 +357,10 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs, onRo
   const preview = prefs.previews === false ? '' : m.preview;
   const selected = r.key === selectedKey || !!selection?.has(r.key);
   const unread = !m.is_read;
+  // Conditional formatting (DMO-INB-18): the row's colour and weight, by the first rule that takes it.
+  const fmt = rowFormat(m, prefs.formatRules);
+  const ink = fmt?.cls ?? 'text-ink';
+  const strong = unread || !!fmt?.bold;
   const box = m.mailbox ? boxes.find((b) => b.id === m.mailbox!.id) : null;
   const badge = unified && m.mailbox ? <AccountBadge text={mailboxBadge(box ?? { email: m.mailbox.email })} colour={box?.colour ?? m.mailbox.colour} title={m.mailbox.email} /> : null;
   const queued = r.queued ? <span className="shrink-0 text-[11.5px] font-semibold text-warning">{text(QUEUED_LABEL[r.queued])}</span> : null;
@@ -407,11 +412,11 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs, onRo
         >
           <Icon name="star" size={15} className={m.is_starred ? 'fill-current' : undefined} />
         </button>
-        <span className={cx('truncate', unread ? 'font-bold text-ink' : 'text-ink')}>{sender}</span>
+        <span className={cx('truncate', strong ? cx('font-bold', ink) : ink)}>{sender}</span>
         <span className="flex min-w-0 items-center gap-2 truncate">
           {queued}
           <StateMarks m={m} />
-          <span className={cx('truncate', unread ? 'font-bold text-ink' : 'font-semibold text-ink')}>{subject}</span>
+          <span className={cx('truncate', strong ? cx('font-bold', ink) : cx('font-semibold', ink))}>{subject}</span>
           {preview ? <span className="truncate text-ink-3">— {preview}</span> : null}
         </span>
         {unified ? (m.mailbox ? (
@@ -429,10 +434,10 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs, onRo
     return (
       <div {...common} aria-label={label} className={cx(common.className, 'flex h-[34px] items-center gap-2.5 px-4 text-[13px]')}>
         {dot}
-        <span className={cx('w-[34%] shrink-0 truncate', unread ? 'font-bold text-ink' : 'text-ink')}>{sender}</span>
+        <span className={cx('w-[34%] shrink-0 truncate', strong ? cx('font-bold', ink) : ink)}>{sender}</span>
         {count}
         <span className="min-w-0 flex-1 truncate">
-          <span className={cx(unread ? 'font-bold text-ink' : 'font-semibold text-ink')}>{subject}</span>
+          <span className={cx(strong ? cx('font-bold', ink) : cx('font-semibold', ink))}>{subject}</span>
           {preview ? <span className="text-ink-3"> — {preview}</span> : null}
         </span>
         <StateMarks m={m} />
@@ -448,13 +453,13 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs, onRo
         <Avatar name={sender} size={36} className="mt-0.5" />
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="flex items-center gap-2">
-            <span className={cx('min-w-0 flex-1 truncate text-[13.5px]', unread ? 'font-bold text-ink' : 'font-semibold text-ink')}>{sender}</span>
+            <span className={cx('min-w-0 flex-1 truncate text-[13.5px]', strong ? cx('font-bold', ink) : cx('font-semibold', ink))}>{sender}</span>
             {count}
             {queued}
             {badge}
             <span className="shrink-0 text-[12px] text-ink-3">{stamp}</span>
           </span>
-          <span className={cx('truncate text-[13.5px]', unread ? 'font-bold text-ink' : 'text-ink')}>{subject}</span>
+          <span className={cx('truncate text-[13.5px]', strong ? cx('font-bold', ink) : ink)}>{subject}</span>
           <span className="flex items-center gap-2">
             <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-3">{preview}</span>
             {m.has_attachment ? <Icon name="paperclip" size={13} className="shrink-0 text-ink-3" label="Has attachments" /> : null}
@@ -470,7 +475,7 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs, onRo
     <div {...common} aria-label={label} className={cx(common.className, 'flex flex-col gap-0.5 px-4 py-2')}>
       <span className="flex items-center gap-2">
         {dot}
-        <span className={cx('min-w-0 flex-1 truncate text-[13.5px]', unread ? 'font-bold text-ink' : 'text-ink')}>{sender}</span>
+        <span className={cx('min-w-0 flex-1 truncate text-[13.5px]', strong ? cx('font-bold', ink) : ink)}>{sender}</span>
         {count}
         {m.has_attachment ? <Icon name="paperclip" size={13} className="shrink-0 text-ink-3" label="Has attachments" /> : null}
         {m.is_starred ? <Icon name="star" size={13} className="shrink-0 fill-current text-warning" label="Starred" /> : null}
@@ -480,7 +485,7 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs, onRo
       </span>
       <span className="flex items-center gap-2 pl-[15px]">
         <span className="min-w-0 flex-1 truncate text-[13px]">
-          <span className={cx(unread ? 'font-bold text-ink' : 'font-semibold text-ink')}>{subject}</span>
+          <span className={cx(strong ? cx('font-bold', ink) : cx('font-semibold', ink))}>{subject}</span>
           {preview ? <span className="text-ink-3"> — {preview}</span> : null}
         </span>
         <StateMarks m={m} />

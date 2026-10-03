@@ -208,6 +208,7 @@ function PreferencesSection({ prefs }: { prefs: Preferences }) {
       <Row label="Theme">
         <Select label="Theme" value={prefs.theme} options={[{ value: 'system', label: 'System' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} onValueChange={(v) => void updatePrefs({ theme: v })} />
       </Row>
+      <Toggle k="highContrast" prefs={prefs} label="High contrast" />
       <DarkProfilePicker prefs={prefs} />
       <Row label="Density">
         <Select label="Density" value={prefs.density} options={[{ value: 'comfortable', label: 'Comfortable' }, { value: 'compact', label: 'Compact' }]} onValueChange={(v) => void updatePrefs({ density: v })} />

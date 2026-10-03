@@ -70,6 +70,14 @@ describe('Dark color profiles across renderer windows (#73)', () => {
     expect(document.documentElement.style.length).toBe(0);
     expect(app.get().prefs?.darkColorProfile).toBe('orange');
   });
+  it('turns High contrast on and off for the whole window (ENH-MAIL-03 DMO-ACC-01)', async () => {
+    await initAppState();
+    expect(document.documentElement.dataset.contrast).toBeUndefined();
+    await updatePrefs({ highContrast: true });
+    expect(document.documentElement.dataset.contrast).toBe('more');
+    await updatePrefs({ highContrast: false });
+    expect(document.documentElement.dataset.contrast).toBeUndefined();
+  });
   it('uses identical palettes in detached windows and restores every Blue token on reset', () => {
     const main = document.documentElement;
     const detached = document.implementation.createHTMLDocument().documentElement;

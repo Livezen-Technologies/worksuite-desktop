@@ -14,7 +14,7 @@ import { hkdfSync } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { canOpenApp, canOpenLink, canOpenRoute, notificationAllowed, visibleAppIds } from '@shared/access';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
-import { findMailtoInArgv, mailBodiesKept, mailtoRoute, parseMailto } from '@shared/mailto';
+import { findMailtoInArgv, mailBodiesKept, mailListKept, mailtoRoute, parseMailto } from '@shared/mailto';
 import { resolveWebLink } from '@shared/links';
 import { redirectRoute } from '@shared/channels';
 import { networkStatus } from '@shared/network';
@@ -81,6 +81,9 @@ import { createRestaurant } from '../services/restaurant';
 import { OfficeEditorHost } from '../services/office-editor';
 import { OfficeExternal } from '../services/office-external';
 import { createPdfStudio } from '../services/pdf/host';
+import { createMailFilesIpc } from '../services/mail-files/ipc';
+import { markFromInternet } from '../services/quarantine';
+import { mailFilePathsInArgv } from '../services/mail-files/argv';
 import { createLocalAI } from '../services/local-ai/host';
 import { OcrService } from '../services/ocr';
 import { OfficeLocalFiles, officePathsInArgv } from '../services/office-local';
@@ -120,6 +123,9 @@ let pdfOnline: () => void = () => undefined;
 /** Office files handed over before the app is running wait here, then open in WorkSuite DOC / Sheet / Slides tabs. */
 const pendingOffice: string[] = [];
 let handOffice: (paths: string[]) => void = (paths) => void pendingOffice.push(...paths);
+/** .eml and .msg files handed over before Mail's data-file service is running wait here (ENH-MAIL-03 DMO-DAT-04). */
+const pendingMailFiles: string[] = [];
+let handMailFiles: (paths: string[]) => void = (paths) => void pendingMailFiles.push(...paths);
 
 if (!app.requestSingleInstanceLock()) {
   // FR-DL-04: a second launch hands its arguments (and deep link) to the first.
@@ -165,10 +171,12 @@ function main(): void {
   app.on('open-file', (e, path) => {
     e.preventDefault();
     if (/\.(docx|xlsx|pptx)$/i.test(path)) handOffice([path]);
+    else if (/\.(eml|msg)$/i.test(path)) handMailFiles([path]);
     else handPdfs([path]);
   });
   handPdfs(pdfPathsInArgv(process.argv));
   handOffice(officePathsInArgv(process.argv));
+  handMailFiles(mailFilePathsInArgv(process.argv));
 
   app.whenReady().then(() => start(boot, pendingLinks, (fn) => (handleLink = fn)));
 }
@@ -388,6 +396,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     audit: (action, details) => audit.record(sessionCtl.userId(), action, details),
     // eLearning's offline copies are kept inside the app, sealed as they arrive.
     sink: (name): DownloadSink | null => elearning.sink(name),
+    // An attachment saved from mail carries the system's "from the internet" mark (ENH-MAIL-03 DMO-SEC-04).
+    downloaded: (path, source) => {
+      if (source.startsWith('/api/mail/messages/')) return markFromInternet(path).then(() => undefined);
+    },
     // Every module's PDFs open in PDF Studio, never in another application.
     openInApp: (path) => {
       if (!/\.pdf$/i.test(path)) return false;
@@ -1535,6 +1547,17 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       (e: unknown) => log.warn('office file handed over by the system not opened', { error: String((e as Error)?.message ?? e) }),
     );
   if (pendingOffice.length) handOffice(pendingOffice.splice(0));
+  // Mail data files, export, safe links and S/MIME (ENH-MAIL-03 P4).
+  const mailFiles = createMailFilesIpc({
+    http,
+    broadcast: (channel, payload) => broadcast(channel, payload),
+    navigate,
+    audit: (action, details) => audit.record(sessionCtl.userId(), action, details),
+    downloadFolder: () => settings.effective().downloadFolder,
+  });
+  handMailFiles = (paths) => mailFiles.openFromOs(paths);
+  if (pendingMailFiles.length) handMailFiles(pendingMailFiles.splice(0));
+  app.on('will-quit', () => mailFiles.closeAll());
 
   const diagnostics = new DiagnosticsService({
     serverOrigin: () => auth.getServer()?.origin ?? null,
@@ -1584,6 +1607,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         return { enabled: caps.offlineCache, maxBytes: (pol?.offline_storage_max_mb ?? 2048) * 1024 * 1024 };
       },
       mailBodiesCached: (path) => mailBodiesKept(settings.effective(), path),
+      mailListCached: (path) => mailListKept(settings.effective(), path),
       // SalonMate's desk calls carry the key this computer was paired with.
       extraHeaders: (path) => {
         const key = salonDesk.keyFor(path);
@@ -1710,6 +1734,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   };
   registerHandlers(router, ctx);
   pdfStudio.register(router);
+  mailFiles.register(router);
   pos.register(router);
   pmsLocks.register(router);
   restaurant.register(router);
@@ -1889,6 +1914,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     if (pdfs.length) handPdfs(pdfs);
     const docs = officePathsInArgv(argv);
     if (docs.length) handOffice(docs);
+    const mails = mailFilePathsInArgv(argv);
+    if (mails.length) handMailFiles(mails);
     if (link) handleDeepLink(link);
     else windows.showMain();
   });

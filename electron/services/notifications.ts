@@ -1,6 +1,7 @@
 import { localize } from '@shared/localization';
 import { meetingNoticeActions, type MeetingNoticeActions } from '@shared/meeting-invitations';
 import { inDnd } from '@shared/notification-block';
+import { mailAlertFor, type FocusContext } from '@shared/mail-focus';
 import { reminderAction } from '@shared/task-reminders';
 import { Notification, app, nativeImage } from 'electron';
 import { join } from 'node:path';
@@ -60,11 +61,35 @@ export interface Incoming {
   sender: string | null;
   link: string | null;
   critical: boolean;
+  /** A VIP's mail during quiet hours, when the person allows it (ENH-MAIL-03 DMO-NTF-03). */
+  breakthrough?: boolean;
   /** An incoming call (`chat.call.ringing`), not a message: said as a call, locked or not (worksuite-desktop#113). */
   call?: boolean;
   /** One new email: its banner offers Reply, Archive and Mark read, which act on this message. */
   mail?: MailNotice | null;
+  /** A flagged message's reminder (ENH-MAIL-03 DMO-TSK-02): Snooze 1 hour and Mark complete on the banner. */
+  flag?: FlagNotice | null;
 }
+
+/** The flagged message a reminder is about. */
+export interface FlagNotice {
+  mailbox: number;
+  folder: string;
+  uid: string;
+}
+
+/** A flag reminder's message, from the link the server gave it ("/mail?msg=12&mbx=4&mf=inbox"). */
+export function flagFromLink(link: string | null | undefined): FlagNotice | null {
+  const m = /^\/mail\?(.*)$/.exec(link ?? '');
+  if (!m) return null;
+  const q = new URLSearchParams(m[1]);
+  const uid = q.get('msg') ?? '';
+  const mailbox = Number(q.get('mbx') ?? '');
+  const folder = q.get('mf') ?? '';
+  return /^\d{1,20}$/.test(uid) && Number.isSafeInteger(mailbox) && mailbox >= 0 && /^[A-Za-z0-9._\-/ :]{1,128}$/.test(folder) ? { mailbox, folder, uid } : null;
+}
+
+const FLAG_ACTIONS = ['Snooze 1 hour', 'Mark complete'] as const;
 
 /** The new email a mail banner is about. */
 export interface MailNotice {
@@ -74,7 +99,7 @@ export interface MailNotice {
 }
 
 /** A mail banner's buttons, in order. */
-export const MAIL_ACTIONS = ['Reply', 'Archive', 'Mark read'] as const;
+export const MAIL_ACTIONS = ['Reply', 'Archive', 'Delete', 'Flag', 'Mark read'] as const;
 
 /** The route that opens one message (and, with `reply`, starts the reply). */
 export function mailRoute(m: MailNotice, reply = false): string {
@@ -294,12 +319,20 @@ export class NotificationService {
         let subject = '';
         let preview = '';
         let notice: MailNotice | null = null;
+        // Which new mail may raise a banner here (DMO-NTF-02), and whether a VIP's may break quiet hours (DMO-NTF-03).
+        const mode = this.prefs().mailAlerts ?? 'all';
+        if (mode === 'none') return;
+        let breakthrough = false;
         try {
           const list = await this.http.get<{ messages?: Array<{ id?: number; from_name?: string; from_email?: string; subject?: string; preview?: string; is_read?: boolean; mailbox?: { id?: number } | null; folder_slug?: string }> }>(
             '/api/mail/messages',
-            { query: { unified: 1, folder: 'inbox', per_page: 1 } },
+            { query: { unified: 1, folder: 'inbox', per_page: mode === 'all' ? 1 : Math.min(10, n) } },
           );
-          const top = list.messages?.[0];
+          const ctx = mode !== 'all' || this.prefs().mailVipBreakthrough ? await this.focusContext() : null;
+          const fresh = (list.messages ?? []).filter((x) => !x.is_read);
+          const top = mode === 'all' ? list.messages?.[0] : fresh.find((x) => mailAlertFor(x, mode, ctx));
+          if (mode !== 'all' && !top) return;
+          breakthrough = !!top && !!this.prefs().mailVipBreakthrough && !!ctx?.vips.includes((top.from_email ?? '').toLowerCase());
           if (top && !top.is_read) {
             sender = top.from_name || top.from_email || null;
             subject = top.subject ?? '';
@@ -308,11 +341,13 @@ export class NotificationService {
             if (n === 1 && Number.isSafeInteger(uid) && uid > 0) notice = { uid, mailbox: Number(top.mailbox?.id) > 0 ? Number(top.mailbox!.id) : null, folder: top.folder_slug || 'inbox' };
           }
         } catch {
-          /* the count alone is enough */
+          // The count alone is enough — unless only some mail may alert, which cannot be told without the list.
+          if (mode !== 'all') return;
         }
         this.notify({
           id: `mail:${Date.now()}`,
           module: 'mail',
+          breakthrough,
           title: sender ? `${sender}` : n === 1 ? 'New email' : `${n} new emails`,
           body: subject ? (preview ? `${subject} · ${preview}`.slice(0, 240) : subject) : n === 1 ? 'You have a new email.' : `You have ${n} new emails.`,
           sender,
@@ -345,7 +380,7 @@ export class NotificationService {
         raw.forEach((n, k) => {
           const i = items[k]!;
           if (i.read || this.shown.includes(i.id) || Date.parse(i.createdAt) < since) return;
-          if (n.desktop_allowed !== false) this.notify({ reminder: (n.event_key ?? n.type) === 'task.reminder' ? reminderAction(n.link, n.actions) : null, meeting: meetingNoticeActions(n.event_key ?? n.type, n.actions), id: i.id, module: i.module, category: n.category ?? null, title: i.title, body: i.body, sender: null, link: i.link, critical: n.priority === 'critical' || n.priority === 'emergency' || n.level === 'critical' || n.level === 'emergency' });
+          if (n.desktop_allowed !== false) this.notify({ flag: (n.event_key ?? n.type) === 'mail.flag_reminder' ? flagFromLink(n.link) : null, reminder: (n.event_key ?? n.type) === 'task.reminder' ? reminderAction(n.link, n.actions) : null, meeting: meetingNoticeActions(n.event_key ?? n.type, n.actions), id: i.id, module: i.module, category: n.category ?? null, title: i.title, body: i.body, sender: null, link: i.link, critical: n.priority === 'critical' || n.priority === 'emergency' || n.level === 'critical' || n.level === 'emergency' });
         });
       }
       this.listed = true;
@@ -424,6 +459,7 @@ export class NotificationService {
         this.notify({
           id,
           reminder: e.event === 'task.reminder' ? reminderAction(link, e.actions) : null,
+          flag: e.event === 'mail.flag_reminder' ? flagFromLink(link) : null,
           meeting: meetingNoticeActions(typeof e.event === 'string' ? e.event : null, e.actions),
           module: moduleOf({ category: e.category as string, link }),
           category: typeof e.category === 'string' ? e.category : null,
@@ -563,8 +599,23 @@ export class NotificationService {
     if (this.isLocked() && (n.category === 'incoming-call' ? p.lockedCallNotifications === false : n.module === 'chat' && p.lockedChatNotifications === false)) return 'locked-hidden';
     if (n.critical) return null;
     if (this.pausedUntil && this.pausedUntil > Date.now()) return 'paused';
-    if (p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) return 'dnd';
+    if (p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date()) && !n.breakthrough) return 'dnd';
     return null;
+  }
+
+  /** What Focused Inbox and VIPs need (DMO-NTF-02), kept five minutes. */
+  private focusCache: { at: number; ctx: FocusContext | null } | null = null;
+  private async focusContext(): Promise<FocusContext | null> {
+    if (this.focusCache && Date.now() - this.focusCache.at < 5 * 60_000) return this.focusCache.ctx;
+    let ctx: FocusContext | null = null;
+    try {
+      const r = await this.http.get<Partial<FocusContext>>('/api/mail/focus/context');
+      ctx = { overrides: r.overrides ?? [], vips: (r.vips ?? []).map((v) => String(v).toLowerCase()), known: r.known ?? [], moves: r.moves ?? {} };
+    } catch {
+      ctx = null;
+    }
+    this.focusCache = { at: Date.now(), ctx };
+    return ctx;
   }
 
   notify(n: Incoming): void {
@@ -591,6 +642,8 @@ export class NotificationService {
           ? undefined
           : n.reminder
             ? [{ type: 'button', text: 'Snooze 15 min' }, { type: 'button', text: 'Mark Complete' }]
+            : n.flag
+              ? FLAG_ACTIONS.map((label) => ({ type: 'button' as const, text: localize(label, this.prefs().language) }))
             : n.meeting?.answers.length
               ? n.meeting.answers.map((a) => ({ type: 'button' as const, text: a.label }))
               : n.mail
@@ -604,6 +657,10 @@ export class NotificationService {
     });
     const recipient = this.userId;
     note.on('action', (_event, index) => {
+      if (n.flag && recipient === this.userId) {
+        void this.flagAction(n, n.flag, index).then(() => note.close());
+        return;
+      }
       if (n.mail && recipient === this.userId) {
         void this.mailAction(n, n.mail, index).then(() => note.close());
         return;
@@ -649,11 +706,39 @@ export class NotificationService {
     if (this.isLocked() || !this.moduleEnabled(n)) return this.onClick(mailRoute(m), 'mail');
     if (action === 'Reply') return this.onClick(mailRoute(m, true), 'mail');
     try {
-      await this.http.post(`/api/mail/messages/${m.uid}/action`, { action: action === 'Archive' ? 'archive' : 'read', folder: m.folder, ...(m.mailbox ? { mailbox: m.mailbox } : {}) });
+      const verb = action === 'Archive' ? 'archive' : action === 'Delete' ? 'trash' : action === 'Flag' ? 'star' : 'read';
+      await this.http.post(`/api/mail/messages/${m.uid}/action`, { action: verb, folder: m.folder, ...(m.mailbox ? { mailbox: m.mailbox } : {}) });
+      // Flag (DMO-NTF-01): a follow-up for today on WorkSuite's flag too, where the mailbox is known.
+      if (action === 'Flag' && m.mailbox) {
+        const due = new Date();
+        due.setHours(17, 0, 0, 0);
+        await this.http.post('/api/mail/states', { action: 'flag', items: [{ mailbox: m.mailbox, folder: m.folder, uid: String(m.uid) }], dates: { start_at: new Date().toISOString(), due_at: due.toISOString(), reminder_at: null } }).catch(() => undefined);
+      }
       await this.pollMail(false);
     } catch (error) {
       log.debug('Mail notification action failed', { error: String(error) });
       this.onClick(mailRoute(m), 'mail');
+    }
+  }
+
+  /**
+   * A flag reminder's button (DMO-TSK-02): Snooze 1 hour moves the reminder,
+   * Mark complete completes the flag and its task — on the server, so every
+   * device agrees. Locked, without Mail, or refused, it opens the message.
+   */
+  async flagAction(n: Incoming, f: FlagNotice, index: number): Promise<void> {
+    const action = FLAG_ACTIONS[index];
+    if (!action) return;
+    const route = `/mail?msg=${encodeURIComponent(f.uid)}&mbx=${f.mailbox}&mf=${encodeURIComponent(f.folder)}`;
+    if (this.isLocked() || !this.moduleEnabled(n)) return this.onClick(route, 'mail');
+    const items = [{ mailbox: f.mailbox, folder: f.folder, uid: f.uid }];
+    try {
+      if (action === 'Snooze 1 hour') await this.http.post('/api/mail/states', { action: 'remind', items, at: new Date(Date.now() + 3_600_000).toISOString() });
+      else await this.http.post('/api/mail/states', { action: 'complete', items });
+      if (/^\d+$/.test(n.id)) await this.markRead([n.id]);
+    } catch (error) {
+      log.debug('Flag reminder action failed', { error: String(error) });
+      this.onClick(route, 'mail');
     }
   }
 

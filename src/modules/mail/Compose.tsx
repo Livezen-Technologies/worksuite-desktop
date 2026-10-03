@@ -10,17 +10,20 @@ import { Menu, type MenuSection } from '../../components/Menu';
 import { Select } from '../../components/Select';
 import { DriveFilePicker, type DriveFileRow } from '../../components/DriveFilePicker';
 import { RichTextEditor } from '../../components/RichTextEditor';
-import { Button, Chip, ErrorNote, FileBadge, Modal, Spinner, cx } from '../../components/ui';
+import { Button, Chip, ErrorNote, FileBadge, Modal, Spinner, TextField, cx } from '../../components/ui';
 import { AiMenuButton } from '../ai/AiMenuButton';
 import { AiTextDialog } from '../ai/AiTextDialog';
-import { WRITING_TASKS, type TextTask } from '../ai/textTools';
+import { SuggestTimes } from './SuggestTimes';
+import { MailMerge } from './MailMerge';
+import { canOpen } from '../../core/access';
+import { MAIL_TASKS, WRITING_TASKS, type TextTask } from '../ai/textTools';
 import { sendMessage, useQuickParts, useSignatures, useTemplates } from './api';
-import { cleanComposeHtml, composeBody, composeText, migrateDraft, parseQuote, pickSignature, sendChecks, signatureBlock, splitSignature, textToComposeHtml, type ComposeDraft } from './composeHtml';
+import { cleanComposeHtml, composeBody, composeText, migrateDraft, parseQuote, pickSignature, sendChecks, signatureBlock, splitSignature, textToComposeHtml, voteChoices, withVotePrompt, type ComposeDraft } from './composeHtml';
 import { MentionPopup } from './Mentions';
 import { mailboxLetter } from './model';
 import { sendAfterUndoWindow } from './outgoing';
 import { AccountAvatar } from './parts';
-import { RecipientField } from './Recipients';
+import { RecipientField, addressOf } from './Recipients';
 import { unquote } from './quote';
 import { parseAddresses } from './sanitize';
 import type { ComposeSeed, Mailbox, Template } from './types';
@@ -99,7 +102,11 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   const templates = useTemplates(true);
   const quickParts = useQuickParts(true);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [voteDialog, setVoteDialog] = useState(false);
   const [partsOpen, setPartsOpen] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
+  // Mail merge works on the message as it is when opened (DMO-CMP-18).
+  const [merging, setMerging] = useState<ReturnType<typeof payload> | null>(null);
   const optionsBtn = useRef<HTMLSpanElement>(null);
   // A choice from the Options and Quick Parts menus, put into the draft right after (menus hand over data, not the draft's ref).
   const [pending, setPending] = useState<{ options?: NonNullable<ComposeDraft['options']>; part?: string } | null>(null);
@@ -128,6 +135,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   const aiItems = [
     ...(original && seed.mode !== 'forward' ? [{ label: text('Draft a reply'), icon: 'reply', run: () => setAi({ task: 'reply', title: text('Draft a reply') }) }] : []),
     ...WRITING_TASKS.map((w) => ({ label: w.label, disabled: !own.trim(), run: () => setAi({ task: w.task, title: w.label }) })),
+    ...MAIL_TASKS.map((w) => ({ label: w.label, disabled: !own.trim(), run: () => setAi({ task: w.task, title: w.label }) })),
   ];
   const choices = useMemo(() => laterChoices(), []);
   const laterAt = later === 'pick' ? (pick ? new Date(pick).toISOString() : null) : (choices.find((c) => c.id === later)?.at ?? null);
@@ -183,7 +191,8 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   // Read at the moment of sending: an address committed by the same keystroke is in it.
   const payload = (scheduleAt?: string) => {
     const d = latest.current;
-    const body = composeBody(d.html, d.quote);
+    const votes = voteChoices(d.options?.vote);
+    const body = withVotePrompt(composeBody(d.html, d.quote), votes, text('Vote by replying with one of: {choices}.', { choices: votes.join(', ') }));
     return {
       to: parseAddresses(d.to),
       cc: parseAddresses(d.cc),
@@ -349,12 +358,26 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
         <Field label="Subject">
           <input aria-label="Subject" value={v.subject} onChange={(e) => set({ subject: e.target.value })} className="bare-focus min-w-0 flex-1 bg-transparent text-[14px] font-bold text-ink outline-none" />
         </Field>
+        {merging ? (
+          <MailMerge
+            message={{ subject: merging.subject, html: merging.body_html, text: merging.body_text }}
+            onSendOne={async (row, m) => {
+              await sendMessage({ ...merging, to: [row.email], cc: [], bcc: [], subject: m.subject, body_html: m.html, body_text: m.text, in_reply_to: undefined, reply_mode: undefined }, text('Send “{subject}” to {to}', { subject: m.subject, to: row.email }));
+            }}
+            onClose={() => setMerging(null)}
+          />
+        ) : null}
+        {suggesting ? <SuggestTimes recipients={[...parseAddresses(v.to ?? ''), ...parseAddresses(v.cc ?? '')].map(addressOf).filter((a) => a.includes('@'))} subject={v.subject} onInsert={(html) => setPending({ part: html })} onClose={() => setSuggesting(false)} /> : null}
         {ai ? (
           <AiTextDialog
             title={ai.title}
             task={ai.task}
             input={() => (ai.task === 'reply' ? `Subject: ${v.subject}\n\nThe email I am replying to:\n${original}${own.trim() ? `\n\nWhat I want to say (my notes):\n${own.trim()}` : ''}` : own.trim())}
-            actions={[{ label: own.trim() ? text('Replace my text') : text('Use this'), primary: true, run: (t) => set({ html: `${textToComposeHtml(t)}${signature}` }) }]}
+            actions={
+              ai.task === 'coach'
+                ? [{ label: text('Copy'), icon: 'copy', primary: true, run: (t) => void navigator.clipboard.writeText(t).then(() => toast('success', text('Copied.'))) }]
+                : [{ label: own.trim() ? text('Replace my text') : text('Use this'), primary: true, run: (t) => set({ html: `${textToComposeHtml(t)}${signature}` }) }]
+            }
             onClose={() => setAi(null)}
           />
         ) : null}
@@ -393,6 +416,16 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
                     {text('Quick Parts')}
                   </Button>
                 </span>
+                {seed.mode === 'new' ? (
+                  <Button size="sm" icon="users" onClick={() => setMerging(payload())} disabled={offline} title={offline ? text('Mail merge needs WorkSuite.') : text('Send this as a separate message to each person on a list')}>
+                    {text('Mail merge')}
+                  </Button>
+                ) : null}
+                {canOpen('calendar') ? (
+                  <Button size="sm" icon="calendar" onClick={() => setSuggesting(true)} disabled={offline} title={offline ? text('Suggesting times needs WorkSuite.') : text('Free times for everyone on this message, and a Meet link')}>
+                    {text('Suggest times')}
+                  </Button>
+                ) : null}
                 <Button size="sm" icon="paperclip" onClick={() => fileInput.current?.click()} disabled={offline} title={offline ? text('Attaching needs WorkSuite.') : text('Attach from this computer')}>
                   Attach
                 </Button>
@@ -506,6 +539,20 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
             { id: 'importance', label: text('Importance'), items: (['high', 'normal', 'low'] as const).map((l) => ({ id: l, label: l === 'high' ? text('High') : l === 'low' ? text('Low') : text('Normal'), radio: true, checked: (v.options?.importance ?? 'normal') === l, onSelect: () => setPending({ options: { importance: l === 'normal' ? undefined : l } }) })) },
             { id: 'sensitivity', label: text('Sensitivity'), items: (['normal', 'personal', 'private', 'confidential'] as const).map((l) => ({ id: l, label: { normal: text('Normal'), personal: text('Personal'), private: text('Private'), confidential: text('Confidential') }[l], radio: true, checked: (v.options?.sensitivity ?? 'normal') === l, onSelect: () => setPending({ options: { sensitivity: l === 'normal' ? undefined : l } }) })) },
             {
+              id: 'vote',
+              label: text('Voting buttons'),
+              items: [
+                ...([['none', text('None')], ['approve', text('Approve; Reject')], ['yesno', text('Yes; No')], ['yesnomaybe', text('Yes; No; Maybe')]] as const).map(([id, label]) => ({
+                  id: `vote-${id}`,
+                  label,
+                  radio: true,
+                  checked: id === 'none' ? !v.options?.vote?.length : (v.options?.vote ?? []).join('; ') === VOTE_PRESETS[id].join('; '),
+                  onSelect: () => setPending({ options: { vote: id === 'none' ? undefined : [...VOTE_PRESETS[id]] } }),
+                })),
+                { id: 'vote-custom', label: text('Your own choices…'), description: text('Counted in WorkSuite for recipients on this server; anyone else replies with a choice.'), onSelect: () => setVoteDialog(true) },
+              ],
+            },
+            {
               id: 'receipts',
               label: text('Receipts'),
               items: [
@@ -527,6 +574,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
         />
       ) : null}
       <MentionPopup editor={editorEl} onMention={mentioned} />
+      {voteDialog ? <CustomVote initial={v.options?.vote ?? []} onSave={(choices) => (setPending({ options: { vote: choices.length ? choices : undefined } }), setVoteDialog(false))} onClose={() => setVoteDialog(false)} /> : null}
       {checks ? (
         <Modal
           title={checks.includes('attachment') ? text('Did you mean to attach a file?') : text('Send without a subject?')}
@@ -581,5 +629,34 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       <span className="w-14 shrink-0 text-[13px] text-ink-3">{label}</span>
       <span className="flex min-w-0 flex-1 items-center gap-2">{children}</span>
     </div>
+  );
+}
+
+/** The voting buttons offered in the options menu (DMO-CMP-12). */
+const VOTE_PRESETS = { approve: ['Approve', 'Reject'], yesno: ['Yes', 'No'], yesnomaybe: ['Yes', 'No', 'Maybe'] } as const satisfies Record<string, readonly string[]>;
+
+/** Voting buttons in the sender's own words: two to six choices. */
+function CustomVote({ initial, onSave, onClose }: { initial: string[]; onSave: (choices: string[]) => void; onClose: () => void }) {
+  const [value, setValue] = useState(initial.join('; '));
+  const choices = voteChoices(value.split(/[;\n]/));
+  return (
+    <Modal
+      title={text('Your own voting buttons')}
+      labelledBy="mail-vote-title"
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={() => onSave(choices)} disabled={value.trim() !== '' && choices.length < 2}>
+            Use these
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-2 p-4 text-[13px]">
+        <TextField label={text('Choices, separated by ;')} value={value} onChange={(e) => setValue(e.target.value)} placeholder={text('Monday; Tuesday; Wednesday')} autoFocus />
+        <p className="text-[12px] text-ink-3">{text('Two to six choices. Recipients on this WorkSuite server vote with a button; anyone else replies with their choice.')}</p>
+      </div>
+    </Modal>
   );
 }

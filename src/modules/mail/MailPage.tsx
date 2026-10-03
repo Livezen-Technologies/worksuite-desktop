@@ -39,12 +39,16 @@ import { needsAsking, removesMessages, runQuickStep, saveAnswers, useQuickSteps,
 import { QuickStepAsk } from './QuickStepsUi';
 import { alertFor, chime, deviceId, freshRows, markSeen, myRules, ruleTakes } from './clientRules';
 import { CreateRule, useRules } from './MailRules';
+import { CatchUp } from './CatchUp';
+import { CleanupDialog, IgnoreDialog, conversationKeyOf, ignoreConversation, ignoredKeys, redundantInThread, stopIgnoring } from './Conversations';
 import { ReadingPane, afterClose, withTab, type OpenTab } from './ReadingPane';
 import { ScheduledList } from './Scheduled';
 import { SearchView } from './SearchView';
+import { MailFileViewer } from './FileViewer';
+import { ExportDialog } from './DataFiles';
 import { MailSidebar, unreadOf, type Place } from './Sidebar';
 import { StatusBar, WaitingPanel } from './StatusBar';
-import type { ComposeSeed, Label, MailPrefs, Mailbox, MessagePage, MessageRef, MessageRow } from './types';
+import type { ComposeSeed, Label, MailPrefs, Mailbox, MessageDetail, MessagePage, MessageRef, MessageRow } from './types';
 
 
 export { joinQuote, splitQuote, unquote } from './quote';
@@ -61,7 +65,14 @@ export { joinQuote, splitQuote, unquote } from './quote';
  * open, Esc back, e archive, # delete, ! spam, s star, u unread, r reply,
  * a reply all, f forward, n new email, / search.
  */
-export default function MailPage({ active }: ModuleProps) {
+export default function MailPage(props: ModuleProps) {
+  const { query } = useTab();
+  // An .eml or .msg opened from the system or Import (ENH-MAIL-03 DMO-DAT-04): read-only, in a tab of its own.
+  const file = query.get('file');
+  return file ? <MailFileViewer handle={file} /> : <MailWorkspace {...props} />;
+}
+
+function MailWorkspace({ active }: ModuleProps) {
   const qc = useQueryClient();
   const { query, go, route, openInWindow, navigate, path } = useTab();
   const place: Place = {
@@ -273,6 +284,8 @@ export default function MailPage({ active }: ModuleProps) {
   };
   const [rowMenu, setRowMenu] = useState<{ r: ListRow; x: number; y: number } | null>(null);
   const [custom, setCustom] = useState<{ what: 'snooze' | 'flag' | 'categories' | 'sweep'; targets: Target[] } | null>(null);
+  // Export a folder (ENH-MAIL-03 DMO-DAT-03).
+  const [exporting, setExporting] = useState<{ mailbox: string; folder: string; name: string } | null>(null);
 
   // The open message: the URL names it; its tab joins the strip.
   const current: MessageRef | null = msg ? { uid: msg, folder: msgFolder, mailbox: msgBox ?? effectiveBox } : null;
@@ -543,6 +556,9 @@ export default function MailPage({ active }: ModuleProps) {
             : folderName(folder.startsWith('label:') ? folder.slice(6) : folder.charAt(0).toUpperCase() + folder.slice(1));
   const included = boxes.filter((b) => b.in_unified !== false);
   const unifiedUnread = allCounts.data?.roles.inbox.count ?? included.reduce((n, b) => n + (unreadOf(b, counts.data ?? null) ?? 0), 0);
+  // New mail, said aloud to a screen reader (DMO-ACC-02): only a rise in unread inbox mail, never the first count.
+  const [heard, setHeard] = useState<{ last: number | null; say: string }>({ last: null, say: '' });
+  if (active && heard.last !== unifiedUnread) setHeard({ last: unifiedUnread, say: heard.last !== null && unifiedUnread > heard.last ? text('{n} new message(s) in the inbox', { n: unifiedUnread - heard.last }) : heard.say });
   const aside = allRole === 'inbox' ? text('{n} unread · {m} accounts', { n: unifiedUnread, m: included.length }) : allRole ? text('{m} accounts', { m: included.length }) : placeBox ? (placeBox.account_type === 'local_mailbox' ? text('WorkSuite Local') : placeBox.shared ? text('Shared') : (placeBox.provider_label ?? null)) : null;
   const unavailable = (firstPage?.data as (MessagePage & { unavailable?: Array<{ email: string; reason: string | null }> }) | undefined)?.unavailable ?? [];
   const notice = firstPage?.data.unsearched?.length
@@ -683,7 +699,8 @@ export default function MailPage({ active }: ModuleProps) {
       const quiet = old.has(rowKey(m));
       if (!quiet && rule.client_actions?.includes('alert')) alertFor(m, rule.name || text('Rule'));
       if (!quiet && rule.client_actions?.includes('sound')) chime();
-      if (rule.action === 'fileinto' && rule.action_arg) void moveMessage(ref, rule.action_arg.startsWith('label:') || ['archive', 'trash', 'spam', 'sent', 'drafts'].includes(rule.action_arg) ? rule.action_arg : `label:${rule.action_arg}`, rule.action_arg, m.subject).catch(() => undefined);
+      const special = rule.action_arg?.toLowerCase() ?? '';
+      if (rule.action === 'fileinto' && rule.action_arg) void moveMessage(ref, rule.action_arg.startsWith('label:') ? rule.action_arg : ['archive', 'trash', 'spam', 'sent', 'drafts'].includes(special) ? special : `label:${rule.action_arg}`, rule.action_arg, m.subject).catch(() => undefined);
       else if (rule.action === 'star' && !m.is_starred) void messageAction(ref, 'star', m.subject).catch(() => undefined);
       else if (rule.action === 'seen' && !m.is_read) void messageAction(ref, 'read', m.subject).catch(() => undefined);
       else if (rule.action === 'delete') void messageAction(ref, 'trash', m.subject).catch(() => undefined);
@@ -692,11 +709,39 @@ export default function MailPage({ active }: ModuleProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientRuleRows, rules.data]);
   const [ruleFor, setRuleFor] = useState<MessageRow | null>(null);
+  // Ignore conversation (DMO-INB-10): offered on a message with a stable thread; Stop ignoring from Deleted Items.
+  const ignored = ignoredKeys(rules.data?.filters);
+  const [ignoring, setIgnoring] = useState<{ key: string; target: Target; here: Target[] } | null>(null);
+  const conversationItems = (t: Target) => {
+    const key = conversationKeyOf(t.row);
+    if (!key || networkOffline) return [];
+    if (t.folder === 'trash' && ignored.has(key)) {
+      return [{ id: 'unignore', label: text('Stop ignoring conversation'), icon: 'undo', onSelect: () => void stopIgnoring(key, t).then(() => (void qc.invalidateQueries({ queryKey: ['mail'] }), toast('success', text('No longer ignored; the message is back in the Inbox.'))), (e: unknown) => toast('error', errorMessage(e))) }];
+    }
+    if (t.folder === 'trash' || ignored.has(key)) return [];
+    return [
+      { id: 'ignore', label: text('Ignore conversation'), icon: 'trash', onSelect: () => setIgnoring({ key, target: t, here: flat.filter((r) => conversationKeyOf(r.row) === key).map(targetOf) }) },
+      { id: 'cleanup', label: text('Clean up conversation'), icon: 'eraser', onSelect: () => void cleanUp(t) },
+    ];
+  };
+  // Clean up conversation (DMO-INB-11): the thread as the server has it, read without marking anything read.
+  const [cleaning, setCleaning] = useState<{ target: Target; redundant: MessageDetail[] } | null>(null);
+  const cleanUp = async (t: Target) => {
+    try {
+      const r = await apiGetMeta<{ messages: MessageDetail[] }>(`/api/mail/messages/${t.row.id}/thread`, withMailbox({ folder: t.folder, peek: 1 }, t.mailbox));
+      const flagged = states.data?.flags ?? {};
+      const redundant = redundantInThread(r.data.messages ?? [], (m) => !!flagged[stateKey(t.mailbox, t.folder, m.id)] && !flagged[stateKey(t.mailbox, t.folder, m.id)]!.completed_at);
+      if (!redundant.length) toast('info', text('Nothing to clean up: every message in this conversation says something new.'));
+      else setCleaning({ target: t, redundant });
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
 
   const menuSections = (targets: Target[]) => [
     ...(quickSteps.data?.length ? [{ id: 'qs', label: text('Quick Steps'), items: quickSteps.data.slice(0, 12).map((q) => ({ id: `qs${q.id}`, label: q.name, icon: q.icon, shortcut: q.shortcut ? `Ctrl+Shift+${q.shortcut}` : undefined, onSelect: () => runStep(q, targets) })) }] : []),
     ...stateSections(targets, stateActs, cats.data ?? null, { focusTabs: focusOn ? focusTab : null, onCustom: (what) => setCustom({ what, targets }) }),
-    ...(targets.length === 1 ? [{ id: 'rule', items: [{ id: 'rule', label: text('Create rule…'), icon: 'filter', description: targets[0]!.row.from_email, onSelect: () => setRuleFor(targets[0]!.row) }] }] : []),
+    ...(targets.length === 1 ? [{ id: 'rule', items: [{ id: 'rule', label: text('Create rule…'), icon: 'filter', description: targets[0]!.row.from_email, onSelect: () => setRuleFor(targets[0]!.row) }, ...conversationItems(targets[0]!)] }] : []),
   ];
   const multi = flat.filter((r) => selection.has(r.key));
   const currentRow = flat.find((r) => r.key === currentKey) ?? null;
@@ -818,6 +863,7 @@ export default function MailPage({ active }: ModuleProps) {
               syncingAll={shared.all}
               onSyncAll={syncAll}
               onSyncAccount={syncAccount}
+              onExport={(b, slug, label) => setExporting({ mailbox: String(b.id), folder: slug, name: label })}
               offline={networkOffline}
               pending={mailPending.length}
               cacheDays={cacheDays}
@@ -857,6 +903,7 @@ export default function MailPage({ active }: ModuleProps) {
               </Button>
             </div>
           ) : null}
+          <CatchUp enabled={active && boxes.length > 0 && globalPrefs.catchUp !== false && !networkOffline} rows={folder === 'inbox' ? decorated : []} vips={(vips.data ?? []).map((v) => v.address)} states={states.data} onOpen={openRef} />
           <div className="flex min-h-0 flex-1">
             {compose?.shown ? (
               <Compose key={compose.n} seed={compose.seed} boxes={boxes} defaultBox={current?.mailbox ?? effectiveBox ?? (defaultBox ? String(defaultBox.id) : null)} offline={offline} onClose={() => setCompose(null)} onReopen={openCompose} />
@@ -873,6 +920,7 @@ export default function MailPage({ active }: ModuleProps) {
           </div>
         </div>
       </div>
+      <div aria-live="polite" className="sr-only">{heard.say}</div>
       <StatusBar summary={summary} sync={shared.status} waiting={mailPending.length} zoom={prefs.zoom ?? 100} localBytes={localBytes.data ?? null} items={virtualOutbox || folder === 'outbox' ? null : (firstPage?.data.total ?? null)} notice={brokenRules ? { text: brokenRules === 1 ? text('1 rule was switched off') : text('{n} rules were switched off', { n: brokenRules }), onClick: () => navigate('/settings/mail?tab=rules') } : null} unread={allRole === 'inbox' ? unifiedUnread : null} onOpenSync={() => navigate('/settings/mail?tab=accounts')} />
       {outgoing.length ? (
         <div role="status" aria-live="polite" className="pointer-events-none fixed bottom-14 left-1/2 z-40 flex -translate-x-1/2 flex-col gap-2">
@@ -889,6 +937,45 @@ export default function MailPage({ active }: ModuleProps) {
       {adding ? <AddMailbox onClose={() => setAdding(false)} /> : null}
       {sheet ? <ShortcutSheet prefs={prefs} onPrefs={setPrefs} onClose={() => setSheet(false)} /> : null}
       {gotoOpen ? <GoToFolder boxes={boxes} onPick={pick} onClose={() => setGotoOpen(false)} /> : null}
+      {cleaning ? (
+        <CleanupDialog
+          subject={cleaning.target.row.subject}
+          count={cleaning.redundant.length}
+          onClose={() => setCleaning(null)}
+          onConfirm={async () => {
+            let moved = 0;
+            for (const m of cleaning.redundant) {
+              try {
+                await messageAction({ uid: String(m.id), folder: cleaning.target.folder, mailbox: cleaning.target.mailbox }, 'trash', m.subject);
+                moved++;
+              } catch {
+                // Left where it is; the count says how many went.
+              }
+            }
+            setCleaning(null);
+            void qc.invalidateQueries({ queryKey: ['mail'] });
+            toast('success', text('{n} message(s) moved to Deleted Items.', { n: moved }));
+          }}
+        />
+      ) : null}
+      {ignoring ? (
+        <IgnoreDialog
+          subject={ignoring.target.row.subject}
+          count={Math.max(1, ignoring.here.length)}
+          onClose={() => setIgnoring(null)}
+          onConfirm={async () => {
+            try {
+              const r = await ignoreConversation(ignoring.key, ignoring.target.row.subject, ignoring.target.mailbox, ignoring.here.length ? ignoring.here : [ignoring.target]);
+              setIgnoring(null);
+              setSelection(new Set());
+              void qc.invalidateQueries({ queryKey: ['mail'] });
+              toast('success', r.where === 'server' ? text('Conversation ignored. Later messages go to Deleted Items on every device.') : text('Conversation ignored. This mailbox cannot keep the rule on its server, so this computer moves later messages while WorkSuite runs.'));
+            } catch (e) {
+              toast('error', errorMessage(e));
+            }
+          }}
+        />
+      ) : null}
       {ruleFor ? (
         <CreateRule
           row={ruleFor}
@@ -928,6 +1015,7 @@ export default function MailPage({ active }: ModuleProps) {
         />
       ) : null}
       {custom?.what === 'categories' ? <CategoriesDialog cats={cats.data ?? []} onClose={() => setCustom(null)} /> : null}
+      {exporting ? <ExportDialog mailbox={exporting.mailbox} folder={exporting.folder} folderName={exporting.name} onClose={() => setExporting(null)} /> : null}
       {custom?.what === 'sweep' && custom.targets[0]?.mailbox ? <SweepDialog mailbox={custom.targets[0].mailbox} folder={custom.targets[0].folder} sender={custom.targets[0].row.from_email} name={custom.targets[0].row.from_name} onClose={() => setCustom(null)} /> : null}
       {custom && (custom.what === 'snooze' || custom.what === 'flag') ? (
         <DatesDialog
@@ -993,7 +1081,12 @@ export function composeSeedFromQuery(query: URLSearchParams): ComposeSeed {
   const bcc = list('bcc');
   const subject = (query.get('subject') ?? '').replace(/[\r\n]+/g, ' ').slice(0, 500);
   const body = (query.get('body') ?? '').slice(0, 20_000);
-  return { mode: 'new', ...(to ? { to } : {}), ...(cc ? { cc } : {}), ...(bcc ? { bcc } : {}), ...(subject ? { subject } : {}), ...(body ? { body } : {}) };
+  // A reply or forward to a message opened from a file (DMO-DAT-04): quoted, and threaded when it had a Message-ID.
+  const quote = (query.get('quote') ?? '').slice(0, 20_000);
+  const asked = query.get('mode');
+  const mode: ComposeSeed['mode'] = asked === 'reply' || asked === 'reply_all' || asked === 'forward' ? asked : 'new';
+  const irt = query.get('irt') ?? '';
+  return { mode, ...(to ? { to } : {}), ...(cc ? { cc } : {}), ...(bcc ? { bcc } : {}), ...(subject ? { subject } : {}), ...(body ? { body } : {}), ...(quote ? { quote } : {}), ...(/^<[^<>\s]+>$/.test(irt) ? { inReplyTo: irt } : {}) };
 }
 
 /** "Sending “Re: Payroll export” in 8 s", counting down. */

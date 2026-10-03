@@ -7,6 +7,7 @@ import { call, errorMessage } from '../../core/bridge';
 import { text } from '../../core/i18n';
 import { isOfficeFile, openInOffice } from '../../core/open-document';
 import { useStore } from '../../core/store';
+import { attachmentRisk } from '@shared/attachments';
 import { useTab } from '../../core/tab-context';
 import { dateLabel, dayKey, parseTs, timeLabel, todayInZone } from '../../core/time';
 import { toast } from '../../core/toasts';
@@ -22,9 +23,14 @@ import { createTask } from '../tasks/actions';
 import { createMeeting, invitation, openMeeting } from '../meet/api';
 import { messageAction, moveMessage, setLabel, useFolders, useLabels, useMessageContext, type MessageActionName } from './api';
 import { folderName, plainText, securityVerdict } from './model';
-import { escapeHtml, highlightText, isDesignedMail, mailFrameDoc, sanitizeMailHtml } from './sanitize';
+import { blockedImageUrls, escapeHtml, highlightText, isDesignedMail, mailFrameDoc, sanitizeMailHtml, withProxiedImages } from './sanitize';
 import { TeamBar, TeamWork } from './Team';
 import { CategoryChip } from './parts';
+import { TaskFromMessage, meetingRoute, messageLink } from './MessageTask';
+import { AddContactDialog, parseSignature, type SignatureGuess } from './AddContact';
+import { ImmersiveReader } from './ImmersiveReader';
+import { AppsPane } from './AppsPane';
+import { MarkerChips, RecallDialog, ReceiptBar, ReportDialog, SmimeChip, VoteBar, VoteTally, sendReceipt } from './MessageExtras';
 import type { ComposeSeed, MailPrefs, Mailbox, MessageContext, MessageDetail, MessageRef, MessageRow } from './types';
 
 /** A PDF attachment, by its type or its name. */
@@ -92,6 +98,10 @@ export function MessageView(p: MessageViewProps) {
   const { openInWindow, navigate } = useTab();
   const [ai, setAi] = useState<{ task: TextTask; title: string; lang?: string } | null>(null);
   const [source, setSource] = useState(false);
+  // Report phishing or junk, and recall (ENH-MAIL-03 DMO-SEC-02, DMO-CMP-10).
+  const [extra, setExtra] = useState<'phishing' | 'junk' | 'recall' | 'task' | null>(null);
+  const [contactGuess, setContactGuess] = useState<SignatureGuess | null>(null);
+  const [receiptAnswered, setReceiptAnswered] = useState<string | null>(null);
   const [menu, setMenu] = useState<'top' | 'bottom' | 'move' | 'label' | 'translate' | 'states' | null>(null);
   const statesBtn = useRef<HTMLButtonElement>(null);
   // Find in this message (DMO-SRC-06): matches are highlighted in the body.
@@ -112,7 +122,26 @@ export function MessageView(p: MessageViewProps) {
   });
   const m = q.data?.data;
   const clean = useMemo(() => (m ? sanitizeMailHtml(m.body_html) : null), [m]);
-  const found = useMemo(() => highlightText(clean?.html ?? '', find ?? ''), [clean, find]);
+  // Plain text (DMO-RD-09): asked for on this message, or always for this sender.
+  const plainSenders = p.prefs.plainTextSenders ?? [];
+  const [plainAsked, setPlainAsked] = useState<boolean | null>(null);
+  const plainSender = !!m && plainSenders.includes(m.from_email.toLowerCase());
+  const plainOn = plainAsked ?? plainSender;
+  const plainBody = useMemo(() => (clean ? plainText(clean.html) : ''), [clean]);
+  const [immersive, setImmersive] = useState(false);
+  const found = useMemo(() => highlightText(plainOn ? `<div style="white-space:pre-wrap">${escapeHtml(plainBody)}</div>` : (clean?.html ?? ''), find ?? ''), [clean, find, plainOn, plainBody]);
+  // Pictures, when the reader asks — always through WorkSuite's image proxy (DMO-SEC-07, DMO-RD-02).
+  const [picturesAsked, setPicturesAsked] = useState(false);
+  const imageSenders = p.prefs.imageSenders ?? [];
+  const picturesWanted = !!m && (picturesAsked || imageSenders.includes(m.from_email.toLowerCase())) && (clean?.blockedImages ?? 0) > 0 && !p.offline;
+  const imageUrls = useMemo(() => (picturesWanted && clean ? blockedImageUrls(clean) : []), [picturesWanted, clean]);
+  const proxied = useQuery({
+    queryKey: ['mail', 'image-links', ref.mailbox, ref.folder, ref.uid],
+    queryFn: () => apiPost<{ enabled: boolean; links: Record<string, string> }>('/api/mail/image-links', { urls: imageUrls }),
+    enabled: imageUrls.length > 0,
+    staleTime: 30 * 60_000,
+  });
+  const shownHtml = useMemo(() => (!plainOn && proxied.data?.enabled && origin && clean ? withProxiedImages(found.html, clean.remoteImages, proxied.data.links, origin) : found.html), [proxied.data, found.html, origin, clean, plainOn]);
   const context = useMessageContext(ref, m?.from_email ?? null, !!m && !p.offline);
   const folders = useFolders(Number(ref.mailbox ?? 0), !!ref.mailbox && menu === 'move');
   const labels = useLabels(p.localStore && menu === 'label');
@@ -173,7 +202,7 @@ export function MessageView(p: MessageViewProps) {
   };
   const print = () => {
     if (!m || !clean) return;
-    const html = `<h2 style="font-family:sans-serif">${escapeHtml(m.subject)}</h2><p style="font-family:sans-serif;color:#555">${escapeHtml(text('From'))} ${escapeHtml(m.from_name)} &lt;${escapeHtml(m.from_email)}&gt;<br>${escapeHtml(text('To'))} ${escapeHtml(m.to.join(', '))}<br>${escapeHtml(dateLabel(m.created_at))} ${escapeHtml(timeLabel(m.created_at))}</p><hr>${clean.html}`;
+    const html = `<h2 style="font-family:sans-serif">${escapeHtml(m.subject)}</h2><p style="font-family:sans-serif;color:#555">${escapeHtml(text('From'))} ${escapeHtml(m.from_name)} &lt;${escapeHtml(m.from_email)}&gt;<br>${escapeHtml(text('To'))} ${escapeHtml(m.to.join(', '))}<br>${escapeHtml(dateLabel(m.created_at))} ${escapeHtml(timeLabel(m.created_at))}</p><hr>${sanitizeMailHtml(m.body_html, { safeLinks: false }).html}`;
     void call('print:print', { html, title: m.subject || text('Email') }).catch((e) => toast('error', errorMessage(e)));
   };
   const downloadOriginal = () =>
@@ -192,13 +221,8 @@ export function MessageView(p: MessageViewProps) {
     if (!m) return;
     const c = context.data?.sender;
     if (c?.contact_id) return navigate(`/contacts?open=${c.contact_id}`);
-    try {
-      await apiPost('/api/contacts', { display_name: m.from_name || m.from_email, work_email: m.from_email });
-      void qc.invalidateQueries({ queryKey: ['mail', 'context'] });
-      toast('success', text('{name} is in your contacts.', { name: m.from_name || m.from_email }));
-    } catch (e) {
-      toast('error', errorMessage(e));
-    }
+    // Filled from the signature, for review (DMO-PPL-04).
+    setContactGuess(parseSignature(clean ? plainText(clean.html) : '', m.from_name, m.from_email));
   };
   const block = async () => {
     if (!m) return;
@@ -212,7 +236,7 @@ export function MessageView(p: MessageViewProps) {
   const saveNote = async () => {
     if (!m || !clean) return;
     try {
-      const r = await apiPost<{ id: number }>('/api/notes', { title: m.subject || text('Email'), body: `<p><b>${escapeHtml(m.from_name || m.from_email)}</b> &lt;${escapeHtml(m.from_email)}&gt; · ${escapeHtml(dateLabel(m.created_at))}</p><hr>${clean.html}` });
+      const r = await apiPost<{ id: number }>('/api/notes', { title: m.subject || text('Email'), body: `<p><b>${escapeHtml(m.from_name || m.from_email)}</b> &lt;${escapeHtml(m.from_email)}&gt; · ${escapeHtml(dateLabel(m.created_at))}</p><hr>${sanitizeMailHtml(m.body_html, { safeLinks: false }).html}` });
       toast('success', text('Saved as a note.'));
       if (r?.id) navigate(`/notes?note=${r.id}`);
     } catch (e) {
@@ -281,6 +305,20 @@ export function MessageView(p: MessageViewProps) {
   useEffect(() => {
     if (m) onLoaded?.(m.subject, m.from_name || m.from_email);
   }, [m, onLoaded]);
+  // A read-receipt request answered by the person's setting (DMO-CMP-11): always — sent once per message on this computer.
+  const receiptTo = context.data?.markers?.read_receipt_to ?? null;
+  const receiptsPref = p.prefs.readReceipts ?? 'ask';
+  useEffect(() => {
+    if (!m || !receiptTo || receiptsPref !== 'always' || ref.folder === 'sent' || p.offline) return;
+    const key = `mail-receipt:${m.message_id}`;
+    try {
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, '1');
+    } catch {
+      return;
+    }
+    void sendReceipt(receiptTo, m.subject, ref.mailbox ?? null).catch(() => undefined);
+  }, [m, receiptTo, receiptsPref, ref.folder, ref.mailbox, p.offline]);
   const replied = useRef(false);
   useEffect(() => {
     if (p.autoReply && m && clean && !replied.current) {
@@ -302,8 +340,23 @@ export function MessageView(p: MessageViewProps) {
   // D13 (the reader's More) and D14 (the action bar's More).
   const moreItems = (where: 'top' | 'bottom'): MenuSection[] => {
     const keep: MenuItem[] = [];
+    if (canOpen('calendar')) keep.push({ id: 'meeting', label: text('Reply with meeting'), description: text('A Calendar event with everyone on this email'), icon: 'calendar', disabled: p.offline, onSelect: () => navigate(meetingRoute(m, p.account?.email ?? null, messageLink(ref))) });
+    if (canOpen('tasks')) keep.push({ id: 'task', label: text('Create task…'), description: text('With assignee, list and due date'), icon: 'list-todo', onSelect: () => setExtra('task') });
     if (where === 'bottom' && canOpen('tasks')) keep.push({ id: 'remind', label: text('Remind me about this'), description: text('A task for tomorrow'), icon: 'bell', onSelect: () => void remind() });
     if (canOpen('notes')) keep.push({ id: 'note', label: text('Save as note'), icon: 'file-text', onSelect: () => void saveNote() });
+    // Reading (DMO-RD-04, DMO-RD-09).
+    keep.push({ id: 'immersive', label: text('Immersive reader'), icon: 'book-open', onSelect: () => setImmersive(true) });
+    keep.push({ id: 'plain', label: plainOn ? text('Show as HTML') : text('Show as plain text'), icon: 'file-text', onSelect: () => setPlainAsked(!plainOn) });
+    keep.push({
+      id: 'plain-sender',
+      label: plainSender ? text('Stop showing plain text from {email}', { email: m.from_email }) : text('Always show plain text from {email}', { email: m.from_email }),
+      icon: 'file-text',
+      onSelect: () => {
+        const me = m.from_email.toLowerCase();
+        p.onPrefs({ plainTextSenders: plainSender ? plainSenders.filter((x) => x !== me) : [...plainSenders.filter((x) => x !== me), me].slice(-500) });
+        setPlainAsked(null);
+      },
+    });
     keep.push({ id: 'link', label: where === 'top' ? text('Copy link to email') : text('Copy link to this message'), icon: 'link', disabled: !origin, onSelect: copyLink });
     const copyItems: MenuItem[] = [
       { id: 'copy-sender', label: text('Copy sender address'), icon: 'copy', onSelect: () => copy(m.from_email, text('Address copied.')) },
@@ -324,6 +377,14 @@ export function MessageView(p: MessageViewProps) {
         items: [
           { id: 'contact', label: context.data?.sender?.contact_id ? text('Open sender in Contacts') : text('Add sender to contacts'), icon: 'user-plus', disabled: !canOpen('contacts') || p.offline, reason: text('Contacts is not available.'), onSelect: () => void addContact() },
           ...(where === 'top' ? [{ id: 'block', label: text('Block sender'), icon: 'warning', danger: true, disabled: p.offline, reason: text('Available when you are back online.'), onSelect: () => void block() }] : []),
+        ],
+      },
+      {
+        id: 'report',
+        items: [
+          { id: 'phishing', label: text('Report phishing'), icon: 'shield-alert', danger: true, disabled: p.offline || !ref.mailbox, reason: p.offline ? text('Available when you are back online.') : text('Only mail from a connected mailbox can be reported.'), onSelect: () => setExtra('phishing') },
+          { id: 'junk', label: text('Report junk'), icon: 'spam', disabled: p.offline || !ref.mailbox || ref.folder === 'spam', reason: p.offline ? text('Available when you are back online.') : text('Only mail from a connected mailbox can be reported.'), onSelect: () => setExtra('junk') },
+          ...(ref.folder === 'sent' ? [{ id: 'recall', label: text('Recall this message…'), icon: 'undo', disabled: p.offline || !m.message_id, reason: text('Available when you are back online.'), onSelect: () => setExtra('recall') }] : []),
         ],
       },
     ];
@@ -389,6 +450,7 @@ export function MessageView(p: MessageViewProps) {
         <Tool icon="printer" label="Print" onClick={print} />
         <Tool icon="download" label="Download original (.eml)" onClick={downloadOriginal} disabled={p.offline} />
         <Tool ref={topMore} icon="more" label="More" onClick={() => setMenu('top')} />
+        <Tool icon={p.prefs.appsPane ? 'panel-right-close' : 'panel-right-open'} label={p.prefs.appsPane ? text('Hide the Apps pane') : text('Apps: CRM, tasks, helpdesk and notes for this message')} onClick={() => p.onPrefs({ appsPane: !p.prefs.appsPane })} active={!!p.prefs.appsPane} />
         <span className="flex-1" />
         <Tool icon="zoom-out" label="Zoom out" onClick={() => p.onPrefs({ zoom: Math.max(75, zoom - 10) })} disabled={zoom <= 75} />
         <Tool icon="zoom-in" label="Zoom in" onClick={() => p.onPrefs({ zoom: Math.min(200, zoom + 10) })} disabled={zoom >= 200} />
@@ -410,7 +472,8 @@ export function MessageView(p: MessageViewProps) {
           ]}
         />
       ) : null}
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="max-h-[45%] shrink-0 overflow-y-auto border-b border-line px-6 pt-4 pb-4 scroll-thin">
           <h2 className="text-[21px] font-bold leading-tight text-ink selectable">{m.subject || text('(no subject)')}</h2>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -431,6 +494,9 @@ export function MessageView(p: MessageViewProps) {
                 <Chip tone="warning">{text('External')}</Chip>
               </span>
             ) : null}
+            <MarkerChips markers={context.data?.markers} />
+            {context.data?.markers?.smime === 'signed' && !p.offline ? <SmimeChip msgRef={ref} from={m.from_email} mailbox={ref.mailbox ?? null} /> : null}
+            {context.data?.markers?.smime === 'encrypted' ? <Chip tone="warning">{text('Encrypted (S/MIME)')}</Chip> : null}
             {p.account ? <Chip tone="indigo">{p.account.account_type === 'local_mailbox' ? text('WorkSuite Local') : p.account.shared ? p.account.email : p.account.provider_label ?? p.account.email}</Chip> : null}
             {m.labels?.map((l) => <Chip key={l.id}>{l.name}</Chip>)}
             {p.marks?.pinned ? (
@@ -497,12 +563,32 @@ export function MessageView(p: MessageViewProps) {
             {text('You don’t often get email from {email}.', { email: m.from_email })}
           </p>
         ) : null}
+        {context.data?.markers?.smime === 'encrypted' ? (
+          <p role="note" className="mx-6 mt-3 rounded-[8px] bg-warning-bg px-3 py-1.5 text-[12.5px] text-warning">{text('This message is encrypted with S/MIME. WorkSuite keeps no private keys, so it cannot be opened here — open it in the mail app that holds your certificate.')}</p>
+        ) : null}
+        {context.data?.markers?.vote.length && ref.folder !== 'sent' ? (
+          <VoteBar msgRef={ref} choices={context.data.markers.vote} subject={m.subject} onReply={(choice) => p.onReply({ mode: 'reply', to: m.from_email, subject: `${choice}: ${m.subject}`, body: choice, inReplyTo: m.message_id, mailbox: ref.mailbox })} />
+        ) : null}
+        {ref.folder === 'sent' && m.message_id && !p.offline ? <VoteTally messageId={m.message_id} /> : null}
+        {receiptTo && receiptsPref === 'ask' && ref.folder !== 'sent' && receiptAnswered !== m.message_id && !p.offline ? (
+          <ReceiptBar to={receiptTo} subject={m.subject} mailbox={ref.mailbox ?? null} onAnswered={() => setReceiptAnswered(m.message_id)} />
+        ) : null}
         {m.team && ref.mailbox ? <TeamBar msgRef={ref} m={m} me={me ? Number(me.id) : null} /> : null}
         <div className="flex shrink-0 flex-wrap items-center gap-2 px-6 pt-4">
           <AiChip label="Summarise" onClick={() => setAi({ task: 'summarize', title: text('Summary of this email') })} />
           <AiChip label="Action items" onClick={() => setAi({ task: 'actions', title: text('Action items in this email') })} />
           <AiChip ref={translateBtn} label="Translate" onClick={() => setMenu('translate')} />
-          {clean.blockedImages > 0 ? <span className="text-[12px] text-ink-3">{text(clean.blockedImages === 1 ? '1 remote image was blocked to protect your privacy.' : '{n} remote images were blocked to protect your privacy.', { n: clean.blockedImages })}</span> : null}
+          {clean.blockedImages > 0 && !(proxied.data?.enabled && picturesWanted) ? (
+            <span className="flex flex-wrap items-center gap-2 text-[12px] text-ink-3">
+              {proxied.data && !proxied.data.enabled ? text('Pictures are shown only through WorkSuite, and your organisation has turned that off.') : text(clean.blockedImages === 1 ? '1 remote image was blocked to protect your privacy.' : '{n} remote images were blocked to protect your privacy.', { n: clean.blockedImages })}
+              {!p.offline && !(proxied.data && !proxied.data.enabled) ? (
+                <>
+                  <button type="button" className="font-semibold text-primary hover:underline" onClick={() => setPicturesAsked(true)}>{text('Show pictures')}</button>
+                  <button type="button" className="font-semibold text-primary hover:underline" onClick={() => p.onPrefs({ imageSenders: [...imageSenders.filter((x) => x !== m.from_email.toLowerCase()), m.from_email.toLowerCase()].slice(-500) })}>{text('Always show from {email}', { email: m.from_email })}</button>
+                </>
+              ) : null}
+            </span>
+          ) : null}
         </div>
         {find !== null ? (
           <div role="search" aria-label={text('Find in message')} className="mx-5 mt-3 flex items-center gap-2 rounded-[8px] border border-line bg-subtle px-2 py-1 text-[12.5px]">
@@ -513,9 +599,11 @@ export function MessageView(p: MessageViewProps) {
           </div>
         ) : null}
         {hasInvite(m) ? <InviteCard msgRef={ref} offline={p.offline} /> : null}
-        <iframe title={text('Message')} sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={mailFrameDoc(found.html, zoom, darkBody)} className={cx('mx-5 mt-3 min-h-[120px] flex-1 rounded-[8px] border-0', darkBody ? 'bg-surface' : 'bg-white', darkTheme && !darkBody && 'p-2')} />
+        <iframe title={text('Message')} sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={mailFrameDoc(shownHtml, zoom, darkBody)} className={cx('mx-5 mt-3 min-h-[120px] flex-1 rounded-[8px] border-0', darkBody ? 'bg-surface' : 'bg-white', darkTheme && !darkBody && 'p-2')} />
         {m.attachments.length ? <Attachments m={m} msgRef={ref} offline={p.offline} /> : null}
         {m.team && ref.mailbox && m.conversation_key ? <TeamWork msgRef={ref} m={m} account={p.account} offline={p.offline} /> : null}
+      </div>
+      {p.prefs.appsPane ? <AppsPane m={m} link={messageLink(ref)} context={context.data} offline={p.offline} navigate={navigate} onCreateTask={() => setExtra('task')} onSaveNote={() => void saveNote()} onClose={() => p.onPrefs({ appsPane: false })} /> : null}
       </div>
       <ActionBar style={toolbarStyle} onReply={reply} onArchive={() => void act('archive')} onDelete={() => void act('trash')} moreRef={bottomMore} onMore={() => setMenu('bottom')} onMove={() => setMenu('move')} onUnread={() => void act('unread')} onStar={() => void act(m.is_starred ? 'unstar' : 'star')} starred={m.is_starred} canMove={!!ref.mailbox || p.localStore} />
       {menu === 'top' ? <Menu sections={moreItems('top')} label={text('More')} anchor={topMore} prefer="bottom" align="end" onClose={() => setMenu(null)} /> : null}
@@ -537,6 +625,29 @@ export function MessageView(p: MessageViewProps) {
         />
       ) : null}
       {source ? <SourceDialog msgRef={ref} onClose={() => setSource(false)} /> : null}
+      {extra === 'phishing' || extra === 'junk' ? (
+        <ReportDialog kind={extra} msgRef={ref} from={m.from_email} subject={m.subject} canBlock={!!ref.mailbox} onDone={() => (setExtra(null), p.onGone())} onClose={() => setExtra(null)} />
+      ) : null}
+      {extra === 'recall' && m.message_id ? (
+        <RecallDialog
+          messageId={m.message_id}
+          onReplace={() => p.onReply({ mode: 'new', to: m.to.join(', '), cc: m.cc.length ? m.cc.join(', ') : undefined, subject: m.subject, body: plainText(clean.html), mailbox: ref.mailbox })}
+          onClose={() => setExtra(null)}
+        />
+      ) : null}
+      {contactGuess ? (
+        <AddContactDialog
+          guess={contactGuess}
+          email={m.from_email}
+          onSaved={() => {
+            setContactGuess(null);
+            void qc.invalidateQueries({ queryKey: ['mail', 'context'] });
+          }}
+          onClose={() => setContactGuess(null)}
+        />
+      ) : null}
+      {immersive ? <ImmersiveReader subject={m.subject} from={m.from_name ? `${m.from_name} <${m.from_email}>` : m.from_email} plain={plainBody} prefs={p.prefs.immersive ?? {}} onPrefs={(v) => p.onPrefs({ immersive: v })} onClose={() => setImmersive(false)} /> : null}
+      {extra === 'task' ? <TaskFromMessage message={m} msgRef={ref} onClose={() => setExtra(null)} /> : null}
     </article>
   );
 }
@@ -658,8 +769,25 @@ function ActionBar({ style, onReply, onArchive, onDelete, onMove, onUnread, onSt
   );
 }
 
+/** What the organisation blocks on top of the built-in list (DMO-SEC-04); none from an older server. */
+function useSecurityPolicy() {
+  return useQuery({
+    queryKey: ['mail', 'security-policy'],
+    queryFn: async () => {
+      try {
+        return await apiGet<{ blocked_extensions: string[]; security_mailbox: boolean }>('/api/mail/security/policy');
+      } catch {
+        return { blocked_extensions: [], security_mailbox: false };
+      }
+    },
+    staleTime: 30 * 60_000,
+  });
+}
+
 function Attachments({ m, msgRef, offline }: { m: MessageDetail; msgRef: MessageRef; offline: boolean }) {
   const { uid, folder, mailbox } = msgRef;
+  const policy = useSecurityPolicy();
+  const extra = policy.data?.blocked_extensions ?? [];
   /** "Save to Files" (MAIL-RD-03): the server copies it into the person's Files; nothing goes through this computer. */
   const save = async (a: MessageDetail['attachments'][number]) => {
     try {
@@ -673,6 +801,21 @@ function Attachments({ m, msgRef, offline }: { m: MessageDetail; msgRef: Message
     <div className="flex max-h-[30%] shrink-0 flex-col gap-2 overflow-y-auto border-t border-line px-6 py-3 scroll-thin">
       {m.attachments.map((a) => {
         const size = `${Math.max(1, Math.round(a.size / 1024))} KB`;
+        const risk = attachmentRisk(a.name, extra);
+        if (risk === 'blocked') {
+          return (
+            <div key={a.ref} className="flex w-full max-w-[520px] items-center gap-3 rounded-[10px] border border-line bg-subtle px-3 py-2 text-[13px]" title={text('WorkSuite blocks this kind of attachment: it can run as a program on your computer.')}>
+              <FileBadge name={a.name} />
+              <span className="min-w-0">
+                <span className="block truncate font-semibold text-ink-2">{a.name}</span>
+                <span className="flex items-center gap-1 text-[11.5px] text-danger">
+                  <Icon name="lock" size={11} />
+                  {text('Blocked — it could run as a program')}
+                </span>
+              </span>
+            </div>
+          );
+        }
         if (offline) {
           return (
             <div key={a.ref} className="flex items-center gap-3 rounded-[10px] border border-dashed border-line px-3 py-2.5 text-[13px]">
@@ -691,8 +834,13 @@ function Attachments({ m, msgRef, offline }: { m: MessageDetail; msgRef: Message
             draggable
             onClick={() =>
               // A PDF opens in PDF Studio, preview only (PDF-OPEN-004); a Word, Excel or PowerPoint file in a
-              // WorkSuite DOC / Sheet / Slides tab; anything else downloads and opens.
-              isPdf(a)
+              // WorkSuite DOC / Sheet / Slides tab; a file with macros is saved, never opened elsewhere (DMO-SEC-04);
+              // anything else downloads and opens.
+              risk === 'macro'
+                ? void call('transfers:download', { mail: { uid, ref: a.ref, folder, mailbox }, name: a.name })
+                    .then(() => toast('info', text('{name} has macros: it is saved, not opened. Open it only if you trust the sender.', { name: a.name })))
+                    .catch((e) => toast('error', errorMessage(e)))
+                : isPdf(a)
                 ? openPdf({ kind: 'mail', uid: String(uid), ref: a.ref, folder, mailbox: mailbox ?? null, name: a.name }, a.name)
                 : isOfficeFile(a.name)
                   ? openInOffice({ kind: 'api', name: a.name, path: `/api/mail/messages/${uid}/attachments/${encodeURIComponent(a.ref)}?${new URLSearchParams({ folder, dl: '1', ...(mailbox ? { mailbox } : {}) })}` })
@@ -707,7 +855,7 @@ function Attachments({ m, msgRef, offline }: { m: MessageDetail; msgRef: Message
             <span className="min-w-0">
               <span className="block truncate text-[13px] font-semibold text-ink">{a.name}</span>
               <span className="block text-[11.5px] text-ink-3">
-                {size} · {isPdf(a) ? text('open') : text('download')}
+                {size} · {risk === 'macro' ? text('has macros — save only') : isPdf(a) ? text('open') : text('download')}
               </span>
             </span>
           </button>

@@ -38,8 +38,10 @@ export function deviceId(): string {
 }
 
 /** One condition against a row: From, To, Subject or anywhere; contains, is, or a * pattern. */
-export function rowMatches(t: Pick<MailFilter, 'field' | 'op' | 'value'>, m: Pick<MessageRow, 'from_name' | 'from_email' | 'subject'> & { to?: string }): boolean {
+export function rowMatches(t: Pick<MailFilter, 'field' | 'op' | 'value'>, m: Pick<MessageRow, 'from_name' | 'from_email' | 'subject'> & { to?: string; conversation_key?: string }): boolean {
   const v = t.value.toLowerCase();
+  // An ignored conversation (DMO-INB-10): the row's thread root, exactly.
+  if (t.field === 'thread') return v !== '' && (m.conversation_key ?? '').trim().replace(/^<|>$/g, '').toLowerCase() === v;
   const hay = t.field === 'subject' ? [m.subject] : t.field === 'to' ? [m.to ?? ''] : t.field === 'any' ? [`${m.from_name} ${m.from_email}`, m.to ?? '', m.subject] : [`${m.from_name} ${m.from_email}`];
   return hay.some((h) => {
     const s = (h ?? '').toLowerCase();
@@ -50,7 +52,7 @@ export function rowMatches(t: Pick<MailFilter, 'field' | 'op' | 'value'>, m: Pic
 }
 
 /** Does a this-computer rule take this row: condition holds, no exception does. */
-export function ruleTakes(f: MailFilter, m: Pick<MessageRow, 'from_name' | 'from_email' | 'subject'>): boolean {
+export function ruleTakes(f: MailFilter, m: Pick<MessageRow, 'from_name' | 'from_email' | 'subject'> & { conversation_key?: string }): boolean {
   return f.enabled && rowMatches(f, m) && !(f.exceptions ?? []).some((e) => rowMatches(e, m));
 }
 

@@ -45,7 +45,8 @@ module.exports = {
   // for Node only, and its one-arch binary breaks the universal mac merge.
   // Local AI (LAI-DSK-002): node-llama-cpp's native binaries load from outside the asar; the CUDA builds
   // (hundreds of MB) are left out — GPUs are used through Vulkan and Metal.
-  files: ['out/**', 'package.json', '!**/*.map', '!node_modules/@napi-rs/**', '!node_modules/@node-llama-cpp/*cuda*/**'],
+  // pst-extractor ships 46 MB of sample mailboxes for its own tests; they are not part of the app.
+  files: ['out/**', 'package.json', '!**/*.map', '!node_modules/@napi-rs/**', '!node_modules/@node-llama-cpp/*cuda*/**', '!node_modules/pst-extractor/example/**'],
   // Text in images (worksuite-desktop#59): tesseract.js's worker thread is started from outside the asar, with the
   // packages it loads there (its WebAssembly core and their few dependencies).
   asarUnpack: [
@@ -74,7 +75,12 @@ module.exports = {
   // "Open mailto: links in WorkSuite" (Settings › Mail), which calls setAsDefaultProtocolClient at runtime.
   protocols: [{ name: 'WorkSuite link', schemes: ['worksuite'] }, { name: 'Email link', schemes: ['mailto'] }],
   // FR-DL-06: only WorkSuite's own reference file type; common formats are never claimed.
-  fileAssociations: [{ ext: 'worksuite', name: 'WorkSuite reference', description: 'A link to a WorkSuite record', role: 'Viewer', mimeType: 'application/x-worksuite-reference' }],
+  fileAssociations: [
+    { ext: 'worksuite', name: 'WorkSuite reference', description: 'A link to a WorkSuite record', role: 'Viewer', mimeType: 'application/x-worksuite-reference' },
+    // Email files open read-only in Mail, with Reply and Forward from the default account (ENH-MAIL-03 DMO-DAT-04, DMO-INT-03).
+    { ext: 'eml', name: 'Email message', description: 'An email message', role: 'Viewer', mimeType: 'message/rfc822' },
+    { ext: 'msg', name: 'Outlook message', description: 'An Outlook email message', role: 'Viewer', mimeType: 'application/vnd.ms-outlook' },
+  ],
 
   beforePack: macSigning.beforePack,
   afterSign: macSigning.afterSign,

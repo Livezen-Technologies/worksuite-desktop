@@ -5,6 +5,23 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.105: Mail that works like Outlook, finished
+
+Phases 4 and 5 of the Outlook-class Mail enhancement (ENH-MAIL-03):
+
+- **Your old mail files.** Import **PST**, **MBOX**, **EML** and **MSG** files (read in a separate, locked-down process; importing the same file again adds nothing twice), export mail, and open .eml/.msg files. Each folder shows what it keeps offline and its archive rule.
+- **Safer mail.** **Report phishing** (it goes to your administrators' queue), **safe links** checked on this computer and against your organisation's blocked list — nothing is sent to anyone else — pictures loaded only when you ask, and attachments that could harm the computer saved but never opened. **S/MIME** signatures are checked and shown.
+- **Recall, voting and read receipts.** Recall a message, add voting buttons, and answer read-receipt requests your way. These are only guaranteed between WorkSuite mailboxes, and the app says so.
+- **From a message:** create a task, a contact or a meeting; **Reply with meeting**; contact groups; add a sender from their signature; **Mentioned me**. Quick Steps can copy to a folder, log in CRM or open a helpdesk ticket.
+- **Reading.** **Ignore** or **clean up** a conversation, **conditional formatting**, plain text for chosen senders, and the **immersive reader**.
+- **Staying on top.** A reminder window and reminders that work offline; choose which mail raises a banner, let VIPs through quiet hours, more banner actions; **Catch up** on what you missed; decline invitations automatically while you're away; a Calendar peek from the sidebar.
+- **Writing.** **Mail merge**, **Suggest times** with a meeting link, and more drafting tools (draft from notes, tone, length, coaching).
+- **Apps pane** beside a message with WorkSuite information about the sender, **High contrast**, and new mail announced to screen readers.
+
+Needs the server update (Mail 1.5.0 and its migration). Not included: delegating a personal mailbox, S/MIME signing and encryption, sensitivity labels, and sending to WorkSuite from other apps' Share menus.
+
+---
+
 ## 0.2.104 — 2026-10-03
 
 - Default app locking to Off for new users without a saved preference. Preserve saved lock choices and explicit organization rules; automatic-lock controls are inactive while locking is off (#181). Deploy the companion server policy-default update to stop the old default 15-minute enforcement.

@@ -27,13 +27,13 @@ export function when(day: string, time: string): string | null {
 }
 
 /** New task (TaskNew). It starts in the list and state the page was showing. */
-export function NewTask({ lists, defaults, onClose, onCreated }: { lists: TaskList[]; defaults: { list_id?: number | null; status?: Status; due?: string; title?: string }; onClose: () => void; onCreated: (id: number | null) => void }) {
+export function NewTask({ lists, defaults, onClose, onCreated }: { lists: TaskList[]; defaults: { list_id?: number | null; status?: Status; due?: string; title?: string; description?: string }; onClose: () => void; onCreated: (id: number | null) => void }) {
   const directory = useQuery({ queryKey: ['chat', 'directory'], queryFn: ({ signal }) => apiGet<Directory>('/api/chat/directory', undefined, signal), staleTime: 5 * 60_000 });
   const orgs = useQuery({ queryKey: ['tasks', 'organizations'], queryFn: ({ signal }) => apiGet<{ organizations: Array<{ id: number; name: string }> }>('/api/tasks/organizations', undefined, signal), staleTime: 5 * 60_000 });
   const me = Number(useStore(app, (s) => s.auth?.user?.id) ?? 0);
   const [reminders, setReminders] = useState<ReminderDraft[]>([]);
   const [title, setTitle] = useState(defaults.title ?? '');
-  const [description, setDescription] = useState('');
+  const [description, setDescription] = useState(defaults.description ?? '');
   const [list, setList] = useState(defaults.list_id ? String(defaults.list_id) : '');
   const [status, setStatus] = useState<Status>(defaults.status ?? 'todo');
   const [priority, setPriority] = useState<Priority>('medium');
@@ -95,7 +95,7 @@ export function NewTask({ lists, defaults, onClose, onCreated }: { lists: TaskLi
         </label>
         <div className={label}>
           Description
-          <RichEditor initial="" taskId={0} label="Task description" placeholder="What needs doing?" onChange={setDescription} minHeight={64} />
+          <RichEditor initial={defaults.description ?? ''} taskId={0} label="Task description" placeholder="What needs doing?" onChange={setDescription} minHeight={64} />
         </div>
         <div className="grid grid-cols-3 gap-2.5">
           <label className={label}>
