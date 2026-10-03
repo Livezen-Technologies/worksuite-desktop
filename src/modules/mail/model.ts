@@ -1,7 +1,7 @@
 import { currentLocale, text } from '../../core/i18n';
 import { addDays, currentZone, dayKey, monthWords, parseTs, timeLabel, todayInZone } from '../../core/time';
 import type { OfflineMutation } from '@shared/types';
-import type { GroupKey, Mailbox, MailboxTag, MessageRow, MessageSecurity, SortKey } from './types';
+import type { GroupKey, MailPrefs, Mailbox, MailboxTag, MessageRow, MessageSecurity, SortKey } from './types';
 
 /**
  * Mail's list logic, kept apart from the screens so it can be tested on its
@@ -222,6 +222,37 @@ export function securityVerdict(s: MessageSecurity | null | undefined): { tone: 
   const failed = known.filter(([, v]) => v === 'fail' || v === 'softfail' || v === 'permerror');
   if (failed.length) return { tone: 'warning', label: text('Not verified · {checks} failed', { checks: failed.map(([k]) => k).join(', ') }), title };
   return { tone: 'muted', label: text('Partly verified'), title };
+}
+
+/** The view settings kept per folder (DMO-INB-16). */
+export const FOLDER_VIEW_KEYS = ['view', 'pane', 'sort', 'dir', 'group', 'toolbar'] as const;
+
+/** The person's settings with this folder's own view on top. */
+export function withFolderView(prefs: MailPrefs, folderKey: string): MailPrefs {
+  const own = prefs.folderViews?.[folderKey];
+  return own ? { ...prefs, ...own } : prefs;
+}
+
+/**
+ * A change from the list or the reader, as it is saved: view settings go to
+ * this folder; `applyToAll` makes them everyone's and forgets the folders'
+ * own; anything else is a setting of its own.
+ */
+export function folderViewPatch(prefs: MailPrefs, folderKey: string, patch: Partial<MailPrefs> & { applyToAll?: boolean }): Partial<MailPrefs> {
+  const { applyToAll, ...rest } = patch;
+  const view: Partial<MailPrefs> = {};
+  const other: Partial<MailPrefs> = {};
+  for (const [k, v] of Object.entries(rest)) {
+    if ((FOLDER_VIEW_KEYS as readonly string[]).includes(k)) (view as Record<string, unknown>)[k] = v;
+    else (other as Record<string, unknown>)[k] = v;
+  }
+  if (applyToAll) {
+    const merged = withFolderView(prefs, folderKey);
+    const keep = Object.fromEntries(FOLDER_VIEW_KEYS.filter((k) => merged[k] !== undefined).map((k) => [k, merged[k]]));
+    return { ...other, ...keep, ...view, folderViews: {} } as Partial<MailPrefs>;
+  }
+  if (Object.keys(view).length === 0) return other;
+  return { ...other, folderViews: { ...(prefs.folderViews ?? {}), [folderKey]: { ...(prefs.folderViews?.[folderKey] ?? {}), ...view } } };
 }
 
 /** A message's identity in the offline queue: its mailbox, folder and uid. */

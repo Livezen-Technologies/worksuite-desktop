@@ -222,6 +222,37 @@ export async function sendMessage(body: Record<string, unknown>, label: string):
   return submit({ entity: 'message.send', entityId: null, label, path: '/api/mail/send', body });
 }
 
+export type StateAction = 'pin' | 'unpin' | 'snooze' | 'unsnooze' | 'flag' | 'unflag' | 'complete' | 'focus' | 'categorise' | 'uncategorise';
+
+const STATE_LABELS: Record<StateAction, string> = {
+  pin: 'Pin {what}',
+  unpin: 'Unpin {what}',
+  snooze: 'Snooze {what}',
+  unsnooze: 'Unsnooze {what}',
+  flag: 'Flag {what}',
+  unflag: 'Clear the flag on {what}',
+  complete: 'Mark {what} complete',
+  focus: 'Move {what} to another tab',
+  categorise: 'Categorise {what}',
+  uncategorise: 'Remove a category from {what}',
+};
+
+/**
+ * Pin, snooze, flag, Focused and categories on one or more messages
+ * (POST api/mail/states) — through the offline queue, so they work offline
+ * and go in order when the connection returns (DMO-OFF-03, AC-DMO-12).
+ */
+export function stateAction(action: StateAction, items: Array<Record<string, unknown>>, extra: Record<string, unknown> = {}, subject = ''): Promise<Outcome> {
+  const what = items.length === 1 ? `“${subject || text('(no subject)')}”` : text('{n} messages', { n: items.length });
+  return submit({
+    entity: `state.${action}`,
+    entityId: items.length === 1 ? `${String(items[0]!.mailbox ?? 0)}:${String(items[0]!.folder)}:${String(items[0]!.uid)}`.slice(0, 128) : null,
+    label: text(STATE_LABELS[action], { what }),
+    path: '/api/mail/states',
+    body: { action, items, ...extra },
+  });
+}
+
 /** Withdraw a change that has not gone yet. */
 export async function undoQueued(id: string): Promise<void> {
   await call('offline:discard', { id });

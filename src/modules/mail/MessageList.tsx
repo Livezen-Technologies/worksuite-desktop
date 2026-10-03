@@ -6,7 +6,7 @@ import { Menu, type MenuSection } from '../../components/Menu';
 import { Avatar, Empty, ErrorNote, Spinner, cx } from '../../components/ui';
 import { VirtualList } from '../../components/VirtualList';
 import { CHIPS, mailboxBadge, rowStamp, type ChipId, type QueuedAction, type RowGroup } from './model';
-import { AccountBadge } from './parts';
+import { AccountBadge, CategoryChip } from './parts';
 import type { GroupKey, MailPrefs, Mailbox, MessageRow, SortKey } from './types';
 
 /**
@@ -35,7 +35,7 @@ export interface MessageListProps {
   onOpen: (r: ListRow) => void;
   onStar: (r: ListRow) => void;
   prefs: MailPrefs;
-  onPrefs: (patch: Partial<MailPrefs>) => void;
+  onPrefs: (patch: Partial<MailPrefs> & { applyToAll?: boolean }) => void;
   /** Group into conversations here: per folder, and only where the server can thread. */
   conversations: boolean | null;
   onConversations: (on: boolean) => void;
@@ -58,6 +58,13 @@ export interface MessageListProps {
   /** A shared team mailbox's queue tabs, above the chips. */
   team?: ReactNode;
   fill?: boolean;
+  /** Focused Inbox (DMO-INB-01/03): the two tabs, and the line about new Other mail. */
+  focusTabs?: { value: 'focused' | 'other'; onChange: (v: 'focused' | 'other') => void; banner: string | null; unread: { focused: number; other: number } } | null;
+  /** Right-click on a row (DMO-SHL-08). */
+  onRowMenu?: (r: ListRow, x: number, y: number) => void;
+  /** Rows selected besides the open one (DMO-INB-15). */
+  selection?: ReadonlySet<string>;
+  onSelect?: (r: ListRow, how: 'toggle' | 'range') => void;
 }
 
 const SORTS: Array<{ id: SortKey; label: string }> = [
@@ -147,6 +154,10 @@ export function MessageList(p: MessageListProps) {
         },
       ],
     },
+    {
+      id: 'remember',
+      items: [{ id: 'all-folders', label: text('Apply this view to all folders'), icon: 'check-check', description: text('These settings are remembered for each folder.'), onSelect: () => p.onPrefs({ applyToAll: true }) }],
+    },
   ];
   const sort = p.prefs.sort ?? 'date';
   const dir = p.prefs.dir ?? 'desc';
@@ -228,6 +239,24 @@ export function MessageList(p: MessageListProps) {
           </form>
         )}
         {p.team}
+        {p.focusTabs ? (
+          <div className="mt-2">
+            <div role="tablist" aria-label={text('Focused Inbox')} className="flex gap-4 border-b border-line">
+              {(['focused', 'other'] as const).map((t) => (
+                <button key={t} type="button" role="tab" aria-selected={p.focusTabs!.value === t} onClick={() => p.focusTabs!.onChange(t)} className={cx('-mb-px flex h-8 items-center gap-1.5 border-b-2 text-[13.5px] font-semibold', p.focusTabs!.value === t ? 'border-primary text-primary' : 'border-transparent text-ink-2 hover:text-ink')}>
+                  {t === 'focused' ? text('Focused') : text('Other')}
+                  {t === 'focused' && p.focusTabs!.unread.focused ? <span className="text-[12px] text-ink-3">{p.focusTabs!.unread.focused}</span> : null}
+                </button>
+              ))}
+            </div>
+            {p.focusTabs.value === 'focused' && p.focusTabs.banner ? (
+              <button type="button" onClick={() => p.focusTabs!.onChange('other')} className="mt-1.5 flex w-full items-center gap-1.5 rounded-[8px] bg-subtle px-2.5 py-1.5 text-left text-[12.5px] text-ink-2 hover:text-ink">
+                <Icon name="inbox" size={13} />
+                <span className="min-w-0 flex-1 truncate">{p.focusTabs.banner}</span>
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         <div className="mt-2 flex items-center gap-1.5" role="group" aria-label="Quick filters">
           {CHIPS.map((c) => {
             const on = p.chips.includes(c.id);
@@ -304,11 +333,27 @@ const QUEUED_LABEL: Record<QueuedAction, string> = {
   send: 'Send queued',
 };
 
-function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs }: MessageListProps & { r: ListRow; view: NonNullable<MailPrefs['view']> }) {
+/** Pin, flag, snooze and categories on a row: icons with names, never colour alone (DMO-ACC-03). */
+function StateMarks({ m }: { m: MessageRow }) {
+  const due = m.flag?.due_at ? text('Due {when}', { when: rowStamp(m.flag.due_at) }) : text('Flagged');
+  return (
+    <>
+      {m.pinned ? <Icon name="pin" size={13} className="shrink-0 text-primary" label={text('Pinned')} /> : null}
+      {m.snoozed_until ? <span className="flex shrink-0 items-center gap-1 text-[11.5px] font-semibold text-warning" title={text('Snoozed until {when}', { when: rowStamp(m.snoozed_until) })}><Icon name="snooze" size={13} />{rowStamp(m.snoozed_until)}</span> : null}
+      {m.flag ? (m.flag.completed_at ? <Icon name="check" size={13} className="shrink-0 text-success" label={text('Flag complete')} /> : <Icon name="flag" size={13} className="shrink-0 fill-current text-danger" label={due} />) : null}
+      {(m.categories ?? []).slice(0, 2).map((c) => (
+        <CategoryChip key={c.id} name={c.name} colour={c.colour} />
+      ))}
+      {(m.categories?.length ?? 0) > 2 ? <span className="shrink-0 text-[11px] text-ink-3" title={(m.categories ?? []).map((c) => c.name).join(', ')}>+{(m.categories?.length ?? 0) - 2}</span> : null}
+    </>
+  );
+}
+
+function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs, onRowMenu, selection, onSelect }: MessageListProps & { r: ListRow; view: NonNullable<MailPrefs['view']> }) {
   const m = r.row;
   // Settings › Reading › Show message previews in the list (D10).
   const preview = prefs.previews === false ? '' : m.preview;
-  const selected = r.key === selectedKey;
+  const selected = r.key === selectedKey || !!selection?.has(r.key);
   const unread = !m.is_read;
   const box = m.mailbox ? boxes.find((b) => b.id === m.mailbox!.id) : null;
   const badge = unified && m.mailbox ? <AccountBadge text={mailboxBadge(box ?? { email: m.mailbox.email })} colour={box?.colour ?? m.mailbox.colour} title={m.mailbox.email} /> : null;
@@ -322,7 +367,18 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs }: Me
     role: 'option',
     'aria-selected': selected,
     'data-mail-row': r.key,
-    onClick: () => onOpen(r),
+    onClick: (e: React.MouseEvent) => {
+      // Ctrl/⌘-click adds to the selection, Shift-click selects a range (DMO-INB-15).
+      if (onSelect && (e.ctrlKey || e.metaKey)) return onSelect(r, 'toggle');
+      if (onSelect && e.shiftKey) return onSelect(r, 'range');
+      onOpen(r);
+    },
+    onContextMenu: onRowMenu
+      ? (e: React.MouseEvent) => {
+          e.preventDefault();
+          onRowMenu(r, e.clientX, e.clientY);
+        }
+      : undefined,
     className: cx('relative w-full cursor-default border-b border-line text-left', selected ? 'bg-selection' : 'hover:bg-subtle', r.queued && r.queued !== 'read' && r.queued !== 'star' && r.queued !== 'unstar' && 'opacity-60'),
   } as const;
   const dot = <span aria-hidden className={cx('h-[7px] w-[7px] shrink-0 rounded-full', unread ? 'bg-primary' : 'bg-transparent')} />;
@@ -347,6 +403,7 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs }: Me
         <span className={cx('truncate', unread ? 'font-bold text-ink' : 'text-ink')}>{sender}</span>
         <span className="flex min-w-0 items-center gap-2 truncate">
           {queued}
+          <StateMarks m={m} />
           <span className={cx('truncate', unread ? 'font-bold text-ink' : 'font-semibold text-ink')}>{subject}</span>
           {preview ? <span className="truncate text-ink-3">— {preview}</span> : null}
         </span>
@@ -371,6 +428,7 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs }: Me
           <span className={cx(unread ? 'font-bold text-ink' : 'font-semibold text-ink')}>{subject}</span>
           {preview ? <span className="text-ink-3"> — {preview}</span> : null}
         </span>
+        <StateMarks m={m} />
         {queued}
         {badge}
         <span className="shrink-0 text-[12px] text-ink-3">{stamp}</span>
@@ -394,6 +452,7 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs }: Me
             <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-3">{preview}</span>
             {m.has_attachment ? <Icon name="paperclip" size={13} className="shrink-0 text-ink-3" label="Has attachments" /> : null}
             {m.is_starred ? <Icon name="star" size={13} className="shrink-0 fill-current text-warning" label="Starred" /> : null}
+            <StateMarks m={m} />
             {team}
           </span>
         </span>
@@ -417,6 +476,7 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs }: Me
           <span className={cx(unread ? 'font-bold text-ink' : 'font-semibold text-ink')}>{subject}</span>
           {preview ? <span className="text-ink-3"> — {preview}</span> : null}
         </span>
+        <StateMarks m={m} />
         {team}
       </span>
     </div>

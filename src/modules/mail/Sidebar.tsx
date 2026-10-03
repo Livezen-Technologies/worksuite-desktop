@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { apiPost } from '../../core/api';
+import { apiPost, apiPut } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
 import { text } from '../../core/i18n';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
+import { type MenuSection } from '../../components/Menu';
 import { Button, DATA_TEXT, Kbd, Modal, Spinner, TextField, cx } from '../../components/ui';
+import { ContextMenu } from './MessageMenus';
 import { mailKeys, useFolders, useLabels } from './api';
 import { ALL_FOLDERS, allCount } from './allAccounts';
 import { SMART_VIEWS, folderName, mailboxLetter, type SmartViewId } from './model';
@@ -50,6 +52,29 @@ export interface SidebarProps {
   onSyncAccount: (id: number) => void;
   /** Settings › Mail: accounts, offline and storage. */
   onSettings: () => void;
+  /** Favourites (DMO-NAV-01): "key|label" — "4:label:Clients|Clients", "all:inbox|Inbox", "view:unread|Unread". */
+  favorites?: string[];
+  onFavorites?: (next: string[]) => void;
+}
+
+/** A favourite's place in the pane. */
+export function favoritePlace(key: string): Partial<Place> | null {
+  if (key.startsWith('all:')) {
+    const role = key.slice(4);
+    return { box: 'unified', view: null, folder: role === 'junk' ? 'spam' : role, label: null };
+  }
+  if (key.startsWith('view:')) {
+    const v = SMART_VIEWS.find((x) => x.id === key.slice(5));
+    return v ? { box: 'unified', view: v.id, folder: v.folder, label: null } : null;
+  }
+  const m = /^(\d+):(.+)$/.exec(key);
+  return m ? { box: m[1]!, view: null, folder: m[2]!, label: null } : null;
+}
+
+/** Is the list showing this favourite? */
+function isPlace(key: string, place: Place): boolean {
+  const p = favoritePlace(key);
+  return !!p && p.box === place.box && (p.view ?? null) === place.view && p.folder === place.folder && place.label === null;
 }
 
 const FOLDER_ICON: Record<string, string> = { inbox: 'inbox', sent: 'send', drafts: 'file-text', archive: 'archive', spam: 'shield-alert', junk: 'shield-alert', trash: 'trash' };
@@ -70,6 +95,7 @@ export function unreadOf(b: Mailbox, counts: ViewCounts | null): number | null {
 }
 
 interface PaneMemory {
+  favorites?: boolean;
   all: boolean;
   accounts: boolean;
   views: boolean;
@@ -109,6 +135,7 @@ export function MailSidebar(p: SidebarProps) {
       return next;
     });
   const [naming, setNaming] = useState<{ kind: 'folder' | 'label'; box: Mailbox | null } | null>(null);
+  const [folderMenu, setFolderMenu] = useState<FolderMenu | null>(null);
   const many = p.boxes.length > 1;
   const inAll = p.place.box === 'unified' && !p.place.view && p.place.label === null;
   // An older server counts no All Accounts folders: the inbox is then the sum of each included account's unread.
@@ -135,6 +162,28 @@ export function MailSidebar(p: SidebarProps) {
         <Button variant="glass" size="action-icon" icon="search" onClick={p.onSearch} aria-label={text('Search mail')} title={text('Search mail (/)')} />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2 scroll-thin">
+        {p.favorites?.length ? (
+          <>
+            <SectionHeading label={text('Favorites')} open={memory.favorites !== false} onToggle={() => remember({ favorites: memory.favorites === false })} />
+            {memory.favorites !== false ? (
+              <ul role="list" aria-label={text('Favorites')}>
+                {p.favorites.map((entry) => {
+                  const [key = '', label = key] = entry.split('|');
+                  const target = favoritePlace(key);
+                  if (!target) return null;
+                  return (
+                    <li key={key} onContextMenu={(e) => {
+                      e.preventDefault();
+                      setFolderMenu({ x: e.clientX, y: e.clientY, key, label, box: null, slug: null });
+                    }}>
+                      <Row icon="star" iconClass="text-warning" label={label} active={isPlace(key, p.place)} onClick={() => p.onPick(target)} />
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+          </>
+        ) : null}
         {many ? (
           <>
             <SectionHeading label={text('All Accounts')} open={memory.all} onToggle={() => remember({ all: !memory.all })}>
@@ -147,7 +196,10 @@ export function MailSidebar(p: SidebarProps) {
                   if (c.hidden) return null;
                   const here = inAll && p.place.folder === (f.role === 'junk' ? 'spam' : f.role);
                   return (
-                    <li key={f.role}>
+                    <li key={f.role} onContextMenu={(e) => {
+                      e.preventDefault();
+                      setFolderMenu({ x: e.clientX, y: e.clientY, key: `all:${f.role}`, label: text(f.label), box: null, slug: null });
+                    }}>
                       <Row icon={f.icon} iconClass={f.role === 'outbox' && c.n ? 'text-danger' : undefined} label={text(f.label)} count={c.n} countTitle={c.title} strong={f.role === 'inbox' && !!c.n} active={here} onClick={() => p.onPick({ box: 'unified', view: null, folder: f.role === 'junk' ? 'spam' : f.role, label: null })} />
                     </li>
                   );
@@ -181,7 +233,7 @@ export function MailSidebar(p: SidebarProps) {
                     onPick={() => p.onPick({ box: String(b.id), view: null, folder: 'inbox', label: null })}
                     onSync={() => p.onSyncAccount(b.id)}
                   />
-                  {open ? <FolderTree box={b} place={p.place} active={p.active} onPick={p.onPick} onAdd={() => setNaming({ kind: 'folder', box: b })} /> : null}
+                  {open ? <FolderTree box={b} place={p.place} active={p.active} onPick={p.onPick} onAdd={() => setNaming({ kind: 'folder', box: b })} onMenu={(x, y, f) => setFolderMenu({ x, y, key: `${b.id}:${f.slug}`, label: f.slug.startsWith('label:') ? folderName(f.name) : f.name, box: b, slug: f.slug })} /> : null}
                 </li>
               );
             })}
@@ -204,7 +256,13 @@ export function MailSidebar(p: SidebarProps) {
               // Today and Has attachments are lists, not badges: a count beside them is noise.
               const shown = v.id === 'today' || v.id === 'attachments' ? null : n;
               return (
-                <li key={v.id}>
+                <li
+                  key={v.id}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setFolderMenu({ x: e.clientX, y: e.clientY, key: `view:${v.id}`, label: text(v.label), box: null, slug: null });
+                  }}
+                >
                   <Row icon={v.icon} iconClass={v.id === 'starred' ? 'text-warning' : v.id === 'important' ? 'text-danger' : undefined} label={text(v.label)} count={shown} active={p.place.view === v.id} onClick={() => p.onPick({ box: 'unified', view: v.id, folder: v.folder, label: null })} />
                 </li>
               );
@@ -218,6 +276,15 @@ export function MailSidebar(p: SidebarProps) {
         <SyncCard summary={p.summary} pending={p.pending} cacheDays={p.cacheDays} />
       </button>
       {naming ? <NameDialog kind={naming.kind} mailbox={naming.box} onClose={() => setNaming(null)} /> : null}
+      {folderMenu ? (
+        <ContextMenu
+          x={folderMenu.x}
+          y={folderMenu.y}
+          label={text('Folder actions')}
+          onClose={() => setFolderMenu(null)}
+          sections={folderSections(folderMenu, p, () => setNaming({ kind: 'folder', box: folderMenu.box }))}
+        />
+      ) : null}
     </nav>
   );
 }
@@ -355,7 +422,7 @@ function SyncAllButton({ summary, accounts, boxes, running, syncingAll, offline,
 }
 
 /** An account's folders, under its row (DMO-ALL-13: per-account trees stay as they were). */
-function FolderTree({ box, place, active, onPick, onAdd }: { box: Mailbox; place: Place; active: boolean; onPick: (p: Partial<Place>) => void; onAdd: () => void }) {
+function FolderTree({ box, place, active, onPick, onAdd, onMenu }: { box: Mailbox; place: Place; active: boolean; onPick: (p: Partial<Place>) => void; onAdd: () => void; onMenu: (x: number, y: number, f: Folder) => void }) {
   const folders = useFolders(box.id, active);
   const list = (folders.data?.folders ?? []).filter((f) => f.slug !== 'starred' && f.slug !== 'important');
   const here = (f: Folder) => !place.view && place.label === null && place.folder === f.slug && place.box === String(box.id);
@@ -368,7 +435,13 @@ function FolderTree({ box, place, active, onPick, onAdd }: { box: Mailbox; place
         // Unread in the folders mail arrives in; Sent, Drafts and Trash count nothing worth a badge.
         const n = ['sent', 'trash', 'drafts'].includes(f.slug) ? null : f.unread;
         return (
-          <li key={f.slug}>
+          <li
+            key={f.slug}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              onMenu(e.clientX, e.clientY, f);
+            }}
+          >
             <Row nested icon={FOLDER_ICON[f.slug] ?? 'folder'} iconClass={custom ? 'text-warning' : undefined} label={custom ? folderName(f.name) : f.name} count={n} strong={!!n} active={here(f)} onClick={() => onPick({ box: String(box.id), view: null, folder: f.slug, label: null })} />
           </li>
         );
@@ -383,6 +456,81 @@ function FolderTree({ box, place, active, onPick, onAdd }: { box: Mailbox; place
       ) : null}
     </ul>
   );
+}
+
+interface FolderMenu {
+  x: number;
+  y: number;
+  /** The favourite's key: "4:label:Clients", "all:inbox". */
+  key: string;
+  label: string;
+  /** The account and folder, for a real folder. */
+  box: Mailbox | null;
+  slug: string | null;
+}
+
+const ROLE_CHOICES: Array<{ role: string; label: string }> = [
+  { role: 'drafts', label: 'Drafts' },
+  { role: 'sent', label: 'Sent' },
+  { role: 'archive', label: 'Archive' },
+  { role: 'trash', label: 'Deleted Items' },
+  { role: 'junk', label: 'Junk Email' },
+];
+
+/** A folder's right-click menu (DMO-NAV-03, DMO-ALL-06): Favorites, its role in All Accounts, a new folder, sync. */
+function folderSections(m: FolderMenu, p: SidebarProps, onNewFolder: () => void): MenuSection[] {
+  const favs = p.favorites ?? [];
+  const isFav = favs.some((e) => e.split('|')[0] === m.key);
+  const sections: MenuSection[] = [];
+  if (p.onFavorites) {
+    sections.push({
+      id: 'fav',
+      items: [
+        isFav
+          ? { id: 'unfav', label: text('Remove from Favorites'), icon: 'star', onSelect: () => p.onFavorites!(favs.filter((e) => e.split('|')[0] !== m.key)) }
+          : { id: 'fav', label: text('Add to Favorites'), icon: 'star', onSelect: () => p.onFavorites!([...favs, `${m.key}|${m.label}`].slice(0, 40)) },
+      ],
+    });
+  }
+  if (m.box && m.slug && m.slug !== 'inbox') {
+    const box = m.box;
+    const slug = m.slug;
+    sections.push({
+      id: 'role',
+      items: [
+        {
+          id: 'role',
+          label: text('Use this folder as'),
+          icon: 'folder-input',
+          description: text('In All Accounts, for {email}', { email: box.email }),
+          submenu: [
+            {
+              id: 'roles',
+              items: ROLE_CHOICES.map((r) => ({
+                id: r.role,
+                label: text(r.label),
+                onSelect: () =>
+                  void apiPut('/api/mail/folders/role', { mailbox: box.id, folder: slug, role: r.role })
+                    .then(() => toast('success', text('{folder} is now this account’s {role}.', { folder: m.label, role: text(r.label) })))
+                    .catch((e) => toast('error', errorMessage(e))),
+              })),
+            },
+          ],
+        },
+      ],
+    });
+  }
+  if (m.box) {
+    const box = m.box;
+    sections.push({
+      id: 'more',
+      items: [
+        { id: 'new', label: text('New folder'), icon: 'folder-plus', onSelect: onNewFolder },
+        { id: 'sync', label: text('Sync {email}', { email: box.email }), icon: 'refresh', disabled: p.offline, reason: text('You’re offline — mail will sync when you reconnect'), onSelect: () => p.onSyncAccount(box.id) },
+      ],
+    });
+  }
+  return sections;
 }
 
 function LabelSection({ open, onToggle, onAdd, place, active, onPick }: { open: boolean; onToggle: () => void; onAdd: () => void; place: Place; active: boolean; onPick: (p: Partial<Place>) => void }) {

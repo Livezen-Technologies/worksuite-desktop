@@ -584,7 +584,54 @@ function Layout() {
         <p id="mail-dark-body-hint" className="pl-[26px] text-[12px] leading-relaxed text-ink-3">
           Emails designed with their own colours are shown on a light card so logos and tables stay readable.
         </p>
+        {seg('markRead', prefs.markRead, 'open', [['open', 'When opened'], ['delay', 'After a few seconds'], ['change', 'When I move on'], ['never', 'Never']], 'Mark as read')}
+        {prefs.markRead === 'delay' ? seg('markReadDelay', prefs.markReadDelay, 5, [[0, '0 s'], [5, '5 s'], [10, '10 s'], [30, '30 s']], 'After') : null}
+        {seg('openIn', prefs.openIn, 'tabs', [['tabs', 'Tabs'], ['windows', 'Windows'], ['both', 'Both']], 'Open messages in')}
       </section>
+      <InboxAndKeyboard prefs={prefs} set={set} />
     </>
+  );
+}
+
+/** Focused Inbox, the keyboard scheme and the command bar (DMO-INB-01, DMO-KEY-01, DMO-SHL-03; §9.1). */
+function InboxAndKeyboard({ prefs, set }: { prefs: MailPrefs; set: (p: Partial<MailPrefs>) => void }) {
+  const boxes = (useMailboxes().data?.mailboxes ?? []).filter((b) => !b.archived);
+  const off = prefs.focusedOff ?? [];
+  return (
+    <section aria-label={text('Inbox and keyboard')} className="mt-4 flex flex-col gap-3 rounded-[12px] border border-line bg-surface p-4 text-[13.5px] text-ink">
+      <h3 className="text-[15px] font-bold text-ink">{text('Inbox and keyboard')}</h3>
+      <SwitchRow label={text('Focused Inbox')} hint={text('Sort the inbox into Focused and Other. Moving a message between the tabs teaches it.')} checked={prefs.focused !== false} onChange={(v) => set({ focused: v })} />
+      {prefs.focused !== false && boxes.length > 1 ? (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 pl-1">
+          {boxes.map((b) => (
+            <label key={b.id} className="flex items-center gap-2 text-[12.5px]">
+              <Checkbox checked={!off.includes(b.id)} onChange={(e) => set({ focusedOff: e.target.checked ? off.filter((x) => x !== b.id) : [...off, b.id] })} />
+              {b.email}
+            </label>
+          ))}
+        </div>
+      ) : null}
+      <div className="flex items-center justify-between gap-4 py-1">
+        <span className="font-semibold">{text('Keyboard shortcuts')}</span>
+        <div role="radiogroup" aria-label={text('Keyboard scheme')} className="flex rounded-[10px] bg-subtle p-0.5">
+          {(['worksuite', 'outlook', 'gmail'] as const).map((s) => (
+            <button key={s} type="button" role="radio" aria-checked={(prefs.keyScheme ?? 'worksuite') === s} onClick={() => set({ keyScheme: s })} className={cx('h-8 rounded-[8px] px-3 text-[13px] font-semibold', (prefs.keyScheme ?? 'worksuite') === s ? 'bg-surface text-ink shadow-sm' : 'text-ink-2 hover:text-ink')}>
+              {s === 'worksuite' ? 'WorkSuite' : s === 'outlook' ? 'Outlook' : 'Gmail'}
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="text-[12px] text-ink-3">{text('Press ? (or Ctrl+/ in the Outlook scheme) in Mail to see every shortcut and change any of them.')}</p>
+      <div className="flex items-center justify-between gap-4 py-1">
+        <span className="font-semibold">{text('Command bar')}</span>
+        <div role="radiogroup" aria-label={text('Command bar')} className="flex rounded-[10px] bg-subtle p-0.5">
+          {(['simplified', 'classic'] as const).map((s) => (
+            <button key={s} type="button" role="radio" aria-checked={(prefs.commandBar ?? 'simplified') === s} onClick={() => set({ commandBar: s })} className={cx('h-8 rounded-[8px] px-3 text-[13px] font-semibold', (prefs.commandBar ?? 'simplified') === s ? 'bg-surface text-ink shadow-sm' : 'text-ink-2 hover:text-ink')}>
+              {s === 'simplified' ? text('Simplified') : text('Classic')}
+            </button>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }

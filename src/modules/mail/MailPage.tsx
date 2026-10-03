@@ -13,22 +13,30 @@ import { SidePanel } from '../../components/SidePanel';
 import { Empty, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
 import { AddMailbox } from './AddMailbox';
-import { messageAction, useLocalStore, useMailPrefs, useMailboxes, usePendingMail, useViewCounts } from './api';
+import { messageAction, useLocalStore, useMailPrefs, useMailboxes, usePendingMail, useViewCounts, type MessageActionName } from './api';
+import { runCommand } from '../../core/commands';
+import { bindings, commandFor, isPlain, keyOf, type MailCommandId } from './keymap';
+import { GoToFolder, ShortcutSheet } from './Shortcuts';
 import { allAccountsPage, allFolderLabel, isAllRole, queuedSends, useAllCounts, useLocalDrafts } from './allAccounts';
 import { ArchivePicker } from './ArchivePicker';
 import { Compose } from './Compose';
 import { LocalDraftRows, OutboxView } from './Outbox';
 import { includedIds, runSync, syncSummary, useSharedSync } from './sync';
+import { CategoriesDialog, ContextMenu, DatesDialog, stateSections, useStateActions, type Target } from './MessageMenus';
+import { SelectionPane } from './SelectionPane';
+import { SweepDialog } from './SweepDialog';
+import { FirstRun, FirstRunOffers } from './FirstRun';
+import { classifyFocus, otherBanner, pinnedFirst, stateKey, useCategories, useFocusContext, useMessageStates, withStates } from './states';
 import { MessageList, type ListRow } from './MessageList';
 import { MessageView, windowRoute, type ViewControls } from './MessageView';
-import { applyFilters, filtersFor, folderName, groupRows, queueKey, queuedByMessage, rowMailbox, smartView, sortRows, step, type ChipId } from './model';
+import { applyFilters, filtersFor, folderName, folderViewPatch, groupRows, queueKey, queuedByMessage, rowMailbox, smartView, sortRows, step, withFolderView, type ChipId } from './model';
 import { useOutgoing, undoSend } from './outgoing';
 import { ReadingPane, afterClose, withTab, type OpenTab } from './ReadingPane';
 import { ScheduledList } from './Scheduled';
 import { SearchView } from './SearchView';
 import { MailSidebar, unreadOf, type Place } from './Sidebar';
 import { StatusBar, WaitingPanel } from './StatusBar';
-import type { ComposeSeed, Label, Mailbox, MessagePage, MessageRef, MessageRow } from './types';
+import type { ComposeSeed, Label, MailPrefs, Mailbox, MessagePage, MessageRef, MessageRow } from './types';
 
 
 export { joinQuote, splitQuote, unquote } from './quote';
@@ -98,7 +106,7 @@ export default function MailPage({ active }: ModuleProps) {
   const allCounts = useAllCounts(active && boxes.length > 1);
   const pending = usePendingMail();
   const localBytes = useLocalStore();
-  const { prefs, set: setPrefs } = useMailPrefs();
+  const { prefs: globalPrefs, set: setGlobalPrefs, loaded: prefsLoaded } = useMailPrefs();
   const outgoing = useOutgoing();
 
   const view = smartView(place.view);
@@ -107,6 +115,9 @@ export default function MailPage({ active }: ModuleProps) {
   const effectiveBox = place.label !== null ? null : unified ? null : place.box === 'unified' ? (defaultBox ? String(defaultBox.id) : null) : place.box;
   const filters = filtersFor(view, chips);
   const folderKey = `${effectiveBox ?? 'unified'}:${folder}`;
+  // Density, reading pane, action bar, sort and grouping are remembered for each folder (DMO-INB-16).
+  const prefs = withFolderView(globalPrefs, folderKey);
+  const setPrefs = (patch: Partial<MailPrefs> & { applyToAll?: boolean }) => setGlobalPrefs(folderViewPatch(globalPrefs, folderKey, patch));
   const canThread = !unified && filters.length === 0 && folder !== 'outbox';
   const threaded = canThread && !!prefs.conversations?.[folderKey];
   // All Accounts (DMO-ALL): the combined view of a folder role, not a smart view.
@@ -165,7 +176,15 @@ export default function MailPage({ active }: ModuleProps) {
 
   const queued = useMemo(() => queuedByMessage(pending.data ?? []), [pending.data]);
   const rowKey = (m: MessageRow) => queueKey(rowMailbox(m, effectiveBox), m.folder_slug ?? folder, m.id);
-  const rows = (() => {
+  // WorkSuite's states for what is listed: pins, snoozes, flags, categories, Focused moves.
+  const statesScope = unified || place.label !== null ? null : effectiveBox;
+  const states = useMessageStates(active && (mailboxes.isSuccess || mailboxes.isError) && folder !== 'outbox', statesScope, statesScope ? folder : null);
+  const cats = useCategories(active);
+  const focusOn = prefs.focused !== false && !view && place.label === null && folder === 'inbox' && states.data !== null && states.data !== undefined && !isTeam && !(effectiveBox && prefs.focusedOff?.includes(Number(effectiveBox)));
+  const focusCtx = useFocusContext(active && focusOn);
+  const [focusTab, setFocusTab] = useState<'focused' | 'other'>('focused');
+  const stateKeyOf = (m: MessageRow) => stateKey(rowMailbox(m, effectiveBox), m.folder_slug ?? folder, m.id);
+  const decorated = (() => {
     let all = (list.data?.pages ?? []).flatMap((p) => p.data.messages);
     all = applyFilters(all, filters);
     if (isTeam) {
@@ -174,10 +193,42 @@ export default function MailPage({ active }: ModuleProps) {
     }
     const term = searchFold(search.trim());
     if (term) all = all.filter((m) => searchFold(`${m.from_name} ${m.from_email} ${m.subject} ${m.preview}`).includes(term));
-    return sortRows(all, prefs.sort ?? 'date', prefs.dir ?? 'desc');
+    // The Snoozed view lists exactly what the others hide.
+    return allRole === 'snoozed' ? all : withStates(all, states.data, stateKeyOf, cats.data);
   })();
-  const groups = groupRows(rows, prefs.group ?? 'date').map((g) => ({ ...g, items: g.rows.map((r): ListRow => ({ row: r, key: rowKey(r), queued: queued.get(rowKey(r)) ?? null })) }));
+  const focusUnread = focusOn ? { focused: decorated.filter((m) => !m.is_read && classifyFocus(m, focusCtx.data).focus === 'focused').length, other: decorated.filter((m) => !m.is_read && classifyFocus(m, focusCtx.data).focus === 'other').length } : { focused: 0, other: 0 };
+  const rows = pinnedFirst(sortRows(focusOn ? decorated.filter((m) => classifyFocus(m, focusCtx.data).focus === focusTab) : decorated, prefs.sort ?? 'date', prefs.dir ?? 'desc'));
+  const toItem = (r: MessageRow): ListRow => ({ row: r, key: rowKey(r), queued: queued.get(rowKey(r)) ?? null });
+  const top = rows.filter((m) => m.pinned || m.returned);
+  const groups = [...(top.length ? [{ key: 'pinned', label: text('Pinned'), rows: top, items: top.map(toItem) }] : []), ...groupRows(rows.filter((m) => !m.pinned && !m.returned), prefs.group ?? 'date').map((g) => ({ ...g, items: g.rows.map(toItem) }))];
   const flat = groups.flatMap((g) => g.items);
+
+  // Several selected (Ctrl/Shift-click, Ctrl+A): every action applies to each, in its own account (DMO-INB-15).
+  const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
+  const [anchorKey, setAnchorKey] = useState<string | null>(null);
+  const selectRow = (r: ListRow, how: 'toggle' | 'range') => {
+    setSelection((s) => {
+      const next = new Set(s);
+      if (how === 'range' && anchorKey) {
+        const a = flat.findIndex((x) => x.key === anchorKey);
+        const b = flat.findIndex((x) => x.key === r.key);
+        if (a >= 0 && b >= 0) for (const x of flat.slice(Math.min(a, b), Math.max(a, b) + 1)) next.add(x.key);
+      } else if (next.has(r.key)) next.delete(r.key);
+      else next.add(r.key);
+      return next;
+    });
+    setAnchorKey(r.key);
+  };
+  const stateActs = useStateActions();
+  // Quick Steps by number (Ctrl+Shift+1…9) — set up in P2; nothing to run until then.
+  const runQuickStepKey = (n: number): boolean => n < 0;
+  const targetOf = (r: ListRow): Target => ({ row: r.row, mailbox: rowMailbox(r.row, effectiveBox), folder: r.row.folder_slug ?? folder });
+  const selectedTargets = (fallback?: ListRow): Target[] => {
+    const picked = flat.filter((r) => selection.has(r.key));
+    return (picked.length ? picked : fallback ? [fallback] : []).map(targetOf);
+  };
+  const [rowMenu, setRowMenu] = useState<{ r: ListRow; x: number; y: number } | null>(null);
+  const [custom, setCustom] = useState<{ what: 'snooze' | 'flag' | 'categories' | 'sweep'; targets: Target[] } | null>(null);
 
   // The open message: the URL names it; its tab joins the strip.
   const current: MessageRef | null = msg ? { uid: msg, folder: msgFolder, mailbox: msgBox ?? effectiveBox } : null;
@@ -209,7 +260,11 @@ export default function MailPage({ active }: ModuleProps) {
   const openRow = (r: ListRow) => {
     setSearching(null);
     setCompose((c) => (c ? { ...c, shown: false } : c));
-    openRef({ uid: String(r.row.id), folder: r.row.folder_slug ?? folder, mailbox: rowMailbox(r.row, effectiveBox) });
+    const ref = { uid: String(r.row.id), folder: r.row.folder_slug ?? folder, mailbox: rowMailbox(r.row, effectiveBox) };
+    setSelection(new Set());
+    // Open messages in windows (DMO-SHL-06): each in its own window, which reopens where it was.
+    if (prefs.openIn === 'windows') return void openInWindow(windowRoute(ref), r.row.subject);
+    openRef(ref);
   };
   const routeOf = (q: URLSearchParams) => (q.size ? `/mail?${q}` : '/mail');
   const closeMessage = () => go(routeOf(placeQuery()));
@@ -217,6 +272,8 @@ export default function MailPage({ active }: ModuleProps) {
     setSearching(null);
     setChips([]);
     setSearch('');
+    setSelection(new Set());
+    setFocusTab('focused');
     setCompose((c) => (c ? { ...c, shown: false } : c));
     go(routeOf(placeQuery({ view: null, label: null, ...p })));
   };
@@ -256,51 +313,136 @@ export default function MailPage({ active }: ModuleProps) {
 
   // Keyboard.
   const keys = useRef<(e: KeyboardEvent) => void>(() => undefined);
+  // The keyboard scheme (DMO-KEY-01): WorkSuite, Outlook or Gmail, with the person's own keys on top.
+  const keyMap = bindings(prefs.keyScheme, prefs.keyBindings);
+  const pendingKey = useRef<{ key: string; at: number } | null>(null);
+  const [sheet, setSheet] = useState(false);
+  const [gotoOpen, setGotoOpen] = useState(false);
   const onKey = (e: KeyboardEvent) => {
-    // Sync all (DMO-SYN-01): Ctrl+Shift+R, ⌘⇧R on macOS — wherever focus is.
-    if (!e.defaultPrevented && (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'r') {
-      e.preventDefault();
-      return syncAll();
-    }
-    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.defaultPrevented) return;
+    const key = keyOf(e);
+    if (!key) return;
     const t = e.target as HTMLElement | null;
-    if (t && typeof t.closest === 'function' && (t.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"]') || t.isContentEditable)) return;
+    const typing = !!t && typeof t.closest === 'function' && (!!t.closest('input, textarea, select, [contenteditable="true"]') || t.isContentEditable);
+    const inLayer = !!t && typeof t.closest === 'function' && !!t.closest('[role="dialog"], [role="menu"]');
+    if (key === 'Escape') {
+      if (inLayer || typing) return;
+      if (selection.size) return e.preventDefault(), setSelection(new Set());
+      if (focus) return e.preventDefault(), setFocus(false);
+      if (current) return e.preventDefault(), closeMessage();
+      return;
+    }
+    if ((typing || inLayer) && isPlain(key)) return;
     if (compose?.shown || searching !== null) return;
-    const k = e.key;
-    const handled = () => e.preventDefault();
-    if (k === 'j' || k === 'ArrowDown') return handled(), move(1);
-    if (k === 'k' || k === 'ArrowUp') return handled(), move(-1);
-    if (k === 'Enter' && e.shiftKey && current) return handled(), openInWindow(windowRoute(current), known?.subject);
-    if ((k === 'Enter' || k === 'o') && !current && flat[0]) return handled(), openRow(flat[0]);
-    if (k === 'Escape') {
-      if (focus) return handled(), setFocus(false);
-      if (current) return handled(), closeMessage();
-      return;
-    }
-    if (k === '/') {
-      const box = document.querySelector<HTMLInputElement>('[data-mail-search]');
-      if (box) return handled(), box.focus();
-      return;
-    }
-    if (k === 'n' || k === 'c') return handled(), openCompose({ mode: 'new' });
+    const now = e.timeStamp;
+    const waiting = pendingKey.current && now - pendingKey.current.at < 1500 ? pendingKey.current.key : null;
+    const hit = commandFor(keyMap, key, waiting);
+    pendingKey.current = hit.pending ? { key: hit.pending, at: now } : null;
+    if (hit.pending) return e.preventDefault();
+    if (!hit.id) return;
+    const ran = runMailCommand(hit.id as MailCommandId);
+    if (ran) e.preventDefault();
+  };
+  /** One command, from a key or the command search. Returns whether it did anything. */
+  const runMailCommand = (id: MailCommandId): boolean => {
     const c = controls.current;
-    if (!current || !c) return;
-    const map: Record<string, () => void> = {
-      e: () => c.act('archive'),
-      '#': () => c.act('trash'),
-      Delete: () => c.act('trash'),
-      '!': () => c.act('spam'),
-      s: () => c.act('star'),
-      u: () => c.act('unread'),
-      r: () => c.reply('reply'),
-      a: () => c.reply('reply_all'),
-      f: () => c.reply('forward'),
+    const many = selectedTargets();
+    const onSelection = (fn: (ts: Target[]) => void) => {
+      const ts = many.length ? many : currentRow ? [targetOf(currentRow)] : [];
+      if (!ts.length) return false;
+      fn(ts);
+      return true;
     };
-    const run = map[k];
-    if (run) {
-      handled();
-      run();
+    switch (id) {
+      case 'next':
+        move(1);
+        return true;
+      case 'prev':
+        move(-1);
+        return true;
+      case 'open':
+        if (current || !flat[0]) return false;
+        openRow(flat[0]);
+        return true;
+      case 'openWindow':
+        if (!current) return false;
+        openInWindow(windowRoute(current), known?.subject);
+        return true;
+      case 'search': {
+        const box = document.querySelector<HTMLInputElement>('[data-mail-search]');
+        if (!box) return false;
+        box.focus();
+        return true;
+      }
+      case 'new':
+        openCompose({ mode: 'new' });
+        return true;
+      case 'syncAll':
+        syncAll();
+        return true;
+      case 'syncFolder':
+        if (effectiveBox) syncAccount(Number(effectiveBox));
+        else syncAll();
+        return true;
+      case 'shortcuts':
+        setSheet(true);
+        return true;
+      case 'goto':
+        setGotoOpen(true);
+        return true;
+      case 'commandSearch':
+        return runCommand('palette');
+      case 'goMail':
+        pick({ box: 'unified', folder: 'inbox' });
+        return true;
+      case 'goCalendar':
+        navigate('/calendar');
+        return true;
+      case 'goPeople':
+        navigate('/contacts');
+        return true;
+      case 'goTasks':
+        navigate('/tasks');
+        return true;
+      case 'selectAll':
+        setSelection(new Set(flat.map((r) => r.key)));
+        return true;
+      case 'pin':
+        return onSelection((ts) => void stateActs.pin(ts, !ts.every((x) => x.row.pinned)));
+      case 'snooze':
+        return onSelection((ts) => setCustom({ what: 'snooze', targets: ts }));
+      default:
+        break;
     }
+    if (id.startsWith('quickStep')) return runQuickStepKey(Number(id.slice(9)));
+    if (many.length > 1) {
+      const bulk: Partial<Record<MailCommandId, MessageActionName>> = { archive: 'archive', delete: 'trash', read: 'read', unread: 'unread', spam: 'spam' };
+      const action = bulk[id];
+      if (!action) return false;
+      void Promise.all(many.map((x) => messageAction({ uid: String(x.row.id), folder: x.folder, mailbox: x.mailbox }, action, x.row.subject).catch(() => undefined))).then(() => {
+        void qc.invalidateQueries({ queryKey: ['mail'] });
+        if (action === 'archive' || action === 'trash' || action === 'spam') setSelection(new Set());
+      });
+      return true;
+    }
+    if (!current || !c) return false;
+    const map: Partial<Record<MailCommandId, () => void>> = {
+      archive: () => c.act('archive'),
+      delete: () => c.act('trash'),
+      spam: () => c.act('spam'),
+      flag: () => c.act('star'),
+      read: () => c.act('read'),
+      unread: () => c.act('unread'),
+      reply: () => c.reply('reply'),
+      replyAll: () => c.reply('reply_all'),
+      forward: () => c.reply('forward'),
+      move: () => c.menu('move'),
+      findInMessage: () => c.menu('find'),
+    };
+    const run = map[id];
+    if (!run) return false;
+    run();
+    return true;
   };
   useEffect(() => {
     keys.current = onKey;
@@ -404,10 +546,20 @@ export default function MailPage({ active }: ModuleProps) {
         notice={notice}
         team={allRole === 'drafts' ? <LocalDraftRows drafts={localDrafts.data ?? []} onOpen={(d) => openCompose(d.seed)} /> : teamTabs}
         fill={pane === 'hidden' || pane === 'bottom'}
+        focusTabs={focusOn ? { value: focusTab, onChange: setFocusTab, banner: otherBanner(decorated, focusCtx.data), unread: focusUnread } : null}
+        onRowMenu={(r, x, y) => setRowMenu({ r, x, y })}
+        selection={selection}
+        onSelect={selectRow}
       />
     );
 
-  const reader = (
+  const menuSections = (targets: Target[]) => stateSections(targets, stateActs, cats.data ?? null, { focusTabs: focusOn ? focusTab : null, onCustom: (what) => setCustom({ what, targets }) });
+  const multi = flat.filter((r) => selection.has(r.key));
+  const currentRow = flat.find((r) => r.key === currentKey) ?? null;
+
+  const reader = multi.length > 1 ? (
+    <SelectionPane targets={multi.map(targetOf)} sections={menuSections(multi.map(targetOf))} onClear={() => setSelection(new Set())} onDone={() => setSelection(new Set())} />
+  ) : (
     <ReadingPane
       tabs={prefs.tabs === false ? tabs.filter((t) => t.key === currentKey) : tabs}
       strip={prefs.tabs !== false}
@@ -440,6 +592,8 @@ export default function MailPage({ active }: ModuleProps) {
           autoReply={query.get('reply') === '1'}
           onLoaded={nameTab}
           archiveTo={archiveTo}
+          marks={currentRow?.row ?? null}
+          stateMenu={() => menuSections(currentRow ? [targetOf(currentRow)] : current ? [{ row: { id: Number(current.uid) || 0, subject: tabs.find((t) => t.key === currentKey)?.subject ?? '', from_name: '', from_email: '', preview: '', is_read: true, is_starred: false, has_attachment: false, created_at: '' }, mailbox: current.mailbox, folder: current.folder }] : [])}
         />
       ) : null}
     </ReadingPane>
@@ -519,6 +673,8 @@ export default function MailPage({ active }: ModuleProps) {
               onAddMailbox={() => setAdding(true)}
               onPick={pick}
               onSettings={() => navigate('/settings/mail')}
+              favorites={globalPrefs.favorites ?? []}
+              onFavorites={(next) => setGlobalPrefs({ favorites: next })}
             />
           </SidePanel>
         ) : null}
@@ -534,6 +690,8 @@ export default function MailPage({ active }: ModuleProps) {
               </div>
             </div>
           ) : null}
+          {prefsLoaded && boxes.length > 0 && !globalPrefs.firstRun ? <FirstRun onPrefs={(patch) => setGlobalPrefs(patch)} /> : null}
+          {globalPrefs.firstRun === 'outlook' ? <FirstRunOffers onImport={() => navigate('/settings/mail?tab=import')} onSignatures={() => navigate('/settings/mail?tab=signatures')} onDone={() => setGlobalPrefs({ firstRun: 'done' })} /> : null}
           <div className="flex min-h-0 flex-1">
             {compose?.shown ? (
               <Compose key={compose.n} seed={compose.seed} boxes={boxes} defaultBox={current?.mailbox ?? effectiveBox ?? (defaultBox ? String(defaultBox.id) : null)} offline={offline} onClose={() => setCompose(null)} onReopen={openCompose} />
@@ -557,6 +715,30 @@ export default function MailPage({ active }: ModuleProps) {
         </div>
       ) : null}
       {adding ? <AddMailbox onClose={() => setAdding(false)} /> : null}
+      {sheet ? <ShortcutSheet prefs={prefs} onPrefs={setPrefs} onClose={() => setSheet(false)} /> : null}
+      {gotoOpen ? <GoToFolder boxes={boxes} onPick={pick} onClose={() => setGotoOpen(false)} /> : null}
+      {rowMenu ? (
+        <ContextMenu
+          x={rowMenu.x}
+          y={rowMenu.y}
+          label={text('Message actions')}
+          sections={menuSections(selectedTargets(rowMenu.r))}
+          onClose={() => setRowMenu(null)}
+        />
+      ) : null}
+      {custom?.what === 'categories' ? <CategoriesDialog cats={cats.data ?? []} onClose={() => setCustom(null)} /> : null}
+      {custom?.what === 'sweep' && custom.targets[0]?.mailbox ? <SweepDialog mailbox={custom.targets[0].mailbox} folder={custom.targets[0].folder} sender={custom.targets[0].row.from_email} name={custom.targets[0].row.from_name} onClose={() => setCustom(null)} /> : null}
+      {custom && (custom.what === 'snooze' || custom.what === 'flag') ? (
+        <DatesDialog
+          kind={custom.what}
+          onClose={() => setCustom(null)}
+          onSave={(v) => {
+            if (custom.what === 'snooze' && v.at) void stateActs.snooze(custom.targets, v.at);
+            if (custom.what === 'flag') void stateActs.flag(custom.targets, { start_at: v.start_at ?? null, due_at: v.due_at ?? null, reminder_at: v.reminder_at ?? null });
+            setCustom(null);
+          }}
+        />
+      ) : null}
       {archiveAsk ? (
         <ArchivePicker
           box={archiveAsk.box}

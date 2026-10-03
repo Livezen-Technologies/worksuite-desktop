@@ -114,6 +114,16 @@ export interface MessageRow {
   team?: TeamState;
   /** A search result's files, named from WorkSuite's copy (search only). */
   attachments?: Attachment[];
+  /** WorkSuite's states (GET api/mail/states), put on the row by the list. */
+  pinned?: boolean;
+  /** Back from snooze within the last day and still unread: on top. */
+  returned?: boolean;
+  flag?: { start_at: string | null; due_at: string | null; reminder_at: string | null; completed_at: string | null; task_id: number | null } | null;
+  categories?: Array<{ id: number; name: string; colour: string }>;
+  /** Moved by hand to a Focused Inbox tab. */
+  focus?: 'focused' | 'other';
+  /** In the Snoozed view: when it comes back. */
+  snoozed_until?: string | null;
 }
 
 export interface MessagePage {
@@ -279,6 +289,26 @@ export interface MailPrefs {
   staleMinutes?: number;
   /** Show a desktop notification when an account's sync fails. */
   notifySyncFailure?: boolean;
+  /** Focused Inbox on (default) or off, and the accounts it is off for (DMO-INB-01). */
+  focused?: boolean;
+  focusedOff?: number[];
+  /** Keyboard scheme (DMO-KEY-01) and the keys someone rebound (DMO-KEY-02). */
+  keyScheme?: 'worksuite' | 'outlook' | 'gmail';
+  keyBindings?: Record<string, string>;
+  /** Command bar: one row with an overflow, or grouped labelled buttons (DMO-SHL-03); commands pinned to it. */
+  commandBar?: 'simplified' | 'classic';
+  commandPins?: string[];
+  /** Open messages in tabs, windows or both (DMO-SHL-06). */
+  openIn?: 'tabs' | 'windows' | 'both';
+  /** Mark as read: when opened, after a delay, when the selection changes, or never (DMO-INB-12). */
+  markRead?: 'open' | 'delay' | 'change' | 'never';
+  markReadDelay?: number;
+  /** Favourites in the folder pane: "box:folder" keys and smart views (DMO-NAV-01). */
+  favorites?: string[];
+  /** View settings remembered per folder (DMO-INB-16). */
+  folderViews?: Record<string, Partial<Pick<MailPrefs, 'view' | 'pane' | 'sort' | 'dir' | 'group' | 'toolbar'>>>;
+  /** First run: "Coming from Outlook?" answered (WF-DO12). */
+  firstRun?: 'done' | 'outlook' | 'skipped';
 }
 
 export type SortKey = 'date' | 'sender' | 'subject' | 'size' | 'read' | 'attachment' | 'flag' | 'star';

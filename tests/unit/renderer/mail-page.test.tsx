@@ -191,11 +191,15 @@ describe('the list', () => {
     expect(vi.mocked(apiGetMeta)).toHaveBeenCalledWith('/api/mail/messages', expect.objectContaining({ filters: 'unread' }), expect.anything());
   });
 
-  it('keeps the layout chosen in the density menu on the server', async () => {
+  it('keeps the layout chosen in the density menu on the server, for this folder (DMO-INB-16)', async () => {
     show();
     fireEvent.click(await screen.findByRole('button', { name: 'Layout and density' }));
     fireEvent.click(await screen.findByRole('menuitemradio', { name: /Super compact/ }));
-    await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/prefs', { view: 'super' }));
+    await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/prefs', { folderViews: { 'unified:inbox': { view: 'super' } } }));
+    // …or for every folder.
+    fireEvent.click(await screen.findByRole('button', { name: 'Layout and density' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Apply this view to all folders/ }));
+    await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/prefs', { view: 'super', folderViews: {} }));
   });
 });
 

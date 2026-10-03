@@ -83,6 +83,38 @@ export function textToHtml(text: string): string {
   return escapeHtml(text).replace(/\r?\n/g, '<br>');
 }
 
+/**
+ * Find in message (DMO-SRC-06): the already-sanitised body with each match of
+ * the term wrapped in <mark>, case-insensitive, in text only — never inside
+ * a tag or an attribute. Under two characters nothing is marked.
+ */
+export function highlightText(html: string, term: string): { html: string; count: number } {
+  const q = term.trim().toLowerCase();
+  if (q.length < 2 || !html) return { html, count: 0 };
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+  const nodes: Text[] = [];
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) if ((n.nodeValue ?? '').toLowerCase().includes(q)) nodes.push(n as Text);
+  let count = 0;
+  for (const node of nodes) {
+    const value = node.nodeValue ?? '';
+    const lower = value.toLowerCase();
+    const frag = doc.createDocumentFragment();
+    let at = 0;
+    for (let i = lower.indexOf(q); i >= 0; i = lower.indexOf(q, at)) {
+      if (i > at) frag.append(value.slice(at, i));
+      const mark = doc.createElement('mark');
+      mark.textContent = value.slice(i, i + q.length);
+      frag.append(mark);
+      at = i + q.length;
+      count++;
+    }
+    if (at < value.length) frag.append(value.slice(at));
+    node.replaceWith(frag);
+  }
+  return { html: doc.body.innerHTML, count };
+}
+
 export function parseAddresses(input: string): string[] {
   return input
     .split(/[,;\n]/)
