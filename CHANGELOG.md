@@ -5,6 +5,32 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.109: Website visitors can call you
+
+With WorkSuite's Communication 1.11.0 and its voice calls migration (Website Live Chat SRS ENH-WCHAT-05), a website's
+chat widget can offer visitors a voice call — audio only, in the browser, no phone number. Somebody has to switch it on
+for the website and give you the **Take website voice calls** permission first.
+
+- **A visitor calling rings like a call**, before any chat: the call window shows **Incoming voice call** with who,
+  which site and page, whose chat it is and what they last wrote, with **Answer** and **Decline**. It rings through Do
+  not disturb unless you chose cards only. **Ctrl/Cmd+Shift+A** answers, and the tray has **Answer —** too. If a
+  colleague answers first, or the visitor hangs up, the window says so.
+- **Answering** brings WorkSuite forward on the chat, already on the call: microphone only, through the speaker you chose
+  for calls. The bar over the thread shows the time and the connection, with **Mute** (Ctrl/Cmd+Shift+M), **Hold** (the
+  visitor hears a soft tone and nothing from you), **Invite**, **Transfer** and **End**, which asks for call notes —
+  kept on the chat as a note only staff see. The chat goes on under the call.
+- **A colleague on a call in your chat** shows with **Join call**; with someone else on it, End offers **Leave the call**.
+  The tray says who you are on a call with, and WorkSuite will not restart to update during it.
+- **Offer call**, in the thread's header, offers the visitor a call that rings only you. Rows in the list say **On a
+  call · 2:14**. **Missed chats** lists visitors who asked to be called back, with their number and best time; log each
+  as Answered, No answer or Wrong number.
+- A computer without a microphone says so to WorkSuite and is not rung for calls.
+
+**Where it bites:** calls ring only people who are online, not already on a call and with a microphone; on the web
+WorkSuite they do not ring at all yet. Calls are not recorded. With an older WorkSuite server none of this shows.
+
+---
+
 ## 2026-10-03 — 0.2.108: Website chats show typing and read receipts as they happen
 
 With WorkSuite's Communication 1.11.0 and its live status migration (Website Live Chat SRS ENH-WCHAT-04):

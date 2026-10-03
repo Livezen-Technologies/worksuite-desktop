@@ -158,3 +158,40 @@ describe('invitations and transfers in the call window (ENH-WCHAT-03, TEAM-UI-02
     expect(bar.textContent).toContain('Nuwan invites you to join · Visitor 4F2A');
   });
 });
+
+describe('a visitor\'s voice call in the call window and the bar (ENH-WCHAT-05, VOICE-UI-03)', () => {
+  const voice = { id: 31, conversationId: 3, visitor: 'Kamal', site: 'creativefx.lk', page: 'Pricing', place: 'Colombo, Sri Lanka', preview: 'Can I call you?', owner: 'Samali Perera', stage: 'first' as const, requestedAt: new Date(Date.now() - 12_000).toISOString() };
+
+  it('comes before chats: who, where, whose chat, what they last wrote, Answer and Decline', async () => {
+    vi.mocked(call).mockResolvedValue(state({ tone: 'strong', calls: [voice], answerShortcut: true }) as never);
+    render(<WebchatRingWindow />);
+    await screen.findByText('Kamal');
+    expect(screen.getByText('Incoming voice call')).toBeTruthy();
+    expect(screen.getByText('creativefx.lk · Colombo, Sri Lanka · With Samali Perera')).toBeTruthy();
+    expect(screen.getByText('“Can I call you?”')).toBeTruthy();
+    expect(screen.getByText(/1 more waiting · Audio only, in WorkSuite · Ctrl\+Shift\+A to answer/)).toBeTruthy();
+    expect(screen.queryByText('Nimali')).toBeNull();
+    await waitFor(() => expect(vi.mocked(playTone)).toHaveBeenCalledWith('webchat-strong', 0.8));
+    fireEvent.click(screen.getByRole('button', { name: 'Answer' }));
+    expect(call).toHaveBeenCalledWith('ring:call', { id: 31, accept: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Decline' }));
+    expect(call).toHaveBeenCalledWith('ring:call', { id: 31, accept: false });
+  });
+
+  it('locked, says a visitor is calling and nothing about who', async () => {
+    vi.mocked(call).mockResolvedValue(state({ hidden: true, chats: [], calls: [{ ...voice, visitor: 'A visitor', page: null, place: null, preview: null, owner: null }] }) as never);
+    render(<WebchatRingWindow />);
+    await screen.findByText('A website visitor');
+    expect(screen.getByText('Unlock WorkSuite to see who.')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Answer' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('the bar under the tabs answers too', async () => {
+    vi.mocked(call).mockResolvedValue(state({ calls: [voice] }) as never);
+    render(<RingingBar tone={false} />);
+    await screen.findByText('Incoming voice call');
+    expect(screen.getByRole('status', { name: 'Voice call ringing' }).textContent).toContain('Kamal · creativefx.lk');
+    fireEvent.click(screen.getByRole('button', { name: 'Answer' }));
+    expect(call).toHaveBeenCalledWith('ring:call', { id: 31, accept: true });
+  });
+});

@@ -54,6 +54,8 @@ export interface WebsiteRow {
   team?: Array<Pick<WebsitePerson, 'user_id' | 'name' | 'avatar' | 'role'>>;
   /** What I am in this chat, if anything (TEAM-09). */
   my_role?: TeamRole | null;
+  /** A voice call on in this chat now (ENH-WCHAT-05, VOICE-UI-02): "On a call · 02:14". */
+  call?: { status: 'ringing' | 'active' | 'on_hold'; since: string | null } | null;
 }
 
 /** Message-id marks that only move forward (LIVE-05): how far the visitor has the team's messages, and each person the visitor's. */
@@ -238,7 +240,60 @@ export interface WebsiteConversation {
   marks?: WebsiteMarks | null;
   /** Who else of the team is typing here now. */
   agents_typing?: string[];
+  /** The latest voice call in this chat (ENH-WCHAT-05); null when there has been none, absent on a server without calls. */
+  call?: WebsiteCall | null;
+  /** Whether I take website voice calls here: answer, join, hold, offer. */
+  can_call?: boolean;
   can?: WebsiteCan;
+}
+
+/** A voice call in a website chat as the thread has it (WidgetCalls::forThread). */
+export interface WebsiteCall {
+  call_id: number;
+  conversation_id: number;
+  status: 'ringing' | 'active' | 'on_hold' | 'ended' | 'missed' | 'cancelled' | 'declined' | 'dropped';
+  call_stage?: 'first' | 'everyone' | null;
+  requested_at: string | null;
+  answered_at: string | null;
+  answered_by: number | null;
+  answered_by_name: string | null;
+  duration: number | null;
+  visitor?: string | null;
+  /** I am in the call's room, as the server has it. */
+  on_call: boolean;
+  /** It rings for me now. */
+  rings_me: boolean;
+  /** Who of the team is on it. */
+  on: Array<{ user_id: number; name: string }>;
+}
+
+/** Whether a call is ringing or on. */
+export const callLive = (c: Pick<WebsiteCall, 'status'> | null | undefined): boolean => !!c && (c.status === 'ringing' || c.status === 'active' || c.status === 'on_hold');
+
+/** A visitor waiting to be called back (VOICE-16). */
+export interface WebsiteCallback {
+  id: number;
+  conversation_id: number;
+  phone: string;
+  best_time: string | null;
+  visitor: string;
+  site: string | null;
+  /** Asked for after a call nobody answered. */
+  missed_call: boolean;
+  created_at: string;
+}
+
+export type CallbackOutcome = 'answered' | 'no_answer' | 'wrong_number';
+
+export function useCallbacks(enabled: boolean) {
+  return useQuery({
+    queryKey: ['website', 'callbacks'],
+    queryFn: ({ signal }) => apiGet<{ callbacks: WebsiteCallback[] }>(`${WEBSITE}/callbacks`, undefined, signal).then((d) => d.callbacks ?? []),
+    enabled,
+    staleTime: 15_000,
+    // An older server has no call backs: nothing to list.
+    retry: false,
+  });
 }
 
 export const PRIORITIES: Array<{ id: string; label: string }> = [

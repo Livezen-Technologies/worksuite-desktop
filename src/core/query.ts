@@ -24,7 +24,9 @@ export const queryClient = new QueryClient({
 /** Website chat (the visitor widget): refresh its inbox and the conversation named. */
 const WEBSITE_EVENTS = new Set(['chat.widget.message', 'chat.widget.activity', 'chat.incoming', 'chat.taken', 'chat.assigned', 'chat.at_risk',
   // Several staff in one chat (ENH-WCHAT-03): who is in it, a note, an invitation or a transfer answered.
-  'chat.widget.participants', 'chat.widget.note', 'chat.widget.handoff', 'chat.widget.handoff.resolved']);
+  'chat.widget.participants', 'chat.widget.note', 'chat.widget.handoff', 'chat.widget.handoff.resolved',
+  // A visitor's voice call ringing, answered, held or over, and a call back asked for (ENH-WCHAT-05).
+  'chat.widget.call', 'chat.widget.callback']);
 
 /** Events that change nothing a list or thread shows; refetching every message on each keystroke was waste. */
 const QUIET_CHAT_EVENTS = /^chat\.(typing\.|presence$|call\.)/;
@@ -41,6 +43,7 @@ export function wireQueryInvalidation(): void {
     if (WEBSITE_EVENTS.has(e.type)) {
       void queryClient.invalidateQueries({ queryKey: ['website', 'inbox'] });
       if (e.conversation_id !== undefined) void queryClient.invalidateQueries({ queryKey: ['website', 'conversation', String(e.conversation_id)] });
+      if (e.type === 'chat.widget.callback' || e.type === 'chat.widget.call') void queryClient.invalidateQueries({ queryKey: ['website', 'callbacks'] });
     } else if (e.type === 'chat.presence') {
       void queryClient.invalidateQueries({ queryKey: ['chat', 'presence'] });
     } else if (e.type.startsWith('chat.') && !QUIET_CHAT_EVENTS.test(e.type)) {

@@ -9,7 +9,7 @@ vi.mock('electron', () => ({
 }));
 
 import { DesktopError } from '../../../electron/main/errors';
-import { mergeAnswer, orderChats, ringerHeight, stampMs, toneFor, WebchatRinger, type PendingAnswer, type RingingEntry } from '../../../electron/services/webchat-ring';
+import { fromCall, mergeAnswer, orderChats, ringerHeight, stampMs, toneFor, WebchatRinger, type CallEntry, type PendingAnswer, type RingingEntry } from '../../../electron/services/webchat-ring';
 import { ringerBounds } from '../../../electron/windows/manager';
 import type { HttpClient } from '../../../electron/services/http';
 
@@ -117,6 +117,8 @@ function ringer(answers: Array<PendingAnswer | Error>, over: Partial<{ locked: b
   const request = vi.fn(async (_method: string, _path: string): Promise<unknown> => ({}));
   const states: WebchatRingState[] = [];
   const opened: number[] = [];
+  // Chats opened on a call just answered: [conversation, call].
+  const onCalls: Array<[number, number]> = [];
   const prefs: WebchatRingPrefs = { window: true, duringDnd: 'card', shortcut: true, volume: 80 };
   const r = new WebchatRinger({
     http: { get, post, request } as unknown as HttpClient,
@@ -125,12 +127,15 @@ function ringer(answers: Array<PendingAnswer | Error>, over: Partial<{ locked: b
     me: () => over.me ?? 5,
     prefs: () => prefs,
     quiet: () => false,
-    open: (id) => opened.push(id),
+    open: (id, callId) => {
+      opened.push(id);
+      if (callId) onCalls.push([id, callId]);
+    },
     onChanged: (s) => states.push(s),
     deviceId: () => 'desktop-12',
     focused: () => false,
   });
-  return { r, get, post, request, states, opened };
+  return { r, get, post, request, states, opened, onCalls, prefs };
 }
 
 describe('WebchatRinger', () => {
@@ -376,5 +381,98 @@ describe('WebchatRinger: invitations and transfers', () => {
 
   it('the call window makes room for a note', () => {
     expect(ringerHeight({ chats: [], outcome: null, handoffs: [{ id: 1, conversationId: 3, kind: 'invite', mode: 'warm', visitor: 'x', site: null, page: null, from: 'Nuwan', department: null, toAny: false, note: 'n', expiresAt: null, createdAt: null }] })).toBe(312);
+  });
+});
+
+describe('WebchatRinger: visitors\' voice calls (ENH-WCHAT-05)', () => {
+  const card = (over: Partial<CallEntry> = {}): CallEntry => ({
+    call_id: 31, conversation_id: 3, visitor: 'Nimali', site: 'Shop', page: 'Pricing', city: 'Kandy', country: 'Sri Lanka', status: 'ringing',
+    call_stage: 'first', requested_at: stamp(4000), last_message: 'Can I call you about the licence?', owner: 'Samali Perera', ...over,
+  });
+
+  it('reads a call card: who, where, what they last wrote, whose chat it is', () => {
+    expect(fromCall(card())).toEqual({
+      id: 31, conversationId: 3, visitor: 'Nimali', site: 'Shop', page: 'Pricing', place: 'Kandy, Sri Lanka',
+      preview: 'Can I call you about the licence?', owner: 'Samali Perera', stage: 'first', requestedAt: card().requested_at,
+    });
+    expect(fromCall(card({ call_id: 0 }))).toBeNull();
+    expect(fromCall(card({ call_stage: 'everyone' }))!.stage).toBe('everyone');
+  });
+
+  it('rings a call from the pending read and from its frame, strongly, and stops with why (VOICE-10)', async () => {
+    const { r } = ringer([{ ringing: [], calls: [card()] }]);
+    r.start();
+    await vi.waitFor(() => expect(r.state().calls).toHaveLength(1));
+    expect(r.state()).toMatchObject({ tone: 'strong', calls: [{ id: 31, visitor: 'Nimali' }] });
+
+    r.handle({ type: 'chat.widget.call', what: 'ringing', ...card({ call_id: 32, conversation_id: 4, visitor: 'Kamal' }) } as never);
+    expect(r.state().calls!.map((c) => c.id)).toEqual([31, 32]);
+
+    // A colleague answered one; the other visitor hung up.
+    r.handle({ type: 'chat.widget.call', what: 'answered', call_id: 31, conversation_id: 3, by: 9, by_name: 'Amaya' } as never);
+    expect(r.state().outcome?.text).toBe('Amaya answered the call.');
+    r.handle({ type: 'chat.widget.call', what: 'cancelled', call_id: 32, conversation_id: 4 } as never);
+    expect(r.state().outcome?.text).toBe('The call from Kamal hung up before anyone answered.');
+    expect(r.state()).toMatchObject({ calls: [], tone: 'off' });
+    // A frame about a call that is not ringing here changes nothing.
+    r.handle({ type: 'chat.widget.call', what: 'held', call_id: 31, conversation_id: 3 } as never);
+    expect(r.state().calls).toEqual([]);
+    r.stop();
+  });
+
+  it('Answer takes the call and brings WorkSuite forward on its chat, on the call; too late says who answered', async () => {
+    const { r, post, opened, onCalls } = ringer([{ ringing: [], calls: [card(), card({ call_id: 32, conversation_id: 4 }), card({ call_id: 33, conversation_id: 5 })] }]);
+    post.mockImplementation(async (path: string) => {
+      if (path.endsWith('/calls/33/answer')) throw new DesktopError('CONFLICT', 'Amaya Silva has already answered this call.', 409);
+      return {};
+    });
+    r.start();
+    await vi.waitFor(() => expect(r.state().calls).toHaveLength(3));
+    expect(r.topCall()?.id).toBe(31);
+
+    expect(await r.answerCall(31, true)).toBe(true);
+    expect(post).toHaveBeenCalledWith('/api/chat/widget-admin/calls/31/answer');
+    expect(onCalls).toEqual([[3, 31]]);
+    expect(await r.answerCall(32, false)).toBe(true);
+    expect(post).toHaveBeenCalledWith('/api/chat/widget-admin/calls/32/decline');
+    expect(opened).toEqual([3]);
+    expect(await r.answerCall(33, true)).toBe(false);
+    expect(r.state().outcome?.text).toBe('Amaya Silva has already answered this call.');
+    expect(r.state().calls).toEqual([]);
+    r.stop();
+  });
+
+  it('rings through Do not disturb unless it shows cards only, and says nothing about who while locked', () => {
+    const base = { ringSeconds: 0, quiet: true, now: Date.now(), calls: 1 };
+    expect(toneFor([], { ...base, duringDnd: 'ring' })).toBe('strong');
+    expect(toneFor([], { ...base, duringDnd: 'at_risk' })).toBe('strong');
+    expect(toneFor([], { ...base, duringDnd: 'card' })).toBe('off');
+    expect(toneFor([], { ...base, quiet: false, duringDnd: 'card', ringHere: false })).toBe('off');
+  });
+
+  it('says nothing about who while locked', async () => {
+    const { r } = ringer([{ ringing: [], calls: [card()] }], { locked: true });
+    r.start();
+    await vi.waitFor(() => expect(r.state().calls).toHaveLength(1));
+    expect(r.state().calls![0]).toMatchObject({ visitor: 'A visitor', page: null, place: null, preview: null, owner: null });
+    r.stop();
+  });
+
+  it('tells the server whether this computer has a microphone, with the heartbeat (VOICE-11)', async () => {
+    const { r, post } = ringer([{ ringing: [] }]);
+    r.start();
+    await vi.waitFor(() => expect(post).toHaveBeenCalledWith('/api/chat/ring/heartbeat', expect.not.objectContaining({ has_mic: expect.anything() })));
+    r.setMic(false);
+    await vi.waitFor(() => expect(post).toHaveBeenLastCalledWith('/api/chat/ring/heartbeat', expect.objectContaining({ has_mic: false })));
+    const beats = post.mock.calls.length;
+    r.setMic(false);
+    expect(post.mock.calls.length).toBe(beats);
+    r.stop();
+  });
+
+  it('the call window counts a call as a card', () => {
+    const c = fromCall(card())!;
+    expect(ringerHeight({ chats: [], outcome: null, calls: [c] })).toBe(272);
+    expect(ringerHeight({ chats: [chat({})], outcome: null, calls: [c] })).toBe(318);
   });
 });

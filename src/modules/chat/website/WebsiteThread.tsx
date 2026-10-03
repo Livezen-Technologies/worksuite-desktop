@@ -13,7 +13,7 @@ import { toast } from '../../../core/toasts';
 import { Icon } from '../../../components/Icon';
 import { Avatar, Button, Chip, Empty, ErrorNote, Modal, Spinner, cx } from '../../../components/ui';
 import { Composer, type ComposerHandle } from '../Composer';
-import { PRIORITIES, quoteAuthor, readBy, typingWords, useAgents, useCanned, useWebsiteConversation, visitorHas, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
+import { callLive, PRIORITIES, quoteAuthor, readBy, typingWords, useAgents, useCanned, useWebsiteConversation, visitorHas, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
 import { usePageVisible, useLiveStatus } from './live';
 import type { ReplyTarget } from '../Thread';
 import { Select } from '../../../components/Select';
@@ -21,6 +21,7 @@ import { SidePanel } from '../../../components/SidePanel';
 import { openChatAttachment } from '../AttachmentViewer';
 import { openWebsiteChatWindow } from '../window';
 import { InThisChat, InviteDialog, NoteBox, TeamFaces, TransferDialog, useDeclined } from './Team';
+import { CallBar } from './CallBar';
 
 const control = 'h-[30px] rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink disabled:opacity-60';
 
@@ -140,6 +141,12 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
                 <Icon name="transfers" size={13} /> Transfer
               </button>
             ) : null}
+            {/* Offer the visitor a call that rings only me (VOICE-15). */}
+            {!mini && data.can_call && c.status !== 'closed' && !callLive(data.call) ? (
+              <button type="button" title="The visitor sees a call button; starting the call rings only you" onClick={() => void apiPost(`${WEBSITE}/conversations/${c.id}/offer-call`, {}).then(() => { toast('success', 'Call offered'); refresh(); }, (e) => toast('error', errorMessage(e)))} className="flex h-[30px] items-center gap-1 rounded-[7px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink hover:bg-subtle">
+                <Icon name="phone" size={13} /> Offer call
+              </button>
+            ) : null}
             <Controls data={data} row={row} me={me} canReply={canReply} onDone={refresh} compact={mini} />
             {!mini ? (
               <button type="button" aria-label="Open in new window" title="Open in new window" onClick={() => void openWebsiteChatWindow(c.id, name)} className="flex h-[30px] w-[30px] items-center justify-center rounded-[7px] border border-line bg-surface text-ink hover:bg-subtle">
@@ -148,6 +155,8 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
             ) : null}
           </span>
         </div>
+        {/* A voice call in this chat (ENH-WCHAT-05): over the transcript, which goes on under it. */}
+        <CallBar data={data} me={me} visitor={name} onInvite={!mini && t?.can.invite ? () => setDialog('invite') : undefined} onTransfer={!mini && t?.can.transfer ? () => setDialog('transfer') : undefined} onDone={refresh} />
         <div ref={scroller} className={cx('flex min-h-0 flex-1 flex-col gap-[9px] overflow-y-auto py-3 scroll-thin', mini ? 'px-3' : 'px-4')}>
           {c.started_at ? <div className="self-center text-[11px] text-ink-3">Started a chat on {c.website ?? c.widget ?? 'the website'}{data.journey?.[0]?.url ? pathOf(data.journey[0].url) : ''} · {timeLabel(c.started_at)}</div> : null}
           {data.messages.length === 0 ? <Empty icon="chat" title="No messages yet" hint="The visitor has opened the chat but not written anything." /> : null}

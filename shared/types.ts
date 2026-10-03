@@ -503,11 +503,43 @@ export interface WebchatHandoff {
   createdAt: string | null;
 }
 
+/** A visitor's voice call ringing for me (WS-WCHAT ENH-WCHAT-05, VOICE-10). */
+export interface WebchatCall {
+  /** The call's id. */
+  id: number;
+  conversationId: number;
+  visitor: string;
+  site: string | null;
+  page: string | null;
+  place: string | null;
+  /** The visitor's latest words, for context. */
+  preview: string | null;
+  /** Who owns the chat, if anybody. */
+  owner: string | null;
+  /** Rung as one of the chat's people, or as one of everybody who takes calls. */
+  stage: 'first' | 'everyone';
+  /** Server stamp. */
+  requestedAt: string | null;
+}
+
+/** The website call this computer is on, as the tray says it (VOICE-UI-03). */
+export interface WebchatOnCall {
+  conversationId: number;
+  visitor: string;
+  /** Epoch ms it was answered. */
+  since: number;
+  held: boolean;
+}
+
 export interface WebchatRingState {
   /** Ordered: at risk, assigned to me, then oldest waiting (RING-23). */
   chats: WebchatRingChat[];
   /** Invitations and transfers waiting for me, oldest first (TEAM-23). */
   handoffs?: WebchatHandoff[];
+  /** Visitors' voice calls ringing for me, oldest first: shown before everything else (VOICE-10). */
+  calls?: WebchatCall[];
+  /** Ctrl/Cmd+Shift+A answers the top call now. */
+  answerShortcut?: boolean;
   /** What the tone does now: off (none left unsilenced, Do not disturb, the organisation's cap), or which tone. */
   tone: 'off' | 'normal' | 'strong';
   volume: number;

@@ -4,6 +4,26 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.17.0 — 2026-10-03
+
+**Added**
+
+- voice calls from the website chat widget, with the server's Communication 1.11.0 (WS-WCHAT ENH-WCHAT-05, VOICE-10…16,
+  VOICE-UI-02/03): a visitor calling rings the call window and the bar under the tabs as an INCOMING VOICE CALL card,
+  before chats and invitations, with who, where, whose chat it is, their last words, how long they have waited, Answer
+  and Decline (`ring:call`), the strong tone (through Do not disturb unless it shows cards only), the tray's "Answer —"
+  and Ctrl/Cmd+Shift+A; a colleague answering first, or the visitor hanging up, is said in the window
+- answering joins the call's own LiveKit room with the microphone only (`website/call.ts`), and the thread shows the
+  in-call bar: the time, the connection, the visitor speaking, Mute (Ctrl/Cmd+Shift+M), Hold (the microphone off and
+  the visitor hearing the hold tone), Invite, Transfer and End, which asks for call notes kept as a note only staff see
+  and offers Leave the call when a colleague is on it too; a colleague's call in my chat offers Join call, and a call I
+  am on elsewhere offers Rejoin audio or Leave; the tray says "On a call with …" with Return to the call, and the
+  updater waits
+- Offer call in the thread's header (VOICE-15); rows say "On a call · 2:14" or "Calling"; Missed chats lists the visitors
+  waiting to be called back, with their number and best time, logged as Answered, No answer or Wrong number (VOICE-16)
+- the ring heartbeat says whether this computer has a microphone (`ring:mic`, from the main window's devices): one
+  without is not rung for calls (VOICE-11)
+
 ## 1.16.0 — 2026-10-03
 
 **Added**

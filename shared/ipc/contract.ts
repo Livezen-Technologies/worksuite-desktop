@@ -398,6 +398,13 @@ export const contract = {
   'ring:pass': ch(z.object({ id: z.number().int().positive() }), { session: true, rate: 4 }),
   // An invitation or transfer into a website chat (ENH-WCHAT-03): Join chat / Accept, or Decline.
   'ring:handoff': ch(z.object({ id: z.number().int().positive(), accept: z.boolean() }), { session: true, rate: 6 }),
+  // A visitor's voice call (ENH-WCHAT-05): Answer or Decline; whether this computer has a microphone; the call it is on.
+  'ring:call': ch(z.object({ id: z.number().int().positive(), accept: z.boolean() }), { session: true, rate: 6 }),
+  'ring:mic': ch(z.object({ has: z.boolean() }), { session: true, rate: 10 }),
+  'ring:onCall': ch(
+    z.object({ conversationId: z.number().int().positive(), visitor: z.string().max(120), since: z.number().int().nonnegative(), held: z.boolean() }).nullable(),
+    { session: true, rate: 20 },
+  ),
   // Multi-window docking (FR-NAV-05/07): tear a tab off into its own window, and dock it back.
   'windows:detach': ch(
     z.object({ route, title: z.string().max(200).optional(), at: z.object({ x: z.number().int(), y: z.number().int() }).optional() }),
@@ -1265,6 +1272,9 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'ring:silence': void;
   'ring:pass': boolean;
   'ring:handoff': boolean;
+  'ring:call': boolean;
+  'ring:mic': void;
+  'ring:onCall': void;
   'windows:detach': { id: number };
   'windows:dock': void;
   'windows:toMain': void;

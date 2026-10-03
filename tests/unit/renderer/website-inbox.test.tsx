@@ -35,10 +35,10 @@ vi.mock('../../../src/core/tab-context', () => ({
   useTabTitle: () => undefined,
 }));
 
-import { apiGet } from '../../../src/core/api';
+import { apiGet, apiPost } from '../../../src/core/api';
 import { app } from '../../../src/core/app-state';
 import { call } from '../../../src/core/bridge';
-import type { WebsiteRow } from '../../../src/modules/chat/website/api';
+import type { WebsiteCallback, WebsiteRow } from '../../../src/modules/chat/website/api';
 import { WebsiteWorkspace } from '../../../src/modules/chat/website/WebsiteWorkspace';
 
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
@@ -59,11 +59,16 @@ const ring = (over: Partial<WebchatRingChat>): WebchatRingChat => ({
   priority: 'vip', offline: false, since: ago(9 * 60_000), stage: 'everyone', atRisk: false, mine: false, by: null, silenced: true, ...over,
 });
 
+let callbacks: WebsiteCallback[] = [];
+let missedList: unknown[] = [];
+
 function serve(rows = ROWS, chats: WebchatRingChat[] = [ring({})], handoffs: NonNullable<WebchatRingState['handoffs']> = []) {
   vi.mocked(apiGet).mockImplementation((async (path: string) => {
     if (path === '/api/chat/widget-admin/conversations') return { conversations: rows, can: { view: true, reply: true, manage: false } };
     if (path === '/api/chat/widget-admin/visitors') return { visitors: [{ id: 1 }, { id: 2 }] };
     if (path === '/api/chat/widget-admin/missed/count') return { count: 1 };
+    if (path === '/api/chat/widget-admin/missed') return { missed: missedList, count: missedList.length };
+    if (path === '/api/chat/widget-admin/callbacks') return { callbacks };
     throw new Error(`unexpected ${path}`);
   }) as never);
   const state: WebchatRingState = { chats, handoffs, tone: 'off', volume: 80, outcome: null, hidden: false, shortcut: false };
@@ -79,6 +84,8 @@ beforeEach(() => {
   tab.active = true;
   tab.go.mockReset();
   app.set({ auth: { stage: 'ready', user: { id: '7' } } as never });
+  callbacks = [];
+  missedList = [];
   serve();
 });
 afterEach(() => cleanup());
@@ -182,6 +189,33 @@ describe('the Website Chats inbox (CHAT-UI-00)', () => {
     // Opening one reads the chat.
     fireEvent.click(within(list()).getByText('Visitor 77AB'));
     expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=invited&website=4');
+  });
+
+  it('a row on a voice call says so, with how long (ENH-WCHAT-05, VOICE-UI-02)', async () => {
+    serve([row({ id: 1, visitor_name: 'Hasitha', call: { status: 'active', since: ago(134_000) } }), row({ id: 2, visitor_name: 'Ahmed', call: { status: 'ringing', since: ago(5_000) } })], []);
+    wrap(<WebsiteWorkspace />);
+    const hasitha = (await within(list()).findByText('Hasitha')).closest('button')!;
+    expect(within(hasitha).getByText(/^On a call · 2:1\d$/)).toBeTruthy();
+    const ahmed = within(list()).getByText('Ahmed').closest('button')!;
+    expect(within(ahmed).getByText(/^Calling · 0:0\d$/)).toBeTruthy();
+  });
+
+  it('Missed chats lists the visitors waiting to be called back, and logs how the call went (VOICE-16)', async () => {
+    callbacks = [{ id: 5, conversation_id: 9, phone: '+94 77 123 4567', best_time: 'After 5pm', visitor: 'Kamal', site: 'techubiz.com', missed_call: true, created_at: ago(600_000) }];
+    serve(ROWS, []);
+    tab.route = '/chat?view=website&section=missed';
+    wrap(<WebsiteWorkspace />);
+    const nav = screen.getByRole('navigation', { name: 'Website chats' });
+    await waitFor(() => expect(within(nav).getByRole('button', { name: /Missed chats/ }).textContent).toBe('Missed chats2'));
+    const group = await screen.findByRole('group', { name: 'Call backs' });
+    expect(within(group).getByText('Call backs · 1')).toBeTruthy();
+    expect(within(group).getByText('+94 77 123 4567')).toBeTruthy();
+    expect(within(group).getByText(/After 5pm/)).toBeTruthy();
+    expect(within(group).getByText('Missed call')).toBeTruthy();
+    fireEvent.click(within(group).getByRole('button', { name: 'No answer' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/chat/widget-admin/callbacks/5/done', { outcome: 'no_answer' }));
+    fireEvent.click(within(group).getByText('Kamal'));
+    expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=missed&website=9');
   });
 
   it('a row says Typing… while its visitor types, and stops at once (LIVE-02)', async () => {

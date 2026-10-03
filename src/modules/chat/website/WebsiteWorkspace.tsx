@@ -1,8 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 import type { WebchatHandoff, WebchatRingChat } from '@shared/types';
 import { apiGet, apiPost } from '../../../core/api';
-import { call, on } from '../../../core/bridge';
+import { call, errorMessage, on } from '../../../core/bridge';
+import { toast } from '../../../core/toasts';
 import { app } from '../../../core/app-state';
 import { text } from '../../../core/i18n';
 import { useStore } from '../../../core/store';
@@ -11,7 +12,7 @@ import { listStamp, parseTs } from '../../../core/time';
 import { Icon } from '../../../components/Icon';
 import { Avatar, Button, Empty, ErrorNote, Kbd, Spinner, cx } from '../../../components/ui';
 import { useNow } from '../../calls/parts';
-import { isMine as mineFor, lastSaid, longestWaiting, sectionRows, stepRow, useWebsiteInbox, useWebsiteSearch, waitingSince, waitingSummary, WEBSITE, type Section, type WebsiteRow } from './api';
+import { isMine as mineFor, lastSaid, longestWaiting, sectionRows, stepRow, useCallbacks, useWebsiteInbox, useWebsiteSearch, waitingSince, waitingSummary, WEBSITE, type CallbackOutcome, type Section, type WebsiteCallback, type WebsiteRow } from './api';
 import { clock, handoffAsk, handoffTitle, useRingState, waited } from './Ringing';
 import { WebsiteLive, type OnlineVisitor } from './WebsiteLive';
 import { WebsiteThread } from './WebsiteThread';
@@ -102,6 +103,9 @@ export function WebsiteWorkspace() {
     refetchInterval: 60_000,
     retry: false,
   });
+  // Visitors waiting to be called back (VOICE-16): first in Missed chats.
+  const callbacks = useCallbacks(true);
+  const callbackList = callbacks.data ?? [];
   // What rings on this computer: the row shows it, and a silenced one is marked (RING-24).
   const ring = useRingState();
   const ringing = new Map(ring.chats.map((c) => [c.id, c]));
@@ -110,7 +114,7 @@ export function WebsiteWorkspace() {
   const typingRows = useVisitorsTyping();
   const openRows = open.data?.conversations ?? [];
   const sites = open.data && 'sites' in open.data ? ((open.data as { sites?: Array<{ widget_id: number; site: string }> }).sites ?? []) : [];
-  const count = (s: Section): number => (s === 'missed' ? (missedCount.data?.count ?? 0) : s === 'invited' ? handoffs.length : s === 'closed' ? 0 : sectionRows(openRows, s, me).length);
+  const count = (s: Section): number => (s === 'missed' ? (missedCount.data?.count ?? 0) + callbackList.length : s === 'invited' ? handoffs.length : s === 'closed' ? 0 : sectionRows(openRows, s, me).length);
   const source = section === 'closed' ? closed : open;
   const pill = section === 'closed' ? 'closed' : mineOnly ? 'mine' : 'open';
   const onSite = (r: WebsiteRow) => !site || r.widget_id === site;
@@ -238,17 +242,25 @@ export function WebsiteWorkspace() {
               <InvitedRow key={h.id} h={h} hidden={ring.hidden} active={selected === String(h.conversationId)} onOpen={() => to({ website: String(h.conversationId) })} />
             ))
           ) : section === 'missed' ? (
-            missed.isLoading ? <Spinner /> : missed.error ? <div className="p-4"><ErrorNote error={missed.error} onRetry={() => void missed.refetch()} /></div> : !missed.data?.missed.length ? (
+            missed.isLoading ? <Spinner /> : missed.error ? <div className="p-4"><ErrorNote error={missed.error} onRetry={() => void missed.refetch()} /></div> : !missed.data?.missed.length && !callbackList.length ? (
               <Empty icon="globe" title="No missed chats" />
             ) : (
-              missed.data.missed.map((m) => (
+              <>
+              {callbackList.length ? (
+                <div role="group" aria-label="Call backs" className="border-b border-line">
+                  <div className="px-3.5 pt-2 pb-1 text-[11px] font-bold tracking-[.06em] text-ink-3 uppercase">{text('Call backs · {n}', { n: callbackList.length })}</div>
+                  {callbackList.map((b) => <CallbackRow key={b.id} b={b} active={selected === String(b.conversation_id)} onOpen={() => to({ website: String(b.conversation_id) })} />)}
+                </div>
+              ) : null}
+              {(missed.data?.missed ?? []).map((m) => (
                 <button key={m.id} type="button" data-website-row={m.id} onClick={() => to({ website: String(m.id) })} className={cx('relative flex w-full flex-col gap-[3px] border-b border-line py-2.5 pr-3 pl-3.5 text-left', selected === String(m.id) ? 'bg-selection' : 'hover:bg-subtle')}>
                   {selected === String(m.id) ? <span aria-hidden className="absolute top-0 bottom-0 left-0 w-[3px] bg-primary" /> : null}
                   <span className="flex items-center gap-[7px]"><b className="flex-1 truncate text-ink">{m.visitor}</b><span className="text-[11px] text-ink-3">{listStamp(m.missed_at)}</span></span>
                   <span className="truncate text-[12px] text-ink-2">{m.email ?? m.phone ?? 'No way to reach them'}{m.place ? ` · ${m.place}` : ''}</span>
                   <span className="text-[11px] text-ink-3">{m.widget}</span>
                 </button>
-              ))
+              ))}
+              </>
             )
           ) : list.isLoading ? <Spinner /> : list.error ? <div className="p-4"><ErrorNote error={list.error} onRetry={() => void list.refetch()} /></div> : rows.length === 0 ? (
             <Empty icon="globe" title={typed ? text('Nothing matches “{q}”', { q: q.trim() }) : pill === 'mine' || section === 'mine' ? 'No chats assigned to you' : section === 'awaiting' ? 'Nobody is waiting' : 'No website chats'} />
@@ -385,7 +397,9 @@ function Row({ r, me, myName, ring, typing = false, active, onOpen }: { r: Websi
           {r.awaiting_reply && since && !closed ? <WaitClock since={since} /> : <span className="shrink-0 text-[11px] text-ink-3">{listStamp(r.last_message?.at ?? r.last_visitor_at ?? r.updated_at)}</span>}
         </span>
         <span className="flex min-w-0 items-center gap-1.5">
-          {typing && !closed ? (
+          {r.call && !closed ? (
+            <CallLine call={r.call} />
+          ) : typing && !closed ? (
             <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-primary">{text('Typing…')}</span>
           ) : (
             <span className={cx('min-w-0 flex-1 truncate text-[12px]', unread ? 'font-semibold text-ink' : 'text-ink-2')}>{line}</span>
@@ -419,6 +433,72 @@ function Row({ r, me, myName, ring, typing = false, active, onOpen }: { r: Websi
 }
 
 /** How long a visitor has waited: counting while it is under an hour, then when they wrote. */
+/** "On a call · 2:14" on a row (VOICE-UI-02): calling, on, or on hold. */
+function CallLine({ call }: { call: NonNullable<WebsiteRow['call']> }) {
+  const now = useNow(1_000);
+  const at = call.since ? parseTs(call.since).getTime() : NaN;
+  const time = Number.isNaN(at) ? '' : ` · ${clock((now - at) / 1000)}`;
+  const words = call.status === 'ringing' ? text('Calling') : call.status === 'on_hold' ? text('On hold') : text('On a call');
+  return (
+    <span className="flex min-w-0 flex-1 items-center gap-1 truncate text-[12px] font-semibold text-success">
+      <Icon name={call.status === 'ringing' ? 'phone-incoming' : 'phone'} size={12} className={cx('shrink-0', call.status === 'ringing' && 'motion-safe:animate-pulse')} />
+      <span className="truncate tabular-nums">{words}{time}</span>
+    </span>
+  );
+}
+
+const OUTCOMES: Array<{ id: CallbackOutcome; label: string }> = [
+  { id: 'answered', label: 'Answered' },
+  { id: 'no_answer', label: 'No answer' },
+  { id: 'wrong_number', label: 'Wrong number' },
+];
+
+/** A visitor waiting to be called back (VOICE-16): their number, the best time, and how the call went once made. */
+function CallbackRow({ b, active, onOpen }: { b: WebsiteCallback; active: boolean; onOpen: () => void }) {
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const log = (outcome: CallbackOutcome) => {
+    setBusy(true);
+    void apiPost(`${WEBSITE}/callbacks/${b.id}/done`, { outcome }).then(
+      () => {
+        toast('success', text('Call back logged'));
+        void qc.invalidateQueries({ queryKey: ['website'] });
+      },
+      (e) => {
+        toast('error', errorMessage(e));
+        setBusy(false);
+      },
+    );
+  };
+  return (
+    <div data-website-row={b.conversation_id} className={cx('relative flex flex-col gap-1 border-t border-line py-2 pr-3 pl-3.5 first-of-type:border-t-0', active ? 'bg-selection' : 'hover:bg-subtle')}>
+      {active ? <span aria-hidden className="absolute top-0 bottom-0 left-0 w-[3px] bg-primary" /> : null}
+      <button type="button" onClick={onOpen} className="flex flex-col gap-[3px] text-left">
+        <span className="flex items-center gap-[7px]">
+          <Icon name="phone" size={12} className="shrink-0 text-primary" />
+          <b className="flex-1 truncate text-ink">{b.visitor}</b>
+          <span className="text-[11px] text-ink-3">{listStamp(b.created_at)}</span>
+        </span>
+        <span className="truncate text-[12px] text-ink-2">
+          <span className="font-semibold text-ink select-text">{b.phone}</span>
+          {b.best_time ? ` · ${b.best_time}` : ''}
+        </span>
+        <span className="flex items-center gap-[5px] text-[11px]">
+          {b.missed_call ? <Tag tone="danger">{text('Missed call')}</Tag> : null}
+          <span className="truncate text-ink-3">{b.site ?? 'Website'}</span>
+        </span>
+      </button>
+      <span className="flex flex-wrap items-center gap-1" role="group" aria-label={text('How the call back went')}>
+        {OUTCOMES.map((o) => (
+          <button key={o.id} type="button" disabled={busy} onClick={() => log(o.id)} className="h-6 rounded-[6px] border border-line bg-surface px-2 text-[11.5px] font-semibold text-ink hover:bg-subtle disabled:opacity-50">
+            {o.label}
+          </button>
+        ))}
+      </span>
+    </div>
+  );
+}
+
 function WaitClock({ since }: { since: string }) {
   const now = useNow(1_000);
   const at = parseTs(since).getTime();

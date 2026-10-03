@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { WebchatHandoff, WebchatRingChat, WebchatRingState } from '@shared/types';
+import type { WebchatCall, WebchatHandoff, WebchatRingChat, WebchatRingState } from '@shared/types';
 import { call, errorMessage, isMac, on } from '../../../core/bridge';
 import { parseTs } from '../../../core/time';
 import { toast } from '../../../core/toasts';
@@ -74,6 +74,7 @@ const join = (id: number) =>
 const silence = (id: number, onOff: boolean) => void call('ring:silence', { id, on: onOff }).catch(() => undefined);
 const pass = (id: number) => void call('ring:pass', { id }).catch((e) => toast('error', errorMessage(e)));
 const answer = (id: number, accept: boolean) => void call('ring:handoff', { id, accept }).catch((e) => toast('error', errorMessage(e)));
+const answerCall = (id: number, accept: boolean) => void call('ring:call', { id, accept }).catch((e) => toast('error', errorMessage(e)));
 
 /** What a handoff card is called (TEAM-UI-02): an INVITATION, or a TRANSFER TO YOU. */
 export function handoffTitle(h: Pick<WebchatHandoff, 'kind'>): string {
@@ -118,7 +119,10 @@ export function WebchatRingWindow() {
   const handoffs = s.handoffs ?? [];
   const joinKey = isMac ? '⌘⇧J' : 'Ctrl+Shift+J';
   const handover = top ? handoverIn(top.handoverAt, now) : null;
+  const [firstCall, ...otherCalls] = s.calls ?? [];
 
+  // A visitor on the line comes before everything else (VOICE-10).
+  if (firstCall) return <CallCard s={s} c={firstCall} rest={otherCalls} more={s.chats.length + handoffs.length} now={now} />;
   if (!top && handoffs[0]) return <HandoffCard s={s} h={handoffs[0]} rest={handoffs.slice(1)} now={now} />;
   if (!top) {
     return (
@@ -199,6 +203,70 @@ export function WebchatRingWindow() {
       {handoffs.length ? <HandoffRows s={s} list={handoffs.slice(0, Math.max(1, 3 - rest.length))} more={handoffs.length - Math.max(1, 3 - rest.length)} first={!rest.length} /> : null}
       <p className="drag mt-auto px-4 pt-2 pb-2.5 text-[11px] text-[#8FA6E0]">
         {s.outcome ? s.outcome.text : s.elsewhere ? 'Ringing on your other device — shown here without sound' : `Rings until someone joins${s.shortcut ? ` · ${joinKey} to join` : ''}`}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * A visitor's voice call as the call window's card (VOICE-UI-03): who, where, what they last wrote, how long they
+ * have waited, and Answer or Decline. Answering brings WorkSuite forward on the chat, on the call.
+ */
+function CallCard({ s, c, rest, more, now }: { s: WebchatRingState; c: WebchatCall; rest: WebchatCall[]; more: number; now: number }) {
+  const answerKey = isMac ? '⌘⇧A' : 'Ctrl+Shift+A';
+  return (
+    <div className="flex h-full flex-col bg-[#0F1B3D] text-[13px] text-[#E6ECFA]">
+      <div className="sr-only" role="alert" aria-live="assertive">
+        {s.hidden ? 'A website visitor is calling.' : `Voice call: ${c.visitor}${c.site ? ` on ${c.site}` : ''} is calling.`}
+      </div>
+      <div className="drag flex items-center gap-2 px-4 pt-3 text-[11.5px] font-bold tracking-[.06em] text-[#8FE3B7] uppercase">
+        <span className="h-2 w-2 rounded-full bg-[#3DD68C] motion-safe:animate-pulse" />
+        <span className="flex-1">Incoming voice call</span>
+        <span className="rounded-full bg-[#1C3A2E] px-2 py-0.5 text-[10.5px] tracking-normal text-[#8FE3B7] normal-case">{c.stage === 'first' ? 'Your chat' : 'Everyone'}</span>
+      </div>
+      <div className="flex gap-3 px-4 pt-3">
+        <span className="relative shrink-0 rounded-full motion-safe:[animation:ws-ring-pulse_1.6s_ease-out_infinite]">
+          <Avatar name={s.hidden ? '?' : c.visitor} size={46} />
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <b className="truncate text-[15px] text-white">{s.hidden ? 'A website visitor' : c.visitor}</b>
+          <span className="truncate text-[12px] text-[#AFC0E8]">{s.hidden ? 'Unlock WorkSuite to see who.' : [c.site, c.place, c.owner ? `With ${c.owner}` : null].filter(Boolean).join(' · ') || 'Website voice call'}</span>
+          {!s.hidden && c.page ? <span className="truncate text-[12px] text-[#C9D5F5]">Reading {c.page}</span> : null}
+        </span>
+        {c.requestedAt ? (
+          <span className="shrink-0 font-mono text-[12px] text-[#AFC0E8]" aria-label={`Calling for ${waited(c.requestedAt, now)}`}>
+            {waited(c.requestedAt, now)}
+          </span>
+        ) : null}
+      </div>
+      {!s.hidden && c.preview ? <p className="mx-4 mt-2 line-clamp-2 rounded-[8px] bg-[#16254F] px-2.5 py-1.5 text-[12.5px] text-[#E6ECFA]">“{c.preview}”</p> : null}
+      <div className="flex gap-2 px-4 pt-3">
+        <button type="button" disabled={s.hidden} onClick={() => answerCall(c.id, true)} className="flex h-11 flex-1 items-center justify-center gap-2 rounded-[9px] bg-[#3DD68C] text-[14px] font-bold text-[#0B2A1D] hover:brightness-105 disabled:opacity-50">
+          <Icon name="phone" size={16} />
+          Answer
+        </button>
+        <button type="button" onClick={() => answerCall(c.id, false)} className="h-11 flex-1 rounded-[9px] bg-[#C2412D] text-[14px] font-bold text-white hover:brightness-110">
+          Decline
+        </button>
+      </div>
+      {rest.length ? (
+        <ul className="mt-3 flex flex-col border-t border-[#22305C]" aria-label="Other calls">
+          {rest.slice(0, 3).map((x) => (
+            <li key={`c${x.id}`} className="flex h-[46px] items-center gap-2 border-b border-[#22305C] px-4">
+              <Icon name="phone" size={13} className="shrink-0 text-[#8FE3B7]" />
+              <span className="min-w-0 flex-1 truncate">
+                <b className="text-white">{s.hidden ? 'A visitor' : x.visitor}</b>
+                <span className="text-[#AFC0E8]"> · Voice call{x.site && !s.hidden ? ` · ${x.site}` : ''}</span>
+              </span>
+              <button type="button" disabled={s.hidden} onClick={() => answerCall(x.id, true)} className="h-8 rounded-[7px] bg-[#22305C] px-2.5 text-[12px] font-bold text-white hover:bg-[#2B3C70] disabled:opacity-50">
+                Answer
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <p className="drag mt-auto px-4 pt-2 pb-2.5 text-[11px] text-[#8FA6E0]">
+        {s.outcome ? s.outcome.text : s.elsewhere ? 'Ringing on your other device — shown here without sound' : `${more ? `${more} more waiting · ` : ''}Audio only, in WorkSuite${s.answerShortcut ? ` · ${answerKey} to answer` : ''}`}
       </p>
     </div>
   );
@@ -290,6 +358,27 @@ export function RingingBar({ tone }: { tone: boolean }) {
   useRingTone(s, tone);
   const [top] = s.chats;
   const h = s.handoffs?.[0];
+  const [c] = s.calls ?? [];
+  if (c) {
+    // A visitor calling (VOICE-10): before everything else.
+    return (
+      <div role="status" aria-label="Voice call ringing" className="flex h-9 shrink-0 items-center gap-2.5 border-b border-[#A9DDBF] bg-success-bg px-3.5 text-[12.5px] text-[#0F5132] dark:text-success">
+        <Icon name="phone" size={15} className="shrink-0 motion-safe:animate-pulse" />
+        <b className="shrink-0">Incoming voice call</b>
+        <span className="min-w-0 flex-1 truncate">
+          {s.hidden ? '' : `${c.visitor}${c.site ? ` · ${c.site}` : ''}`}
+          {c.requestedAt ? ` · ${waited(c.requestedAt, now)}` : ''}
+          {(s.calls?.length ?? 0) > 1 ? ` · +${(s.calls?.length ?? 0) - 1} more` : ''}
+        </span>
+        <button type="button" onClick={() => answerCall(c.id, true)} className="h-7 rounded-[7px] bg-[#1F7A4D] px-3 font-bold text-white hover:brightness-110">
+          Answer
+        </button>
+        <button type="button" onClick={() => answerCall(c.id, false)} className="h-7 rounded-[7px] border border-current/30 px-2.5 font-semibold hover:bg-black/5">
+          Decline
+        </button>
+      </div>
+    );
+  }
   if (!top && h) {
     // A colleague asking me in, with nothing else ringing (TEAM-23).
     return (

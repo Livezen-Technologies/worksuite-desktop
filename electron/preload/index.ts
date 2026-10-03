@@ -131,6 +131,9 @@ const api = {
     silence: call('ring:silence'),
     pass: call('ring:pass'),
     handoff: call('ring:handoff'),
+    call: call('ring:call'),
+    mic: call('ring:mic'),
+    onCall: call('ring:onCall'),
   },
   tabs: {
     save: call('tabs:save'),

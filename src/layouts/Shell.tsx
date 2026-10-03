@@ -26,6 +26,7 @@ import { SearchOverlay } from '../app/overlays/SearchOverlay';
 import { UpdateBanner } from '../app/screens/UpdateScreens';
 import { ChatDrawer, MinimisedChats } from '../modules/chat/ChatDrawer';
 import { RingingBar } from '../modules/chat/website/Ringing';
+import { watchMicrophone } from '../modules/chat/website/mic';
 import { Sidebar } from './Sidebar';
 import { StatusBar } from './StatusBar';
 import { TabStrip } from './TabStrip';
@@ -55,6 +56,8 @@ export function Shell() {
   useAutoMinimize();
   // Only when WorkSuite starts, as the setting says; a menu closes when the screen changes under it (#150).
   useEffect(() => void openAssistantAtStart(), []);
+  // Whether this computer can take a visitor's voice call (ENH-WCHAT-05, VOICE-11).
+  useEffect(() => (hasChat ? watchMicrophone() : undefined), [hasChat]);
   useEffect(() => closeMenuOnRouteChange(), []);
 
   // Tab restore at start (FR-NAV-04) — only apps the user can still open.

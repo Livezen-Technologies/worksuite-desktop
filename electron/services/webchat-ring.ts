@@ -1,4 +1,4 @@
-import type { WebchatHandoff, WebchatRingChat, WebchatRingPrefs, WebchatRingState } from '@shared/types';
+import type { WebchatCall, WebchatHandoff, WebchatRingChat, WebchatRingPrefs, WebchatRingState } from '@shared/types';
 import { isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { HttpClient } from './http';
@@ -25,7 +25,47 @@ export interface PendingAnswer {
   ring_here?: boolean | null;
   /** Invitations and transfers waiting for me (ENH-WCHAT-03); absent on a server without team chats. */
   handoffs?: HandoffEntry[];
+  /** Visitors' voice calls ringing for me (ENH-WCHAT-05); absent on a server without them, or for whoever does not take calls. */
+  calls?: CallEntry[];
 }
+
+/** A voice call card as the server sends it (WidgetCalls::card, `chat.widget.call`). */
+export interface CallEntry extends WaitingContext {
+  call_id: number;
+  status?: string;
+  call_stage?: string | null;
+  requested_at?: string | null;
+  last_message?: string | null;
+  owner?: string | null;
+}
+
+/** A call card as this computer shows it, or null when it cannot be read. */
+export function fromCall(c: CallEntry): WebchatCall | null {
+  const callId = id(c.call_id);
+  const cid = id(c.conversation_id);
+  if (!callId || !cid) return null;
+  return {
+    id: callId,
+    conversationId: cid,
+    visitor: text(c.visitor, 120) ?? 'A visitor',
+    site: text(c.site, 120),
+    page: text(c.page, 200),
+    place: [text(c.city, 80), text(c.country, 80)].filter(Boolean).join(', ') || null,
+    preview: text(c.last_message, 280),
+    owner: text(c.owner, 120),
+    stage: c.call_stage === 'everyone' ? 'everyone' : 'first',
+    requestedAt: text(c.requested_at, 32),
+  };
+}
+
+/** Said when a call stops ringing here for a reason other than me answering it (VOICE-10, VOICE-04). */
+export const CALL_WORDS: Record<string, string> = {
+  cancelled: 'hung up before anyone answered.',
+  missed: 'was not answered in time — the visitor can ask for a call back.',
+  declined: 'was declined by everybody — the visitor can ask for a call back.',
+  dropped: 'dropped.',
+  ended: 'ended.',
+};
 
 /** An invitation or transfer card as the server sends it (WidgetTeam::pendingFor, `chat.widget.handoff`). */
 export interface HandoffEntry extends WaitingContext {
@@ -200,9 +240,11 @@ export function stampMs(s: string): number {
  * quiet by the person's Do not disturb choice; the stronger tone for at-risk
  * and high, urgent and VIP chats.
  */
-export function toneFor(chats: WebchatRingChat[], opts: { ringSeconds: number; quiet: boolean; duringDnd: WebchatRingPrefs['duringDnd']; now: number; ringHere?: boolean | null; handoffs?: number }): WebchatRingState['tone'] {
+export function toneFor(chats: WebchatRingChat[], opts: { ringSeconds: number; quiet: boolean; duringDnd: WebchatRingPrefs['duringDnd']; now: number; ringHere?: boolean | null; handoffs?: number; calls?: number }): WebchatRingState['tone'] {
   // Another of my devices plays the ring (RING-10): this one shows it without sound.
   if (opts.ringHere === false) return 'off';
+  // A visitor waiting on the line rings like a chat at risk: through Do not disturb unless it only shows cards (VOICE-10).
+  if ((opts.calls ?? 0) > 0) return opts.quiet && opts.duringDnd === 'card' ? 'off' : 'strong';
   const live = chats.filter((c) => !c.silenced && !c.offline && (c.atRisk || opts.ringSeconds <= 0 || opts.now - stampMs(c.since) < opts.ringSeconds * 1000));
   // A colleague asking me in rings too, like a chat that has reached me (TEAM-23).
   if (!live.length) return (opts.handoffs ?? 0) > 0 && !(opts.quiet && opts.duringDnd !== 'ring') ? 'normal' : 'off';
@@ -218,11 +260,11 @@ export function toneFor(chats: WebchatRingChat[], opts: { ringSeconds: number; q
  * How tall the call window is for what it shows: one card — a chat, or an invitation or transfer — then a row for
  * each of the others (up to three), or just an outcome.
  */
-export function ringerHeight(s: Pick<WebchatRingState, 'chats' | 'outcome' | 'handoffs'>): number {
-  const all = s.chats.length + (s.handoffs?.length ?? 0);
+export function ringerHeight(s: Pick<WebchatRingState, 'chats' | 'outcome' | 'handoffs' | 'calls'>): number {
+  const all = s.chats.length + (s.handoffs?.length ?? 0) + (s.calls?.length ?? 0);
   if (!all) return 120;
   const rows = Math.min(3, all - 1);
-  return 272 + rows * 46 + (all > 4 ? 26 : 0) + (!s.chats.length && s.handoffs?.[0]?.note ? 40 : 0);
+  return 272 + rows * 46 + (all > 4 ? 26 : 0) + (!s.calls?.length && !s.chats.length && s.handoffs?.[0]?.note ? 40 : 0);
 }
 
 export interface WebchatRingDeps {
@@ -234,8 +276,8 @@ export interface WebchatRingDeps {
   prefs: () => WebchatRingPrefs;
   /** Do not disturb, or notifications paused. */
   quiet: () => boolean;
-  /** Bring the main window forward on a website chat. */
-  open: (conversationId: number) => void;
+  /** Bring the main window forward on a website chat; with a call, its thread joins the call's audio. */
+  open: (conversationId: number, callId?: number) => void;
   onChanged: (state: WebchatRingState) => void;
   /** This installation as a ringing device (RING-10, RING-49): stable across restarts. */
   deviceId: () => string;
@@ -262,6 +304,10 @@ export class WebchatRinger {
   private chats = new Map<number, WebchatRingChat>();
   /** Invitations and transfers waiting for me, by handoff id (ENH-WCHAT-03). */
   private handoffs = new Map<number, WebchatHandoff>();
+  /** Visitors' voice calls ringing for me, by call id (ENH-WCHAT-05). */
+  private calls = new Map<number, WebchatCall>();
+  /** Whether this computer has a microphone, as its main window last found; null until it says (VOICE-11). */
+  private hasMic: boolean | null = null;
   private ringSeconds = 0;
   /** Whether the server has this computer play the ring; null when it does not choose (no ring sessions there). */
   private ringHere: boolean | null = null;
@@ -280,6 +326,7 @@ export class WebchatRinger {
   private running = false;
   private last = '';
   shortcut = false;
+  answerShortcut = false;
 
   constructor(private readonly deps: WebchatRingDeps) {}
 
@@ -304,6 +351,7 @@ export class WebchatRinger {
     this.timer = this.soon = this.outcomeTimer = this.tick = this.beatTimer = null;
     this.chats.clear();
     this.handoffs.clear();
+    this.calls.clear();
     this.ringHere = null;
     this.sessions = false;
     this.outcome = null;
@@ -317,15 +365,18 @@ export class WebchatRinger {
     const now = Date.now();
     // One that ran out stops ringing at once; the server says so at the next read.
     const handoffs = [...this.handoffs.values()].filter((h) => !h.expiresAt || stampMs(h.expiresAt) > now).sort((a, b) => a.id - b.id);
+    const calls = [...this.calls.values()].sort((a, b) => a.id - b.id);
     return {
       chats: hidden ? chats.map((c) => ({ ...c, visitor: 'A visitor', page: null, place: null, device: null, preview: null, by: null })) : chats,
       handoffs: hidden ? handoffs.map((h) => ({ ...h, visitor: 'A visitor', page: null, note: null, from: null })) : handoffs,
-      tone: toneFor(chats, { ringSeconds: this.ringSeconds, quiet: this.deps.quiet(), duringDnd: prefs.duringDnd, now, ringHere: this.ringHere, handoffs: handoffs.length }),
+      calls: hidden ? calls.map((c) => ({ ...c, visitor: 'A visitor', page: null, place: null, preview: null, owner: null })) : calls,
+      answerShortcut: this.answerShortcut,
+      tone: toneFor(chats, { ringSeconds: this.ringSeconds, quiet: this.deps.quiet(), duringDnd: prefs.duringDnd, now, ringHere: this.ringHere, handoffs: handoffs.length, calls: calls.length }),
       volume: Math.max(0, Math.min(100, prefs.volume)),
       outcome: this.outcome,
       hidden,
       shortcut: this.shortcut,
-      elsewhere: this.ringHere === false && chats.length + handoffs.length > 0,
+      elsewhere: this.ringHere === false && chats.length + handoffs.length + calls.length > 0,
       ringHere: this.ringHere,
     };
   }
@@ -346,6 +397,25 @@ export class WebchatRinger {
     const cid = id(ev.conversation_id);
     if (!cid) return;
     switch (e.type) {
+      case 'chat.widget.call': {
+        // A visitor calling (VOICE-10): it rings until somebody answers, the visitor hangs up or nobody did in time.
+        if (ev.what === 'ringing') {
+          const c = fromCall(ev as unknown as CallEntry);
+          if (c) this.calls.set(c.id, c);
+          this.changed();
+          break;
+        }
+        const callId = id(ev.call_id);
+        if (callId === null || !this.calls.has(callId)) return;
+        const c = this.calls.get(callId)!;
+        this.calls.delete(callId);
+        const by = id(ev.by);
+        if (ev.what === 'answered') {
+          if (by !== this.deps.me()) this.say(cid, `${text(ev.by_name, 120) ?? 'A colleague'} answered the call.`);
+        } else if (typeof ev.what === 'string' && CALL_WORDS[ev.what]) this.say(cid, `The call from ${c.visitor} ${CALL_WORDS[ev.what]}`);
+        this.changed();
+        break;
+      }
       case 'chat.widget.handoff': {
         // A colleague asks me in (TEAM-23): it rings until I answer, it is cancelled or it runs out.
         const h = fromHandoff(ev as unknown as HandoffEntry);
@@ -490,6 +560,46 @@ export class WebchatRinger {
     return true;
   }
 
+  /**
+   * Answer a visitor's call, or decline it (VOICE-10, VOICE-12): the first to answer takes it, and WorkSuite comes
+   * forward on the chat, whose thread joins the call's audio. A moment too late, the card says who answered.
+   */
+  async answerCall(callId: number, accept: boolean): Promise<boolean> {
+    const c = this.calls.get(callId);
+    if (!c) return false;
+    try {
+      await this.deps.http.post(`${WEBSITE}/calls/${callId}/${accept ? 'answer' : 'decline'}`);
+    } catch (e) {
+      if (isDesktopError(e) && (e.status === 409 || e.status === 404 || e.status === 403)) {
+        this.calls.delete(callId);
+        this.say(c.conversationId, e.message || 'This call is no longer ringing for you.');
+        this.changed();
+        return false;
+      }
+      this.say(c.conversationId, `Could not ${accept ? 'answer' : 'decline'}: ${e instanceof Error ? e.message : 'the server did not answer'}`);
+      this.changed();
+      return false;
+    }
+    this.calls.delete(callId);
+    this.outcome = null;
+    this.changed();
+    if (accept) this.deps.open(c.conversationId, callId);
+    this.reconcileSoon();
+    return true;
+  }
+
+  /** The oldest call ringing, for Ctrl/Cmd+Shift+A and the tray. */
+  topCall(): WebchatCall | null {
+    return [...this.calls.values()].sort((a, b) => a.id - b.id)[0] ?? null;
+  }
+
+  /** Whether this computer has a microphone (VOICE-11): told by the main window, sent with the next heartbeat. */
+  setMic(has: boolean): void {
+    if (this.hasMic === has) return;
+    this.hasMic = has;
+    void this.beat();
+  }
+
   /** The top chat still ringing, for Ctrl/Cmd+Shift+J and the tray. */
   top(): WebchatRingChat | null {
     return orderChats([...this.chats.values()]).find((c) => !c.silenced) ?? orderChats([...this.chats.values()])[0] ?? null;
@@ -551,6 +661,8 @@ export class WebchatRinger {
         kind: 'desktop',
         focused: this.deps.focused(),
         can_play_audio: this.deps.prefs().volume > 0,
+        // A computer without a microphone is not rung for visitors' calls (VOICE-11).
+        ...(this.hasMic === null ? {} : { has_mic: this.hasMic }),
       });
       const here = typeof r?.ring_here === 'boolean' ? r.ring_here : null;
       if (here !== this.ringHere) {
@@ -590,6 +702,10 @@ export class WebchatRinger {
       if (Array.isArray(answer?.handoffs)) {
         this.handoffs = new Map(answer.handoffs.map(fromHandoff).filter((h): h is WebchatHandoff => h !== null).map((h) => [h.id, h]));
       }
+      // And of visitors' calls ringing for me (ENH-WCHAT-05).
+      if (Array.isArray(answer?.calls)) {
+        this.calls = new Map(answer.calls.map(fromCall).filter((c): c is WebchatCall => c !== null).map((c) => [c.id, c]));
+      }
       this.changed();
     } catch (e) {
       if (isDesktopError(e) && (e.status === 403 || e.status === 404)) {
@@ -597,6 +713,7 @@ export class WebchatRinger {
         this.refused = true;
         this.chats.clear();
         this.handoffs.clear();
+        this.calls.clear();
         this.changed();
         return;
       }
