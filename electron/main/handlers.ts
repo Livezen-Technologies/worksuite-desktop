@@ -801,6 +801,9 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('notifications:test', () => ctx.notifications.test());
   router.handle('notifications:permission', () => ctx.notifications.permission());
   router.handle('notifications:refresh', () => ctx.notifications.refreshCounts());
+  router.handle('notifications:reminder', (input) =>
+    ctx.notifications.notify({ id: `reminder:${input.id}`, module: 'mail', title: input.title, body: input.body, sender: null, link: input.route, critical: false, flag: input.flag ?? null }),
+  );
 
   // ── clipboard (FR-XFR-05; never monitored, FR-XFR-06) ──────────────────
   router.handle('clipboard:readForPaste', async (_i, c) => {

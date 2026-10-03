@@ -64,7 +64,29 @@ export interface Incoming {
   call?: boolean;
   /** One new email: its banner offers Reply, Archive and Mark read, which act on this message. */
   mail?: MailNotice | null;
+  /** A flagged message's reminder (ENH-MAIL-03 DMO-TSK-02): Snooze 1 hour and Mark complete on the banner. */
+  flag?: FlagNotice | null;
 }
+
+/** The flagged message a reminder is about. */
+export interface FlagNotice {
+  mailbox: number;
+  folder: string;
+  uid: string;
+}
+
+/** A flag reminder's message, from the link the server gave it ("/mail?msg=12&mbx=4&mf=inbox"). */
+export function flagFromLink(link: string | null | undefined): FlagNotice | null {
+  const m = /^\/mail\?(.*)$/.exec(link ?? '');
+  if (!m) return null;
+  const q = new URLSearchParams(m[1]);
+  const uid = q.get('msg') ?? '';
+  const mailbox = Number(q.get('mbx') ?? '');
+  const folder = q.get('mf') ?? '';
+  return /^\d{1,20}$/.test(uid) && Number.isSafeInteger(mailbox) && mailbox >= 0 && /^[A-Za-z0-9._\-/ :]{1,128}$/.test(folder) ? { mailbox, folder, uid } : null;
+}
+
+const FLAG_ACTIONS = ['Snooze 1 hour', 'Mark complete'] as const;
 
 /** The new email a mail banner is about. */
 export interface MailNotice {
@@ -345,7 +367,7 @@ export class NotificationService {
         raw.forEach((n, k) => {
           const i = items[k]!;
           if (i.read || this.shown.includes(i.id) || Date.parse(i.createdAt) < since) return;
-          if (n.desktop_allowed !== false) this.notify({ reminder: (n.event_key ?? n.type) === 'task.reminder' ? reminderAction(n.link, n.actions) : null, meeting: meetingNoticeActions(n.event_key ?? n.type, n.actions), id: i.id, module: i.module, category: n.category ?? null, title: i.title, body: i.body, sender: null, link: i.link, critical: n.priority === 'critical' || n.priority === 'emergency' || n.level === 'critical' || n.level === 'emergency' });
+          if (n.desktop_allowed !== false) this.notify({ flag: (n.event_key ?? n.type) === 'mail.flag_reminder' ? flagFromLink(n.link) : null, reminder: (n.event_key ?? n.type) === 'task.reminder' ? reminderAction(n.link, n.actions) : null, meeting: meetingNoticeActions(n.event_key ?? n.type, n.actions), id: i.id, module: i.module, category: n.category ?? null, title: i.title, body: i.body, sender: null, link: i.link, critical: n.priority === 'critical' || n.priority === 'emergency' || n.level === 'critical' || n.level === 'emergency' });
         });
       }
       this.listed = true;
@@ -424,6 +446,7 @@ export class NotificationService {
         this.notify({
           id,
           reminder: e.event === 'task.reminder' ? reminderAction(link, e.actions) : null,
+          flag: e.event === 'mail.flag_reminder' ? flagFromLink(link) : null,
           meeting: meetingNoticeActions(typeof e.event === 'string' ? e.event : null, e.actions),
           module: moduleOf({ category: e.category as string, link }),
           category: typeof e.category === 'string' ? e.category : null,
@@ -591,6 +614,8 @@ export class NotificationService {
           ? undefined
           : n.reminder
             ? [{ type: 'button', text: 'Snooze 15 min' }, { type: 'button', text: 'Mark Complete' }]
+            : n.flag
+              ? FLAG_ACTIONS.map((label) => ({ type: 'button' as const, text: localize(label, this.prefs().language) }))
             : n.meeting?.answers.length
               ? n.meeting.answers.map((a) => ({ type: 'button' as const, text: a.label }))
               : n.mail
@@ -604,6 +629,10 @@ export class NotificationService {
     });
     const recipient = this.userId;
     note.on('action', (_event, index) => {
+      if (n.flag && recipient === this.userId) {
+        void this.flagAction(n, n.flag, index).then(() => note.close());
+        return;
+      }
       if (n.mail && recipient === this.userId) {
         void this.mailAction(n, n.mail, index).then(() => note.close());
         return;
@@ -654,6 +683,27 @@ export class NotificationService {
     } catch (error) {
       log.debug('Mail notification action failed', { error: String(error) });
       this.onClick(mailRoute(m), 'mail');
+    }
+  }
+
+  /**
+   * A flag reminder's button (DMO-TSK-02): Snooze 1 hour moves the reminder,
+   * Mark complete completes the flag and its task — on the server, so every
+   * device agrees. Locked, without Mail, or refused, it opens the message.
+   */
+  async flagAction(n: Incoming, f: FlagNotice, index: number): Promise<void> {
+    const action = FLAG_ACTIONS[index];
+    if (!action) return;
+    const route = `/mail?msg=${encodeURIComponent(f.uid)}&mbx=${f.mailbox}&mf=${encodeURIComponent(f.folder)}`;
+    if (this.isLocked() || !this.moduleEnabled(n)) return this.onClick(route, 'mail');
+    const items = [{ mailbox: f.mailbox, folder: f.folder, uid: f.uid }];
+    try {
+      if (action === 'Snooze 1 hour') await this.http.post('/api/mail/states', { action: 'remind', items, at: new Date(Date.now() + 3_600_000).toISOString() });
+      else await this.http.post('/api/mail/states', { action: 'complete', items });
+      if (/^\d+$/.test(n.id)) await this.markRead([n.id]);
+    } catch (error) {
+      log.debug('Flag reminder action failed', { error: String(error) });
+      this.onClick(route, 'mail');
     }
   }
 

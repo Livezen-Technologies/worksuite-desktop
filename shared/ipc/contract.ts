@@ -760,6 +760,16 @@ export const contract = {
   'notifications:markAllRead': ch(none, { session: true }),
   'notifications:pause': ch(z.object({ minutes: z.number().int().min(0).max(60 * 24 * 7).nullable() }), { session: true }),
   'notifications:test': ch(none, { session: true, rate: 1 }),
+  'notifications:reminder': ch(
+    z.strictObject({
+      id: z.string().regex(/^[A-Za-z0-9:._\-/ ]{1,200}$/),
+      title: z.string().max(200),
+      body: z.string().max(300),
+      route: z.string().regex(/^\/(mail|calendar)\?[A-Za-z0-9%=&._\-:]{1,400}$/),
+      flag: z.strictObject({ mailbox: z.number().int().min(0), folder: z.string().regex(/^[A-Za-z0-9._\-/ :]{1,128}$/), uid: z.string().regex(/^\d{1,20}$/) }).optional(),
+    }),
+    { session: true, rate: 5 },
+  ),
   'notifications:permission': ch(none, { session: true }),
   /** The bell's count again, now: after the notification centre read, snoozed or archived something. */
   'notifications:refresh': ch(none, { session: true, rate: 10 }),
@@ -1343,6 +1353,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'notifications:markAllRead': void;
   'notifications:pause': { pausedUntil: string | null };
   'notifications:test': boolean;
+  'notifications:reminder': void;
   'notifications:permission': NotificationPermission;
   'notifications:refresh': void;
   'clipboard:readForPaste': { text: string | null; image: string | null; files: PickedFile[] };

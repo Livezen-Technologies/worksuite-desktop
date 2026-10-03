@@ -245,6 +245,7 @@ const api = {
     test: call('notifications:test'),
     permission: call('notifications:permission'),
     refresh: call('notifications:refresh'),
+    reminder: call('notifications:reminder'),
   },
   clipboard: {
     readForPaste: call('clipboard:readForPaste'),

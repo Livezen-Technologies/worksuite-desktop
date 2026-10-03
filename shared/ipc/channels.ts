@@ -173,6 +173,8 @@ export const INVOKE_CHANNELS = [
   'notifications:test',
   'notifications:permission',
   'notifications:refresh',
+  // A reminder this computer worked out by itself, while WorkSuite could not send it (ENH-MAIL-03 DMO-TSK-02).
+  'notifications:reminder',
 
   'clipboard:readForPaste',
 

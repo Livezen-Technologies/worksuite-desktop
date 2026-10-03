@@ -2116,5 +2116,18 @@
   "Your organisation keeps no copy of this mailbox on the WorkSuite server; the mail provider’s own retention applies. There is no AutoArchive on this computer.": "ඔබගේ සංවිධානය මෙම තැපැල් පෙට්ටියේ පිටපතක් WorkSuite සේවාදායකයේ තබා නොගනී; තැපැල් සපයන්නාගේම රඳවා ගැනීම අදාළ වේ. මෙම පරිගණකයේ AutoArchive නැත.",
   "has macros — save only": "මැක්‍රෝ ඇත — සුරැකීම පමණි",
   "{folder} — properties": "{folder} — ගුණාංග",
-  "{name} has macros: it is saved, not opened. Open it only if you trust the sender.": "{name} හි මැක්‍රෝ ඇත: එය සුරකින ලදී, විවෘත නොකළා. ඔබ යවන්නා විශ්වාස කරන්නේ නම් පමණක් එය විවෘත කරන්න."
+  "{name} has macros: it is saved, not opened. Open it only if you trust the sender.": "{name} හි මැක්‍රෝ ඇත: එය සුරකින ලදී, විවෘත නොකළා. ඔබ යවන්නා විශ්වාස කරන්නේ නම් පමණක් එය විවෘත කරන්න.",
+  "5 minutes": "මිනිත්තු 5",
+  "Back from snooze": "නිදි කිරීමෙන් ආපසු",
+  "Dismiss": "ඉවත් කරන්න",
+  "Dismiss all": "සියල්ල ඉවත් කරන්න",
+  "Follow up": "පසු විපරම",
+  "Hide reminders": "සිහිකැඳවීම් සඟවන්න",
+  "Reminders": "සිහිකැඳවීම්",
+  "Reminders · {n}": "සිහිකැඳවීම් · {n}",
+  "Snooze…": "නිදි කරන්න…",
+  "Started {n} min ago": "මිනිත්තු {n}කට පෙර ආරම්භ විය",
+  "Starting now": "දැන් ආරම්භ වේ",
+  "Starts in {n} min": "මිනිත්තු {n}කින් ආරම්භ වේ",
+  "Snooze 1 hour": "පැය 1ක් නිදි කරන්න"
 }
