@@ -5,6 +5,12 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.147 — 2026-10-03
+
+- **A small organisation switcher everywhere (#214).** Home's big "All organizations" box is now a compact pill on the date line — no thick blue ring after you click it — showing the organisation's initials, or stacked initials for All and "N organisations" for several. It opens the standard menu under the pill: search (with more than five), tick several and press **Apply**, or click a name to pick just that one; the default organisation has a badge and can be changed from **Default organisation ›**, and **Manage organisations** is there if you may manage them. Keyboard: arrows, Space to tick, Enter to apply, Esc to close. Home's cards reload for the chosen organisations (with due-today counts per organisation), and the numbers line up in the app font.
+- The same switcher now sits in Expenses, Finance, Tenders, Sales, Billing, Inventory, Garage, eLearning, People, HR announcements, Files › Shared with me and the sidebar's company menu, and labels read "All organisations" throughout. Expenses' pins moved to **Pin to the top ›**.
+- Your choice is remembered per person and synced; **Settings › Preferences › Organisation filter** decides whether it's the same in every app (the default) or separate in each. Modules that show one organisation at a time ignore a several-organisation choice.
+
 ## 0.2.146 — 2026-10-03
 
 - **A compact, cleaner email header (#212).** The top of an open email now takes about half the space: the subject (up to two lines) with small **Inbox** and **External** badges beside it; the sender on one line — name and address, the address copies on click — with a small shield that is green when SPF, DKIM and DMARC pass, amber when partly verified and red when it fails (a failed check also shows a warning above the message); and "to me ▾" underneath, which opens the full details (From, To, Cc, Bcc, Reply-To, date, mailed-by, signed-by, account and folder). On the right are the short date ("3:26 PM" today), **Star** and **⋯**, which holds Remind me, Add to contacts, Create meeting, Copy, View source, Print and Download .eml. Clicking the sender opens their card with New email, Create meeting and View in CRM. The account shows as a small dot only in All Accounts. The header follows the Super compact, Compact and Classic density, shrinks to a slim bar when you scroll the message, and rearranges itself in a narrow reading pane. Turn on **Settings › Mail › Show more buttons in the message header** for extra icons.

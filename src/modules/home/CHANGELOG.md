@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.5.0 — 2026-10-03
+
+- A compact organisation pill on the date line (#214): search, several organisations with Apply, a default organisation, due-today counts; cards refetch for the chosen organisations and the stat numbers are tabular in the app font.
+
 ## 1.4.1 — 2026-10-02
 
 - Announcements order urgent, pinned, important, then newest; expired ones drop off at once; edits and withdrawals refresh Home immediately; 'See all' (#98).
