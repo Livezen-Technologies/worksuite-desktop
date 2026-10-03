@@ -121,7 +121,8 @@ export interface RingingEntry extends WaitingContext {
 
 /** Said when a ring stops for a reason other than me joining (RING-28). */
 export const STOP_WORDS: Record<string, string> = {
-  visitor_left: 'The visitor left the site before anyone joined. The chat is in Missed chats.',
+  // Not "in Missed chats": a chat is marked missed only once the widget's missed time has passed.
+  visitor_left: 'The visitor left the site before anyone joined.',
   visitor_ended: 'The visitor ended the chat.',
   closed: 'The chat was closed before anyone joined.',
   blocked: 'The visitor was blocked.',

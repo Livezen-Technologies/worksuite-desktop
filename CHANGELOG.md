@@ -5,6 +5,13 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.110: Website chat ringing says what happened
+
+- When a visitor leaves the site before anyone joins their chat, the call window now says just that. It used to add
+  "The chat is in Missed chats", which is only true once the website's missed time has passed.
+
+---
+
 ## 2026-10-03 — 0.2.109: Website visitors can call you
 
 With WorkSuite's Communication 1.11.0 and its voice calls migration (Website Live Chat SRS ENH-WCHAT-05), a website's

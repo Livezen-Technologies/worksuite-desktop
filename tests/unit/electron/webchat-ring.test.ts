@@ -291,7 +291,7 @@ describe('WebchatRinger with ring sessions on the server', () => {
     r.start();
     await vi.waitFor(() => expect(r.state().chats).toHaveLength(3));
     r.handle({ type: 'chat.ring.stopped', conversation_id: 3, reason: 'visitor_left' } as never);
-    expect(r.state().outcome?.text).toBe('The visitor left the site before anyone joined. The chat is in Missed chats.');
+    expect(r.state().outcome?.text).toBe('The visitor left the site before anyone joined.');
     r.handle({ type: 'chat.ring.stopped', conversation_id: 4, reason: 'joined', by: 8, by_name: 'Kasun' } as never);
     expect(r.state().outcome?.text).toBe('Kasun joined the chat.');
     r.handle({ type: 'chat.ring.stopped', conversation_id: 5, reason: 'visitor_ended' } as never);
