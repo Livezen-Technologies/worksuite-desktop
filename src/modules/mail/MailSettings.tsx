@@ -20,7 +20,8 @@ import { includedIds, runSync } from './sync';
 import { AppPasswords } from './AppPasswords';
 import { ImportMail } from './Import';
 import { DataFileImport } from './DataFiles';
-import { Rules, Signatures } from './MailRules';
+import { Rules } from './MailRules';
+import { Signatures } from './signatures/SignaturesSettings';
 import { SpellingSettings } from './SpellingSettings';
 import { mailKeys, useLocalStore, useMailPrefs, useMailStats, useMailboxes, useSyncStatus } from './api';
 import { mailboxLetter } from './model';
@@ -144,8 +145,8 @@ function Accounts() {
   const boxes = useMailboxes();
   const sync = useSyncStatus(true);
   const prefs = useStore(app, (s) => s.prefs);
-  const store = useLocalStore();
-  const stats = useMailStats();
+  const store = useLocalStore(true);
+  const stats = useMailStats(true, true);
   const qc = useQueryClient();
   const mailPrefs = useMailPrefs();
   const [adding, setAdding] = useState(false);
@@ -207,7 +208,7 @@ function Accounts() {
           <div className="mt-3">
             <Select label="Keep messages from the last" value={prefs.mailCacheDays} options={MAIL_DAYS.map((d) => ({ ...d, label: text(d.label) }))} onValueChange={(v) => void updatePrefs({ mailCacheDays: v as Preferences['mailCacheDays'] })} />
           </div>
-          <p className="mt-2 text-[12.5px] text-ink-3">{prefs.mailCacheDays === 0 ? text('Only the lists are kept; a message is read from the server.') : text('Lists and the messages you open are kept, encrypted, so they read offline.')}</p>
+          <p className="mt-2 text-[12.5px] text-ink-3">{prefs.mailCacheDays === 0 ? text('Only the lists are kept; a message is read from the server.') : text('Messages from this period in Inbox, Sent and Drafts are downloaded in the background, newest and unread first, and kept encrypted so they read offline.')}</p>
           <label className="mt-3 flex items-center gap-2.5 text-[13.5px] text-ink">
             <Checkbox checked={prefs.mailCacheDays !== 0} onChange={(e) => void updatePrefs({ mailCacheDays: e.target.checked ? 30 : 0 })} />
             Download message bodies

@@ -258,6 +258,13 @@ export interface SyncAccount {
   pushed: boolean;
   folders: number;
   folders_done: number;
+  /** A run is going now (`running` is also true while a first sync is still building). */
+  syncing_now?: boolean;
+  /** Every folder's headers are in (#190). */
+  complete?: boolean;
+  /** Messages mirrored, and bodies kept, on the WorkSuite server. */
+  messages?: number;
+  bodies?: number;
 }
 
 export interface SyncOverall {
@@ -293,6 +300,28 @@ export interface SyncRun {
   removed: number;
   error_code: string | null;
   error: string | null;
+  /** Message bodies the run downloaded (#190; absent from older servers). */
+  bodies?: number;
+  /** Folders that failed in this run. */
+  errors?: number;
+  /** One entry per folder, in the order the run took them (#190). */
+  details?: SyncRunFolder[];
+}
+
+/** One folder's part in a sync run (GET mailboxes/{id}/sync-log, #190). */
+export interface SyncRunFolder {
+  folder: string;
+  path: string;
+  role: string | null;
+  /** ok · pending (more to fetch next run) · not_reached (out of time) · error. */
+  status: 'ok' | 'pending' | 'not_reached' | 'error' | string;
+  added: number;
+  changed: number;
+  removed: number;
+  ms?: number;
+  error?: string;
+  /** "unchanged": the server said nothing had moved. */
+  note?: string;
 }
 
 /** The All Accounts folders (DMO-ALL-01), in the order the pane lists them. */
@@ -415,6 +444,50 @@ export interface Signature {
   mailbox?: number | null;
   default_new?: boolean;
   default_reply?: boolean;
+  /** worksuite-desktop#166 (newer servers): the plain-text version. */
+  text?: string;
+  /** personal, or the organisation's (made by an administrator). */
+  scope?: 'personal' | 'company';
+  /** An organisation signature people use with their own details and cannot change. */
+  locked?: boolean;
+  editable?: boolean;
+  /** hosted: pictures by their public WorkSuite link; embedded: inside the message (cid:). */
+  image_mode?: 'hosted' | 'embedded';
+  dark_logo?: string | null;
+  images?: string[];
+  variables_used?: string[];
+  /** Embedded mode: each hosted picture's address and the picture as a data: URL. */
+  embedded?: Record<string, string>;
+  updated_at?: string | null;
+}
+
+/** Which signature an account uses (mailbox null: every account without its own choice). */
+export interface SignatureSetting {
+  mailbox: number | null;
+  new_id: number | null;
+  /** null: no signature on replies and forwards. */
+  reply_id: number | null;
+  /** above_quote: below the reply, above the quoted message; below_quote: at the very end. */
+  placement: 'above_quote' | 'below_quote';
+}
+
+export interface SignatureTemplate {
+  id: number;
+  name: string;
+  html: string;
+  scope: 'personal' | 'company';
+  editable: boolean;
+}
+
+/** GET /api/mail/signatures: older servers send only `signatures`. */
+export interface SignaturesData {
+  signatures: Signature[];
+  settings?: SignatureSetting[];
+  templates?: SignatureTemplate[];
+  values?: Record<string, string>;
+  details?: Record<string, string>;
+  assets?: { social_base: string; social: string[] };
+  can_manage_company?: boolean;
 }
 
 /** A message's address: which mailbox, which folder, which uid. */

@@ -60,8 +60,8 @@ export interface MessageViewProps {
   account: Mailbox | null;
   /** What the page's keyboard shortcuts call on the open message. */
   onControls?: (c: ViewControls | null) => void;
-  /** Start a reply as soon as the message is here (a notification's Reply). */
-  autoReply?: boolean;
+  /** Start a reply as soon as the message is here (a notification's Reply; the list's Reply all and Forward). */
+  autoReply?: boolean | ComposeSeed['mode'];
   /** The message arrived: its tab can be named (a message opened from a link is not in the list). */
   onLoaded?: (subject: string, from: string) => void;
   /**
@@ -343,7 +343,7 @@ export function MessageView(p: MessageViewProps) {
   useEffect(() => {
     if (p.autoReply && m && clean && !replied.current) {
       replied.current = true;
-      reply('reply');
+      reply(p.autoReply === true ? 'reply' : p.autoReply);
     }
   });
 
@@ -902,7 +902,7 @@ function Attachments({ m, msgRef, offline }: { m: MessageDetail; msgRef: Message
 }
 
 /** The original as the server holds it, headers and all — read-only text, never rendered. */
-function SourceDialog({ msgRef, onClose }: { msgRef: MessageRef; onClose: () => void }) {
+export function SourceDialog({ msgRef, onClose }: { msgRef: MessageRef; onClose: () => void }) {
   const q = useQuery({
     queryKey: ['mail', 'source', msgRef.mailbox, msgRef.folder, msgRef.uid],
     queryFn: () => apiGet<{ source: string }>(`/api/mail/messages/${msgRef.uid}/source`, withMailbox({ folder: msgRef.folder }, msgRef.mailbox)),

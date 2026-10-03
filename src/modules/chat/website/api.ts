@@ -229,6 +229,8 @@ export interface WebsiteConversation {
     tags: string[] | null;
     is_starred: boolean;
     priority?: string;
+    /** The largest file this website's visitors may be sent (RDC-04); absent on an older server, which means 5 MB. */
+    max_upload_kb?: number;
   };
   visitor: WebsiteVisitor | null;
   messages: WebsiteMessage[];

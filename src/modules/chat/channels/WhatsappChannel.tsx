@@ -97,7 +97,7 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
         </div>
       ))}
       <div className="min-h-0 flex-1 overflow-y-auto pb-2 scroll-thin">
-        {chats.isLoading ? <Spinner /> : chats.error ? <div className="p-4"><ErrorNote error={chats.error} onRetry={() => void chats.refetch()} /></div> : null}
+        {chats.isLoading ? <Spinner /> : chats.error && !chats.data ? <div className="p-4"><ErrorNote error={chats.error} onRetry={() => void chats.refetch()} /></div> : null}
         {chats.isSuccess && !rows.length ? (
           <Empty icon="phone" title={q.trim() ? 'Nothing matches' : scope === 'unread' ? 'Nothing unread' : scope === 'waiting' ? 'Nobody is waiting' : scope === 'mine' ? 'No conversations assigned to you' : 'No WhatsApp conversations yet'} hint={scope === 'all' && !q.trim() ? 'Messages to your numbers appear here.' : undefined} />
         ) : null}
@@ -116,7 +116,7 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
           <ResizeDivider state={list} label="Resize the conversation list" />
           <div className="flex flex-col gap-2 px-3 pt-3 pb-2">
             <div className="flex items-center gap-2">
-              <b className="flex-1 truncate text-[15px] text-ink">WhatsApp</b>
+              <b className="flex-1 truncate text-[15px] text-ink">WhatsApp</b>{chats.isFetching && chats.data ? <span role="status" className="text-[11px] text-ink-3">Updating…</span> : null}
               {accounts.length > 1 ? (
                 <Select aria-label="Number" value={account} onChange={(e) => setAccount(Number(e.target.value))} className="h-7 max-w-[150px] rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink">
                   <option value={0}>All numbers</option>
@@ -326,6 +326,8 @@ function WhatsappThread({ id, onRelink, index, picked, onPick, onAction }: { id:
   const scroller = useRef<HTMLDivElement>(null);
   const data = thread.data;
   const count = data?.messages.length ?? 0;
+  const firstScroll = useRef(true);
+  const atBottom = useRef(true);
   const unread = data?.chat.unread ?? 0;
 
   // Reading a conversation reads it: the list, the toolbar badge and the customer's ticks follow. Not while the
@@ -340,11 +342,11 @@ function WhatsappThread({ id, onRelink, index, picked, onPick, onAction }: { id:
 
   useEffect(() => {
     const el = scroller.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el && (firstScroll.current || atBottom.current)) { el.scrollTop = el.scrollHeight; firstScroll.current = false; }
   }, [count]);
 
   if (thread.isLoading) return <Spinner />;
-  if (thread.error || !data) return <div className="p-6"><ErrorNote error={thread.error} onRetry={() => void thread.refetch()} /></div>;
+  if (!data) return <div className="p-6"><ErrorNote error={thread.error} onRetry={() => void thread.refetch()} /></div>;
   const { chat } = data;
   const who = whoIs(chat, index, picked);
   const group = who.group;
@@ -380,7 +382,7 @@ function WhatsappThread({ id, onRelink, index, picked, onPick, onAction }: { id:
           ) : null}
           <Button size="sm" icon="external" onClick={() => void call('app:openInBrowser', { path: `/whatsapp?chat=${chat.id}` })}>Open on the web</Button>
         </header>
-        <div ref={scroller} className="flex min-h-0 flex-1 flex-col gap-[9px] overflow-y-auto px-4 py-3 scroll-thin">
+        <div ref={scroller} onScroll={() => { const el = scroller.current; if (el) atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }} className="flex min-h-0 flex-1 flex-col gap-[9px] overflow-y-auto px-4 py-3 scroll-thin">
           {data.has_more ? <div className="self-center text-[11px] text-ink-3">Earlier messages are on the web.</div> : null}
           {!shown.length ? <Empty icon="phone" title="No messages yet" /> : null}
           {shown.map((m) => {

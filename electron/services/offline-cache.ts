@@ -37,6 +37,22 @@ export function mailboxOfPath(path: string): string | null {
   return m && /^\d{1,12}$/.test(m) ? m : null;
 }
 
+/**
+ * The key a saved answer is kept under. A message body is the same answer
+ * however it was asked for — opened with `peek=1` or without, its parameters
+ * in any order — so it is kept once, under its folder and mailbox: the body
+ * downloaded in the background (#190) is the one a later offline open finds.
+ */
+export function cacheKeyPath(path: string): string {
+  const q = path.indexOf('?');
+  const base = q >= 0 ? path.slice(0, q) : path;
+  if (!/^\/api\/mail\/messages\/\d+$/.test(base) || q < 0) return path;
+  const params = new URLSearchParams(path.slice(q + 1));
+  params.delete('peek');
+  const kept = [...params.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return kept.length ? `${base}?${new URLSearchParams(kept).toString()}` : base;
+}
+
 export class OfflineCache {
   constructor(
     private readonly db: Database,
@@ -47,8 +63,9 @@ export class OfflineCache {
     return createHash('sha256').update(`${userId}\n${path}`).digest('hex');
   }
 
-  put(userId: string, module: string, path: string, res: Omit<CachedResponse, 'cachedAt'>, limits: CacheLimits): void {
+  put(userId: string, module: string, rawPath: string, res: Omit<CachedResponse, 'cachedAt'>, limits: CacheLimits): void {
     if (!limits.enabled) return;
+    const path = cacheKeyPath(rawPath);
     const now = new Date().toISOString();
     const payload = this.vault().encrypt({ ...res, cachedAt: now });
     const bytes = Buffer.byteLength(payload);
@@ -71,7 +88,7 @@ export class OfflineCache {
   }
 
   get(userId: string, path: string): CachedResponse | null {
-    const key = OfflineCache.key(userId, path);
+    const key = OfflineCache.key(userId, cacheKeyPath(path));
     const row = this.db.get<{ payload: string }>('SELECT payload FROM cached_records WHERE key = ? AND user_id = ?', key, userId);
     if (!row) return null;
     const value = this.vault().decrypt<CachedResponse>(row.payload);
@@ -81,6 +98,19 @@ export class OfflineCache {
     }
     this.db.run('UPDATE cached_records SET accessed_at = ? WHERE key = ?', new Date().toISOString(), key);
     return value;
+  }
+
+  /** Remove saved reads under an API prefix after access is refused. */
+  clearPrefix(userId: string, prefix: string): number {
+    const rows = this.db.all<{ key: string; path: string }>('SELECT key, path FROM cached_records WHERE user_id = ?', userId);
+    let removed = 0;
+    for (const row of rows) if (row.path === prefix || row.path.startsWith(`${prefix}/`) || row.path.startsWith(`${prefix}?`)) removed += this.db.run('DELETE FROM cached_records WHERE key = ? AND user_id = ?', row.key, userId).changes;
+    return removed;
+  }
+
+  /** Is an answer kept for this path (without opening it)? */
+  has(userId: string, path: string): boolean {
+    return !!this.db.get<{ n: number }>('SELECT 1 AS n FROM cached_records WHERE key = ? AND user_id = ?', OfflineCache.key(userId, cacheKeyPath(path)), userId);
   }
 
   /** Least-recently-used eviction down to the policy limit (offline_storage max MB). */

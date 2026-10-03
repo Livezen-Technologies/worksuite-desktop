@@ -4,6 +4,22 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.12.0 — 2026-10-03
+
+- Mail list actions (#161): hover buttons (Archive, Delete, read/unread, Snooze, Star) and a checkbox on every row; a right-click menu with Reply, Reply all, Forward, Archive, Delete, Move, Junk, read, star, pin, snooze, flag, categories, Quick Steps, rules, Block sender, Create task, Add to calendar, Save attachments to Files, Open in new window, Copy link, View original, and Select all in this folder or from this sender; Restore and Delete permanently in Deleted Items, Not junk in Junk; a selection toolbar ("Archive 12"); Archive, Delete, Junk, Restore and Move leave the list at once with Undo for 5 seconds, then go to each message's own account (queued offline, Retry on failure); Backspace deletes; right-click acts on the row clicked, not on another selection; the attachment clip shows in every density.
+
+## 1.11.1 — 2026-10-03
+
+- Writing an email keeps the AI launcher out of the send options and status bar; Write with AI stays in the editor's toolbar (#153).
+
+## 1.11.0 — 2026-10-03
+
+- Signatures (#166): written in the mail editor with a smaller toolbar (formatting, alignment, links incl. mailto: and tel:, dividers, tables, pictures with size, alt text and link, compressed to about 500 KB, SVG saved as PNG), social icons, profile fields ({name} {job_title} {department} {company} {phone} {mobile} {email} {website} {address} {photo} {company_logo}), an HTML source view and a live preview (light/dark, desktop/mobile); 8 templates filled from the profile and company branding; save as template; locked organisation signatures; per account a signature for new mail and one for replies (or none) and where it goes; the compose Signature menu, switching with From; a list with preview, defaults, Edit, Duplicate, Set default and Delete; pictures hosted (default) or embedded; a plain-text version; a dark-logo warning and dark-mode logo; Save enabled once there's content and a warning before closing with unsaved changes.
+
+## 1.10.0 — 2026-10-03
+
+- Fixed (#190): mail bodies for the keep period now download in the background — unread Inbox first, then newest, never marking anything read — so local storage fills and opened mail is instant; a body is saved under one key however it was opened. Settings › Mail › Accounts shows "Headers 12 of 27 folders · Bodies 340 of 1,200 · 17.4 MB on this computer" and Partly synced; the sync log has one row per run (Success / Partial / Failed / Running, folders, added, updated, removed, bodies, errors) that expands to each folder's details, wraps its text, and can be copied or exported.
+
 ## 1.9.0 — 2026-10-03
 
 - Composer: one formatting row of grouped icon buttons (style, font, size, colour, highlight, align, lists, checklist, indent, line spacing, format painter) with a separate actions row (Attach, Template with Quick Parts, Signature, Suggest times, Mail merge, Options) that moves what doesn't fit into More; pictures from the computer, Files, a link, paste or drag-drop with size, alignment, alt text, link, corners, border, crop and automatic compression, sent inside the message; tables with a grid picker and table tools; emoji, line, quote, code, date, special characters, button, meeting link and merge fields; Word/Excel paste clean-up and paste options; Markdown shortcuts; spelling suggestions on right-click with a language choice (#188).

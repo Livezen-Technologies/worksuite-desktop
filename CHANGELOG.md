@@ -5,16 +5,56 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 0.2.125 — 2026-10-03
-
-- **Beta builds update themselves on Windows, Mac and Linux.** A build that is not code-signed (today's Beta builds) now downloads and installs a new version by itself when it comes from a test channel — Beta, Dev or Internal — and this computer is set to that channel. It trusts the Update Center's signed answer and the file's SHA-256, the same as the Linux AppImage already did; on a Mac the app inside the disk image must still pass macOS's own integrity check. Stable never installs an unsigned update, and a signed build never takes an unsigned one.
-- Installing still waits for you: WorkSuite asks before restarting if uploads, queued changes, drafts or a call would be interrupted.
-
-## 0.2.124 — 2026-10-03
+## 0.2.131 — 2026-10-03
 
 - **Updates come from the WorkSuite Update Center.** WorkSuite now asks https://download.worksuitecloud.com whether a newer version is out, instead of a manifest file on your WorkSuite server. The answer is signed by the Update Center and checked against a key built into the app, and the download must match the size and SHA-256 inside that signed answer, or it is deleted. Your channel (Stable, Beta, Dev) is sent as a request; the Update Center decides, and your organisation's policy there wins. The computer is identified only by a one-way code made from its install ID.
 - On a Mac the update now comes as the disk image: WorkSuite opens it out of sight, read-only, checks that the app inside is signed by the same publisher as the one running, and swaps it in when you restart.
 - Builds that are not code-signed still never install an update by themselves — they say a new version is out and leave installing it to you. Only the Linux AppImage updates itself without a code signature, trusting the signed answer and its checksum.
+- **Beta builds update themselves on Windows, Mac and Linux.** A build that is not code-signed (today's Beta builds) now downloads and installs a new version by itself when it comes from a test channel — Beta, Dev or Internal — and this computer is set to that channel. It trusts the Update Center's signed answer and the file's SHA-256, the same as the Linux AppImage already did; on a Mac the app inside the disk image must still pass macOS's own integrity check. Stable never installs an unsigned update, and a signed build never takes an unsigned one.
+- Installing still waits for you: WorkSuite asks before restarting if uploads, queued changes, drafts or a call would be interrupted.
+
+## 0.2.129 — 2026-10-03
+
+- **WhatsApp opens from what this computer saved (#158, first stage).** Accounts, chat lists and conversations you
+  have opened before appear at once from encrypted local reads while the latest loads in the background ("Updating").
+  Saved reads are kept apart per signed-in user, server and organisation, follow the offline storage policy, and are
+  removed when access is refused, an account is retired or you sign out. A conversation only scrolls to new messages
+  if you were already near the bottom. Delta sync, offline search and media, and the outbox are still to come (see
+  docs/WHATSAPP_LOCAL_SYNC.md).
+
+## 0.2.128 — 2026-10-03
+
+Website chats: saved replies counted, and each website's own file limit.
+
+With WorkSuite's Communication 1.13.0:
+
+- **Saved replies you use most come first.** Sending a reply you started from a saved reply ("/" or a chip) counts it,
+  and the chips above the box are the six your team uses most.
+- **Files follow the website's own limit.** A website set to take larger files no longer has them refused at 5 MB on
+  this computer; one set lower refuses a bigger file before it uploads.
+- **A chat whose owner went offline comes to you** as a Transfer to you card from WorkSuite, with "<owner> went offline",
+  when you have been in that chat longest; if nobody takes it, it goes to everybody covering the website.
+
+## 0.2.127 — 2026-10-03
+
+- **Act on mail from the list (#161).** Hover a message for Archive, Delete, Mark read/unread, Snooze and Star, and a checkbox to select it. Right-click for Reply, Reply all, Forward, Archive, Delete, Move to folder, Mark as junk, read/unread, star, pin, snooze, flag, categories, Quick Steps, Always move mail from this sender, Block sender, Create task, Add to calendar, Save attachments to Files, Open in new window, Copy link, View original, and Select all in this folder or from this sender — handy for repeated bank alerts. Deleted Items offers Restore and Delete permanently; Junk offers Not junk. With several selected, a toolbar says "Archive 12". Archived, deleted, junked or moved mail leaves the list at once with **Undo** for 5 seconds, then goes to its own account — queued when offline, and back with Retry if the server refuses. Backspace now deletes too. Right-clicking a message that isn't selected acts on that message.
+
+## 0.2.126 — 2026-10-03
+
+- **The AI Assistant waits to be asked (#153).** It starts minimised after launch, sign-in and every module change, never opens by itself, and shows a dot or count on its launcher when something new arrives. The launcher now also steps aside while you're writing an email, so it no longer covers Send later or the status bar — Write with AI is in the editor's toolbar. **Maximise** opens it as a side panel that pushes your work aside instead of covering it, and **⌘J / Ctrl+J** opens or minimises it (in the mail editor, ⌘J is Write with AI).
+
+## 0.2.125 — 2026-10-03
+
+- **Proper email signatures (#166).** Signatures are written in the mail editor: bold, italic, fonts, sizes and colours, alignment, links (including mailto: and tel:), dividers, tables for a logo beside your details, and pictures you can resize, link and describe — big ones are shrunk automatically. Add social icons (LinkedIn, Facebook, X, Instagram, YouTube, WhatsApp, website) by pasting a link, and fields such as {name}, {job_title}, {company}, {phone} and {company_logo} that fill in from your profile. Paste an existing HTML signature in the source view, and check it in the live preview in light or dark and on a desktop or phone width.
+- **Templates:** Simple, Classic with logo, Photo card, Corporate banner, Minimal line, Social, Bilingual (with Sinhala or Tamil lines) and Legal footer, each filled in from your profile and your company's logo and colour. Save your own as a template. Administrators can publish locked company signatures that people use but can't change.
+- **Choosing:** for each account, pick the signature for new mail and a shorter one (or none) for replies and forwards, and whether it goes above the quoted message. In a new email, the **Signature** menu switches or removes it, and changing **From** switches it for you. Save becomes active as soon as there's something to save, and closing with unsaved changes asks first.
+- Needs the server update (Mail migration `2026-10-11-000100_MailSignatureStudio`). Pictures are hosted from your Files with a public link by default, or can be embedded. Recipients' mail apps won't swap in the dark-mode logo; it shows in the preview only.
+
+## 0.2.124 — 2026-10-03
+
+- **Mail sync that actually syncs (#190).** With the server update, every run now checks every folder (not just Inbox), finds new mail reliably, carries on past a folder that fails and says so (a run is **Partial**, not Success), never overlaps another run, resumes where it stopped, and only updates "last successful sync" when everything synced. On this computer, message bodies for the keep period now download in the background — unread Inbox first — so storage grows and mail opens instantly.
+- **Settings › Mail › Accounts** shows each account's progress ("Headers 12 of 27 folders · Bodies 340 of 1,200 · 17.4 MB on this computer"). The **sync log** has one row per run with its result, folders, added, updated, removed, bodies and errors; expand a row for each folder's details, and use Copy log or Export for support. The Details column is no longer cut off.
+- Needs the server update (Mail migration `2026-10-06-000100_MailSyncRunDetails`). Not yet tried against the real livezentech.com accounts.
 
 ## 0.2.123 — 2026-10-03
 

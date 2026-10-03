@@ -4,6 +4,18 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.19.0 — 2026-10-03
+
+- Hydrate WhatsApp accounts, lists and opened chats from encrypted scoped local reads while refreshing in the background (#158, initial stage).
+
+## 1.18.1 — 2026-10-03
+
+**Fixed**
+
+- a website reply written from a saved reply ("/" or a chip) tells the server which one, so its use is counted and the
+  most used come first (RDC-03, with Communication 1.13.0)
+- files for a website visitor are held to that website's own size limit from the thread, not a fixed 5 MB (RDC-04)
+
 ## 1.18.0 — 2026-10-03
 
 - A file or folder shared with you from Files arrives as a card in your chat with the sharer (or the team's chat), with Open, Download, Show in Files and Request edit access; several files make one card, and the card updates when access changes or ends. The "is open — messages can link to it" notice is a small chip in the message box (#164).

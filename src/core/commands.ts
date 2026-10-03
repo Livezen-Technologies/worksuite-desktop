@@ -34,6 +34,8 @@ export const DEFAULT_SHORTCUTS: Record<string, string> = {
   'dock-tab-beside': 'Mod+Shift+D',
   settings: 'Mod+,',
   ai: 'Mod+Shift+A',
+  // ⌘J / Ctrl+J opens or minimises the assistant too (worksuite-desktop#153); inside the mail editor it is Write with AI.
+  'ai-alt': 'Mod+J',
   'switch-org': 'Mod+Shift+O',
   lock: 'Mod+L',
   help: 'F1',

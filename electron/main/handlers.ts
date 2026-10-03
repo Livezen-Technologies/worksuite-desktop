@@ -902,7 +902,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('offline:pending', () => ctx.queue.list(uid()));
   router.handle('offline:moduleBytes', (input) => ctx.cache.moduleBytes(uid(), input.module));
   router.handle('offline:clearModule', (input) => ctx.cache.clearModule(uid(), input.module));
-  router.handle('offline:mailStats', () => ({ ...ctx.cache.mailStats(uid()), limitBytes: (ctx.session.current()?.policy?.offline_storage_max_mb ?? 2048) * 1024 * 1024 }));
+  router.handle('offline:mailStats', () => ({ ...ctx.cache.mailStats(uid()), limitBytes: (ctx.session.current()?.policy?.offline_storage_max_mb ?? 2048) * 1024 * 1024, bodies: ctx.mailBodies?.progress() ?? {} }));
   // Cached first (worksuite-desktop#162): Mail's saved answers, read without the network; the page refreshes behind them.
   router.handle('offline:peek', (input) => {
     if (!canOpenApp('mail', ctx.session.visibleApps())) return input.paths.map(() => null);
