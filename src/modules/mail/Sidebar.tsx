@@ -7,6 +7,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { type MenuSection } from '../../components/Menu';
 import { PrimaryActionButton, SidebarIconButton } from '../../components/PrimaryAction';
+import { SyncButton, useSyncFeedback } from '../../components/SyncButton';
 import { Button, DATA_TEXT, Kbd, Modal, Spinner, TextField, cx } from '../../components/ui';
 import { ContextMenu } from './MessageMenus';
 import { mailKeys, useFolders, useLabels } from './api';
@@ -324,6 +325,7 @@ function AccountRow({ box, account, running, offline, open, count, active, onTog
   const why = account?.error ?? box.last_error ?? text('The last sync did not finish.');
   const name = mailboxName(box);
   const status = account ? accountState(account) : null;
+  const feedback = useSyncFeedback(running, account?.last_result === 'failed');
   return (
     <div className={cx('group relative flex h-[30px] items-center rounded-[8px]', active ? 'bg-selection' : 'hover:bg-subtle')}>
       <button type="button" onClick={onToggle} aria-expanded={open} aria-label={open ? text('Hide the folders of {name}', { name }) : text('Show the folders of {name}', { name })} className="inline-flex h-6 w-5 shrink-0 items-center justify-center text-ink-3 hover:text-ink">
@@ -352,9 +354,11 @@ function AccountRow({ box, account, running, offline, open, count, active, onTog
           disabled={offline || running}
           aria-label={running ? text('Syncing {name}…', { name }) : text('Sync {name}', { name })}
           title={offline ? text('You’re offline — mail will sync when you reconnect') : running ? text('Syncing…') : account?.last_ok_at ? text('Last synced {ago} · sync now', { ago: syncAgo(account.last_ok_at) }) : text('Sync now')}
-          className={cx('mr-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] text-ink-3 hover:bg-surface hover:text-ink disabled:cursor-default', running ? 'opacity-100' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100')}
+          aria-busy={running || undefined}
+          data-state={feedback.state}
+          className={cx('mr-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] text-ink-3 hover:bg-surface hover:text-ink disabled:cursor-default', running || feedback.state === 'done' ? 'opacity-100' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100')}
         >
-          <Icon name="refresh" size={13} className={running ? 'animate-spin motion-reduce:animate-none' : undefined} />
+          <Icon name={feedback.icon} size={13} className={feedback.iconClass} />
         </button>
       )}
     </div>
@@ -370,6 +374,8 @@ function SyncAllButton({ summary, accounts, boxes, running, syncingAll, offline,
   const [open, setOpen] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const spin = syncingAll || summary.state === 'syncing';
+  // Spinning, then a check (or red) when the run ends (worksuite-desktop#165).
+  const feedback = useSyncFeedback(spin, summary.failed.length > 0);
   const show = () => {
     if (timer.current) clearTimeout(timer.current);
     setOpen(true);
@@ -389,9 +395,11 @@ function SyncAllButton({ summary, accounts, boxes, running, syncingAll, offline,
         aria-label={offline ? text('You’re offline — mail will sync when you reconnect') : spin ? text('Syncing — pressing again won’t start another') : text('Sync all accounts')}
         aria-keyshortcuts="Control+Shift+R"
         aria-describedby={open ? 'mail-sync-all-card' : undefined}
+        aria-busy={spin || undefined}
+        data-state={feedback.state}
         className="inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-3 hover:bg-subtle hover:text-ink disabled:opacity-50"
       >
-        <Icon name="refresh" size={13} className={spin ? 'animate-spin motion-reduce:animate-none' : undefined} />
+        <Icon name={feedback.icon} size={13} className={feedback.iconClass} />
       </button>
       {open ? (
         <div id="mail-sync-all-card" role="tooltip" className="absolute left-0 top-7 z-30 w-[300px] rounded-[10px] border border-line bg-surface p-2 text-[12.5px] shadow-lg">
@@ -475,10 +483,7 @@ function SyncDetails(p: { summary: SyncSummary; pending: number; cacheDays: numb
         <div id="mail-sync-details" role="dialog" aria-label={text('Sync status')} className="absolute right-2 bottom-full left-2 z-30 mb-1 rounded-[10px] border border-line bg-surface p-2 text-[12.5px] shadow-lg">
           <div className="flex items-center justify-between gap-2 px-1.5 pb-1.5">
             <b className="min-w-0 break-words text-ink">{p.summary.headline}</b>
-            <button type="button" onClick={p.onSyncAll} disabled={p.offline} aria-label={spin ? text('Syncing — pressing again won’t start another') : text('Sync all accounts')} className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-[7px] border border-line px-2 font-semibold text-ink hover:bg-subtle disabled:opacity-50">
-              <Icon name="refresh" size={13} className={spin ? 'animate-spin motion-reduce:animate-none' : undefined} />
-              {text('Sync all')}
-            </button>
+            <SyncButton size="sm" label={text('Sync all')} running={spin} failed={p.summary.failed.length > 0} disabled={p.offline} onSync={p.onSyncAll} />
           </div>
           {p.summary.liveLine ? <p className={cx('px-1.5 pb-1 text-[11.5px]', p.summary.live < p.summary.pushTotal ? 'text-warning' : 'text-ink-3')}>{p.summary.liveLine}</p> : null}
           <AccountRows accounts={rows} boxes={p.boxes} running={p.running} offline={p.offline} onSync={p.onSyncAccount} onFix={p.onSettings} />

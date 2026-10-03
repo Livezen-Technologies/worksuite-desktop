@@ -315,7 +315,7 @@ describe('the folder pane and lists (DMO-ALL-01…11, DMO-SYN-01…04)', () => {
     await within(nav).findByRole('button', { name: 'Retry' });
     fireEvent.click(within(nav).getByRole('button', { name: /Needs attention/ }));
     const details = await screen.findByRole('dialog', { name: 'Sync status' });
-    expect(within(details).getByRole('button', { name: 'Sync all accounts' })).toBeTruthy();
+    expect(within(details).getByRole('button', { name: 'Sync all' })).toBeTruthy();
     expect(within(details).getAllByRole('button', { name: /^Sync .* now$/ }).length).toBeGreaterThan(0);
     fireEvent.click(within(details).getAllByRole('button', { name: /^Fix / })[0]!);
     // Settings is another module: it opens through the app's tabs.

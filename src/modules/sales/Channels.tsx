@@ -30,6 +30,7 @@ import {
   type SyncRun,
 } from './manage';
 import { Checkbox } from '../../components/Checkbox';
+import { SyncButton } from '../../components/SyncButton';
 
 /**
  * Sales channels (OmsChannelSheet): where orders come from. Every kind the
@@ -185,8 +186,10 @@ function ChannelPanel({ id, org, can, onClose }: { id: number; org: string; can:
       const r = await channelAct(id, what);
       toast(r.data?.ok === false ? 'error' : 'success', r.message ?? (what === 'test' ? 'Tested.' : 'Synced.'));
       refresh();
+      return r.data?.ok !== false;
     } catch (e) {
       toast('error', errorMessage(e));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -236,9 +239,17 @@ function ChannelPanel({ id, org, can, onClose }: { id: number; org: string; can:
               </button>
             ) : null}
             {can.sync ? (
-              <button type="button" className={btnSmall} disabled={busy || sync.driving} onClick={() => (d.pull ? (setTab('sync'), void sync.start()) : void act('sync'))}>
-                Sync now
-              </button>
+              <SyncButton
+                size="sm"
+                running={sync.driving}
+                disabled={busy && !sync.driving}
+                onSync={async () => {
+                  if (d.pull) {
+                    setTab('sync');
+                    await sync.start();
+                  } else if (!(await act('sync'))) throw new Error('sync failed');
+                }}
+              />
             ) : null}
           </>
         ) : (
@@ -486,9 +497,7 @@ function SyncPanel({ id, name, canSync, sync }: { id: number; name: string; canS
         <div className="flex items-center gap-3 rounded-[10px] border border-line px-3 py-2.5 text-[12.5px] text-ink-2">
           <Icon name="refresh" size={16} className="shrink-0 text-primary" />
           <span className="min-w-0 flex-1">Brings in the shop's orders placed since the newest one already here. Orders already here are left as they are.</span>
-          <button type="button" className={btnPrimary + ' !h-[30px]'} onClick={() => void sync.start()}>
-            Sync now
-          </button>
+          <SyncButton variant="primary" running={sync.driving} onSync={() => sync.start()} />
         </div>
       ) : null}
       {last ? (

@@ -32,6 +32,7 @@ import { MailSettings } from '../mail/MailSettings';
 import { LocalDataSection, LocalProfileSection } from '../guest/LocalSettings';
 import { useGuest } from '../../core/session';
 import { LinksSettings } from './LinksSettings';
+import { SyncButton } from '../../components/SyncButton';
 
 /** Settings / profile tree (§4.9). Anything the organization's policy decides is shown locked, with the reason. */
 const SECTIONS = [
@@ -918,9 +919,7 @@ function FilesSection() {
               ) : null}
               {sync.folders.length ? (
                 <>
-                  <Button size="sm" icon="refresh" loading={busy === 'now'} disabled={sync.paused} onClick={() => run('now', call('sync:now'))}>
-                    Sync now
-                  </Button>
+                  <SyncButton size="sm" running={sync.state === 'syncing'} failed={sync.state === 'error'} disabled={sync.paused} reason={sync.paused ? 'Resume syncing first' : undefined} onSync={() => call('sync:now')} />
                   <Button size="sm" loading={busy === 'pause'} onClick={() => run('pause', call('sync:pause', { id: null, paused: !sync.paused }))}>
                     {sync.paused ? 'Resume' : 'Pause'}
                   </Button>

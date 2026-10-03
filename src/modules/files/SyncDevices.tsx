@@ -13,6 +13,7 @@ import type { TreeNode } from './api';
 import { ConfirmDialog, NameDialog } from './Dialogs';
 import { PopMenu, below, type MenuItem } from './Menu';
 import { computerWord, hereLabel, revealLabel, useSync } from './sync';
+import { SyncButton } from '../../components/SyncButton';
 
 /**
  * Sync devices (the Drive designs' "Sync devices"): the computers and phones
@@ -61,9 +62,7 @@ export function SyncDevices({ tree, ask, onAsked }: { tree: TreeNode[]; ask: num
           <span className="text-[13px] text-ink-3">Computers and phones that keep your Drive files. Signing one out stops it syncing; wiping it removes its synced copy — never your other files.</span>
         </div>
         {sync?.available && sync.folders.length ? (
-          <Button variant="primary" icon="refresh" onClick={() => run(() => call('sync:now'))} disabled={sync.state === 'syncing'}>
-            Sync now
-          </Button>
+          <SyncButton variant="primary" running={sync.state === 'syncing'} failed={sync.state === 'error'} onSync={() => call('sync:now')} />
         ) : null}
       </div>
       <div className="flex flex-wrap items-start gap-4">

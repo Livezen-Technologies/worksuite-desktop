@@ -26,6 +26,7 @@ import { mailboxLetter } from './model';
 import { AccountAvatar } from './parts';
 import type { MailPrefs, Mailbox, SyncMailbox } from './types';
 import type { MailStoreStats } from '@shared/types';
+import { SyncButton } from '../../components/SyncButton';
 
 /**
  * Settings › Mail: the accounts and what this computer keeps (Accounts &
@@ -330,9 +331,17 @@ function ManageMailbox({ box, onClose }: { box: Mailbox; onClose: () => void }) 
         {!b.shared ? <SwitchRow label={text('Pause syncing')} hint={text('Stop checking for new mail until you turn this off.')} checked={!!b.sync_paused} onChange={(v) => void save({ sync_paused: v })} /> : null}
         <div className="flex flex-wrap gap-2 border-t border-line pt-4">
           {!b.is_default && !b.shared ? <Button onClick={() => void act(() => apiPost(`/api/mail/mailboxes/${b.id}/default`), text('Now your default mailbox.'))}>Make default</Button> : null}
-          <Button icon="refresh" onClick={() => void act(() => apiPost(`/api/mail/mailboxes/${b.id}/sync`), text('Checking for new mail.'))}>
-            Sync now
-          </Button>
+          <SyncButton
+            onSync={async () => {
+              try {
+                await apiPost(`/api/mail/mailboxes/${b.id}/sync`);
+                void qc.invalidateQueries({ queryKey: ['mail'] });
+              } catch (e) {
+                toast('error', errorMessage(e));
+                throw e;
+              }
+            }}
+          />
           {!b.shared ? (
             confirm ? (
               <Button variant="danger" onClick={() => void act(() => apiDelete(`/api/mail/mailboxes/${b.id}`), text('Removed from WorkSuite. The mail stays with the provider.')).then(onClose)}>
@@ -424,6 +433,7 @@ function Storage() {
     void qc.invalidateQueries({ queryKey: ['mail'] });
     if (!r.started.length) return;
     toast(r.failed.length ? 'error' : 'success', r.failed.length ? text('{n} mailboxes could not be synced.', { n: r.failed.length }) : text('Every mailbox was synced.'));
+    if (r.failed.length) throw new Error('sync failed');
   };
   const keep = (id: number, v: 7 | 30 | 90 | 0) => {
     const next = { ...byBox, [String(id)]: v };
@@ -442,7 +452,7 @@ function Storage() {
     <>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-[20px] font-bold text-ink">Storage & sync</h2>
-        <Button onClick={() => void syncAll()}>Sync all now</Button>
+        <SyncButton label={text('Sync all now')} onSync={syncAll} />
       </div>
       <div className="grid grid-cols-2 gap-4">
         <section aria-label="On this computer" className="flex flex-col gap-2.5 rounded-[12px] border border-line bg-surface p-[18px]">
