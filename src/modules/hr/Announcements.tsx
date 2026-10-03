@@ -10,6 +10,7 @@ import { Icon } from '../../components/Icon';
 import { btn, btnPrimary, Cell, Empty, Field, input, Kpi, PageHead, row, Sheet, SidePanel, StatusChip, THead } from './parts';
 import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';
+import { OrgSwitcher } from '../../components/OrgSwitcher';
 
 /**
  * Announcements (HrAdminSheet "Announcements"; the web's HrAnnouncements):
@@ -182,14 +183,7 @@ export default function Announcements() {
     <div className="flex flex-col gap-3.5">
       <PageHead title="Announcements" sub="What HR has told each company, and who has read it.">
         {list.length > 1 ? (
-          <Select aria-label="Filter by company" value={org} onChange={(e) => setOrg(e.target.value)} className={input + ' !w-[200px]'}>
-            <option value="">All companies</option>
-            {list.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </Select>
+          <OrgSwitcher label="Filter by company" orgs={list.map((c) => ({ id: String(c.id), name: c.name }))} value={org ? [org] : []} onChange={(ids) => setOrg(ids[0] ?? '')} />
         ) : null}
         <button type="button" className={btnPrimary} onClick={() => setWriting('new')}>
           New announcement
@@ -576,14 +570,9 @@ function ReportPanel({ row: r, onClose }: { row: AnnouncementRow; onClose: () =>
   return (
     <SidePanel label="Who has read it" width={540} onClose={onClose} head={<b className="truncate text-ink">{r.title}</b>}>
       {choices.length > 1 ? (
-        <Select aria-label="Company" value={org} onChange={(e) => setOrg(e.target.value)} className={input}>
-          <option value="">All companies</option>
-          {choices.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </Select>
+        <div>
+          <OrgSwitcher label="Company" orgs={choices.map((c) => ({ id: String(c.id), name: c.name }))} value={org ? [org] : []} onChange={(ids) => setOrg(ids[0] ?? '')} />
+        </div>
       ) : null}
       {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
       {d ? (

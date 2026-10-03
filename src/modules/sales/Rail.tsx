@@ -1,8 +1,8 @@
 import { Icon } from '../../components/Icon';
-import { Select } from '../../components/Select';
 import { cx } from '../../components/ui';
 import { FINISHED, MOVING, statusOf, type Status } from './api';
 import { PrimaryActionButton } from '../../components/PrimaryAction';
+import { OrgSwitcher } from '../../components/OrgSwitcher';
 
 /**
  * The Orders rail (OmsRail): a company picker, then the orders by who they
@@ -87,14 +87,7 @@ export function SalesRail({ view, status, onPick, onNew, counts, org, orgs, onOr
           <PrimaryActionButton data-guide="sales.new-order" label="New order" onClick={onNew} />
         ) : null}
         {orgs.length > 1 ? (
-          <Select aria-label="Companies" searchable value={org} onChange={(e) => onOrg(e.target.value)} className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink">
-            <option value="">Every company</option>
-            {orgs.map((o) => (
-              <option key={o.id} value={String(o.id)}>
-                {o.name}
-              </option>
-            ))}
-          </Select>
+          <OrgSwitcher variant="field" orgs={orgs.map((c) => ({ id: String(c.id), name: c.name }))} value={org ? [org] : []} onChange={(ids) => onOrg(ids[0] ?? '')} />
         ) : null}
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2.5 pb-2.5 scroll-thin">

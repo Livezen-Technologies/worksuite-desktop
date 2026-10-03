@@ -1,13 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { lazy, Suspense, useState } from 'react';
 import { Icon } from '../../components/Icon';
-import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import type { ModuleProps } from '../registry';
 import { eGet, K, useOnline, type Options } from './api';
 import { ElContext, type El, type ElView } from './parts';
 import { SidePanel } from '../../components/SidePanel';
+import { OrgSwitcher } from '../../components/OrgSwitcher';
+import { recallOrgChoice, rememberOrgChoice } from '../../core/org-prefs';
 
 /**
  * eLearning, native in WorkSuite Desktop, over the server's `/api/elearning/v1`.
@@ -67,7 +68,8 @@ const num = (v: string | null | undefined) => (v && /^\d{1,10}$/.test(v) ? Numbe
 
 function savedOrg(): string {
   try {
-    return localStorage.getItem(ORG_KEY) ?? '';
+    // The organisation filter's memory (#214), shared with the other apps when the person chose so; this app's own before it.
+    return recallOrgChoice('elearning') ?? localStorage.getItem(ORG_KEY) ?? '';
   } catch {
     return '';
   }
@@ -161,6 +163,7 @@ export default function ElearningShell(_props: ModuleProps) {
   };
   const chooseOrg = (v: string) => {
     setOrg(v);
+    rememberOrgChoice('elearning', v);
     try {
       localStorage.setItem(ORG_KEY, v);
     } catch {
@@ -242,7 +245,7 @@ export default function ElearningShell(_props: ModuleProps) {
                 </div>
               </div>
               {opts.companies.length > 1 ? (
-                <Select aria-label="Company" value={scope} onChange={(e) => chooseOrg(e.target.value)} options={opts.companies.map((c) => ({ value: String(c.id), label: c.name }))} className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink" />
+                <OrgSwitcher variant="field" allowAll={false} orgs={opts.companies.map((c) => ({ id: String(c.id), name: c.name }))} value={scope ? [scope] : []} onChange={(ids) => ids[0] && chooseOrg(ids[0])} />
               ) : null}
             </div>
             <div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto px-2.5 pb-3 scroll-thin">

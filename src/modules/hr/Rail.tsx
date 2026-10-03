@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { app, organizationName } from '../../core/app-state';
+import { app } from '../../core/app-state';
 import { call } from '../../core/bridge';
 import { useStore } from '../../core/store';
-import { openOverlay } from '../../core/ui';
+import { AppOrgSwitcher } from '../../components/OrgSwitcher';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 
@@ -131,8 +131,6 @@ export function webPathFor(view: HrView): string {
 
 export function HrRail({ view, onPick, counts }: { view: HrView; onPick: (v: HrView) => void; counts: { requests: number; waiting: number; reviewsTimesheets: boolean } }) {
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
-  const orgId = useStore(app, (s) => s.organizationId);
-  const orgs = useStore(app, (s) => s.bootstrap?.organizations.length ?? 0);
   const sections = hrSections(perms, counts);
   const holding = sections.find((s) => s.items.some((i) => i.id === view))?.id;
   const [shut, setShut] = useState<Record<string, boolean> | null>(null);
@@ -150,11 +148,7 @@ export function HrRail({ view, onPick, counts }: { view: HrView; onPick: (v: HrV
             <span className="text-[11px] text-ink-3">Employees &amp; leave</span>
           </span>
         </div>
-        <button type="button" aria-label="Company scope" onClick={() => openOverlay('org')} className="flex h-[34px] items-center gap-2 rounded-[10px] border border-line bg-surface pr-2 pl-2.5 text-[12.5px] font-semibold text-ink hover:bg-subtle">
-          <span className="min-w-0 flex-1 truncate text-left">{organizationName(orgId)}</span>
-          {orgs > 1 ? <span className="flex h-[18px] items-center rounded-[9px] bg-selection px-1.5 text-[10.5px] font-bold text-primary">+{orgs - 1}</span> : null}
-          <Icon name="chevrons-up-down" size={13} className="text-ink-3" />
-        </button>
+        <AppOrgSwitcher label="Company scope" />
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2.5 pb-2.5 scroll-thin">
         {sections.map((s) => {

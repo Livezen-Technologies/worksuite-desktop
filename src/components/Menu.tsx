@@ -55,6 +55,20 @@ export interface MenuItem {
   onSelect?: () => void;
   /** Opens a submenu instead of acting. */
   submenu?: MenuSection[];
+  /** A picture before the label in place of an icon: an organisation's logo or initials. */
+  leading?: ReactNode;
+  /** A small tag after the label ("Default"). */
+  badge?: string;
+  /** Small muted text on the right (a count), with what it means for a screen reader. */
+  meta?: string;
+  metaLabel?: string;
+  /**
+   * A multi-select row (worksuite-desktop#214): a checkbox before the label. Space or a click on the checkbox calls
+   * `onToggle` and the menu stays open; Enter or a click on the row is `onSelect`, as for any item.
+   */
+  onToggle?: () => void;
+  /** In the footer: the main action (Apply), filled in the accent colour. */
+  primary?: boolean;
 }
 
 export interface MenuSection {
@@ -89,6 +103,20 @@ export interface MenuProps {
   width?: number;
   /** Between the trigger and the menu: 6px by default, 0 at the pointer (a right-click menu). */
   gap?: number;
+  /**
+   * A search box at the top (worksuite-desktop#214). It takes focus when the menu opens; Down moves into the list
+   * and a letter typed in the list goes to it. The caller filters `sections` by its value.
+   */
+  search?: { value: string; onChange: (value: string) => void; label: string; placeholder?: string };
+  /** Shown in place of the list when nothing is left in it (a search that matches nothing). */
+  empty?: string;
+  /**
+   * Enter, before the item's own action: return true to take it (applying a multi-selection) and the menu closes.
+   * Space still toggles the item.
+   */
+  onEnter?: () => boolean;
+  /** A row of actions held at the menu's foot, still reached with the arrow keys (Manage, Apply). */
+  footer?: MenuItem[];
 }
 
 const SUB_WIDTH = 264;
@@ -103,15 +131,18 @@ function isRtl() {
 
 const visible = (sections: MenuSection[]) => sections.filter((s) => s.items.length > 0);
 
-export function Menu({ sections, label, anchor, avoid, prefer = 'top', align = 'center', onClose, sheetBelow = SHEET_BELOW, width = 288, gap = MENU_GAP }: MenuProps) {
+export function Menu({ sections, label, anchor, avoid, prefer = 'top', align = 'center', onClose, sheetBelow = SHEET_BELOW, width = 288, gap = MENU_GAP, search, empty, onEnter, footer }: MenuProps) {
   const menuId = useId().replace(/:/g, '');
   const [open, setOpen] = useState<OpenSub[]>([]);
   const [viewport, setViewport] = useState(viewportSize);
   const counter = useRef(0);
   const closeRef = useRef(onClose);
+  const enterRef = useRef(onEnter);
   useEffect(() => {
     closeRef.current = onClose;
+    enterRef.current = onEnter;
   });
+  const foot = footer ?? [];
   const sheet = sheetMode(viewport.width, sheetBelow);
   const rtl = isRtl();
 
@@ -188,10 +219,12 @@ export function Menu({ sections, label, anchor, avoid, prefer = 'top', align = '
     item.onSelect?.();
   };
 
+  const itemsAt = (level: number) => [...levels[level]!.sections.flatMap((s) => s.items), ...(level === 0 ? foot : [])];
+
   const onKeyDown = (level: number, e: ReactKeyboardEvent<HTMLElement>, list: HTMLElement | null) => {
     const items = list ? Array.from(list.querySelectorAll<HTMLElement>('[data-menu-item]')) : [];
     const at = items.indexOf(document.activeElement as HTMLElement);
-    const current = at >= 0 ? levels[level]!.sections.flatMap((s) => s.items).find((i) => domId(level, i.id) === items[at]!.id) : undefined;
+    const current = at >= 0 ? itemsAt(level).find((i) => domId(level, i.id) === items[at]!.id) : undefined;
     const move = (to: number) => items[(to + items.length) % items.length]?.focus();
     const forward = rtl ? 'ArrowLeft' : 'ArrowRight';
     const back = rtl ? 'ArrowRight' : 'ArrowLeft';
@@ -225,9 +258,13 @@ export function Menu({ sections, label, anchor, avoid, prefer = 'top', align = '
       case back:
         if (level > 0) closeTo(level - 1);
         break;
-      case 'Enter':
       case ' ':
-        if (current) activate(level, current);
+        if (current?.onToggle && !current.disabled) current.onToggle();
+        else if (current) activate(level, current);
+        break;
+      case 'Enter':
+        if (level === 0 && enterRef.current?.() === true) finish('select');
+        else if (current) activate(level, current);
         break;
       case 'Escape':
         if (level > 0) closeTo(level - 1);
@@ -238,8 +275,13 @@ export function Menu({ sections, label, anchor, avoid, prefer = 'top', align = '
         break;
       default:
         handled = false;
-        // Typeahead: the next item starting with the letter typed.
-        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && /\S/.test(e.key)) {
+        if (level === 0 && search && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          // A letter typed with a search box goes to it.
+          search.onChange(search.value + e.key);
+          list?.parentElement?.querySelector<HTMLElement>('[data-menu-search]')?.focus();
+          handled = true;
+        } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && /\S/.test(e.key)) {
+          // Typeahead: the next item starting with the letter typed.
           const key = e.key.toLocaleLowerCase();
           const labels = levels[level]!.sections.flatMap((s) => s.items).map((i) => i.label.toLocaleLowerCase());
           for (let step = 1; step <= items.length; step++) {
@@ -256,6 +298,24 @@ export function Menu({ sections, label, anchor, avoid, prefer = 'top', align = '
       e.preventDefault();
       e.stopPropagation();
     }
+  };
+
+  // The search box: Down into the list, Enter applies or takes the first item, Escape and Tab close.
+  const onSearchKey = (e: ReactKeyboardEvent<HTMLInputElement>, list: HTMLElement | null) => {
+    const items = list ? Array.from(list.querySelectorAll<HTMLElement>('[data-menu-item]')) : [];
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      (e.key === 'ArrowDown' ? items[0] : items[items.length - 1])?.focus();
+    } else if (e.key === 'Enter') {
+      if (enterRef.current?.() === true) finish('select');
+      else {
+        const first = levels[0]!.sections.flatMap((s) => s.items).find((i) => !i.disabled && !i.submenu);
+        if (first) activate(0, first);
+      }
+    } else if (e.key === 'Escape') finish('escape');
+    else if (e.key === 'Tab') finish('tab');
+    else return;
+    e.preventDefault();
+    e.stopPropagation();
   };
 
   const hover = (level: number, item: MenuItem, el: HTMLElement) => {
@@ -294,6 +354,10 @@ export function Menu({ sections, label, anchor, avoid, prefer = 'top', align = '
               onKeyDown={(e) => onKeyDown(level, e, list.current)}
               onActivate={(item) => activate(level, item)}
               onHover={() => undefined}
+              search={level === 0 ? search : undefined}
+              onSearchKey={(e) => onSearchKey(e, list.current)}
+              empty={empty}
+              footer={level === 0 ? foot : []}
             />
           )}
         />
@@ -319,7 +383,7 @@ export function Menu({ sections, label, anchor, avoid, prefer = 'top', align = '
           rtl={rtl}
           focus={level === 0 ? true : open[level - 1]!.focus}
           focusKey={level === 0 ? 0 : open[level - 1]!.n}
-          contentKey={contentKey(lv.sections)}
+          contentKey={level === 0 ? `${contentKey(lv.sections)}#${contentKey([{ id: 'foot', items: foot }])}` : contentKey(lv.sections)}
           render={(list) => (
             <MenuList
               id={`${menuId}-list-${level}`}
@@ -334,6 +398,10 @@ export function Menu({ sections, label, anchor, avoid, prefer = 'top', align = '
               onKeyDown={(e) => onKeyDown(level, e, list.current)}
               onActivate={(item) => activate(level, item)}
               onHover={(item, el) => hover(level, item, el)}
+              search={level === 0 ? search : undefined}
+              onSearchKey={(e) => onSearchKey(e, list.current)}
+              empty={empty}
+              footer={level === 0 ? foot : []}
             />
           )}
         />
@@ -345,8 +413,10 @@ export function Menu({ sections, label, anchor, avoid, prefer = 'top', align = '
 
 const contentKey = (sections: MenuSection[]) => sections.map((s) => `${s.id}:${s.label ?? ''}:${s.items.map((i) => `${i.id}|${i.label}|${i.description ?? ''}|${i.reason ?? ''}`).join(',')}`).join(';');
 
-/** The chosen option when the menu has one (the first radio that is checked), else the first item that can be used. */
+/** The search box when there is one; else the chosen option (the first radio that is checked), else the first item that can be used. */
 function focusFirst(list: HTMLElement | null) {
+  const box = list?.parentElement?.querySelector<HTMLElement>('[data-menu-search]');
+  if (box) return box.focus({ preventScroll: true });
   const items = list ? Array.from(list.querySelectorAll<HTMLElement>('[data-menu-item]')) : [];
   const usable = items.filter((el) => el.getAttribute('aria-disabled') !== 'true');
   const chosen = usable.find((el) => el.getAttribute('role') === 'menuitemradio' && el.getAttribute('aria-checked') === 'true');
@@ -493,6 +563,10 @@ function MenuList({
   onKeyDown,
   onActivate,
   onHover,
+  search,
+  onSearchKey,
+  empty,
+  footer,
 }: {
   id: string;
   label: string;
@@ -506,11 +580,36 @@ function MenuList({
   onKeyDown: (e: ReactKeyboardEvent<HTMLElement>) => void;
   onActivate: (item: MenuItem) => void;
   onHover: (item: MenuItem, el: HTMLElement) => void;
+  search?: MenuProps['search'];
+  onSearchKey?: (e: ReactKeyboardEvent<HTMLInputElement>) => void;
+  empty?: string;
+  footer?: MenuItem[];
 }) {
   // The icon column only where some item at this level has an icon: no blank gap before every label (worksuite-desktop#168).
   const iconSlot = sections.some((s) => !s.segmented && s.items.some((i) => !!i.icon));
+  const nothing = sections.every((s) => s.items.length === 0);
   return (
+    <>
+      {search ? (
+        <div className={cx('sticky top-0 z-[1] bg-surface pb-1', !sheet && '-mx-1.5 -mt-1.5 px-1.5 pt-1.5')}>
+          <label className="flex h-8 items-center gap-2 rounded-[8px] border border-line bg-well px-2 text-ink-3 focus-within:border-primary">
+            <Icon name="search" size={14} className="shrink-0" />
+            <input
+              data-menu-search=""
+              type="text"
+              value={search.value}
+              onChange={(e) => search.onChange(e.target.value)}
+              onKeyDown={onSearchKey}
+              aria-label={search.label}
+              aria-controls={id}
+              placeholder={search.placeholder ?? search.label}
+              className="bare-focus min-w-0 flex-1 bg-transparent text-[12.5px] text-ink outline-none placeholder:text-ink-3"
+            />
+          </label>
+        </div>
+      ) : null}
     <div ref={listRef} id={id} role="menu" aria-label={label} onKeyDown={onKeyDown} className="outline-none">
+      {nothing && empty ? <p className="m-0 px-2.5 py-3 text-center text-[12.5px] text-ink-3">{empty}</p> : null}
       {sections.map((s, si) => (
         <div key={s.id} role="group" aria-labelledby={s.label ? `${id}-${s.id}` : undefined} aria-label={s.label ? undefined : label}>
           {si > 0 ? <div role="separator" className="mx-1.5 my-1 h-px bg-line" /> : null}
@@ -524,6 +623,40 @@ function MenuList({
           ) : (
             s.items.map((item) => <Row key={item.id} item={item} iconSlot={iconSlot} domId={domId(level, item.id)} sheet={sheet} expanded={openId === item.id} rtl={rtl} onActivate={onActivate} onHover={onHover} />)
           )}
+        </div>
+      ))}
+      {footer?.length ? <Footer items={footer} level={level} domId={domId} sheet={sheet} onActivate={onActivate} onHover={onHover} /> : null}
+    </div>
+    </>
+  );
+}
+
+/**
+ * The menu's foot (worksuite-desktop#214): a link on the start side (Manage organisations) and the main action on the
+ * end (Apply), held at the bottom while the list scrolls. Menu items still: the arrow keys reach them.
+ */
+function Footer({ items, level, domId, sheet, onActivate, onHover }: { items: MenuItem[]; level: number; domId: (level: number, itemId: string) => string; sheet: boolean; onActivate: (item: MenuItem) => void; onHover: (item: MenuItem, el: HTMLElement) => void }) {
+  return (
+    <div role="group" aria-label={text('Actions')} data-menu-footer="" className={cx('sticky bottom-0 z-[1] mt-1 flex items-center gap-2 border-t border-line bg-surface pt-1.5', !sheet && '-mx-1.5 -mb-1.5 px-1.5 pb-1.5')}>
+      {items.map((item) => (
+        <div
+          key={item.id}
+          id={domId(level, item.id)}
+          role="menuitem"
+          tabIndex={-1}
+          data-menu-item=""
+          aria-disabled={item.disabled ? true : undefined}
+          onClick={() => onActivate(item)}
+          onMouseEnter={(e) => onHover(item, e.currentTarget)}
+          className={cx(
+            'flex min-w-0 cursor-default items-center gap-1.5 rounded-[8px] px-2.5 text-[12.5px] font-semibold outline-none select-none focus-visible:shadow-[inset_0_0_0_2px_var(--ws-focus)]',
+            sheet ? 'h-10' : 'h-8',
+            item.primary ? 'ms-auto shrink-0 bg-primary text-[var(--ws-on-primary)] hover:bg-primary-hover focus:bg-primary-hover' : 'text-primary hover:bg-subtle focus:bg-subtle',
+            item.disabled && 'opacity-50',
+          )}
+        >
+          {item.icon ? <Icon name={item.icon} size={14} className="shrink-0" /> : null}
+          <span className="truncate">{item.label}</span>
         </div>
       ))}
     </div>
@@ -583,30 +716,56 @@ function Row({ item, iconSlot = true, domId, sheet, expanded, rtl, onActivate, o
       aria-haspopup={item.submenu ? 'menu' : undefined}
       aria-expanded={item.submenu && !sheet ? expanded : undefined}
       aria-labelledby={`${domId}-label`}
-      aria-describedby={note ? `${domId}-note` : undefined}
+      aria-describedby={[item.badge ? `${domId}-badge` : null, note ? `${domId}-note` : null].filter(Boolean).join(' ') || undefined}
       title={item.disabled && item.reason ? item.reason : undefined}
       onClick={() => onActivate(item)}
       onMouseEnter={(e) => onHover(item, e.currentTarget)}
       className={cx(
-        'flex w-full cursor-default items-start gap-2.5 rounded-[8px] px-2.5 text-start text-[13px] leading-[18px] outline-none select-none',
+        'flex w-full cursor-default gap-2.5 rounded-[8px] px-2.5 text-start text-[13px] leading-[18px] outline-none select-none',
         sheet ? 'min-h-11 py-[11px]' : 'min-h-9 py-[9px]',
+        item.leading || item.onToggle ? 'items-center' : 'items-start',
         // Focus and hover: a light background only. Chosen: a tick and accent text, never a background (#208).
         'focus:bg-subtle focus-visible:shadow-[inset_0_0_0_2px_var(--ws-focus)]',
         !item.disabled && 'hover:bg-subtle',
         expanded && 'bg-subtle',
-        item.disabled ? 'text-ink-3' : item.danger ? 'text-danger' : item.checked ? 'font-semibold text-primary' : 'text-ink',
+        item.disabled ? 'text-ink-3' : item.danger ? 'text-danger' : item.checked && !item.onToggle ? 'font-semibold text-primary' : 'text-ink',
       )}
       data-checked={item.checked ? '' : undefined}
     >
-      {iconSlot || item.icon ? (
+      {item.onToggle ? (
+        <span
+          aria-hidden="true"
+          data-menu-check=""
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!item.disabled) item.onToggle?.();
+          }}
+          className="-my-1 -ms-1 flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[6px] hover:bg-line/60"
+        >
+          <span className={cx('flex h-4 w-4 items-center justify-center rounded-[4px] border', item.checked ? 'border-primary bg-primary text-[var(--ws-on-primary)]' : 'border-ink-3/60 bg-surface')}>{item.checked ? <Icon name="check" size={11} /> : null}</span>
+        </span>
+      ) : null}
+      {item.leading ? <span className="-my-0.5 flex shrink-0 items-center">{item.leading}</span> : null}
+      {!item.leading && (iconSlot || item.icon) ? (
         <span className="flex h-[18px] w-4 shrink-0 items-center justify-center">
           {item.icon ? <Icon name={item.icon} size={16} className={cx(item.disabled ? 'text-ink-3 opacity-70' : item.danger ? 'text-danger' : item.checked ? 'text-primary' : 'text-ink-2')} /> : null}
         </span>
       ) : null}
       <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
-        <span id={`${domId}-label`} className={cx('block', item.disabled && 'opacity-80')}>
-          {item.label}
-        </span>
+        {item.badge ? (
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span id={`${domId}-label`} className={cx('min-w-0 truncate', item.disabled && 'opacity-80')}>
+              {item.label}
+            </span>
+            <span id={`${domId}-badge`} data-menu-badge="" className="inline-flex h-[17px] shrink-0 items-center rounded-full bg-subtle px-1.5 text-[10.5px] leading-none font-semibold text-ink-2">
+              {item.badge}
+            </span>
+          </span>
+        ) : (
+          <span id={`${domId}-label`} className={cx('block', item.disabled && 'opacity-80')}>
+            {item.label}
+          </span>
+        )}
         {note ? (
           <span id={`${domId}-note`} className={cx('mt-0.5 flex items-start gap-1 text-[11.5px] leading-[16px]', item.disabled && item.reason ? 'text-ink-2' : 'text-ink-3')}>
             {item.disabled && item.reason ? <Icon name="info" size={12} className="mt-[2px] shrink-0" /> : null}
@@ -615,7 +774,12 @@ function Row({ item, iconSlot = true, domId, sheet, expanded, rtl, onActivate, o
         ) : null}
       </span>
       {item.shortcut ? <kbd className="mt-px shrink-0 rounded-[5px] border border-line px-1.5 font-mono text-[11px] leading-[16px] text-ink-3">{item.shortcut}</kbd> : null}
-      {item.checked !== undefined ? (
+      {item.meta ? (
+        <span className="mt-px shrink-0 text-[11.5px] leading-[16px] font-medium text-ink-3 tabular-nums" aria-label={item.metaLabel} title={item.metaLabel}>
+          {item.meta}
+        </span>
+      ) : null}
+      {item.checked !== undefined && !item.onToggle ? (
         <span className="flex h-[18px] w-4 shrink-0 items-center justify-center">{item.checked ? <Icon name="check" size={16} className="text-primary" /> : null}</span>
       ) : null}
       {item.submenu ? <Icon name={rtl ? 'chevron-left' : 'chevron-right'} size={16} className="mt-px shrink-0 text-ink-3" /> : null}

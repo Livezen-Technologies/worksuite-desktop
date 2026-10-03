@@ -8,6 +8,7 @@ import type { ModuleProps } from '../registry';
 import { can, fetchDashboard, K, useCompanies, type ListView } from './api';
 import { NATIVE, TenderRail, type TenderView } from './Rail';
 import { SidePanel } from '../../components/SidePanel';
+import { recallOrgChoice, rememberOrgChoice } from '../../core/org-prefs';
 
 /**
  * Tenders: the rail, and the screen it points at. Addressed as
@@ -50,7 +51,8 @@ const num = (v: string | null | undefined) => (v && /^\d+$/.test(v) ? Number(v) 
 
 function savedOrg(): string {
   try {
-    return localStorage.getItem(ORG_KEY) ?? '';
+    // The organisation filter's memory (#214), shared with the other apps when the person chose so; this app's own before it.
+    return recallOrgChoice('tenders') ?? localStorage.getItem(ORG_KEY) ?? '';
   } catch {
     return '';
   }
@@ -83,6 +85,7 @@ export default function TendersShell(_props: ModuleProps) {
 
   const chooseOrg = (v: string) => {
     setOrg(v);
+    rememberOrgChoice('tenders', v);
     try {
       localStorage.setItem(ORG_KEY, v);
     } catch {

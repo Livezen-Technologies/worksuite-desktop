@@ -8,6 +8,7 @@ import type { ModuleProps } from '../registry';
 import { fetchFulfilment, fetchReturns, K, useOrgs, useOverview, type Status } from './api';
 import { NATIVE, NEEDS, SalesRail, type SalesView } from './Rail';
 import { SidePanel } from '../../components/SidePanel';
+import { recallOrgChoice, rememberOrgChoice } from '../../core/org-prefs';
 
 /**
  * Sales & Orders (the "12 · Orders (OMS)" designs): the rail, and the screen
@@ -46,7 +47,8 @@ const has = (perms: readonly string[] | undefined, p: string) => !!perms && (per
 
 function savedOrg(): string {
   try {
-    return localStorage.getItem(ORG_KEY) ?? '';
+    // The organisation filter's memory (#214), shared with the other apps when the person chose so; this app's own before it.
+    return recallOrgChoice('sales') ?? localStorage.getItem(ORG_KEY) ?? '';
   } catch {
     return '';
   }
@@ -88,6 +90,7 @@ export default function SalesShell(_props: ModuleProps) {
   const pick = (v: SalesView, s?: string | null) => go(v === 'orders' && s ? `/sales?tab=orders&status=${s}` : `/sales?tab=${v}`);
   const chooseOrg = (v: string) => {
     setOrg(v);
+    rememberOrgChoice('sales', v);
     try {
       localStorage.setItem(ORG_KEY, v);
     } catch {

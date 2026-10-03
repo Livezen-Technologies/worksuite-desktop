@@ -1,8 +1,9 @@
-import { useState } from 'react';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { canAct, type Org } from './api';
 import { PrimaryActionButton } from '../../components/PrimaryAction';
+import { OrgSwitcher as SharedOrgSwitcher } from '../../components/OrgSwitcher';
+import type { MenuItem } from '../../components/Menu';
 
 /**
  * The Expenses rail, ordered by the working day rather than the data model:
@@ -181,81 +182,27 @@ export function ExpensesRail({
 }
 
 /**
- * The company switcher. Several may be ticked, because the dashboard and the
- * claim lists add companies up; **Only** picks one without unticking the rest
- * one at a time, which is what most people want most days. A company pinned
- * with the star sits at the top. A company visible only through consolidated
- * reporting says it can be read and not changed — here, before somebody tries
- * to act and is refused.
+ * The company switcher: the shared organisation filter (#214). Several may be ticked, because the dashboard and the
+ * claim lists add companies up, and applied together; a click on a name shows only that company. A company pinned
+ * to the top (Pin to the top ›) comes first. A company visible only through consolidated reporting says it can be read
+ * and not changed — here, before somebody tries to act and is refused.
  */
 export function OrgSwitcher({ orgs, selected, onSelect, onFavourite }: { orgs: Org[]; selected: number[]; onSelect: (ids: number[]) => void; onFavourite: (id: number) => void }) {
-  const [open, setOpen] = useState(false);
-  const [q, setQ] = useState('');
-  const all = selected.length === 0;
-  const chosen = orgs.filter((o) => selected.includes(o.id));
   const sorted = [...orgs].sort((a, b) => Number(b.favourite) - Number(a.favourite));
-  const shown = q.trim() ? sorted.filter((o) => o.name.toLowerCase().includes(q.trim().toLowerCase())) : sorted;
-  const label = all ? 'All companies' : chosen.length === 1 ? chosen[0]!.name : `${chosen.length} companies`;
-  const sub = all ? 'Every company you can see' : chosen.length === 1 ? `${chosen[0]!.currency}${canAct(chosen[0]!) ? (chosen[0]!.role ? ` · ${chosen[0]!.role}` : '') : ' · read only'}` : chosen.map((o) => o.name).join(', ');
-  const toggle = (id: number) => {
-    const next = selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id];
-    onSelect(next);
+  const pin: MenuItem = {
+    id: 'pin',
+    label: 'Pin to the top',
+    icon: 'star',
+    submenu: [{ id: 'pins', items: sorted.map((o) => ({ id: `pin-${o.id}`, label: o.name, checked: !!o.favourite, onSelect: () => onFavourite(o.id) })) }],
   };
-
   return (
-    <div className="relative">
-      <button type="button" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 rounded-[9px] border border-line bg-surface px-2 py-1.5 text-left hover:bg-subtle">
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] bg-primary text-[11px] font-bold text-white">{all ? '∗' : chosen.length === 1 ? chosen[0]!.name.slice(0, 2).toUpperCase() : chosen.length}</span>
-        <span className="flex min-w-0 flex-1 flex-col">
-          <b className="truncate text-[12.5px] text-ink">{label}</b>
-          <span className="truncate text-[11px] text-ink-3">{sub}</span>
-        </span>
-        <Icon name="chevrons-up-down" size={14} className="shrink-0 text-ink-3" />
-      </button>
-      {open ? (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div role="listbox" aria-label="Companies" aria-multiselectable="true" className="absolute top-full right-0 left-0 z-40 mt-1 flex max-h-[420px] flex-col overflow-y-auto rounded-[10px] border border-line bg-surface py-1 shadow-[0_12px_32px_rgb(var(--ws-shadow-rgb)/.18)] scroll-thin">
-            {orgs.length > 6 ? (
-              <div className="px-2 pb-1">
-                <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a company" aria-label="Find a company" className="h-7 w-full rounded-[7px] border border-line bg-ground px-2 text-[12px] text-ink outline-none focus:border-primary" />
-              </div>
-            ) : null}
-            <button type="button" role="option" aria-selected={all} onClick={() => (onSelect([]), setOpen(false))} className={cx('flex items-center gap-2 px-2.5 py-1.5 text-left text-[12.5px]', all ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
-              <Box on={all} /> All companies
-            </button>
-            <div className="my-1 border-t border-line" />
-            {shown.map((o) => {
-              const on = selected.includes(o.id);
-              return (
-                <div key={o.id} className={cx('group flex items-center', on ? 'bg-selection' : 'hover:bg-subtle')}>
-                  <button type="button" role="option" aria-selected={on} onClick={() => toggle(o.id)} className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-left">
-                    <Box on={on} />
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-[12.5px] text-ink">{o.name}</span>
-                      <span className="truncate text-[11px] text-ink-3">
-                        {o.currency}
-                        {canAct(o) ? (o.role ? ` · ${o.role}` : '') : ' · you can read this one, not change it'}
-                      </span>
-                    </span>
-                  </button>
-                  <button type="button" title={`Show only ${o.name}`} onClick={() => (onSelect([o.id]), setOpen(false))} className="mr-1 rounded-[6px] px-1.5 py-1 text-[11px] font-semibold text-ink-3 opacity-0 group-hover:opacity-100 hover:bg-subtle hover:text-ink focus-visible:opacity-100">
-                    Only
-                  </button>
-                  <button type="button" aria-label={o.favourite ? `Unpin ${o.name}` : `Pin ${o.name} to the top`} title={o.favourite ? 'Unpin' : 'Pin to the top'} onClick={() => onFavourite(o.id)} className={cx('mr-2 rounded-[6px] p-1', o.favourite ? 'text-[#E9A23B]' : 'text-ink-3 opacity-0 group-hover:opacity-100 focus-visible:opacity-100')}>
-                    <Icon name="star" size={13} className={o.favourite ? 'fill-current' : undefined} />
-                  </button>
-                </div>
-              );
-            })}
-            {!shown.length ? <p className="m-0 px-3 py-3 text-center text-[12px] text-ink-3">Nothing matches.</p> : null}
-          </div>
-        </>
-      ) : null}
-    </div>
+    <SharedOrgSwitcher
+      variant="field"
+      multiple
+      orgs={sorted.map((o) => ({ id: String(o.id), name: o.name, hint: `${o.currency}${canAct(o) ? (o.role ? ` · ${o.role}` : '') : ' · read only'}` }))}
+      value={selected.map(String)}
+      onChange={(ids) => onSelect(ids.map(Number))}
+      more={orgs.length > 1 ? [pin] : []}
+    />
   );
-}
-
-function Box({ on }: { on: boolean }) {
-  return <span className={cx('flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border', on ? 'border-primary bg-primary text-white' : 'border-line bg-surface')}>{on ? <Icon name="check" size={11} /> : null}</span>;
 }

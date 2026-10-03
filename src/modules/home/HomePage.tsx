@@ -13,6 +13,8 @@ import { useCanOpen } from '../../core/access';
 import { Icon } from '../../components/Icon';
 import { Avatar, Button, Chip, OfflineNote, cx } from '../../components/ui';
 import { Checkbox } from '../../components/Checkbox';
+import { OrgSwitcher, useManageOrganisations, type OrgOption } from '../../components/OrgSwitcher';
+import { setDefaultOrganisation, useOrgPrefs, useOrgSelection } from '../../core/org-prefs';
 import type { ModuleProps } from '../registry';
 import { nowWall, type CalendarEvent, type Destination } from '../calendar/api';
 import { awaitingAnswer } from '@shared/meeting-invitations';
@@ -124,14 +126,26 @@ export default function HomePage(_props: ModuleProps) {
   const now = nowWall(clock).minutes;
   const [customizing, setCustomizing] = useState(false);
   const [layout, setLayoutState] = useState<Layout>(() => loadLayout(user?.id));
-  // The company the dashboard is about: the one you work in, or all of yours. Home's own filter — it does not switch the app.
-  const [company, setCompany] = useState<string | null>(orgId);
+  // The organisations the dashboard is about (#214): remembered per person, else their default, else the one they
+  // work in, else all of theirs. Home's own filter — it does not switch the app.
+  const orgPrefs = useOrgPrefs();
+  const serverDefault = useStore(app, (s) => s.bootstrap?.defaultOrganizationId ?? null);
+  const fallback = orgPrefs.defaultOrg ?? orgId;
+  const [selection, setSelection] = useOrgSelection(
+    'home',
+    orgs.map((o) => o.id),
+    fallback ? [fallback] : [],
+  );
+  const scope = selection.join(',');
+  const manage = useManageOrganisations();
   const setLayout = (l: Layout) => {
     setLayoutState(l);
     saveLayout(user?.id, l);
   };
 
-  const dash = useQuery({ queryKey: ['home', 'dashboard'], queryFn: () => apiGetMeta<Dashboard>('/api/dashboard/home') });
+  // Asked again for the organisations chosen (the `org` filter the modules' APIs take): the cards show their loading
+  // placeholders until it answers. A server that does not filter answers for all; the lists are filtered here too.
+  const dash = useQuery({ queryKey: ['home', 'dashboard', scope], queryFn: () => apiGetMeta<Dashboard>('/api/dashboard/home', scope ? { org: scope } : undefined) });
   // The Tasks page's own request: the counts here are the lengths of the lists they open.
   const tasks = useQuery({ ...ALL_TASKS, enabled: has('tasks') });
   const events = useQuery({
@@ -155,20 +169,26 @@ export default function HomePage(_props: ModuleProps) {
     staleTime: 60_000,
   });
   const announcements = useMyAnnouncements();
-  const summary = useQuery({ queryKey: ['home', 'summary'], queryFn: () => apiGet<Summary>('/api/dashboard/summary'), retry: false, staleTime: 10 * 60_000 });
+  const summary = useQuery({ queryKey: ['home', 'summary', scope], queryFn: () => apiGet<Summary>('/api/dashboard/summary', scope ? { org: scope } : undefined), retry: false, staleTime: 10 * 60_000 });
 
   const reading = Number(query.get('announcement') ?? 0) || null;
   const readingAll = query.get('announcements') === 'all';
 
-  const inCompany = (o: number | null | undefined) => company === null || o === null || o === undefined || String(o) === company;
-  const myTasks = (tasks.data?.data.tasks ?? []).filter((x) => inCompany(x.org_id));
+  const inCompany = (o: number | null | undefined) => selection.length === 0 || o === null || o === undefined || selection.includes(String(o));
+  const allTasks = tasks.data?.data.tasks ?? [];
+  const myTasks = allTasks.filter((x) => inCompany(x.org_id));
   const buckets = taskBuckets(myTasks, today);
+  // The switcher's counts: what is due today in each organisation, from the Tasks list Home already has. None without it.
+  const counted = has('tasks') && !!tasks.data;
+  const dueByOrg = new Map<string, number>();
+  if (counted) for (const x of taskBuckets(allTasks, today).today) if (x.org_id != null) dueByOrg.set(String(x.org_id), (dueByOrg.get(String(x.org_id)) ?? 0) + 1);
+  const orgOptions: OrgOption[] = orgs.map((o) => ({ id: o.id, name: o.name, count: counted ? (dueByOrg.get(o.id) ?? 0) : null }));
   const agenda = events.data?.data.events ?? [];
   const meetings = meetingsToday(agenda);
   const next = agendaOf(agenda, now).next;
   // Announcements: an older server without them, or one refusing, has no card rather than an error.
   const noAnnouncements = announcements.error instanceof ApiError && (announcements.error.status === 404 || announcements.error.forbidden);
-  const notices = ranked(current(forCompany(announcements.data ?? [], company)));
+  const notices = ranked(current(forCompany(announcements.data ?? [], selection)));
   const acks = toAcknowledge(notices);
   const approvalItems = has('hr') ? (approvals.data?.items ?? []) : [];
   const approvalCount = has('hr') ? (approvals.data?.count ?? 0) : 0;
@@ -420,27 +440,21 @@ export default function HomePage(_props: ModuleProps) {
       <div className="mx-auto flex max-w-[1400px] flex-col gap-5">
         <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
           <div className="flex min-w-0 flex-col gap-1.5">
-            <div className="flex flex-wrap items-center gap-2 text-[13px] text-ink-3">
+            <div className="flex min-h-8 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-ink-3">
               <span>{dayLabel(today)}</span>
               {orgs.length > 1 ? (
                 <>
                   <span aria-hidden="true">·</span>
-                  <span className="relative -ml-1 flex items-center">
-                    <select
-                      aria-label="Organization"
-                      value={company ?? ''}
-                      onChange={(e) => setCompany(e.target.value || null)}
-                      className="h-6 max-w-[240px] cursor-pointer appearance-none rounded-[6px] border-0 bg-subtle py-0 pr-6 pl-2 text-[13px] font-medium text-ink-2 hover:text-ink"
-                    >
-                      <option value="">All organizations</option>
-                      {orgs.map((o) => (
-                        <option key={o.id} value={o.id}>
-                          {o.name}
-                        </option>
-                      ))}
-                    </select>
-                    <Icon name="chevron-down" size={14} className="pointer-events-none absolute right-1.5 text-ink-3" />
-                  </span>
+                  <OrgSwitcher
+                    orgs={orgOptions}
+                    value={selection}
+                    onChange={setSelection}
+                    multiple
+                    countLabel="due today"
+                    defaultId={orgPrefs.defaultOrg ?? serverDefault}
+                    onSetDefault={setDefaultOrganisation}
+                    onManage={manage}
+                  />
                 </>
               ) : null}
             </div>
@@ -603,7 +617,7 @@ export function StatTile({
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-[13px] text-ink-2">{label}</span>
         <span className="flex min-w-0 items-baseline gap-2">
-          <span className="text-[24px] leading-tight font-semibold tracking-[-0.02em] text-ink tabular" title={n.toLocaleString()}>
+          <span data-stat-number="" className="stat-number text-[24px] leading-tight font-semibold tracking-[-0.02em] text-ink" title={n.toLocaleString()}>
             {loading ? '–' : (display ?? compactCount(n))}
           </span>
           {note && !loading ? <span className={cx('truncate text-[12px] font-medium', noteTone === 'danger' ? 'text-danger' : 'text-ink-3')}>{note}</span> : null}

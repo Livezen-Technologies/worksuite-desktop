@@ -140,7 +140,7 @@ function OrgCard({ collapsed }: { collapsed: boolean }) {
         type="button"
         data-org-card
         onClick={toggle}
-        aria-haspopup="dialog"
+        aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`Organization: ${name}. Change organization`}
         title={collapsed ? `${name} — ${sub}` : undefined}
