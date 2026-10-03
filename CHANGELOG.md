@@ -13,6 +13,14 @@ person who has to live with the change — what it does, and where it bites.
 - **Beta builds update themselves on Windows, Mac and Linux.** A build that is not code-signed (today's Beta builds) now downloads and installs a new version by itself when it comes from a test channel — Beta, Dev or Internal — and this computer is set to that channel. It trusts the Update Center's signed answer and the file's SHA-256, the same as the Linux AppImage already did; on a Mac the app inside the disk image must still pass macOS's own integrity check. Stable never installs an unsigned update, and a signed build never takes an unsigned one.
 - Installing still waits for you: WorkSuite asks before restarting if uploads, queued changes, drafts or a call would be interrupted.
 
+## 0.2.130 — 2026-10-03
+
+- **WhatsApp says which number is linked only once it is (#157, first fix).** While a QR scan has not confirmed a
+  number, settings say "Number not linked yet" instead of showing a stored phone value. Confirmed Sri Lankan numbers
+  read as +94 7x xxx xxxx, with the connection time and device where the server gives them. Check connection reports
+  the provider's answer, settings actions no longer overlap, and Unlink from phone moves into an action menu (still
+  asking first). Duplicate account cards and organisation ownership are still to come.
+
 ## 0.2.129 — 2026-10-03
 
 - **WhatsApp opens from what this computer saved (#158, first stage).** Accounts, chat lists and conversations you
