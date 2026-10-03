@@ -22,6 +22,8 @@ export interface PersonActions {
   meet?: () => void;
   addContact?: () => void;
   chat?: (userId: number) => void;
+  /** The sender's lead or account in CRM (#212). */
+  crm?: () => void;
 }
 
 export function useVips(enabled = true) {
@@ -55,7 +57,7 @@ function useAway(email: string, enabled: boolean) {
   });
 }
 
-export function PersonButton({ name, email, context, actions, className }: { name: string; email: string; context: MessageContext | null | undefined; actions: PersonActions; className?: string }) {
+export function PersonButton({ name, email, context, actions, className, title }: { name: string; email: string; context: MessageContext | null | undefined; actions: PersonActions; className?: string; title?: string }) {
   const [at, setAt] = useState<{ top: number; left: number } | null>(null);
   const btn = useRef<HTMLButtonElement>(null);
   const open = () => {
@@ -65,7 +67,7 @@ export function PersonButton({ name, email, context, actions, className }: { nam
   };
   return (
     <>
-      <button ref={btn} type="button" aria-haspopup="dialog" aria-expanded={!!at} onClick={() => (at ? setAt(null) : open())} className={className}>
+      <button ref={btn} type="button" aria-haspopup="dialog" aria-expanded={!!at} onClick={() => (at ? setAt(null) : open())} className={className} title={title}>
         {name}
       </button>
       {at ? <PeopleCard email={email} name={name} context={context} actions={actions} at={at} onClose={() => setAt(null)} /> : null}
@@ -115,7 +117,7 @@ export function PeopleCard({ email, name, context, actions, at, onClose }: { ema
   return createPortal(
     <div ref={box} role="dialog" aria-label={text('About {name}', { name })} tabIndex={-1} style={{ top: at.top, left: at.left }} className="fixed z-[70] w-[330px] rounded-[12px] border border-line bg-surface p-4 text-[13px] shadow-xl outline-none">
       <div className="flex items-start gap-3">
-        <Avatar name={name || email} size={44} />
+        <Avatar name={name || email} size={44} src={s?.photo_url ?? null} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-[15px] font-bold text-ink">{s?.name || name || email}</p>
           {role ? <p className="truncate text-ink-2">{role}</p> : null}
@@ -130,7 +132,7 @@ export function PeopleCard({ email, name, context, actions, at, onClose }: { ema
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5">
         <Button size="sm" icon="mail" onClick={() => (onClose(), actions.email())}>
-          {text('Email')}
+          {text('New email')}
         </Button>
         {s?.user_id && actions.chat ? (
           <Button size="sm" icon="chat" onClick={() => (onClose(), actions.chat!(s.user_id!))}>
@@ -144,12 +146,17 @@ export function PeopleCard({ email, name, context, actions, at, onClose }: { ema
         ) : null}
         {actions.meet ? (
           <Button size="sm" icon="video" onClick={() => (onClose(), actions.meet!())}>
-            {text('Meet')}
+            {text('Create meeting')}
           </Button>
         ) : null}
         {actions.addContact ? (
           <Button size="sm" icon="user-plus" onClick={() => (onClose(), actions.addContact!())}>
             {s?.contact_id ? text('Open contact') : text('Add to contacts')}
+          </Button>
+        ) : null}
+        {actions.crm ? (
+          <Button size="sm" icon="briefcase" onClick={() => (onClose(), actions.crm!())}>
+            {text('View in CRM')}
           </Button>
         ) : null}
         {vips.data !== null ? (

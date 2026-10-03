@@ -5,6 +5,10 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.146 — 2026-10-03
+
+- **A compact, cleaner email header (#212).** The top of an open email now takes about half the space: the subject (up to two lines) with small **Inbox** and **External** badges beside it; the sender on one line — name and address, the address copies on click — with a small shield that is green when SPF, DKIM and DMARC pass, amber when partly verified and red when it fails (a failed check also shows a warning above the message); and "to me ▾" underneath, which opens the full details (From, To, Cc, Bcc, Reply-To, date, mailed-by, signed-by, account and folder). On the right are the short date ("3:26 PM" today), **Star** and **⋯**, which holds Remind me, Add to contacts, Create meeting, Copy, View source, Print and Download .eml. Clicking the sender opens their card with New email, Create meeting and View in CRM. The account shows as a small dot only in All Accounts. The header follows the Super compact, Compact and Classic density, shrinks to a slim bar when you scroll the message, and rearranges itself in a narrow reading pane. Turn on **Settings › Mail › Show more buttons in the message header** for extra icons.
+
 ## 0.2.145 — 2026-10-03
 
 - **Menus open where you clicked (#208).** The Mail **View** menu — and every dropdown, Sort, Select and right-click menu — now opens attached to its button, flips above it when there's no room, stays 8px inside the window and scrolls inside itself instead of running off the screen. The chosen option shows a tick and accent text; hovering or moving with the keyboard only lightly shades a row, so the two never look alike. The View menu is shorter: the reading pane is one Right · Below · Hidden switch, and **More view settings…** opens Appearance & reading.

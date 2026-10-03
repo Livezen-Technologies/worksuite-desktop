@@ -120,6 +120,14 @@ export function monthWords(ym: string): string {
   return Number.isNaN(d.getTime()) ? ym : d.toLocaleDateString(displayLocale(), { month: 'long', year: 'numeric', timeZone: 'UTC' });
 }
 
+/** A stamp's day on the reader's calendar in their own format: "Oct 3" / "3 Oct", the year when asked, or the whole date in words. */
+export function stampDayLabel(stamp: string, form: 'short' | 'year' | 'long'): string {
+  const d = parseTs(stamp);
+  if (Number.isNaN(d.getTime())) return '';
+  const o: Intl.DateTimeFormatOptions = form === 'long' ? { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' } : form === 'year' ? { day: 'numeric', month: 'short', year: 'numeric' } : { day: 'numeric', month: 'short' };
+  return d.toLocaleDateString(displayLocale(), opts(o));
+}
+
 /** A bare date stays a day; a stamp is shown on the reader's calendar. */
 export function dateLabel(value: string | null | undefined): string {
   if (!value) return '';

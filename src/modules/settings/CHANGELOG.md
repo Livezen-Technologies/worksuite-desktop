@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.16.1 — 2026-10-03
+
+- Mail › Reading: 'Show more buttons in the message header' (#212).
+
 ## 1.16.0 — 2026-10-03
 
 - Updates (#205): one updates card in Settings › Desktop and Settings › About — state and next step with progress, the update channel (Stable, Beta, Dev) limited by your organisation with a confirmation for less stable channels, What's new, Reinstall Stable, and Download automatically, Install when quitting and Update notifications.
