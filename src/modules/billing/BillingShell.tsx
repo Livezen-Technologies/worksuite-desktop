@@ -9,6 +9,7 @@ import type { ModuleProps } from '../registry';
 import { can, closeTab, fetchDashboard, fetchInvoice, invoiceName, K, openTab, useBillingOrgs } from './api';
 import { BillRail, NATIVE, type BillView } from './Rail';
 import { SidePanel } from '../../components/SidePanel';
+import { recallOrgChoice, rememberOrgChoice } from '../../core/org-prefs';
 
 /**
  * Billing (the "Bill*" designs): the rail, and the screen it points at.
@@ -40,7 +41,8 @@ const num = (v: string | null | undefined) => (v && /^\d+$/.test(v) ? Number(v) 
 
 function savedOrg(): string {
   try {
-    return localStorage.getItem(ORG_KEY) ?? '';
+    // The organisation filter's memory (#214), shared with the other apps when the person chose so; this app's own before it.
+    return recallOrgChoice('billing') ?? localStorage.getItem(ORG_KEY) ?? '';
   } catch {
     return '';
   }
@@ -78,6 +80,7 @@ export default function BillingShell(_props: ModuleProps) {
     if (requestedOrg !== null) {
       const next = new URLSearchParams(query); next.set('org', v); go(`/billing?${next.toString()}`);
     }
+    rememberOrgChoice('billing', v);
     try {
       localStorage.setItem(ORG_KEY, v);
     } catch {

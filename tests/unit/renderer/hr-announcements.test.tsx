@@ -54,8 +54,8 @@ describe('the announcements console (#98)', () => {
     expect(statusLabel('cancelled')).toBe('Withdrawn');
     expect(companiesLabel({ company: 'x', companies: COMPANIES })).toBe('3 companies');
     expect(companiesLabel({ company: 'x', all_companies: true })).toBe('All companies');
-    fireEvent.click(screen.getByLabelText('Filter by company'));
-    fireEvent.click(await screen.findByRole('option', { name: 'Asterix' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Filter by company:/ }));
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Asterix' }));
     await waitFor(() => expect(screen.queryByText('Draft note')).toBeNull());
     expect(vi.mocked(apiGet)).toHaveBeenCalledWith('/api/hr/announcements', { org: '2' }, expect.anything());
   });
@@ -197,8 +197,8 @@ describe('the announcements console (#98)', () => {
     expect(within(panel).getByText('Acknowledged earlier text')).toBeTruthy();
     expect(within(panel).getByText('Read, not acknowledged')).toBeTruthy();
     expect(within(panel).getByText('Not read')).toBeTruthy();
-    fireEvent.click(within(panel).getByLabelText('Company'));
-    fireEvent.click(await screen.findByRole('option', { name: 'Asterix' }));
+    fireEvent.click(within(panel).getByRole('button', { name: /^Company:/ }));
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Asterix' }));
     await waitFor(() => expect(within(panel).queryByText('Ann')).toBeNull());
     expect(vi.mocked(apiGet)).toHaveBeenCalledWith('/api/hr/announcements/5/report', { org: '2' }, expect.anything());
   });

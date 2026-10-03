@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.0 — 2026-10-03
+
+- The organisation filter is the shared compact switcher (#214): one pill, search, several at once, a default organisation, remembered per person.
+
 ## 1.2.0 — 2026-10-02
 
 - Announcements to several companies (#98): the company picker offers only companies you may publish to, with 'All companies you may publish to', Clear Selection, a count and chips marked 'draft only' where you may write but not publish; Publish is disabled with the reason when such a company is chosen; the acknowledgement report separates 'Acknowledged earlier text' and 'Read, not acknowledged' and filters by the companies you may read it in; edits, withdrawal and expiry refresh open consoles and readers at once.

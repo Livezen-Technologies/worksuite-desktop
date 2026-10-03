@@ -10,6 +10,7 @@ import { fetchCompanies, fetchDashboard, K, type Company } from './api';
 import { LoadFailed } from './parts';
 import { FinanceRail, TITLES, VIEWS, type FinanceView } from './Rail';
 import { SidePanel } from '../../components/SidePanel';
+import { recallOrgChoice, rememberOrgChoice } from '../../core/org-prefs';
 
 /**
  * Finance: the rail, and the screen it points at. Addressed as
@@ -85,7 +86,9 @@ export default function FinanceShell(_props: ModuleProps) {
   const view: FinanceView = asked && VIEWS.includes(asked) ? asked : 'dashboard';
   const companiesQ = useQuery({ queryKey: K.companies(uid), queryFn: ({ signal }) => fetchCompanies(signal), retry: false, staleTime: 60_000 });
   const companies = companiesQ.data ?? [];
-  const company = resolveCompany(companies, num(query.get('company')), remembered(uid));
+  // Remembered: the organisation filter's memory (#214, shared with the other apps when the person chose so), else Finance's own.
+  const memory = [num(recallOrgChoice('finance')), remembered(uid)].find((id) => id !== null && companies.some((c) => c.id === id)) ?? null;
+  const company = resolveCompany(companies, num(query.get('company')), memory);
   const dash = useQuery({
     queryKey: K.dashboard(company?.id ?? 0),
     queryFn: ({ signal }) => fetchDashboard(company!.id, signal),
@@ -98,6 +101,7 @@ export default function FinanceShell(_props: ModuleProps) {
   const pick = (v: FinanceView, extra = '') => go(route(v, company?.id ?? null, extra));
   const choose = (id: number) => {
     remember(uid, id);
+    rememberOrgChoice('finance', String(id));
     go(route(view, id));
   };
 

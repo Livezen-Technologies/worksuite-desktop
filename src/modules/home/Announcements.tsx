@@ -58,9 +58,10 @@ export function current(items: MyAnnouncement[], now = Date.now()): MyAnnounceme
 }
 
 /** Those for the company chosen in the header; all of them when it is "All organizations". */
-export function forCompany(items: MyAnnouncement[], orgId: string | null): MyAnnouncement[] {
-  if (orgId === null) return items;
-  return items.filter((a) => !a.companies?.length || a.companies.some((c) => String(c.id) === orgId));
+export function forCompany(items: MyAnnouncement[], orgId: string | string[] | null): MyAnnouncement[] {
+  const ids = orgId === null ? [] : Array.isArray(orgId) ? orgId : [orgId];
+  if (!ids.length) return items;
+  return items.filter((a) => !a.companies?.length || a.companies.some((c) => ids.includes(String(c.id))));
 }
 
 export function useMyAnnouncements(enabled = true) {

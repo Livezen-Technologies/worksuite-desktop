@@ -14,6 +14,7 @@ import { Note, OneCompany, QuickBar } from './parts';
 import type { ClaimPreset } from './suppliers';
 import { ExpensesRail, GATED, ONE_COMPANY, TITLES, VIEWS, type ExpenseView } from './Rail';
 import { SidePanel } from '../../components/SidePanel';
+import { encodeSelection, recallOrgSelection, rememberOrgSelection } from '../../core/org-prefs';
 
 /**
  * Expenses: the rail, the quick bar, and the screen they point at. Addressed
@@ -82,7 +83,9 @@ export default function ExpensesShell(_props: ModuleProps) {
   const view = viewFrom(query);
   const orgsQ = useQuery({ queryKey: K.orgs(uid), queryFn: ({ signal }) => fetchOrgs(signal), retry: false, staleTime: 60_000 });
   const orgs = orgsQ.data?.items ?? [];
-  const selected = resolveSelection(orgs, query.get('org'), remembered(uid), orgsQ.data?.current ?? null);
+  // Remembered: the organisation filter's memory (#214, shared with the other apps when the person chose so), else Expenses' own.
+  const shared = recallOrgSelection('expenses');
+  const selected = resolveSelection(orgs, query.get('org'), shared === null ? remembered(uid) : encodeSelection(shared), orgsQ.data?.current ?? null);
   const org = selectionParam(selected);
   // One company to write in: the one selected, or the only one there is.
   const orgId = selected.length === 1 ? selected[0]! : orgs.length === 1 ? orgs[0]!.id : null;
@@ -102,6 +105,7 @@ export default function ExpensesShell(_props: ModuleProps) {
   const onGo = (v: ExpenseView, extra = '') => go(route(v, selected, extra));
   const onSelect = (ids: number[]) => {
     remember(uid, ids.length ? selectionParam(ids) : 'all');
+    rememberOrgSelection('expenses', ids.map(String));
     go(route(view, ids));
   };
   const favourite = async (id: number) => {

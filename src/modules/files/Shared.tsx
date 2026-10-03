@@ -11,6 +11,7 @@ import { PopMenu, type MenuItem } from './Menu';
 import type { Place } from './Rail';
 import { FileIcon } from './Thumb';
 import { Select } from '../../components/Select';
+import { OrgSwitcher } from '../../components/OrgSwitcher';
 
 const LEVEL: Record<string, [string, string]> = { view: ['Can view', 'text-ink-2'], edit: ['Can edit', 'text-primary'], full: ['Full access', 'text-success'] };
 const KINDS: Array<[string, string]> = [['', 'Any type'], ['document', 'Documents'], ['spreadsheet', 'Spreadsheets'], ['presentation', 'Presentations'], ['pdf', 'PDFs'], ['image', 'Images'], ['video', 'Video'], ['audio', 'Audio'], ['archive', 'Archives']];
@@ -77,11 +78,14 @@ export function Shared({ onPlace }: { onPlace: (p: Place) => void }) {
             </Select>
             <Select aria-label="When shared" value={when} onChange={(e) => setWhen(e.target.value)} className={select(!!when)}>{WHEN.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select>
             {facets && (facets.organizations.length || facets.no_company) ? (
-              <Select aria-label="Company" value={org} onChange={(e) => setOrg(e.target.value)} className={select(!!org)}>
-                <option value="">Any company</option>
-                {facets.organizations.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-                {facets.no_company ? <option value="none">No company</option> : null}
-              </Select>
+              <OrgSwitcher
+                label="Company"
+                allLabel="Any company"
+                orgs={[...facets.organizations.map((o) => ({ id: String(o.id), name: o.name })), ...(facets.no_company ? [{ id: 'none', name: 'No company' }] : [])]}
+                value={org ? [org] : []}
+                onChange={(ids) => setOrg(ids[0] ?? '')}
+                onSetDefault={null}
+              />
             ) : null}
             {facets?.locations.length ? (
               <Select aria-label="Location" value={within} onChange={(e) => setWithin(e.target.value)} className={select(!!within)}>

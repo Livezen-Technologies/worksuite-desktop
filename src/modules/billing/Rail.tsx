@@ -3,10 +3,10 @@ import { useState } from 'react';
 import { useCanOpen } from '../../core/access';
 import { call } from '../../core/bridge';
 import { Icon } from '../../components/Icon';
-import { Select } from '../../components/Select';
 import { cx } from '../../components/ui';
 import { searchBilling } from './api';
 import { PrimaryActionButton } from '../../components/PrimaryAction';
+import { OrgSwitcher } from '../../components/OrgSwitcher';
 
 /**
  * The Billing rail (BillRail): the company picker, New invoice, a search over
@@ -88,14 +88,7 @@ export function BillRail({ view, draftsOnly, onPick, onDrafts, onOnAccount, onNe
     <nav aria-label="Billing" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
       <div className="flex flex-col gap-2 px-2.5 pt-3.5 pb-1">
         {orgs.length > 1 ? (
-          <Select aria-label="Companies" searchable value={org} onChange={(e) => onOrg(e.target.value)} className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink">
-            <option value="">Every company</option>
-            {orgs.map((o) => (
-              <option key={o.id} value={String(o.id)}>
-                {o.name}
-              </option>
-            ))}
-          </Select>
+          <OrgSwitcher variant="field" orgs={orgs.map((c) => ({ id: String(c.id), name: c.name }))} value={org ? [org] : []} onChange={(ids) => onOrg(ids[0] ?? '')} />
         ) : null}
         {canCreate ? (
           <PrimaryActionButton data-guide="billing.new-invoice" label="New invoice" onClick={onNew} />

@@ -7,6 +7,7 @@ import { GuestProfileMenu } from '../modules/guest/GuestProfileMenu';
 import { call, errorMessage, on } from '../core/bridge';
 import { accelerator, commandForAccelerator, getCommand, registerCommand, runCommand } from '../core/commands';
 import { initLauncherPrefs, shellShortcuts } from '../core/launcher-prefs';
+import { initOrgPrefs } from '../core/org-prefs';
 import { noteRecentApp } from '../core/recent-apps';
 import { useStore } from '../core/store';
 import { activateIndex, activeTab, closeTab, closeTabsForApps, detachTab, dockSide, insertTab, navigate, newRoute, openTab, resetTabs, restoreClosed, restoreTabs, suspendIdle, tabsStore, undockSide } from '../core/tabs';
@@ -65,6 +66,7 @@ export function Shell() {
   useEffect(() => closeMenuOnRouteChange(), []);
   // The launcher's preferences follow whoever is signed in: this computer's copy at once, then the server's (#201).
   useEffect(() => initLauncherPrefs(), []);
+  useEffect(() => initOrgPrefs(), []);
 
   // Tab restore at start (FR-NAV-04) — only apps the user can still open.
   useEffect(() => {

@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.17.0 — 2026-10-03
+
+- Preferences: Organisation filter, the same in every app or separate in each (#214).
+
 ## 1.16.1 — 2026-10-03
 
 - Mail › Reading: 'Show more buttons in the message header' (#212).
