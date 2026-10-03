@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.12.0 — 2026-10-03
+
+- WhatsApp shows contact names: numbers are matched to Contacts in any format (07x, +94, spaces, dashes) and named contact first (with company), then the saved name, then ~WhatsApp name (Not in contacts), then a formatted number — in the list, header, group senders, mentions, search and tab title. Groups show their real name and member count. Add to contacts and Link to existing contact for unknown numbers, a contact side panel from the header, and live updates when a contact changes. Fixed: "is not connected" while messages arrive, "Message" previews, and photo previews (#176).
+
 ## 1.11.0 — 2026-10-03
 
 **Added**

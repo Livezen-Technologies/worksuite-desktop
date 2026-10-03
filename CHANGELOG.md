@@ -5,6 +5,12 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.108 — 2026-10-03
+
+- **WhatsApp shows who you're talking to (#176).** A number that is in Contacts shows the contact's name, company and photo or initials — in the list, the header, group messages, mentions, search and the tab title — whatever way the number was typed (07x, +94, spaces, dashes). Unknown numbers show the person's WhatsApp name as "~Name · Not in contacts", or a formatted number; never a bare "+". Groups show their real name and member count, not "Group" and an @g.us id. **Add to contacts** and **Link to existing contact** are in the header and the row's right-click menu, and clicking the header opens the contact's details with deals, invoices, tenders and notes. Changing a contact updates the names straight away.
+- Also fixed in WhatsApp: "is not connected · Starting the session" while messages were arriving, previews that said "Message", and photos listed as "📎 Photo" (now an image icon with the caption).
+- Needs the server update (Contacts and WhatsApp migrations, then `php spark whatsapp:match-contacts` once). WhatsApp profile and group photos are not fetched yet.
+
 ## 0.2.107 — 2026-10-03
 
 - **One New button everywhere (#171).** Mail, Files, Tasks, Notes, Calendar, Contacts, CRM, Billing, Sales, Tenders and Expenses use the same primary button: 40 px, plus icon, quiet shadow, with the shortcut in its tooltip instead of a chip. Mail's is a split button — New email, from a template, in a new window, an event invite or a contact — and Search beside it matches Files' Upload button.
