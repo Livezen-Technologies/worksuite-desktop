@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.14.0 — 2026-10-03
+
+- A file or folder shared with you from Files arrives as a card in your chat with the sharer (or the team's chat), with Open, Download, Show in Files and Request edit access; several files make one card, and the card updates when access changes or ends. The "is open — messages can link to it" notice is a small chip in the message box (#164).
+
 ## 1.13.0 — 2026-10-03
 
 - Right-click any conversation (Chat, WhatsApp, Website): Open in new window, Mark read/unread, Pin (max 5), Archive with an Archived section, Favourite, Mute for 8 hours / 1 week / always, Contact info, calls, Block, Export (.txt or .zip, audited), Clear (keep starred) and Delete with 5-second Undo; group, meeting and System chats get their own actions; WhatsApp adds Assign, waiting/done and Add/Link/Open contact, Website adds Assign, Transfer and Close. Multi-select with Ctrl/Shift-click or Select mode, keyboard shortcuts, muted chats left out of the badge, and one presence source everywhere (#183).

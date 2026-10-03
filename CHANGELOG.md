@@ -5,6 +5,14 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.114 — 2026-10-03
+
+- **You hear when someone shares a file with you (#164).** A file or folder shared from Files shows up as a card in your chat with that person — or in the team's chat for a team share — with Open, Download, Show in Files and, if you can only view it, Request edit access. Several files shared together make one card, folders show how many items they hold, and the card changes to "Access changed to …" or "No longer shared" when that happens. You also get a bell entry ("Dinusha shared "Report.docx" with you (Full access)"), a desktop notification, a count on **Shared with me** until you open it, and an email with an Open file button — shares made within a couple of minutes come as one email, or in a daily summary if you prefer.
+- The share dialog has **Notify people** (on by default), a message box, and choices to post in chat and send an email.
+- **Notification settings › Files** lets you choose chat, in-app and email for shares, access changes and comments.
+- In the chat drawer, the "… is open — messages can link to it" notice is now a small chip in the message box instead of a bar over the conversation.
+- Needs the server update (Files migration). People outside WorkSuite are not invited by email, because Drive shares only with people in your company or partner companies.
+
 ## 0.2.113 — 2026-10-03
 
 - **Contacts sync with Google, Outlook and iCloud (#175).** Connect Google Contacts, Outlook / Microsoft 365, iCloud or another CardDAV address book (several per provider) in **Settings › Contacts › Accounts & sync**, and contacts stay in step both ways — only changes are fetched each time. The first sync shows what it will do before writing anything ("320 found · 210 new · 95 match existing · 15 possible duplicates"). People you already have are linked, not copied, and WorkSuite's own fields (type, company links, CRM) are never overwritten. When both sides change the same field the newest wins, or it goes to a Sync conflicts list. Something deleted at the provider is archived (if it has CRM links) rather than lost. Each account shows its status, last sync, count and errors, with Sync now, settings, a log and Disconnect (keep the contacts or remove the ones only it brought).
