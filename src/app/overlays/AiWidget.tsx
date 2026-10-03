@@ -63,8 +63,11 @@ export function AiWidget() {
         }
       }}
       className={cx(
-        'absolute z-20 flex flex-col overflow-hidden rounded-[16px] border border-line bg-surface shadow-[0_18px_48px_rgb(var(--ws-shadow-rgb)/.28)] motion-safe:animate-[ws-fade-in_.14s_ease-out]',
-        maximized ? 'inset-3' : 'right-4 bottom-4 h-[min(600px,calc(100%-2rem))] w-[min(400px,calc(100%-2rem))]',
+        'z-20 flex flex-col overflow-hidden bg-surface motion-safe:animate-[ws-fade-in_.14s_ease-out]',
+        // Maximised is a side panel that takes its own room and pushes the work aside, never over it (worksuite-desktop#153).
+        maximized
+          ? 'relative w-[min(560px,45%)] shrink-0 border-l border-line'
+          : 'absolute right-4 bottom-4 h-[min(600px,calc(100%-2rem))] w-[min(400px,calc(100%-2rem))] rounded-[16px] border border-line shadow-[0_18px_48px_rgb(var(--ws-shadow-rgb)/.28)]',
       )}
     >
       <header className="flex items-center gap-1 border-b border-line py-2 pr-2 pl-4">
@@ -96,7 +99,8 @@ export function AiWidget() {
 function AiBubble({ always, buttonRef }: { always?: boolean; buttonRef?: Ref<HTMLButtonElement> }) {
   const [composerVisible, setComposerVisible] = useState(false);
   useEffect(() => {
-    const update = () => setComposerVisible(Array.from(document.querySelectorAll('[data-chat-composer]')).some((el) => el.getClientRects().length > 0));
+    // A chat composer or a mail being written owns the corner: the launcher steps out of its way (#153).
+    const update = () => setComposerVisible(Array.from(document.querySelectorAll('[data-chat-composer], [data-hide-ai-launcher]')).some((el) => el.getClientRects().length > 0));
     update();
     const observer = new MutationObserver(update);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden'] });

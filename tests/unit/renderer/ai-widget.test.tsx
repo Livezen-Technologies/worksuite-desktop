@@ -133,9 +133,11 @@ describe('the floating widget (#61)', () => {
     fireEvent.change(question(), { target: { value: 'Draft a reply to' } });
     const dialog = screen.getByRole('dialog');
     fireEvent.click(screen.getByRole('button', { name: 'Maximize' }));
-    expect(dialog.className).toContain('inset-3');
+    // Maximised is a side panel that takes its own room, not a layer over the work (#153).
+    expect(dialog.className).toContain('relative');
+    expect(dialog.className).not.toContain('absolute');
     fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
-    expect(dialog.className).not.toContain('inset-3');
+    expect(dialog.className).toContain('absolute');
     fireEvent.keyDown(question(), { key: 'Escape' });
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(document.activeElement).toBe(launcher());
@@ -228,4 +230,18 @@ it('hides the floating launcher when a visible composer supplies AI (#156)', asy
   expect(screen.queryByRole('button', { name: /^Ask AI/ })).toBeNull();
   await act(async () => { composer.remove(); });
   expect(launcher()).toBeTruthy();
+});
+
+it('keeps the launcher out of the way while an email is being written (#153)', async () => {
+  const compose = document.createElement('form');
+  compose.setAttribute('data-hide-ai-launcher', '');
+  vi.spyOn(compose, 'getClientRects').mockReturnValue({ length: 1 } as DOMRectList);
+  document.body.append(compose);
+  wrap(<AiWidget />);
+  expect(screen.queryByRole('button', { name: /^Ask AI/ })).toBeNull();
+  // It never opens by itself either: nothing but the person opens the panel.
+  expect(screen.queryByRole('dialog')).toBeNull();
+  await act(async () => { compose.remove(); });
+  expect(launcher()).toBeTruthy();
+  expect(screen.queryByRole('dialog')).toBeNull();
 });
