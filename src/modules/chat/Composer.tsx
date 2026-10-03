@@ -79,6 +79,7 @@ type Extra = { caption?: string; replyTo?: number };
 export interface ComposerHandle {
   stage: (files: PickedFile[]) => void;
   edit: (m: { id: number; message: string }) => void;
+  focus: () => void;
 }
 
 /**
@@ -200,6 +201,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       setRecording(false);
       focus(m.message.length);
     },
+    focus: () => focus(),
   }));
 
   const typingSignal = (state: 'start' | 'stop') => {
@@ -298,7 +300,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const sendWords = async (words: string, asUrgent: boolean): Promise<boolean> => {
     if (site) {
       // A reply to a visitor goes through the outbox too: pending while offline, sent once on reconnecting (RDC-07).
-      const r = await call('offline:submit', websiteReplyMutation(site.conversationId, words));
+      const r = await call('offline:submit', websiteReplyMutation(site.conversationId, words, reply?.id ?? null));
       if (!r.delivered && !r.queued) {
         toast('error', r.error ?? 'Not sent.');
         return false;
@@ -436,8 +438,8 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       fileInput.current?.click(); return;
     }
     if (c === 'camera') return setModal(c);
-    // A Drive link is never sent to a visitor, and a visitor cannot play a voice message (RDC-02, RDC-05).
-    if (site && (c === 'drive' || c === 'voice')) return;
+    // A visitor cannot play a voice message (RDC-02); a Drive file goes to them as a copy, never a link (RDC-05).
+    if (site && c === 'voice') return;
     if (c === 'drive') return setModal(c);
     if (c === 'voice') return setRecording(true);
     try {
@@ -445,6 +447,28 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       stageDisk(files);
     } catch (e) {
       toast('error', errorMessage(e));
+    }
+  };
+
+  /**
+   * Drive files to a website visitor (RDC-05): the server copies each into the conversation — the visitor can never
+   * open a Drive link — under the visitor allowlist and size limit, and says why one is refused.
+   */
+  const sendDriveCopies = async (files: Array<{ id: number; name: string }>) => {
+    if (!site) return;
+    setModal(null);
+    setSending(true);
+    try {
+      for (const f of files) {
+        try {
+          await apiPost(`/api/chat/widget-admin/conversations/${site.conversationId}/attach-drive`, { file_id: f.id });
+        } catch (e) {
+          toast('error', `${f.name}: ${errorMessage(e)}`);
+        }
+      }
+      void qc.invalidateQueries({ queryKey: ['website'] });
+    } finally {
+      setSending(false);
     }
   };
 
@@ -532,7 +556,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                   <button type="button" aria-label="Attach" title="Attach" aria-haspopup="menu" aria-expanded={menu === 'attach'} onClick={() => setMenu(menu === 'attach' ? null : 'attach')} className={cx(tool, menu === 'attach' && '!bg-selection !text-primary')}>
                     <Icon name="paperclip" size={compact ? 16 : 18} />
                   </button>
-                  {menu === 'attach' ? <AttachMenu compact={compact} align={look === 'pill' ? 'right' : 'left'} only={channel ? channel.attachChoices ?? ['document', 'image', 'video', 'audio', 'camera', 'drive', ...(channel.voice ? ['voice' as const] : [])] : site ? ['document', 'image', 'camera'] : undefined} onPick={(c) => void attach(c)} onClose={() => setMenu(null)} /> : null}
+                  {menu === 'attach' ? <AttachMenu compact={compact} align={look === 'pill' ? 'right' : 'left'} only={channel ? channel.attachChoices ?? ['document', 'image', 'video', 'audio', 'camera', 'drive', ...(channel.voice ? ['voice' as const] : [])] : site ? ['document', 'image', 'camera', 'drive'] : undefined} onPick={(c) => void attach(c)} onClose={() => setMenu(null)} /> : null}
                 </span>
               ) : null;
   const shareBtn = !editing && !site && !channel ? (
@@ -798,7 +822,9 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
         ) : null;
   const modalsEl = (
     <>
-      {modal === 'drive' && channel ? <DriveFilePicker title="Attach from WorkSuite Files" confirmLabel="Attach" onClose={() => setModal(null)} onChoose={(files) => { void (async () => { try { for (const f of files) { const response = await fetch(apiUrl(`/api/files/${f.id}/download`)); if (!response.ok) throw new Error('This file could not be downloaded.'); stageBlob(await response.blob(), f.name); } setModal(null); } catch (e) { toast('error', errorMessage(e)); } })(); }} /> : modal === 'drive' ? <DrivePicker roomId={roomId} onClose={() => setModal(null)} onSent={refresh} /> : null}
+      {modal === 'drive' && site ? (
+        <DriveFilePicker title="Send a copy to the visitor" confirmLabel="Send a copy" busy={sending} onClose={() => setModal(null)} onChoose={(files) => void sendDriveCopies(files.map((f) => ({ id: Number(f.id), name: f.name })))} />
+      ) : modal === 'drive' && channel ? <DriveFilePicker title="Attach from WorkSuite Files" confirmLabel="Attach" onClose={() => setModal(null)} onChoose={(files) => { void (async () => { try { for (const f of files) { const response = await fetch(apiUrl(`/api/files/${f.id}/download`)); if (!response.ok) throw new Error('This file could not be downloaded.'); stageBlob(await response.blob(), f.name); } setModal(null); } catch (e) { toast('error', errorMessage(e)); } })(); }} /> : modal === 'drive' ? <DrivePicker roomId={roomId} onClose={() => setModal(null)} onSent={refresh} /> : null}
       {modal === 'camera' ? <CameraCapture onTaken={stageBlob} onClose={() => setModal(null)} /> : null}
       {sharing ? <SharePicker kind={sharing} roomName={roomName} onClose={() => setSharing(null)} onDrive={() => (setSharing(null), setModal('drive'))} onShare={shareRecord} /> : null}
     </>

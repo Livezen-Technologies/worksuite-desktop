@@ -13,7 +13,8 @@ import { toast } from '../../../core/toasts';
 import { Icon } from '../../../components/Icon';
 import { Avatar, Button, Chip, Empty, ErrorNote, Modal, Spinner, cx } from '../../../components/ui';
 import { Composer, type ComposerHandle } from '../Composer';
-import { PRIORITIES, useAgents, useCanned, useWebsiteConversation, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
+import { PRIORITIES, quoteAuthor, useAgents, useCanned, useWebsiteConversation, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
+import type { ReplyTarget } from '../Thread';
 import { Select } from '../../../components/Select';
 import { SidePanel } from '../../../components/SidePanel';
 import { openChatAttachment } from '../AttachmentViewer';
@@ -40,6 +41,7 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   const scroller = useRef<HTMLDivElement>(null);
   const composer = useRef<ComposerHandle>(null);
   const [drag, setDrag] = useState(false);
+  const [reply, setReply] = useState<ReplyTarget | null>(null);
   const canned = useCanned(true);
   const outbox = useQuery({ queryKey: ['offline', 'pending'], queryFn: () => call('offline:pending') });
   const waiting = (outbox.data ?? []).filter((m: OfflineMutation) => m.module === 'website-chat' && m.entityId === id && m.state !== 'DONE');
@@ -112,7 +114,18 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
         <div ref={scroller} className={cx('flex min-h-0 flex-1 flex-col gap-[9px] overflow-y-auto py-3 scroll-thin', mini ? 'px-3' : 'px-4')}>
           {c.started_at ? <div className="self-center text-[11px] text-ink-3">Started a chat on {c.website ?? c.widget ?? 'the website'}{data.journey?.[0]?.url ? pathOf(data.journey[0].url) : ''} · {timeLabel(c.started_at)}</div> : null}
           {data.messages.length === 0 ? <Empty icon="chat" title="No messages yet" hint="The visitor has opened the chat but not written anything." /> : null}
-          {data.messages.map((m) => <Message key={m.id} m={m} />)}
+          {data.messages.map((m) => (
+            <Message
+              key={m.id}
+              m={m}
+              visitor={name}
+              // Answering one message quotes it, for the visitor too (RDC-10).
+              onReply={canReply && c.status !== 'closed' && m.from !== 'system' ? () => {
+                setReply({ id: m.id, sender_name: quoteAuthor({ from: m.from === 'system' ? 'agent' : m.from, agent: m.agent }, name), snippet: m.body ?? m.file?.filename ?? '' });
+                composer.current?.focus();
+              } : undefined}
+            />
+          ))}
           {waiting.map((p) => (
             <div key={p.id} className="flex flex-col items-end gap-1 self-end">
               <div className="max-w-[min(360px,85%)] rounded-[12px_4px_12px_12px] border border-dashed border-[#8C9AD3] bg-[#DDE3F7] px-3 py-2 text-ink dark:bg-selection">{p.label.startsWith(WEBSITE_REPLY_LABEL) ? p.label.slice(WEBSITE_REPLY_LABEL.length) : p.label}</div>
@@ -148,8 +161,8 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
             roomName={name}
             compact={mini}
             group={false}
-            reply={null}
-            onClearReply={() => undefined}
+            reply={reply}
+            onClearReply={() => setReply(null)}
             website={{ conversationId: c.id, replies: canned.data?.responses ?? [] }}
           />
         ) : (
@@ -245,14 +258,23 @@ function openWebsiteFile(f: NonNullable<WebsiteMessage['file']>, openLink: (url:
   openChatAttachment({ filename: f.filename, mime: f.mime, size: f.size, is_image: f.is_image, url, download_url: url }, openLink);
 }
 
-function Message({ m }: { m: WebsiteMessage }) {
+function Message({ m, visitor, onReply }: { m: WebsiteMessage; visitor: string; onReply?: () => void }) {
   const { openLink } = useTab();
   // "Nuwan joined the chat": a notice, not something anybody said.
   if (m.from === 'system') return <div className="self-center text-center text-[11px] text-ink-3">{m.body} · {timeLabel(m.at)}</div>;
   const ours = m.from === 'agent';
   const shape = ours ? 'self-end rounded-[12px_4px_12px_12px] bg-primary text-white' : m.from === 'bot' ? 'self-start rounded-[4px_12px_12px_12px] bg-subtle text-ink-2 text-[12.5px]' : 'self-start rounded-[4px_12px_12px_12px] border border-line bg-surface text-ink';
+  const q = m.reply;
   return (
-    <>
+    <div className={cx('group flex max-w-full flex-col gap-1', ours ? 'items-end self-end' : 'items-start self-start')}>
+      {q ? (
+        <div className="max-w-[min(320px,80%)] truncate border-l-[3px] border-primary/60 bg-subtle px-2 py-1 text-[11.5px] text-ink-2" title={q.body ?? q.file ?? ''}>
+          <b className="text-ink">{quoteAuthor(q, visitor)}</b> · {q.body ?? (q.file ? `📎 ${q.file}` : 'A removed message')}
+        </div>
+      ) : m.reply_to ? (
+        <div className="border-l-[3px] border-line px-2 py-1 text-[11.5px] text-ink-3 italic">A removed message</div>
+      ) : null}
+      <div className={cx('flex max-w-full items-center gap-1', ours && 'flex-row-reverse')}>
       {m.body ? (
         <div className={cx('max-w-[min(360px,85%)] whitespace-pre-wrap break-words px-3 py-2 leading-[1.5] selectable', shape)} title={`${m.from === 'agent' ? (m.agent ?? 'Agent') : m.from === 'bot' ? 'Automated message' : 'Visitor'} · ${timeLabel(m.at)}`}>
           {m.from === 'bot' ? <b className="block">Automated message{m.agent ? ` · ${m.agent}` : ''}</b> : null}
@@ -266,7 +288,13 @@ function Message({ m }: { m: WebsiteMessage }) {
           <button type="button" className="font-semibold text-primary hover:underline" onClick={() => m.file && openWebsiteFile(m.file, openLink)}>Open</button>
         </div>
       ) : null}
-    </>
+      {onReply ? (
+        <button type="button" aria-label="Reply to this message" title="Reply" onClick={onReply} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-ink-3 opacity-0 hover:bg-subtle hover:text-ink focus:opacity-100 group-hover:opacity-100">
+          <Icon name="reply" size={13} />
+        </button>
+      ) : null}
+      </div>
+    </div>
   );
 }
 

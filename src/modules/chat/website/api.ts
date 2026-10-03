@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { ApiError, apiGet, request } from '../../../core/api';
 import { text } from '../../../core/i18n';
 import { parseTs } from '../../../core/time';
@@ -46,6 +46,17 @@ export interface WebsiteRow {
   rating: number | null;
   is_starred: boolean;
   tags: string[] | null;
+  /** What was said last, notices aside (CHAT-UI-00): the row's preview. */
+  last_message?: (Omit<WebsiteQuote, 'file'> & { file: string | null; at: string }) | null;
+  /** What the visitor has written since staff last answered. */
+  unread?: number;
+}
+
+/** A row's preview: who said it last, unless it was the visitor, then the words or the file. */
+export function lastSaid(m: NonNullable<WebsiteRow['last_message']>, myName: string | null): string {
+  const what = m.body ?? (m.file ? `📎 ${m.file}` : '');
+  const who = m.from === 'visitor' ? null : m.from === 'bot' ? text('Bot') : m.agent && m.agent === myName ? text('You') : (m.agent ?? text('Agent'));
+  return who ? `${who}: ${what}` : what;
 }
 
 export interface WebsiteCan {
@@ -61,6 +72,23 @@ export interface WebsiteMessage {
   agent: string | null;
   at: string;
   file: { url: string; filename: string; mime: string; size: number; is_image: boolean } | null;
+  /** The message this one answers (RDC-10): an excerpt both the agent and the visitor see above it. */
+  reply_to?: number | null;
+  reply?: WebsiteQuote | null;
+}
+
+/** A quoted message: its first words, who wrote it, and its file's name. */
+export interface WebsiteQuote {
+  id: number;
+  body: string | null;
+  from: 'visitor' | 'agent' | 'bot';
+  agent: string | null;
+  file: string | null;
+}
+
+/** Who wrote a message, as a quote or a preview says it. */
+export function quoteAuthor(q: Pick<WebsiteQuote, 'from' | 'agent'>, visitor: string): string {
+  return q.from === 'visitor' ? visitor : q.from === 'bot' ? 'Automated message' : (q.agent ?? 'Agent');
 }
 
 export interface WebsiteVisitor {
@@ -235,6 +263,21 @@ export function useWebsiteInbox(closed: boolean, enabled = true) {
     // Somebody who does not staff website chat is told once, not every 15 s.
     refetchInterval: (query) => (query.state.error instanceof ApiError && (query.state.error.forbidden || query.state.error.status === 404) ? false : 15_000),
     retry: (n, e) => !(e instanceof ApiError && (e.forbidden || e.status === 404)) && n < 2,
+  });
+}
+
+/**
+ * A search of every conversation, closed ones too, by visitor, email, site, page and what was said (CHAT-UI-00).
+ * Two characters at least, as the server asks; the last results stay while the next ones load.
+ */
+export function useWebsiteSearch(needle: string, closed: boolean) {
+  return useQuery({
+    queryKey: ['website', 'inbox', 'search', closed ? 'closed' : 'all', needle],
+    queryFn: ({ signal }) => apiGet<{ conversations: WebsiteRow[]; can: WebsiteCan }>(`${WEBSITE}/conversations`, closed ? { q: needle, status: 'closed' } : { q: needle }, signal),
+    enabled: needle.length >= 2,
+    placeholderData: keepPreviousData,
+    staleTime: 10_000,
+    retry: false,
   });
 }
 

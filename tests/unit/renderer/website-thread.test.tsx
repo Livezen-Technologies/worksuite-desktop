@@ -11,7 +11,14 @@ import type * as CoreApi from '../../../src/core/api';
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiPost: vi.fn(async () => ({})) }));
 vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(async () => []), on: () => () => undefined, errorMessage: (e: unknown) => String(e), isMac: false, registerDropped: vi.fn() }));
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
-vi.mock('../../../src/modules/chat/Composer', () => ({ Composer: ({ compact }: { compact?: boolean }) => <div>{compact ? 'The compact composer' : 'The composer'}</div> }));
+vi.mock('../../../src/modules/chat/Composer', () => ({
+  Composer: ({ compact, reply, onClearReply }: { compact?: boolean; reply: { sender_name: string; snippet: string } | null; onClearReply: () => void }) => (
+    <div>
+      {compact ? 'The compact composer' : 'The composer'}
+      {reply ? <button type="button" onClick={onClearReply}>{`Replying to ${reply.sender_name}: ${reply.snippet}`}</button> : null}
+    </div>
+  ),
+}));
 vi.mock('../../../src/modules/chat/window', () => ({ openWebsiteChatWindow: vi.fn(async () => undefined) }));
 vi.mock('../../../src/modules/chat/AttachmentViewer', () => ({ openChatAttachment: vi.fn() }));
 vi.mock('../../../src/core/tab-context', () => ({
@@ -37,6 +44,7 @@ const conversation = (): WebsiteConversation => ({
     { id: 1, body: 'Hi, is the Adobe licence lifetime or yearly?', from: 'visitor', agent: null, at: ago(300_000), file: null },
     { id: 2, body: null, from: 'visitor', agent: null, at: ago(200_000), file: { url: '/chat/widget-admin/files/abc', filename: 'screenshot-pricing.png', mime: 'image/png', size: 2048, is_image: true } },
     { id: 3, body: null, from: 'agent', agent: 'Nuwan', at: ago(100_000), file: { url: '/chat/widget-admin/files/def', filename: 'Adobe-CC-Teams-Quote.pdf', mime: 'application/pdf', size: 188_416, is_image: false } },
+    { id: 4, body: 'Yearly, renewed each March.', from: 'agent', agent: 'Nuwan', at: ago(50_000), file: null, reply_to: 1, reply: { id: 1, body: 'Hi, is the Adobe licence lifetime or yearly?', from: 'visitor', agent: null, file: null } },
   ],
   journey: [
     { url: 'https://techubiz.com/', title: 'Home', at: ago(500_000) },
@@ -83,6 +91,22 @@ describe('a website chat in its own small window (RDC-16)', () => {
     expect(screen.queryByRole('combobox', { name: 'Priority' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Open in new window' })).toBeNull();
     expect(screen.queryByRole('complementary', { name: 'Visitor details' })).toBeNull();
+  });
+});
+
+describe('reply quotes in the website thread (RDC-10)', () => {
+  it('shows what a reply answers, and Reply on a message quotes it in the composer', async () => {
+    mount();
+    const answer = await screen.findByText('Yearly, renewed each March.');
+    const quote = answer.parentElement!.parentElement!.firstElementChild!;
+    expect(quote.textContent).toBe('Visitor 4F2A · Hi, is the Adobe licence lifetime or yearly?');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Reply to this message' })[0]!);
+    const bar = screen.getByRole('button', { name: 'Replying to Visitor 4F2A: Hi, is the Adobe licence lifetime or yearly?' });
+    fireEvent.click(bar);
+    expect(screen.queryByText(/^Replying to/)).toBeNull();
+    // A file alone is quoted by its name.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Reply to this message' })[1]!);
+    expect(screen.getByText('Replying to Visitor 4F2A: screenshot-pricing.png')).toBeTruthy();
   });
 });
 

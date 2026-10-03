@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.14.0 — 2026-10-03
+
+**Added**
+
+- website chats, with the server's Communication 1.11.0: each row in the list says what was said last (who said it,
+  unless it was the visitor) and how many visitor messages wait unread; search, after a pause in typing, goes to the
+  server and covers what was said and closed chats; Reply on a message quotes it above the answer, for the visitor
+  too (RDC-10); From Drive sends the visitor a copy of a Drive file, never a link, refused with the server's reason
+  when the visitor cannot receive it (RDC-05)
+
 ## 1.13.0 — 2026-10-03
 
 **Added**

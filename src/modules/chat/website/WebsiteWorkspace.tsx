@@ -11,7 +11,7 @@ import { listStamp, parseTs } from '../../../core/time';
 import { Icon } from '../../../components/Icon';
 import { Avatar, Button, Empty, ErrorNote, Kbd, Spinner, cx } from '../../../components/ui';
 import { useNow } from '../../calls/parts';
-import { longestWaiting, sectionRows, stepRow, useWebsiteInbox, waitingSince, waitingSummary, WEBSITE, type Section, type WebsiteRow } from './api';
+import { lastSaid, longestWaiting, sectionRows, stepRow, useWebsiteInbox, useWebsiteSearch, waitingSince, waitingSummary, WEBSITE, type Section, type WebsiteRow } from './api';
 import { useRingState, waited } from './Ringing';
 import { WebsiteLive, type OnlineVisitor } from './WebsiteLive';
 import { WebsiteThread } from './WebsiteThread';
@@ -63,6 +63,7 @@ interface Missed {
 export function WebsiteWorkspace() {
   const { query, go, active } = useTab();
   const me = useStore(app, (s) => (s.auth?.user?.id ? Number(s.auth.user.id) : null));
+  const myName = useStore(app, (s) => s.bootstrap?.user?.name ?? null);
   const selected = query.get('website');
   const live = query.get('section') === 'live';
   const section = (SECTIONS.find((s) => s.id === query.get('section'))?.id ?? 'inbox') as Section;
@@ -71,6 +72,12 @@ export function WebsiteWorkspace() {
   const [mineOnly, setMineOnly] = useState(false);
   useTabTitle(selected ? null : 'Website chats');
   const [q, setQ] = useState('');
+  // The server searches what was said as well, once typing pauses.
+  const [needle, setNeedle] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setNeedle(q.trim()), 300);
+    return () => clearTimeout(t);
+  }, [q]);
   const open = useWebsiteInbox(false);
   const online = useQuery({
     queryKey: ['website', 'visitors'],
@@ -102,11 +109,15 @@ export function WebsiteWorkspace() {
   const onSite = (r: WebsiteRow) => !site || r.widget_id === site;
   const isMine = (r: WebsiteRow) => me !== null && r.assigned_to === me;
   const openHere = sectionRows(openRows, section === 'closed' ? 'inbox' : section, me).filter(onSite);
-  const needle = q.trim().toLowerCase();
-  const rows = sectionRows(source.data?.conversations ?? [], section, me)
+  const typed = q.trim().toLowerCase();
+  const searching = section !== 'missed' && needle.length >= 2 && typed.length >= 2;
+  const found = useWebsiteSearch(searching ? needle : '', section === 'closed');
+  // Until the server answers, the list narrows by what it already has.
+  const rows = (searching && found.data ? found.data.conversations : sectionRows(source.data?.conversations ?? [], section, me))
     .filter(onSite)
     .filter((r) => pill !== 'mine' || isMine(r))
-    .filter((r) => !needle || [r.label, r.visitor_name, r.email, r.site, r.current_url].some((v) => v?.toLowerCase().includes(needle)));
+    .filter((r) => (searching && found.data) || !typed || [r.label, r.visitor_name, r.email, r.site, r.current_url, r.last_message?.body].some((v) => v?.toLowerCase().includes(typed)));
+  const list = searching && found.data ? found : source;
   const to = (params: Record<string, string | null>) => {
     const next = new URLSearchParams({ view: 'website', section });
     if (selected) next.set('website', selected);
@@ -204,7 +215,7 @@ export function WebsiteWorkspace() {
           </div>
           <span className="relative flex items-center">
             <Icon name="search" size={14} className="pointer-events-none absolute left-2.5 text-ink-3" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search visitors" placeholder="Search visitors, email, site…" className="h-8 w-full rounded-[8px] border border-line bg-surface pr-2.5 pl-8 text-[13px] outline-none focus:border-primary" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search visitors" placeholder="Search visitors, messages, email…" className="h-8 w-full rounded-[8px] border border-line bg-surface pr-2.5 pl-8 text-[13px] outline-none focus:border-primary" />
           </span>
           {section !== 'missed' ? (
             <div className="flex gap-1 text-[11.5px] font-semibold" role="group" aria-label="Show">
@@ -228,10 +239,10 @@ export function WebsiteWorkspace() {
                 </button>
               ))
             )
-          ) : source.isLoading ? <Spinner /> : source.error ? <div className="p-4"><ErrorNote error={source.error} onRetry={() => void source.refetch()} /></div> : rows.length === 0 ? (
-            <Empty icon="globe" title={pill === 'mine' || section === 'mine' ? 'No chats assigned to you' : section === 'awaiting' ? 'Nobody is waiting' : 'No website chats'} />
+          ) : list.isLoading ? <Spinner /> : list.error ? <div className="p-4"><ErrorNote error={list.error} onRetry={() => void list.refetch()} /></div> : rows.length === 0 ? (
+            <Empty icon="globe" title={typed ? text('Nothing matches “{q}”', { q: q.trim() }) : pill === 'mine' || section === 'mine' ? 'No chats assigned to you' : section === 'awaiting' ? 'Nobody is waiting' : 'No website chats'} />
           ) : (
-            rows.map((r) => <Row key={r.id} r={r} me={me} ring={ringing.get(r.id)} active={selected === String(r.id)} onOpen={() => to({ website: String(r.id) })} />)
+            rows.map((r) => <Row key={r.id} r={r} me={me} myName={myName} ring={ringing.get(r.id)} active={selected === String(r.id)} onOpen={() => to({ website: String(r.id) })} />)
           )}
         </div>
       </section>
@@ -280,15 +291,18 @@ function pathOf(url: string): string {
  * happening, and on which site. A chat ringing here shows a bell; one silenced on this computer is amber with the
  * bell struck through (RING-UI-04).
  */
-function Row({ r, me, ring, active, onOpen }: { r: WebsiteRow; me: number | null; ring?: WebchatRingChat; active: boolean; onOpen: () => void }) {
+function Row({ r, me, myName, ring, active, onOpen }: { r: WebsiteRow; me: number | null; myName: string | null; ring?: WebchatRingChat; active: boolean; onOpen: () => void }) {
   const name = r.visitor_name || r.label;
   const mine = me !== null && r.assigned_to === me;
   const closed = r.status === 'closed';
   const since = waitingSince(r);
   const page = r.current_url ? pathOf(r.current_url) : null;
+  const unread = closed ? 0 : (r.unread ?? 0);
   const line = ring?.preview
     ? `“${ring.preview}”`
-    : r.online && page && !closed
+    : r.last_message
+      ? lastSaid(r.last_message, myName)
+      : r.online && page && !closed
       ? text('Reading {page}', { page })
       : r.agent
         ? mine
@@ -310,9 +324,16 @@ function Row({ r, me, ring, active, onOpen }: { r: WebsiteRow; me: number | null
         <span className="flex items-center gap-1.5">
           <b className={cx('flex-1 truncate text-ink', r.awaiting_reply ? 'font-bold' : 'font-semibold')}>{name}</b>
           {ring ? <Icon name={ring.silenced ? 'bell-off' : 'bell'} size={12} className={ring.silenced ? 'shrink-0 text-warning' : 'shrink-0 text-danger'} label={ring.silenced ? text('Silenced on this computer') : text('Ringing')} /> : null}
-          {r.awaiting_reply && since && !closed ? <WaitClock since={since} /> : <span className="shrink-0 text-[11px] text-ink-3">{listStamp(r.last_visitor_at ?? r.updated_at)}</span>}
+          {r.awaiting_reply && since && !closed ? <WaitClock since={since} /> : <span className="shrink-0 text-[11px] text-ink-3">{listStamp(r.last_message?.at ?? r.last_visitor_at ?? r.updated_at)}</span>}
         </span>
-        {line ? <span className="truncate text-[12px] text-ink-2">{line}</span> : null}
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className={cx('min-w-0 flex-1 truncate text-[12px]', unread ? 'font-semibold text-ink' : 'text-ink-2')}>{line}</span>
+          {unread ? (
+            <span className="min-w-[18px] shrink-0 rounded-full bg-primary px-1.5 text-center text-[10.5px] leading-[18px] font-bold text-white tabular-nums" aria-label={text('{n} unread', { n: unread })}>
+              {unread > 99 ? '99+' : unread}
+            </span>
+          ) : null}
+        </span>
         <span className="flex min-w-0 items-center gap-[5px] text-[11px]">
           {closed ? <Tag tone="muted">Closed</Tag> : r.awaiting_reply ? <Tag tone="danger">Awaiting reply</Tag> : mine ? <Tag tone="indigo">You</Tag> : null}
           {r.at_risk && !closed ? <Tag tone="danger">At risk</Tag> : null}

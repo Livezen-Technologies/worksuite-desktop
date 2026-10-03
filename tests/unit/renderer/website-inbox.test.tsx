@@ -105,6 +105,37 @@ describe('the Website Chats inbox (CHAT-UI-00)', () => {
     expect(within(kasun).getByText('With you')).toBeTruthy();
   });
 
+  it('says what was said last and how much is unread', async () => {
+    serve([
+      row({ id: 1, visitor_name: 'Hasitha', unread: 2, last_message: { id: 9, body: 'Is there an education discount?', file: null, from: 'visitor', agent: null, at: ago(60_000) } }),
+      row({ id: 3, visitor_name: 'Kasun P.', assigned_to: 7, agent: 'Me', last_message: { id: 8, body: 'Yes, island-wide.', file: null, from: 'agent', agent: 'Samali Perera', at: ago(60_000) } }),
+      row({ id: 4, visitor_name: 'Dilan', last_message: { id: 7, body: null, file: 'invoice.pdf', from: 'agent', agent: 'Nimal Silva', at: ago(60_000) } }),
+    ], []);
+    app.set({ auth: { stage: 'ready', user: { id: '7' } }, bootstrap: { user: { name: 'Samali Perera' } } } as never);
+    wrap(<WebsiteWorkspace />);
+    const hasitha = (await within(list()).findByText('Hasitha')).closest('button')!;
+    expect(within(hasitha).getByText('Is there an education discount?').className).toContain('font-semibold');
+    expect(within(hasitha).getByLabelText('2 unread').textContent).toBe('2');
+    const kasun = within(list()).getByText('Kasun P.').closest('button')!;
+    expect(within(kasun).getByText('You: Yes, island-wide.')).toBeTruthy();
+    expect(within(kasun).queryByLabelText(/unread/)).toBeNull();
+    expect(within(list()).getByText('Nimal Silva: 📎 invoice.pdf')).toBeTruthy();
+  });
+
+  it('searches what was said on the server, closed chats too, once typing pauses', async () => {
+    const found = row({ id: 8, visitor_name: 'Old customer', status: 'closed', online: false, last_message: { id: 5, body: 'The invoice shows the wrong company name', file: null, from: 'visitor', agent: null, at: ago(86_400_000) } });
+    const base = vi.mocked(apiGet).getMockImplementation()!;
+    vi.mocked(apiGet).mockImplementation((async (path: string, query?: Record<string, string>) => (query?.q ? { conversations: query.q === 'wrong company' ? [found] : [], can: { view: true, reply: true, manage: false } } : base(path, query as never))) as never);
+    wrap(<WebsiteWorkspace />);
+    await within(list()).findByText('Hasitha');
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search visitors' }), { target: { value: 'wrong company' } });
+    expect(await within(list()).findByText('Old customer', undefined, { timeout: 2000 })).toBeTruthy();
+    expect(within(list()).queryByText('Hasitha')).toBeNull();
+    expect(vi.mocked(apiGet)).toHaveBeenCalledWith('/api/chat/widget-admin/conversations', { q: 'wrong company' }, expect.anything());
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search visitors' }), { target: { value: 'nobody said this' } });
+    expect(await within(list()).findByText('Nothing matches “nobody said this”', undefined, { timeout: 2000 })).toBeTruthy();
+  });
+
   it('Open, Mine and Closed over the list, with their counts', async () => {
     wrap(<WebsiteWorkspace />);
     await within(list()).findByText('Hasitha');

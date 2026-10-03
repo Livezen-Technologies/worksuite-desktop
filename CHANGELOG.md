@@ -5,6 +5,25 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.106: Website chat list previews, search, reply quotes and Drive files
+
+With WorkSuite's Communication 1.11.0:
+
+- **Each row says what was said last** — "You: …", the agent's name, or the visitor's own words — with a count of the
+  visitor's messages nobody has answered yet.
+- **Search finds what was said**, not only who said it, and looks in closed chats too. It asks WorkSuite once you
+  pause typing; until it answers, the list narrows by what it already shows.
+- **Reply to one message.** Hover a message and choose Reply: your answer shows the words it answers above it, in your
+  thread and in the visitor's chat window.
+- **From Drive** in the attach menu sends the visitor a copy of a Drive file — they can never open a Drive link. A file
+  the visitor cannot receive (an SVG, one over the site's size limit) or one you may not download is refused with the
+  reason.
+
+With an older WorkSuite server the rows read as in 0.2.103, search is over visitors only, and From Drive and Reply are
+refused with the server's message.
+
+---
+
 ## 2026-10-03 — 0.2.105: Website chats ring on one device, and stop for a reason
 
 With WorkSuite's ring sessions (the server's Communication 1.11.0 and its migration), the call-style ringing of the

@@ -125,6 +125,8 @@ describe('replying to a website visitor from the banner (RDC-15)', () => {
       queueIfOffline: true,
     });
     expect((websiteReplyMutation(41, 'x'.repeat(5000)).body as { message: string }).message).toHaveLength(4000);
+    // Answering one message quotes it (RDC-10).
+    expect(websiteReplyMutation(41, 'Yes', 7).body).toEqual({ message: 'Yes', reply_to: 7 });
     expect(websiteDraftKey(41)).toEqual({ module: 'website-chat', context: 'conversation:41' });
   });
 });

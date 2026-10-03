@@ -11,7 +11,7 @@ export const WEBSITE_REPLY_MAX = 4000;
  * The thread's composer and a notification's inline reply (RDC-15) both send exactly this, so a reply from a banner
  * goes the same way as one typed in the conversation.
  */
-export function websiteReplyMutation(conversationId: number, words: string): MutationInput {
+export function websiteReplyMutation(conversationId: number, words: string, replyTo: number | null = null): MutationInput {
   return {
     module: 'website-chat',
     entity: 'reply',
@@ -19,7 +19,8 @@ export function websiteReplyMutation(conversationId: number, words: string): Mut
     label: `${WEBSITE_REPLY_LABEL}${words.slice(0, 160)}`,
     method: 'POST',
     path: `/api/chat/widget-admin/conversations/${conversationId}/reply`,
-    body: { message: words.slice(0, WEBSITE_REPLY_MAX) },
+    // Answering one visitor message: the quote shows above the reply for both sides (RDC-10).
+    body: { message: words.slice(0, WEBSITE_REPLY_MAX), ...(replyTo ? { reply_to: replyTo } : {}) },
     queueIfOffline: true,
   };
 }
