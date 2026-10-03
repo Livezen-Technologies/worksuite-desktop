@@ -16,6 +16,8 @@ import { toast } from '../../../src/core/toasts';
 import { AppsPane } from '../../../src/modules/mail/AppsPane';
 import { AWAY_MS, CatchUp, catchUpDigest } from '../../../src/modules/mail/CatchUp';
 import { candidateSlots, freeSlots, slotWords } from '../../../src/modules/mail/SuggestTimes';
+import { declineInvitations } from '../../../src/modules/mail/MailRules';
+import { CalendarPeek, agendaOf } from '../../../src/layouts/CalendarPeek';
 import type { MessageStates } from '../../../src/modules/mail/states';
 import type { MessageDetail, MessageRow } from '../../../src/modules/mail/types';
 
@@ -125,5 +127,50 @@ describe('Suggest times (DMO-CMP-17)', () => {
     const r = await freeSlots(['pat@client.example'], slots, 2, check);
     expect(r).toEqual({ free: [slots[1], slots[2]], unseen: ['pat@client.example'] });
     expect(check).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('while away: decline meeting invitations (DMO-OOF-02)', () => {
+  it('declines only invitations the person does not organise and has not already declined', async () => {
+    const get = vi.fn(async () => ({ data: { events: [
+      { source: 'event', id: 1, invited: true, can_manage: false, my_rsvp: 'accepted' },
+      { source: 'event', id: 1, invited: true, can_manage: false, my_rsvp: 'accepted' },
+      { source: 'event', id: 2, invited: true, can_manage: true },
+      { source: 'event', id: 3, invited: false },
+      { source: 'event', id: 4, invited: true, my_rsvp: 'declined' },
+      { source: 'businessmeeting', id: 5, invited: true },
+      { source: 'event', id: 6, invited: true, status: 'cancelled' },
+      { source: 'event', id: 7, invited: true, my_rsvp: null },
+    ] }, offline: false, cachedAt: null }));
+    const post = vi.fn(async (path: string) => {
+      if (path.includes('/7/')) throw new Error('refused');
+      return {};
+    });
+    expect(await declineInvitations('2026-10-12', '2026-10-16', get as never, post as never)).toBe(1);
+    expect(get).toHaveBeenCalledWith('/api/calendar/events', { from: '2026-10-12', to: '2026-10-16' });
+    expect(post.mock.calls.map(([p, b]) => [p, b])).toEqual([['/api/calendar/events/1/rsvp', { status: 'declined' }], ['/api/calendar/events/7/rsvp', { status: 'declined' }]]);
+  });
+});
+
+describe('Calendar peek (DMO-CAL-05)', () => {
+  it('lists today all-day first then by time, without cancelled or declined entries', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const events = [
+      { source: 'event', id: 1, title: 'Standup', start_at: `${today} 09:00:00`, end_at: `${today} 09:15:00`, all_day: false },
+      { source: 'event', id: 2, title: 'Holiday', start_at: `${today} 00:00:00`, end_at: null, all_day: true },
+      { source: 'event', id: 3, title: 'Cancelled', start_at: `${today} 08:00:00`, end_at: null, all_day: false, status: 'cancelled' },
+      { source: 'event', id: 4, title: 'Declined', start_at: `${today} 07:00:00`, end_at: null, all_day: false, my_rsvp: 'declined' },
+    ];
+    expect(agendaOf(events).map((e) => e.title)).toEqual(['Holiday', 'Standup']);
+    const { apiGetMeta } = await import('../../../src/core/api');
+    vi.mocked(apiGetMeta).mockReset().mockResolvedValue({ data: { events }, offline: false, cachedAt: null } as never);
+    const onClose = vi.fn();
+    wrap(<CalendarPeek at={{ top: 10, left: 10 }} onClose={onClose} />);
+    const peek = screen.getByRole('dialog', { name: 'Today’s agenda' });
+    expect(await within(peek).findByText('Standup')).toBeTruthy();
+    expect(within(peek).getByText('All day')).toBeTruthy();
+    expect(within(peek).queryByText('Cancelled')).toBeNull();
+    fireEvent.keyDown(peek, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalled();
   });
 });

@@ -556,6 +556,9 @@ function MailWorkspace({ active }: ModuleProps) {
             : folderName(folder.startsWith('label:') ? folder.slice(6) : folder.charAt(0).toUpperCase() + folder.slice(1));
   const included = boxes.filter((b) => b.in_unified !== false);
   const unifiedUnread = allCounts.data?.roles.inbox.count ?? included.reduce((n, b) => n + (unreadOf(b, counts.data ?? null) ?? 0), 0);
+  // New mail, said aloud to a screen reader (DMO-ACC-02): only a rise in unread inbox mail, never the first count.
+  const [heard, setHeard] = useState<{ last: number | null; say: string }>({ last: null, say: '' });
+  if (active && heard.last !== unifiedUnread) setHeard({ last: unifiedUnread, say: heard.last !== null && unifiedUnread > heard.last ? text('{n} new message(s) in the inbox', { n: unifiedUnread - heard.last }) : heard.say });
   const aside = allRole === 'inbox' ? text('{n} unread · {m} accounts', { n: unifiedUnread, m: included.length }) : allRole ? text('{m} accounts', { m: included.length }) : placeBox ? (placeBox.account_type === 'local_mailbox' ? text('WorkSuite Local') : placeBox.shared ? text('Shared') : (placeBox.provider_label ?? null)) : null;
   const unavailable = (firstPage?.data as (MessagePage & { unavailable?: Array<{ email: string; reason: string | null }> }) | undefined)?.unavailable ?? [];
   const notice = firstPage?.data.unsearched?.length
@@ -901,6 +904,7 @@ function MailWorkspace({ active }: ModuleProps) {
           </div>
         </div>
       </div>
+      <div aria-live="polite" className="sr-only">{heard.say}</div>
       <StatusBar summary={summary} sync={shared.status} waiting={mailPending.length} zoom={prefs.zoom ?? 100} localBytes={localBytes.data ?? null} items={virtualOutbox || folder === 'outbox' ? null : (firstPage?.data.total ?? null)} notice={brokenRules ? { text: brokenRules === 1 ? text('1 rule was switched off') : text('{n} rules were switched off', { n: brokenRules }), onClick: () => navigate('/settings/mail?tab=rules') } : null} unread={allRole === 'inbox' ? unifiedUnread : null} onOpenSync={() => navigate('/settings/mail?tab=accounts')} />
       {outgoing.length ? (
         <div role="status" aria-live="polite" className="pointer-events-none fixed bottom-14 left-1/2 z-40 flex -translate-x-1/2 flex-col gap-2">

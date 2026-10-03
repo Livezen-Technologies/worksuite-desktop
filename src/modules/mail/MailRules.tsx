@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
+import { apiDelete, apiGet, apiGetMeta, apiPost, apiPut } from '../../core/api';
+import { canOpen } from '../../core/access';
 import { errorMessage } from '../../core/bridge';
 import { text } from '../../core/i18n';
 import { toast } from '../../core/toasts';
@@ -338,15 +339,42 @@ export function Rules({ mailbox }: { mailbox: string | null }) {
   );
 }
 
+/**
+ * While away (DMO-OOF-02): the meeting invitations already in the calendar
+ * between the two dates, declined — events the person was invited to and
+ * does not organise. Returns how many were declined.
+ */
+export async function declineInvitations(from: string, until: string, get = apiGetMeta, post = apiPost): Promise<number> {
+  const r = await get<{ events?: Array<{ source: string; id: number | string; invited?: boolean; can_manage?: boolean; my_rsvp?: string | null; status?: string | null }> }>('/api/calendar/events', { from, to: until });
+  const mine = (r.data.events ?? []).filter((e) => e.source === 'event' && e.invited && !e.can_manage && e.my_rsvp !== 'declined' && e.status !== 'cancelled');
+  const ids = [...new Set(mine.map((e) => String(e.id)))];
+  let n = 0;
+  for (const id of ids) {
+    try {
+      await post(`/api/calendar/events/${id}/rsvp`, { status: 'declined' });
+      n++;
+    } catch {
+      // One refused answer does not stop the others.
+    }
+  }
+  return n;
+}
+
 function Vacation({ value, mailbox, onSaved }: { value: RulesData['vacation']; mailbox: string | null; onSaved: () => void }) {
   const [v, setV] = useState(value);
   const [busy, setBusy] = useState(false);
+  const [decline, setDecline] = useState(false);
   const save = async () => {
     setBusy(true);
     try {
       const r = await apiPut<{ error?: string | null }>('/api/mail/rules/vacation', { ...v, ...(mailbox ? { mailbox } : {}) });
       onSaved();
       toast(r?.error ? 'info' : 'success', r?.error ? text('Saved, but not running yet: {why}', { why: r.error }) : v.enabled ? text('Automatic reply is on.') : text('Automatic reply is off.'));
+      if (v.enabled && decline && v.start_date && v.end_date && canOpen('calendar')) {
+        const n = await declineInvitations(v.start_date, v.end_date);
+        toast('success', text('{n} meeting invitation(s) in that time declined.', { n }));
+        setDecline(false);
+      }
     } catch (e) {
       toast('error', errorMessage(e));
     } finally {
@@ -396,6 +424,15 @@ function Vacation({ value, mailbox, onSaved }: { value: RulesData['vacation']; m
             </>
           ) : null}
         </div>
+      ) : null}
+      {canOpen('calendar') ? (
+        <label className="flex items-start gap-2.5 text-[13px]">
+          <Checkbox checked={decline} disabled={!v.enabled || !v.start_date || !v.end_date} onChange={(e) => setDecline(e.target.checked)} />
+          <span>
+            {text('Decline meeting invitations in this period')}
+            <span className="block text-[12px] text-ink-3">{text('When you save: invitations already in your calendar between the two dates are declined. Ones that arrive later are not.')}</span>
+          </span>
+        </label>
       ) : null}
       <div className="flex justify-end">
         <Button variant="primary" loading={busy} onClick={() => void save()}>

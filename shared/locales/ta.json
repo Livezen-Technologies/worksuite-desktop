@@ -2240,5 +2240,14 @@
   "While you were away · {n}": "நீங்கள் இல்லாதபோது · {n}",
   "Would one of these times work for you?": "இந்த நேரங்களில் ஒன்று உங்களுக்குப் பொருந்துமா?",
   "{email} is not a lead or account in CRM.": "{email} CRM இல் வாய்ப்போ கணக்கோ அல்ல.",
-  "{n} minutes": "{n} நிமிடங்கள்"
+  "{n} minutes": "{n} நிமிடங்கள்",
+  "Decline meeting invitations in this period": "இந்தக் காலத்தில் கூட்ட அழைப்புகளை நிராகரி",
+  "Nothing in your calendar today.": "இன்று உங்கள் நாட்காட்டியில் எதுவும் இல்லை.",
+  "Nothing kept on this computer for today.": "இன்றைக்கு இந்தக் கணினியில் எதுவும் வைக்கப்படவில்லை.",
+  "Today · {day}": "இன்று · {day}",
+  "Today’s agenda": "இன்றைய நிகழ்ச்சி நிரல்",
+  "When you save: invitations already in your calendar between the two dates are declined. Ones that arrive later are not.": "சேமிக்கும்போது: இரு தேதிகளுக்கு இடையில் உங்கள் நாட்காட்டியில் ஏற்கனவே உள்ள அழைப்புகள் நிராகரிக்கப்படும். பின்னர் வருபவை அல்ல.",
+  "and {n} more": "மேலும் {n}",
+  "{n} meeting invitation(s) in that time declined.": "அந்த நேரத்தில் {n} கூட்ட அழைப்பு(கள்) நிராகரிக்கப்பட்டன.",
+  "{n} new message(s) in the inbox": "உள்பெட்டியில் {n} புதிய செய்தி(கள்)"
 }
