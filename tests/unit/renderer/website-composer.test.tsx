@@ -55,12 +55,12 @@ describe('the website channel profile (ENH-WCHAT-02)', () => {
 
 const calls = vi.mocked(call);
 
-function mount(reply: { id: number; sender_name: string; snippet: string } | null = null, onClearReply = () => undefined) {
+function mount(reply: { id: number; sender_name: string; snippet: string } | null = null, onClearReply = () => undefined, maxUploadKb?: number) {
   const ref = { current: null as ComposerHandle | null };
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
-      <Composer ref={(h) => void (ref.current = h)} roomId="website-41" roomName="Visitor 4F2A" group={false} reply={reply} onClearReply={onClearReply} website={{ conversationId: 41, replies }} />
+      <Composer ref={(h) => void (ref.current = h)} roomId="website-41" roomName="Visitor 4F2A" group={false} reply={reply} onClearReply={onClearReply} website={{ conversationId: 41, replies, maxUploadKb }} />
     </QueryClientProvider>,
   );
   return ref;
@@ -147,6 +147,35 @@ describe('the website thread on the shared composer (RDC-01/02)', () => {
     expect(vi.mocked(toast)).toHaveBeenCalledWith('error', "logo.svg: Error: SVG files can't be sent to a visitor.");
     // Never Drive's share-a-link endpoint.
     expect(vi.mocked(apiPost).mock.calls.some(([p]) => String(p).startsWith('/api/drive/'))).toBe(false);
+  });
+
+  it('a reply written from a saved reply says which, once, so the server counts the use (RDC-03)', async () => {
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Education discount' }));
+    const box = screen.getByRole('textbox', { name: 'Message' });
+    await act(async () => {
+      fireEvent.keyDown(box, { key: 'Enter' });
+    });
+    expect(calls).toHaveBeenCalledWith('offline:submit', expect.objectContaining({ body: { message: 'Schools get 20% off the first year.', canned_id: 1 } }));
+    fireEvent.change(box, { target: { value: 'Anything else?' } });
+    await act(async () => {
+      fireEvent.keyDown(box, { key: 'Enter' });
+    });
+    const sent = calls.mock.calls.filter(([c]) => c === 'offline:submit').map(([, x]) => (x as { body: unknown }).body);
+    expect(sent).toEqual([{ message: 'Schools get 20% off the first year.', canned_id: 1 }, { message: 'Anything else?' }]);
+  });
+
+  it('holds files to the website\'s own size limit, not a fixed 5 MB (RDC-04)', () => {
+    const big = { handle: 'h3', name: 'brochure.pdf', size: 8 * 1024 * 1024 };
+    const ref = mount(null, () => undefined, 10_240);
+    act(() => ref.current?.stage([big]));
+    expect(screen.getByText('brochure.pdf')).toBeTruthy();
+    expect(vi.mocked(toast)).not.toHaveBeenCalled();
+    cleanup();
+    const ref2 = mount();
+    act(() => ref2.current?.stage([big]));
+    expect(screen.queryByText('brochure.pdf')).toBeNull();
+    expect(vi.mocked(toast)).toHaveBeenCalledWith('error', expect.stringContaining('5'));
   });
 
   it('refuses a dropped file a visitor cannot receive before any upload, and sends the rest to the widget', async () => {

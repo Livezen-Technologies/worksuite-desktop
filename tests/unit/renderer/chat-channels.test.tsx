@@ -404,9 +404,10 @@ describe('WhatsApp channel settings', () => {
     const sales = screen.getByRole('listitem', { name: 'Sales' });
     expect(within(sales).getByText('Connected')).toBeTruthy();
     expect(within(sales).getByText('Default')).toBeTruthy();
-    expect(within(sales).getByText('+94771234567 · WhatsApp Web · Owner')).toBeTruthy();
+    expect(within(sales).getByText('+94 77 123 4567 · WhatsApp Web · Owner')).toBeTruthy();
     expect(within(sales).getByRole('button', { name: 'Check connection' })).toBeTruthy();
-    expect(within(sales).getByRole('button', { name: 'Unlink from phone' })).toBeTruthy();
+    expect(within(sales).getByRole('button', { name: 'More actions for Sales' })).toBeTruthy();
+    expect(within(sales).queryByRole('button', { name: 'Unlink from phone' })).toBeNull();
     expect(within(sales).queryByRole('button', { name: 'Make default' })).toBeNull();
     const support = screen.getByRole('listitem', { name: 'Support' });
     expect(within(support).getByText('Not connected')).toBeTruthy();
@@ -430,7 +431,8 @@ describe('WhatsApp channel settings', () => {
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/accounts/2/default'));
     fireEvent.click(within(support).getByRole('button', { name: 'Link again' }));
     expect(onRelink).toHaveBeenCalledWith(down);
-    fireEvent.click(within(sales).getByRole('button', { name: 'Unlink from phone' }));
+    fireEvent.click(within(sales).getByRole('button', { name: 'More actions for Sales' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Unlink from phone' }));
     expect(within(sales).getByRole('alert').textContent).toContain('Unlink Sales from the phone? Its conversations stay here.');
     fireEvent.click(within(sales).getByRole('button', { name: 'Unlink' }));
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/accounts/1/unlink'));
@@ -439,6 +441,27 @@ describe('WhatsApp channel settings', () => {
     expect(onConnect).toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'More on the web' }));
     expect(call).toHaveBeenCalledWith('app:openInBrowser', { path: '/whatsapp' });
+  });
+
+  it('does not display an unconfirmed phone while a QR scan is pending (#157)', () => {
+    settings([account({ status: 'qr_required', phone: '+94770000000', connected_at: '2026-09-01 09:00:00' })]);
+    expect(screen.getByText(/Number not linked yet/)).toBeTruthy();
+    expect(screen.queryByText(/94 77 000 0000/)).toBeNull();
+  });
+
+  it('shows confirmed phone formatting and available connection metadata (#157)', () => {
+    settings([account({ phone: '94770000000', connected_at: '2026-10-03 09:02:00', device_label: 'Mac – WorkSuite' })]);
+    expect(screen.getByText(/\+94 77 000 0000/)).toBeTruthy();
+    expect(screen.getByText(/Last connected:/)).toBeTruthy();
+    expect(screen.getByText('Connected on: Mac – WorkSuite')).toBeTruthy();
+  });
+
+  it('shows the actual connection-check refusal rather than a generic success (#157)', async () => {
+    vi.mocked(apiPost).mockResolvedValue({ ok: false, note: 'Waiting for the QR code to be scanned.' } as never);
+    settings([account({})]);
+    fireEvent.click(screen.getByRole('button', { name: 'Check connection' }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Waiting for the QR code to be scanned.'));
+    expect(toast).toHaveBeenCalledWith('error', 'Waiting for the QR code to be scanned.');
   });
 
   it('is reached from Add a channel too', () => {

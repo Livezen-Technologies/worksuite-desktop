@@ -1,11 +1,13 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { call, errorMessage } from '../../../core/bridge';
 import { text } from '../../../core/i18n';
 import { toast } from '../../../core/toasts';
+import { timeLabel } from '../../../core/time';
+import { Menu } from '../../../components/Menu';
 import { Icon } from '../../../components/Icon';
 import { Button, Modal, Spinner, cx } from '../../../components/ui';
-import { checkWa, isConnected, makeDefaultWa, unlinkWa, type WaAccount } from './whatsapp';
+import { checkWa, confirmedWaPhone, formatWaPhone, isConnected, makeDefaultWa, unlinkWa, type WaAccount } from './whatsapp';
 
 const ROLES: Record<string, string> = { owner: 'Owner', admin: 'Admin', agent: 'Agent', viewer: 'Viewer' };
 
@@ -24,19 +26,27 @@ export function WhatsappSettings({ accounts, loading, onConnect, onRelink, onClo
   onClose: () => void;
 }) {
   const qc = useQueryClient();
+  const [menu, setMenu] = useState<number | null>(null);
+  const anchor = useRef<HTMLButtonElement>(null);
+  const activeAction = useRef(false);
+  const [results, setResults] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [unlinking, setUnlinking] = useState<number | null>(null);
   const web = (path: string) => void call('app:openInBrowser', { path });
 
   const act = async (key: string, run: () => Promise<unknown>, done: string) => {
+    if (activeAction.current) return;
+    activeAction.current = true;
     setBusy(key);
     try {
-      const r = (await run()) as { ok?: boolean; error?: string | null } | null;
-      if (r && r.ok === false) toast('error', r.error ?? text('That did not work.'));
-      else toast('success', done);
+      const r = (await run()) as { ok?: boolean; error?: string | null; note?: string | null } | null;
+      const result = r?.note ?? r?.error ?? (r?.ok === false ? text('That did not work.') : done);
+      if (key.startsWith('check:')) setResults((old) => ({ ...old, [Number(key.split(':')[1])]: result }));
+      toast(r?.ok === false ? 'error' : 'success', result);
     } catch (e) {
       toast('error', errorMessage(e));
     } finally {
+      activeAction.current = false;
       setBusy(null);
       setUnlinking(null);
       void qc.invalidateQueries({ queryKey: ['whatsapp'] });
@@ -69,6 +79,7 @@ export function WhatsappSettings({ accounts, loading, onConnect, onRelink, onClo
         <ul className="flex flex-col gap-2" aria-label={text('Your numbers')}>
           {accounts.map((a) => {
             const up = isConnected(a);
+            const phone = confirmedWaPhone(a);
             const may = a.can_connect === true;
             return (
               <li key={a.id} aria-label={a.name} className="flex flex-col gap-2 rounded-[10px] border border-line p-3">
@@ -81,8 +92,11 @@ export function WhatsappSettings({ accounts, loading, onConnect, onRelink, onClo
                       {a.is_default ? <span className="rounded-full bg-subtle px-2 py-px text-[11px] font-semibold text-ink-2">{text('Default')}</span> : null}
                     </span>
                     <span className="block text-ink-3">
-                      {[a.phone ? `+${a.phone.replace(/^\+/, '')}` : null, a.provider_label ?? null, a.role ? text(ROLES[a.role] ?? a.role) : null].filter(Boolean).join(' · ')}
+                      {[phone ? formatWaPhone(phone) : a.provider === 'web_js' ? text('Number not linked yet') : null, a.provider_label ?? null, a.role ? text(ROLES[a.role] ?? a.role) : null].filter(Boolean).join(' · ')}
                     </span>
+                    {a.connected_at ? <span className="block text-ink-3">{text('Last connected: {time}', { time: timeLabel(a.connected_at) })}</span> : null}
+                    {a.device_label ? <span className="block text-ink-3">{text('Connected on: {device}', { device: a.device_label })}</span> : null}
+                    {results[a.id] ? <span role="status" className="block text-ink-2">{results[a.id]}</span> : null}
                     {!up && a.status_note ? <span className="mt-0.5 block text-ink-2">{a.status_note}</span> : null}
                   </span>
                 </div>
@@ -95,10 +109,10 @@ export function WhatsappSettings({ accounts, loading, onConnect, onRelink, onClo
                     </div>
                   ) : (
                     <div className="flex flex-wrap gap-1.5">
-                      <Button size="sm" icon="refresh" loading={busy === `check:${a.id}`} onClick={() => void act(`check:${a.id}`, () => checkWa(a.id), text('{name} was checked.', { name: a.name }))}>{text('Check connection')}</Button>
+                      <Button disabled={busy !== null} size="sm" icon="refresh" loading={busy === `check:${a.id}`} onClick={() => void act(`check:${a.id}`, () => checkWa(a.id), text('{name} was checked.', { name: a.name }))}>{text('Check connection')}</Button>
                       {a.provider === 'web_js' && !up ? <Button size="sm" onClick={() => onRelink(a)}>{text('Link again')}</Button> : null}
-                      {!a.is_default ? <Button size="sm" loading={busy === `default:${a.id}`} onClick={() => void act(`default:${a.id}`, () => makeDefaultWa(a.id), text('{name} is the default number now.', { name: a.name }))}>{text('Make default')}</Button> : null}
-                      {a.provider === 'web_js' && up ? <Button size="sm" onClick={() => setUnlinking(a.id)}>{text('Unlink from phone')}</Button> : null}
+                      {!a.is_default ? <Button disabled={busy !== null} size="sm" loading={busy === `default:${a.id}`} onClick={() => void act(`default:${a.id}`, () => makeDefaultWa(a.id), text('{name} is the default number now.', { name: a.name }))}>{text('Make default')}</Button> : null}
+                      {a.provider === 'web_js' && up ? <><button ref={menu === a.id ? anchor : undefined} type="button" aria-label={`More actions for ${a.name}`} aria-haspopup="menu" aria-expanded={menu === a.id} disabled={busy !== null} onClick={(e) => { anchor.current = e.currentTarget; setMenu(menu === a.id ? null : a.id); }} className="rounded px-2 text-ink-2 hover:bg-subtle"><Icon name="more" size={16} /></button>{menu === a.id ? <Menu label={`Actions for ${a.name}`} anchor={anchor} onClose={() => setMenu(null)} sections={[{ id: 'number', items: [{ id: 'unlink', label: text('Unlink from phone'), danger: true, onSelect: () => { setMenu(null); setUnlinking(a.id); } }] }]} /> : null}</> : null}
                     </div>
                   )
                 ) : null}

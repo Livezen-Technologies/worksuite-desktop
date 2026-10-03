@@ -5,22 +5,52 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 0.2.130 — 2026-10-03
+## 0.2.133 — 2026-10-03
 
 - **Link mail to a tender, customer or deal.** Right-click a message (or a selection) or open the reader's **More** and choose **Link to tender, customer or deal…**: pick the kind, search by name or reference, and the sender's own customer record and tenders are suggested first. Linked records show as chips under the subject — click to open the tender or deal, ✕ to unlink — and everyone who can read the mailbox sees them. A tender's new **Mail** tab lists the email linked to it; click one to open it in Mail. Offered to people who can open Tenders or the CRM; the server decides which kinds each person may link. Needs the server update (Mail 1.12.0, migration `2026-10-12-000100_MailRecordLinks`).
 - Live mail lists show a **preview line and the paper clip** before the mailbox has synced (server Mail 1.10.0).
 
-## 0.2.129 — 2026-10-03
+## 0.2.132 — 2026-10-03
 
 - **What a bid costs (#159).** Each tender has an **Expenses** tab beside Budget: total spent, pending approval, reimbursable, and spent against the planned bid budget ("Spent LKR 18,500 of LKR 25,000 planned (74%)", with a warning when over). **+ Add expense** and the quick categories (courier, travel, printing, bid bond / security, document purchase…) open the Expense form with the tender already filled in; **Link existing expense** picks one of your claims that isn't on a tender yet. Clicking a row opens the claim as Expenses shows it — approval stays there — with Open in Expenses, Mark refunded (for bid bonds) and Unlink. Overview shows **Bid cost so far**, a lost or cancelled tender shows what was written off, History records each expense, and Reports has **Bid cost by tender** with cost per win.
 - In Expenses, a claim can be **Linked to** a tender, claims can be filtered by tender, and the claim shows its tender with a link back.
 - Needs the server update (Expense migration `2026-10-13-000100_ClaimLinkedToAndRefunds`; the planned bid budget uses Tender V2's budget table).
 
-## 0.2.128 — 2026-10-03
+## 0.2.131 — 2026-10-03
 
 - **Pictures in email, done properly (#163).** Remote pictures stay off until you choose: a bar says how many are blocked, with **Show images**, **Always show from this sender** and (for company domains) **…from this domain**. They load only through WorkSuite's image proxy, never straight from the sender, and blocked ones are neat placeholders of the right size instead of broken icons. Tracking pixels are removed even when pictures are on, and the bar says how many. **Settings › Mail › Images & media** sets the picture mode, trusted senders and domains (synced across your devices), whether your own company's domains are trusted, and auto-download of attachments by size, network, file type and folder. Junk and mail that fails sender authentication never load pictures by themselves.
 - **Logos and signature pictures show in the email** instead of as attachments named with long IDs (needs the server update, Mail 1.11.0). Attachments get readable names, thumbnails, and Open, Download and Save to Files. Pictures you loaded and attachments you opened are kept on this computer and open instantly, offline too.
 - Mail from a sender that passes DMARC now shows **Verified** rather than "Partly verified".
+
+## 0.2.130 — 2026-10-03
+
+- **WhatsApp says which number is linked only once it is (#157, first fix).** While a QR scan has not confirmed a
+  number, settings say "Number not linked yet" instead of showing a stored phone value. Confirmed Sri Lankan numbers
+  read as +94 7x xxx xxxx, with the connection time and device where the server gives them. Check connection reports
+  the provider's answer, settings actions no longer overlap, and Unlink from phone moves into an action menu (still
+  asking first). Duplicate account cards and organisation ownership are still to come.
+
+## 0.2.129 — 2026-10-03
+
+- **WhatsApp opens from what this computer saved (#158, first stage).** Accounts, chat lists and conversations you
+  have opened before appear at once from encrypted local reads while the latest loads in the background ("Updating").
+  Saved reads are kept apart per signed-in user, server and organisation, follow the offline storage policy, and are
+  removed when access is refused, an account is retired or you sign out. A conversation only scrolls to new messages
+  if you were already near the bottom. Delta sync, offline search and media, and the outbox are still to come (see
+  docs/WHATSAPP_LOCAL_SYNC.md).
+
+## 0.2.128 — 2026-10-03
+
+Website chats: saved replies counted, and each website's own file limit.
+
+With WorkSuite's Communication 1.13.0:
+
+- **Saved replies you use most come first.** Sending a reply you started from a saved reply ("/" or a chip) counts it,
+  and the chips above the box are the six your team uses most.
+- **Files follow the website's own limit.** A website set to take larger files no longer has them refused at 5 MB on
+  this computer; one set lower refuses a bigger file before it uploads.
+- **A chat whose owner went offline comes to you** as a Transfer to you card from WorkSuite, with "<owner> went offline",
+  when you have been in that chat longest; if nobody takes it, it goes to everybody covering the website.
 
 ## 0.2.127 — 2026-10-03
 

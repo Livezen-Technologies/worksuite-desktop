@@ -234,7 +234,7 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
             group={false}
             reply={reply}
             onClearReply={() => setReply(null)}
-            website={{ conversationId: c.id, replies: canned.data?.responses ?? [] }}
+            website={{ conversationId: c.id, replies: canned.data?.responses ?? [], maxUploadKb: c.max_upload_kb }}
           />
         ) : (
           <div className="border-t border-line bg-surface px-3.5 py-2.5 text-[13px] text-ink-3">You can read this chat but not reply to it.</div>
