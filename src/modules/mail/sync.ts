@@ -34,6 +34,11 @@ export interface SyncSummary {
   detail: string;
   /** A warning about one stale account for the status bar: "Personal · Gmail not synced for 3 h". */
   warning: string | null;
+  /** Push connections up now / accounts that sync by push (worksuite-desktop#172): the real connection state. */
+  live: number;
+  pushTotal: number;
+  /** "2 of 2 mailboxes live" — or null when no account syncs by push. */
+  liveLine: string | null;
   tone: 'success' | 'warning' | 'danger' | 'muted';
 }
 
@@ -88,7 +93,12 @@ export function syncSummary(status: SyncStatus | null | undefined, opts: { offli
   const stale = active.filter((a) => !a.running && a.last_result !== 'failed' && (a.last_ok_at ? now - parseTs(a.last_ok_at).getTime() > staleMinutes * 60_000 : a.last_result !== 'never'));
   const oldest = [...failed, ...stale].sort((a, b) => (a.last_ok_at ? parseTs(a.last_ok_at).getTime() : 0) - (b.last_ok_at ? parseTs(b.last_ok_at).getTime() : 0))[0];
   const warning = oldest && (!oldest.last_ok_at || now - parseTs(oldest.last_ok_at).getTime() > staleMinutes * 60_000) ? text('{name} not synced for {since}', { name: accountName(oldest, box(oldest.mailbox)), since: sinceWords(oldest.last_ok_at, now) }) : null;
-  const base = { syncing, total: active.length, lastOk, failed, stale, warning };
+  // Live means the server holds an idling connection that is serving, for an account that syncs by push.
+  const pushIds = new Set(active.filter((a) => a.mode === 'push').map((a) => a.mailbox));
+  const live = (status?.mailboxes ?? []).filter((m) => pushIds.has(m.mailbox) && m.status === 'live' && m.serving && m.pushed).length;
+  const pushTotal = pushIds.size;
+  const liveLine = pushTotal ? text('{n} of {total} mailboxes live', { n: live, total: pushTotal }) : null;
+  const base = { syncing, total: active.length, lastOk, failed, stale, warning, live, pushTotal, liveLine };
 
   if (opts.offline) {
     return { ...base, state: 'offline', headline: text('Offline'), detail: lastOk ? text('Last successful sync {ago}', { ago: syncAgo(lastOk, now) }) : text('Showing mail saved on this computer'), tone: 'warning' };
@@ -111,10 +121,11 @@ export function syncSummary(status: SyncStatus | null | undefined, opts: { offli
       state: 'attention',
       headline: `${text('Needs attention')} · ${what}`,
       detail: others > 0 && lastOk ? text('Other {n} accounts synced {ago}', { n: others, ago: syncAgo(lastOk, now) }) : lastOk ? text('Last successful sync {ago}', { ago: syncAgo(lastOk, now) }) : '',
-      tone: 'danger',
+      // A failure is red; an account that is only out of date is amber — never green (worksuite-desktop#172).
+      tone: failed.length ? 'danger' : 'warning',
     };
   }
-  return { ...base, state: 'up_to_date', headline: lastOk ? text('Synced {ago}', { ago: syncAgo(lastOk, now) }) : text('Up to date'), detail: text('{n} of {total} accounts', { n: active.length, total: active.length }), tone: 'success' };
+  return { ...base, state: 'up_to_date', headline: lastOk ? text('Synced {ago}', { ago: syncAgo(lastOk, now) }) : text('Up to date'), detail: liveLine && live === pushTotal ? liveLine : text('{n} of {total} accounts', { n: active.length, total: active.length }), tone: 'success' };
 }
 
 /** One account's state in words, for its row and the Sync all tooltip (DMO-SYN-03/04). */

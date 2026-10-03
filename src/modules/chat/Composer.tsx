@@ -35,6 +35,7 @@ import { AiTextDialog } from '../ai/AiTextDialog';
 import { AiMenuButton } from '../ai/AiMenuButton';
 import { WRITING_TASKS, type TextTask } from '../ai/textTools';
 import type { WebsiteConversation } from './website/api';
+import { usePresence } from './presence';
 
 /**
  * The website channel (WS-WCHAT ENH-02, RDC-01/02): the same composer, for a
@@ -88,7 +89,7 @@ export interface ComposerHandle {
  * an edit shown above it; files wait in a tray until Send; a voice message
  * records in its place. `compact` is the drawer's and the call panel's size.
  */
-export function Composer({ roomId, roomName, group, reply, onClearReply, typing = [], compact, look = 'box', extras, website, channel, ref }: {
+export function Composer({ roomId, roomName, group, reply, onClearReply, typing = [], compact, look = 'box', extras, inside, website, channel, ref }: {
   roomId: string;
   roomName: string;
   group: boolean;
@@ -100,6 +101,8 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   look?: 'box' | 'pill';
   /** Actions above the box (the chat drawer's quick actions). */
   extras?: ReactNode;
+  /** A small chip inside the box, above the line you type in (the drawer's open record). */
+  inside?: ReactNode;
   /** A website visitor's conversation rather than a Team Chat room. */
   website?: WebsiteChannel;
   channel?: ComposerChannel;
@@ -144,13 +147,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const found = asking ? suggestions.data : undefined;
   const people = found?.people ?? [];
   const options = found ? [...found.everyone, ...people, ...found.teams, ...found.departments].slice(0, 10) : [];
-  const ids = people.map((p) => p.id).join(',');
-  const presence = useQuery({
-    queryKey: ['chat', 'presence', ids],
-    queryFn: ({ signal }) => apiGet<{ presence: Record<string, string> }>('/api/chat/presence', { ids }, signal),
-    enabled: ids !== '',
-    staleTime: 30_000,
-  });
+  const presenceOf = usePresence(people.map((p) => p.id));
 
   const text = editing ? editing.text : draft.value;
   const setText = (v: string) => {
@@ -776,7 +773,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                 t.type === 'user' && options.findIndex((o) => o.type === 'user') === i ? 'PEOPLE IN THIS CHAT'
                   : t.type !== 'user' && t.type !== 'everyone' && options.findIndex((o) => o.type !== 'user' && o.type !== 'everyone') === i ? 'TEAMS AND DEPARTMENTS'
                     : null;
-              const state = t.type === 'user' ? (presence.data?.presence[String(t.id)] ?? 'offline') : '';
+              const state = t.type === 'user' ? (presenceOf(t.id) ?? 'offline') : '';
               const sub = t.type === 'user'
                 ? [t.detail, (PRESENCE[state]?.label ?? state).toLowerCase()].filter(Boolean).join(' · ')
                 : (t.detail ?? (t.type === 'department' ? 'Department' : 'Team'));
@@ -848,6 +845,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
               urgent && !editing ? 'ring-danger' : editing ? 'ring-[#D97706]' : 'ring-line focus-within:ring-primary/50',
             )}
           >
+            {inside}
             {trayEl}
             <div className="flex items-end gap-0.5">
               {recording ? (
@@ -910,6 +908,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
               : 'border-line focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15',
         )}
       >
+        {inside}
         {trayEl}
         {channel ? <div className="flex gap-1" aria-label="Message formatting">{[{ label: 'Bold', mark: '*' }, { label: 'Italic', mark: '_' }, { label: 'Strikethrough', mark: '~' }, { label: 'Monospace', mark: '```' }].map(({ label, mark }) => <button key={label} type="button" className="rounded px-2 text-[11px] text-ink-2 hover:bg-subtle" onClick={() => { const el = input.current; const start = el?.selectionStart ?? text.length; const end = el?.selectionEnd ?? start; setText(`${text.slice(0, start)}${mark}${text.slice(start, end)}${mark}${text.slice(end)}`); focus(start + mark.length); }}>{label}</button>)}</div> : null}
         <div className="flex items-end gap-1">

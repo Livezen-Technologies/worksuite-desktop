@@ -14,7 +14,9 @@ import { hkdfSync } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { canOpenApp, canOpenLink, canOpenRoute, notificationAllowed, visibleAppIds } from '@shared/access';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
-import { findMailtoInArgv, mailBodiesKept, mailListKept, mailtoRoute, parseMailto } from '@shared/mailto';
+import { itemApp, itemRoute, looksLikeItemLink, parseItemLink } from '@shared/item-links';
+import { linkPrefs } from '@shared/link-prefs';
+import { findMailtoInArgv, mailBodiesKept, mailKeptForever, mailListKept, mailtoRoute, parseMailto } from '@shared/mailto';
 import { websiteDraftKey, websiteReplyMutation } from '@shared/website-reply';
 import { resolveWebLink } from '@shared/links';
 import { redirectRoute } from '@shared/channels';
@@ -49,6 +51,7 @@ import { DEFAULT_POLICY } from '../services/policy';
 import { Database } from '../services/db';
 import { archName, DeviceService, platformName } from '../services/device';
 import { PmsLocks } from '../services/pms-locks';
+import { ContactSync } from '../services/contact-sync';
 import { createPos } from '../services/pos-ipc';
 import { SalonDesk } from '../services/salon-desk';
 import { SalonPrint } from '../services/salon-print';
@@ -83,6 +86,7 @@ import { OfficeEditorHost } from '../services/office-editor';
 import { OfficeExternal } from '../services/office-external';
 import { createPdfStudio } from '../services/pdf/host';
 import { createMailFilesIpc } from '../services/mail-files/ipc';
+import { attachSpellingMenu } from '../services/spellcheck';
 import { markFromInternet } from '../services/quarantine';
 import { mailFilePathsInArgv } from '../services/mail-files/argv';
 import { createLocalAI } from '../services/local-ai/host';
@@ -163,6 +167,14 @@ function main(): void {
   const pendingLinks: string[] = [];
   let handleLink: (url: string) => void = (url) => pendingLinks.push(url);
   app.on('open-url', (e, url) => {
+    e.preventDefault();
+    handleLink(url);
+  });
+  // Universal Links (#170): an https://app.worksuite.lk/o/… link macOS hands to the app instead of the browser,
+  // once the server's apple-app-site-association names this app. Held to the same grammar as any other link.
+  app.on('continue-activity', (e, type, details) => {
+    const url = (details as { webpageURL?: unknown } | undefined)?.webpageURL;
+    if (type !== 'NSUserActivityTypeBrowsingWeb' || typeof url !== 'string') return;
     e.preventDefault();
     handleLink(url);
   });
@@ -520,6 +532,17 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     allowed: () => sessionCtl.isReady() && canOpenApp('pms', sessionCtl.visibleApps()),
   });
 
+  // Contacts: iCloud, CardDAV and Mac Contacts synced from this computer (worksuite-desktop#175); passwords only in the OS keystore.
+  const contactSync = new ContactSync({
+    http,
+    fetch: fetchImpl,
+    secrets,
+    origin: () => auth.getServer()?.origin ?? null,
+    allowed: () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('contacts', sessionCtl.visibleApps()),
+    deviceId: () => device.installId(),
+  });
+  contactSync.start();
+
   // Restaurant Manager: this computer as a paired terminal — its key, menu and floor copy, outbox and print agent.
   const restaurant = createRestaurant({
     db,
@@ -764,6 +787,32 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         main.webContents.send('guest:destination', destination);
         broadcast('toast', { kind: 'error', text: String(e.message) });
       });
+      return;
+    }
+    // An item link (#170): worksuite://{org}/{type}/{id} or https://app.worksuite.lk/o/{org}/{type}/{id}.
+    if (looksLikeItemLink(url)) {
+      const serverHost = (() => {
+        try {
+          const origin = auth.getServer()?.origin;
+          return origin ? new URL(origin).hostname : null;
+        } catch {
+          return null;
+        }
+      })();
+      const item = parseItemLink(url, { hosts: [serverHost] });
+      if (!item.ok) {
+        log.warn('item link rejected', { reason: item.reason, url: redactUrl(url) });
+        windows.showMain();
+        broadcast('toast', { kind: 'error', text: 'That WorkSuite link could not be opened.' });
+        return;
+      }
+      // "Open WorkSuite links in the desktop app" off: a web link the system handed over goes on to the browser.
+      if (item.link.format === 'web' && !linkPrefs(settings.effective()).openInApp) {
+        void openExternalSafely(url);
+        return;
+      }
+      log.info('item link', { type: item.link.type, action: item.link.action });
+      navigate({ route: itemRoute(item.link), organizationId: item.link.org, source: 'deep-link', item: { link: item.link, source: item.link.source ?? 'external', app: itemApp(item.link) } });
       return;
     }
     const parsed = parseDeepLink(url);
@@ -1346,10 +1395,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     accessWatch.start();
     // FR-OFF-06: prune mail bodies beyond the cache window.
     const days = settings.effective().mailCacheDays;
-    if (days > 0) cache.pruneModuleOlderThan('mail', days);
+    // A folder kept whole on this computer is not pruned by age (worksuite-desktop#162).
+    const keepAll = (path: string) => mailKeptForever(settings.effective(), path);
+    if (days > 0) cache.pruneModuleOlderThan('mail', days, keepAll);
     // A mailbox's own keep period (Settings › Mail › Storage & sync, D09).
     const me = sessionCtl.current()?.user?.id;
-    for (const [box, d] of Object.entries(settings.effective().mailCacheDaysByMailbox ?? {})) if (me) cache.pruneMailbox(String(me), box, d);
+    for (const [box, d] of Object.entries(settings.effective().mailCacheDaysByMailbox ?? {})) if (me) cache.pruneMailbox(String(me), box, d, keepAll);
     emitStatus();
   };
   const stopServices = (): void => {
@@ -1436,6 +1487,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         restaurant.forgetAll();
         // The door-lock servers this computer's front desk talked to, and their secrets.
         pmsLocks.wipe();
+        // The iCloud and CardDAV passwords contact sync kept for this computer.
+        contactSync.wipe();
       }
       log.info('local data removed', { scope });
     },
@@ -1695,6 +1748,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     contents.on('before-input-event', (_ev, input) => {
       if (input.type === 'keyDown' && (input.control || input.meta) && input.key.toLowerCase() === 'v') pasteGestures.set(contents.id, Date.now());
     });
+    // A right-click on a misspelt word offers its corrections (worksuite-desktop#188).
+    attachSpellingMenu(contents);
   });
 
   const router = new IpcRouter(ipcMain, {
@@ -1791,6 +1846,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   mailFiles.register(router);
   pos.register(router);
   pmsLocks.register(router);
+  contactSync.register(router);
   restaurant.register(router);
   localAI.register(router);
   router.handle('ai:ocr', (input, c) => ocr.recognize(c.sender.id, input));

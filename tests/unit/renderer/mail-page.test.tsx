@@ -134,35 +134,47 @@ describe('the sidebar', () => {
     // Importance is not something the mirror knows: no Important view rather than a wrong one.
     expect(within(nav).queryByRole('button', { name: /^Important/ })).toBeNull();
     expect(await within(nav).findByRole('button', { name: /Clients › Acme/ })).toBeTruthy();
-    // One sync status in the footer and the status bar (DMO-SYN-05/07): no "mailboxes live" next to "synced".
+    // One sync status in the footer and the status bar (DMO-SYN-05/07), with the real live count (#172).
     expect(within(nav).getByText('Synced 2 min ago')).toBeTruthy();
-    expect(within(nav).getByText(/3 of 3 accounts · offline cache 30 days/)).toBeTruthy();
+    expect(within(nav).getByText(/3 of 3 mailboxes live · offline cache 30 days/)).toBeTruthy();
     const bar = screen.getByRole('status', { name: 'Mail status' });
-    expect(within(bar).getByText('Synced 2 min ago · 3 of 3 accounts')).toBeTruthy();
-    expect(within(bar).queryByText(/mailboxes live/)).toBeNull();
+    // The status bar follows the card: every push connection is really live (#172).
+    expect(within(bar).getByText('Synced 2 min ago · 3 of 3 mailboxes live')).toBeTruthy();
     expect(await screen.findByText('Local store 412 MB')).toBeTruthy();
   });
 
-  it('leads with an accent New email button whose N chip is the wired shortcut, and a glass search button (#148)', async () => {
+  it('leads with the shared primary New email split button, the shortcut in its tooltip, and a Files-style search button (#171)', async () => {
     show();
     const nav = await screen.findByRole('navigation', { name: 'Mail' });
     const compose = within(nav).getByRole('button', { name: 'New email' });
-    // The chip is decoration; the shortcut is named for assistive tech, and N really composes.
+    // The shortcut is in the tooltip and named for assistive tech; no chip inside the button.
     expect(compose.getAttribute('aria-keyshortcuts')).toBe('N');
-    const chip = compose.querySelector('kbd')!;
-    expect(chip.textContent).toBe('N');
-    expect(chip.getAttribute('aria-hidden')).toBe('true');
-    expect(compose.className).toContain('text-white');
+    expect(compose.getAttribute('title')).toBe('New email (N)');
+    expect(compose.querySelector('kbd')).toBeNull();
+    expect(compose.className).toContain('bg-primary');
+    expect(compose.className).toContain('h-10');
     expect(compose.className).toContain('focus-visible:outline-2');
-    expect(compose.className).toContain('motion-safe:enabled:hover:-translate-y-px');
-    expect(compose.className).not.toMatch(/(^|\s)(enabled:)?hover:-translate-y-px/);
+    // Flat with a quiet shadow: no brand glow.
+    expect(compose.className).not.toContain('color-mix');
     const search = within(nav).getByRole('button', { name: 'Search mail' });
     expect(search.getAttribute('title')).toBe('Search mail (/)');
-    expect(search.className).toContain('bg-glass');
-    expect(search.className).toContain('h-11 w-11');
-    expect(search.querySelector('kbd')).toBeNull();
+    expect(search.className).toContain('h-10 w-10');
+    expect(search.className).toContain('border-line');
     fireEvent.keyDown(document.body, { key: 'n' });
     expect(await screen.findByRole('form', { name: 'New email' })).toBeTruthy();
+  });
+
+  it('offers the New email dropdown: template, new window, event invite and contact (#171)', async () => {
+    show();
+    const side = await screen.findByRole('navigation', { name: 'Mail' });
+    fireEvent.click(within(side).getByRole('button', { name: 'More new email options' }));
+    const menu = await screen.findByRole('menu', { name: 'New' });
+    for (const label of ['New email', 'New email from template…', 'New email in a new window', 'New event invite', 'New contact']) {
+      expect(within(menu).getAllByRole('menuitem', { name: new RegExp(`^${label}`) })[0]).toBeTruthy();
+    }
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /^New event invite/ }));
+    // Another module's route opens through the app's tabs.
+    await waitFor(() => expect(nav.navigate.mock.calls.some((c) => c[0] === '/calendar?new=1')).toBe(true));
   });
 
   it('opens a smart view as the combined list narrowed', async () => {
@@ -200,6 +212,39 @@ describe('the list', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Layout and density' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /Apply this view to all folders/ }));
     await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/prefs', { view: 'super', folderViews: {} }));
+  });
+
+  it('sorts and groups from a menu with an icon on every choice, a direction switch in the field\'s words and Reset (#168)', async () => {
+    show();
+    await screen.findByRole('listbox', { name: 'Messages' });
+    const chip = screen.getByRole('button', { name: /Date · Newest/ });
+    fireEvent.click(chip);
+    const menu = await screen.findByRole('menu', { name: 'Sort and group' });
+    const radios = within(menu).getAllByRole('menuitemradio');
+    // 8 sorts, 2 directions, 7 groupings — each sort and group row with its icon.
+    expect(radios).toHaveLength(17);
+    for (const r of radios) expect(r.querySelector('svg')).not.toBeNull();
+    const sortBy = () => within(within(screen.getByRole('menu', { name: 'Sort and group' })).getByRole('group', { name: 'Sort by' }));
+    const date = sortBy().getByRole('menuitemradio', { name: 'Date' });
+    expect(date.getAttribute('aria-checked')).toBe('true');
+    expect(document.activeElement).toBe(date);
+    expect(within(menu).getByRole('menuitemradio', { name: 'Newest' }).getAttribute('aria-checked')).toBe('true');
+    // Arrow keys move; Escape closes and puts focus back.
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(document.activeElement?.textContent).toBe('Sender');
+    fireEvent.click(within(menu).getByRole('menuitemradio', { name: 'Oldest' }));
+    await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/prefs', { folderViews: { 'unified:inbox': { dir: 'asc' } } }));
+    expect(await screen.findByRole('button', { name: /Date · Oldest/ })).toBeTruthy();
+    // A new field starts in its natural direction, worded for it; picking it again reverses it.
+    fireEvent.click(sortBy().getByRole('menuitemradio', { name: 'Sender' }));
+    expect(await screen.findByRole('button', { name: /Sender · A → Z/ })).toBeTruthy();
+    expect(within(screen.getByRole('menu', { name: 'Sort and group' })).getByRole('menuitemradio', { name: /Z → A/ })).toBeTruthy();
+    fireEvent.click(sortBy().getByRole('menuitemradio', { name: 'Sender' }));
+    expect(await screen.findByRole('button', { name: /Sender · Z → A/ })).toBeTruthy();
+    fireEvent.click(within(screen.getByRole('menu', { name: 'Sort and group' })).getByRole('button', { name: 'Reset to default' }));
+    expect(await screen.findByRole('button', { name: /Date · Newest/ })).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole('menu', { name: 'Sort and group' }), { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('menu', { name: 'Sort and group' })).toBeNull());
   });
 });
 

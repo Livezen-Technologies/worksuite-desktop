@@ -16,12 +16,14 @@ import { Menu, type MenuItem, type MenuSection } from '../../components/Menu';
 import { Avatar, Button, Chip, ErrorNote, FileBadge, Modal, Spinner, cx } from '../../components/ui';
 import { AiTextDialog } from '../ai/AiTextDialog';
 import { InviteCard, hasInvite } from './InviteCard';
+import { WorkSuiteCard, openFromMail, workSuiteMailItem } from './WorkSuiteCard';
 import { PersonButton } from './PeopleCard';
 import type { TextTask } from '../ai/textTools';
 import { openPdf } from '../pdf/open';
 import { createTask } from '../tasks/actions';
 import { createMeeting, invitation, openMeeting } from '../meet/api';
 import { messageAction, moveMessage, setLabel, useFolders, useLabels, useMessageContext, type MessageActionName } from './api';
+import { messageKey, seedMessage } from './localFirst';
 import { folderName, plainText, securityVerdict } from './model';
 import { blockedImageUrls, escapeHtml, highlightText, isDesignedMail, mailFrameDoc, sanitizeMailHtml, withProxiedImages } from './sanitize';
 import { TeamBar, TeamWork } from './Team';
@@ -117,9 +119,13 @@ export function MessageView(p: MessageViewProps) {
   // Mark as read (DMO-INB-12): when opened (the server does it), after N seconds, when moving on, or never.
   const markRead = p.prefs.markRead ?? 'open';
   const q = useQuery({
-    queryKey: ['mail', 'message', ref.mailbox, ref.folder, ref.uid],
+    queryKey: messageKey(ref),
     queryFn: ({ signal }) => apiGetMeta<MessageDetail>(`/api/mail/messages/${ref.uid}`, withMailbox({ folder: ref.folder, ...(markRead !== 'open' ? { peek: 1 } : {}) }, ref.mailbox), signal),
   });
+  // Opened or fetched ahead before: shown from this computer at once, while the server is asked (worksuite-desktop#162).
+  const refKey = `${ref.mailbox ?? ''}:${ref.folder}:${ref.uid}`;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the message is named by refKey; the object is new each render
+  useEffect(() => void seedMessage(qc, ref, markRead !== 'open'), [qc, refKey, markRead]);
   const m = q.data?.data;
   const clean = useMemo(() => (m ? sanitizeMailHtml(m.body_html) : null), [m]);
   // Plain text (DMO-RD-09): asked for on this message, or always for this sender.
@@ -147,13 +153,27 @@ export function MessageView(p: MessageViewProps) {
   const labels = useLabels(p.localStore && menu === 'label');
   // Opening a message reads it: the list's dot and the counts follow.
   useEffect(() => {
-    if (q.isSuccess && !q.data.offline) {
+    if (q.isSuccess && !q.data.offline && !q.data.local && !q.data.peeked) {
       void qc.invalidateQueries({ queryKey: ['mail', 'messages'] });
       void qc.invalidateQueries({ queryKey: ['mail', 'views'] });
     }
-  }, [q.isSuccess, q.data?.offline, qc]);
+  }, [q.isSuccess, q.data?.offline, q.data?.local, q.data?.peeked, qc]);
   const unreadNow = !!m && m.is_read === false;
   const subjectNow = m?.subject ?? '';
+  // Fetched ahead (peek), then opened with "mark as read when opened": the server has not marked it, so this does.
+  const peekedUnread = unreadNow && markRead === 'open' && !!q.data?.peeked && !q.data.local;
+  const markedOnOpen = useRef<string | null>(null);
+  useEffect(() => {
+    if (!peekedUnread || markedOnOpen.current === refKey) return;
+    markedOnOpen.current = refKey;
+    void messageAction(ref, 'read', subjectNow)
+      .then(() => {
+        void qc.invalidateQueries({ queryKey: ['mail', 'messages'] });
+        void qc.invalidateQueries({ queryKey: ['mail', 'views'] });
+      })
+      .catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per message (refKey), not per render
+  }, [peekedUnread, refKey, subjectNow, qc]);
   const delay = Math.max(0, Math.min(30, p.prefs.markReadDelay ?? 5));
   useEffect(() => {
     if (!unreadNow || (markRead !== 'delay' && markRead !== 'change')) return;
@@ -336,6 +356,8 @@ export function MessageView(p: MessageViewProps) {
   const darkBody = darkTheme && p.prefs.darkBody === true && !isDesignedMail(clean.html);
   const security = securityVerdict(context.data?.security);
   const outsider = senderNotice(m.from_email, p.account?.email ?? null, context.data ?? null);
+  // A WorkSuite notification email's item (#170): a card above the body, and Open in WorkSuite by Reply — verified mail only.
+  const wsMail = workSuiteMailItem(m.from_email, context.data);
   const folderChip = folderName(m && ref.folder.startsWith('label:') ? ref.folder.slice(6) : ref.folder === 'inbox' ? text('Inbox') : ref.folder.charAt(0).toUpperCase() + ref.folder.slice(1));
   // D13 (the reader's More) and D14 (the action bar's More).
   const moreItems = (where: 'top' | 'bottom'): MenuSection[] => {
@@ -599,13 +621,14 @@ export function MessageView(p: MessageViewProps) {
           </div>
         ) : null}
         {hasInvite(m) ? <InviteCard msgRef={ref} offline={p.offline} /> : null}
+        {wsMail ? <WorkSuiteCard mail={wsMail} offline={p.offline} /> : null}
         <iframe title={text('Message')} sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={mailFrameDoc(shownHtml, zoom, darkBody)} className={cx('mx-5 mt-3 min-h-[120px] flex-1 rounded-[8px] border-0', darkBody ? 'bg-surface' : 'bg-white', darkTheme && !darkBody && 'p-2')} />
         {m.attachments.length ? <Attachments m={m} msgRef={ref} offline={p.offline} /> : null}
         {m.team && ref.mailbox && m.conversation_key ? <TeamWork msgRef={ref} m={m} account={p.account} offline={p.offline} /> : null}
       </div>
       {p.prefs.appsPane ? <AppsPane m={m} link={messageLink(ref)} context={context.data} offline={p.offline} navigate={navigate} onCreateTask={() => setExtra('task')} onSaveNote={() => void saveNote()} onClose={() => p.onPrefs({ appsPane: false })} /> : null}
       </div>
-      <ActionBar style={toolbarStyle} onReply={reply} onArchive={() => void act('archive')} onDelete={() => void act('trash')} moreRef={bottomMore} onMore={() => setMenu('bottom')} onMove={() => setMenu('move')} onUnread={() => void act('unread')} onStar={() => void act(m.is_starred ? 'unstar' : 'star')} starred={m.is_starred} canMove={!!ref.mailbox || p.localStore} />
+      <ActionBar style={toolbarStyle} onReply={reply} onArchive={() => void act('archive')} onDelete={() => void act('trash')} moreRef={bottomMore} onMore={() => setMenu('bottom')} onMove={() => setMenu('move')} onUnread={() => void act('unread')} onStar={() => void act(m.is_starred ? 'unstar' : 'star')} starred={m.is_starred} canMove={!!ref.mailbox || p.localStore} onOpenInWorkSuite={wsMail?.verified ? () => openFromMail(wsMail.link, 'open', undefined) : undefined} />
       {menu === 'top' ? <Menu sections={moreItems('top')} label={text('More')} anchor={topMore} prefer="bottom" align="end" onClose={() => setMenu(null)} /> : null}
       {menu === 'bottom' ? <Menu sections={moreItems('bottom')} label={text('More')} anchor={bottomMore} prefer="top" align="end" onClose={() => setMenu(null)} /> : null}
       {menu === 'move' ? <Menu sections={moveSections} label={text('Move to')} anchor={moveBtn} prefer="bottom" align="start" onClose={() => setMenu(null)} /> : null}
@@ -713,7 +736,7 @@ const AiChip = ({ ref, label, onClick }: { ref?: React.Ref<HTMLButtonElement>; l
   </button>
 );
 
-function ActionBar({ style, onReply, onArchive, onDelete, onMove, onUnread, onStar, starred, onMore, moreRef, canMove }: { style: NonNullable<MailPrefs['toolbar']>; onReply: (mode: ComposeSeed['mode']) => void; onArchive: () => void; onDelete: () => void; onMove: () => void; onUnread: () => void; onStar: () => void; starred: boolean; onMore: () => void; moreRef: React.Ref<HTMLButtonElement>; canMove: boolean }) {
+function ActionBar({ style, onReply, onArchive, onDelete, onMove, onUnread, onStar, starred, onMore, moreRef, canMove, onOpenInWorkSuite }: { style: NonNullable<MailPrefs['toolbar']>; onReply: (mode: ComposeSeed['mode']) => void; onArchive: () => void; onDelete: () => void; onMove: () => void; onUnread: () => void; onStar: () => void; starred: boolean; onMore: () => void; moreRef: React.Ref<HTMLButtonElement>; canMove: boolean; onOpenInWorkSuite?: () => void }) {
   const labelled = style === 'docked';
   const btn = (icon: string, label: string, run: () => void, show = true, extra?: string): ReactNode =>
     show ? (
@@ -727,6 +750,11 @@ function ActionBar({ style, onReply, onArchive, onDelete, onMove, onUnread, onSt
       Reply
     </Button>
   );
+  const openItem = onOpenInWorkSuite ? (
+    <Button icon="external" onClick={onOpenInWorkSuite} title={text('Open in WorkSuite')}>
+      {text('Open in WorkSuite')}
+    </Button>
+  ) : null;
   const more = (
     <button ref={moreRef} type="button" onClick={onMore} aria-label="More actions" title="More actions" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle">
       <Icon name="more" size={17} />
@@ -737,6 +765,7 @@ function ActionBar({ style, onReply, onArchive, onDelete, onMove, onUnread, onSt
       <div className="pointer-events-none relative h-0">
         <div role="toolbar" aria-label="Reply and actions" className="pointer-events-auto absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-0.5 rounded-full border border-line bg-surface px-1.5 py-1 shadow-[0_6px_24px_rgb(var(--ws-shadow-rgb)/0.16)]">
           {reply}
+          {openItem}
           {btn('reply-all', text('Reply all'), () => onReply('reply_all'))}
           {btn('forward', text('Forward'), () => onReply('forward'))}
           {btn('archive', text('Archive'), onArchive)}
@@ -751,6 +780,7 @@ function ActionBar({ style, onReply, onArchive, onDelete, onMove, onUnread, onSt
   return (
     <div role="toolbar" aria-label="Reply and actions" className="flex h-[54px] shrink-0 items-center gap-0.5 border-t border-line px-3">
       {reply}
+      {openItem}
       {btn('reply-all', text('Reply all'), () => onReply('reply_all'))}
       {btn('forward', text('Forward'), () => onReply('forward'))}
       {style !== 'minimal' ? (

@@ -83,8 +83,12 @@ export function wallMinutes(stamp: string): number {
   return m ? +m[1]! * 60 + +m[2]! : 0;
 }
 
+/** One formatter per time zone: building one for every message made a 90,000-message list take seconds (#162). */
+let dayFormat: { zone: string | undefined; fmt: Intl.DateTimeFormat } | null = null;
+
 export function dayKey(d: Date): string {
-  return new Intl.DateTimeFormat('en-CA', opts({ year: 'numeric', month: '2-digit', day: '2-digit' })).format(d);
+  if (!dayFormat || dayFormat.zone !== zone) dayFormat = { zone, fmt: new Intl.DateTimeFormat('en-CA', opts({ year: 'numeric', month: '2-digit', day: '2-digit' })) };
+  return dayFormat.fmt.format(d);
 }
 
 /** Today on the reader's calendar, YYYY-MM-DD. */

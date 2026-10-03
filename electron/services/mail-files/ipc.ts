@@ -8,6 +8,7 @@ import type { IpcRouter } from '../../ipc/router';
 import type { HttpClient } from '../http';
 import { openExternalSafely } from '../../security/hardening';
 import { verifySmime } from '../smime';
+import { setSpellLanguages, spellState } from '../spellcheck';
 import { exportMail } from './export';
 import { MailFiles, type WorkerChannel } from './host';
 import type { WorkerResponse } from './worker-protocol';
@@ -126,6 +127,10 @@ export function createMailFilesIpc(deps: MailFilesIpcDeps) {
     router.handle('mail:exportCancel', () => {
       if (exporting) exporting.cancel = true;
     });
+
+    // Spell check's languages (worksuite-desktop#188), for the window's own session.
+    router.handle('mail:spellLanguages', (_input, c) => spellState(c.sender.session));
+    router.handle('mail:setSpellLanguages', (input, c) => setSpellLanguages(c.sender.session, input.languages));
 
     // A link from a message, after the safe-link check in the window (DMO-SEC-03).
     router.handle('mail:openLink', async (input, c) => {

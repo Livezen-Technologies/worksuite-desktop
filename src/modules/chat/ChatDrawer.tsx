@@ -1,7 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { apiGet, apiGetMeta, apiPost } from '../../core/api';
-import { errorMessage } from '../../core/bridge';
+import { apiGetMeta, apiPost } from '../../core/api';
+import { errorMessage, isMac } from '../../core/bridge';
+import { ContextMenu } from '../../components/ContextMenu';
 import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
 import { TabProvider } from '../../core/tab-context';
@@ -24,6 +25,9 @@ import { NewChat } from './NewChat';
 import { Thread } from './Thread';
 import { openChatWindow } from './window';
 import { canCall, roomPerson, type Room } from './types';
+import { usePresence } from './presence';
+import { roomMenu } from './menus';
+import { useRoomActions } from './RoomActions';
 
 /** The web address of what the active tab shows, when it is a record. */
 function recordLink(route: string): string | null {
@@ -101,6 +105,9 @@ type Tab = 'Chats' | 'Calls' | 'Archived';
 function Lists() {
   const qc = useQueryClient();
   const me = useStore(app, (s) => s.auth?.user?.id);
+  // The conversation menu, as in Chat's list (worksuite-desktop#183).
+  const actions = useRoomActions({ onInfo: (r) => openChatDrawer(String(r.id)) });
+  const [menu, setMenu] = useState<{ x: number; y: number; id: number } | null>(null);
   const [tab, setTab] = useState<Tab>('Chats');
   const now = useNow(60_000);
   const [q, setQ] = useState('');
@@ -111,12 +118,7 @@ function Lists() {
   const all = (rooms.data?.data.rooms ?? []).filter((r) => r.type !== 'widget');
   const calls = useCallLog(tab === 'Calls');
   const people = [...new Set(all.map((r) => r.other_user_id).filter((id): id is number => typeof id === 'number'))];
-  const presence = useQuery({
-    queryKey: ['chat', 'presence', people.join(',')],
-    queryFn: ({ signal }) => apiGet<{ presence: Record<string, string> }>('/api/chat/presence', { ids: people.join(',') }, signal),
-    enabled: people.length > 0,
-    refetchInterval: 60_000,
-  });
+  const presenceOf = usePresence(people);
   const needle = q.trim().toLowerCase();
   const live = all.filter((r) => !r.archived);
   const archived = all.filter((r) => r.archived);
@@ -199,7 +201,7 @@ function Lists() {
             {!rooms.isLoading && !ordered.length ? <Empty icon="chat" title={tab === 'Archived' ? 'Nothing archived' : filter === 'Unread' ? 'Nothing unread' : filter === 'Mentions' ? 'No mentions' : 'No conversations'} /> : null}
             {ordered.map((r) => {
               const group = r.type !== 'direct';
-              const st = r.other_user_id ? PRESENCE[presence.data?.presence[String(r.other_user_id)] ?? ''] : undefined;
+              const st = r.other_user_id ? PRESENCE[presenceOf(r.other_user_id) ?? ''] : undefined;
               const mine = !!r.last_message && String(r.last_message.sender_id) === String(me);
               const text = r.last_message?.type === 'voice' ? 'Voice message' : r.last_message?.type === 'file' ? 'Attachment' : r.last_message?.type === 'call' ? 'Call' : (r.last_message?.text ?? '');
               if (tab === 'Archived') {
@@ -223,7 +225,7 @@ function Lists() {
                 );
               }
               return (
-                <button key={r.id} type="button" onClick={() => openChatDrawer(String(r.id))} className="flex w-full items-center gap-3 rounded-[12px] px-2.5 text-left hover:bg-subtle">
+                <button key={r.id} type="button" onClick={() => openChatDrawer(String(r.id))} onContextMenu={(e) => (e.preventDefault(), setMenu({ x: e.clientX, y: e.clientY, id: r.id }))} className="flex w-full items-center gap-3 rounded-[12px] px-2.5 text-left hover:bg-subtle">
                   <span className="relative shrink-0">
                     <UserAvatar userId={roomPerson(r)} name={r.avatar_name || r.name} size={46} className={group ? '!rounded-[14px]' : ''} />
                     {st ? <span className={cx('absolute right-0 bottom-0 h-3 w-3 rounded-full border-[2.5px] border-surface', st.dot)} aria-label={st.label} /> : null}
@@ -241,7 +243,7 @@ function Lists() {
                       {r.muted ? <Icon name="volume-off" size={13} className="shrink-0 text-ink-3" label="Muted" /> : null}
                       {r.pinned ? <Icon name="pin" size={13} className="shrink-0 text-ink-3" label="Pinned" /> : null}
                       {r.mentions ? <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-extrabold text-white" aria-label="Mentions you">@</span> : null}
-                      {r.unread ? <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-bold text-white">{r.unread}</span> : null}
+                      {r.unread ? <span className={cx('flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-bold text-white', r.muted ? 'bg-ink-3' : 'bg-primary')}>{r.unread}</span> : null}
                     </span>
                   </span>
                 </button>
@@ -259,6 +261,16 @@ function Lists() {
           }}
         />
       ) : null}
+      {menu && all.some((r) => r.id === menu.id) ? (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          label="Conversation actions"
+          sections={roomMenu(all.find((r) => r.id === menu.id)!, { pinned: all.filter((r) => r.pinned).length, mac: isMac }, (a) => actions.run(all.find((r) => r.id === menu.id)!, a))}
+          onClose={() => setMenu(null)}
+        />
+      ) : null}
+      {actions.dialogs}
     </>
   );
 }
@@ -269,13 +281,8 @@ function Conversation({ roomId }: { roomId: string }) {
   const [menu, setMenu] = useState(false);
   const [typing, setTyping] = useState<string[]>([]);
   const [hiddenFor, setHiddenFor] = useState<string | null>(null);
-  const presence = useQuery({
-    queryKey: ['chat', 'presence', String(room?.other_user_id ?? '')],
-    queryFn: ({ signal }) => apiGet<{ presence: Record<string, string> }>('/api/chat/presence', { ids: String(room!.other_user_id) }, signal),
-    enabled: !!room?.other_user_id,
-    refetchInterval: 60_000,
-  });
-  const st = room?.other_user_id ? PRESENCE[presence.data?.presence[String(room.other_user_id)] ?? ''] : undefined;
+  const presenceOf = usePresence([room?.other_user_id]);
+  const st = room?.other_user_id ? PRESENCE[presenceOf(room.other_user_id) ?? ''] : undefined;
   const tab = useStore(tabsStore, (s) => s.tabs.find((t) => t.id === s.activeId) ?? null);
   const link = tab ? recordLink(tab.route) : null;
   const attach = async () => {
@@ -288,19 +295,20 @@ function Conversation({ roomId }: { roomId: string }) {
     }
   };
   const recordApp = tab ? APP_CATALOGUE.find((x) => x.id === tab.app) : undefined;
-  const banner =
+  // A small chip inside the message box rather than a card over the conversation (worksuite-desktop#164).
+  const chip =
     link && tab && hiddenFor !== tab.id ? (
-      <div className="relative z-10 mx-2.5 mt-2.5 flex shrink-0 items-center gap-2.5 rounded-[12px] bg-surface py-2 pr-2 pl-2.5 shadow-[0_1px_3px_rgb(var(--ws-shadow-rgb)/.12)]">
-        <AppTile icon={recordApp?.icon ?? 'link'} colour={appColour(recordApp?.id ?? 'crm')} size={30} radius={8} iconSize={15} />
-        <span className="min-w-0 flex-1 text-[12px] leading-snug text-ink-2">
-          <b className="text-ink">{tab.title}</b> is open — messages can link to it
+      <div data-record-chip className="mx-1 mb-1 flex max-w-full items-center gap-1.5 self-start rounded-full bg-subtle py-0.5 pr-0.5 pl-1 text-[11.5px] text-ink-2">
+        <AppTile icon={recordApp?.icon ?? 'link'} colour={appColour(recordApp?.id ?? 'crm')} size={18} radius={9} iconSize={10} />
+        <span className="min-w-0 truncate" title={`${tab.title} is open — messages can link to it`}>
+          <b className="text-ink">{tab.title}</b> is open
         </span>
-        <button type="button" onClick={() => void attach()} className="flex h-[30px] shrink-0 items-center gap-1.5 rounded-full bg-selection px-3 text-[12px] font-bold text-primary hover:brightness-95">
-          <Icon name="link" size={13} />
+        <button type="button" onClick={() => void attach()} title="Attach a link to it to the conversation" className="flex h-5 shrink-0 items-center gap-1 rounded-full bg-selection px-2 text-[11px] font-bold text-primary hover:brightness-95">
+          <Icon name="link" size={11} />
           Attach record
         </button>
-        <button type="button" aria-label="Hide" title="Hide" onClick={() => setHiddenFor(tab.id)} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-ink-3 hover:bg-subtle hover:text-ink">
-          <Icon name="x" size={13} />
+        <button type="button" aria-label="Hide" title="Hide" onClick={() => setHiddenFor(tab.id)} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-ink-3 hover:bg-surface hover:text-ink">
+          <Icon name="x" size={11} />
         </button>
       </div>
     ) : null;
@@ -358,7 +366,7 @@ function Conversation({ roomId }: { roomId: string }) {
         </button>
       </div>
       <div className="min-h-0 flex-1">
-        <Thread roomId={roomId} room={room} mini bare drawer banner={banner} onTyping={setTyping} rooms={rooms.data?.data.rooms ?? []} />
+        <Thread roomId={roomId} room={room} mini bare drawer boxChip={chip} onTyping={setTyping} rooms={rooms.data?.data.rooms ?? []} />
       </div>
     </>
   );

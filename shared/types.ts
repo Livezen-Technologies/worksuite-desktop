@@ -1,4 +1,6 @@
 import type { DarkColorProfile } from './theme-profiles';
+import type { ItemLink, ItemSource } from './item-links';
+import type { LinkPrefs } from './link-prefs';
 /**
  * Types shared by the main process and the renderer. Everything crossing the
  * IPC boundary is described here and validated by the zod schemas in
@@ -251,10 +253,12 @@ export interface Preferences {
   mailCacheDays: 7 | 30 | 90 | 0;
   /** Open mailto: links in WorkSuite: it registers as the system's mail app (Settings › Mail, D04). Off until the person turns it on. */
   mailtoHandler?: boolean;
+  /** Settings › Desktop › Links (#170); unset fields take DEFAULT_LINK_PREFS (shared/link-prefs.ts). */
+  links?: Partial<LinkPrefs>;
   /** Per mailbox, how long its mail is kept on this computer (D09), overriding `mailCacheDays`. */
   mailCacheDaysByMailbox?: Record<string, 7 | 30 | 90 | 0>;
   /** Per folder ("<mailbox>:<folder>"), what this computer keeps (ENH-MAIL-03 DMO-OFF-01); unset folders follow the defaults. */
-  mailFolderOffline?: Record<string, 'recent' | 'headers' | 'online'>;
+  mailFolderOffline?: Record<string, 'all' | 'recent' | 'headers' | 'online'>;
   /** High contrast lines, text and focus ring, chosen here rather than by the system (ENH-MAIL-03 DMO-ACC-01). */
   highContrast?: boolean;
   /** New-mail banners on this computer (ENH-MAIL-03 DMO-NTF-02): every message, Focused only, VIPs only, or none. */
@@ -729,6 +733,8 @@ export interface NavigateRequest {
   /** A window docked back into the main window (source 'dock'), or a file the OS handed over (source 'file', a tab of its own): its title, and whether it goes beside the open tab. */
   title?: string;
   side?: boolean;
+  /** A WorkSuite item link (#170): opened, org-switched, access-checked and its action confirmed by the main window. */
+  item?: { link: ItemLink; source: ItemSource; app: string };
 }
 
 /**

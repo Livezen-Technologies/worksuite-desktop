@@ -88,16 +88,25 @@ export function applyFilters(rows: MessageRow[], filters: string[], now = Date.n
   );
 }
 
-const SORTERS: Record<SortKey, (a: MessageRow, b: MessageRow) => number> = {
-  date: (a, b) => parseTs(a.created_at).getTime() - parseTs(b.created_at).getTime(),
-  sender: (a, b) => (a.from_name || a.from_email).localeCompare(b.from_name || b.from_email, currentLocale(), { sensitivity: 'base' }),
-  subject: (a, b) => stripPrefix(a.subject).localeCompare(stripPrefix(b.subject), currentLocale(), { sensitivity: 'base' }),
-  size: (a, b) => (a.size ?? 0) - (b.size ?? 0),
-  read: (a, b) => Number(a.is_read) - Number(b.is_read),
-  attachment: (a, b) => Number(a.has_attachment) - Number(b.has_attachment),
-  flag: (a, b) => Number(!!a.is_important) - Number(!!b.is_important),
-  star: (a, b) => Number(a.is_starred) - Number(b.is_starred),
+/** What each sort compares, read once per message rather than once per comparison (#162: 90,000 rows). */
+const SORT_KEYS: Record<SortKey, (m: MessageRow) => string | number> = {
+  date: () => 0,
+  sender: (m) => m.from_name || m.from_email,
+  subject: (m) => stripPrefix(m.subject),
+  size: (m) => m.size ?? 0,
+  read: (m) => Number(m.is_read),
+  attachment: (m) => Number(m.has_attachment),
+  flag: (m) => Number(!!m.is_important),
+  star: (m) => Number(m.is_starred),
 };
+
+function collator(): Intl.Collator {
+  try {
+    return new Intl.Collator(currentLocale(), { sensitivity: 'base' });
+  } catch {
+    return new Intl.Collator(undefined, { sensitivity: 'base' });
+  }
+}
 
 /** "Re: Fwd: Hello" sorts as "Hello". */
 export function stripPrefix(subject: string): string {
@@ -106,17 +115,28 @@ export function stripPrefix(subject: string): string {
 
 /** Sorted on what is loaded, newest first within a tie; the server's order is the date. */
 export function sortRows(rows: MessageRow[], key: SortKey = 'date', dir: 'asc' | 'desc' = 'desc'): MessageRow[] {
-  const by = SORTERS[key] ?? SORTERS.date;
+  const k = SORT_KEYS[key] ? key : 'date';
+  const pick = SORT_KEYS[k];
   const sign = dir === 'asc' ? 1 : -1;
-  // Read, attachment, flag and star put the "yes" first when descending, which is what people mean.
-  return [...rows].sort((a, b) => sign * by(a, b) || SORTERS.date(b, a));
+  const coll = collator();
+  // Each message's key and time once, one collator for the lot: a comparison is then just a compare.
+  const items = rows.map((r) => ({ r, t: parseTs(r.created_at).getTime(), v: pick(r) }));
+  const by = (a: (typeof items)[number], b: (typeof items)[number]): number => {
+    if (k === 'date') return a.t - b.t;
+    return typeof a.v === 'string' ? coll.compare(a.v, b.v as string) : a.v - (b.v as number);
+  };
+  // Read, attachment, flag and star put the "yes" first when descending, which is what people mean; ties newest first.
+  return items.sort((a, b) => sign * by(a, b) || b.t - a.t).map((i) => i.r);
 }
 
 /** Which date band a message falls in on the reader's calendar. */
 export function dateBand(stamp: string, today = todayInZone()): { key: string; label: string; order: number } {
   const d = parseTs(stamp);
   if (Number.isNaN(d.getTime())) return { key: 'older', label: text('Older'), order: 9 };
-  const day = dayKey(d);
+  return dayBand(dayKey(d), today);
+}
+
+function dayBand(day: string, today: string): { key: string; label: string; order: number } {
   if (day >= today) return { key: 'today', label: text('Today'), order: 0 };
   if (day === addDays(today, -1)) return { key: 'yesterday', label: text('Yesterday'), order: 1 };
   if (day >= addDays(today, -6)) return { key: 'week', label: text('Earlier this week'), order: 2 };
@@ -131,7 +151,7 @@ export interface RowGroup {
   rows: MessageRow[];
 }
 
-/** The list in bands: by date, sender, folder, label or importance; or one band with no heading. */
+/** The list in bands: by date, sender, folder, label, importance or conversation; or one band with no heading. */
 export function groupRows(rows: MessageRow[], by: GroupKey = 'date', today = todayInZone()): RowGroup[] {
   if (by === 'none') return rows.length ? [{ key: 'all', label: '', rows }] : [];
   const groups = new Map<string, RowGroup>();
@@ -140,15 +160,24 @@ export function groupRows(rows: MessageRow[], by: GroupKey = 'date', today = tod
     g.rows.push(m);
     groups.set(key, g);
   };
+  // A band's name is worked out once per day, not once per message (#162: 90,000 rows took seconds).
+  const bands = new Map<string, { key: string; label: string; order: number }>();
   for (const m of rows) {
     if (by === 'date') {
-      const b = dateBand(m.created_at, today);
+      const d = parseTs(m.created_at);
+      const day = Number.isNaN(d.getTime()) ? '' : dayKey(d);
+      let b = bands.get(day);
+      if (!b) bands.set(day, (b = day ? dayBand(day, today) : { key: 'older', label: text('Older'), order: 9 }));
       add(b.key, b.label, m);
     } else if (by === 'sender') add(`s:${(m.from_email || m.from_name).toLowerCase()}`, m.from_name || m.from_email, m);
     else if (by === 'folder') add(`f:${m.folder_slug ?? m.folder ?? ''}`, m.folder ? folderName(m.folder) : text('Inbox'), m);
     else if (by === 'label') {
       const l = m.labels?.[0];
       add(l ? `l:${l.id}` : 'l:none', l ? l.name : text('No label'), m);
+    } else if (by === 'conversation') {
+      // One band per conversation, named by its subject without Re:/Fwd: (worksuite-desktop#168).
+      const subject = m.subject.replace(/^\s*((re|fwd?|aw|wg|sv|tr)\s*:\s*)+/i, '').trim();
+      add(`c:${m.conversation_key ?? subject.toLowerCase()}`, subject || text('(no subject)'), m);
     } else add(m.is_important || m.is_starred ? 'p:high' : 'p:normal', m.is_important || m.is_starred ? text('Important') : text('Everything else'), m);
   }
   // Groups keep the order their first message has in the sorted list — except the date bands, which keep their own.

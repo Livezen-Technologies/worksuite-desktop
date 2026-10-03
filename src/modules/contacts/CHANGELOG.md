@@ -4,6 +4,18 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.0 — 2026-10-03
+
+- Two-way sync with Google Contacts, Outlook / Microsoft 365, iCloud and other CardDAV address books (Mac Contacts needs a native add-on, not yet built): a preview before the first sync, matched contacts linked instead of duplicated, per-field conflict rules with a Sync conflicts list, deletions archived or unlinked, a per-account log, Settings › Contacts › Accounts & sync, an Accounts filter in the sidebar, source marks, "Synced with …" with Unlink, and Tidy up › Possible duplicates with a side-by-side merge and Undo. Also: one New contact / Import / Export each, no repeated name as subtitle, one phone format, and imports no longer default to Customer (#175).
+
+## 1.1.0 — 2026-10-03
+
+- Phone numbers are indexed in E.164 so WhatsApp (and later Calls and SMS) can match them; a contact's drawer has a WhatsApp action (#176).
+
+## 1.0.2 — 2026-10-03
+
+- The sidebar's New button is the shared primary action button: same size, colour, plus icon and quiet shadow as every module; the shortcut is in its tooltip (#171).
+
 ## 1.0.1 — 2026-10-02
 
 - Open the conversation on a contact opens it in Chat's WhatsApp channel instead of the browser (#35).

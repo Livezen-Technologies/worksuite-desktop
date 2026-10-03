@@ -24,6 +24,7 @@ import { openMeeting } from '../meet/api';
 import { startMeetingFromChat } from '../meet/start';
 import { LinkedText } from '../../components/LinkedText';
 import { DriveShareCard, type DriveCard } from './cards/DriveMeetCards';
+import { FileShareCard, type FileShareCardData } from './cards/FileShareCard';
 import { RecordMessage } from './cards/RecordMessage';
 import { CardFrame } from './cards/CardFrame';
 import { RecordCards } from './cards/RecordCards';
@@ -34,6 +35,7 @@ import { ForwardDialog, type RoomDetail } from './NewChat';
 import { EmojiPicker, VoicePlayer } from './parts';
 import { AttachmentGallery, openChatAttachment, useAttachmentGallery } from './AttachmentViewer';
 import { canCall, mediaUrl, roomPerson, type ChatMessage, type Room } from './types';
+import { usePresence } from './presence';
 
 export interface ReplyTarget {
   id: number;
@@ -56,7 +58,7 @@ export function Thread({
   mini,
   bare,
   drawer,
-  banner,
+  boxChip,
   onTyping,
   rooms,
   detailsOpen,
@@ -68,8 +70,8 @@ export function Thread({
   bare?: boolean;
   /** The chat drawer's conversation: its bubbles, action bar, quick actions and message box. */
   drawer?: boolean;
-  /** Shown over the top of the messages (the drawer's "record is open" card). */
-  banner?: ReactNode;
+  /** Shown inside the message box, above the line you type in (the drawer's "record is open" chip, worksuite-desktop#164). */
+  boxChip?: ReactNode;
   /** Who is typing, for a header drawn outside the thread. */
   onTyping?: (names: string[]) => void;
   rooms: Room[];
@@ -101,8 +103,8 @@ export function Thread({
     getNextPageParam: (last) => (last.messages.length >= 40 ? last.messages[0]?.id : undefined),
   });
   const detail = useQuery({ queryKey: ['chat', 'room', roomId], queryFn: ({ signal }) => apiGet<RoomDetail>(`/api/chat/rooms/${roomId}`, undefined, signal), enabled: !mini });
-  const ids = (detail.data?.members ?? []).map((m) => m.id).join(',');
-  const presence = useQuery({ queryKey: ['chat', 'presence', ids], queryFn: ({ signal }) => apiGet<{ presence: Record<string, string> }>('/api/chat/presence', { ids }, signal), enabled: ids !== '', refetchInterval: 60_000 });
+  // One presence for everybody, the list's and this header's (worksuite-desktop#183).
+  const presenceOf = usePresence([...(detail.data?.members ?? []).map((m) => m.id), room?.other_user_id]);
   const pins = useQuery({ queryKey: ['chat', 'pins', roomId], queryFn: ({ signal }) => apiGet<{ messages: ChatMessage[] }>(`/api/chat/rooms/${roomId}/pins`, undefined, signal) });
   const found = useQuery({
     queryKey: ['chat', 'search', roomId, find.trim()],
@@ -156,6 +158,8 @@ export function Thread({
       }
       if ((e.type === 'chat.typing.stopped' || e.type === 'chat.message') && who) drop(who);
       if (e.type === 'chat.message.pinned') void qc.invalidateQueries({ queryKey: ['chat', 'pins', roomId] });
+      // A share card's access changed, or another file joined it (worksuite-desktop#164): drawn again for this reader.
+      if (e.type === 'chat.message.card') void qc.invalidateQueries({ queryKey: ['chat', 'messages', roomId] });
     });
     return () => {
       off();
@@ -179,8 +183,8 @@ export function Thread({
 
   const group = room?.type !== undefined && room.type !== 'direct';
   const members = detail.data?.members ?? [];
-  const online = members.filter((m) => presence.data?.presence[String(m.id)] === 'online').length;
-  const other = room?.other_user_id ? presence.data?.presence[String(room.other_user_id)] : undefined;
+  const online = members.filter((m) => presenceOf(m.id) === 'online').length;
+  const other = room?.other_user_id ? presenceOf(room.other_user_id) : undefined;
   const subtitle = group ? `Group · ${members.length || '…'} members${online ? ` · ${online} online` : ''}` : ((other ? PRESENCE[other]?.label : null) ?? 'Direct message');
   const pinned = pins.data?.messages ?? [];
   const days = messages.map((m, i) => {
@@ -291,7 +295,6 @@ export function Thread({
           ) : null}
         </div>
       ) : null}
-      {banner}
       <div ref={scroller} className={cx('min-h-0 flex-1 overflow-y-auto scroll-thin', drawer ? 'px-3 pt-1 pb-3' : 'px-5 py-3.5')}>
         {msgs.hasNextPage ? (
           <div className="mb-3 text-center">
@@ -350,39 +353,54 @@ export function Thread({
           </div>
         ))}
       </div>
-      <Composer
-        ref={composer}
-        roomId={roomId}
-        roomName={room?.name ?? 'this conversation'}
-        group={group}
-        reply={reply}
-        onClearReply={() => setReply(null)}
-        typing={Object.values(typing)}
-        compact={mini || bare}
-        look={drawer ? 'pill' : 'box'}
-        extras={
-          drawer ? (
-            <div className="flex flex-wrap gap-1.5 text-[12px] font-bold">
-              {tasksAllowed ? (
-                <button type="button" onClick={() => navigate(`/tasks?new=1&title=${encodeURIComponent(`Follow up: ${room?.name ?? 'conversation'}`.slice(0, 200))}`)} className={chip}>
-                  <Icon name="tasks" size={14} className="text-primary" />
-                  Create task
+      {room?.blocked ? (
+        // A person I blocked can't message me, and I can't message them until I unblock them (worksuite-desktop#183).
+        <div role="status" className="flex shrink-0 items-center justify-center gap-1.5 border-t border-line bg-surface px-4 py-3 text-[13px] text-ink-2">
+          You blocked {room.name} ·
+          <button
+            type="button"
+            className="font-bold text-primary hover:underline"
+            onClick={() => void apiPost(`/api/chat/rooms/${roomId}/unblock`).then(() => qc.invalidateQueries({ queryKey: ['chat', 'rooms'] }), (e) => toast('error', errorMessage(e)))}
+          >
+            Unblock
+          </button>
+        </div>
+      ) : (
+        <Composer
+          ref={composer}
+          roomId={roomId}
+          roomName={room?.name ?? 'this conversation'}
+          group={group}
+          reply={reply}
+          onClearReply={() => setReply(null)}
+          typing={Object.values(typing)}
+          compact={mini || bare}
+          look={drawer ? 'pill' : 'box'}
+          inside={boxChip}
+          extras={
+            drawer ? (
+              <div className="flex flex-wrap gap-1.5 text-[12px] font-bold">
+                {tasksAllowed ? (
+                  <button type="button" onClick={() => navigate(`/tasks?new=1&title=${encodeURIComponent(`Follow up: ${room?.name ?? 'conversation'}`.slice(0, 200))}`)} className={chip}>
+                    <Icon name="tasks" size={14} className="text-primary" />
+                    Create task
+                  </button>
+                ) : null}
+                {notesAllowed ? (
+                  <button type="button" disabled={saving} onClick={() => void saveAsNote()} className={chip}>
+                    <Icon name="notebook" size={14} className="text-[#CA8A04]" />
+                    {saving ? 'Saving…' : 'Save as note'}
+                  </button>
+                ) : null}
+                <button type="button" aria-label="Search in conversation" aria-pressed={searching} onClick={() => setSearching(!searching)} className={cx(chip, searching && '!border-primary !bg-selection !text-primary')}>
+                  <Icon name="search" size={14} className="text-ink-2" />
+                  Search
                 </button>
-              ) : null}
-              {notesAllowed ? (
-                <button type="button" disabled={saving} onClick={() => void saveAsNote()} className={chip}>
-                  <Icon name="notebook" size={14} className="text-[#CA8A04]" />
-                  {saving ? 'Saving…' : 'Save as note'}
-                </button>
-              ) : null}
-              <button type="button" aria-label="Search in conversation" aria-pressed={searching} onClick={() => setSearching(!searching)} className={cx(chip, searching && '!border-primary !bg-selection !text-primary')}>
-                <Icon name="search" size={14} className="text-ink-2" />
-                Search
-              </button>
-            </div>
-          ) : null
-        }
-      />
+              </div>
+            ) : null
+          }
+        />
+      )}
       {drag ? (
         <div className="pointer-events-none absolute inset-3 flex items-center justify-center rounded-[14px] border-2 border-dashed border-primary bg-selection/80 text-[15px] font-semibold text-primary">
           Drop to add to the message for {room?.name ?? 'this conversation'}
@@ -393,12 +411,16 @@ export function Thread({
   );
 }
 
-type Card = { kind: string; available?: boolean; why?: string; heading?: string; name?: string; owner?: string; who?: string; what?: string; link?: string };
+type Card = { kind: string; available?: boolean; why?: string; heading?: string; name?: string; owner?: string; who?: string; what?: string; link?: string; note?: string | null };
+
+/** A share card (worksuite-desktop#164) draws its own headline: only the sharer's own words are shown above it. */
+const cardText = (m: ChatMessage & { card?: Card | null }, text: string | null | undefined) => (m.card?.kind === 'drive.share' ? (m.card.note ?? null) : text);
 
 function MessageRecords({ m, named, openLink, visible }: { m: ChatMessage & { card?: Card | null }; named: boolean; openLink: (link: string) => void; visible: ReadonlySet<string> }) {
   if (named) return <RecordCards text={m.message} />;
   const card = m.card;
   if (!card) return null;
+  if (card.kind === 'drive.share') return <FileShareCard card={card as unknown as FileShareCardData} onOpen={openLink} />;
   if (card.kind.startsWith('drive.')) return <DriveShareCard card={card as DriveCard} onOpen={openLink} />;
   return <CardFrame kind="link" label={card.heading ?? card.kind.split('.')[0]} state={card.available === false ? 'noaccess' : 'ok'} gone={card.available === false ? { title: 'You don’t have access', sub: card.why ?? '' } : undefined}
     actions={card.available !== false && card.link && canOpenLink(card.link, visible) ? [{ label: 'Open', onClick: () => openLink(card.link!) }] : []}>
@@ -416,7 +438,7 @@ function Bubble({ m, own, lastCard, cardContinuation, roomId, onReply, onForward
   const [deleting, setDeleting] = useState<'everyone' | 'me' | null>(null);
   const origin = useStore(app, (x) => x.auth?.server?.origin);
   const named = !m.deleted && !m.card && recordsIn(m.message, origin).length > 0;
-  const shownText = named && m.message ? withoutRecordLines(m.message, origin) : m.message;
+  const shownText = cardText(m, named && m.message ? withoutRecordLines(m.message, origin) : m.message);
   // Record messages give up their width in a narrow column.
   const carded = named || (!!m.card && !m.deleted);
   const can = m.can ?? {};
@@ -758,7 +780,7 @@ function DrawerBubble({ m, own, lastCard, cardContinuation, group, first, roomId
   // On dark the other side's bubbles sit a shade above the wallpaper, and inside
   // your own the accents go pale: indigo on indigo is not readable.
   const cards = !m.deleted && !m.card && recordsIn(m.message, origin).length > 0;
-  const shownText = cards && m.message ? withoutRecordLines(m.message, origin) : m.message;
+  const shownText = cardText(m, cards && m.message ? withoutRecordLines(m.message, origin) : m.message);
   const tone = own ? 'bg-[#DCE3FB] dark:bg-[#26366E]' : 'bg-surface dark:bg-well';
   const accent = own ? 'text-primary dark:text-[#B4C3FF]' : 'text-primary';
   const toolBtn = 'flex h-7 w-7 items-center justify-center rounded-[7px] text-ink-2 hover:bg-subtle hover:text-ink';

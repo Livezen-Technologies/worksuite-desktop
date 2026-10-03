@@ -4,10 +4,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as CoreApi from '../../../src/core/api';
+import type * as Tabs from '../../../src/core/tabs';
 
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiGetMeta: vi.fn(), apiPost: vi.fn(), apiPut: vi.fn(), apiDelete: vi.fn() }));
 vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(async () => null), on: () => () => undefined, errorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)), isMac: false, hasDesktop: () => true }));
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
+const tabs = vi.hoisted(() => ({ navigate: vi.fn() }));
+vi.mock('../../../src/core/tabs', async (orig) => ({ ...(await orig<typeof Tabs>()), navigate: tabs.navigate }));
 
 import { ApiError, apiGet, apiGetMeta, apiPost } from '../../../src/core/api';
 import { app } from '../../../src/core/app-state';
@@ -68,6 +71,22 @@ describe('the one sync status (DMO-SYN-05…07, 14)', () => {
     expect(stale.warning).toBe('Sales not synced for 1 h');
     // A wider threshold: not stale yet.
     expect(syncSummary(status([acct(1), acct(2, { last_ok_at: at(75) })]), { offline: false, staleMinutes: 180 }).state).toBe('up_to_date');
+  });
+
+  it('is amber, never green, for an account that is only out of date; red for a failure (#172)', () => {
+    expect(syncSummary(status([acct(1), acct(2, { name: 'Sales', last_ok_at: at(5 * 24 * 60) })]), { offline: false }).tone).toBe('warning');
+    expect(syncSummary(status([acct(1), acct(2, { last_result: 'failed', error: 'x' })]), { offline: false }).tone).toBe('danger');
+  });
+
+  it('counts live push connections from the real connection state (#172)', () => {
+    const push = (id: number) => acct(id, { mode: 'push', pushed: true });
+    const box = (id: number, up: boolean) => ({ mailbox: id, status: up ? 'live' : 'degraded', serving: true, lag_seconds: 0, pushed: up, problem: null, last_sync_at: null });
+    const both = syncSummary({ ...status([push(1), push(2)]), mailboxes: [box(1, true), box(2, true)] }, { offline: false });
+    expect([both.state, both.live, both.pushTotal, both.detail]).toEqual(['up_to_date', 2, 2, '2 of 2 mailboxes live']);
+    const none = syncSummary({ ...status([push(1), push(2)]), mailboxes: [box(1, false), box(2, false)] }, { offline: false });
+    expect([none.live, none.liveLine, none.detail]).toEqual([0, '0 of 2 mailboxes live', '2 of 2 accounts']);
+    // An account checked on a schedule has no live connection to count.
+    expect(syncSummary(status([acct(1)]), { offline: false }).liveLine).toBeNull();
   });
 
   it('is offline with the last successful sync, and paused when every account is (DMO-SYN-13)', () => {
@@ -288,6 +307,19 @@ describe('the folder pane and lists (DMO-ALL-01…11, DMO-SYN-01…04)', () => {
     expect(within(nav).getByText('Needs attention · me · Gmail failed')).toBeTruthy();
     const bar = screen.getByRole('status', { name: 'Mail status' });
     expect(within(bar).getByText('me · Gmail not synced for 3 h — fix')).toBeTruthy();
+  });
+
+  it('opens each account\'s details from the footer card, with Sync all, Sync now and Fix (#172)', async () => {
+    show();
+    const nav = await screen.findByRole('navigation', { name: 'Mail' });
+    await within(nav).findByRole('button', { name: 'Retry' });
+    fireEvent.click(within(nav).getByRole('button', { name: /Needs attention/ }));
+    const details = await screen.findByRole('dialog', { name: 'Sync status' });
+    expect(within(details).getByRole('button', { name: 'Sync all' })).toBeTruthy();
+    expect(within(details).getAllByRole('button', { name: /^Sync .* now$/ }).length).toBeGreaterThan(0);
+    fireEvent.click(within(details).getAllByRole('button', { name: /^Fix / })[0]!);
+    // Settings is another module: it opens through the app's tabs.
+    await waitFor(() => expect(tabs.navigate).toHaveBeenCalledWith('/settings/mail'));
   });
 
   it('syncs every included account with Sync all and with Ctrl+Shift+R, and one account with its own button', async () => {

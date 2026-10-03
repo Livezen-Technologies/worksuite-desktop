@@ -8,6 +8,10 @@ import { Icon } from '../../components/Icon';
 import { ErrorNote, OfflineNote, Spinner, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
 import { initials, matches, pillOf, subLine, typeOf, type Contact, type ContactDetail, type Group, type Stats } from './api';
+import { formatPhone, toE164 } from '../../core/phone';
+import { useSyncAccounts } from './sync/AccountsSettings';
+import { SourceIcons } from './sync/SourceIcon';
+import { TidyUp } from './TidyUp';
 import { Directory } from './Directory';
 import { ContactDrawer } from './Drawer';
 import { EditDrawer } from './EditDrawer';
@@ -21,12 +25,15 @@ const LAYOUT_KEY = 'contacts.layout';
 function placeFrom(q: URLSearchParams): Place {
   const g = q.get('group');
   if (g && /^\d+$/.test(g)) return { group: Number(g) };
+  const a = q.get('account');
+  if (a && /^\d+$/.test(a)) return { account: Number(a) };
   const v = q.get('view') as View | null;
   return { view: v && VIEWS.some((x) => x.id === v) ? v : 'all' };
 }
 
 function paramsOf(place: Place): Record<string, string | number> {
   if ('group' in place) return { group: place.group };
+  if ('account' in place) return { account: place.account };
   switch (place.view) {
     case 'fav':
       return { favorites: 1 };
@@ -75,14 +82,15 @@ export default function ContactsPage(_props: ModuleProps) {
   const [layout, setLayoutState] = useState<Layout>(storedLayout);
   const [editing, setEditing] = useState<{ contact: ContactDetail | null } | null>(query.get('new') === '1' ? { contact: null } : null);
   const [importing, setImporting] = useState(query.get('import') === '1');
-  const [exportOpen, setExportOpen] = useState(false);
   const [addingGroup, setAddingGroup] = useState(false);
   const directory = 'view' in place && place.view === 'directory';
+  const tidy = 'view' in place && place.view === 'tidy';
+  const accounts = useSyncAccounts();
 
   const list = useQuery({
     queryKey: ['contacts', 'list', place],
     queryFn: ({ signal }) => apiGetMeta<Contact[]>('/api/contacts', paramsOf(place), signal),
-    enabled: !directory,
+    enabled: !directory && !tidy,
     refetchInterval: 120_000,
   });
   const stats = useQuery({ queryKey: ['contacts', 'stats'], queryFn: ({ signal }) => apiGet<Stats>('/api/contacts/stats', undefined, signal) });
@@ -108,7 +116,7 @@ export default function ContactsPage(_props: ModuleProps) {
   };
   const setPlace = (p: Place) => {
     setQ('');
-    set({ view: 'view' in p && p.view !== 'all' ? p.view : null, group: 'group' in p ? String(p.group) : null, open: null });
+    set({ view: 'view' in p && p.view !== 'all' ? p.view : null, group: 'group' in p ? String(p.group) : null, account: 'account' in p ? String(p.account) : null, tab: null, open: null });
   };
   const open = (id: number | null) => set({ open: id ? String(id) : null });
   const setLayout = (l: Layout) => {
@@ -134,7 +142,6 @@ export default function ContactsPage(_props: ModuleProps) {
   };
 
   const exportAs = async (kind: 'csv' | 'vcf') => {
-    setExportOpen(false);
     const name = `worksuite-contacts.${kind}`;
     try {
       await call('transfers:download', { export: kind === 'csv' ? 'contacts-csv' : 'contacts-vcf', name });
@@ -165,7 +172,8 @@ export default function ContactsPage(_props: ModuleProps) {
   });
 
   const group = 'group' in place ? groups.find((g) => g.id === place.group) : undefined;
-  const title = 'group' in place ? (group?.name ?? 'Group') : VIEWS.find((v) => v.id === place.view)!.label;
+  const account = 'account' in place ? accounts.data?.find((a) => a.id === place.account) : undefined;
+  const title = 'group' in place ? (group?.name ?? 'Group') : 'account' in place ? (account ? `${account.provider_label}${account.email ? ` · ${account.email}` : ''}` : 'Account') : VIEWS.find((v) => v.id === place.view)!.label;
   const newGroup = () => setAddingGroup(true);
 
   return (
@@ -175,10 +183,11 @@ export default function ContactsPage(_props: ModuleProps) {
           place={place}
           stats={stats.data}
           groups={groups}
+          accounts={accounts.data}
           onPlace={setPlace}
           onNew={() => setEditing({ contact: null })}
           onImport={canImport ? () => setImporting(true) : undefined}
-          onExport={() => setExportOpen(true)}
+          onExport={(k) => void exportAs(k)}
           adding={addingGroup}
           setAdding={setAddingGroup}
         />
@@ -186,42 +195,14 @@ export default function ContactsPage(_props: ModuleProps) {
       <main aria-label={title} className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
         {directory ? (
           <Directory onNewGroup={newGroup} onNew={() => setEditing({ contact: null })} />
+        ) : tidy ? (
+          <TidyUp tab={query.get('tab') === 'conflicts' ? 'conflicts' : 'duplicates'} onTab={(t) => set({ tab: t === 'conflicts' ? t : null })} onOpen={(id) => open(id)} />
         ) : (
           <>
             <div className="flex items-center gap-2.5 px-6 pt-5">
               <h1 className="min-w-0 flex-1 truncate text-[22px] font-bold tracking-[-0.3px] text-ink">{title}</h1>
-              {canImport ? (
-                <button type="button" onClick={() => setImporting(true)} className={headBtn}>
-                  <Icon name="upload" size={15} /> Import
-                </button>
-              ) : null}
-              <div className="relative">
-                <button type="button" aria-haspopup="menu" aria-expanded={exportOpen} onClick={() => setExportOpen(!exportOpen)} className={headBtn}>
-                  <Icon name="download" size={15} /> Export <Icon name="chevron-down" size={14} />
-                </button>
-                {exportOpen ? (
-                  <>
-                    <div className="fixed inset-0 z-10" onMouseDown={() => setExportOpen(false)} />
-                    <div role="menu" aria-label="Export" className="absolute top-[42px] right-0 z-20 w-[190px] rounded-[12px] border border-line bg-surface p-1.5 shadow-[0_12px_32px_rgb(var(--ws-shadow-rgb)/.16)]">
-                      {(
-                        [
-                          ['csv', 'CSV (.csv)'],
-                          ['vcf', 'vCard (.vcf)'],
-                        ] as const
-                      ).map(([k, l]) => (
-                        <button key={k} type="button" role="menuitem" onClick={() => void exportAs(k)} className="flex h-[34px] w-full items-center gap-2 rounded-[8px] px-2.5 text-left text-[12.5px] font-semibold text-ink hover:bg-ground">
-                          <Icon name={k === 'csv' ? 'file-sheet' : 'contact'} size={15} className="text-ink-2" /> {l}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                ) : null}
-              </div>
               <button type="button" onClick={newGroup} className={headBtn}>
                 <Icon name="users" size={15} /> New group
-              </button>
-              <button type="button" onClick={() => setEditing({ contact: null })} className="flex h-9 items-center gap-[7px] rounded-[10px] bg-primary px-3.5 font-bold text-white hover:bg-primary-hover">
-                <Icon name="plus" size={15} /> New contact
               </button>
             </div>
             <div className="flex gap-2.5 px-6 pt-4">
@@ -363,6 +344,7 @@ function Card({ c, selected, onOpen, onStar }: { c: Contact; selected: boolean; 
         <span className="truncate text-[12px] text-ink-3">{subLine(c)}</span>
         <span className="mt-1 flex gap-1 overflow-hidden">
           <Pill type={c.type} />
+          <SourceIcons sources={c.sources} />
           {c.labels.slice(0, 1).map((l) => (
             <span key={l} className="inline-flex h-5 items-center truncate rounded-[10px] bg-selection px-[7px] text-[11px] font-semibold text-primary">{l}</span>
           ))}
@@ -379,13 +361,16 @@ function Row({ c, selected, narrow, onOpen, onStar }: { c: Contact; selected: bo
       <button type="button" aria-label={c.display_name} onClick={onOpen} className="absolute inset-0" />
       <Avatar c={c} size={36} />
       <span role="cell" className="pointer-events-none flex min-w-0 flex-1 flex-col">
-        <b className="truncate text-[13px] text-ink">{c.display_name}</b>
+        <span className="flex min-w-0 items-center gap-1.5">
+          <b className="truncate text-[13px] text-ink">{c.display_name}</b>
+          <SourceIcons sources={c.sources} size={13} />
+        </span>
         <span className="truncate text-[11.5px] text-ink-3">{subLine(c)}</span>
       </span>
       {!narrow ? (
         <>
           <span role="cell" className="pointer-events-none w-[220px] truncate text-[12.5px] text-ink-2">{c.email || '—'}</span>
-          <span role="cell" className="pointer-events-none w-[140px] truncate text-[12.5px] text-ink-2 tabular-nums">{c.phone || '—'}</span>
+          <span role="cell" className="pointer-events-none w-[140px] truncate text-[12.5px] text-ink-2 tabular-nums">{c.phone ? formatPhone(toE164(c.phone)) || c.phone : '—'}</span>
         </>
       ) : null}
       <span role="cell" className="pointer-events-none w-[84px]"><Pill type={c.type} /></span>

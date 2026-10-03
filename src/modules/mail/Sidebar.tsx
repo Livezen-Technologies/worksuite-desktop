@@ -6,9 +6,12 @@ import { text } from '../../core/i18n';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { type MenuSection } from '../../components/Menu';
+import { PrimaryActionButton, SidebarIconButton } from '../../components/PrimaryAction';
+import { SyncButton, useSyncFeedback } from '../../components/SyncButton';
 import { Button, DATA_TEXT, Kbd, Modal, Spinner, TextField, cx } from '../../components/ui';
 import { ContextMenu } from './MessageMenus';
-import { mailKeys, useFolders, useLabels } from './api';
+import { isCoreFolder, isEmptyableFolder, mailKeys, syncFolder, useFolderInfo, useFolders, useLabels } from './api';
+import { FolderDialogs, readCountModes, runFolderOp, writeCountModes, type FolderDialog } from './FolderDialogs';
 import { app, updatePrefs } from '../../core/app-state';
 import { useStore } from '../../core/store';
 import { defaultFolderOffline, folderOffline, type FolderOffline } from '@shared/mailto';
@@ -50,6 +53,8 @@ export interface SidebarProps {
   pending: number;
   cacheDays: number;
   onCompose: () => void;
+  /** The ⌄ part of New email: from a template, in a new window, an event, a contact (worksuite-desktop#171). */
+  newMenu?: MenuSection[];
   onSearch: () => void;
   onAddMailbox: () => void;
   onPick: (p: Partial<Place>) => void;
@@ -145,6 +150,10 @@ export function MailSidebar(p: SidebarProps) {
   const [folderMenu, setFolderMenu] = useState<FolderMenu | null>(null);
   // A folder's properties, and what this computer keeps of each folder (DMO-OFF-01, DMO-DAT-05).
   const [props, setProps] = useState<{ box: Mailbox; slug: string; label: string } | null>(null);
+  // New subfolder, rename, move, delete and empty (worksuite-desktop#162), and each folder's count: unread or total.
+  const [dialog, setDialog] = useState<FolderDialog | null>(null);
+  const [countModes, setCountModes] = useState(readCountModes);
+  const qc = useQueryClient();
   const offlinePrefs = useStore(app, (s) => s.prefs ?? null);
   const many = p.boxes.length > 1;
   const inAll = p.place.box === 'unified' && !p.place.view && p.place.label === null;
@@ -163,13 +172,8 @@ export function MailSidebar(p: SidebarProps) {
   return (
     <nav aria-label="Mail" className="flex w-[260px] shrink-0 flex-col border-r border-line bg-surface">
       <div className="flex gap-2 p-3 pb-1">
-        <Button data-guide="mail.compose" variant="accent" size="action-lg" icon="compose" className="flex-1" onClick={p.onCompose} title={text('New email (N)')} aria-keyshortcuts="N">
-          <span className="min-w-0 flex-1 text-left">{text('New email')}</span>
-          <Kbd tone="accent" aria-hidden>
-            N
-          </Kbd>
-        </Button>
-        <Button variant="glass" size="action-icon" icon="search" onClick={p.onSearch} aria-label={text('Search mail')} title={text('Search mail (/)')} />
+        <PrimaryActionButton data-guide="mail.compose" label={text('New email')} shortcut="N" onClick={p.onCompose} menu={p.newMenu} menuLabel={text('New')} className="flex-1" />
+        <SidebarIconButton icon="search" onClick={p.onSearch} label={text('Search mail')} shortcut="/" />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2 scroll-thin">
         {p.favorites?.length ? (
@@ -230,7 +234,13 @@ export function MailSidebar(p: SidebarProps) {
               const open = expanded(b);
               const a = account(b.id);
               return (
-                <li key={b.id}>
+                <li
+                  key={b.id}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setFolderMenu({ x: e.clientX, y: e.clientY, key: `${b.id}:inbox`, label: text('Inbox'), box: b, slug: null, account: true });
+                  }}
+                >
                   <AccountRow
                     box={b}
                     account={a}
@@ -243,7 +253,7 @@ export function MailSidebar(p: SidebarProps) {
                     onPick={() => p.onPick({ box: String(b.id), view: null, folder: 'inbox', label: null })}
                     onSync={() => p.onSyncAccount(b.id)}
                   />
-                  {open ? <FolderTree box={b} place={p.place} active={p.active} onPick={p.onPick} onAdd={() => setNaming({ kind: 'folder', box: b })} onMenu={(x, y, f) => setFolderMenu({ x, y, key: `${b.id}:${f.slug}`, label: f.slug.startsWith('label:') ? folderName(f.name) : f.name, box: b, slug: f.slug })} /> : null}
+                  {open ? <FolderTree box={b} place={p.place} active={p.active} countModes={countModes} onPick={p.onPick} onAdd={() => setNaming({ kind: 'folder', box: b })} onMenu={(x, y, f) => setFolderMenu({ x, y, key: `${b.id}:${f.slug}`, label: f.slug.startsWith('label:') ? folderName(f.name) : f.name, box: b, slug: f.slug, unread: f.unread })} /> : null}
                 </li>
               );
             })}
@@ -282,9 +292,7 @@ export function MailSidebar(p: SidebarProps) {
 
         {p.showLabels ? <LabelSection open={memory.labels} onToggle={() => remember({ labels: !memory.labels })} onAdd={() => setNaming({ kind: 'label', box: null })} place={p.place} active={p.active} onPick={p.onPick} /> : null}
       </div>
-      <button type="button" onClick={p.onSettings} title={text('Mail accounts, offline and storage settings')} className="block text-left">
-        <SyncCard summary={p.summary} pending={p.pending} cacheDays={p.cacheDays} />
-      </button>
+      <SyncDetails summary={p.summary} pending={p.pending} cacheDays={p.cacheDays} accounts={p.accounts} boxes={p.boxes} running={p.running} syncingAll={p.syncingAll} offline={p.offline} onSyncAll={p.onSyncAll} onSyncAccount={p.onSyncAccount} onSettings={p.onSettings} />
       {naming ? <NameDialog kind={naming.kind} mailbox={naming.box} onClose={() => setNaming(null)} /> : null}
       {folderMenu ? (
         <ContextMenu
@@ -292,10 +300,34 @@ export function MailSidebar(p: SidebarProps) {
           y={folderMenu.y}
           label={text('Folder actions')}
           onClose={() => setFolderMenu(null)}
-          sections={folderSections(folderMenu, p, () => setNaming({ kind: 'folder', box: folderMenu.box }), offlinePrefs, () => setProps({ box: folderMenu.box!, slug: folderMenu.slug!, label: folderMenu.label }))}
+          sections={folderSections(folderMenu, p, () => setNaming({ kind: 'folder', box: folderMenu.box }), offlinePrefs, () => setProps({ box: folderMenu.box!, slug: folderMenu.slug!, label: folderMenu.label }), {
+            open: (kind) => folderMenu.box && setDialog({ kind, target: { box: folderMenu.box, slug: folderMenu.slug ?? 'inbox', label: folderMenu.label } }),
+            readAll: () => folderMenu.box && void runFolderOp(qc, 'read-all', { box: folderMenu.box, slug: folderMenu.slug ?? 'inbox', label: folderMenu.label }, {}, text('Everything in {folder} is marked as read.', { folder: folderMenu.label })),
+            syncFolder: () => {
+              const box = folderMenu.box;
+              const slug = folderMenu.slug ?? 'inbox';
+              if (!box) return;
+              void syncFolder(box.id, slug)
+                .then(() => {
+                  void qc.invalidateQueries({ queryKey: ['mail'] });
+                  toast('success', text('{folder} is up to date.', { folder: folderMenu.label }));
+                })
+                .catch((e) => toast('error', errorMessage(e)));
+            },
+            countMode: countModes[folderMenu.key] ?? 'unread',
+            setCountMode: (mode) =>
+              setCountModes((m) => {
+                const next = { ...m };
+                if (mode === 'total') next[folderMenu.key] = 'total';
+                else delete next[folderMenu.key];
+                writeCountModes(next);
+                return next;
+              }),
+          })}
         />
       ) : null}
       {props ? <FolderProperties box={props.box} slug={props.slug} label={props.label} prefs={offlinePrefs} onClose={() => setProps(null)} /> : null}
+      {dialog ? <FolderDialogs dialog={dialog} offline={p.offline} onClose={() => setDialog(null)} /> : null}
     </nav>
   );
 }
@@ -328,6 +360,7 @@ function AccountRow({ box, account, running, offline, open, count, active, onTog
   const why = account?.error ?? box.last_error ?? text('The last sync did not finish.');
   const name = mailboxName(box);
   const status = account ? accountState(account) : null;
+  const feedback = useSyncFeedback(running, account?.last_result === 'failed');
   return (
     <div className={cx('group relative flex h-[30px] items-center rounded-[8px]', active ? 'bg-selection' : 'hover:bg-subtle')}>
       <button type="button" onClick={onToggle} aria-expanded={open} aria-label={open ? text('Hide the folders of {name}', { name }) : text('Show the folders of {name}', { name })} className="inline-flex h-6 w-5 shrink-0 items-center justify-center text-ink-3 hover:text-ink">
@@ -356,9 +389,11 @@ function AccountRow({ box, account, running, offline, open, count, active, onTog
           disabled={offline || running}
           aria-label={running ? text('Syncing {name}…', { name }) : text('Sync {name}', { name })}
           title={offline ? text('You’re offline — mail will sync when you reconnect') : running ? text('Syncing…') : account?.last_ok_at ? text('Last synced {ago} · sync now', { ago: syncAgo(account.last_ok_at) }) : text('Sync now')}
-          className={cx('mr-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] text-ink-3 hover:bg-surface hover:text-ink disabled:cursor-default', running ? 'opacity-100' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100')}
+          aria-busy={running || undefined}
+          data-state={feedback.state}
+          className={cx('mr-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] text-ink-3 hover:bg-surface hover:text-ink disabled:cursor-default', running || feedback.state === 'done' ? 'opacity-100' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100')}
         >
-          <Icon name="refresh" size={13} className={running ? 'animate-spin motion-reduce:animate-none' : undefined} />
+          <Icon name={feedback.icon} size={13} className={feedback.iconClass} />
         </button>
       )}
     </div>
@@ -374,6 +409,8 @@ function SyncAllButton({ summary, accounts, boxes, running, syncingAll, offline,
   const [open, setOpen] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const spin = syncingAll || summary.state === 'syncing';
+  // Spinning, then a check (or red) when the run ends (worksuite-desktop#165).
+  const feedback = useSyncFeedback(spin, summary.failed.length > 0);
   const show = () => {
     if (timer.current) clearTimeout(timer.current);
     setOpen(true);
@@ -393,9 +430,11 @@ function SyncAllButton({ summary, accounts, boxes, running, syncingAll, offline,
         aria-label={offline ? text('You’re offline — mail will sync when you reconnect') : spin ? text('Syncing — pressing again won’t start another') : text('Sync all accounts')}
         aria-keyshortcuts="Control+Shift+R"
         aria-describedby={open ? 'mail-sync-all-card' : undefined}
+        aria-busy={spin || undefined}
+        data-state={feedback.state}
         className="inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-3 hover:bg-subtle hover:text-ink disabled:opacity-50"
       >
-        <Icon name="refresh" size={13} className={spin ? 'animate-spin motion-reduce:animate-none' : undefined} />
+        <Icon name={feedback.icon} size={13} className={feedback.iconClass} />
       </button>
       {open ? (
         <div id="mail-sync-all-card" role="tooltip" className="absolute left-0 top-7 z-30 w-[300px] rounded-[10px] border border-line bg-surface p-2 text-[12.5px] shadow-lg">
@@ -403,28 +442,7 @@ function SyncAllButton({ summary, accounts, boxes, running, syncingAll, offline,
             <b className="text-ink">{spin ? summary.headline : text('Sync all accounts')}</b>
             <Kbd aria-hidden>{text('Ctrl+Shift+R')}</Kbd>
           </div>
-          <ul role="list" className="flex flex-col gap-0.5">
-            {rows.map((a) => {
-              const b = boxes.find((x) => x.id === a.mailbox);
-              const st = accountState(running.has(a.mailbox) ? { ...a, running: true } : a);
-              return (
-                <li key={a.mailbox} className={cx('flex items-center gap-2 rounded-[8px] px-1.5 py-1', st.tone === 'danger' && 'bg-danger-bg')}>
-                  {b ? <AccountAvatar letter={mailboxLetter(b)} colour={b.colour} size={18} /> : null}
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-semibold text-ink">{accountName(a, b)}</span>
-                    <span className={cx('block truncate', st.tone === 'danger' ? 'text-danger' : 'text-ink-3')} title={a.last_ok_at ? text('Last successful sync: {at}', { at: syncAt(a.last_ok_at) }) : undefined}>
-                      {st.label}
-                    </span>
-                  </span>
-                  {st.tone === 'danger' && !offline ? (
-                    <button type="button" onClick={() => onRetry(a.mailbox)} className="h-6 shrink-0 rounded-[6px] bg-danger px-2 text-[11.5px] font-bold text-white hover:brightness-95">
-                      {text('Retry')}
-                    </button>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
+          <AccountRows accounts={rows} boxes={boxes} running={running} offline={offline} onSync={onRetry} />
           <p className="mt-1.5 border-t border-line px-1.5 pt-1.5 text-[11.5px] text-ink-3">{offline ? text('You’re offline — mail will sync when you reconnect') : spin ? text('Sync is running — pressing again won’t start another.') : text('Last successful sync per account. Click to sync all now.')}</p>
         </div>
       ) : null}
@@ -432,8 +450,89 @@ function SyncAllButton({ summary, accounts, boxes, running, syncingAll, offline,
   );
 }
 
+/**
+ * Each account's sync state: name, state, last synced (in the tooltip), the error and Retry. With `onFix`
+ * (the card's details) every account gets Sync now and a failed one Fix (worksuite-desktop#172).
+ */
+function AccountRows({ accounts, boxes, running, offline, onSync, onFix }: { accounts: SyncAccount[]; boxes: Mailbox[]; running: ReadonlySet<number>; offline: boolean; onSync: (id: number) => void; onFix?: () => void }) {
+  return (
+    <ul role="list" className="flex flex-col gap-0.5">
+      {accounts.map((a) => {
+        const b = boxes.find((x) => x.id === a.mailbox);
+        const busy = running.has(a.mailbox) || a.running;
+        const st = accountState(busy ? { ...a, running: true } : a);
+        const name = accountName(a, b);
+        return (
+          <li key={a.mailbox} className={cx('flex items-center gap-2 rounded-[8px] px-1.5 py-1', st.tone === 'danger' && 'bg-danger-bg')}>
+            {b ? <AccountAvatar letter={mailboxLetter(b)} colour={b.colour} size={18} /> : null}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-semibold text-ink" title={name}>{name}</span>
+              <span className={cx('block', onFix ? 'break-words' : 'truncate', st.tone === 'danger' ? 'text-danger' : st.tone === 'warning' ? 'text-warning' : 'text-ink-3')} title={a.last_ok_at ? text('Last successful sync: {at}', { at: syncAt(a.last_ok_at) }) : st.label}>
+                {st.label}
+              </span>
+            </span>
+            {st.tone === 'danger' && !offline ? (
+              <button type="button" onClick={() => onSync(a.mailbox)} className="h-6 shrink-0 rounded-[6px] bg-danger px-2 text-[11.5px] font-bold text-white hover:brightness-95">
+                {text('Retry')}
+              </button>
+            ) : onFix && !offline ? (
+              <button type="button" disabled={busy} onClick={() => onSync(a.mailbox)} aria-label={text('Sync {name} now', { name })} className="h-6 shrink-0 rounded-[6px] border border-line px-2 text-[11.5px] font-semibold text-ink hover:bg-subtle disabled:opacity-50">
+                {text('Sync now')}
+              </button>
+            ) : null}
+            {onFix && st.tone === 'danger' ? (
+              <button type="button" onClick={onFix} aria-label={text('Fix {name}', { name })} className="h-6 shrink-0 rounded-[6px] border border-line px-2 text-[11.5px] font-semibold text-ink hover:bg-subtle">
+                {text('Fix')}
+              </button>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** The footer card, with every account's details on click (worksuite-desktop#172): Sync all, Sync now, Fix. */
+function SyncDetails(p: { summary: SyncSummary; pending: number; cacheDays: number; accounts: SyncAccount[]; boxes: Mailbox[]; running: ReadonlySet<number>; syncingAll: boolean; offline: boolean; onSyncAll: () => void; onSyncAccount: (id: number) => void; onSettings: () => void }) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => (root.current && !root.current.contains(e.target as Node) ? setOpen(false) : undefined);
+    const esc = (e: KeyboardEvent) => (e.key === 'Escape' ? setOpen(false) : undefined);
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('mousedown', away);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [open]);
+  const spin = p.syncingAll || p.summary.state === 'syncing';
+  const rows = p.accounts.filter((a) => a.included || p.boxes.length <= 1);
+  return (
+    <div ref={root} className="relative">
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls="mail-sync-details" title={text('Each account’s sync status')} className="block w-full text-left">
+        <SyncCard summary={p.summary} pending={p.pending} cacheDays={p.cacheDays} />
+      </button>
+      {open ? (
+        <div id="mail-sync-details" role="dialog" aria-label={text('Sync status')} className="absolute right-2 bottom-full left-2 z-30 mb-1 rounded-[10px] border border-line bg-surface p-2 text-[12.5px] shadow-lg">
+          <div className="flex items-center justify-between gap-2 px-1.5 pb-1.5">
+            <b className="min-w-0 break-words text-ink">{p.summary.headline}</b>
+            <SyncButton size="sm" label={text('Sync all')} running={spin} failed={p.summary.failed.length > 0} disabled={p.offline} onSync={p.onSyncAll} />
+          </div>
+          {p.summary.liveLine ? <p className={cx('px-1.5 pb-1 text-[11.5px]', p.summary.live < p.summary.pushTotal ? 'text-warning' : 'text-ink-3')}>{p.summary.liveLine}</p> : null}
+          <AccountRows accounts={rows} boxes={p.boxes} running={p.running} offline={p.offline} onSync={p.onSyncAccount} onFix={p.onSettings} />
+          <button type="button" onClick={p.onSettings} className="mt-1.5 w-full border-t border-line px-1.5 pt-1.5 text-left text-[11.5px] font-semibold text-primary hover:underline">
+            {text('Mail accounts, offline and storage settings')}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** An account's folders, under its row (DMO-ALL-13: per-account trees stay as they were). */
-function FolderTree({ box, place, active, onPick, onAdd, onMenu }: { box: Mailbox; place: Place; active: boolean; onPick: (p: Partial<Place>) => void; onAdd: () => void; onMenu: (x: number, y: number, f: Folder) => void }) {
+function FolderTree({ box, place, active, countModes, onPick, onAdd, onMenu }: { box: Mailbox; place: Place; active: boolean; countModes: Record<string, 'total'>; onPick: (p: Partial<Place>) => void; onAdd: () => void; onMenu: (x: number, y: number, f: Folder) => void }) {
   const folders = useFolders(box.id, active);
   const list = (folders.data?.folders ?? []).filter((f) => f.slug !== 'starred' && f.slug !== 'important');
   const here = (f: Folder) => !place.view && place.label === null && place.folder === f.slug && place.box === String(box.id);
@@ -443,17 +542,21 @@ function FolderTree({ box, place, active, onPick, onAdd, onMenu }: { box: Mailbo
       {folders.error ? <li className="px-2 text-[12px] text-danger">{errorMessage(folders.error)}</li> : null}
       {list.map((f) => {
         const custom = !FOLDER_ICON[f.slug];
-        // Unread in the folders mail arrives in; Sent, Drafts and Trash count nothing worth a badge.
-        const n = ['sent', 'trash', 'drafts'].includes(f.slug) ? null : f.unread;
+        // Unread in the folders mail arrives in; Sent, Drafts and Trash count nothing worth a badge — unless the
+        // folder was set to show its total (worksuite-desktop#162).
+        const total = countModes[`${box.id}:${f.slug}`] === 'total';
+        const n = total ? f.total : ['sent', 'trash', 'drafts'].includes(f.slug) ? null : f.unread;
         return (
           <li
             key={f.slug}
             onContextMenu={(e) => {
               e.preventDefault();
+              // The account's own menu is on the row around the tree.
+              e.stopPropagation();
               onMenu(e.clientX, e.clientY, f);
             }}
           >
-            <Row nested icon={FOLDER_ICON[f.slug] ?? 'folder'} iconClass={custom ? 'text-warning' : undefined} label={custom ? folderName(f.name) : f.name} count={n} strong={!!n} active={here(f)} onClick={() => onPick({ box: String(box.id), view: null, folder: f.slug, label: null })} />
+            <Row nested icon={FOLDER_ICON[f.slug] ?? 'folder'} iconClass={custom ? 'text-warning' : undefined} label={custom ? folderName(f.name) : f.name} count={n} countTitle={total ? text('{n} messages', { n: f.total }) : null} strong={!!n && !total} active={here(f)} onClick={() => onPick({ box: String(box.id), view: null, folder: f.slug, label: null })} />
           </li>
         );
       })}
@@ -478,6 +581,18 @@ interface FolderMenu {
   /** The account and folder, for a real folder. */
   box: Mailbox | null;
   slug: string | null;
+  /** The account's own row was right-clicked. */
+  account?: boolean;
+  unread?: number;
+}
+
+/** What the menu does beyond Favourites and the folder's role (worksuite-desktop#162). */
+interface FolderMenuOps {
+  open: (kind: FolderDialog['kind']) => void;
+  readAll: () => void;
+  syncFolder: () => void;
+  countMode: 'unread' | 'total';
+  setCountMode: (mode: 'unread' | 'total') => void;
 }
 
 const ROLE_CHOICES: Array<{ role: string; label: string }> = [
@@ -488,10 +603,10 @@ const ROLE_CHOICES: Array<{ role: string; label: string }> = [
   { role: 'junk', label: 'Junk Email' },
 ];
 
-/** A folder's right-click menu (DMO-NAV-03, DMO-ALL-06): Favorites, its role in All Accounts, a new folder, sync. */
 /** The offline choices a folder offers (ENH-MAIL-03 DMO-OFF-01). */
 export const OFFLINE_CHOICES: Array<{ id: FolderOffline; label: string; hint: string }> = [
-  { id: 'recent', label: 'Keep recent messages', hint: 'Within the mailbox’s keep period' },
+  { id: 'all', label: 'All messages', hint: 'Every message opened or fetched ahead, whatever its age' },
+  { id: 'recent', label: 'Keep recent messages', hint: 'Within the mailbox’s keep period (30 days unless changed)' },
   { id: 'headers', label: 'Headers only', hint: 'Messages open from the server' },
   { id: 'online', label: 'Online only', hint: 'Nothing kept on this computer' },
 ];
@@ -504,10 +619,110 @@ const setFolderOffline = (prefs: Pick<Preferences, 'mailFolderOffline'> | null, 
   void updatePrefs({ mailFolderOffline: next });
 };
 
-function folderSections(m: FolderMenu, p: SidebarProps, onNewFolder: () => void, prefs: Pick<Preferences, 'mailFolderOffline'> | null = null, onProperties?: () => void): MenuSection[] {
+/**
+ * A folder's (or an account's) right-click menu (DMO-NAV-03, DMO-ALL-06, worksuite-desktop#162): Sync, Status,
+ * Manage, Clean up, View, Offline and Info. Core folders are never renamed, moved or deleted.
+ */
+function folderSections(m: FolderMenu, p: SidebarProps, onNewFolder: () => void, prefs: Pick<Preferences, 'mailFolderOffline'> | null = null, onProperties?: () => void, ops?: FolderMenuOps): MenuSection[] {
   const favs = p.favorites ?? [];
   const isFav = favs.some((e) => e.split('|')[0] === m.key);
+  const offlineWhy = text('You’re offline — mail will sync when you reconnect');
   const sections: MenuSection[] = [];
+  const box = m.box;
+  const slug = m.slug;
+  // A folder of one account, or the account itself (its Inbox): the full menu (worksuite-desktop#162).
+  if (box && ops) {
+    const target = slug ?? 'inbox';
+    sections.push({
+      id: 'sync',
+      label: text('Sync'),
+      items: [
+        ...(slug ? [{ id: 'sync-folder', label: text('Sync this folder now'), icon: 'refresh', disabled: p.offline, reason: offlineWhy, onSelect: ops.syncFolder }] : []),
+        { id: 'sync', label: text('Sync {email}', { email: box.email }), icon: 'refresh', disabled: p.offline, reason: offlineWhy, onSelect: () => p.onSyncAccount(box.id) },
+      ],
+    });
+    sections.push({
+      id: 'status',
+      label: text('Status'),
+      items: [{ id: 'read-all', label: m.account ? text('Mark all in Inbox as read') : text('Mark all as read'), icon: 'mail-open', disabled: m.unread === 0, reason: text('Nothing here is unread.'), onSelect: ops.readAll }],
+    });
+    const core = isCoreFolder(target);
+    const coreWhy = text('Inbox, Sent, Drafts, Deleted Items, Junk, Archive and Outbox stay as they are.');
+    sections.push({
+      id: 'manage',
+      label: text('Manage'),
+      items: m.account
+        ? [{ id: 'new', label: text('New folder…'), icon: 'folder-plus', onSelect: onNewFolder }]
+        : [
+            { id: 'subfolder', label: text('New subfolder…'), icon: 'folder-plus', disabled: core && target !== 'inbox', reason: text('Subfolders go in Inbox or in a folder of yours.'), onSelect: () => ops.open('subfolder') },
+            { id: 'rename', label: text('Rename…'), icon: 'pen', disabled: core, reason: coreWhy, onSelect: () => ops.open('rename') },
+            { id: 'move', label: text('Move to…'), icon: 'folder-input', disabled: core, reason: coreWhy, onSelect: () => ops.open('move') },
+            { id: 'delete', label: text('Delete folder…'), icon: 'trash', danger: true, disabled: core, reason: coreWhy, onSelect: () => ops.open('delete') },
+            ...(target !== 'inbox'
+              ? [
+                  {
+                    id: 'role',
+                    label: text('Use this folder as'),
+                    icon: 'folder-input',
+                    description: text('In All Accounts, for {email}', { email: box.email }),
+                    submenu: [
+                      {
+                        id: 'roles',
+                        items: ROLE_CHOICES.map((r) => ({
+                          id: r.role,
+                          label: text(r.label),
+                          onSelect: () =>
+                            void apiPut('/api/mail/folders/role', { mailbox: box.id, folder: target, role: r.role })
+                              .then(() => toast('success', text('{folder} is now this account’s {role}.', { folder: m.label, role: text(r.label) })))
+                              .catch((e) => toast('error', errorMessage(e))),
+                        })),
+                      },
+                    ],
+                  },
+                ]
+              : []),
+            ...(p.onExport ? [{ id: 'export', label: text('Export folder…'), icon: 'download', disabled: p.offline, reason: text('Available when you are back online.'), onSelect: () => p.onExport!(box, target, m.label) }] : []),
+          ],
+    });
+    if (slug && isEmptyableFolder(slug)) {
+      sections.push({ id: 'cleanup', label: text('Clean up'), items: [{ id: 'empty', label: text('Empty folder…'), icon: 'trash', danger: true, disabled: p.offline, reason: text('Emptying a folder needs a connection.'), onSelect: () => ops.open('empty') }] });
+    }
+    sections.push({
+      id: 'view',
+      label: text('View'),
+      items: [
+        ...(p.onFavorites
+          ? [
+              isFav
+                ? { id: 'unfav', label: text('Remove from Favorites'), icon: 'star', onSelect: () => p.onFavorites!(favs.filter((e) => e.split('|')[0] !== m.key)) }
+                : { id: 'fav', label: text('Add to Favorites'), icon: 'star', onSelect: () => p.onFavorites!([...favs, `${m.key}|${m.label}`].slice(0, 40)) },
+            ]
+          : []),
+        ...(slug
+          ? [
+              { id: 'count-unread', label: text('Show unread count'), radio: true, checked: ops.countMode === 'unread', onSelect: () => ops.setCountMode('unread') },
+              { id: 'count-total', label: text('Show total count'), radio: true, checked: ops.countMode === 'total', onSelect: () => ops.setCountMode('total') },
+            ]
+          : []),
+      ],
+    });
+    sections.push({
+      id: 'offline',
+      label: text('Offline'),
+      items: [
+        {
+          id: 'offline',
+          label: text('Keep this folder on this computer'),
+          icon: 'cloud-off',
+          description: text(OFFLINE_CHOICES.find((c) => c.id === folderOffline(prefs ?? {}, String(box.id), target))!.label),
+          submenu: [{ id: 'choices', items: OFFLINE_CHOICES.map((c) => ({ id: c.id, label: text(c.label), description: text(c.hint), radio: true, checked: folderOffline(prefs ?? {}, String(box.id), target) === c.id, onSelect: () => setFolderOffline(prefs, box, target, c.id) })) }],
+        },
+      ],
+    });
+    sections.push({ id: 'info', label: text('Info'), items: [...(onProperties && slug ? [{ id: 'properties', label: text('Properties'), icon: 'info', onSelect: onProperties }] : []), ...(m.account ? [{ id: 'settings', label: text('Account settings…'), icon: 'settings', onSelect: p.onSettings }] : [])] });
+    return sections.filter((x) => x.items.length > 0);
+  }
+  // A favourite, an All Accounts folder or a smart view: Favorites only.
   if (p.onFavorites) {
     sections.push({
       id: 'fav',
@@ -515,57 +730,6 @@ function folderSections(m: FolderMenu, p: SidebarProps, onNewFolder: () => void,
         isFav
           ? { id: 'unfav', label: text('Remove from Favorites'), icon: 'star', onSelect: () => p.onFavorites!(favs.filter((e) => e.split('|')[0] !== m.key)) }
           : { id: 'fav', label: text('Add to Favorites'), icon: 'star', onSelect: () => p.onFavorites!([...favs, `${m.key}|${m.label}`].slice(0, 40)) },
-      ],
-    });
-  }
-  if (m.box && m.slug && m.slug !== 'inbox') {
-    const box = m.box;
-    const slug = m.slug;
-    sections.push({
-      id: 'role',
-      items: [
-        {
-          id: 'role',
-          label: text('Use this folder as'),
-          icon: 'folder-input',
-          description: text('In All Accounts, for {email}', { email: box.email }),
-          submenu: [
-            {
-              id: 'roles',
-              items: ROLE_CHOICES.map((r) => ({
-                id: r.role,
-                label: text(r.label),
-                onSelect: () =>
-                  void apiPut('/api/mail/folders/role', { mailbox: box.id, folder: slug, role: r.role })
-                    .then(() => toast('success', text('{folder} is now this account’s {role}.', { folder: m.label, role: text(r.label) })))
-                    .catch((e) => toast('error', errorMessage(e))),
-              })),
-            },
-          ],
-        },
-      ],
-    });
-  }
-  if (m.box) {
-    const box = m.box;
-    sections.push({
-      id: 'more',
-      items: [
-        { id: 'new', label: text('New folder'), icon: 'folder-plus', onSelect: onNewFolder },
-        { id: 'sync', label: text('Sync {email}', { email: box.email }), icon: 'refresh', disabled: p.offline, reason: text('You’re offline — mail will sync when you reconnect'), onSelect: () => p.onSyncAccount(box.id) },
-        ...(m.slug && p.onExport ? [{ id: 'export', label: text('Export folder…'), icon: 'download', disabled: p.offline, reason: text('Available when you are back online.'), onSelect: () => p.onExport!(box, m.slug!, m.label) }] : []),
-        ...(m.slug
-          ? [
-              {
-                id: 'offline',
-                label: text('On this computer'),
-                icon: 'cloud-off',
-                description: text(OFFLINE_CHOICES.find((c) => c.id === folderOffline(prefs ?? {}, String(box.id), m.slug!))!.label),
-                submenu: [{ id: 'choices', items: OFFLINE_CHOICES.map((c) => ({ id: c.id, label: text(c.label), description: text(c.hint), radio: true, checked: folderOffline(prefs ?? {}, String(box.id), m.slug!) === c.id, onSelect: () => setFolderOffline(prefs, box, m.slug!, c.id) })) }],
-              },
-              ...(onProperties ? [{ id: 'properties', label: text('Properties'), icon: 'info', onSelect: onProperties }] : []),
-            ]
-          : []),
       ],
     });
   }
@@ -608,7 +772,7 @@ function LabelSection({ open, onToggle, onAdd, place, active, onPick }: { open: 
 export function SyncCard({ summary, pending, cacheDays }: { summary: SyncSummary; pending: number; cacheDays: number }) {
   const cache = cacheDays === 0 ? text('headers only offline') : text('offline cache {n} days', { n: cacheDays });
   const tone = summary.tone;
-  const icon = summary.state === 'offline' || tone === 'danger' ? 'warning' : summary.state === 'syncing' ? 'refresh' : summary.state === 'paused' ? 'pause' : 'check';
+  const icon = summary.state === 'offline' || tone === 'danger' || tone === 'warning' ? 'warning' : summary.state === 'syncing' ? 'refresh' : summary.state === 'paused' ? 'pause' : 'check';
   const headline = summary.state === 'offline' && pending ? text('Offline · {n} actions waiting', { n: pending }) : summary.headline;
   return (
     <span role="status" aria-live="polite" className="m-2 mt-0 flex items-start gap-2.5 rounded-[10px] border border-line bg-surface p-2.5 text-[12px] leading-snug hover:bg-subtle">
@@ -683,6 +847,9 @@ function NameDialog({ kind, mailbox, onClose }: { kind: 'folder' | 'label'; mail
 function FolderProperties({ box, slug, label, prefs, onClose }: { box: Mailbox; slug: string; label: string; prefs: Pick<Preferences, 'mailFolderOffline'> | null; onClose: () => void }) {
   const folders = useFolders(box.id, true);
   const f = (folders.data?.folders ?? []).find((x) => x.slug === slug) ?? null;
+  // Size and last sync from the server (worksuite-desktop#162); an older server has neither.
+  const info = useFolderInfo(box.id, slug, true);
+  const i = info.data ?? null;
   const current = folderOffline(prefs ?? {}, String(box.id), slug);
   return (
     <Modal title={text('{folder} — properties', { folder: label })} labelledBy="mail-folder-props" onClose={onClose} footer={<Button variant="primary" onClick={onClose}>Done</Button>}>
@@ -690,14 +857,18 @@ function FolderProperties({ box, slug, label, prefs, onClose }: { box: Mailbox; 
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
           <dt className="text-ink-3">{text('Account')}</dt>
           <dd>{box.email}</dd>
-          {f ? (
+          {f || i ? (
             <>
               <dt className="text-ink-3">{text('Messages')}</dt>
-              <dd>{f.total.toLocaleString()}</dd>
+              <dd>{(i?.messages ?? f?.total ?? 0).toLocaleString()}</dd>
               <dt className="text-ink-3">{text('Unread')}</dt>
-              <dd>{(f.unread ?? 0).toLocaleString()}</dd>
+              <dd>{(i?.unread ?? f?.unread ?? 0).toLocaleString()}</dd>
             </>
           ) : null}
+          <dt className="text-ink-3">{text('Size')}</dt>
+          <dd>{i?.bytes !== null && i?.bytes !== undefined ? (i.bytes_partial ? text('at least {size}', { size: folderBytes(i.bytes) }) : folderBytes(i.bytes)) : info.isLoading ? '…' : text('Not known')}</dd>
+          <dt className="text-ink-3">{text('Last synced')}</dt>
+          <dd>{i?.synced_at ? syncAt(i.synced_at) : info.isLoading ? '…' : text('Not known')}</dd>
         </dl>
         <fieldset className="flex flex-col gap-1.5">
           <legend className="mb-1 font-semibold">{text('On this computer')}</legend>
@@ -721,4 +892,11 @@ function FolderProperties({ box, slug, label, prefs, onClose }: { box: Mailbox; 
       </div>
     </Modal>
   );
+}
+
+function folderBytes(n: number): string {
+  if (n < 1024) return text('{n} bytes', { n });
+  if (n < 1024 ** 2) return `${(n / 1024).toFixed(0)} KB`;
+  if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)} MB`;
+  return `${(n / 1024 ** 3).toFixed(2)} GB`;
 }

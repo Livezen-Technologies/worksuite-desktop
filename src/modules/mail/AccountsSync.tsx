@@ -14,6 +14,7 @@ import { mailboxLetter } from './model';
 import { AccountAvatar } from './parts';
 import { accountName, accountState, includedIds, modeWords, runSync, syncAgo, syncAt, syncSummary, useSharedSync, type SyncSummary } from './sync';
 import type { MailPrefs, Mailbox, SyncAccount, SyncRun } from './types';
+import { SyncButton } from '../../components/SyncButton';
 
 /**
  * Settings › Mail › Accounts & sync (design D04 v1.1, D18; DMO-SYN-09…11):
@@ -109,9 +110,16 @@ export function AccountsSync({ boxes, prefs, onPrefs, onRepair, onManage }: { bo
                     {text('Sign in again')}
                   </Button>
                 ) : null}
-                <Button icon="refresh" disabled={offline || running} title={offline ? text('You’re offline — mail will sync when you reconnect') : undefined} onClick={() => void runSync([b.id], { offline, onDone: done })}>
-                  {running ? text('Syncing…') : text('Sync now')}
-                </Button>
+                <SyncButton
+                  running={running}
+                  failed={failed}
+                  disabled={offline}
+                  reason={offline ? text('You’re offline — mail will sync when you reconnect') : undefined}
+                  onSync={async () => {
+                    const r = await runSync([b.id], { offline, onDone: done });
+                    if (r.failed.length) throw new Error('sync failed');
+                  }}
+                />
                 <Button onClick={() => setLog(b)}>{text('View sync log')}</Button>
                 {onManage ? <Button onClick={() => onManage(b)}>{text('Manage')}</Button> : null}
               </div>
@@ -171,9 +179,7 @@ function SummaryBanner({ summary, onSyncAll, offline, running }: { summary: Sync
         {summary.detail ? <span className="text-ink-2"> · {summary.detail}</span> : null}
       </span>
       <span className="text-[12px] text-ink-3">{text('Same status as the folder pane and status bar')}</span>
-      <Button icon="refresh" disabled={offline || running} onClick={onSyncAll} title={text('Sync all (Ctrl+Shift+R)')}>
-        {text('Sync all')}
-      </Button>
+      <SyncButton label={text('Sync all')} running={running} failed={summary.failed.length > 0} disabled={offline} title={text('Sync all (Ctrl+Shift+R)')} onSync={onSyncAll} />
     </div>
   );
 }

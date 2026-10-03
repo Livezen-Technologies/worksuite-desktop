@@ -58,6 +58,8 @@ const api = {
     setDockIcon: call('app:setDockIcon'),
   },
   local: { enter: call('local:enter'), leave: call('local:leave'), status: call('local:status'), profile: call('local:profile'), unlock: call('local:unlock'), api: call('local:api'), overview: call('local:overview'), export: call('local:export'), restorePreview: call('local:restorePreview'), restore: call('local:restore'), deleteAll: call('local:deleteAll'), meeting: call('local:meeting'), joinMeeting: call('local:joinMeeting'), moveOffer: call('local:moveOffer'), move: call('local:move'), keep: call('local:keep') },
+  // Item links opened in the app go on the audit trail (#170).
+  links: { audit: call('links:audit') },
   guest: { pending: call('guest:pending'), open: call('guest:open'), info: call('guest:info'), join: call('guest:join'), signIn: call('guest:signIn') },
   auth: {
     state: call('auth:state'),
@@ -398,6 +400,15 @@ const api = {
     run: call('pmsLocks:run'),
     status: call('pmsLocks:status'),
   },
+  // Contact sync (contact-sync-channels.ts): iCloud, CardDAV and Mac Contacts on this computer; passwords never come back.
+  contactSync: {
+    status: call('contactSync:status'),
+    connect: call('contactSync:connect'),
+    run: call('contactSync:run'),
+    setPassword: call('contactSync:setPassword'),
+    forget: call('contactSync:forget'),
+    macAccess: call('contactSync:macAccess'),
+  },
   pos: {
     till: call('pos:till'),
     pair: call('pos:pair'),
@@ -436,6 +447,8 @@ const api = {
     export: call('mail:export'),
     exportCancel: call('mail:exportCancel'),
     openLink: call('mail:openLink'),
+    spellLanguages: call('mail:spellLanguages'),
+    setSpellLanguages: call('mail:setSpellLanguages'),
   },
   smime: {
     verify: call('smime:verify'),
@@ -446,6 +459,9 @@ const api = {
     moduleBytes: call('offline:moduleBytes'),
     clearModule: call('offline:clearModule'),
     mailStats: call('offline:mailStats'),
+    peek: call('offline:peek'),
+    clearMailbox: call('offline:clearMailbox'),
+    mailSearch: call('offline:mailSearch'),
     submit: call('offline:submit'),
     retry: call('offline:retry'),
     discard: call('offline:discard'),

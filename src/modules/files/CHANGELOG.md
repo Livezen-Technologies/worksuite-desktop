@@ -4,6 +4,22 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.7.0 — 2026-10-03
+
+- Sharing tells people: the share dialog has Notify people with a message and chat/email choices; Shared with me shows how many new shares you haven't opened (#164).
+
+## 1.6.5 — 2026-10-03
+
+- Sync buttons use the shared Sync button: they spin from the click, can't be pressed twice, show Synced just now or Sync failed · Retry, and keep one width (#165).
+
+## 1.6.4 — 2026-10-03
+
+- A link to a file you can't open offers Request access in the app (#170).
+
+## 1.6.3 — 2026-10-03
+
+- The sidebar's New button is the shared primary action button: same size, colour, plus icon and quiet shadow as every module; the shortcut is in its tooltip (#171).
+
 ## 1.6.2 — 2026-10-03
 
 - Mail data files and exports go through the transfer and download paths (ENH-MAIL-03).

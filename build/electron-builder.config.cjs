@@ -25,6 +25,10 @@
  * WS_RELEASE_BUILD=1) and warns loudly for any other build.
  */
 const macSigning = require('./mac-signing.cjs');
+// Universal Links (worksuite-desktop#170): with a provisioning profile that grants Associated Domains for
+// app.worksuite.lk (Team ID + lk.worksuite.desktop), the app is signed with it and claims those links. Without one
+// the build is as before: worksuite:// still works, and the web fallback page hands links over through it.
+const macProfile = process.env.WS_MAC_PROVISIONING_PROFILE || null;
 const notarize = !!(process.env.APPLE_TEAM_ID || process.env.APPLE_API_KEY);
 const azure = process.env.AZURE_TRUSTED_SIGNING_ACCOUNT
   ? {
@@ -106,8 +110,9 @@ module.exports = {
     // identity, hardened runtime and the inherited entitlements.
     hardenedRuntime: true,
     gatekeeperAssess: false,
-    entitlements: 'build/entitlements.mac.plist',
+    entitlements: macProfile ? 'build/entitlements.mac.links.plist' : 'build/entitlements.mac.plist',
     entitlementsInherit: 'build/entitlements.mac.plist',
+    ...(macProfile ? { provisioningProfile: macProfile } : {}),
     notarize,
     minimumSystemVersion: '12.0',
     extendInfo: {

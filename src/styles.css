@@ -231,6 +231,18 @@ html[data-contrast='more'] :focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+/* Menus open with a short fade and scale (worksuite-desktop#168); `motion-safe:` leaves it out for reduced motion. */
+@keyframes ws-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @keyframes ws-fade-in {
   from {
     opacity: 0;

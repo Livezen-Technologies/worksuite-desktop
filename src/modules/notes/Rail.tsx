@@ -7,6 +7,7 @@ import { Icon } from '../../components/Icon';
 import { Button, Modal, cx } from '../../components/ui';
 import { useGuest } from '../../core/session';
 import { NOTEBOOK_COLORS, VIEWS, type Notebook, type Section, type View } from './api';
+import { PrimaryActionButton } from '../../components/PrimaryAction';
 
 export type Place = { view: View } | { notebook: number } | { section: number };
 
@@ -69,9 +70,7 @@ export function Rail({ place, counts, notebooks, sections, onPlace, onNew }: { p
 
   return (
     <nav aria-label="Notebooks" className="flex w-[236px] shrink-0 flex-col gap-px overflow-y-auto border-r border-line bg-surface px-2.5 py-3.5 scroll-thin">
-      <button type="button" onClick={onNew} title="New note (N)" className="mb-2.5 flex h-[38px] shrink-0 items-center justify-center gap-1.5 rounded-[9px] bg-primary font-bold text-white hover:bg-primary-hover">
-        <Icon name="plus" size={16} /> New note
-      </button>
+      <PrimaryActionButton label="New note" shortcut="N" onClick={onNew} className="mb-2.5" />
       {VIEWS.filter((v) => !guest || v.id !== 'shared').map((v) => (
         <button key={v.id} type="button" aria-current={is({ view: v.id }) ? 'page' : undefined} onClick={() => onPlace({ view: v.id })} className={row(is({ view: v.id }), 0)}>
           <span className="w-2.5" />

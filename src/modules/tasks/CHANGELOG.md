@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.3 — 2026-10-03
+
+- The sidebar's New button is the shared primary action button: same size, colour, plus icon and quiet shadow as every module; the shortcut is in its tooltip (#171).
+
 ## 1.2.2 — 2026-10-03
 
 - New task from a mail message carries its subject, link, due date and assignee (ENH-MAIL-03).

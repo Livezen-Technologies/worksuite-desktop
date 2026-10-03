@@ -1,7 +1,7 @@
 import type { Room } from '../types';
 import type { WebsiteRow } from '../website/api';
 import { metaState, type MetaAccount, type MetaPlatform } from './meta';
-import { isConnected, type WaAccount } from './whatsapp';
+import { isConnected, isConnecting, type WaAccount } from './whatsapp';
 
 /**
  * The messaging channels down the left of Chat (worksuite-desktop#33): Chat itself, website chat, WhatsApp, and
@@ -68,9 +68,9 @@ export function channelRoute(id: ChannelId): string {
   return '/chat';
 }
 
-/** Chat's badge: unread messages, leaving out archived and muted conversations (a muted one is not to nag). */
+/** Chat's badge: unread messages, leaving out archived conversations and muted ones — but an @mention in a muted one still counts (worksuite-desktop#183). */
 export function chatUnread(rooms: Room[]): number {
-  return rooms.reduce((n, r) => n + (!r.archived && !r.muted ? r.unread : 0), 0);
+  return rooms.reduce((n, r) => n + (r.archived ? 0 : r.muted ? r.mentions : r.unread), 0);
 }
 
 /** Website chat's badge: visitors waiting for an answer. */
@@ -83,6 +83,8 @@ export function whatsappState(accounts: WaAccount[]): { badge: number; problem: 
   const badge = accounts.reduce((n, a) => n + (a.unread ?? 0), 0);
   const down = accounts.filter((a) => !isConnected(a));
   if (!down.length) return { badge, problem: null };
+  // Starting up is not a fault (#176): said as such, so it does not read as a number that needs linking again.
+  if (down.every(isConnecting)) return { badge, problem: down.length === 1 ? `${down[0]!.name} is connecting` : `${down.length} numbers are connecting` };
   if (down.length === accounts.length && accounts.length > 1) return { badge, problem: 'None of your WhatsApp numbers is connected' };
   return { badge, problem: down.length === 1 ? `${down[0]!.name} is not connected` : `${down.length} numbers are not connected` };
 }

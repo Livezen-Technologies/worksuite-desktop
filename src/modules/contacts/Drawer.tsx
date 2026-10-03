@@ -5,11 +5,16 @@ import { useCanOpen } from '../../core/access';
 import { apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
 import { useTab } from '../../core/tab-context';
+import { toE164, waDigits } from '../../core/phone';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, ErrorNote, Modal, Spinner, cx } from '../../components/ui';
+import { Checkbox } from '../../components/Checkbox';
 import { createMeeting, openMeeting } from '../meet/api';
-import { SOCIAL, addressOf, birthdayOf, digits, initials, pillOf, stampLabel, subLine, typeOf, type Activity, type Contact, type ContactDetail, type ContactNote } from './api';
+import { SOCIAL, addressOf, birthdayOf, digits, initials, phoneLabel, pillOf, stampLabel, subLine, typeOf, type Activity, type Contact, type ContactDetail, type ContactNote } from './api';
+import { providerLabel, syncedWith } from './sync/api';
+import { useSyncAccounts } from './sync/AccountsSettings';
+import { SourceIcons } from './sync/SourceIcon';
 import { WhatsappSend } from './WhatsappSend';
 
 type Tab = 'det' | 'notes' | 'act';
@@ -40,12 +45,15 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
   const { navigate } = useTab();
   const [tab, setTab] = useState<Tab>('det');
   const [deleting, setDeleting] = useState(false);
+  const [alsoRemote, setAlsoRemote] = useState(false);
+  const syncAccounts = useSyncAccounts();
   // Each quick action opens another app; one the person was not given is not offered.
   const canMail = useCanOpen('mail');
   const canChat = useCanOpen('chat');
   const canMeet = useCanOpen('meet');
   const canCalendar = useCanOpen('calendar');
   const canTasks = useCanOpen('tasks');
+  const canWhatsapp = useCanOpen('whatsapp');
   const detail = useQuery({ queryKey: ['contacts', 'detail', id], queryFn: ({ signal }) => apiGet<ContactDetail>(`/api/contacts/${id}`, undefined, signal) });
   const notes = useQuery({ queryKey: ['contacts', 'notes', id], queryFn: ({ signal }) => apiGet<ContactNote[]>(`/api/contacts/${id}/notes`, undefined, signal) });
   const found: (Contact & Partial<ContactDetail>) | undefined = detail.data ?? card;
@@ -70,6 +78,8 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
   }
   const c = found;
   const email = c.work_email || c.personal_email;
+  // Their WhatsApp: the number in the WhatsApp field, else their mobile (#176).
+  const waNumber = toE164(c.social?.whatsapp) ?? toE164(c.mobile) ?? toE164(c.office_phone);
 
   const toggle = async (what: 'favorite' | 'archive') => {
     try {
@@ -83,10 +93,29 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
     }
   };
 
+  /* Synced (worksuite-desktop#175): "Also delete in Google?" for the person's own accounts, defaulting to what each
+     account's setting says; an account set to keep its copy is never asked. */
+  const links = detail.data?.links ?? [];
+  const askable = links.filter((l) => l.mine && syncAccounts.data?.find((a) => a.id === l.account_id)?.settings.on_local_delete !== 'never');
+  const startDelete = () => {
+    setAlsoRemote(askable.length > 0 && askable.every((l) => syncAccounts.data?.find((a) => a.id === l.account_id)?.settings.on_local_delete === 'always'));
+    setDeleting(true);
+  };
+  const unlink = async (linkId: number, provider: string) => {
+    try {
+      await apiDelete(`/api/contacts/${id}/links/${linkId}`);
+      toast('success', `Unlinked from ${providerLabel(provider)}. It stays there, and is not imported again.`);
+      void detail.refetch();
+      refresh();
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
+
   const remove = async () => {
     setDeleting(false);
     try {
-      await apiDelete(`/api/contacts/${id}`);
+      await apiDelete(`/api/contacts/${id}${askable.length ? `?remote=${alsoRemote ? 1 : 0}` : ''}`);
       toast('success', 'Contact deleted');
       refresh();
       onGone();
@@ -105,6 +134,17 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
         if (!email) return toast('info', 'No email on file');
         void logAct(id, 'email', `Emailed ${email}`);
         navigate(`/mail?compose=1&to=${encodeURIComponent(email)}`);
+      },
+    },
+    {
+      label: 'WhatsApp',
+      icon: 'phone',
+      shown: canWhatsapp,
+      on: !!waNumber,
+      go: () => {
+        if (!waNumber) return toast('info', 'No phone number on file');
+        void logAct(id, 'chat', `Opened WhatsApp with ${c.display_name}`);
+        navigate(whatsappRoute({ to: waDigits(waNumber) }));
       },
     },
     {
@@ -179,7 +219,7 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
           <HeadButton label={c.is_archived ? 'Restore' : 'Archive'} onClick={() => void toggle('archive')}>
             <Icon name={c.is_archived ? 'undo' : 'archive'} size={17} />
           </HeadButton>
-          <HeadButton label="Delete" onClick={() => setDeleting(true)} className="text-danger">
+          <HeadButton label="Delete" onClick={startDelete} className="text-danger">
             <Icon name="trash" size={17} />
           </HeadButton>
           <span className="mx-1 h-5 w-px bg-line" />
@@ -207,6 +247,22 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
                 <span key={l} className="inline-flex h-5 items-center rounded-[10px] bg-subtle px-2 text-[11px] font-semibold text-ink-2">{l}</span>
               ))}
             </div>
+            {links.length ? (
+              <div className="mt-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[12px] text-ink-3">
+                <SourceIcons sources={links.map((l) => l.provider)} />
+                <span>
+                  {syncedWith(links)}
+                  {detail.data?.updated_at ? ` · last updated ${stampLabel(detail.data.updated_at)}` : ''}
+                </span>
+                {links
+                  .filter((l) => l.mine)
+                  .map((l) => (
+                    <button key={l.id} type="button" onClick={() => void unlink(l.id, l.provider)} title={`Stop syncing this contact with ${l.email ?? providerLabel(l.provider)}`} className="font-semibold text-primary hover:underline">
+                      Unlink from {providerLabel(l.provider)}
+                    </button>
+                  ))}
+              </div>
+            ) : null}
             {actions.length ? (
               <div className="mt-3.5 flex gap-1.5">
                 {actions.map((a) => (
@@ -214,7 +270,7 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
                     <button
                       type="button"
                       aria-label={a.label}
-                      title={a.on ? a.label : a.label === 'Email' ? 'No email on file' : 'Link this contact to a team member to chat'}
+                      title={a.on ? a.label : a.label === 'Email' ? 'No email on file' : a.label === 'WhatsApp' ? 'No phone number on file' : 'Link this contact to a team member to chat'}
                       onClick={() => void a.go()}
                       className={cx('flex h-[46px] w-[46px] items-center justify-center rounded-full border', a.on ? 'border-[#DCE2F5] bg-selection text-primary hover:brightness-95 dark:border-line' : 'border-line bg-ground text-ink-3')}
                     >
@@ -266,6 +322,12 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
           }
         >
           <p className="text-[13px] text-ink-2">Delete {c.display_name}?</p>
+          {askable.length ? (
+            <label className="mt-3 flex items-start gap-2 text-[13px] text-ink">
+              <Checkbox checked={alsoRemote} onChange={(e) => setAlsoRemote(e.target.checked)} className="mt-0.5" />
+              <span>Also delete in {[...new Set(askable.map((l) => providerLabel(l.provider)))].join(' and ')}</span>
+            </label>
+          ) : null}
         </Modal>
       ) : null}
     </>
@@ -311,9 +373,12 @@ function Details({ c, loading }: { c: Contact & Partial<ContactDetail>; loading:
       rows: [
         c.work_email ? { k: 'Work email', icon: 'mail', v: c.work_email, wide: true, copy: true, go: canMail ? () => mail(c.work_email!) : undefined } : null,
         c.personal_email ? { k: 'Personal email', icon: 'mail', v: c.personal_email, copy: true, go: canMail ? () => mail(c.personal_email!) : undefined } : null,
-        c.mobile ? { k: 'Mobile', icon: 'mobile', v: c.mobile, phone: c.mobile } : null,
-        c.office_phone ? { k: 'Office phone', icon: 'phone', v: c.office_phone, phone: c.office_phone } : null,
-        c.home_phone ? { k: 'Home phone', icon: 'phone', v: c.home_phone, phone: c.home_phone } : null,
+        c.mobile ? { k: 'Mobile', icon: 'mobile', v: phoneLabel(c.mobile), phone: c.mobile } : null,
+        c.office_phone ? { k: 'Office phone', icon: 'phone', v: phoneLabel(c.office_phone), phone: c.office_phone } : null,
+        c.home_phone ? { k: 'Home phone', icon: 'phone', v: phoneLabel(c.home_phone), phone: c.home_phone } : null,
+        // What a synced account had beyond the columns (worksuite-desktop#175).
+        ...(c.extras?.emails ?? []).map((e, i) => ({ k: `Email ${i + 3}${e.type && e.type !== 'other' ? ` (${e.type})` : ''}`, icon: 'mail', v: e.value, copy: true, go: canMail ? () => mail(e.value) : undefined })),
+        ...(c.extras?.phones ?? []).map((p, i) => ({ k: `Phone ${i + 4}${p.type && p.type !== 'other' ? ` (${p.type})` : ''}`, icon: 'phone', v: phoneLabel(p.value), phone: p.value })),
         c.website ? { k: 'Website', icon: 'globe', v: c.website, go: () => web(c.website!) } : null,
       ],
     },

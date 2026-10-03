@@ -4,6 +4,7 @@ import { call } from '../../core/bridge';
 import { text } from '../../core/i18n';
 import type { Draft, OfflineMutation } from '@shared/types';
 import type { AllCounts, AllRole, ComposeSeed } from './types';
+import { useLocalFirst } from './localFirst';
 
 /**
  * All Accounts (ENH-MAIL-03 v1.1 DMO-ALL): eight virtual folders over every
@@ -82,6 +83,7 @@ export async function allAccountsPage<T>(role: AllRole, params: Record<string, s
 
 /** GET views/all/counts — null from an older server, which has no such call. */
 export function useAllCounts(enabled: boolean) {
+  useLocalFirst(['mail', 'all', 'counts'], enabled ? { path: '/api/mail/views/all/counts' } : null);
   return useQuery({
     queryKey: ['mail', 'all', 'counts'],
     queryFn: async () => {

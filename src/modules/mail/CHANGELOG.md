@@ -4,6 +4,31 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.9.0 — 2026-10-03
+
+- Composer: one formatting row of grouped icon buttons (style, font, size, colour, highlight, align, lists, checklist, indent, line spacing, format painter) with a separate actions row (Attach, Template with Quick Parts, Signature, Suggest times, Mail merge, Options) that moves what doesn't fit into More; pictures from the computer, Files, a link, paste or drag-drop with size, alignment, alt text, link, corners, border, crop and automatic compression, sent inside the message; tables with a grid picker and table tools; emoji, line, quote, code, date, special characters, button, meeting link and merge fields; Word/Excel paste clean-up and paste options; Markdown shortcuts; spelling suggestions on right-click with a language choice (#188).
+- Folder and account right-click menus: sync this folder, mark all as read, new subfolder, rename, move, delete, empty Deleted Items/Junk, favourites, unread or total count, keep on this computer (all / recent / headers), properties; core folders protected. Mail shows what this computer saved first and refreshes, opened and next messages open instantly, folder actions work offline with rollback, offline search covers saved mail, and a removed account's saved mail is wiped. Large mailboxes sort and group much faster (#162).
+
+## 1.8.3 — 2026-10-03
+
+- Sync buttons use the shared Sync button: they spin from the click, can't be pressed twice, show Synced just now or Sync failed · Retry, and keep one width (#165). Mail's ↻ icons show the same states.
+
+## 1.8.2 — 2026-10-03
+
+- The setup banner after choosing Outlook shortcuts is clearer and fits any window: Import email first, Add signature and Set as default mail app second (in More when narrow), and a dismiss icon; dismissing is remembered (#187).
+
+## 1.8.1 — 2026-10-03
+
+- The message menu is drawn by the shared context menu (#183).
+
+## 1.8.0 — 2026-10-03
+
+- WorkSuite links in messages open in an app tab, not the browser; verified WorkSuite notification mail shows an action card with the item's current state and buttons (Open, Download, Show in Files, Join meeting, Snooze, Mark done), spoofed mail a warning and no buttons; Open in WorkSuite by Reply (#170).
+
+## 1.7.0 — 2026-10-03
+
+- New email is the shared split button with New email from a template, in a new window, an event invite and a contact (#171). One accurate sync status: an out-of-date account is amber, never green; N of M mailboxes live from the real connections; the footer card opens each account's state with Sync now, Fix and Sync all (#172). Sort & Group menu with icons, a direction switch in the field's words, the current sort on the toolbar, Show conversations, Apply to all folders, Reset to default and grouping by conversation (#168).
+
 ## 1.6.0 — 2026-10-03
 
 - ENH-MAIL-03 phases 4–5: data files — import PST, MBOX, EML and MSG (parsed in a separate sandboxed process, no duplicates on re-import) and export; open .eml/.msg; archive policy per folder; Report phishing; safe links checked on this computer and against the organisation's blocked list; Recall, voting and read-receipt answers (guaranteed only between WorkSuite mailboxes, as the app says); S/MIME signature checking; pictures loaded on request through WorkSuite; harmful attachments saved but never opened; reminder window and offline reminders; tasks, contacts and meetings from a message, contact groups, Add from signature, Reply with meeting, Mentioned me; Quick Steps copy to folder, Log in CRM and helpdesk ticket; ignore and clean up conversation; conditional formatting, plain text per sender and immersive reader; which mail alerts, VIPs through quiet hours, more banner actions; Apps pane, Catch up, Suggest times and more drafting tools; decline invitations while away; mail merge; screen-reader new-mail announcements.

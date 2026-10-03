@@ -97,6 +97,13 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     return openExternalSafely(`${origin}${input.path}`, winOf(c.sender));
   });
 
+  // An item link opened from an email, a chat or another program (#170): the audit trail says which item, which
+  // action and where from — the server's copy is what an administrator reads.
+  router.handle('links:audit', async (input) => {
+    ctx.audit.record(ctx.session.userId(), 'desktop.link.opened', { org_id: input.org, item_type: input.type, item_id: input.id, action: input.action, source: input.source, outcome: input.outcome });
+    void ctx.audit.flush();
+  });
+
   // ── auth / session ─────────────────────────────────────────────────────
   router.handle('auth:state', () => ctx.session.get());
   router.handle('auth:setServer', async (input) => {
@@ -556,6 +563,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       ? `/media/${input.elearningMedia}?download=1`
       : input.chatMedia
       ? `/media/${input.chatMedia}?download=1`
+      : input.chatExport
+      ? `/api/chat/rooms/${input.chatExport.room}/export?${new URLSearchParams({ format: input.chatExport.format, media: input.chatExport.media ? '1' : '0' })}`
       : input.garageDoc
       ? garageDocPath(input.garageDoc)
       : ef
@@ -894,6 +903,17 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('offline:moduleBytes', (input) => ctx.cache.moduleBytes(uid(), input.module));
   router.handle('offline:clearModule', (input) => ctx.cache.clearModule(uid(), input.module));
   router.handle('offline:mailStats', () => ({ ...ctx.cache.mailStats(uid()), limitBytes: (ctx.session.current()?.policy?.offline_storage_max_mb ?? 2048) * 1024 * 1024 }));
+  // Cached first (worksuite-desktop#162): Mail's saved answers, read without the network; the page refreshes behind them.
+  router.handle('offline:peek', (input) => {
+    if (!canOpenApp('mail', ctx.session.visibleApps())) return input.paths.map(() => null);
+    return input.paths.map((path) => {
+      if (path.includes('..') || path.includes('//')) return null;
+      const hit = ctx.cache.get(uid(), path);
+      return hit && hit.status === 200 ? { body: hit.body, cachedAt: hit.cachedAt } : null;
+    });
+  });
+  router.handle('offline:clearMailbox', (input) => ctx.cache.clearMailbox(uid(), input.mailbox));
+  router.handle('offline:mailSearch', (input) => (canOpenApp('mail', ctx.session.visibleApps()) ? ctx.cache.mailSearch(uid(), input.q) : []));
   router.handle('offline:submit', (input) => ctx.queue.submit(uid(), input));
   router.handle('offline:retry', async (input) => {
     ctx.queue.retry(uid(), input.id);
