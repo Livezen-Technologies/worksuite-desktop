@@ -6,6 +6,7 @@ import { ErrorNote, Spinner } from '../../components/ui';
 import { Empty, input, Kpi, PageHead, Panel } from '../hr/parts';
 import { moneyList } from './api';
 import { bars, fetchReport, KA, PERIODS, periodOf, type PeriodPreset } from './admin';
+import { amount, fetchBidCostReport, KE } from './bidcost';
 
 /**
  * What came in and what came back, over a period. Two questions on their
@@ -90,9 +91,68 @@ export default function Reports({ org }: { org: string }) {
               )}
             </div>
           </Panel>
+          <BidCost org={org} from={p.from} to={p.to} />
         </>
       )}
     </div>
+  );
+}
+
+const OUTCOME: Record<string, string> = { won: 'Won', lost: 'Lost', open: 'Open', cancelled: 'Cancelled' };
+
+/**
+ * Bid cost by tender (worksuite-desktop#159): what bidding cost, won against
+ * lost, and the cost of a win — everything spent on the decided bids over the
+ * number won. Below it the pipeline, tender by tender, with its bid cost. The
+ * figures are the expenses each reader may see, so a member's report counts
+ * their own claims and says nothing it cannot back.
+ */
+export function BidCost({ org, from, to }: { org: string; from: string; to: string }) {
+  const q = useQuery({ queryKey: KE.report(org, from, to), queryFn: ({ signal }) => fetchBidCostReport(org, from, to, signal), placeholderData: keepPreviousData, retry: false });
+  const r = q.data;
+  if (q.isLoading) return <Spinner />;
+  if (q.error || !r) return <ErrorNote error={q.error} onRetry={() => void q.refetch()} />;
+  if (!r.visible) return <p className="m-0 text-[12.5px] text-ink-3">{r.why ?? 'Bid costs come from the Expenses module.'}</p>;
+  const ccy = r.currency;
+  return (
+    <Panel title="Bid cost by tender" sub={ccy ? `In ${ccy}, from the expenses linked to each tender` : 'Across companies that keep different currencies — the figures are not one total'} bodyClassName="flex flex-col gap-3 px-3.5 py-3">
+      <div className="grid grid-cols-4 gap-3" aria-label="Bid cost">
+        <Kpi label="Total bid cost" value={amount(r.total, ccy)} sub={`${r.rows.length} ${r.rows.length === 1 ? 'tender' : 'tenders'}`} />
+        <Kpi label="On bids won" value={amount(r.by_outcome.won.cost, ccy)} tone={r.by_outcome.won.count ? 'green' : undefined} sub={`${r.by_outcome.won.count} won`} />
+        <Kpi label="On bids lost" value={amount(r.by_outcome.lost.cost, ccy)} tone={r.by_outcome.lost.count ? 'red' : undefined} sub={`${r.by_outcome.lost.count} lost`} />
+        <Kpi label="Cost per win" value={r.cost_per_win === null ? '—' : amount(r.cost_per_win, ccy)} sub="Won and lost, over the wins" />
+      </div>
+      {r.note ? <p className="m-0 text-[12px] text-ink-3">{r.note}</p> : null}
+      {r.rows.length ? (
+        <table className="w-full border-collapse text-[12.5px]" aria-label="Tender pipeline with bid cost">
+          <thead>
+            <tr className="border-b border-line text-left text-[11.5px] text-ink-3">
+              <th className="py-1.5 pr-2 font-semibold">Tender</th>
+              <th className="px-2 py-1.5 font-semibold">Stage</th>
+              <th className="px-2 py-1.5 font-semibold">Outcome</th>
+              <th className="px-2 py-1.5 text-right font-semibold">Expenses</th>
+              <th className="py-1.5 pl-2 text-right font-semibold">Bid cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {r.rows.map((x) => (
+              <tr key={x.id} data-bid-cost={x.id} className="border-b border-line/60 last:border-b-0">
+                <td className="max-w-[320px] truncate py-1.5 pr-2 text-ink" title={x.title}>
+                  {x.reference ? <span className="text-ink-3">{x.reference} · </span> : null}
+                  {x.title}
+                </td>
+                <td className="px-2 py-1.5 text-ink-2">{x.stage_label}</td>
+                <td className="px-2 py-1.5 text-ink-2">{OUTCOME[x.outcome] ?? x.outcome}</td>
+                <td className="px-2 py-1.5 text-right text-ink-2 tabular-nums">{x.expenses}</td>
+                <td className="py-1.5 pl-2 text-right font-semibold text-ink tabular-nums">{amount(x.bid_cost, ccy)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <Empty text="No tenders in this period." />
+      )}
+    </Panel>
   );
 }
 
