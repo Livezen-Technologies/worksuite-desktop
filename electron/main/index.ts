@@ -69,6 +69,7 @@ import { AI_ANSWER_LINK, AI_CHANGES_LINK, AiPendingWatcher } from '../services/a
 import * as fsp from 'node:fs/promises';
 import { createInjector, type Injector } from '../services/remote-control/input';
 import { OfflineCache } from '../services/offline-cache';
+import { MailBodies } from '../services/mail-bodies';
 import { OfflineQueue } from '../services/offline-queue';
 import { RealtimeService } from '../services/realtime';
 import { SecureStore } from '../services/secure-store';
@@ -294,6 +295,19 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const salonPrint = new SalonPrint({ config: db, http, origin: () => auth.getServer()?.origin ?? null });
   const bootstrap = new BootstrapService(db, getVault, http, POLICY_PUBLIC_KEY);
   const cache = new OfflineCache(db, getVault);
+  // "Download message bodies" (#190): Mail's bodies within the keep period, fetched ahead into the offline cache.
+  const mailBodies = new MailBodies({
+    http,
+    cache,
+    userId: () => sessionCtl?.userId() ?? null,
+    prefs: () => settings.effective(),
+    limits: () => {
+      const caps = sessionCtl.capabilities();
+      const pol = sessionCtl.current()?.policy;
+      return { enabled: caps.offlineCache && canOpenApp('mail', sessionCtl.visibleApps()), maxBytes: (pol?.offline_storage_max_mb ?? 2048) * 1024 * 1024 };
+    },
+    online: () => apiReachable && !!sessionCtl?.isReady(),
+  });
   const audit = new AuditService(db, getVault, http, () => auth.getServer()?.api === 'desktop-v1');
   const supervisor = new ServiceSupervisor();
   const lock = new LockService();
@@ -1401,9 +1415,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     // A mailbox's own keep period (Settings › Mail › Storage & sync, D09).
     const me = sessionCtl.current()?.user?.id;
     for (const [box, d] of Object.entries(settings.effective().mailCacheDaysByMailbox ?? {})) if (me) cache.pruneMailbox(String(me), box, d, keepAll);
+    mailBodies.start();
     emitStatus();
   };
   const stopServices = (): void => {
+    mailBodies.stop();
     void remoteControl.shutdown('logout');
     webchat.stop();
     quickAsk.release();
@@ -1584,6 +1600,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   function onReconnect(): void {
     const uid = sessionCtl.userId();
     realtime.kick();
+    mailBodies.kick();
     if (!uid) return;
     void webchat.reconcile();
     void sessionCtl.revalidate();
@@ -1805,6 +1822,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     realtime,
     notifications,
     cache,
+    mailBodies,
     queue,
     transfers,
     meetRecorder,
@@ -2007,7 +2025,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     }
   };
   applyMailtoHandler(settings.effective().mailtoHandler === true);
+  // What Mail keeps offline changed: its bodies are listed and fetched again soon (#190).
+  let bodyPrefs = JSON.stringify([settings.effective().mailCacheDays, settings.effective().mailCacheDaysByMailbox ?? {}, settings.effective().mailFolderOffline ?? {}]);
   settings.onChange((prefs) => {
+    const now = JSON.stringify([prefs.mailCacheDays, prefs.mailCacheDaysByMailbox ?? {}, prefs.mailFolderOffline ?? {}]);
+    if (now !== bodyPrefs) {
+      bodyPrefs = now;
+      mailBodies.kick(2_000, true);
+    }
     applyMailtoHandler(prefs.mailtoHandler === true);
     webchat.refresh();
     syncQuickAsk();

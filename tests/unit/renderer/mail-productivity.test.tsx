@@ -20,7 +20,8 @@ import { TabProvider } from '../../../src/core/tab-context';
 import { setRegional } from '../../../src/core/time';
 import { toast } from '../../../src/core/toasts';
 import MailPage from '../../../src/modules/mail/MailPage';
-import { Rules, Signatures, exportRules, importRules, type MailFilter } from '../../../src/modules/mail/MailRules';
+import { Rules, exportRules, importRules, type MailFilter } from '../../../src/modules/mail/MailRules';
+import { Signatures } from '../../../src/modules/mail/signatures/SignaturesSettings';
 import { QuickStepsSettings } from '../../../src/modules/mail/QuickStepsUi';
 import { freshRows, markSeen, myRules, rowMatches, ruleTakes } from '../../../src/modules/mail/clientRules';
 import { pickSignature, sendChecks } from '../../../src/modules/mail/composeHtml';
@@ -193,17 +194,16 @@ describe('settings screens', () => {
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/mail/quick-parts', { name: 'Bank details', html: expect.stringContaining('Account 1234') }));
   });
 
-  it('saves a signature for one account, as the default for replies only (DMO-CMP-06)', async () => {
+  // worksuite-desktop#166: which signature an account uses is chosen per account (new mail, replies and forwards, placement), not on the signature.
+  it('chooses one account’s signature for replies only (DMO-CMP-06)', async () => {
+    const get = vi.mocked(apiGet).getMockImplementation()!;
+    vi.mocked(apiGet).mockImplementation((async (path: string) =>
+      path === '/api/mail/signatures' ? { signatures: [{ id: 1, name: 'Work', html: '<div>Asha</div>', is_default: true }, { id: 2, name: 'Sales', html: '<div>Sales team</div>', is_default: false }], settings: [], values: {} } : get(path)) as never);
     wrap(<Signatures />);
-    fireEvent.click(await screen.findByRole('button', { name: 'New signature' }));
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Sales' } });
-    fireEvent.change(screen.getByLabelText('Signature'), { target: { value: 'Sales team' } });
     await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/api/mail/mailboxes'));
-    fireEvent.click(screen.getByRole('combobox', { name: 'For' }));
-    fireEvent.click(await screen.findByRole('option', { name: 'sales@example.test' }));
-    fireEvent.click(screen.getByLabelText('Use for new messages'));
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/mail/signatures', expect.objectContaining({ name: 'Sales', mailbox: 7, default_new: false, default_reply: true, html: expect.stringContaining('Sales team') })));
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Replies and forwards for sales@example.test' }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Sales' }));
+    await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/signature-settings', { mailbox: 7, new_id: 1, reply_id: 2, placement: 'above_quote' }));
   });
 
   it('shows where each rule runs, and runs a server rule now on a folder (DMO-RUL-04/05, AC-DMO-06)', async () => {

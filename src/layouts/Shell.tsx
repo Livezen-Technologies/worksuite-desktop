@@ -120,6 +120,7 @@ export function Shell() {
       registerCommand({ id: 'account', label: 'My account', group: 'Navigate', keywords: 'profile picture password two-factor passkey sessions', run: () => navigate('/account/profile'), when: () => !isGuest() }),
       registerCommand({ id: 'account-security', label: 'Change my password', group: 'Navigate', keywords: 'security two-factor 2fa passkey sessions sign out', run: () => navigate('/account/security'), when: () => !isGuest() }),
       registerCommand({ id: 'ai', label: 'Open AI Assistant', group: 'Shell', run: () => toggleAssistant(), when: () => canOpen('ai') }),
+      registerCommand({ id: 'ai-alt', label: 'Open AI Assistant', group: 'Shell', hidden: true, run: () => toggleAssistant(), when: () => canOpen('ai') }),
       registerCommand({ id: 'switch-org', label: 'Switch organization', group: 'Shell', run: () => openOverlay('org'), when: () => !isGuest() }),
       registerCommand({ id: 'lock', label: 'Lock WorkSuite', group: 'Shell', run: () => void call('security:lock'), when: () => !isGuest() }),
       registerCommand({ id: 'help', label: 'Help & Diagnostics', group: 'Navigate', run: () => navigate('/diagnostics') }),
