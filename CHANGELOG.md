@@ -5,6 +5,14 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.130 — 2026-10-03
+
+- **WhatsApp says which number is linked only once it is (#157, first fix).** While a QR scan has not confirmed a
+  number, settings say "Number not linked yet" instead of showing a stored phone value. Confirmed Sri Lankan numbers
+  read as +94 7x xxx xxxx, with the connection time and device where the server gives them. Check connection reports
+  the provider's answer, settings actions no longer overlap, and Unlink from phone moves into an action menu (still
+  asking first). Duplicate account cards and organisation ownership are still to come.
+
 ## 0.2.129 — 2026-10-03
 
 - **WhatsApp opens from what this computer saved (#158, first stage).** Accounts, chat lists and conversations you

@@ -17,6 +17,9 @@ export interface WaAccount {
   provider_label?: string;
   is_live?: boolean;
   phone: string | null;
+  connected_at?: string | null;
+  checked_at?: string | null;
+  device_label?: string | null;
   colour?: string | null;
   status: string;
   status_note: string | null;
@@ -119,6 +122,18 @@ export const WA_SCOPES: Array<{ id: WaScope; label: string }> = [
 /** A number that can carry messages now. Anything else (being set up, unlinked, failing) needs somebody to act. */
 export function isConnected(a: WaAccount): boolean {
   return a.status === 'connected';
+}
+
+/** Unconfirmed QR records must not claim ownership of a stored phone value. */
+export function confirmedWaPhone(a: WaAccount): string | null {
+  if (a.provider === 'web_js' && (['setup', 'qr_required', 'connecting', 'authenticating'].includes(a.status) || (!isConnected(a) && !a.connected_at))) return null;
+  return a.phone;
+}
+
+export function formatWaPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  if (/^94\d{9}$/.test(digits)) return `+94 ${digits.slice(2, 4)} ${digits.slice(4, 7)} ${digits.slice(7)}`;
+  return digits ? `+${digits}` : '';
 }
 
 /**
