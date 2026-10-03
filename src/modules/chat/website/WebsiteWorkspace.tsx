@@ -16,6 +16,7 @@ import { isMine as mineFor, lastSaid, longestWaiting, sectionRows, stepRow, useC
 import { clock, handoffAsk, handoffTitle, useRingState, waited } from './Ringing';
 import { WebsiteLive, type OnlineVisitor } from './WebsiteLive';
 import { WebsiteThread } from './WebsiteThread';
+import { WidgetSettings } from './widget/WidgetSettings';
 import { ConversationMenu } from '../ConversationMenu';
 import { Select } from '../../../components/Select';
 import { SidePanel } from '../../../components/SidePanel';
@@ -23,7 +24,8 @@ import { SidePanel } from '../../../components/SidePanel';
 /**
  * Website chats as their own workspace (WebChatInbox): the sections down the
  * left, the conversations in the chosen one, then the visitor's thread and
- * dossier. Setup and reports stay on the web, where they are edited.
+ * dossier. The widget's design is edited here, beside a live preview (#199); the rest of setup and the reports stay
+ * on the web, where they are edited.
  */
 const SECTIONS: Array<{ id: Section; label: string }> = [
   { id: 'inbox', label: 'Inbox' },
@@ -71,6 +73,7 @@ export function WebsiteWorkspace() {
   const myName = useStore(app, (s) => s.bootstrap?.user?.name ?? null);
   const selected = query.get('website');
   const live = query.get('section') === 'live';
+  const designing = query.get('section') === 'widget';
   const section = (SECTIONS.find((s) => s.id === query.get('section'))?.id ?? 'inbox') as Section;
   const [site, setSite] = useState(0);
   // The Mine pill narrows whichever open section is showing; Closed is a section of its own.
@@ -161,7 +164,7 @@ export function WebsiteWorkspace() {
   const ids = section === 'missed' ? (missed.data?.missed ?? []).map((m) => m.id) : section === 'invited' ? handoffs.map((h) => h.conversationId) : rows.map((r) => r.id);
   const idsKey = ids.join(',');
   useEffect(() => {
-    if (!active || live) return;
+    if (!active || live || designing) return;
     const list = idsKey ? idsKey.split(',').map(Number) : [];
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || (e.key !== 'j' && e.key !== 'k')) return;
@@ -176,7 +179,7 @@ export function WebsiteWorkspace() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [active, live, idsKey, selected, section, go]);
+  }, [active, live, designing, idsKey, selected, section, go]);
 
   return (
     <div className="flex h-full min-w-0 flex-1 text-[13px]">
@@ -207,6 +210,12 @@ export function WebsiteWorkspace() {
           {ON_WEB.map((g) => (
             <div key={g.head} className="flex flex-col gap-px">
               <div className="mx-2 mt-2 mb-0.5 text-[10.5px] font-bold tracking-[0.6px] text-ink-3">{g.head}</div>
+              {/* The widget's look and words are designed here, with a live preview (#199). */}
+              {g.head === 'SETUP' ? (
+                <button type="button" aria-current={designing ? 'page' : undefined} onClick={() => go('/chat?view=website&section=widget')} className={cx('flex h-[27px] items-center rounded-[7px] px-2 text-left', designing ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
+                  <span className="flex-1">Widget</span>
+                </button>
+              ) : null}
               {g.items.map((i) => (
                 <button key={i.tab} type="button" title="Opens on the web" onClick={() => void call('app:openInBrowser', { path: `/website-chats?tab=${i.tab}` })} className="flex h-[27px] items-center rounded-[7px] px-2 text-left text-ink hover:bg-subtle">
                   <span className="flex-1">{i.label}</span>
@@ -218,7 +227,8 @@ export function WebsiteWorkspace() {
         </nav>
       </SidePanel>
       {live ? <WebsiteLive onOpenChat={(id) => go(`/chat?view=website&section=inbox&website=${id}`)} /> : null}
-      <section aria-label="Conversations" className={cx('flex w-[320px] shrink-0 flex-col border-r border-line bg-surface', live && 'hidden')}>
+      {designing ? <WidgetSettings /> : null}
+      <section aria-label="Conversations" className={cx('flex w-[320px] shrink-0 flex-col border-r border-line bg-surface', (live || designing) && 'hidden')}>
         <div className="flex flex-col gap-2 border-b border-line p-3">
           <div className="flex items-center">
             <b className="flex-1 text-[15px] text-ink">{SECTIONS.find((s) => s.id === section)?.label}</b>
@@ -273,7 +283,7 @@ export function WebsiteWorkspace() {
         </div>
         {rowMenu ? <ConversationMenu x={rowMenu.x} y={rowMenu.y} target={{ kind: 'website', row: rowMenu.r }} onClose={() => setRowMenu(null)} /> : null}
       </section>
-      <div className={cx('flex min-w-0 flex-1', live && 'hidden')}>
+      <div className={cx('flex min-w-0 flex-1', (live || designing) && 'hidden')}>
         {selected ? (
           <WebsiteThread key={selected} id={selected} row={openRows.find((r) => String(r.id) === selected)} />
         ) : (
