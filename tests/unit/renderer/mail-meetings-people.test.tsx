@@ -21,6 +21,7 @@ import { toast } from '../../../src/core/toasts';
 import { InviteCard, hasInvite, inviteWhen, type InviteView } from '../../../src/modules/mail/InviteCard';
 import MailPage from '../../../src/modules/mail/MailPage';
 import { Rules } from '../../../src/modules/mail/MailRules';
+import { senderNotice } from '../../../src/modules/mail/MessageView';
 import { applyFilters, serverFilters } from '../../../src/modules/mail/model';
 import { PersonButton } from '../../../src/modules/mail/PeopleCard';
 import { RecipientField } from '../../../src/modules/mail/Recipients';
@@ -344,5 +345,16 @@ describe('automatic replies (DMO-OOF-01/02, AC-DMO-09)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open My Day' }));
     await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/prefs', { todoPane: true }));
     await act(async () => undefined);
+  });
+});
+
+describe('external and first-time senders (DMO-SEC-01)', () => {
+  it('tags mail from outside the organisation and says when a sender is new, once the context has answered', () => {
+    const ctx = (over: Partial<MessageContext['sender'] & object> = {}, total = 5) => ({ sender: { email: 'x', name: null, contact_id: null, user_id: null, is_colleague: false, company: null, ...over }, history: { total, first: null, last: null, messages: [] } });
+    expect(senderNotice('pat@client.example', 'asha@example.com', ctx())).toEqual({ external: true, rare: false });
+    expect(senderNotice('omar@example.com', 'asha@example.com', ctx())).toEqual({ external: false, rare: false });
+    expect(senderNotice('omar@other.example', 'asha@example.com', ctx({ is_colleague: true }))).toEqual({ external: false, rare: false });
+    expect(senderNotice('new@client.example', 'asha@example.com', ctx({}, 1))).toEqual({ external: true, rare: true });
+    expect(senderNotice('new@client.example', 'asha@example.com', null)).toEqual({ external: false, rare: false });
   });
 });

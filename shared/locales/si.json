@@ -1956,5 +1956,8 @@
   "today": "අද",
   "Tasks due": "නියමිත කාර්ය",
   "Drop a message here to make a task": "කාර්යයක් සෑදීමට පණිවිඩයක් මෙහි දමන්න",
-  "Nothing due this week.": "මෙම සතියේ නියමිත කිසිවක් නැත."
+  "Nothing due this week.": "මෙම සතියේ නියමිත කිසිවක් නැත.",
+  "This message came from outside your organisation. Take care with links and attachments.": "මෙම පණිවිඩය ඔබේ ආයතනයෙන් පිටතින් ආවා. සබැඳි සහ ඇමුණුම් ගැන සැලකිලිමත් වන්න.",
+  "External": "බාහිර",
+  "You don’t often get email from {email}.": "ඔබට {email} වෙතින් නිතර ඊමේල් නොලැබේ."
 }

@@ -1956,5 +1956,8 @@
   "today": "இன்று",
   "Tasks due": "உரிய பணிகள்",
   "Drop a message here to make a task": "பணியை உருவாக்க ஒரு செய்தியை இங்கே விடுங்கள்",
-  "Nothing due this week.": "இந்த வாரம் உரியது எதுவும் இல்லை."
+  "Nothing due this week.": "இந்த வாரம் உரியது எதுவும் இல்லை.",
+  "This message came from outside your organisation. Take care with links and attachments.": "இந்தச் செய்தி உங்கள் நிறுவனத்திற்கு வெளியே இருந்து வந்தது. இணைப்புகள் மற்றும் இணைப்புக் கோப்புகளில் கவனமாக இருங்கள்.",
+  "External": "வெளி",
+  "You don’t often get email from {email}.": "உங்களுக்கு {email} இடமிருந்து அடிக்கடி மின்னஞ்சல் வருவதில்லை."
 }

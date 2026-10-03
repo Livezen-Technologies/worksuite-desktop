@@ -25,7 +25,7 @@ import { folderName, plainText, securityVerdict } from './model';
 import { escapeHtml, highlightText, isDesignedMail, mailFrameDoc, sanitizeMailHtml } from './sanitize';
 import { TeamBar, TeamWork } from './Team';
 import { CategoryChip } from './parts';
-import type { ComposeSeed, MailPrefs, Mailbox, MessageDetail, MessageRef, MessageRow } from './types';
+import type { ComposeSeed, MailPrefs, Mailbox, MessageContext, MessageDetail, MessageRef, MessageRow } from './types';
 
 /** A PDF attachment, by its type or its name. */
 const isPdf = (a: { name: string; mime: string }) => a.mime === 'application/pdf' || /\.pdf$/i.test(a.name);
@@ -297,6 +297,7 @@ export function MessageView(p: MessageViewProps) {
   // Dark email content (Settings › Reading) in the dark theme — but a designed email keeps its light card (D10).
   const darkBody = darkTheme && p.prefs.darkBody === true && !isDesignedMail(clean.html);
   const security = securityVerdict(context.data?.security);
+  const outsider = senderNotice(m.from_email, p.account?.email ?? null, context.data ?? null);
   const folderChip = folderName(m && ref.folder.startsWith('label:') ? ref.folder.slice(6) : ref.folder === 'inbox' ? text('Inbox') : ref.folder.charAt(0).toUpperCase() + ref.folder.slice(1));
   // D13 (the reader's More) and D14 (the action bar's More).
   const moreItems = (where: 'top' | 'bottom'): MenuSection[] => {
@@ -425,6 +426,11 @@ export function MessageView(p: MessageViewProps) {
                 </Chip>
               </span>
             ) : null}
+            {outsider.external ? (
+              <span title={text('This message came from outside your organisation. Take care with links and attachments.')}>
+                <Chip tone="warning">{text('External')}</Chip>
+              </span>
+            ) : null}
             {p.account ? <Chip tone="indigo">{p.account.account_type === 'local_mailbox' ? text('WorkSuite Local') : p.account.shared ? p.account.email : p.account.provider_label ?? p.account.email}</Chip> : null}
             {m.labels?.map((l) => <Chip key={l.id}>{l.name}</Chip>)}
             {p.marks?.pinned ? (
@@ -486,6 +492,11 @@ export function MessageView(p: MessageViewProps) {
             </div>
           </div>
         </header>
+        {outsider.rare ? (
+          <p role="note" className="mx-6 mt-3 rounded-[8px] bg-subtle px-3 py-1.5 text-[12.5px] text-ink-2">
+            {text('You don’t often get email from {email}.', { email: m.from_email })}
+          </p>
+        ) : null}
         {m.team && ref.mailbox ? <TeamBar msgRef={ref} m={m} me={me ? Number(me.id) : null} /> : null}
         <div className="flex shrink-0 flex-wrap items-center gap-2 px-6 pt-4">
           <AiChip label="Summarise" onClick={() => setAi({ task: 'summarize', title: text('Summary of this email') })} />
@@ -531,6 +542,20 @@ export function MessageView(p: MessageViewProps) {
 }
 
 /** The route that opens one message on its own (a window, a tab). */
+/**
+ * External sender tag and first-time sender hint (ENH-MAIL-03 DMO-SEC-01):
+ * external when the sender's domain is not the mailbox's and the sender is
+ * not a colleague; rare when there is at most this one message from them.
+ * Nothing is claimed until the context has answered.
+ */
+export function senderNotice(from: string, mailbox: string | null, ctx: Pick<MessageContext, 'sender' | 'history'> | null): { external: boolean; rare: boolean } {
+  if (!ctx) return { external: false, rare: false };
+  const domain = (a: string | null) => (a ?? '').toLowerCase().split('@')[1] ?? '';
+  const external = !!mailbox && !!domain(from) && domain(from) !== domain(mailbox) && !ctx.sender?.is_colleague;
+  const rare = !!ctx.history && ctx.history.total <= 1 && from.toLowerCase() !== (mailbox ?? '').toLowerCase();
+  return { external, rare };
+}
+
 export function windowRoute(ref: MessageRef): string {
   const q = new URLSearchParams({ folder: ref.folder, msg: ref.uid });
   if (ref.mailbox) {
