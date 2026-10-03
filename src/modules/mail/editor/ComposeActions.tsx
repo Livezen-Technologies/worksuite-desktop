@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { text } from '../../../core/i18n';
 import type { MenuSection } from '../../../components/Menu';
 import type { Signature, Template } from '../types';
@@ -7,8 +8,10 @@ import { ToolbarRow, type ToolGroup } from './Toolbar';
  * The composer's actions (worksuite-desktop#188), one row above the
  * addresses and apart from the formatting tools: Attach ▾ (this computer,
  * WorkSuite Files, a cloud link), Template ▾ (insert, save, Quick Parts),
- * Signature ▾, Suggest times, Mail merge and ⋯ Options. What does not fit
- * goes into More, as in the formatting row.
+ * Signature ▾, Suggest times, Mail merge and ⋯ Options. 32 px buttons with
+ * an icon and a caption; short of room, the captions go (the tooltips stay),
+ * then what still does not fit goes into More (worksuite-desktop#213). The
+ * same groups can join the formatting row instead (composeActionGroups).
  */
 
 export type QuickPart = { id: number; name: string; html: string; org: boolean };
@@ -41,9 +44,11 @@ export interface ComposeActionsProps {
   onSuggestTimes: () => void;
   options: () => MenuSection[];
   important: boolean;
+  /** The templates list in the side panel (or its popover, when the panel is not showing). */
+  onBrowseTemplates?: () => void;
 }
 
-export function ComposeActions(p: ComposeActionsProps) {
+export function composeActionGroups(p: ComposeActionsProps): ToolGroup[] {
   const needs = (what: string) => (p.offline ? text('{what} needs WorkSuite.', { what }) : undefined);
   const attach = (): MenuSection[] => [
     {
@@ -68,6 +73,7 @@ export function ComposeActions(p: ComposeActionsProps) {
           submenu: [{ id: 'list', items: p.templates.map((t) => ({ id: `tpl-${t.id}`, label: t.name, description: t.mine ? undefined : text('Shared with you'), onSelect: () => p.onTemplate(t) })) }],
         },
         { id: 'tpl-save', label: text('Save as template…'), icon: 'bookmark', disabled: p.offline, reason: needs(text('Saving a template')), onSelect: p.onSaveTemplate },
+        ...(p.onBrowseTemplates ? [{ id: 'tpl-browse', label: text('Browse templates…'), icon: 'search', onSelect: p.onBrowseTemplates }] : []),
       ],
     },
     {
@@ -93,9 +99,9 @@ export function ComposeActions(p: ComposeActionsProps) {
       ],
     },
   ];
-  const groups: ToolGroup[] = [
+  return [
     {
-      id: 'add',
+      id: 'compose-add',
       label: text('Add'),
       items: [
         { id: 'attach', label: text('Attach'), icon: 'paperclip', caption: text('Attach'), menu: attach },
@@ -104,7 +110,7 @@ export function ComposeActions(p: ComposeActionsProps) {
       ],
     },
     {
-      id: 'more',
+      id: 'compose-more',
       label: text('More'),
       items: [
         ...(p.suggestTimes ? [{ id: 'suggest', label: text('Suggest times'), icon: 'calendar', caption: text('Suggest times'), disabled: p.offline, reason: text('Suggesting times needs WorkSuite.'), run: p.onSuggestTimes }] : []),
@@ -113,9 +119,13 @@ export function ComposeActions(p: ComposeActionsProps) {
       ],
     },
   ];
+}
+
+/** `end`: after the row (the side panel's Show button). */
+export function ComposeActions(p: ComposeActionsProps & { end?: ReactNode }) {
   return (
-    <div className="flex shrink-0 items-center border-b border-line px-3 py-1">
-      <ToolbarRow groups={groups} label={text('Message actions')} size="sm" className="min-w-0 flex-1" />
+    <div data-compose-actions className="flex h-10 shrink-0 items-center border-b border-line px-3">
+      <ToolbarRow groups={composeActionGroups(p)} label={text('Message actions')} collapse className="min-w-0 flex-1" end={p.end} />
     </div>
   );
 }

@@ -516,4 +516,6 @@ export interface ComposeSeed {
   mailbox?: string | null;
   /** A template to put in once it has loaded (a Quick Step's reply with template). */
   templateId?: number;
+  /** The message replied to, for Send and archive (worksuite-desktop#213). */
+  source?: MessageRef;
 }

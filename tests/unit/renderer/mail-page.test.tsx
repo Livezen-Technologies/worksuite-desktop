@@ -378,7 +378,7 @@ describe('compose', () => {
     const form = await screen.findByRole('form', { name: 'New email' });
     fireEvent.change(within(form).getByLabelText('Subject'), { target: { value: 'Later' } });
     fireEvent.click(screen.getByRole('radio', { name: /Tomorrow morning/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Send later…' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule' }));
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/mail/send', expect.objectContaining({ subject: 'Later', schedule_at: '2026-10-03T08:00:00.000Z' })));
   });
 });

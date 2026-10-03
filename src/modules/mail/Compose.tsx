@@ -1,33 +1,35 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { apiPost, request } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
-import { useDraft } from '../../core/drafts';
+import { flushDrafts, useDraft } from '../../core/drafts';
 import { text } from '../../core/i18n';
 import { addDays, bytes, timeLabel, todayInZone, wallToUtc } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
-import { Menu, type MenuSection } from '../../components/Menu';
+import type { MenuSection } from '../../components/Menu';
+import { PrimaryActionButton } from '../../components/PrimaryAction';
 import { Select } from '../../components/Select';
 import { DriveFilePicker, type DriveFileRow } from '../../components/DriveFilePicker';
-import { Button, Chip, ErrorNote, FileBadge, Modal, Spinner, TextField, cx } from '../../components/ui';
+import { Button, ErrorNote, FileBadge, Modal, TextField, cx } from '../../components/ui';
 import { AiTextDialog } from '../ai/AiTextDialog';
 import { SuggestTimes } from './SuggestTimes';
 import { createMeeting } from '../meet/api';
-import { ComposeActions, quickPartsReason } from './editor/ComposeActions';
+import { ComposeActions, composeActionGroups, quickPartsReason, type ComposeActionsProps } from './editor/ComposeActions';
+import { ComposeSidePanel, PanelPopover, useComposePanel, useWidth } from './ComposePanel';
 import { MailEditor } from './editor/MailEditor';
 import { INLINE_MAX_BYTES, MESSAGE_MAX_BYTES, MESSAGE_WARN_BYTES, embeddedBytes } from './editor/images';
 import { meetingLinkHtml } from './editor/insert';
 import { MailMerge } from './MailMerge';
 import { canOpen } from '../../core/access';
 import { MAIL_TASKS, WRITING_TASKS, type TextTask } from '../ai/textTools';
-import { sendMessage, useQuickParts, useSignatures, useTemplates } from './api';
+import { messageAction, sendMessage, useQuickParts, useSignatures, useTemplates } from './api';
 import { chooseSignature as signatureFor, cleanComposeHtml, composeBody, composeText, migrateDraft, parseQuote, sendChecks, signatureBlock, splitSignature, textToComposeHtml, voteChoices, withVotePrompt, type ComposeDraft } from './composeHtml';
 import { fillSignature, valuesFor, withEmbedded } from './signatures/signatureHtml';
 import { MentionPopup } from './Mentions';
 import { mailboxLetter } from './model';
 import { sendAfterUndoWindow } from './outgoing';
 import { AccountAvatar } from './parts';
-import { RecipientField, addressOf } from './Recipients';
+import { RecipientField, addressOf, domainOf } from './Recipients';
 import { unquote } from './quote';
 import { escapeHtml, parseAddresses } from './sanitize';
 import type { ComposeSeed, Mailbox, Signature, Template } from './types';
@@ -45,9 +47,21 @@ import type { ComposeSeed, Mailbox, Signature, Template } from './types';
  * it is typed (FR-OFF-07) — cleaned HTML, with older plain-text drafts brought
  * forward; offline, Send queues the message and it goes when the connection
  * returns. It goes as HTML with a plain-text alternative.
+ *
+ * Laid out top to bottom (worksuite-desktop#213): the address rows and the
+ * subject on one 64 px label column, the actions and formatting rows, the
+ * message — which takes all the height left and scrolls inside, with the
+ * quoted email below it — the attachments, and the footer: Send ▾ (send
+ * later, send and archive, send as), the draft's state, Discard and Pop out.
+ * Templates and Send later are in a side panel that can be resized and
+ * hidden, and is a popover when the composer is narrow (ComposePanel).
+ * Keys: Ctrl/⌘+Enter sends, Ctrl/⌘+Shift+D discards (after asking), Esc
+ * puts the message aside with its draft saved.
  */
 
 type Attached = NonNullable<ComposeDraft['attachments']>[number];
+/** How Send was asked for: Send and archive archives the message replied to. */
+type SendOpts = { archive?: boolean };
 
 const tooManyPictures = () => text('The pictures inside this message are too big to send together. Send some as attachments instead (select a picture › Send as attachment instead).');
 
@@ -68,25 +82,71 @@ export function laterChoices(today = todayInZone()): Array<{ id: string; label: 
   ];
 }
 
-export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }: { seed: ComposeSeed; boxes: Mailbox[]; defaultBox: string | null; offline: boolean; onClose: () => void; onReopen: (seed: ComposeSeed) => void }) {
+const mac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
+const MOD = mac ? '⌘' : 'Ctrl+';
+const ONE_ROW_KEY = 'ws.mail.composeOneRow';
+/** From this composer width up, the actions can join the formatting row (when the person chose that). */
+export const ONE_ROW_MIN = 1280;
+
+function readOneRow(): boolean {
+  try {
+    return localStorage.getItem(ONE_ROW_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** The address of the message being opened again in a window of its own: the same seed, so it finds the same draft. */
+export function popOutRoute(seed: ComposeSeed): string {
+  const q = new URLSearchParams({ compose: '1' });
+  if (seed.mode !== 'new') q.set('mode', seed.mode);
+  for (const k of ['to', 'cc', 'bcc', 'subject', 'body', 'quote'] as const) if (seed[k]) q.set(k, seed[k]!);
+  if (seed.inReplyTo) q.set('irt', seed.inReplyTo);
+  return `/mail?${q}`;
+}
+
+/** The footer's word on the draft: calm, never an error. */
+export function draftStatus(s: { saving: boolean; savedAt: string | null; restored: boolean; edited: boolean }): string {
+  if (s.saving) return text('Saving…');
+  if (s.savedAt && s.edited) return text('Draft saved {time}', { time: timeLabel(s.savedAt) });
+  if (s.restored) return text('Restored from this computer');
+  return '';
+}
+
+export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen, onMinimise, onPopOut }: { seed: ComposeSeed; boxes: Mailbox[]; defaultBox: string | null; offline: boolean; onClose: () => void; onReopen: (seed: ComposeSeed) => void; onMinimise?: () => void; onPopOut?: (route: string, title: string) => void }) {
   const context = draftContext(seed);
   const seedQuote = seed.quote ?? '';
   const draft = useDraft<ComposeDraft>('mail', context, { to: seed.to ?? '', cc: seed.cc ?? '', bcc: seed.bcc ?? '', subject: seed.subject ?? '', html: seed.body ? textToComposeHtml(seed.body) : '', quote: seedQuote, from: seed.mailbox ?? defaultBox ?? '', attachments: [], v: 2 });
   const [error, setError] = useState<string | null>(null);
-  const [showCc, setShowCc] = useState(!!seed.cc);
-  const [showBcc, setShowBcc] = useState(!!seed.bcc);
-  const [savedAt, setSavedAt] = useState<string | null>(null);
-  const [uploading, setUploading] = useState<string[]>([]);
+  const [showCc, setShowCc] = useState<boolean | 'opened'>(!!seed.cc);
+  const [showBcc, setShowBcc] = useState<boolean | 'opened'>(!!seed.bcc);
+  const [edited, setEdited] = useState(false);
+  const [uploading, setUploading] = useState<Array<{ id: string; name: string; size: number }>>([]);
   const [later, setLater] = useState<string | null>(null);
   const [pick, setPick] = useState('');
   const [busy, setBusy] = useState(false);
-  const [menu, setMenu] = useState(false);
-  const [tplQuery, setTplQuery] = useState('');
   const [quoteOpen, setQuoteOpen] = useState(false);
   const [drive, setDrive] = useState(false);
-  const tplSearch = useRef<HTMLInputElement>(null);
-  const sendMenu = useRef<HTMLButtonElement>(null);
+  const [discarding, setDiscarding] = useState(false);
+  const [oneRow, setOneRowState] = useState(readOneRow);
+  const area = useRef<HTMLDivElement>(null);
+  const form = useRef<HTMLFormElement>(null);
+  const sendWrap = useRef<HTMLDivElement>(null);
+  const actionsRow = useRef<HTMLDivElement>(null);
+  const templateAnchor = useRef<HTMLElement | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const panel = useComposePanel(area);
+  const formWidth = useWidth(form);
+  const merged = oneRow && formWidth >= ONE_ROW_MIN;
+  const setOneRow = (on: boolean) => {
+    try {
+      if (on) localStorage.setItem(ONE_ROW_KEY, '1');
+      else localStorage.removeItem(ONE_ROW_KEY);
+    } catch {
+      // A view preference only.
+    }
+    setOneRowState(on);
+  };
   // A draft saved by an older version (plain text with the quote inside) comes back as rich text and a separate quote.
   const v = useMemo(() => migrateDraft(draft.value, seedQuote), [draft.value, seedQuote]);
   // The draft as of the last change, for handlers that run before the next render (an upload finishing, Send right after a chip).
@@ -97,7 +157,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   const set = (patch: Partial<ComposeDraft>) => {
     draft.setValue({ ...latest.current, ...patch });
     latest.current = { ...latest.current, ...patch };
-    setSavedAt(new Date().toISOString());
+    setEdited(true);
   };
   // The names behind chosen addresses, so a chip reads "Nimal Perera" rather than the address (kept with the draft).
   const named = (email: string, name: string) => set({ names: { ...(latest.current.names ?? {}), [email.toLowerCase()]: name } });
@@ -182,7 +242,8 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
         toast('error', text('{name} is over the 25 MB limit.', { name: file.name }));
         continue;
       }
-      setUploading((u) => [...u, file.name]);
+      const id = `${file.name}-${Math.random().toString(36).slice(2)}`;
+      setUploading((u) => [...u, { id, name: file.name, size: file.size }]);
       try {
         const form = new FormData();
         form.set('file', file, file.name);
@@ -192,7 +253,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
       } catch (e) {
         toast('error', errorMessage(e));
       } finally {
-        setUploading((u) => u.filter((n) => n !== file.name));
+        setUploading((u) => u.filter((n) => n.id !== id));
       }
     }
   };
@@ -201,14 +262,15 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   const attachFromDrive = async (files: DriveFileRow[]) => {
     setDrive(false);
     for (const f of files) {
-      setUploading((u) => [...u, f.name]);
+      const id = `drive-${f.id}-${Math.random().toString(36).slice(2)}`;
+      setUploading((u) => [...u, { id, name: f.name, size: Number(f.size) || 0 }]);
       try {
         const r = await apiPost<Attached>('/api/mail/upload/from-drive', { file_id: Number(f.id) });
         set({ attachments: [...(latest.current.attachments ?? []), { token: r.token, name: r.name, size: r.size, source: 'drive' }] });
       } catch (e) {
         toast('error', text('“{name}” was not attached: {reason}', { name: f.name, reason: errorMessage(e) }));
       } finally {
-        setUploading((u) => u.filter((n) => n !== f.name));
+        setUploading((u) => u.filter((n) => n.id !== id));
       }
     }
   };
@@ -261,14 +323,15 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
       body_text: body.text,
       in_reply_to: seed.inReplyTo,
       reply_mode: seed.mode === 'new' ? undefined : seed.mode,
-      mailbox: fromId || undefined,
+      // A From chosen by the same click (Send as…) is in the draft before the next render.
+      mailbox: (boxes.some((b) => String(b.id) === d.from) ? d.from : fromId) || undefined,
       attachments: (d.attachments ?? []).map((a) => a.token),
       ...(d.options && Object.keys(d.options).length ? { options: d.options } : {}),
       ...(scheduleAt ? { schedule_at: scheduleAt } : {}),
     };
   };
 
-  const [checks, setChecks] = useState<Array<'attachment' | 'subject'> | null>(null);
+  const [checks, setChecks] = useState<{ issues: Array<'attachment' | 'subject'>; opts: SendOpts } | null>(null);
   useEffect(() => {
     if (!pending) return;
     const d = latest.current;
@@ -281,14 +344,15 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
     // Only when a choice arrives.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pending]);
-  const sendNow = (checked = false) => {
+  const sendNow = (checked = false, opts: SendOpts = {}) => {
     setError(null);
     const d = latest.current;
     if (!parseAddresses(d.to).length) return setError(text('Add at least one recipient.'));
     if (embeddedBytes(d.html) > INLINE_MAX_BYTES) return setError(tooManyPictures());
-    // Forgot the file? No subject? Asked once before it goes (DMO-CMP-16).
+    // Forgot the file? No subject? Asked once before it goes (DMO-CMP-16); quoted text does not count (#213).
     const issues = checked ? [] : sendChecks(d, composeText(splitSignature(d.html)[0]));
-    if (issues.length) return setChecks(issues);
+    if (issues.length) return setChecks({ issues, opts });
+    const source = opts.archive ? seed.source : undefined;
     const body = payload();
     const subject = d.subject || text('(no subject)');
     const toList = parseAddresses(d.to).join(', ');
@@ -299,6 +363,8 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
         try {
           const outcome = await sendMessage(body, text('Send “{subject}” to {to}', { subject, to: toList }));
           await call('offline:deleteDraft', { module: 'mail', context }).catch(() => undefined);
+          // Send and archive: the message replied to goes to the archive once the reply has gone.
+          if (source) await messageAction(source, 'archive', seed.subject ?? '').catch((e) => toast('error', errorMessage(e)));
           toast(outcome === 'queued' ? 'info' : 'success', outcome === 'queued' ? text('Offline — “{subject}” sends when you reconnect.', { subject }) : text('Sent.'));
         } catch (e) {
           toast('error', text('“{subject}” was not sent: {reason} It is still in your drafts.', { subject, reason: errorMessage(e) }));
@@ -389,95 +455,211 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
     },
   ];
 
+  // The composer's own view choices, after the message options.
+  const viewSection = (): MenuSection => ({
+    id: 'view',
+    label: text('View'),
+    items: [
+      { id: 'one-row', label: text('Actions and formatting in one row on wide screens'), checked: oneRow, onSelect: () => setOneRow(!oneRow) },
+      ...(panel.hidden ? [{ id: 'show-panel', label: text('Show side panel'), icon: 'panel-right-open', onSelect: () => panel.setHidden(false) }] : []),
+    ],
+  });
+
   const quote = parseQuote(v.quote);
-  const list = (templates.data?.templates ?? []).filter((t) => !tplQuery.trim() || t.name.toLowerCase().includes(tplQuery.trim().toLowerCase()));
+  const ownDomains = [...new Set(boxes.map((b) => domainOf(b.email)).filter(Boolean))];
+  const replying = seed.mode === 'reply' || seed.mode === 'reply_all';
+  const boxLabel = (b: Mailbox) => (b.display_name && b.display_name !== b.email ? `${b.display_name} <${b.email}>` : b.email);
+  const boxKind = (b: Mailbox) => (b.account_type === 'local_mailbox' ? text('WorkSuite Local') : b.shared ? text('Shared') : (b.provider_label ?? ''));
+  const pickLater = () => {
+    setLater('pick');
+    panel.reveal('later', sendWrap);
+  };
   const sendSections: MenuSection[] = [
     {
       id: 'later',
       label: text('Send later'),
       items: [
         ...choices.map((c) => ({ id: c.id, label: c.label, description: c.when, icon: 'clock', disabled: offline, reason: text('Scheduling needs WorkSuite.'), onSelect: () => void sendLater(c.at) })),
-        { id: 'pick', label: text('Pick a date and time'), icon: 'calendar', onSelect: () => setLater('pick') },
+        { id: 'pick', label: text('Pick a date and time'), icon: 'calendar', disabled: offline, reason: text('Scheduling needs WorkSuite.'), onSelect: pickLater },
       ],
     },
+    ...(replying && seed.source ? [{ id: 'and', items: [{ id: 'send-archive', label: text('Send and archive'), icon: 'archive', onSelect: () => sendNow(false, { archive: true }) }] }] : []),
+    ...(boxes.length > 1
+      ? [
+          {
+            id: 'as',
+            items: [
+              {
+                id: 'send-as',
+                label: text('Send as…'),
+                icon: 'user',
+                submenu: [{ id: 'identities', items: boxes.map((b) => ({ id: `as-${b.id}`, label: b.display_name || b.email, description: b.email, radio: true, checked: String(b.id) === fromId, onSelect: () => (set({ from: String(b.id) }), sendNow()) })) }],
+              },
+            ],
+          },
+        ]
+      : []),
   ];
 
+  const actionProps: ComposeActionsProps = {
+    offline,
+    templates: templates.data?.templates ?? [],
+    onTemplate: (t) => void applyTemplate(t),
+    onSaveTemplate: () => setSaveTpl(true),
+    quickParts: quickParts.data ?? [],
+    quickPartsReason: quickPartsReason(quickParts.data, !!quickParts.isLoading, !!quickParts.error),
+    onQuickPart: (q) => setPending({ part: q.html }),
+    signatures: signatures.data?.signatures ?? [],
+    currentSignature,
+    onSignature: chooseSignature,
+    onAttachComputer: () => fileInput.current?.click(),
+    onAttachFiles: () => setDrive(true),
+    onCloudLink: () => setCloud(true),
+    mailMerge: seed.mode === 'new',
+    onMailMerge: () => setMerging(payload()),
+    suggestTimes: canOpen('calendar'),
+    onSuggestTimes: () => setSuggesting(true),
+    options: () => [...optionSections(), viewSection()],
+    important: v.options?.importance === 'high',
+    onBrowseTemplates: () => {
+      // From the Template button when it shows, else the row (it is in More, or the actions are in the formatting row).
+      templateAnchor.current = actionsRow.current?.querySelector<HTMLElement>('[data-ov="template"]:not([hidden])') ?? actionsRow.current ?? form.current;
+      panel.reveal('templates', templateAnchor);
+    },
+  };
+
+  /** Put the message aside: minimised to its tab when the page has one, else closed — the draft is saved either way. */
+  const putAside = () => {
+    void flushDrafts();
+    if (onMinimise) onMinimise();
+    else onClose();
+  };
+  const discard = async () => {
+    setDiscarding(false);
+    await draft.clear();
+    onClose();
+  };
+  /** Opens the message in a window of its own (where the page offers it): the draft is written first, and the new window finds it by the same seed. */
+  const popOut = () => {
+    if (!onPopOut) return;
+    void flushDrafts().then(() => {
+      onPopOut(popOutRoute(seed), latest.current.subject || (seed.mode === 'new' ? text('New email') : text('Reply')));
+      onClose();
+    });
+  };
+
+  const panelContent = {
+    templates: templates.data?.templates ?? [],
+    templatesLoading: !!templates.isLoading,
+    onTemplate: (t: Template) => void applyTemplate(t),
+    choices,
+    later,
+    onLater: setLater,
+    pick,
+    onPick: setPick,
+    onSchedule: () => void sendLater(laterAt),
+    scheduling: busy,
+    canSchedule: !!later && uploading.length === 0,
+    offline,
+  };
+
+  const status = draftStatus({ saving: draft.saving, savedAt: draft.savedAt, restored: draft.restored, edited });
+
   return (
-    <div className="flex min-h-0 flex-1">
+    <div
+      ref={area}
+      data-compose
+      className="flex min-h-0 min-w-0 flex-1 overflow-hidden"
+      onKeyDown={(e) => {
+        const t = e.target as HTMLElement;
+        // Keys inside a menu, a dialog or a list of suggestions are theirs.
+        if (e.defaultPrevented || (typeof t.closest === 'function' && t.closest('[role="menu"], [role="dialog"], [role="listbox"]'))) return;
+        const mod = e.ctrlKey || e.metaKey;
+        if (mod && !e.shiftKey && !e.altKey && e.key === 'Enter') {
+          e.preventDefault();
+          sendNow();
+        } else if (mod && e.shiftKey && !e.altKey && (e.key === 'D' || e.key === 'd')) {
+          e.preventDefault();
+          e.stopPropagation();
+          setDiscarding(true);
+        } else if (e.key === 'Escape' && !mod && !e.shiftKey && !e.altKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          putAside();
+        }
+      }}
+    >
       <form
+        ref={form}
         aria-label={seed.mode === 'new' ? text('New email') : seed.mode === 'forward' ? text('Forward') : text('Reply')}
         // Writing an email: the AI launcher stays out of the send options and status bar (#153); Write with AI is in the toolbar.
         data-hide-ai-launcher
-        className="flex min-w-0 flex-1 flex-col bg-surface"
+        className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface"
         onSubmit={(e) => {
           e.preventDefault();
           sendNow();
         }}
-        onKeyDown={(e) => {
-          if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-            e.preventDefault();
-            sendNow();
-          }
-        }}
+        // Leaving a field writes the draft now rather than after the pause (the save itself is useDraft's).
+        onBlur={() => void flushDrafts()}
       >
-        <ComposeActions
-          offline={offline}
-          templates={templates.data?.templates ?? []}
-          onTemplate={(t) => void applyTemplate(t)}
-          onSaveTemplate={() => setSaveTpl(true)}
-          quickParts={quickParts.data ?? []}
-          quickPartsReason={quickPartsReason(quickParts.data, !!quickParts.isLoading, !!quickParts.error)}
-          onQuickPart={(q) => setPending({ part: q.html })}
-          signatures={signatures.data?.signatures ?? []}
-          currentSignature={currentSignature}
-          onSignature={chooseSignature}
-          onAttachComputer={() => fileInput.current?.click()}
-          onAttachFiles={() => setDrive(true)}
-          onCloudLink={() => setCloud(true)}
-          mailMerge={seed.mode === 'new'}
-          onMailMerge={() => setMerging(payload())}
-          suggestTimes={canOpen('calendar')}
-          onSuggestTimes={() => setSuggesting(true)}
-          options={optionSections}
-          important={v.options?.importance === 'high'}
-        />
-        <Field label="From">
-          {boxes.length > 1 ? (
-            <Select aria-label="From" value={fromId} onValueChange={(x) => set({ from: String(x) })} options={boxes.map((b) => ({ value: String(b.id), label: b.display_name && b.display_name !== b.email ? `${b.display_name} <${b.email}>` : b.email }))} className="h-8 max-w-[360px]" />
-          ) : from ? (
-            <span className="flex items-center gap-2 text-[13.5px] font-semibold text-ink">
-              <AccountAvatar letter={mailboxLetter(from)} colour={from.colour} size={20} />
-              {from.email}
-            </span>
-          ) : null}
-          {from ? <Chip tone="indigo">{from.account_type === 'local_mailbox' ? text('WorkSuite Local') : from.shared ? text('Shared') : (from.provider_label ?? '')}</Chip> : null}
-        </Field>
-        <Field label="To">
-          <RecipientField label="To" value={v.to} onChange={(to) => set({ to })} names={v.names ?? {}} onName={named} placeholder="name@company.com, …" autoFocus={!v.to} />
-          {!showCc ? (
-            <button type="button" onClick={() => setShowCc(true)} className="text-[13px] font-semibold text-primary hover:underline">
-              Cc
-            </button>
-          ) : null}
-          {!showBcc ? (
-            <button type="button" onClick={() => setShowBcc(true)} className="text-[13px] font-semibold text-primary hover:underline">
-              Bcc
-            </button>
-          ) : null}
-        </Field>
-        {showCc ? (
-          <Field label="Cc">
-            <RecipientField label="Cc" value={v.cc} onChange={(cc) => set({ cc })} names={v.names ?? {}} onName={named} />
+        <div data-compose-header className="shrink-0">
+          <Field label={text('From')}>
+            {from ? <AccountAvatar letter={mailboxLetter(from)} colour={from.colour} size={22} /> : null}
+            {boxes.length > 1 ? (
+              <Select aria-label={text('From')} value={fromId} onValueChange={(x) => set({ from: String(x) })} options={boxes.map((b) => ({ value: String(b.id), label: boxLabel(b), hint: boxKind(b) || undefined }))} className="h-8 max-w-[420px] min-w-0" />
+            ) : from ? (
+              <span className="min-w-0 truncate text-[13.5px] text-ink">
+                {from.display_name && from.display_name !== from.email ? (
+                  <>
+                    <span className="font-semibold">{from.display_name}</span> <span className="text-ink-2">{`<${from.email}>`}</span>
+                  </>
+                ) : (
+                  <span className="font-semibold">{from.email}</span>
+                )}
+              </span>
+            ) : null}
           </Field>
-        ) : null}
-        {showBcc ? (
-          <Field label="Bcc">
-            <RecipientField label="Bcc" value={v.bcc} onChange={(bcc) => set({ bcc })} names={v.names ?? {}} onName={named} />
+          <Field label={text('To')}>
+            <RecipientField label="To" value={v.to} onChange={(to) => set({ to })} names={v.names ?? {}} onName={named} placeholder={text('Add recipients')} autoFocus={!v.to} internal={ownDomains} />
+            {!showCc ? (
+              <button type="button" onClick={() => setShowCc('opened')} className="h-7 shrink-0 rounded-[6px] px-1.5 text-[13px] font-semibold text-primary hover:bg-subtle">
+                Cc
+              </button>
+            ) : null}
+            {!showBcc ? (
+              <button type="button" onClick={() => setShowBcc('opened')} className="h-7 shrink-0 rounded-[6px] px-1.5 text-[13px] font-semibold text-primary hover:bg-subtle">
+                Bcc
+              </button>
+            ) : null}
           </Field>
-        ) : null}
-        <Field label="Subject">
-          <input aria-label="Subject" value={v.subject} onChange={(e) => set({ subject: e.target.value })} className="bare-focus min-w-0 flex-1 bg-transparent text-[14px] font-bold text-ink outline-none" />
-        </Field>
+          {showCc ? (
+            <Field label="Cc">
+              <RecipientField label="Cc" value={v.cc} onChange={(cc) => set({ cc })} names={v.names ?? {}} onName={named} placeholder={text('Add recipients')} autoFocus={showCc === 'opened'} internal={ownDomains} />
+            </Field>
+          ) : null}
+          {showBcc ? (
+            <Field label="Bcc">
+              <RecipientField label="Bcc" value={v.bcc} onChange={(bcc) => set({ bcc })} names={v.names ?? {}} onName={named} placeholder={text('Add recipients')} autoFocus={showBcc === 'opened'} internal={ownDomains} />
+            </Field>
+          ) : null}
+          <Field label={text('Subject')}>
+            <input aria-label="Subject" value={v.subject} placeholder={text('Add a subject')} onChange={(e) => set({ subject: e.target.value })} className="bare-focus h-9 min-w-0 flex-1 bg-transparent text-[14px] font-semibold text-ink outline-none placeholder:font-normal placeholder:text-ink-3" />
+          </Field>
+        </div>
+        {merged ? null : (
+          <div ref={actionsRow} className="shrink-0">
+            <ComposeActions
+              {...actionProps}
+              end={
+                panel.hidden && !panel.layout.narrow ? (
+                  <button type="button" onClick={() => panel.setHidden(false)} aria-label={text('Show side panel')} title={text('Show side panel')} className="ml-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] text-ink-2 hover:bg-subtle hover:text-ink">
+                    <Icon name="panel-right-open" size={16} />
+                  </button>
+                ) : null
+              }
+            />
+          </div>
+        )}
         {merging ? (
           <MailMerge
             message={{ subject: merging.subject, html: merging.body_html, text: merging.body_text }}
@@ -501,147 +683,134 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
             onClose={() => setAi(null)}
           />
         ) : null}
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto bg-ground/40 px-4 py-3 scroll-thin">
-          <MailEditor
-            value={v.html}
-            onChange={(html) => set({ html })}
-            clean={cleanComposeHtml}
-            editorRef={editorEl}
-            label={text('Message')}
-            placeholder={text('Write your message…')}
-            onFiles={(files) => void attach(files)}
-            onAttachInstead={(file) => void attach([file])}
-            aiSections={aiSections}
-            mergeFields={seed.mode === 'new'}
-            onMeetingLink={meetingLink}
-            offline={offline}
-            autoFocus={!!v.to}
-            minHeight={240}
-            className="shrink-0 shadow-sm"
-          />
-          <input ref={fileInput} type="file" multiple hidden aria-hidden onChange={(e) => void attach(e.target.files ? [...e.target.files] : []).then(() => (e.target.value = ''))} />
-          {(v.attachments?.length ?? 0) > 0 || uploading.length ? (
-            <ul role="list" aria-label="Attachments" className="flex shrink-0 flex-wrap gap-2">
-              {(v.attachments ?? []).map((a) => (
-                <li key={a.token} className="flex items-center gap-2.5 rounded-[10px] border border-line bg-surface px-3 py-2">
-                  <FileBadge name={a.name} size={30} />
-                  <span>
-                    <span className="block max-w-[200px] truncate text-[13px] font-semibold text-ink">{a.name}</span>
-                    <span className="block text-[11.5px] text-ink-3">{a.source === 'drive' ? text('{size} · from Files', { size: bytes(a.size) }) : text('{size} · from this computer', { size: bytes(a.size) })}</span>
-                  </span>
-                  <button type="button" onClick={() => set({ attachments: (v.attachments ?? []).filter((x) => x.token !== a.token) })} aria-label={text('Remove {name}', { name: a.name })} className="text-ink-3 hover:text-danger">
-                    <Icon name="x" size={14} />
+        <MailEditor
+          value={v.html}
+          onChange={(html) => set({ html })}
+          clean={cleanComposeHtml}
+          editorRef={editorEl}
+          label={text('Message')}
+          placeholder={text('Write your message…')}
+          onFiles={(files) => void attach(files)}
+          onAttachInstead={(file) => void attach([file])}
+          aiSections={aiSections}
+          mergeFields={seed.mode === 'new'}
+          onMeetingLink={meetingLink}
+          offline={offline}
+          autoFocus={!!v.to}
+          minHeight={160}
+          fill
+          leadingGroups={merged ? () => composeActionGroups(actionProps) : undefined}
+          below={
+            v.quote.trim() ? (
+              <section aria-label={text('Quoted email')} className="mx-5 mb-4 shrink-0 rounded-[10px] border border-dashed border-line bg-surface">
+                <div className="flex flex-wrap items-center gap-2 px-3 py-1.5">
+                  <button type="button" aria-expanded={quoteOpen} onClick={() => setQuoteOpen(!quoteOpen)} className="flex min-w-0 flex-1 items-center gap-1.5 rounded-[6px] py-1 text-left text-[12.5px] font-semibold text-ink-2 hover:text-ink">
+                    <Icon name={quoteOpen ? 'chevron-down' : 'chevron-right'} size={14} />
+                    <span className="truncate">{quote.attribution || (seed.mode === 'forward' ? text('Forwarded email') : text('Quoted email'))}</span>
                   </button>
-                </li>
-              ))}
-              {uploading.map((n) => (
-                <li key={n} className="flex items-center gap-2 rounded-[10px] border border-dashed border-line px-3 py-2 text-[12.5px] text-ink-3">
-                  <Icon name="spinner" size={14} className="animate-spin" /> {text('Uploading {name}…', { name: n })}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {v.quote.trim() ? (
-            <section aria-label={text('Quoted email')} className="shrink-0 rounded-[10px] border border-dashed border-line bg-surface">
-              <div className="flex items-center gap-2 px-3 py-1.5">
-                <button type="button" aria-expanded={quoteOpen} onClick={() => setQuoteOpen(!quoteOpen)} className="flex min-w-0 flex-1 items-center gap-1.5 rounded-[6px] py-1 text-left text-[12.5px] font-semibold text-ink-2 hover:text-ink">
-                  <Icon name={quoteOpen ? 'chevron-down' : 'chevron-right'} size={14} />
-                  <span className="truncate">{quote.attribution || (seed.mode === 'forward' ? text('Forwarded email') : text('Quoted email'))}</span>
-                </button>
-                <span className="hidden shrink-0 text-[11.5px] text-ink-3 sm:inline">{text('AI works on what you wrote; the quoted email is left as it is.')}</span>
-                <button type="button" onClick={() => set({ quote: '' })} className="shrink-0 rounded-[6px] px-2 py-1 text-[12px] font-semibold text-ink-3 hover:bg-subtle hover:text-danger">
-                  {text('Remove quoted email')}
-                </button>
-              </div>
-              {quoteOpen ? (
-                <blockquote className="selectable mx-3 mb-3 max-h-[320px] overflow-y-auto border-l-[3px] border-line pl-3 text-[13px] leading-[1.55] whitespace-pre-wrap text-ink-2 scroll-thin">{quote.lines.join('\n')}</blockquote>
-              ) : null}
-            </section>
-          ) : null}
-        </div>
+                  <span className="hidden shrink-0 text-[11.5px] text-ink-3 sm:inline">{text('AI works on what you wrote; the quoted email is left as it is.')}</span>
+                  <button type="button" onClick={() => set({ quote: '' })} className="shrink-0 rounded-[6px] px-2 py-1 text-[12px] font-semibold text-ink-3 hover:bg-subtle hover:text-danger">
+                    {text('Remove quoted email')}
+                  </button>
+                </div>
+                {quoteOpen ? <blockquote className="selectable mx-3 mb-3 border-l-[3px] border-line pl-3 text-[13px] leading-[1.55] whitespace-pre-wrap text-ink-2">{quote.lines.join('\n')}</blockquote> : null}
+              </section>
+            ) : null
+          }
+        />
+        <input ref={fileInput} type="file" multiple hidden aria-hidden onChange={(e) => void attach(e.target.files ? [...e.target.files] : []).then(() => (e.target.value = ''))} />
         {totalBytes > MESSAGE_WARN_BYTES ? (
-          <p role="status" className={cx('mx-4 mt-2 rounded-[8px] px-3 py-2 text-[12.5px]', totalBytes > MESSAGE_MAX_BYTES ? 'bg-danger-bg text-danger' : 'bg-warning-bg text-warning')}>
+          <p role="status" className={cx('mx-4 mt-2 shrink-0 rounded-[8px] px-3 py-2 text-[12.5px]', totalBytes > MESSAGE_MAX_BYTES ? 'bg-danger-bg text-danger' : 'bg-warning-bg text-warning')}>
             {text('This message is {size} with its pictures and attachments — most mail servers refuse messages over 25 MB. Send big files as a cloud link instead.', { size: bytes(totalBytes) })}
           </p>
         ) : null}
-        {error ? <div className="px-4 pt-2"><ErrorNote error={error} /></div> : null}
-        <div className="flex h-[60px] shrink-0 items-center gap-2.5 border-t border-line px-4">
-          <SendSplit menuRef={sendMenu} disabled={uploading.length > 0} onMenu={() => setMenu(true)} />
-          <button type="button" onClick={() => void sendLater(laterAt)} disabled={busy || !later || uploading.length > 0} className={SECONDARY}>
-            {busy ? <Icon name="spinner" size={15} className="animate-spin-slow" /> : null}
-            {text('Send later…')}
-          </button>
-          <span className="min-w-0 flex-1 truncate text-[12px] text-ink-3">
-            {draft.restored && !savedAt ? text('Draft restored from this computer') : savedAt ? text('Draft saved on this computer · {time}', { time: timeLabel(savedAt) }) : text('Saved on this computer as you type')}
+        {error ? <div className="shrink-0 px-4 pt-2"><ErrorNote error={error} /></div> : null}
+        {(v.attachments?.length ?? 0) > 0 || uploading.length ? (
+          <ul role="list" aria-label={text('Attachments')} className="flex max-h-[96px] shrink-0 flex-wrap gap-2 overflow-y-auto border-t border-line px-4 py-2 scroll-thin">
+            {(v.attachments ?? []).map((a) => (
+              <li key={a.token} data-attachment className="flex h-9 max-w-[280px] min-w-0 items-center gap-2 rounded-[8px] border border-line bg-surface pr-1 pl-2">
+                <FileBadge name={a.name} size={22} />
+                <span className="min-w-0 truncate text-[12.5px] font-semibold text-ink" title={a.name}>{a.name}</span>
+                <span className="shrink-0 text-[11.5px] text-ink-3">{a.source === 'drive' ? text('{size} · from Files', { size: bytes(a.size) }) : bytes(a.size)}</span>
+                <button type="button" onClick={() => set({ attachments: (latest.current.attachments ?? []).filter((x) => x.token !== a.token) })} aria-label={text('Remove {name}', { name: a.name })} className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-ink-3 hover:bg-subtle hover:text-danger">
+                  <Icon name="x" size={13} />
+                </button>
+              </li>
+            ))}
+            {uploading.map((u) => (
+              <li key={u.id} data-uploading className="relative flex h-9 max-w-[280px] min-w-0 items-center gap-2 overflow-hidden rounded-[8px] border border-dashed border-line pr-2 pl-2 text-[12.5px] text-ink-2">
+                <FileBadge name={u.name} size={22} />
+                <span className="min-w-0 truncate" title={u.name}>{u.name}</span>
+                {u.size ? <span className="shrink-0 text-[11.5px] text-ink-3">{bytes(u.size)}</span> : null}
+                <span className="sr-only">{text('Uploading {name}…', { name: u.name })}</span>
+                <span role="progressbar" aria-label={text('Uploading {name}', { name: u.name })} className="absolute inset-x-0 bottom-0 h-[2px] overflow-hidden bg-subtle">
+                  <span className="block h-full w-1/3 animate-pulse bg-primary" />
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <div data-compose-footer className="flex h-14 shrink-0 items-center gap-3 border-t border-line px-4">
+          <div ref={sendWrap} role="group" aria-label={text('Send options')} data-testid="send-split" className="shrink-0">
+            <PrimaryActionButton label={text('Send')} icon="send" shortcut={`${MOD}Enter`} hint={text('Send — you have {n} seconds to undo', { n: 8 })} onClick={() => sendNow()} menu={sendSections} menuLabel={text('Send options')} disabled={uploading.length > 0} />
+          </div>
+          <span role="status" aria-live="polite" data-draft-status className="min-w-0 flex-1 truncate text-[12px] text-ink-3">
+            {status}
           </span>
-          <button
-            type="button"
-            onClick={async () => {
-              await draft.clear();
-              onClose();
-            }}
-            aria-label={text('Discard draft')}
-            className="h-[34px] shrink-0 rounded-[8px] px-2.5 text-[13.5px] font-semibold text-danger hover:bg-danger-bg"
-          >
-            Discard
+          <button type="button" onClick={() => setDiscarding(true)} aria-label={text('Discard draft')} title={text('Discard draft ({keys})', { keys: `${MOD}${mac ? '⇧' : 'Shift+'}D` })} aria-keyshortcuts={mac ? 'Meta+Shift+D' : 'Control+Shift+D'} className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] px-2.5 text-[13px] font-semibold text-ink-2 hover:bg-subtle hover:text-danger">
+            <Icon name="trash" size={15} />
+            <span>{text('Discard')}</span>
           </button>
+          {onPopOut ? (
+            <button type="button" onClick={popOut} aria-label={text('Pop out')} title={text('Open in a new window')} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle hover:text-ink">
+              <Icon name="external" size={15} />
+            </button>
+          ) : null}
         </div>
       </form>
-      <aside aria-label="Templates and send later" className="flex w-[300px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-surface p-4 scroll-thin">
-        <h3 className="text-[14px] font-bold text-ink">Templates</h3>
-        <label className="flex h-9 items-center gap-2 rounded-[8px] border border-line px-2.5 text-[13px]">
-          <Icon name="search" size={14} className="text-ink-3" />
-          <input ref={tplSearch} value={tplQuery} onChange={(e) => setTplQuery(e.target.value)} placeholder="Search templates" aria-label="Search templates" className="bare-focus min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-ink-3" />
-        </label>
-        {templates.isLoading ? <Spinner label="" /> : null}
-        {!templates.isLoading && list.length === 0 ? <p className="text-[12.5px] text-ink-3">{tplQuery ? text('No template matches.') : text('No templates yet. Make them in WorkSuite Mail on the web.')}</p> : null}
-        <ul role="list" className="flex flex-col gap-2">
-          {list.map((t) => (
-            <li key={t.id}>
-              <button type="button" onClick={() => void applyTemplate(t)} className="w-full rounded-[10px] border border-line px-3 py-2 text-left hover:border-primary hover:bg-subtle">
-                <span className="block truncate text-[13px] font-bold text-ink">{t.name}</span>
-                <span className="block text-[12px] text-ink-3">{t.mine ? (t.shared ? text('Mine · shared') : text('Mine')) : text('Shared with you')}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-        <h3 className="mt-2 text-[14px] font-bold text-ink">Send later</h3>
-        <div role="radiogroup" aria-label="Send later" className="flex flex-col gap-2">
-          {[...choices, { id: 'pick', label: text('Pick a date and time'), at: '', when: '' }].map((c) => (
-            <button key={c.id} type="button" role="radio" aria-checked={later === c.id} onClick={() => setLater(later === c.id ? null : c.id)} className={cx('flex items-center gap-2.5 rounded-[10px] border px-3 py-2 text-left text-[13px]', later === c.id ? 'border-primary bg-selection' : 'border-line hover:bg-subtle')}>
-              <span aria-hidden className={cx('inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2', later === c.id ? 'border-primary' : 'border-ink-3')}>{later === c.id ? <span className="h-2 w-2 rounded-full bg-primary" /> : null}</span>
-              <span className="flex-1 text-ink">{c.label}</span>
-              {c.when ? <span className="text-[12px] text-ink-3">{c.when}</span> : null}
-            </button>
-          ))}
-          {later === 'pick' ? <input type="datetime-local" aria-label="Date and time to send" value={pick} min={new Date().toISOString().slice(0, 16)} onChange={(e) => setPick(e.target.value)} className="h-9 rounded-[8px] border border-line bg-surface px-2 text-[13px] text-ink" /> : null}
-        </div>
-        <p className="text-[12px] text-ink-3">Scheduled mail is sent by the WorkSuite server, so this computer can be off.</p>
-      </aside>
+      {panel.layout.docked ? <ComposeSidePanel state={panel} {...panelContent} /> : null}
+      <PanelPopover state={panel} {...panelContent} />
       {drive ? <DriveFilePicker title={text('Attach from Files')} confirmLabel={text('Attach')} onChoose={(files) => void attachFromDrive(files)} onClose={() => setDrive(false)} /> : null}
-      {menu ? <Menu sections={sendSections} label={text('Send later')} anchor={sendMenu} prefer="top" align="start" onClose={() => setMenu(false)} /> : null}
       {cloud ? <DriveFilePicker title={text('Share a link to a file')} confirmLabel={text('Insert link')} onChoose={(files) => void cloudLink(files)} onClose={() => setCloud(false)} /> : null}
       {saveTpl ? <SaveTemplate subject={v.subject} html={mine} onClose={() => setSaveTpl(false)} onSaved={() => void templates.refetch?.()} /> : null}
       <MentionPopup editor={editorEl} onMention={mentioned} />
       {voteDialog ? <CustomVote initial={v.options?.vote ?? []} onSave={(choices) => (setPending({ options: { vote: choices.length ? choices : undefined } }), setVoteDialog(false))} onClose={() => setVoteDialog(false)} /> : null}
+      {discarding ? (
+        <Modal
+          title={text('Discard this draft?')}
+          labelledBy="mail-discard"
+          width={400}
+          onClose={() => setDiscarding(false)}
+          footer={
+            <>
+              <Button onClick={() => setDiscarding(false)}>{text('Keep writing')}</Button>
+              <Button variant="danger" onClick={() => void discard()}>
+                {text('Discard')}
+              </Button>
+            </>
+          }
+        >
+          <p className="p-5 text-[13.5px] text-ink">{text('The message and its attachments are removed from this computer. This cannot be undone.')}</p>
+        </Modal>
+      ) : null}
       {checks ? (
         <Modal
-          title={checks.includes('attachment') ? text('Did you mean to attach a file?') : text('Send without a subject?')}
+          title={checks.issues.includes('attachment') ? text('Did you mean to attach a file?') : text('Send without a subject?')}
           labelledBy="mail-send-check"
           width={420}
           onClose={() => setChecks(null)}
           footer={
             <>
-              <Button onClick={() => setChecks(null)}>{checks.includes('attachment') ? text('Attach a file') : text('Add a subject')}</Button>
-              <Button variant="primary" onClick={() => (setChecks(null), sendNow(true))}>
+              <Button onClick={() => setChecks(null)}>{checks.issues.includes('attachment') ? text('Attach a file') : text('Add a subject')}</Button>
+              <Button variant="primary" onClick={() => (setChecks(null), sendNow(true, checks.opts))}>
                 {text('Send anyway')}
               </Button>
             </>
           }
         >
           <ul className="flex list-disc flex-col gap-1 p-5 pl-9 text-[13.5px] text-ink">
-            {checks.includes('attachment') ? <li>{text('Your message mentions an attachment, but nothing is attached.')}</li> : null}
-            {checks.includes('subject') ? <li>{text('There is no subject.')}</li> : null}
+            {checks.issues.includes('attachment') ? <li>{text('Your message mentions an attachment, but nothing is attached.')}</li> : null}
+            {checks.issues.includes('subject') ? <li>{text('There is no subject.')}</li> : null}
           </ul>
         </Modal>
       ) : null}
@@ -649,33 +818,11 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   );
 }
 
-/*
- * The bottom bar's buttons, kept local and plain until the shared
- * primary/secondary button styles land: both halves of Send are one control —
- * the same height, one rounded outline, a hairline between them.
- */
-const PRIMARY_HALF = 'inline-flex h-full items-center justify-center gap-1.5 bg-primary text-[13.5px] font-bold text-[var(--ws-on-primary)] transition-colors hover:bg-primary-hover focus-visible:relative focus-visible:z-10 disabled:cursor-not-allowed disabled:opacity-60';
-const SECONDARY = 'inline-flex h-[38px] shrink-0 items-center gap-1.5 rounded-[9px] border border-line bg-surface px-3.5 text-[13.5px] font-semibold text-ink transition-colors hover:bg-subtle disabled:cursor-not-allowed disabled:opacity-50';
-
-export function SendSplit({ menuRef, disabled, onMenu }: { menuRef: React.RefObject<HTMLButtonElement | null>; disabled?: boolean; onMenu: () => void }) {
-  return (
-    <div role="group" aria-label={text('Send options')} data-testid="send-split" className="inline-flex h-[38px] shrink-0 items-stretch overflow-hidden rounded-[9px] shadow-sm">
-      <button type="submit" disabled={disabled} title={text('Send (Ctrl+Enter) — you have {n} seconds to undo', { n: 8 })} className={cx(PRIMARY_HALF, 'px-[18px]')}>
-        <Icon name="send" size={15} />
-        {text('Send')}
-      </button>
-      <span aria-hidden className="w-px bg-[var(--ws-on-primary)] opacity-25" />
-      <button ref={menuRef} type="button" onClick={onMenu} aria-label={text('Send later options')} aria-haspopup="menu" title={text('Send later options')} className={cx(PRIMARY_HALF, 'w-8')}>
-        <Icon name="chevron-down" size={15} />
-      </button>
-    </div>
-  );
-}
-
+/** One header row (worksuite-desktop#213): a 64 px label column, the field, a 1 px divider that turns to the accent line while the field has focus. */
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex min-h-[44px] items-center gap-3 border-b border-line px-4">
-      <span className="w-14 shrink-0 text-[13px] text-ink-3">{label}</span>
+    <div data-field-row className="flex min-h-[44px] items-center border-b border-line px-4 transition-shadow focus-within:border-primary focus-within:shadow-[inset_0_-1px_0_var(--color-primary)]">
+      <span className="w-16 shrink-0 text-[13px] text-ink-3">{label}</span>
       <span className="flex min-w-0 flex-1 items-center gap-2">{children}</span>
     </div>
   );

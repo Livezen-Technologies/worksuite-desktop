@@ -355,7 +355,35 @@ export function migrateDraft(raw: unknown, seedQuote = ''): ComposeDraft {
 }
 
 /** Words that say a file is attached, in English, Sinhala and Tamil. */
-const ATTACH_WORDS = /\b(attach(ed|ment|ments|ing)?|enclos(ed|ure)|see (the )?attach(ed|ment))\b|ඇමුණුම|අමුණා|இணைப்ப|இணைத்துள்ள/i;
+const ATTACH_WORDS = /\b(attach(ed|ment|ments|ing)?|enclos(ed|ure)|see (the )?attach(ed|ment)|please find)\b|ඇමුණුම|අමුණා|இணைப்ப|இணைத்துள்ள/i;
+
+/** Where quoted text starts inside what was written: "On … wrote:", an Outlook header block, a forwarded message. */
+const QUOTE_START = /^(on .+ wrote:|-{2,}\s*(original message|forwarded message)\s*-{2,})$/i;
+
+/**
+ * What the person wrote themselves, without text quoted into it
+ * (worksuite-desktop#213): "> " lines (a pasted or inline quote, and
+ * blockquotes as composeText writes them) and everything from an
+ * attribution line ("On … wrote:", "-----Original Message-----") down.
+ */
+export function withoutQuoted(ownText: string): string {
+  const out: string[] = [];
+  const lines = ownText.split('\n');
+  for (const [i, line] of lines.entries()) {
+    const t = line.trim();
+    if (QUOTE_START.test(t)) break;
+    // An Outlook header block: "From: …" with "Sent: …" or "Date: …" on the next line.
+    if (/^from:\s/i.test(t) && /^(sent|date):\s/i.test((lines[i + 1] ?? '').trim())) break;
+    if (t.startsWith('>')) continue;
+    out.push(line);
+  }
+  return out.join('\n');
+}
+
+/** The message says a file is attached ("attached", "attachment", "please find", "enclosed"), quoted text aside. */
+export function mentionsAttachment(ownText: string): boolean {
+  return ATTACH_WORDS.test(withoutQuoted(ownText));
+}
 
 /**
  * Before sending (DMO-CMP-16): a file promised and none attached, or no
@@ -363,7 +391,7 @@ const ATTACH_WORDS = /\b(attach(ed|ment|ments|ing)?|enclos(ed|ure)|see (the )?at
  */
 export function sendChecks(d: Pick<ComposeDraft, 'subject' | 'attachments'>, ownText: string): Array<'attachment' | 'subject'> {
   const out: Array<'attachment' | 'subject'> = [];
-  if (!d.attachments?.length && ATTACH_WORDS.test(ownText)) out.push('attachment');
+  if (!d.attachments?.length && mentionsAttachment(ownText)) out.push('attachment');
   if (!d.subject.trim()) out.push('subject');
   return out;
 }

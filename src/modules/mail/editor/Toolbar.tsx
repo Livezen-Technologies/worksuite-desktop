@@ -3,7 +3,7 @@ import { text } from '../../../core/i18n';
 import { Icon } from '../../../components/Icon';
 import { Menu, type MenuItem, type MenuSection } from '../../../components/Menu';
 import { cx } from '../../../components/ui';
-import { useOverflow } from './overflow';
+import { useCompact, useOverflow } from './overflow';
 
 /**
  * A row of grouped icon buttons (worksuite-desktop#188): 32 px buttons with
@@ -68,8 +68,12 @@ export interface ToolRequest {
   n: number;
 }
 
-/** `keep`: which tools show (the signature editor's smaller set, worksuite-desktop#166). */
-export function ToolbarRow({ groups, label, size = 'md', className, end, request, keep }: { groups: ToolGroup[]; label: string; size?: 'md' | 'sm'; className?: string; end?: ReactNode; request?: ToolRequest | null; keep?: (id: string) => boolean }) {
+/**
+ * `keep`: which tools show (the signature editor's smaller set, worksuite-desktop#166).
+ * `collapse`: when the row is short of room the captions go first (icons with
+ * tooltips), and only then do tools move into More (worksuite-desktop#213).
+ */
+export function ToolbarRow({ groups, label, size = 'md', className, end, request, keep, collapse }: { groups: ToolGroup[]; label: string; size?: 'md' | 'sm'; className?: string; end?: ReactNode; request?: ToolRequest | null; keep?: (id: string) => boolean; collapse?: boolean }) {
   const row = useRef<HTMLDivElement>(null);
   const anchor = useRef<HTMLElement | null>(null);
   const moreBtn = useRef<HTMLButtonElement>(null);
@@ -81,10 +85,15 @@ export function ToolbarRow({ groups, label, size = 'md', className, end, request
     if (i) flat.push({ key: `sep-${g.id}`, group: g });
     for (const it of g.items) flat.push({ key: it.id, group: g, item: it });
   });
+  const compact = useCompact(
+    row,
+    flat.map((f) => f.key),
+    !!collapse,
+  );
   const fit = useOverflow(
     row,
     flat.map((f) => f.key),
-    { moreWidth: size === 'md' ? 36 : 32 },
+    { moreWidth: size === 'md' ? 36 : 32, epoch: compact ? 1 : 0 },
   );
   const hidden = flat.slice(fit).filter((f) => f.item);
   const moreSections: MenuSection[] = [];
@@ -114,7 +123,7 @@ export function ToolbarRow({ groups, label, size = 'md', className, end, request
   const h = size === 'md' ? 'h-8 min-w-8' : 'h-7 min-w-7';
 
   return (
-    <div role="toolbar" aria-label={label} className={cx('flex min-w-0 items-center', className)}>
+    <div role="toolbar" aria-label={label} data-compact={compact || undefined} className={cx('flex min-w-0 items-center', className)}>
       <div ref={row} data-ov-row className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden">
         {flat.map((f, i) => {
           const visible = i < fit;
@@ -149,7 +158,7 @@ export function ToolbarRow({ groups, label, size = 'md', className, end, request
               )}
             >
               {t.icon ? <Icon name={t.icon} size={size === 'md' ? 18 : 16} /> : null}
-              {t.caption ? <span className="max-w-[110px] truncate">{t.caption}</span> : null}
+              {t.caption && !compact ? <span className="max-w-[110px] truncate">{t.caption}</span> : null}
               {t.badge}
               {t.menu ? <Icon name="chevron-down" size={12} className="-ml-0.5 text-ink-3" /> : null}
             </button>

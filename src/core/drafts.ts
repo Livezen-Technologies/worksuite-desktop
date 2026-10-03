@@ -27,9 +27,15 @@ export function useDraft<T>(module: string, context: string, initial: T): {
   setValue: (v: T) => void;
   restored: boolean;
   clear: () => Promise<void>;
+  /** A change is waiting to be written, or being written. */
+  saving: boolean;
+  /** When this editor's draft was last written on this computer (ISO), or null before the first save. */
+  savedAt: string | null;
 } {
   const [value, setValueState] = useState<T>(initial);
   const [restored, setRestored] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latest = useRef(value);
 
@@ -59,9 +65,16 @@ export function useDraft<T>(module: string, context: string, initial: T): {
         if (timer.current) clearTimeout(timer.current);
         timer.current = null;
         pending.delete(key);
-        return call('offline:saveDraft', { module, context, content: latest.current }).then(() => undefined, () => undefined);
+        return call('offline:saveDraft', { module, context, content: latest.current }).then(
+          () => {
+            setSaving(false);
+            setSavedAt(new Date().toISOString());
+          },
+          () => setSaving(false),
+        );
       };
       pending.set(key, save);
+      setSaving(true);
       timer.current = setTimeout(() => { void save(); }, 800);
     },
     [module, context],
@@ -84,7 +97,8 @@ export function useDraft<T>(module: string, context: string, initial: T): {
     pending.delete(`${module}\u0000${context}`);
     await call('offline:deleteDraft', { module, context }).catch(() => undefined);
     setRestored(false);
+    setSaving(false);
   }, [module, context]);
 
-  return { value, setValue, restored, clear };
+  return { value, setValue, restored, clear, saving, savedAt };
 }
