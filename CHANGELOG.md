@@ -5,6 +5,10 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## Unreleased — WhatsApp local-first reads
+
+- Open previously viewed WhatsApp lists and conversations from encrypted local reads while refreshing in the background. Keep older-message scroll position, isolate cached reads by account/server/organisation and purge refused reads. This is the initial response-cache stage of #158; delta sync, offline search/media and outbox work remain pending.
+
 ## 0.2.99 — 2026-10-03
 
 - WhatsApp now uses the shared Chat composer with emoji, AI writing, saved replies, attachment previews, paste/drop, Files selection, formatting and per-conversation drafts. Blocked channels hide Send and offer reconnect and a drafting preference; floating AI no longer covers the composer (#156).

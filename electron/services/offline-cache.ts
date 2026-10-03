@@ -83,6 +83,14 @@ export class OfflineCache {
     return value;
   }
 
+  /** Remove saved reads under an API prefix after access is refused. */
+  clearPrefix(userId: string, prefix: string): number {
+    const rows = this.db.all<{ key: string; path: string }>('SELECT key, path FROM cached_records WHERE user_id = ?', userId);
+    let removed = 0;
+    for (const row of rows) if (row.path === prefix || row.path.startsWith(`${prefix}/`) || row.path.startsWith(`${prefix}?`)) removed += this.db.run('DELETE FROM cached_records WHERE key = ? AND user_id = ?', row.key, userId).changes;
+    return removed;
+  }
+
   /** Least-recently-used eviction down to the policy limit (offline_storage max MB). */
   evict(maxBytes: number): number {
     const total = this.totalBytes();
