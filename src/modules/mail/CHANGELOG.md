@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.13.0 — 2026-10-03
+
+- Pictures in mail (#163): a notice bar with Show images, Always show from this sender or domain; remote pictures only through WorkSuite's proxy; tidy sized placeholders; tracking pixels removed and counted; Settings › Mail › Images & media (picture mode, trusted senders and domains, own domains, auto-download size, network, file types, Save to); never automatic in Junk or failed-authentication mail.
+- Inline cid: pictures show in the body (embedded by the server) and no longer appear as attachments with raw IDs; attachment cards have thumbnails, Open, Download and Save to Files; loaded pictures and opened attachments are kept in the local mail store and open offline.
+- Verification: DMARC pass, or SPF and DKIM both passing, shows Verified.
+
 ## 1.12.0 — 2026-10-03
 
 - Mail list actions (#161): hover buttons (Archive, Delete, read/unread, Snooze, Star) and a checkbox on every row; a right-click menu with Reply, Reply all, Forward, Archive, Delete, Move, Junk, read, star, pin, snooze, flag, categories, Quick Steps, rules, Block sender, Create task, Add to calendar, Save attachments to Files, Open in new window, Copy link, View original, and Select all in this folder or from this sender; Restore and Delete permanently in Deleted Items, Not junk in Junk; a selection toolbar ("Archive 12"); Archive, Delete, Junk, Restore and Move leave the list at once with Undo for 5 seconds, then go to each message's own account (queued offline, Retry on failure); Backspace deletes; right-click acts on the row clicked, not on another selection; the attachment clip shows in every density.

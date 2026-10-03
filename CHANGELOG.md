@@ -5,6 +5,12 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.128 — 2026-10-03
+
+- **Pictures in email, done properly (#163).** Remote pictures stay off until you choose: a bar says how many are blocked, with **Show images**, **Always show from this sender** and (for company domains) **…from this domain**. They load only through WorkSuite's image proxy, never straight from the sender, and blocked ones are neat placeholders of the right size instead of broken icons. Tracking pixels are removed even when pictures are on, and the bar says how many. **Settings › Mail › Images & media** sets the picture mode, trusted senders and domains (synced across your devices), whether your own company's domains are trusted, and auto-download of attachments by size, network, file type and folder. Junk and mail that fails sender authentication never load pictures by themselves.
+- **Logos and signature pictures show in the email** instead of as attachments named with long IDs (needs the server update, Mail 1.11.0). Attachments get readable names, thumbnails, and Open, Download and Save to Files. Pictures you loaded and attachments you opened are kept on this computer and open instantly, offline too.
+- Mail from a sender that passes DMARC now shows **Verified** rather than "Partly verified".
+
 ## 0.2.127 — 2026-10-03
 
 - **Act on mail from the list (#161).** Hover a message for Archive, Delete, Mark read/unread, Snooze and Star, and a checkbox to select it. Right-click for Reply, Reply all, Forward, Archive, Delete, Move to folder, Mark as junk, read/unread, star, pin, snooze, flag, categories, Quick Steps, Always move mail from this sender, Block sender, Create task, Add to calendar, Save attachments to Files, Open in new window, Copy link, View original, and Select all in this folder or from this sender — handy for repeated bank alerts. Deleted Items offers Restore and Delete permanently; Junk offers Not junk. With several selected, a toolbar says "Archive 12". Archived, deleted, junked or moved mail leaves the list at once with **Undo** for 5 seconds, then goes to its own account — queued when offline, and back with Retry if the server refuses. Backspace now deletes too. Right-clicking a message that isn't selected acts on that message.
