@@ -449,6 +449,8 @@ const api = {
     openLink: call('mail:openLink'),
     spellLanguages: call('mail:spellLanguages'),
     setSpellLanguages: call('mail:setSpellLanguages'),
+    images: call('mail:images'),
+    keptAttachments: call('mail:keptAttachments'),
   },
   smime: {
     verify: call('smime:verify'),

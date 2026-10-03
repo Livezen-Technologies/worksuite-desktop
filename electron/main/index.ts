@@ -70,6 +70,9 @@ import * as fsp from 'node:fs/promises';
 import { createInjector, type Injector } from '../services/remote-control/input';
 import { OfflineCache } from '../services/offline-cache';
 import { MailBodies } from '../services/mail-bodies';
+import { MailMedia, mailAttachmentKeepMax } from '../services/mail-media';
+import { attachmentStorePathOf } from '@shared/mail-media';
+import { mimeFor } from '@shared/mime';
 import { OfflineQueue } from '../services/offline-queue';
 import { RealtimeService } from '../services/realtime';
 import { SecureStore } from '../services/secure-store';
@@ -295,17 +298,28 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const salonPrint = new SalonPrint({ config: db, http, origin: () => auth.getServer()?.origin ?? null });
   const bootstrap = new BootstrapService(db, getVault, http, POLICY_PUBLIC_KEY);
   const cache = new OfflineCache(db, getVault);
-  // "Download message bodies" (#190): Mail's bodies within the keep period, fetched ahead into the offline cache.
-  const mailBodies = new MailBodies({
+  const mailLimits = () => {
+    const caps = sessionCtl.capabilities();
+    const pol = sessionCtl.current()?.policy;
+    return { enabled: caps.offlineCache && canOpenApp('mail', sessionCtl.visibleApps()), maxBytes: (pol?.offline_storage_max_mb ?? 2048) * 1024 * 1024 };
+  };
+  // Mail's pictures and attachments kept on this computer (#163): pictures through WorkSuite's proxy, attachments ahead.
+  const mailMedia = new MailMedia({
     http,
     cache,
     userId: () => sessionCtl?.userId() ?? null,
     prefs: () => settings.effective(),
-    limits: () => {
-      const caps = sessionCtl.capabilities();
-      const pol = sessionCtl.current()?.policy;
-      return { enabled: caps.offlineCache && canOpenApp('mail', sessionCtl.visibleApps()), maxBytes: (pol?.offline_storage_max_mb ?? 2048) * 1024 * 1024 };
-    },
+    limits: mailLimits,
+    online: () => apiReachable && !!sessionCtl?.isReady(),
+  });
+  // "Download message bodies" (#190): Mail's bodies within the keep period, fetched ahead into the offline cache.
+  const mailBodies = new MailBodies({
+    afterBody: (user, path, body) => mailMedia.afterBody(user, path, body),
+    http,
+    cache,
+    userId: () => sessionCtl?.userId() ?? null,
+    prefs: () => settings.effective(),
+    limits: mailLimits,
     online: () => apiReachable && !!sessionCtl?.isReady(),
   });
   const audit = new AuditService(db, getVault, http, () => auth.getServer()?.api === 'desktop-v1');
@@ -425,7 +439,27 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     sink: (name): DownloadSink | null => elearning.sink(name),
     // An attachment saved from mail carries the system's "from the internet" mark (ENH-MAIL-03 DMO-SEC-04).
     downloaded: (path, source) => {
-      if (source.startsWith('/api/mail/messages/')) return markFromInternet(path).then(() => undefined);
+      if (!source.startsWith('/api/mail/messages/')) return;
+      return markFromInternet(path).then(async () => {
+        // Kept in the local mail store too, so the next open is instant and works offline (#163).
+        const key = attachmentStorePathOf(source);
+        const user = sessionCtl.userId();
+        if (!key || !user || cache.has(user, key)) return;
+        const info = await fsp.stat(path).catch(() => null);
+        if (!info || info.size > mailAttachmentKeepMax()) return;
+        mailMedia.keepDownloaded(user, key, mimeFor(path) ?? 'application/octet-stream', await fsp.readFile(path));
+      });
+    },
+    // A mail attachment already kept here opens from the store, also offline (#163).
+    localCopy: (source) => {
+      const key = attachmentStorePathOf(source);
+      const user = sessionCtl.userId();
+      return key && user ? (mailMedia.localAttachment(user, key)?.bytes ?? null) : null;
+    },
+    hasLocalCopy: (source) => {
+      const key = attachmentStorePathOf(source);
+      const user = sessionCtl.userId();
+      return !!key && !!user && cache.has(user, key);
     },
     // Every module's PDFs open in PDF Studio, never in another application.
     openInApp: (path) => {
@@ -1823,6 +1857,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     notifications,
     cache,
     mailBodies,
+    mailMedia,
     queue,
     transfers,
     meetRecorder,

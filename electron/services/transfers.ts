@@ -138,6 +138,14 @@ export interface TransferDeps {
   downloaded?: (path: string, source: string) => void | Promise<void>;
   /** How long before the n-th automatic retry (0 first); tests make it short. */
   retryDelay?: (attempt: number) => number;
+  /**
+   * A copy already on this computer, by the download's address: a mail
+   * attachment kept in the local mail store (worksuite-desktop#163) opens
+   * from there at once, also offline, instead of being fetched again.
+   */
+  localCopy?: (source: string) => Buffer | null;
+  /** Whether there is one, without reading it: such a download starts offline too. */
+  hasLocalCopy?: (source: string) => boolean;
 }
 
 /** How the queue runs: Drive › Settings, as the transfer manager takes it. */
@@ -733,7 +741,7 @@ export class TransferManager {
         soonest = Math.min(soonest, due);
         continue;
       }
-      if (held) continue;
+      if (held && !(l.t.direction === 'download' && !l.meta.sink && l.meta.source && this.deps.hasLocalCopy?.(l.meta.source))) continue;
       const n = this.running();
       if (n.all >= this.limit()) break;
       const own = l.t.direction === 'upload' ? this.cfg.maxUploads : this.cfg.maxDownloads;
@@ -901,6 +909,21 @@ export class TransferManager {
     if (!source || !meta.tempPath) return this.settle(l, abort, 'failed', 'Nothing to download.');
     let offset = 0;
     try {
+      const local = this.deps.localCopy?.(source) ?? null;
+      if (local) {
+        await writeFile(meta.tempPath, local, { mode: 0o600 });
+        if (abort.signal.aborted || l.abort !== abort) return;
+        const final = meta.exactPath ?? (await this.uniquePath(this.deps.downloadFolder(), l.t.name));
+        await rename(meta.tempPath, final);
+        meta.finalPath = final;
+        meta.tempPath = null;
+        l.t.destination = final;
+        l.t.total = local.byteLength;
+        l.t.bytes = local.byteLength;
+        this.settle(l, abort, 'done');
+        if (meta.openWhenDone) void this.open(final).catch(() => undefined);
+        return;
+      }
       if (existsSync(meta.tempPath)) offset = (await stat(meta.tempPath)).size;
       const headers: Record<string, string> = { Accept: '*/*' };
       if (offset > 0) headers.Range = `bytes=${offset}-`;

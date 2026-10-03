@@ -113,7 +113,7 @@ import {
   Monitor, Moon, Notebook, Package, Paperclip, Pause, Phone, Pin, PinOff, Play, Plus, Printer, Receipt, RefreshCw, Repeat, Reply, ReplyAll,
   RotateCcw, Search, Send, Server, Settings, Settings2, ShieldAlert, ShieldCheck, ShoppingCart, Smile, Sparkles, SquareCheck, SquarePen, Star,
   Stethoscope, Store, Sun, Timer, Trash2, TrendingUp, TriangleAlert, Upload, UserRound, Users, Video, Wallet, Wifi, WifiOff, Wrench, X, Zap,
-  SlidersHorizontal, Image, RotateCw, CircleHelp, Shield, Dices, Crop,
+  SlidersHorizontal, Image, ImageOff, RotateCw, CircleHelp, Shield, Dices, Crop,
   Scissors,
   Forward, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Mic, MicOff, VideoOff, PhoneOff, PhoneIncoming, MonitorUp, Maximize2, Camera, Film, Music, Square, AtSign, MessageCircle, Cake, Smartphone, MapPin, Tag, List, type LucideIcon,
 } from 'lucide-react';
@@ -147,7 +147,7 @@ const ICONS: Record<string, LucideIcon> = {
   'graduation-cap': GraduationCap, 'book-open': BookOpen,
   ticket: Ticket, 'qr-code': QrCode,
   bed: BedDouble, bookmark: Bookmark, 'log-in': LogIn, 'badge-check': BadgeCheck, 'user-x': UserX, 'x-circle': CircleX, 'credit-card': CreditCard, 'calendar-plus': CalendarPlus, concierge: ConciergeBell,
-  'arrow-down': ArrowDown, 'arrow-right': ArrowRight, 'arrow-up': ArrowUp, sliders: SlidersHorizontal, image: Image, 'rotate-cw': RotateCw, help: CircleHelp, shield: Shield, dice: Dices, crop: Crop, cpu: Cpu,
+  'arrow-down': ArrowDown, 'arrow-right': ArrowRight, 'arrow-up': ArrowUp, sliders: SlidersHorizontal, image: Image, 'image-off': ImageOff, 'rotate-cw': RotateCw, help: CircleHelp, shield: Shield, dice: Dices, crop: Crop, cpu: Cpu,
   'folder-input': FolderInput, spam: OctagonAlert, code: Code, table: Table, 'align-justify': AlignJustify, rows: Rows3, 'mail-check': MailCheck,
   bold: Bold, italic: Italic, underline: Underline, 'list-ordered': ListOrdered, quote: TextQuote,
   strikethrough: Strikethrough, indent: ListIndentIncrease, outdent: ListIndentDecrease, 'undo-edit': Undo2, 'redo-edit': Redo2, unlink: Unlink, 'text-colour': Baseline, 'clear-format': RemoveFormatting, heading: Heading,
