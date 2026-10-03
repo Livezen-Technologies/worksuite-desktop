@@ -14,15 +14,18 @@ import { Icon } from '../../components/Icon';
 import { Menu, type MenuItem, type MenuSection } from '../../components/Menu';
 import { Avatar, Button, Chip, ErrorNote, FileBadge, Modal, Spinner, cx } from '../../components/ui';
 import { AiTextDialog } from '../ai/AiTextDialog';
+import { InviteCard, hasInvite } from './InviteCard';
+import { PersonButton } from './PeopleCard';
 import type { TextTask } from '../ai/textTools';
 import { openPdf } from '../pdf/open';
 import { createTask } from '../tasks/actions';
 import { createMeeting, invitation, openMeeting } from '../meet/api';
 import { messageAction, moveMessage, setLabel, useFolders, useLabels, useMessageContext, type MessageActionName } from './api';
 import { folderName, plainText, securityVerdict } from './model';
-import { escapeHtml, isDesignedMail, mailFrameDoc, sanitizeMailHtml } from './sanitize';
+import { escapeHtml, highlightText, isDesignedMail, mailFrameDoc, sanitizeMailHtml } from './sanitize';
 import { TeamBar, TeamWork } from './Team';
-import type { ComposeSeed, MailPrefs, Mailbox, MessageDetail, MessageRef } from './types';
+import { CategoryChip } from './parts';
+import type { ComposeSeed, MailPrefs, Mailbox, MessageContext, MessageDetail, MessageRef, MessageRow } from './types';
 
 /** A PDF attachment, by its type or its name. */
 const isPdf = (a: { name: string; mime: string }) => a.mime === 'application/pdf' || /\.pdf$/i.test(a.name);
@@ -53,10 +56,24 @@ export interface MessageViewProps {
   autoReply?: boolean;
   /** The message arrived: its tab can be named (a message opened from a link is not in the list). */
   onLoaded?: (subject: string, from: string) => void;
+  /**
+   * Where Archive puts it, from a combined view (DMO-ALL-11): the account's
+   * own Archive ('default'), a folder chosen for an account without one, or
+   * null when the person cancelled.
+   */
+  /** The Quick Steps gallery in the Classic command bar (DMO-QS, O-UI-02). */
+  quickStepButtons?: Array<{ id: number; name: string; icon: string; run: () => void }>;
+  /** Pin, Snooze, Flag, Categorize and Focused for this message (the list's right-click menu). */
+  stateMenu?: () => MenuSection[];
+  /** The row as the list knows it, with WorkSuite's states on it. */
+  marks?: MessageRow | null;
+  archiveTo?: (ref: MessageRef) => Promise<{ slug: string; name: string } | 'default' | null> | 'default';
 }
 
 export interface ViewControls {
-  act: (action: 'archive' | 'trash' | 'spam' | 'star' | 'unread') => void;
+  act: (action: 'archive' | 'trash' | 'spam' | 'star' | 'unread' | 'read') => void;
+  /** Open the Move menu, or the find-in-message bar (DMO-SRC-06). */
+  menu: (which: 'move' | 'find') => void;
   reply: (mode: ComposeSeed['mode']) => void;
 }
 
@@ -75,7 +92,10 @@ export function MessageView(p: MessageViewProps) {
   const { openInWindow, navigate } = useTab();
   const [ai, setAi] = useState<{ task: TextTask; title: string; lang?: string } | null>(null);
   const [source, setSource] = useState(false);
-  const [menu, setMenu] = useState<'top' | 'bottom' | 'move' | 'label' | 'translate' | null>(null);
+  const [menu, setMenu] = useState<'top' | 'bottom' | 'move' | 'label' | 'translate' | 'states' | null>(null);
+  const statesBtn = useRef<HTMLButtonElement>(null);
+  // Find in this message (DMO-SRC-06): matches are highlighted in the body.
+  const [find, setFind] = useState<string | null>(null);
   const topMore = useRef<HTMLButtonElement>(null);
   const bottomMore = useRef<HTMLButtonElement>(null);
   const moveBtn = useRef<HTMLButtonElement>(null);
@@ -84,12 +104,15 @@ export function MessageView(p: MessageViewProps) {
   const me = useStore(app, (s) => s.bootstrap?.user ?? null);
   const origin = useStore(app, (s) => s.auth?.server?.origin ?? '');
   const darkTheme = useStore(app, (s) => s.resolvedTheme === 'dark');
+  // Mark as read (DMO-INB-12): when opened (the server does it), after N seconds, when moving on, or never.
+  const markRead = p.prefs.markRead ?? 'open';
   const q = useQuery({
     queryKey: ['mail', 'message', ref.mailbox, ref.folder, ref.uid],
-    queryFn: ({ signal }) => apiGetMeta<MessageDetail>(`/api/mail/messages/${ref.uid}`, withMailbox({ folder: ref.folder }, ref.mailbox), signal),
+    queryFn: ({ signal }) => apiGetMeta<MessageDetail>(`/api/mail/messages/${ref.uid}`, withMailbox({ folder: ref.folder, ...(markRead !== 'open' ? { peek: 1 } : {}) }, ref.mailbox), signal),
   });
   const m = q.data?.data;
   const clean = useMemo(() => (m ? sanitizeMailHtml(m.body_html) : null), [m]);
+  const found = useMemo(() => highlightText(clean?.html ?? '', find ?? ''), [clean, find]);
   const context = useMessageContext(ref, m?.from_email ?? null, !!m && !p.offline);
   const folders = useFolders(Number(ref.mailbox ?? 0), !!ref.mailbox && menu === 'move');
   const labels = useLabels(p.localStore && menu === 'label');
@@ -100,10 +123,30 @@ export function MessageView(p: MessageViewProps) {
       void qc.invalidateQueries({ queryKey: ['mail', 'views'] });
     }
   }, [q.isSuccess, q.data?.offline, qc]);
+  const unreadNow = !!m && m.is_read === false;
+  const subjectNow = m?.subject ?? '';
+  const delay = Math.max(0, Math.min(30, p.prefs.markReadDelay ?? 5));
+  useEffect(() => {
+    if (!unreadNow || (markRead !== 'delay' && markRead !== 'change')) return;
+    const read = () => void messageAction(ref, 'read', subjectNow).then(() => qc.invalidateQueries({ queryKey: ['mail', 'messages'] })).catch(() => undefined);
+    if (markRead === 'delay') {
+      const t = setTimeout(read, delay * 1000);
+      return () => clearTimeout(t);
+    }
+    // When the selection changes: on leaving this message.
+    return read;
+  }, [unreadNow, markRead, delay, ref, subjectNow, qc]);
 
   const zoom = p.prefs.zoom ?? 100;
   const act = async (action: MessageActionName) => {
     if (!m) return;
+    if (action === 'archive' && p.archiveTo) {
+      // A combined view archives into the message's own account (WF-DO14); an account with no Archive folder asks once.
+      const asked = p.archiveTo(ref);
+      const to = asked instanceof Promise ? await asked : asked;
+      if (to === null) return;
+      if (to !== 'default') return void move(to.slug, to.name);
+    }
     try {
       const outcome = await messageAction(ref, action, m.subject);
       void qc.invalidateQueries({ queryKey: ['mail'] });
@@ -208,6 +251,15 @@ export function MessageView(p: MessageViewProps) {
       toast('error', errorMessage(e));
     }
   };
+  /** A direct chat with a colleague, from the people card. */
+  const chatWith = async (userId: number) => {
+    try {
+      const r = await apiPost<{ room_id: number }>('/api/chat/rooms/direct', { user_id: userId });
+      navigate(`/chat?room=${r.room_id}`);
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
   const remind = async () => {
     if (!m) return;
     const tomorrow = new Date(Date.parse(`${todayInZone()}T12:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
@@ -222,7 +274,7 @@ export function MessageView(p: MessageViewProps) {
   // The page's shortcuts act on this message.
   const { onControls } = p;
   useEffect(() => {
-    onControls?.({ act: (a) => void act(a === 'star' && m?.is_starred ? 'unstar' : a), reply });
+    onControls?.({ act: (a) => void act(a === 'star' && m?.is_starred ? 'unstar' : a), reply, menu: (w) => (w === 'move' ? setMenu('move') : setFind((f) => f ?? '')) });
     return () => onControls?.(null);
   });
   const { onLoaded } = p;
@@ -245,6 +297,7 @@ export function MessageView(p: MessageViewProps) {
   // Dark email content (Settings › Reading) in the dark theme — but a designed email keeps its light card (D10).
   const darkBody = darkTheme && p.prefs.darkBody === true && !isDesignedMail(clean.html);
   const security = securityVerdict(context.data?.security);
+  const outsider = senderNotice(m.from_email, p.account?.email ?? null, context.data ?? null);
   const folderChip = folderName(m && ref.folder.startsWith('label:') ? ref.folder.slice(6) : ref.folder === 'inbox' ? text('Inbox') : ref.folder.charAt(0).toUpperCase() + ref.folder.slice(1));
   // D13 (the reader's More) and D14 (the action bar's More).
   const moreItems = (where: 'top' | 'bottom'): MenuSection[] => {
@@ -332,6 +385,7 @@ export function MessageView(p: MessageViewProps) {
         <Tool icon="spam" label="Report spam (!)" onClick={() => void act('spam')} disabled={ref.folder === 'spam'} />
         <Tool ref={moveBtn} icon="folder-input" label="Move to (V)" onClick={() => setMenu('move')} disabled={!ref.mailbox && !p.localStore} />
         {p.localStore ? <Tool ref={labelBtn} icon="tag" label="Label" onClick={() => setMenu('label')} /> : null}
+        {p.stateMenu ? <Tool ref={statesBtn} icon="snooze" label={text('Pin, snooze, flag or categorize')} onClick={() => setMenu('states')} /> : null}
         <Tool icon="printer" label="Print" onClick={print} />
         <Tool icon="download" label="Download original (.eml)" onClick={downloadOriginal} disabled={p.offline} />
         <Tool ref={topMore} icon="more" label="More" onClick={() => setMenu('top')} />
@@ -343,6 +397,19 @@ export function MessageView(p: MessageViewProps) {
         <Tool icon="chevron-left" label="Previous (K)" onClick={() => p.onPrev?.()} disabled={!p.onPrev} />
         <Tool icon="chevron-right" label="Next (J)" onClick={() => p.onNext?.()} disabled={!p.onNext} />
       </div>
+      {p.prefs.commandBar === 'classic' ? (
+        <ClassicBar
+          groups={[
+            { id: 'new', label: text('New'), items: [{ id: 'new', icon: 'compose', label: text('New email'), run: () => p.onReply({ mode: 'new' }) }] },
+            { id: 'delete', label: text('Delete'), items: [{ id: 'trash', icon: 'trash', label: text('Delete'), run: () => void act('trash') }, { id: 'archive', icon: 'archive', label: text('Archive'), run: () => void act('archive') }, { id: 'spam', icon: 'spam', label: text('Junk'), run: () => void act('spam'), disabled: ref.folder === 'spam' }] },
+            { id: 'respond', label: text('Respond'), items: [{ id: 'reply', icon: 'reply', label: text('Reply'), run: () => reply('reply') }, { id: 'all', icon: 'reply-all', label: text('Reply all'), run: () => reply('reply_all') }, { id: 'fwd', icon: 'forward', label: text('Forward'), run: () => reply('forward') }] },
+            ...(p.quickStepButtons?.length ? [{ id: 'qs', label: text('Quick Steps'), items: p.quickStepButtons.slice(0, 6).map((q) => ({ id: `qs${q.id}`, icon: q.icon, label: q.name, run: q.run })) }] : []),
+            { id: 'move', label: text('Move'), items: [{ id: 'move', icon: 'folder-input', label: text('Move to'), run: () => setMenu('move'), disabled: !ref.mailbox && !p.localStore }] },
+            ...(p.stateMenu ? [{ id: 'tags', label: text('Tags'), items: [{ id: 'tags', icon: 'tag', label: text('Flag, pin, snooze'), run: () => setMenu('states'), ref: statesBtn }] }] : []),
+            { id: 'find', label: text('Find'), items: [{ id: 'find', icon: 'search', label: text('Find in message'), run: () => setFind((f) => f ?? '') }] },
+          ]}
+        />
+      ) : null}
       <div className="flex min-h-0 flex-1 flex-col">
         <header className="max-h-[45%] shrink-0 overflow-y-auto border-b border-line px-6 pt-4 pb-4 scroll-thin">
           <h2 className="text-[21px] font-bold leading-tight text-ink selectable">{m.subject || text('(no subject)')}</h2>
@@ -359,13 +426,44 @@ export function MessageView(p: MessageViewProps) {
                 </Chip>
               </span>
             ) : null}
+            {outsider.external ? (
+              <span title={text('This message came from outside your organisation. Take care with links and attachments.')}>
+                <Chip tone="warning">{text('External')}</Chip>
+              </span>
+            ) : null}
             {p.account ? <Chip tone="indigo">{p.account.account_type === 'local_mailbox' ? text('WorkSuite Local') : p.account.shared ? p.account.email : p.account.provider_label ?? p.account.email}</Chip> : null}
             {m.labels?.map((l) => <Chip key={l.id}>{l.name}</Chip>)}
+            {p.marks?.pinned ? (
+              <Chip tone="indigo">
+                <Icon name="pin" size={12} />
+                {text('Pinned')}
+              </Chip>
+            ) : null}
+            {p.marks?.flag ? (
+              <Chip tone={p.marks.flag.completed_at ? 'success' : 'danger'}>
+                <Icon name={p.marks.flag.completed_at ? 'check' : 'flag'} size={12} />
+                {p.marks.flag.completed_at ? text('Flag complete') : p.marks.flag.due_at ? text('Due {when}', { when: whenLabel(p.marks.flag.due_at) }) : text('Flagged')}
+              </Chip>
+            ) : null}
+            {p.marks?.categories?.map((c) => <CategoryChip key={c.id} name={c.name} colour={c.colour} />)}
           </div>
           <div className="mt-3 flex items-start gap-3">
             <Avatar name={m.from_name || m.from_email} size={42} />
             <div className="min-w-0 flex-1 text-[13.5px]">
-              <div className="truncate font-bold text-ink selectable">{m.from_name || m.from_email}</div>
+              <div className="truncate">
+                <PersonButton
+                  name={m.from_name || m.from_email}
+                  email={m.from_email}
+                  context={context.data}
+                  className="max-w-full truncate text-left font-bold text-ink hover:underline"
+                  actions={{
+                    email: () => p.onReply({ mode: 'new', to: m.from_email, mailbox: ref.mailbox }),
+                    meet: canOpen('meet') && !p.offline ? () => void startMeeting() : undefined,
+                    addContact: canOpen('contacts') && !p.offline ? () => void addContact() : undefined,
+                    chat: canOpen('chat') && !p.offline ? (id) => void chatWith(id) : undefined,
+                  }}
+                />
+              </div>
               <div className="truncate text-ink-2 selectable">{m.from_email}</div>
               <div className="truncate text-[12.5px] text-ink-3 selectable">
                 {text('to {list}', { list: m.to.join(', ') })}
@@ -394,6 +492,11 @@ export function MessageView(p: MessageViewProps) {
             </div>
           </div>
         </header>
+        {outsider.rare ? (
+          <p role="note" className="mx-6 mt-3 rounded-[8px] bg-subtle px-3 py-1.5 text-[12.5px] text-ink-2">
+            {text('You don’t often get email from {email}.', { email: m.from_email })}
+          </p>
+        ) : null}
         {m.team && ref.mailbox ? <TeamBar msgRef={ref} m={m} me={me ? Number(me.id) : null} /> : null}
         <div className="flex shrink-0 flex-wrap items-center gap-2 px-6 pt-4">
           <AiChip label="Summarise" onClick={() => setAi({ task: 'summarize', title: text('Summary of this email') })} />
@@ -401,7 +504,16 @@ export function MessageView(p: MessageViewProps) {
           <AiChip ref={translateBtn} label="Translate" onClick={() => setMenu('translate')} />
           {clean.blockedImages > 0 ? <span className="text-[12px] text-ink-3">{text(clean.blockedImages === 1 ? '1 remote image was blocked to protect your privacy.' : '{n} remote images were blocked to protect your privacy.', { n: clean.blockedImages })}</span> : null}
         </div>
-        <iframe title={text('Message')} sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={mailFrameDoc(clean.html, zoom, darkBody)} className={cx('mx-5 mt-3 min-h-[120px] flex-1 rounded-[8px] border-0', darkBody ? 'bg-surface' : 'bg-white', darkTheme && !darkBody && 'p-2')} />
+        {find !== null ? (
+          <div role="search" aria-label={text('Find in message')} className="mx-5 mt-3 flex items-center gap-2 rounded-[8px] border border-line bg-subtle px-2 py-1 text-[12.5px]">
+            <Icon name="search" size={13} className="text-ink-3" />
+            <input autoFocus value={find} onChange={(e) => setFind(e.target.value)} onKeyDown={(e) => (e.key === 'Escape' ? setFind(null) : undefined)} aria-label={text('Find in message')} placeholder={text('Find in message')} className="bare-focus min-w-0 flex-1 bg-transparent text-ink outline-none" />
+            <span aria-live="polite" className="text-ink-3">{find.trim().length > 1 ? text('{n} found', { n: found.count }) : ''}</span>
+            <button type="button" aria-label={text('Close')} onClick={() => setFind(null)} className="text-ink-3 hover:text-ink"><Icon name="x" size={13} /></button>
+          </div>
+        ) : null}
+        {hasInvite(m) ? <InviteCard msgRef={ref} offline={p.offline} /> : null}
+        <iframe title={text('Message')} sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={mailFrameDoc(found.html, zoom, darkBody)} className={cx('mx-5 mt-3 min-h-[120px] flex-1 rounded-[8px] border-0', darkBody ? 'bg-surface' : 'bg-white', darkTheme && !darkBody && 'p-2')} />
         {m.attachments.length ? <Attachments m={m} msgRef={ref} offline={p.offline} /> : null}
         {m.team && ref.mailbox && m.conversation_key ? <TeamWork msgRef={ref} m={m} account={p.account} offline={p.offline} /> : null}
       </div>
@@ -410,6 +522,7 @@ export function MessageView(p: MessageViewProps) {
       {menu === 'bottom' ? <Menu sections={moreItems('bottom')} label={text('More')} anchor={bottomMore} prefer="top" align="end" onClose={() => setMenu(null)} /> : null}
       {menu === 'move' ? <Menu sections={moveSections} label={text('Move to')} anchor={moveBtn} prefer="bottom" align="start" onClose={() => setMenu(null)} /> : null}
       {menu === 'label' ? <Menu sections={labelSections} label={text('Label')} anchor={labelBtn} prefer="bottom" align="start" onClose={() => setMenu(null)} /> : null}
+      {menu === 'states' && p.stateMenu ? <Menu sections={p.stateMenu()} label={text('Pin, snooze, flag or categorize')} anchor={statesBtn} prefer="bottom" align="start" width={260} onClose={() => setMenu(null)} /> : null}
       {menu === 'translate' ? <Menu sections={translate} label={text('Translate')} anchor={translateBtn} prefer="bottom" align="start" width={220} onClose={() => setMenu(null)} /> : null}
       {ai ? (
         <AiTextDialog
@@ -429,6 +542,20 @@ export function MessageView(p: MessageViewProps) {
 }
 
 /** The route that opens one message on its own (a window, a tab). */
+/**
+ * External sender tag and first-time sender hint (ENH-MAIL-03 DMO-SEC-01):
+ * external when the sender's domain is not the mailbox's and the sender is
+ * not a colleague; rare when there is at most this one message from them.
+ * Nothing is claimed until the context has answered.
+ */
+export function senderNotice(from: string, mailbox: string | null, ctx: Pick<MessageContext, 'sender' | 'history'> | null): { external: boolean; rare: boolean } {
+  if (!ctx) return { external: false, rare: false };
+  const domain = (a: string | null) => (a ?? '').toLowerCase().split('@')[1] ?? '';
+  const external = !!mailbox && !!domain(from) && domain(from) !== domain(mailbox) && !ctx.sender?.is_colleague;
+  const rare = !!ctx.history && ctx.history.total <= 1 && from.toLowerCase() !== (mailbox ?? '').toLowerCase();
+  return { external, rare };
+}
+
 export function windowRoute(ref: MessageRef): string {
   const q = new URLSearchParams({ folder: ref.folder, msg: ref.uid });
   if (ref.mailbox) {
@@ -443,6 +570,30 @@ const Tool = ({ ref, icon, label, onClick, disabled, active, fill }: { ref?: Rea
     <Icon name={icon} size={17} className={fill ? 'fill-current' : undefined} />
   </button>
 );
+
+/**
+ * The Classic command bar (DMO-SHL-03): grouped, labelled buttons — New,
+ * Delete, Respond, Move, Tags, Find — under the Simplified one-row toolbar.
+ */
+export function ClassicBar({ groups }: { groups: Array<{ id: string; label: string; items: Array<{ id: string; icon: string; label: string; run: () => void; disabled?: boolean; ref?: React.Ref<HTMLButtonElement> }> }> }) {
+  return (
+    <div role="toolbar" aria-label={text('Commands')} className="flex shrink-0 items-stretch gap-0 overflow-x-auto border-b border-line bg-subtle px-2 py-1 scroll-thin">
+      {groups.map((g) => (
+        <div key={g.id} role="group" aria-label={g.label} className="flex flex-col items-center border-r border-line px-2 last:border-r-0">
+          <div className="flex items-center gap-0.5">
+            {g.items.map((it) => (
+              <button key={it.id} ref={it.ref} type="button" onClick={it.run} disabled={it.disabled} className="flex h-12 min-w-[52px] flex-col items-center justify-center gap-0.5 rounded-[8px] px-1.5 text-[11.5px] font-semibold text-ink hover:bg-surface disabled:opacity-40">
+                <Icon name={it.icon} size={17} />
+                <span className="whitespace-nowrap">{it.label}</span>
+              </button>
+            ))}
+          </div>
+          <span className="text-[10.5px] text-ink-3">{g.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 const AiChip = ({ ref, label, onClick }: { ref?: React.Ref<HTMLButtonElement>; label: string; onClick: () => void }) => (
   <button ref={ref} type="button" onClick={onClick} className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-line bg-selection px-3 text-[12.5px] font-semibold text-primary hover:border-primary">

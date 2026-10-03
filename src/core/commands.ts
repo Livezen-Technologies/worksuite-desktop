@@ -19,6 +19,8 @@ export interface Command {
   /** Kept out of the palette; still runs from its shortcut. */
   hidden?: boolean;
   source?: 'shell' | 'module';
+  /** The key to show beside it when the shell does not own its shortcut (a module's own keymap). */
+  hint?: string;
 }
 
 export const DEFAULT_SHORTCUTS: Record<string, string> = {

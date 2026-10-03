@@ -10,8 +10,12 @@ import { toast } from '../../core/toasts';
 import { Checkbox } from '../../components/Checkbox';
 import { Select } from '../../components/Select';
 import { Button, Chip, ErrorNote, Modal, Spinner, Switch, TextField, cx } from '../../components/ui';
+import { AutocompleteSettings } from './AutocompleteSettings';
 import type { Preferences } from '@shared/types';
 import { AddMailbox } from './AddMailbox';
+import { AccountsSync } from './AccountsSync';
+import { QuickStepsSettings } from './QuickStepsUi';
+import { includedIds, runSync } from './sync';
 import { AppPasswords } from './AppPasswords';
 import { ImportMail } from './Import';
 import { Rules, Signatures } from './MailRules';
@@ -27,7 +31,7 @@ import type { MailStoreStats } from '@shared/types';
  * and how the Mail screen is laid out (Layout & reading).
  */
 
-type Tab = 'accounts' | 'storage' | 'import' | 'signatures' | 'rules' | 'layout';
+type Tab = 'accounts' | 'storage' | 'import' | 'signatures' | 'rules' | 'quicksteps' | 'layout';
 
 const TABS: Array<[Tab, string]> = [
   ['accounts', 'Accounts & offline'],
@@ -35,6 +39,7 @@ const TABS: Array<[Tab, string]> = [
   ['import', 'Import mail'],
   ['signatures', 'Signatures'],
   ['rules', 'Rules'],
+  ['quicksteps', 'Quick Steps'],
   ['layout', 'Appearance & reading'],
 ];
 
@@ -73,7 +78,12 @@ export function MailSettings({ query = new URLSearchParams() }: { query?: URLSea
           </button>
         ))}
       </div>
-      {tab === 'accounts' ? <Accounts /> : tab === 'storage' ? <Storage /> : tab === 'import' ? <ImportMail openId={importId} /> : tab === 'signatures' ? <Signatures /> : tab === 'rules' ? <Rules mailbox={defaultBox ? String(defaultBox.id) : null} /> : <Layout />}
+      {tab === 'accounts' ? <Accounts /> : tab === 'storage' ? <Storage /> : tab === 'import' ? (
+        <>
+          <ImportMail openId={importId} />
+          <AutocompleteSettings />
+        </>
+      ) : tab === 'signatures' ? <Signatures /> : tab === 'rules' ? <Rules mailbox={defaultBox ? String(defaultBox.id) : null} /> : tab === 'quicksteps' ? <QuickStepsSettings /> : <Layout />}
     </div>
   );
 }
@@ -126,6 +136,7 @@ function Accounts() {
   const store = useLocalStore();
   const stats = useMailStats();
   const qc = useQueryClient();
+  const mailPrefs = useMailPrefs();
   const [adding, setAdding] = useState(false);
   const [passwords, setPasswords] = useState(false);
   const [managing, setManaging] = useState<Mailbox | null>(null);
@@ -151,7 +162,8 @@ function Accounts() {
         </Button>
       </div>
       {boxes.isLoading ? <Spinner /> : boxes.error ? <ErrorNote error={boxes.error} onRetry={() => void boxes.refetch()} /> : null}
-      {list.length ? (
+      {list.length && sync.data?.accounts ? <AccountsSync boxes={list} prefs={mailPrefs.prefs} onPrefs={mailPrefs.set} onRepair={(b) => void repair(b)} onManage={setManaging} /> : null}
+      {list.length && sync.data && !sync.data.accounts ? (
         <ul role="list" className="overflow-hidden rounded-[12px] border border-line bg-surface">
           {list.map((b) => {
             const s = sync.data?.mailboxes.find((m) => m.mailbox === b.id);
@@ -286,7 +298,7 @@ function ManageMailbox({ box, onClose }: { box: Mailbox; onClose: () => void }) 
   return (
     <Modal title={b.email} labelledBy="mail-manage-title" width={480} onClose={onClose} footer={<Button onClick={onClose}>Done</Button>}>
       <div className="flex flex-col gap-4 p-5 text-[13.5px]">
-        <SwitchRow label={text('Show in the unified inbox')} hint={text('Mix its mail into Unified inbox with your other mailboxes.')} checked={b.in_unified !== false} onChange={(v) => void save({ in_unified: v })} />
+        <SwitchRow label={text('Include in All Accounts')} hint={text('Show its Inbox, Drafts, Sent and other folders in All Accounts, and sync it with Sync all.')} checked={b.in_unified !== false} onChange={(v) => void save({ in_unified: v })} />
         <SwitchRow label={text('Notify me about new mail')} hint={text('Desktop notifications for mail arriving in this mailbox.')} checked={(b as Mailbox & { notify?: boolean }).notify !== false} onChange={(v) => void save({ notify: v } as Partial<Mailbox>)} />
         {!b.shared ? <SwitchRow label={text('Pause syncing')} hint={text('Stop checking for new mail until you turn this off.')} checked={!!b.sync_paused} onChange={(v) => void save({ sync_paused: v })} /> : null}
         <div className="flex flex-wrap gap-2 border-t border-line pt-4">
@@ -379,11 +391,12 @@ function Storage() {
   const mode = copies[0]?.copy ?? null;
   const s = stats.data ?? null;
   const byBox = prefs?.mailCacheDaysByMailbox ?? {};
+  // The same Sync all as the folder pane: single-flight, three accounts at a time (DMO-SYN-02/12).
   const syncAll = async () => {
-    const r = await Promise.allSettled(list.filter((b) => !b.shared).map((b) => apiPost(`/api/mail/mailboxes/${b.id}/sync`)));
+    const r = await runSync(includedIds(sync.data, list), { all: true, offline: app.get().status?.network === 'OFFLINE' });
     void qc.invalidateQueries({ queryKey: ['mail'] });
-    const failed = r.filter((x) => x.status === 'rejected').length;
-    toast(failed ? 'error' : 'success', failed ? text('{n} mailboxes could not be asked now.', { n: failed }) : text('Checking every mailbox for new mail.'));
+    if (!r.started.length) return;
+    toast(r.failed.length ? 'error' : 'success', r.failed.length ? text('{n} mailboxes could not be synced.', { n: r.failed.length }) : text('Every mailbox was synced.'));
   };
   const keep = (id: number, v: 7 | 30 | 90 | 0) => {
     const next = { ...byBox, [String(id)]: v };
@@ -579,7 +592,54 @@ function Layout() {
         <p id="mail-dark-body-hint" className="pl-[26px] text-[12px] leading-relaxed text-ink-3">
           Emails designed with their own colours are shown on a light card so logos and tables stay readable.
         </p>
+        {seg('markRead', prefs.markRead, 'open', [['open', 'When opened'], ['delay', 'After a few seconds'], ['change', 'When I move on'], ['never', 'Never']], 'Mark as read')}
+        {prefs.markRead === 'delay' ? seg('markReadDelay', prefs.markReadDelay, 5, [[0, '0 s'], [5, '5 s'], [10, '10 s'], [30, '30 s']], 'After') : null}
+        {seg('openIn', prefs.openIn, 'tabs', [['tabs', 'Tabs'], ['windows', 'Windows'], ['both', 'Both']], 'Open messages in')}
       </section>
+      <InboxAndKeyboard prefs={prefs} set={set} />
     </>
+  );
+}
+
+/** Focused Inbox, the keyboard scheme and the command bar (DMO-INB-01, DMO-KEY-01, DMO-SHL-03; §9.1). */
+function InboxAndKeyboard({ prefs, set }: { prefs: MailPrefs; set: (p: Partial<MailPrefs>) => void }) {
+  const boxes = (useMailboxes().data?.mailboxes ?? []).filter((b) => !b.archived);
+  const off = prefs.focusedOff ?? [];
+  return (
+    <section aria-label={text('Inbox and keyboard')} className="mt-4 flex flex-col gap-3 rounded-[12px] border border-line bg-surface p-4 text-[13.5px] text-ink">
+      <h3 className="text-[15px] font-bold text-ink">{text('Inbox and keyboard')}</h3>
+      <SwitchRow label={text('Focused Inbox')} hint={text('Sort the inbox into Focused and Other. Moving a message between the tabs teaches it.')} checked={prefs.focused !== false} onChange={(v) => set({ focused: v })} />
+      {prefs.focused !== false && boxes.length > 1 ? (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 pl-1">
+          {boxes.map((b) => (
+            <label key={b.id} className="flex items-center gap-2 text-[12.5px]">
+              <Checkbox checked={!off.includes(b.id)} onChange={(e) => set({ focusedOff: e.target.checked ? off.filter((x) => x !== b.id) : [...off, b.id] })} />
+              {b.email}
+            </label>
+          ))}
+        </div>
+      ) : null}
+      <div className="flex items-center justify-between gap-4 py-1">
+        <span className="font-semibold">{text('Keyboard shortcuts')}</span>
+        <div role="radiogroup" aria-label={text('Keyboard scheme')} className="flex rounded-[10px] bg-subtle p-0.5">
+          {(['worksuite', 'outlook', 'gmail'] as const).map((s) => (
+            <button key={s} type="button" role="radio" aria-checked={(prefs.keyScheme ?? 'worksuite') === s} onClick={() => set({ keyScheme: s })} className={cx('h-8 rounded-[8px] px-3 text-[13px] font-semibold', (prefs.keyScheme ?? 'worksuite') === s ? 'bg-surface text-ink shadow-sm' : 'text-ink-2 hover:text-ink')}>
+              {s === 'worksuite' ? 'WorkSuite' : s === 'outlook' ? 'Outlook' : 'Gmail'}
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="text-[12px] text-ink-3">{text('Press ? (or Ctrl+/ in the Outlook scheme) in Mail to see every shortcut and change any of them.')}</p>
+      <div className="flex items-center justify-between gap-4 py-1">
+        <span className="font-semibold">{text('Command bar')}</span>
+        <div role="radiogroup" aria-label={text('Command bar')} className="flex rounded-[10px] bg-subtle p-0.5">
+          {(['simplified', 'classic'] as const).map((s) => (
+            <button key={s} type="button" role="radio" aria-checked={(prefs.commandBar ?? 'simplified') === s} onClick={() => set({ commandBar: s })} className={cx('h-8 rounded-[8px] px-3 text-[13px] font-semibold', (prefs.commandBar ?? 'simplified') === s ? 'bg-surface text-ink shadow-sm' : 'text-ink-2 hover:text-ink')}>
+              {s === 'simplified' ? text('Simplified') : text('Classic')}
+            </button>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }

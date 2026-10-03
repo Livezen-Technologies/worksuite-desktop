@@ -1,7 +1,7 @@
 import { currentLocale, text } from '../../core/i18n';
 import { addDays, currentZone, dayKey, monthWords, parseTs, timeLabel, todayInZone } from '../../core/time';
 import type { OfflineMutation } from '@shared/types';
-import type { GroupKey, Mailbox, MailboxTag, MessageRow, MessageSecurity, SortKey } from './types';
+import type { GroupKey, MailPrefs, Mailbox, MailboxTag, MessageRow, MessageSecurity, SortKey } from './types';
 
 /**
  * Mail's list logic, kept apart from the screens so it can be tested on its
@@ -10,7 +10,7 @@ import type { GroupKey, Mailbox, MailboxTag, MessageRow, MessageSecurity, SortKe
  * waiting in the offline queue.
  */
 
-export type SmartViewId = 'unread' | 'starred' | 'important' | 'today' | 'attachments' | 'scheduled' | 'drafts';
+export type SmartViewId = 'unread' | 'starred' | 'important' | 'today' | 'attachments' | 'scheduled' | 'drafts' | 'vip';
 
 export interface SmartView {
   id: SmartViewId;
@@ -29,6 +29,8 @@ export const SMART_VIEWS: SmartView[] = [
   { id: 'attachments', label: 'Has attachments', icon: 'paperclip', folder: 'inbox', filters: ['attachments'] },
   { id: 'scheduled', label: 'Scheduled', icon: 'clock', folder: 'outbox', filters: [] },
   { id: 'drafts', label: 'Drafts', icon: 'file-text', folder: 'drafts', filters: [] },
+  // Mail from the people marked VIP (DMO-PPL-05): narrowed here, so the server is never asked for it.
+  { id: 'vip', label: 'VIP', icon: 'badge-check', folder: 'inbox', filters: ['vip'] },
 ];
 
 export function smartView(id: string | null | undefined): SmartView | null {
@@ -50,12 +52,18 @@ export function filtersFor(view: SmartView | null, chips: ChipId[]): string[] {
   return [...new Set([...(view?.filters ?? []), ...chips])];
 }
 
+/** The filters the server answers; the rest are applied to what comes back. */
+export const CLIENT_ONLY_FILTERS = ['vip'];
+export function serverFilters(filters: string[]): string[] {
+  return filters.filter((f) => !CLIENT_ONLY_FILTERS.includes(f));
+}
+
 /**
  * The same narrowing again on what came back. A connected mailbox answers the
  * filters it can (`quick`); one it could not is applied here, so a chip never
  * looks as if it did nothing.
  */
-export function applyFilters(rows: MessageRow[], filters: string[], now = Date.now()): MessageRow[] {
+export function applyFilters(rows: MessageRow[], filters: string[], now = Date.now(), vips?: ReadonlySet<string>): MessageRow[] {
   const weekAgo = now - 7 * 86_400_000;
   const today = todayInZone();
   return rows.filter((m) =>
@@ -71,6 +79,8 @@ export function applyFilters(rows: MessageRow[], filters: string[], now = Date.n
           return parseTs(m.created_at).getTime() >= weekAgo;
         case 'today':
           return dayKey(parseTs(m.created_at)) === today;
+        case 'vip':
+          return !!vips?.has(m.from_email.toLowerCase());
         default:
           return true;
       }
@@ -222,6 +232,37 @@ export function securityVerdict(s: MessageSecurity | null | undefined): { tone: 
   const failed = known.filter(([, v]) => v === 'fail' || v === 'softfail' || v === 'permerror');
   if (failed.length) return { tone: 'warning', label: text('Not verified · {checks} failed', { checks: failed.map(([k]) => k).join(', ') }), title };
   return { tone: 'muted', label: text('Partly verified'), title };
+}
+
+/** The view settings kept per folder (DMO-INB-16). */
+export const FOLDER_VIEW_KEYS = ['view', 'pane', 'sort', 'dir', 'group', 'toolbar'] as const;
+
+/** The person's settings with this folder's own view on top. */
+export function withFolderView(prefs: MailPrefs, folderKey: string): MailPrefs {
+  const own = prefs.folderViews?.[folderKey];
+  return own ? { ...prefs, ...own } : prefs;
+}
+
+/**
+ * A change from the list or the reader, as it is saved: view settings go to
+ * this folder; `applyToAll` makes them everyone's and forgets the folders'
+ * own; anything else is a setting of its own.
+ */
+export function folderViewPatch(prefs: MailPrefs, folderKey: string, patch: Partial<MailPrefs> & { applyToAll?: boolean }): Partial<MailPrefs> {
+  const { applyToAll, ...rest } = patch;
+  const view: Partial<MailPrefs> = {};
+  const other: Partial<MailPrefs> = {};
+  for (const [k, v] of Object.entries(rest)) {
+    if ((FOLDER_VIEW_KEYS as readonly string[]).includes(k)) (view as Record<string, unknown>)[k] = v;
+    else (other as Record<string, unknown>)[k] = v;
+  }
+  if (applyToAll) {
+    const merged = withFolderView(prefs, folderKey);
+    const keep = Object.fromEntries(FOLDER_VIEW_KEYS.filter((k) => merged[k] !== undefined).map((k) => [k, merged[k]]));
+    return { ...other, ...keep, ...view, folderViews: {} } as Partial<MailPrefs>;
+  }
+  if (Object.keys(view).length === 0) return other;
+  return { ...other, folderViews: { ...(prefs.folderViews ?? {}), [folderKey]: { ...(prefs.folderViews?.[folderKey] ?? {}), ...view } } };
 }
 
 /** A message's identity in the offline queue: its mailbox, folder and uid. */
