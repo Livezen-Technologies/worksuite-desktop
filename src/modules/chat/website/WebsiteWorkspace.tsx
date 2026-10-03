@@ -1,13 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import type { WebchatRingChat } from '@shared/types';
 import { apiGet, apiPost } from '../../../core/api';
 import { app } from '../../../core/app-state';
 import { call } from '../../../core/bridge';
+import { text } from '../../../core/i18n';
 import { useStore } from '../../../core/store';
 import { useTab, useTabTitle } from '../../../core/tab-context';
-import { listStamp } from '../../../core/time';
-import { Empty, ErrorNote, Spinner, cx } from '../../../components/ui';
-import { sectionRows, useWebsiteInbox, WEBSITE, type Section, type WebsiteRow } from './api';
+import { listStamp, parseTs } from '../../../core/time';
+import { Icon } from '../../../components/Icon';
+import { Avatar, Button, Empty, ErrorNote, Kbd, Spinner, cx } from '../../../components/ui';
+import { useNow } from '../../calls/parts';
+import { longestWaiting, sectionRows, stepRow, useWebsiteInbox, waitingSince, waitingSummary, WEBSITE, type Section, type WebsiteRow } from './api';
+import { useRingState, waited } from './Ringing';
 import { WebsiteLive, type OnlineVisitor } from './WebsiteLive';
 import { WebsiteThread } from './WebsiteThread';
 import { Select } from '../../../components/Select';
@@ -55,26 +60,15 @@ interface Missed {
   last_visitor_at: string | null;
 }
 
-const STATUS: Record<string, [string, string]> = {
-  Open: ['bg-success-bg text-success', 'Open'],
-  Pending: ['bg-warning-bg text-[#9A4A06] dark:text-warning', 'Pending'],
-  Awaiting: ['bg-danger-bg text-danger', 'Awaiting reply'],
-  Closed: ['bg-subtle text-ink-3', 'Closed'],
-};
-
-function statusOf(r: WebsiteRow): [string, string] {
-  if (r.status === 'closed') return STATUS.Closed!;
-  if (r.awaiting_reply) return STATUS.Awaiting!;
-  return r.status === 'pending' ? STATUS.Pending! : STATUS.Open!;
-}
-
 export function WebsiteWorkspace() {
-  const { query, go } = useTab();
+  const { query, go, active } = useTab();
   const me = useStore(app, (s) => (s.auth?.user?.id ? Number(s.auth.user.id) : null));
   const selected = query.get('website');
   const live = query.get('section') === 'live';
   const section = (SECTIONS.find((s) => s.id === query.get('section'))?.id ?? 'inbox') as Section;
   const [site, setSite] = useState(0);
+  // The Mine pill narrows whichever open section is showing; Closed is a section of its own.
+  const [mineOnly, setMineOnly] = useState(false);
   useTabTitle(selected ? null : 'Website chats');
   const [q, setQ] = useState('');
   const open = useWebsiteInbox(false);
@@ -98,13 +92,20 @@ export function WebsiteWorkspace() {
     refetchInterval: 60_000,
     retry: false,
   });
+  // What rings on this computer: the row shows it, and a silenced one is marked (RING-24).
+  const ringing = new Map(useRingState().chats.map((c) => [c.id, c]));
   const openRows = open.data?.conversations ?? [];
   const sites = open.data && 'sites' in open.data ? ((open.data as { sites?: Array<{ widget_id: number; site: string }> }).sites ?? []) : [];
   const count = (s: Section): number => (s === 'missed' ? (missedCount.data?.count ?? 0) : s === 'closed' ? 0 : sectionRows(openRows, s, me).length);
   const source = section === 'closed' ? closed : open;
+  const pill = section === 'closed' ? 'closed' : mineOnly ? 'mine' : 'open';
+  const onSite = (r: WebsiteRow) => !site || r.widget_id === site;
+  const isMine = (r: WebsiteRow) => me !== null && r.assigned_to === me;
+  const openHere = sectionRows(openRows, section === 'closed' ? 'inbox' : section, me).filter(onSite);
   const needle = q.trim().toLowerCase();
   const rows = sectionRows(source.data?.conversations ?? [], section, me)
-    .filter((r) => !site || r.widget_id === site)
+    .filter(onSite)
+    .filter((r) => pill !== 'mine' || isMine(r))
     .filter((r) => !needle || [r.label, r.visitor_name, r.email, r.site, r.current_url].some((v) => v?.toLowerCase().includes(needle)));
   const to = (params: Record<string, string | null>) => {
     const next = new URLSearchParams({ view: 'website', section });
@@ -115,11 +116,42 @@ export function WebsiteWorkspace() {
     }
     go(`/chat?${next.toString()}`);
   };
+  const showOpen = (mine: boolean) => {
+    setMineOnly(mine);
+    if (section === 'closed') to({ section: 'inbox', website: null });
+  };
+  const longest = longestWaiting(openRows);
+  const openLongest = () => {
+    if (!longest) return;
+    // Stay in the section when the visitor is in it, so the list shows what is open.
+    to({ section: rows.some((r) => r.id === longest.id) ? section : 'inbox', website: String(longest.id) });
+  };
 
   // Opening a missed chat is dealing with it (the web does the same).
   useEffect(() => {
     if (section === 'missed' && selected) void apiPost(`${WEBSITE}/missed/${selected}/handle`).catch(() => undefined);
   }, [section, selected]);
+
+  // J and K move through the list (CHAT-UI-00) while this tab is in front and nothing is being typed.
+  const ids = section === 'missed' ? (missed.data?.missed ?? []).map((m) => m.id) : rows.map((r) => r.id);
+  const idsKey = ids.join(',');
+  useEffect(() => {
+    if (!active || live) return;
+    const list = idsKey ? idsKey.split(',').map(Number) : [];
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || (e.key !== 'j' && e.key !== 'k')) return;
+      const t = e.target as HTMLElement | null;
+      if (t && typeof t.closest === 'function' && (t.isContentEditable || t.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"]'))) return;
+      const next = stepRow(list, selected && /^\d+$/.test(selected) ? Number(selected) : null, e.key === 'j' ? 1 : -1);
+      if (next === null) return;
+      e.preventDefault();
+      if (String(next) === selected) return;
+      go(`/chat?${new URLSearchParams({ view: 'website', section, website: String(next) }).toString()}`);
+      document.querySelector(`[data-website-row="${next}"]`)?.scrollIntoView?.({ block: 'nearest' });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [active, live, idsKey, selected, section, go]);
 
   return (
     <div className="flex h-full min-w-0 flex-1 text-[13px]">
@@ -170,11 +202,17 @@ export function WebsiteWorkspace() {
               {sites.map((s) => <option key={s.widget_id} value={s.widget_id}>{s.site}</option>)}
             </Select>
           </div>
-          <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search visitors" placeholder="Search visitors…" className="h-8 rounded-[8px] border border-line bg-surface px-2.5 text-[13px] outline-none focus:border-primary" />
-          <div className="flex gap-1 text-[11.5px] font-semibold">
-            <button type="button" onClick={() => to({ section: section === 'closed' ? 'inbox' : section, website: null })} className={cx('rounded-[10px] px-2 py-[3px]', section !== 'closed' ? 'bg-ink text-surface' : 'border border-line text-ink')}>Open &amp; pending</button>
-            <button type="button" onClick={() => to({ section: 'closed', website: null })} className={cx('rounded-[10px] px-2 py-[3px]', section === 'closed' ? 'bg-ink text-surface' : 'border border-line text-ink')}>Closed</button>
-          </div>
+          <span className="relative flex items-center">
+            <Icon name="search" size={14} className="pointer-events-none absolute left-2.5 text-ink-3" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search visitors" placeholder="Search visitors, email, site…" className="h-8 w-full rounded-[8px] border border-line bg-surface pr-2.5 pl-8 text-[13px] outline-none focus:border-primary" />
+          </span>
+          {section !== 'missed' ? (
+            <div className="flex gap-1 text-[11.5px] font-semibold" role="group" aria-label="Show">
+              <Pill on={pill === 'open'} onClick={() => showOpen(false)}>Open · {openHere.length}</Pill>
+              <Pill on={pill === 'mine'} onClick={() => showOpen(true)}>Mine · {openHere.filter(isMine).length}</Pill>
+              <Pill on={pill === 'closed'} onClick={() => to({ section: 'closed', website: null })}>Closed</Pill>
+            </div>
+          ) : null}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto scroll-thin">
           {section === 'missed' ? (
@@ -182,7 +220,8 @@ export function WebsiteWorkspace() {
               <Empty icon="globe" title="No missed chats" />
             ) : (
               missed.data.missed.map((m) => (
-                <button key={m.id} type="button" onClick={() => to({ website: String(m.id) })} className={cx('flex w-full flex-col gap-[3px] border-b border-line px-3 py-2.5 text-left', selected === String(m.id) ? 'bg-selection' : 'hover:bg-subtle')}>
+                <button key={m.id} type="button" data-website-row={m.id} onClick={() => to({ website: String(m.id) })} className={cx('relative flex w-full flex-col gap-[3px] border-b border-line py-2.5 pr-3 pl-3.5 text-left', selected === String(m.id) ? 'bg-selection' : 'hover:bg-subtle')}>
+                  {selected === String(m.id) ? <span aria-hidden className="absolute top-0 bottom-0 left-0 w-[3px] bg-primary" /> : null}
                   <span className="flex items-center gap-[7px]"><b className="flex-1 truncate text-ink">{m.visitor}</b><span className="text-[11px] text-ink-3">{listStamp(m.missed_at)}</span></span>
                   <span className="truncate text-[12px] text-ink-2">{m.email ?? m.phone ?? 'No way to reach them'}{m.place ? ` · ${m.place}` : ''}</span>
                   <span className="text-[11px] text-ink-3">{m.widget}</span>
@@ -190,32 +229,140 @@ export function WebsiteWorkspace() {
               ))
             )
           ) : source.isLoading ? <Spinner /> : source.error ? <div className="p-4"><ErrorNote error={source.error} onRetry={() => void source.refetch()} /></div> : rows.length === 0 ? (
-            <Empty icon="globe" title={section === 'awaiting' ? 'Nobody is waiting' : section === 'mine' ? 'No chats assigned to you' : 'No website chats'} />
+            <Empty icon="globe" title={pill === 'mine' || section === 'mine' ? 'No chats assigned to you' : section === 'awaiting' ? 'Nobody is waiting' : 'No website chats'} />
           ) : (
-            rows.map((r) => {
-              const [tone, label] = statusOf(r);
-              return (
-                <button key={r.id} type="button" onClick={() => to({ website: String(r.id) })} className={cx('flex w-full flex-col gap-[3px] border-b border-line px-3 py-2.5 text-left', selected === String(r.id) ? 'bg-selection' : 'hover:bg-subtle')}>
-                  <span className="flex items-center gap-[7px]">
-                    <span className={cx('h-2 w-2 shrink-0 rounded-full', r.online ? 'bg-success' : r.status === 'pending' ? 'bg-warning' : 'bg-line')} aria-label={r.online ? 'On the site now' : 'Left the site'} />
-                    <b className="flex-1 truncate text-ink">{r.visitor_name || r.label}</b>
-                    <span className="text-[11px] text-ink-3">{listStamp(r.last_visitor_at ?? r.updated_at)}</span>
-                  </span>
-                  <span className="truncate text-[12px] text-ink-2">{r.current_url ?? (r.agent ? `With ${r.agent}` : r.email ?? '')}</span>
-                  <span className="flex items-center gap-[5px]">
-                    <span className={cx('rounded-[5px] px-1.5 py-px text-[10.5px] font-bold', tone)}>{label}</span>
-                    <span className="truncate text-[11px] text-ink-3">{r.site ?? r.widget}</span>
-                    {r.at_risk ? <span className="text-[10.5px] font-bold text-danger">At risk</span> : null}
-                    {r.is_starred ? <span className="text-[11px] text-warning" aria-label="Starred">★</span> : null}
-                  </span>
-                </button>
-              );
-            })
+            rows.map((r) => <Row key={r.id} r={r} me={me} ring={ringing.get(r.id)} active={selected === String(r.id)} onOpen={() => to({ website: String(r.id) })} />)
           )}
         </div>
       </section>
       <div className={cx('flex min-w-0 flex-1', live && 'hidden')}>
-        {selected ? <WebsiteThread key={selected} id={selected} row={openRows.find((r) => String(r.id) === selected)} /> : <Empty icon="globe" title="Pick a conversation" hint="Visitors waiting for a reply are marked Awaiting reply." />}
+        {selected ? (
+          <WebsiteThread key={selected} id={selected} row={openRows.find((r) => String(r.id) === selected)} />
+        ) : (
+          <PickConversation rows={openRows} longest={longest} visitors={online.isSuccess ? visitorsOnline : null} onLongest={openLongest} onVisitors={() => go('/chat?view=website&section=live')} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Pill({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button type="button" aria-pressed={on} onClick={onClick} className={cx('rounded-[10px] px-2.5 py-[3px]', on ? 'bg-ink text-surface' : 'border border-line text-ink hover:bg-subtle')}>
+      {children}
+    </button>
+  );
+}
+
+const TAG = {
+  danger: 'bg-danger-bg text-danger',
+  indigo: 'bg-selection text-primary',
+  warning: 'bg-warning-bg text-[#9A4A06] dark:text-warning',
+  muted: 'bg-subtle text-ink-3',
+};
+
+function Tag({ tone, children }: { tone: keyof typeof TAG; children: ReactNode }) {
+  return <span className={cx('shrink-0 rounded-[5px] px-1.5 py-px text-[10.5px] font-bold', TAG[tone])}>{children}</span>;
+}
+
+const PRIORITY_TAG: Record<string, string> = { vip: 'VIP', urgent: 'Urgent', high: 'High' };
+
+function pathOf(url: string): string {
+  try {
+    return new URL(url).pathname || '/';
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * A conversation in the list (CHAT-UI-00): the visitor with their on-site dot, how long they have waited, what is
+ * happening, and on which site. A chat ringing here shows a bell; one silenced on this computer is amber with the
+ * bell struck through (RING-UI-04).
+ */
+function Row({ r, me, ring, active, onOpen }: { r: WebsiteRow; me: number | null; ring?: WebchatRingChat; active: boolean; onOpen: () => void }) {
+  const name = r.visitor_name || r.label;
+  const mine = me !== null && r.assigned_to === me;
+  const closed = r.status === 'closed';
+  const since = waitingSince(r);
+  const page = r.current_url ? pathOf(r.current_url) : null;
+  const line = ring?.preview
+    ? `“${ring.preview}”`
+    : r.online && page && !closed
+      ? text('Reading {page}', { page })
+      : r.agent
+        ? mine
+          ? text('With you')
+          : text('With {name}', { name: r.agent })
+        : (r.email ?? '');
+  const presence = closed ? null : r.online ? 'online' : 'away';
+  return (
+    <button
+      type="button"
+      data-website-row={r.id}
+      aria-current={active ? 'true' : undefined}
+      onClick={onOpen}
+      className={cx('relative flex w-full items-start gap-2.5 border-b border-line py-2.5 pr-3 pl-3.5 text-left', active ? 'bg-selection' : ring?.silenced ? 'bg-warning-bg' : 'hover:bg-subtle')}
+    >
+      {active ? <span aria-hidden className="absolute top-0 bottom-0 left-0 w-[3px] bg-primary" /> : null}
+      <Avatar name={name} size={32} presence={presence} className="mt-px" />
+      <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
+        <span className="flex items-center gap-1.5">
+          <b className={cx('flex-1 truncate text-ink', r.awaiting_reply ? 'font-bold' : 'font-semibold')}>{name}</b>
+          {ring ? <Icon name={ring.silenced ? 'bell-off' : 'bell'} size={12} className={ring.silenced ? 'shrink-0 text-warning' : 'shrink-0 text-danger'} label={ring.silenced ? text('Silenced on this computer') : text('Ringing')} /> : null}
+          {r.awaiting_reply && since && !closed ? <WaitClock since={since} /> : <span className="shrink-0 text-[11px] text-ink-3">{listStamp(r.last_visitor_at ?? r.updated_at)}</span>}
+        </span>
+        {line ? <span className="truncate text-[12px] text-ink-2">{line}</span> : null}
+        <span className="flex min-w-0 items-center gap-[5px] text-[11px]">
+          {closed ? <Tag tone="muted">Closed</Tag> : r.awaiting_reply ? <Tag tone="danger">Awaiting reply</Tag> : mine ? <Tag tone="indigo">You</Tag> : null}
+          {r.at_risk && !closed ? <Tag tone="danger">At risk</Tag> : null}
+          {r.is_offline ? <Tag tone="muted">Offline</Tag> : null}
+          {PRIORITY_TAG[r.priority] ? <Tag tone="warning">{PRIORITY_TAG[r.priority]}</Tag> : null}
+          <span className="min-w-0 truncate text-ink-3">
+            {r.site ?? r.widget ?? 'Website'}
+            {presence === 'away' ? ` · ${text('away')}` : ''}
+          </span>
+          {presence === 'online' ? <span className="sr-only">On the site now</span> : null}
+          {r.is_starred ? <Icon name="star" size={11} className="shrink-0 text-warning" label={text('Starred')} /> : null}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+/** How long a visitor has waited: counting while it is under an hour, then when they wrote. */
+function WaitClock({ since }: { since: string }) {
+  const now = useNow(1_000);
+  const at = parseTs(since).getTime();
+  if (Number.isNaN(at) || now - at >= 3_600_000) return <span className="shrink-0 text-[11px] text-ink-3">{listStamp(since)}</span>;
+  return <span className="shrink-0 text-[11.5px] font-bold text-danger tabular-nums">{waited(since, now)}</span>;
+}
+
+/**
+ * Nothing open yet (CHAT-UI-00): how many visitors are waiting and for how long the longest has, a way straight to
+ * them, the visitors on the sites now, and the keys that move through the list.
+ */
+function PickConversation({ rows, longest, visitors, onLongest, onVisitors }: { rows: WebsiteRow[]; longest: WebsiteRow | null; visitors: number | null; onLongest: () => void; onVisitors: () => void }) {
+  const now = useNow(30_000);
+  return (
+    <div className="flex h-full min-h-[160px] flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
+      <span className="flex h-11 w-11 items-center justify-center rounded-full border border-line bg-surface text-ink-3">
+        <Icon name="globe" size={20} />
+      </span>
+      <div className="text-[14px] font-semibold text-ink">Pick a conversation</div>
+      <div className="max-w-sm text-[12.5px] text-ink-3">{waitingSummary(rows, now)}</div>
+      <div className="mt-1.5 flex flex-wrap justify-center gap-2">
+        {longest ? (
+          <Button variant="primary" size="sm" onClick={onLongest}>
+            Open the longest waiting
+          </Button>
+        ) : null}
+        <Button size="sm" onClick={onVisitors}>
+          {visitors === null ? 'Visitors online' : `${text('Visitors online')} · ${visitors}`}
+        </Button>
+      </div>
+      <div className="mt-2 flex items-center gap-1 text-[11.5px] text-ink-3">
+        Press <Kbd tone="key">J</Kbd> / <Kbd tone="key">K</Kbd> to move through the list
       </div>
     </div>
   );

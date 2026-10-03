@@ -4,6 +4,17 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.11.0 — 2026-10-03
+
+**Added**
+
+- the Website Chats inbox as drawn in WS-WCHAT-SRS v1.5 (CHAT-UI-00): Open, Mine and Closed with counts over the list; rows with the visitor's on-site dot, a live waiting timer, Awaiting reply / You / At risk / Offline / priority chips, the site and whether they are away; a bell on a chat ringing here and amber with the bell struck through when silenced on this computer (RING-UI-04)
+- "Pick a conversation" says how many visitors are waiting and how long the longest has, with Open the longest waiting and Visitors online; J and K move through the list
+
+**Changed**
+
+- the website thread's details panel (CHAT-UI-01): the visitor at the top with their email, then Visitor, Journey (each page with its time) and Shared files (open from the panel); the header's avatar shows whether the visitor is on the site
+
 ## 1.10.2 — 2026-10-03
 
 - Show every shared record card without a coloured message frame, with grouped captions and receipts; quiet completed task urgency (#173).

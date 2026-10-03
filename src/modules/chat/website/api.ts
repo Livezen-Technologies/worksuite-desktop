@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, apiGet, request } from '../../../core/api';
+import { text } from '../../../core/i18n';
+import { parseTs } from '../../../core/time';
 
 /**
  * Website chat (UI-08: "group, direct and website-chat conversations") — the
@@ -163,6 +165,66 @@ export function filterRows(rows: WebsiteRow[], filter: WebsiteFilter, me: number
 export function sortRows(rows: WebsiteRow[], filter: WebsiteFilter): WebsiteRow[] {
   const key = (r: WebsiteRow) => (filter === 'waiting' ? (r.waiting_since ?? r.last_visitor_at ?? r.started_at ?? '') : r.updated_at);
   return [...rows].sort((a, b) => (filter === 'waiting' ? key(a).localeCompare(key(b)) : key(b).localeCompare(key(a))));
+}
+
+/** The pills over the workspace's list (CHAT-UI-00): Open, Mine and Closed. */
+export type ListPill = 'open' | 'mine' | 'closed';
+
+/** When a visitor started waiting: the ring's own stamp, else their last message. */
+export function waitingSince(r: Pick<WebsiteRow, 'waiting_since' | 'last_visitor_at'>): string | null {
+  return r.waiting_since ?? r.last_visitor_at ?? null;
+}
+
+/** The visitor who has waited longest for a reply, the one "Open the longest waiting" opens. */
+export function longestWaiting(rows: WebsiteRow[]): WebsiteRow | null {
+  let best: WebsiteRow | null = null;
+  let bestAt = Number.NaN;
+  for (const r of rows) {
+    if (!r.awaiting_reply) continue;
+    const since = waitingSince(r);
+    const at = since ? parseTs(since).getTime() : Number.NaN;
+    // A row without a stamp still counts, but any stamped one has waited longer as far as anybody can tell.
+    if (best === null || (!Number.isNaN(at) && (Number.isNaN(bestAt) || at < bestAt))) {
+      best = r;
+      bestAt = at;
+    }
+  }
+  return best;
+}
+
+function minutesText(m: number): string {
+  if (m < 60) return m === 1 ? text('1 minute') : text('{n} minutes', { n: m });
+  if (m >= 1440) {
+    const d = Math.floor(m / 1440);
+    return d === 1 ? text('1 day') : text('{n} days', { n: d });
+  }
+  const h = Math.floor(m / 60);
+  const hours = h === 1 ? text('1 hour') : text('{n} hours', { n: h });
+  const rest = m % 60;
+  return rest ? `${hours} ${rest === 1 ? text('1 minute') : text('{n} minutes', { n: rest })}` : hours;
+}
+
+/** The "Pick a conversation" line (CHAT-UI-00): how many are waiting, and for how long the longest has. */
+export function waitingSummary(rows: WebsiteRow[], now: number): string {
+  const n = rows.filter((r) => r.awaiting_reply).length;
+  if (!n) return text('Nobody is waiting for a reply.');
+  const head = n === 1 ? text('1 visitor is waiting for a reply.') : text('{n} visitors are waiting for a reply.', { n });
+  const since = waitingSince(longestWaiting(rows) ?? { waiting_since: null, last_visitor_at: null });
+  const at = since ? parseTs(since).getTime() : Number.NaN;
+  if (Number.isNaN(at)) return head;
+  const waited = minutesText(Math.max(1, Math.floor((now - at) / 60_000)));
+  return `${head} ${n === 1 ? text('They have waited {time}.', { time: waited }) : text('The longest has waited {time}.', { time: waited })}`;
+}
+
+/**
+ * J and K move through the list (CHAT-UI-00): the next or the previous conversation, stopping at either end. With
+ * nothing open, either key opens the first.
+ */
+export function stepRow(ids: number[], current: number | null, step: 1 | -1): number | null {
+  if (!ids.length) return null;
+  const at = current === null ? -1 : ids.indexOf(current);
+  if (at < 0) return ids[0]!;
+  return ids[Math.min(ids.length - 1, Math.max(0, at + step))]!;
 }
 
 export function useWebsiteInbox(closed: boolean, enabled = true) {
