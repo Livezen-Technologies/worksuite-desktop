@@ -1,11 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { OfflineMutation } from '@shared/types';
-import { WEBSITE_REPLY_LABEL } from '@shared/website-reply';
+import { WEBSITE_REPLY_LABEL, websiteDraftKey } from '@shared/website-reply';
 import { useCanOpen } from '../../../core/access';
 import { ApiError, apiPost } from '../../../core/api';
 import { app } from '../../../core/app-state';
-import { call, errorMessage, registerDropped } from '../../../core/bridge';
+import { call, errorMessage, on, registerDropped } from '../../../core/bridge';
 import { useStore } from '../../../core/store';
 import { useTab, useTabTitle } from '../../../core/tab-context';
 import { bytes, dateLabel, parseTs, timeLabel } from '../../../core/time';
@@ -19,6 +19,7 @@ import { Select } from '../../../components/Select';
 import { SidePanel } from '../../../components/SidePanel';
 import { openChatAttachment } from '../AttachmentViewer';
 import { openWebsiteChatWindow } from '../window';
+import { InThisChat, InviteDialog, NoteBox, TeamFaces, TransferDialog, useDeclined } from './Team';
 
 const control = 'h-[30px] rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink disabled:opacity-60';
 
@@ -42,6 +43,10 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   const composer = useRef<ComposerHandle>(null);
   const [drag, setDrag] = useState(false);
   const [reply, setReply] = useState<ReplyTarget | null>(null);
+  // The composer writes to the visitor, or a note only staff see (TEAM-60).
+  const [tab, setTab] = useState<'reply' | 'note'>('reply');
+  const [dialog, setDialog] = useState<'invite' | 'transfer' | null>(null);
+  const declined = useDeclined(Number(id), me, q.data?.team);
   const canned = useCanned(true);
   const outbox = useQuery({ queryKey: ['offline', 'pending'], queryFn: () => call('offline:pending') });
   const waiting = (outbox.data ?? []).filter((m: OfflineMutation) => m.module === 'website-chat' && m.entityId === id && m.state !== 'DONE');
@@ -51,6 +56,19 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
   }, [count, data?.conversation.visitor_typing, waiting.length]);
+
+  // Removed from the chat by its owner or a supervisor (TEAM-07): what I was writing to the visitor goes too.
+  useEffect(
+    () =>
+      on<{ type: string; conversation_id?: number; what?: string; text?: string }>('realtime:event', (e) => {
+        if (e.type !== 'chat.widget.participants' || e.what !== 'removed' || e.conversation_id !== Number(id)) return;
+        toast('info', e.text ?? 'You were removed from the chat.');
+        void call('offline:deleteDraft', websiteDraftKey(Number(id))).catch(() => undefined);
+        setTab('reply');
+        void qc.invalidateQueries({ queryKey: ['website'] });
+      }),
+    [id, qc],
+  );
 
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ['website'] });
@@ -69,6 +87,8 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   // On the site: seen in the two minutes before this copy was fetched, as the list decides.
   const online = row?.online ?? (v?.last_seen ? q.dataUpdatedAt - parseTs(v.last_seen).getTime() < 120_000 : false);
   const page = v?.current_url ? pathOf(v.current_url) : null;
+  const t = data.team ?? null;
+  const noting = tab === 'note' && !!t?.can.note;
 
   return (
     <div className="flex h-full min-w-0 flex-1">
@@ -103,6 +123,18 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
             </span>
           </span>
           <span className="flex flex-wrap items-center gap-2">
+            {t ? <TeamFaces people={t.people} /> : null}
+            {/* Invite and Transfer, beside Close (TEAM-UI-01). */}
+            {!mini && t?.can.invite && c.status !== 'closed' ? (
+              <button type="button" onClick={() => setDialog('invite')} className="flex h-[30px] items-center gap-1 rounded-[7px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink hover:bg-subtle">
+                <Icon name="user-plus" size={13} /> Invite
+              </button>
+            ) : null}
+            {!mini && t?.can.transfer && c.status !== 'closed' ? (
+              <button type="button" onClick={() => setDialog('transfer')} className="flex h-[30px] items-center gap-1 rounded-[7px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink hover:bg-subtle">
+                <Icon name="transfers" size={13} /> Transfer
+              </button>
+            ) : null}
             <Controls data={data} row={row} me={me} canReply={canReply} onDone={refresh} compact={mini} />
             {!mini ? (
               <button type="button" aria-label="Open in new window" title="Open in new window" onClick={() => void openWebsiteChatWindow(c.id, name)} className="flex h-[30px] w-[30px] items-center justify-center rounded-[7px] border border-line bg-surface text-ink hover:bg-subtle">
@@ -114,13 +146,15 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
         <div ref={scroller} className={cx('flex min-h-0 flex-1 flex-col gap-[9px] overflow-y-auto py-3 scroll-thin', mini ? 'px-3' : 'px-4')}>
           {c.started_at ? <div className="self-center text-[11px] text-ink-3">Started a chat on {c.website ?? c.widget ?? 'the website'}{data.journey?.[0]?.url ? pathOf(data.journey[0].url) : ''} · {timeLabel(c.started_at)}</div> : null}
           {data.messages.length === 0 ? <Empty icon="chat" title="No messages yet" hint="The visitor has opened the chat but not written anything." /> : null}
-          {data.messages.map((m) => (
+          {data.messages.map((m, i) => (
             <Message
               key={m.id}
               m={m}
+              // Each person signs their first message in a run (TEAM-05).
+              signed={m.from === 'agent' && (i === 0 || data.messages[i - 1]!.from !== 'agent' || data.messages[i - 1]!.agent_id !== m.agent_id || (data.messages[i - 1]!.visibility ?? 'public') !== (m.visibility ?? 'public'))}
               visitor={name}
               // Answering one message quotes it, for the visitor too (RDC-10).
-              onReply={canReply && c.status !== 'closed' && m.from !== 'system' ? () => {
+              onReply={canReply && c.status !== 'closed' && m.from !== 'system' && m.visibility !== 'internal' ? () => {
                 setReply({ id: m.id, sender_name: quoteAuthor({ from: m.from === 'system' ? 'agent' : m.from, agent: m.agent }, name), snippet: m.body ?? m.file?.filename ?? '' });
                 composer.current?.focus();
               } : undefined}
@@ -149,7 +183,26 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
           ))}
           {c.visitor_typing ? <div className="self-start text-[12px] text-ink-3">{name.split(' ')[0]} is typing…</div> : null}
         </div>
-        {c.status === 'closed' ? (
+        {declined ? (
+          // An invitation or transfer this person sent came back (TEAM-24, WF-T2).
+          <div role="status" className="flex items-center gap-2 border-t border-line bg-selection px-3.5 py-2 text-[12.5px] text-ink">
+            <Icon name="info" size={14} className="shrink-0 text-primary" />
+            <span className="min-w-0 flex-1">{declined.text}</span>
+            {declined.retry && t?.can[declined.retry] ? <button type="button" onClick={() => setDialog(declined.retry)} className="shrink-0 font-semibold text-primary hover:underline">Try someone else</button> : null}
+          </div>
+        ) : null}
+        {t?.can.note && c.status !== 'closed' && canReply ? (
+          <div role="tablist" aria-label="Write" className="flex gap-1 border-t border-line bg-surface px-3 pt-1.5 text-[12px] font-semibold">
+            {([['reply', 'Reply to visitor'], ['note', 'Internal note']] as const).map(([k, label]) => (
+              <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={cx('rounded-t-[7px] border-b-2 px-2.5 py-1', tab === k ? (k === 'note' ? 'border-[#C88A12] text-[#7A4308] dark:text-warning' : 'border-primary text-primary') : 'border-transparent text-ink-3 hover:text-ink')}>
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {c.status !== 'closed' && noting ? (
+          <NoteBox conversationId={c.id} onSent={refresh} compact={mini} />
+        ) : c.status === 'closed' ? (
           <div className="flex items-center justify-between border-t border-line bg-surface px-3.5 py-2.5 text-[13px] text-ink-3">
             This chat is closed{c.closed_at ? ` since ${dateLabel(c.closed_at)}` : ''}.
             {canReply ? <Button size="sm" onClick={() => void websiteAction(c.id, 'reopen').then(refresh, (e) => toast('error', errorMessage(e)))}>Reopen</Button> : null}
@@ -169,7 +222,13 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
           <div className="border-t border-line bg-surface px-3.5 py-2.5 text-[13px] text-ink-3">You can read this chat but not reply to it.</div>
         )}
       </section>
-      {!mini ? <VisitorPanel v={v} data={data} online={online} onDone={refresh} /> : null}
+      {!mini ? (
+        <VisitorPanel v={v} data={data} online={online} onDone={refresh}>
+          {t ? <InThisChat data={data} me={me} onInvite={() => setDialog('invite')} onTransfer={() => setDialog('transfer')} onClose={() => void websiteAction(c.id, 'close').then(refresh, (e) => toast('error', errorMessage(e)))} onDone={refresh} /> : null}
+        </VisitorPanel>
+      ) : null}
+      {dialog === 'invite' ? <InviteDialog conversationId={c.id} me={me} onClose={() => setDialog(null)} onDone={refresh} /> : null}
+      {dialog === 'transfer' ? <TransferDialog conversationId={c.id} me={me} onClose={() => setDialog(null)} onDone={refresh} /> : null}
     </div>
   );
 }
@@ -258,15 +317,33 @@ function openWebsiteFile(f: NonNullable<WebsiteMessage['file']>, openLink: (url:
   openChatAttachment({ filename: f.filename, mime: f.mime, size: f.size, is_image: f.is_image, url, download_url: url }, openLink);
 }
 
-function Message({ m, visitor, onReply }: { m: WebsiteMessage; visitor: string; onReply?: () => void }) {
+function Message({ m, visitor, onReply, signed = false }: { m: WebsiteMessage; visitor: string; onReply?: () => void; signed?: boolean }) {
   const { openLink } = useTab();
-  // "Nuwan joined the chat": a notice, not something anybody said.
-  if (m.from === 'system') return <div className="self-center text-center text-[11px] text-ink-3">{m.body} · {timeLabel(m.at)}</div>;
+  const internal = m.visibility === 'internal';
+  // "Nuwan joined the chat": a notice, not something anybody said. One only staff see is the chat's event log (TEAM-63).
+  if (m.from === 'system') {
+    return internal ? (
+      <div className="flex items-center gap-1 self-center text-center text-[11px] text-[#7A4308] dark:text-warning" title="Only staff see this">
+        <Icon name="lock" size={10} /> {m.body} · {timeLabel(m.at)}
+      </div>
+    ) : (
+      <div className="self-center text-center text-[11px] text-ink-3">{m.body} · {timeLabel(m.at)}</div>
+    );
+  }
   const ours = m.from === 'agent';
-  const shape = ours ? 'self-end rounded-[12px_4px_12px_12px] bg-primary text-white' : m.from === 'bot' ? 'self-start rounded-[4px_12px_12px_12px] bg-subtle text-ink-2 text-[12.5px]' : 'self-start rounded-[4px_12px_12px_12px] border border-line bg-surface text-ink';
+  // A note only staff see (TEAM-60): amber and dashed, and never quoted to the visitor.
+  const shape = internal
+    ? 'self-end rounded-[12px_4px_12px_12px] border border-dashed border-[#E2B04A] bg-[#FFF6E0] text-ink dark:bg-warning-bg'
+    : ours ? 'self-end rounded-[12px_4px_12px_12px] bg-primary text-white' : m.from === 'bot' ? 'self-start rounded-[4px_12px_12px_12px] bg-subtle text-ink-2 text-[12.5px]' : 'self-start rounded-[4px_12px_12px_12px] border border-line bg-surface text-ink';
   const q = m.reply;
   return (
     <div className={cx('group flex max-w-full flex-col gap-1', ours ? 'items-end self-end' : 'items-start self-start')}>
+      {signed || internal ? (
+        <span className="flex items-center gap-1.5 text-[11px] text-ink-3">
+          {internal ? <b className="flex items-center gap-1 text-[#7A4308] dark:text-warning"><Icon name="lock" size={10} /> Only staff see this</b> : null}
+          {signed || internal ? <span className="flex items-center gap-1">{m.avatar ? <Avatar name={m.agent} src={m.avatar} size={14} /> : null}{m.agent ?? 'A colleague'}</span> : null}
+        </span>
+      ) : null}
       {q ? (
         <div className="max-w-[min(320px,80%)] truncate border-l-[3px] border-primary/60 bg-subtle px-2 py-1 text-[11.5px] text-ink-2" title={q.body ?? q.file ?? ''}>
           <b className="text-ink">{quoteAuthor(q, visitor)}</b> · {q.body ?? (q.file ? `📎 ${q.file}` : 'A removed message')}
@@ -300,7 +377,7 @@ function Message({ m, visitor, onReply }: { m: WebsiteMessage; visitor: string; 
 
 const HEADING = 'text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase';
 
-function VisitorPanel({ v, data, online, onDone }: { v: WebsiteVisitor | null; data: WebsiteConversation; online: boolean; onDone: () => void }) {
+function VisitorPanel({ v, data, online, onDone, children }: { v: WebsiteVisitor | null; data: WebsiteConversation; online: boolean; onDone: () => void; children?: ReactNode }) {
   const [blocking, setBlocking] = useState(false);
   const [busy, setBusy] = useState(false);
   // A ticket is raised in, and opened by, Support: offered only to whoever has it.
@@ -355,6 +432,7 @@ function VisitorPanel({ v, data, online, onDone }: { v: WebsiteVisitor | null; d
           </b>
           {v?.email ? <span className="break-all text-[12px] text-ink-3 selectable">{v.email}</span> : null}
         </div>
+        {children}
         <h3 className={HEADING}>Visitor</h3>
         {rows.filter(([, val]) => val).map(([k, val]) => (
           <div key={k} className="flex gap-2">

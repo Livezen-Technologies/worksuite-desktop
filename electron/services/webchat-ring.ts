@@ -1,4 +1,4 @@
-import type { WebchatRingChat, WebchatRingPrefs, WebchatRingState } from '@shared/types';
+import type { WebchatHandoff, WebchatRingChat, WebchatRingPrefs, WebchatRingState } from '@shared/types';
 import { isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { HttpClient } from './http';
@@ -23,7 +23,50 @@ export interface PendingAnswer {
   ringing?: RingingEntry[];
   /** Whether this device plays my ring (RING-10); null when the server does not choose. */
   ring_here?: boolean | null;
+  /** Invitations and transfers waiting for me (ENH-WCHAT-03); absent on a server without team chats. */
+  handoffs?: HandoffEntry[];
 }
+
+/** An invitation or transfer card as the server sends it (WidgetTeam::pendingFor, `chat.widget.handoff`). */
+export interface HandoffEntry extends WaitingContext {
+  handoff_id: number;
+  kind?: string;
+  mode?: string;
+  from_name?: string | null;
+  department?: string | null;
+  to_any?: boolean;
+  note?: string | null;
+  expires_at?: string | null;
+  created_at?: string | null;
+}
+
+/** A handoff card as this computer shows it, or null when it cannot be read. */
+export function fromHandoff(h: HandoffEntry): WebchatHandoff | null {
+  const hid = id(h.handoff_id);
+  const cid = id(h.conversation_id);
+  if (!hid || !cid) return null;
+  return {
+    id: hid,
+    conversationId: cid,
+    kind: h.kind === 'transfer' ? 'transfer' : 'invite',
+    mode: h.mode === 'cold' ? 'cold' : 'warm',
+    visitor: text(h.visitor, 120) ?? 'A visitor',
+    site: text(h.site, 120),
+    page: text(h.page, 200),
+    from: text(h.from_name, 120),
+    department: text(h.department, 120),
+    toAny: !!h.to_any,
+    note: text(h.note, 500),
+    expiresAt: text(h.expires_at, 32),
+    createdAt: text(h.created_at, 32),
+  };
+}
+
+/** Said to whoever an invitation or transfer was for when it resolves without them. */
+export const HANDOFF_WORDS: Record<string, string> = {
+  cancelled: 'It was cancelled.',
+  expired: 'It expired.',
+};
 
 /** One ringing chat as the server's ring sessions describe it (RingSessions::ringingFor). */
 export interface RingingEntry extends WaitingContext {
@@ -157,11 +200,12 @@ export function stampMs(s: string): number {
  * quiet by the person's Do not disturb choice; the stronger tone for at-risk
  * and high, urgent and VIP chats.
  */
-export function toneFor(chats: WebchatRingChat[], opts: { ringSeconds: number; quiet: boolean; duringDnd: WebchatRingPrefs['duringDnd']; now: number; ringHere?: boolean | null }): WebchatRingState['tone'] {
+export function toneFor(chats: WebchatRingChat[], opts: { ringSeconds: number; quiet: boolean; duringDnd: WebchatRingPrefs['duringDnd']; now: number; ringHere?: boolean | null; handoffs?: number }): WebchatRingState['tone'] {
   // Another of my devices plays the ring (RING-10): this one shows it without sound.
   if (opts.ringHere === false) return 'off';
   const live = chats.filter((c) => !c.silenced && !c.offline && (c.atRisk || opts.ringSeconds <= 0 || opts.now - stampMs(c.since) < opts.ringSeconds * 1000));
-  if (!live.length) return 'off';
+  // A colleague asking me in rings too, like a chat that has reached me (TEAM-23).
+  if (!live.length) return (opts.handoffs ?? 0) > 0 && !(opts.quiet && opts.duringDnd !== 'ring') ? 'normal' : 'off';
   const strong = live.some((c) => c.atRisk || LOUD.has(c.priority));
   if (opts.quiet) {
     if (opts.duringDnd === 'card') return 'off';
@@ -170,11 +214,15 @@ export function toneFor(chats: WebchatRingChat[], opts: { ringSeconds: number; q
   return strong ? 'strong' : 'normal';
 }
 
-/** How tall the call window is for what it shows: one card, then a row for each other chat (up to three), or just an outcome. */
-export function ringerHeight(s: Pick<WebchatRingState, 'chats' | 'outcome'>): number {
-  if (!s.chats.length) return 120;
-  const rows = Math.min(3, s.chats.length - 1);
-  return 272 + rows * 46 + (s.chats.length > 4 ? 26 : 0);
+/**
+ * How tall the call window is for what it shows: one card — a chat, or an invitation or transfer — then a row for
+ * each of the others (up to three), or just an outcome.
+ */
+export function ringerHeight(s: Pick<WebchatRingState, 'chats' | 'outcome' | 'handoffs'>): number {
+  const all = s.chats.length + (s.handoffs?.length ?? 0);
+  if (!all) return 120;
+  const rows = Math.min(3, all - 1);
+  return 272 + rows * 46 + (all > 4 ? 26 : 0) + (!s.chats.length && s.handoffs?.[0]?.note ? 40 : 0);
 }
 
 export interface WebchatRingDeps {
@@ -212,6 +260,8 @@ export const HEARTBEAT_MS = 20_000;
  */
 export class WebchatRinger {
   private chats = new Map<number, WebchatRingChat>();
+  /** Invitations and transfers waiting for me, by handoff id (ENH-WCHAT-03). */
+  private handoffs = new Map<number, WebchatHandoff>();
   private ringSeconds = 0;
   /** Whether the server has this computer play the ring; null when it does not choose (no ring sessions there). */
   private ringHere: boolean | null = null;
@@ -253,6 +303,7 @@ export class WebchatRinger {
     for (const t of [this.timer, this.soon, this.outcomeTimer, this.tick, this.beatTimer]) if (t) clearTimeout(t);
     this.timer = this.soon = this.outcomeTimer = this.tick = this.beatTimer = null;
     this.chats.clear();
+    this.handoffs.clear();
     this.ringHere = null;
     this.sessions = false;
     this.outcome = null;
@@ -263,14 +314,18 @@ export class WebchatRinger {
     const chats = orderChats([...this.chats.values()]);
     const prefs = this.deps.prefs();
     const hidden = this.deps.locked();
+    const now = Date.now();
+    // One that ran out stops ringing at once; the server says so at the next read.
+    const handoffs = [...this.handoffs.values()].filter((h) => !h.expiresAt || stampMs(h.expiresAt) > now).sort((a, b) => a.id - b.id);
     return {
       chats: hidden ? chats.map((c) => ({ ...c, visitor: 'A visitor', page: null, place: null, device: null, preview: null, by: null })) : chats,
-      tone: toneFor(chats, { ringSeconds: this.ringSeconds, quiet: this.deps.quiet(), duringDnd: prefs.duringDnd, now: Date.now(), ringHere: this.ringHere }),
+      handoffs: hidden ? handoffs.map((h) => ({ ...h, visitor: 'A visitor', page: null, note: null, from: null })) : handoffs,
+      tone: toneFor(chats, { ringSeconds: this.ringSeconds, quiet: this.deps.quiet(), duringDnd: prefs.duringDnd, now, ringHere: this.ringHere, handoffs: handoffs.length }),
       volume: Math.max(0, Math.min(100, prefs.volume)),
       outcome: this.outcome,
       hidden,
       shortcut: this.shortcut,
-      elsewhere: this.ringHere === false && chats.length > 0,
+      elsewhere: this.ringHere === false && chats.length + handoffs.length > 0,
       ringHere: this.ringHere,
     };
   }
@@ -291,6 +346,27 @@ export class WebchatRinger {
     const cid = id(ev.conversation_id);
     if (!cid) return;
     switch (e.type) {
+      case 'chat.widget.handoff': {
+        // A colleague asks me in (TEAM-23): it rings until I answer, it is cancelled or it runs out.
+        const h = fromHandoff(ev as unknown as HandoffEntry);
+        if (h) this.handoffs.set(h.id, h);
+        this.changed();
+        break;
+      }
+      case 'chat.widget.handoff.resolved': {
+        const hid = id(ev.handoff_id);
+        if (hid === null || !this.handoffs.has(hid)) return;
+        const h = this.handoffs.get(hid)!;
+        this.handoffs.delete(hid);
+        const by = id(ev.by);
+        if (by !== this.deps.me()) {
+          const what = h.kind === 'invite' ? 'The invitation' : 'The transfer';
+          if (ev.status === 'accepted') this.say(cid, `${text(ev.by_name, 120) ?? 'A colleague'} took it first.`);
+          else if (typeof ev.status === 'string' && HANDOFF_WORDS[ev.status]) this.say(cid, `${what} for ${h.visitor}: ${HANDOFF_WORDS[ev.status]!.toLowerCase()}`);
+        }
+        this.changed();
+        break;
+      }
       case 'chat.ring.stopped': {
         // The ring stopped for everybody, for a reason (RING-03, RING-28). A join is said with who.
         if (!this.chats.has(cid)) return;
@@ -382,6 +458,34 @@ export class WebchatRinger {
     this.outcome = null;
     this.changed();
     this.deps.open(conversationId);
+    this.reconcileSoon();
+    return true;
+  }
+
+  /**
+   * Answer an invitation or a transfer (TEAM-24, TEAM-41): Join chat or Accept brings WorkSuite forward on the chat;
+   * Decline tells whoever asked. Somebody who was a moment too late is told who took it.
+   */
+  async answer(handoffId: number, accept: boolean): Promise<boolean> {
+    const h = this.handoffs.get(handoffId);
+    if (!h) return false;
+    try {
+      await this.deps.http.post(`${WEBSITE}/handoffs/${handoffId}/${accept ? 'accept' : 'decline'}`);
+    } catch (e) {
+      if (isDesktopError(e) && (e.status === 409 || e.status === 404 || e.status === 403)) {
+        this.handoffs.delete(handoffId);
+        this.say(h.conversationId, e.message || 'This is no longer waiting for you.');
+        this.changed();
+        return false;
+      }
+      this.say(h.conversationId, `Could not ${accept ? 'join' : 'decline'}: ${e instanceof Error ? e.message : 'the server did not answer'}`);
+      this.changed();
+      return false;
+    }
+    this.handoffs.delete(handoffId);
+    this.outcome = null;
+    this.changed();
+    if (accept) this.deps.open(h.conversationId);
     this.reconcileSoon();
     return true;
   }
@@ -482,12 +586,17 @@ export class WebchatRinger {
       if (typeof answer?.ring_here === 'boolean') this.ringHere = answer.ring_here;
       const next = mergeAnswer(answer ?? {}, this.chats);
       this.chats = new Map(next.map((c) => [c.id, c]));
+      // The server's list of invitations and transfers is the truth, where it has one (ENH-WCHAT-03).
+      if (Array.isArray(answer?.handoffs)) {
+        this.handoffs = new Map(answer.handoffs.map(fromHandoff).filter((h): h is WebchatHandoff => h !== null).map((h) => [h.id, h]));
+      }
       this.changed();
     } catch (e) {
       if (isDesktopError(e) && (e.status === 403 || e.status === 404)) {
         // Not website staff, or no website chat on this server: nothing rings here.
         this.refused = true;
         this.chats.clear();
+        this.handoffs.clear();
         this.changed();
         return;
       }

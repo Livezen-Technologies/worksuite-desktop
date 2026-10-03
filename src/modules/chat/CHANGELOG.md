@@ -4,6 +4,26 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.15.0 — 2026-10-03
+
+**Added**
+
+- several staff in one website chat, with the server's Communication 1.11.0 (WS-WCHAT ENH-WCHAT-03, TEAM-UI-01/02):
+  the thread's header shows everybody in it, owner first, with Invite and Transfer; the details panel's "In this chat"
+  lists each person's role, when they joined and who invited them, invitations and transfers still waiting with Cancel,
+  Leave chat (an owner is offered Transfer or Close instead), Remove for the owner, and a supervisor's Monitor, Join and
+  Take over; the Invite dialog picks colleagues by availability, open chats and department (offline people and those
+  already in it cannot be picked; somebody not on the site's staff is marked) or a department, with a note; the
+  Transfer dialog sends to a colleague, a department or the next available agent, warm or handed over now, with a
+  handover note
+- the composer's Reply to visitor / Internal note tabs: a note only staff see, amber, with @mentions; notes and the
+  staff-only event lines are drawn as such in the thread, and each person signs their first message in a run
+- invitations and transfers ring in the call window and the bar under the tabs as INVITATION and TRANSFER TO YOU cards
+  with who asks, the note, a countdown, Join chat or Accept, and Decline (`ring:handoff`); the inbox's new Invited
+  section lists them; Mine includes chats I take part in, marked Participant, and a row several staff are in shows their
+  faces; a declined or unanswered invitation is said in the thread with Try someone else; somebody removed from a chat
+  is told and their draft to the visitor is dropped
+
 ## 1.14.0 — 2026-10-03
 
 **Added**

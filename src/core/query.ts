@@ -22,7 +22,9 @@ export const queryClient = new QueryClient({
 });
 
 /** Website chat (the visitor widget): refresh its inbox and the conversation named. */
-const WEBSITE_EVENTS = new Set(['chat.widget.message', 'chat.widget.activity', 'chat.incoming', 'chat.taken', 'chat.assigned', 'chat.at_risk']);
+const WEBSITE_EVENTS = new Set(['chat.widget.message', 'chat.widget.activity', 'chat.incoming', 'chat.taken', 'chat.assigned', 'chat.at_risk',
+  // Several staff in one chat (ENH-WCHAT-03): who is in it, a note, an invitation or a transfer answered.
+  'chat.widget.participants', 'chat.widget.note', 'chat.widget.handoff', 'chat.widget.handoff.resolved']);
 
 /** Events that change nothing a list or thread shows; refetching every message on each keystroke was waste. */
 const QUIET_CHAT_EVENTS = /^chat\.(typing\.|presence$|call\.)/;

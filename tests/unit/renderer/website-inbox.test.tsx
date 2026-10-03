@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebchatRingChat, WebchatRingState } from '@shared/types';
@@ -49,14 +49,14 @@ const ring = (over: Partial<WebchatRingChat>): WebchatRingChat => ({
   priority: 'vip', offline: false, since: ago(9 * 60_000), stage: 'everyone', atRisk: false, mine: false, by: null, silenced: true, ...over,
 });
 
-function serve(rows = ROWS, chats: WebchatRingChat[] = [ring({})]) {
+function serve(rows = ROWS, chats: WebchatRingChat[] = [ring({})], handoffs: NonNullable<WebchatRingState['handoffs']> = []) {
   vi.mocked(apiGet).mockImplementation((async (path: string) => {
     if (path === '/api/chat/widget-admin/conversations') return { conversations: rows, can: { view: true, reply: true, manage: false } };
     if (path === '/api/chat/widget-admin/visitors') return { visitors: [{ id: 1 }, { id: 2 }] };
     if (path === '/api/chat/widget-admin/missed/count') return { count: 1 };
     throw new Error(`unexpected ${path}`);
   }) as never);
-  const state: WebchatRingState = { chats, tone: 'off', volume: 80, outcome: null, hidden: false, shortcut: false };
+  const state: WebchatRingState = { chats, handoffs, tone: 'off', volume: 80, outcome: null, hidden: false, shortcut: false };
   vi.mocked(call).mockImplementation((async (channel: string) => (channel === 'ring:state' ? state : null)) as never);
 }
 
@@ -134,6 +134,44 @@ describe('the Website Chats inbox (CHAT-UI-00)', () => {
     expect(vi.mocked(apiGet)).toHaveBeenCalledWith('/api/chat/widget-admin/conversations', { q: 'wrong company' }, expect.anything());
     fireEvent.change(screen.getByRole('textbox', { name: 'Search visitors' }), { target: { value: 'nobody said this' } });
     expect(await within(list()).findByText('Nothing matches “nobody said this”', undefined, { timeout: 2000 })).toBeTruthy();
+  });
+
+  it('Mine includes chats I take part in, and a chat several staff are in shows their faces (ENH-WCHAT-03)', async () => {
+    serve([
+      row({ id: 1, visitor_name: 'Hasitha', assigned_to: 9, agent: 'Nuwan', my_role: 'participant',
+        team: [{ user_id: 9, name: 'Nuwan Perera', avatar: null, role: 'owner' }, { user_id: 7, name: 'Me Myself', avatar: null, role: 'participant' }] }),
+      row({ id: 2, visitor_name: 'Ahmed', assigned_to: 9, agent: 'Nuwan' }),
+    ], []);
+    wrap(<WebsiteWorkspace />);
+    const hasitha = (await within(list()).findByText('Hasitha')).closest('button')!;
+    expect(within(hasitha).getByText('Participant')).toBeTruthy();
+    expect(within(hasitha).getByLabelText('In this chat: Nuwan Perera, Me Myself')).toBeTruthy();
+    fireEvent.click(within(list()).getByRole('button', { name: 'Mine · 1' }));
+    expect(within(list()).getByText('Hasitha')).toBeTruthy();
+    expect(within(list()).queryByText('Ahmed')).toBeNull();
+  });
+
+  it('Invited lists the invitations and transfers waiting for me, with Join chat and Decline (TEAM-09)', async () => {
+    serve(ROWS, [], [
+      { id: 21, conversationId: 4, kind: 'invite', mode: 'warm', visitor: 'Visitor 77AB', site: 'techubiz.com', page: null, from: 'Nuwan', department: null, toAny: false,
+        note: 'Education pricing?', expiresAt: new Date(Date.now() + 90_000).toISOString(), createdAt: new Date().toISOString() },
+      { id: 22, conversationId: 5, kind: 'transfer', mode: 'warm', visitor: 'Visitor 12', site: null, page: null, from: 'Dilini', department: 'Billing', toAny: false,
+        note: null, expiresAt: null, createdAt: null },
+    ]);
+    tab.route = '/chat?view=website&section=invited';
+    wrap(<WebsiteWorkspace />);
+    const nav = screen.getByRole('navigation', { name: 'Website chats' });
+    await waitFor(() => expect(within(nav).getByRole('button', { name: /Invited/ }).textContent).toBe('Invited2'));
+    expect(within(list()).getByText('Nuwan invites you to join · techubiz.com')).toBeTruthy();
+    expect(within(list()).getByText('“Education pricing?”')).toBeTruthy();
+    expect(within(list()).getByText('Dilini asks you to take over (the Billing team)')).toBeTruthy();
+    fireEvent.click(within(list()).getByRole('button', { name: 'Join chat' }));
+    expect(call).toHaveBeenCalledWith('ring:handoff', { id: 21, accept: true });
+    fireEvent.click(within(list()).getAllByRole('button', { name: 'Decline' })[1]!);
+    expect(call).toHaveBeenCalledWith('ring:handoff', { id: 22, accept: false });
+    // Opening one reads the chat.
+    fireEvent.click(within(list()).getByText('Visitor 77AB'));
+    expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=invited&website=4');
   });
 
   it('Open, Mine and Closed over the list, with their counts', async () => {

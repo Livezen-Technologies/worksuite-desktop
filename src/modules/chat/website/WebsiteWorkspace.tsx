@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
-import type { WebchatRingChat } from '@shared/types';
+import type { WebchatHandoff, WebchatRingChat } from '@shared/types';
 import { apiGet, apiPost } from '../../../core/api';
 import { app } from '../../../core/app-state';
 import { call } from '../../../core/bridge';
@@ -11,8 +11,8 @@ import { listStamp, parseTs } from '../../../core/time';
 import { Icon } from '../../../components/Icon';
 import { Avatar, Button, Empty, ErrorNote, Kbd, Spinner, cx } from '../../../components/ui';
 import { useNow } from '../../calls/parts';
-import { lastSaid, longestWaiting, sectionRows, stepRow, useWebsiteInbox, useWebsiteSearch, waitingSince, waitingSummary, WEBSITE, type Section, type WebsiteRow } from './api';
-import { useRingState, waited } from './Ringing';
+import { isMine as mineFor, lastSaid, longestWaiting, sectionRows, stepRow, useWebsiteInbox, useWebsiteSearch, waitingSince, waitingSummary, WEBSITE, type Section, type WebsiteRow } from './api';
+import { clock, handoffAsk, handoffTitle, useRingState, waited } from './Ringing';
 import { WebsiteLive, type OnlineVisitor } from './WebsiteLive';
 import { WebsiteThread } from './WebsiteThread';
 import { Select } from '../../../components/Select';
@@ -28,7 +28,10 @@ const SECTIONS: Array<{ id: Section; label: string }> = [
   { id: 'live', label: 'Live chats' },
   { id: 'offline', label: 'Offline enquiries' },
   { id: 'missed', label: 'Missed chats' },
-  { id: 'mine', label: 'Assigned to me' },
+  // Chats I own or take part in (ENH-WCHAT-03, TEAM-09).
+  { id: 'mine', label: 'Mine' },
+  // Invitations and transfers waiting for me.
+  { id: 'invited', label: 'Invited' },
   { id: 'unassigned', label: 'Unassigned' },
   { id: 'awaiting', label: 'Awaiting reply' },
   { id: 'starred', label: 'Starred' },
@@ -100,17 +103,19 @@ export function WebsiteWorkspace() {
     retry: false,
   });
   // What rings on this computer: the row shows it, and a silenced one is marked (RING-24).
-  const ringing = new Map(useRingState().chats.map((c) => [c.id, c]));
+  const ring = useRingState();
+  const ringing = new Map(ring.chats.map((c) => [c.id, c]));
+  const handoffs = ring.handoffs ?? [];
   const openRows = open.data?.conversations ?? [];
   const sites = open.data && 'sites' in open.data ? ((open.data as { sites?: Array<{ widget_id: number; site: string }> }).sites ?? []) : [];
-  const count = (s: Section): number => (s === 'missed' ? (missedCount.data?.count ?? 0) : s === 'closed' ? 0 : sectionRows(openRows, s, me).length);
+  const count = (s: Section): number => (s === 'missed' ? (missedCount.data?.count ?? 0) : s === 'invited' ? handoffs.length : s === 'closed' ? 0 : sectionRows(openRows, s, me).length);
   const source = section === 'closed' ? closed : open;
   const pill = section === 'closed' ? 'closed' : mineOnly ? 'mine' : 'open';
   const onSite = (r: WebsiteRow) => !site || r.widget_id === site;
-  const isMine = (r: WebsiteRow) => me !== null && r.assigned_to === me;
+  const isMine = (r: WebsiteRow) => mineFor(r, me);
   const openHere = sectionRows(openRows, section === 'closed' ? 'inbox' : section, me).filter(onSite);
   const typed = q.trim().toLowerCase();
-  const searching = section !== 'missed' && needle.length >= 2 && typed.length >= 2;
+  const searching = section !== 'missed' && section !== 'invited' && needle.length >= 2 && typed.length >= 2;
   const found = useWebsiteSearch(searching ? needle : '', section === 'closed');
   // Until the server answers, the list narrows by what it already has.
   const rows = (searching && found.data ? found.data.conversations : sectionRows(source.data?.conversations ?? [], section, me))
@@ -144,7 +149,7 @@ export function WebsiteWorkspace() {
   }, [section, selected]);
 
   // J and K move through the list (CHAT-UI-00) while this tab is in front and nothing is being typed.
-  const ids = section === 'missed' ? (missed.data?.missed ?? []).map((m) => m.id) : rows.map((r) => r.id);
+  const ids = section === 'missed' ? (missed.data?.missed ?? []).map((m) => m.id) : section === 'invited' ? handoffs.map((h) => h.conversationId) : rows.map((r) => r.id);
   const idsKey = ids.join(',');
   useEffect(() => {
     if (!active || live) return;
@@ -176,7 +181,7 @@ export function WebsiteWorkspace() {
             return (
               <button key={s.id} type="button" aria-current={section === s.id ? 'page' : undefined} onClick={() => to({ section: s.id, website: null })} className={cx('flex h-[27px] items-center rounded-[7px] px-2 text-left', section === s.id ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
                 <span className="flex-1">{s.label}</span>
-                {n ? <span className={cx('text-[11.5px] font-bold', s.id === 'missed' ? 'text-danger' : 'text-ink-2')}>{n}</span> : null}
+                {n ? <span className={cx('text-[11.5px] font-bold', s.id === 'missed' ? 'text-danger' : s.id === 'invited' ? 'text-primary' : 'text-ink-2')}>{n}</span> : null}
               </button>
             );
           })}
@@ -217,7 +222,7 @@ export function WebsiteWorkspace() {
             <Icon name="search" size={14} className="pointer-events-none absolute left-2.5 text-ink-3" />
             <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search visitors" placeholder="Search visitors, messages, email…" className="h-8 w-full rounded-[8px] border border-line bg-surface pr-2.5 pl-8 text-[13px] outline-none focus:border-primary" />
           </span>
-          {section !== 'missed' ? (
+          {section !== 'missed' && section !== 'invited' ? (
             <div className="flex gap-1 text-[11.5px] font-semibold" role="group" aria-label="Show">
               <Pill on={pill === 'open'} onClick={() => showOpen(false)}>Open · {openHere.length}</Pill>
               <Pill on={pill === 'mine'} onClick={() => showOpen(true)}>Mine · {openHere.filter(isMine).length}</Pill>
@@ -226,7 +231,11 @@ export function WebsiteWorkspace() {
           ) : null}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto scroll-thin">
-          {section === 'missed' ? (
+          {section === 'invited' ? (
+            handoffs.length === 0 ? <Empty icon="users" title="No invitations" hint="When a colleague invites you into a website chat, or transfers one to you, it waits here." /> : handoffs.map((h) => (
+              <InvitedRow key={h.id} h={h} hidden={ring.hidden} active={selected === String(h.conversationId)} onOpen={() => to({ website: String(h.conversationId) })} />
+            ))
+          ) : section === 'missed' ? (
             missed.isLoading ? <Spinner /> : missed.error ? <div className="p-4"><ErrorNote error={missed.error} onRetry={() => void missed.refetch()} /></div> : !missed.data?.missed.length ? (
               <Empty icon="globe" title="No missed chats" />
             ) : (
@@ -287,6 +296,34 @@ function pathOf(url: string): string {
 }
 
 /**
+ * An invitation or a transfer waiting for me, in the Invited view (ENH-WCHAT-03, TEAM-09): who asks, the note, how long
+ * is left, Join chat or Accept, and Decline. Opening the row reads the chat without joining it.
+ */
+function InvitedRow({ h, hidden, active, onOpen }: { h: WebchatHandoff; hidden: boolean; active: boolean; onOpen: () => void }) {
+  const now = useNow(1_000);
+  const left = h.expiresAt ? Math.max(0, Math.round((parseTs(h.expiresAt).getTime() - now) / 1000)) : null;
+  const answer = (accept: boolean) => void call('ring:handoff', { id: h.id, accept }).catch(() => undefined);
+  return (
+    <div data-website-row={h.conversationId} className={cx('relative flex flex-col gap-1.5 border-b border-line py-2.5 pr-3 pl-3.5', active ? 'bg-selection' : 'hover:bg-subtle')}>
+      {active ? <span aria-hidden className="absolute top-0 bottom-0 left-0 w-[3px] bg-primary" /> : null}
+      <button type="button" onClick={onOpen} className="flex flex-col gap-[3px] text-left">
+        <span className="flex items-center gap-1.5">
+          <b className="flex-1 truncate text-ink">{hidden ? 'A visitor' : h.visitor}</b>
+          <Tag tone="indigo">{handoffTitle(h)}</Tag>
+          {left !== null ? <span className="shrink-0 font-mono text-[11px] text-ink-3" aria-label={`Expires in ${clock(left)}`}>{clock(left)}</span> : null}
+        </span>
+        <span className="truncate text-[12px] text-ink-2">{handoffAsk(h)}{h.site ? ` · ${h.site}` : ''}</span>
+        {h.note && !hidden ? <span className="truncate text-[12px] text-[#7A4308] italic dark:text-warning" title="Only staff see this note">“{h.note}”</span> : null}
+      </button>
+      <span className="flex gap-1.5">
+        <Button size="sm" variant="primary" onClick={() => answer(true)}>{h.kind === 'invite' ? 'Join chat' : 'Accept'}</Button>
+        <Button size="sm" onClick={() => answer(false)}>Decline</Button>
+      </span>
+    </div>
+  );
+}
+
+/**
  * A conversation in the list (CHAT-UI-00): the visitor with their on-site dot, how long they have waited, what is
  * happening, and on which site. A chat ringing here shows a bell; one silenced on this computer is amber with the
  * bell struck through (RING-UI-04).
@@ -294,6 +331,9 @@ function pathOf(url: string): string {
 function Row({ r, me, myName, ring, active, onOpen }: { r: WebsiteRow; me: number | null; myName: string | null; ring?: WebchatRingChat; active: boolean; onOpen: () => void }) {
   const name = r.visitor_name || r.label;
   const mine = me !== null && r.assigned_to === me;
+  // Several staff in it: their faces, the owner first (TEAM-04); and what I am in it (TEAM-09).
+  const faces = (r.team ?? []).filter((p) => p.role !== 'observer');
+  const helping = !mine && r.my_role === 'participant';
   const closed = r.status === 'closed';
   const since = waitingSince(r);
   const page = r.current_url ? pathOf(r.current_url) : null;
@@ -335,7 +375,7 @@ function Row({ r, me, myName, ring, active, onOpen }: { r: WebsiteRow; me: numbe
           ) : null}
         </span>
         <span className="flex min-w-0 items-center gap-[5px] text-[11px]">
-          {closed ? <Tag tone="muted">Closed</Tag> : r.awaiting_reply ? <Tag tone="danger">Awaiting reply</Tag> : mine ? <Tag tone="indigo">You</Tag> : null}
+          {closed ? <Tag tone="muted">Closed</Tag> : r.awaiting_reply ? <Tag tone="danger">Awaiting reply</Tag> : mine ? <Tag tone="indigo">You</Tag> : helping ? <Tag tone="indigo">Participant</Tag> : null}
           {r.at_risk && !closed ? <Tag tone="danger">At risk</Tag> : null}
           {r.is_offline ? <Tag tone="muted">Offline</Tag> : null}
           {PRIORITY_TAG[r.priority] ? <Tag tone="warning">{PRIORITY_TAG[r.priority]}</Tag> : null}
@@ -345,6 +385,11 @@ function Row({ r, me, myName, ring, active, onOpen }: { r: WebsiteRow; me: numbe
           </span>
           {presence === 'online' ? <span className="sr-only">On the site now</span> : null}
           {r.is_starred ? <Icon name="star" size={11} className="shrink-0 text-warning" label={text('Starred')} /> : null}
+          {faces.length > 1 ? (
+            <span className="ml-auto flex shrink-0" aria-label={text('In this chat: {names}', { names: faces.map((p) => p.name).join(', ') })}>
+              {faces.slice(0, 3).map((p, i) => <Avatar key={p.user_id} name={p.name} src={p.avatar} size={16} className={cx('ring-2 ring-surface', i > 0 && '-ml-1')} />)}
+            </span>
+          ) : null}
         </span>
       </span>
     </button>

@@ -5,6 +5,32 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.107: Several staff in one website chat
+
+With WorkSuite's Communication 1.11.0 and its team chats migration, a website chat can have more than one of you in it
+(Website Live Chat SRS ENH-WCHAT-03):
+
+- **Invite a colleague**, or a whole department, from the thread's header or its **In this chat** panel. The picker
+  shows who is available, how many chats they have open and their department; offline people cannot be picked. Add a
+  note — only staff see it. Their call window rings with an **Invitation** card for two minutes; Join chat puts them
+  in the chat, and the visitor sees them arrive. If they decline or don't answer, the thread says so, with **Try someone
+  else**.
+- **Transfer** to a colleague, a department or the next available agent: **warm** — you keep answering until they
+  accept, then stay in as a participant — or **hand over now**, which takes you out at once. Their call window rings
+  with a **Transfer to you** card. The visitor sees "You're now chatting with …".
+- **Internal note**, beside Reply to visitor under the thread: a note only staff see, amber in the thread, with
+  @mentions that notify. It never reaches the visitor.
+- **In this chat** lists everybody with their role and when they joined, what is still waiting with Cancel, and Leave
+  chat. The owner can remove someone; an owner who tries to leave is offered Transfer or Close. Supervisors can
+  Monitor a chat unseen, Join it or Take it over.
+- **Invited**, a new section of Website Chats, lists invitations and transfers waiting for you. **Mine** now includes
+  chats you take part in, and a row several of you are in shows your faces.
+
+**Where it bites:** with WorkSuite's team chats, opening a chat nobody owns makes it yours, and a reply to a chat that
+already has four staff in it is refused, with the number. With an older WorkSuite server none of this shows.
+
+---
+
 ## 2026-10-03 — 0.2.106: Website chat list previews, search, reply quotes and Drive files
 
 With WorkSuite's Communication 1.11.0:

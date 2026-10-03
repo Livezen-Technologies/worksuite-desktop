@@ -130,6 +130,7 @@ const api = {
     join: call('ring:join'),
     silence: call('ring:silence'),
     pass: call('ring:pass'),
+    handoff: call('ring:handoff'),
   },
   tabs: {
     save: call('tabs:save'),

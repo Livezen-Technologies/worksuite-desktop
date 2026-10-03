@@ -112,3 +112,49 @@ describe('ringing words', () => {
     expect(waited(new Date(Date.now() - 3_725_000).toISOString(), Date.now())).toBe('1:02:05');
   });
 });
+
+describe('invitations and transfers in the call window (ENH-WCHAT-03, TEAM-UI-02)', () => {
+  const handoff = (over: Partial<NonNullable<WebchatRingState['handoffs']>[number]>) => ({
+    id: 21, conversationId: 3, kind: 'invite' as const, mode: 'warm' as const, visitor: 'Visitor 4F2A', site: 'techubiz.com', page: 'Pricing', from: 'Nuwan',
+    department: null, toAny: false, note: 'Can you take the education pricing?', expiresAt: new Date(Date.now() + 95_000).toISOString(), createdAt: new Date(Date.now() - 25_000).toISOString(), ...over,
+  });
+
+  it('an INVITATION card: who asks, the note, the countdown, Join chat and Decline', async () => {
+    vi.mocked(call).mockResolvedValue(state({ chats: [], handoffs: [handoff({})] }) as never);
+    render(<WebchatRingWindow />);
+    await screen.findByText('Invitation');
+    expect(screen.getByText('Nuwan invites you to join')).toBeTruthy();
+    expect(screen.getByText('“Can you take the education pricing?”')).toBeTruthy();
+    expect(screen.getByRole('timer').getAttribute('aria-label')).toMatch(/^Rings for 1:3\d more$/);
+    fireEvent.click(screen.getByRole('button', { name: 'Join chat' }));
+    expect(call).toHaveBeenCalledWith('ring:handoff', { id: 21, accept: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Decline' }));
+    expect(call).toHaveBeenCalledWith('ring:handoff', { id: 21, accept: false });
+  });
+
+  it('a TRANSFER TO YOU card says warm or handed over now, and Accept', async () => {
+    vi.mocked(call).mockResolvedValue(state({ chats: [], handoffs: [handoff({ kind: 'transfer', mode: 'cold', from: 'Dilini' })] }) as never);
+    render(<WebchatRingWindow />);
+    await screen.findByText('Transfer to you');
+    expect(screen.getByText('Handed over now')).toBeTruthy();
+    expect(screen.getByText('Dilini handed this chat over')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
+    expect(call).toHaveBeenCalledWith('ring:handoff', { id: 21, accept: true });
+  });
+
+  it('under a ringing chat, an invitation is a row with Join and Decline; the bar shows one when nothing else rings', async () => {
+    vi.mocked(call).mockResolvedValue(state({ handoffs: [handoff({})] }) as never);
+    render(<WebchatRingWindow />);
+    await screen.findByText('Nimali');
+    const rows = screen.getByRole('list', { name: 'Invitations and transfers' });
+    expect(rows.textContent).toContain('Visitor 4F2A · Invitation from Nuwan');
+    fireEvent.click(screen.getByRole('button', { name: 'Decline invitation for Visitor 4F2A' }));
+    expect(call).toHaveBeenCalledWith('ring:handoff', { id: 21, accept: false });
+    cleanup();
+
+    vi.mocked(call).mockResolvedValue(state({ chats: [], handoffs: [handoff({})] }) as never);
+    render(<RingingBar tone={false} />);
+    const bar = await screen.findByRole('status', { name: 'Website chat invitation' });
+    expect(bar.textContent).toContain('Nuwan invites you to join · Visitor 4F2A');
+  });
+});

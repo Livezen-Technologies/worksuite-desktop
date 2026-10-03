@@ -1103,15 +1103,15 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     onChanged: (s) => {
       broadcast('ring:changed', s);
       const prefs = settings.effective().webchatRinging;
-      if ((s.chats.length || s.outcome) && prefs.window && (!lock.isLocked() || settings.effective().lockedChatNotifications !== false)) windows.showRinger(ringerHeight(s));
+      if ((s.chats.length || s.handoffs?.length || s.outcome) && prefs.window && (!lock.isLocked() || settings.effective().lockedChatNotifications !== false)) windows.showRinger(ringerHeight(s));
       else windows.hideRinger();
       tray.update({ webchatRinging: s.chats.map((c) => ({ id: c.id, label: c.site ? `${c.visitor} · ${c.site}` : c.visitor })) });
-      const live = s.chats.some((c) => !c.silenced);
+      const live = s.chats.some((c) => !c.silenced) || !!s.handoffs?.length;
       attention(live);
       webchat.shortcut = joinShortcut(live && prefs.shortcut);
     },
   });
-  notifications.ringerShowing = () => settings.effective().webchatRinging.window && webchat.state().chats.length > 0;
+  notifications.ringerShowing = () => settings.effective().webchatRinging.window && (webchat.state().chats.length > 0 || !!webchat.state().handoffs?.length);
 
   // ── Quick Ask over any app (AI Assistant) ───────────────────────────────
   // The keyboard helper remote control uses, started once, on first use, for copy and paste only.

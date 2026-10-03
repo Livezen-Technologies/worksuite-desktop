@@ -306,3 +306,75 @@ describe('WebchatRinger with ring sessions on the server', () => {
     r.stop();
   });
 });
+
+/*
+ * Several staff in one chat (ENH-WCHAT-03): an invitation or a transfer rings like a chat, until I answer it, it is
+ * cancelled or it runs out; Join chat opens the chat, Decline tells whoever asked.
+ */
+describe('WebchatRinger: invitations and transfers', () => {
+  const card = (over: Record<string, unknown> = {}) => ({
+    handoff_id: 21, conversation_id: 3, visitor: 'Nimali', site: 'Shop', kind: 'invite', mode: 'warm', from_name: 'Nuwan',
+    department: null, to_any: false, note: 'Education pricing?', expires_at: stamp(-120_000), created_at: stamp(0), ...over,
+  });
+
+  it('rings an invitation from the pending read and from its frame, and stops when it is resolved', async () => {
+    const { r } = ringer([{ ringing: [], handoffs: [card()] }]);
+    r.start();
+    await vi.waitFor(() => expect(r.state().handoffs).toHaveLength(1));
+    expect(r.state().handoffs![0]).toMatchObject({ id: 21, conversationId: 3, kind: 'invite', from: 'Nuwan', note: 'Education pricing?' });
+    expect(r.state().tone).toBe('normal');
+
+    r.handle({ type: 'chat.widget.handoff', ...card({ handoff_id: 22, conversation_id: 4, kind: 'transfer', mode: 'cold', from_name: 'Dilini' }) } as never);
+    expect(r.state().handoffs!.map((h) => [h.id, h.kind, h.mode])).toEqual([[21, 'invite', 'warm'], [22, 'transfer', 'cold']]);
+
+    // Somebody else in the department took it first; another was cancelled.
+    r.handle({ type: 'chat.widget.handoff.resolved', handoff_id: 21, conversation_id: 3, status: 'accepted', by: 9, by_name: 'Amaya' } as never);
+    expect(r.state().outcome?.text).toBe('Amaya took it first.');
+    r.handle({ type: 'chat.widget.handoff.resolved', handoff_id: 22, conversation_id: 4, status: 'cancelled', by: 8 } as never);
+    expect(r.state().outcome?.text).toBe('The transfer for Nimali: it was cancelled.');
+    expect(r.state()).toMatchObject({ handoffs: [], tone: 'off' });
+    r.stop();
+  });
+
+  it('one that ran out stops ringing before the server says so', async () => {
+    const { r } = ringer([{ ringing: [], handoffs: [card({ expires_at: stamp(1000) })] }]);
+    r.start();
+    await vi.waitFor(() => expect(r.state()).toBeTruthy());
+    await r.reconcile();
+    expect(r.state().handoffs).toEqual([]);
+    r.stop();
+  });
+
+  it('Join chat accepts it and opens the chat; Decline tells whoever asked; too late says who took it', async () => {
+    const { r, post, opened } = ringer([{ ringing: [], handoffs: [card(), card({ handoff_id: 22, conversation_id: 4 }), card({ handoff_id: 23, conversation_id: 5 })] }]);
+    post.mockImplementation(async (path: string) => {
+      if (path.endsWith('/23/accept')) throw new DesktopError('CONFLICT', 'Amaya Silva accepted this invitation first.', 409);
+      return {};
+    });
+    r.start();
+    await vi.waitFor(() => expect(r.state().handoffs).toHaveLength(3));
+
+    expect(await r.answer(21, true)).toBe(true);
+    expect(post).toHaveBeenCalledWith('/api/chat/widget-admin/handoffs/21/accept');
+    expect(opened).toEqual([3]);
+    expect(await r.answer(22, false)).toBe(true);
+    expect(post).toHaveBeenCalledWith('/api/chat/widget-admin/handoffs/22/decline');
+    expect(opened).toEqual([3]);
+    expect(await r.answer(23, true)).toBe(false);
+    expect(r.state().outcome?.text).toBe('Amaya Silva accepted this invitation first.');
+    expect(r.state().handoffs).toEqual([]);
+    r.stop();
+  });
+
+  it('says nothing about who while locked, and stays quiet while another device has the ring', async () => {
+    const { r } = ringer([{ ringing: [], handoffs: [card()], ring_here: false }], { locked: true });
+    r.start();
+    await vi.waitFor(() => expect(r.state().handoffs).toHaveLength(1));
+    expect(r.state()).toMatchObject({ hidden: true, tone: 'off', elsewhere: true, handoffs: [{ visitor: 'A visitor', note: null, from: null }] });
+    r.stop();
+  });
+
+  it('the call window makes room for a note', () => {
+    expect(ringerHeight({ chats: [], outcome: null, handoffs: [{ id: 1, conversationId: 3, kind: 'invite', mode: 'warm', visitor: 'x', site: null, page: null, from: 'Nuwan', department: null, toAny: false, note: 'n', expiresAt: null, createdAt: null }] })).toBe(312);
+  });
+});

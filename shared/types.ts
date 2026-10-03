@@ -477,9 +477,37 @@ export interface WebchatRingChat {
   handoverAt?: string | null;
 }
 
+/**
+ * A colleague asks me into a website chat (WS-WCHAT ENH-WCHAT-03): an invitation to join it, or a transfer of it to
+ * me — warm (they keep it until I accept) or handed over now. It rings like a chat until I answer it, it is cancelled,
+ * or `expiresAt` passes (TEAM-23, TEAM-41).
+ */
+export interface WebchatHandoff {
+  id: number;
+  conversationId: number;
+  kind: 'invite' | 'transfer';
+  mode: 'warm' | 'cold';
+  visitor: string;
+  site: string | null;
+  page: string | null;
+  /** Who asks; null when WorkSuite sends it (a transfer nobody took, back to everybody). */
+  from: string | null;
+  /** The department it rings, when it was sent to one. */
+  department: string | null;
+  /** The next available agent, or everybody covering the website. */
+  toAny: boolean;
+  /** The note for staff, shown on the card (TEAM-22, TEAM-43). */
+  note: string | null;
+  /** Server stamp; null rings until somebody takes it. */
+  expiresAt: string | null;
+  createdAt: string | null;
+}
+
 export interface WebchatRingState {
   /** Ordered: at risk, assigned to me, then oldest waiting (RING-23). */
   chats: WebchatRingChat[];
+  /** Invitations and transfers waiting for me, oldest first (TEAM-23). */
+  handoffs?: WebchatHandoff[];
   /** What the tone does now: off (none left unsilenced, Do not disturb, the organisation's cap), or which tone. */
   tone: 'off' | 'normal' | 'strong';
   volume: number;
