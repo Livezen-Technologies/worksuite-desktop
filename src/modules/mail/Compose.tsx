@@ -16,6 +16,7 @@ import { AiTextDialog } from '../ai/AiTextDialog';
 import { WRITING_TASKS, type TextTask } from '../ai/textTools';
 import { sendMessage, useQuickParts, useSignatures, useTemplates } from './api';
 import { cleanComposeHtml, composeBody, composeText, migrateDraft, parseQuote, pickSignature, sendChecks, signatureBlock, splitSignature, textToComposeHtml, type ComposeDraft } from './composeHtml';
+import { MentionPopup } from './Mentions';
 import { mailboxLetter } from './model';
 import { sendAfterUndoWindow } from './outgoing';
 import { AccountAvatar } from './parts';
@@ -89,6 +90,12 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   };
   // The names behind chosen addresses, so a chip reads "Nimal Perera" rather than the address (kept with the draft).
   const named = (email: string, name: string) => set({ names: { ...(latest.current.names ?? {}), [email.toLowerCase()]: name } });
+  // @mentions (DMO-CMP-14): the person goes on To, once.
+  const editorEl = useRef<HTMLDivElement | null>(null);
+  const mentioned = (p: { name: string; email: string }) => {
+    const to = parseAddresses(latest.current.to);
+    if (!to.some((a) => a.toLowerCase() === p.email.toLowerCase())) set({ to: [...to, p.email].join(', '), names: { ...(latest.current.names ?? {}), [p.email.toLowerCase()]: p.name } });
+  };
   const templates = useTemplates(true);
   const quickParts = useQuickParts(true);
   const [optionsOpen, setOptionsOpen] = useState(false);
@@ -110,7 +117,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   const sig = pickSignature(signatures.data?.signatures ?? [], fromId || null, seed.mode);
   useEffect(() => {
     if (!sig || v.signed || draft.restored || own.trim() || signature) return;
-    draft.setValue({ ...v, signed: true, html: `${mine}${signatureBlock(sig.html)}` });
+    draft.setValue({ ...v, signed: true, html: `${mine}${signatureBlock(sig.filled ?? sig.html)}` });
     // Only when the signature arrives.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sig?.id]);
@@ -356,6 +363,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
             value={v.html}
             onChange={(html) => set({ html })}
             clean={cleanComposeHtml}
+            editorRef={editorEl}
             label={text('Message')}
             placeholder={text('Write your message…')}
             markdownShortcuts
@@ -518,6 +526,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
           sections={[{ id: 'parts', items: quickParts.data.map((p) => ({ id: `p${p.id}`, label: p.name, description: p.org ? text('Organisation') : undefined, onSelect: () => setPending({ part: p.html }) })) }]}
         />
       ) : null}
+      <MentionPopup editor={editorEl} onMention={mentioned} />
       {checks ? (
         <Modal
           title={checks.includes('attachment') ? text('Did you mean to attach a file?') : text('Send without a subject?')}

@@ -1864,5 +1864,12 @@
   "Save attachments to Files": "இணைப்புகளைக் கோப்புகளில் சேமி",
   "No folder chosen.": "கோப்புறை தேர்ந்தெடுக்கப்படவில்லை.",
   "From an email from {sender}": "{sender} அனுப்பிய மின்னஞ்சலிலிருந்து",
-  "“{action}” is not available on this computer yet.": "“{action}” இன்னும் இந்தக் கணினியில் கிடைக்கவில்லை."
+  "“{action}” is not available on this computer yet.": "“{action}” இன்னும் இந்தக் கணினியில் கிடைக்கவில்லை.",
+  "Quick Step: {name}": "விரைவுப் படி: {name}",
+  "Automatic replies (out of office)": "தானியங்கு பதில்கள் (அலுவலகத்தில் இல்லை)",
+  "New rule": "புதிய விதி",
+  "Manage Quick Steps": "விரைவுப் படிகளை நிர்வகி",
+  "Select a message first.": "முதலில் ஒரு செய்தியைத் தேர்ந்தெடுக்கவும்.",
+  "Write {t1}, {t2}, {t3} or {t4} and each message gets your name, job title, phone or email from your WorkSuite profile.": "{t1}, {t2}, {t3} அல்லது {t4} என எழுதுங்கள்; ஒவ்வொரு செய்தியிலும் உங்கள் WorkSuite சுயவிவரத்திலிருந்து பெயர், பதவி, தொலைபேசி அல்லது மின்னஞ்சல் வரும்.",
+  "Mention someone": "ஒருவரைக் குறிப்பிடு"
 }

@@ -347,6 +347,8 @@ export interface Signature {
   id: number;
   name: string;
   html: string;
+  /** The html with {name}, {title}, {phone}, {email} filled from the profile (newer servers). */
+  filled?: string;
   is_default: boolean;
   /** The account it belongs to; null or absent: every account (DMO-CMP-06). */
   mailbox?: number | null;

@@ -1864,5 +1864,12 @@
   "Save attachments to Files": "ඇමුණුම් ගොනු වෙත සුරකින්න",
   "No folder chosen.": "ෆෝල්ඩරයක් තෝරා නැත.",
   "From an email from {sender}": "{sender} වෙතින් ලද ඊමේල් එකකින්",
-  "“{action}” is not available on this computer yet.": "“{action}” තවම මෙම පරිගණකයේ ලබා ගත නොහැක."
+  "“{action}” is not available on this computer yet.": "“{action}” තවම මෙම පරිගණකයේ ලබා ගත නොහැක.",
+  "Quick Step: {name}": "ඉක්මන් පියවර: {name}",
+  "Automatic replies (out of office)": "ස්වයංක්‍රීය පිළිතුරු (කාර්යාලයෙන් බැහැර)",
+  "New rule": "නව නීතියක්",
+  "Manage Quick Steps": "ඉක්මන් පියවර කළමනාකරණය",
+  "Select a message first.": "පළමුව පණිවිඩයක් තෝරන්න.",
+  "Write {t1}, {t2}, {t3} or {t4} and each message gets your name, job title, phone or email from your WorkSuite profile.": "{t1}, {t2}, {t3} හෝ {t4} ලියන්න; එවිට සෑම පණිවිඩයකටම ඔබේ WorkSuite පැතිකඩෙන් ඔබේ නම, තනතුර, දුරකථනය හෝ ඊමේල් ලැබේ.",
+  "Mention someone": "කෙනෙකු සඳහන් කරන්න"
 }

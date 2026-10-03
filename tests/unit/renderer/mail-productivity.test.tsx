@@ -4,13 +4,17 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as CoreApi from '../../../src/core/api';
+import type * as Tabs from '../../../src/core/tabs';
 
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiGetMeta: vi.fn(), apiPost: vi.fn(), apiPut: vi.fn(), apiDelete: vi.fn() }));
 vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(async () => null), on: () => () => undefined, errorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)), isMac: false, hasDesktop: () => true }));
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
+const nav = vi.hoisted(() => ({ navigate: vi.fn() }));
+vi.mock('../../../src/core/tabs', async (orig) => ({ ...(await orig<typeof Tabs>()), navigate: nav.navigate }));
 
 import { ApiError, apiGet, apiGetMeta, apiPost, apiPut } from '../../../src/core/api';
 import { app } from '../../../src/core/app-state';
+import { allCommands, getCommand } from '../../../src/core/commands';
 import { call } from '../../../src/core/bridge';
 import { TabProvider } from '../../../src/core/tab-context';
 import { setRegional } from '../../../src/core/time';
@@ -277,5 +281,19 @@ describe('Quick Steps on the Mail screen (AC-DMO-05)', () => {
     vi.useRealTimers();
     await waitFor(() => expect(submitted()).toEqual(['message.archive', 'message.read']));
     await waitFor(() => expect(toast).toHaveBeenCalledWith('success', 'Done: “To manager” on “Budget review”.'));
+  });
+
+  it('puts Mail’s commands and Quick Steps in the command search, with their keys (DMO-SHL-04)', async () => {
+    wrap(<Page />);
+    await screen.findByRole('listbox', { name: 'Messages' });
+    await waitFor(() => expect(getCommand('mail-qs-1')).toBeTruthy());
+    const flag = allCommands().find((c) => c.id === 'mail-flag')!;
+    expect(flag.label).toBe('Flag / unflag');
+    expect(flag.hint).toBeTruthy();
+    expect(getCommand('mail-qs-1')!.label).toBe('Quick Step: To manager');
+    expect(getCommand('mail-qs-1')!.hint).toBe('Ctrl+Shift+1');
+    expect(allCommands().filter((c) => (c.keywords ?? '').includes('out of office')).map((c) => c.id)).toEqual(['mail-out-of-office']);
+    act(() => getCommand('mail-out-of-office')!.run());
+    await waitFor(() => expect(nav.navigate).toHaveBeenCalledWith('/settings/mail?tab=rules'));
   });
 });

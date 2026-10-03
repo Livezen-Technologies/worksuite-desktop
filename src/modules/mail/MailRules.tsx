@@ -215,6 +215,7 @@ function SignatureEditor({ signature, first, boxes, onClose, onSaved }: { signat
           {text('Use for replies and forwards')}
         </label>
       </div>
+      <p className="text-[12px] text-ink-3">{text('Write {t1}, {t2}, {t3} or {t4} and each message gets your name, job title, phone or email from your WorkSuite profile.', { t1: '{name}', t2: '{title}', t3: '{phone}', t4: '{email}' })}</p>
       <label className="flex flex-col gap-1">
         <span className="text-[12.5px] font-semibold text-ink-2">{text('Signature')}</span>
         <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={6} className="rounded-[8px] border border-line bg-surface px-3 py-2 text-[13.5px] text-ink outline-none focus:border-primary" />

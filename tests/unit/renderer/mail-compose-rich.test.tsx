@@ -438,3 +438,36 @@ describe('message options, Quick Parts and send checks (ENH-MAIL-03 P2)', () => 
     expect(close).toHaveBeenCalled();
   });
 });
+
+describe('@mentions (DMO-CMP-14)', () => {
+  it('offers people after "@", writes the name as a link and adds them to To', async () => {
+    net.get.mockImplementation(async (path: string, q: { q: string }) => (path === '/api/contacts/lookup' && q.q === 'Nim' ? { results: [{ kind: 'employee', id: 7, name: 'Nimal Perera', email: 'nimal@example.org' }] } : { results: [] }));
+    const { box } = compose({ mode: 'new', to: 'ann@example.org', subject: 'Plan' });
+    act(() => {
+      box().innerHTML = '<div>Thanks @Nim</div>';
+      const t = box().firstChild!.firstChild!;
+      placeCaretIn(t, t.textContent!.length);
+      fireEvent.input(box());
+    });
+    const list = await screen.findByRole('listbox', { name: 'Mention someone' });
+    fireEvent.mouseDown(within(list).getByRole('option', { name: /Nimal Perera/ }));
+    await waitFor(() => expect(box().innerHTML).toContain('<a href="mailto:nimal@example.org">@Nimal Perera</a>'));
+    expect(box().textContent).not.toContain('@Nim\u00a0');
+    expect(await screen.findByText('Nimal Perera')).toBeTruthy();
+    fireEvent.click(screen.getByRole('radio', { name: /Tomorrow morning/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send later…' }));
+    await waitFor(() => expect(net.post).toHaveBeenCalledWith('/api/mail/send', expect.objectContaining({ to: ['ann@example.org', 'nimal@example.org'] })));
+  });
+
+  it('does not offer anyone for an address being typed or a lone "@"', async () => {
+    const { box } = compose({ mode: 'new', to: 'ann@example.org' });
+    act(() => {
+      box().innerHTML = '<div>mail me at a@b</div>';
+      const t = box().firstChild!.firstChild!;
+      placeCaretIn(t, t.textContent!.length);
+      fireEvent.input(box());
+    });
+    await new Promise((r) => setTimeout(r, 250));
+    expect(net.get).not.toHaveBeenCalledWith('/api/contacts/lookup', expect.anything(), expect.anything());
+  });
+});

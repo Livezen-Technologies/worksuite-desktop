@@ -2,7 +2,7 @@ import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiGetMeta, apiPut, setDefaultMailbox, withMailbox } from '../../core/api';
 import { app } from '../../core/app-state';
-import { errorMessage } from '../../core/bridge';
+import { errorMessage, isMac } from '../../core/bridge';
 import { text } from '../../core/i18n';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
@@ -14,8 +14,8 @@ import { Empty, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
 import { AddMailbox } from './AddMailbox';
 import { messageAction, moveMessage, useLocalStore, useMailPrefs, useMailboxes, usePendingMail, useViewCounts, type MessageActionName } from './api';
-import { runCommand } from '../../core/commands';
-import { bindings, commandFor, isPlain, keyOf, type MailCommandId } from './keymap';
+import { registerCommand, runCommand } from '../../core/commands';
+import { MAIL_COMMANDS, bindings, commandFor, isPlain, keyLabel, keyOf, type MailCommandId } from './keymap';
 import { GoToFolder, ShortcutSheet } from './Shortcuts';
 import { allAccountsPage, allFolderLabel, isAllRole, queuedSends, useAllCounts, useLocalDrafts } from './allAccounts';
 import { ArchivePicker } from './ArchivePicker';
@@ -482,9 +482,39 @@ export default function MailPage({ active }: ModuleProps) {
     run();
     return true;
   };
+  const runner = useRef<(id: MailCommandId) => boolean>(() => false);
+  const stepRunner = useRef<(n: number) => void>(() => undefined);
   useEffect(() => {
     keys.current = onKey;
+    runner.current = runMailCommand;
   });
+  // Command search (DMO-SHL-04): Mail's commands, Quick Steps and settings in the palette while Mail is in front, with their keys.
+  const paletteKeys = MAIL_COMMANDS.filter((c) => !c.id.startsWith('quickStep') && c.id !== 'commandSearch').map((c) => `${c.id}=${keyMap[c.id]?.[0] ?? ''}`).join('|');
+  const paletteSteps = (quickSteps.data ?? []).map((q) => `${q.id}:${q.name}:${q.shortcut ?? ''}`).join('|');
+  useEffect(() => {
+    if (!active) return;
+    const mac = isMac;
+    const key = (id: string) => {
+      const k = paletteKeys.split('|').find((p) => p.startsWith(`${id}=`))?.slice(id.length + 1);
+      return k ? keyLabel(k, mac) : undefined;
+    };
+    const offs = [
+      ...MAIL_COMMANDS.filter((c) => !c.id.startsWith('quickStep') && c.id !== 'commandSearch').map((c) =>
+        registerCommand({ id: `mail-${c.id}`, label: text(c.label), group: 'Module', source: 'module', keywords: `mail ${c.id.toLowerCase()} ${c.label.toLowerCase()}`, hint: key(c.id), run: () => void runner.current(c.id) }),
+      ),
+      ...(paletteSteps ? paletteSteps.split('|') : []).map((p) => {
+        const [id, name, n] = p.split(':');
+        return registerCommand({ id: `mail-qs-${id}`, label: text('Quick Step: {name}', { name: name ?? '' }), group: 'Module', source: 'module', keywords: 'mail quick step', hint: n ? keyLabel(`Mod+Shift+${n}`, mac) : undefined, run: () => stepRunner.current(Number(id)) });
+      }),
+      registerCommand({ id: 'mail-out-of-office', label: text('Automatic replies (out of office)'), group: 'Module', source: 'module', keywords: 'mail out of office vacation away automatic reply', run: () => navigate('/settings/mail?tab=rules') }),
+      registerCommand({ id: 'mail-new-rule', label: text('New rule'), group: 'Module', source: 'module', keywords: 'mail rule filter create', run: () => navigate('/settings/mail?tab=rules') }),
+      registerCommand({ id: 'mail-quick-steps', label: text('Manage Quick Steps'), group: 'Module', source: 'module', keywords: 'mail quick steps', run: () => navigate('/settings/mail?tab=quicksteps') }),
+      registerCommand({ id: 'mail-signatures', label: text('Signatures'), group: 'Module', source: 'module', keywords: 'mail signature', run: () => navigate('/settings/mail?tab=signatures') }),
+    ];
+    return () => offs.forEach((off) => off());
+    // Re-registered when the keys or the Quick Steps change; the runners are read through refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, paletteKeys, paletteSteps]);
   useEffect(() => {
     if (!active) return;
     const on = (e: KeyboardEvent) => keys.current(e);
@@ -625,6 +655,14 @@ export default function MailPage({ active }: ModuleProps) {
   ];
   const multi = flat.filter((r) => selection.has(r.key));
   const currentRow = flat.find((r) => r.key === currentKey) ?? null;
+  useEffect(() => {
+    stepRunner.current = (id) => {
+      const s = (quickSteps.data ?? []).find((q) => q.id === id);
+      const ts = selectedTargets(currentRow ?? undefined);
+      if (s && ts.length) runStep(s, ts);
+      else if (s) toast('info', text('Select a message first.'));
+    };
+  });
 
   const reader = multi.length > 1 ? (
     <SelectionPane targets={multi.map(targetOf)} sections={menuSections(multi.map(targetOf))} onClear={() => setSelection(new Set())} onDone={() => setSelection(new Set())} />
