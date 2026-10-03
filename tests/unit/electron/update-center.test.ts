@@ -297,7 +297,7 @@ describe('What a new version tells the person outside the window', () => {
   });
 
   it('says a downloaded version is ready, once per version', () => {
-    expect(updateNotice(status({ state: 'STAGED' }), true)).toEqual({ key: 'ready:0.2.132', title: 'Update ready', body: 'WorkSuite 0.2.132 is ready. Restart WorkSuite to finish updating.' });
+    expect(updateNotice(status({ state: 'STAGED' }), true)).toEqual({ key: 'ready:0.2.132', title: 'Update ready', body: 'WorkSuite 0.2.132 is ready. Restart to update.' });
     expect(updateNotice(status({ state: 'STAGED', required: true }), true)?.title).toBe('Update required');
   });
 

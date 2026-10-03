@@ -359,6 +359,10 @@ export const INVOKE_CHANNELS = [
   'updates:setChannel',
   'updates:setActiveCall',
   'updates:busy',
+  'updates:later',
+  'updates:reinstall',
+  'updates:dismissNotice',
+  'updates:prepared',
 
   'settings:get',
   'settings:set',
@@ -400,6 +404,7 @@ export const EVENT_CHANNELS = [
   'offline:changed',
   'lock:changed',
   'update:changed',
+  'update:prepare',
   'settings:changed',
   'organization:changed',
   'windows:changed',

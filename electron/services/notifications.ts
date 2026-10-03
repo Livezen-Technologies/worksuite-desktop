@@ -31,6 +31,8 @@ const log = logger('notifications');
 
 /** How far back a notification the realtime push missed is still worth popping up. */
 const MISSED_WINDOW_MS = 15 * 60_000;
+/** This computer's own bell entries (worksuite-desktop#205), in the local config table. */
+const LOCAL_KEY = 'local_notifications';
 
 interface ServerNotification {
   id: string | number;
@@ -299,7 +301,36 @@ export class NotificationService {
   }
 
   counts() {
-    return { ...this.unread };
+    return { ...this.unread, notifications: this.unread.notifications + this.local().filter((i) => !i.read).length };
+  }
+
+  /**
+   * This computer's own entries in the bell ("WorkSuite 0.2.127 is ready", worksuite-desktop#205): kept locally,
+   * listed first, read and cleared here — the server never hears of them. An id is added once.
+   */
+  private local(): NotificationItem[] {
+    try {
+      return this.db.getConfig<NotificationItem[]>(LOCAL_KEY) ?? [];
+    } catch {
+      // The local entries are extras: the server's list never waits on them.
+      return [];
+    }
+  }
+
+  addLocal(item: { id: string; title: string; body: string; link: string | null; module?: string }): boolean {
+    const id = item.id.startsWith('local:') ? item.id : `local:${item.id}`;
+    const list = this.local();
+    if (list.some((i) => i.id === id)) return false;
+    const entry: NotificationItem = { id, module: item.module ?? 'system', title: item.title, body: item.body, link: item.link, read: false, createdAt: new Date().toISOString(), actor: null };
+    this.db.setConfig(LOCAL_KEY, [entry, ...list].slice(0, 20));
+    this.onChanged();
+    return true;
+  }
+
+  private markLocalRead(ids: string[] | 'all'): void {
+    const list = this.local();
+    if (!list.length) return;
+    this.db.setConfig(LOCAL_KEY, list.map((i) => (ids === 'all' || ids.includes(i.id) ? { ...i, read: true } : i)));
   }
 
   pausedUntilIso(): string | null {
@@ -419,7 +450,8 @@ export class NotificationService {
       // Anything already on the server is not "new": never pop a toast for it.
       for (const i of items) this.remember(i.id);
       this.onChanged();
-      return { items, unread: this.unread.notifications };
+      const local = this.local();
+      return { items: [...local, ...items], unread: this.unread.notifications + local.filter((i) => !i.read).length };
     } catch (e) {
       log.debug('notification list unavailable; using cache', { code: isDesktopError(e) ? e.code : String(e) });
       const items = this.cached();
@@ -447,6 +479,11 @@ export class NotificationService {
   }
 
   cached(): NotificationItem[] {
+    if (!this.userId) return this.local();
+    return [...this.local(), ...this.cachedServer()];
+  }
+
+  private cachedServer(): NotificationItem[] {
     if (!this.userId) return [];
     const rows = this.db.all<{ id: string; module: string; payload: string; read: number; created_at: string }>(
       'SELECT id, module, payload, read, created_at FROM notification_cache WHERE user_id = ? ORDER BY created_at DESC LIMIT 200',
@@ -458,7 +495,9 @@ export class NotificationService {
     });
   }
 
-  async markRead(ids: string[]): Promise<void> {
+  async markRead(allIds: string[]): Promise<void> {
+    this.markLocalRead(allIds.filter((id) => id.startsWith('local:')));
+    const ids = allIds.filter((id) => !id.startsWith('local:'));
     await Promise.allSettled(ids.map((id) => this.http.post(`/api/notifications/${encodeURIComponent(id)}/read`)));
     if (this.userId) for (const id of ids) this.db.run('UPDATE notification_cache SET read = 1 WHERE user_id = ? AND id = ?', this.userId, id);
     for (const id of ids) this.live.get(id)?.close();
@@ -466,6 +505,7 @@ export class NotificationService {
   }
 
   async markAllRead(): Promise<void> {
+    this.markLocalRead('all');
     await this.http.post('/api/notifications/read-all');
     if (this.userId) this.db.run('UPDATE notification_cache SET read = 1 WHERE user_id = ?', this.userId);
     for (const n of this.live.values()) n.close();

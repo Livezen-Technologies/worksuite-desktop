@@ -22,6 +22,8 @@ export interface DiagnosticsDeps {
   signedIn: () => boolean;
   realtimeState: () => string;
   updaterState: () => { state: string; error: string | null; lastCheckedAt: string | null; channel: string };
+  /** Every update check, download, install and rollback (worksuite-desktop#205), newest last. */
+  updateHistory?: () => Array<{ t: string; event: string; version?: string | null; detail?: string | null }>;
   services: () => Record<string, string>;
   dbCheck: () => string;
   secureStorage: () => { available: boolean; backend: string; persistent: boolean };
@@ -89,11 +91,12 @@ export class DiagnosticsService {
     });
 
     const u = this.deps.updaterState();
+    const last = this.deps.updateHistory?.().at(-1);
     checks.push({
       id: 'updater',
       label: 'Updates',
       status: u.state === 'FAILED' ? 'warn' : 'pass',
-      detail: `${u.state.toLowerCase()} · ${u.channel} channel${u.lastCheckedAt ? ` · last checked ${u.lastCheckedAt}` : ''}${u.error ? ` · ${u.error}` : ''}`,
+      detail: `${u.state.toLowerCase()} · ${u.channel} channel${u.lastCheckedAt ? ` · last checked ${u.lastCheckedAt}` : ''}${u.error ? ` · ${u.error}` : ''}${last ? ` · last event: ${last.event}${last.version ? ` ${last.version}` : ''} at ${last.t}` : ''}`,
     });
 
     checks.push({ id: 'sync', label: 'File sync', status: 'skip', detail: 'WorkSuite Drive sync arrives in a later release; files are available online in Files.' });
@@ -167,6 +170,8 @@ export class DiagnosticsService {
       { name: 'settings.json', data: json(this.deps.settings()) },
       { name: 'offline.json', data: json(this.deps.offline()) },
       { name: 'crashes.json', data: json(this.deps.crashes()) },
+      // The update log: every check, download, install and rollback (#205).
+      ...(this.deps.updateHistory ? [{ name: 'updates.json', data: json({ state: this.deps.updaterState(), history: this.deps.updateHistory() }) }] : []),
       { name: 'services.json', data: json(this.deps.services()) },
     ];
     for (const file of logFiles()) {

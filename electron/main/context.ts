@@ -49,7 +49,7 @@ export interface ClockExtra {
 import type { WindowManager } from '../windows/manager';
 import type { BootState } from './boot';
 import type { SessionController } from './session';
-import type { StatusSnapshot, WebchatOnCall } from '@shared/types';
+import type { BusyReport, StatusSnapshot, WebchatOnCall } from '@shared/types';
 import type { Vault } from '../services/vault';
 
 /** Every main-process service, for the IPC handlers. */
@@ -105,6 +105,10 @@ export interface AppContext {
   status: () => StatusSnapshot;
   setActiveCall: (active: boolean) => void;
   activeCall: () => boolean;
+  /** What a restart would interrupt: transfers, queued changes, drafts, a call, meeting, share or remote control (#205). */
+  updateBusy: () => BusyReport;
+  /** A window answered `update:prepare` (its drafts and tabs are saved). */
+  updatePrepared: (token: string) => void;
   lastPasteGesture: (webContentsId: number) => number;
   flushNavigation: () => void;
   /** Opens a route in the main window the way a deep link or a notification does (or queues it until it can). */

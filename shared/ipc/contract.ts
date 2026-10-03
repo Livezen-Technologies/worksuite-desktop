@@ -181,6 +181,7 @@ export const preferencesPatchSchema = z
     updateChannel: z.enum(['stable', 'beta', 'dev', 'org']),
     autoUpdate: z.boolean(),
     updateNotifications: z.boolean(),
+    updateInstallOnQuit: z.boolean(),
     sidebarMode: z.enum(['expanded', 'collapsed', 'auto-hide']),
     pinnedApps: z.array(z.string().max(64)).max(64),
     shortcuts: z.record(z.string().max(64), z.string().max(64)),
@@ -1167,9 +1168,15 @@ export const contract = {
   'updates:installNow': ch(z.object({ force: z.boolean().optional() }).optional(), { whileLocked: true }),
   'updates:download': ch(none, { whileLocked: true, rate: 1 }),
   'updates:restartLater': ch(none),
-  'updates:setChannel': ch(z.object({ channel: z.enum(['stable', 'beta', 'dev', 'org']) }), { session: true }),
+  // A less stable channel needs `confirmed` (Settings asks first); the organisation's policy limits the choice (#205).
+  'updates:setChannel': ch(z.object({ channel: z.enum(['stable', 'beta', 'dev', 'org']), confirmed: z.boolean().optional() })),
   'updates:setActiveCall': ch(z.object({ active: z.boolean() }), { session: true }),
   'updates:busy': ch(none, { whileLocked: true }),
+  'updates:later': ch(z.object({ choice: z.enum(['hour', 'tonight', 'next-launch']) })),
+  'updates:reinstall': ch(none, { rate: 1 }),
+  'updates:dismissNotice': ch(none),
+  // A window saved its drafts and tabs before an update's restart (`update:prepare`).
+  'updates:prepared': ch(z.object({ token: z.string().regex(/^[a-z0-9]{1,40}$/) }), { whileLocked: true }),
 
   'settings:get': ch(none, { whileLocked: true }),
   'settings:set': ch(preferencesPatchSchema.extend({ verificationPassword: z.string().min(1).max(512).optional() }), { sensitive: true, rate: 10 }),
@@ -1602,6 +1609,10 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'updates:setChannel': UpdateStatus;
   'updates:setActiveCall': void;
   'updates:busy': BusyReport;
+  'updates:later': UpdateStatus;
+  'updates:reinstall': UpdateStatus;
+  'updates:dismissNotice': UpdateStatus;
+  'updates:prepared': void;
   'settings:get': { preferences: Preferences; locks: PreferenceLock[] };
   'settings:set': { preferences: Preferences; locks: PreferenceLock[] };
   'settings:launcherDefaults': { pinned: string[]; order: string[] };

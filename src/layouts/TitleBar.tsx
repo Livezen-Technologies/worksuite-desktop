@@ -84,7 +84,7 @@ export function TitleBar() {
         {pill.text}
       </button>
 
-      {/* A newer version: on offer, on its way or ready to install (Settings › Desktop › Updates). */}
+      {/* A newer version: on offer, on its way, or ready (the Update ready pill, #205) — Settings › Desktop › Updates. */}
       <UpdateIndicator />
       {guest ? null : <TopButton icon="transfers" label={t('shell.transfers')} onClick={() => openOverlay('transfers')} active={overlay === 'transfers'} count={activeTransfers} countTone="indigo" />}
       {hasChat ? <TopButton icon="chat" label="Chat" onClick={() => (dock === 'chat' ? minimiseChatDrawer() : openChatDrawer(null))} active={dock === 'chat'} count={status?.unread.chat ?? 0} /> : null}

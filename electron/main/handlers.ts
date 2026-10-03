@@ -410,7 +410,9 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('windows:restoreDetached', (_i, c) => {
     fromMain(c.sender);
     const prefs = ctx.settings.effective();
-    if (!prefs.restoreTabs || ctx.boot.safeMode || ctx.windows.detached().length) return 0;
+    // After an update's restart the same windows come back, whatever Settings says (#205); never in Safe Mode.
+    const afterUpdate = ctx.updater.takeSessionRestore();
+    if ((!prefs.restoreTabs && !afterUpdate) || ctx.boot.safeMode || ctx.windows.detached().length) return 0;
     const row = ctx.db.get<{ payload: string }>('SELECT payload FROM tab_sessions WHERE user_id = ? AND window = ?', uid(), 'detached');
     const saved = row ? (ctx.vault().decrypt<{ windows: DetachedWindow[] }>(row.payload)?.windows ?? []) : [];
     let n = 0;
@@ -449,7 +451,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   });
   router.handle('tabs:restore', () => {
     const prefs = ctx.settings.effective();
-    if (!prefs.restoreTabs || ctx.boot.safeMode) return { tabs: [], activeId: null, side: null, restored: false };
+    if ((!prefs.restoreTabs && !ctx.updater.sessionRestorePending()) || ctx.boot.safeMode) return { tabs: [], activeId: null, side: null, restored: false };
     const row = ctx.db.get<{ payload: string }>('SELECT payload FROM tab_sessions WHERE user_id = ? AND window = ?', uid(), 'main');
     const v = row ? ctx.vault().decrypt<{ tabs: TabRecord[]; activeId: string | null; side?: { id: string; split: number } | null }>(row.payload) : undefined;
     return { tabs: v?.tabs ?? [], activeId: v?.activeId ?? null, side: v?.side ?? null, restored: !!v };
@@ -1058,25 +1060,25 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('updates:status', () => ctx.updater.get());
   router.handle('updates:check', () => ctx.updater.check());
   router.handle('updates:installNow', (input) => ctx.updater.install(!!input?.force));
+  router.handle('updates:restartLater', () => ctx.updater.later('hour'));
+  router.handle('updates:later', (input) => ctx.updater.later(input.choice));
   router.handle('updates:download', () => ctx.updater.downloadNow());
-  router.handle('updates:restartLater', () => ctx.updater.restartLater());
-  router.handle('updates:setChannel', (input) => {
-    if (ctx.settings.locks().some((l) => l.key === 'updateChannel')) throw new DesktopError('POLICY_DENIED', 'Your organization chooses the update channel.');
-    ctx.settings.update({ updateChannel: input.channel });
-    return ctx.updater.check();
+  router.handle('updates:reinstall', () => ctx.updater.reinstall());
+  router.handle('updates:dismissNotice', () => ctx.updater.dismissNotice());
+  router.handle('updates:prepared', (input) => ctx.updatePrepared(input.token));
+  // Settings › About › Channel (#205): only what the organisation allows; a less stable channel once confirmed.
+  router.handle('updates:setChannel', async (input) => {
+    try {
+      return await ctx.updater.setChannel(input.channel, !!input.confirmed, (channel) => ctx.settings.update({ updateChannel: channel, updateChannelChosen: true }));
+    } catch (e) {
+      const code = (e as { code?: string }).code;
+      if (code === 'POLICY_DENIED') throw new DesktopError('POLICY_DENIED', (e as Error).message);
+      if (code === 'CONFIRMATION_REQUIRED') throw new DesktopError('IPC_VALIDATION_FAILED', (e as Error).message);
+      throw e;
+    }
   });
   router.handle('updates:setActiveCall', (input) => ctx.setActiveCall(input.active));
-  router.handle('updates:busy', (): BusyReport => {
-    const id = ctx.session.userId();
-    const counts = ctx.transfers.activeCounts();
-    return {
-      uploads: counts.uploads,
-      downloads: counts.downloads,
-      pendingMutations: id ? ctx.queue.pendingCount(id) : 0,
-      drafts: id ? ctx.queue.draftCount(id) : 0,
-      activeCall: ctx.activeCall(),
-    };
-  });
+  router.handle('updates:busy', (): BusyReport => ctx.updateBusy());
 
   // ── settings ───────────────────────────────────────────────────────────
   router.handle('settings:get', () => ({ preferences: ctx.settings.effective(), locks: ctx.settings.locks() }));
