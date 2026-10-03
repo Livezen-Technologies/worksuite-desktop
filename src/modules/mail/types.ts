@@ -345,6 +345,22 @@ export interface MailPrefs {
   folderViews?: Record<string, Partial<Pick<MailPrefs, 'view' | 'pane' | 'sort' | 'dir' | 'group' | 'toolbar'>>>;
   /** First run: "Coming from Outlook?" answered (WF-DO12). */
   firstRun?: 'done' | 'outlook' | 'skipped';
+  /** Conditional formatting of list rows (DMO-INB-18). */
+  formatRules?: FormatRule[];
+  /** Senders always shown as plain text (DMO-RD-09). */
+  plainTextSenders?: string[];
+  /** Immersive reader settings (DMO-RD-04). */
+  immersive?: { size?: number; spacing?: 'normal' | 'wide'; width?: 'narrow' | 'wide'; focusLine?: boolean };
+}
+
+/** "When the row is from x / says y / has category z / is unread → colour, bold" (DMO-INB-18). */
+export interface FormatRule {
+  id: string;
+  when: 'from' | 'subject' | 'category' | 'unread' | 'flagged' | 'important';
+  value: string;
+  colour: 'red' | 'orange' | 'green' | 'blue' | 'teal' | null;
+  bold: boolean;
+  enabled: boolean;
 }
 
 export type SortKey = 'date' | 'sender' | 'subject' | 'size' | 'read' | 'attachment' | 'flag' | 'star';

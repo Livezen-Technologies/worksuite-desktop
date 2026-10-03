@@ -28,6 +28,7 @@ import { TeamBar, TeamWork } from './Team';
 import { CategoryChip } from './parts';
 import { TaskFromMessage, meetingRoute, messageLink } from './MessageTask';
 import { AddContactDialog, parseSignature, type SignatureGuess } from './AddContact';
+import { ImmersiveReader } from './ImmersiveReader';
 import { MarkerChips, RecallDialog, ReceiptBar, ReportDialog, SmimeChip, VoteBar, VoteTally, sendReceipt } from './MessageExtras';
 import type { ComposeSeed, MailPrefs, Mailbox, MessageContext, MessageDetail, MessageRef, MessageRow } from './types';
 
@@ -120,7 +121,14 @@ export function MessageView(p: MessageViewProps) {
   });
   const m = q.data?.data;
   const clean = useMemo(() => (m ? sanitizeMailHtml(m.body_html) : null), [m]);
-  const found = useMemo(() => highlightText(clean?.html ?? '', find ?? ''), [clean, find]);
+  // Plain text (DMO-RD-09): asked for on this message, or always for this sender.
+  const plainSenders = p.prefs.plainTextSenders ?? [];
+  const [plainAsked, setPlainAsked] = useState<boolean | null>(null);
+  const plainSender = !!m && plainSenders.includes(m.from_email.toLowerCase());
+  const plainOn = plainAsked ?? plainSender;
+  const plainBody = useMemo(() => (clean ? plainText(clean.html) : ''), [clean]);
+  const [immersive, setImmersive] = useState(false);
+  const found = useMemo(() => highlightText(plainOn ? `<div style="white-space:pre-wrap">${escapeHtml(plainBody)}</div>` : (clean?.html ?? ''), find ?? ''), [clean, find, plainOn, plainBody]);
   // Pictures, when the reader asks — always through WorkSuite's image proxy (DMO-SEC-07, DMO-RD-02).
   const [picturesAsked, setPicturesAsked] = useState(false);
   const imageSenders = p.prefs.imageSenders ?? [];
@@ -132,7 +140,7 @@ export function MessageView(p: MessageViewProps) {
     enabled: imageUrls.length > 0,
     staleTime: 30 * 60_000,
   });
-  const shownHtml = useMemo(() => (proxied.data?.enabled && origin && clean ? withProxiedImages(found.html, clean.remoteImages, proxied.data.links, origin) : found.html), [proxied.data, found.html, origin, clean]);
+  const shownHtml = useMemo(() => (!plainOn && proxied.data?.enabled && origin && clean ? withProxiedImages(found.html, clean.remoteImages, proxied.data.links, origin) : found.html), [proxied.data, found.html, origin, clean, plainOn]);
   const context = useMessageContext(ref, m?.from_email ?? null, !!m && !p.offline);
   const folders = useFolders(Number(ref.mailbox ?? 0), !!ref.mailbox && menu === 'move');
   const labels = useLabels(p.localStore && menu === 'label');
@@ -335,6 +343,19 @@ export function MessageView(p: MessageViewProps) {
     if (canOpen('tasks')) keep.push({ id: 'task', label: text('Create task…'), description: text('With assignee, list and due date'), icon: 'list-todo', onSelect: () => setExtra('task') });
     if (where === 'bottom' && canOpen('tasks')) keep.push({ id: 'remind', label: text('Remind me about this'), description: text('A task for tomorrow'), icon: 'bell', onSelect: () => void remind() });
     if (canOpen('notes')) keep.push({ id: 'note', label: text('Save as note'), icon: 'file-text', onSelect: () => void saveNote() });
+    // Reading (DMO-RD-04, DMO-RD-09).
+    keep.push({ id: 'immersive', label: text('Immersive reader'), icon: 'book-open', onSelect: () => setImmersive(true) });
+    keep.push({ id: 'plain', label: plainOn ? text('Show as HTML') : text('Show as plain text'), icon: 'file-text', onSelect: () => setPlainAsked(!plainOn) });
+    keep.push({
+      id: 'plain-sender',
+      label: plainSender ? text('Stop showing plain text from {email}', { email: m.from_email }) : text('Always show plain text from {email}', { email: m.from_email }),
+      icon: 'file-text',
+      onSelect: () => {
+        const me = m.from_email.toLowerCase();
+        p.onPrefs({ plainTextSenders: plainSender ? plainSenders.filter((x) => x !== me) : [...plainSenders.filter((x) => x !== me), me].slice(-500) });
+        setPlainAsked(null);
+      },
+    });
     keep.push({ id: 'link', label: where === 'top' ? text('Copy link to email') : text('Copy link to this message'), icon: 'link', disabled: !origin, onSelect: copyLink });
     const copyItems: MenuItem[] = [
       { id: 'copy-sender', label: text('Copy sender address'), icon: 'copy', onSelect: () => copy(m.from_email, text('Address copied.')) },
@@ -620,6 +641,7 @@ export function MessageView(p: MessageViewProps) {
           onClose={() => setContactGuess(null)}
         />
       ) : null}
+      {immersive ? <ImmersiveReader subject={m.subject} from={m.from_name ? `${m.from_name} <${m.from_email}>` : m.from_email} plain={plainBody} prefs={p.prefs.immersive ?? {}} onPrefs={(v) => p.onPrefs({ immersive: v })} onClose={() => setImmersive(false)} /> : null}
       {extra === 'task' ? <TaskFromMessage message={m} msgRef={ref} onClose={() => setExtra(null)} /> : null}
     </article>
   );

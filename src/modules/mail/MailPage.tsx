@@ -39,6 +39,7 @@ import { needsAsking, removesMessages, runQuickStep, saveAnswers, useQuickSteps,
 import { QuickStepAsk } from './QuickStepsUi';
 import { alertFor, chime, deviceId, freshRows, markSeen, myRules, ruleTakes } from './clientRules';
 import { CreateRule, useRules } from './MailRules';
+import { IgnoreDialog, conversationKeyOf, ignoreConversation, ignoredKeys, stopIgnoring } from './Conversations';
 import { ReadingPane, afterClose, withTab, type OpenTab } from './ReadingPane';
 import { ScheduledList } from './Scheduled';
 import { SearchView } from './SearchView';
@@ -694,7 +695,8 @@ function MailWorkspace({ active }: ModuleProps) {
       const quiet = old.has(rowKey(m));
       if (!quiet && rule.client_actions?.includes('alert')) alertFor(m, rule.name || text('Rule'));
       if (!quiet && rule.client_actions?.includes('sound')) chime();
-      if (rule.action === 'fileinto' && rule.action_arg) void moveMessage(ref, rule.action_arg.startsWith('label:') || ['archive', 'trash', 'spam', 'sent', 'drafts'].includes(rule.action_arg) ? rule.action_arg : `label:${rule.action_arg}`, rule.action_arg, m.subject).catch(() => undefined);
+      const special = rule.action_arg?.toLowerCase() ?? '';
+      if (rule.action === 'fileinto' && rule.action_arg) void moveMessage(ref, rule.action_arg.startsWith('label:') ? rule.action_arg : ['archive', 'trash', 'spam', 'sent', 'drafts'].includes(special) ? special : `label:${rule.action_arg}`, rule.action_arg, m.subject).catch(() => undefined);
       else if (rule.action === 'star' && !m.is_starred) void messageAction(ref, 'star', m.subject).catch(() => undefined);
       else if (rule.action === 'seen' && !m.is_read) void messageAction(ref, 'read', m.subject).catch(() => undefined);
       else if (rule.action === 'delete') void messageAction(ref, 'trash', m.subject).catch(() => undefined);
@@ -703,11 +705,23 @@ function MailWorkspace({ active }: ModuleProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientRuleRows, rules.data]);
   const [ruleFor, setRuleFor] = useState<MessageRow | null>(null);
+  // Ignore conversation (DMO-INB-10): offered on a message with a stable thread; Stop ignoring from Deleted Items.
+  const ignored = ignoredKeys(rules.data?.filters);
+  const [ignoring, setIgnoring] = useState<{ key: string; target: Target; here: Target[] } | null>(null);
+  const conversationItems = (t: Target) => {
+    const key = conversationKeyOf(t.row);
+    if (!key || networkOffline) return [];
+    if (t.folder === 'trash' && ignored.has(key)) {
+      return [{ id: 'unignore', label: text('Stop ignoring conversation'), icon: 'undo', onSelect: () => void stopIgnoring(key, t).then(() => (void qc.invalidateQueries({ queryKey: ['mail'] }), toast('success', text('No longer ignored; the message is back in the Inbox.'))), (e: unknown) => toast('error', errorMessage(e))) }];
+    }
+    if (t.folder === 'trash' || ignored.has(key)) return [];
+    return [{ id: 'ignore', label: text('Ignore conversation'), icon: 'trash', onSelect: () => setIgnoring({ key, target: t, here: flat.filter((r) => conversationKeyOf(r.row) === key).map(targetOf) }) }];
+  };
 
   const menuSections = (targets: Target[]) => [
     ...(quickSteps.data?.length ? [{ id: 'qs', label: text('Quick Steps'), items: quickSteps.data.slice(0, 12).map((q) => ({ id: `qs${q.id}`, label: q.name, icon: q.icon, shortcut: q.shortcut ? `Ctrl+Shift+${q.shortcut}` : undefined, onSelect: () => runStep(q, targets) })) }] : []),
     ...stateSections(targets, stateActs, cats.data ?? null, { focusTabs: focusOn ? focusTab : null, onCustom: (what) => setCustom({ what, targets }) }),
-    ...(targets.length === 1 ? [{ id: 'rule', items: [{ id: 'rule', label: text('Create rule…'), icon: 'filter', description: targets[0]!.row.from_email, onSelect: () => setRuleFor(targets[0]!.row) }] }] : []),
+    ...(targets.length === 1 ? [{ id: 'rule', items: [{ id: 'rule', label: text('Create rule…'), icon: 'filter', description: targets[0]!.row.from_email, onSelect: () => setRuleFor(targets[0]!.row) }, ...conversationItems(targets[0]!)] }] : []),
   ];
   const multi = flat.filter((r) => selection.has(r.key));
   const currentRow = flat.find((r) => r.key === currentKey) ?? null;
@@ -901,6 +915,24 @@ function MailWorkspace({ active }: ModuleProps) {
       {adding ? <AddMailbox onClose={() => setAdding(false)} /> : null}
       {sheet ? <ShortcutSheet prefs={prefs} onPrefs={setPrefs} onClose={() => setSheet(false)} /> : null}
       {gotoOpen ? <GoToFolder boxes={boxes} onPick={pick} onClose={() => setGotoOpen(false)} /> : null}
+      {ignoring ? (
+        <IgnoreDialog
+          subject={ignoring.target.row.subject}
+          count={Math.max(1, ignoring.here.length)}
+          onClose={() => setIgnoring(null)}
+          onConfirm={async () => {
+            try {
+              const r = await ignoreConversation(ignoring.key, ignoring.target.row.subject, ignoring.target.mailbox, ignoring.here.length ? ignoring.here : [ignoring.target]);
+              setIgnoring(null);
+              setSelection(new Set());
+              void qc.invalidateQueries({ queryKey: ['mail'] });
+              toast('success', r.where === 'server' ? text('Conversation ignored. Later messages go to Deleted Items on every device.') : text('Conversation ignored. This mailbox cannot keep the rule on its server, so this computer moves later messages while WorkSuite runs.'));
+            } catch (e) {
+              toast('error', errorMessage(e));
+            }
+          }}
+        />
+      ) : null}
       {ruleFor ? (
         <CreateRule
           row={ruleFor}

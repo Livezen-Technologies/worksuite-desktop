@@ -25,7 +25,8 @@ import type { Mailbox, Signature } from './types';
 export interface MailFilter {
   id?: number;
   name: string | null;
-  field: 'from' | 'to' | 'subject' | 'any';
+  /** `thread`: an ignored conversation (DMO-INB-10), by its root Message-ID. */
+  field: 'from' | 'to' | 'subject' | 'any' | 'thread';
   op: 'contains' | 'is' | 'matches';
   value: string;
   action: 'fileinto' | 'star' | 'seen' | 'delete' | 'forward';
@@ -58,7 +59,7 @@ export function importRules(raw: string): { rules: MailFilter[] } | { error: str
   }
   const list = (data as { rules?: unknown })?.rules;
   if (!Array.isArray(list)) return { error: text('That is not a WorkSuite rules file. Outlook .rwz rules cannot be read — recreate them here, or from a message with Create rule.') };
-  const fields = ['from', 'to', 'subject', 'any'];
+  const fields = ['from', 'to', 'subject', 'any', 'thread'];
   const ops = ['contains', 'is', 'matches'];
   const actions = ['fileinto', 'star', 'seen', 'delete', 'forward'];
   const rules: MailFilter[] = [];
@@ -107,6 +108,7 @@ export function senderRule(f: MailFilter): { kind: 'blocked' | 'safe'; email: st
 
 /** "From contains sfcl.lk → move to Clients" in words. */
 export function filterWords(f: MailFilter): string {
+  if (f.field === 'thread') return text('A later message in this conversation → move to Deleted Items');
   const field = { from: text('From'), to: text('To'), subject: text('Subject'), any: text('Anywhere') }[f.field];
   const op = { contains: text('contains'), is: text('is'), matches: text('matches') }[f.op];
   const action =

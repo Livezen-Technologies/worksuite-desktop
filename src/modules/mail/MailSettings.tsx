@@ -7,6 +7,7 @@ import { text } from '../../core/i18n';
 import { useStore } from '../../core/store';
 import { bytes, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
+import { FormattingSettings } from './ReadingSettings';
 import { Checkbox } from '../../components/Checkbox';
 import { Select } from '../../components/Select';
 import { Button, Chip, ErrorNote, Modal, Spinner, Switch, TextField, cx } from '../../components/ui';
@@ -599,6 +600,7 @@ function Layout() {
         {seg('openIn', prefs.openIn, 'tabs', [['tabs', 'Tabs'], ['windows', 'Windows'], ['both', 'Both']], 'Open messages in')}
       </section>
       <InboxAndKeyboard prefs={prefs} set={set} />
+      <FormattingSettings prefs={prefs} set={set} />
     </>
   );
 }
