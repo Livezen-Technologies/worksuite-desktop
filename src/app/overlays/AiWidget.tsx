@@ -1,4 +1,4 @@
-import { useEffect, useRef, type Ref } from 'react';
+import { useEffect, useRef, useState, type Ref } from 'react';
 import { app } from '../../core/app-state';
 import { t } from '../../core/i18n';
 import { useStore } from '../../core/store';
@@ -94,10 +94,19 @@ export function AiWidget() {
  * something to wait for or to see.
  */
 function AiBubble({ always, buttonRef }: { always?: boolean; buttonRef?: Ref<HTMLButtonElement> }) {
+  const [composerVisible, setComposerVisible] = useState(false);
+  useEffect(() => {
+    const update = () => setComposerVisible(Array.from(document.querySelectorAll('[data-chat-composer]')).some((el) => el.getClientRects().length > 0));
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden'] });
+    return () => observer.disconnect();
+  }, []);
   const { busy, unread, phase, engine } = useAssistantActivity();
   const notice = useStore(aiNotice, (s) => s.kind);
   const failed = phase === 'failed';
   const waiting = phase === 'needsInput';
+  if (composerVisible) return null;
   if (!always && !busy && !waiting && !unread && !notice) return <AiNotice />;
   // Working, or waiting on the person: where it is. Done: how many answers wait unread, or that it failed.
   const state = busy || waiting ? phaseLabel(phase, engine) : unread ? (failed ? t('ai.failed') : unreadLabel(unread)) : null;

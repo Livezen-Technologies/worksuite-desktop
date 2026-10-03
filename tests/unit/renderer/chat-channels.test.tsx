@@ -254,8 +254,11 @@ describe('WhatsApp in Chat', () => {
     serve(thread({ allowed: false }));
     wrap(<WhatsappChannel accounts={[account({})]} loading={false} error={null} retry={() => undefined} onConnect={null} onRelink={() => undefined} />);
     expect(await screen.findByText(/more than 24 hours since they last wrote.*Send an approved template instead/)).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole('button', { name: 'Attach files' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
+    const box = screen.getByRole('textbox', { name: 'Message Nimal Perera on WhatsApp' });
+    fireEvent.change(box, { target: { value: 'A draft for reconnecting' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(vi.mocked(apiPost).mock.calls.some(([path]) => path === '/api/whatsapp/chats/7/messages')).toBe(false);
   });
 
   it('sends an approved template once the 24-hour window has closed, its placeholders filled in', async () => {
@@ -324,15 +327,16 @@ describe('WhatsApp in Chat', () => {
     await act(async () => undefined);
     fireEvent.change(input, { target: { files: [pdf, clip] } });
     expect(toast).toHaveBeenCalledWith('error', 'clip.mp4: videos cannot be sent on WhatsApp here.');
-    const tray = screen.getByRole('list', { name: 'Files to send' });
-    expect(within(tray).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['quote.pdf']);
+    const tray = screen.getByRole('list', { name: 'Files ready to send' });
+    expect(within(tray).getByText('quote.pdf')).toBeTruthy();
+    expect(within(tray).queryByText('clip.mp4')).toBeNull();
     fireEvent.change(box, { target: { value: 'Your quote' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/chats/7/attachments', expect.any(FormData)));
     const form = vi.mocked(apiPost).mock.calls.find((c) => c[0] === '/api/whatsapp/chats/7/attachments')![1] as FormData;
     expect((form.getAll('files[]') as File[]).map((f) => f.name)).toEqual(['quote.pdf']);
     expect(form.get('caption')).toBe('Your quote');
-    await waitFor(() => expect(screen.queryByRole('list', { name: 'Files to send' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('list', { name: 'Files ready to send' })).toBeNull());
     expect((box as HTMLTextAreaElement).value).toBe('');
   });
 

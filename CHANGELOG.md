@@ -5,6 +5,10 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.99 — 2026-10-03
+
+- WhatsApp now uses the shared Chat composer with emoji, AI writing, saved replies, attachment previews, paste/drop, Files selection, formatting and per-conversation drafts. Blocked channels hide Send and offer reconnect and a drafting preference; floating AI no longer covers the composer (#156).
+
 ## 2026-10-03 — 0.2.98: Mail, the rest of the way
 
 Mail now covers the WorkSuite Mail SRS v2.2 and every screen of the desktop design:
