@@ -5,6 +5,10 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.111 — 2026-10-03
+
+- **Mail's setup banner (#187).** After you choose Outlook shortcuts, the banner says "Outlook shortcuts enabled." with a short line of guidance, offers **Import email** first (the tooltip says .pst and .mbox work), with **Add signature** and **Set as default mail app** beside it — in a **More** menu when the window is narrow — and has a dismiss icon instead of "Close". Once dismissed it stays gone, after navigation and restarts.
+
 ## 0.2.110 — 2026-10-03
 
 - **Right-click a conversation (#183).** Chat, WhatsApp and Website chats share one menu. Direct chats: Open in new window, Mark as read/unread, Pin (up to 5, with a pin icon), Archive (into an Archived section with a count; a new message brings it back unless it's muted), Favourite, Mute for 8 hours, a week or until you turn it back on, Contact info, Start call or video call, Block (shows "You blocked … · Unblock"), Export as .txt or .zip with or without media (recorded in the audit log), Clear chat for you (keeping starred messages if you like) and Delete chat for you with a 5-second Undo. Groups add Group info, Add members, Leave and — for the owner only — Delete for everyone; meeting chats get Open meeting details, Rename and Leave; the System channel only Mark read, Archive and Mute. WhatsApp adds Assign, Mark as waiting/done and Add/Link/Open contact; Website chats add Assign, Transfer and Close.
