@@ -5,6 +5,12 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.107 — 2026-10-03
+
+- **One New button everywhere (#171).** Mail, Files, Tasks, Notes, Calendar, Contacts, CRM, Billing, Sales, Tenders and Expenses use the same primary button: 40 px, plus icon, quiet shadow, with the shortcut in its tooltip instead of a chip. Mail's is a split button — New email, from a template, in a new window, an event invite or a contact — and Search beside it matches Files' Upload button.
+- **Mail sync status you can trust (#172).** The card and the status bar always say the same thing. An account that is out of date is amber, never green; "N of M mailboxes live" comes from the real connections, and "New mail pushed" shows only while one is up. A mailbox kept current by push no longer shows a days-old sync time (needs the server update). Click the card to see each account's state, last sync and error, with Sync now, Fix and Sync all.
+- **Sort & Group menu (#168).** Every choice has its icon; the direction is a switch in the field's own words (Newest/Oldest, A → Z/Z → A, Largest/Smallest); the toolbar says what the list is sorted by. Show conversations, Apply to all folders and Reset to default are at the bottom, and the list can be grouped by conversation. Menus elsewhere no longer leave a blank gap where an icon would go.
+
 ## 0.2.106 — 2026-10-03
 
 - Keep tab menus, dialogs, search, notifications, AI surfaces and toasts above the native Office editor. Hide and restore the existing view with a captured document image while overlapping shell surfaces are open (#184). Reserve a footer for the persistent AI launcher so the editor stays usable.
