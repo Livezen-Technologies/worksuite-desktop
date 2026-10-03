@@ -6,7 +6,8 @@ import { messageAction } from './api';
 import { deviceId } from './clientRules';
 import type { MailFilter } from './MailRules';
 import type { Target } from './MessageMenus';
-import type { MessageRow } from './types';
+import { plainText } from './model';
+import type { MessageDetail, MessageRow } from './types';
 
 /**
  * Ignore conversation (ENH-MAIL-03 DMO-INB-10): the messages of the thread
@@ -71,6 +72,64 @@ export function IgnoreDialog({ subject, count, onConfirm, onClose }: { subject: 
     >
       <p className="text-[13.5px] text-ink-2">
         {text('“{subject}”: the {n} message(s) here and every later message in this conversation go to Deleted Items. You can stop ignoring it from Deleted Items.', { subject: subject || text('(no subject)'), n: count })}
+      </p>
+    </Modal>
+  );
+}
+
+/** A message's own words, for comparing: quote marks, spacing and case set aside. */
+export function comparable(html: string): string {
+  return plainText(html)
+    .split('\n')
+    .map((l) => l.replace(/^(\s*>)+/, ''))
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Clean up conversation (DMO-INB-11): the messages whose whole text a later
+ * message in the thread already quotes — never the newest, never one with an
+ * attachment, a star or a flag (`keep`), and never a short one, where
+ * "contained" proves nothing.
+ */
+export function redundantInThread(msgs: MessageDetail[], keep: (m: MessageDetail) => boolean): MessageDetail[] {
+  const ordered = [...msgs].sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id - b.id);
+  const texts = ordered.map((m) => comparable(m.body_html ?? ''));
+  return ordered.filter((m, i) => {
+    if (i === ordered.length - 1 || keep(m) || (m.attachments?.length ?? 0) > 0 || m.is_starred) return false;
+    const mine = texts[i]!;
+    if (mine.length < 20) return false;
+    return texts.slice(i + 1).some((later) => later.includes(mine));
+  });
+}
+
+export function CleanupDialog({ subject, count, onConfirm, onClose }: { subject: string; count: number; onConfirm: () => Promise<void>; onClose: () => void }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Modal
+      title={text('Clean up conversation')}
+      onClose={onClose}
+      width={440}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button
+            variant="danger"
+            loading={busy}
+            onClick={() => {
+              setBusy(true);
+              void onConfirm().finally(() => setBusy(false));
+            }}
+          >
+            {text('Move {n} to Deleted Items', { n: count })}
+          </Button>
+        </>
+      }
+    >
+      <p className="text-[13.5px] text-ink-2">
+        {text('“{subject}”: {n} message(s) are quoted in full in a later reply. Messages with attachments, stars or flags are kept.', { subject: subject || text('(no subject)'), n: count })}
       </p>
     </Modal>
   );

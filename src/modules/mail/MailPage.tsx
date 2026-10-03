@@ -40,7 +40,7 @@ import { QuickStepAsk } from './QuickStepsUi';
 import { alertFor, chime, deviceId, freshRows, markSeen, myRules, ruleTakes } from './clientRules';
 import { CreateRule, useRules } from './MailRules';
 import { CatchUp } from './CatchUp';
-import { IgnoreDialog, conversationKeyOf, ignoreConversation, ignoredKeys, stopIgnoring } from './Conversations';
+import { CleanupDialog, IgnoreDialog, conversationKeyOf, ignoreConversation, ignoredKeys, redundantInThread, stopIgnoring } from './Conversations';
 import { ReadingPane, afterClose, withTab, type OpenTab } from './ReadingPane';
 import { ScheduledList } from './Scheduled';
 import { SearchView } from './SearchView';
@@ -48,7 +48,7 @@ import { MailFileViewer } from './FileViewer';
 import { ExportDialog } from './DataFiles';
 import { MailSidebar, unreadOf, type Place } from './Sidebar';
 import { StatusBar, WaitingPanel } from './StatusBar';
-import type { ComposeSeed, Label, MailPrefs, Mailbox, MessagePage, MessageRef, MessageRow } from './types';
+import type { ComposeSeed, Label, MailPrefs, Mailbox, MessageDetail, MessagePage, MessageRef, MessageRow } from './types';
 
 
 export { joinQuote, splitQuote, unquote } from './quote';
@@ -719,7 +719,23 @@ function MailWorkspace({ active }: ModuleProps) {
       return [{ id: 'unignore', label: text('Stop ignoring conversation'), icon: 'undo', onSelect: () => void stopIgnoring(key, t).then(() => (void qc.invalidateQueries({ queryKey: ['mail'] }), toast('success', text('No longer ignored; the message is back in the Inbox.'))), (e: unknown) => toast('error', errorMessage(e))) }];
     }
     if (t.folder === 'trash' || ignored.has(key)) return [];
-    return [{ id: 'ignore', label: text('Ignore conversation'), icon: 'trash', onSelect: () => setIgnoring({ key, target: t, here: flat.filter((r) => conversationKeyOf(r.row) === key).map(targetOf) }) }];
+    return [
+      { id: 'ignore', label: text('Ignore conversation'), icon: 'trash', onSelect: () => setIgnoring({ key, target: t, here: flat.filter((r) => conversationKeyOf(r.row) === key).map(targetOf) }) },
+      { id: 'cleanup', label: text('Clean up conversation'), icon: 'eraser', onSelect: () => void cleanUp(t) },
+    ];
+  };
+  // Clean up conversation (DMO-INB-11): the thread as the server has it, read without marking anything read.
+  const [cleaning, setCleaning] = useState<{ target: Target; redundant: MessageDetail[] } | null>(null);
+  const cleanUp = async (t: Target) => {
+    try {
+      const r = await apiGetMeta<{ messages: MessageDetail[] }>(`/api/mail/messages/${t.row.id}/thread`, withMailbox({ folder: t.folder, peek: 1 }, t.mailbox));
+      const flagged = states.data?.flags ?? {};
+      const redundant = redundantInThread(r.data.messages ?? [], (m) => !!flagged[stateKey(t.mailbox, t.folder, m.id)] && !flagged[stateKey(t.mailbox, t.folder, m.id)]!.completed_at);
+      if (!redundant.length) toast('info', text('Nothing to clean up: every message in this conversation says something new.'));
+      else setCleaning({ target: t, redundant });
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
   };
 
   const menuSections = (targets: Target[]) => [
@@ -921,6 +937,27 @@ function MailWorkspace({ active }: ModuleProps) {
       {adding ? <AddMailbox onClose={() => setAdding(false)} /> : null}
       {sheet ? <ShortcutSheet prefs={prefs} onPrefs={setPrefs} onClose={() => setSheet(false)} /> : null}
       {gotoOpen ? <GoToFolder boxes={boxes} onPick={pick} onClose={() => setGotoOpen(false)} /> : null}
+      {cleaning ? (
+        <CleanupDialog
+          subject={cleaning.target.row.subject}
+          count={cleaning.redundant.length}
+          onClose={() => setCleaning(null)}
+          onConfirm={async () => {
+            let moved = 0;
+            for (const m of cleaning.redundant) {
+              try {
+                await messageAction({ uid: String(m.id), folder: cleaning.target.folder, mailbox: cleaning.target.mailbox }, 'trash', m.subject);
+                moved++;
+              } catch {
+                // Left where it is; the count says how many went.
+              }
+            }
+            setCleaning(null);
+            void qc.invalidateQueries({ queryKey: ['mail'] });
+            toast('success', text('{n} message(s) moved to Deleted Items.', { n: moved }));
+          }}
+        />
+      ) : null}
       {ignoring ? (
         <IgnoreDialog
           subject={ignoring.target.row.subject}

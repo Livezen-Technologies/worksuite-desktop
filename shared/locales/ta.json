@@ -2269,5 +2269,10 @@
   "The header line needs an “email” column.": "தலைப்பு வரியில் “email” நெடுவரிசை தேவை.",
   "email, name, company\npat@client.lk, Pat Silva, Silva Builders": "email, name, company\npat@client.lk, Pat Silva, Silva Builders",
   "{done} of {n} sent.": "{n} இல் {done} அனுப்பப்பட்டன.",
-  "High contrast": "உயர் மாறுபாடு"
+  "High contrast": "உயர் மாறுபாடு",
+  "Clean up conversation": "உரையாடலைச் சுத்தம் செய்",
+  "Move {n} to Deleted Items": "{n} ஐ நீக்கப்பட்டவைக்கு நகர்த்து",
+  "Nothing to clean up: every message in this conversation says something new.": "சுத்தம் செய்ய எதுவும் இல்லை: இந்த உரையாடலின் ஒவ்வொரு செய்தியும் புதிதாக ஏதாவது சொல்கிறது.",
+  "{n} message(s) moved to Deleted Items.": "{n} செய்தி(கள்) நீக்கப்பட்டவைக்கு நகர்த்தப்பட்டன.",
+  "“{subject}”: {n} message(s) are quoted in full in a later reply. Messages with attachments, stars or flags are kept.": "“{subject}”: {n} செய்தி(கள்) பிந்தைய பதிலில் முழுமையாக மேற்கோள் காட்டப்பட்டுள்ளன. இணைப்புகள், நட்சத்திரங்கள் அல்லது கொடிகள் உள்ள செய்திகள் வைக்கப்படும்."
 }

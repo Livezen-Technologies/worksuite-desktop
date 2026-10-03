@@ -2269,5 +2269,10 @@
   "The header line needs an “email” column.": "ශීර්ෂ පේළියට “email” තීරුවක් අවශ්‍යයි.",
   "email, name, company\npat@client.lk, Pat Silva, Silva Builders": "email, name, company\npat@client.lk, Pat Silva, Silva Builders",
   "{done} of {n} sent.": "{n} න් {done}ක් යවන ලදී.",
-  "High contrast": "ඉහළ වෙනස"
+  "High contrast": "ඉහළ වෙනස",
+  "Clean up conversation": "සංවාදය පිරිසිදු කරන්න",
+  "Move {n} to Deleted Items": "{n}ක් මකා දැමූ අයිතම වෙත ගෙන යන්න",
+  "Nothing to clean up: every message in this conversation says something new.": "පිරිසිදු කිරීමට කිසිවක් නැත: මෙම සංවාදයේ සෑම පණිවිඩයක්ම අලුත් දෙයක් කියයි.",
+  "{n} message(s) moved to Deleted Items.": "පණිවිඩ {n}ක් මකා දැමූ අයිතම වෙත ගෙන යන ලදී.",
+  "“{subject}”: {n} message(s) are quoted in full in a later reply. Messages with attachments, stars or flags are kept.": "“{subject}”: පණිවිඩ {n}ක් පසු පිළිතුරක සම්පූර්ණයෙන් උපුටා දක්වා ඇත. ඇමුණුම්, තරු හෝ ධජ ඇති පණිවිඩ තබා ගනී."
 }

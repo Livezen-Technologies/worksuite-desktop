@@ -9,11 +9,11 @@ vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(async () => ({ delivere
 import { apiDelete, apiPost } from '../../../src/core/api';
 import { call } from '../../../src/core/bridge';
 import { rowMatches, ruleTakes } from '../../../src/modules/mail/clientRules';
-import { conversationKeyOf, ignoreConversation, ignoredKeys, stopIgnoring } from '../../../src/modules/mail/Conversations';
+import { comparable, conversationKeyOf, ignoreConversation, ignoredKeys, redundantInThread, stopIgnoring } from '../../../src/modules/mail/Conversations';
 import { ImmersiveReader, paragraphsOf } from '../../../src/modules/mail/ImmersiveReader';
 import { filterWords, type MailFilter } from '../../../src/modules/mail/MailRules';
 import { cleanFormatRules, rowFormat } from '../../../src/modules/mail/ReadingSettings';
-import type { MessageRow } from '../../../src/modules/mail/types';
+import type { MessageDetail, MessageRow } from '../../../src/modules/mail/types';
 
 /**
  * ENH-MAIL-03 P5 reading and list polish: Ignore conversation (DMO-INB-10),
@@ -115,5 +115,22 @@ describe('immersive reader (DMO-RD-04)', () => {
     expect(speak.mock.calls.map(([u]) => (u as { text: string }).text)).toEqual(['Second']);
     fireEvent.keyDown(first.parentElement!.parentElement!, { key: 'Escape' });
     expect(onClose).toHaveBeenCalled();
+  });
+});
+
+describe('Clean up conversation (DMO-INB-11)', () => {
+  const msg = (id: number, at: string, html: string, over: Partial<MessageDetail> = {}): MessageDetail => ({ id, message_id: `<${id}@x>`, from_name: 'Pat', from_email: 'pat@x.org', subject: 'Plan', to: [], cc: [], body_html: html, is_starred: false, attachments: [], created_at: at, ...over });
+
+  it('takes out only messages a later one quotes in full, never the newest, one with a file, a star or a flag, or a short one', () => {
+    const first = msg(1, '2026-10-01 09:00:00', '<p>Please send the revised BOQ by Friday.</p>');
+    const second = msg(2, '2026-10-01 10:00:00', '<p>Will do.</p><blockquote>&gt; Please send the revised BOQ<br>&gt; by Friday.</blockquote>');
+    const withFile = msg(3, '2026-10-01 11:00:00', '<p>Here is the first draft of it attached.</p>', { attachments: [{ ref: '2', name: 'BOQ.xlsx', mime: 'x', size: 1 }] as never });
+    const starred = msg(4, '2026-10-01 12:00:00', '<p>And one more thing to note on the plan.</p>', { is_starred: true });
+    const flagged = msg(5, '2026-10-01 12:30:00', '<p>Flagged note that is quoted below too.</p>');
+    const last = msg(6, '2026-10-01 13:00:00', '<p>Thanks</p><blockquote>Here is the first draft of it attached. And one more thing to note on the plan. Flagged note that is quoted below too.</blockquote>');
+    const out = redundantInThread([last, flagged, starred, withFile, second, first], (m) => m.id === 5);
+    expect(out.map((m) => m.id)).toEqual([1]);
+    expect(comparable('<p>A&nbsp; b</p><blockquote>&gt; C</blockquote>')).toBe('a b c');
+    expect(redundantInThread([msg(1, '2026-10-01 09:00:00', '<p>Ok</p>'), msg(2, '2026-10-01 10:00:00', '<p>Ok</p><p>Ok</p>')], () => false)).toEqual([]);
   });
 });
