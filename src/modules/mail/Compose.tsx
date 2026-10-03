@@ -13,14 +13,16 @@ import { RichTextEditor } from '../../components/RichTextEditor';
 import { Button, Chip, ErrorNote, FileBadge, Modal, Spinner, TextField, cx } from '../../components/ui';
 import { AiMenuButton } from '../ai/AiMenuButton';
 import { AiTextDialog } from '../ai/AiTextDialog';
-import { WRITING_TASKS, type TextTask } from '../ai/textTools';
+import { SuggestTimes } from './SuggestTimes';
+import { canOpen } from '../../core/access';
+import { MAIL_TASKS, WRITING_TASKS, type TextTask } from '../ai/textTools';
 import { sendMessage, useQuickParts, useSignatures, useTemplates } from './api';
 import { cleanComposeHtml, composeBody, composeText, migrateDraft, parseQuote, pickSignature, sendChecks, signatureBlock, splitSignature, textToComposeHtml, voteChoices, withVotePrompt, type ComposeDraft } from './composeHtml';
 import { MentionPopup } from './Mentions';
 import { mailboxLetter } from './model';
 import { sendAfterUndoWindow } from './outgoing';
 import { AccountAvatar } from './parts';
-import { RecipientField } from './Recipients';
+import { RecipientField, addressOf } from './Recipients';
 import { unquote } from './quote';
 import { parseAddresses } from './sanitize';
 import type { ComposeSeed, Mailbox, Template } from './types';
@@ -101,6 +103,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [voteDialog, setVoteDialog] = useState(false);
   const [partsOpen, setPartsOpen] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
   const optionsBtn = useRef<HTMLSpanElement>(null);
   // A choice from the Options and Quick Parts menus, put into the draft right after (menus hand over data, not the draft's ref).
   const [pending, setPending] = useState<{ options?: NonNullable<ComposeDraft['options']>; part?: string } | null>(null);
@@ -129,6 +132,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   const aiItems = [
     ...(original && seed.mode !== 'forward' ? [{ label: text('Draft a reply'), icon: 'reply', run: () => setAi({ task: 'reply', title: text('Draft a reply') }) }] : []),
     ...WRITING_TASKS.map((w) => ({ label: w.label, disabled: !own.trim(), run: () => setAi({ task: w.task, title: w.label }) })),
+    ...MAIL_TASKS.map((w) => ({ label: w.label, disabled: !own.trim(), run: () => setAi({ task: w.task, title: w.label }) })),
   ];
   const choices = useMemo(() => laterChoices(), []);
   const laterAt = later === 'pick' ? (pick ? new Date(pick).toISOString() : null) : (choices.find((c) => c.id === later)?.at ?? null);
@@ -351,12 +355,17 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
         <Field label="Subject">
           <input aria-label="Subject" value={v.subject} onChange={(e) => set({ subject: e.target.value })} className="bare-focus min-w-0 flex-1 bg-transparent text-[14px] font-bold text-ink outline-none" />
         </Field>
+        {suggesting ? <SuggestTimes recipients={[...parseAddresses(v.to ?? ''), ...parseAddresses(v.cc ?? '')].map(addressOf).filter((a) => a.includes('@'))} subject={v.subject} onInsert={(html) => setPending({ part: html })} onClose={() => setSuggesting(false)} /> : null}
         {ai ? (
           <AiTextDialog
             title={ai.title}
             task={ai.task}
             input={() => (ai.task === 'reply' ? `Subject: ${v.subject}\n\nThe email I am replying to:\n${original}${own.trim() ? `\n\nWhat I want to say (my notes):\n${own.trim()}` : ''}` : own.trim())}
-            actions={[{ label: own.trim() ? text('Replace my text') : text('Use this'), primary: true, run: (t) => set({ html: `${textToComposeHtml(t)}${signature}` }) }]}
+            actions={
+              ai.task === 'coach'
+                ? [{ label: text('Copy'), icon: 'copy', primary: true, run: (t) => void navigator.clipboard.writeText(t).then(() => toast('success', text('Copied.'))) }]
+                : [{ label: own.trim() ? text('Replace my text') : text('Use this'), primary: true, run: (t) => set({ html: `${textToComposeHtml(t)}${signature}` }) }]
+            }
             onClose={() => setAi(null)}
           />
         ) : null}
@@ -395,6 +404,11 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
                     {text('Quick Parts')}
                   </Button>
                 </span>
+                {canOpen('calendar') ? (
+                  <Button size="sm" icon="calendar" onClick={() => setSuggesting(true)} disabled={offline} title={offline ? text('Suggesting times needs WorkSuite.') : text('Free times for everyone on this message, and a Meet link')}>
+                    {text('Suggest times')}
+                  </Button>
+                ) : null}
                 <Button size="sm" icon="paperclip" onClick={() => fileInput.current?.click()} disabled={offline} title={offline ? text('Attaching needs WorkSuite.') : text('Attach from this computer')}>
                   Attach
                 </Button>

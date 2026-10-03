@@ -349,6 +349,10 @@ export interface MailPrefs {
   formatRules?: FormatRule[];
   /** Senders always shown as plain text (DMO-RD-09). */
   plainTextSenders?: string[];
+  /** The Apps pane beside the message (DMO-INT-01). */
+  appsPane?: boolean;
+  /** Catch up after an absence (DMO-AI-01): on unless turned off. */
+  catchUp?: boolean;
   /** Immersive reader settings (DMO-RD-04). */
   immersive?: { size?: number; spacing?: 'normal' | 'wide'; width?: 'narrow' | 'wide'; focusLine?: boolean };
 }

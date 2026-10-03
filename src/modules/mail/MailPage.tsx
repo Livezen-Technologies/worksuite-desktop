@@ -39,6 +39,7 @@ import { needsAsking, removesMessages, runQuickStep, saveAnswers, useQuickSteps,
 import { QuickStepAsk } from './QuickStepsUi';
 import { alertFor, chime, deviceId, freshRows, markSeen, myRules, ruleTakes } from './clientRules';
 import { CreateRule, useRules } from './MailRules';
+import { CatchUp } from './CatchUp';
 import { IgnoreDialog, conversationKeyOf, ignoreConversation, ignoredKeys, stopIgnoring } from './Conversations';
 import { ReadingPane, afterClose, withTab, type OpenTab } from './ReadingPane';
 import { ScheduledList } from './Scheduled';
@@ -883,6 +884,7 @@ function MailWorkspace({ active }: ModuleProps) {
               </Button>
             </div>
           ) : null}
+          <CatchUp enabled={active && boxes.length > 0 && globalPrefs.catchUp !== false && !networkOffline} rows={folder === 'inbox' ? decorated : []} vips={(vips.data ?? []).map((v) => v.address)} states={states.data} onOpen={openRef} />
           <div className="flex min-h-0 flex-1">
             {compose?.shown ? (
               <Compose key={compose.n} seed={compose.seed} boxes={boxes} defaultBox={current?.mailbox ?? effectiveBox ?? (defaultBox ? String(defaultBox.id) : null)} offline={offline} onClose={() => setCompose(null)} onReopen={openCompose} />

@@ -15,7 +15,7 @@ import { useWriter, write, writerProblem, WRITER_MAX, type WriterInfo } from './
  * Online, a tool uses the writing assistant's own action when the server offers it (`improve`, `shorten`,
  * `professional`, `grammar`, `reply`, `summarize`, `minutes`), and otherwise asks the AI Assistant.
  */
-export type TextTask = 'improve' | 'shorten' | 'professional' | 'grammar' | 'reply' | 'summarize' | 'minutes' | 'translate' | 'actions';
+export type TextTask = 'improve' | 'shorten' | 'professional' | 'grammar' | 'reply' | 'summarize' | 'minutes' | 'translate' | 'actions' | 'draft' | 'friendly' | 'longer' | 'coach';
 
 export const WRITING_TASKS: Array<{ task: Extract<TextTask, 'improve' | 'shorten' | 'professional' | 'grammar'>; label: string }> = [
   { task: 'improve', label: 'Improve writing' },
@@ -24,12 +24,28 @@ export const WRITING_TASKS: Array<{ task: Extract<TextTask, 'improve' | 'shorten
   { task: 'grammar', label: 'Fix spelling and grammar' },
 ];
 
+/**
+ * Mail's own drafting tools (ENH-MAIL-03 DMO-CMP-19, DMO-AI-02): a draft from
+ * the person's notes, tone and length, and coaching that only comments.
+ * Every result is shown for the person to use or not; nothing is sent.
+ */
+export const MAIL_TASKS: Array<{ task: Extract<TextTask, 'draft' | 'friendly' | 'longer' | 'coach'>; label: string }> = [
+  { task: 'draft', label: 'Draft from my notes' },
+  { task: 'friendly', label: 'Make friendlier' },
+  { task: 'longer', label: 'Make longer' },
+  { task: 'coach', label: 'Coaching: tone and clarity' },
+];
+
 /** What each tool asks of a model, given the material it works on. */
 const INSTRUCTIONS: Record<TextTask, string> = {
   improve: 'Rewrite the text so it reads clearly and naturally. Keep its meaning, language and tone.',
   shorten: 'Rewrite the text to be noticeably shorter. Keep every important point, its language and its tone.',
   professional: 'Rewrite the text in a polite, professional tone suitable for work. Keep its meaning and language.',
   grammar: 'Correct the spelling, grammar and punctuation of the text. Change nothing else.',
+  draft: 'Write an email from the notes or bullet points below, as the person who wrote them, in their language. Use only what the notes say: never invent a fact, a name, a number or a date. Short paragraphs, no subject line.',
+  friendly: 'Rewrite the text in a warmer, friendlier tone that is still suitable for work. Keep its meaning and language.',
+  longer: 'Rewrite the text a little longer and fuller, explaining its points more clearly. Add no new facts, names, numbers or dates. Keep its language and tone.',
+  coach: 'Do not rewrite the text. Give short coaching on it: how its tone may come across, anything unclear or ambiguous, anything that may be missing (a request, a date, a next step), each as one line starting with "- ". If it reads well, say so in one line.',
   reply: 'Write the reply the person (marked "me") could send next. Write it as them, in the language and tone of the conversation, short and ready to send, with no greeting line unless the conversation uses one.',
   summarize: 'Summarise the conversation for someone who missed it, in a few short bullet points: what it is about, what was decided, and what is still open or who is doing what next.',
   actions:

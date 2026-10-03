@@ -29,6 +29,7 @@ import { CategoryChip } from './parts';
 import { TaskFromMessage, meetingRoute, messageLink } from './MessageTask';
 import { AddContactDialog, parseSignature, type SignatureGuess } from './AddContact';
 import { ImmersiveReader } from './ImmersiveReader';
+import { AppsPane } from './AppsPane';
 import { MarkerChips, RecallDialog, ReceiptBar, ReportDialog, SmimeChip, VoteBar, VoteTally, sendReceipt } from './MessageExtras';
 import type { ComposeSeed, MailPrefs, Mailbox, MessageContext, MessageDetail, MessageRef, MessageRow } from './types';
 
@@ -449,6 +450,7 @@ export function MessageView(p: MessageViewProps) {
         <Tool icon="printer" label="Print" onClick={print} />
         <Tool icon="download" label="Download original (.eml)" onClick={downloadOriginal} disabled={p.offline} />
         <Tool ref={topMore} icon="more" label="More" onClick={() => setMenu('top')} />
+        <Tool icon={p.prefs.appsPane ? 'panel-right-close' : 'panel-right-open'} label={p.prefs.appsPane ? text('Hide the Apps pane') : text('Apps: CRM, tasks, helpdesk and notes for this message')} onClick={() => p.onPrefs({ appsPane: !p.prefs.appsPane })} active={!!p.prefs.appsPane} />
         <span className="flex-1" />
         <Tool icon="zoom-out" label="Zoom out" onClick={() => p.onPrefs({ zoom: Math.max(75, zoom - 10) })} disabled={zoom <= 75} />
         <Tool icon="zoom-in" label="Zoom in" onClick={() => p.onPrefs({ zoom: Math.min(200, zoom + 10) })} disabled={zoom >= 200} />
@@ -470,7 +472,8 @@ export function MessageView(p: MessageViewProps) {
           ]}
         />
       ) : null}
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="max-h-[45%] shrink-0 overflow-y-auto border-b border-line px-6 pt-4 pb-4 scroll-thin">
           <h2 className="text-[21px] font-bold leading-tight text-ink selectable">{m.subject || text('(no subject)')}</h2>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -599,6 +602,8 @@ export function MessageView(p: MessageViewProps) {
         <iframe title={text('Message')} sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={mailFrameDoc(shownHtml, zoom, darkBody)} className={cx('mx-5 mt-3 min-h-[120px] flex-1 rounded-[8px] border-0', darkBody ? 'bg-surface' : 'bg-white', darkTheme && !darkBody && 'p-2')} />
         {m.attachments.length ? <Attachments m={m} msgRef={ref} offline={p.offline} /> : null}
         {m.team && ref.mailbox && m.conversation_key ? <TeamWork msgRef={ref} m={m} account={p.account} offline={p.offline} /> : null}
+      </div>
+      {p.prefs.appsPane ? <AppsPane m={m} link={messageLink(ref)} context={context.data} offline={p.offline} navigate={navigate} onCreateTask={() => setExtra('task')} onSaveNote={() => void saveNote()} onClose={() => p.onPrefs({ appsPane: false })} /> : null}
       </div>
       <ActionBar style={toolbarStyle} onReply={reply} onArchive={() => void act('archive')} onDelete={() => void act('trash')} moreRef={bottomMore} onMore={() => setMenu('bottom')} onMove={() => setMenu('move')} onUnread={() => void act('unread')} onStar={() => void act(m.is_starred ? 'unstar' : 'star')} starred={m.is_starred} canMove={!!ref.mailbox || p.localStore} />
       {menu === 'top' ? <Menu sections={moreItems('top')} label={text('More')} anchor={topMore} prefer="bottom" align="end" onClose={() => setMenu(null)} /> : null}

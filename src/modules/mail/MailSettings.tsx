@@ -625,6 +625,9 @@ function Layout() {
       </section>
       <InboxAndKeyboard prefs={prefs} set={set} />
       <FormattingSettings prefs={prefs} set={set} />
+      <section aria-label={text('Catch up')} className="mt-4 flex flex-col gap-3 rounded-[12px] border border-line bg-surface p-4 text-[13.5px] text-ink">
+        <SwitchRow label={text('Catch up after time away')} hint={text('Back after eight hours or more: unread mail from VIPs, mail that mentions you and flags due, at the top of Mail.')} checked={prefs.catchUp !== false} onChange={(v) => set({ catchUp: v })} />
+      </section>
     </>
   );
 }

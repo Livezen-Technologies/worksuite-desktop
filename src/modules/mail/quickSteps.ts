@@ -7,7 +7,7 @@ import { messageLink, taskDescription } from './MessageTask';
 import { plainText } from './model';
 import type { Target } from './MessageMenus';
 import { flagChoices, snoozeChoices, stateItem } from './states';
-import type { ComposeSeed, MessageDetail } from './types';
+import type { ComposeSeed, MessageDetail, MessageRow } from './types';
 
 /**
  * Quick Steps (ENH-MAIL-03 DMO-QS-01…06, WF-DO03): a named list of actions
@@ -258,9 +258,29 @@ export function taskDueDay(when: string, today = todayInZone()): string | null {
   return null;
 }
 
-interface CrmRecord {
+export interface CrmRecord {
   id: number;
   email: string | null;
+  name?: string;
+  status?: string;
+  company?: string | null;
+}
+
+/** The CRM lead, or else account, whose address is exactly this one (DMO-QS-02, DMO-INT-01). */
+export async function findCrmRecord(email: string, get: Runner['get'] = apiGet): Promise<{ kind: 'lead' | 'account'; record: CrmRecord } | null> {
+  const want = email.trim().toLowerCase();
+  const same = (r: CrmRecord) => (r.email ?? '').trim().toLowerCase() === want;
+  const leads = await get<{ leads?: CrmRecord[] }>('/api/crm/leads', { q: want, per_page: 20 });
+  const lead = (leads?.leads ?? []).find(same);
+  if (lead) return { kind: 'lead', record: lead };
+  const accounts = await get<{ accounts?: CrmRecord[] }>('/api/crm/accounts', { q: want, per_page: 20 });
+  const account = (accounts?.accounts ?? []).find(same);
+  return account ? { kind: 'account', record: account } : null;
+}
+
+/** The email as a CRM activity on that record. */
+export function crmActivity(row: Pick<MessageRow, 'subject' | 'preview'>, link: string): { kind: 'email'; title: string; body: string } {
+  return { kind: 'email', title: text('Email: {subject}', { subject: row.subject || text('(no subject)') }).slice(0, 255), body: [row.preview ?? '', link].filter(Boolean).join('\n\n') };
 }
 
 /**
@@ -269,18 +289,7 @@ interface CrmRecord {
  * sender CRM does not know is a failure for that message, not a guess.
  */
 async function logInCrm(t: Target, link: string, run: Runner): Promise<void> {
-  const email = t.row.from_email.trim().toLowerCase();
-  const same = (r: CrmRecord) => (r.email ?? '').trim().toLowerCase() === email;
-  const title = text('Email: {subject}', { subject: t.row.subject || text('(no subject)') }).slice(0, 255);
-  const body = [t.row.preview ?? '', link].filter(Boolean).join('\n\n');
-  const leads = await run.get<{ leads?: CrmRecord[] }>('/api/crm/leads', { q: email, per_page: 20 });
-  const lead = (leads?.leads ?? []).find(same);
-  if (lead) {
-    await run.post(`/api/crm/leads/${lead.id}/activity`, { kind: 'email', title, body });
-    return;
-  }
-  const accounts = await run.get<{ accounts?: CrmRecord[] }>('/api/crm/accounts', { q: email, per_page: 20 });
-  const account = (accounts?.accounts ?? []).find(same);
-  if (!account) throw new Error(text('No CRM lead or account has the address {email}.', { email }));
-  await run.post(`/api/crm/accounts/${account.id}/activity`, { kind: 'email', title, body });
+  const found = await findCrmRecord(t.row.from_email, run.get);
+  if (!found) throw new Error(text('No CRM lead or account has the address {email}.', { email: t.row.from_email.trim().toLowerCase() }));
+  await run.post(`/api/crm/${found.kind === 'lead' ? 'leads' : 'accounts'}/${found.record.id}/activity`, crmActivity(t.row, link));
 }
