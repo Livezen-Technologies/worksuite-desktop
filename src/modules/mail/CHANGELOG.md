@@ -4,6 +4,11 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.9.0 — 2026-10-03
+
+- Composer: one formatting row of grouped icon buttons (style, font, size, colour, highlight, align, lists, checklist, indent, line spacing, format painter) with a separate actions row (Attach, Template with Quick Parts, Signature, Suggest times, Mail merge, Options) that moves what doesn't fit into More; pictures from the computer, Files, a link, paste or drag-drop with size, alignment, alt text, link, corners, border, crop and automatic compression, sent inside the message; tables with a grid picker and table tools; emoji, line, quote, code, date, special characters, button, meeting link and merge fields; Word/Excel paste clean-up and paste options; Markdown shortcuts; spelling suggestions on right-click with a language choice (#188).
+- Folder and account right-click menus: sync this folder, mark all as read, new subfolder, rename, move, delete, empty Deleted Items/Junk, favourites, unread or total count, keep on this computer (all / recent / headers), properties; core folders protected. Mail shows what this computer saved first and refreshes, opened and next messages open instantly, folder actions work offline with rollback, offline search covers saved mail, and a removed account's saved mail is wiped. Large mailboxes sort and group much faster (#162).
+
 ## 1.8.3 — 2026-10-03
 
 - Sync buttons use the shared Sync button: they spin from the click, can't be pressed twice, show Synced just now or Sync failed · Retry, and keep one width (#165). Mail's ↻ icons show the same states.
