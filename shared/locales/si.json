@@ -2268,5 +2268,6 @@
   "That group has nobody with an address.": "එම කණ්ඩායමේ ලිපිනයක් ඇති කිසිවෙක් නැත.",
   "The header line needs an “email” column.": "ශීර්ෂ පේළියට “email” තීරුවක් අවශ්‍යයි.",
   "email, name, company\npat@client.lk, Pat Silva, Silva Builders": "email, name, company\npat@client.lk, Pat Silva, Silva Builders",
-  "{done} of {n} sent.": "{n} න් {done}ක් යවන ලදී."
+  "{done} of {n} sent.": "{n} න් {done}ක් යවන ලදී.",
+  "High contrast": "ඉහළ වෙනස"
 }

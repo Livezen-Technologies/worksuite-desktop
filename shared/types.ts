@@ -254,6 +254,8 @@ export interface Preferences {
   mailCacheDaysByMailbox?: Record<string, 7 | 30 | 90 | 0>;
   /** Per folder ("<mailbox>:<folder>"), what this computer keeps (ENH-MAIL-03 DMO-OFF-01); unset folders follow the defaults. */
   mailFolderOffline?: Record<string, 'recent' | 'headers' | 'online'>;
+  /** High contrast lines, text and focus ring, chosen here rather than by the system (ENH-MAIL-03 DMO-ACC-01). */
+  highContrast?: boolean;
   /** New-mail banners on this computer (ENH-MAIL-03 DMO-NTF-02): every message, Focused only, VIPs only, or none. */
   mailAlerts?: 'all' | 'focused' | 'vip' | 'none';
   /** VIP mail shows a banner during quiet hours (DMO-NTF-03). */

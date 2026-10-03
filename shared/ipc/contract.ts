@@ -163,6 +163,7 @@ export const preferencesPatchSchema = z
     mailFolderOffline: z.record(z.string().regex(/^(\d{1,12}|local):[A-Za-z0-9._\-/ :]{1,128}$/), z.enum(['recent', 'headers', 'online'])).refine((r) => Object.keys(r).length <= 500),
     mailAlerts: z.enum(['all', 'focused', 'vip', 'none']),
     mailVipBreakthrough: z.boolean(),
+    highContrast: z.boolean(),
     tabSuspendMinutes: z.number().int().min(5).max(480),
     language: z.string().regex(/^[a-z]{2}(-[A-Z]{2})?$/),
     updateChannel: z.enum(['stable', 'beta', 'dev', 'org']),

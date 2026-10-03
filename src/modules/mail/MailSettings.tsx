@@ -561,6 +561,7 @@ function Storage() {
 function Layout() {
   const { prefs, set } = useMailPrefs();
   const theme = useStore(app, (s) => s.prefs?.theme ?? 'system');
+  const desktopPrefs = useStore(app, (s) => s.prefs);
   const seg = <K extends keyof MailPrefs>(key: K, value: MailPrefs[K] | undefined, fallback: MailPrefs[K], options: Array<[NonNullable<MailPrefs[K]>, string]>, label: string) => (
     <div className="flex items-center justify-between gap-4 py-2">
       <span className="text-[13.5px] font-semibold text-ink">{text(label)}</span>
@@ -594,6 +595,10 @@ function Layout() {
           ))}
         </div>
       </section>
+      <label className="mt-3 flex items-center gap-2.5 text-[13.5px] text-ink">
+        <Checkbox checked={desktopPrefs?.highContrast === true} onChange={(e) => void updatePrefs({ highContrast: e.target.checked })} />
+        {text('High contrast')}
+      </label>
       <section aria-label="Mail layout" className="mt-4 rounded-[12px] border border-line bg-surface p-4">
         <h3 className="text-[15px] font-bold text-ink">Mail layout</h3>
         {seg('pane', prefs.pane, 'right', [['right', 'Right'], ['bottom', 'Bottom'], ['hidden', 'Off']], 'Reading pane')}

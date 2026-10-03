@@ -2268,5 +2268,6 @@
   "That group has nobody with an address.": "அந்தக் குழுவில் முகவரி உள்ள யாரும் இல்லை.",
   "The header line needs an “email” column.": "தலைப்பு வரியில் “email” நெடுவரிசை தேவை.",
   "email, name, company\npat@client.lk, Pat Silva, Silva Builders": "email, name, company\npat@client.lk, Pat Silva, Silva Builders",
-  "{done} of {n} sent.": "{n} இல் {done} அனுப்பப்பட்டன."
+  "{done} of {n} sent.": "{n} இல் {done} அனுப்பப்பட்டன.",
+  "High contrast": "உயர் மாறுபாடு"
 }
