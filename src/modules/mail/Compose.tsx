@@ -59,10 +59,10 @@ export function laterChoices(today = todayInZone()): Array<{ id: string; label: 
 export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }: { seed: ComposeSeed; boxes: Mailbox[]; defaultBox: string | null; offline: boolean; onClose: () => void; onReopen: (seed: ComposeSeed) => void }) {
   const context = draftContext(seed);
   const seedQuote = seed.quote ?? '';
-  const draft = useDraft<ComposeDraft>('mail', context, { to: seed.to ?? '', cc: seed.cc ?? '', bcc: '', subject: seed.subject ?? '', html: '', quote: seedQuote, from: seed.mailbox ?? defaultBox ?? '', attachments: [], v: 2 });
+  const draft = useDraft<ComposeDraft>('mail', context, { to: seed.to ?? '', cc: seed.cc ?? '', bcc: seed.bcc ?? '', subject: seed.subject ?? '', html: seed.body ? textToComposeHtml(seed.body) : '', quote: seedQuote, from: seed.mailbox ?? defaultBox ?? '', attachments: [], v: 2 });
   const [error, setError] = useState<string | null>(null);
   const [showCc, setShowCc] = useState(!!seed.cc);
-  const [showBcc, setShowBcc] = useState(false);
+  const [showBcc, setShowBcc] = useState(!!seed.bcc);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [uploading, setUploading] = useState<string[]>([]);
   const [later, setLater] = useState<string | null>(null);

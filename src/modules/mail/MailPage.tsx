@@ -539,9 +539,10 @@ export function composeSeedFromQuery(query: URLSearchParams): ComposeSeed {
       .join(', ');
   const to = list('to');
   const cc = list('cc');
+  const bcc = list('bcc');
   const subject = (query.get('subject') ?? '').replace(/[\r\n]+/g, ' ').slice(0, 500);
   const body = (query.get('body') ?? '').slice(0, 20_000);
-  return { mode: 'new', ...(to ? { to } : {}), ...(cc ? { cc } : {}), ...(subject ? { subject } : {}), ...(body ? { quote: body } : {}) };
+  return { mode: 'new', ...(to ? { to } : {}), ...(cc ? { cc } : {}), ...(bcc ? { bcc } : {}), ...(subject ? { subject } : {}), ...(body ? { body } : {}) };
 }
 
 /** "Sending “Re: Payroll export” in 8 s", counting down. */

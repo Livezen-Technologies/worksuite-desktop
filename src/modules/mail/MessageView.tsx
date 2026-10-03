@@ -201,7 +201,7 @@ export function MessageView(p: MessageViewProps) {
       if (colleague) await apiPost(`/api/meet/${meeting.uuid}/ring`, { user_ids: [colleague] }).catch(() => undefined);
       await openMeeting(meeting.uuid, meeting.title);
       if (!colleague) {
-        p.onReply({ mode: 'reply', to: m.from_email, subject: re(m.subject), quote: `\n\n${invitation(meeting, me?.name ?? null)}`, inReplyTo: m.message_id, mailbox: ref.mailbox });
+        p.onReply({ mode: 'reply', to: m.from_email, subject: re(m.subject), body: invitation(meeting, me?.name ?? null), inReplyTo: m.message_id, mailbox: ref.mailbox });
         toast('info', text('The meeting is open. Send the invitation in the reply.'));
       } else toast('success', text('The meeting is open; {name} is being called.', { name: m.from_name || m.from_email }));
     } catch (e) {

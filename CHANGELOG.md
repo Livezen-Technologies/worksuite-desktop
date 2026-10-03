@@ -5,6 +5,23 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.98: Mail, the rest of the way
+
+Mail now covers the WorkSuite Mail SRS v2.2 and every screen of the desktop design:
+
+- **Import my old mail.** Bring mail over from an old account yourself — progress per folder, a list of anything that couldn't be copied, and pause, resume or cancel. (Microsoft 365 imports from an account already connected in Mail.)
+- **Shared mailboxes work as a team.** Leave **internal notes** your colleagues see and customers never do, **snooze** a conversation (a customer reply wakes it), see **who else is reading** it, and reply as the shared address or as a note.
+- **Search** gets an **Attachments** panel, Folder / Label / From filters, and **Best match** ordering.
+- **Accounts & offline:** how much of each mailbox is on this computer, whether message bodies are downloaded, app passwords for other mail apps, and **Make WorkSuite my mail app** so `mailto:` links open a new message here (filled in, never sent on its own).
+- **Storage & sync:** what this computer holds against your organisation's limit, a keep period **per mailbox**, and what the WorkSuite copy holds.
+- **Appearance & reading:** open messages in tabs, show previews in the list, and **dark mode for email content** — designed emails stay on a light card so logos and tables read well.
+- **On a message:** Copy link, **Save to Files** (the whole message or an attachment), **Start meeting** with the sender, and Remind me.
+- **Rules:** automatic reply, filters, and blocked and safe senders. **Signatures** are edited in Settings.
+
+Needs the server update (Mail: team notes, snooze and viewers with their migration; Save to Files; attachment names in search; reading preferences). Not yet: automatic attachment download, and showing your access level on a shared mailbox.
+
+---
+
 ## 2026-10-03 — 0.2.97: guest mode in the main window
 
 **Continue as Guest** no longer opens a separate, differently styled window on top of an empty one (#149):

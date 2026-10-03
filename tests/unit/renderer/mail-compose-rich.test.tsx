@@ -261,6 +261,13 @@ function compose(seed: ComposeSeed, extra: Partial<Parameters<typeof Compose>[0]
 }
 
 describe('composing', () => {
+  it("puts a seeded body in the editor as the sender's own words, not a quote, and keeps Bcc", async () => {
+    const { box } = compose({ mode: 'new', to: 'ann@example.org', bcc: 'boss@example.org', body: 'Hello Ann\nSee you at 3' });
+    await waitFor(() => expect(box().innerHTML).toBe('<div>Hello Ann</div><div>See you at 3</div>'));
+    expect(screen.queryByRole('region', { name: 'Quoted email' })).toBeNull();
+    expect(screen.getByText('boss@example.org')).toBeTruthy();
+  });
+
   it('restores a rich draft, and a plain-text one from before as rich text with the quote apart', async () => {
     net.call.mockImplementation(async (ch: string) => (ch === 'offline:getDraft' ? { content: { to: 'pat@example.org', cc: '', bcc: '', subject: 'Re: BOQ', body: `Will do\nTomorrow${QUOTE}`, from: '1' } } : null));
     const { box } = compose({ mode: 'reply', to: 'pat@example.org', subject: 'Re: BOQ', quote: QUOTE, inReplyTo: '<m@x>' });

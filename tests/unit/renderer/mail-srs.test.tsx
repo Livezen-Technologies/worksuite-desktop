@@ -314,7 +314,8 @@ describe('rules and mailto: (MAIL-RUL, UI-DSK-04)', () => {
   });
 
   it('prefills a new message from a mailto: route, keeping only real addresses', () => {
-    expect(composeSeedFromQuery(new URLSearchParams('compose=1&to=a@b.lk, nope&cc=c@d.lk&subject=Hi%0Athere&body=Hello'))).toEqual({ mode: 'new', to: 'a@b.lk', cc: 'c@d.lk', subject: 'Hi there', quote: 'Hello' });
+    // The body is the sender's own text (not a quoted email), and Bcc is kept.
+    expect(composeSeedFromQuery(new URLSearchParams('compose=1&to=a@b.lk, nope&cc=c@d.lk&bcc=e@f.lk&subject=Hi%0Athere&body=Hello'))).toEqual({ mode: 'new', to: 'a@b.lk', cc: 'c@d.lk', bcc: 'e@f.lk', subject: 'Hi there', body: 'Hello' });
     expect(composeSeedFromQuery(new URLSearchParams('compose=1'))).toEqual({ mode: 'new' });
   });
 });

@@ -263,7 +263,10 @@ export interface ComposeSeed {
   mode: 'new' | 'reply' | 'reply_all' | 'forward';
   to?: string;
   cc?: string;
+  bcc?: string;
   subject?: string;
+  /** Text the person is sending as their own words (a mailto: body, a meeting invitation) — not quoted. */
+  body?: string;
   quote?: string;
   inReplyTo?: string;
   mailbox?: string | null;
