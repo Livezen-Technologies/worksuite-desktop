@@ -9,7 +9,7 @@ import { splitQuote } from './quote';
  * The allow-list is formatting only — no scripts, no styles but the
  * email-safe ones (colour, highlight, fonts and sizes, alignment, spacing,
  * borders, a picture's size and float), no event handlers, links only to
- * http(s) and mailto, and the table attributes Outlook reads (`border`,
+ * http(s), mailto and tel, and the table attributes Outlook reads (`border`,
  * `cellpadding`, `width`, `bgcolor`…). Pictures stay: embedded ones (a
  * `data:` PNG, JPEG, GIF or WebP, which the server sends as inline `cid:`
  * parts — worksuite-desktop#188), `cid:` ones and remote http(s) ones; any
@@ -47,7 +47,8 @@ export function safeImageSrc(src: string): string | null {
 
 export function safeHref(href: string): string | null {
   const h = href.trim();
-  return /^(https?:\/\/[^\s<>"]+|mailto:[^\s<>"]+)$/i.test(h) ? h : null;
+  // tel: for a phone number (a signature's, worksuite-desktop#166).
+  return /^(https?:\/\/[^\s<>"]+|mailto:[^\s<>"]+|tel:\+?[\d\s().-]{3,})$/i.test(h) ? h : null;
 }
 
 function safeStyle(style: string): string {
@@ -257,10 +258,23 @@ export function quoteToHtml(quote: string): string {
   return `<div><br></div>${attribution ? `<div>${esc(attribution)}</div>` : ''}<blockquote style="margin: 0 0 0 0.8ex; border-left: 1px solid #cccccc; padding-left: 1ex">${body}</blockquote>`;
 }
 
-/** What is sent: the message and the quote, as HTML and as plain text. */
-export function composeBody(html: string, quote: string): { html: string; text: string } {
-  const own = cleanComposeHtml(html);
+/**
+ * What is sent: the message and the quote, as HTML and as plain text. The
+ * signature sits above the quoted message, or — `below_quote`, an account's
+ * choice (worksuite-desktop#166) — at the very end, below it.
+ */
+export function composeBody(html: string, quote: string, placement: 'above_quote' | 'below_quote' = 'above_quote'): { html: string; text: string } {
   const q = quote.trim() ? quote.replace(/^\s+/, '') : '';
+  if (placement === 'below_quote' && q) {
+    const [mine, sig] = splitSignature(cleanComposeHtml(html));
+    if (sig) {
+      return {
+        html: `${mine}${quoteToHtml(q)}${sig}`,
+        text: [composeText(mine), q, composeText(sig)].filter(Boolean).join('\n\n'),
+      };
+    }
+  }
+  const own = cleanComposeHtml(html);
   return {
     html: `${own}${quoteToHtml(q)}`,
     text: [composeText(own), q].filter(Boolean).join('\n\n'),
@@ -363,4 +377,23 @@ export function pickSignature<S extends { is_default: boolean; mailbox?: number 
   const key = mode === 'new' ? 'default_new' : 'default_reply';
   const box = mailbox ? Number(mailbox) : null;
   return list.find((s) => s[key] && box !== null && s.mailbox === box) ?? list.find((s) => s[key] && (s.mailbox ?? null) === null) ?? list.find((s) => s.is_default) ?? null;
+}
+
+/**
+ * The signature for this account and this kind of message, and where it
+ * goes (worksuite-desktop#166): the account's own choice, else the one for
+ * every account — where a reply can have none — else, on a server without
+ * those choices, the older flags on the signatures (pickSignature).
+ */
+export function chooseSignature<S extends { id: number; is_default: boolean; mailbox?: number | null; default_new?: boolean; default_reply?: boolean }>(
+  list: S[],
+  settings: Array<{ mailbox: number | null; new_id: number | null; reply_id: number | null; placement: 'above_quote' | 'below_quote' }> | undefined,
+  mailbox: string | null,
+  mode: 'new' | 'reply' | 'reply_all' | 'forward',
+): { signature: S | null; placement: 'above_quote' | 'below_quote' } {
+  const box = mailbox ? Number(mailbox) : null;
+  const row = (box !== null ? settings?.find((s) => s.mailbox === box) : undefined) ?? settings?.find((s) => s.mailbox === null);
+  if (!row) return { signature: pickSignature(list, mailbox, mode), placement: 'above_quote' };
+  const id = mode === 'new' ? row.new_id : row.reply_id;
+  return { signature: id === null ? null : (list.find((s) => s.id === id) ?? null), placement: row.placement === 'below_quote' ? 'below_quote' : 'above_quote' };
 }

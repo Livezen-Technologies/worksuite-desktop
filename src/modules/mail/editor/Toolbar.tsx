@@ -68,12 +68,13 @@ export interface ToolRequest {
   n: number;
 }
 
-export function ToolbarRow({ groups, label, size = 'md', className, end, request }: { groups: ToolGroup[]; label: string; size?: 'md' | 'sm'; className?: string; end?: ReactNode; request?: ToolRequest | null }) {
+/** `keep`: which tools show (the signature editor's smaller set, worksuite-desktop#166). */
+export function ToolbarRow({ groups, label, size = 'md', className, end, request, keep }: { groups: ToolGroup[]; label: string; size?: 'md' | 'sm'; className?: string; end?: ReactNode; request?: ToolRequest | null; keep?: (id: string) => boolean }) {
   const row = useRef<HTMLDivElement>(null);
   const anchor = useRef<HTMLElement | null>(null);
   const moreBtn = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState<string | null>(null);
-  const shown = groups.map((g) => ({ ...g, items: g.items.filter(Boolean) })).filter((g) => g.items.length);
+  const shown = groups.map((g) => ({ ...g, items: g.items.filter((i) => i && (!keep || keep(i.id))) })).filter((g) => g.items.length);
   // The row as a flat list: dividers between groups count as items.
   const flat: Array<{ key: string; group: ToolGroup; item?: ToolItem }> = [];
   shown.forEach((g, i) => {

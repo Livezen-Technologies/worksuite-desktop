@@ -12,14 +12,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * became attachments), and the Send split control.
  */
 
-const net = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), request: vi.fn(), call: vi.fn(), toast: vi.fn(), send: vi.fn(), ai: null as null | { input: () => string; actions: Array<{ run: (t: string) => void }> }, sigs: [] as Array<{ id: number; name: string; html: string; is_default: boolean; mailbox?: number | null; default_new?: boolean; default_reply?: boolean }>, parts: [] as Array<{ id: number; name: string; html: string; org: boolean }> }));
+const net = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), request: vi.fn(), call: vi.fn(), toast: vi.fn(), send: vi.fn(), ai: null as null | { input: () => string; actions: Array<{ run: (t: string) => void }> }, sigs: [] as Array<{ id: number; name: string; html: string; is_default: boolean; mailbox?: number | null; default_new?: boolean; default_reply?: boolean; image_mode?: 'hosted' | 'embedded'; embedded?: Record<string, string> }>, sigExtra: {} as Record<string, unknown>, parts: [] as Array<{ id: number; name: string; html: string; org: boolean }> }));
 vi.mock('../../../src/core/api', () => ({ apiGet: net.get, apiPost: net.post, request: net.request, apiUrl: (s: string) => s }));
 vi.mock('../../../src/core/bridge', () => ({ call: net.call, errorMessage: (e: Error) => e.message }));
 vi.mock('../../../src/core/toasts', () => ({ toast: net.toast }));
 vi.mock('../../../src/modules/mail/api', () => ({
   sendMessage: net.send,
   useTemplates: () => ({ data: { templates: [] }, isLoading: false }),
-  useSignatures: () => ({ data: { signatures: net.sigs } }),
+  useSignatures: () => ({ data: { signatures: net.sigs, ...net.sigExtra } }),
   useQuickParts: () => ({ data: net.parts }),
 }));
 // Pictures are decoded and made smaller with the browser's canvas, which jsdom does not have.
@@ -59,6 +59,7 @@ beforeEach(() => {
   net.send.mockReset().mockResolvedValue('sent');
   net.ai = null;
   net.sigs = [];
+  net.sigExtra = {};
   net.parts = [];
   exec = vi.fn((cmd: string, _ui: boolean, value?: string) => {
     const box = document.querySelector<HTMLElement>('[contenteditable]');
@@ -498,5 +499,66 @@ describe('@mentions (DMO-CMP-14)', () => {
     });
     await new Promise((r) => setTimeout(r, 250));
     expect(net.get).not.toHaveBeenCalledWith('/api/contacts/lookup', expect.anything(), expect.anything());
+  });
+});
+
+describe('signatures in the composer (worksuite-desktop#166)', () => {
+  const TWO = [
+    { id: 1, email: 'me@example.test', display_name: 'Me', is_default: true, colour: 'blue' },
+    { id: 2, email: 'sales@example.test', display_name: 'Sales', is_default: false, colour: 'teal' },
+  ] as unknown as Mailbox[];
+
+  it('fills the fields for the From account, and changing From switches the signature', async () => {
+    net.sigs = [
+      { id: 1, name: 'Mine', html: '<div>{name}</div><div><a href="mailto:{email}">{email}</a></div><div>{mobile}</div>', is_default: true },
+      { id: 2, name: 'Sales', html: '<div>{name} · Sales desk</div><div>{email}</div>', is_default: false },
+    ];
+    net.sigExtra = { settings: [{ mailbox: null, new_id: 1, reply_id: 1, placement: 'above_quote' }, { mailbox: 2, new_id: 2, reply_id: null, placement: 'above_quote' }], values: { name: 'Asha Perera', email: 'asha@example.test', mobile: '' } };
+    const { box } = compose({ mode: 'new' }, { boxes: TWO });
+    await waitFor(() => expect(box().innerHTML).toContain('<div>-- </div><div>Asha Perera</div><div><a href="mailto:me@example.test">me@example.test</a></div>'));
+    expect(box().innerHTML).not.toContain('{mobile}');
+    fireEvent.click(screen.getByRole('combobox', { name: 'From' }));
+    fireEvent.click(await screen.findByRole('option', { name: /sales@example.test/ }));
+    await waitFor(() => expect(box().innerHTML).toContain('<div>-- </div><div>Asha Perera · Sales desk</div><div>sales@example.test</div>'));
+    expect(box().innerHTML).not.toContain('me@example.test');
+  });
+
+  it('leaves a signature chosen by hand alone when From changes', async () => {
+    net.sigs = [
+      { id: 1, name: 'Mine', html: '<div>Long one</div>', is_default: true },
+      { id: 2, name: 'Short', html: '<div>Short one</div>', is_default: false },
+    ];
+    net.sigExtra = { settings: [{ mailbox: null, new_id: 1, reply_id: 1, placement: 'above_quote' }, { mailbox: 2, new_id: 1, reply_id: 1, placement: 'above_quote' }], values: {} };
+    const { box } = compose({ mode: 'new' }, { boxes: TWO });
+    await waitFor(() => expect(box().innerHTML).toContain('Long one'));
+    fireEvent.click(screen.getByRole('button', { name: 'Signature' }));
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitemradio', { name: 'Short' }));
+    await waitFor(() => expect(box().innerHTML).toContain('Short one'));
+    fireEvent.click(screen.getByRole('combobox', { name: 'From' }));
+    fireEvent.click(await screen.findByRole('option', { name: /sales@example.test/ }));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'From' }).textContent).toContain('sales@example.test'));
+    expect(box().innerHTML).toContain('Short one');
+  });
+
+  it('goes below the quoted message when the account says so, with its pictures inside in embedded mode', async () => {
+    net.sigs = [{ id: 3, name: 'Reply', html: '<div>Asha</div><img src="https://ws.example/s/t?inline=1" alt="Logo" width="80">', is_default: true, image_mode: 'embedded', embedded: { 'https://ws.example/s/t?inline=1': 'data:image/png;base64,iVBORw0KGgo=' } }];
+    net.sigExtra = { settings: [{ mailbox: null, new_id: null, reply_id: 3, placement: 'below_quote' }], values: {} };
+    const { box } = compose({ mode: 'reply', to: 'pat@example.org', subject: 'Re: BOQ', quote: QUOTE, inReplyTo: '<m@x>' });
+    await waitFor(() => expect(box().innerHTML).toContain('<div>Asha</div>'));
+    fireEvent.click(screen.getByRole('radio', { name: /Tomorrow morning/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send later…' }));
+    await waitFor(() => expect(net.post).toHaveBeenCalled());
+    const sent = net.post.mock.calls.find((c) => c[0] === '/api/mail/send')![1] as { body_html: string; body_text: string };
+    expect(sent.body_html.indexOf('<blockquote')).toBeLessThan(sent.body_html.indexOf('<div>Asha</div>'));
+    expect(sent.body_html).toContain('src="data:image/png;base64,iVBORw0KGgo="');
+    expect(sent.body_text.endsWith('> Thanks\n\n--\nAsha\n[Logo]')).toBe(true);
+  });
+
+  it('writes no signature on a new message when the account’s choice for new mail is none', async () => {
+    net.sigs = [{ id: 3, name: 'Reply', html: '<div>Asha</div>', is_default: true }];
+    net.sigExtra = { settings: [{ mailbox: null, new_id: null, reply_id: 3, placement: 'above_quote' }], values: {} };
+    const { box } = compose({ mode: 'new' });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(box().innerHTML).not.toContain('Asha');
   });
 });

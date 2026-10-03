@@ -4,7 +4,7 @@ import { call } from '../../core/bridge';
 import { text } from '../../core/i18n';
 import type { OfflineMutation } from '@shared/types';
 import { queueKey, type QueuedAction } from './model';
-import type { Folder, Label, LocalMailbox, MailPrefs, Mailbox, MessageContext, MessageRef, OutboxRow, Signature, SyncStatus, Template, ViewCounts } from './types';
+import type { Folder, Label, LocalMailbox, MailPrefs, Mailbox, MessageContext, MessageRef, OutboxRow, SignaturesData, SyncStatus, Template, ViewCounts } from './types';
 
 /**
  * Mail's server calls. Reads go through the API proxy, which answers from the
@@ -161,7 +161,7 @@ export function useQuickParts(enabled: boolean) {
 }
 
 export function useSignatures(enabled: boolean) {
-  return useQuery({ queryKey: ['mail', 'signatures'], queryFn: () => apiGet<{ signatures: Signature[] }>('/api/mail/signatures'), enabled, staleTime: 5 * 60_000 });
+  return useQuery({ queryKey: ['mail', 'signatures'], queryFn: () => apiGet<SignaturesData>('/api/mail/signatures'), enabled, staleTime: 5 * 60_000 });
 }
 
 export function useLocalMailboxes(enabled: boolean) {
