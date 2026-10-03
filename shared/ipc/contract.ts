@@ -162,7 +162,7 @@ export const preferencesPatchSchema = z
     mailtoHandler: z.boolean(),
     links: z.object({ openInApp: z.boolean(), mailLinks: z.enum(['new-tab', 'current-tab']), confirmActions: z.boolean() }).partial(),
     mailCacheDaysByMailbox: z.record(z.string().regex(/^\d{1,12}$/), z.union([z.literal(7), z.literal(30), z.literal(90), z.literal(0)])).refine((r) => Object.keys(r).length <= 200),
-    mailFolderOffline: z.record(z.string().regex(/^(\d{1,12}|local):[A-Za-z0-9._\-/ :]{1,128}$/), z.enum(['recent', 'headers', 'online'])).refine((r) => Object.keys(r).length <= 500),
+    mailFolderOffline: z.record(z.string().regex(/^(\d{1,12}|local):[A-Za-z0-9._\-/ :]{1,128}$/), z.enum(['all', 'recent', 'headers', 'online'])).refine((r) => Object.keys(r).length <= 500),
     mailAlerts: z.enum(['all', 'focused', 'vip', 'none']),
     mailVipBreakthrough: z.boolean(),
     highContrast: z.boolean(),
@@ -1061,6 +1061,15 @@ export const contract = {
   'offline:clearModule': ch(z.object({ module: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/) }), { session: true, sensitive: true, rate: 1 }),
   /** What Mail keeps on this computer, by kind and by mailbox (Settings › Mail). */
   'offline:mailStats': ch(none, { session: true }),
+  /**
+   * Mail's saved answers for these GET paths, read from this computer without asking the server: the page shows
+   * them at once and refreshes from the server behind them (worksuite-desktop#162). Null where nothing is saved.
+   */
+  'offline:peek': ch(z.strictObject({ paths: z.array(z.string().regex(/^\/api\/mail\/[A-Za-z0-9/_\-.,:@~]*(\?[^\s]*)?$/).max(2048)).min(1).max(12) }), { session: true, rate: 60 }),
+  /** Remove one mailbox's saved mail from this computer (the mailbox was removed from the account). */
+  'offline:clearMailbox': ch(z.strictObject({ mailbox: z.string().regex(/^\d{1,12}$/) }), { session: true, sensitive: true, rate: 5 }),
+  /** Mail search over what this computer keeps (lists and opened messages), for when the server cannot be reached. */
+  'offline:mailSearch': ch(z.strictObject({ q: z.string().min(1).max(200) }), { session: true, rate: 30 }),
   // Mail data files (ENH-MAIL-03 DMO-DAT-01…04): the main process picks, the worker reads, the server receives.
   'mailfile:pick': ch(z.strictObject({ mode: z.enum(['file', 'folder', 'view']) }), { session: true, rate: 2 }),
   'mailfile:scan': ch(z.strictObject({ handle: mailFileHandle }), { session: true, rate: 5 }),
@@ -1509,6 +1518,9 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'offline:moduleBytes': number;
   'offline:clearModule': number;
   'offline:mailStats': MailStoreStats;
+  'offline:peek': Array<{ body: string; cachedAt: string } | null>;
+  'offline:clearMailbox': number;
+  'offline:mailSearch': Array<Record<string, unknown>>;
   'mailfile:pick': MailFileHandle | null;
   'mailfile:scan': { folders: DataFolder[]; unreadable: string[] };
   'mailfile:import': ImportProgress;

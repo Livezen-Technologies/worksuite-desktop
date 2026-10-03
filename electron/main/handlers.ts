@@ -903,6 +903,17 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('offline:moduleBytes', (input) => ctx.cache.moduleBytes(uid(), input.module));
   router.handle('offline:clearModule', (input) => ctx.cache.clearModule(uid(), input.module));
   router.handle('offline:mailStats', () => ({ ...ctx.cache.mailStats(uid()), limitBytes: (ctx.session.current()?.policy?.offline_storage_max_mb ?? 2048) * 1024 * 1024 }));
+  // Cached first (worksuite-desktop#162): Mail's saved answers, read without the network; the page refreshes behind them.
+  router.handle('offline:peek', (input) => {
+    if (!canOpenApp('mail', ctx.session.visibleApps())) return input.paths.map(() => null);
+    return input.paths.map((path) => {
+      if (path.includes('..') || path.includes('//')) return null;
+      const hit = ctx.cache.get(uid(), path);
+      return hit && hit.status === 200 ? { body: hit.body, cachedAt: hit.cachedAt } : null;
+    });
+  });
+  router.handle('offline:clearMailbox', (input) => ctx.cache.clearMailbox(uid(), input.mailbox));
+  router.handle('offline:mailSearch', (input) => (canOpenApp('mail', ctx.session.visibleApps()) ? ctx.cache.mailSearch(uid(), input.q) : []));
   router.handle('offline:submit', (input) => ctx.queue.submit(uid(), input));
   router.handle('offline:retry', async (input) => {
     ctx.queue.retry(uid(), input.id);
