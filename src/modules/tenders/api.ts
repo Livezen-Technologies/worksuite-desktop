@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, apiGet, apiPost, apiPut } from '../../core/api';
 import { currentZone, parseTs, wallToUtc } from '../../core/time';
+import { toBidCost, toExpenseHistory, type BidCostSummary, type ExpenseHistoryLine } from './bidcost';
 
 /**
  * Tenders (the server's `/api/tenders` and `/api/tender`): the bids a company
@@ -431,6 +432,10 @@ export interface Workspace {
   /** What this reader may do with the tender's documents (and the files on its checklist). */
   can: DocAccess;
   budget: Budget;
+  /** What chasing the bid has cost, as this reader may see it; null from a server that does not say. */
+  bid_cost: BidCostSummary | null;
+  /** The expense lines of the history: added, linked, unlinked, refunded. */
+  expense_history: ExpenseHistoryLine[];
 }
 
 export interface DocAccess {
@@ -499,6 +504,8 @@ export async function fetchTender(id: number, signal?: AbortSignal): Promise<Wor
     documents: arr<TenderDoc>(d.documents),
     can: { view: false, download: false, upload: false, edit: false, delete: false, ...((d.attachments as { can?: Partial<DocAccess> } | undefined)?.can ?? {}) },
     budget: budgetOf(d.budget),
+    bid_cost: toBidCost(d.bid_cost),
+    expense_history: toExpenseHistory(d.expense_history),
   };
 }
 

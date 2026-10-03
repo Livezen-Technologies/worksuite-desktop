@@ -116,6 +116,8 @@ export interface ClaimFilters {
   from?: string;
   to?: string;
   flagged?: boolean;
+  /** Only the claims linked to this tender. */
+  tender_id?: string;
 }
 
 export interface ClaimPage {
@@ -148,7 +150,7 @@ export function toPage(r: Raw, page: number): ClaimPage {
 export const fetchClaims = (org: string, scope: ClaimScope, f: ClaimFilters, page: number, signal?: AbortSignal) =>
   apiGet<Raw>(
     '/api/expense/claims2',
-    { scope, org, page, per_page: PER_PAGE, q: f.q, status: f.status, category_id: f.category_id, from: f.from, to: f.to, flagged: f.flagged ? 1 : undefined },
+    { scope, org, page, per_page: PER_PAGE, q: f.q, status: f.status, category_id: f.category_id, from: f.from, to: f.to, flagged: f.flagged ? 1 : undefined, tender_id: f.tender_id || undefined },
     signal,
   ).then((r) => toPage(r ?? {}, page));
 
@@ -295,6 +297,28 @@ export interface ActivityRow {
   actor: string | null;
 }
 
+export interface Linked {
+  type: string;
+  id: number;
+  label: string | null;
+  reference: string | null;
+}
+
+export const LINKED_WORD: Record<string, string> = { tender: 'Tender', project: 'Project', client: 'Customer' };
+
+export function toLinked(v: unknown): Linked | null {
+  const l = v as Raw | null | undefined;
+  if (!l || typeof l !== 'object') return null;
+  const id = idOf(l.id);
+  return id === null ? null : { type: String(l.type ?? ''), id, label: str(l.label), reference: str(l.reference) };
+}
+
+/** "Tender: Road resurfacing (RFQ/7)" — what a claim is linked to, in words. */
+export function linkedLine(l: Linked): string {
+  const name = l.label ?? `#${l.id}`;
+  return `${LINKED_WORD[l.type] ?? l.type}: ${name}${l.reference ? ` (${l.reference})` : ''}`;
+}
+
 export interface ClaimDetail extends ClaimRow {
   org_id: number | null;
   organization: string | null;
@@ -305,6 +329,12 @@ export interface ClaimDetail extends ClaimRow {
   branch: string | null;
   cost_centre_code: string | null;
   subscription_id: number | null;
+  /** What it is "Linked to" — a tender, a project or a customer — with the record's name where it can be read. */
+  linked: Linked | null;
+  /** Money meant to come back (a bid bond), and whether it has. */
+  refundable: boolean;
+  refunded_at: string | null;
+  refunded_by: string | null;
   /** The attached receipt's row, which also busts the image cache when it is replaced. */
   receipt_id: number | null;
   revision: number;
@@ -354,6 +384,10 @@ export function toDetail(r: Raw): ClaimDetail {
     branch: str(r.branch),
     cost_centre_code: str(r.cost_centre_code),
     subscription_id: idOf(r.subscription_id),
+    linked: toLinked(r.linked),
+    refundable: flag(r.refundable),
+    refunded_at: str(r.refunded_at),
+    refunded_by: str(r.refunded_by_name),
     receipt_id: idOf(r.receipt_file_id),
     revision: idOf(r.revision) ?? 1,
     receipt: rec ? { name: String(rec.name ?? 'receipt'), mime: String(rec.mime ?? ''), size: Number(rec.size ?? 0) || 0, previewable: flag(rec.previewable), is_image: flag(rec.is_image) } : null,

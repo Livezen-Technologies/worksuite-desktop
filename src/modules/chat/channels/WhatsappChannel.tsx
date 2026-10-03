@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useCanOpen } from '../../../core/access';
-import { call, errorMessage } from '../../../core/bridge';
+import { call, errorMessage, isMac } from '../../../core/bridge';
 import { navigate } from '../../../core/tabs';
 import { usePhoneIndex, type PhoneIndex } from '../../contacts/phones';
 import type { ReplyTarget } from '../Thread';
@@ -10,7 +10,8 @@ import { Checkbox } from '../../../components/Checkbox';
 import { Composer } from '../Composer';
 import { text as l10n } from '../../../core/i18n';
 import { useTab, useTabTitle } from '../../../core/tab-context';
-import { dateLabel, dayKey, listStamp, parseTs, timeLabel, todayInZone } from '../../../core/time';
+import { conversationStamp, dateLabel, dayKey, parseTs, timeLabel, todayInZone } from '../../../core/time';
+import { useStore } from '../../../core/store';
 import { toast } from '../../../core/toasts';
 import { Icon } from '../../../components/Icon';
 import { ResizeDivider, useResizableWidth } from '../../../components/ResizeDivider';
@@ -20,36 +21,40 @@ import { Button, Empty, ErrorNote, Modal, Spinner, cx } from '../../../component
 import { openChatAttachment, previewKind, type Attachment } from '../AttachmentViewer';
 import { mediaUrl } from '../types';
 import { ConversationMenu } from '../ConversationMenu';
-import { LIST_WIDTH, rememberWhatsapp } from './channels';
+import { LIST_WIDTH, badgeText, rememberWhatsapp } from './channels';
+import { LinkPhone } from './LinkPhone';
 import { fullName, previewParts, whoIs, whoSent, withMentionNames, type WaWho } from './wa-names';
 import { AddToContacts, ContactPanel, LinkToContact, WaAvatar, contactRoute, waContactMenuItems } from './WaContact';
 import {
-  fileRefusal, isConnected, isConnecting, messageText, readWa, sendWa, sendWaFiles, sendWaTemplate, startWa, useWaChats, useWaSettings, useWaTemplates, useWaThread, waAttachment, waLimits, WA_SCOPES,
+  fileRefusal, isConnected, isConnecting, messageText, readWa, sendWa, sendWaFiles, sendWaTemplate, startWa, useWaChats, useWaSettings, useWaTemplates, useWaThread, waAttachment, waLimits, waNumber, WA_SCOPES,
   type WaAccount, type WaChat, type WaMessage, type WaScope, type WaTemplate,
 } from './whatsapp';
 
 /**
  * WhatsApp in Chat (worksuite-desktop#33, #35): the conversations on the numbers shared with this person in the list,
  * the chosen one beside it, answered from here — text, files and, once the 24-hour window has closed, an approved
- * template. A number that is not connected says so above the list, with the way to link it again for whoever may;
- * the gear opens the channel's settings. `?to=<number>` (Contacts, the web's links) starts a conversation with it.
+ * template. A number that is not connected says so above the list, with the way to link it again for whoever may —
+ * its QR code opens in the pane beside the list (#155) — and its conversations are dimmed until it is; the gear opens
+ * the channel's settings. `?to=<number>` (Contacts, the web's links) starts a conversation with it, and `?new=1`
+ * (⌘N / Ctrl+N) asks for the number first.
  */
-export function WhatsappChannel({ accounts, loading, error, retry, onConnect, onRelink, onSettings }: {
+export function WhatsappChannel({ accounts, loading, error, retry, onConnect, onSettings }: {
   accounts: WaAccount[];
   loading: boolean;
   error: unknown;
   retry: () => void;
   onConnect: (() => void) | null;
-  onRelink: (a: WaAccount) => void;
   onSettings?: () => void;
 }) {
   const { query, go } = useTab();
   const selected = query.get('wa');
   const to = query.get('to');
+  const fresh = query.get('new') === '1';
   const [starting, setStarting] = useState(false);
-  // The conversation menu at the mouse (worksuite-desktop#183).
   const senders = accounts.filter((a) => a.can_send !== false && isConnected(a));
-  const [account, setAccount] = useState(0);
+  // The number chosen on the channel rail or in the header (#155); one no longer shared reads as all of them.
+  const chosen = useStore(waNumber, (s) => s.id);
+  const account = accounts.some((a) => a.id === chosen) ? chosen : 0;
   const [scope, setScope] = useState<WaScope>('all');
   const [q, setQ] = useState('');
   const chats = useWaChats({ account, scope, q }, accounts.length > 0);
@@ -58,13 +63,32 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
   const index = usePhoneIndex(useCanOpen('contacts') && accounts.length > 0).data;
   const [picks, pick] = usePicks();
   const [action, setAction] = useState<{ kind: 'add' | 'link'; who: WaWho } | null>(null);
+  // The conversation menu at the mouse (worksuite-desktop#183).
   const [menu, setMenu] = useState<{ who: WaWho; c: WaChat; x: number; y: number } | null>(null);
+  // The number whose QR code is open beside the list (#155).
+  const [linking, setLinking] = useState<WaAccount | null>(null);
   const current = rows.find((c) => String(c.id) === selected);
   useTabTitle(current ? `WhatsApp · ${fullName(whoIs(current, index, picks[current.id]))}` : selected ? null : 'WhatsApp');
   const list = useResizableWidth('chat.list', LIST_WIDTH);
   const down = accounts.filter((a) => !isConnected(a));
+  const byId = new Map(accounts.map((a) => [a.id, a]));
 
   useEffect(() => rememberWhatsapp(selected), [selected]);
+
+  // ⌘N / Ctrl+N in WhatsApp starts a WhatsApp conversation (`?new=1`); closing it leaves the route as it was. With no
+  // number that can send, there is nothing to start and the request is simply dropped.
+  const canStart = senders.length > 0;
+  const withoutNew = () => {
+    const rest = new URLSearchParams(query);
+    rest.delete('new');
+    return `/chat?${rest.toString()}`;
+  };
+  useEffect(() => {
+    if (!fresh || loading || canStart) return;
+    const rest = new URLSearchParams(query);
+    rest.delete('new');
+    go(`/chat?${rest.toString()}`);
+  }, [fresh, loading, canStart, query, go]);
 
   const body = loading ? (
     <Spinner />
@@ -80,7 +104,7 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
   ) : (
     <>
       {down.map((a) => (
-        <div key={a.id} role="status" className="mx-3 mb-2 flex items-start gap-2 rounded-[8px] bg-warning-bg p-2.5 text-[12px] text-[#9A4A06] dark:text-warning">
+        <div key={a.id} role="status" className="mx-3 mb-2 flex items-start gap-2 rounded-[8px] bg-warning-bg p-2.5 text-[12px] text-warning-ink">
           <Icon name="wifi-off" size={14} className="mt-px shrink-0" />
           <span className="min-w-0 flex-1">
             {isConnecting(a) ? (
@@ -89,24 +113,40 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
               <><b className="font-semibold">{a.name} is not connected.</b> {a.status_note ?? 'Messages to and from it wait until it is linked again.'}</>
             )}
           </span>
-          {a.provider === 'web_js' && a.can_connect ? (
-            <button type="button" onClick={() => onRelink(a)} className="shrink-0 font-bold underline">Link again</button>
+          {relinkable(a) ? (
+            <Button size="sm" onClick={() => setLinking(a)}>Link again</Button>
           ) : (
-            <button type="button" onClick={() => void call('app:openInBrowser', { path: '/whatsapp' })} className="shrink-0 font-bold underline">Open on the web</button>
+            <Button size="sm" icon="external" onClick={() => void call('app:openInBrowser', { path: '/whatsapp' })}>Open on the web</Button>
           )}
         </div>
       ))}
-      <div className="min-h-0 flex-1 overflow-y-auto pb-2 scroll-thin">
+      <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-1.5 pb-2 scroll-thin">
         {chats.isLoading ? <Spinner /> : chats.error && !chats.data ? <div className="p-4"><ErrorNote error={chats.error} onRetry={() => void chats.refetch()} /></div> : null}
         {chats.isSuccess && !rows.length ? (
           <Empty icon="phone" title={q.trim() ? 'Nothing matches' : scope === 'unread' ? 'Nothing unread' : scope === 'waiting' ? 'Nobody is waiting' : scope === 'mine' ? 'No conversations assigned to you' : 'No WhatsApp conversations yet'} hint={scope === 'all' && !q.trim() ? 'Messages to your numbers appear here.' : undefined} />
         ) : null}
         {rows.map((c) => {
           const who = whoIs(c, index, picks[c.id]);
-          return <ChatRow key={c.id} c={c} who={who} active={String(c.id) === selected} many={accounts.length > 1 && !account} onOpen={() => go(`/chat?channel=whatsapp&wa=${c.id}`)} onMenu={(x, y) => setMenu({ who, c, x, y })} />;
+          const on = byId.get(c.account_id);
+          // A conversation on a number that is down cannot be answered until it is up again: dimmed, and said why.
+          const blocked = on && !isConnected(on) ? `Can’t reply until ${on.name} is ${isConnecting(on) ? 'connected' : 'linked'}.` : null;
+          return <ChatRow key={c.id} c={c} who={who} active={String(c.id) === selected} many={accounts.length > 1 && !account} blocked={blocked} onOpen={() => go(`/chat?channel=whatsapp&wa=${c.id}`)} onMenu={(x, y) => setMenu({ who, c, x, y })} />;
         })}
       </div>
     </>
+  );
+
+  // Beside the list: the QR code being scanned, the conversation, or — with nothing open — a number to link again,
+  // else where to start.
+  const idle = !selected ? down.find((a) => relinkable(a) && !isConnecting(a)) : undefined;
+  const pane = linking ? (
+    <LinkPane key={linking.id} account={linking} onDone={() => setLinking(null)} />
+  ) : selected ? (
+    <WhatsappThread key={selected} id={selected} onRelink={(a) => (relinkable(a) ? setLinking(a) : void call('app:openInBrowser', { path: '/whatsapp' }))} index={index} picked={picks[Number(selected)] ?? null} onPick={(c) => pick(Number(selected), c)} onAction={(kind, who) => setAction({ kind, who })} />
+  ) : idle ? (
+    <ReconnectCard account={idle} onLink={() => setLinking(idle)} />
+  ) : (
+    <PickCard canStart={canStart} hasNumbers={accounts.length > 0} />
   );
 
   return (
@@ -118,18 +158,18 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
             <div className="flex items-center gap-2">
               <b className="flex-1 truncate text-[15px] text-ink">WhatsApp</b>{chats.isFetching && chats.data ? <span role="status" className="text-[11px] text-ink-3">Updating…</span> : null}
               {accounts.length > 1 ? (
-                <Select aria-label="Number" value={account} onChange={(e) => setAccount(Number(e.target.value))} className="h-7 max-w-[150px] rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink">
+                <Select aria-label="Number" value={account} onChange={(e) => waNumber.set({ id: Number(e.target.value) })} className="h-7 max-w-[150px] rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink">
                   <option value={0}>All numbers</option>
                   {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </Select>
               ) : null}
               {onSettings ? (
-                <button type="button" aria-label={l10n('WhatsApp settings')} title={l10n('WhatsApp settings')} onClick={onSettings} className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-line text-ink-2 hover:bg-subtle">
+                <button type="button" aria-label={l10n('WhatsApp settings')} title={l10n('WhatsApp settings')} onClick={onSettings} className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-line text-ink-2 outline-none hover:bg-subtle focus-visible:ring-2 focus-visible:ring-primary">
                   <Icon name="settings" size={15} />
                 </button>
               ) : null}
-              {senders.length ? (
-                <button type="button" aria-label={l10n('New WhatsApp conversation')} title={l10n('New WhatsApp conversation')} onClick={() => setStarting(true)} className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-primary text-white hover:bg-primary-hover">
+              {canStart ? (
+                <button type="button" aria-label={l10n('New WhatsApp conversation')} title={`${l10n('New WhatsApp conversation')} (${NEW_KEY})`} onClick={() => setStarting(true)} className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-primary text-white outline-none hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1">
                   <Icon name="plus" size={17} />
                 </button>
               ) : null}
@@ -142,7 +182,7 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
                 </label>
                 <div role="tablist" aria-label="Show" className="flex gap-1 text-[12px] font-semibold">
                   {WA_SCOPES.map((s) => (
-                    <button key={s.id} type="button" role="tab" aria-selected={scope === s.id} onClick={() => setScope(s.id)} className={cx('shrink-0 rounded-full px-2.5 py-1', scope === s.id ? 'bg-ink text-surface' : 'border border-line text-ink hover:bg-subtle')}>
+                    <button key={s.id} type="button" role="tab" aria-selected={scope === s.id} onClick={() => setScope(s.id)} className={cx('shrink-0 rounded-full px-2.5 py-1 outline-none focus-visible:ring-2 focus-visible:ring-primary', scope === s.id ? 'bg-ink text-surface' : 'border border-line text-ink hover:bg-subtle')}>
                       {s.label}
                     </button>
                   ))}
@@ -153,9 +193,7 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
           {body}
         </aside>
       </SidePanel>
-      <div className="flex min-w-0 flex-1 bg-ground">
-        {selected ? <WhatsappThread key={selected} id={selected} onRelink={onRelink} index={index} picked={picks[Number(selected)] ?? null} onPick={(c) => pick(Number(selected), c)} onAction={(kind, who) => setAction({ kind, who })} /> : <Empty icon="phone" title="Pick a conversation" hint={accounts.length ? 'Your WhatsApp conversations are in the list.' : undefined} />}
-      </div>
+      <div className="flex min-w-0 flex-1 bg-ground">{pane}</div>
       {menu ? (
         <ConversationMenu
           x={menu.x}
@@ -166,13 +204,14 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
       ) : null}
       {action?.kind === 'add' ? <AddToContacts who={action.who} onClose={() => setAction(null)} /> : null}
       {action?.kind === 'link' ? <LinkToContact who={action.who} onClose={() => setAction(null)} /> : null}
-      {(starting || (to && !selected)) && !loading ? (
+      {(starting || (fresh && canStart) || (to && !selected)) && !loading ? (
         <StartConversation
           accounts={senders}
-          phone={starting ? '' : (to ?? '')}
+          phone={starting || fresh ? '' : (to ?? '')}
           onClose={() => {
             setStarting(false);
             if (to) go('/chat?channel=whatsapp');
+            else if (fresh) go(withoutNew());
           }}
           onStarted={(id) => {
             setStarting(false);
@@ -181,6 +220,65 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
         />
       ) : null}
     </div>
+  );
+}
+
+/** A number this app can link again by QR code, for somebody who may: a WhatsApp Web number. */
+const relinkable = (a: Pick<WaAccount, 'provider' | 'can_connect'>) => a.provider === 'web_js' && a.can_connect !== false;
+
+/** The shortcut that starts a conversation, as this computer writes it. */
+const NEW_KEY = isMac ? '⌘N' : 'Ctrl+N';
+
+/** Nothing open: a light card, and how to start a conversation when one can be started. */
+function PickCard({ canStart, hasNumbers }: { canStart: boolean; hasNumbers: boolean }) {
+  return (
+    <div className="flex flex-1 items-center justify-center p-6">
+      <div className="flex max-w-[320px] flex-col items-center gap-2 rounded-[12px] border border-line/70 bg-surface/60 px-8 py-7 text-center">
+        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-subtle text-ink-3"><Icon name="phone" size={18} /></span>
+        <b className="text-[14px] font-semibold text-ink">Pick a conversation</b>
+        {canStart ? (
+          <span className="text-[12.5px] text-ink-3">Press <kbd className="rounded-[4px] border border-line bg-surface px-1 font-sans text-[11.5px] text-ink-2">{NEW_KEY}</kbd> to start a new chat.</span>
+        ) : hasNumbers ? (
+          <span className="text-[12.5px] text-ink-3">Your WhatsApp conversations are in the list.</span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/** Nothing open and a number is down: linking it again is the thing to do, said where the conversation would be. */
+function ReconnectCard({ account, onLink }: { account: WaAccount; onLink: () => void }) {
+  return (
+    <section aria-label={`Reconnect ${account.name}`} className="flex flex-1 items-center justify-center p-6">
+      <div className="flex max-w-[360px] flex-col items-center gap-2.5 rounded-[12px] border border-line bg-surface px-8 py-7 text-center">
+        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-warning-bg text-warning-ink"><Icon name="wifi-off" size={18} /></span>
+        <b className="text-[14px] font-semibold text-ink">{account.name} is not connected</b>
+        <span className="text-[12.5px] text-ink-3">{account.status_note ?? 'Scan a QR code with the phone that owns the number to link it again.'}</span>
+        <Button variant="primary" size="sm" icon="link" onClick={onLink}>Show the QR code</Button>
+      </div>
+    </section>
+  );
+}
+
+/** A number's QR code beside the list (#155): once scanned the number is up, and the pane goes back to what it showed. */
+function LinkPane({ account, onDone }: { account: WaAccount; onDone: () => void }) {
+  return (
+    <section aria-label={`Link ${account.name}`} className="flex min-w-0 flex-1 flex-col overflow-y-auto scroll-thin">
+      <header className="flex items-center gap-2.5 border-b border-line bg-surface px-4 py-2.5">
+        <Icon name="link" size={16} className="text-ink-3" />
+        <b className="min-w-0 flex-1 truncate text-[14px] text-ink">Link {account.name} to WhatsApp</b>
+        <Button size="sm" onClick={onDone}>{l10n('Cancel')}</Button>
+      </header>
+      <div className="mx-auto w-full max-w-[420px] p-6">
+        <LinkPhone
+          accountId={account.id}
+          onLinked={() => {
+            toast('success', `${account.name} is connected.`);
+            onDone();
+          }}
+        />
+      </div>
+    </section>
   );
 }
 
@@ -271,11 +369,18 @@ function usePicks(): [Record<number, number>, (chat: number, contact: number) =>
 
 const PICKS = 'ws.chat.whatsapp.picks';
 
-function ChatRow({ c, who, active, many, onOpen, onMenu }: { c: WaChat; who: WaWho; active: boolean; many: boolean; onOpen: () => void; onMenu: (x: number, y: number) => void }) {
+/**
+ * A conversation in the list (#155): its picture, the name and the last message, and in one right-hand column on
+ * every row the time with, under it, the unread count — or, with nothing unread, a soft "Waiting" pill; with both, the
+ * count and a small waiting dot whose tooltip says how long. The number it is on leads the preview only while all
+ * numbers are shown. A row on a number that is down is dimmed, its tooltip saying why.
+ */
+function ChatRow({ c, who, active, many, blocked, onOpen, onMenu }: { c: WaChat; who: WaWho; active: boolean; many: boolean; blocked: string | null; onOpen: () => void; onMenu: (x: number, y: number) => void }) {
   const waiting = c.waiting_minutes !== null && c.status !== 'resolved';
+  const waitingFor = waiting ? `Waiting ${waitedFor(c.waiting_minutes ?? 0)}${c.overdue ? ' · overdue' : ''}` : '';
   const p = previewParts(c);
   // A photo reads as a picture and its caption, not the word "Photo" (#176).
-  const lead = `${many ? `${c.account_name} · ` : ''}${c.is_muted ? 'Muted · ' : ''}${p.you ? 'You: ' : ''}`;
+  const lead = `${c.is_muted ? 'Muted · ' : ''}${p.you ? 'You: ' : ''}`;
   return (
     <button
       type="button"
@@ -284,20 +389,25 @@ function ChatRow({ c, who, active, many, onOpen, onMenu }: { c: WaChat; who: WaW
         e.preventDefault();
         onMenu(e.clientX, e.clientY);
       }}
+      title={blocked ?? undefined}
       aria-current={active ? 'true' : undefined}
-      className={cx('flex w-full items-center gap-2.5 px-3.5 py-[7px] text-left', active ? 'bg-selection' : 'hover:bg-subtle')}
+      data-blocked={blocked ? 'true' : undefined}
+      className={cx(
+        'flex min-h-[64px] w-full shrink-0 items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset',
+        active ? 'bg-selection shadow-[inset_3px_0_0_var(--color-primary)]' : 'hover:bg-subtle',
+        blocked && 'opacity-60',
+      )}
     >
-      <WaAvatar who={who} size={34} />
-      <span className="min-w-0 flex-1">
-        <span className="flex items-baseline gap-1.5">
-          <span className="flex min-w-0 flex-1 items-baseline gap-1 truncate">
-            <b className={cx('truncate text-[13px] text-ink', !c.unread && 'font-semibold')}>{who.name}</b>
-            {who.source === 'contact' && who.subtitle ? <span className="truncate text-[11.5px] text-ink-3">· {who.subtitle}</span> : null}
-            {who.candidates.length > 1 ? <span title={who.candidates.map((x) => x.name).join(', ')} className="shrink-0 rounded-full bg-subtle px-1.5 text-[10.5px] font-semibold text-ink-2">{who.candidates.length} contacts</span> : null}
-          </span>
-          <span className="shrink-0 text-[11px] text-ink-3">{c.last_message_at ? listStamp(c.last_message_at) : ''}</span>
+      <WaAvatar who={who} size={40} />
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="flex min-w-0 items-center gap-1">
+          {who.group ? <Icon name="users" size={12} className="shrink-0 text-ink-3" label="Group" /> : null}
+          <b className={cx('truncate text-[13px] text-ink', !c.unread && 'font-semibold')}>{who.name}</b>
+          {who.source === 'contact' && who.subtitle ? <span className="truncate text-[11.5px] text-ink-3">· {who.subtitle}</span> : null}
+          {who.candidates.length > 1 ? <span title={who.candidates.map((x) => x.name).join(', ')} className="shrink-0 rounded-full bg-subtle px-1.5 text-[10.5px] font-semibold text-ink-2">{who.candidates.length} contacts</span> : null}
         </span>
         <span className="flex min-w-0 items-center gap-1 text-[12px] text-ink-3">
+          {many ? <span data-channel className="shrink-0 font-semibold text-ink-2">{c.account_name} ·</span> : null}
           {p.icon ? (
             <>
               {lead ? <span className="shrink-0">{lead}</span> : null}
@@ -309,13 +419,26 @@ function ChatRow({ c, who, active, many, onOpen, onMenu }: { c: WaChat; who: WaW
           )}
         </span>
       </span>
-      {c.unread ? (
-        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10.5px] font-bold text-white">{c.unread}</span>
-      ) : waiting ? (
-        <span className={cx('rounded-full px-1.5 text-[10.5px] font-bold text-white', c.overdue ? 'bg-danger' : 'bg-badge')}>Waiting</span>
-      ) : null}
+      <span data-meta className="flex w-[52px] shrink-0 flex-col items-end justify-center gap-1 self-stretch">
+        <span className={cx('text-[11px] whitespace-nowrap', c.unread ? 'font-semibold text-primary' : 'text-ink-3')}>{conversationStamp(c.last_message_at)}</span>
+        <span className="flex h-[18px] items-center gap-1">
+          {c.unread && waiting ? <span data-waiting-dot title={waitingFor} className={cx('h-2 w-2 rounded-full', c.overdue ? 'bg-danger' : 'bg-warning')} /> : null}
+          {c.unread ? (
+            <span data-unread className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1.5 text-[10.5px] font-bold text-white">{badgeText(c.unread)}</span>
+          ) : waiting ? (
+            <span title={waitingFor} className={cx('rounded-full px-1.5 py-px text-[10px] font-semibold', c.overdue ? 'bg-danger-bg text-danger' : 'bg-warning-bg text-warning-ink')}>Waiting</span>
+          ) : null}
+        </span>
+      </span>
     </button>
   );
+}
+
+/** How long somebody has waited, in words: "45 min", "3 h", "2 d". */
+function waitedFor(minutes: number): string {
+  if (minutes < 60) return `${Math.max(1, Math.round(minutes))} min`;
+  if (minutes < 60 * 24) return `${Math.round(minutes / 60)} h`;
+  return `${Math.round(minutes / 60 / 24)} d`;
 }
 
 function WhatsappThread({ id, onRelink, index, picked, onPick, onAction }: { id: string; onRelink: (a: WaAccount) => void; index: PhoneIndex | undefined; picked: number | null; onPick: (contact: number) => void; onAction: (kind: 'add' | 'link', who: WaWho) => void }) {

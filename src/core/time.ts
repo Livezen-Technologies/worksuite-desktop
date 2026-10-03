@@ -155,6 +155,22 @@ export function listStamp(stamp: string | null | undefined): string {
   return d.toLocaleDateString(displayLocale(), opts({ day: 'numeric', month: 'short' }));
 }
 
+/**
+ * A conversation list's stamp (worksuite-desktop#155): the time today, "Yesterday", the weekday within the last
+ * seven days, the date before that — on the reader's calendar.
+ */
+export function conversationStamp(stamp: string | null | undefined, now = new Date()): string {
+  if (!stamp) return '';
+  const d = parseTs(stamp);
+  if (Number.isNaN(d.getTime())) return '';
+  const day = dayKey(d);
+  const today = dayKey(now);
+  if (day === today) return timeLabel(stamp);
+  if (day === addDays(today, -1)) return text('Yesterday');
+  if (day > addDays(today, -7) && day < today) return d.toLocaleDateString(displayLocale(), opts({ weekday: 'short' }));
+  return d.toLocaleDateString(displayLocale(), opts({ day: 'numeric', month: 'short' }));
+}
+
 export function greeting(now = new Date()): string {
   // The hour as a number whatever the time format: a 12-hour setting would make it "10 am", which is no number.
   const h = Number(new Intl.DateTimeFormat('en-GB', { ...opts({ hour: '2-digit' }), hour12: false }).format(now)) % 24;

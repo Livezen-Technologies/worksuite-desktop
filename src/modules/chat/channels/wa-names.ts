@@ -152,7 +152,8 @@ export function previewParts(c: { last_message: string | null; last_direction: '
   const you = c.last_direction === 'out' && raw !== '';
   if (!raw) return { icon: null, text: 'No messages yet', you: false };
   const m = /^(Photo|Video|Voice message|Document|Sticker|Location|Contact card)(?: — (.+))?$/s.exec(raw);
-  if (m) return { icon: MEDIA_NOUNS[m[1]!] ?? null, text: m[2] ?? m[1]!, you };
+  // A voice message reads as people say it (#155): "Voice note".
+  if (m) return { icon: MEDIA_NOUNS[m[1]!] ?? null, text: m[2] ?? (m[1] === 'Voice message' ? 'Voice note' : m[1]!), you };
   return { icon: null, text: raw, you };
 }
 

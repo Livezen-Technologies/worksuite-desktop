@@ -2,19 +2,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../src/core/app-state', () => ({ app: { get: () => ({ apps: [], auth: null }), set: () => undefined, subscribe: () => () => undefined }, updatePrefs: () => undefined }));
-import { gridStep } from '../../../src/app/overlays/Launcher';
+import { gridStep } from '@shared/launcher';
 import { nextScope, readRecentSearches, splitMatch } from '../../../src/app/overlays/SearchOverlay';
 import { appColour, groupLook } from '../../../src/core/app-look';
 import { agoLabel, noteRecentApp, readRecentApps, withRecent } from '../../../src/core/recent-apps';
 
 describe('the app launcher (AppLauncher)', () => {
   it('moves over a six-wide grid with the arrow keys, and stops at the edges', () => {
-    expect(gridStep(0, 'ArrowRight', 20)).toBe(1);
-    expect(gridStep(0, 'ArrowLeft', 20)).toBe(0);
-    expect(gridStep(2, 'ArrowDown', 20)).toBe(8);
-    expect(gridStep(8, 'ArrowUp', 20)).toBe(2);
-    expect(gridStep(17, 'ArrowDown', 20)).toBe(17);
-    expect(gridStep(3, 'Enter', 20)).toBe(3);
+    expect(gridStep(0, 'ArrowRight', 20, 6)).toBe(1);
+    expect(gridStep(0, 'ArrowLeft', 20, 6)).toBe(0);
+    expect(gridStep(2, 'ArrowDown', 20, 6)).toBe(8);
+    expect(gridStep(8, 'ArrowUp', 20, 6)).toBe(2);
+    expect(gridStep(17, 'ArrowDown', 20, 6)).toBe(17);
+    expect(gridStep(3, 'Enter', 20, 6)).toBe(3);
   });
 
   it('remembers the apps opened lately, newest first, once each', () => {

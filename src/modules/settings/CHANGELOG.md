@@ -4,6 +4,14 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.14.0 — 2026-10-03
+
+- Settings › App launcher (#201): size, popover or full screen, recent apps, badges, browser mark and names, pinned apps with drag to reorder (up to 8), show or hide each app, group by, sort, open in, keyboard shortcut and Reset to default — synced to all your devices; administrators set the organisation's default pinned apps and order.
+
+## 1.13.1 — 2026-10-03
+
+- WhatsApp and Meta channel settings use the theme's colours in dark mode (#155).
+
 ## 1.13.0 — 2026-10-03
 
 - Settings › Contacts › Accounts & sync: connect, sync now, settings, log and disconnect each address-book account (#175).

@@ -2,6 +2,7 @@ import { createPublicKey, verify } from 'node:crypto';
 import type { DesktopPolicy, DeviceTrust, NotificationPrivacy } from '@shared/types';
 import { canonicalJson } from '@shared/canonical-json';
 import { canonicalChord, parseChord } from '@shared/remote-control/channel';
+import { cleanIds, PIN_MAX } from '@shared/launcher';
 
 /**
  * Desktop policy (§11.2, FR-SEC-09).
@@ -49,6 +50,8 @@ export const DEFAULT_POLICY: DesktopPolicy = {
   ai_quick_ask: true,
   ai_insert: true,
   ai_local_files: true,
+  launcher_pinned: [],
+  launcher_order: [],
 };
 
 /**
@@ -134,6 +137,8 @@ export function normalizePolicy(input: Record<string, unknown> | null | undefine
     ai_quick_ask: aiKey(p, 'quick_ask') !== false,
     ai_insert: aiKey(p, 'insert') !== false,
     ai_local_files: aiKey(p, 'local_files') !== false,
+    launcher_pinned: cleanIds(p.launcher_pinned, PIN_MAX),
+    launcher_order: cleanIds(p.launcher_order, 300),
   };
 }
 

@@ -11,7 +11,7 @@ import { ConfirmSheet, LoadFailed, Notice, ReasonSheet } from '../finance/parts'
 import { btnBad, btnGood, input, PageHead } from '../hr/parts';
 import { Pill } from '../inventory/parts';
 import { can, K, money } from './api';
-import { bulkDecide, CK, clean, fetchCategories, fetchClaims, KIND_WORD, nextPage, selectionTotal, STATUSES, type ClaimFilters, type ClaimRow, type ClaimScope } from './claim-data';
+import { bulkDecide, CK, clean, fetchCategories, fetchClaims, fetchRelated, KIND_WORD, nextPage, selectionTotal, STATUSES, type ClaimFilters, type ClaimRow, type ClaimScope } from './claim-data';
 import { StatusPill, words } from './parts';
 import type { ScreenProps } from './Rail';
 import { Checkbox } from '../../components/Checkbox';
@@ -42,7 +42,7 @@ const SUB: Record<ClaimScope, string> = {
   organization: 'Every claim in this organization.',
 };
 
-export default function Claims({ org, orgs, onGo, scope, openClaim }: ScreenProps & { scope: ClaimScope; openClaim: number | null }) {
+export default function Claims({ org, orgId, orgs, onGo, scope, openClaim }: ScreenProps & { scope: ClaimScope; openClaim: number | null }) {
   const qc = useQueryClient();
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
   const [q, setQ] = useState('');
@@ -52,6 +52,7 @@ export default function Claims({ org, orgs, onGo, scope, openClaim }: ScreenProp
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [flagged, setFlagged] = useState(false);
+  const [tender, setTender] = useState('');
   const [picked, setPicked] = useState<Set<number>>(new Set());
   const [asking, setAsking] = useState<'approve' | 'reject' | null>(null);
   const [busy, setBusy] = useState(false);
@@ -62,8 +63,11 @@ export default function Claims({ org, orgs, onGo, scope, openClaim }: ScreenProp
     return () => clearTimeout(t);
   }, [q]);
 
-  const filters: ClaimFilters = useMemo(() => ({ q: needle || undefined, status: status || undefined, category_id: category || undefined, from: from || undefined, to: to || undefined, flagged: flagged || undefined }), [needle, status, category, from, to, flagged]);
-  const anyFilter = !!(q || status || category || from || to || flagged);
+  const filters: ClaimFilters = useMemo(
+    () => ({ q: needle || undefined, status: status || undefined, category_id: category || undefined, from: from || undefined, to: to || undefined, flagged: flagged || undefined, tender_id: tender || undefined }),
+    [needle, status, category, from, to, flagged, tender],
+  );
+  const anyFilter = !!(q || status || category || from || to || flagged || tender);
 
   /*
    * PAGED. The server takes `page` and `per_page` and returns the real total,
@@ -78,6 +82,9 @@ export default function Claims({ org, orgs, onGo, scope, openClaim }: ScreenProp
   });
   // The category filter follows the selection: every selected company's categories, and the shared ones.
   const cats = useQuery({ queryKey: CK.categories(org), queryFn: ({ signal }) => fetchCategories(org, signal), staleTime: 300_000 });
+  // The tenders a claim may be linked to, from the same picker list the claim form reads — in one company, as a tender belongs to one.
+  const related = useQuery({ queryKey: CK.related(orgId ?? 0), queryFn: ({ signal }) => fetchRelated(orgId!, signal), enabled: orgId !== null, retry: false, staleTime: 300_000 });
+  const tenders = (related.data ?? []).find((t) => t.key === 'tender')?.items ?? [];
 
   const rows = useMemo(() => (list.data?.pages ?? []).flatMap((p) => p.items), [list.data]);
   const first = list.data?.pages[0];
@@ -100,6 +107,7 @@ export default function Claims({ org, orgs, onGo, scope, openClaim }: ScreenProp
     setFrom('');
     setTo('');
     setFlagged(false);
+    setTender('');
   };
 
   /*
@@ -165,6 +173,16 @@ export default function Claims({ org, orgs, onGo, scope, openClaim }: ScreenProp
           <span className="text-[12px] text-ink-3">to</span>
           <input type="date" aria-label="Claims up to this date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className={cx(input, '!w-[150px]')} />
         </span>
+        {tenders.length ? (
+          <Select
+            aria-label="Filter by tender"
+            searchable
+            value={tender}
+            onValueChange={setTender}
+            className={cx('!w-auto', tender && 'bg-selection')}
+            options={[{ value: '', label: 'Any tender' }, ...tenders.map((t) => ({ value: String(t.id), label: t.label }))]}
+          />
+        ) : null}
         <label className="flex items-center gap-1.5 text-[12.5px] font-semibold text-ink">
           <Checkbox checked={flagged} onChange={(e) => setFlagged(e.target.checked)} />
           Flagged only

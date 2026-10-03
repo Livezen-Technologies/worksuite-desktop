@@ -32,7 +32,7 @@ import { ChannelBar } from '../../../src/modules/chat/channels/ChannelBar';
 import { badgeText, buildChannels, channelOf, channelRoute, channelTitle, chatUnread, rememberWhatsapp, whatsappState, type Channel } from '../../../src/modules/chat/channels/channels';
 import { WhatsappChannel } from '../../../src/modules/chat/channels/WhatsappChannel';
 import { WhatsappSettings } from '../../../src/modules/chat/channels/WhatsappSettings';
-import { fileRefusal, messageText, preview, waAttachment, waLimits, type WaAccount, type WaChat, type WaMessage } from '../../../src/modules/chat/channels/whatsapp';
+import { fileRefusal, messageText, numberName, numberState, preview, waAttachment, waLimits, waNumber, type WaAccount, type WaChat, type WaMessage } from '../../../src/modules/chat/channels/whatsapp';
 import type { Room } from '../../../src/modules/chat/types';
 import type { WebsiteRow } from '../../../src/modules/chat/website/api';
 
@@ -46,6 +46,7 @@ const message = (o: Partial<WaMessage>): WaMessage => ({ id: 1, direction: 'in',
 
 beforeEach(() => {
   localStorage.clear();
+  waNumber.set({ id: 0 });
   tab.route = '/chat?channel=whatsapp';
   tab.go.mockReset();
   vi.mocked(apiGet).mockReset();
@@ -165,6 +166,54 @@ describe('the channel toolbar', () => {
     expect(onAdd).toHaveBeenCalled();
   });
 
+  // #155: each number on the rail, its tooltip naming it, a status dot apart from the unread count.
+  it('puts the WhatsApp numbers on the rail, each with its status dot and, separately, its unread count', () => {
+    const onPick = vi.fn();
+    const accounts = [
+      account({ id: 1, name: 'Sales', unread: 2 }),
+      account({ id: 2, name: 'Support', phone: '94771112223', status: 'qr_required', unread: 0 }),
+      account({ id: 3, name: 'Front desk', phone: null, status: 'disconnected', unread: 5 }),
+    ];
+    const { rerender } = render(<ChannelBar channels={channels} active="whatsapp" onPick={() => undefined} onAdd={() => undefined} numbers={{ accounts, selected: 0, onPick }} />);
+    const rail = screen.getByRole('group', { name: 'WhatsApp numbers' });
+    const sales = within(rail).getByRole('button', { name: 'Sales · +94 77 123 4567 · Connected · 2 unread' });
+    expect(sales.title).toBe('Sales · +94 77 123 4567 · Connected · 2 unread');
+    const support = within(rail).getByRole('button', { name: 'Support · +94 77 111 2223 · Waiting for scan' });
+    const desk = within(rail).getByRole('button', { name: 'Front desk · Not connected · 5 unread' });
+    const dot = (b: HTMLElement) => b.querySelector('[data-status]') as HTMLElement;
+    expect([dot(sales).dataset.status, dot(support).dataset.status, dot(desk).dataset.status]).toEqual(['connected', 'waiting', 'down']);
+    expect([dot(sales).className, dot(support).className, dot(desk).className].map((c) => /bg-(success|warning|danger)/.exec(c)?.[1])).toEqual(['success', 'warning', 'danger']);
+    // The count is its own mark, never the status dot.
+    const count = sales.querySelector('[data-unread]') as HTMLElement;
+    expect(count.textContent).toBe('2');
+    expect(count).not.toBe(dot(sales));
+    expect(count.className).not.toMatch(/bg-(success|warning|danger)/);
+    expect(support.querySelector('[data-unread]')).toBeNull();
+    // The numbers say what is wrong: the WhatsApp icon carries no warning of its own meanwhile.
+    const wa = screen.getByRole('button', { name: /^WhatsApp · 120 unread/ });
+    expect(wa.querySelector('.bg-warning')).toBeNull();
+    fireEvent.click(support);
+    expect(onPick).toHaveBeenCalledWith(2);
+    rerender(<ChannelBar channels={channels} active="whatsapp" onPick={() => undefined} onAdd={() => undefined} numbers={{ accounts, selected: 2, onPick }} />);
+    const picked = screen.getByRole('button', { name: /^Support/ });
+    expect(picked.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(picked);
+    expect(onPick).toHaveBeenLastCalledWith(0);
+    // Another channel open: no numbers, and the warning is back on the icon.
+    rerender(<ChannelBar channels={channels} active="chat" onPick={() => undefined} onAdd={() => undefined} numbers={{ accounts, selected: 0, onPick }} />);
+    expect(screen.queryByRole('group', { name: 'WhatsApp numbers' })).toBeNull();
+    expect(screen.getByRole('button', { name: /^WhatsApp · 120 unread/ }).querySelector('.bg-warning')).toBeTruthy();
+  });
+
+  it('reads where a number stands, and names it with its number', () => {
+    expect(numberState({ status: 'connected' })).toEqual({ tone: 'connected', label: 'Connected' });
+    expect(numberState({ status: 'qr_required' })).toEqual({ tone: 'waiting', label: 'Waiting for scan' });
+    expect(numberState({ status: 'connecting' })).toEqual({ tone: 'waiting', label: 'Connecting' });
+    expect(numberState({ status: 'expired' })).toEqual({ tone: 'down', label: 'Not connected' });
+    expect(numberName({ name: 'Support', phone: '94771234567' })).toBe('Support · +94 77 123 4567');
+    expect(numberName({ name: 'Support', phone: null })).toBe('Support');
+  });
+
   it('moves along with the arrow keys, Home and End', () => {
     render(<ChannelBar channels={channels} active="chat" onPick={() => undefined} onAdd={() => undefined} />);
     const buttons = screen.getAllByRole('button');
@@ -205,11 +254,11 @@ describe('WhatsApp in Chat', () => {
     }) as never);
   }
 
-  const mount = (o: { onSettings?: () => void; accounts?: WaAccount[] } = {}) => wrap(<WhatsappChannel accounts={o.accounts ?? [account({})]} loading={false} error={null} retry={() => undefined} onConnect={null} onRelink={() => undefined} onSettings={o.onSettings} />);
+  const mount = (o: { onSettings?: () => void; accounts?: WaAccount[] } = {}) => wrap(<WhatsappChannel accounts={o.accounts ?? [account({})]} loading={false} error={null} retry={() => undefined} onConnect={null} onSettings={o.onSettings} />);
 
   it('lists the conversations, and opens one', async () => {
     serve();
-    wrap(<WhatsappChannel accounts={[account({})]} loading={false} error={null} retry={() => undefined} onConnect={null} onRelink={() => undefined} />);
+    wrap(<WhatsappChannel accounts={[account({})]} loading={false} error={null} retry={() => undefined} onConnect={null} />);
     const list = await screen.findByRole('complementary', { name: 'WhatsApp conversations' });
     await within(list).findByText('Nimal Perera');
     expect(within(list).getByText('You: Thanks')).toBeTruthy();
@@ -223,7 +272,7 @@ describe('WhatsApp in Chat', () => {
     tab.route = '/chat?channel=whatsapp&wa=7';
     serve(thread({ unread: 2 }));
     vi.mocked(apiPost).mockResolvedValue({ ok: true } as never);
-    wrap(<WhatsappChannel accounts={[account({})]} loading={false} error={null} retry={() => undefined} onConnect={null} onRelink={() => undefined} />);
+    wrap(<WhatsappChannel accounts={[account({})]} loading={false} error={null} retry={() => undefined} onConnect={null} />);
     const box = await screen.findByRole('textbox', { name: 'Message Nimal Perera on WhatsApp' });
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/chats/7/read'));
     expect(screen.getByText('Packing it now')).toBeTruthy();
@@ -241,7 +290,7 @@ describe('WhatsApp in Chat', () => {
     tab.route = '/chat?channel=whatsapp&wa=7';
     serve();
     vi.mocked(apiPost).mockResolvedValue({ ok: false, error: 'The phone is offline.' } as never);
-    wrap(<WhatsappChannel accounts={[account({})]} loading={false} error={null} retry={() => undefined} onConnect={null} onRelink={() => undefined} />);
+    wrap(<WhatsappChannel accounts={[account({})]} loading={false} error={null} retry={() => undefined} onConnect={null} />);
     const box = await screen.findByRole('textbox', { name: 'Message Nimal Perera on WhatsApp' });
     fireEvent.change(box, { target: { value: 'Ready at 4pm' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
@@ -252,7 +301,7 @@ describe('WhatsApp in Chat', () => {
   it('says why a reply cannot be sent', async () => {
     tab.route = '/chat?channel=whatsapp&wa=7';
     serve(thread({ allowed: false }));
-    wrap(<WhatsappChannel accounts={[account({})]} loading={false} error={null} retry={() => undefined} onConnect={null} onRelink={() => undefined} />);
+    wrap(<WhatsappChannel accounts={[account({})]} loading={false} error={null} retry={() => undefined} onConnect={null} />);
     expect(await screen.findByText(/more than 24 hours since they last wrote.*Send an approved template instead/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
     const box = screen.getByRole('textbox', { name: 'Message Nimal Perera on WhatsApp' });
@@ -370,26 +419,123 @@ describe('WhatsApp in Chat', () => {
     expect(tab.go).toHaveBeenCalledWith('/chat?channel=whatsapp&wa=55');
   });
 
-  it('shows a number that is not connected, with the way to link it again', async () => {
+  // #155: Link again opens the number's QR code beside the list, where "Pick a conversation" was — not a dialog.
+  it('shows a number that is not connected, and links it again by QR code in the pane beside the list', async () => {
     serve(thread(), []);
-    const onRelink = vi.fn();
+    vi.mocked(apiPost).mockResolvedValue({ ok: true } as never);
     const down = account({ status: 'error', status_note: 'The phone unlinked this device.' });
-    wrap(<WhatsappChannel accounts={[down]} loading={false} error={null} retry={() => undefined} onConnect={null} onRelink={onRelink} />);
-    expect(await screen.findByText('Sales is not connected.')).toBeTruthy();
-    expect(screen.getByText('The phone unlinked this device.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Link again' }));
-    expect(onRelink).toHaveBeenCalledWith(down);
+    const qr = vi.mocked(apiGet).getMockImplementation()!;
+    vi.mocked(apiGet).mockImplementation((async (path: string, ...rest: unknown[]) => (path === '/api/whatsapp/accounts/1/qr' ? { ok: true, qr: '2@abc,def', state: 'qr', linked: false, status_note: null, error: null } : (qr as (...a: unknown[]) => unknown)(path, ...rest))) as never);
+    mount({ accounts: [down] });
+    const banner = (await screen.findByText('Sales is not connected.')).closest('[role="status"]') as HTMLElement;
+    expect(within(banner).getByText('The phone unlinked this device.')).toBeTruthy();
+    // With nothing open, the pane offers the reconnection itself.
+    const card = screen.getByRole('region', { name: 'Reconnect Sales' });
+    expect(within(card).getByText('Sales is not connected')).toBeTruthy();
+    expect(screen.queryByText('Pick a conversation')).toBeNull();
+    // The banner's Link again is a real button, and the code opens beside the list.
+    const link = within(banner).getByRole('button', { name: 'Link again' });
+    expect(link.className).toContain('rounded');
+    fireEvent.click(link);
+    const pane = await screen.findByRole('region', { name: 'Link Sales' });
+    expect(within(pane).getByText('Link Sales to WhatsApp')).toBeTruthy();
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/accounts/1/link'));
+    expect(await within(pane).findByRole('img', { name: 'QR code to link WhatsApp' })).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.click(within(pane).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('region', { name: 'Link Sales' })).toBeNull();
     expect(await screen.findByText('No WhatsApp conversations yet')).toBeTruthy();
+  });
+
+  // #155: dimmed while the number is down, with the reason as the tooltip; connected numbers' rows are not.
+  it('dims the conversations of a number that is down, saying why', async () => {
+    serve(thread(), [chat({ id: 7, account_id: 2, account_name: 'Support' }), chat({ id: 8, name: 'Kamal', account_id: 1 })]);
+    mount({ accounts: [account({}), account({ id: 2, name: 'Support', status: 'disconnected', is_default: false })] });
+    const list = await screen.findByRole('complementary', { name: 'WhatsApp conversations' });
+    const down = (await within(list).findByText('Nimal Perera')).closest('button')!;
+    expect(down.title).toBe('Can’t reply until Support is linked.');
+    expect(down.className).toContain('opacity-60');
+    const up = within(list).getByText('Kamal').closest('button')!;
+    expect(up.title).toBe('');
+    expect(up.className).not.toContain('opacity-60');
+  });
+
+  // #155: the time and the badges share one right-hand column on every row.
+  it('puts the time and the badges in one column: the unread count under the time, Waiting as a soft pill or, with unread, a dot', async () => {
+    serve(thread(), [
+      chat({ id: 1, name: 'Unread only', unread: 3 }),
+      chat({ id: 2, name: 'Waiting only', awaiting_since: '2026-09-30 08:00:00', waiting_minutes: 45 }),
+      chat({ id: 3, name: 'Both', unread: 2, awaiting_since: '2026-09-30 08:00:00', waiting_minutes: 130, overdue: true }),
+      chat({ id: 4, name: 'Neither' }),
+    ]);
+    mount();
+    const list = await screen.findByRole('complementary', { name: 'WhatsApp conversations' });
+    const row = async (name: string) => (await within(list).findByText(name)).closest('button')!;
+    const meta = (b: HTMLElement) => b.querySelector('[data-meta]') as HTMLElement;
+    for (const name of ['Unread only', 'Waiting only', 'Both', 'Neither']) {
+      const b = await row(name);
+      // Every row has the column, its first line the time.
+      expect(meta(b)).toBeTruthy();
+      expect(meta(b).firstElementChild?.textContent).not.toBe('');
+      expect(b.className).toContain('min-h-[64px]');
+      expect(b.className).toContain('focus-visible:ring-2');
+    }
+    const unread = meta(await row('Unread only'));
+    expect(unread.querySelector('[data-unread]')?.textContent).toBe('3');
+    expect(within(unread).queryByText('Waiting')).toBeNull();
+    const waiting = meta(await row('Waiting only'));
+    const pill = within(waiting).getByText('Waiting');
+    expect(pill.className).toContain('bg-warning-bg');
+    expect(pill.title).toBe('Waiting 45 min');
+    const both = meta(await row('Both'));
+    expect(both.querySelector('[data-unread]')?.textContent).toBe('2');
+    expect(within(both).queryByText('Waiting')).toBeNull();
+    expect((both.querySelector('[data-waiting-dot]') as HTMLElement).title).toBe('Waiting 2 h · overdue');
+    expect(meta(await row('Neither')).querySelector('[data-unread], [data-waiting-dot]')).toBeNull();
+  });
+
+  // #155: "Support ·" says which number a conversation is on only while every number is shown.
+  it('names the number a conversation is on only when All numbers is chosen', async () => {
+    serve(thread(), [chat({ account_name: 'Support', account_id: 2 })]);
+    const accounts = [account({}), account({ id: 2, name: 'Support', is_default: false })];
+    mount({ accounts });
+    const list = await screen.findByRole('complementary', { name: 'WhatsApp conversations' });
+    const row = (await within(list).findByText('Nimal Perera')).closest('button')!;
+    expect(row.querySelector('[data-channel]')?.textContent).toBe('Support ·');
+    act(() => waNumber.set({ id: 2 }));
+    await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/api/whatsapp/chats', expect.objectContaining({ account_id: '2' }), expect.anything()));
+    const again = (await within(list).findByText('Nimal Perera')).closest('button')!;
+    expect(again.querySelector('[data-channel]')).toBeNull();
+    // A single number: never.
+    cleanup();
+    waNumber.set({ id: 0 });
+    mount({ accounts: [account({})] });
+    const single = (await screen.findByText('Nimal Perera')).closest('button')!;
+    expect(single.querySelector('[data-channel]')).toBeNull();
+  });
+
+  // #155: a lighter empty card, with the shortcut that does start a WhatsApp conversation.
+  it('says how to start a chat when nothing is open, and ⌘N / Ctrl+N starts a WhatsApp conversation', async () => {
+    serve(thread(), []);
+    mount();
+    expect(await screen.findByText('Pick a conversation')).toBeTruthy();
+    expect(screen.getByText('Ctrl+N', { selector: 'kbd' }).parentElement?.textContent).toBe('Press Ctrl+N to start a new chat.');
+    cleanup();
+    tab.route = '/chat?channel=whatsapp&new=1';
+    mount();
+    expect(await screen.findByRole('textbox', { name: /Phone number/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(tab.go).toHaveBeenCalledWith('/chat?channel=whatsapp');
   });
 
   it('with no number yet, offers to connect one, or says who can', () => {
     const onConnect = vi.fn();
-    wrap(<WhatsappChannel accounts={[]} loading={false} error={null} retry={() => undefined} onConnect={onConnect} onRelink={() => undefined} />);
+    wrap(<WhatsappChannel accounts={[]} loading={false} error={null} retry={() => undefined} onConnect={onConnect} />);
     expect(screen.getByText('No WhatsApp number yet')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Connect a number' }));
     expect(onConnect).toHaveBeenCalled();
     cleanup();
-    wrap(<WhatsappChannel accounts={[]} loading={false} error={null} retry={() => undefined} onConnect={null} onRelink={() => undefined} />);
+    wrap(<WhatsappChannel accounts={[]} loading={false} error={null} retry={() => undefined} onConnect={null} />);
     expect(screen.getByText('Ask whoever manages WhatsApp numbers to share one with you.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Connect a number' })).toBeNull();
   });

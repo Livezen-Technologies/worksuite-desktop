@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 0.2.132 — 2026-10-03
+## 0.2.138 — 2026-10-03
 
 - **You choose whether updates download by themselves.** Settings › Desktop now starts with the updates: where they
   stand, with the one next step (Check for updates, Download, or Restart to update), a **Download updates
@@ -21,6 +21,38 @@ person who has to live with the change — what it does, and where it bites.
   with automatic downloads off, when it is available to download. Clicking it opens the update settings. Quiet hours
   and paused notifications keep it silent (the title-bar icon still shows), and **Update notifications** in
   Settings › Desktop turns it off.
+## 0.2.137 — 2026-10-03
+
+- **A new website chat widget, with your team's faces (#199).** Visitors now see who's online — up to three real profile photos with green dots — and how quickly you usually reply, can type their question straight into the home screen, and see the agent who joins their chat with photo, name and role. Outside business hours, or when nobody's online, the widget says when you're back and offers a leave-a-message form and WhatsApp; replies to those messages are emailed to the visitor. Set it up under **Website chats › Setup › Widget**: brand colour, logo, greeting, quick links, which staff are shown and how, business hours, away message, WhatsApp number, launcher style and greeting card — with a live preview. Staff no longer show as Online on the widget for minutes after they've gone offline. Needs the server update (Communication 1.18.0, migration `2026-10-12-000100_WidgetModernDesign`).
+
+## 0.2.136 — 2026-10-03
+
+- **A smaller, smarter app launcher (#201).** The launcher is now a compact popover (about 760×600) that always fits the window and never hides behind the Dock or taskbar; the grid adds or removes columns to fit, and in a narrow window it becomes a bottom sheet. Search finds apps by name or keyword ("bill" finds Invoices) — hidden apps too — and starts as you type; arrow keys move, Enter opens, ⌘Enter opens in a new window. Tiles show just the icon and name, an unread badge, and a small arrow on apps that open in the browser (the "Desktop app" line is gone). Open it with **⌘⇧K / Ctrl+Shift+K** — changeable, and no longer clashing with ⌘K search.
+- **Make it yours:** right-click or drag a tile to pin it (up to 8), hide it, move it to your own group or open it in a new window. **Settings › App launcher** sets the size (Compact, Comfortable, Large), popover or full screen, which details show, pinned and hidden apps, grouping, sort order, where apps open and the shortcut — saved to your account and synced to your other devices. Administrators can set the organisation's default pinned apps and order (needs the server update, Desktop 1.2.0).
+
+## 0.2.135 — 2026-10-03
+
+- **WhatsApp, tidied up (#155).** Each of your numbers sits in the left rail under WhatsApp, with a green, orange or red dot for its connection and its own unread count; click one to see only its chats, click again for all. When a number is disconnected, **Link again** shows the QR code right in the side pane, and that number's conversations are dimmed with a note that you can't reply until it's linked. Conversation rows are easier to scan: the time, unread count and "waiting" state share one column, times read today / Yesterday / weekday / date, voice messages say "Voice note", unknown numbers get a steady colour, and the number's name shows only when you're looking at all numbers. With nothing open, the pane says **Pick a conversation** — and **⌘N / Ctrl+N** now really starts a new WhatsApp chat.
+- **Tabs:** there's only ever one Home tab — "+", ⌘T and Duplicate switch to it instead of opening another — and tabs are as wide as their title.
+- **Side panels:** the collapse handle appears only when you hover the panel or tab to it, in every module.
+- **Dark mode:** WhatsApp and the channel settings now follow the light and dark theme; only the title bar and sidebar stay navy.
+
+## 0.2.134 — 2026-10-03
+
+- **Link mail to a tender, customer or deal.** Right-click a message (or a selection) or open the reader's **More** and choose **Link to tender, customer or deal…**: pick the kind, search by name or reference, and the sender's own customer record and tenders are suggested first. Linked records show as chips under the subject — click to open the tender or deal, ✕ to unlink — and everyone who can read the mailbox sees them. A tender's new **Mail** tab lists the email linked to it; click one to open it in Mail. Offered to people who can open Tenders or the CRM; the server decides which kinds each person may link. Needs the server update (Mail 1.12.0, migration `2026-10-12-000100_MailRecordLinks`).
+- Live mail lists show a **preview line and the paper clip** before the mailbox has synced (server Mail 1.10.0).
+
+## 0.2.133 — 2026-10-03
+
+- **What a bid costs (#159).** Each tender has an **Expenses** tab beside Budget: total spent, pending approval, reimbursable, and spent against the planned bid budget ("Spent LKR 18,500 of LKR 25,000 planned (74%)", with a warning when over). **+ Add expense** and the quick categories (courier, travel, printing, bid bond / security, document purchase…) open the Expense form with the tender already filled in; **Link existing expense** picks one of your claims that isn't on a tender yet. Clicking a row opens the claim as Expenses shows it — approval stays there — with Open in Expenses, Mark refunded (for bid bonds) and Unlink. Overview shows **Bid cost so far**, a lost or cancelled tender shows what was written off, History records each expense, and Reports has **Bid cost by tender** with cost per win.
+- In Expenses, a claim can be **Linked to** a tender, claims can be filtered by tender, and the claim shows its tender with a link back.
+- Needs the server update (Expense migration `2026-10-13-000100_ClaimLinkedToAndRefunds`; the planned bid budget uses Tender V2's budget table).
+
+## 0.2.132 — 2026-10-03
+
+- **Pictures in email, done properly (#163).** Remote pictures stay off until you choose: a bar says how many are blocked, with **Show images**, **Always show from this sender** and (for company domains) **…from this domain**. They load only through WorkSuite's image proxy, never straight from the sender, and blocked ones are neat placeholders of the right size instead of broken icons. Tracking pixels are removed even when pictures are on, and the bar says how many. **Settings › Mail › Images & media** sets the picture mode, trusted senders and domains (synced across your devices), whether your own company's domains are trusted, and auto-download of attachments by size, network, file type and folder. Junk and mail that fails sender authentication never load pictures by themselves.
+- **Logos and signature pictures show in the email** instead of as attachments named with long IDs (needs the server update, Mail 1.11.0). Attachments get readable names, thumbnails, and Open, Download and Save to Files. Pictures you loaded and attachments you opened are kept on this computer and open instantly, offline too.
+- Mail from a sender that passes DMARC now shows **Verified** rather than "Partly verified".
 
 ## 0.2.131 — 2026-10-03
 

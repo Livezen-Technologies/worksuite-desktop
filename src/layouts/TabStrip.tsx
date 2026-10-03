@@ -140,15 +140,16 @@ export function TabStrip() {
                 setMenu({ tab, x: e.clientX, y: e.clientY });
               }}
               className={cx(
-                'group flex h-[34px] max-w-[220px] min-w-[110px] shrink-0 cursor-default items-center gap-2 rounded-t-[9px] px-3 text-[13px]',
+                // Sized to its title (#155): the same padding on every tab, never wider than 200px, the close button's room kept.
+                'group flex h-[34px] w-auto max-w-[200px] min-w-0 shrink-0 cursor-default items-center gap-2 rounded-t-[9px] px-3 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset',
                 active ? 'bg-ground font-semibold text-ink' : side ? 'bg-ground/70 text-ink' : 'text-ink-2 hover:bg-ground/60',
-                tab.pinned && 'min-w-0 max-w-[140px]',
+                tab.pinned && 'max-w-[140px]',
               )}
               title={side ? `${tab.title} — docked beside` : tab.title}
             >
               {side ? <Icon name="layout-side" size={14} className="shrink-0 text-ink-3" label="Docked beside" /> : null}
               {tab.pinned ? <Icon name="pin" size={13} className="shrink-0 text-ink-3" /> : tab.app === 'home' ? <Icon name="home" size={15} className="shrink-0" /> : null}
-              <span className="min-w-0 flex-1 truncate">{tab.title}</span>
+              <span className="min-w-0 truncate">{tab.title}</span>
               {!tab.pinned ? (
                 <button
                   type="button"

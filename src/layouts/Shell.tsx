@@ -5,10 +5,11 @@ import { app, isGuest } from '../core/app-state';
 import { useGuest } from '../core/session';
 import { GuestProfileMenu } from '../modules/guest/GuestProfileMenu';
 import { call, errorMessage, on } from '../core/bridge';
-import { accelerator, commandForAccelerator, effectiveShortcuts, getCommand, registerCommand, runCommand } from '../core/commands';
+import { accelerator, commandForAccelerator, getCommand, registerCommand, runCommand } from '../core/commands';
+import { initLauncherPrefs, shellShortcuts } from '../core/launcher-prefs';
 import { noteRecentApp } from '../core/recent-apps';
 import { useStore } from '../core/store';
-import { activateIndex, activeTab, closeTab, closeTabsForApps, detachTab, dockSide, insertTab, navigate, openTab, resetTabs, restoreClosed, restoreTabs, suspendIdle, tabsStore, undockSide } from '../core/tabs';
+import { activateIndex, activeTab, closeTab, closeTabsForApps, detachTab, dockSide, insertTab, navigate, newRoute, openTab, resetTabs, restoreClosed, restoreTabs, suspendIdle, tabsStore, undockSide } from '../core/tabs';
 import { toast } from '../core/toasts';
 import { aiWidget, closeOverlay, closeTopPanel, minimiseChatDrawer, openAssistant, openChatDrawer, openOverlay, toggleAssistant, toggleDock, ui, useAiDisplay } from '../core/ui';
 import { allowedModules, moduleFor } from '../modules/registry';
@@ -61,6 +62,8 @@ export function Shell() {
   // Whether this computer can take a visitor's voice call (ENH-WCHAT-05, VOICE-11).
   useEffect(() => (hasChat ? watchMicrophone() : undefined), [hasChat]);
   useEffect(() => closeMenuOnRouteChange(), []);
+  // The launcher's preferences follow whoever is signed in: this computer's copy at once, then the server's (#201).
+  useEffect(() => initLauncherPrefs(), []);
 
   // Tab restore at start (FR-NAV-04) — only apps the user can still open.
   useEffect(() => {
@@ -124,11 +127,11 @@ export function Shell() {
       registerCommand({ id: 'switch-org', label: 'Switch organization', group: 'Shell', run: () => openOverlay('org'), when: () => !isGuest() }),
       registerCommand({ id: 'lock', label: 'Lock WorkSuite', group: 'Shell', run: () => void call('security:lock'), when: () => !isGuest() }),
       registerCommand({ id: 'help', label: 'Help & Diagnostics', group: 'Navigate', run: () => navigate('/diagnostics') }),
-      registerCommand({ id: 'launcher', label: 'All apps', group: 'Navigate', run: () => openOverlay('launcher') }),
+      registerCommand({ id: 'launcher', label: 'App launcher', group: 'Navigate', keywords: 'all apps grid', run: () => openOverlay('launcher') }),
       registerCommand({ id: 'notifications', label: 'Notifications', group: 'Navigate', run: () => navigate('/notifications'), when: () => !isGuest() }),
       registerCommand({ id: 'theme', label: 'Change theme', group: 'Shell', keywords: 'dark light appearance', run: () => navigate('/settings/preferences') }),
       registerCommand({ id: 'pause-notifications', label: 'Pause notifications for an hour', group: 'Shell', run: () => void call('notifications:pause', { minutes: 60 }).then(() => toast('info', 'Notifications paused for an hour.')), when: () => !isGuest() }),
-      registerCommand({ id: 'new', label: 'New (in this app)', group: 'Create', run: () => { const t = activeTab(); if (t) navigate(`/${t.app}?new=1`); } }),
+      registerCommand({ id: 'new', label: 'New (in this app)', group: 'Create', run: () => { const t = activeTab(); if (t) navigate(newRoute(t)); } }),
       registerCommand({ id: 'new-task', label: 'Create task', group: 'Create', run: () => navigate('/tasks?new=1'), when: () => canOpen('tasks') }),
       registerCommand({ id: 'new-email', label: 'New email', group: 'Create', run: () => navigate('/mail?compose=1'), when: () => canOpen('mail') }),
       registerCommand({ id: 'open-chat', label: 'Open chat', group: 'Navigate', run: () => navigate('/chat'), when: () => canOpen('chat') }),
@@ -160,7 +163,9 @@ export function Shell() {
       if (!acc) return;
       const typing = e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable="true"]');
       if (typing && !acc.includes('Mod') && acc !== 'F1') return;
-      const id = commandForAccelerator(effectiveShortcuts(app.get().prefs?.shortcuts), acc);
+      const id = commandForAccelerator(shellShortcuts(app.get().prefs?.shortcuts), acc);
+      // ⌘⇧K inside a text editor that took it for itself (a link) stays there.
+      if (id === 'launcher' && e.defaultPrevented) return;
       if (!id) {
         // Escape that nothing nearer took: the open menu, else the assistant (#150).
         if (e.key === 'Escape' && !e.defaultPrevented) closeTopPanel();

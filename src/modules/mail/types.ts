@@ -370,6 +370,12 @@ export interface MailPrefs {
   markRead?: 'open' | 'delay' | 'change' | 'never';
   /** Senders whose pictures are always shown, through WorkSuite's image proxy (DMO-RD-02). */
   imageSenders?: string[];
+  /** Images & media (#163): when pictures from the web load — Ask unless changed. */
+  remoteImages?: 'always' | 'ask' | 'trusted' | 'never';
+  /** Domains whose pictures are always shown (a sender at mail.example.com counts under example.com). */
+  imageDomains?: string[];
+  /** The person's organisation's own domains count as trusted (on unless turned off). */
+  trustOwnDomains?: boolean;
   /** Answering a read-receipt request (DMO-CMP-11): ask each time (the default), always, or never. */
   readReceipts?: 'ask' | 'always' | 'never';
   markReadDelay?: number;

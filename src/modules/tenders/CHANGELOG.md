@@ -4,6 +4,15 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.0 — 2026-10-03
+
+- Mail tab: the email linked to this tender from Mail, newest first, each opening in Mail.
+
+## 1.2.0 — 2026-10-03
+
+- Expenses tab (#159): bid costs linked from the Expense module, with totals, pending, reimbursable and spent against the planned bid budget; add an expense with the tender locked, quick categories, link an existing expense, Mark refunded for bid bonds, Unlink; Bid cost so far on Overview, written-off cost for lost or cancelled tenders, history lines, and a Bid cost by tender report.
+- Checklist: Add the step explains why it is unavailable; the no-mandatory-items note links to the Checklist.
+
 ## 1.1.1 — 2026-10-03
 
 - The sidebar's New button is the shared primary action button: same size, colour, plus icon and quiet shadow as every module; the shortcut is in its tooltip (#171).

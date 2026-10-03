@@ -40,6 +40,7 @@ export default function Approvals({ id, org, rows, canManage, canApprove }: { id
     }
   };
   const next = rows.reduce((m, a) => Math.max(m, a.step), 0) + 1;
+  const named = label.trim() !== '';
 
   return (
     <div className="flex flex-col gap-3">
@@ -93,13 +94,16 @@ export default function Approvals({ id, org, rows, canManage, canApprove }: { id
               className={input}
             />
           </Field>
+          {/* Grey only while there is no name to add — the one thing it waits for, and said in its title. A decision
+              in flight on a row above is not a reason to look switched off. */}
           <button
             type="button"
             className={btnPrimary}
-            disabled={busy !== null || !label.trim()}
+            disabled={!named || busy === 'add'}
+            title={named ? undefined : 'Name the step first'}
             onClick={() => void run('add', () => addApproval(id, { role_label: label.trim(), step: next, approver_id: approver ? Number(approver) : null }), 'Step added.').then((ok) => ok && (setLabel(''), setApprover('')))}
           >
-            Add the step
+            {busy === 'add' ? 'Adding…' : 'Add the step'}
           </button>
         </div>
       ) : null}

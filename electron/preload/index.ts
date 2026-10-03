@@ -449,6 +449,8 @@ const api = {
     openLink: call('mail:openLink'),
     spellLanguages: call('mail:spellLanguages'),
     setSpellLanguages: call('mail:setSpellLanguages'),
+    images: call('mail:images'),
+    keptAttachments: call('mail:keptAttachments'),
   },
   smime: {
     verify: call('smime:verify'),
@@ -496,6 +498,7 @@ const api = {
   settings: {
     get: call('settings:get'),
     set: call('settings:set'),
+    launcherDefaults: call('settings:launcherDefaults'),
   },
   status: {
     snapshot: call('status:snapshot'),

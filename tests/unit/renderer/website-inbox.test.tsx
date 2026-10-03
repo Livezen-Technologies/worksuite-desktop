@@ -26,6 +26,7 @@ vi.mock('../../../src/core/bridge', () => ({
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
 vi.mock('../../../src/modules/calls/tones', () => ({ playTone: vi.fn(() => ({ stop: vi.fn(), setVolume: vi.fn() })) }));
 vi.mock('../../../src/modules/chat/website/WebsiteThread', () => ({ WebsiteThread: ({ id }: { id: string }) => <div>Thread {id}</div> }));
+vi.mock('../../../src/modules/chat/website/widget/WidgetSettings', () => ({ WidgetSettings: () => <div>The widget settings</div> }));
 const tab = { route: '/chat?view=website', go: vi.fn(), active: true };
 vi.mock('../../../src/core/tab-context', () => ({
   useTab: () => {
@@ -257,5 +258,22 @@ describe('the Website Chats inbox (CHAT-UI-00)', () => {
     await within(list()).findByText('Hasitha');
     fireEvent.keyDown(window, { key: 'j' });
     expect(tab.go).not.toHaveBeenCalled();
+  });
+});
+
+describe('Website chats → Widget (#199)', () => {
+  it('is in Setup, in the app rather than on the web, and takes the place of the list and the thread', async () => {
+    wrap(<WebsiteWorkspace />);
+    const item = await screen.findByRole('button', { name: 'Widget' });
+    expect(item.getAttribute('title')).toBeNull();
+    fireEvent.click(item);
+    expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=widget');
+
+    cleanup();
+    tab.route = '/chat?view=website&section=widget';
+    wrap(<WebsiteWorkspace />);
+    expect(await screen.findByText('The widget settings')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Widget' }).getAttribute('aria-current')).toBe('page');
+    expect(list().className).toContain('hidden');
   });
 });

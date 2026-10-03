@@ -14,6 +14,7 @@ import { assertRoute, assertWebPath } from './access';
 import { windowRoute } from '../windows/manager';
 import { attachmentRisk } from '@shared/attachments';
 import { DesktopError, isDesktopError } from './errors';
+import { saveLauncherDefaults } from '../services/launcher-defaults';
 import type { AppContext } from './context';
 import type { IpcRouter } from '../ipc/router';
 import { applyAutostart } from './autostart';
@@ -903,6 +904,15 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('offline:moduleBytes', (input) => ctx.cache.moduleBytes(uid(), input.module));
   router.handle('offline:clearModule', (input) => ctx.cache.clearModule(uid(), input.module));
   router.handle('offline:mailStats', () => ({ ...ctx.cache.mailStats(uid()), limitBytes: (ctx.session.current()?.policy?.offline_storage_max_mb ?? 2048) * 1024 * 1024, bodies: ctx.mailBodies?.progress() ?? {} }));
+  // A message's pictures and attachments kept on this computer (worksuite-desktop#163).
+  router.handle('mail:images', (input) => {
+    if (!canOpenApp('mail', ctx.session.visibleApps()) || !ctx.mailMedia) return { enabled: true, images: {} };
+    return ctx.mailMedia.images(uid(), input.urls, input.mailbox, input.fetch);
+  });
+  router.handle('mail:keptAttachments', (input) => {
+    if (!canOpenApp('mail', ctx.session.visibleApps()) || !ctx.mailMedia) return [];
+    return ctx.mailMedia.kept(uid(), { uid: input.uid, folder: input.folder, mailbox: input.mailbox, items: input.items }, input.auto);
+  });
   // Cached first (worksuite-desktop#162): Mail's saved answers, read without the network; the page refreshes behind them.
   router.handle('offline:peek', (input) => {
     if (!canOpenApp('mail', ctx.session.visibleApps())) return input.paths.map(() => null);
@@ -1084,6 +1094,14 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     // Turned back on with a version on offer: it downloads now rather than at the next check.
     if (before.autoUpdate === false && prefs.autoUpdate !== false && ctx.updater.get().state === 'AVAILABLE') void ctx.updater.check();
     return { preferences: prefs, locks: ctx.settings.locks() };
+  });
+
+  router.handle('settings:launcherDefaults', async (input) => {
+    if (ctx.session.get().server?.api !== 'desktop-v1') throw new DesktopError('UNSUPPORTED', 'This WorkSuite server does not take launcher defaults.');
+    const saved = await saveLauncherDefaults(ctx.http, input.organizationId, input);
+    // Everyone's next bootstrap carries them; this window's at once.
+    void ctx.session.refreshBootstrap().catch(() => undefined);
+    return saved;
   });
 
   router.handle('status:snapshot', () => ctx.status());

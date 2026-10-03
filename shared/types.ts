@@ -1,6 +1,7 @@
 import type { DarkColorProfile } from './theme-profiles';
 import type { ItemLink, ItemSource } from './item-links';
 import type { LinkPrefs } from './link-prefs';
+import type { MailMediaPrefs } from './mail-media';
 /**
  * Types shared by the main process and the renderer. Everything crossing the
  * IPC boundary is described here and validated by the zod schemas in
@@ -132,6 +133,12 @@ export interface DesktopPolicy {
   ai_quick_ask: boolean;
   ai_insert: boolean;
   ai_local_files: boolean;
+  /**
+   * The app launcher's organization defaults (worksuite-desktop#201): the pinned apps (at most 8) and the order of the
+   * grid, for everyone who has not chosen their own. Apps the person may not open are never shown, whatever is here.
+   */
+  launcher_pinned?: string[];
+  launcher_order?: string[];
 }
 
 export interface MonitoringPolicySummary {
@@ -265,6 +272,8 @@ export interface Preferences {
   mailAlerts?: 'all' | 'focused' | 'vip' | 'none';
   /** VIP mail shows a banner during quiet hours (DMO-NTF-03). */
   mailVipBreakthrough?: boolean;
+  /** Settings › Mail › Images & media on this computer: attachments downloaded ahead (#163). Unset fields take DEFAULT_MAIL_MEDIA. */
+  mailMedia?: Partial<MailMediaPrefs>;
   tabSuspendMinutes: number;
   language: string;
   updateChannel: UpdateChannel;
