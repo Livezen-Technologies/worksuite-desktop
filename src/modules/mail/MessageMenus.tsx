@@ -1,12 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { apiDelete, apiPost, apiPut } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
 import { text } from '../../core/i18n';
 import { dateLabel, timeLabel, todayInZone, wallToUtc } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
-import { Menu, type MenuSection } from '../../components/Menu';
+import type { MenuSection } from '../../components/Menu';
 import { Button, Modal, TextField, cx } from '../../components/ui';
 import { messageAction, stateAction, type StateAction } from './api';
 import { accountBg, CategoryDot } from './parts';
@@ -254,13 +254,5 @@ export function CategoriesDialog({ cats, onClose }: { cats: Category[]; onClose:
   );
 }
 
-/** A menu at the mouse (the list's right-click menu). */
-export function ContextMenu({ x, y, sections, label, onClose }: { x: number; y: number; sections: MenuSection[]; label: string; onClose: () => void }) {
-  const anchor = useRef<HTMLSpanElement>(null);
-  return (
-    <>
-      <span ref={anchor} aria-hidden style={{ position: 'fixed', left: x, top: y, width: 1, height: 1 }} />
-      <Menu sections={sections} label={label} anchor={anchor} prefer="bottom" align="start" width={260} onClose={onClose} />
-    </>
-  );
-}
+/** A menu at the mouse (the list's right-click menu): shared with Chat's list. */
+export { ContextMenu } from '../../components/ContextMenu';

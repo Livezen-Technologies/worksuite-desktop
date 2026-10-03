@@ -68,9 +68,9 @@ export function channelRoute(id: ChannelId): string {
   return '/chat';
 }
 
-/** Chat's badge: unread messages, leaving out archived and muted conversations (a muted one is not to nag). */
+/** Chat's badge: unread messages, leaving out archived conversations and muted ones — but an @mention in a muted one still counts (worksuite-desktop#183). */
 export function chatUnread(rooms: Room[]): number {
-  return rooms.reduce((n, r) => n + (!r.archived && !r.muted ? r.unread : 0), 0);
+  return rooms.reduce((n, r) => n + (r.archived ? 0 : r.muted ? r.mentions : r.unread), 0);
 }
 
 /** Website chat's badge: visitors waiting for an answer. */

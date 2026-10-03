@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { call, errorMessage } from '../../../core/bridge';
 import type { ReplyTarget } from '../Thread';
 import { useDraft } from '../../../core/drafts';
@@ -16,6 +16,7 @@ import { SidePanel } from '../../../components/SidePanel';
 import { Avatar, Button, Empty, ErrorNote, Modal, Spinner, cx } from '../../../components/ui';
 import { openChatAttachment, previewKind, type Attachment } from '../AttachmentViewer';
 import { mediaUrl } from '../types';
+import { ConversationMenu } from '../ConversationMenu';
 import { LIST_WIDTH, rememberWhatsapp } from './channels';
 import {
   fileRefusal, isConnected, messageText, preview, readWa, sendWa, sendWaFiles, sendWaTemplate, startWa, useWaChats, useWaSettings, useWaTemplates, useWaThread, waAttachment, waLimits, WA_SCOPES,
@@ -41,6 +42,8 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
   const selected = query.get('wa');
   const to = query.get('to');
   const [starting, setStarting] = useState(false);
+  // The conversation menu at the mouse (worksuite-desktop#183).
+  const [rowMenu, setRowMenu] = useState<{ x: number; y: number; c: WaChat } | null>(null);
   const senders = accounts.filter((a) => a.can_send !== false && isConnected(a));
   const [account, setAccount] = useState(0);
   const [scope, setScope] = useState<WaScope>('all');
@@ -86,7 +89,7 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
           <Empty icon="phone" title={q.trim() ? 'Nothing matches' : scope === 'unread' ? 'Nothing unread' : scope === 'waiting' ? 'Nobody is waiting' : scope === 'mine' ? 'No conversations assigned to you' : 'No WhatsApp conversations yet'} hint={scope === 'all' && !q.trim() ? 'Messages to your numbers appear here.' : undefined} />
         ) : null}
         {rows.map((c) => (
-          <ChatRow key={c.id} c={c} active={String(c.id) === selected} many={accounts.length > 1 && !account} onOpen={() => go(`/chat?channel=whatsapp&wa=${c.id}`)} />
+          <ChatRow key={c.id} c={c} active={String(c.id) === selected} many={accounts.length > 1 && !account} onOpen={() => go(`/chat?channel=whatsapp&wa=${c.id}`)} onMenu={(e) => (e.preventDefault(), setRowMenu({ x: e.clientX, y: e.clientY, c }))} />
         ))}
       </div>
     </>
@@ -139,6 +142,7 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
       <div className="flex min-w-0 flex-1 bg-ground">
         {selected ? <WhatsappThread key={selected} id={selected} onRelink={onRelink} /> : <Empty icon="phone" title="Pick a conversation" hint={accounts.length ? 'Your WhatsApp conversations are in the list.' : undefined} />}
       </div>
+      {rowMenu ? <ConversationMenu x={rowMenu.x} y={rowMenu.y} target={{ kind: 'whatsapp', chat: rowMenu.c }} onClose={() => setRowMenu(null)} /> : null}
       {(starting || (to && !selected)) && !loading ? (
         <StartConversation
           accounts={senders}
@@ -220,10 +224,10 @@ function StartConversation({ accounts, phone, onClose, onStarted }: { accounts: 
   );
 }
 
-function ChatRow({ c, active, many, onOpen }: { c: WaChat; active: boolean; many: boolean; onOpen: () => void }) {
+function ChatRow({ c, active, many, onOpen, onMenu }: { c: WaChat; active: boolean; many: boolean; onOpen: () => void; onMenu: (e: ReactMouseEvent) => void }) {
   const waiting = c.waiting_minutes !== null && c.status !== 'resolved';
   return (
-    <button type="button" onClick={onOpen} aria-current={active ? 'true' : undefined} className={cx('flex w-full items-center gap-2.5 px-3.5 py-[7px] text-left', active ? 'bg-selection' : 'hover:bg-subtle')}>
+    <button type="button" onClick={onOpen} onContextMenu={onMenu} aria-current={active ? 'true' : undefined} className={cx('flex w-full items-center gap-2.5 px-3.5 py-[7px] text-left', active ? 'bg-selection' : 'hover:bg-subtle')}>
       <Avatar name={c.name} size={34} src={mediaUrl(c.avatar_url)} className={c.kind === 'group' ? '!rounded-[9px]' : ''} />
       <span className="min-w-0 flex-1">
         <span className="flex gap-1.5">
