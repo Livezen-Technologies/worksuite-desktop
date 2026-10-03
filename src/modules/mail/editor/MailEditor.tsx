@@ -181,12 +181,28 @@ export interface MailEditorProps {
   className?: string;
   /** Below the text. */
   footer?: ReactNode;
+  /**
+   * `signature`: the smaller toolbar a signature needs (worksuite-desktop#166) —
+   * font, size, bold, italic, underline, colour, clear; alignment and line
+   * spacing; links (tel: too), pictures, tables and dividers.
+   */
+  variant?: 'compose' | 'signature';
+  /** How big a picture may be once made smaller (a signature's: about 500 KB). */
+  imageMaxBytes?: number;
+  /** More tool groups after the editor's own. */
+  extraGroups?: ToolGroup[];
+  /** Puts HTML in at the caret (or at the end), for tools outside the editor. */
+  insertRef?: React.MutableRefObject<((html: string) => void) | null>;
 }
+
+/** The tools a signature keeps. */
+const SIGNATURE_TOOLS = new Set(['undo', 'redo', 'font', 'size', 'bold', 'italic', 'underline', 'colour', 'clear', 'align', 'spacing', 'link', 'image', 'table', 'divider']);
 
 type Panel = 'link' | 'colour' | 'highlight' | 'table' | 'emoji' | 'chars' | 'image-url' | null;
 type Dialog = 'table' | 'button' | 'crop' | 'drive' | null;
 
-export function MailEditor({ value, onChange, clean, label, placeholder, editorRef, autoFocus, onFiles, aiSections, mergeFields, onMeetingLink, onAttachInstead, offline, minHeight = 260, className, footer }: MailEditorProps) {
+export function MailEditor({ value, onChange, clean, label, placeholder, editorRef, autoFocus, onFiles, aiSections, mergeFields, onMeetingLink, onAttachInstead, offline, minHeight = 260, className, footer, variant = 'compose', imageMaxBytes, extraGroups, insertRef }: MailEditorProps) {
+  const signature = variant === 'signature';
   const box = useRef<HTMLDivElement | null>(null);
   const wrap = useRef<HTMLDivElement | null>(null);
   const last = useRef<string | null>(null);
@@ -315,6 +331,10 @@ export function MailEditor({ value, onChange, clean, label, placeholder, editorR
     changed();
   };
 
+  useEffect(() => {
+    if (insertRef) insertRef.current = insert;
+  });
+
   /** A font family or size on the selection (or on what is typed next). */
   const inline = (prop: 'font-family' | 'font-size', v: string) => {
     restore();
@@ -432,8 +452,8 @@ export function MailEditor({ value, onChange, clean, label, placeholder, editorR
   };
 
   const applyLink = (input: string) => {
-    const url = normalizeLink(input);
-    if (!url) return setLinkError(text('Use an https, http or mailto address (for example https://example.com).'));
+    const url = normalizeLink(input, signature);
+    if (!url) return setLinkError(signature ? text('Use an https, http, mailto or tel address.') : text('Use an https, http or mailto address (for example https://example.com).'));
     restore();
     const existing = hereIn(box.current).link;
     if (existing) existing.setAttribute('href', url);
@@ -469,7 +489,7 @@ export function MailEditor({ value, onChange, clean, label, placeholder, editorR
     try {
       for (const f of files) {
         try {
-          const p = await prepareImage(f);
+          const p = await prepareImage(f, imageMaxBytes);
           insert(imageHtml({ src: p.src, alt: f.name.replace(/\.[a-z0-9]+$/i, ''), width: p.width }));
           if (p.shrunk) toast('info', text('“{name}” was made smaller to send ({size} KB).', { name: f.name, size: Math.round(p.bytes / 1024) }));
         } catch {
@@ -488,7 +508,7 @@ export function MailEditor({ value, onChange, clean, label, placeholder, editorR
   };
 
   const filesIn = (files: File[]) => {
-    const pics = files.filter((f) => /^image\/(png|jpeg|gif|webp|bmp)$/.test(f.type));
+    const pics = files.filter((f) => /^image\/(png|jpeg|gif|webp|bmp|svg\+xml)$/.test(f.type));
     const others = files.filter((f) => !pics.includes(f));
     if (pics.length) void insertImages(pics);
     if (others.length) onFiles?.(others);
@@ -642,7 +662,7 @@ export function MailEditor({ value, onChange, clean, label, placeholder, editorR
     },
   ];
 
-  const groups: ToolGroup[] = [
+  const allGroups: ToolGroup[] = [
     {
       id: 'history',
       label: text('History'),
@@ -727,6 +747,7 @@ export function MailEditor({ value, onChange, clean, label, placeholder, editorR
           ],
         },
         { id: 'table', label: text('Table'), icon: 'table', keys: `${MOD}${ALT}T`, expanded: panel === 'table', run: () => (remember(), setPanel(panel === 'table' ? null : 'table')) },
+        { id: 'divider', label: text('Divider'), icon: 'separator', run: () => insert(HR_HTML) },
         { id: 'emoji', label: text('Emoji'), icon: 'smile', expanded: panel === 'emoji', run: () => (remember(), setPanel(panel === 'emoji' ? null : 'emoji')) },
         { id: 'insert-more', label: text('More to insert'), icon: 'plus', menu: insertMenu },
       ],
@@ -741,6 +762,10 @@ export function MailEditor({ value, onChange, clean, label, placeholder, editorR
         ]
       : []),
   ];
+
+  const groups: ToolGroup[] = [...allGroups, ...(extraGroups ?? [])];
+  const extraIds = new Set((extraGroups ?? []).flatMap((g) => g.items.map((i) => i.id)));
+  const keepTool = (id: string) => (signature ? SIGNATURE_TOOLS.has(id) || extraIds.has(id) : id !== 'divider');
 
   /** The keys (worksuite-desktop#188); they stop here so the app's own (Mod+K is Search) do not also run. */
   const onKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -880,7 +905,7 @@ export function MailEditor({ value, onChange, clean, label, placeholder, editorR
     <div className={cx('relative flex flex-col rounded-[10px] border border-line bg-surface transition-shadow focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25', className)}>
       <div className="sticky top-0 z-10 flex flex-col rounded-t-[10px] border-b border-line bg-surface">
         <div className="flex min-w-0 items-center px-1.5 py-1">
-          <ToolbarRow groups={groups} label={text('{label} formatting', { label })} request={request} className="min-w-0 flex-1" />
+          <ToolbarRow groups={groups} keep={keepTool} label={text('{label} formatting', { label })} request={request} className="min-w-0 flex-1" />
         </div>
         {panel === 'link' ? (
           <FieldStrip
@@ -1094,18 +1119,18 @@ export function MailEditor({ value, onChange, clean, label, placeholder, editorR
         ) : null}
       </div>
       {footer}
-      <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden aria-hidden onChange={(e) => void insertImages(fileList(e.target.files)).then(() => (e.target.value = ''))} />
+      <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" multiple hidden aria-hidden onChange={(e) => void insertImages(fileList(e.target.files)).then(() => (e.target.value = ''))} />
       <input
         ref={replaceInput}
         type="file"
-        accept="image/png,image/jpeg,image/gif,image/webp"
+        accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
         hidden
         aria-hidden
         onChange={(e) => {
           const f = e.target.files?.[0];
           e.target.value = '';
           if (!f || !img) return;
-          void prepareImage(f).then(
+          void prepareImage(f, imageMaxBytes).then(
             (p) => {
               img.setAttribute('src', p.src);
               changed();

@@ -5,6 +5,13 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.125 — 2026-10-03
+
+- **Proper email signatures (#166).** Signatures are written in the mail editor: bold, italic, fonts, sizes and colours, alignment, links (including mailto: and tel:), dividers, tables for a logo beside your details, and pictures you can resize, link and describe — big ones are shrunk automatically. Add social icons (LinkedIn, Facebook, X, Instagram, YouTube, WhatsApp, website) by pasting a link, and fields such as {name}, {job_title}, {company}, {phone} and {company_logo} that fill in from your profile. Paste an existing HTML signature in the source view, and check it in the live preview in light or dark and on a desktop or phone width.
+- **Templates:** Simple, Classic with logo, Photo card, Corporate banner, Minimal line, Social, Bilingual (with Sinhala or Tamil lines) and Legal footer, each filled in from your profile and your company's logo and colour. Save your own as a template. Administrators can publish locked company signatures that people use but can't change.
+- **Choosing:** for each account, pick the signature for new mail and a shorter one (or none) for replies and forwards, and whether it goes above the quoted message. In a new email, the **Signature** menu switches or removes it, and changing **From** switches it for you. Save becomes active as soon as there's something to save, and closing with unsaved changes asks first.
+- Needs the server update (Mail migration `2026-10-11-000100_MailSignatureStudio`). Pictures are hosted from your Files with a public link by default, or can be embedded. Recipients' mail apps won't swap in the dark-mode logo; it shows in the preview only.
+
 ## 0.2.124 — 2026-10-03
 
 - **Mail sync that actually syncs (#190).** With the server update, every run now checks every folder (not just Inbox), finds new mail reliably, carries on past a folder that fails and says so (a run is **Partial**, not Success), never overlaps another run, resumes where it stopped, and only updates "last successful sync" when everything synced. On this computer, message bodies for the keep period now download in the background — unread Inbox first — so storage grows and mail opens instantly.

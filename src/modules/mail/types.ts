@@ -444,6 +444,50 @@ export interface Signature {
   mailbox?: number | null;
   default_new?: boolean;
   default_reply?: boolean;
+  /** worksuite-desktop#166 (newer servers): the plain-text version. */
+  text?: string;
+  /** personal, or the organisation's (made by an administrator). */
+  scope?: 'personal' | 'company';
+  /** An organisation signature people use with their own details and cannot change. */
+  locked?: boolean;
+  editable?: boolean;
+  /** hosted: pictures by their public WorkSuite link; embedded: inside the message (cid:). */
+  image_mode?: 'hosted' | 'embedded';
+  dark_logo?: string | null;
+  images?: string[];
+  variables_used?: string[];
+  /** Embedded mode: each hosted picture's address and the picture as a data: URL. */
+  embedded?: Record<string, string>;
+  updated_at?: string | null;
+}
+
+/** Which signature an account uses (mailbox null: every account without its own choice). */
+export interface SignatureSetting {
+  mailbox: number | null;
+  new_id: number | null;
+  /** null: no signature on replies and forwards. */
+  reply_id: number | null;
+  /** above_quote: below the reply, above the quoted message; below_quote: at the very end. */
+  placement: 'above_quote' | 'below_quote';
+}
+
+export interface SignatureTemplate {
+  id: number;
+  name: string;
+  html: string;
+  scope: 'personal' | 'company';
+  editable: boolean;
+}
+
+/** GET /api/mail/signatures: older servers send only `signatures`. */
+export interface SignaturesData {
+  signatures: Signature[];
+  settings?: SignatureSetting[];
+  templates?: SignatureTemplate[];
+  values?: Record<string, string>;
+  details?: Record<string, string>;
+  assets?: { social_base: string; social: string[] };
+  can_manage_company?: boolean;
 }
 
 /** A message's address: which mailbox, which folder, which uid. */
