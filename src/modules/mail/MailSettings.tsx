@@ -13,6 +13,7 @@ import { Button, Chip, ErrorNote, Modal, Spinner, Switch, TextField, cx } from '
 import type { Preferences } from '@shared/types';
 import { AddMailbox } from './AddMailbox';
 import { AccountsSync } from './AccountsSync';
+import { QuickStepsSettings } from './QuickStepsUi';
 import { includedIds, runSync } from './sync';
 import { AppPasswords } from './AppPasswords';
 import { ImportMail } from './Import';
@@ -29,7 +30,7 @@ import type { MailStoreStats } from '@shared/types';
  * and how the Mail screen is laid out (Layout & reading).
  */
 
-type Tab = 'accounts' | 'storage' | 'import' | 'signatures' | 'rules' | 'layout';
+type Tab = 'accounts' | 'storage' | 'import' | 'signatures' | 'rules' | 'quicksteps' | 'layout';
 
 const TABS: Array<[Tab, string]> = [
   ['accounts', 'Accounts & offline'],
@@ -37,6 +38,7 @@ const TABS: Array<[Tab, string]> = [
   ['import', 'Import mail'],
   ['signatures', 'Signatures'],
   ['rules', 'Rules'],
+  ['quicksteps', 'Quick Steps'],
   ['layout', 'Appearance & reading'],
 ];
 
@@ -75,7 +77,7 @@ export function MailSettings({ query = new URLSearchParams() }: { query?: URLSea
           </button>
         ))}
       </div>
-      {tab === 'accounts' ? <Accounts /> : tab === 'storage' ? <Storage /> : tab === 'import' ? <ImportMail openId={importId} /> : tab === 'signatures' ? <Signatures /> : tab === 'rules' ? <Rules mailbox={defaultBox ? String(defaultBox.id) : null} /> : <Layout />}
+      {tab === 'accounts' ? <Accounts /> : tab === 'storage' ? <Storage /> : tab === 'import' ? <ImportMail openId={importId} /> : tab === 'signatures' ? <Signatures /> : tab === 'rules' ? <Rules mailbox={defaultBox ? String(defaultBox.id) : null} /> : tab === 'quicksteps' ? <QuickStepsSettings /> : <Layout />}
     </div>
   );
 }

@@ -143,6 +143,23 @@ export function useTemplates(enabled: boolean) {
   return useQuery({ queryKey: ['mail', 'templates'], queryFn: () => apiGet<{ templates: Template[] }>('/api/mail/templates'), enabled, staleTime: 5 * 60_000 });
 }
 
+/** Quick Parts (DMO-CMP-07): saved snippets inserted by name; none from an older server. */
+export function useQuickParts(enabled: boolean) {
+  return useQuery({
+    queryKey: ['mail', 'quick-parts'],
+    queryFn: async () => {
+      try {
+        return (await apiGet<{ quick_parts: Array<{ id: number; name: string; html: string; org: boolean }> }>('/api/mail/quick-parts')).quick_parts;
+      } catch (e) {
+        if (e instanceof ApiError && (e.status === 404 || e.status === 503)) return [];
+        throw e;
+      }
+    },
+    enabled,
+    staleTime: 5 * 60_000,
+  });
+}
+
 export function useSignatures(enabled: boolean) {
   return useQuery({ queryKey: ['mail', 'signatures'], queryFn: () => apiGet<{ signatures: Signature[] }>('/api/mail/signatures'), enabled, staleTime: 5 * 60_000 });
 }

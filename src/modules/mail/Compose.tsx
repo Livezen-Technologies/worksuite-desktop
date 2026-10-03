@@ -10,12 +10,12 @@ import { Menu, type MenuSection } from '../../components/Menu';
 import { Select } from '../../components/Select';
 import { DriveFilePicker, type DriveFileRow } from '../../components/DriveFilePicker';
 import { RichTextEditor } from '../../components/RichTextEditor';
-import { Button, Chip, ErrorNote, FileBadge, Spinner, cx } from '../../components/ui';
+import { Button, Chip, ErrorNote, FileBadge, Modal, Spinner, cx } from '../../components/ui';
 import { AiMenuButton } from '../ai/AiMenuButton';
 import { AiTextDialog } from '../ai/AiTextDialog';
 import { WRITING_TASKS, type TextTask } from '../ai/textTools';
-import { sendMessage, useSignatures, useTemplates } from './api';
-import { cleanComposeHtml, composeBody, composeText, migrateDraft, parseQuote, signatureBlock, splitSignature, textToComposeHtml, type ComposeDraft } from './composeHtml';
+import { sendMessage, useQuickParts, useSignatures, useTemplates } from './api';
+import { cleanComposeHtml, composeBody, composeText, migrateDraft, parseQuote, pickSignature, sendChecks, signatureBlock, splitSignature, textToComposeHtml, type ComposeDraft } from './composeHtml';
 import { mailboxLetter } from './model';
 import { sendAfterUndoWindow } from './outgoing';
 import { AccountAvatar } from './parts';
@@ -90,6 +90,13 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   // The names behind chosen addresses, so a chip reads "Nimal Perera" rather than the address (kept with the draft).
   const named = (email: string, name: string) => set({ names: { ...(latest.current.names ?? {}), [email.toLowerCase()]: name } });
   const templates = useTemplates(true);
+  const quickParts = useQuickParts(true);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [partsOpen, setPartsOpen] = useState(false);
+  const optionsBtn = useRef<HTMLSpanElement>(null);
+  // A choice from the Options and Quick Parts menus, put into the draft right after (menus hand over data, not the draft's ref).
+  const [pending, setPending] = useState<{ options?: NonNullable<ComposeDraft['options']>; part?: string } | null>(null);
+  const partsBtn = useRef<HTMLSpanElement>(null);
   const signatures = useSignatures(true);
   // The mailbox it goes from: the draft's, else the one the page names, else the first (the list may arrive after the composer opens).
   const from = boxes.find((b) => String(b.id) === v.from) ?? boxes.find((b) => String(b.id) === defaultBox) ?? boxes.find((b) => b.is_default) ?? boxes[0] ?? null;
@@ -99,7 +106,8 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   const own = composeText(mine);
 
   // The default signature goes in once, below the message, on a message that has none yet.
-  const sig = signatures.data?.signatures.find((s) => s.is_default) ?? null;
+  // The account's own signature for new mail or for replies (DMO-CMP-06).
+  const sig = pickSignature(signatures.data?.signatures ?? [], fromId || null, seed.mode);
   useEffect(() => {
     if (!sig || v.signed || draft.restored || own.trim() || signature) return;
     draft.setValue({ ...v, signed: true, html: `${mine}${signatureBlock(sig.html)}` });
@@ -180,14 +188,31 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
       reply_mode: seed.mode === 'new' ? undefined : seed.mode,
       mailbox: fromId || undefined,
       attachments: (d.attachments ?? []).map((a) => a.token),
+      ...(d.options && Object.keys(d.options).length ? { options: d.options } : {}),
       ...(scheduleAt ? { schedule_at: scheduleAt } : {}),
     };
   };
 
-  const sendNow = () => {
+  const [checks, setChecks] = useState<Array<'attachment' | 'subject'> | null>(null);
+  useEffect(() => {
+    if (!pending) return;
+    const d = latest.current;
+    if (pending.options) set({ options: { ...d.options, ...pending.options } });
+    if (pending.part) {
+      const [mineNow, sigNow] = splitSignature(d.html);
+      set({ html: `${mineNow}${composeText(mineNow).trim() ? '<div><br></div>' : ''}${cleanComposeHtml(pending.part)}${sigNow}` });
+    }
+    setPending(null);
+    // Only when a choice arrives.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending]);
+  const sendNow = (checked = false) => {
     setError(null);
     const d = latest.current;
     if (!parseAddresses(d.to).length) return setError(text('Add at least one recipient.'));
+    // Forgot the file? No subject? Asked once before it goes (DMO-CMP-16).
+    const issues = checked ? [] : sendChecks(d, composeText(splitSignature(d.html)[0]));
+    if (issues.length) return setChecks(issues);
     const body = payload();
     const subject = d.subject || text('(no subject)');
     const toList = parseAddresses(d.to).join(', ');
@@ -237,6 +262,19 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
       toast('error', errorMessage(e));
     }
   };
+
+  // A Quick Step's "Reply with template": the template goes in once, when it has loaded.
+  const templated = useRef(false);
+  const seedTemplate = seed.templateId ? (templates.data?.templates ?? []).find((t) => t.id === seed.templateId) : undefined;
+  const applyRef = useRef(applyTemplate);
+  useEffect(() => {
+    applyRef.current = applyTemplate;
+  });
+  useEffect(() => {
+    if (!seedTemplate || templated.current || draft.restored) return;
+    templated.current = true;
+    void applyRef.current(seedTemplate);
+  }, [seedTemplate, draft.restored]);
 
   const quote = parseQuote(v.quote);
   const list = (templates.data?.templates ?? []).filter((t) => !tplQuery.trim() || t.name.toLowerCase().includes(tplQuery.trim().toLowerCase()));
@@ -336,6 +374,17 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
                 <Button size="sm" icon="folder" onClick={() => setDrive(true)} disabled={offline} title={offline ? text('Attaching needs WorkSuite.') : text('Attach a copy of a file from Files')}>
                   Attach from Files
                 </Button>
+                <span ref={optionsBtn} className="inline-flex">
+                  <Button size="sm" icon="sliders" aria-haspopup="menu" aria-expanded={optionsOpen} onClick={() => setOptionsOpen(!optionsOpen)} title={text('Importance, sensitivity and receipts')}>
+                    {text('Options')}
+                    {v.options?.importance === 'high' ? <span className="font-bold text-danger">!</span> : null}
+                  </Button>
+                </span>
+                <span ref={partsBtn} className="inline-flex">
+                  <Button size="sm" icon="file-text" aria-haspopup="menu" aria-expanded={partsOpen} onClick={() => setPartsOpen(!partsOpen)} disabled={!quickParts.data?.length} title={quickParts.data?.length ? text('Insert a saved snippet') : text('No Quick Parts yet — add them in Settings › Mail › Quick Steps')}>
+                    {text('Quick Parts')}
+                  </Button>
+                </span>
                 <Button size="sm" icon="paperclip" onClick={() => fileInput.current?.click()} disabled={offline} title={offline ? text('Attaching needs WorkSuite.') : text('Attach from this computer')}>
                   Attach
                 </Button>
@@ -438,6 +487,58 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
       </aside>
       {drive ? <DriveFilePicker title={text('Attach from Files')} confirmLabel={text('Attach')} onChoose={(files) => void attachFromDrive(files)} onClose={() => setDrive(false)} /> : null}
       {menu ? <Menu sections={sendSections} label={text('Send later')} anchor={sendMenu} prefer="top" align="start" onClose={() => setMenu(false)} /> : null}
+      {optionsOpen ? (
+        <Menu
+          label={text('Message options')}
+          anchor={optionsBtn}
+          prefer="bottom"
+          align="start"
+          onClose={() => setOptionsOpen(false)}
+          sections={[
+            { id: 'importance', label: text('Importance'), items: (['high', 'normal', 'low'] as const).map((l) => ({ id: l, label: l === 'high' ? text('High') : l === 'low' ? text('Low') : text('Normal'), radio: true, checked: (v.options?.importance ?? 'normal') === l, onSelect: () => setPending({ options: { importance: l === 'normal' ? undefined : l } }) })) },
+            { id: 'sensitivity', label: text('Sensitivity'), items: (['normal', 'personal', 'private', 'confidential'] as const).map((l) => ({ id: l, label: { normal: text('Normal'), personal: text('Personal'), private: text('Private'), confidential: text('Confidential') }[l], radio: true, checked: (v.options?.sensitivity ?? 'normal') === l, onSelect: () => setPending({ options: { sensitivity: l === 'normal' ? undefined : l } }) })) },
+            {
+              id: 'receipts',
+              label: text('Receipts'),
+              items: [
+                { id: 'read', label: text('Request a read receipt'), checked: !!v.options?.read_receipt, description: text('Many mail apps ask the reader first, or never send one.'), onSelect: () => setPending({ options: { read_receipt: !v.options?.read_receipt } }) },
+                { id: 'delivery', label: text('Request a delivery receipt'), checked: !!v.options?.delivery_receipt, onSelect: () => setPending({ options: { delivery_receipt: !v.options?.delivery_receipt } }) },
+              ],
+            },
+          ]}
+        />
+      ) : null}
+      {partsOpen && quickParts.data?.length ? (
+        <Menu
+          label={text('Quick Parts')}
+          anchor={partsBtn}
+          prefer="bottom"
+          align="start"
+          onClose={() => setPartsOpen(false)}
+          sections={[{ id: 'parts', items: quickParts.data.map((p) => ({ id: `p${p.id}`, label: p.name, description: p.org ? text('Organisation') : undefined, onSelect: () => setPending({ part: p.html }) })) }]}
+        />
+      ) : null}
+      {checks ? (
+        <Modal
+          title={checks.includes('attachment') ? text('Did you mean to attach a file?') : text('Send without a subject?')}
+          labelledBy="mail-send-check"
+          width={420}
+          onClose={() => setChecks(null)}
+          footer={
+            <>
+              <Button onClick={() => setChecks(null)}>{checks.includes('attachment') ? text('Attach a file') : text('Add a subject')}</Button>
+              <Button variant="primary" onClick={() => (setChecks(null), sendNow(true))}>
+                {text('Send anyway')}
+              </Button>
+            </>
+          }
+        >
+          <ul className="flex list-disc flex-col gap-1 p-5 pl-9 text-[13.5px] text-ink">
+            {checks.includes('attachment') ? <li>{text('Your message mentions an attachment, but nothing is attached.')}</li> : null}
+            {checks.includes('subject') ? <li>{text('There is no subject.')}</li> : null}
+          </ul>
+        </Modal>
+      ) : null}
     </div>
   );
 }

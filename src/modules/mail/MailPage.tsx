@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { apiGetMeta, setDefaultMailbox, withMailbox } from '../../core/api';
+import { apiGetMeta, apiPut, setDefaultMailbox, withMailbox } from '../../core/api';
 import { app } from '../../core/app-state';
 import { errorMessage } from '../../core/bridge';
 import { text } from '../../core/i18n';
@@ -13,7 +13,7 @@ import { SidePanel } from '../../components/SidePanel';
 import { Empty, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
 import { AddMailbox } from './AddMailbox';
-import { messageAction, useLocalStore, useMailPrefs, useMailboxes, usePendingMail, useViewCounts, type MessageActionName } from './api';
+import { messageAction, moveMessage, useLocalStore, useMailPrefs, useMailboxes, usePendingMail, useViewCounts, type MessageActionName } from './api';
 import { runCommand } from '../../core/commands';
 import { bindings, commandFor, isPlain, keyOf, type MailCommandId } from './keymap';
 import { GoToFolder, ShortcutSheet } from './Shortcuts';
@@ -30,7 +30,11 @@ import { classifyFocus, otherBanner, pinnedFirst, stateKey, useCategories, useFo
 import { MessageList, type ListRow } from './MessageList';
 import { MessageView, windowRoute, type ViewControls } from './MessageView';
 import { applyFilters, filtersFor, folderName, folderViewPatch, groupRows, queueKey, queuedByMessage, rowMailbox, smartView, sortRows, step, withFolderView, type ChipId } from './model';
-import { useOutgoing, undoSend } from './outgoing';
+import { sendAfterUndoWindow, useOutgoing, undoSend } from './outgoing';
+import { needsAsking, removesMessages, runQuickStep, saveAnswers, useQuickSteps, type QuickStep } from './quickSteps';
+import { QuickStepAsk } from './QuickStepsUi';
+import { alertFor, chime, deviceId, freshRows, markSeen, myRules, ruleTakes } from './clientRules';
+import { CreateRule, useRules } from './MailRules';
 import { ReadingPane, afterClose, withTab, type OpenTab } from './ReadingPane';
 import { ScheduledList } from './Scheduled';
 import { SearchView } from './SearchView';
@@ -184,9 +188,12 @@ export default function MailPage({ active }: ModuleProps) {
   const focusCtx = useFocusContext(active && focusOn);
   const [focusTab, setFocusTab] = useState<'focused' | 'other'>('focused');
   const stateKeyOf = (m: MessageRow) => stateKey(rowMailbox(m, effectiveBox), m.folder_slug ?? folder, m.id);
+  // Messages a Quick Step is about to move away: gone from the list at once, back on Undo.
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
   const decorated = (() => {
     let all = (list.data?.pages ?? []).flatMap((p) => p.data.messages);
     all = applyFilters(all, filters);
+    if (hidden.size) all = all.filter((m) => !hidden.has(rowKey(m)));
     if (isTeam) {
       const me = Number(app.get().bootstrap?.user.id ?? 0);
       all = all.filter((m) => teamRowShown(m, team, teamWho, me));
@@ -220,8 +227,39 @@ export default function MailPage({ active }: ModuleProps) {
     setAnchorKey(r.key);
   };
   const stateActs = useStateActions();
-  // Quick Steps by number (Ctrl+Shift+1…9) — set up in P2; nothing to run until then.
-  const runQuickStepKey = (n: number): boolean => n < 0;
+  // Quick Steps (DMO-QS, WF-DO03): run on the selection with one Undo; asked values asked once.
+  const quickSteps = useQuickSteps(active);
+  const [asking, setAsking] = useState<{ step: QuickStep; targets: Target[] } | null>(null);
+  const runStep = (step: QuickStep, targets: Target[]) => {
+    if (targets.length === 0) return;
+    if (needsAsking(step).length) return setAsking({ step, targets });
+    const keys = targets.map((t) => queueKey(t.mailbox, t.folder, t.row.id));
+    if (removesMessages(step)) setHidden((h) => new Set([...h, ...keys]));
+    setSelection(new Set());
+    const label = targets.length === 1 ? text('“{step}” on “{subject}”', { step: step.name, subject: targets[0]!.row.subject || text('(no subject)') }) : text('“{step}” on {n} messages', { step: step.name, n: targets.length });
+    sendAfterUndoWindow(
+      step.name,
+      async () => {
+        const r = await runQuickStep(step, targets);
+        setHidden((h) => new Set([...h].filter((k) => !keys.includes(k))));
+        void qc.invalidateQueries({ queryKey: ['mail'] });
+        void qc.invalidateQueries({ queryKey: ['offline'] });
+        if (r.failed) toast('error', text('{n} of {total} failed — {why}', { n: r.failed, total: targets.length, why: r.errors[0] ?? '' }));
+        else toast('success', text('Done: {what}.', { what: label }));
+        if (r.compose[0]) openCompose(r.compose[0]);
+      },
+      () => setHidden((h) => new Set([...h].filter((k) => !keys.includes(k)))),
+      10,
+      label,
+    );
+  };
+  const runQuickStepKey = (n: number): boolean => {
+    const step = (quickSteps.data ?? []).find((q) => q.shortcut === n);
+    const ts = selectedTargets(currentRow ?? undefined);
+    if (!step || ts.length === 0) return false;
+    runStep(step, ts);
+    return true;
+  };
   const targetOf = (r: ListRow): Target => ({ row: r.row, mailbox: rowMailbox(r.row, effectiveBox), folder: r.row.folder_slug ?? folder });
   const selectedTargets = (fallback?: ListRow): Target[] => {
     const picked = flat.filter((r) => selection.has(r.key));
@@ -553,7 +591,38 @@ export default function MailPage({ active }: ModuleProps) {
       />
     );
 
-  const menuSections = (targets: Target[]) => stateSections(targets, stateActs, cats.data ?? null, { focusTabs: focusOn ? focusTab : null, onCustom: (what) => setCustom({ what, targets }) });
+  // Rules that run on this computer only (DMO-RUL-04): applied to new inbox mail as it shows up here.
+  const rules = useRules(active && boxes.length > 0);
+  const brokenRules = (rules.data?.filters ?? []).filter((f) => f.last_error).length;
+  const clientRuleRows = folder === 'inbox' && !view ? decorated : null;
+  useEffect(() => {
+    const mine = myRules(rules.data?.filters ?? []);
+    if (!clientRuleRows || mine.length === 0 || networkOffline) return;
+    const { rows: fresh, old } = freshRows(clientRuleRows, rowKey);
+    if (fresh.length === 0) return;
+    markSeen(fresh.map(rowKey));
+    for (const m of fresh) {
+      const rule = mine.find((r) => ruleTakes(r, m));
+      if (!rule) continue;
+      const ref = { uid: String(m.id), folder: m.folder_slug ?? 'inbox', mailbox: rowMailbox(m, effectiveBox) };
+      const quiet = old.has(rowKey(m));
+      if (!quiet && rule.client_actions?.includes('alert')) alertFor(m, rule.name || text('Rule'));
+      if (!quiet && rule.client_actions?.includes('sound')) chime();
+      if (rule.action === 'fileinto' && rule.action_arg) void moveMessage(ref, rule.action_arg.startsWith('label:') || ['archive', 'trash', 'spam', 'sent', 'drafts'].includes(rule.action_arg) ? rule.action_arg : `label:${rule.action_arg}`, rule.action_arg, m.subject).catch(() => undefined);
+      else if (rule.action === 'star' && !m.is_starred) void messageAction(ref, 'star', m.subject).catch(() => undefined);
+      else if (rule.action === 'seen' && !m.is_read) void messageAction(ref, 'read', m.subject).catch(() => undefined);
+      else if (rule.action === 'delete') void messageAction(ref, 'trash', m.subject).catch(() => undefined);
+    }
+    // Keyed on the rows that are listed; the rules and the account only matter when rows change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientRuleRows, rules.data]);
+  const [ruleFor, setRuleFor] = useState<MessageRow | null>(null);
+
+  const menuSections = (targets: Target[]) => [
+    ...(quickSteps.data?.length ? [{ id: 'qs', label: text('Quick Steps'), items: quickSteps.data.slice(0, 12).map((q) => ({ id: `qs${q.id}`, label: q.name, icon: q.icon, shortcut: q.shortcut ? `Ctrl+Shift+${q.shortcut}` : undefined, onSelect: () => runStep(q, targets) })) }] : []),
+    ...stateSections(targets, stateActs, cats.data ?? null, { focusTabs: focusOn ? focusTab : null, onCustom: (what) => setCustom({ what, targets }) }),
+    ...(targets.length === 1 ? [{ id: 'rule', items: [{ id: 'rule', label: text('Create rule…'), icon: 'filter', description: targets[0]!.row.from_email, onSelect: () => setRuleFor(targets[0]!.row) }] }] : []),
+  ];
   const multi = flat.filter((r) => selection.has(r.key));
   const currentRow = flat.find((r) => r.key === currentKey) ?? null;
 
@@ -593,6 +662,7 @@ export default function MailPage({ active }: ModuleProps) {
           onLoaded={nameTab}
           archiveTo={archiveTo}
           marks={currentRow?.row ?? null}
+          quickStepButtons={(quickSteps.data ?? []).map((q) => ({ id: q.id, name: q.name, icon: q.icon, run: () => runStep(q, currentRow ? [targetOf(currentRow)] : []) }))}
           stateMenu={() => menuSections(currentRow ? [targetOf(currentRow)] : current ? [{ row: { id: Number(current.uid) || 0, subject: tabs.find((t) => t.key === currentKey)?.subject ?? '', from_name: '', from_email: '', preview: '', is_read: true, is_starred: false, has_attachment: false, created_at: '' }, mailbox: current.mailbox, folder: current.folder }] : [])}
         />
       ) : null}
@@ -701,14 +771,14 @@ export default function MailPage({ active }: ModuleProps) {
           </div>
         </div>
       </div>
-      <StatusBar summary={summary} sync={shared.status} waiting={mailPending.length} zoom={prefs.zoom ?? 100} localBytes={localBytes.data ?? null} items={virtualOutbox || folder === 'outbox' ? null : (firstPage?.data.total ?? null)} unread={allRole === 'inbox' ? unifiedUnread : null} onOpenSync={() => navigate('/settings/mail?tab=accounts')} />
+      <StatusBar summary={summary} sync={shared.status} waiting={mailPending.length} zoom={prefs.zoom ?? 100} localBytes={localBytes.data ?? null} items={virtualOutbox || folder === 'outbox' ? null : (firstPage?.data.total ?? null)} notice={brokenRules ? { text: brokenRules === 1 ? text('1 rule was switched off') : text('{n} rules were switched off', { n: brokenRules }), onClick: () => navigate('/settings/mail?tab=rules') } : null} unread={allRole === 'inbox' ? unifiedUnread : null} onOpenSync={() => navigate('/settings/mail?tab=accounts')} />
       {outgoing.length ? (
         <div role="status" aria-live="polite" className="pointer-events-none fixed bottom-14 left-1/2 z-40 flex -translate-x-1/2 flex-col gap-2">
           {outgoing.map((o) => (
             <div key={o.id} className="pointer-events-auto flex items-center gap-3 rounded-[10px] bg-navy px-4 py-2.5 text-[13.5px] text-white shadow-lg">
-              <SendingLabel subject={o.subject} at={o.at} />
+              <SendingLabel subject={o.subject} at={o.at} label={o.label} />
               <button type="button" onClick={() => undoSend(o.id)} className="rounded-[6px] bg-primary px-3 py-1 text-[13px] font-bold text-[var(--ws-on-primary)] hover:bg-primary-hover">
-                Undo
+                {text('Undo')}
               </button>
             </div>
           ))}
@@ -717,6 +787,35 @@ export default function MailPage({ active }: ModuleProps) {
       {adding ? <AddMailbox onClose={() => setAdding(false)} /> : null}
       {sheet ? <ShortcutSheet prefs={prefs} onPrefs={setPrefs} onClose={() => setSheet(false)} /> : null}
       {gotoOpen ? <GoToFolder boxes={boxes} onPick={pick} onClose={() => setGotoOpen(false)} /> : null}
+      {ruleFor ? (
+        <CreateRule
+          row={ruleFor}
+          onClose={() => setRuleFor(null)}
+          onSave={(rule) => {
+            setRuleFor(null);
+            const all = [...(rules.data?.filters ?? []), rule.run_location === 'client' ? { ...rule, device_id: deviceId() } : rule];
+            void apiPut('/api/mail/rules/filters', { filters: all, ...(effectiveBox ? { mailbox: effectiveBox } : {}) })
+              .then(() => {
+                void qc.invalidateQueries({ queryKey: ['mail', 'rules'] });
+                toast('success', text('Rule added.'));
+              })
+              .catch((e) => toast('error', errorMessage(e)));
+          }}
+        />
+      ) : null}
+      {asking ? (
+        <QuickStepAsk
+          step={asking.step}
+          mailbox={asking.targets[0]?.mailbox ?? null}
+          onCancel={() => setAsking(null)}
+          onAnswer={(values) => {
+            const { step, targets } = asking;
+            setAsking(null);
+            void saveAnswers(step, values).then(() => qc.invalidateQueries({ queryKey: ['mail', 'quick-steps'] })).catch(() => undefined);
+            runStep({ ...step, actions: step.actions.map((a) => (a.ask ? { ...a, ask: false, ...(a.type === 'move' || a.type === 'copy' ? { folder: values.folder } : { to: values.to }) } : a)) }, targets);
+          }}
+        />
+      ) : null}
       {rowMenu ? (
         <ContextMenu
           x={rowMenu.x}
@@ -796,11 +895,12 @@ export function composeSeedFromQuery(query: URLSearchParams): ComposeSeed {
 }
 
 /** "Sending “Re: Payroll export” in 8 s", counting down. */
-function SendingLabel({ subject, at }: { subject: string; at: number }) {
+function SendingLabel({ subject, at, label }: { subject: string; at: number; label?: string }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(t);
   }, []);
-  return <span>{text('Sending “{subject}” in {n} s', { subject, n: Math.max(0, Math.ceil((at - now) / 1000)) })}</span>;
+  const n = Math.max(0, Math.ceil((at - now) / 1000));
+  return <span>{label ? text('{what} in {n} s', { what: label, n }) : text('Sending “{subject}” in {n} s', { subject, n })}</span>;
 }

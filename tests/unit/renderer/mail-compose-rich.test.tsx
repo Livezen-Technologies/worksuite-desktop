@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * pasted pictures as attachments, and the Send split control.
  */
 
-const net = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), request: vi.fn(), call: vi.fn(), toast: vi.fn(), send: vi.fn(), ai: null as null | { input: () => string; actions: Array<{ run: (t: string) => void }> }, sigs: [] as Array<{ id: number; name: string; html: string; is_default: boolean }> }));
+const net = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), request: vi.fn(), call: vi.fn(), toast: vi.fn(), send: vi.fn(), ai: null as null | { input: () => string; actions: Array<{ run: (t: string) => void }> }, sigs: [] as Array<{ id: number; name: string; html: string; is_default: boolean; mailbox?: number | null; default_new?: boolean; default_reply?: boolean }>, parts: [] as Array<{ id: number; name: string; html: string; org: boolean }> }));
 vi.mock('../../../src/core/api', () => ({ apiGet: net.get, apiPost: net.post, request: net.request, apiUrl: (s: string) => s }));
 vi.mock('../../../src/core/bridge', () => ({ call: net.call, errorMessage: (e: Error) => e.message }));
 vi.mock('../../../src/core/toasts', () => ({ toast: net.toast }));
@@ -19,6 +19,7 @@ vi.mock('../../../src/modules/mail/api', () => ({
   sendMessage: net.send,
   useTemplates: () => ({ data: { templates: [] }, isLoading: false }),
   useSignatures: () => ({ data: { signatures: net.sigs } }),
+  useQuickParts: () => ({ data: net.parts }),
 }));
 vi.mock('../../../src/modules/ai/AiMenuButton', () => ({
   AiMenuButton: ({ items }: { items: Array<{ label: string; run: () => void; disabled?: boolean }> }) => (
@@ -63,6 +64,7 @@ beforeEach(() => {
   net.send.mockReset().mockResolvedValue('sent');
   net.ai = null;
   net.sigs = [];
+  net.parts = [];
   exec = vi.fn((cmd: string, _ui: boolean, value?: string) => {
     const box = document.querySelector<HTMLElement>('[contenteditable]');
     if (!box) return false;
@@ -397,5 +399,42 @@ describe('composing', () => {
     expect(screen.getByRole('menu')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Send later…' }).className).toContain('h-[38px]');
     expect(screen.getByRole('button', { name: 'Discard draft' }).className).toContain('text-danger');
+  });
+});
+
+describe('message options, Quick Parts and send checks (ENH-MAIL-03 P2)', () => {
+  it('sends importance, sensitivity and receipt requests with the message (DMO-CMP-10)', async () => {
+    compose({ mode: 'new', to: 'ann@example.org', subject: 'Plan' });
+    fireEvent.click(screen.getByRole('button', { name: /Options/ }));
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitemradio', { name: /High/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Options/ }));
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitemradio', { name: /Confidential/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Options/ }));
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitemcheckbox', { name: /Request a read receipt/ }));
+    fireEvent.click(screen.getByRole('radio', { name: /Tomorrow morning/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send later…' }));
+    await waitFor(() => expect(net.post).toHaveBeenCalledWith('/api/mail/send', expect.objectContaining({ options: { importance: 'high', sensitivity: 'confidential', read_receipt: true } })));
+  });
+
+  it('puts a Quick Part into the message above the signature (DMO-CMP-07)', async () => {
+    net.sigs = [{ id: 4, name: 'Default', html: '<div>Hasarinda</div>', is_default: true }];
+    net.parts = [{ id: 5, name: 'Directions', html: '<div>Gate 2</div><script>x()</script>', org: false }];
+    const { box } = compose({ mode: 'new', to: 'ann@example.org' });
+    await waitFor(() => expect(box().innerHTML).toContain('<div>Hasarinda</div>'));
+    fireEvent.click(screen.getByRole('button', { name: 'Quick Parts' }));
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: /Directions/ }));
+    await waitFor(() => expect(box().innerHTML.startsWith('<div>Gate 2</div>')).toBe(true));
+    expect(box().innerHTML).not.toContain('script');
+    expect(box().innerHTML.indexOf('Gate 2')).toBeLessThan(box().innerHTML.indexOf('Hasarinda'));
+  });
+
+  it('asks once when the message mentions an attachment that is not there, and sends on "Send anyway" (DMO-CMP-16)', async () => {
+    const { close, box } = compose({ mode: 'new', to: 'ann@example.org', subject: 'Plan', body: 'Please see the attached plan' });
+    await waitFor(() => expect(box().textContent).toContain('attached'));
+    fireEvent.click(within(screen.getByRole('group', { name: 'Send options' })).getByRole('button', { name: 'Send' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Did you mean to attach a file?' });
+    expect(close).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send anyway' }));
+    expect(close).toHaveBeenCalled();
   });
 });

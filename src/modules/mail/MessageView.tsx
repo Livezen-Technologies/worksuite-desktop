@@ -59,6 +59,8 @@ export interface MessageViewProps {
    * own Archive ('default'), a folder chosen for an account without one, or
    * null when the person cancelled.
    */
+  /** The Quick Steps gallery in the Classic command bar (DMO-QS, O-UI-02). */
+  quickStepButtons?: Array<{ id: number; name: string; icon: string; run: () => void }>;
   /** Pin, Snooze, Flag, Categorize and Focused for this message (the list's right-click menu). */
   stateMenu?: () => MenuSection[];
   /** The row as the list knows it, with WorkSuite's states on it. */
@@ -389,6 +391,7 @@ export function MessageView(p: MessageViewProps) {
             { id: 'new', label: text('New'), items: [{ id: 'new', icon: 'compose', label: text('New email'), run: () => p.onReply({ mode: 'new' }) }] },
             { id: 'delete', label: text('Delete'), items: [{ id: 'trash', icon: 'trash', label: text('Delete'), run: () => void act('trash') }, { id: 'archive', icon: 'archive', label: text('Archive'), run: () => void act('archive') }, { id: 'spam', icon: 'spam', label: text('Junk'), run: () => void act('spam'), disabled: ref.folder === 'spam' }] },
             { id: 'respond', label: text('Respond'), items: [{ id: 'reply', icon: 'reply', label: text('Reply'), run: () => reply('reply') }, { id: 'all', icon: 'reply-all', label: text('Reply all'), run: () => reply('reply_all') }, { id: 'fwd', icon: 'forward', label: text('Forward'), run: () => reply('forward') }] },
+            ...(p.quickStepButtons?.length ? [{ id: 'qs', label: text('Quick Steps'), items: p.quickStepButtons.slice(0, 6).map((q) => ({ id: `qs${q.id}`, icon: q.icon, label: q.name, run: q.run })) }] : []),
             { id: 'move', label: text('Move'), items: [{ id: 'move', icon: 'folder-input', label: text('Move to'), run: () => setMenu('move'), disabled: !ref.mailbox && !p.localStore }] },
             ...(p.stateMenu ? [{ id: 'tags', label: text('Tags'), items: [{ id: 'tags', icon: 'tag', label: text('Flag, pin, snooze'), run: () => setMenu('states'), ref: statesBtn }] }] : []),
             { id: 'find', label: text('Find'), items: [{ id: 'find', icon: 'search', label: text('Find in message'), run: () => setFind((f) => f ?? '') }] },

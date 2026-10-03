@@ -16,7 +16,7 @@ import type { SyncStatus } from './types';
  * an account that has not synced for too long, what is waiting to go, the
  * selection, the reading zoom and how much mail this computer keeps.
  */
-export function StatusBar({ summary, sync, waiting, zoom, localBytes, items, unread, selected, onOpenSync }: { summary: SyncSummary; sync: SyncStatus | null; waiting: number; zoom: number; localBytes: number | null; items?: number | null; unread?: number | null; selected?: number; onOpenSync?: () => void }) {
+export function StatusBar({ summary, sync, waiting, zoom, localBytes, items, unread, selected, onOpenSync, notice }: { summary: SyncSummary; sync: SyncStatus | null; waiting: number; zoom: number; localBytes: number | null; items?: number | null; unread?: number | null; selected?: number; onOpenSync?: () => void; notice?: { text: string; onClick: () => void } | null }) {
   const pushed = !!sync?.enabled && sync.mailboxes.some((m) => m.pushed);
   const dot = summary.state === 'offline' ? 'bg-warning' : summary.tone === 'danger' ? 'bg-danger' : summary.state === 'syncing' ? 'bg-primary' : 'bg-success';
   const line = summary.state === 'up_to_date' ? `${summary.headline} · ${summary.detail}` : summary.state === 'attention' ? (summary.lastOk ? text('Synced {ago}', { ago: syncAgo(summary.lastOk) }) : text('Needs attention')) : summary.headline;
@@ -30,6 +30,12 @@ export function StatusBar({ summary, sync, waiting, zoom, localBytes, items, unr
         <button type="button" onClick={onOpenSync} className="flex items-center gap-1 font-semibold text-danger hover:underline">
           <Icon name="warning" size={12} />
           {text('{warning} — fix', { warning: summary.warning })}
+        </button>
+      ) : null}
+      {notice ? (
+        <button type="button" onClick={notice.onClick} className="flex items-center gap-1 font-semibold text-danger hover:underline">
+          <Icon name="filter" size={12} />
+          {notice.text}
         </button>
       ) : null}
       {summary.state === 'up_to_date' && pushed ? <span>{text('New mail pushed')}</span> : null}

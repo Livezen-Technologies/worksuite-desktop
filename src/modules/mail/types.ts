@@ -348,6 +348,10 @@ export interface Signature {
   name: string;
   html: string;
   is_default: boolean;
+  /** The account it belongs to; null or absent: every account (DMO-CMP-06). */
+  mailbox?: number | null;
+  default_new?: boolean;
+  default_reply?: boolean;
 }
 
 /** A message's address: which mailbox, which folder, which uid. */
@@ -368,4 +372,6 @@ export interface ComposeSeed {
   quote?: string;
   inReplyTo?: string;
   mailbox?: string | null;
+  /** A template to put in once it has loaded (a Quick Step's reply with template). */
+  templateId?: number;
 }
