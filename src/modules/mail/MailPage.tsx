@@ -32,7 +32,8 @@ import { CategoriesDialog, ContextMenu, DatesDialog, stateSections, useStateActi
 import { SelectionPane } from './SelectionPane';
 import { SweepDialog } from './SweepDialog';
 import { FirstRun, FirstRunOffers } from './FirstRun';
-import { classifyFocus, flagChoices, otherBanner, pinnedFirst, stateKey, useCategories, useFocusContext, useMessageStates, withStates } from './states';
+import { classifyFocus, flagChoices, otherBanner, pinnedFirst, stateItem, stateKey, useCategories, useFocusContext, useMessageStates, withStates } from './states';
+import { LinkRecordDialog } from './recordLinks';
 import { MessageList, type ListRow, type RowAction } from './MessageList';
 import { MessageView, SourceDialog, windowRoute, type ViewControls } from './MessageView';
 import { LIST_ACTIONS, MoveDialog, SelectionBar, actionLabel, hoverIds, listMenuSections, placeOf, useListActions, type ListActionId } from './listActions';
@@ -326,6 +327,9 @@ function MailWorkspace({ active }: ModuleProps) {
   const [moving, setMoving] = useState<Target[] | null>(null);
   const [snoozeAt, setSnoozeAt] = useState<{ targets: Target[]; x: number; y: number } | null>(null);
   const [taskFor, setTaskFor] = useState<Target | null>(null);
+  const [linkFor, setLinkFor] = useState<Target[] | null>(null);
+  // Link to tender, customer or deal: offered to people who can open Tenders or the CRM; the server says which kinds.
+  const canLinkRecords = canOpen('tenders') || canOpen('crm');
   const [sourceOf, setSourceOf] = useState<MessageRef | null>(null);
   const keyFor = (command: string) => {
     const k = keyMap[command]?.[0];
@@ -886,6 +890,7 @@ function MailWorkspace({ active }: ModuleProps) {
       task: canOpen('tasks') ? (t) => setTaskFor(t) : undefined,
       calendar: canOpen('calendar') ? (t) => void addToCalendar(t) : undefined,
       saveAttachments: canOpen('files') ? (t) => void saveAttachments(t) : undefined,
+      linkRecord: canLinkRecords ? (ts) => setLinkFor(ts) : undefined,
       window: (t) => openInWindow(windowRoute(refOfTarget(t)), t.row.subject),
       copyLink,
       source: (t) => setSourceOf(refOfTarget(t)),
@@ -1192,6 +1197,7 @@ function MailWorkspace({ active }: ModuleProps) {
           }}
         />
       ) : null}
+      {linkFor ? <LinkRecordDialog items={linkFor.map((t) => stateItem(t.row, t.mailbox, t.folder))} onClose={() => setLinkFor(null)} /> : null}
       {taskFor ? <TaskFromMessage message={taskFor.row} msgRef={refOfTarget(taskFor)} onClose={() => setTaskFor(null)} /> : null}
       {sourceOf ? <SourceDialog msgRef={sourceOf} onClose={() => setSourceOf(null)} /> : null}
       {listActs.dialog}

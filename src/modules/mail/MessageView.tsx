@@ -32,6 +32,7 @@ import { TaskFromMessage, meetingRoute, messageLink } from './MessageTask';
 import { AddContactDialog, parseSignature, type SignatureGuess } from './AddContact';
 import { ImmersiveReader } from './ImmersiveReader';
 import { AppsPane } from './AppsPane';
+import { LinkRecordDialog, LinkedRecordChips, type LinkItem } from './recordLinks';
 import { MarkerChips, RecallDialog, ReceiptBar, ReportDialog, SmimeChip, VoteBar, VoteTally, sendReceipt } from './MessageExtras';
 import type { ComposeSeed, MailPrefs, Mailbox, MessageContext, MessageDetail, MessageRef, MessageRow } from './types';
 
@@ -100,6 +101,7 @@ export function MessageView(p: MessageViewProps) {
   const { openInWindow, navigate } = useTab();
   const [ai, setAi] = useState<{ task: TextTask; title: string; lang?: string } | null>(null);
   const [source, setSource] = useState(false);
+  const [linking, setLinking] = useState(false);
   // Report phishing or junk, and recall (ENH-MAIL-03 DMO-SEC-02, DMO-CMP-10).
   const [extra, setExtra] = useState<'phishing' | 'junk' | 'recall' | 'task' | null>(null);
   const [contactGuess, setContactGuess] = useState<SignatureGuess | null>(null);
@@ -352,6 +354,7 @@ export function MessageView(p: MessageViewProps) {
   if (!m || !clean) return null;
 
   const fromCache = !!q.data?.offline;
+  const linkItem: LinkItem = { mailbox: ref.mailbox ? Number(ref.mailbox) : 0, folder: ref.folder, uid: String(ref.uid), subject: m.subject, from_name: m.from_name ?? undefined, from_email: m.from_email, received_at: m.created_at, ...(m.message_id ? { message_id: m.message_id } : {}) };
   // Dark email content (Settings › Reading) in the dark theme — but a designed email keeps its light card (D10).
   const darkBody = darkTheme && p.prefs.darkBody === true && !isDesignedMail(clean.html);
   const security = securityVerdict(context.data?.security);
@@ -365,6 +368,7 @@ export function MessageView(p: MessageViewProps) {
     if (canOpen('calendar')) keep.push({ id: 'meeting', label: text('Reply with meeting'), description: text('A Calendar event with everyone on this email'), icon: 'calendar', disabled: p.offline, onSelect: () => navigate(meetingRoute(m, p.account?.email ?? null, messageLink(ref))) });
     if (canOpen('tasks')) keep.push({ id: 'task', label: text('Create task…'), description: text('With assignee, list and due date'), icon: 'list-todo', onSelect: () => setExtra('task') });
     if (where === 'bottom' && canOpen('tasks')) keep.push({ id: 'remind', label: text('Remind me about this'), description: text('A task for tomorrow'), icon: 'bell', onSelect: () => void remind() });
+    if (canOpen('tenders') || canOpen('crm')) keep.push({ id: 'link-record', label: text('Link to tender, customer or deal…'), icon: 'link', disabled: p.offline, reason: text('Available when you are back online.'), onSelect: () => setLinking(true) });
     if (canOpen('notes')) keep.push({ id: 'note', label: text('Save as note'), icon: 'file-text', onSelect: () => void saveNote() });
     // Reading (DMO-RD-04, DMO-RD-09).
     keep.push({ id: 'immersive', label: text('Immersive reader'), icon: 'book-open', onSelect: () => setImmersive(true) });
@@ -517,6 +521,7 @@ export function MessageView(p: MessageViewProps) {
               </span>
             ) : null}
             <MarkerChips markers={context.data?.markers} />
+            {canOpen('tenders') || canOpen('crm') ? <LinkedRecordChips item={linkItem} navigate={navigate} offline={p.offline} /> : null}
             {context.data?.markers?.smime === 'signed' && !p.offline ? <SmimeChip msgRef={ref} from={m.from_email} mailbox={ref.mailbox ?? null} /> : null}
             {context.data?.markers?.smime === 'encrypted' ? <Chip tone="warning">{text('Encrypted (S/MIME)')}</Chip> : null}
             {p.account ? <Chip tone="indigo">{p.account.account_type === 'local_mailbox' ? text('WorkSuite Local') : p.account.shared ? p.account.email : p.account.provider_label ?? p.account.email}</Chip> : null}
@@ -671,6 +676,7 @@ export function MessageView(p: MessageViewProps) {
       ) : null}
       {immersive ? <ImmersiveReader subject={m.subject} from={m.from_name ? `${m.from_name} <${m.from_email}>` : m.from_email} plain={plainBody} prefs={p.prefs.immersive ?? {}} onPrefs={(v) => p.onPrefs({ immersive: v })} onClose={() => setImmersive(false)} /> : null}
       {extra === 'task' ? <TaskFromMessage message={m} msgRef={ref} onClose={() => setExtra(null)} /> : null}
+      {linking ? <LinkRecordDialog items={[linkItem]} onClose={() => setLinking(false)} /> : null}
     </article>
   );
 }
