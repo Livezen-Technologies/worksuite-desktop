@@ -8,6 +8,9 @@ import type * as CoreApi from '../../../src/core/api';
  * Website chats → Widget (worksuite-desktop#199): the visitor widget's design edited beside a live preview — the brand
  * colour and its contrast, the greeting and quick links, whose photos are shown and how they are named, business hours
  * and the away screen, the launcher and its greeting card — and a save that sends the design and nothing else.
+ *
+ * #207: the theme, the launcher's offsets, a company name that is never a web address, and the preview as the widget
+ * now draws itself (minimise and maximise in its header, one status line, a start card that is just the message box).
  */
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiPut: vi.fn(), apiPost: vi.fn(async () => ({})) }));
 vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(async () => undefined), on: () => () => undefined, errorMessage: (e: unknown) => String(e), isMac: false }));
@@ -16,14 +19,15 @@ vi.mock('../../../src/core/tab-context', () => ({ useTab: () => ({ query: new UR
 
 import { apiGet, apiPut } from '../../../src/core/api';
 import { toast } from '../../../src/core/toasts';
-import { hoursText, namesLine, palette, previewPeople, problems, weekOf, type DesignPayload, type WidgetDesign } from '../../../src/modules/chat/website/widget/design';
+import { clampOffset, contrast, hoursText, looksLikeAddress, namesLine, palette, previewPeople, problems, siteNameOf, weekOf, withDefaults, type DesignPayload, type WidgetDesign } from '../../../src/modules/chat/website/widget/design';
 import { WidgetSettings } from '../../../src/modules/chat/website/widget/WidgetSettings';
 
 const design = (extra: Partial<WidgetDesign> = {}): WidgetDesign => ({
   website_name: 'Livezen Technologies', brand_color: '#2F3FB5', logo_url: null, greeting: 'Hi there,\nhow can we help?', header_subtitle: null,
   quick_links: [{ label: 'Pricing and plans', url: 'https://livezen.example/pricing' }], staff_display: 'name_role', show_agents: true,
   offline_message: null, whatsapp_number: '+94771234567', launcher_style: 'pill', position: 'bottom_right', greeting_delay: 5,
-  greeting_text: 'Hi there. Looking for hosting, a website or WorkSuite?', dark_mode: 'auto', ...extra,
+  greeting_text: 'Hi there. Looking for hosting, a website or WorkSuite?', theme: 'auto', dark_mode: 'auto',
+  launcher_offset_bottom: 20, launcher_offset_right: 20, launcher_offset_left: 20, ...extra,
 });
 
 let payload: DesignPayload;
@@ -95,6 +99,29 @@ describe('the design rules, as the widget and the server keep them', () => {
     expect(previewPeople({ agents: [], preview_agents: [] }, design(), {}).sample).toBe(true);
     expect(namesLine(['Dimuthu', 'Samali', 'Hasarinda', 'Kasun'])).toBe('Dimuthu, Samali, Hasarinda and 1 more');
   });
+
+  it('never names the company by its web address: refused, and the organisation\'s name in its place (#207)', () => {
+    for (const address of ['https://tenderhub.lk/', 'http://tenderhub.lk', 'www.tenderhub.lk', 'tenderhub.lk/contact']) {
+      expect(looksLikeAddress(address)).toBe(true);
+      expect(problems(design({ website_name: address })).website_name).toBe('Enter the company\'s name, not its web address: the widget shows it in its header');
+      expect(siteNameOf({ website_name: address }, 'Tender Hub (Pvt) Ltd')).toBe('Tender Hub (Pvt) Ltd');
+    }
+    expect(looksLikeAddress('Booking.com')).toBe(false);
+    expect(siteNameOf({ website_name: 'Tender Hub' }, 'Org')).toBe('Tender Hub');
+    expect(siteNameOf({ website_name: null }, null)).toBeNull();
+  });
+
+  it('holds the launcher\'s offsets to 0–200px, reads a server from before #207, and darkens the header for the dark theme', () => {
+    expect([clampOffset(-4), clampOffset(36.4), clampOffset(900), clampOffset(Number.NaN)]).toEqual([0, 36, 200, 20]);
+    expect(problems(design({ launcher_offset_bottom: 250 })).launcher_offset_bottom).toBe('A number of pixels, 0 to 200');
+    const older = { ...design(), theme: undefined, launcher_offset_bottom: undefined, launcher_offset_right: undefined, launcher_offset_left: undefined, dark_mode: 'dark' } as unknown as WidgetDesign;
+    expect(withDefaults(older)).toMatchObject({ theme: 'dark', launcher_offset_bottom: 20, launcher_offset_right: 20, launcher_offset_left: 20 });
+
+    const hd = palette('#3B82F6').darkHeader;
+    const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
+    expect(contrast([255, 255, 255], rgb(hd))).toBeGreaterThanOrEqual(5.5);
+    expect(hd).not.toBe('#3b82f6');
+  });
 });
 
 describe('Website chats → Widget', () => {
@@ -103,8 +130,8 @@ describe('Website chats → Widget', () => {
     await screen.findByTestId('widget-preview');
     expect(screen.getByRole('img', { name: 'Preview of the home screen' })).toBeTruthy();
     expect(preview().getByText(/Hi there,/)).toBeTruthy();
-    expect(preview().getByText('Samali and Dimuthu are online')).toBeTruthy();
-    expect(preview().getByText('Usually replies in a few minutes')).toBeTruthy();
+    // One status line (#207).
+    expect(preview().getByText('Samali and Dimuthu are online · usually replies in a few minutes')).toBeTruthy();
     expect(preview().getByText('Pricing and plans')).toBeTruthy();
     expect(preview().getByText('SG')).toBeTruthy();
   });
@@ -183,6 +210,82 @@ describe('Website chats → Widget', () => {
     fireEvent.change(screen.getByLabelText('Link 1 address'), { target: { value: 'javascript:alert(1)' } });
     expect(screen.getByRole('alert').textContent).toBe('Quick links must start with https://, mailto: or tel:');
     expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('previews the header as the widget draws it now: the name, minimise and maximise, and a start card that is just the box (#207)', async () => {
+    mount();
+    await screen.findByTestId('widget-preview');
+    expect(preview().getByText('Livezen Technologies')).toBeTruthy();
+    expect(screen.getByTestId('preview-logo').textContent).toBe('L');
+    expect(within(screen.getAllByTestId('preview-controls')[0]!).getByTitle('Minimise chat')).toBeTruthy();
+    expect(within(screen.getAllByTestId('preview-controls')[0]!).getByTitle('Maximise chat')).toBeTruthy();
+    expect(preview().queryByText('Start a conversation')).toBeNull();
+    expect(preview().queryByText('We are online')).toBeNull();
+    expect(preview().queryByText(/Type your question/)).toBeNull();
+    expect(screen.getByTestId('preview-start').textContent).toBe('Write a message…');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Conversation' }));
+    expect(screen.getAllByTestId('preview-controls')).toHaveLength(1);
+  });
+
+  it('shows the organisation\'s name in place of a web address, and will not save the address (#207)', async () => {
+    payload = { ...payload, fallback_name: 'Livezen Technologies (Pvt) Ltd', design: design({ website_name: 'https://tenderhub.lk/' }) };
+    mount();
+    await screen.findByTestId('widget-preview');
+    expect(preview().getByText('Livezen Technologies (Pvt) Ltd')).toBeTruthy();
+    expect(preview().queryByText(/tenderhub/)).toBeNull();
+    expect(screen.getByTestId('preview-logo').textContent).toBe('L');
+    expect(screen.getByText('Enter the company\'s name, not its web address: the widget shows it in its header')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.change(screen.getByRole('textbox', { name: /Company name/ }), { target: { value: '' } });
+    expect(preview().getByText('Livezen Technologies (Pvt) Ltd')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('previews the dark theme with a darker brand header, and the launcher where its offsets put it (#207)', async () => {
+    mount();
+    await screen.findByTestId('widget-preview');
+    fireEvent.click(screen.getByRole('radio', { name: 'Dark' }));
+    const header = preview().getByText(/Hi there,/).closest('[style]') as HTMLElement;
+    expect(header.style.background).not.toBe('');
+    expect(header.style.color).toBe('rgb(255, 255, 255)');
+    const dark = palette('#2F3FB5').darkHeader;
+    expect(header.style.background).toBe(`rgb(${[1, 3, 5].map((i) => parseInt(dark.slice(i, i + 2), 16)).join(', ')})`);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Launcher' }));
+    fireEvent.change(screen.getByRole('spinbutton', { name: /From the bottom \(px\)/ }), { target: { value: '90' } });
+    fireEvent.change(screen.getByRole('spinbutton', { name: /From the right \(px\)/ }), { target: { value: '999' } });
+    const corner = screen.getByTestId('preview-corner');
+    expect([corner.style.bottom, corner.style.right]).toEqual(['90px', '200px']);
+    expect(preview().getByText('90px from the bottom, 200px from the right')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Bottom left' }));
+    fireEvent.change(screen.getByRole('spinbutton', { name: /From the left \(px\)/ }), { target: { value: '12' } });
+    expect([corner.style.bottom, corner.style.left]).toEqual(['90px', '12px']);
+  });
+
+  it('saves the theme as `theme` and the offsets, never the older `dark_mode` (#207)', async () => {
+    mount();
+    await screen.findByTestId('widget-preview');
+    fireEvent.click(screen.getByRole('radio', { name: 'Light' }));
+    fireEvent.change(screen.getByRole('spinbutton', { name: /From the bottom \(px\)/ }), { target: { value: '84' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/chat/widget-admin/widgets/1/design', expect.anything()));
+    const body = vi.mocked(apiPut).mock.calls.find(([p]) => p === '/api/chat/widget-admin/widgets/1/design')![1] as Record<string, unknown>;
+    expect(body).toMatchObject({ theme: 'light', launcher_offset_bottom: 84, launcher_offset_right: 20, launcher_offset_left: 20 });
+    expect(body).not.toHaveProperty('dark_mode');
+  });
+
+  it('reads a server from before #207: the theme from `dark_mode`, and the offsets at 20px', async () => {
+    const { theme: _t, launcher_offset_bottom: _b, launcher_offset_right: _r, launcher_offset_left: _l, ...older } = design({ dark_mode: 'dark' });
+    void [_t, _b, _r, _l];
+    payload = { ...payload, design: older as WidgetDesign };
+    mount();
+    await screen.findByTestId('widget-preview');
+    expect(screen.getByRole('radio', { name: 'Dark' }).getAttribute('aria-checked')).toBe('true');
+    expect((screen.getByRole('spinbutton', { name: /From the bottom \(px\)/ }) as HTMLInputElement).value).toBe('20');
   });
 
   it('lets somebody without the permission look but not change anything', async () => {
