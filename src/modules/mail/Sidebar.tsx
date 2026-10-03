@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiPost } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
@@ -7,11 +7,13 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, DATA_TEXT, Kbd, Modal, Spinner, TextField, cx } from '../../components/ui';
 import { mailKeys, useFolders, useLabels } from './api';
-import { SMART_VIEWS, agoShort, folderName, mailboxLetter, type SmartViewId } from './model';
+import { ALL_FOLDERS, allCount } from './allAccounts';
+import { SMART_VIEWS, folderName, mailboxLetter, type SmartViewId } from './model';
 import { AccountAvatar, Count, SectionHeading } from './parts';
-import type { Folder, Mailbox, SyncStatus, ViewCounts } from './types';
+import { accountName, accountState, syncAgo, syncAt, type SyncSummary } from './sync';
+import type { AllCounts, Folder, Mailbox, SyncAccount, ViewCounts } from './types';
 
-/** Where the list is: the combined inbox, a smart view, or a folder of one mailbox. */
+/** Where the list is: All Accounts (`unified`), a smart view, or a folder of one mailbox. */
 export interface Place {
   box: string;
   view: SmartViewId | null;
@@ -23,13 +25,20 @@ export interface SidebarProps {
   boxes: Mailbox[];
   loading: boolean;
   counts: ViewCounts | null;
+  /** All Accounts' counts (GET views/all/counts); null from an older server. */
+  allCounts: AllCounts | null;
+  /** What only this computer knows: drafts not yet uploaded, sends waiting in its queue. */
+  local: { drafts: number; outbox: number };
   place: Place;
-  /** The mailbox whose folders are listed. */
-  folderBox: Mailbox | null;
   /** Labels are kept in WorkSuite's own store; they are offered where that store is the mail. */
   showLabels: boolean;
   active: boolean;
-  sync: SyncStatus | null;
+  /** The one sync status (DMO-SYN-05) and each account's row. */
+  summary: SyncSummary;
+  accounts: SyncAccount[];
+  /** Accounts this computer is syncing now, and whether a Sync all runs. */
+  running: ReadonlySet<number>;
+  syncingAll: boolean;
   offline: boolean;
   pending: number;
   cacheDays: number;
@@ -37,6 +46,8 @@ export interface SidebarProps {
   onSearch: () => void;
   onAddMailbox: () => void;
   onPick: (p: Partial<Place>) => void;
+  onSyncAll: () => void;
+  onSyncAccount: (id: number) => void;
   /** Settings › Mail: accounts, offline and storage. */
   onSettings: () => void;
 }
@@ -58,13 +69,60 @@ export function unreadOf(b: Mailbox, counts: ViewCounts | null): number | null {
   return b.unread;
 }
 
+interface PaneMemory {
+  all: boolean;
+  accounts: boolean;
+  views: boolean;
+  labels: boolean;
+  /** Accounts whose folder trees are open. */
+  expanded: number[];
+}
+
+const MEMORY_KEY = 'ws.mail.pane';
+
+/** The pane's open and collapsed sections, remembered on this computer (DMO-ALL-01). */
+export function readPaneMemory(): PaneMemory | null {
+  try {
+    const raw = window.localStorage.getItem(MEMORY_KEY);
+    const v = raw ? (JSON.parse(raw) as Partial<PaneMemory>) : null;
+    if (!v || typeof v !== 'object') return null;
+    return { all: v.all !== false, accounts: v.accounts !== false, views: v.views !== false, labels: v.labels !== false, expanded: Array.isArray(v.expanded) ? v.expanded.filter((n): n is number => typeof n === 'number') : [] };
+  } catch {
+    return null;
+  }
+}
+
+function writePaneMemory(m: PaneMemory): void {
+  try {
+    window.localStorage.setItem(MEMORY_KEY, JSON.stringify(m));
+  } catch {
+    // Private window or blocked storage: the pane just opens as it always does.
+  }
+}
+
 export function MailSidebar(p: SidebarProps) {
-  const [open, setOpen] = useState({ mailboxes: true, views: true, folders: true, labels: true });
-  const toggle = (k: keyof typeof open) => setOpen((o) => ({ ...o, [k]: !o[k] }));
-  const [naming, setNaming] = useState<'folder' | 'label' | null>(null);
-  const unifiedUnread = p.boxes.filter((b) => b.in_unified !== false).reduce((n, b) => n + (unreadOf(b, p.counts) ?? 0), 0);
-  const isUnified = p.place.box === 'unified' && !p.place.view && p.place.folder === 'inbox' && p.place.label === null;
+  const [memory, setMemory] = useState<PaneMemory>(() => readPaneMemory() ?? { all: true, accounts: true, views: true, labels: true, expanded: [] });
+  const remember = (patch: Partial<PaneMemory>) =>
+    setMemory((m) => {
+      const next = { ...m, ...patch };
+      writePaneMemory(next);
+      return next;
+    });
+  const [naming, setNaming] = useState<{ kind: 'folder' | 'label'; box: Mailbox | null } | null>(null);
+  const many = p.boxes.length > 1;
+  const inAll = p.place.box === 'unified' && !p.place.view && p.place.label === null;
+  // An older server counts no All Accounts folders: the inbox is then the sum of each included account's unread.
+  const fallbackInbox = p.boxes.filter((b) => b.in_unified !== false).reduce((n, b) => n + (unreadOf(b, p.counts) ?? 0), 0);
   const views = SMART_VIEWS.filter((v) => v.id !== 'important' || (p.counts?.views.important ?? null) !== null);
+  const placeId = Number(p.place.box);
+  // The account being looked at, or the default one, shows its folders until it is collapsed.
+  const expanded = (b: Mailbox) => memory.expanded.includes(b.id) || (!memory.expanded.includes(-b.id) && (placeId === b.id || (!many && p.boxes[0]?.id === b.id) || (Number.isNaN(placeId) && !!b.is_default)));
+  const toggleAccount = (b: Mailbox) => {
+    const open = expanded(b);
+    const rest = memory.expanded.filter((x) => x !== b.id && x !== -b.id);
+    remember({ expanded: open ? [...rest, -b.id] : [...rest, b.id] });
+  };
+  const account = (id: number) => p.accounts.find((a) => a.mailbox === id) ?? null;
   return (
     <nav aria-label="Mail" className="flex w-[260px] shrink-0 flex-col border-r border-line bg-surface">
       <div className="flex gap-2 p-3 pb-1">
@@ -77,46 +135,69 @@ export function MailSidebar(p: SidebarProps) {
         <Button variant="glass" size="action-icon" icon="search" onClick={p.onSearch} aria-label={text('Search mail')} title={text('Search mail (/)')} />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2 scroll-thin">
-        <SectionHeading label={text('Mailboxes')} open={open.mailboxes} onToggle={() => toggle('mailboxes')} onAdd={p.onAddMailbox} addLabel={text('Add a mailbox')} />
-        {open.mailboxes ? (
-          <ul role="list">
-            {p.boxes.length > 1 ? (
-              <li>
-                <Row icon="inbox" label={text('Unified inbox')} count={unifiedUnread} strong active={isUnified} onClick={() => p.onPick({ box: 'unified', view: null, folder: 'inbox', label: null })} />
-              </li>
+        {many ? (
+          <>
+            <SectionHeading label={text('All Accounts')} open={memory.all} onToggle={() => remember({ all: !memory.all })}>
+              <SyncAllButton summary={p.summary} accounts={p.accounts} boxes={p.boxes} running={p.running} syncingAll={p.syncingAll} offline={p.offline} onSyncAll={p.onSyncAll} onRetry={p.onSyncAccount} />
+            </SectionHeading>
+            {memory.all ? (
+              <ul role="list" aria-label={text('All Accounts')}>
+                {ALL_FOLDERS.map((f) => {
+                  const c = allCount(f.role, p.allCounts, { ...p.local, inbox: fallbackInbox });
+                  if (c.hidden) return null;
+                  const here = inAll && p.place.folder === (f.role === 'junk' ? 'spam' : f.role);
+                  return (
+                    <li key={f.role}>
+                      <Row icon={f.icon} iconClass={f.role === 'outbox' && c.n ? 'text-danger' : undefined} label={text(f.label)} count={c.n} countTitle={c.title} strong={f.role === 'inbox' && !!c.n} active={here} onClick={() => p.onPick({ box: 'unified', view: null, folder: f.role === 'junk' ? 'spam' : f.role, label: null })} />
+                    </li>
+                  );
+                })}
+              </ul>
             ) : null}
+          </>
+        ) : null}
+
+        <SectionHeading label={text('Accounts')} open={memory.accounts} onToggle={() => remember({ accounts: !memory.accounts })} onAdd={p.onAddMailbox} addLabel={text('Add a mailbox')}>
+          {!many ? <SyncAllButton summary={p.summary} accounts={p.accounts} boxes={p.boxes} running={p.running} syncingAll={p.syncingAll} offline={p.offline} onSyncAll={p.onSyncAll} onRetry={p.onSyncAccount} /> : null}
+        </SectionHeading>
+        {memory.accounts ? (
+          <ul role="list" aria-label={text('Accounts')}>
             {p.loading ? <Spinner label="" className="p-2" /> : null}
             {p.boxes.map((b) => {
               const n = unreadOf(b, p.counts);
+              const open = expanded(b);
+              const a = account(b.id);
               return (
                 <li key={b.id}>
-                  <Row
-                    nested={p.boxes.length > 1}
-                    lead={<AccountAvatar letter={mailboxLetter(b)} colour={b.colour} size={18} />}
-                    label={mailboxName(b)}
-                    title={b.auth_state === 'problem' ? text('{email} · sign-in problem — open Accounts to repair', { email: b.email }) : b.email}
-                    warn={b.auth_state === 'problem'}
+                  <AccountRow
+                    box={b}
+                    account={a}
+                    running={p.running.has(b.id) || !!a?.running}
+                    offline={p.offline}
+                    open={open}
                     count={n}
-                    strong={!!n}
                     active={p.place.box === String(b.id) && !p.place.view && p.place.folder === 'inbox'}
-                    onClick={() => p.onPick({ box: String(b.id), view: null, folder: 'inbox', label: null })}
+                    onToggle={() => toggleAccount(b)}
+                    onPick={() => p.onPick({ box: String(b.id), view: null, folder: 'inbox', label: null })}
+                    onSync={() => p.onSyncAccount(b.id)}
                   />
+                  {open ? <FolderTree box={b} place={p.place} active={p.active} onPick={p.onPick} onAdd={() => setNaming({ kind: 'folder', box: b })} /> : null}
                 </li>
               );
             })}
             {!p.loading && p.boxes.length === 0 ? (
               <li className="px-2 py-1.5 text-[12.5px] text-ink-3">
-                No mailbox yet.{' '}
+                {text('No mailbox yet.')}{' '}
                 <button type="button" className="font-semibold text-primary underline" onClick={p.onAddMailbox}>
-                  Add a mailbox
+                  {text('Add a mailbox')}
                 </button>
               </li>
             ) : null}
           </ul>
         ) : null}
 
-        <SectionHeading label={text('Smart views')} open={open.views} onToggle={() => toggle('views')} />
-        {open.views ? (
+        <SectionHeading label={text('Smart views')} open={memory.views} onToggle={() => remember({ views: !memory.views })} />
+        {memory.views ? (
           <ul role="list">
             {views.map((v) => {
               const n = p.counts ? (p.counts.views[v.id] ?? null) : null;
@@ -124,72 +205,183 @@ export function MailSidebar(p: SidebarProps) {
               const shown = v.id === 'today' || v.id === 'attachments' ? null : n;
               return (
                 <li key={v.id}>
-                  <Row icon={v.icon} iconClass={v.id === 'starred' ? 'text-warning' : v.id === 'important' ? 'text-danger' : undefined} label={v.label} count={shown} active={p.place.view === v.id} onClick={() => p.onPick({ box: 'unified', view: v.id, folder: v.folder, label: null })} />
+                  <Row icon={v.icon} iconClass={v.id === 'starred' ? 'text-warning' : v.id === 'important' ? 'text-danger' : undefined} label={text(v.label)} count={shown} active={p.place.view === v.id} onClick={() => p.onPick({ box: 'unified', view: v.id, folder: v.folder, label: null })} />
                 </li>
               );
             })}
           </ul>
         ) : null}
 
-        {p.folderBox ? <FolderSection box={p.folderBox} many={p.boxes.length > 1} open={open.folders} onToggle={() => toggle('folders')} onAdd={() => setNaming('folder')} place={p.place} active={p.active} onPick={p.onPick} /> : null}
-
-        {p.showLabels ? <LabelSection open={open.labels} onToggle={() => toggle('labels')} onAdd={() => setNaming('label')} place={p.place} active={p.active} onPick={p.onPick} /> : null}
+        {p.showLabels ? <LabelSection open={memory.labels} onToggle={() => remember({ labels: !memory.labels })} onAdd={() => setNaming({ kind: 'label', box: null })} place={p.place} active={p.active} onPick={p.onPick} /> : null}
       </div>
       <button type="button" onClick={p.onSettings} title={text('Mail accounts, offline and storage settings')} className="block text-left">
-        <SyncCard sync={p.sync} boxes={p.boxes} offline={p.offline} pending={p.pending} cacheDays={p.cacheDays} />
+        <SyncCard summary={p.summary} pending={p.pending} cacheDays={p.cacheDays} />
       </button>
-      {naming ? <NameDialog kind={naming} mailbox={p.folderBox} onClose={() => setNaming(null)} /> : null}
+      {naming ? <NameDialog kind={naming.kind} mailbox={naming.box} onClose={() => setNaming(null)} /> : null}
     </nav>
   );
 }
 
-function Row({ icon, iconClass, lead, label, title, count, strong, active, nested, warn, onClick }: { icon?: string; iconClass?: string; lead?: ReactNode; label: string; title?: string; count?: number | null; strong?: boolean; active: boolean; nested?: boolean; warn?: boolean; onClick: () => void }) {
+function Row({ icon, iconClass, lead, label, title, count, countTitle, strong, active, nested, warn, onClick }: { icon?: string; iconClass?: string; lead?: ReactNode; label: string; title?: string; count?: number | null; countTitle?: string | null; strong?: boolean; active: boolean; nested?: boolean; warn?: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      title={title ?? label}
+      title={countTitle ? `${title ?? label} · ${countTitle}` : (title ?? label)}
       aria-current={active ? 'page' : undefined}
       className={cx(
         'relative flex h-[30px] w-full items-center gap-2.5 rounded-[8px] pr-1.5 text-left text-[13.5px]',
-        nested ? 'pl-6' : 'pl-2.5',
+        nested ? 'pl-7' : 'pl-2.5',
         active ? 'bg-selection font-semibold text-primary before:absolute before:-left-2 before:top-1 before:bottom-1 before:w-[3px] before:rounded-full before:bg-primary' : 'text-ink hover:bg-subtle',
         strong && !active && 'font-semibold',
       )}
     >
       {lead ?? (icon ? <Icon name={icon} size={16} className={cx('shrink-0', iconClass ?? (active ? 'text-primary' : 'text-ink-2'))} /> : null)}
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      {warn ? <Icon name="warning" size={14} className="shrink-0 text-danger" label="Sign-in problem" /> : null}
+      {warn ? <Icon name="warning" size={14} className="shrink-0 text-danger" label={text('Sign-in problem')} /> : null}
       <Count n={count} strong={strong} active={active} />
     </button>
   );
 }
 
-function FolderSection({ box, many, open, onToggle, onAdd, place, active, onPick }: { box: Mailbox; many: boolean; open: boolean; onToggle: () => void; onAdd: () => void; place: Place; active: boolean; onPick: (p: Partial<Place>) => void }) {
+/** An account's row: open its folders, its inbox, and its own sync button — a spinner while it syncs, Retry when it failed (DMO-SYN-01/02/04). */
+function AccountRow({ box, account, running, offline, open, count, active, onToggle, onPick, onSync }: { box: Mailbox; account: SyncAccount | null; running: boolean; offline: boolean; open: boolean; count: number | null; active: boolean; onToggle: () => void; onPick: () => void; onSync: () => void }) {
+  const failed = !running && (account?.last_result === 'failed' || box.auth_state === 'problem');
+  const why = account?.error ?? box.last_error ?? text('The last sync did not finish.');
+  const name = mailboxName(box);
+  const status = account ? accountState(account) : null;
+  return (
+    <div className={cx('group relative flex h-[30px] items-center rounded-[8px]', active ? 'bg-selection' : 'hover:bg-subtle')}>
+      <button type="button" onClick={onToggle} aria-expanded={open} aria-label={open ? text('Hide the folders of {name}', { name }) : text('Show the folders of {name}', { name })} className="inline-flex h-6 w-5 shrink-0 items-center justify-center text-ink-3 hover:text-ink">
+        <Icon name="chevron-down" size={12} className={cx('transition-transform motion-reduce:transition-none', open ? '' : '-rotate-90')} />
+      </button>
+      <button
+        type="button"
+        onClick={onPick}
+        aria-current={active ? 'page' : undefined}
+        title={failed ? text('{name} · sync failed: {why}', { name, why }) : status ? `${name} · ${status.label}` : box.email}
+        className={cx('flex min-w-0 flex-1 items-center gap-2 pr-1 text-left text-[13.5px]', active ? 'font-semibold text-primary' : 'text-ink', !!count && !active && 'font-semibold')}
+      >
+        <AccountAvatar letter={mailboxLetter(box)} colour={box.colour} size={18} />
+        <span className="min-w-0 flex-1 truncate">{name}</span>
+        <Count n={count} strong={!!count} active={active} />
+      </button>
+      {failed ? (
+        <button type="button" onClick={onSync} disabled={offline} title={offline ? text('You’re offline — mail will sync when you reconnect') : text('Sync failed: {why} — retry', { why })} className="mr-1 inline-flex h-[22px] shrink-0 items-center gap-1 rounded-[6px] bg-danger-bg px-1.5 text-[11.5px] font-bold text-danger hover:brightness-95 disabled:opacity-50">
+          <Icon name="warning" size={12} />
+          {text('Retry')}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={onSync}
+          disabled={offline || running}
+          aria-label={running ? text('Syncing {name}…', { name }) : text('Sync {name}', { name })}
+          title={offline ? text('You’re offline — mail will sync when you reconnect') : running ? text('Syncing…') : account?.last_ok_at ? text('Last synced {ago} · sync now', { ago: syncAgo(account.last_ok_at) }) : text('Sync now')}
+          className={cx('mr-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] text-ink-3 hover:bg-surface hover:text-ink disabled:cursor-default', running ? 'opacity-100' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100')}
+        >
+          <Icon name="refresh" size={13} className={running ? 'animate-spin motion-reduce:animate-none' : undefined} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The ↻ on the All Accounts header (DMO-SYN-01…03): runs Sync all; spins
+ * while anything syncs; hovering or focusing it lists each account with its
+ * last successful sync and its state, failed ones with Retry.
+ */
+function SyncAllButton({ summary, accounts, boxes, running, syncingAll, offline, onSyncAll, onRetry }: { summary: SyncSummary; accounts: SyncAccount[]; boxes: Mailbox[]; running: ReadonlySet<number>; syncingAll: boolean; offline: boolean; onSyncAll: () => void; onRetry: (id: number) => void }) {
+  const [open, setOpen] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const spin = syncingAll || summary.state === 'syncing';
+  const show = () => {
+    if (timer.current) clearTimeout(timer.current);
+    setOpen(true);
+  };
+  const hide = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setOpen(false), 150);
+  };
+  useEffect(() => () => (timer.current ? clearTimeout(timer.current) : undefined), []);
+  const rows = accounts.filter((a) => a.included || boxes.length <= 1);
+  return (
+    <span className="relative" onMouseEnter={show} onMouseLeave={hide} onFocus={show} onBlur={hide} onKeyDown={(e) => (e.key === 'Escape' ? setOpen(false) : undefined)}>
+      <button
+        type="button"
+        onClick={onSyncAll}
+        disabled={offline}
+        aria-label={offline ? text('You’re offline — mail will sync when you reconnect') : spin ? text('Syncing — pressing again won’t start another') : text('Sync all accounts')}
+        aria-keyshortcuts="Control+Shift+R"
+        aria-describedby={open ? 'mail-sync-all-card' : undefined}
+        className="inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-3 hover:bg-subtle hover:text-ink disabled:opacity-50"
+      >
+        <Icon name="refresh" size={13} className={spin ? 'animate-spin motion-reduce:animate-none' : undefined} />
+      </button>
+      {open ? (
+        <div id="mail-sync-all-card" role="tooltip" className="absolute left-0 top-7 z-30 w-[300px] rounded-[10px] border border-line bg-surface p-2 text-[12.5px] shadow-lg">
+          <div className="flex items-center justify-between px-1.5 pb-1.5">
+            <b className="text-ink">{spin ? summary.headline : text('Sync all accounts')}</b>
+            <Kbd aria-hidden>{text('Ctrl+Shift+R')}</Kbd>
+          </div>
+          <ul role="list" className="flex flex-col gap-0.5">
+            {rows.map((a) => {
+              const b = boxes.find((x) => x.id === a.mailbox);
+              const st = accountState(running.has(a.mailbox) ? { ...a, running: true } : a);
+              return (
+                <li key={a.mailbox} className={cx('flex items-center gap-2 rounded-[8px] px-1.5 py-1', st.tone === 'danger' && 'bg-danger-bg')}>
+                  {b ? <AccountAvatar letter={mailboxLetter(b)} colour={b.colour} size={18} /> : null}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold text-ink">{accountName(a, b)}</span>
+                    <span className={cx('block truncate', st.tone === 'danger' ? 'text-danger' : 'text-ink-3')} title={a.last_ok_at ? text('Last successful sync: {at}', { at: syncAt(a.last_ok_at) }) : undefined}>
+                      {st.label}
+                    </span>
+                  </span>
+                  {st.tone === 'danger' && !offline ? (
+                    <button type="button" onClick={() => onRetry(a.mailbox)} className="h-6 shrink-0 rounded-[6px] bg-danger px-2 text-[11.5px] font-bold text-white hover:brightness-95">
+                      {text('Retry')}
+                    </button>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-1.5 border-t border-line px-1.5 pt-1.5 text-[11.5px] text-ink-3">{offline ? text('You’re offline — mail will sync when you reconnect') : spin ? text('Sync is running — pressing again won’t start another.') : text('Last successful sync per account. Click to sync all now.')}</p>
+        </div>
+      ) : null}
+    </span>
+  );
+}
+
+/** An account's folders, under its row (DMO-ALL-13: per-account trees stay as they were). */
+function FolderTree({ box, place, active, onPick, onAdd }: { box: Mailbox; place: Place; active: boolean; onPick: (p: Partial<Place>) => void; onAdd: () => void }) {
   const folders = useFolders(box.id, active);
   const list = (folders.data?.folders ?? []).filter((f) => f.slug !== 'starred' && f.slug !== 'important');
-  // A mailbox's inbox is its row under Mailboxes when there are several: one place, one highlight.
-  const here = (f: Folder) => !place.view && place.label === null && place.folder === f.slug && !(many && f.slug === 'inbox') && (place.box === String(box.id) || (place.box === 'unified' && !many));
+  const here = (f: Folder) => !place.view && place.label === null && place.folder === f.slug && place.box === String(box.id);
   return (
-    <>
-      <SectionHeading label={many ? text('Folders · {email}', { email: box.email }) : text('Folders')} open={open} onToggle={onToggle} onAdd={onAdd} addLabel={text('New folder')} />
-      {open ? (
-        <ul role="list">
-          {folders.isLoading ? <Spinner label="" className="p-2" /> : null}
-          {folders.error ? <li className="px-2 text-[12px] text-danger">{errorMessage(folders.error)}</li> : null}
-          {list.map((f) => {
-            const custom = !FOLDER_ICON[f.slug];
-            // Unread in the folders mail arrives in; Sent, Drafts and Trash count nothing worth a badge.
-            const n = ['sent', 'trash', 'drafts'].includes(f.slug) ? null : f.unread;
-            return (
-              <li key={f.slug}>
-                <Row icon={FOLDER_ICON[f.slug] ?? 'folder'} iconClass={custom ? 'text-warning' : undefined} label={custom ? folderName(f.name) : f.name} count={n} strong={!!n} active={here(f)} onClick={() => onPick({ box: String(box.id), view: null, folder: f.slug, label: null })} />
-              </li>
-            );
-          })}
-        </ul>
+    <ul role="list" aria-label={text('Folders of {email}', { email: box.email })}>
+      {folders.isLoading ? <Spinner label="" className="p-2" /> : null}
+      {folders.error ? <li className="px-2 text-[12px] text-danger">{errorMessage(folders.error)}</li> : null}
+      {list.map((f) => {
+        const custom = !FOLDER_ICON[f.slug];
+        // Unread in the folders mail arrives in; Sent, Drafts and Trash count nothing worth a badge.
+        const n = ['sent', 'trash', 'drafts'].includes(f.slug) ? null : f.unread;
+        return (
+          <li key={f.slug}>
+            <Row nested icon={FOLDER_ICON[f.slug] ?? 'folder'} iconClass={custom ? 'text-warning' : undefined} label={custom ? folderName(f.name) : f.name} count={n} strong={!!n} active={here(f)} onClick={() => onPick({ box: String(box.id), view: null, folder: f.slug, label: null })} />
+          </li>
+        );
+      })}
+      {!folders.isLoading ? (
+        <li>
+          <button type="button" onClick={onAdd} className="flex h-[26px] w-full items-center gap-2.5 rounded-[8px] pl-7 text-left text-[12.5px] text-ink-3 hover:bg-subtle hover:text-ink">
+            <Icon name="plus" size={14} />
+            {text('New folder')}
+          </button>
+        </li>
       ) : null}
-    </>
+    </ul>
   );
 }
 
@@ -225,44 +417,30 @@ function LabelSection({ open, onToggle, onAdd, place, active, onPick }: { open: 
   );
 }
 
-/** "All mailboxes synced · 12 s ago" — or offline, with what is waiting. */
-export function SyncCard({ sync, boxes, offline, pending, cacheDays }: { sync: SyncStatus | null; boxes: Mailbox[]; offline: boolean; pending: number; cacheDays: number }) {
+/** The folder pane's footer: the one sync status (DMO-SYN-05/07) — the same words as the status bar and Settings. */
+export function SyncCard({ summary, pending, cacheDays }: { summary: SyncSummary; pending: number; cacheDays: number }) {
   const cache = cacheDays === 0 ? text('headers only offline') : text('offline cache {n} days', { n: cacheDays });
-  if (offline) {
-    return (
-      <span role="status" className="m-2 mt-0 flex items-start gap-2.5 rounded-[10px] border border-line bg-surface p-2.5 text-[12px] leading-snug hover:bg-subtle">
-        <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] bg-warning-bg text-warning">
-          <Icon name="warning" size={14} />
-        </span>
-        <span className="min-w-0">
-          <span className="block font-semibold text-warning">{pending ? text('Offline · {n} actions waiting', { n: pending }) : text('Offline')}</span>
-          <span className="block truncate text-ink-3">Showing mail saved on this computer</span>
-        </span>
-      </span>
-    );
-  }
-  const live = sync?.enabled ? sync.mailboxes : [];
-  const problem = boxes.some((b) => b.auth_state === 'problem') || live.some((m) => m.problem);
-  const lag = live.length ? Math.max(...live.map((m) => m.lag_seconds ?? 0)) : null;
-  const pushed = live.length > 0 && live.every((m) => m.pushed);
-  const head = problem ? text('A mailbox needs attention') : live.length ? text('All mailboxes synced') : text('Mail is checked on a schedule');
-  const ago = agoShort(lag);
+  const tone = summary.tone;
+  const icon = summary.state === 'offline' || tone === 'danger' ? 'warning' : summary.state === 'syncing' ? 'refresh' : summary.state === 'paused' ? 'pause' : 'check';
+  const headline = summary.state === 'offline' && pending ? text('Offline · {n} actions waiting', { n: pending }) : summary.headline;
   return (
-    <span role="status" className="m-2 mt-0 flex items-start gap-2.5 rounded-[10px] border border-line bg-surface p-2.5 text-[12px] leading-snug hover:bg-subtle">
-      <span className={cx('mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px]', problem ? 'bg-danger-bg text-danger' : 'bg-success-bg text-success')}>
-        <Icon name={problem ? 'warning' : 'check'} size={14} />
+    <span role="status" aria-live="polite" className="m-2 mt-0 flex items-start gap-2.5 rounded-[10px] border border-line bg-surface p-2.5 text-[12px] leading-snug hover:bg-subtle">
+      <span className={cx('mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px]', tone === 'danger' ? 'bg-danger-bg text-danger' : tone === 'warning' ? 'bg-warning-bg text-warning' : tone === 'success' ? 'bg-success-bg text-success' : 'bg-subtle text-ink-2')}>
+        <Icon name={icon} size={14} className={summary.state === 'syncing' ? 'animate-spin motion-reduce:animate-none' : undefined} />
       </span>
       <span className="min-w-0">
-        <span className={cx('block truncate font-semibold', problem ? 'text-danger' : 'text-success')}>{ago && !problem ? `${head} · ${ago}` : head}</span>
-        <span className="block truncate text-ink-3" title={cache}>
-          {live.length ? (pushed ? text('Pushed (IDLE) · {cache}', { cache }) : text('Checked regularly · {cache}', { cache })) : cache}
+        <span className={cx('block truncate font-semibold', tone === 'danger' ? 'text-danger' : tone === 'warning' ? 'text-warning' : tone === 'success' ? 'text-success' : 'text-ink')} title={headline}>
+          {headline}
+        </span>
+        <span className="block truncate text-ink-3" title={summary.detail ? `${summary.detail} · ${cache}` : cache}>
+          {summary.detail ? `${summary.detail} · ${cache}` : cache}
         </span>
       </span>
     </span>
   );
 }
 
-/** A new folder (in the mailbox listed) or a new label. */
+/** A new folder (in the mailbox named) or a new label. */
 function NameDialog({ kind, mailbox, onClose }: { kind: 'folder' | 'label'; mailbox: Mailbox | null; onClose: () => void }) {
   const qc = useQueryClient();
   const [name, setName] = useState('');
@@ -273,7 +451,7 @@ function NameDialog({ kind, mailbox, onClose }: { kind: 'folder' | 'label'; mail
       if (kind === 'folder') await apiPost('/api/mail/folders-tree', { name: name.trim(), ...(mailbox ? { mailbox: mailbox.id } : {}) });
       else await apiPost('/api/mail/labels', { name: name.trim() });
       void qc.invalidateQueries({ queryKey: kind === 'folder' ? ['mail', 'folders'] : mailKeys.labels });
-      toast('success', kind === 'folder' ? 'Folder created.' : 'Label created.');
+      toast('success', kind === 'folder' ? text('Folder created.') : text('Label created.'));
       onClose();
     } catch (e) {
       toast('error', errorMessage(e));
@@ -289,9 +467,9 @@ function NameDialog({ kind, mailbox, onClose }: { kind: 'folder' | 'label'; mail
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose}>Cancel</Button>
+          <Button onClick={onClose}>{text('Cancel')}</Button>
           <Button variant="primary" loading={busy} disabled={!name.trim()} onClick={() => void save()}>
-            Create
+            {text('Create')}
           </Button>
         </>
       }
@@ -303,7 +481,7 @@ function NameDialog({ kind, mailbox, onClose }: { kind: 'folder' | 'label'; mail
           if (name.trim()) void save();
         }}
       >
-        <TextField label="Name" value={name} onChange={(e) => setName(e.target.value)} autoFocus hint={kind === 'folder' && mailbox ? text('In {email}', { email: mailbox.email }) : undefined} />
+        <TextField label={text('Name')} value={name} onChange={(e) => setName(e.target.value)} autoFocus hint={kind === 'folder' && mailbox ? text('In {email}', { email: mailbox.email }) : undefined} />
       </form>
     </Modal>
   );

@@ -191,9 +191,73 @@ export interface SyncMailbox {
   last_sync_at: string | null;
 }
 
+/** One account's row in the shared sync status (ENH-MAIL-03 v1.1 DMO-SYN). */
+export interface SyncAccount {
+  mailbox: number;
+  email: string;
+  name: string;
+  /** In All Accounts (and Sync all). */
+  included: boolean;
+  paused: boolean;
+  mode: 'push' | 'interval' | 'manual' | string;
+  interval_min: number;
+  /** The last successful sync — never a failed attempt. */
+  last_ok_at: string | null;
+  last_attempt_at: string | null;
+  last_result: 'ok' | 'failed' | 'partial' | 'running' | 'never' | string;
+  error_code: string | null;
+  /** In plain words: "Password or app password rejected", "Google sign-in expired — sign in again". */
+  error: string | null;
+  running: boolean;
+  mirror: boolean;
+  pushed: boolean;
+  folders: number;
+  folders_done: number;
+}
+
+export interface SyncOverall {
+  state: 'up_to_date' | 'syncing' | 'attention' | 'paused' | string;
+  syncing: number;
+  total: number;
+  last_ok_at: string | null;
+  failed: number[];
+  stale: number[];
+  stale_minutes: number;
+}
+
 export interface SyncStatus {
   enabled: boolean;
   mailboxes: SyncMailbox[];
+  /** An older server sends neither. */
+  accounts?: SyncAccount[];
+  overall?: SyncOverall;
+}
+
+/** One run in an account's sync log (GET mailboxes/{id}/sync-log). */
+export interface SyncRun {
+  id: number;
+  started_by: string;
+  started_at: string | null;
+  finished_at: string | null;
+  duration_ms: number | null;
+  result: string;
+  folders: number;
+  folders_total: number;
+  added: number;
+  changed: number;
+  removed: number;
+  error_code: string | null;
+  error: string | null;
+}
+
+/** The All Accounts folders (DMO-ALL-01), in the order the pane lists them. */
+export type AllRole = 'inbox' | 'drafts' | 'outbox' | 'archive' | 'sent' | 'snoozed' | 'trash' | 'junk';
+
+/** GET views/all/counts. */
+export interface AllCounts {
+  roles: Record<AllRole, { count: number | null; kind: 'unread' | 'total' | 'none'; mailboxes: Array<{ id: number; count: number | null; folder: string | null; source: string | null; ambiguous: boolean }> }>;
+  unknown: string[];
+  partial: boolean;
 }
 
 /** The list's layout, kept on the server (GET/PUT /api/mail/prefs). */
@@ -211,6 +275,10 @@ export interface MailPrefs {
   tabs?: boolean;
   previews?: boolean;
   darkBody?: boolean;
+  /** Warn when an account has not synced successfully for this many minutes (DMO-SYN-06; 15…1440). */
+  staleMinutes?: number;
+  /** Show a desktop notification when an account's sync fails. */
+  notifySyncFailure?: boolean;
 }
 
 export type SortKey = 'date' | 'sender' | 'subject' | 'size' | 'read' | 'attachment' | 'flag' | 'star';

@@ -13,8 +13,12 @@ import { SidePanel } from '../../components/SidePanel';
 import { Empty, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
 import { AddMailbox } from './AddMailbox';
-import { messageAction, useLocalStore, useMailPrefs, useMailboxes, usePendingMail, useSyncStatus, useViewCounts } from './api';
+import { messageAction, useLocalStore, useMailPrefs, useMailboxes, usePendingMail, useViewCounts } from './api';
+import { allAccountsPage, allFolderLabel, isAllRole, queuedSends, useAllCounts, useLocalDrafts } from './allAccounts';
+import { ArchivePicker } from './ArchivePicker';
 import { Compose } from './Compose';
+import { LocalDraftRows, OutboxView } from './Outbox';
+import { includedIds, runSync, syncSummary, useSharedSync } from './sync';
 import { MessageList, type ListRow } from './MessageList';
 import { MessageView, windowRoute, type ViewControls } from './MessageView';
 import { applyFilters, filtersFor, folderName, groupRows, queueKey, queuedByMessage, rowMailbox, smartView, sortRows, step, type ChipId } from './model';
@@ -24,7 +28,8 @@ import { ScheduledList } from './Scheduled';
 import { SearchView } from './SearchView';
 import { MailSidebar, unreadOf, type Place } from './Sidebar';
 import { StatusBar, WaitingPanel } from './StatusBar';
-import type { ComposeSeed, Label, MessagePage, MessageRef, MessageRow } from './types';
+import type { ComposeSeed, Label, Mailbox, MessagePage, MessageRef, MessageRow } from './types';
+
 
 export { joinQuote, splitQuote, unquote } from './quote';
 
@@ -89,7 +94,8 @@ export default function MailPage({ active }: ModuleProps) {
   useEffect(() => setDefaultMailbox(defaultBox ? String(defaultBox.id) : null), [defaultBox]);
   const localStore = mailboxes.isSuccess && boxes.length === 0;
   const counts = useViewCounts(active && (mailboxes.isSuccess || mailboxes.isError));
-  const sync = useSyncStatus(active && boxes.length > 0);
+  const shared = useSharedSync(active && boxes.length > 0);
+  const allCounts = useAllCounts(active && boxes.length > 1);
   const pending = usePendingMail();
   const localBytes = useLocalStore();
   const { prefs, set: setPrefs } = useMailPrefs();
@@ -103,23 +109,55 @@ export default function MailPage({ active }: ModuleProps) {
   const folderKey = `${effectiveBox ?? 'unified'}:${folder}`;
   const canThread = !unified && filters.length === 0 && folder !== 'outbox';
   const threaded = canThread && !!prefs.conversations?.[folderKey];
+  // All Accounts (DMO-ALL): the combined view of a folder role, not a smart view.
+  const allRole = unified && !view ? (folder === 'spam' ? 'junk' : isAllRole(folder) ? folder : null) : null;
+  const virtualOutbox = allRole === 'outbox';
 
   const list = useInfiniteQuery({
     queryKey: ['mail', 'messages', unified ? 'unified' : effectiveBox, folder, filters.join(','), threaded],
     initialPageParam: 1,
-    queryFn: ({ pageParam, signal }) =>
-      apiGetMeta<MessagePage>(
-        '/api/mail/messages',
-        unified
-          ? { unified: 1, folder, page: pageParam, per_page: 50, ...(filters.length ? { filters: filters.join(',') } : {}) }
-          : place.label !== null
-            ? { folder, page: pageParam, per_page: 50 }
-            : withMailbox({ folder, page: pageParam, per_page: 50, ...(filters.length ? { filters: filters.join(',') } : {}), ...(threaded ? { threaded: 1 } : {}), sort: prefs.sort ?? 'date', dir: prefs.dir ?? 'desc' }, effectiveBox),
-        signal,
-      ),
+    queryFn: ({ pageParam, signal }) => {
+      const combined = { page: pageParam, per_page: 50, ...(filters.length ? { filters: filters.join(',') } : {}) };
+      const byName = () =>
+        apiGetMeta<MessagePage>(
+          '/api/mail/messages',
+          unified
+            ? { unified: 1, folder, ...combined }
+            : place.label !== null
+              ? { folder, page: pageParam, per_page: 50 }
+              : withMailbox({ folder, page: pageParam, per_page: 50, ...(filters.length ? { filters: filters.join(',') } : {}), ...(threaded ? { threaded: 1 } : {}), sort: prefs.sort ?? 'date', dir: prefs.dir ?? 'desc' }, effectiveBox),
+          signal,
+        );
+      return allRole ? allAccountsPage(allRole, combined, signal, byName) : byName();
+    },
     getNextPageParam: (last, pages) => (last.data.has_more ? pages.length + 1 : undefined),
     enabled: (mailboxes.isSuccess || mailboxes.isError) && folder !== 'outbox',
   });
+  const localDrafts = useLocalDrafts(active && (allRole === 'drafts' || boxes.length > 1));
+  const sending = queuedSends(pending.data ?? []);
+  const running = shared.running;
+  const summary = syncSummary(shared.status, { offline: networkOffline, running, boxes, staleMinutes: prefs.staleMinutes });
+  const syncAll = () => {
+    if (networkOffline) return;
+    void runSync(includedIds(shared.status, boxes), { all: true, onDone: () => void shared.refetch() }).then((r) => {
+      if (r.failed.length) toast('error', text('{n} accounts could not be synced — see the Sync all tooltip.', { n: r.failed.length }));
+      void qc.invalidateQueries({ queryKey: ['mail'] });
+    });
+  };
+  const syncAccount = (id: number) => {
+    if (networkOffline) return;
+    void runSync([id], { onDone: () => void shared.refetch() }).then(() => void qc.invalidateQueries({ queryKey: ['mail'] }));
+  };
+  // Archive from a combined view: the account's own Archive, or — where it has none — a folder chosen once (DMO-ALL-11).
+  const [archiveAsk, setArchiveAsk] = useState<{ box: Mailbox; resolve: (v: { slug: string; name: string } | 'default' | null) => void } | null>(null);
+  const archiveTo = (ref: MessageRef): Promise<{ slug: string; name: string } | 'default' | null> | 'default' => {
+    if (!unified || !ref.mailbox) return 'default';
+    const box = boxes.find((b) => String(b.id) === ref.mailbox);
+    const known = allCounts.data?.roles.archive.mailboxes.find((m) => String(m.id) === ref.mailbox);
+    if (!box || !known || /gmail|google/i.test(`${box.provider ?? ''} ${box.oauth_provider ?? ''}`)) return 'default';
+    if (known.folder) return known.folder === 'archive' ? 'default' : Promise.resolve({ slug: known.folder, name: text('Archive') });
+    return new Promise((resolve) => setArchiveAsk({ box, resolve }));
+  };
   const firstPage = list.data?.pages[0];
   const cachedOffline = !!list.data?.pages.some((p) => p.offline);
   const offline = networkOffline || cachedOffline;
@@ -219,6 +257,11 @@ export default function MailPage({ active }: ModuleProps) {
   // Keyboard.
   const keys = useRef<(e: KeyboardEvent) => void>(() => undefined);
   const onKey = (e: KeyboardEvent) => {
+    // Sync all (DMO-SYN-01): Ctrl+Shift+R, ⌘⇧R on macOS — wherever focus is.
+    if (!e.defaultPrevented && (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'r') {
+      e.preventDefault();
+      return syncAll();
+    }
     if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
     const t = e.target as HTMLElement | null;
     if (t && typeof t.closest === 'function' && (t.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"]') || t.isContentEditable)) return;
@@ -269,29 +312,32 @@ export default function MailPage({ active }: ModuleProps) {
     return () => window.removeEventListener('keydown', on);
   }, [active]);
 
-  const folderBox = place.box !== 'unified' ? (boxes.find((b) => String(b.id) === place.box) ?? defaultBox ?? null) : (defaultBox ?? null);
   const placeBox = place.box !== 'unified' ? boxes.find((b) => String(b.id) === place.box) : undefined;
   const label = place.label !== null ? (qc.getQueryData<{ labels: Label[] }>(['mail', 'labels'])?.labels.find((l) => l.id === place.label) ?? null) : null;
   const title = view
-    ? view.label
+    ? text(view.label)
     : label
       ? label.name
-      : placeBox && folder === 'inbox'
-        ? placeBox.email
-        : folder === 'inbox'
-          ? unified
-            ? text('Unified inbox')
-            : text('Inbox')
-          : folderName(folder.startsWith('label:') ? folder.slice(6) : folder.charAt(0).toUpperCase() + folder.slice(1));
-  const unifiedUnread = boxes.filter((b) => b.in_unified !== false).reduce((n, b) => n + (unreadOf(b, counts.data ?? null) ?? 0), 0);
-  const aside = unified && !view ? text('{n} unread · {m} mailboxes', { n: unifiedUnread, m: boxes.length }) : placeBox ? (placeBox.account_type === 'local_mailbox' ? text('WorkSuite Local') : placeBox.shared ? text('Shared') : (placeBox.provider_label ?? null)) : null;
+      : allRole
+        ? text('All Accounts · {folder}', { folder: allFolderLabel(allRole) })
+        : placeBox && folder === 'inbox'
+          ? placeBox.email
+          : folder === 'inbox'
+            ? text('Inbox')
+            : folderName(folder.startsWith('label:') ? folder.slice(6) : folder.charAt(0).toUpperCase() + folder.slice(1));
+  const included = boxes.filter((b) => b.in_unified !== false);
+  const unifiedUnread = allCounts.data?.roles.inbox.count ?? included.reduce((n, b) => n + (unreadOf(b, counts.data ?? null) ?? 0), 0);
+  const aside = allRole === 'inbox' ? text('{n} unread · {m} accounts', { n: unifiedUnread, m: included.length }) : allRole ? text('{m} accounts', { m: included.length }) : placeBox ? (placeBox.account_type === 'local_mailbox' ? text('WorkSuite Local') : placeBox.shared ? text('Shared') : (placeBox.provider_label ?? null)) : null;
+  const unavailable = (firstPage?.data as (MessagePage & { unavailable?: Array<{ email: string; reason: string | null }> }) | undefined)?.unavailable ?? [];
   const notice = firstPage?.data.unsearched?.length
     ? text('Not searched: {list}.', { list: firstPage.data.unsearched.join(', ') })
     : firstPage?.data.offline?.length
       ? text('Could not reach {list} — showing the others.', { list: firstPage.data.offline.join(', ') })
       : firstPage?.data.quick_failed
         ? text('This mailbox could not apply that filter on the server; it is applied to what is loaded.')
-        : null;
+        : unavailable.length
+          ? text('No {folder} folder in {list}.', { folder: allRole ? allFolderLabel(allRole) : folder, list: unavailable.map((u) => u.email).join(', ') })
+          : null;
   const pane = prefs.pane ?? 'right';
   const mailPending = (pending.data ?? []).filter((m) => m.state !== 'DONE');
   const account = current?.mailbox ? (boxes.find((b) => String(b.id) === current.mailbox) ?? null) : null;
@@ -319,8 +365,9 @@ export default function MailPage({ active }: ModuleProps) {
     </div>
   ) : null;
 
-  const listEl =
-    folder === 'outbox' ? (
+  const listEl = virtualOutbox ? (
+    <OutboxView active={active} pending={pending.data ?? []} onEdit={openCompose} />
+  ) : folder === 'outbox' ? (
       <ScheduledList active={active} />
     ) : (
       <MessageList
@@ -355,7 +402,7 @@ export default function MailPage({ active }: ModuleProps) {
         loadingMore={list.isFetchingNextPage}
         onMore={() => void list.fetchNextPage()}
         notice={notice}
-        team={teamTabs}
+        team={allRole === 'drafts' ? <LocalDraftRows drafts={localDrafts.data ?? []} onOpen={(d) => openCompose(d.seed)} /> : teamTabs}
         fill={pane === 'hidden' || pane === 'bottom'}
       />
     );
@@ -392,6 +439,7 @@ export default function MailPage({ active }: ModuleProps) {
           }}
           autoReply={query.get('reply') === '1'}
           onLoaded={nameTab}
+          archiveTo={archiveTo}
         />
       ) : null}
     </ReadingPane>
@@ -452,12 +500,18 @@ export default function MailPage({ active }: ModuleProps) {
               boxes={boxes}
               loading={mailboxes.isLoading}
               counts={counts.data ?? null}
+              allCounts={allCounts.data ?? null}
+              local={{ drafts: localDrafts.data?.length ?? 0, outbox: sending.length }}
               place={place}
-              folderBox={folderBox}
               showLabels={localStore}
               active={active}
-              sync={sync.data ?? null}
-              offline={offline}
+              summary={summary}
+              accounts={shared.status?.accounts ?? []}
+              running={running}
+              syncingAll={shared.all}
+              onSyncAll={syncAll}
+              onSyncAccount={syncAccount}
+              offline={networkOffline}
               pending={mailPending.length}
               cacheDays={cacheDays}
               onCompose={() => openCompose({ mode: 'new' })}
@@ -489,7 +543,7 @@ export default function MailPage({ active }: ModuleProps) {
           </div>
         </div>
       </div>
-      <StatusBar sync={sync.data ?? null} mailboxes={boxes.length} offline={offline} waiting={mailPending.length} zoom={prefs.zoom ?? 100} localBytes={localBytes.data ?? null} />
+      <StatusBar summary={summary} sync={shared.status} waiting={mailPending.length} zoom={prefs.zoom ?? 100} localBytes={localBytes.data ?? null} items={virtualOutbox || folder === 'outbox' ? null : (firstPage?.data.total ?? null)} unread={allRole === 'inbox' ? unifiedUnread : null} onOpenSync={() => navigate('/settings/mail?tab=accounts')} />
       {outgoing.length ? (
         <div role="status" aria-live="polite" className="pointer-events-none fixed bottom-14 left-1/2 z-40 flex -translate-x-1/2 flex-col gap-2">
           {outgoing.map((o) => (
@@ -503,6 +557,20 @@ export default function MailPage({ active }: ModuleProps) {
         </div>
       ) : null}
       {adding ? <AddMailbox onClose={() => setAdding(false)} /> : null}
+      {archiveAsk ? (
+        <ArchivePicker
+          box={archiveAsk.box}
+          onPick={(slug, name) => {
+            archiveAsk.resolve({ slug, name });
+            setArchiveAsk(null);
+            void qc.invalidateQueries({ queryKey: ['mail', 'all'] });
+          }}
+          onCancel={() => {
+            archiveAsk.resolve(null);
+            setArchiveAsk(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

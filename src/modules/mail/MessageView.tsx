@@ -53,6 +53,12 @@ export interface MessageViewProps {
   autoReply?: boolean;
   /** The message arrived: its tab can be named (a message opened from a link is not in the list). */
   onLoaded?: (subject: string, from: string) => void;
+  /**
+   * Where Archive puts it, from a combined view (DMO-ALL-11): the account's
+   * own Archive ('default'), a folder chosen for an account without one, or
+   * null when the person cancelled.
+   */
+  archiveTo?: (ref: MessageRef) => Promise<{ slug: string; name: string } | 'default' | null> | 'default';
 }
 
 export interface ViewControls {
@@ -104,6 +110,13 @@ export function MessageView(p: MessageViewProps) {
   const zoom = p.prefs.zoom ?? 100;
   const act = async (action: MessageActionName) => {
     if (!m) return;
+    if (action === 'archive' && p.archiveTo) {
+      // A combined view archives into the message's own account (WF-DO14); an account with no Archive folder asks once.
+      const asked = p.archiveTo(ref);
+      const to = asked instanceof Promise ? await asked : asked;
+      if (to === null) return;
+      if (to !== 'default') return void move(to.slug, to.name);
+    }
     try {
       const outcome = await messageAction(ref, action, m.subject);
       void qc.invalidateQueries({ queryKey: ['mail'] });

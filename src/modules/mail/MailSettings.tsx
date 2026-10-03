@@ -12,6 +12,8 @@ import { Select } from '../../components/Select';
 import { Button, Chip, ErrorNote, Modal, Spinner, Switch, TextField, cx } from '../../components/ui';
 import type { Preferences } from '@shared/types';
 import { AddMailbox } from './AddMailbox';
+import { AccountsSync } from './AccountsSync';
+import { includedIds, runSync } from './sync';
 import { AppPasswords } from './AppPasswords';
 import { ImportMail } from './Import';
 import { Rules, Signatures } from './MailRules';
@@ -126,6 +128,7 @@ function Accounts() {
   const store = useLocalStore();
   const stats = useMailStats();
   const qc = useQueryClient();
+  const mailPrefs = useMailPrefs();
   const [adding, setAdding] = useState(false);
   const [passwords, setPasswords] = useState(false);
   const [managing, setManaging] = useState<Mailbox | null>(null);
@@ -151,7 +154,8 @@ function Accounts() {
         </Button>
       </div>
       {boxes.isLoading ? <Spinner /> : boxes.error ? <ErrorNote error={boxes.error} onRetry={() => void boxes.refetch()} /> : null}
-      {list.length ? (
+      {list.length && sync.data?.accounts ? <AccountsSync boxes={list} prefs={mailPrefs.prefs} onPrefs={mailPrefs.set} onRepair={(b) => void repair(b)} onManage={setManaging} /> : null}
+      {list.length && sync.data && !sync.data.accounts ? (
         <ul role="list" className="overflow-hidden rounded-[12px] border border-line bg-surface">
           {list.map((b) => {
             const s = sync.data?.mailboxes.find((m) => m.mailbox === b.id);
@@ -286,7 +290,7 @@ function ManageMailbox({ box, onClose }: { box: Mailbox; onClose: () => void }) 
   return (
     <Modal title={b.email} labelledBy="mail-manage-title" width={480} onClose={onClose} footer={<Button onClick={onClose}>Done</Button>}>
       <div className="flex flex-col gap-4 p-5 text-[13.5px]">
-        <SwitchRow label={text('Show in the unified inbox')} hint={text('Mix its mail into Unified inbox with your other mailboxes.')} checked={b.in_unified !== false} onChange={(v) => void save({ in_unified: v })} />
+        <SwitchRow label={text('Include in All Accounts')} hint={text('Show its Inbox, Drafts, Sent and other folders in All Accounts, and sync it with Sync all.')} checked={b.in_unified !== false} onChange={(v) => void save({ in_unified: v })} />
         <SwitchRow label={text('Notify me about new mail')} hint={text('Desktop notifications for mail arriving in this mailbox.')} checked={(b as Mailbox & { notify?: boolean }).notify !== false} onChange={(v) => void save({ notify: v } as Partial<Mailbox>)} />
         {!b.shared ? <SwitchRow label={text('Pause syncing')} hint={text('Stop checking for new mail until you turn this off.')} checked={!!b.sync_paused} onChange={(v) => void save({ sync_paused: v })} /> : null}
         <div className="flex flex-wrap gap-2 border-t border-line pt-4">
@@ -379,11 +383,12 @@ function Storage() {
   const mode = copies[0]?.copy ?? null;
   const s = stats.data ?? null;
   const byBox = prefs?.mailCacheDaysByMailbox ?? {};
+  // The same Sync all as the folder pane: single-flight, three accounts at a time (DMO-SYN-02/12).
   const syncAll = async () => {
-    const r = await Promise.allSettled(list.filter((b) => !b.shared).map((b) => apiPost(`/api/mail/mailboxes/${b.id}/sync`)));
+    const r = await runSync(includedIds(sync.data, list), { all: true, offline: app.get().status?.network === 'OFFLINE' });
     void qc.invalidateQueries({ queryKey: ['mail'] });
-    const failed = r.filter((x) => x.status === 'rejected').length;
-    toast(failed ? 'error' : 'success', failed ? text('{n} mailboxes could not be asked now.', { n: failed }) : text('Checking every mailbox for new mail.'));
+    if (!r.started.length) return;
+    toast(r.failed.length ? 'error' : 'success', r.failed.length ? text('{n} mailboxes could not be synced.', { n: r.failed.length }) : text('Every mailbox was synced.'));
   };
   const keep = (id: number, v: 7 | 30 | 90 | 0) => {
     const next = { ...byBox, [String(id)]: v };

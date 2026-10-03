@@ -281,7 +281,7 @@ function GroupHead({ g }: { g: RowGroup & { items: ListRow[] } }) {
 
 function TableHead({ unified }: { unified: boolean }) {
   return (
-    <div role="presentation" className="grid h-7 items-center gap-3 border-t border-line px-4 text-[11.5px] font-semibold text-ink-3" style={{ gridTemplateColumns: unified ? '20px 220px 1fr 70px 64px 70px' : '20px 220px 1fr 64px 70px' }}>
+    <div role="presentation" className="grid h-7 items-center gap-3 border-t border-line px-4 text-[11.5px] font-semibold text-ink-3" style={{ gridTemplateColumns: unified ? '20px 220px 1fr 170px 64px 70px' : '20px 220px 1fr 64px 70px' }}>
       <span />
       <span>From</span>
       <span>Subject</span>
@@ -331,7 +331,7 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs }: Me
 
   if (view === 'table') {
     return (
-      <div {...common} aria-label={label} className={cx(common.className, 'grid h-[36px] items-center gap-3 px-4 text-[13px]')} style={{ gridTemplateColumns: unified ? '20px 220px 1fr 70px 64px 70px' : '20px 220px 1fr 64px 70px' }}>
+      <div {...common} aria-label={label} className={cx(common.className, 'grid h-[36px] items-center gap-3 px-4 text-[13px]')} style={{ gridTemplateColumns: unified ? '20px 220px 1fr 170px 64px 70px' : '20px 220px 1fr 64px 70px' }}>
         <button
           type="button"
           onClick={(e) => {
@@ -350,7 +350,12 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs }: Me
           <span className={cx('truncate', unread ? 'font-bold text-ink' : 'font-semibold text-ink')}>{subject}</span>
           {preview ? <span className="truncate text-ink-3">— {preview}</span> : null}
         </span>
-        {unified ? <span>{badge}</span> : null}
+        {unified ? (m.mailbox ? (
+          <span className="flex min-w-0 items-center gap-1.5" title={m.mailbox.email}>
+            {badge}
+            <span className="truncate text-[12px] text-ink-3">{m.mailbox.email}</span>
+          </span>
+        ) : <span />) : null}
         <span className="text-right font-mono text-[12px] text-ink-2 tabular">{m.size ? bytes(m.size) : ''}</span>
         <span className="text-right text-[12px] text-ink-3">{stamp}</span>
       </div>
