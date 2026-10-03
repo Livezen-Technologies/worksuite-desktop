@@ -334,6 +334,8 @@ export interface MailPrefs {
   openIn?: 'tabs' | 'windows' | 'both';
   /** Mark as read: when opened, after a delay, when the selection changes, or never (DMO-INB-12). */
   markRead?: 'open' | 'delay' | 'change' | 'never';
+  /** Senders whose pictures are always shown, through WorkSuite's image proxy (DMO-RD-02). */
+  imageSenders?: string[];
   /** Answering a read-receipt request (DMO-CMP-11): ask each time (the default), always, or never. */
   readReceipts?: 'ask' | 'always' | 'never';
   markReadDelay?: number;

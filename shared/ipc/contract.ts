@@ -160,6 +160,7 @@ export const preferencesPatchSchema = z
     mailCacheDays: z.union([z.literal(7), z.literal(30), z.literal(90), z.literal(0)]),
     mailtoHandler: z.boolean(),
     mailCacheDaysByMailbox: z.record(z.string().regex(/^\d{1,12}$/), z.union([z.literal(7), z.literal(30), z.literal(90), z.literal(0)])).refine((r) => Object.keys(r).length <= 200),
+    mailFolderOffline: z.record(z.string().regex(/^(\d{1,12}|local):[A-Za-z0-9._\-/ :]{1,128}$/), z.enum(['recent', 'headers', 'online'])).refine((r) => Object.keys(r).length <= 500),
     tabSuspendMinutes: z.number().int().min(5).max(480),
     language: z.string().regex(/^[a-z]{2}(-[A-Z]{2})?$/),
     updateChannel: z.enum(['stable', 'beta', 'dev', 'org']),

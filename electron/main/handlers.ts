@@ -12,6 +12,7 @@ import { safeFileName } from '@shared/filename';
 import type { AppInfo, BusyReport, DetachedWindow, SyncPolicy } from '@shared/types';
 import { assertRoute, assertWebPath } from './access';
 import { windowRoute } from '../windows/manager';
+import { attachmentRisk } from '@shared/attachments';
 import { DesktopError, isDesktopError } from './errors';
 import type { AppContext } from './context';
 import type { IpcRouter } from '../ipc/router';
@@ -506,6 +507,12 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('files:registerDropped', (input) => ctx.transfers.register(input.paths));
   router.handle('transfers:list', () => ctx.transfers.list());
   router.handle('transfers:download', async (input, c) => {
+    // A mail attachment that runs as a program is never saved from a message; one with macros never opens elsewhere (ENH-MAIL-03 DMO-SEC-04).
+    if (input.mail) {
+      const risk = attachmentRisk(input.name);
+      if (risk === 'blocked') throw new DesktopError('POLICY_DENIED', 'WorkSuite blocks this kind of attachment: it can run as a program on your computer.');
+      if (risk === 'macro' && input.open) throw new DesktopError('POLICY_DENIED', 'Files with macros open only in WorkSuite, where macros do not run.');
+    }
     // Drive › Settings › Ask where to save each time: the place comes from this process's own dialog, never the page.
     let saveAs: string | undefined;
     if (!input.open && ctx.settings.effective().drive.askWhereToSave) {

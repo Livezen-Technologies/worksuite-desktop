@@ -518,7 +518,7 @@ function Storage() {
         </table>
       ) : null}
       <div className="mt-4 flex items-center gap-3 rounded-[10px] border border-line bg-surface px-3.5 py-3 text-[13px]">
-        <span className="flex-1 text-ink-2">Short on disk space? Choose a shorter keep period above; older mail stays searchable on the server and downloads when you open it.</span>
+        <span className="flex-1 text-ink-2">Short on disk space? Choose a shorter keep period above; older mail stays searchable on the server and downloads when you open it. Each folder can also keep recent messages, headers only or nothing (right-click it › On this computer): Inbox, Sent and Drafts keep recent mail, Archive is online only, other folders keep headers.</span>
         {clearing ? (
           <Button size="sm" variant="danger" onClick={clearAll}>
             Clear everything now

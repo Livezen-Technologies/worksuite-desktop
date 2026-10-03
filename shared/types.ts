@@ -252,6 +252,8 @@ export interface Preferences {
   mailtoHandler?: boolean;
   /** Per mailbox, how long its mail is kept on this computer (D09), overriding `mailCacheDays`. */
   mailCacheDaysByMailbox?: Record<string, 7 | 30 | 90 | 0>;
+  /** Per folder ("<mailbox>:<folder>"), what this computer keeps (ENH-MAIL-03 DMO-OFF-01); unset folders follow the defaults. */
+  mailFolderOffline?: Record<string, 'recent' | 'headers' | 'online'>;
   tabSuspendMinutes: number;
   language: string;
   updateChannel: UpdateChannel;

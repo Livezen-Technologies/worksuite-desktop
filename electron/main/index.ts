@@ -14,7 +14,7 @@ import { hkdfSync } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { canOpenApp, canOpenLink, canOpenRoute, notificationAllowed, visibleAppIds } from '@shared/access';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
-import { findMailtoInArgv, mailBodiesKept, mailtoRoute, parseMailto } from '@shared/mailto';
+import { findMailtoInArgv, mailBodiesKept, mailListKept, mailtoRoute, parseMailto } from '@shared/mailto';
 import { resolveWebLink } from '@shared/links';
 import { redirectRoute } from '@shared/channels';
 import { networkStatus } from '@shared/network';
@@ -82,6 +82,7 @@ import { OfficeEditorHost } from '../services/office-editor';
 import { OfficeExternal } from '../services/office-external';
 import { createPdfStudio } from '../services/pdf/host';
 import { createMailFilesIpc } from '../services/mail-files/ipc';
+import { markFromInternet } from '../services/quarantine';
 import { mailFilePathsInArgv } from '../services/mail-files/argv';
 import { createLocalAI } from '../services/local-ai/host';
 import { OcrService } from '../services/ocr';
@@ -395,6 +396,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     audit: (action, details) => audit.record(sessionCtl.userId(), action, details),
     // eLearning's offline copies are kept inside the app, sealed as they arrive.
     sink: (name): DownloadSink | null => elearning.sink(name),
+    // An attachment saved from mail carries the system's "from the internet" mark (ENH-MAIL-03 DMO-SEC-04).
+    downloaded: (path, source) => {
+      if (source.startsWith('/api/mail/messages/')) return markFromInternet(path).then(() => undefined);
+    },
     // Every module's PDFs open in PDF Studio, never in another application.
     openInApp: (path) => {
       if (!/\.pdf$/i.test(path)) return false;
@@ -1602,6 +1607,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         return { enabled: caps.offlineCache, maxBytes: (pol?.offline_storage_max_mb ?? 2048) * 1024 * 1024 };
       },
       mailBodiesCached: (path) => mailBodiesKept(settings.effective(), path),
+      mailListCached: (path) => mailListKept(settings.effective(), path),
       // SalonMate's desk calls carry the key this computer was paired with.
       extraHeaders: (path) => {
         const key = salonDesk.keyFor(path);

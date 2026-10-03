@@ -12,6 +12,8 @@ const DROP = ['script', 'iframe', 'frame', 'frameset', 'object', 'embed', 'apple
 export interface SanitizedMail {
   html: string;
   blockedImages: number;
+  /** The remote pictures held back, by the number each <img data-ws-img> carries — kept out of the HTML itself. */
+  remoteImages: string[];
 }
 
 /**
@@ -23,6 +25,7 @@ export function sanitizeMailHtml(input: string, { safeLinks = true }: { safeLink
   const doc = new DOMParser().parseFromString(input || '', 'text/html');
   for (const tag of DROP) doc.querySelectorAll(tag).forEach((el) => el.remove());
   let blockedImages = 0;
+  const remoteImages: string[] = [];
   doc.querySelectorAll('*').forEach((el) => {
     for (const attr of [...el.attributes]) {
       const name = attr.name.toLowerCase();
@@ -37,6 +40,11 @@ export function sanitizeMailHtml(input: string, { safeLinks = true }: { safeLink
     if (/^(https?:)?\/\//i.test(src)) {
       img.removeAttribute('src');
       img.removeAttribute('srcset');
+      // Kept aside to show later through WorkSuite's image proxy, when the reader asks (DMO-SEC-07, DMO-RD-02).
+      if (/^https?:\/\//i.test(src) && remoteImages.length < 60) {
+        img.setAttribute('data-ws-img', String(remoteImages.length));
+        remoteImages.push(src.slice(0, 2000));
+      }
       img.setAttribute('alt', img.getAttribute('alt') || '[image blocked]');
       blockedImages++;
     }
@@ -55,7 +63,11 @@ export function sanitizeMailHtml(input: string, { safeLinks = true }: { safeLink
   doc.querySelectorAll('style').forEach((s) => {
     s.textContent = (s.textContent ?? '').replace(/@import[^;]+;/gi, '').replace(/url\([^)]*\)/gi, 'none');
   });
-  return { html: doc.body.innerHTML, blockedImages };
+  // A sender's own markers mean nothing here.
+  doc.querySelectorAll('[data-ws-img]').forEach((el) => {
+    if (el.tagName !== 'IMG' || el.hasAttribute('src')) el.removeAttribute('data-ws-img');
+  });
+  return { html: doc.body.innerHTML, blockedImages, remoteImages };
 }
 
 /**
@@ -134,4 +146,26 @@ export function parseAddresses(input: string): string[] {
     .split(/[,;\n]/)
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+/** The remote images a sanitised body held back (DMO-SEC-07), each once. */
+export function blockedImageUrls(clean: Pick<SanitizedMail, 'remoteImages'>): string[] {
+  return [...new Set(clean.remoteImages)];
+}
+
+/**
+ * The held-back images shown through WorkSuite's image proxy: each address
+ * swapped for its signed proxy link on the WorkSuite server, so the sender
+ * sees WorkSuite fetch it, not who opened the message or where.
+ */
+export function withProxiedImages(html: string, remoteImages: string[], links: Record<string, string>, origin: string): string {
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+  doc.querySelectorAll('img[data-ws-img]').forEach((img) => {
+    const link = links[remoteImages[Number(img.getAttribute('data-ws-img'))] ?? ''];
+    if (link && link.startsWith('/mail-image?')) {
+      img.setAttribute('src', `${origin}${link}`);
+      img.removeAttribute('data-ws-img');
+    }
+  });
+  return doc.body.innerHTML;
 }

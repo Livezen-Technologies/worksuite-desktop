@@ -2099,5 +2099,22 @@
   "{n} of {total} read · {copied} copied": "{total} න් {n} ක් කියවූවා · {copied} ක් පිටපත් කළා",
   "{v0} KB · {v1}": "{v0} KB · {v1}",
   "“{subject}” goes to Junk, and the spam filter learns from it.": "“{subject}” Junk වෙත යයි, අයාචිත තැපැල් පෙරහන එයින් ඉගෙන ගනී.",
-  "“{subject}” is removed from your inbox and sent, untouched, to your organisation’s security team, who can remove it from other mailboxes too.": "“{subject}” ඔබගේ එන ලිපි වලින් ඉවත් කර, නොවෙනස්ව ඔබගේ සංවිධානයේ ආරක්ෂක කණ්ඩායමට යවනු ලැබේ; ඔවුන්ට එය අනෙක් තැපැල් පෙට්ටිවලින්ද ඉවත් කළ හැක."
+  "“{subject}” is removed from your inbox and sent, untouched, to your organisation’s security team, who can remove it from other mailboxes too.": "“{subject}” ඔබගේ එන ලිපි වලින් ඉවත් කර, නොවෙනස්ව ඔබගේ සංවිධානයේ ආරක්ෂක කණ්ඩායමට යවනු ලැබේ; ඔවුන්ට එය අනෙක් තැපැල් පෙට්ටිවලින්ද ඉවත් කළ හැක.",
+  "Always show from {email}": "{email} වෙතින් සැමවිටම පෙන්වන්න",
+  "Blocked — it could run as a program": "අවහිර කළා — එයට වැඩසටහනක් ලෙස ක්‍රියා කළ හැක",
+  "Keep recent messages": "මෑත පණිවිඩ තබා ගන්න",
+  "Messages open from the server": "පණිවිඩ සේවාදායකයෙන් විවෘත වේ",
+  "Nothing kept on this computer": "මෙම පරිගණකයේ කිසිවක් තබා නොගනී",
+  "Online only": "සබැඳිව පමණි",
+  "Pictures are shown only through WorkSuite, and your organisation has turned that off.": "පින්තූර පෙන්වන්නේ WorkSuite හරහා පමණි, ඔබගේ සංවිධානය එය අක්‍රිය කර ඇත.",
+  "Properties": "ගුණාංග",
+  "Short on disk space? Choose a shorter keep period above; older mail stays searchable on the server and downloads when you open it. Each folder can also keep recent messages, headers only or nothing (right-click it › On this computer): Inbox, Sent and Drafts keep recent mail, Archive is online only, other folders keep headers.": "තැටි ඉඩ මදිද? ඉහතින් කෙටි තබා ගැනීමේ කාලයක් තෝරන්න; පැරණි තැපැල් සේවාදායකයේ සෙවිය හැකි ලෙස පවතින අතර ඔබ විවෘත කළ විට බාගත වේ. සෑම ෆෝල්ඩරයකටම මෑත පණිවිඩ, ශීර්ෂ පමණක් හෝ කිසිවක් නොතබා ගත හැක (දකුණු-ක්ලික් කරන්න › මෙම පරිගණකයේ): එන ලිපි, යැවූ සහ කෙටුම්පත් මෑත තැපැල් තබා ගනී, Archive සබැඳිව පමණි, අනෙක් ෆෝල්ඩර ශීර්ෂ තබා ගනී.",
+  "Show pictures": "පින්තූර පෙන්වන්න",
+  "Within the mailbox’s keep period": "තැපැල් පෙට්ටියේ තබා ගැනීමේ කාලය තුළ",
+  "WorkSuite blocks this kind of attachment: it can run as a program on your computer.": "WorkSuite මෙවැනි ඇමුණුම් අවහිර කරයි: එයට ඔබගේ පරිගණකයේ වැඩසටහනක් ලෙස ක්‍රියා කළ හැක.",
+  "Your organisation keeps a copy of {what} on the WorkSuite server. Old mail is archived there by that policy — there is no AutoArchive on this computer.": "ඔබගේ සංවිධානය {what} හි පිටපතක් WorkSuite සේවාදායකයේ තබා ගනී. පැරණි තැපැල් එම ප්‍රතිපත්තිය අනුව එහි සංරක්ෂණය වේ — මෙම පරිගණකයේ AutoArchive නැත.",
+  "Your organisation keeps no copy of this mailbox on the WorkSuite server; the mail provider’s own retention applies. There is no AutoArchive on this computer.": "ඔබගේ සංවිධානය මෙම තැපැල් පෙට්ටියේ පිටපතක් WorkSuite සේවාදායකයේ තබා නොගනී; තැපැල් සපයන්නාගේම රඳවා ගැනීම අදාළ වේ. මෙම පරිගණකයේ AutoArchive නැත.",
+  "has macros — save only": "මැක්‍රෝ ඇත — සුරැකීම පමණි",
+  "{folder} — properties": "{folder} — ගුණාංග",
+  "{name} has macros: it is saved, not opened. Open it only if you trust the sender.": "{name} හි මැක්‍රෝ ඇත: එය සුරකින ලදී, විවෘත නොකළා. ඔබ යවන්නා විශ්වාස කරන්නේ නම් පමණක් එය විවෘත කරන්න."
 }

@@ -31,7 +31,7 @@ import { DataFileImport, ExportDialog, folderLabel, planEntries, progressWords }
 import { fileReplyRoute } from '../../../src/modules/mail/FileViewer';
 import { MailLinkGuard, judgeLink, reasonWords } from '../../../src/modules/mail/LinkGuard';
 import { MarkerChips, RecallDialog, ReceiptBar, ReportDialog, SmimeChip, VoteBar, VoteTally, recallStateWords } from '../../../src/modules/mail/MessageExtras';
-import { sanitizeMailHtml } from '../../../src/modules/mail/sanitize';
+import { blockedImageUrls, sanitizeMailHtml, withProxiedImages } from '../../../src/modules/mail/sanitize';
 import { parseSafeLink } from '@shared/mail-files';
 import type { ImportProgress, MailFileView } from '@shared/mail-files';
 
@@ -338,5 +338,20 @@ describe('read receipts (DMO-CMP-11)', () => {
     wrap(<ReceiptBar to="pat@client.example" subject="Plan" mailbox="4" onAnswered={answered} />);
     fireEvent.click(screen.getByRole('button', { name: 'Don’t send' }));
     expect(apiPost).not.toHaveBeenCalled();
+  });
+});
+
+describe('pictures on request, through WorkSuite (DMO-SEC-07, DMO-RD-02)', () => {
+  it('holds remote pictures back and shows them only through the signed proxy links', () => {
+    const clean = sanitizeMailHtml('<p>Hi</p><img src="https://t.example/p.gif" alt="logo"><img src="http://x.example/a.png"><img src="data:image/png;base64,AAAA">');
+    expect(clean.blockedImages).toBe(2);
+    expect(clean.html).not.toContain(' src="https://t.example');
+    expect(clean.html).not.toContain('t.example');
+    expect(blockedImageUrls(clean)).toEqual(['https://t.example/p.gif', 'http://x.example/a.png']);
+    const shown = withProxiedImages(clean.html, clean.remoteImages, { 'https://t.example/p.gif': '/mail-image?t=abc&s=def', 'http://x.example/a.png': 'https://elsewhere.example/x' }, 'https://ws.example');
+    expect(shown).toContain('src="https://ws.example/mail-image?t=abc&amp;s=def"');
+    expect(shown).not.toContain('elsewhere.example');
+    // A sender's own marker on a picture that already shows is dropped.
+    expect(sanitizeMailHtml('<img src="data:image/png;base64,AA" data-ws-img="0">').html).not.toContain('data-ws-img');
   });
 });

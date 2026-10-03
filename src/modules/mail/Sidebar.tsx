@@ -9,6 +9,11 @@ import { type MenuSection } from '../../components/Menu';
 import { Button, DATA_TEXT, Kbd, Modal, Spinner, TextField, cx } from '../../components/ui';
 import { ContextMenu } from './MessageMenus';
 import { mailKeys, useFolders, useLabels } from './api';
+import { app, updatePrefs } from '../../core/app-state';
+import { useStore } from '../../core/store';
+import { defaultFolderOffline, folderOffline, type FolderOffline } from '@shared/mailto';
+import type { Preferences } from '@shared/types';
+import { copyWords } from './MailSettings';
 import { ALL_FOLDERS, allCount } from './allAccounts';
 import { SMART_VIEWS, folderName, mailboxLetter, type SmartViewId } from './model';
 import { AccountAvatar, Count, SectionHeading } from './parts';
@@ -138,6 +143,9 @@ export function MailSidebar(p: SidebarProps) {
     });
   const [naming, setNaming] = useState<{ kind: 'folder' | 'label'; box: Mailbox | null } | null>(null);
   const [folderMenu, setFolderMenu] = useState<FolderMenu | null>(null);
+  // A folder's properties, and what this computer keeps of each folder (DMO-OFF-01, DMO-DAT-05).
+  const [props, setProps] = useState<{ box: Mailbox; slug: string; label: string } | null>(null);
+  const offlinePrefs = useStore(app, (s) => s.prefs ?? null);
   const many = p.boxes.length > 1;
   const inAll = p.place.box === 'unified' && !p.place.view && p.place.label === null;
   // An older server counts no All Accounts folders: the inbox is then the sum of each included account's unread.
@@ -284,9 +292,10 @@ export function MailSidebar(p: SidebarProps) {
           y={folderMenu.y}
           label={text('Folder actions')}
           onClose={() => setFolderMenu(null)}
-          sections={folderSections(folderMenu, p, () => setNaming({ kind: 'folder', box: folderMenu.box }))}
+          sections={folderSections(folderMenu, p, () => setNaming({ kind: 'folder', box: folderMenu.box }), offlinePrefs, () => setProps({ box: folderMenu.box!, slug: folderMenu.slug!, label: folderMenu.label }))}
         />
       ) : null}
+      {props ? <FolderProperties box={props.box} slug={props.slug} label={props.label} prefs={offlinePrefs} onClose={() => setProps(null)} /> : null}
     </nav>
   );
 }
@@ -480,7 +489,22 @@ const ROLE_CHOICES: Array<{ role: string; label: string }> = [
 ];
 
 /** A folder's right-click menu (DMO-NAV-03, DMO-ALL-06): Favorites, its role in All Accounts, a new folder, sync. */
-function folderSections(m: FolderMenu, p: SidebarProps, onNewFolder: () => void): MenuSection[] {
+/** The offline choices a folder offers (ENH-MAIL-03 DMO-OFF-01). */
+export const OFFLINE_CHOICES: Array<{ id: FolderOffline; label: string; hint: string }> = [
+  { id: 'recent', label: 'Keep recent messages', hint: 'Within the mailbox’s keep period' },
+  { id: 'headers', label: 'Headers only', hint: 'Messages open from the server' },
+  { id: 'online', label: 'Online only', hint: 'Nothing kept on this computer' },
+];
+
+const setFolderOffline = (prefs: Pick<Preferences, 'mailFolderOffline'> | null, box: Mailbox, slug: string, v: FolderOffline) => {
+  const key = `${box.id}:${slug}`;
+  const next = { ...(prefs?.mailFolderOffline ?? {}) };
+  if (v === defaultFolderOffline(slug)) delete next[key];
+  else next[key] = v;
+  void updatePrefs({ mailFolderOffline: next });
+};
+
+function folderSections(m: FolderMenu, p: SidebarProps, onNewFolder: () => void, prefs: Pick<Preferences, 'mailFolderOffline'> | null = null, onProperties?: () => void): MenuSection[] {
   const favs = p.favorites ?? [];
   const isFav = favs.some((e) => e.split('|')[0] === m.key);
   const sections: MenuSection[] = [];
@@ -530,6 +554,18 @@ function folderSections(m: FolderMenu, p: SidebarProps, onNewFolder: () => void)
         { id: 'new', label: text('New folder'), icon: 'folder-plus', onSelect: onNewFolder },
         { id: 'sync', label: text('Sync {email}', { email: box.email }), icon: 'refresh', disabled: p.offline, reason: text('You’re offline — mail will sync when you reconnect'), onSelect: () => p.onSyncAccount(box.id) },
         ...(m.slug && p.onExport ? [{ id: 'export', label: text('Export folder…'), icon: 'download', disabled: p.offline, reason: text('Available when you are back online.'), onSelect: () => p.onExport!(box, m.slug!, m.label) }] : []),
+        ...(m.slug
+          ? [
+              {
+                id: 'offline',
+                label: text('On this computer'),
+                icon: 'cloud-off',
+                description: text(OFFLINE_CHOICES.find((c) => c.id === folderOffline(prefs ?? {}, String(box.id), m.slug!))!.label),
+                submenu: [{ id: 'choices', items: OFFLINE_CHOICES.map((c) => ({ id: c.id, label: text(c.label), description: text(c.hint), radio: true, checked: folderOffline(prefs ?? {}, String(box.id), m.slug!) === c.id, onSelect: () => setFolderOffline(prefs, box, m.slug!, c.id) })) }],
+              },
+              ...(onProperties ? [{ id: 'properties', label: text('Properties'), icon: 'info', onSelect: onProperties }] : []),
+            ]
+          : []),
       ],
     });
   }
@@ -634,6 +670,55 @@ function NameDialog({ kind, mailbox, onClose }: { kind: 'folder' | 'label'; mail
       >
         <TextField label={text('Name')} value={name} onChange={(e) => setName(e.target.value)} autoFocus hint={kind === 'folder' && mailbox ? text('In {email}', { email: mailbox.email }) : undefined} />
       </form>
+    </Modal>
+  );
+}
+
+/**
+ * A folder's properties (ENH-MAIL-03 DMO-NAV-03, DMO-DAT-05, DMO-OFF-01):
+ * what this computer keeps of it, and what the server keeps — the
+ * organisation's copy and archive policy, which is what takes the place of
+ * Outlook's AutoArchive.
+ */
+function FolderProperties({ box, slug, label, prefs, onClose }: { box: Mailbox; slug: string; label: string; prefs: Pick<Preferences, 'mailFolderOffline'> | null; onClose: () => void }) {
+  const folders = useFolders(box.id, true);
+  const f = (folders.data?.folders ?? []).find((x) => x.slug === slug) ?? null;
+  const current = folderOffline(prefs ?? {}, String(box.id), slug);
+  return (
+    <Modal title={text('{folder} — properties', { folder: label })} labelledBy="mail-folder-props" onClose={onClose} footer={<Button variant="primary" onClick={onClose}>Done</Button>}>
+      <div className="flex flex-col gap-3 p-4 text-[13px] text-ink">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+          <dt className="text-ink-3">{text('Account')}</dt>
+          <dd>{box.email}</dd>
+          {f ? (
+            <>
+              <dt className="text-ink-3">{text('Messages')}</dt>
+              <dd>{f.total.toLocaleString()}</dd>
+              <dt className="text-ink-3">{text('Unread')}</dt>
+              <dd>{(f.unread ?? 0).toLocaleString()}</dd>
+            </>
+          ) : null}
+        </dl>
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className="mb-1 font-semibold">{text('On this computer')}</legend>
+          {OFFLINE_CHOICES.map((c) => (
+            <label key={c.id} className="flex items-center gap-2">
+              <input type="radio" name="folder-offline" checked={current === c.id} onChange={() => setFolderOffline(prefs, box, slug, c.id)} />
+              <span>
+                {text(c.label)} <span className="text-ink-3">· {text(c.hint)}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+        <section aria-label={text('On the server')}>
+          <h3 className="mb-1 font-semibold">{text('On the server')}</h3>
+          <p className="text-ink-2">
+            {box.copy
+              ? text('Your organisation keeps a copy of {what} on the WorkSuite server. Old mail is archived there by that policy — there is no AutoArchive on this computer.', { what: copyWords(box.copy.copy_mode, box.copy.window_months) })
+              : text('Your organisation keeps no copy of this mailbox on the WorkSuite server; the mail provider’s own retention applies. There is no AutoArchive on this computer.')}
+          </p>
+        </section>
+      </div>
     </Modal>
   );
 }

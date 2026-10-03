@@ -2099,5 +2099,22 @@
   "{n} of {total} read · {copied} copied": "{total} இல் {n} படிக்கப்பட்டன · {copied} நகலெடுக்கப்பட்டன",
   "{v0} KB · {v1}": "{v0} KB · {v1}",
   "“{subject}” goes to Junk, and the spam filter learns from it.": "“{subject}” Junk க்குச் செல்லும், ஸ்பேம் வடிகட்டி அதிலிருந்து கற்றுக்கொள்ளும்.",
-  "“{subject}” is removed from your inbox and sent, untouched, to your organisation’s security team, who can remove it from other mailboxes too.": "“{subject}” உங்கள் உள்பெட்டியிலிருந்து அகற்றப்பட்டு, மாற்றமின்றி உங்கள் நிறுவனத்தின் பாதுகாப்புக் குழுவிற்கு அனுப்பப்படும்; அவர்கள் அதை மற்ற அஞ்சல்பெட்டிகளிலிருந்தும் அகற்றலாம்."
+  "“{subject}” is removed from your inbox and sent, untouched, to your organisation’s security team, who can remove it from other mailboxes too.": "“{subject}” உங்கள் உள்பெட்டியிலிருந்து அகற்றப்பட்டு, மாற்றமின்றி உங்கள் நிறுவனத்தின் பாதுகாப்புக் குழுவிற்கு அனுப்பப்படும்; அவர்கள் அதை மற்ற அஞ்சல்பெட்டிகளிலிருந்தும் அகற்றலாம்.",
+  "Always show from {email}": "{email} இலிருந்து எப்போதும் காட்டு",
+  "Blocked — it could run as a program": "தடுக்கப்பட்டது — இது ஒரு நிரலாக இயங்கக்கூடும்",
+  "Keep recent messages": "சமீபத்திய செய்திகளை வைத்திரு",
+  "Messages open from the server": "செய்திகள் சேவையகத்திலிருந்து திறக்கும்",
+  "Nothing kept on this computer": "இந்தக் கணினியில் எதுவும் வைக்கப்படாது",
+  "Online only": "இணையத்தில் மட்டும்",
+  "Pictures are shown only through WorkSuite, and your organisation has turned that off.": "படங்கள் WorkSuite வழியாக மட்டுமே காட்டப்படும், உங்கள் நிறுவனம் அதை முடக்கியுள்ளது.",
+  "Properties": "பண்புகள்",
+  "Short on disk space? Choose a shorter keep period above; older mail stays searchable on the server and downloads when you open it. Each folder can also keep recent messages, headers only or nothing (right-click it › On this computer): Inbox, Sent and Drafts keep recent mail, Archive is online only, other folders keep headers.": "வட்டு இடம் குறைவா? மேலே குறுகிய வைத்திருப்புக் காலத்தைத் தேர்ந்தெடுக்கவும்; பழைய அஞ்சல் சேவையகத்தில் தேடக்கூடியதாக இருக்கும், நீங்கள் திறக்கும்போது பதிவிறங்கும். ஒவ்வொரு கோப்புறையும் சமீபத்திய செய்திகளை, தலைப்புகளை மட்டும், அல்லது எதுவுமின்றி வைத்திருக்கலாம் (வலது-கிளிக் › இந்தக் கணினியில்): உள்பெட்டி, அனுப்பியவை, வரைவுகள் சமீபத்திய அஞ்சலை வைத்திருக்கும், Archive இணையத்தில் மட்டும், மற்ற கோப்புறைகள் தலைப்புகளை வைத்திருக்கும்.",
+  "Show pictures": "படங்களைக் காட்டு",
+  "Within the mailbox’s keep period": "அஞ்சல்பெட்டியின் வைத்திருப்புக் காலத்திற்குள்",
+  "WorkSuite blocks this kind of attachment: it can run as a program on your computer.": "WorkSuite இவ்வகை இணைப்புகளைத் தடுக்கிறது: இது உங்கள் கணினியில் நிரலாக இயங்கக்கூடும்.",
+  "Your organisation keeps a copy of {what} on the WorkSuite server. Old mail is archived there by that policy — there is no AutoArchive on this computer.": "உங்கள் நிறுவனம் {what} இன் நகலை WorkSuite சேவையகத்தில் வைத்திருக்கிறது. பழைய அஞ்சல் அந்தக் கொள்கையின்படி அங்கே காப்பகப்படுத்தப்படும் — இந்தக் கணினியில் AutoArchive இல்லை.",
+  "Your organisation keeps no copy of this mailbox on the WorkSuite server; the mail provider’s own retention applies. There is no AutoArchive on this computer.": "உங்கள் நிறுவனம் இந்த அஞ்சல்பெட்டியின் நகலை WorkSuite சேவையகத்தில் வைத்திருக்கவில்லை; அஞ்சல் வழங்குநரின் சொந்தத் தக்கவைப்பு பொருந்தும். இந்தக் கணினியில் AutoArchive இல்லை.",
+  "has macros — save only": "மேக்ரோக்கள் உள்ளன — சேமிக்க மட்டும்",
+  "{folder} — properties": "{folder} — பண்புகள்",
+  "{name} has macros: it is saved, not opened. Open it only if you trust the sender.": "{name} இல் மேக்ரோக்கள் உள்ளன: இது சேமிக்கப்பட்டது, திறக்கப்படவில்லை. அனுப்புநரை நம்பினால் மட்டுமே திறக்கவும்."
 }
