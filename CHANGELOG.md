@@ -5,6 +5,10 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.101 — 2026-10-03
+
+- Show the presenter's live shared screen on the meeting stage with their camera in a separate draggable tile, a red preview border and Stop presenting. Add a click-through desktop outline for captured screens and windows where native bounds are available (#146).
+
 ## 0.2.100 — 2026-10-03
 
 - Keep a new Chat, WhatsApp or website reply draft when an earlier send finishes, and prevent repeated Enter presses from submitting the same pending message twice (#156).

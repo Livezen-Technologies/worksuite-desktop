@@ -154,6 +154,7 @@ const api = {
   },
   media: {
     access: call('media:access'),
+    screenIndicator: call('media:screenIndicator'),
     screenSources: call('media:screenSources'),
     screenPick: call('media:screenPick'),
     privacySettings: call('media:privacySettings'),

@@ -423,6 +423,7 @@ export const contract = {
   'files:pickFolder': ch(z.object({ title: z.string().max(100).optional() }), { session: true, rate: 2 }),
 
   'media:access': ch(z.object({ kind: z.enum(['microphone', 'camera']) }), { session: true, rate: 5 }),
+  'media:screenIndicator': ch(z.object({ active: z.boolean() }), { session: true, rate: 12 }),
   'media:screenSources': ch(none, { session: true, rate: 3 }),
   'media:screenPick': ch(z.object({ id: z.string().min(1).max(200), audio: z.boolean().optional() }), { session: true, rate: 6 }),
   'media:privacySettings': ch(z.object({ pane: z.enum(['microphone', 'camera', 'screen', 'accessibility']) }), { session: true, rate: 2 }),
@@ -1171,6 +1172,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'hr:clock': { ok: true };
   'hr:break': { ok: true };
   'media:access': { granted: boolean };
+  'media:screenIndicator': void;
   'media:screenSources': ScreenSources;
   'media:screenPick': void;
   'media:privacySettings': void;

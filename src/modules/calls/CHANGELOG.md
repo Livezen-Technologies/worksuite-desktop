@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.5.2 — 2026-10-03
+
+- Show local shared screens on stage with separate camera PiP and a desktop sharing outline (#146).
+
 ## 1.5.1 — 2026-10-03
 
 - Apply locked ringing sound controls and keep incoming alerts separate from permission to answer (#115).

@@ -1,6 +1,6 @@
 {
     "module": "meet",
-    "version": "1.10.2",
+    "version": "1.10.3",
     "paths": [
         "shared/livestream.ts"
     ]
