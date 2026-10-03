@@ -132,6 +132,8 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const [ai, setAi] = useState<{ task: TextTask; title: string } | null>(null);
   const picked = useRef<Target[]>([]);
   const slashMenu = useRef<SlashMenuHandle>(null);
+  // The saved reply the website message being written started from, if any.
+  const cannedUsed = useRef<number | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -297,7 +299,8 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const sendWords = async (words: string, asUrgent: boolean): Promise<boolean> => {
     if (site) {
       // A reply to a visitor goes through the outbox too: pending while offline, sent once on reconnecting (RDC-07).
-      const r = await call('offline:submit', websiteReplyMutation(site.conversationId, words, reply?.id ?? null));
+      const r = await call('offline:submit', websiteReplyMutation(site.conversationId, words, reply?.id ?? null, cannedUsed.current));
+      cannedUsed.current = null;
       if (!r.delivered && !r.queued) {
         toast('error', r.error ?? 'Not sent.');
         return false;
@@ -508,6 +511,8 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   };
   /** What the menu picked takes the place of the "/word" typed for it, and stays in the box until sent. */
   const insertSlash = (body: string) => {
+    // A website saved reply: counted as a use when the message is sent (RDC-03).
+    if (site) cannedUsed.current = site.replies.find((r) => r.body === body)?.id ?? cannedUsed.current;
     const start = slash ? slash.start : (input.current?.selectionStart ?? text.length);
     const end = slash ? slash.start + 1 + slash.word.length : start;
     setText(`${text.slice(0, start)}${body}${text.slice(end)}`);
