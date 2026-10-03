@@ -252,7 +252,7 @@ export function MailSidebar(p: SidebarProps) {
         {memory.views ? (
           <ul role="list">
             {views.map((v) => {
-              const n = p.counts ? (p.counts.views[v.id] ?? null) : null;
+              const n = p.counts ? ((p.counts.views as Record<string, number | null | undefined>)[v.id] ?? null) : null;
               // Today and Has attachments are lists, not badges: a count beside them is noise.
               const shown = v.id === 'today' || v.id === 'attachments' ? null : n;
               return (

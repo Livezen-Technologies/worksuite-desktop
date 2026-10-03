@@ -10,7 +10,7 @@ import type { GroupKey, MailPrefs, Mailbox, MailboxTag, MessageRow, MessageSecur
  * waiting in the offline queue.
  */
 
-export type SmartViewId = 'unread' | 'starred' | 'important' | 'today' | 'attachments' | 'scheduled' | 'drafts';
+export type SmartViewId = 'unread' | 'starred' | 'important' | 'today' | 'attachments' | 'scheduled' | 'drafts' | 'vip';
 
 export interface SmartView {
   id: SmartViewId;
@@ -29,6 +29,8 @@ export const SMART_VIEWS: SmartView[] = [
   { id: 'attachments', label: 'Has attachments', icon: 'paperclip', folder: 'inbox', filters: ['attachments'] },
   { id: 'scheduled', label: 'Scheduled', icon: 'clock', folder: 'outbox', filters: [] },
   { id: 'drafts', label: 'Drafts', icon: 'file-text', folder: 'drafts', filters: [] },
+  // Mail from the people marked VIP (DMO-PPL-05): narrowed here, so the server is never asked for it.
+  { id: 'vip', label: 'VIP', icon: 'badge-check', folder: 'inbox', filters: ['vip'] },
 ];
 
 export function smartView(id: string | null | undefined): SmartView | null {
@@ -50,12 +52,18 @@ export function filtersFor(view: SmartView | null, chips: ChipId[]): string[] {
   return [...new Set([...(view?.filters ?? []), ...chips])];
 }
 
+/** The filters the server answers; the rest are applied to what comes back. */
+export const CLIENT_ONLY_FILTERS = ['vip'];
+export function serverFilters(filters: string[]): string[] {
+  return filters.filter((f) => !CLIENT_ONLY_FILTERS.includes(f));
+}
+
 /**
  * The same narrowing again on what came back. A connected mailbox answers the
  * filters it can (`quick`); one it could not is applied here, so a chip never
  * looks as if it did nothing.
  */
-export function applyFilters(rows: MessageRow[], filters: string[], now = Date.now()): MessageRow[] {
+export function applyFilters(rows: MessageRow[], filters: string[], now = Date.now(), vips?: ReadonlySet<string>): MessageRow[] {
   const weekAgo = now - 7 * 86_400_000;
   const today = todayInZone();
   return rows.filter((m) =>
@@ -71,6 +79,8 @@ export function applyFilters(rows: MessageRow[], filters: string[], now = Date.n
           return parseTs(m.created_at).getTime() >= weekAgo;
         case 'today':
           return dayKey(parseTs(m.created_at)) === today;
+        case 'vip':
+          return !!vips?.has(m.from_email.toLowerCase());
         default:
           return true;
       }

@@ -179,7 +179,24 @@ export interface MessageSecurity {
 }
 
 export interface MessageContext {
-  sender: { email: string; name: string | null; contact_id: number | null; user_id: number | null; is_colleague: boolean; company: string | null } | null;
+  sender: {
+    email: string;
+    name: string | null;
+    contact_id: number | null;
+    user_id: number | null;
+    is_colleague: boolean;
+    company: string | null;
+    job_title?: string | null;
+    department?: string | null;
+    phone?: string | null;
+    mobile?: string | null;
+    is_customer?: boolean;
+    is_vip?: boolean;
+    client_id?: number | null;
+  } | null;
+  /** Recent mail with the sender, newest first. */
+  history?: { total: number; first: string | null; last: string | null; messages: Array<{ id: number; subject: string; at: string; is_read: boolean; has_attachment: boolean; folder: string | null; slug: string | null }> };
+  related?: { meetings?: Array<{ id: number; title: string; at: string | null; status: string | null }>; tasks?: Array<{ id: number; title: string; status: string | null; due: string | null }> };
   security: MessageSecurity;
 }
 
@@ -272,6 +289,8 @@ export interface AllCounts {
 
 /** The list's layout, kept on the server (GET/PUT /api/mail/prefs). */
 export interface MailPrefs {
+  /** My Day on the right of Mail (DMO-TSK-04). */
+  todoPane?: boolean;
   view?: 'classic' | 'compact' | 'super' | 'table';
   pane?: 'right' | 'bottom' | 'hidden';
   sort?: SortKey;

@@ -7,6 +7,7 @@ import { Avatar, Empty, ErrorNote, Spinner, cx } from '../../components/ui';
 import { VirtualList } from '../../components/VirtualList';
 import { CHIPS, mailboxBadge, rowStamp, type ChipId, type QueuedAction, type RowGroup } from './model';
 import { AccountBadge, CategoryChip } from './parts';
+import { MAIL_DRAG } from './TodoPane';
 import type { GroupKey, MailPrefs, Mailbox, MessageRow, SortKey } from './types';
 
 /**
@@ -367,6 +368,12 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs, onRo
     role: 'option',
     'aria-selected': selected,
     'data-mail-row': r.key,
+    // Dragged onto My Day: an event or a task from the message (DMO-CAL-07, DMO-TSK-04).
+    draggable: true,
+    onDragStart: (e: React.DragEvent) => {
+      e.dataTransfer.setData(MAIL_DRAG, r.key);
+      e.dataTransfer.effectAllowed = 'copy';
+    },
     onClick: (e: React.MouseEvent) => {
       // Ctrl/⌘-click adds to the selection, Shift-click selects a range (DMO-INB-15).
       if (onSelect && (e.ctrlKey || e.metaKey)) return onSelect(r, 'toggle');

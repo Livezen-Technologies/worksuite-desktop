@@ -84,7 +84,17 @@ export function importRules(raw: string): { rules: MailFilter[] } | { error: str
 
 export interface RulesData {
   server_rules: { available: boolean; reason: string | null };
-  vacation: { enabled: boolean; subject: string; message: string; start_date: string | null; end_date: string | null };
+  vacation: {
+    enabled: boolean;
+    subject: string;
+    message: string;
+    start_date: string | null;
+    end_date: string | null;
+    /** Outside the organisation (DMO-OOF-01): the same reply, none, contacts only, or a separate one to everyone. Absent on an older server. */
+    external_audience?: 'same' | 'none' | 'contacts' | 'everyone';
+    external_subject?: string | null;
+    external_message?: string | null;
+  };
   filters: MailFilter[];
 }
 
@@ -345,8 +355,8 @@ function Vacation({ value, mailbox, onSaved }: { value: RulesData['vacation']; m
     <section aria-label={text('Automatic reply')} className="flex flex-col gap-3 rounded-[12px] border border-line bg-surface p-4 text-[13.5px]">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h3 className="text-[15px] font-bold text-ink">Automatic reply</h3>
-          <p className="text-[12.5px] text-ink-3">Answers mail while you are away, once per sender.</p>
+          <h3 className="text-[15px] font-bold text-ink">{text('Automatic reply')}</h3>
+          <p className="text-[12.5px] text-ink-3">{text('Answers mail while you are away, once per sender.')}</p>
         </div>
         <Switch label={text('Automatic reply')} checked={v.enabled} onChange={(on) => setV({ ...v, enabled: on })} />
       </div>
@@ -356,12 +366,38 @@ function Vacation({ value, mailbox, onSaved }: { value: RulesData['vacation']; m
       </div>
       <TextField label={text('Subject')} value={v.subject} onChange={(e) => setV({ ...v, subject: e.target.value })} />
       <label className="flex flex-col gap-1">
-        <span className="text-[12.5px] font-semibold text-ink-2">Message</span>
+        <span className="text-[12.5px] font-semibold text-ink-2">{v.external_audience && v.external_audience !== 'same' ? text('Message to people in your organisation') : text('Message')}</span>
         <textarea value={v.message} onChange={(e) => setV({ ...v, message: e.target.value })} rows={4} className="rounded-[8px] border border-line bg-surface px-3 py-2 text-[13.5px] text-ink outline-none focus:border-primary" />
       </label>
+      {v.external_audience !== undefined ? (
+        <div className="flex flex-col gap-3 rounded-[10px] border border-line p-3">
+          <div className="w-[320px] max-w-full">
+            <Select
+              label={text('People outside your organisation')}
+              value={v.external_audience}
+              options={[
+                { value: 'same', label: text('Get the same reply') },
+                { value: 'everyone', label: text('Get a separate reply') },
+                { value: 'contacts', label: text('Only your contacts get a separate reply') },
+                { value: 'none', label: text('Get no reply') },
+              ]}
+              onValueChange={(x) => setV({ ...v, external_audience: x as NonNullable<typeof v.external_audience> })}
+            />
+          </div>
+          {v.external_audience === 'everyone' || v.external_audience === 'contacts' ? (
+            <>
+              <TextField label={text('Subject for outside')} value={v.external_subject ?? ''} onChange={(e) => setV({ ...v, external_subject: e.target.value })} placeholder={v.subject} />
+              <label className="flex flex-col gap-1">
+                <span className="text-[12.5px] font-semibold text-ink-2">{text('Message to people outside')}</span>
+                <textarea value={v.external_message ?? ''} onChange={(e) => setV({ ...v, external_message: e.target.value })} rows={4} placeholder={v.message} className="rounded-[8px] border border-line bg-surface px-3 py-2 text-[13.5px] text-ink outline-none focus:border-primary" />
+              </label>
+            </>
+          ) : null}
+        </div>
+      ) : null}
       <div className="flex justify-end">
         <Button variant="primary" loading={busy} onClick={() => void save()}>
-          Save automatic reply
+          {text('Save automatic reply')}
         </Button>
       </div>
     </section>

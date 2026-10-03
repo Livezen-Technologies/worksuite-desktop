@@ -14,6 +14,8 @@ import { Icon } from '../../components/Icon';
 import { Menu, type MenuItem, type MenuSection } from '../../components/Menu';
 import { Avatar, Button, Chip, ErrorNote, FileBadge, Modal, Spinner, cx } from '../../components/ui';
 import { AiTextDialog } from '../ai/AiTextDialog';
+import { InviteCard, hasInvite } from './InviteCard';
+import { PersonButton } from './PeopleCard';
 import type { TextTask } from '../ai/textTools';
 import { openPdf } from '../pdf/open';
 import { createTask } from '../tasks/actions';
@@ -249,6 +251,15 @@ export function MessageView(p: MessageViewProps) {
       toast('error', errorMessage(e));
     }
   };
+  /** A direct chat with a colleague, from the people card. */
+  const chatWith = async (userId: number) => {
+    try {
+      const r = await apiPost<{ room_id: number }>('/api/chat/rooms/direct', { user_id: userId });
+      navigate(`/chat?room=${r.room_id}`);
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
   const remind = async () => {
     if (!m) return;
     const tomorrow = new Date(Date.parse(`${todayInZone()}T12:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
@@ -433,7 +444,20 @@ export function MessageView(p: MessageViewProps) {
           <div className="mt-3 flex items-start gap-3">
             <Avatar name={m.from_name || m.from_email} size={42} />
             <div className="min-w-0 flex-1 text-[13.5px]">
-              <div className="truncate font-bold text-ink selectable">{m.from_name || m.from_email}</div>
+              <div className="truncate">
+                <PersonButton
+                  name={m.from_name || m.from_email}
+                  email={m.from_email}
+                  context={context.data}
+                  className="max-w-full truncate text-left font-bold text-ink hover:underline"
+                  actions={{
+                    email: () => p.onReply({ mode: 'new', to: m.from_email, mailbox: ref.mailbox }),
+                    meet: canOpen('meet') && !p.offline ? () => void startMeeting() : undefined,
+                    addContact: canOpen('contacts') && !p.offline ? () => void addContact() : undefined,
+                    chat: canOpen('chat') && !p.offline ? (id) => void chatWith(id) : undefined,
+                  }}
+                />
+              </div>
               <div className="truncate text-ink-2 selectable">{m.from_email}</div>
               <div className="truncate text-[12.5px] text-ink-3 selectable">
                 {text('to {list}', { list: m.to.join(', ') })}
@@ -477,6 +501,7 @@ export function MessageView(p: MessageViewProps) {
             <button type="button" aria-label={text('Close')} onClick={() => setFind(null)} className="text-ink-3 hover:text-ink"><Icon name="x" size={13} /></button>
           </div>
         ) : null}
+        {hasInvite(m) ? <InviteCard msgRef={ref} offline={p.offline} /> : null}
         <iframe title={text('Message')} sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={mailFrameDoc(found.html, zoom, darkBody)} className={cx('mx-5 mt-3 min-h-[120px] flex-1 rounded-[8px] border-0', darkBody ? 'bg-surface' : 'bg-white', darkTheme && !darkBody && 'p-2')} />
         {m.attachments.length ? <Attachments m={m} msgRef={ref} offline={p.offline} /> : null}
         {m.team && ref.mailbox && m.conversation_key ? <TeamWork msgRef={ref} m={m} account={p.account} offline={p.offline} /> : null}

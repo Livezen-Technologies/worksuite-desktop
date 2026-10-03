@@ -10,6 +10,7 @@ import { toast } from '../../core/toasts';
 import { Checkbox } from '../../components/Checkbox';
 import { Select } from '../../components/Select';
 import { Button, Chip, ErrorNote, Modal, Spinner, Switch, TextField, cx } from '../../components/ui';
+import { AutocompleteSettings } from './AutocompleteSettings';
 import type { Preferences } from '@shared/types';
 import { AddMailbox } from './AddMailbox';
 import { AccountsSync } from './AccountsSync';
@@ -77,7 +78,12 @@ export function MailSettings({ query = new URLSearchParams() }: { query?: URLSea
           </button>
         ))}
       </div>
-      {tab === 'accounts' ? <Accounts /> : tab === 'storage' ? <Storage /> : tab === 'import' ? <ImportMail openId={importId} /> : tab === 'signatures' ? <Signatures /> : tab === 'rules' ? <Rules mailbox={defaultBox ? String(defaultBox.id) : null} /> : tab === 'quicksteps' ? <QuickStepsSettings /> : <Layout />}
+      {tab === 'accounts' ? <Accounts /> : tab === 'storage' ? <Storage /> : tab === 'import' ? (
+        <>
+          <ImportMail openId={importId} />
+          <AutocompleteSettings />
+        </>
+      ) : tab === 'signatures' ? <Signatures /> : tab === 'rules' ? <Rules mailbox={defaultBox ? String(defaultBox.id) : null} /> : tab === 'quicksteps' ? <QuickStepsSettings /> : <Layout />}
     </div>
   );
 }

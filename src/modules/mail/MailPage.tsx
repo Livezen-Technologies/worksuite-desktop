@@ -1,6 +1,8 @@
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { apiGetMeta, apiPut, setDefaultMailbox, withMailbox } from '../../core/api';
+import { apiGetMeta, apiPost, apiPut, setDefaultMailbox, withMailbox } from '../../core/api';
+import { canOpen } from '../../core/access';
+import { dayWords, todayInZone } from '../../core/time';
 import { app } from '../../core/app-state';
 import { errorMessage, isMac } from '../../core/bridge';
 import { text } from '../../core/i18n';
@@ -10,7 +12,9 @@ import { toast } from '../../core/toasts';
 import { searchFold } from '@shared/localization';
 import { Icon } from '../../components/Icon';
 import { SidePanel } from '../../components/SidePanel';
-import { Empty, cx } from '../../components/ui';
+import { Button, Empty, cx } from '../../components/ui';
+import { useVips } from './PeopleCard';
+import { TodoPane, nextSlot } from './TodoPane';
 import type { ModuleProps } from '../registry';
 import { AddMailbox } from './AddMailbox';
 import { messageAction, moveMessage, useLocalStore, useMailPrefs, useMailboxes, usePendingMail, useViewCounts, type MessageActionName } from './api';
@@ -26,10 +30,10 @@ import { CategoriesDialog, ContextMenu, DatesDialog, stateSections, useStateActi
 import { SelectionPane } from './SelectionPane';
 import { SweepDialog } from './SweepDialog';
 import { FirstRun, FirstRunOffers } from './FirstRun';
-import { classifyFocus, otherBanner, pinnedFirst, stateKey, useCategories, useFocusContext, useMessageStates, withStates } from './states';
+import { classifyFocus, flagChoices, otherBanner, pinnedFirst, stateKey, useCategories, useFocusContext, useMessageStates, withStates } from './states';
 import { MessageList, type ListRow } from './MessageList';
 import { MessageView, windowRoute, type ViewControls } from './MessageView';
-import { applyFilters, filtersFor, folderName, folderViewPatch, groupRows, queueKey, queuedByMessage, rowMailbox, smartView, sortRows, step, withFolderView, type ChipId } from './model';
+import { applyFilters, filtersFor, serverFilters, folderName, folderViewPatch, groupRows, queueKey, queuedByMessage, rowMailbox, smartView, sortRows, step, withFolderView, type ChipId } from './model';
 import { sendAfterUndoWindow, useOutgoing, undoSend } from './outgoing';
 import { needsAsking, removesMessages, runQuickStep, saveAnswers, useQuickSteps, type QuickStep } from './quickSteps';
 import { QuickStepAsk } from './QuickStepsUi';
@@ -129,10 +133,10 @@ export default function MailPage({ active }: ModuleProps) {
   const virtualOutbox = allRole === 'outbox';
 
   const list = useInfiniteQuery({
-    queryKey: ['mail', 'messages', unified ? 'unified' : effectiveBox, folder, filters.join(','), threaded],
+    queryKey: ['mail', 'messages', unified ? 'unified' : effectiveBox, folder, serverFilters(filters).join(','), threaded],
     initialPageParam: 1,
     queryFn: ({ pageParam, signal }) => {
-      const combined = { page: pageParam, per_page: 50, ...(filters.length ? { filters: filters.join(',') } : {}) };
+      const combined = { page: pageParam, per_page: 50, ...(serverFilters(filters).length ? { filters: serverFilters(filters).join(',') } : {}) };
       const byName = () =>
         apiGetMeta<MessagePage>(
           '/api/mail/messages',
@@ -140,7 +144,7 @@ export default function MailPage({ active }: ModuleProps) {
             ? { unified: 1, folder, ...combined }
             : place.label !== null
               ? { folder, page: pageParam, per_page: 50 }
-              : withMailbox({ folder, page: pageParam, per_page: 50, ...(filters.length ? { filters: filters.join(',') } : {}), ...(threaded ? { threaded: 1 } : {}), sort: prefs.sort ?? 'date', dir: prefs.dir ?? 'desc' }, effectiveBox),
+              : withMailbox({ folder, page: pageParam, per_page: 50, ...(serverFilters(filters).length ? { filters: serverFilters(filters).join(',') } : {}), ...(threaded ? { threaded: 1 } : {}), sort: prefs.sort ?? 'date', dir: prefs.dir ?? 'desc' }, effectiveBox),
           signal,
         );
       return allRole ? allAccountsPage(allRole, combined, signal, byName) : byName();
@@ -184,6 +188,8 @@ export default function MailPage({ active }: ModuleProps) {
   const statesScope = unified || place.label !== null ? null : effectiveBox;
   const states = useMessageStates(active && (mailboxes.isSuccess || mailboxes.isError) && folder !== 'outbox', statesScope, statesScope ? folder : null);
   const cats = useCategories(active);
+  const vips = useVips(active);
+  const vipSet = new Set((vips.data ?? []).map((v) => v.address.toLowerCase()));
   const focusOn = prefs.focused !== false && !view && place.label === null && folder === 'inbox' && states.data !== null && states.data !== undefined && !isTeam && !(effectiveBox && prefs.focusedOff?.includes(Number(effectiveBox)));
   const focusCtx = useFocusContext(active && focusOn);
   const [focusTab, setFocusTab] = useState<'focused' | 'other'>('focused');
@@ -192,7 +198,7 @@ export default function MailPage({ active }: ModuleProps) {
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
   const decorated = (() => {
     let all = (list.data?.pages ?? []).flatMap((p) => p.data.messages);
-    all = applyFilters(all, filters);
+    all = applyFilters(all, filters, undefined, vipSet);
     if (hidden.size) all = all.filter((m) => !hidden.has(rowKey(m)));
     if (isTeam) {
       const me = Number(app.get().bootstrap?.user.id ?? 0);
@@ -624,6 +630,45 @@ export default function MailPage({ active }: ModuleProps) {
   // Rules that run on this computer only (DMO-RUL-04): applied to new inbox mail as it shows up here.
   const rules = useRules(active && boxes.length > 0);
   const brokenRules = (rules.data?.filters ?? []).filter((f) => f.last_error).length;
+  // Automatic replies on now: a banner with Turn off (DMO-OOF-02).
+  const vac = rules.data?.vacation;
+  const todayWall = todayInZone();
+  const away = !!vac?.enabled && (!vac.start_date || vac.start_date <= todayWall) && (!vac.end_date || vac.end_date >= todayWall);
+  const turnOffAway = async () => {
+    if (!vac) return;
+    try {
+      await apiPut('/api/mail/rules/vacation', { ...vac, enabled: false });
+      void qc.invalidateQueries({ queryKey: ['mail', 'rules'] });
+      toast('success', text('Automatic replies are off.'));
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
+  /** A message dropped on My Day: an event now-ish with its text, or a flag — which is a task linked back to it. */
+  const dropMail = async (key: string, to: 'event' | 'task') => {
+    const r = flat.find((x) => x.key === key);
+    if (!r) return;
+    const t = targetOf(r);
+    if (to === 'task') {
+      await stateActs.flag([t], flagChoices().find((c) => c.id === 'today')!.dates);
+      toast('success', text('“{subject}” is a task due today, linked to the message.', { subject: r.row.subject || text('(no subject)') }));
+      return;
+    }
+    const slot = nextSlot();
+    try {
+      await apiPost('/api/calendar/events', {
+        title: (r.row.subject || text('(no subject)')).slice(0, 250),
+        description: `${text('From {sender} <{email}>', { sender: r.row.from_name || r.row.from_email, email: r.row.from_email })}\n\n${r.row.preview ?? ''}`.slice(0, 4000),
+        start: `${slot.date}T${slot.start}`,
+        end: `${slot.date}T${slot.end}`,
+        all_day: false,
+      });
+      void qc.invalidateQueries({ queryKey: ['calendar'] });
+      toast('success', text('Added to your calendar at {time}. Open Calendar to move it.', { time: slot.start }));
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
   const clientRuleRows = folder === 'inbox' && !view ? decorated : null;
   useEffect(() => {
     const mine = myRules(rules.data?.filters ?? []);
@@ -800,12 +845,31 @@ export default function MailPage({ active }: ModuleProps) {
           ) : null}
           {prefsLoaded && boxes.length > 0 && !globalPrefs.firstRun ? <FirstRun onPrefs={(patch) => setGlobalPrefs(patch)} /> : null}
           {globalPrefs.firstRun === 'outlook' ? <FirstRunOffers onImport={() => navigate('/settings/mail?tab=import')} onSignatures={() => navigate('/settings/mail?tab=signatures')} onDone={() => setGlobalPrefs({ firstRun: 'done' })} /> : null}
+          {away ? (
+            <div role="status" className="flex shrink-0 items-center gap-3 border-b border-line bg-warning-bg px-4 py-2 text-[13px] text-warning">
+              <Icon name="bell-off" size={15} />
+              <span className="min-w-0 flex-1">{rules.data?.vacation.end_date ? text('Automatic replies are on until {day}.', { day: dayWords(rules.data.vacation.end_date, { weekday: true }) }) : text('Automatic replies are on.')}</span>
+              <Button size="sm" onClick={() => void turnOffAway()}>
+                {text('Turn off')}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => navigate('/settings/mail?tab=rules')}>
+                {text('Change')}
+              </Button>
+            </div>
+          ) : null}
           <div className="flex min-h-0 flex-1">
             {compose?.shown ? (
               <Compose key={compose.n} seed={compose.seed} boxes={boxes} defaultBox={current?.mailbox ?? effectiveBox ?? (defaultBox ? String(defaultBox.id) : null)} offline={offline} onClose={() => setCompose(null)} onReopen={openCompose} />
             ) : (
               main
             )}
+            {globalPrefs.todoPane && !focus ? (
+              <TodoPane canCalendar={canOpen('calendar')} canTasks={canOpen('tasks')} onClose={() => setGlobalPrefs({ todoPane: false })} onOpenFlag={(f) => openRef({ uid: f.uid, folder: f.folder, mailbox: f.mailbox ? String(f.mailbox) : null })} onDropMail={(k, to) => void dropMail(k, to)} />
+            ) : !focus ? (
+              <button type="button" aria-label={text('Open My Day')} title={text('My Day: events, flagged mail and tasks')} onClick={() => setGlobalPrefs({ todoPane: true })} className="flex w-7 shrink-0 flex-col items-center gap-2 border-l border-line bg-surface pt-3 text-ink-3 hover:bg-subtle hover:text-ink">
+                <Icon name="panel-right-open" size={15} />
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
