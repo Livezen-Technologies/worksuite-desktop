@@ -297,31 +297,35 @@ describe('the Mail screen (P1)', () => {
     fireEvent.click(within(welcome).getByRole('button', { name: 'Yes, set it up like Outlook' }));
     await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/prefs', expect.objectContaining({ firstRun: 'outlook', keyScheme: 'outlook', commandBar: 'classic', focused: true })));
     // Then the setup banner (#187): what was done, Import email first, the rest second, and a dismiss icon.
-    const offers = await screen.findByRole('region', { name: 'Outlook shortcuts enabled.' });
-    expect(within(offers).getByText('Bring your email and preferences into WorkSuite.')).toBeTruthy();
+    const offers = await screen.findByRole('region', { name: 'Outlook shortcuts are on' });
+    expect(within(offers).getByText('Finish setting up Mail')).toBeTruthy();
     const importBtn = within(offers).getByRole('button', { name: 'Import email' });
     expect(importBtn.getAttribute('title')).toMatch(/\.pst or \.mbox/);
     expect(within(offers).getByRole('button', { name: 'Add signature' })).toBeTruthy();
-    expect(within(offers).getByRole('button', { name: 'Set as default mail app' })).toBeTruthy();
+    expect(within(offers).getByRole('button', { name: 'Make default mail app' })).toBeTruthy();
     expect(within(offers).queryByRole('button', { name: 'Close' })).toBeNull();
     fireEvent.click(within(offers).getByRole('button', { name: 'Dismiss' }));
     // Dismissing is saved, so it does not come back after navigation or restart.
     await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/prefs', expect.objectContaining({ firstRun: 'done' })));
-    await waitFor(() => expect(screen.queryByRole('region', { name: 'Outlook shortcuts enabled.' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Outlook shortcuts are on' })).toBeNull());
   });
 });
 
 describe('the setup banner on a narrow window (#187)', () => {
-  it('moves Add signature and Set as default mail app into More', async () => {
+  it('moves Add signature and Make default mail app into More', async () => {
     const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 480, height: 80, top: 0, left: 0, right: 480, bottom: 80, x: 0, y: 0, toJSON: () => ({}) } as DOMRect);
     try {
-      render(<FirstRunOffers onImport={() => undefined} onSignatures={() => undefined} onDone={() => undefined} />);
-      const offers = screen.getByRole('region', { name: 'Outlook shortcuts enabled.' });
+      render(
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <FirstRunOffers onImport={() => undefined} onSignatures={() => undefined} onDone={() => undefined} />
+        </QueryClientProvider>,
+      );
+      const offers = screen.getByRole('region', { name: 'Outlook shortcuts are on' });
       expect(within(offers).queryByRole('button', { name: 'Add signature' })).toBeNull();
       fireEvent.click(within(offers).getByRole('button', { name: 'More' }));
       const menu = await screen.findByRole('menu', { name: 'More setup actions' });
       expect(within(menu).getByRole('menuitem', { name: 'Add signature' })).toBeTruthy();
-      expect(within(menu).getByRole('menuitem', { name: 'Set as default mail app' })).toBeTruthy();
+      expect(within(menu).getByRole('menuitem', { name: 'Make default mail app' })).toBeTruthy();
     } finally {
       rect.mockRestore();
     }

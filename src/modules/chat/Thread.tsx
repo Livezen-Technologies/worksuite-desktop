@@ -295,7 +295,7 @@ export function Thread({
           ) : null}
         </div>
       ) : null}
-      <div ref={scroller} className={cx('min-h-0 flex-1 overflow-y-auto scroll-thin', drawer ? 'px-3 pt-1 pb-3' : 'px-5 py-3.5')}>
+      <div ref={scroller} className={cx('min-h-0 flex-1 overflow-y-auto scroll-thin', drawer ? 'px-4 pt-1 pb-3' : 'px-5 py-3.5')}>
         {msgs.hasNextPage ? (
           <div className="mb-3 text-center">
             <button type="button" className="text-[12.5px] font-semibold text-primary hover:underline" onClick={() => void msgs.fetchNextPage()}>

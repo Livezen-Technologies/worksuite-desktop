@@ -669,6 +669,7 @@ function InboxAndKeyboard({ prefs, set }: { prefs: MailPrefs; set: (p: Partial<M
   return (
     <section aria-label={text('Inbox and keyboard')} className="mt-4 flex flex-col gap-3 rounded-[12px] border border-line bg-surface p-4 text-[13.5px] text-ink">
       <h3 className="text-[15px] font-bold text-ink">{text('Inbox and keyboard')}</h3>
+      <SwitchRow label={text('Show setup tips')} hint={text('The banner above the mail list with the steps left to set up Mail: import email, add a signature, make WorkSuite the default mail app.')} checked={prefs.firstRun === 'outlook'} onChange={(v) => set({ firstRun: v ? 'outlook' : 'done' })} />
       <SwitchRow label={text('Focused Inbox')} hint={text('Sort the inbox into Focused and Other. Moving a message between the tabs teaches it.')} checked={prefs.focused !== false} onChange={(v) => set({ focused: v })} />
       {prefs.focused !== false && boxes.length > 1 ? (
         <div className="flex flex-wrap gap-x-4 gap-y-1 pl-1">
