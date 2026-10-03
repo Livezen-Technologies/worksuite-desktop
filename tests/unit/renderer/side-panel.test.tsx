@@ -32,6 +32,22 @@ describe('a module side panel can be hidden and shown again', () => {
     expect(localStorage.getItem('ws.panel.hr')).toBe('1');
   });
 
+  // worksuite-desktop#155: the handle never sits over the content — it shows on hover over the panel, or keyboard focus.
+  it('shows its hide handle only while the panel is hovered or the handle is focused', () => {
+    render(
+      <SidePanel id="chat" label="the conversations">
+        <aside aria-label="List">list</aside>
+      </SidePanel>,
+    );
+    const handle = screen.getByRole('button', { name: 'Hide the conversations' });
+    const classes = handle.className.split(/\s+/);
+    expect(classes).toContain('opacity-0');
+    expect(classes).toContain('group-hover/panel:opacity-100');
+    expect(classes).toContain('focus-visible:opacity-100');
+    expect(classes.some((c) => /^opacity-(?!0$)\d+$/.test(c))).toBe(false);
+    expect(handle.closest('[data-side-panel]')?.className).toContain('group/panel');
+  });
+
   it('keeps each panel on its own', () => {
     render(
       <>

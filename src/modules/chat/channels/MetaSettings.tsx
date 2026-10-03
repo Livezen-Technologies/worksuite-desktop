@@ -68,7 +68,7 @@ export function MetaSettings({ platform, accounts, loading, onConnect, onReconne
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-center gap-1.5">
                       <b className="text-[13.5px] text-ink">{platform === 'instagram' && a.username ? `@${a.username}` : a.name}</b>
-                      <span className={cx('rounded-full px-2 py-px text-[11px] font-semibold', up ? 'bg-success-bg text-success' : off ? 'bg-subtle text-ink-3' : 'bg-warning-bg text-[#9A4A06] dark:text-warning')}>{statusLabel(a.status)}</span>
+                      <span className={cx('rounded-full px-2 py-px text-[11px] font-semibold', up ? 'bg-success-bg text-success' : off ? 'bg-subtle text-ink-3' : 'bg-warning-bg text-warning-ink')}>{statusLabel(a.status)}</span>
                     </span>
                     <span className="block text-ink-3">
                       {[platform === 'instagram' ? text('Linked to {page}', { page: a.page_name }) : text('Facebook Page'), a.role ? text(ROLES[a.role] ?? a.role) : null, a.human_agent ? text('Human Agent replies to 7 days') : null]

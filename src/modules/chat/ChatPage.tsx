@@ -37,7 +37,7 @@ import { MetaSettings } from './channels/MetaSettings';
 import { PLATFORM_LABEL, useMetaAccounts, type MetaAccount, type MetaPlatform } from './channels/meta';
 import { WhatsappChannel } from './channels/WhatsappChannel';
 import { WhatsappSettings } from './channels/WhatsappSettings';
-import { useWaAccounts } from './channels/whatsapp';
+import { useWaAccounts, waNumber } from './channels/whatsapp';
 
 /**
  * Chat (UI-08, FR-COM-02/03, §4.15; the "Chat · conversations, thread,
@@ -81,6 +81,8 @@ export default function ChatPage({ tabId }: ModuleProps) {
   const canConnect = !!perms && (perms.includes('*') || perms.includes('whatsapp.connect'));
   const meta = useMetaAccounts(metaAccess && !mini);
   const metaAccounts = meta.data?.accounts ?? [];
+  // The WhatsApp number the rail and the list show (#155).
+  const waPicked = useStore(waNumber, (s) => s.id);
   const metaCanConnect = !!meta.data?.can_connect;
   const [connecting, setConnecting] = useState<{ platform: MetaPlatform; reconnect?: MetaAccount } | null>(null);
   const [metaSettings, setMetaSettings] = useState<MetaPlatform | null>(null);
@@ -107,6 +109,16 @@ export default function ChatPage({ tabId }: ModuleProps) {
       // Remembering is a convenience; without it Chat opens the most recent conversation.
     }
   }, [room, current, lastKey]);
+
+  // ⌘N / Ctrl+N (the shell's "New") in Chat starts a conversation (`?new=1`); closing it leaves the route as it was
+  // (#155). WhatsApp answers its own.
+  const fresh = query.get('new') === '1' && channel === 'chat' && chatAccess && !mini;
+  const withoutNew = () => {
+    const rest = new URLSearchParams(query);
+    rest.delete('new');
+    const qs = rest.toString();
+    return qs ? `/chat?${qs}` : '/chat';
+  };
 
   // Chat opens on a conversation, never on an empty pane: the last one you had
   // open, or else the most recent.
@@ -158,9 +170,12 @@ export default function ChatPage({ tabId }: ModuleProps) {
           <Empty icon="chat" title="No conversations yet" hint="Start one with +." />
         )}
       </div>
-      {starting ? (
+      {starting || fresh ? (
         <NewChat
-          onClose={() => setStarting(false)}
+          onClose={() => {
+            setStarting(false);
+            if (fresh) go(withoutNew());
+          }}
           onOpened={(id) => {
             setStarting(false);
             go(`/chat?room=${id}`);
@@ -181,7 +196,7 @@ export default function ChatPage({ tabId }: ModuleProps) {
 
   return (
     <div className="flex h-full">
-      {!mini ? <ChannelBar channels={channels} active={channel} onPick={(id) => go(channelRoute(id))} onAdd={() => setAdding({ at: 'list' })} /> : null}
+      {!mini ? <ChannelBar channels={channels} active={channel} onPick={(id) => go(channelRoute(id))} onAdd={() => setAdding({ at: 'list' })} numbers={{ accounts: waAccounts, selected: waPicked, onPick: (id) => waNumber.set({ id }) }} /> : null}
       {/* Every website chat opens in its workspace, wherever the link came from; in a window of its own, just the conversation (RDC-16). */}
       {channel === 'website' && mini ? (
         <WebsiteMini id={query.get('website')} />
@@ -189,7 +204,7 @@ export default function ChatPage({ tabId }: ModuleProps) {
         <WebsiteWorkspace />
       ) : channel === 'whatsapp' ? (
         whatsappAccess ? (
-          <WhatsappChannel accounts={waAccounts} loading={wa.isLoading} error={wa.error} retry={() => void wa.refetch()} onConnect={connect} onRelink={(a) => setAdding({ at: 'link', accountId: a.id, name: a.name })} onSettings={() => setSettings(true)} />
+          <WhatsappChannel accounts={waAccounts} loading={wa.isLoading} error={wa.error} retry={() => void wa.refetch()} onConnect={connect} onSettings={() => setSettings(true)} />
         ) : (
           <div className="flex min-w-0 flex-1 bg-ground">
             <Empty icon="lock" title="WhatsApp is not available to you" hint="Ask an administrator for access to WhatsApp." />

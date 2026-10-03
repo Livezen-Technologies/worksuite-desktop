@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useLocalFirstQuery } from '../../../core/local-first-query';
 import { ApiError, apiGet, apiPost } from '../../../core/api';
+import { formatPhone, toE164 } from '../../../core/phone';
+import { createStore } from '../../../core/store';
 import type { WaDisplay } from './wa-names';
 
 /**
@@ -120,7 +122,7 @@ export const WA_SCOPES: Array<{ id: WaScope; label: string }> = [
 ];
 
 /** A number that can carry messages now. Anything else (being set up, unlinked, failing) needs somebody to act. */
-export function isConnected(a: WaAccount): boolean {
+export function isConnected(a: Pick<WaAccount, 'status'>): boolean {
   return a.status === 'connected';
 }
 
@@ -143,6 +145,32 @@ export function formatWaPhone(phone: string): string {
 export function isConnecting(a: Pick<WaAccount, 'status'>): boolean {
   return a.status === 'connecting' || a.status === 'authenticating';
 }
+
+/**
+ * Where a number stands, as the rail's status dot says it (worksuite-desktop#155): green connected, orange on its way
+ * (waiting for its QR code to be scanned, starting, signing in), red down (unlinked, expired, failing).
+ */
+export type NumberTone = 'connected' | 'waiting' | 'down';
+
+export function numberState(a: Pick<WaAccount, 'status'>): { tone: NumberTone; label: string } {
+  if (isConnected(a)) return { tone: 'connected', label: 'Connected' };
+  if (a.status === 'qr_required' || a.status === 'setup') return { tone: 'waiting', label: 'Waiting for scan' };
+  if (isConnecting(a)) return { tone: 'waiting', label: 'Connecting' };
+  return { tone: 'down', label: 'Not connected' };
+}
+
+/** A number as its tooltip names it: "Support · +94 77 123 4567". */
+export function numberName(a: Pick<WaAccount, 'name' | 'phone'>): string {
+  const e164 = toE164(a.phone);
+  const phone = e164 ? formatPhone(e164) : (a.phone ?? '').trim();
+  return phone ? `${a.name} · ${phone}` : a.name;
+}
+
+/**
+ * The number the WhatsApp list shows (0: all of them), chosen on the channel rail or in the list's header. Kept for
+ * the session only: opening WhatsApp again starts on every number.
+ */
+export const waNumber = createStore<{ id: number }>({ id: 0 });
 
 /** A refusal is an answer, not a fault: somebody without WhatsApp is not asked again every few seconds. */
 const refused = (e: unknown) => e instanceof ApiError && (e.forbidden || e.status === 404);

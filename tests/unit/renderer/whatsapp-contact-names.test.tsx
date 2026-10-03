@@ -28,6 +28,8 @@ import { buildPhoneIndex, contactsFor, type PhoneContact } from '../../../src/mo
 import { initialsSource, previewParts, whoIs, whoSent, withMentionNames } from '../../../src/modules/chat/channels/wa-names';
 import { whatsappState } from '../../../src/modules/chat/channels/channels';
 import { WhatsappChannel } from '../../../src/modules/chat/channels/WhatsappChannel';
+import { WaAvatar } from '../../../src/modules/chat/channels/WaContact';
+import { avatarTone } from '../../../src/components/ui';
 import type { WaAccount, WaChat } from '../../../src/modules/chat/channels/whatsapp';
 
 const person = (o: Partial<PhoneContact>): PhoneContact => ({ id: 1, name: 'Abdul Rahuman', company: 'Konnect BPO', type: 'customer', avatar: null, avatar_color: null, is_favorite: false, updated_at: '2026-09-01 10:00:00', phones: ['+94767793692'], whatsapp: null, ...o });
@@ -124,6 +126,22 @@ describe('naming a conversation', () => {
     expect(previewParts({ last_message: 'Photo — the shelf', last_direction: 'in' })).toEqual({ icon: 'image', text: 'the shelf', you: false });
     expect(previewParts({ last_message: 'Photo', last_direction: 'out' })).toEqual({ icon: 'image', text: 'Photo', you: true });
     expect(previewParts({ last_message: 'See you at 3', last_direction: 'in' })).toEqual({ icon: null, text: 'See you at 3', you: false });
+    // #155: a voice message reads as a voice note, by its microphone.
+    expect(previewParts({ last_message: 'Voice message', last_direction: 'in' })).toEqual({ icon: 'mic', text: 'Voice note', you: false });
+  });
+
+  // #155, reconciled with #176: an unknown number keeps the person icon (never "+"), on the colour that always goes
+  // with that number.
+  it('draws an unknown number as a person icon on its own colour, the same every time', () => {
+    const who = (e164: string) => ({ name: formatPhone(e164), avatars: [], initialsOf: '', group: false, e164 });
+    const { container } = render(<><WaAvatar who={who('+94767414854')} /><WaAvatar who={who('+94767414854')} /><WaAvatar who={who('+94771234567')} /></>);
+    const [a, b, c] = [...container.querySelectorAll(':scope > span')] as HTMLElement[];
+    expect(a!.textContent).toBe('');
+    expect(a!.querySelector('svg')).toBeTruthy();
+    expect(a!.className).toContain(avatarTone('+94767414854').split(' ')[0]!);
+    expect(a!.className).toBe(b!.className);
+    expect(c!.className).toContain(avatarTone('+94771234567').split(' ')[0]!);
+    expect(a!.className).not.toContain('bg-subtle');
   });
 
   it('says a number that is starting up is connecting, not broken', () => {
@@ -147,7 +165,7 @@ describe('WhatsApp names in Chat', () => {
   }
   function mount() {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={qc}><WhatsappChannel accounts={[account()]} loading={false} error={null} retry={() => undefined} onConnect={null} onRelink={() => undefined} /></QueryClientProvider>);
+    render(<QueryClientProvider client={qc}><WhatsappChannel accounts={[account()]} loading={false} error={null} retry={() => undefined} onConnect={null} /></QueryClientProvider>);
     return qc;
   }
 

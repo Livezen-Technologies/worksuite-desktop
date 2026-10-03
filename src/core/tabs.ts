@@ -59,6 +59,16 @@ const newId = () => `t${Date.now().toString(36)}${(++seq).toString(36)}`;
  * session (OO-DSK-004) — never replacing another document's tab.
  */
 const RECORD_TAB_APPS = new Set(['office']);
+/**
+ * Apps that have one tab at most (worksuite-desktop#155): Home. Opening it again — "+", ⌘T, the launcher,
+ * Duplicate, a window taken back in — brings the tab there is forward instead of a second one.
+ */
+const SINGLETON_APPS = new Set(['home']);
+/** The tab a singleton app already has, if the route is one. */
+function singletonTab(s: TabsState, route: string): Tab | null {
+  const app = appForRoute(route);
+  return SINGLETON_APPS.has(app) ? (s.tabs.find((t) => t.app === app) ?? null) : null;
+}
 const pathOf = (route: string) => route.split('?')[0]!.replace(/\/+$/, '');
 /**
  * Which record a record tab shows: its path (`/office/42`), or for a document that is not a Drive file
@@ -179,6 +189,12 @@ function allowed(route: string): boolean {
 export function openTab(at: string, opts: { background?: boolean; title?: string; organizationId?: string | null } = {}): string | null {
   const route = redirectRoute(at);
   if (!allowed(route)) return null;
+  const existing = singletonTab(tabsStore.get(), route);
+  if (existing) {
+    if (existing.route !== route) setRoute(existing.id, route);
+    if (!opts.background) activate(existing.id);
+    return existing.id;
+  }
   const tab = make(route, opts.organizationId ?? null, opts.title);
   update((s) => ({ tabs: [...s.tabs, tab], activeId: opts.background ? s.activeId : tab.id }));
   return tab.id;
@@ -310,6 +326,12 @@ export async function detachTab(id: string, at?: { x: number; y: number }): Prom
 
 /** Opens a tab at a place in the strip (a window docked back, dropped between two tabs). */
 export function insertTab(route: string, opts: { title?: string; index?: number; side?: boolean } = {}): string {
+  const existing = singletonTab(tabsStore.get(), redirectRoute(route));
+  if (existing) {
+    if (opts.side && tabsStore.get().activeId !== existing.id) dockSide(existing.id);
+    else activate(existing.id);
+    return existing.id;
+  }
   const tab = make(route, null, opts.title);
   update((s) => {
     const tabs = [...s.tabs];
@@ -450,9 +472,18 @@ export function closeTabsForApps(allowed: Set<string>): string[] {
 export async function restoreTabs(allowed: Set<string>): Promise<boolean> {
   try {
     const saved = await call('tabs:restore');
+    const seen = new Set<string>();
     const tabs: Tab[] = saved.tabs
       .map((r) => ({ ...r, route: redirectRoute(r.route) }))
       .filter((r) => allowed.has(appForRoute(r.route)))
+      // Two Home tabs saved by an older version come back as one.
+      .filter((r) => {
+        const app = appForRoute(r.route);
+        if (!SINGLETON_APPS.has(app)) return true;
+        if (seen.has(app)) return false;
+        seen.add(app);
+        return true;
+      })
       .map((r) => ({ ...r, app: appForRoute(r.route), lastActive: Date.now(), suspended: true, reloadKey: 0 }));
     if (tabs.length === 0) return false;
     const activeId = tabs.some((t) => t.id === saved.activeId) ? saved.activeId : tabs[0]!.id;
@@ -473,4 +504,15 @@ export async function restoreTabs(allowed: Set<string>): Promise<boolean> {
 export function resetTabs(): void {
   const home = make(startRoute(), null);
   tabsStore.set({ tabs: [home], activeId: home.id, closed: [], sideId: null, split: 0.5 });
+}
+
+/**
+ * Where "New" (⌘N / Ctrl+N) goes from a tab: its app with `?new=1`. Chat keeps the route it is on, so the channel
+ * open decides what is new — ⌘N in WhatsApp starts a WhatsApp conversation, in Chat a chat (worksuite-desktop#155).
+ */
+export function newRoute(t: Pick<Tab, 'app' | 'route'>): string {
+  if (t.app !== 'chat') return `/${t.app}?new=1`;
+  const q = new URLSearchParams(t.route.split('?')[1] ?? '');
+  q.set('new', '1');
+  return `/chat?${q.toString()}`;
 }

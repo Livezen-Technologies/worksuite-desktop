@@ -30,6 +30,10 @@
   --ws-success-bg: #e7f4ed;
   --ws-warning: #b45309;
   --ws-warning-bg: #fdf1e3;
+  /* Warning words on warning-bg: darker than the warning tone, so a banner reads (#155). */
+  --ws-warning-ink: #9a4a06;
+  /* A module's narrow rail (Chat's channels, a hidden side panel's strip): a step off the surface. */
+  --ws-rail: #fbfbfd;
   --ws-danger: #b42318;
   --ws-danger-bg: #fdecea;
   --ws-badge: #e0522f;
@@ -79,6 +83,8 @@
   --ws-success-bg: #12301f;
   --ws-warning: #f0a04b;
   --ws-warning-bg: #36240f;
+  --ws-warning-ink: #f0a04b;
+  --ws-rail: #121a34;
   --ws-danger: #f07167;
   --ws-danger-bg: #3a1614;
   --ws-focus: #8da2fb;
@@ -129,6 +135,8 @@
   --color-success-bg: var(--ws-success-bg);
   --color-warning: var(--ws-warning);
   --color-warning-bg: var(--ws-warning-bg);
+  --color-warning-ink: var(--ws-warning-ink);
+  --color-rail: var(--ws-rail);
   --color-danger: var(--ws-danger);
   --color-danger-bg: var(--ws-danger-bg);
   --color-badge: var(--ws-badge);
