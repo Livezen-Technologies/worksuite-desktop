@@ -5,6 +5,11 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.136 — 2026-10-03
+
+- **A smaller, smarter app launcher (#201).** The launcher is now a compact popover (about 760×600) that always fits the window and never hides behind the Dock or taskbar; the grid adds or removes columns to fit, and in a narrow window it becomes a bottom sheet. Search finds apps by name or keyword ("bill" finds Invoices) — hidden apps too — and starts as you type; arrow keys move, Enter opens, ⌘Enter opens in a new window. Tiles show just the icon and name, an unread badge, and a small arrow on apps that open in the browser (the "Desktop app" line is gone). Open it with **⌘⇧K / Ctrl+Shift+K** — changeable, and no longer clashing with ⌘K search.
+- **Make it yours:** right-click or drag a tile to pin it (up to 8), hide it, move it to your own group or open it in a new window. **Settings › App launcher** sets the size (Compact, Comfortable, Large), popover or full screen, which details show, pinned and hidden apps, grouping, sort order, where apps open and the shortcut — saved to your account and synced to your other devices. Administrators can set the organisation's default pinned apps and order (needs the server update, Desktop 1.2.0).
+
 ## 0.2.135 — 2026-10-03
 
 - **WhatsApp, tidied up (#155).** Each of your numbers sits in the left rail under WhatsApp, with a green, orange or red dot for its connection and its own unread count; click one to see only its chats, click again for all. When a number is disconnected, **Link again** shows the QR code right in the side pane, and that number's conversations are dimmed with a note that you can't reply until it's linked. Conversation rows are easier to scan: the time, unread count and "waiting" state share one column, times read today / Yesterday / weekday / date, voice messages say "Voice note", unknown numbers get a steady colour, and the number's name shows only when you're looking at all numbers. With nothing open, the pane says **Pick a conversation** — and **⌘N / Ctrl+N** now really starts a new WhatsApp chat.
