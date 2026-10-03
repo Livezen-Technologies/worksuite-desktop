@@ -1,9 +1,11 @@
 /**
  * Pinned verification keys.
  *
- * RELEASE_PUBLIC_KEY verifies release manifests (WF-25). Its private half is
- * held offline by Livezen Technologies and never enters this repository —
- * see scripts/release-keygen.mjs.
+ * RELEASE_PUBLIC_KEY verifies the self-hosted release manifests of
+ * scripts/release-manifest.mjs (WF-25). Its private half is held offline by
+ * Livezen Technologies and never enters this repository — see
+ * scripts/release-keygen.mjs. The app no longer reads those manifests: it
+ * asks the WorkSuite Update Center, whose keys are in update-center.ts.
  *
  * POLICY_PUBLIC_KEY verifies signed desktop policies from /desktop/v1. The
  * existing WorkSuite API does not sign policies, so it is empty until the

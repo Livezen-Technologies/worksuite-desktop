@@ -39,22 +39,50 @@ to the release vault and the `WS_RELEASE_PRIVATE_KEY` secret; the public key
 is written into `electron/updater/keys.ts`. Rotating it means shipping one
 release, signed with the old key, whose app pins the new one.
 
-## 4. Publish
+## 4. Publish — the WorkSuite Update Center
 
-Put the installers and `manifest.json` side by side where clients look:
+The app asks the **WorkSuite Update Center** (https://download.worksuitecloud.com,
+repo `Livezen-Technologies/worksite-download`) whether to update:
+`GET /api/v1/desktop/update?app_id=lk.worksuite.desktop&current_version=…&platform=…&architecture=…&install_type=…&channel=…&device_id=…&os_version=…`
+(`electron/updater/update-center.ts`). The answer is signed with the Update
+Center's response key (`ws-uc-resp-1`, pinned in that file); the package's
+size and SHA-256 sit inside the signed answer, and the download comes from its
+15-minute signed URL (the download grant buys a fresh one). A channel that is
+not public there falls back to Stable unless a tenant policy names it.
 
-- servers with the desktop API: `/desktop/v1/releases/manifest` (served by the backend);
-- other servers: `https://<server>/desktop/releases/<channel>/manifest.json`.
-
-Manually:
+Publish a build with the Update Center's script (from that repo; Node 20, no
+dependencies). Each `--file` is `platform:arch:type:path`; Windows x64, macOS
+arm64, macOS x64 and Linux x64 are required. Build one DMG per Mac architecture
+(`electron-builder --mac dmg --arm64 --x64`): the universal merge currently
+fails with "pattern is too long". The build number must rise per channel — use the patch number.
 
 ```bash
-node scripts/release-manifest.mjs --dir release/0.2.0 --channel stable --base-url ./ [--critical] [--minimum 0.1.0]
+UC_CI_TOKEN_FILE=~/.config/worksuite-release/ci-token \
+UC_CI_KEY_FILE=~/.config/worksuite-release/ci-attestation.key \
+node scripts/publish-release.mjs --app desktop --app-id lk.worksuite.desktop --channel BETA \
+  --version 0.2.125 --build 125 --commit <sha> --summary "WorkSuite Desktop 0.2.125" --notes notes.md \
+  --file windows:x64:exe:release/0.2.125/WorkSuite-Setup-0.2.125-x64.exe \
+  --file macos:arm64:dmg:release/0.2.125/WorkSuite-0.2.125-arm64.dmg \
+  --file macos:x64:dmg:release/0.2.125/WorkSuite-0.2.125-x64.dmg \
+  --file linux:x64:appimage:release/0.2.125/WorkSuite-0.2.125-x86_64.AppImage
 ```
 
-`--critical` makes clients install at the policy deadline (default 24 h, with
-warnings at 4 h, 1 h and 10 min); `--minimum` makes older clients show the
-blocking Update Required screen.
+The script stops at **READY_FOR_TEST**; people approve and publish in the
+Update Center's `/admin`. Unsigned installers are accepted on BETA, DEV and
+INTERNAL only; STABLE needs Authenticode, Developer ID + notarization and GPG
+for Linux, and two different approvers. An unsigned running build installs
+an update by itself only from a test channel (BETA, DEV, INTERNAL) and only
+when it is set to that channel: the signed answer and the package's SHA-256
+are then the trust, as for a Linux AppImage. Stable never installs an unsigned
+update, and a signed build never takes an unsigned one.
+
+On a Mac the updater takes the `.app` out of the DMG (mounted read-only and
+hidden), checks its code signature against the running app's Team ID, and
+swaps it in after quit.
+
+The older self-hosted manifest (`scripts/release-manifest.mjs`, the
+`RELEASE_PUBLIC_KEY` in `electron/updater/keys.ts`) is no longer read by the
+app.
 
 ## 5. Enterprise deployment (§16.2)
 

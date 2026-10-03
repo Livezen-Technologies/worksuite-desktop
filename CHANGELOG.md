@@ -5,22 +5,30 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 0.2.133 — 2026-10-03
+## 0.2.134 — 2026-10-03
 
 - **Link mail to a tender, customer or deal.** Right-click a message (or a selection) or open the reader's **More** and choose **Link to tender, customer or deal…**: pick the kind, search by name or reference, and the sender's own customer record and tenders are suggested first. Linked records show as chips under the subject — click to open the tender or deal, ✕ to unlink — and everyone who can read the mailbox sees them. A tender's new **Mail** tab lists the email linked to it; click one to open it in Mail. Offered to people who can open Tenders or the CRM; the server decides which kinds each person may link. Needs the server update (Mail 1.12.0, migration `2026-10-12-000100_MailRecordLinks`).
 - Live mail lists show a **preview line and the paper clip** before the mailbox has synced (server Mail 1.10.0).
 
-## 0.2.132 — 2026-10-03
+## 0.2.133 — 2026-10-03
 
 - **What a bid costs (#159).** Each tender has an **Expenses** tab beside Budget: total spent, pending approval, reimbursable, and spent against the planned bid budget ("Spent LKR 18,500 of LKR 25,000 planned (74%)", with a warning when over). **+ Add expense** and the quick categories (courier, travel, printing, bid bond / security, document purchase…) open the Expense form with the tender already filled in; **Link existing expense** picks one of your claims that isn't on a tender yet. Clicking a row opens the claim as Expenses shows it — approval stays there — with Open in Expenses, Mark refunded (for bid bonds) and Unlink. Overview shows **Bid cost so far**, a lost or cancelled tender shows what was written off, History records each expense, and Reports has **Bid cost by tender** with cost per win.
 - In Expenses, a claim can be **Linked to** a tender, claims can be filtered by tender, and the claim shows its tender with a link back.
 - Needs the server update (Expense migration `2026-10-13-000100_ClaimLinkedToAndRefunds`; the planned bid budget uses Tender V2's budget table).
 
-## 0.2.131 — 2026-10-03
+## 0.2.132 — 2026-10-03
 
 - **Pictures in email, done properly (#163).** Remote pictures stay off until you choose: a bar says how many are blocked, with **Show images**, **Always show from this sender** and (for company domains) **…from this domain**. They load only through WorkSuite's image proxy, never straight from the sender, and blocked ones are neat placeholders of the right size instead of broken icons. Tracking pixels are removed even when pictures are on, and the bar says how many. **Settings › Mail › Images & media** sets the picture mode, trusted senders and domains (synced across your devices), whether your own company's domains are trusted, and auto-download of attachments by size, network, file type and folder. Junk and mail that fails sender authentication never load pictures by themselves.
 - **Logos and signature pictures show in the email** instead of as attachments named with long IDs (needs the server update, Mail 1.11.0). Attachments get readable names, thumbnails, and Open, Download and Save to Files. Pictures you loaded and attachments you opened are kept on this computer and open instantly, offline too.
 - Mail from a sender that passes DMARC now shows **Verified** rather than "Partly verified".
+
+## 0.2.131 — 2026-10-03
+
+- **Updates come from the WorkSuite Update Center.** WorkSuite now asks https://download.worksuitecloud.com whether a newer version is out, instead of a manifest file on your WorkSuite server. The answer is signed by the Update Center and checked against a key built into the app, and the download must match the size and SHA-256 inside that signed answer, or it is deleted. Your channel (Stable, Beta, Dev) is sent as a request; the Update Center decides, and your organisation's policy there wins. The computer is identified only by a one-way code made from its install ID.
+- On a Mac the update now comes as the disk image: WorkSuite opens it out of sight, read-only, checks that the app inside is signed by the same publisher as the one running, and swaps it in when you restart.
+- Builds that are not code-signed still never install an update by themselves — they say a new version is out and leave installing it to you. Only the Linux AppImage updates itself without a code signature, trusting the signed answer and its checksum.
+- **Beta builds update themselves on Windows, Mac and Linux.** A build that is not code-signed (today's Beta builds) now downloads and installs a new version by itself when it comes from a test channel — Beta, Dev or Internal — and this computer is set to that channel. It trusts the Update Center's signed answer and the file's SHA-256, the same as the Linux AppImage already did; on a Mac the app inside the disk image must still pass macOS's own integrity check. Stable never installs an unsigned update, and a signed build never takes an unsigned one.
+- Installing still waits for you: WorkSuite asks before restarting if uploads, queued changes, drafts or a call would be interrupted.
 
 ## 0.2.130 — 2026-10-03
 
