@@ -4,6 +4,17 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.16.0 — 2026-10-03
+
+**Added**
+
+- live typing, delivered and read in website chats, with the server's Communication 1.11.0 (WS-WCHAT ENH-WCHAT-04,
+  LIVE-02…08, LIVE-12): the composer says typing started and stopped (a note's typing marked internal, never shown to
+  the visitor); the thread reports the visitor's messages delivered, and read while it is in front, and shows the
+  visitor's typing and colleagues' ("Nimal and Dilini are typing…") from the live frames at once; each team message
+  is ticked sent, delivered or read, the latest says Delivered or Read with the time, and the visitor's latest says who
+  read it; a row in the list says Typing… while its visitor types; unread counts come from the server's read marks
+
 ## 1.15.0 — 2026-10-03
 
 **Added**

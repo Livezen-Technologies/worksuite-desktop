@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ApiError } from '../../../core/api';
+import { ApiError, apiPost } from '../../../core/api';
 import { errorMessage, on } from '../../../core/bridge';
 import { text } from '../../../core/i18n';
 import { dateLabel, parseTs, timeLabel } from '../../../core/time';
@@ -8,7 +8,7 @@ import { Checkbox } from '../../../components/Checkbox';
 import { Icon } from '../../../components/Icon';
 import { Select } from '../../../components/Select';
 import { Avatar, Button, Chip, Modal, cx } from '../../../components/ui';
-import { ROLE_LABEL, team, useAgents, type Colleague, type WebsiteConversation, type WebsitePerson, type WebsiteTeam } from './api';
+import { ROLE_LABEL, team, useAgents, WEBSITE, type Colleague, type WebsiteConversation, type WebsitePerson, type WebsiteTeam } from './api';
 
 /**
  * Several staff in one website chat (WS-WCHAT ENH-WCHAT-03, TEAM-UI-01 and TEAM-UI-02): the faces in the thread's
@@ -338,6 +338,18 @@ export function NoteBox({ conversationId, onSent, compact = false }: { conversat
   const [at, setAt] = useState<{ start: number; word: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const box = useRef<HTMLTextAreaElement>(null);
+  // Colleagues see "Nimal (a note)" typing; the visitor never sees a note being written (LIVE-03).
+  const typingAt = useRef(0);
+  const typing = (state: 'start' | 'stop') => {
+    if (state === 'start') {
+      if (Date.now() - typingAt.current < 3_000) return;
+      typingAt.current = Date.now();
+    } else {
+      if (!typingAt.current) return;
+      typingAt.current = 0;
+    }
+    void apiPost(`${WEBSITE}/conversations/${conversationId}/typing`, { state, internal: true }).catch(() => undefined);
+  };
   const matches = at ? (agents.data?.agents ?? []).filter((a) => a.name.toLowerCase().includes(at.word)).slice(0, 5) : [];
   const pick = (a: Colleague) => {
     if (!at) return;
@@ -355,6 +367,7 @@ export function NoteBox({ conversationId, onSent, compact = false }: { conversat
     try {
       // Only the colleagues still named in the words are mentioned.
       const mentions = named.filter((n) => words.includes(`@${n.name}`)).map((n) => n.id);
+      typing('stop');
       await team.note(conversationId, words, mentions);
       setValue('');
       setNamed([]);
@@ -391,7 +404,9 @@ export function NoteBox({ conversationId, onSent, compact = false }: { conversat
           onChange={(e) => {
             setValue(e.target.value.slice(0, 4000));
             setAt(mentionQuery(e.target.value, e.target.selectionStart ?? e.target.value.length));
+            typing(e.target.value ? 'start' : 'stop');
           }}
+          onBlur={() => typing('stop')}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();

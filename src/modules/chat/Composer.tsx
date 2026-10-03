@@ -205,10 +205,10 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   }));
 
   const typingSignal = (state: 'start' | 'stop') => {
-    // The widget's typing stamp has no "stopped": it lapses by itself (LiveActivity::WINDOW).
     if (channel) return;
+    // A website visitor sees "Nuwan is typing…" at once, and it goes at once on send, clear or blur (LIVE-03, LIVE-04).
     if (site) {
-      if (state === 'start') void apiPost(`/api/chat/widget-admin/conversations/${site.conversationId}/typing`).catch(() => undefined);
+      void apiPost(`/api/chat/widget-admin/conversations/${site.conversationId}/typing`, { state }).catch(() => undefined);
       return;
     }
     void apiPost('/api/chat/typing', { room_id: Number(roomId), state }).catch(() => undefined);

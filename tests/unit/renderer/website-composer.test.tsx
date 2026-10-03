@@ -107,11 +107,13 @@ describe('the website thread on the shared composer (RDC-01/02)', () => {
     mount();
     const box = screen.getByRole('textbox', { name: 'Message' });
     fireEvent.change(box, { target: { value: 'We can help with that.' } });
-    expect(vi.mocked(apiPost)).toHaveBeenCalledWith('/api/chat/widget-admin/conversations/41/typing');
+    expect(vi.mocked(apiPost)).toHaveBeenCalledWith('/api/chat/widget-admin/conversations/41/typing', { state: 'start' });
     await act(async () => {
       fireEvent.keyDown(box, { key: 'Enter' });
     });
     expect(calls).toHaveBeenCalledWith('offline:submit', expect.objectContaining({ module: 'website-chat', entityId: '41', path: '/api/chat/widget-admin/conversations/41/reply', body: { message: 'We can help with that.' }, queueIfOffline: true }));
+    // Sending stops it at once (LIVE-04).
+    expect(vi.mocked(apiPost)).toHaveBeenCalledWith('/api/chat/widget-admin/conversations/41/typing', { state: 'stop' });
     // Never Team Chat's message endpoint.
     expect(calls.mock.calls.filter(([c]) => c === 'offline:submit').map(([, x]) => (x as { path: string }).path)).toEqual(['/api/chat/widget-admin/conversations/41/reply']);
   });

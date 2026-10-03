@@ -13,7 +13,8 @@ import { toast } from '../../../core/toasts';
 import { Icon } from '../../../components/Icon';
 import { Avatar, Button, Chip, Empty, ErrorNote, Modal, Spinner, cx } from '../../../components/ui';
 import { Composer, type ComposerHandle } from '../Composer';
-import { PRIORITIES, quoteAuthor, useAgents, useCanned, useWebsiteConversation, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
+import { PRIORITIES, quoteAuthor, readBy, typingWords, useAgents, useCanned, useWebsiteConversation, visitorHas, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
+import { usePageVisible, useLiveStatus } from './live';
 import type { ReplyTarget } from '../Thread';
 import { Select } from '../../../components/Select';
 import { SidePanel } from '../../../components/SidePanel';
@@ -47,6 +48,10 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   const [tab, setTab] = useState<'reply' | 'note'>('reply');
   const [dialog, setDialog] = useState<'invite' | 'transfer' | null>(null);
   const declined = useDeclined(Number(id), me, q.data?.team);
+  // Typing and receipts, live (ENH-WCHAT-04): reading counts while this tab is in front and the window can be seen.
+  const { active: tabActive } = useTab();
+  const pageVisible = usePageVisible();
+  const live = useLiveStatus(Number(id), q.data, q.dataUpdatedAt, me, tabActive && pageVisible);
   const canned = useCanned(true);
   const outbox = useQuery({ queryKey: ['offline', 'pending'], queryFn: () => call('offline:pending') });
   const waiting = (outbox.data ?? []).filter((m: OfflineMutation) => m.module === 'website-chat' && m.entityId === id && m.state !== 'DONE');
@@ -55,7 +60,7 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
-  }, [count, data?.conversation.visitor_typing, waiting.length]);
+  }, [count, live.visitorTyping, waiting.length]);
 
   // Removed from the chat by its owner or a supervisor (TEAM-07): what I was writing to the visitor goes too.
   useEffect(
@@ -118,8 +123,8 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
           <Avatar name={name} size={mini ? 30 : 34} presence={c.status === 'closed' ? null : online ? 'online' : 'away'} />
           <span className={cx('flex flex-1 flex-col', mini ? 'min-w-[120px]' : 'min-w-[150px]')}>
             <b className="truncate text-ink">{name}{v?.company ? ` · ${v.company}` : ''}</b>
-            <span className={cx('truncate text-[11.5px] font-semibold', c.visitor_typing ? 'text-primary' : online && c.status !== 'closed' ? 'text-success' : 'text-ink-3')}>
-              {c.visitor_typing ? 'Typing…' : c.status === 'closed' ? `Closed${c.closed_at ? ` ${dateLabel(c.closed_at)}` : ''}` : online ? `On the site now${page ? ` · reading ${page}` : ''}` : 'Left the site'}
+            <span className={cx('truncate text-[11.5px] font-semibold', live.visitorTyping ? 'text-primary' : online && c.status !== 'closed' ? 'text-success' : 'text-ink-3')}>
+              {live.visitorTyping ? 'Typing…' : c.status === 'closed' ? `Closed${c.closed_at ? ` ${dateLabel(c.closed_at)}` : ''}` : online ? `On the site now${page ? ` · reading ${page}` : ''}` : 'Left the site'}
             </span>
           </span>
           <span className="flex flex-wrap items-center gap-2">
@@ -150,6 +155,9 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
             <Message
               key={m.id}
               m={m}
+              // Sent, delivered or read by the visitor, on the team's messages; who read the visitor's latest (LIVE-08).
+              status={data.marks && m.from === 'agent' && m.visibility !== 'internal' ? visitorHas(m.id, data.marks) : undefined}
+              footer={data.marks ? footerFor(m, data, me) : null}
               // Each person signs their first message in a run (TEAM-05).
               signed={m.from === 'agent' && (i === 0 || data.messages[i - 1]!.from !== 'agent' || data.messages[i - 1]!.agent_id !== m.agent_id || (data.messages[i - 1]!.visibility ?? 'public') !== (m.visibility ?? 'public'))}
               visitor={name}
@@ -181,7 +189,8 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
               </span>
             </div>
           ))}
-          {c.visitor_typing ? <div className="self-start text-[12px] text-ink-3">{name.split(' ')[0]} is typing…</div> : null}
+          {live.visitorTyping ? <div className="self-start text-[12px] text-ink-3">{name.split(' ')[0]} is typing…</div> : null}
+          {live.staffTyping.length ? <div className="self-end text-[12px] text-ink-3">{typingWords(live.staffTyping)}</div> : null}
         </div>
         {declined ? (
           // An invitation or transfer this person sent came back (TEAM-24, WF-T2).
@@ -231,6 +240,26 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
       {dialog === 'transfer' ? <TransferDialog conversationId={c.id} me={me} onClose={() => setDialog(null)} onDone={refresh} /> : null}
     </div>
   );
+}
+
+/**
+ * The line under a message (LIVE-08): under the team's latest, how far the visitor has it — Sent, Delivered, or Read
+ * and when; under the visitor's latest, who of the team has read it.
+ */
+function footerFor(m: WebsiteMessage, data: WebsiteConversation, me: number | null): string | null {
+  const marks = data.marks;
+  if (!marks || m.visibility === 'internal') return null;
+  const team = data.messages.filter((x) => (x.from === 'agent' || x.from === 'bot') && x.visibility !== 'internal').at(-1);
+  const visitor = data.messages.filter((x) => x.from === 'visitor').at(-1);
+  if (team && m.id === team.id) {
+    const s = visitorHas(m.id, marks);
+    return s === 'read' ? `Read${marks.visitor.read_at ? ` ${timeLabel(marks.visitor.read_at)}` : ''}` : s === 'delivered' ? 'Delivered' : 'Sent';
+  }
+  if (visitor && m.id === visitor.id) {
+    const who = readBy(m.id, marks, me);
+    return who.length ? `Read by ${who.join(', ')}` : null;
+  }
+  return null;
 }
 
 function pathOf(url: string): string {
@@ -317,7 +346,7 @@ function openWebsiteFile(f: NonNullable<WebsiteMessage['file']>, openLink: (url:
   openChatAttachment({ filename: f.filename, mime: f.mime, size: f.size, is_image: f.is_image, url, download_url: url }, openLink);
 }
 
-function Message({ m, visitor, onReply, signed = false }: { m: WebsiteMessage; visitor: string; onReply?: () => void; signed?: boolean }) {
+function Message({ m, visitor, onReply, signed = false, status, footer = null }: { m: WebsiteMessage; visitor: string; onReply?: () => void; signed?: boolean; status?: 'sent' | 'delivered' | 'read'; footer?: string | null }) {
   const { openLink } = useTab();
   const internal = m.visibility === 'internal';
   // "Nuwan joined the chat": a notice, not something anybody said. One only staff see is the chat's event log (TEAM-63).
@@ -365,12 +394,16 @@ function Message({ m, visitor, onReply, signed = false }: { m: WebsiteMessage; v
           <button type="button" className="font-semibold text-primary hover:underline" onClick={() => m.file && openWebsiteFile(m.file, openLink)}>Open</button>
         </div>
       ) : null}
+      {status ? (
+        <Icon name={status === 'sent' ? 'check' : 'check-check'} size={13} className={cx('shrink-0', status === 'read' ? 'text-primary' : 'text-ink-3')} label={status === 'read' ? 'Read by the visitor' : status === 'delivered' ? 'Delivered to the visitor' : 'Sent'} />
+      ) : null}
       {onReply ? (
         <button type="button" aria-label="Reply to this message" title="Reply" onClick={onReply} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-ink-3 opacity-0 hover:bg-subtle hover:text-ink focus:opacity-100 group-hover:opacity-100">
           <Icon name="reply" size={13} />
         </button>
       ) : null}
       </div>
+      {footer ? <span className="text-[11px] text-ink-3">{footer}</span> : null}
     </div>
   );
 }

@@ -5,6 +5,24 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.108: Website chats show typing and read receipts as they happen
+
+With WorkSuite's Communication 1.11.0 and its live status migration (Website Live Chat SRS ENH-WCHAT-04):
+
+- **The visitor typing** shows in the thread and on their row in the list the moment they start, and goes the moment
+  they stop or send — not on the next refresh.
+- **Colleagues typing** in the same chat are named under the thread: "Nimal and Dilini are typing…"; somebody writing a
+  note says so. The visitor never sees a note being written.
+- **Ticks on your messages**: sent, delivered to the visitor's widget, or read with the time — read only when the
+  visitor had the chat open and in front. Under the visitor's latest message: who of you has read it.
+- **Your reading counts**: while the thread is in front, the visitor's messages are marked read for you, and the
+  visitor sees "Read by" your name (when the website shows receipts). A supervisor monitoring a chat never makes it
+  read. Unread counts in the list come from your own read mark.
+
+With an older WorkSuite server, typing and the list work as before and no ticks show.
+
+---
+
 ## 2026-10-03 — 0.2.107: Several staff in one website chat
 
 With WorkSuite's Communication 1.11.0 and its team chats migration, a website chat can have more than one of you in it

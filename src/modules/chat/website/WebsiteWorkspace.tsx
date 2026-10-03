@@ -2,8 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 import type { WebchatHandoff, WebchatRingChat } from '@shared/types';
 import { apiGet, apiPost } from '../../../core/api';
+import { call, on } from '../../../core/bridge';
 import { app } from '../../../core/app-state';
-import { call } from '../../../core/bridge';
 import { text } from '../../../core/i18n';
 import { useStore } from '../../../core/store';
 import { useTab, useTabTitle } from '../../../core/tab-context';
@@ -106,6 +106,8 @@ export function WebsiteWorkspace() {
   const ring = useRingState();
   const ringing = new Map(ring.chats.map((c) => [c.id, c]));
   const handoffs = ring.handoffs ?? [];
+  // Visitors typing now, for their rows (LIVE-02).
+  const typingRows = useVisitorsTyping();
   const openRows = open.data?.conversations ?? [];
   const sites = open.data && 'sites' in open.data ? ((open.data as { sites?: Array<{ widget_id: number; site: string }> }).sites ?? []) : [];
   const count = (s: Section): number => (s === 'missed' ? (missedCount.data?.count ?? 0) : s === 'invited' ? handoffs.length : s === 'closed' ? 0 : sectionRows(openRows, s, me).length);
@@ -251,7 +253,7 @@ export function WebsiteWorkspace() {
           ) : list.isLoading ? <Spinner /> : list.error ? <div className="p-4"><ErrorNote error={list.error} onRetry={() => void list.refetch()} /></div> : rows.length === 0 ? (
             <Empty icon="globe" title={typed ? text('Nothing matches “{q}”', { q: q.trim() }) : pill === 'mine' || section === 'mine' ? 'No chats assigned to you' : section === 'awaiting' ? 'Nobody is waiting' : 'No website chats'} />
           ) : (
-            rows.map((r) => <Row key={r.id} r={r} me={me} myName={myName} ring={ringing.get(r.id)} active={selected === String(r.id)} onOpen={() => to({ website: String(r.id) })} />)
+            rows.map((r) => <Row key={r.id} r={r} me={me} myName={myName} ring={ringing.get(r.id)} typing={typingRows.has(r.id)} active={selected === String(r.id)} onOpen={() => to({ website: String(r.id) })} />)
           )}
         </div>
       </section>
@@ -295,6 +297,22 @@ function pathOf(url: string): string {
   }
 }
 
+/** Which visitors are typing now, from the live frames (LIVE-02): a start lasts seven seconds unless a stop comes first. */
+function useVisitorsTyping(): Set<number> {
+  const now = useNow(1_000);
+  const [until, setUntil] = useState<Record<number, number>>({});
+  useEffect(
+    () =>
+      on<{ type: string; conversation_id?: number; who?: string; state?: string }>('realtime:event', (e) => {
+        if (e.type !== 'chat.widget.typing' || e.who !== 'visitor' || !e.conversation_id) return;
+        const cid = e.conversation_id;
+        setUntil((u) => ({ ...u, [cid]: e.state === 'stop' ? 0 : Date.now() + 7_000 }));
+      }),
+    [],
+  );
+  return new Set(Object.entries(until).filter(([, t]) => t > now).map(([k]) => Number(k)));
+}
+
 /**
  * An invitation or a transfer waiting for me, in the Invited view (ENH-WCHAT-03, TEAM-09): who asks, the note, how long
  * is left, Join chat or Accept, and Decline. Opening the row reads the chat without joining it.
@@ -328,7 +346,7 @@ function InvitedRow({ h, hidden, active, onOpen }: { h: WebchatHandoff; hidden: 
  * happening, and on which site. A chat ringing here shows a bell; one silenced on this computer is amber with the
  * bell struck through (RING-UI-04).
  */
-function Row({ r, me, myName, ring, active, onOpen }: { r: WebsiteRow; me: number | null; myName: string | null; ring?: WebchatRingChat; active: boolean; onOpen: () => void }) {
+function Row({ r, me, myName, ring, typing = false, active, onOpen }: { r: WebsiteRow; me: number | null; myName: string | null; ring?: WebchatRingChat; typing?: boolean; active: boolean; onOpen: () => void }) {
   const name = r.visitor_name || r.label;
   const mine = me !== null && r.assigned_to === me;
   // Several staff in it: their faces, the owner first (TEAM-04); and what I am in it (TEAM-09).
@@ -367,7 +385,11 @@ function Row({ r, me, myName, ring, active, onOpen }: { r: WebsiteRow; me: numbe
           {r.awaiting_reply && since && !closed ? <WaitClock since={since} /> : <span className="shrink-0 text-[11px] text-ink-3">{listStamp(r.last_message?.at ?? r.last_visitor_at ?? r.updated_at)}</span>}
         </span>
         <span className="flex min-w-0 items-center gap-1.5">
-          <span className={cx('min-w-0 flex-1 truncate text-[12px]', unread ? 'font-semibold text-ink' : 'text-ink-2')}>{line}</span>
+          {typing && !closed ? (
+            <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-primary">{text('Typing…')}</span>
+          ) : (
+            <span className={cx('min-w-0 flex-1 truncate text-[12px]', unread ? 'font-semibold text-ink' : 'text-ink-2')}>{line}</span>
+          )}
           {unread ? (
             <span className="min-w-[18px] shrink-0 rounded-full bg-primary px-1.5 text-center text-[10.5px] leading-[18px] font-bold text-white tabular-nums" aria-label={text('{n} unread', { n: unread })}>
               {unread > 99 ? '99+' : unread}

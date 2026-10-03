@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebchatRingChat, WebchatRingState } from '@shared/types';
@@ -12,7 +12,17 @@ import type * as CoreApi from '../../../src/core/api';
  * "Pick a conversation" empty state, and J / K through the list.
  */
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiPost: vi.fn(async () => ({})) }));
-vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(), on: () => () => undefined, errorMessage: (e: unknown) => String(e), isMac: false, registerDropped: vi.fn() }));
+const realtime: Array<(e: unknown) => void> = [];
+vi.mock('../../../src/core/bridge', () => ({
+  call: vi.fn(),
+  on: (channel: string, cb: (e: unknown) => void) => {
+    if (channel === 'realtime:event') realtime.push(cb);
+    return () => undefined;
+  },
+  errorMessage: (e: unknown) => String(e),
+  isMac: false,
+  registerDropped: vi.fn(),
+}));
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
 vi.mock('../../../src/modules/calls/tones', () => ({ playTone: vi.fn(() => ({ stop: vi.fn(), setVolume: vi.fn() })) }));
 vi.mock('../../../src/modules/chat/website/WebsiteThread', () => ({ WebsiteThread: ({ id }: { id: string }) => <div>Thread {id}</div> }));
@@ -172,6 +182,15 @@ describe('the Website Chats inbox (CHAT-UI-00)', () => {
     // Opening one reads the chat.
     fireEvent.click(within(list()).getByText('Visitor 77AB'));
     expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=invited&website=4');
+  });
+
+  it('a row says Typing… while its visitor types, and stops at once (LIVE-02)', async () => {
+    wrap(<WebsiteWorkspace />);
+    const kasun = (await within(list()).findByText('Kasun P.')).closest('button')!;
+    act(() => realtime.forEach((cb) => cb({ type: 'chat.widget.typing', conversation_id: 3, who: 'visitor', state: 'start' })));
+    expect(within(kasun).getByText('Typing…')).toBeTruthy();
+    act(() => realtime.forEach((cb) => cb({ type: 'chat.widget.typing', conversation_id: 3, who: 'visitor', state: 'stop' })));
+    expect(within(kasun).queryByText('Typing…')).toBeNull();
   });
 
   it('Open, Mine and Closed over the list, with their counts', async () => {

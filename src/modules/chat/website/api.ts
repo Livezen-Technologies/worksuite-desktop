@@ -56,6 +56,34 @@ export interface WebsiteRow {
   my_role?: TeamRole | null;
 }
 
+/** Message-id marks that only move forward (LIVE-05): how far the visitor has the team's messages, and each person the visitor's. */
+export interface WebsiteMarks {
+  visitor: { delivered: number | null; read: number | null; delivered_at: string | null; read_at: string | null };
+  staff: Array<{ user_id: number; name: string; delivered: number | null; read: number | null; read_at: string | null }>;
+}
+
+/** A team message's state for the visitor (LIVE-08): sent, delivered to their widget, or read with its panel open. */
+export function visitorHas(id: number, marks: WebsiteMarks | null | undefined): 'sent' | 'delivered' | 'read' {
+  const v = marks?.visitor;
+  if (v?.read && v.read >= id) return 'read';
+  if (v?.delivered && v.delivered >= id) return 'delivered';
+  return 'sent';
+}
+
+/** Who of the team has read the visitor's message (LIVE-08): "you" first. */
+export function readBy(id: number, marks: WebsiteMarks | null | undefined, me: number | null): string[] {
+  const who = (marks?.staff ?? []).filter((s) => s.read !== null && s.read >= id);
+  return [...who.filter((s) => s.user_id === me).map(() => 'you'), ...who.filter((s) => s.user_id !== me).map((s) => s.name)];
+}
+
+/** "Nimal is typing", "Nimal and Dilini are typing". */
+export function typingWords(names: string[]): string {
+  if (!names.length) return '';
+  if (names.length === 1) return `${names[0]} is typing…`;
+  if (names.length === 2) return `${names[0]} and ${names[1]} are typing…`;
+  return `${names[0]}, ${names[1]} and ${names.length - 2} more are typing…`;
+}
+
 /** A role in one website chat (TEAM-01): who answers for it, who is helping, who is reading along unseen. */
 export type TeamRole = 'owner' | 'participant' | 'observer';
 
@@ -206,6 +234,10 @@ export interface WebsiteConversation {
   history?: Array<{ id: number; status: string; started_at: string | null; rating: number | null; other_device: boolean }>;
   /** Null or absent on a server without team chats. */
   team?: WebsiteTeam | null;
+  /** Delivered and read, both ways (ENH-WCHAT-04, LIVE-08); null on a server without them. */
+  marks?: WebsiteMarks | null;
+  /** Who else of the team is typing here now. */
+  agents_typing?: string[];
   can?: WebsiteCan;
 }
 
