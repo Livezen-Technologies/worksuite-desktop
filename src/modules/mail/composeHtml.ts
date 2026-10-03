@@ -6,17 +6,44 @@ import { splitQuote } from './quote';
  * goes with it, the quoted email below it, the signature inside it, and old
  * plain-text drafts brought forward.
  *
- * The allow-list is formatting only — no scripts, no styles but colour,
- * highlight, alignment, decoration and a table's borders and padding, no
- * event handlers, and links only to
- * http(s) and mailto. Pictures do not go inline (the send path has no
- * multipart/related part): pasted ones become attachments instead.
+ * The allow-list is formatting only — no scripts, no styles but the
+ * email-safe ones (colour, highlight, fonts and sizes, alignment, spacing,
+ * borders, a picture's size and float), no event handlers, links only to
+ * http(s) and mailto, and the table attributes Outlook reads (`border`,
+ * `cellpadding`, `width`, `bgcolor`…). Pictures stay: embedded ones (a
+ * `data:` PNG, JPEG, GIF or WebP, which the server sends as inline `cid:`
+ * parts — worksuite-desktop#188), `cid:` ones and remote http(s) ones; any
+ * other source drops the picture.
  */
 
-const KEEP = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'DEL', 'P', 'DIV', 'BR', 'SPAN', 'UL', 'OL', 'LI', 'A', 'BLOCKQUOTE', 'H1', 'H2', 'H3', 'H4', 'PRE', 'CODE', 'HR', 'SUB', 'SUP', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TD', 'TH']);
+const KEEP = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'DEL', 'P', 'DIV', 'BR', 'SPAN', 'UL', 'OL', 'LI', 'A', 'BLOCKQUOTE', 'H1', 'H2', 'H3', 'H4', 'PRE', 'CODE', 'HR', 'SUB', 'SUP', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TD', 'TH', 'IMG']);
 /** Removed with what is inside them: their content is not the message's words. */
-const DROP = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'FRAME', 'FRAMESET', 'OBJECT', 'EMBED', 'APPLET', 'TEMPLATE', 'NOSCRIPT', 'SVG', 'MATH', 'LINK', 'META', 'BASE', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'OPTION', 'IMG', 'PICTURE', 'VIDEO', 'AUDIO', 'SOURCE', 'TITLE', 'HEAD']);
-const STYLES = new Set(['color', 'background-color', 'text-align', 'text-decoration', 'text-decoration-line', 'font-weight', 'font-style', 'border', 'border-collapse', 'padding', 'vertical-align', 'width']);
+const DROP = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'FRAME', 'FRAMESET', 'OBJECT', 'EMBED', 'APPLET', 'TEMPLATE', 'NOSCRIPT', 'SVG', 'MATH', 'LINK', 'META', 'BASE', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'OPTION', 'PICTURE', 'VIDEO', 'AUDIO', 'SOURCE', 'TITLE', 'HEAD']);
+const STYLES = new Set([
+  'color', 'background-color', 'text-align', 'text-decoration', 'text-decoration-line', 'font-weight', 'font-style', 'font-family', 'font-size', 'line-height',
+  'border', 'border-top', 'border-right', 'border-bottom', 'border-left', 'border-color', 'border-style', 'border-width', 'border-radius', 'border-collapse',
+  'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+  'vertical-align', 'width', 'max-width', 'height', 'float', 'display', 'list-style-type', 'white-space',
+]);
+/** Attributes kept by element, each with the values it may have (everything else is removed). */
+const NUM = /^\d{1,4}(%|px)?$/;
+const ATTRS: Record<string, Record<string, RegExp>> = {
+  IMG: { alt: /^[^<>]{0,300}$/, title: /^[^<>]{0,300}$/, width: NUM, height: NUM, align: /^(left|right|middle|top|bottom)$/i, border: /^\d{1,2}$/ },
+  TABLE: { border: /^\d{1,2}$/, cellpadding: /^\d{1,2}$/, cellspacing: /^\d{1,2}$/, width: NUM, align: /^(left|right|center)$/i, bgcolor: /^#[0-9a-f]{3,8}$/i },
+  TR: { align: /^(left|right|center)$/i, valign: /^(top|middle|bottom|baseline)$/i, bgcolor: /^#[0-9a-f]{3,8}$/i },
+  TD: { colspan: /^\d{1,3}$/, rowspan: /^\d{1,3}$/, width: NUM, height: NUM, align: /^(left|right|center|justify)$/i, valign: /^(top|middle|bottom|baseline)$/i, bgcolor: /^#[0-9a-f]{3,8}$/i },
+  P: { align: /^(left|right|center|justify)$/i },
+  DIV: { align: /^(left|right|center|justify)$/i },
+};
+ATTRS.TH = ATTRS.TD!;
+/** `<font size>` (the browser's own sizes, 1–7) as the pixels it means. */
+const FONT_SIZES: Record<string, string> = { '1': '10px', '2': '13px', '4': '18px', '5': '24px', '6': '32px', '7': '48px' };
+
+/** A picture's source the composer keeps: embedded (sent as an inline part), inline by Content-ID, or remote. */
+export function safeImageSrc(src: string): string | null {
+  const s = src.trim();
+  return /^(https?:\/\/[^\s<>"]+|cid:[^\s<>"]+|data:image\/(png|jpe?g|gif|webp);base64,[a-z0-9+/=]+)$/i.test(s) ? s : null;
+}
 
 export function safeHref(href: string): string | null {
   const h = href.trim();
@@ -43,9 +70,11 @@ function cleanInto(from: Node, to: Node, doc: Document): void {
     }
     if (!(node instanceof Element) || DROP.has(node.tagName)) continue;
     if (node.tagName === 'FONT') {
-      // The browser's colour command can write <font color>; it leaves as a span with a colour style.
+      // The browser's colour, font and size commands can write <font>; it leaves as a span with a style.
       const colour = node.getAttribute('color') ?? '';
-      const style = safeStyle(`color: ${colour}`);
+      const face = node.getAttribute('face') ?? '';
+      const size = FONT_SIZES[node.getAttribute('size') ?? ''] ?? '';
+      const style = safeStyle(`${colour ? `color: ${colour};` : ''}${face ? `font-family: ${face};` : ''}${size ? `font-size: ${size}` : ''}`);
       const span = doc.createElement('span');
       if (style) span.setAttribute('style', style);
       cleanInto(node, style ? span : to, doc);
@@ -58,6 +87,16 @@ function cleanInto(from: Node, to: Node, doc: Document): void {
       continue;
     }
     const el = doc.createElement(node.tagName === 'STRIKE' ? 's' : node.tagName.toLowerCase());
+    if (node.tagName === 'IMG') {
+      const src = safeImageSrc(node.getAttribute('src') ?? '');
+      // A picture with nowhere safe to come from is nothing.
+      if (!src) continue;
+      el.setAttribute('src', src);
+    }
+    for (const [name, ok] of Object.entries(ATTRS[node.tagName] ?? {})) {
+      const v = node.getAttribute(name);
+      if (v !== null && ok.test(v.trim())) el.setAttribute(name, v.trim());
+    }
     if (node.tagName === 'A') {
       const href = safeHref(node.getAttribute('href') ?? '');
       if (!href) {
@@ -121,7 +160,17 @@ export function composeText(html: string): string {
       if (!(c instanceof Element)) continue;
       const tag = c.tagName;
       if (tag === 'BR') flush(prefix);
-      else if (tag === 'A') {
+      else if (tag === 'IMG') {
+        const alt = (c.getAttribute('alt') ?? '').trim();
+        if (alt) line += `[${alt}]`;
+      } else if (tag === 'TD' || tag === 'TH') {
+        if (line.trim() && !/\|\s*$/.test(line)) line += ' | ';
+        walk(c, prefix, depth);
+      } else if (tag === 'TR') {
+        if (line.trim()) flush(prefix);
+        walk(c, prefix, depth);
+        if (line.trim()) flush(prefix);
+      } else if (tag === 'A') {
         const inner = (c.textContent ?? '').trim();
         const href = (c.getAttribute('href') ?? '').replace(/^mailto:/i, '');
         line += inner && inner !== href ? `${inner} <${href}>` : href || inner;
