@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useRef, useState, type ReactNode } from 'react';
-import { apiGet, apiGetMeta } from '../../core/api';
+import { ApiError, apiGet, apiGetMeta } from '../../core/api';
+import { call } from '../../core/bridge';
 import { text } from '../../core/i18n';
 import { addDays, parseTs, todayInZone } from '../../core/time';
 import { Icon } from '../../components/Icon';
@@ -148,8 +149,15 @@ export function SearchView({ initial, boxes, current, onOpen, onClose }: { initi
     queryKey: ['mail', 'search', term, scopeBox, mentioned],
     queryFn: async () => {
       const t0 = performance.now();
-      const r = await apiGet<{ messages: MessageRow[]; total: number; unsearched: string[] }>('/api/mail/search', { ...(scopeBox ? { mailbox: scopeBox } : { scope: 'all' }), q: term, ...(mentioned ? { mentioned: 1 } : {}) });
-      return { ...r, ms: performance.now() - t0 };
+      try {
+        const r = await apiGet<{ messages: MessageRow[]; total: number; unsearched: string[] }>('/api/mail/search', { ...(scopeBox ? { mailbox: scopeBox } : { scope: 'all' }), q: term, ...(mentioned ? { mentioned: 1 } : {}) });
+        return { ...r, ms: performance.now() - t0, offline: false };
+      } catch (e) {
+        // Offline (worksuite-desktop#162): the mail kept on this computer is searched instead, and says so.
+        if (!(e instanceof ApiError && e.offline) || mentioned) throw e;
+        const found = await offlineMailSearch(term, boxes, scopeBox);
+        return { messages: found, total: found.length, unsearched: [] as string[], ms: performance.now() - t0, offline: true };
+      }
     },
     enabled: term.length >= 2 || mentioned,
     staleTime: 30_000,
@@ -291,7 +299,7 @@ export function SearchView({ initial, boxes, current, onOpen, onClose }: { initi
                 {text('Export results…')}
               </button>
             ) : null}
-            {local.data ? <span className="text-[12px] font-semibold text-success">{text('Searched {n} mailboxes on this computer · {s} s', { n: searched, s: (local.data.ms / 1000).toFixed(2) })}</span> : null}
+            {local.data?.offline ? <span className="text-[12px] font-semibold text-warning">{text('Offline — searched the mail kept on this computer · {s} s', { s: (local.data.ms / 1000).toFixed(2) })}</span> : local.data ? <span className="text-[12px] font-semibold text-success">{text('Searched {n} mailboxes on this computer · {s} s', { n: searched, s: (local.data.ms / 1000).toFixed(2) })}</span> : null}
           </header>
           <div className="min-h-0 flex-1 overflow-y-auto scroll-thin">
             {term.length < 2 && !mentioned ? <Empty icon="search" title={text('Type at least two letters')} hint={text('Try from: to: has:attachment before:2026-09-01 or is:unread.')} /> : local.isLoading ? <Spinner /> : local.error ? <div className="p-4"><ErrorNote error={local.error} onRetry={() => void local.refetch()} /></div> : rows.length === 0 && !remote.isLoading ? <Empty icon="search" title={text('Nothing found on this computer')} hint={text('Search the server for older mail.')} /> : null}
@@ -392,4 +400,21 @@ function Chip({ ref, on, onClick, menu, children }: { ref?: React.Ref<HTMLButton
       {menu ? <Icon name="chevron-down" size={12} /> : null}
     </button>
   );
+}
+
+/** Mail kept on this computer that matches, as list rows with their account (offline search, worksuite-desktop#162). */
+export async function offlineMailSearch(term: string, boxes: Mailbox[], scopeBox: string | null): Promise<MessageRow[]> {
+  let rows: Array<Record<string, unknown>> = [];
+  try {
+    rows = await call('offline:mailSearch', { q: term });
+  } catch {
+    return [];
+  }
+  return rows
+    .map((r) => {
+      const id = Number((r.mailbox as { id?: unknown } | undefined)?.id ?? 0);
+      const b = boxes.find((x) => x.id === id);
+      return { ...(r as unknown as MessageRow), mailbox: b ? { id: b.id, email: b.email, name: b.display_name || b.email, colour: b.colour ?? '' } : undefined };
+    })
+    .filter((m) => !scopeBox || String(m.mailbox?.id ?? '') === scopeBox);
 }

@@ -16,7 +16,7 @@ import { canOpenApp, canOpenLink, canOpenRoute, notificationAllowed, visibleAppI
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
 import { itemApp, itemRoute, looksLikeItemLink, parseItemLink } from '@shared/item-links';
 import { linkPrefs } from '@shared/link-prefs';
-import { findMailtoInArgv, mailBodiesKept, mailListKept, mailtoRoute, parseMailto } from '@shared/mailto';
+import { findMailtoInArgv, mailBodiesKept, mailKeptForever, mailListKept, mailtoRoute, parseMailto } from '@shared/mailto';
 import { resolveWebLink } from '@shared/links';
 import { redirectRoute } from '@shared/channels';
 import { networkStatus } from '@shared/network';
@@ -1341,10 +1341,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     accessWatch.start();
     // FR-OFF-06: prune mail bodies beyond the cache window.
     const days = settings.effective().mailCacheDays;
-    if (days > 0) cache.pruneModuleOlderThan('mail', days);
+    // A folder kept whole on this computer is not pruned by age (worksuite-desktop#162).
+    const keepAll = (path: string) => mailKeptForever(settings.effective(), path);
+    if (days > 0) cache.pruneModuleOlderThan('mail', days, keepAll);
     // A mailbox's own keep period (Settings › Mail › Storage & sync, D09).
     const me = sessionCtl.current()?.user?.id;
-    for (const [box, d] of Object.entries(settings.effective().mailCacheDaysByMailbox ?? {})) if (me) cache.pruneMailbox(String(me), box, d);
+    for (const [box, d] of Object.entries(settings.effective().mailCacheDaysByMailbox ?? {})) if (me) cache.pruneMailbox(String(me), box, d, keepAll);
     emitStatus();
   };
   const stopServices = (): void => {

@@ -84,18 +84,22 @@ export function mailBodiesKept(prefs: { mailCacheDays: number; mailCacheDaysByMa
   const box = params?.get('mailbox') ?? null;
   const own = box ? prefs.mailCacheDaysByMailbox?.[box] : undefined;
   const folder = params?.get('folder') ?? null;
-  // A folder's own offline policy (ENH-MAIL-03 DMO-OFF-01): headers only, or online only, keep no bodies.
-  if (folder && folderOffline(prefs, box, folder) !== 'recent') return false;
+  // A folder's own offline policy (ENH-MAIL-03 DMO-OFF-01): headers only, or online only, keep no bodies; all keeps every one.
+  const policy = folder ? folderOffline(prefs, box, folder) : null;
+  if (policy === 'all') return true;
+  if (policy && policy !== 'recent') return false;
   return (own ?? prefs.mailCacheDays) !== 0;
 }
 
 /**
  * What this computer keeps of a folder (ENH-MAIL-03 DMO-OFF-01, §3.3):
- * `recent` — messages within the mailbox's keep period; `headers` — the
+ * `all` — every message opened or fetched ahead, whatever its age
+ * (worksuite-desktop#162); `recent` — messages within the mailbox's keep
+ * period (30 days unless changed); `headers` — the
  * list only, messages open from the server; `online` — nothing, the folder
  * is read from the server each time.
  */
-export type FolderOffline = 'recent' | 'headers' | 'online';
+export type FolderOffline = 'all' | 'recent' | 'headers' | 'online';
 
 /** The default for a folder: Inbox, Sent and Drafts keep recent mail, Archive is online only, the rest headers only. */
 export function defaultFolderOffline(folder: string): FolderOffline {
@@ -118,4 +122,16 @@ export function mailListKept(prefs: { mailFolderOffline?: Record<string, FolderO
   // The combined views (Unified, All Accounts) follow their folders' own policies at the server; kept as before.
   if (!folder || params?.get('unified')) return true;
   return folderOffline(prefs, params?.get('mailbox') ?? null, folder) !== 'online';
+}
+
+/**
+ * A saved message body that the keep period does not remove: its folder keeps
+ * all of its mail on this computer (worksuite-desktop#162).
+ */
+export function mailKeptForever(prefs: { mailFolderOffline?: Record<string, FolderOffline> }, path: string): boolean {
+  if (!/^\/api\/mail\/messages\/\d+/.test(path)) return false;
+  const q = path.indexOf('?');
+  const params = q >= 0 ? new URLSearchParams(path.slice(q + 1)) : null;
+  const folder = params?.get('folder');
+  return !!folder && folderOffline(prefs, params?.get('mailbox') ?? null, folder) === 'all';
 }

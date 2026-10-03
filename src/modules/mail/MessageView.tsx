@@ -23,6 +23,7 @@ import { openPdf } from '../pdf/open';
 import { createTask } from '../tasks/actions';
 import { createMeeting, invitation, openMeeting } from '../meet/api';
 import { messageAction, moveMessage, setLabel, useFolders, useLabels, useMessageContext, type MessageActionName } from './api';
+import { messageKey, seedMessage } from './localFirst';
 import { folderName, plainText, securityVerdict } from './model';
 import { blockedImageUrls, escapeHtml, highlightText, isDesignedMail, mailFrameDoc, sanitizeMailHtml, withProxiedImages } from './sanitize';
 import { TeamBar, TeamWork } from './Team';
@@ -118,9 +119,13 @@ export function MessageView(p: MessageViewProps) {
   // Mark as read (DMO-INB-12): when opened (the server does it), after N seconds, when moving on, or never.
   const markRead = p.prefs.markRead ?? 'open';
   const q = useQuery({
-    queryKey: ['mail', 'message', ref.mailbox, ref.folder, ref.uid],
+    queryKey: messageKey(ref),
     queryFn: ({ signal }) => apiGetMeta<MessageDetail>(`/api/mail/messages/${ref.uid}`, withMailbox({ folder: ref.folder, ...(markRead !== 'open' ? { peek: 1 } : {}) }, ref.mailbox), signal),
   });
+  // Opened or fetched ahead before: shown from this computer at once, while the server is asked (worksuite-desktop#162).
+  const refKey = `${ref.mailbox ?? ''}:${ref.folder}:${ref.uid}`;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the message is named by refKey; the object is new each render
+  useEffect(() => void seedMessage(qc, ref, markRead !== 'open'), [qc, refKey, markRead]);
   const m = q.data?.data;
   const clean = useMemo(() => (m ? sanitizeMailHtml(m.body_html) : null), [m]);
   // Plain text (DMO-RD-09): asked for on this message, or always for this sender.
@@ -148,13 +153,27 @@ export function MessageView(p: MessageViewProps) {
   const labels = useLabels(p.localStore && menu === 'label');
   // Opening a message reads it: the list's dot and the counts follow.
   useEffect(() => {
-    if (q.isSuccess && !q.data.offline) {
+    if (q.isSuccess && !q.data.offline && !q.data.local && !q.data.peeked) {
       void qc.invalidateQueries({ queryKey: ['mail', 'messages'] });
       void qc.invalidateQueries({ queryKey: ['mail', 'views'] });
     }
-  }, [q.isSuccess, q.data?.offline, qc]);
+  }, [q.isSuccess, q.data?.offline, q.data?.local, q.data?.peeked, qc]);
   const unreadNow = !!m && m.is_read === false;
   const subjectNow = m?.subject ?? '';
+  // Fetched ahead (peek), then opened with "mark as read when opened": the server has not marked it, so this does.
+  const peekedUnread = unreadNow && markRead === 'open' && !!q.data?.peeked && !q.data.local;
+  const markedOnOpen = useRef<string | null>(null);
+  useEffect(() => {
+    if (!peekedUnread || markedOnOpen.current === refKey) return;
+    markedOnOpen.current = refKey;
+    void messageAction(ref, 'read', subjectNow)
+      .then(() => {
+        void qc.invalidateQueries({ queryKey: ['mail', 'messages'] });
+        void qc.invalidateQueries({ queryKey: ['mail', 'views'] });
+      })
+      .catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per message (refKey), not per render
+  }, [peekedUnread, refKey, subjectNow, qc]);
   const delay = Math.max(0, Math.min(30, p.prefs.markReadDelay ?? 5));
   useEffect(() => {
     if (!unreadNow || (markRead !== 'delay' && markRead !== 'change')) return;

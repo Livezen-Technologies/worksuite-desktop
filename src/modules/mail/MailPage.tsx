@@ -18,6 +18,7 @@ import { useVips } from './PeopleCard';
 import { TodoPane, nextSlot } from './TodoPane';
 import type { ModuleProps } from '../registry';
 import { AddMailbox } from './AddMailbox';
+import { PREFETCH_AHEAD, prefetchMessages, useForgetRemovedMailboxes, useLocalFirst, useServerStateOnRefusal } from './localFirst';
 import { messageAction, moveMessage, useTemplates, useLocalStore, useMailPrefs, useMailboxes, usePendingMail, useViewCounts, type MessageActionName } from './api';
 import { registerCommand, runCommand } from '../../core/commands';
 import { MAIL_COMMANDS, bindings, commandFor, isPlain, keyLabel, keyOf, type MailCommandId } from './keymap';
@@ -139,6 +140,8 @@ function MailWorkspace({ active }: ModuleProps) {
 
   const mailboxes = useMailboxes();
   const boxes = useMemo(() => (mailboxes.data?.mailboxes ?? []).filter((m) => !m.archived), [mailboxes.data]);
+  // Only the server's own list (not one read from this computer) says a mailbox has gone.
+  useForgetRemovedMailboxes(mailboxes.isSuccess && !mailboxes.isPlaceholderData && mailboxes.dataUpdatedAt > 0 ? (mailboxes.data?.mailboxes ?? []).map((m) => m.id) : null);
   const defaultBox = boxes.find((m) => m.is_default) ?? boxes[0];
   useEffect(() => setDefaultMailbox(defaultBox ? String(defaultBox.id) : null), [defaultBox]);
   const localStore = mailboxes.isSuccess && boxes.length === 0;
@@ -146,6 +149,7 @@ function MailWorkspace({ active }: ModuleProps) {
   const shared = useSharedSync(active && boxes.length > 0);
   const allCounts = useAllCounts(active && boxes.length > 1);
   const pending = usePendingMail();
+  useServerStateOnRefusal(pending.data);
   const localBytes = useLocalStore();
   const { prefs: globalPrefs, set: setGlobalPrefs, loaded: prefsLoaded } = useMailPrefs();
   const outgoing = useOutgoing();
@@ -165,26 +169,27 @@ function MailWorkspace({ active }: ModuleProps) {
   const allRole = unified && !view ? (folder === 'spam' ? 'junk' : isAllRole(folder) ? folder : null) : null;
   const virtualOutbox = allRole === 'outbox';
 
+  const listKey = ['mail', 'messages', unified ? 'unified' : effectiveBox, folder, serverFilters(filters).join(','), threaded];
+  const listQuery = (pageParam: number) =>
+    unified
+      ? { unified: 1, folder, page: pageParam, per_page: 50, ...(serverFilters(filters).length ? { filters: serverFilters(filters).join(',') } : {}) }
+      : place.label !== null
+        ? { folder, page: pageParam, per_page: 50 }
+        : withMailbox({ folder, page: pageParam, per_page: 50, ...(serverFilters(filters).length ? { filters: serverFilters(filters).join(',') } : {}), ...(threaded ? { threaded: 1 } : {}), sort: prefs.sort ?? 'date', dir: prefs.dir ?? 'desc' }, effectiveBox);
   const list = useInfiniteQuery({
-    queryKey: ['mail', 'messages', unified ? 'unified' : effectiveBox, folder, serverFilters(filters).join(','), threaded],
+    queryKey: listKey,
     initialPageParam: 1,
     queryFn: ({ pageParam, signal }) => {
       const combined = { page: pageParam, per_page: 50, ...(serverFilters(filters).length ? { filters: serverFilters(filters).join(',') } : {}) };
-      const byName = () =>
-        apiGetMeta<MessagePage>(
-          '/api/mail/messages',
-          unified
-            ? { unified: 1, folder, ...combined }
-            : place.label !== null
-              ? { folder, page: pageParam, per_page: 50 }
-              : withMailbox({ folder, page: pageParam, per_page: 50, ...(serverFilters(filters).length ? { filters: serverFilters(filters).join(',') } : {}), ...(threaded ? { threaded: 1 } : {}), sort: prefs.sort ?? 'date', dir: prefs.dir ?? 'desc' }, effectiveBox),
-          signal,
-        );
+      const byName = () => apiGetMeta<MessagePage>('/api/mail/messages', listQuery(pageParam), signal);
       return allRole ? allAccountsPage(allRole, combined, signal, byName) : byName();
     },
     getNextPageParam: (last, pages) => (last.data.has_more ? pages.length + 1 : undefined),
     enabled: (mailboxes.isSuccess || mailboxes.isError) && folder !== 'outbox',
   });
+  // The list's first page from this computer at once, then the server's (worksuite-desktop#162). All Accounts' folders
+  // are assembled from several answers, so they wait for the server.
+  useLocalFirst<MessagePage>(listKey, folder !== 'outbox' && !allRole && (unified || place.label !== null || !!effectiveBox) ? { path: '/api/mail/messages', query: listQuery(1) } : null, (r) => ({ pages: [r], pageParams: [1] }));
   const localDrafts = useLocalDrafts(active && (allRole === 'drafts' || boxes.length > 1));
   const sending = queuedSends(pending.data ?? []);
   const running = shared.running;
@@ -369,6 +374,15 @@ function MailWorkspace({ active }: ModuleProps) {
   // (The update returns the same list when there is nothing to name, so React does not render again.)
   const nameTab = (subject: string, from: string) => setTabs((ts) => (ts.some((t) => t.key === currentKey && (!t.subject || !t.from)) ? ts.map((t) => (t.key === currentKey ? { ...t, subject: t.subject || subject, from: t.from || from } : t)) : ts));
   const at = flat.findIndex((r) => r.key === currentKey);
+  // The next few messages are fetched ahead (unread stays unread), so moving down the list opens each at once (#162).
+  const ahead = at >= 0 && !offline && active ? flat.slice(at + 1, at + 1 + PREFETCH_AHEAD).map((r) => ({ uid: String(r.row.id), folder: r.row.folder_slug ?? folder, mailbox: rowMailbox(r.row, effectiveBox) })) : [];
+  const aheadKey = ahead.map((r) => `${r.mailbox ?? ''}:${r.folder}:${r.uid}`).join(',');
+  useEffect(() => {
+    if (!aheadKey) return;
+    const t = setTimeout(() => prefetchMessages(qc, ahead), 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the messages ahead are named by aheadKey
+  }, [aheadKey, qc]);
   const move = (by: number) => {
     const i = step(flat, at, by);
     if (i >= 0 && flat[i]) openRow(flat[i]);

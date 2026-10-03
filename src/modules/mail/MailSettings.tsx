@@ -27,6 +27,7 @@ import { AccountAvatar } from './parts';
 import type { MailPrefs, Mailbox, SyncMailbox } from './types';
 import type { MailStoreStats } from '@shared/types';
 import { SyncButton } from '../../components/SyncButton';
+import { forgetMailbox } from './localFirst';
 
 /**
  * Settings › Mail: the accounts and what this computer keeps (Accounts &
@@ -344,7 +345,11 @@ function ManageMailbox({ box, onClose }: { box: Mailbox; onClose: () => void }) 
           />
           {!b.shared ? (
             confirm ? (
-              <Button variant="danger" onClick={() => void act(() => apiDelete(`/api/mail/mailboxes/${b.id}`), text('Removed from WorkSuite. The mail stays with the provider.')).then(onClose)}>
+              <Button variant="danger" onClick={() => void act(async () => {
+                await apiDelete(`/api/mail/mailboxes/${b.id}`);
+                // Its mail kept on this computer goes with it (worksuite-desktop#162).
+                await forgetMailbox(b.id);
+              }, text('Removed from WorkSuite. The mail stays with the provider.')).then(onClose)}>
                 Remove for good
               </Button>
             ) : (
