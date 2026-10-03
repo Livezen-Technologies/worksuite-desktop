@@ -5,6 +5,12 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.129 — 2026-10-03
+
+- **What a bid costs (#159).** Each tender has an **Expenses** tab beside Budget: total spent, pending approval, reimbursable, and spent against the planned bid budget ("Spent LKR 18,500 of LKR 25,000 planned (74%)", with a warning when over). **+ Add expense** and the quick categories (courier, travel, printing, bid bond / security, document purchase…) open the Expense form with the tender already filled in; **Link existing expense** picks one of your claims that isn't on a tender yet. Clicking a row opens the claim as Expenses shows it — approval stays there — with Open in Expenses, Mark refunded (for bid bonds) and Unlink. Overview shows **Bid cost so far**, a lost or cancelled tender shows what was written off, History records each expense, and Reports has **Bid cost by tender** with cost per win.
+- In Expenses, a claim can be **Linked to** a tender, claims can be filtered by tender, and the claim shows its tender with a link back.
+- Needs the server update (Expense migration `2026-10-13-000100_ClaimLinkedToAndRefunds`; the planned bid budget uses Tender V2's budget table).
+
 ## 0.2.128 — 2026-10-03
 
 - **Pictures in email, done properly (#163).** Remote pictures stay off until you choose: a bar says how many are blocked, with **Show images**, **Always show from this sender** and (for company domains) **…from this domain**. They load only through WorkSuite's image proxy, never straight from the sender, and blocked ones are neat placeholders of the right size instead of broken icons. Tracking pixels are removed even when pictures are on, and the bar says how many. **Settings › Mail › Images & media** sets the picture mode, trusted senders and domains (synced across your devices), whether your own company's domains are trusted, and auto-download of attachments by size, network, file type and folder. Junk and mail that fails sender authentication never load pictures by themselves.
