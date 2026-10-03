@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.6.1 — 2026-10-03
+
+- A bell entry when a WorkSuite update is ready, once per version (#205).
+
 ## 1.6.0 — 2026-10-03
 
 - Settings for Files: choose chat, in-app and email (instant, daily summary or off) for shares, access changes and comments (#164).
