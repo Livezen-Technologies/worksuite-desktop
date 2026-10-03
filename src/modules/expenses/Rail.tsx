@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { canAct, type Org } from './api';
+import { PrimaryActionButton } from '../../components/PrimaryAction';
 
 /**
  * The Expenses rail, ordered by the working day rather than the data model:
@@ -148,9 +149,7 @@ export function ExpensesRail({
       <div className="flex flex-col gap-2 px-2.5 pt-3.5 pb-1">
         <OrgSwitcher orgs={orgs} selected={selected} onSelect={onSelect} onFavourite={onFavourite} />
         {onFile ? (
-          <button type="button" data-guide="expenses.file" onClick={onFile} className="flex h-8 items-center justify-center gap-1.5 rounded-[8px] bg-primary text-[12.5px] font-bold text-white hover:bg-primary-hover">
-            <Icon name="plus" size={14} /> File an expense
-          </button>
+          <PrimaryActionButton data-guide="expenses.file" label="File an expense" onClick={onFile} />
         ) : null}
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2.5 pb-2.5 scroll-thin">

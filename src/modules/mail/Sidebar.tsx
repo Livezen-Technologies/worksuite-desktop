@@ -6,6 +6,7 @@ import { text } from '../../core/i18n';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { type MenuSection } from '../../components/Menu';
+import { PrimaryActionButton, SidebarIconButton } from '../../components/PrimaryAction';
 import { Button, DATA_TEXT, Kbd, Modal, Spinner, TextField, cx } from '../../components/ui';
 import { ContextMenu } from './MessageMenus';
 import { mailKeys, useFolders, useLabels } from './api';
@@ -50,6 +51,8 @@ export interface SidebarProps {
   pending: number;
   cacheDays: number;
   onCompose: () => void;
+  /** The ⌄ part of New email: from a template, in a new window, an event, a contact (worksuite-desktop#171). */
+  newMenu?: MenuSection[];
   onSearch: () => void;
   onAddMailbox: () => void;
   onPick: (p: Partial<Place>) => void;
@@ -163,13 +166,8 @@ export function MailSidebar(p: SidebarProps) {
   return (
     <nav aria-label="Mail" className="flex w-[260px] shrink-0 flex-col border-r border-line bg-surface">
       <div className="flex gap-2 p-3 pb-1">
-        <Button data-guide="mail.compose" variant="accent" size="action-lg" icon="compose" className="flex-1" onClick={p.onCompose} title={text('New email (N)')} aria-keyshortcuts="N">
-          <span className="min-w-0 flex-1 text-left">{text('New email')}</span>
-          <Kbd tone="accent" aria-hidden>
-            N
-          </Kbd>
-        </Button>
-        <Button variant="glass" size="action-icon" icon="search" onClick={p.onSearch} aria-label={text('Search mail')} title={text('Search mail (/)')} />
+        <PrimaryActionButton data-guide="mail.compose" label={text('New email')} shortcut="N" onClick={p.onCompose} menu={p.newMenu} menuLabel={text('New')} className="flex-1" />
+        <SidebarIconButton icon="search" onClick={p.onSearch} label={text('Search mail')} shortcut="/" />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2 scroll-thin">
         {p.favorites?.length ? (

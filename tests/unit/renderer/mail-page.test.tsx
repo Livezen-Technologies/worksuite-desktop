@@ -143,26 +143,38 @@ describe('the sidebar', () => {
     expect(await screen.findByText('Local store 412 MB')).toBeTruthy();
   });
 
-  it('leads with an accent New email button whose N chip is the wired shortcut, and a glass search button (#148)', async () => {
+  it('leads with the shared primary New email split button, the shortcut in its tooltip, and a Files-style search button (#171)', async () => {
     show();
     const nav = await screen.findByRole('navigation', { name: 'Mail' });
     const compose = within(nav).getByRole('button', { name: 'New email' });
-    // The chip is decoration; the shortcut is named for assistive tech, and N really composes.
+    // The shortcut is in the tooltip and named for assistive tech; no chip inside the button.
     expect(compose.getAttribute('aria-keyshortcuts')).toBe('N');
-    const chip = compose.querySelector('kbd')!;
-    expect(chip.textContent).toBe('N');
-    expect(chip.getAttribute('aria-hidden')).toBe('true');
-    expect(compose.className).toContain('text-white');
+    expect(compose.getAttribute('title')).toBe('New email (N)');
+    expect(compose.querySelector('kbd')).toBeNull();
+    expect(compose.className).toContain('bg-primary');
+    expect(compose.className).toContain('h-10');
     expect(compose.className).toContain('focus-visible:outline-2');
-    expect(compose.className).toContain('motion-safe:enabled:hover:-translate-y-px');
-    expect(compose.className).not.toMatch(/(^|\s)(enabled:)?hover:-translate-y-px/);
+    // Flat with a quiet shadow: no brand glow.
+    expect(compose.className).not.toContain('color-mix');
     const search = within(nav).getByRole('button', { name: 'Search mail' });
     expect(search.getAttribute('title')).toBe('Search mail (/)');
-    expect(search.className).toContain('bg-glass');
-    expect(search.className).toContain('h-11 w-11');
-    expect(search.querySelector('kbd')).toBeNull();
+    expect(search.className).toContain('h-10 w-10');
+    expect(search.className).toContain('border-line');
     fireEvent.keyDown(document.body, { key: 'n' });
     expect(await screen.findByRole('form', { name: 'New email' })).toBeTruthy();
+  });
+
+  it('offers the New email dropdown: template, new window, event invite and contact (#171)', async () => {
+    show();
+    const side = await screen.findByRole('navigation', { name: 'Mail' });
+    fireEvent.click(within(side).getByRole('button', { name: 'More new email options' }));
+    const menu = await screen.findByRole('menu', { name: 'New' });
+    for (const label of ['New email', 'New email from template…', 'New email in a new window', 'New event invite', 'New contact']) {
+      expect(within(menu).getAllByRole('menuitem', { name: new RegExp(`^${label}`) })[0]).toBeTruthy();
+    }
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /^New event invite/ }));
+    // Another module's route opens through the app's tabs.
+    await waitFor(() => expect(nav.navigate.mock.calls.some((c) => c[0] === '/calendar?new=1')).toBe(true));
   });
 
   it('opens a smart view as the combined list narrowed', async () => {

@@ -6,6 +6,7 @@ import { dayWords, todayInZone } from '../../core/time';
 import { app } from '../../core/app-state';
 import { errorMessage, isMac } from '../../core/bridge';
 import { text } from '../../core/i18n';
+import type { MenuSection } from '../../components/Menu';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
@@ -17,7 +18,7 @@ import { useVips } from './PeopleCard';
 import { TodoPane, nextSlot } from './TodoPane';
 import type { ModuleProps } from '../registry';
 import { AddMailbox } from './AddMailbox';
-import { messageAction, moveMessage, useLocalStore, useMailPrefs, useMailboxes, usePendingMail, useViewCounts, type MessageActionName } from './api';
+import { messageAction, moveMessage, useTemplates, useLocalStore, useMailPrefs, useMailboxes, usePendingMail, useViewCounts, type MessageActionName } from './api';
 import { registerCommand, runCommand } from '../../core/commands';
 import { MAIL_COMMANDS, bindings, commandFor, isPlain, keyLabel, keyOf, type MailCommandId } from './keymap';
 import { GoToFolder, ShortcutSheet } from './Shortcuts';
@@ -100,6 +101,27 @@ function MailWorkspace({ active }: ModuleProps) {
   const controls = useRef<ViewControls | null>(null);
   const [composeRoute, setComposeRoute] = useState<string | null>(null);
   const openCompose = (seed: ComposeSeed) => setCompose((c) => ({ seed, shown: true, n: (c?.n ?? 0) + 1 }));
+  const templates = useTemplates(true);
+  const templateItems = (templates.data?.templates ?? []).map((t) => ({ id: `t${t.id}`, label: t.name, icon: 'file-text', onSelect: () => openCompose({ mode: 'new', templateId: t.id }) }));
+  const newMenu: MenuSection[] = [
+    {
+      id: 'mail',
+      items: [
+        { id: 'new', label: text('New email'), icon: 'compose', shortcut: 'N', onSelect: () => openCompose({ mode: 'new' }) },
+        templateItems.length
+          ? { id: 'template', label: text('New email from template…'), icon: 'file-text', submenu: [{ id: 'templates', items: templateItems }] }
+          : { id: 'template', label: text('New email from template…'), icon: 'file-text', disabled: true, reason: templates.isLoading ? text('Loading templates…') : text('No templates yet: add them in Settings › Mail.') },
+        { id: 'window', label: text('New email in a new window'), icon: 'app-window', onSelect: () => openInWindow('/mail?compose=1', text('New email')) },
+      ],
+    },
+    {
+      id: 'other',
+      items: [
+        { id: 'event', label: text('New event invite'), icon: 'calendar-plus', onSelect: () => navigate('/calendar?new=1') },
+        { id: 'contact', label: text('New contact'), icon: 'user-plus', onSelect: () => navigate('/contacts?new=1') },
+      ],
+    },
+  ];
   if (query.get('compose') === '1' && composeRoute !== route) {
     setComposeRoute(route);
     // `?compose=1&to=a@b` — a new message to somebody (Contacts' Email), or a mailto: link with cc, subject and body.
@@ -868,6 +890,7 @@ function MailWorkspace({ active }: ModuleProps) {
               pending={mailPending.length}
               cacheDays={cacheDays}
               onCompose={() => openCompose({ mode: 'new' })}
+              newMenu={newMenu}
               onSearch={() => setSearching(search)}
               onAddMailbox={() => setAdding(true)}
               onPick={pick}

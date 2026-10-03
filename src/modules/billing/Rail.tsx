@@ -6,6 +6,7 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { cx } from '../../components/ui';
 import { searchBilling } from './api';
+import { PrimaryActionButton } from '../../components/PrimaryAction';
 
 /**
  * The Billing rail (BillRail): the company picker, New invoice, a search over
@@ -97,9 +98,7 @@ export function BillRail({ view, draftsOnly, onPick, onDrafts, onOnAccount, onNe
           </Select>
         ) : null}
         {canCreate ? (
-          <button type="button" data-guide="billing.new-invoice" onClick={onNew} className="flex h-[38px] items-center justify-center gap-1.5 rounded-[9px] bg-primary font-bold text-white hover:bg-primary-hover">
-            <Icon name="plus" size={16} /> New invoice
-          </button>
+          <PrimaryActionButton data-guide="billing.new-invoice" label="New invoice" onClick={onNew} />
         ) : null}
         <div className="relative">
           <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setQ('')} placeholder="Search billing" aria-label="Search billing" className="h-8 w-full rounded-[8px] border border-line bg-surface px-2.5 text-[12.5px] text-ink outline-none focus:border-primary" />

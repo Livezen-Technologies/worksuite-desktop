@@ -2,6 +2,7 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { cx } from '../../components/ui';
 import type { Company } from './api';
+import { PrimaryActionButton } from '../../components/PrimaryAction';
 
 /**
  * The Tenders rail, ordered by the working week rather than the data model:
@@ -79,9 +80,7 @@ export function TenderRail({
           </Select>
         ) : null}
         {onNew ? (
-          <button type="button" onClick={onNew} className="flex h-8 items-center justify-center gap-1.5 rounded-[8px] bg-primary text-[12.5px] font-bold text-white hover:bg-primary-hover">
-            <Icon name="plus" size={14} /> New tender
-          </button>
+          <PrimaryActionButton label="New tender" onClick={onNew} />
         ) : null}
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2.5 pb-2.5 scroll-thin">
