@@ -162,6 +162,22 @@ describe('the tab strip, torn off (FR-NAV-05)', () => {
     expect(detached().at(-1)?.[1]).toEqual({ route: '/mail', title: 'Mail', at: undefined });
   });
 
+  // worksuite-desktop#155: tabs as wide as their title, the same padding on each, never wider than 200px.
+  it('sizes each tab to its title within a maximum width', () => {
+    openTab('/mail', { title: 'Mail' });
+    render(<TabStrip />);
+    for (const tab of screen.getAllByRole('tab')) {
+      const classes = tab.className.split(/\s+/);
+      expect(classes).toContain('px-3');
+      expect(classes).toContain('max-w-[200px]');
+      expect(classes.some((c) => /^min-w-\[\d+px\]$/.test(c))).toBe(false);
+    }
+    // "+" brings Home forward rather than opening a second one.
+    fireEvent.click(screen.getByRole('button', { name: /new tab/i }));
+    expect(tabsStore.get().tabs.filter((t) => t.app === 'home')).toHaveLength(1);
+    expect(tabsStore.get().tabs.find((t) => t.id === tabsStore.get().activeId)?.app).toBe('home');
+  });
+
   it('takes a window dropped between two tabs in at that place', async () => {
     openTab('/mail', { title: 'Mail' });
     render(<TabStrip />);
