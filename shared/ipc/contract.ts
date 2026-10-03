@@ -395,6 +395,7 @@ export const contract = {
   'ring:state': ch(none, { session: true, whileLocked: true }),
   'ring:join': ch(z.object({ id: z.number().int().positive() }), { session: true, rate: 4 }),
   'ring:silence': ch(z.object({ id: z.number().int().positive(), on: z.boolean() }), { session: true, rate: 10 }),
+  'ring:pass': ch(z.object({ id: z.number().int().positive() }), { session: true, rate: 4 }),
   // Multi-window docking (FR-NAV-05/07): tear a tab off into its own window, and dock it back.
   'windows:detach': ch(
     z.object({ route, title: z.string().max(200).optional(), at: z.object({ x: z.number().int(), y: z.number().int() }).optional() }),
@@ -1260,6 +1261,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs {
   'ring:state': WebchatRingState;
   'ring:join': boolean;
   'ring:silence': void;
+  'ring:pass': boolean;
   'windows:detach': { id: number };
   'windows:dock': void;
   'windows:toMain': void;

@@ -1094,6 +1094,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       return (p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) || notifications.pausedUntilIso() !== null;
     },
     open: (id) => navigate({ route: `/chat?view=website&website=${id}`, source: 'notification' }),
+    // This installation as a ringing device (RING-10): the registered device's id, stable across restarts.
+    deviceId: () => {
+      const d = Number(device.current()?.id);
+      return Number.isInteger(d) && d > 0 ? `desktop-${d}` : 'desktop-unregistered';
+    },
+    focused: () => !!windows.getMain()?.isFocused(),
     onChanged: (s) => {
       broadcast('ring:changed', s);
       const prefs = settings.effective().webchatRinging;

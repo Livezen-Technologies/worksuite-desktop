@@ -5,6 +5,27 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.105: Website chats ring on one device, and stop for a reason
+
+With WorkSuite's ring sessions (the server's Communication 1.11.0 and its migration), the call-style ringing of the
+Website Live Chat SRS works across your devices:
+
+- **One device rings.** This computer tells WorkSuite it is here to ring, every 20 seconds. While it runs it plays the
+  ring and your browser tabs stay quiet; choose the browser, or every device, in **Settings › Notifications › Website
+  chats › Where to ring**, which also says whether this computer is the one that rings. If this computer sleeps, your
+  browser takes the ring within 45 seconds. When another device has it, the call window still shows the chat, without
+  sound, and says so.
+- **Silence follows you.** Silencing a chat here silences it on your other devices too, until it is at risk — then it
+  rings again, louder, everywhere. An at-risk chat cannot be silenced.
+- **A chat given to you** shows how long until it passes on, and **Pass to next** hands it straight to the next
+  available agent (or to everybody, when nobody else is available).
+- **Why it stopped** is said: who joined, the visitor left the site before anyone joined (the chat is then in Missed
+  chats), the visitor ended it, it was closed, or the visitor was blocked.
+
+With an older WorkSuite server, ringing works as in 0.2.44.
+
+---
+
 ## 2026-10-03 — 0.2.104: Answer a website visitor from the notification, or in a small window
 
 The last two desktop parts of the Website Live Chat SRS's shared chat kit (ENH-WCHAT-02):

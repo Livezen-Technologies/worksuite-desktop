@@ -18,7 +18,7 @@ vi.mock('../../../src/modules/calls/tones', () => ({ playTone: vi.fn(() => ({ st
 
 import { call } from '../../../src/core/bridge';
 import { playTone } from '../../../src/modules/calls/tones';
-import { RingingBar, WebchatRingWindow, stageLabel, waited } from '../../../src/modules/chat/website/Ringing';
+import { RingingBar, WebchatRingWindow, clock, stageLabel, waited } from '../../../src/modules/chat/website/Ringing';
 
 const chat = (over: Partial<WebchatRingChat>): WebchatRingChat => ({
   id: 7, visitor: 'Nimali', site: 'creativefx.lk', page: 'Pricing', place: 'Kandy, Sri Lanka', device: 'desktop · Chrome', returning: true, preview: 'Do you ship to Galle?',
@@ -65,6 +65,24 @@ describe('the website-chat call window (RING-UI-06)', () => {
     await screen.findByText('A website visitor');
     expect(screen.getByText('Unlock WorkSuite to see who.')).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Join chat' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('a chat given to me counts down to its handover, and passes straight on (RING-UI-02)', async () => {
+    const at = new Date(Date.now() + 18_000).toISOString();
+    vi.mocked(call).mockResolvedValue(state({ chats: [chat({ mine: true, by: 'Dilini', handoverAt: at })] }) as never);
+    render(<WebchatRingWindow />);
+    await screen.findByText(/Passes to the next available agent in 0:1[78] if you don't join/);
+    expect(screen.queryByRole('button', { name: 'Silence' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Pass to next' }));
+    expect(call).toHaveBeenCalledWith('ring:pass', { id: 7 });
+    expect(clock(78)).toBe('1:18');
+  });
+
+  it('says when another of my devices has the ring', async () => {
+    vi.mocked(call).mockResolvedValue(state({ tone: 'off', elsewhere: true }) as never);
+    render(<WebchatRingWindow />);
+    await screen.findByText('Ringing on your other device — shown here without sound');
+    expect(vi.mocked(playTone)).not.toHaveBeenCalled();
   });
 
   it('shows how the ring ended', async () => {

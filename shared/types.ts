@@ -471,8 +471,10 @@ export interface WebchatRingChat {
   mine: boolean;
   /** Who assigned it, for a chat that is mine. */
   by: string | null;
-  /** Silenced by me on this computer until it is at risk (RING-11, locally). */
+  /** Silenced by me until it is at risk: on all my devices where the server keeps ring sessions, else on this computer (RING-11). */
   silenced: boolean;
+  /** A chat given to me that I have not joined passes on to the next available agent at this server stamp (RING-05, RING-12). */
+  handoverAt?: string | null;
 }
 
 export interface WebchatRingState {
@@ -487,6 +489,10 @@ export interface WebchatRingState {
   hidden: boolean;
   /** Ctrl/Cmd+Shift+J is registered now. */
   shortcut: boolean;
+  /** Another of my devices plays the ring — the browser I chose, say — so this computer shows it without sound (RING-10). */
+  elsewhere?: boolean;
+  /** Whether the server has this computer play my ring (RING-10, RING-49); null where it does not choose. */
+  ringHere?: boolean | null;
 }
 
 export interface PreferenceLock {

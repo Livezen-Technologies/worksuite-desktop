@@ -76,6 +76,7 @@ export const INVOKE_CHANNELS = [
   'ring:state',
   'ring:join',
   'ring:silence',
+  'ring:pass',
   'windows:detach',
   'windows:dock',
   'windows:toMain',

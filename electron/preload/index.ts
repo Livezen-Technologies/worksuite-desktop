@@ -129,6 +129,7 @@ const api = {
     state: call('ring:state'),
     join: call('ring:join'),
     silence: call('ring:silence'),
+    pass: call('ring:pass'),
   },
   tabs: {
     save: call('tabs:save'),

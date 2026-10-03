@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.13.0 — 2026-10-03
+
+**Added**
+
+- website chats ring through the server's ring sessions (WS-WCHAT RING-49, RING-10/11/05/12): this computer heartbeats as a ringing device and stays silent, window still showing, while another of your devices has the ring; Silence goes to the server and holds on all your devices until at risk; a chat given to you counts down to its handover with Pass to next; the window says why a ring stopped — the visitor left, ended it, it was closed or blocked, or who joined. An older server without ring sessions rings as before
+
 ## 1.12.0 — 2026-10-03
 
 **Added**

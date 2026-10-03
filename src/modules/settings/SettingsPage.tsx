@@ -1,6 +1,6 @@
 import { LivestreamDestinations } from '../meet/Livestreaming';
 import { DarkProfilePicker } from './Appearance';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, useRef, type ReactNode } from 'react';
 import { categoryVisible } from '@shared/access';
 import { QUICK_ASK_SHORTCUTS, type AiDisplay, type Preferences, type RemoteControlIdentity, type RemoteControlView } from '@shared/types';
@@ -23,6 +23,8 @@ import { Button, Chip, Modal, Switch, TextField, cx } from '../../components/ui'
 import { Select } from '../../components/Select';
 import type { ModuleProps } from '../registry';
 import { playTone } from '../calls/tones';
+import { useRingState } from '../chat/website/Ringing';
+import { apiGet, request } from '../../core/api';
 import { shortcutLabel, useWriter, writerProblem } from '../ai/writer';
 import { ModuleAccess } from '../ai/ModuleAccess';
 import { discoverStudioModels, setStudioModels, STUDIO_KEY, studioState, testStudioModel, useStudioStatus, type StudioDiscovery } from '../ai/studio';
@@ -395,6 +397,18 @@ function WebchatRingingPrefs({ prefs }: { prefs: Preferences }) {
   const r = prefs.webchatRinging;
   const set = (patch: Partial<Preferences['webchatRinging']>) => void updatePrefs({ webchatRinging: { ...r, ...patch } });
   const [testing, setTesting] = useState(false);
+  const ring = useRingState();
+  const qc = useQueryClient();
+  // Where my ring plays is kept on the server, for every device of mine (RING-10, RING-29); an older server has no say.
+  const where = useQuery({ queryKey: ['website', 'ring-prefs'], queryFn: ({ signal }) => apiGet<{ prefs: { ring_where: RingWhere } }>('/api/chat/ring/prefs', undefined, signal), retry: false });
+  const setWhere = async (v: RingWhere) => {
+    try {
+      await request('PUT', '/api/chat/ring/prefs', { body: { ring_where: v } });
+      void qc.invalidateQueries({ queryKey: ['website', 'ring-prefs'] });
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
   const test = () => {
     if (testing) return;
     setTesting(true);
@@ -408,6 +422,25 @@ function WebchatRingingPrefs({ prefs }: { prefs: Preferences }) {
     <>
       <h3 className="mt-8 mb-1 text-[16px] font-bold text-ink">Website chats</h3>
       <p className="mb-1 text-[13px] text-ink-2">A chat from your websites rings on this computer until someone joins it — while WorkSuite runs, with its window closed too.</p>
+      {ring.ringHere === true ? (
+        <p className="my-2 flex items-center gap-2 rounded-[10px] bg-success-bg px-3 py-2 text-[13px] text-success"><Icon name="check-circle" size={15} /> This computer rings for you. Your browser tabs show the chat without sound.</p>
+      ) : ring.ringHere === false ? (
+        <p className="my-2 flex items-center gap-2 rounded-[10px] bg-subtle px-3 py-2 text-[13px] text-ink-2"><Icon name="bell-off" size={15} /> Another of your devices rings for you. This computer shows the chat without sound.</p>
+      ) : null}
+      {where.isSuccess ? (
+        <Row label="Where to ring" hint="Only one of your devices rings at a time; the others show the chat without sound.">
+          <Select<RingWhere>
+            label="Where to ring"
+            value={where.data.prefs.ring_where}
+            options={[
+              { value: 'desktop_first', label: 'This app when it is running, else the browser' },
+              { value: 'browser', label: 'The browser first' },
+              { value: 'all', label: 'Every device' },
+            ]}
+            onValueChange={(v) => void setWhere(v)}
+          />
+        </Row>
+      ) : null}
       <Row label="Ring over other apps" hint="A small window at the bottom right, over full-screen apps where the system allows. Off: the bar under your tabs and the tray only.">
         <Switch label="Ring over other apps" checked={r.window} onChange={(v) => set({ window: v })} />
       </Row>
@@ -438,6 +471,9 @@ function WebchatRingingPrefs({ prefs }: { prefs: Preferences }) {
     </>
   );
 }
+
+/** Where a person's website-chat ring plays, kept on the server for all their devices (RING-10). */
+type RingWhere = 'desktop_first' | 'browser' | 'all';
 
 const WEBSITE = 'https://worksuiteone.com/';
 

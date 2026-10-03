@@ -72,6 +72,22 @@ export function stageLabel(c: Pick<WebchatRingChat, 'atRisk' | 'mine' | 'stage' 
 const join = (id: number) =>
   void call('ring:join', { id }).catch((e) => toast('error', errorMessage(e)));
 const silence = (id: number, onOff: boolean) => void call('ring:silence', { id, on: onOff }).catch(() => undefined);
+const pass = (id: number) => void call('ring:pass', { id }).catch((e) => toast('error', errorMessage(e)));
+
+/** The server's accept time by default: how long a chat given to me rings before it passes on (RING-05). */
+const ACCEPT_SECONDS = 60;
+
+/** m:ss for a count of seconds. */
+export function clock(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/** Seconds until a chat given to me passes on, or null when it does not (RING-05, RING-12). */
+export function handoverIn(handoverAt: string | null | undefined, now: number): number | null {
+  if (!handoverAt) return null;
+  return Math.max(0, Math.round((parseTs(handoverAt).getTime() - now) / 1000));
+}
 
 /**
  * The call window (RING-UI-06, RING-23): the top chat as a card — who, where,
@@ -85,6 +101,7 @@ export function WebchatRingWindow() {
   useRingTone(s);
   const [top, ...rest] = s.chats;
   const joinKey = isMac ? '⌘⇧J' : 'Ctrl+Shift+J';
+  const handover = top ? handoverIn(top.handoverAt, now) : null;
 
   if (!top) {
     return (
@@ -121,13 +138,28 @@ export function WebchatRingWindow() {
       </div>
       {!s.hidden && top.preview ? <p className="mx-4 mt-2 line-clamp-2 rounded-[8px] bg-[#16254F] px-2.5 py-1.5 text-[12.5px] text-[#E6ECFA]">“{top.preview}”</p> : null}
       {top.mine && top.by ? <p className="mx-4 mt-1.5 text-[11.5px] text-[#AFC0E8]">Assigned to you by {top.by}</p> : null}
+      {top.mine && handover !== null ? (
+        // A chat given to me passes on if I do not join it in time (RING-UI-02).
+        <div className="mx-4 mt-2" role="timer" aria-label={`Passes on in ${clock(handover)}`}>
+          <div className="h-1 overflow-hidden rounded-full bg-[#22305C]">
+            <div className="h-full rounded-full bg-[#8FA6E0] transition-[width] duration-1000 ease-linear" style={{ width: `${Math.min(100, (handover / ACCEPT_SECONDS) * 100)}%` }} />
+          </div>
+          <p className="mt-1 text-[11.5px] text-[#AFC0E8]">Passes to the next available agent in {clock(handover)} if you don't join</p>
+        </div>
+      ) : null}
       <div className="flex gap-2 px-4 pt-3">
         <button type="button" disabled={s.hidden} onClick={() => join(top.id)} className="h-11 flex-1 rounded-[9px] bg-[#3DD68C] text-[14px] font-bold text-[#0B2A1D] hover:brightness-105 disabled:opacity-50">
           Join chat
         </button>
-        <button type="button" onClick={() => silence(top.id, !top.silenced)} className="h-11 flex-1 rounded-[9px] border border-[#33477E] text-[14px] font-semibold hover:bg-white/5">
-          {top.silenced ? 'Unsilence' : 'Silence'}
-        </button>
+        {top.mine && handover !== null ? (
+          <button type="button" onClick={() => pass(top.id)} className="h-11 flex-1 rounded-[9px] border border-[#33477E] text-[14px] font-semibold hover:bg-white/5">
+            Pass to next
+          </button>
+        ) : (
+          <button type="button" onClick={() => silence(top.id, !top.silenced)} className="h-11 flex-1 rounded-[9px] border border-[#33477E] text-[14px] font-semibold hover:bg-white/5">
+            {top.silenced ? 'Unsilence' : 'Silence'}
+          </button>
+        )}
       </div>
       {rest.length ? (
         <ul className="mt-3 flex flex-col border-t border-[#22305C]" aria-label="Other chats waiting">
@@ -148,7 +180,7 @@ export function WebchatRingWindow() {
         </ul>
       ) : null}
       <p className="drag mt-auto px-4 pt-2 pb-2.5 text-[11px] text-[#8FA6E0]">
-        {s.outcome ? s.outcome.text : `Rings until someone joins${s.shortcut ? ` · ${joinKey} to join` : ''}`}
+        {s.outcome ? s.outcome.text : s.elsewhere ? 'Ringing on your other device — shown here without sound' : `Rings until someone joins${s.shortcut ? ` · ${joinKey} to join` : ''}`}
       </p>
     </div>
   );
