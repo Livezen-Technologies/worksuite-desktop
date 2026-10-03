@@ -50,6 +50,8 @@ export interface SidebarProps {
   onPick: (p: Partial<Place>) => void;
   onSyncAll: () => void;
   onSyncAccount: (id: number) => void;
+  /** Export a folder to .mbox or .eml (ENH-MAIL-03 DMO-DAT-03). */
+  onExport?: (box: Mailbox, slug: string, label: string) => void;
   /** Settings › Mail: accounts, offline and storage. */
   onSettings: () => void;
   /** Favourites (DMO-NAV-01): "key|label" — "4:label:Clients|Clients", "all:inbox|Inbox", "view:unread|Unread". */
@@ -527,6 +529,7 @@ function folderSections(m: FolderMenu, p: SidebarProps, onNewFolder: () => void)
       items: [
         { id: 'new', label: text('New folder'), icon: 'folder-plus', onSelect: onNewFolder },
         { id: 'sync', label: text('Sync {email}', { email: box.email }), icon: 'refresh', disabled: p.offline, reason: text('You’re offline — mail will sync when you reconnect'), onSelect: () => p.onSyncAccount(box.id) },
+        ...(m.slug && p.onExport ? [{ id: 'export', label: text('Export folder…'), icon: 'download', disabled: p.offline, reason: text('Available when you are back online.'), onSelect: () => p.onExport!(box, m.slug!, m.label) }] : []),
       ],
     });
   }

@@ -293,6 +293,21 @@ export const INVOKE_CHANNELS = [
   'office:readOffline',
   'office:writeOffline',
 
+  // Mail data files and safe links (ENH-MAIL-03 P4, shared/mail-files.ts): handles only, never a path or a file's bytes.
+  'mailfile:pick',
+  'mailfile:scan',
+  'mailfile:import',
+  'mailfile:progress',
+  'mailfile:cancel',
+  'mailfile:view',
+  'mailfile:saveAttachment',
+  'mailfile:close',
+  'mail:export',
+  'mail:exportCancel',
+  'mail:openLink',
+  // S/MIME (ENH-MAIL-03 DMO-SEC-05): a signature checked in the main process against the message's own bytes.
+  'smime:verify',
+
   'offline:status',
   'offline:pending',
   'offline:moduleBytes',
@@ -384,6 +399,9 @@ export const EVENT_CHANNELS = [
   'ai:localChanged',
   'ai:ocrProgress',
   'office:localChanged',
+  'mailfile:changed',
+  'mail:exportChanged',
+  'mail:link',
   ...POS_EVENT_CHANNELS,
 ] as const;
 

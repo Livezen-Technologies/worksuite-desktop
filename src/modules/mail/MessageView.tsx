@@ -25,6 +25,7 @@ import { folderName, plainText, securityVerdict } from './model';
 import { escapeHtml, highlightText, isDesignedMail, mailFrameDoc, sanitizeMailHtml } from './sanitize';
 import { TeamBar, TeamWork } from './Team';
 import { CategoryChip } from './parts';
+import { MarkerChips, RecallDialog, ReceiptBar, ReportDialog, SmimeChip, VoteBar, VoteTally, sendReceipt } from './MessageExtras';
 import type { ComposeSeed, MailPrefs, Mailbox, MessageContext, MessageDetail, MessageRef, MessageRow } from './types';
 
 /** A PDF attachment, by its type or its name. */
@@ -92,6 +93,9 @@ export function MessageView(p: MessageViewProps) {
   const { openInWindow, navigate } = useTab();
   const [ai, setAi] = useState<{ task: TextTask; title: string; lang?: string } | null>(null);
   const [source, setSource] = useState(false);
+  // Report phishing or junk, and recall (ENH-MAIL-03 DMO-SEC-02, DMO-CMP-10).
+  const [extra, setExtra] = useState<'phishing' | 'junk' | 'recall' | null>(null);
+  const [receiptAnswered, setReceiptAnswered] = useState<string | null>(null);
   const [menu, setMenu] = useState<'top' | 'bottom' | 'move' | 'label' | 'translate' | 'states' | null>(null);
   const statesBtn = useRef<HTMLButtonElement>(null);
   // Find in this message (DMO-SRC-06): matches are highlighted in the body.
@@ -173,7 +177,7 @@ export function MessageView(p: MessageViewProps) {
   };
   const print = () => {
     if (!m || !clean) return;
-    const html = `<h2 style="font-family:sans-serif">${escapeHtml(m.subject)}</h2><p style="font-family:sans-serif;color:#555">${escapeHtml(text('From'))} ${escapeHtml(m.from_name)} &lt;${escapeHtml(m.from_email)}&gt;<br>${escapeHtml(text('To'))} ${escapeHtml(m.to.join(', '))}<br>${escapeHtml(dateLabel(m.created_at))} ${escapeHtml(timeLabel(m.created_at))}</p><hr>${clean.html}`;
+    const html = `<h2 style="font-family:sans-serif">${escapeHtml(m.subject)}</h2><p style="font-family:sans-serif;color:#555">${escapeHtml(text('From'))} ${escapeHtml(m.from_name)} &lt;${escapeHtml(m.from_email)}&gt;<br>${escapeHtml(text('To'))} ${escapeHtml(m.to.join(', '))}<br>${escapeHtml(dateLabel(m.created_at))} ${escapeHtml(timeLabel(m.created_at))}</p><hr>${sanitizeMailHtml(m.body_html, { safeLinks: false }).html}`;
     void call('print:print', { html, title: m.subject || text('Email') }).catch((e) => toast('error', errorMessage(e)));
   };
   const downloadOriginal = () =>
@@ -212,7 +216,7 @@ export function MessageView(p: MessageViewProps) {
   const saveNote = async () => {
     if (!m || !clean) return;
     try {
-      const r = await apiPost<{ id: number }>('/api/notes', { title: m.subject || text('Email'), body: `<p><b>${escapeHtml(m.from_name || m.from_email)}</b> &lt;${escapeHtml(m.from_email)}&gt; · ${escapeHtml(dateLabel(m.created_at))}</p><hr>${clean.html}` });
+      const r = await apiPost<{ id: number }>('/api/notes', { title: m.subject || text('Email'), body: `<p><b>${escapeHtml(m.from_name || m.from_email)}</b> &lt;${escapeHtml(m.from_email)}&gt; · ${escapeHtml(dateLabel(m.created_at))}</p><hr>${sanitizeMailHtml(m.body_html, { safeLinks: false }).html}` });
       toast('success', text('Saved as a note.'));
       if (r?.id) navigate(`/notes?note=${r.id}`);
     } catch (e) {
@@ -281,6 +285,20 @@ export function MessageView(p: MessageViewProps) {
   useEffect(() => {
     if (m) onLoaded?.(m.subject, m.from_name || m.from_email);
   }, [m, onLoaded]);
+  // A read-receipt request answered by the person's setting (DMO-CMP-11): always — sent once per message on this computer.
+  const receiptTo = context.data?.markers?.read_receipt_to ?? null;
+  const receiptsPref = p.prefs.readReceipts ?? 'ask';
+  useEffect(() => {
+    if (!m || !receiptTo || receiptsPref !== 'always' || ref.folder === 'sent' || p.offline) return;
+    const key = `mail-receipt:${m.message_id}`;
+    try {
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, '1');
+    } catch {
+      return;
+    }
+    void sendReceipt(receiptTo, m.subject, ref.mailbox ?? null).catch(() => undefined);
+  }, [m, receiptTo, receiptsPref, ref.folder, ref.mailbox, p.offline]);
   const replied = useRef(false);
   useEffect(() => {
     if (p.autoReply && m && clean && !replied.current) {
@@ -324,6 +342,14 @@ export function MessageView(p: MessageViewProps) {
         items: [
           { id: 'contact', label: context.data?.sender?.contact_id ? text('Open sender in Contacts') : text('Add sender to contacts'), icon: 'user-plus', disabled: !canOpen('contacts') || p.offline, reason: text('Contacts is not available.'), onSelect: () => void addContact() },
           ...(where === 'top' ? [{ id: 'block', label: text('Block sender'), icon: 'warning', danger: true, disabled: p.offline, reason: text('Available when you are back online.'), onSelect: () => void block() }] : []),
+        ],
+      },
+      {
+        id: 'report',
+        items: [
+          { id: 'phishing', label: text('Report phishing'), icon: 'shield-alert', danger: true, disabled: p.offline || !ref.mailbox, reason: p.offline ? text('Available when you are back online.') : text('Only mail from a connected mailbox can be reported.'), onSelect: () => setExtra('phishing') },
+          { id: 'junk', label: text('Report junk'), icon: 'spam', disabled: p.offline || !ref.mailbox || ref.folder === 'spam', reason: p.offline ? text('Available when you are back online.') : text('Only mail from a connected mailbox can be reported.'), onSelect: () => setExtra('junk') },
+          ...(ref.folder === 'sent' ? [{ id: 'recall', label: text('Recall this message…'), icon: 'undo', disabled: p.offline || !m.message_id, reason: text('Available when you are back online.'), onSelect: () => setExtra('recall') }] : []),
         ],
       },
     ];
@@ -431,6 +457,9 @@ export function MessageView(p: MessageViewProps) {
                 <Chip tone="warning">{text('External')}</Chip>
               </span>
             ) : null}
+            <MarkerChips markers={context.data?.markers} />
+            {context.data?.markers?.smime === 'signed' && !p.offline ? <SmimeChip msgRef={ref} from={m.from_email} mailbox={ref.mailbox ?? null} /> : null}
+            {context.data?.markers?.smime === 'encrypted' ? <Chip tone="warning">{text('Encrypted (S/MIME)')}</Chip> : null}
             {p.account ? <Chip tone="indigo">{p.account.account_type === 'local_mailbox' ? text('WorkSuite Local') : p.account.shared ? p.account.email : p.account.provider_label ?? p.account.email}</Chip> : null}
             {m.labels?.map((l) => <Chip key={l.id}>{l.name}</Chip>)}
             {p.marks?.pinned ? (
@@ -497,6 +526,16 @@ export function MessageView(p: MessageViewProps) {
             {text('You don’t often get email from {email}.', { email: m.from_email })}
           </p>
         ) : null}
+        {context.data?.markers?.smime === 'encrypted' ? (
+          <p role="note" className="mx-6 mt-3 rounded-[8px] bg-warning-bg px-3 py-1.5 text-[12.5px] text-warning">{text('This message is encrypted with S/MIME. WorkSuite keeps no private keys, so it cannot be opened here — open it in the mail app that holds your certificate.')}</p>
+        ) : null}
+        {context.data?.markers?.vote.length && ref.folder !== 'sent' ? (
+          <VoteBar msgRef={ref} choices={context.data.markers.vote} subject={m.subject} onReply={(choice) => p.onReply({ mode: 'reply', to: m.from_email, subject: `${choice}: ${m.subject}`, body: choice, inReplyTo: m.message_id, mailbox: ref.mailbox })} />
+        ) : null}
+        {ref.folder === 'sent' && m.message_id && !p.offline ? <VoteTally messageId={m.message_id} /> : null}
+        {receiptTo && receiptsPref === 'ask' && ref.folder !== 'sent' && receiptAnswered !== m.message_id && !p.offline ? (
+          <ReceiptBar to={receiptTo} subject={m.subject} mailbox={ref.mailbox ?? null} onAnswered={() => setReceiptAnswered(m.message_id)} />
+        ) : null}
         {m.team && ref.mailbox ? <TeamBar msgRef={ref} m={m} me={me ? Number(me.id) : null} /> : null}
         <div className="flex shrink-0 flex-wrap items-center gap-2 px-6 pt-4">
           <AiChip label="Summarise" onClick={() => setAi({ task: 'summarize', title: text('Summary of this email') })} />
@@ -537,6 +576,16 @@ export function MessageView(p: MessageViewProps) {
         />
       ) : null}
       {source ? <SourceDialog msgRef={ref} onClose={() => setSource(false)} /> : null}
+      {extra === 'phishing' || extra === 'junk' ? (
+        <ReportDialog kind={extra} msgRef={ref} from={m.from_email} subject={m.subject} canBlock={!!ref.mailbox} onDone={() => (setExtra(null), p.onGone())} onClose={() => setExtra(null)} />
+      ) : null}
+      {extra === 'recall' && m.message_id ? (
+        <RecallDialog
+          messageId={m.message_id}
+          onReplace={() => p.onReply({ mode: 'new', to: m.to.join(', '), cc: m.cc.length ? m.cc.join(', ') : undefined, subject: m.subject, body: plainText(clean.html), mailbox: ref.mailbox })}
+          onClose={() => setExtra(null)}
+        />
+      ) : null}
     </article>
   );
 }

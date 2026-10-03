@@ -10,12 +10,12 @@ import { Menu, type MenuSection } from '../../components/Menu';
 import { Select } from '../../components/Select';
 import { DriveFilePicker, type DriveFileRow } from '../../components/DriveFilePicker';
 import { RichTextEditor } from '../../components/RichTextEditor';
-import { Button, Chip, ErrorNote, FileBadge, Modal, Spinner, cx } from '../../components/ui';
+import { Button, Chip, ErrorNote, FileBadge, Modal, Spinner, TextField, cx } from '../../components/ui';
 import { AiMenuButton } from '../ai/AiMenuButton';
 import { AiTextDialog } from '../ai/AiTextDialog';
 import { WRITING_TASKS, type TextTask } from '../ai/textTools';
 import { sendMessage, useQuickParts, useSignatures, useTemplates } from './api';
-import { cleanComposeHtml, composeBody, composeText, migrateDraft, parseQuote, pickSignature, sendChecks, signatureBlock, splitSignature, textToComposeHtml, type ComposeDraft } from './composeHtml';
+import { cleanComposeHtml, composeBody, composeText, migrateDraft, parseQuote, pickSignature, sendChecks, signatureBlock, splitSignature, textToComposeHtml, voteChoices, withVotePrompt, type ComposeDraft } from './composeHtml';
 import { MentionPopup } from './Mentions';
 import { mailboxLetter } from './model';
 import { sendAfterUndoWindow } from './outgoing';
@@ -99,6 +99,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   const templates = useTemplates(true);
   const quickParts = useQuickParts(true);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [voteDialog, setVoteDialog] = useState(false);
   const [partsOpen, setPartsOpen] = useState(false);
   const optionsBtn = useRef<HTMLSpanElement>(null);
   // A choice from the Options and Quick Parts menus, put into the draft right after (menus hand over data, not the draft's ref).
@@ -183,7 +184,8 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   // Read at the moment of sending: an address committed by the same keystroke is in it.
   const payload = (scheduleAt?: string) => {
     const d = latest.current;
-    const body = composeBody(d.html, d.quote);
+    const votes = voteChoices(d.options?.vote);
+    const body = withVotePrompt(composeBody(d.html, d.quote), votes, text('Vote by replying with one of: {choices}.', { choices: votes.join(', ') }));
     return {
       to: parseAddresses(d.to),
       cc: parseAddresses(d.cc),
@@ -506,6 +508,20 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
             { id: 'importance', label: text('Importance'), items: (['high', 'normal', 'low'] as const).map((l) => ({ id: l, label: l === 'high' ? text('High') : l === 'low' ? text('Low') : text('Normal'), radio: true, checked: (v.options?.importance ?? 'normal') === l, onSelect: () => setPending({ options: { importance: l === 'normal' ? undefined : l } }) })) },
             { id: 'sensitivity', label: text('Sensitivity'), items: (['normal', 'personal', 'private', 'confidential'] as const).map((l) => ({ id: l, label: { normal: text('Normal'), personal: text('Personal'), private: text('Private'), confidential: text('Confidential') }[l], radio: true, checked: (v.options?.sensitivity ?? 'normal') === l, onSelect: () => setPending({ options: { sensitivity: l === 'normal' ? undefined : l } }) })) },
             {
+              id: 'vote',
+              label: text('Voting buttons'),
+              items: [
+                ...([['none', text('None')], ['approve', text('Approve; Reject')], ['yesno', text('Yes; No')], ['yesnomaybe', text('Yes; No; Maybe')]] as const).map(([id, label]) => ({
+                  id: `vote-${id}`,
+                  label,
+                  radio: true,
+                  checked: id === 'none' ? !v.options?.vote?.length : (v.options?.vote ?? []).join('; ') === VOTE_PRESETS[id].join('; '),
+                  onSelect: () => setPending({ options: { vote: id === 'none' ? undefined : [...VOTE_PRESETS[id]] } }),
+                })),
+                { id: 'vote-custom', label: text('Your own choices…'), description: text('Counted in WorkSuite for recipients on this server; anyone else replies with a choice.'), onSelect: () => setVoteDialog(true) },
+              ],
+            },
+            {
               id: 'receipts',
               label: text('Receipts'),
               items: [
@@ -527,6 +543,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
         />
       ) : null}
       <MentionPopup editor={editorEl} onMention={mentioned} />
+      {voteDialog ? <CustomVote initial={v.options?.vote ?? []} onSave={(choices) => (setPending({ options: { vote: choices.length ? choices : undefined } }), setVoteDialog(false))} onClose={() => setVoteDialog(false)} /> : null}
       {checks ? (
         <Modal
           title={checks.includes('attachment') ? text('Did you mean to attach a file?') : text('Send without a subject?')}
@@ -581,5 +598,34 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       <span className="w-14 shrink-0 text-[13px] text-ink-3">{label}</span>
       <span className="flex min-w-0 flex-1 items-center gap-2">{children}</span>
     </div>
+  );
+}
+
+/** The voting buttons offered in the options menu (DMO-CMP-12). */
+const VOTE_PRESETS = { approve: ['Approve', 'Reject'], yesno: ['Yes', 'No'], yesnomaybe: ['Yes', 'No', 'Maybe'] } as const satisfies Record<string, readonly string[]>;
+
+/** Voting buttons in the sender's own words: two to six choices. */
+function CustomVote({ initial, onSave, onClose }: { initial: string[]; onSave: (choices: string[]) => void; onClose: () => void }) {
+  const [value, setValue] = useState(initial.join('; '));
+  const choices = voteChoices(value.split(/[;\n]/));
+  return (
+    <Modal
+      title={text('Your own voting buttons')}
+      labelledBy="mail-vote-title"
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={() => onSave(choices)} disabled={value.trim() !== '' && choices.length < 2}>
+            Use these
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-2 p-4 text-[13px]">
+        <TextField label={text('Choices, separated by ;')} value={value} onChange={(e) => setValue(e.target.value)} placeholder={text('Monday; Tuesday; Wednesday')} autoFocus />
+        <p className="text-[12px] text-ink-3">{text('Two to six choices. Recipients on this WorkSuite server vote with a button; anyone else replies with their choice.')}</p>
+      </div>
+    </Modal>
   );
 }

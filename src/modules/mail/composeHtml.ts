@@ -233,7 +233,7 @@ export interface ComposeDraft {
   names?: Record<string, string>;
   signed?: boolean;
   /** Importance, sensitivity and receipts (DMO-CMP-11/13). */
-  options?: { importance?: 'high' | 'low'; sensitivity?: 'personal' | 'private' | 'confidential'; read_receipt?: boolean; delivery_receipt?: boolean };
+  options?: { importance?: 'high' | 'low'; sensitivity?: 'personal' | 'private' | 'confidential'; read_receipt?: boolean; delivery_receipt?: boolean; vote?: string[] };
   v: 2;
 }
 
@@ -245,7 +245,30 @@ function draftOptions(o: Record<string, unknown>): NonNullable<ComposeDraft['opt
     ...(o.sensitivity === 'personal' || o.sensitivity === 'private' || o.sensitivity === 'confidential' ? { sensitivity: o.sensitivity } : {}),
     ...(o.read_receipt === true ? { read_receipt: true } : {}),
     ...(o.delivery_receipt === true ? { delivery_receipt: true } : {}),
+    ...(voteChoices(o.vote).length ? { vote: voteChoices(o.vote) } : {}),
   };
+}
+
+/** Voting buttons' choices (DMO-CMP-12): two to six short plain lines, no repeats. */
+export function voteChoices(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  const out: string[] = [];
+  for (const c of v) {
+    const t = String(c).replace(/[\p{Cc};]+/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
+    if (t && !out.some((o) => o.toLowerCase() === t.toLowerCase())) out.push(t);
+  }
+  return out.length >= 2 ? out.slice(0, 6) : [];
+}
+
+/**
+ * The line that lets anybody vote, whatever their mail app (DMO-CMP-12): a
+ * recipient on this WorkSuite server sees buttons; everybody else replies
+ * with a choice.
+ */
+export function withVotePrompt(body: { html: string; text: string }, choices: string[], prompt: string): { html: string; text: string } {
+  if (choices.length < 2) return body;
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return { html: `${body.html}<p style="color:#555">${esc(prompt)}</p>`, text: `${body.text}\n\n${prompt}` };
 }
 
 export function migrateDraft(raw: unknown, seedQuote = ''): ComposeDraft {

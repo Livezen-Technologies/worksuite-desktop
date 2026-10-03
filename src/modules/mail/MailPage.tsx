@@ -42,6 +42,8 @@ import { CreateRule, useRules } from './MailRules';
 import { ReadingPane, afterClose, withTab, type OpenTab } from './ReadingPane';
 import { ScheduledList } from './Scheduled';
 import { SearchView } from './SearchView';
+import { MailFileViewer } from './FileViewer';
+import { ExportDialog } from './DataFiles';
 import { MailSidebar, unreadOf, type Place } from './Sidebar';
 import { StatusBar, WaitingPanel } from './StatusBar';
 import type { ComposeSeed, Label, MailPrefs, Mailbox, MessagePage, MessageRef, MessageRow } from './types';
@@ -61,7 +63,14 @@ export { joinQuote, splitQuote, unquote } from './quote';
  * open, Esc back, e archive, # delete, ! spam, s star, u unread, r reply,
  * a reply all, f forward, n new email, / search.
  */
-export default function MailPage({ active }: ModuleProps) {
+export default function MailPage(props: ModuleProps) {
+  const { query } = useTab();
+  // An .eml or .msg opened from the system or Import (ENH-MAIL-03 DMO-DAT-04): read-only, in a tab of its own.
+  const file = query.get('file');
+  return file ? <MailFileViewer handle={file} /> : <MailWorkspace {...props} />;
+}
+
+function MailWorkspace({ active }: ModuleProps) {
   const qc = useQueryClient();
   const { query, go, route, openInWindow, navigate, path } = useTab();
   const place: Place = {
@@ -273,6 +282,8 @@ export default function MailPage({ active }: ModuleProps) {
   };
   const [rowMenu, setRowMenu] = useState<{ r: ListRow; x: number; y: number } | null>(null);
   const [custom, setCustom] = useState<{ what: 'snooze' | 'flag' | 'categories' | 'sweep'; targets: Target[] } | null>(null);
+  // Export a folder (ENH-MAIL-03 DMO-DAT-03).
+  const [exporting, setExporting] = useState<{ mailbox: string; folder: string; name: string } | null>(null);
 
   // The open message: the URL names it; its tab joins the strip.
   const current: MessageRef | null = msg ? { uid: msg, folder: msgFolder, mailbox: msgBox ?? effectiveBox } : null;
@@ -818,6 +829,7 @@ export default function MailPage({ active }: ModuleProps) {
               syncingAll={shared.all}
               onSyncAll={syncAll}
               onSyncAccount={syncAccount}
+              onExport={(b, slug, label) => setExporting({ mailbox: String(b.id), folder: slug, name: label })}
               offline={networkOffline}
               pending={mailPending.length}
               cacheDays={cacheDays}
@@ -928,6 +940,7 @@ export default function MailPage({ active }: ModuleProps) {
         />
       ) : null}
       {custom?.what === 'categories' ? <CategoriesDialog cats={cats.data ?? []} onClose={() => setCustom(null)} /> : null}
+      {exporting ? <ExportDialog mailbox={exporting.mailbox} folder={exporting.folder} folderName={exporting.name} onClose={() => setExporting(null)} /> : null}
       {custom?.what === 'sweep' && custom.targets[0]?.mailbox ? <SweepDialog mailbox={custom.targets[0].mailbox} folder={custom.targets[0].folder} sender={custom.targets[0].row.from_email} name={custom.targets[0].row.from_name} onClose={() => setCustom(null)} /> : null}
       {custom && (custom.what === 'snooze' || custom.what === 'flag') ? (
         <DatesDialog
@@ -993,7 +1006,12 @@ export function composeSeedFromQuery(query: URLSearchParams): ComposeSeed {
   const bcc = list('bcc');
   const subject = (query.get('subject') ?? '').replace(/[\r\n]+/g, ' ').slice(0, 500);
   const body = (query.get('body') ?? '').slice(0, 20_000);
-  return { mode: 'new', ...(to ? { to } : {}), ...(cc ? { cc } : {}), ...(bcc ? { bcc } : {}), ...(subject ? { subject } : {}), ...(body ? { body } : {}) };
+  // A reply or forward to a message opened from a file (DMO-DAT-04): quoted, and threaded when it had a Message-ID.
+  const quote = (query.get('quote') ?? '').slice(0, 20_000);
+  const asked = query.get('mode');
+  const mode: ComposeSeed['mode'] = asked === 'reply' || asked === 'reply_all' || asked === 'forward' ? asked : 'new';
+  const irt = query.get('irt') ?? '';
+  return { mode, ...(to ? { to } : {}), ...(cc ? { cc } : {}), ...(bcc ? { bcc } : {}), ...(subject ? { subject } : {}), ...(body ? { body } : {}), ...(quote ? { quote } : {}), ...(/^<[^<>\s]+>$/.test(irt) ? { inReplyTo: irt } : {}) };
 }
 
 /** "Sending “Re: Payroll export” in 8 s", counting down. */

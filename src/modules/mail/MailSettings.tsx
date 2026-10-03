@@ -18,6 +18,7 @@ import { QuickStepsSettings } from './QuickStepsUi';
 import { includedIds, runSync } from './sync';
 import { AppPasswords } from './AppPasswords';
 import { ImportMail } from './Import';
+import { DataFileImport } from './DataFiles';
 import { Rules, Signatures } from './MailRules';
 import { mailKeys, useLocalStore, useMailPrefs, useMailStats, useMailboxes, useSyncStatus } from './api';
 import { mailboxLetter } from './model';
@@ -80,6 +81,7 @@ export function MailSettings({ query = new URLSearchParams() }: { query?: URLSea
       </div>
       {tab === 'accounts' ? <Accounts /> : tab === 'storage' ? <Storage /> : tab === 'import' ? (
         <>
+          <DataFileImport />
           <ImportMail openId={importId} />
           <AutocompleteSettings />
         </>
@@ -639,6 +641,20 @@ function InboxAndKeyboard({ prefs, set }: { prefs: MailPrefs; set: (p: Partial<M
             </button>
           ))}
         </div>
+      </div>
+      <div className="flex items-center justify-between gap-4 py-1">
+        <span className="font-semibold">{text('When someone asks for a read receipt')}</span>
+        <Select
+          aria-label={text('Read receipts')}
+          value={prefs.readReceipts ?? 'ask'}
+          options={[
+            { value: 'ask', label: text('Ask me each time') },
+            { value: 'always', label: text('Always send one') },
+            { value: 'never', label: text('Never send one') },
+          ]}
+          onValueChange={(v) => set({ readReceipts: v as 'ask' | 'always' | 'never' })}
+          className="h-8 w-[200px]"
+        />
       </div>
     </section>
   );

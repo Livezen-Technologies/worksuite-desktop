@@ -5,6 +5,8 @@
  * the browser (through the shell's allow-list and confirmation), and blocks
  * remote images, which are how senders learn you opened a message.
  */
+import { safeLinkHref } from '@shared/mail-files';
+
 const DROP = ['script', 'iframe', 'frame', 'frameset', 'object', 'embed', 'applet', 'form', 'input', 'button', 'textarea', 'select', 'meta', 'link', 'base', 'svg', 'math', 'template', 'noscript', 'audio', 'video'];
 
 export interface SanitizedMail {
@@ -12,7 +14,12 @@ export interface SanitizedMail {
   blockedImages: number;
 }
 
-export function sanitizeMailHtml(input: string): SanitizedMail {
+/**
+ * `safeLinks` (on for what is shown): links point at the app, which checks
+ * each one when it is clicked (ENH-MAIL-03 DMO-SEC-03). Off for a copy kept
+ * elsewhere — a note, a print — which keeps the real addresses.
+ */
+export function sanitizeMailHtml(input: string, { safeLinks = true }: { safeLinks?: boolean } = {}): SanitizedMail {
   const doc = new DOMParser().parseFromString(input || '', 'text/html');
   for (const tag of DROP) doc.querySelectorAll(tag).forEach((el) => el.remove());
   let blockedImages = 0;
@@ -35,6 +42,13 @@ export function sanitizeMailHtml(input: string): SanitizedMail {
     }
   });
   doc.querySelectorAll('a').forEach((a) => {
+    const href = (a.getAttribute('href') ?? '').trim();
+    if (href.startsWith('#')) return;
+    // Safe links (ENH-MAIL-03 DMO-SEC-03): every link is checked when it is clicked, and its real address is what hovering shows.
+    if (/^(https?:|mailto:|tel:)/i.test(href)) {
+      if (safeLinks) a.setAttribute('href', safeLinkHref(href, a.textContent ?? ''));
+      a.setAttribute('title', href.slice(0, 500));
+    } else a.removeAttribute('href');
     a.setAttribute('target', '_blank');
     a.setAttribute('rel', 'noopener noreferrer');
   });

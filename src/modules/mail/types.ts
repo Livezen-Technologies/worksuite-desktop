@@ -198,6 +198,19 @@ export interface MessageContext {
   history?: { total: number; first: string | null; last: string | null; messages: Array<{ id: number; subject: string; at: string; is_read: boolean; has_attachment: boolean; folder: string | null; slug: string | null }> };
   related?: { meetings?: Array<{ id: number; title: string; at: string | null; status: string | null }>; tasks?: Array<{ id: number; title: string; status: string | null; due: string | null }> };
   security: MessageSecurity;
+  /** What the message asks of its reader, from its headers (ENH-MAIL-03 P4); absent from an older server. */
+  markers?: MessageMarkers;
+}
+
+export interface MessageMarkers {
+  /** Voting buttons (DMO-CMP-12). */
+  vote: string[];
+  /** Who asked for a read receipt (DMO-CMP-11). */
+  read_receipt_to: string | null;
+  /** S/MIME, as the message says — checked against its bytes before anything is claimed (DMO-SEC-05). */
+  smime: 'signed' | 'encrypted' | null;
+  sensitivity: 'personal' | 'private' | 'confidential' | null;
+  importance: 'high' | 'low' | null;
 }
 
 /** GET /api/mail/views: the sidebar's numbers. Null is "not counted", never zero. */
@@ -321,6 +334,8 @@ export interface MailPrefs {
   openIn?: 'tabs' | 'windows' | 'both';
   /** Mark as read: when opened, after a delay, when the selection changes, or never (DMO-INB-12). */
   markRead?: 'open' | 'delay' | 'change' | 'never';
+  /** Answering a read-receipt request (DMO-CMP-11): ask each time (the default), always, or never. */
+  readReceipts?: 'ask' | 'always' | 'never';
   markReadDelay?: number;
   /** Favourites in the folder pane: "box:folder" keys and smart views (DMO-NAV-01). */
   favorites?: string[];

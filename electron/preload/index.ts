@@ -414,6 +414,25 @@ const api = {
     displayOpen: call('pos:displayOpen'),
     displayClose: call('pos:displayClose'),
   },
+  // Mail data files, export, safe links and S/MIME (ENH-MAIL-03 P4).
+  mailfile: {
+    pick: call('mailfile:pick'),
+    scan: call('mailfile:scan'),
+    import: call('mailfile:import'),
+    progress: call('mailfile:progress'),
+    cancel: call('mailfile:cancel'),
+    view: call('mailfile:view'),
+    saveAttachment: call('mailfile:saveAttachment'),
+    close: call('mailfile:close'),
+  },
+  mail: {
+    export: call('mail:export'),
+    exportCancel: call('mail:exportCancel'),
+    openLink: call('mail:openLink'),
+  },
+  smime: {
+    verify: call('smime:verify'),
+  },
   offline: {
     status: call('offline:status'),
     pending: call('offline:pending'),
