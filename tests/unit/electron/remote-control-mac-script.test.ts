@@ -23,14 +23,15 @@ interface Posted {
   w2?: number;
 }
 
-function runScript(lines: string[], opts: { trusted?: boolean; clock?: number[]; scroll2?: boolean; ownPid?: number; windows?: Array<Record<string, unknown>> } = {}) {
+function runScript(lines: string[], opts: { trusted?: boolean | (() => boolean); ax?: () => boolean; clock?: number[]; scroll2?: boolean; ownPid?: number; windows?: Array<Record<string, unknown>> } = {}) {
   const posted: Posted[] = [];
   const said: string[] = [];
   const typed: string[] = [];
   const data = (b: Buffer) => ({ bytes: b, length: b.length, base64EncodedStringWithOptions: () => ({ js: b.toString('base64') }) });
   let stdin: Buffer | null = Buffer.from(lines.map((l) => `${l}\n`).join(''), 'utf8');
   const bridge = Object.assign((s: string) => ({ js: String(s), dataUsingEncoding: () => data(Buffer.from(String(s), 'utf8')) }), {
-    CGPreflightPostEventAccess: () => opts.trusted !== false,
+    CGPreflightPostEventAccess: () => (typeof opts.trusted === 'function' ? opts.trusted() : opts.trusted !== false),
+    AXIsProcessTrusted: () => (opts.ax ? opts.ax() : true),
     NSUTF8StringEncoding: 4,
     NSFileHandle: {
       fileHandleWithStandardOutput: { writeData: (d: { bytes: Buffer }) => said.push(d.bytes.toString('utf8').trimEnd()) },
@@ -79,6 +80,15 @@ const lines = (actions: InputAction[]) => protocolLines(actions, 'darwin');
 const click = (down: boolean): InputAction => ({ t: 'button', button: 'left', down });
 
 describe('the macOS helper script', () => {
+  it('re-checks its own Accessibility and event posting each time the app asks over its pipe (worksuite-desktop#147)', () => {
+    const answers = [true, true, false];
+    let calls = 0;
+    const { said, posted } = runScript(['?1 perm', '?2 perm'], { trusted: () => answers[calls++] ?? false, ax: () => true });
+    // The first answer is the start-up check; each query asks macOS again.
+    expect(calls).toBe(3);
+    expect(said).toEqual(['ready', '1 {"trusted":true,"accessibility":true}', '2 {"trusted":false,"accessibility":true}']);
+    expect(posted).toEqual([]);
+  });
   it('does not become ready or post input after permission is revoked', () => {
     const result = runScript(['m 300 200', 'k 0 1'], { trusted: false });
     expect(result.said).toEqual(['permission-denied']);

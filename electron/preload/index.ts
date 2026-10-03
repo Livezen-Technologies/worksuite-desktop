@@ -57,7 +57,7 @@ const api = {
     openInBrowser: call('app:openInBrowser'),
     setDockIcon: call('app:setDockIcon'),
   },
-  local: { open: call('local:open'), status: call('local:status'), profile: call('local:profile'), unlock: call('local:unlock'), restorePreview: call('local:restorePreview'), joinMeeting: call('local:joinMeeting'), read: call('local:read'), save: call('local:save'), remove: call('local:remove'), export: call('local:export'), restore: call('local:restore'), deleteAll: call('local:deleteAll'), meeting: call('local:meeting'), signIn: call('local:signIn'), importOffer: call('local:importOffer'), reviewImport: call('local:reviewImport'), import: call('local:import') },
+  local: { enter: call('local:enter'), leave: call('local:leave'), status: call('local:status'), profile: call('local:profile'), unlock: call('local:unlock'), api: call('local:api'), overview: call('local:overview'), export: call('local:export'), restorePreview: call('local:restorePreview'), restore: call('local:restore'), deleteAll: call('local:deleteAll'), meeting: call('local:meeting'), joinMeeting: call('local:joinMeeting'), moveOffer: call('local:moveOffer'), move: call('local:move'), keep: call('local:keep') },
   guest: { pending: call('guest:pending'), open: call('guest:open'), info: call('guest:info'), join: call('guest:join'), signIn: call('guest:signIn') },
   auth: {
     state: call('auth:state'),
@@ -191,6 +191,7 @@ const api = {
   rc: {
     state: call('rc:state'),
     recheck: call('rc:recheck'),
+    restart: call('rc:restart'),
     setAllowRequests: call('rc:setAllowRequests'),
     shareStarted: call('rc:shareStarted'),
     shareChanged: call('rc:shareChanged'),
@@ -418,6 +419,7 @@ const api = {
     pending: call('offline:pending'),
     moduleBytes: call('offline:moduleBytes'),
     clearModule: call('offline:clearModule'),
+    mailStats: call('offline:mailStats'),
     submit: call('offline:submit'),
     retry: call('offline:retry'),
     discard: call('offline:discard'),

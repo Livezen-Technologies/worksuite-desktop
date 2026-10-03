@@ -304,8 +304,10 @@ const QUEUED_LABEL: Record<QueuedAction, string> = {
   send: 'Send queued',
 };
 
-function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes }: MessageListProps & { r: ListRow; view: NonNullable<MailPrefs['view']> }) {
+function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs }: MessageListProps & { r: ListRow; view: NonNullable<MailPrefs['view']> }) {
   const m = r.row;
+  // Settings › Reading › Show message previews in the list (D10).
+  const preview = prefs.previews === false ? '' : m.preview;
   const selected = r.key === selectedKey;
   const unread = !m.is_read;
   const box = m.mailbox ? boxes.find((b) => b.id === m.mailbox!.id) : null;
@@ -346,7 +348,7 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes }: MessageLi
         <span className="flex min-w-0 items-center gap-2 truncate">
           {queued}
           <span className={cx('truncate', unread ? 'font-bold text-ink' : 'font-semibold text-ink')}>{subject}</span>
-          <span className="truncate text-ink-3">— {m.preview}</span>
+          {preview ? <span className="truncate text-ink-3">— {preview}</span> : null}
         </span>
         {unified ? <span>{badge}</span> : null}
         <span className="text-right font-mono text-[12px] text-ink-2 tabular">{m.size ? bytes(m.size) : ''}</span>
@@ -362,7 +364,7 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes }: MessageLi
         {count}
         <span className="min-w-0 flex-1 truncate">
           <span className={cx(unread ? 'font-bold text-ink' : 'font-semibold text-ink')}>{subject}</span>
-          <span className="text-ink-3"> — {m.preview}</span>
+          {preview ? <span className="text-ink-3"> — {preview}</span> : null}
         </span>
         {queued}
         {badge}
@@ -384,7 +386,7 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes }: MessageLi
           </span>
           <span className={cx('truncate text-[13.5px]', unread ? 'font-bold text-ink' : 'text-ink')}>{subject}</span>
           <span className="flex items-center gap-2">
-            <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-3">{m.preview}</span>
+            <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-3">{preview}</span>
             {m.has_attachment ? <Icon name="paperclip" size={13} className="shrink-0 text-ink-3" label="Has attachments" /> : null}
             {m.is_starred ? <Icon name="star" size={13} className="shrink-0 fill-current text-warning" label="Starred" /> : null}
             {team}
@@ -408,7 +410,7 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes }: MessageLi
       <span className="flex items-center gap-2 pl-[15px]">
         <span className="min-w-0 flex-1 truncate text-[13px]">
           <span className={cx(unread ? 'font-bold text-ink' : 'font-semibold text-ink')}>{subject}</span>
-          {m.preview ? <span className="text-ink-3"> — {m.preview}</span> : null}
+          {preview ? <span className="text-ink-3"> — {preview}</span> : null}
         </span>
         {team}
       </span>
@@ -422,6 +424,8 @@ function TeamTag({ t }: { t: NonNullable<MessageRow['team']> }) {
   return (
     <span className="flex shrink-0 items-center gap-1.5">
       <span className={cx('rounded-[5px] px-1.5 py-0.5 text-[11px] font-bold', tone)}>{label}</span>
+      {t.snoozed_until ? <Icon name="clock" size={13} className="text-ink-3" label={text('Snoozed until {time}', { time: rowStamp(t.snoozed_until) })} /> : null}
+      {t.notes ? <span className="text-[11px] text-ink-3">{t.notes === 1 ? text('1 internal note') : text('{n} internal notes', { n: t.notes })}</span> : null}
       {t.assignee_name ? <Avatar name={t.assignee_name} size={20} /> : <span className="h-5 w-5 rounded-full border border-dashed border-ink-3" title="Nobody assigned yet" />}
     </span>
   );

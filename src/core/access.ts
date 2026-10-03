@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
-import type { AppDefinition } from '@shared/apps';
-import { canOpenApp, canOpenLink, canOpenRoute, canOpenWebPath } from '@shared/access';
-import { app } from './app-state';
+import { GUEST_APPS, type AppDefinition } from '@shared/apps';
+import { GUEST_VISIBLE, canOpenApp, canOpenLink, canOpenRoute, canOpenWebPath, guestLockedApp, type VisibleApps } from '@shared/access';
+import { app, isGuest } from './app-state';
+import { openSignInPanel } from './session';
 import { useStore } from './store';
 import { toast } from './toasts';
 
@@ -16,9 +17,15 @@ import { toast } from './toasts';
 export const NO_ACCESS = "You don't have access to this.";
 
 const cache = new WeakMap<readonly AppDefinition[], Set<string>>();
+/** Guest mode's ids: a Set (for `has`) that says it is guest mode's, so shell screens and parts of apps stay closed. */
+const GUEST_IDS: Set<string> & VisibleApps = Object.assign(new Set(GUEST_APPS.map((a) => a.id)), { guest: GUEST_VISIBLE.guest });
 
-/** The ids of a visible-apps list, kept per list so a selector can use them. */
+/**
+ * The ids of a visible-apps list, kept per list so a selector can use them. Guest mode's list (#149) answers as
+ * guest mode: its apps and Settings, nothing else (shared/access GUEST_VISIBLE).
+ */
 export function idsOf(apps: readonly AppDefinition[]): Set<string> {
+  if (apps === GUEST_APPS) return GUEST_IDS;
   let ids = cache.get(apps);
   if (!ids) {
     ids = new Set(apps.map((a) => a.id));
@@ -52,8 +59,16 @@ export function canFollowLink(link: string | null | undefined): boolean {
   return canOpenLink(link, visibleIds());
 }
 
-/** Says no, the same way everywhere. */
-export function refuse(): void {
+/**
+ * Says no, the same way everywhere. In guest mode (#149) an app that needs an account opens the in-app
+ * "Sign in to use …" panel instead — from the sidebar, a link, a deep link or ⌘K alike.
+ */
+export function refuse(target?: string): void {
+  const locked = isGuest() && target ? guestLockedApp(target) : null;
+  if (isGuest()) {
+    openSignInPanel(locked ?? target ?? '');
+    return;
+  }
   toast('error', NO_ACCESS);
 }
 

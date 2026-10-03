@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { canOpen } from '../../core/access';
-import { ApiError, apiGet, apiGetMeta, apiPost, withMailbox } from '../../core/api';
+import { apiGet, apiGetMeta, apiPost, withMailbox } from '../../core/api';
 import { app } from '../../core/app-state';
 import { call, errorMessage } from '../../core/bridge';
 import { text } from '../../core/i18n';
@@ -17,9 +17,11 @@ import { AiTextDialog } from '../ai/AiTextDialog';
 import type { TextTask } from '../ai/textTools';
 import { openPdf } from '../pdf/open';
 import { createTask } from '../tasks/actions';
+import { createMeeting, invitation, openMeeting } from '../meet/api';
 import { messageAction, moveMessage, setLabel, useFolders, useLabels, useMessageContext, type MessageActionName } from './api';
 import { folderName, plainText, securityVerdict } from './model';
-import { escapeHtml, mailFrameDoc, sanitizeMailHtml } from './sanitize';
+import { escapeHtml, isDesignedMail, mailFrameDoc, sanitizeMailHtml } from './sanitize';
+import { TeamBar, TeamWork } from './Team';
 import type { ComposeSeed, MailPrefs, Mailbox, MessageDetail, MessageRef } from './types';
 
 /** A PDF attachment, by its type or its name. */
@@ -80,6 +82,8 @@ export function MessageView(p: MessageViewProps) {
   const labelBtn = useRef<HTMLButtonElement>(null);
   const translateBtn = useRef<HTMLButtonElement>(null);
   const me = useStore(app, (s) => s.bootstrap?.user ?? null);
+  const origin = useStore(app, (s) => s.auth?.server?.origin ?? '');
+  const darkTheme = useStore(app, (s) => s.resolvedTheme === 'dark');
   const q = useQuery({
     queryKey: ['mail', 'message', ref.mailbox, ref.folder, ref.uid],
     queryFn: ({ signal }) => apiGetMeta<MessageDetail>(`/api/mail/messages/${ref.uid}`, withMailbox({ folder: ref.folder }, ref.mailbox), signal),
@@ -172,6 +176,38 @@ export function MessageView(p: MessageViewProps) {
       toast('error', errorMessage(e));
     }
   };
+  /** A link to this message that re-opens it for anyone with access (MAIL-RD-07): the web's own address for it. */
+  const copyLink = () => {
+    const q = new URLSearchParams({ msg: ref.uid, folder: ref.folder });
+    if (ref.mailbox) q.set('mailbox', ref.mailbox);
+    copy(`${origin}/mail?${q}`, text('Link copied.'));
+  };
+  /** The whole message into Files as a .eml (D13): an ordinary file of yours, apart from the mail. */
+  const saveToFiles = async () => {
+    if (!m) return;
+    try {
+      const r = await apiPost<{ id: number; name: string }>(`/api/mail/messages/${ref.uid}/save`, { folder: ref.folder, subject: m.subject, ...(ref.mailbox ? { mailbox: ref.mailbox } : {}) }, { folder: ref.folder });
+      toast('success', text('Saved to Files as {name}.', { name: r?.name ?? '.eml' }));
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
+  /** A meeting with the sender now: a colleague is rung; anybody else gets the invitation in a reply to send. */
+  const startMeeting = async () => {
+    if (!m) return;
+    try {
+      const meeting = await createMeeting({ title: text('Meeting · {subject}', { subject: m.subject || m.from_name || m.from_email }).slice(0, 190) });
+      const colleague = context.data?.sender?.user_id ?? null;
+      if (colleague) await apiPost(`/api/meet/${meeting.uuid}/ring`, { user_ids: [colleague] }).catch(() => undefined);
+      await openMeeting(meeting.uuid, meeting.title);
+      if (!colleague) {
+        p.onReply({ mode: 'reply', to: m.from_email, subject: re(m.subject), body: invitation(meeting, me?.name ?? null), inReplyTo: m.message_id, mailbox: ref.mailbox });
+        toast('info', text('The meeting is open. Send the invitation in the reply.'));
+      } else toast('success', text('The meeting is open; {name} is being called.', { name: m.from_name || m.from_email }));
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
   const remind = async () => {
     if (!m) return;
     const tomorrow = new Date(Date.parse(`${todayInZone()}T12:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
@@ -206,29 +242,30 @@ export function MessageView(p: MessageViewProps) {
   if (!m || !clean) return null;
 
   const fromCache = !!q.data?.offline;
+  // Dark email content (Settings › Reading) in the dark theme — but a designed email keeps its light card (D10).
+  const darkBody = darkTheme && p.prefs.darkBody === true && !isDesignedMail(clean.html);
   const security = securityVerdict(context.data?.security);
   const folderChip = folderName(m && ref.folder.startsWith('label:') ? ref.folder.slice(6) : ref.folder === 'inbox' ? text('Inbox') : ref.folder.charAt(0).toUpperCase() + ref.folder.slice(1));
+  // D13 (the reader's More) and D14 (the action bar's More).
   const moreItems = (where: 'top' | 'bottom'): MenuSection[] => {
-    const first: MenuItem[] = [];
-    if (where === 'bottom' && canOpen('tasks')) first.push({ id: 'remind', label: text('Remind me about this'), description: text('A task for tomorrow'), icon: 'bell', onSelect: () => void remind() });
-    if (canOpen('notes')) first.push({ id: 'note', label: text('Save as note'), icon: 'file-text', onSelect: () => void saveNote() });
+    const keep: MenuItem[] = [];
+    if (where === 'bottom' && canOpen('tasks')) keep.push({ id: 'remind', label: text('Remind me about this'), description: text('A task for tomorrow'), icon: 'bell', onSelect: () => void remind() });
+    if (canOpen('notes')) keep.push({ id: 'note', label: text('Save as note'), icon: 'file-text', onSelect: () => void saveNote() });
+    keep.push({ id: 'link', label: where === 'top' ? text('Copy link to email') : text('Copy link to this message'), icon: 'link', disabled: !origin, onSelect: copyLink });
+    const copyItems: MenuItem[] = [
+      { id: 'copy-sender', label: text('Copy sender address'), icon: 'copy', onSelect: () => copy(m.from_email, text('Address copied.')) },
+      { id: 'window', label: text('Open in new window'), icon: 'app-window', shortcut: 'Shift ↵', onSelect: () => openInWindow(windowRoute(ref), m.subject) },
+    ];
+    const original: MenuItem[] = [
+      { id: 'source', label: text('View original'), icon: 'external', disabled: p.offline, reason: text('Available when you are back online.'), onSelect: () => setSource(true) },
+      { id: 'eml', label: text('Download original (.eml)'), icon: 'upload', disabled: p.offline, reason: text('Available when you are back online.'), onSelect: downloadOriginal },
+      ...(where === 'top' && canOpen('files') ? [{ id: 'files', label: text('Save to Files'), icon: 'folder-input', disabled: p.offline || p.localStore, reason: p.offline ? text('Available when you are back online.') : text('Only mail from a connected mailbox is kept as an email file.'), onSelect: () => void saveToFiles() }] : []),
+      ...(where === 'bottom' ? [{ id: 'print', label: text('Print'), icon: 'printer', shortcut: 'Ctrl P', onSelect: print }] : []),
+    ];
     return [
-      { id: 'keep', items: first },
-      {
-        id: 'copy',
-        items: [
-          { id: 'copy-sender', label: text('Copy sender address'), icon: 'copy', onSelect: () => copy(m.from_email, text('Address copied.')) },
-          { id: 'window', label: text('Open in new window'), icon: 'app-window', shortcut: 'Shift ↵', onSelect: () => openInWindow(windowRoute(ref), m.subject) },
-        ],
-      },
-      {
-        id: 'original',
-        items: [
-          { id: 'source', label: text('View original'), icon: 'external', disabled: p.offline, reason: text('Available when you are back online.'), onSelect: () => setSource(true) },
-          { id: 'eml', label: text('Download original (.eml)'), icon: 'upload', disabled: p.offline, reason: text('Available when you are back online.'), onSelect: downloadOriginal },
-          ...(where === 'bottom' ? [{ id: 'print', label: text('Print'), icon: 'printer', shortcut: 'Ctrl P', onSelect: print }] : []),
-        ],
-      },
+      { id: 'keep', items: where === 'top' ? [...keep, ...copyItems] : keep },
+      ...(where === 'bottom' ? [{ id: 'copy', items: copyItems }] : []),
+      { id: 'original', items: original },
       {
         id: 'sender',
         items: [
@@ -351,20 +388,22 @@ export function MessageView(p: MessageViewProps) {
               <span className="text-[12.5px] text-ink-3">{whenLabel(m.created_at)}</span>
               <div className="flex items-center gap-0.5">
                 {canOpen('contacts') ? <Tool icon="user-plus" label={context.data?.sender?.contact_id ? 'Open sender in Contacts' : 'Add sender to contacts'} onClick={() => void addContact()} disabled={p.offline} /> : null}
+                {canOpen('meet') ? <Tool icon="video" label="Start a meeting with sender" onClick={() => void startMeeting()} disabled={p.offline} /> : null}
                 <Tool icon="copy" label="Copy sender address" onClick={() => copy(m.from_email, text('Address copied.'))} />
               </div>
             </div>
           </div>
         </header>
-        {m.team && ref.mailbox ? <TeamBar ref_={ref} m={m} me={me ? Number(me.id) : null} /> : null}
+        {m.team && ref.mailbox ? <TeamBar msgRef={ref} m={m} me={me ? Number(me.id) : null} /> : null}
         <div className="flex shrink-0 flex-wrap items-center gap-2 px-6 pt-4">
           <AiChip label="Summarise" onClick={() => setAi({ task: 'summarize', title: text('Summary of this email') })} />
           <AiChip label="Action items" onClick={() => setAi({ task: 'actions', title: text('Action items in this email') })} />
           <AiChip ref={translateBtn} label="Translate" onClick={() => setMenu('translate')} />
           {clean.blockedImages > 0 ? <span className="text-[12px] text-ink-3">{text(clean.blockedImages === 1 ? '1 remote image was blocked to protect your privacy.' : '{n} remote images were blocked to protect your privacy.', { n: clean.blockedImages })}</span> : null}
         </div>
-        <iframe title={text('Message')} sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={mailFrameDoc(clean.html, zoom)} className="mx-5 mt-3 min-h-[120px] flex-1 rounded-[8px] border-0 bg-white" />
+        <iframe title={text('Message')} sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={mailFrameDoc(clean.html, zoom, darkBody)} className={cx('mx-5 mt-3 min-h-[120px] flex-1 rounded-[8px] border-0', darkBody ? 'bg-surface' : 'bg-white', darkTheme && !darkBody && 'p-2')} />
         {m.attachments.length ? <Attachments m={m} msgRef={ref} offline={p.offline} /> : null}
+        {m.team && ref.mailbox && m.conversation_key ? <TeamWork msgRef={ref} m={m} account={p.account} offline={p.offline} /> : null}
       </div>
       <ActionBar style={toolbarStyle} onReply={reply} onArchive={() => void act('archive')} onDelete={() => void act('trash')} moreRef={bottomMore} onMore={() => setMenu('bottom')} onMove={() => setMenu('move')} onUnread={() => void act('unread')} onStar={() => void act(m.is_starred ? 'unstar' : 'star')} starred={m.is_starred} canMove={!!ref.mailbox || p.localStore} />
       {menu === 'top' ? <Menu sections={moreItems('top')} label={text('More')} anchor={topMore} prefer="bottom" align="end" onClose={() => setMenu(null)} /> : null}
@@ -470,6 +509,15 @@ function ActionBar({ style, onReply, onArchive, onDelete, onMove, onUnread, onSt
 
 function Attachments({ m, msgRef, offline }: { m: MessageDetail; msgRef: MessageRef; offline: boolean }) {
   const { uid, folder, mailbox } = msgRef;
+  /** "Save to Files" (MAIL-RD-03): the server copies it into the person's Files; nothing goes through this computer. */
+  const save = async (a: MessageDetail['attachments'][number]) => {
+    try {
+      await apiPost(`/api/mail/messages/${uid}/attachments/${encodeURIComponent(a.ref)}/save`, mailbox ? { mailbox } : {}, { folder, mime: a.mime || 'application/octet-stream', ...(mailbox ? { mailbox } : {}) });
+      toast('success', text('{name} is in your Files.', { name: a.name }));
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
   return (
     <div className="flex max-h-[30%] shrink-0 flex-col gap-2 overflow-y-auto border-t border-line px-6 py-3 scroll-thin">
       {m.attachments.map((a) => {
@@ -486,8 +534,8 @@ function Attachments({ m, msgRef, offline }: { m: MessageDetail; msgRef: Message
           );
         }
         return (
+          <div key={a.ref} className="flex w-full max-w-[560px] items-center gap-1">
           <button
-            key={a.ref}
             type="button"
             draggable
             onClick={() =>
@@ -512,6 +560,12 @@ function Attachments({ m, msgRef, offline }: { m: MessageDetail; msgRef: Message
               </span>
             </span>
           </button>
+          {canOpen('files') ? (
+            <button type="button" onClick={() => void save(a)} aria-label={text('Save {name} to Files', { name: a.name })} title={text('Save to Files')} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle">
+              <Icon name="folder-input" size={16} />
+            </button>
+          ) : null}
+          </div>
         );
       })}
     </div>
@@ -531,83 +585,5 @@ function SourceDialog({ msgRef, onClose }: { msgRef: MessageRef; onClose: () => 
         {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} /> : <pre className="max-h-[60vh] overflow-auto rounded-[8px] bg-subtle p-3 font-mono text-[12px] leading-relaxed whitespace-pre-wrap text-ink selectable">{q.data?.source}</pre>}
       </div>
     </Modal>
-  );
-}
-
-/** A shared team mailbox's conversation: who has it, and where it stands. */
-function TeamBar({ ref_, m, me }: { ref_: MessageRef; m: MessageDetail; me: number | null }) {
-  const qc = useQueryClient();
-  const team = m.team!;
-  const people = useQuery({ queryKey: ['mail', 'team', 'assignees', ref_.mailbox], queryFn: () => apiGet<{ users: Array<{ id: number; name: string }> }>('/api/mail/messages/team/assignees', { mailbox: ref_.mailbox }), staleTime: 5 * 60_000, retry: false });
-  const [menu, setMenu] = useState<'assign' | 'status' | null>(null);
-  const assignBtn = useRef<HTMLButtonElement>(null);
-  const statusBtn = useRef<HTMLButtonElement>(null);
-  const base = { mailbox: ref_.mailbox, conversation_key: m.conversation_key, subject: m.subject, from_email: m.from_email, created_at: m.created_at };
-  const run = async (path: string, body: Record<string, unknown>) => {
-    try {
-      await apiPost(`/api/mail/messages/team/${path}`, { ...base, ...body });
-      void qc.invalidateQueries({ queryKey: ['mail'] });
-    } catch (e) {
-      toast('error', e instanceof ApiError && e.status === 409 ? e.message : errorMessage(e));
-    }
-  };
-  const statusName = team.status === 'closed' ? text('Done') : team.status === 'answered' ? text('Pending') : text('Open');
-  const mine = me !== null && team.assignee_id === me;
-  return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-line px-6 py-2.5">
-      <button ref={assignBtn} type="button" onClick={() => setMenu('assign')} className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-line px-2.5 text-[13px] font-semibold text-ink hover:bg-subtle">
-        {team.assignee_name ? <Avatar name={team.assignee_name} size={20} /> : <Icon name="user" size={15} />}
-        {mine ? text('Assigned to me') : team.assignee_name ? text('Assigned to {name}', { name: team.assignee_name }) : text('Unassigned')}
-        <Icon name="chevron-down" size={12} />
-      </button>
-      <button ref={statusBtn} type="button" onClick={() => setMenu('status')} className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-line px-2.5 text-[13px] font-semibold text-ink hover:bg-subtle">
-        {text('Status: {status}', { status: statusName })}
-        <Icon name="chevron-down" size={12} />
-      </button>
-      <span className="flex-1" />
-      {team.status !== 'closed' ? (
-        <Button variant="success" onClick={() => void run('status', { status: 'closed' })}>
-          Mark done
-        </Button>
-      ) : null}
-      {menu === 'assign' ? (
-        <Menu
-          label={text('Assign')}
-          anchor={assignBtn}
-          prefer="bottom"
-          align="start"
-          onClose={() => setMenu(null)}
-          sections={[
-            {
-              id: 'me',
-              items: [
-                { id: 'claim', label: text('Assign to me'), icon: 'user', disabled: mine, onSelect: () => void run('claim', {}) },
-                { id: 'release', label: text('Unassign'), icon: 'x', disabled: !team.assignee_id, onSelect: () => void run('release', { force: !mine }) },
-              ],
-            },
-            { id: 'people', label: text('Assign to'), items: (people.data?.users ?? []).filter((u) => u.id !== me).map((u) => ({ id: String(u.id), label: u.name, checked: team.assignee_id === u.id, onSelect: () => void run('assign', { assignee_id: u.id }) })) },
-          ]}
-        />
-      ) : null}
-      {menu === 'status' ? (
-        <Menu
-          label={text('Status')}
-          anchor={statusBtn}
-          prefer="bottom"
-          align="start"
-          onClose={() => setMenu(null)}
-          sections={[
-            {
-              id: 'status',
-              items: [
-                { id: 'open', label: text('Open'), radio: true, checked: team.status === 'open', onSelect: () => void run('status', { status: 'open' }) },
-                { id: 'answered', label: text('Pending'), description: text('Waiting on the customer'), radio: true, checked: team.status === 'answered', onSelect: () => void run('status', { status: 'answered' }) },
-                { id: 'closed', label: text('Done'), radio: true, checked: team.status === 'closed', onSelect: () => void run('status', { status: 'closed' }) },
-              ],
-            },
-          ]}
-        />
-      ) : null}
-    </div>
   );
 }

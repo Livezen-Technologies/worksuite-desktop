@@ -1,11 +1,12 @@
 import { lockedScope, lockedApi, lockedIpc } from '@shared/locked-access';
 import { lockedClickTarget } from '../services/locked-notifications';
 import { accessibilityDiagnostics } from '../services/remote-control/accessibility-diagnostics';
-import { LocalAccess, LocalWorkspace } from '../services/local-workspace';
-import { LocalWorkspaceImport, type ImportAccount } from '../services/local-workspace-import';
+import { LocalSession, LocalWorkspace } from '../services/local-workspace';
+import { LocalApi } from '../services/local-api';
+import { LocalWorkspaceMove, type MoveAccount } from '../services/local-workspace-move';
 import { createHash, randomUUID } from 'node:crypto';
 import { localize } from '@shared/localization';
-import { readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { GuestMeetService } from '../services/guest-meet';
 import { app, net as electronNet, Notification, clipboard, crashReporter, dialog, globalShortcut, ipcMain, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents, webContents } from 'electron';
 import os from 'node:os';
@@ -13,6 +14,7 @@ import { hkdfSync } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { canOpenApp, canOpenLink, canOpenRoute, notificationAllowed, visibleAppIds } from '@shared/access';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
+import { findMailtoInArgv, mailBodiesKept, mailtoRoute, parseMailto } from '@shared/mailto';
 import { resolveWebLink } from '@shared/links';
 import { redirectRoute } from '@shared/channels';
 import { networkStatus } from '@shared/network';
@@ -41,6 +43,7 @@ import { BootstrapService } from '../services/bootstrap';
 import { CallService } from '../services/calls';
 import { ScreenShare } from '../services/screen-share';
 import { accessibility, createRemoteControl } from '../services/remote-control/host';
+import { AX_RESTARTED_ARG, watchAccessibility } from '../services/remote-control/accessibility-watch';
 import { DEFAULT_POLICY } from '../services/policy';
 import { Database } from '../services/db';
 import { archName, DeviceService, platformName } from '../services/device';
@@ -156,7 +159,7 @@ function main(): void {
     e.preventDefault();
     handleLink(url);
   });
-  const argvLink = findDeepLinkInArgv(process.argv);
+  const argvLink = findDeepLinkInArgv(process.argv) ?? findMailtoInArgv(process.argv);
   if (argvLink) pendingLinks.push(argvLink);
   // PDFs the operating system hands over ("Open with"; a file dropped on the Dock icon): PDF Studio opens each.
   app.on('open-file', (e, path) => {
@@ -203,7 +206,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const fetchImpl: FetchLike = (url, init) => net.fetch(url, init as RequestInit);
 
   const local = new LocalWorkspace(join(p.profile, 'guest-workspace.sqlite'));
-  const localWindows = new Set<number>();
+  // Guest mode runs in the main window (#149): which window is in it and past its PIN, and where a move may go.
+  const localSession = new LocalSession(local);
+  let localAccountKey: () => string | null = () => null;
+  let wasSignedIn = false;
   const settings = new SettingsService(db);
   /** Media servers (LiveKit) the WorkSuite server announced; allowed in the page's CSP. */
   let pendingGuest: { input: string; server?: string } | null = null;
@@ -653,6 +659,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       windows.showMain();
       return;
     }
+    // Guest mode (#149): the main window's guard opens what guest mode has, or the sign-in panel for what needs an account.
+    const main = windows.getMain();
+    if (!sessionCtl.isReady() && main && localSession.isGuest(main.webContents.id) && !localSession.access.locked(main.webContents.id)) {
+      windows.showMain().webContents.send('navigate', req);
+      return;
+    }
     if (!sessionCtl.isReady() || !windows.getMain()) {
       // Checked by the main window when it takes them (Shell).
       pendingNav.push(req);
@@ -700,6 +712,13 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     } else windows.showMain();
   };
   const handleDeepLink = (url: string): void => {
+    // A mailto: link from another app (WorkSuite is the default mail app): a new message, prefilled, for the person to send.
+    if (/^mailto:/i.test(url)) {
+      const fields = parseMailto(url);
+      if (fields) navigate({ route: mailtoRoute(fields), source: 'deep-link' });
+      else windows.showMain();
+      return;
+    }
     // A passkey sign-in coming back from the browser. Handled before the link
     // grammar, and never logged: it carries a one-time code.
     if (/^worksuite:\/\/auth\/callback\?/i.test(url)) {
@@ -1263,6 +1282,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     // FR-OFF-06: prune mail bodies beyond the cache window.
     const days = settings.effective().mailCacheDays;
     if (days > 0) cache.pruneModuleOlderThan('mail', days);
+    // A mailbox's own keep period (Settings › Mail › Storage & sync, D09).
+    const me = sessionCtl.current()?.user?.id;
+    for (const [box, d] of Object.entries(settings.effective().mailCacheDaysByMailbox ?? {})) if (me) cache.pruneMailbox(String(me), box, d);
     emitStatus();
   };
   const stopServices = (): void => {
@@ -1353,6 +1375,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       log.info('local data removed', { scope });
     },
     changed: (s) => {
+      // Signing in ends guest mode (the window may then offer to move its data here); signing out closes the Local Profile.
+      if (s.stage === 'ready' && !wasSignedIn) localSession.signedIn(localAccountKey());
+      else if (s.stage !== 'ready' && wasSignedIn) localSession.signedOut();
+      wasSignedIn = s.stage === 'ready';
       lockPin.setServerScope(s.server?.origin ?? null);
       settings.setUserLanguageScope(s.server?.origin ?? null, s.user?.id ?? null);
       broadcast('auth:changed', s);
@@ -1429,6 +1455,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         if (scope) win.setTitle(scope.kind === 'chat-mini' ? 'WorkSuite chat' : 'WorkSuite call');
       }
     } else {
+      // Present again at once, not at the next heartbeat: no heartbeat went while locked (#150).
+      void heartbeatPresence();
       broadcast('realtime:resync');
       // What a notification clicked while locked pointed at, now that the workspace is back (#114).
       if (pendingNav.length) setTimeout(() => flushNavigation(), 300);
@@ -1555,7 +1583,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         const pol = sessionCtl.current()?.policy;
         return { enabled: caps.offlineCache, maxBytes: (pol?.offline_storage_max_mb ?? 2048) * 1024 * 1024 };
       },
-      mailBodiesCached: () => settings.effective().mailCacheDays !== 0,
+      mailBodiesCached: (path) => mailBodiesKept(settings.effective(), path),
       // SalonMate's desk calls carry the key this computer was paired with.
       extraHeaders: (path) => {
         const key = salonDesk.keyFor(path);
@@ -1614,10 +1642,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
   });
 
-  const relaunch = (safe: boolean): void => {
-    const args = process.argv.slice(1).filter((a) => a !== '--safe-mode' && a !== '--updated' && a !== '--hidden');
+  const relaunch = (safe: boolean, extraArgs: string[] = []): void => {
+    const args = process.argv.slice(1).filter((a) => a !== '--safe-mode' && a !== '--updated' && a !== '--hidden' && a !== AX_RESTARTED_ARG);
     if (safe) args.push('--safe-mode');
     else clearCrashes(p.crashState);
+    args.push(...extraArgs);
     markCleanExit(p.runningMarker);
     app.relaunch({ args });
     windows.quitting = true;
@@ -1699,49 +1728,55 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     pendingGuest = null;
     return { id: w.id };
   };
-  const openLocal = () => {
-    const w = windows.open('meet', '/guest-workspace', 'WorkSuite · Guest workspace');
-    const id = w.webContents.id;
-    localWindows.add(id); guestWindowIds.add(id);
-    w.once('closed', () => { localWindows.delete(id); guestWindowIds.delete(id); localAccess.forget(id); });
-    return { id: w.id };
-  };
-  // Windows past the Local Profile's PIN (or with none set); wrong PINs wait a minute after five.
-  const localAccess = new LocalAccess(local);
-  const localWindow = (senderId: number) => {
-    if (!localWindows.has(senderId)) throw new DesktopError('PERMISSION_DENIED', 'Open the local guest workspace first.');
-  };
-  const localOnly = (senderId: number) => { localWindow(senderId); localAccess.require(senderId); };
-  const currentImportAccount = (): ImportAccount | null => {
+  const localWindow = (senderId: number) => localSession.window(senderId);
+  const localOnly = (senderId: number) => localSession.require(senderId);
+  const localApi = new LocalApi(local, () => local.profile()?.name ?? '');
+  const currentMoveAccount = (): MoveAccount | null => {
     const b = sessionCtl.current();
     const origin = auth.getServer()?.origin;
     if (!sessionCtl.isReady() || !b || !origin) return null;
     const orgId = sessionCtl.organizationScope();
-    return { key: createHash('sha256').update(JSON.stringify([origin, b.user.id, orgId])).digest('hex'), name: `${b.user.name} · ${origin}`, organization: b.organizations.find((org) => org.id === orgId)?.name ?? 'Personal items', orgId, timezone: b.user.timezone || 'UTC' };
+    return { key: createHash('sha256').update(JSON.stringify([origin, b.user.id])).digest('hex'), orgId, timezone: b.user.timezone || 'UTC' };
   };
-  const importer = new LocalWorkspaceImport(local, currentImportAccount);
-  router.handle('local:open', () => openLocal());
+  localAccountKey = () => currentMoveAccount()?.key ?? null;
+  const moveBackupPath = join(p.profile, 'guest-move-backup.json');
+  const mover = new LocalWorkspaceMove(local, {
+    exists: () => existsSync(moveBackupPath),
+    write: (text) => writeFileSync(moveBackupPath, text, { mode: 0o600, flush: true }),
+    remove: () => rmSync(moveBackupPath, { force: true }),
+  });
+  // Guest mode: only the main window, and only while no account is signed in.
+  router.handle('local:enter', (_input, c) => {
+    if (sessionCtl.isReady()) throw new DesktopError('PERMISSION_DENIED', 'Sign out of your account to use the Local Profile.');
+    if (windows.getMain()?.webContents.id !== c.sender.id) throw new DesktopError('PERMISSION_DENIED', 'Guest mode opens in the main WorkSuite window.');
+    localSession.enter(c.sender.id);
+    return { profile: local.profile(), locked: localSession.access.locked(c.sender.id), language: settings.effective().language };
+  });
+  router.handle('local:leave', (_input, c) => { localSession.leave(c.sender.id); });
   router.handle('local:status', (_input, c) => {
     localWindow(c.sender.id);
-    const profile = local.profile();
-    return { profile, locked: localAccess.locked(c.sender.id), language: settings.effective().language };
+    return { profile: local.profile(), locked: localSession.access.locked(c.sender.id), language: settings.effective().language };
   });
   router.handle('local:profile', (input, c) => {
     localWindow(c.sender.id);
     // Creating the profile needs nothing; changing one that has a PIN needs it entered first.
     if (local.profile()) localOnly(c.sender.id);
     const profile = local.saveProfile(input);
-    localAccess.grant(c.sender.id);
+    localSession.access.grant(c.sender.id);
     return profile;
   });
-  router.handle('local:unlock', (input, c) => { localWindow(c.sender.id); return localAccess.unlock(c.sender.id, input.pin); });
-  router.handle('local:read', (_input, c) => { localOnly(c.sender.id); return local.read(); });
-  router.handle('local:save', (input, c) => { localOnly(c.sender.id); return local.save(input); });
-  router.handle('local:remove', (input, c) => { localOnly(c.sender.id); local.remove(input.id); });
+  router.handle('local:unlock', (input, c) => { localWindow(c.sender.id); return localSession.access.unlock(c.sender.id, input.pin); });
+  router.handle('local:api', (input, c) => { localOnly(c.sender.id); return localApi.handle(input); });
+  router.handle('local:overview', (_input, c) => {
+    localOnly(c.sender.id);
+    const { items, contacts, meetingInput, meetingServer } = local.read();
+    const count = (kind: string) => items.filter((item) => item.kind === kind).length;
+    return { notes: count('note'), tasks: count('task'), events: count('event'), contacts: contacts.length, meetingInput, meetingServer };
+  });
   router.handle('local:meeting', (input, c) => { localOnly(c.sender.id); local.meeting(input.input, input.server); });
-  router.handle('local:deleteAll', (_input, c) => { localOnly(c.sender.id); local.deleteAll(); localAccess.clear(); });
+  router.handle('local:deleteAll', (_input, c) => { localOnly(c.sender.id); local.deleteAll(); localSession.access.clear(); });
+  // A guest joins with the Local Profile's name and no account token, where the meeting server allows guests.
   router.handle('local:joinMeeting', (input, c) => { localOnly(c.sender.id); return openGuest(input.input, input.server, local.profile()?.name); });
-  router.handle('local:signIn', (_input, c) => { localOnly(c.sender.id); windows.showMain(); BrowserWindow.fromWebContents(c.sender)?.close(); });
   router.handle('local:export', async (_input, c) => {
     localOnly(c.sender.id);
     const chosen = await dialog.showSaveDialog(BrowserWindow.fromWebContents(c.sender)!, { title: 'Back up guest workspace', defaultPath: 'worksuite-local-backup.json', filters: [{ name: 'Guest workspace backup', extensions: ['json'] }] });
@@ -1771,28 +1806,34 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     try { return local.restore(pending.text); }
     catch { throw new DesktopError('IPC_VALIDATION_FAILED', 'This is not a valid guest workspace backup. Nothing was changed.'); }
   });
-  router.handle('local:importOffer', () => {
-    const profile = local.profile();
-    return { count: local.read().items.length, pinRequired: !!profile?.hasPin, profileName: profile?.name ?? null };
+  // Signing in from guest mode: only the window that was in guest mode (past its PIN), into the account it signed in to.
+  router.handle('local:moveOffer', (_input, c) => {
+    const account = localSession.moveAccount(c.sender.id, currentMoveAccount()?.key ?? null);
+    if (!account) return null;
+    const offer = mover.offer(account);
+    return offer.total ? offer : null;
   });
-  router.handle('local:reviewImport', (input) => {
-    // A Local Profile with a PIN shows its items to an account only after that PIN.
-    if (local.profile()?.hasPin) {
-      const result = localAccess.tryPin(input.pin ?? '');
-      if (!result.unlocked) throw new DesktopError('PERMISSION_DENIED', result.retryAfter ? `Too many wrong PINs. Try again in ${result.retryAfter} seconds.` : 'Enter the Local Profile PIN to review its items.');
-    }
+  router.handle('local:keep', (_input, c) => { if (localSession.moveAccount(c.sender.id, currentMoveAccount()?.key ?? null)) localSession.endMove(); });
+  router.handle('local:move', async (_input, c) => {
+    const account = currentMoveAccount();
+    if (!account || !localSession.moveAccount(c.sender.id, account.key)) throw new DesktopError('PERMISSION_DENIED', 'Sign in from guest mode to move your local data.');
     const origin = auth.getServer()?.origin;
     const token = auth.accessToken();
-    if (!origin || !token) throw new DesktopError('NOT_SIGNED_IN', 'Refresh your sign-in before importing.');
+    if (!origin || !token) throw new DesktopError('NOT_SIGNED_IN', 'Refresh your sign-in before moving your data.');
     // Freeze credentials and origin: a later account switch can never redirect these writes to another user.
     const headers = clientHeaders();
     const client = new HttpClient({ fetch: fetchImpl, origin: () => origin, tokens: { accessToken: () => token, refresh: async () => 'lost' }, clientHeaders: () => headers, onReachability: () => undefined, onAuthLost: () => undefined });
-    return importer.review({ get: (path) => client.get(path), post: (path, body, key) => client.post(path, body, { headers: { 'Idempotency-Key': key } }) });
+    const result = await mover.run(account, {
+      get: (path) => client.get(path),
+      post: (path, body, key) => client.post(path, body, { headers: { 'Idempotency-Key': key } }),
+      put: (path, body, key) => client.request('PUT', path, { body, headers: { 'Idempotency-Key': key } }),
+    }, () => currentMoveAccount()?.key ?? null);
+    if (!result.failures.length) localSession.endMove();
+    return result;
   });
-  router.handle('local:import', (input) => importer.run(input.token, input.ids, input.createCopies));
   const localReminderTimer = setInterval(() => local.reminders(Date.now(), (item) => {
     if (!Notification.isSupported()) return false;
-    try { const reminder = new Notification({ title: `${localize('Local reminder', settings.effective().language)} · ${item.title}`, body: localize(item.kind === 'event' ? 'Your local calendar reminder is due.' : 'Your local task reminder is due.', settings.effective().language) }); reminder.on('click', () => openLocal()); reminder.show(); return true; }
+    try { const reminder = new Notification({ title: `${localize('Local reminder', settings.effective().language)} · ${item.title}`, body: localize(item.kind === 'event' ? 'Your local calendar reminder is due.' : 'Your local task reminder is due.', settings.effective().language) }); reminder.on('click', () => { windows.showMain(); }); reminder.show(); return true; }
     catch { return false; }
   }), 15000);
   app.on('before-quit', () => { clearInterval(localReminderTimer); local.close(); });
@@ -1807,7 +1848,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     let body: unknown;
     try { body = JSON.parse((details.uploadData ?? []).map(x => x.bytes?.toString('utf8') ?? '').join('')); } catch { /* no JSON body */ }
     const allowed = !lock.isLocked() || lockedApi(sender ? scopeFor(sender) : null, details.url, details.method, settings.effective(), body);
-    callback({ cancel: !allowed || id !== undefined && guestWindowIds.has(id) });
+    // Guest meeting windows and a window in guest mode (#149) never reach the account's API or its local cache.
+    callback({ cancel: !allowed || id !== undefined && (guestWindowIds.has(id) || localSession.isGuest(id)) });
   });
   router.install();
   const missing = router.missingHandlers();
@@ -1815,7 +1857,23 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   rebuildMenu(sessionCtl.visibleApps());
 
+  // Open mailto: links in WorkSuite (D04): only when the person turned it on, and only for an installed copy.
+  const applyMailtoHandler = (on: boolean): void => {
+    const dev = !app.isPackaged && process.env.WS_REGISTER_PROTOCOL === '1' && process.argv.length >= 2;
+    if (!app.isPackaged && !dev) return;
+    const path = dev ? process.execPath : undefined;
+    const args = dev ? [resolve(process.argv[1]!)] : undefined;
+    try {
+      const registered = app.isDefaultProtocolClient('mailto', path, args);
+      if (on && !registered) app.setAsDefaultProtocolClient('mailto', path, args);
+      else if (!on && registered) app.removeAsDefaultProtocolClient('mailto', path, args);
+    } catch (e) {
+      log.warn('mailto handler', { error: String(e) });
+    }
+  };
+  applyMailtoHandler(settings.effective().mailtoHandler === true);
   settings.onChange((prefs) => {
+    applyMailtoHandler(prefs.mailtoHandler === true);
     webchat.refresh();
     syncQuickAsk();
     broadcast('settings:changed', prefs);
@@ -1826,7 +1884,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   // ── lifecycle ──────────────────────────────────────────────────────────
   app.on('second-instance', (_e, argv) => {
-    const link = findDeepLinkInArgv(argv);
+    const link = findDeepLinkInArgv(argv) ?? findMailtoInArgv(argv);
     const pdfs = pdfPathsInArgv(argv);
     if (pdfs.length) handPdfs(pdfs);
     const docs = officePathsInArgv(argv);
@@ -1876,9 +1934,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     notifications.markGap();
   });
   powerMonitor.on('user-did-resign-active', () => remoteControl.onSystem('user-did-resign-active'));
-  app.on('browser-window-focus', () => { if (process.platform === 'darwin') { accessibility.openedSettings(); void accessibility.refresh(); } });
+  // Back from System Settings, or WorkSuite brought to the front: Accessibility is asked again and every window told.
+  watchAccessibility({ app, platform: process.platform, recheck: () => accessibility.refresh(), changed: () => broadcast('rc:changed', remoteControl.view()) });
   powerMonitor.on('resume', () => {
-    if (process.platform === 'darwin') { accessibility.openedSettings(); void accessibility.refresh(); }
+    if (process.platform === 'darwin') void accessibility.refresh().then(() => broadcast('rc:changed', remoteControl.view()));
     device.poke();
     sync.kick('resume');
     realtime.kick();

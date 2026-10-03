@@ -14,7 +14,7 @@ export const INVOKE_CHANNELS = [
   'app:openInBrowser',
   'app:setDockIcon',
 
-  'local:open', 'local:status', 'local:profile', 'local:unlock', 'local:read', 'local:save', 'local:remove', 'local:export', 'local:restorePreview', 'local:restore', 'local:deleteAll', 'local:meeting', 'local:joinMeeting', 'local:signIn', 'local:importOffer', 'local:reviewImport', 'local:import',
+  'local:enter', 'local:leave', 'local:status', 'local:profile', 'local:unlock', 'local:api', 'local:overview', 'local:export', 'local:restorePreview', 'local:restore', 'local:deleteAll', 'local:meeting', 'local:joinMeeting', 'local:moveOffer', 'local:move', 'local:keep',
   'guest:pending',
   'guest:open',
   'guest:info',
@@ -123,6 +123,7 @@ export const INVOKE_CHANNELS = [
 
   'rc:state',
   'rc:recheck',
+  'rc:restart',
   'rc:setAllowRequests',
   'rc:shareStarted',
   'rc:shareChanged',
@@ -296,6 +297,7 @@ export const INVOKE_CHANNELS = [
   'offline:pending',
   'offline:moduleBytes',
   'offline:clearModule',
+  'offline:mailStats',
   'offline:submit',
   'offline:retry',
   'offline:discard',

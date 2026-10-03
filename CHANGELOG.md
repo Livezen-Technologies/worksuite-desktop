@@ -5,6 +5,86 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 2026-10-03 — 0.2.98: Mail, the rest of the way
+
+Mail now covers the WorkSuite Mail SRS v2.2 and every screen of the desktop design:
+
+- **Import my old mail.** Bring mail over from an old account yourself — progress per folder, a list of anything that couldn't be copied, and pause, resume or cancel. (Microsoft 365 imports from an account already connected in Mail.)
+- **Shared mailboxes work as a team.** Leave **internal notes** your colleagues see and customers never do, **snooze** a conversation (a customer reply wakes it), see **who else is reading** it, and reply as the shared address or as a note.
+- **Search** gets an **Attachments** panel, Folder / Label / From filters, and **Best match** ordering.
+- **Accounts & offline:** how much of each mailbox is on this computer, whether message bodies are downloaded, app passwords for other mail apps, and **Make WorkSuite my mail app** so `mailto:` links open a new message here (filled in, never sent on its own).
+- **Storage & sync:** what this computer holds against your organisation's limit, a keep period **per mailbox**, and what the WorkSuite copy holds.
+- **Appearance & reading:** open messages in tabs, show previews in the list, and **dark mode for email content** — designed emails stay on a light card so logos and tables read well.
+- **On a message:** Copy link, **Save to Files** (the whole message or an attachment), **Start meeting** with the sender, and Remind me.
+- **Rules:** automatic reply, filters, and blocked and safe senders. **Signatures** are edited in Settings.
+
+Needs the server update (Mail: team notes, snooze and viewers with their migration; Save to Files; attachment names in search; reading preferences). Not yet: automatic attachment download, and showing your access level on a shared mailbox.
+
+---
+
+## 2026-10-03 — 0.2.97: guest mode in the main window
+
+**Continue as Guest** no longer opens a separate, differently styled window on top of an empty one (#149):
+
+- **Same window, same look.** Your Local Profile opens in the normal WorkSuite window, with the usual sidebar, top bar, theme and screens. The profile menu shows *Name · Local profile · Saved on this device* with Sign in / Create account, Backup & export data and Profile; Backup & Data and Profile are in Settings.
+- **Notes, Tasks, Contacts and Calendar** work on this computer with the same screens as an account — Contacts is new for guests. **Meet** joins a meeting by link or code under your profile name.
+- **Account-only apps** — Chat, Mail, Drive, company records, shared workspaces, HR, CRM, AI Assistant — stay in the sidebar with a lock and open a *Sign in to use …* panel, also from links and ⌘K.
+- **Signing in** switches to your full account without a restart and asks: *Move data* or *Keep on this device only*. Moving keeps a backup until every item is confirmed in your account; anything that fails is listed and can be retried without duplicates. Signing out never shows guest data to someone else.
+- **The note editor's Save button** now looks like a normal primary button.
+- Your existing Local Profile data is upgraded in place.
+
+Not moved yet: task reminders and pin/favourite flags. Needs the server update (Contacts and Tasks honour `Idempotency-Key`) for retries to be duplicate-free.
+
+---
+
+## 2026-10-03 — 0.2.96: write mail with formatting
+
+Mail's compose tab was a bare text box. It is now a proper editor:
+
+- **A formatting toolbar** — undo/redo, headings, bold, italic, underline, strikethrough, text colour and highlight, links, tables, bulleted and numbered lists, indent, quote and clear formatting. Ctrl/⌘ + B, I, U, K and friends work, and typing "- ", "1. " or "> " starts a list or quote.
+- **Recipients as chips**, with suggestions from your contacts; × removes one.
+- **Attach from Files** adds a file from your WorkSuite Drive (as a copy); **Insert template** keeps the template's formatting.
+- **Your signature** sits below the message; **Write with AI** works only on what you wrote, never on the signature or the email you're replying to, which is a collapsible block left as it was.
+- **Sent as clean HTML** with a matching plain-text version, checked on this computer and again on the server — no scripts or unsafe links get through. Drafts keep their formatting; older plain drafts are converted.
+- **The bottom bar**: Send and its options are one even control, Send later sits beside it, and Discard is quiet red text.
+
+Pasted pictures are added as attachments rather than placed inside the text. Needs the server update (Mail: HTML cleaning, text part, `POST /api/mail/upload/from-drive`, and a migration for scheduled mail).
+
+---
+
+## 2026-10-03 — 0.2.95: macOS remote control sees the permission you granted
+
+On a Mac, Settings › Remote control could keep saying **Accessibility: Denied** after WorkSuite was switched on in System Settings (#147):
+
+- **Check again checks again** — WorkSuite and its input helper are asked afresh each time; nothing is cached. The status also refreshes on its own when you come back to WorkSuite, and every 2 seconds while access is missing.
+- **When macOS needs a relaunch**, it says *Access granted — restart WorkSuite to finish* with a **Restart WorkSuite** button, instead of Denied.
+- **Which copy is running** is shown: its location, bundle ID, Team ID and signing identity, with a warning for an unsigned build, a copy macOS has moved to a temporary place, a second copy in Applications or a development build — the usual reasons the switch in System Settings belongs to a different WorkSuite. Help explains removing and re-adding WorkSuite there.
+- **Releases are signed with the Developer ID** so the permission carries over to updates; a tagged macOS release without the signing certificate now stops instead of shipping unsigned.
+
+Release builds need `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD` and `APPLE_TEAM_ID` (plus the notarization keys). A test checklist for a real Mac is in `docs/MACOS_PERMISSIONS.md`.
+
+---
+
+## 2026-10-03 — 0.2.94: a clean Home after signing in
+
+After signing in — from the login screen, the lock screen or a Local Profile — Home now opens with nothing on top of it (#150):
+
+- **Menus and panels start closed.** The profile menu, AI Assistant, notifications, chat drawer, transfers and search no longer reappear over Home after sign-in or unlock. If "Open the AI Assistant at start-up" is on, it opens once when WorkSuite starts, not after every sign-in.
+- **One floating panel at a time.** Opening the profile menu puts the AI Assistant away, and the other way round; an open chat conversation moves to the corner. **Esc** closes the open menu first, then the assistant; clicking outside a menu or moving to another page closes it. The profile menu always sits above the assistant.
+- **Online means online.** The profile menu no longer says Offline while the title bar says Online — it shows the status you chose as soon as you're connected (Offline only when you really are, or chose to appear offline).
+- **AI replies are formatted.** Bold, italic, lists, headings, code, quotes and links render properly instead of showing `**` and `*`. A long reply opens at its first line, with no blank gap above it.
+
+---
+
+## 2026-10-03 — 0.2.93: clearer Mail settings and modern buttons
+
+- **Mail › Manage** showed three toggles with no names. Each now reads **Show in the unified inbox**, **Notify me about new mail** and **Pause syncing**, with a one-line explanation, and **Remove…** is shown as the red danger action it is.
+- **Command palette (⌘K / Ctrl+K)** (#148): the selected result's **Open** button is a brand-coloured gradient with white text, a soft glow and a glass ↵ key; **New window** and **Copy link** are translucent glass buttons that light up on hover. Their shortcut keys show only when they work (Ctrl/⌘+↵ and Ctrl/⌘+C — the latter copies the result's link when nothing is selected). **Copy link** briefly turns into **Copied** with a check.
+- **Mail's New email** button gets the same treatment — white text on the brand gradient, with its **N** shortcut — and the search button beside it becomes a matching glass square.
+- Keyboard focus rings on all of them; hover lifts are off when your system asks for reduced motion.
+
+---
+
 ## 2026-10-03 — 0.2.92: the new Mail
 
 Mail is rebuilt to the *WorkSuite Mail — Desktop app* design, in light and dark:

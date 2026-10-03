@@ -94,6 +94,22 @@ export function usePendingMail() {
   });
 }
 
+/** What Mail keeps on this computer, by kind and by mailbox, and the organization's limit (D04, D09). */
+export function useMailStats(enabled = true) {
+  return useQuery({
+    queryKey: [...mailKeys.localStore, 'stats'],
+    queryFn: async () => {
+      try {
+        return await call('offline:mailStats');
+      } catch {
+        return null;
+      }
+    },
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
 /** How much mail this computer keeps (the offline cache's mail answers). */
 export function useLocalStore() {
   return useQuery({

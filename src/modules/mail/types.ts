@@ -30,6 +30,18 @@ export interface Mailbox {
   label?: string | null;
   mine?: boolean;
   protocol?: string;
+  /** WorkSuite's own copy of this mailbox on the server (Mail SRS v2.2 §9), when the organization keeps one. */
+  copy?: MailboxCopy | null;
+  notify?: boolean;
+}
+
+export interface MailboxCopy {
+  copy_mode: 'headers' | 'recent' | 'everything' | 'archive' | string;
+  stored_bytes: number;
+  local?: boolean;
+  window_months?: number;
+  /** Share of the last day's opens served from the copy, 0…1; null when nothing was opened. */
+  opens_from_copy?: number | null;
 }
 
 export interface Folder {
@@ -63,6 +75,20 @@ export interface TeamState {
   assignee_name: string | null;
   status: 'open' | 'answered' | 'closed' | string;
   read_by_me?: boolean;
+  /** Internal notes on the conversation (only the team sees them). */
+  notes?: number;
+  /** Snoozed until then (null: in the queue). */
+  snoozed_until?: string | null;
+}
+
+/** An internal note on a shared mailbox's conversation (GET messages/team/notes). */
+export interface TeamNote {
+  id: number;
+  user_id: number;
+  name: string;
+  mine: boolean;
+  body: string;
+  created_at: string;
 }
 
 export interface MessageRow {
@@ -86,6 +112,8 @@ export interface MessageRow {
   /** A conversation row (threaded list): how many messages it holds. */
   count?: number;
   team?: TeamState;
+  /** A search result's files, named from WorkSuite's copy (search only). */
+  attachments?: Attachment[];
 }
 
 export interface MessagePage {
@@ -179,6 +207,10 @@ export interface MailPrefs {
   zoom?: number;
   /** Group into conversations, per folder. */
   conversations?: Record<string, boolean>;
+  /** Reading (D10): open messages in tabs, previews in the list, dark mode for email content. */
+  tabs?: boolean;
+  previews?: boolean;
+  darkBody?: boolean;
 }
 
 export type SortKey = 'date' | 'sender' | 'subject' | 'size' | 'read' | 'attachment' | 'flag' | 'star';
@@ -231,7 +263,10 @@ export interface ComposeSeed {
   mode: 'new' | 'reply' | 'reply_all' | 'forward';
   to?: string;
   cc?: string;
+  bcc?: string;
   subject?: string;
+  /** Text the person is sending as their own words (a mailto: body, a meeting invitation) — not quoted. */
+  body?: string;
   quote?: string;
   inReplyTo?: string;
   mailbox?: string | null;

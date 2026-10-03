@@ -22,6 +22,8 @@ import { archName, platformName } from '../services/device';
 import { listPrinters, printHtml, printToPdf } from '../services/print';
 import { pmsDownload } from '../services/pms-download';
 import { accessibility } from '../services/remote-control/host';
+import { stopProbes } from '../services/remote-control/accessibility';
+import { restartForAccessibility } from '../services/remote-control/accessibility-watch';
 import { createZip } from '../services/zip';
 import { openExternalSafely } from '../security/hardening';
 import { answerNotice } from '../services/ai-pending';
@@ -138,8 +140,13 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   const rc = ctx.remoteControl;
   router.handle('rc:state', () => rc.view());
   router.handle('rc:recheck', async () => {
+    // A new question to the app and to its input helper each time, never an earlier answer (worksuite-desktop#147).
     await accessibility.refresh();
     return rc.view();
+  });
+  router.handle('rc:restart', async () => {
+    if (process.platform !== 'darwin') throw new DesktopError('UNSUPPORTED', 'Restarting for Accessibility is only needed on macOS.');
+    await restartForAccessibility({ stopControl: () => rc.shutdown('stopped'), stopProbes, relaunch: (safe, args) => ctx.relaunch(safe, args) });
   });
   router.handle('rc:setAllowRequests', (input) => rc.setAllowRequests(input.value));
   router.handle('rc:shareStarted', async (input, c) => {
@@ -870,6 +877,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('offline:pending', () => ctx.queue.list(uid()));
   router.handle('offline:moduleBytes', (input) => ctx.cache.moduleBytes(uid(), input.module));
   router.handle('offline:clearModule', (input) => ctx.cache.clearModule(uid(), input.module));
+  router.handle('offline:mailStats', () => ({ ...ctx.cache.mailStats(uid()), limitBytes: (ctx.session.current()?.policy?.offline_storage_max_mb ?? 2048) * 1024 * 1024 }));
   router.handle('offline:submit', (input) => ctx.queue.submit(uid(), input));
   router.handle('offline:retry', async (input) => {
     ctx.queue.retry(uid(), input.id);

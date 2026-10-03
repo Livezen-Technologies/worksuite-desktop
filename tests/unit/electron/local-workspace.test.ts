@@ -26,14 +26,14 @@ describe('device-only guest persistence', () => {
   it('backs up, merges and skips identical content without overwriting original IDs', () => {
     const source = new LocalWorkspace(':memory:'); const target = new LocalWorkspace(':memory:');
     source.save(input()); source.save(input('event')); const existing = target.save(input());
-    const backup = source.export(); expect(JSON.parse(backup)).toMatchObject({ format: 'worksuite-local', version: 2 });
+    const backup = source.export(); expect(JSON.parse(backup)).toMatchObject({ format: 'worksuite-local', version: 3 });
     expect(target.restore(backup)).toEqual({ added: 1, skipped: 1 });
     expect(target.read().items.some((item) => item.id === existing.id)).toBe(true);
     expect(target.restore(backup)).toEqual({ added: 0, skipped: 2 });
     const before = target.export();
     expect(() => target.restore(JSON.stringify({ format: 'worksuite-local', version: 1, items: [input(), { kind: 'event', title: 'Invalid' }] }))).toThrow();
     expect(target.export()).toBe(before);
-    target.deleteAll(); expect(target.read()).toEqual({ items: [], meetingInput: '', meetingServer: '' });
+    target.deleteAll(); expect(target.read()).toEqual({ items: [], contacts: [], meetingInput: '', meetingServer: '' });
     source.close(); target.close();
   });
   it('delivers missed task/event reminders once, retains denied notifications, and skips completed tasks', () => {

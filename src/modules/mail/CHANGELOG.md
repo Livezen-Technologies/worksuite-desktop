@@ -4,6 +4,19 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.4.0 — 2026-10-03
+
+- Mail SRS v2.2 and designs D04–D14: Import my old mail (D08) with progress, folders, what wasn't copied, pause/resume/cancel; shared mailboxes (D06) with internal notes, snooze (woken by a customer reply), who else is viewing, reply as the shared address or as an internal note; search (D07) with an attachments panel, Folder/Label/From filter chips and Best match; Accounts & offline (D04) with offline counts per account, download message bodies, app passwords and making WorkSuite the mailto: handler (prefilled compose that never sends on its own); Storage & sync (D09) with a breakdown against the organisation's limit, keep period per mailbox and the WorkSuite copy's window and use; Appearance & reading (D10): open in tabs, previews in the list, dark email content with a light card for designed emails; Copy link, Save to Files (message or attachment), Start meeting and Remind me (D13/D14); automatic reply, filters and blocked/safe senders; signatures in Settings. A mailto: body or a meeting invitation opens as your own text, not a quote, and Bcc from a mailto: link is kept.
+
+## 1.3.0 — 2026-10-03
+
+- Compose has a real editor (design D05): a visible writing surface with a formatting toolbar — undo/redo, Normal/Heading/Subheading, bold, italic, underline, strikethrough, text colour and highlight, link (http/https/mailto only), table, bulleted and numbered lists, indent, quote, clear formatting — with Ctrl/⌘ shortcuts and Markdown-style list starts; recipients as chips with suggestions from Contacts; Attach from Files; Insert template; the signature below a '-- ' line; Write with AI works on your own words only; the quoted email is a collapsible block left untouched; mail is sent as cleaned HTML with a matching plain-text part; old plain drafts are converted; Send is one control with equal halves, Send later is secondary and Discard is quiet red text. Pasted pictures are attached rather than placed inline.
+
+## 1.2.1 — 2026-10-03
+
+- The switches in a mailbox's Manage dialog show their names and a one-line hint (Show in the unified inbox, Notify me about new mail, Pause syncing) — they were bare toggles; Remove… reads as a red danger action.
+- New email is a 44 px brand-gradient button with white text, a glow, an N shortcut chip and a 1 px lift on hover; the search button beside it is a 44 px glass square labelled Search mail (/) (#148).
+
 ## 1.2.0 — 2026-10-03
 
 - Mail rebuilt to the WorkSuite Mail desktop design: sidebar with mailboxes and a unified inbox, smart views with counts (Unread, Starred, Important, Today, Has attachments, Scheduled, Drafts), folders, labels and a sync card; list with search across all mailboxes, filter chips, date groups and account badges; reading pane with message tabs, full toolbar, SPF/DKIM/DMARC chip, AI Summarise / Action items / Translate, action bar and status bar; offline banner, queued actions marked on rows and a Waiting to send panel with Undo; Add a mailbox (WorkSuite Local mailboxes from your admin, Microsoft 365, Google, IMAP/SMTP, POP3/send-only, offline period); compose in its own tab with Send later and Undo send; shared-inbox tabs and assignment; search operators (from:, to:, has:attachment, is:unread, is:starred, before:, after:); density, reading-pane, sort/group and conversation menus; More menu actions; keyboard shortcuts (j/k, Enter, e, #, !, s, u, r/a/f, n, /). Message HTML stays sanitised and remote images blocked.

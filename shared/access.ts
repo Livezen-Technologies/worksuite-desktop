@@ -1,4 +1,4 @@
-import { APP_CATALOGUE, visibleApps, type AccessGrant } from './apps';
+import { APP_CATALOGUE, GUEST_APPS, GUEST_LOCKED_APPS, visibleApps, type AccessGrant } from './apps';
 import { channelAppOfRoute, redirectRoute } from './channels';
 import { appForWebPath, resolveWebLink } from './links';
 
@@ -21,9 +21,23 @@ export const SHELL_SCREENS: ReadonlySet<string> = new Set(['home', 'notification
 /** Desktop screens that are part of another app: open to whoever may open that app. An Office document's tab is Files'. */
 export const APP_PARTS: Readonly<Record<string, string>> = { calls: 'chat', office: 'files' };
 
-/** A set of visible catalogue app ids (a `Set`, or anything with `has`). */
+/** A set of visible catalogue app ids (a `Set`, or anything with `has`). `guest`: guest mode's set (#149). */
 export interface VisibleApps {
   has(id: string): boolean;
+  readonly guest?: boolean;
+}
+
+/** Shell screens a guest may open (#149): Settings (with its Local Profile pages) and Help. Home, Notifications and My account need an account. */
+export const GUEST_SCREENS: ReadonlySet<string> = new Set(['settings', 'diagnostics']);
+
+/** What guest mode may open (#149): its local apps and screens, nothing else — not a part of another app, not an unknown route. */
+export const GUEST_VISIBLE: VisibleApps = Object.freeze({ guest: true, has: (id: string) => GUEST_APPS.some((a) => a.id === id) });
+
+/** The locked app a guest asked for, for the sign-in panel: a catalogue id or a route's. Null for one guest mode lists nowhere. */
+export function guestLockedApp(idOrRoute: string): string | null {
+  const id = idOrRoute.startsWith('/') ? routeOwner(idOrRoute) : idOrRoute;
+  const owner = APP_PARTS[id] ?? id;
+  return GUEST_LOCKED_APPS.some((a) => a.id === owner) ? owner : null;
 }
 
 const CATALOGUE_IDS = new Set(APP_CATALOGUE.map((a) => a.id));
@@ -48,6 +62,7 @@ export function isKnownApp(id: string): boolean {
 
 /** Whether the person may open this app (a catalogue id, a shell screen or a part of an app). */
 export function canOpenApp(id: string, visible: VisibleApps): boolean {
+  if (visible.guest) return GUEST_SCREENS.has(id) || (!(id in APP_PARTS) && visible.has(id));
   if (SHELL_SCREENS.has(id)) return true;
   const owner = APP_PARTS[id];
   return visible.has(owner ?? id);
@@ -70,12 +85,15 @@ export function routeOwner(route: string): string {
 /** A desktop route (`/chat?room=4`, `/calls/ring?…`): refused only when it belongs to an app the person may not open. */
 export function canOpenRoute(route: string, visible: VisibleApps): boolean {
   const id = routeOwner(route);
+  // A guest opens only what guest mode lists: a person's profile or a record of no app needs an account too.
+  if (visible.guest) return canOpenApp(id, visible);
   return !isKnownApp(id) || canOpenApp(id, visible);
 }
 
 /** A WorkSuite web path (`/tickets?ticket=4`): refused only when it belongs to an app the person may not open. */
 export function canOpenWebPath(path: string, visible: VisibleApps): boolean {
   const app = appForWebPath(path);
+  if (visible.guest) return !!app && canOpenApp(app.id, visible);
   return !app || canOpenApp(app.id, visible);
 }
 
@@ -88,6 +106,7 @@ export function linkApp(link: string | null | undefined): string | null {
 /** A web link (a notification's, a search hit's): refused only when it opens an app the person may not open. */
 export function canOpenLink(link: string | null | undefined, visible: VisibleApps): boolean {
   const app = linkApp(link);
+  if (visible.guest) return !!app && canOpenApp(app, visible);
   return !app || canOpenApp(app, visible);
 }
 

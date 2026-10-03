@@ -248,6 +248,10 @@ export interface Preferences {
   openFilesLocally: 'ask' | 'always' | 'never';
   downloadFolder: string;
   mailCacheDays: 7 | 30 | 90 | 0;
+  /** Open mailto: links in WorkSuite: it registers as the system's mail app (Settings › Mail, D04). Off until the person turns it on. */
+  mailtoHandler?: boolean;
+  /** Per mailbox, how long its mail is kept on this computer (D09), overriding `mailCacheDays`. */
+  mailCacheDaysByMailbox?: Record<string, 7 | 30 | 90 | 0>;
   tabSuspendMinutes: number;
   language: string;
   updateChannel: UpdateChannel;
@@ -784,6 +788,20 @@ export interface SyncPolicy {
 
 // ── Meet remote control on this computer (WS-MEET-ENH-01) ─────────────────
 
+/** macOS: who the running WorkSuite is, to compare with its entry in Privacy & Security › Accessibility. */
+export interface RemoteControlIdentity {
+  executable: string;
+  bundle: string;
+  bundleId: string | null;
+  teamId: string | null;
+  authority: string | null;
+  adhoc: boolean;
+  translocated: boolean;
+  otherInstalledCopy: boolean;
+  development: boolean;
+  signingUnavailable: boolean;
+}
+
 /** Whether this computer can be controlled, and if not, why — in a sentence. */
 export interface RemoteControlSupport {
   available: boolean;
@@ -793,10 +811,24 @@ export interface RemoteControlSupport {
   /** macOS: Accessibility, which injecting needs. Elsewhere 'not_required'. */
   accessibility: 'granted' | 'denied' | 'checking' | 'unknown' | 'not_required';
   /**
-   * macOS: the running app reports access but its input helper explicitly reports denial.
+   * macOS: the running app reports access but its input helper reports denial.
+   *  - restart: granted while WorkSuite was running; restarting WorkSuite (and so its helper) finishes it.
+   *  - helper: a restart has already been tried; the helper is not being counted as WorkSuite's.
    */
-  accessibilityHint?: 'restart' | null;
-  accessibilityDetails?: { appTrusted: boolean | null; helperTrusted: boolean | null; helperAccessibility: boolean | null; problem: string | null; checkedAt: number | null; runningApp: string };
+  accessibilityHint?: 'restart' | 'helper' | null;
+  accessibilityDetails?: {
+    appTrusted: boolean | null;
+    helperTrusted: boolean | null;
+    helperAccessibility: boolean | null;
+    problem: string | null;
+    checkedAt: number | null;
+    runningApp: string;
+    /** The input helper's executable, and whether the last answer came from the running helper or a new one. */
+    helperPath?: string;
+    helperSource?: 'injector' | 'probe' | null;
+    /** Signing and location of the running copy (worksuite-desktop#147); null until known. */
+    identity?: RemoteControlIdentity | null;
+  };
   /** The computer's policy lets it be controlled at all (the server still decides each time). */
   policyAllows: boolean;
 }
@@ -1064,4 +1096,19 @@ export interface SpeechSegment {
 /** Whether this computer can transcribe on its own, and if not why. */
 export interface SpeechStatus {
   local: { ready: boolean; model: { name: string; size: number } | null; why: string | null };
+}
+
+/** What Mail keeps on this computer (offline:mailStats; Settings › Mail, D04 and D09). */
+export interface MailStoreStats {
+  total: number;
+  /** Opened messages and what is read beside them. */
+  messages: number;
+  /** Message lists, folders, labels and counts. */
+  lists: number;
+  search: number;
+  other: number;
+  /** Per mailbox id: messages kept to read offline, and their bytes. */
+  byMailbox: Record<string, { messages: number; bytes: number }>;
+  /** The organization's limit for everything this computer keeps offline (all apps). */
+  limitBytes?: number;
 }

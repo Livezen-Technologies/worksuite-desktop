@@ -1,12 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { appRoute, navApps, type AppDefinition } from '@shared/apps';
+import { GUEST_LOCKED_APPS, appRoute, navApps, type AppDefinition } from '@shared/apps';
 import { app, updatePrefs } from '../core/app-state';
 import { apiGet } from '../core/api';
 import { appLabel, t } from '../core/i18n';
 import { useStore } from '../core/store';
 import { navigate, tabsStore } from '../core/tabs';
 import { closeOverlay, openOverlay, ui } from '../core/ui';
+import { openSignInPanel, useGuest } from '../core/session';
+import { text } from '../core/i18n';
 import { roleLabel } from '../core/orgs';
 import { OrgTile } from '../app/overlays/OrgSwitcher';
 import { Icon } from '../components/Icon';
@@ -32,8 +34,11 @@ export function Sidebar() {
   const listed = navApps(apps);
   const native = listed.filter((a) => a.surface === 'native');
   const pinnedBrowser = listed.filter((a) => (a.surface === 'browser' || a.channelOf) && prefs?.pinnedApps.includes(a.id));
-  const work = native.filter((a) => a.sidebar === 'work');
-  const business = [...native.filter((a) => a.sidebar === 'business'), ...pinnedBrowser];
+  // Guest mode (#149): its apps, then the ones that need an account, locked.
+  const guest = useGuest();
+  const work = guest ? native : native.filter((a) => a.sidebar === 'work');
+  const business = guest ? [] : [...native.filter((a) => a.sidebar === 'business'), ...pinnedBrowser];
+  const locked = guest ? GUEST_LOCKED_APPS : [];
 
   const badge = (a: AppDefinition): number => {
     if (!status || !a.badge) return 0;
@@ -59,6 +64,16 @@ export function Sidebar() {
             <Item key={a.id} a={a} active={activeApp === a.id} collapsed={collapsed} badge={badge(a)} onClick={() => open(a)} />
           ))}
         </ul>
+        {locked.length ? (
+          <>
+            <div className="mx-2 my-3 border-t border-white/10" />
+            <ul className="flex flex-col gap-0.5" aria-label={text('Needs a WorkSuite account')}>
+              {locked.map((a) => (
+                <Item key={a.id} a={a} active={false} collapsed={collapsed} badge={0} locked onClick={() => openSignInPanel(a.id)} />
+              ))}
+            </ul>
+          </>
+        ) : null}
         {business.length ? <div className="mx-2 my-3 border-t border-white/10" /> : null}
         <ul className="flex flex-col gap-0.5">
           {business.map((a) => (
@@ -150,15 +165,16 @@ function OrgCard({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-function Item({ a, active, collapsed, badge, onClick }: { a: AppDefinition; active: boolean; collapsed: boolean; badge: number; onClick: () => void }) {
-  const label = appLabel(a);
+function Item({ a, active, collapsed, badge, onClick, locked }: { a: AppDefinition; active: boolean; collapsed: boolean; badge: number; onClick: () => void; locked?: boolean }) {
+  const label = locked ? text(a.guestLabel ?? a.label) : appLabel(a);
   return (
     <li>
       <button
         type="button"
         onClick={onClick}
         aria-current={active ? 'page' : undefined}
-        title={collapsed ? label : undefined}
+        title={locked ? text('Sign in to use {app}', { app: label }) : collapsed ? label : undefined}
+        aria-label={locked ? `${label} (${text('needs a WorkSuite account')})` : undefined}
         className={cx(
           'relative flex h-10 w-full items-center gap-3 rounded-[9px] px-3 text-[14px] font-medium transition-colors',
           active ? 'bg-primary text-white' : 'hover:bg-white/8 hover:text-white',
@@ -167,7 +183,8 @@ function Item({ a, active, collapsed, badge, onClick }: { a: AppDefinition; acti
       >
         <Icon name={a.icon} size={19} />
         {!collapsed && <span className="flex-1 truncate text-left">{label}</span>}
-        {!collapsed && a.surface === 'browser' ? <Icon name="external" size={13} className="opacity-60" /> : null}
+        {!collapsed && a.surface === 'browser' && !locked ? <Icon name="external" size={13} className="opacity-60" /> : null}
+        {locked ? <Icon name="lock" size={13} className={cx('opacity-70', collapsed && 'absolute right-1.5 bottom-1')} /> : null}
         {badge > 0 ? <CountBadge n={badge} tone={a.id === 'mail' || a.id === 'tasks' ? 'indigo' : 'badge'} className={collapsed ? 'absolute top-0.5 right-1' : ''} /> : null}
       </button>
     </li>

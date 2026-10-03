@@ -1,4 +1,3 @@
-import { isLocalWorkspaceHash } from '@shared/local-workspace';
 import { isGuestMeetingHash } from '@shared/guest-meet';
 import '@fontsource-variable/plus-jakarta-sans';
 import '@fontsource/jetbrains-mono/500.css';
@@ -12,9 +11,14 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { App } from './app/App';
 import { AppBoundary } from './app/Boundaries';
 import { initAppState } from './core/app-state';
+import { wireSessionCache } from './core/session';
 import { queryClient, wireQueryInvalidation } from './core/query';
 
-if (!isGuestMeetingHash(window.location.hash) && !isLocalWorkspaceHash(window.location.hash)) void initAppState().then(() => wireQueryInvalidation());
+if (!isGuestMeetingHash(window.location.hash)) void initAppState().then(() => {
+  wireQueryInvalidation();
+  // Guest mode and each account keep their own data: switching between them leaves nothing cached behind (#149).
+  wireSessionCache();
+});
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -1,13 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { canOpenApp, canOpenLink, canOpenRoute } from '@shared/access';
-import { appRoute, navApps } from '@shared/apps';
+import { GUEST_LOCKED_APPS, appRoute, navApps } from '@shared/apps';
 import { resolveWebLink } from '@shared/links';
 import { idsOf } from '../../core/access';
 import { app } from '../../core/app-state';
 import { ApiError, apiGet } from '../../core/api';
 import { appColour, groupLook } from '../../core/app-look';
-import { call } from '../../core/bridge';
+import { call, isMac } from '../../core/bridge';
 import { allCommands, effectiveShortcuts, prettyAccelerator } from '../../core/commands';
 import { appLabel, text, useLanguage } from '../../core/i18n';
 import { noteRecentApp } from '../../core/recent-apps';
@@ -17,11 +17,12 @@ import { openWebLink } from '../../core/tab-context';
 import { bytes, relative } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { closeOverlay, ui } from '../../core/ui';
+import { openSignInPanel, useGuest } from '../../core/session';
 import { AppTile } from '../../components/AppTile';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { extOf, kindOf } from '../../modules/files/api';
-import { cx, DATA_TEXT } from '../../components/ui';
+import { Button, cx, DATA_TEXT, Kbd as KeyChip } from '../../components/ui';
 
 /**
  * Global search (GlobalSearch; Ctrl/Cmd+K, FR-SRCH-01/02) and the command
@@ -194,6 +195,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const apps = useStore(app, (s) => s.apps);
+  const guest = useGuest();
   // The apps to go to: a channel is in its host (WhatsApp, in Chat: #35), not an app of its own.
   const listed = useMemo(() => navApps(apps), [apps]);
   const shortcuts = effectiveShortcuts(useStore(app, (s) => s.prefs?.shortcuts));
@@ -287,6 +289,15 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
   const items = useMemo<Item[]>(() => {
     const lower = term.toLowerCase();
     const out: Item[] = [];
+    // Guest mode (#149): an app that needs an account is found, and opens the sign-in panel — never the app.
+    const locked = (group: string) => {
+      if (!guest) return;
+      for (const a of GUEST_LOCKED_APPS) {
+        const label = text(a.guestLabel ?? a.label);
+        if (lower && !label.toLowerCase().includes(lower) && !(a.keywords ?? '').includes(lower)) continue;
+        out.push({ key: `locked:${a.id}`, group, title: label, subtitle: text('Needs a WorkSuite account'), colour: '#8A90A2', icon: 'lock', kv: [[text('Needs'), text('A WorkSuite account')]], verb: text('Sign in to use {app}', { app: label }), run: () => { closeOverlay(); openSignInPanel(a.id); } });
+      }
+    };
     const appItem = (a: (typeof apps)[number], group: string): Item => ({
       key: `app:${a.id}`,
       group,
@@ -303,6 +314,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
     });
     if (commandMode) {
       for (const a of listed) if (!lower || appLabel(a).toLowerCase().includes(lower) || (a.keywords ?? '').includes(lower)) out.push(appItem(a, 'Go to'));
+      locked('Go to');
       for (const c of create) {
         if (lower && !c.label.toLowerCase().includes(lower)) continue;
         out.push({
@@ -339,6 +351,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
     }
     if (!lower) return out;
     if (scope === 'All') for (const a of listed) if (appLabel(a).toLowerCase().includes(lower) || (a.keywords ?? '').includes(lower)) out.push(appItem(a, 'Apps'));
+    if (scope === 'All') locked('Apps');
     const words = serverData?.terms ?? [];
     for (const g of serverData?.results ?? []) {
       const look = groupLook(g.group);
@@ -388,7 +401,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
       });
     }
     return out;
-  }, [commandMode, term, listed, create, serverData, offlineData, shortcuts, scope, allowed, origin, user]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [commandMode, term, listed, create, serverData, offlineData, shortcuts, scope, allowed, origin, user, guest]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filters: All, then each group that found something (and the one chosen, even when empty).
   const groups = [...new Set(items.filter((i) => i.group !== 'Apps').map((i) => i.group))];
@@ -412,6 +425,10 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
     list.current?.querySelector<HTMLElement>(`[data-index="${selected}"]`)?.scrollIntoView({ block: 'nearest' });
   }, [selected]);
 
+  const [copied, setCopied] = useState<string | null>(null);
+  const copiedTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(copiedTimer.current), []);
+
   const run = (it: Item | undefined, how: 'open' | 'window' = 'open') => {
     if (!it) return;
     if (!commandMode) noteRecentSearch(user, term);
@@ -426,6 +443,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
   };
 
   const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (copyKey(e)) return;
     if (e.key === 'Escape') {
       e.preventDefault();
       closeOverlay();
@@ -453,8 +471,20 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
     if (!it.link) return;
     void navigator.clipboard
       .writeText(it.link)
-      .then(() => toast('success', text('Link copied.')))
+      .then(() => {
+        // The button says "Copied" for a moment (#148); the polite live region announces it.
+        window.clearTimeout(copiedTimer.current);
+        setCopied(it.key);
+        copiedTimer.current = window.setTimeout(() => setCopied(null), COPIED_MS);
+      })
       .catch(() => toast('error', text('Could not copy the link.')));
+  };
+  // Mod+C copies the selected result's link, but only when there is no text to copy instead.
+  const copyKey = (e: React.KeyboardEvent<HTMLElement>) => {
+    if (!cur?.link || !isCopyChord(e) || hasTextSelection(e.target)) return false;
+    e.preventDefault();
+    copy(cur);
+    return true;
   };
 
   let lastGroup = '';
@@ -670,6 +700,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
                       if (narrow) setDetailsOpen(true);
                     }}
                     onKeyDown={(e) => {
+                      if (copyKey(e)) return;
                       if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
                         e.preventDefault();
                         const next = e.key === 'Home' ? 0 : e.key === 'End' ? shown.length - 1 : Math.max(0, Math.min(shown.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)));
@@ -767,6 +798,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
               ref={details}
               aria-label={text('Preview')}
               onKeyDown={(e) => {
+                if (copyKey(e)) return;
                 if (narrow && e.key === 'Escape') {
                   e.preventDefault();
                   setDetailsOpen(false);
@@ -812,36 +844,51 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
                 <SearchFacts key={cur.key} item={cur} online={online} identity={companyIdentity} />
               </div>
               <div className="flex shrink-0 flex-col gap-2 border-t border-line bg-well p-4">
-                <button
-                  type="button"
-                  onClick={() => run(cur)}
-                  className="flex min-h-[38px] items-center justify-center gap-2 rounded-[10px] bg-primary text-[13px] font-bold text-white hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-primary"
-                >
+                <Button variant="accent" size="action-lg" onClick={() => run(cur)} aria-keyshortcuts="Enter" className="w-full">
                   {text(cur.verb)}
-                  <Kbd>↵</Kbd>
-                </button>
+                  <KeyChip tone="accent" aria-hidden>
+                    ↵
+                  </KeyChip>
+                </Button>
                 {!cur.action ? (
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant="glass"
+                      size="action"
+                      icon="maximize"
                       disabled={!cur.window}
                       onClick={() => run(cur, 'window')}
-                      className="flex min-h-[34px] flex-1 items-center justify-center gap-1.5 rounded-[9px] border border-line bg-surface text-[12px] font-semibold text-ink-2 hover:text-ink disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-primary"
+                      aria-keyshortcuts={cur.window ? (isMac ? 'Meta+Enter' : 'Control+Enter') : undefined}
+                      className="min-w-0"
                     >
-                      <Icon name="maximize" size={13} />
-                      {text('New window')}
-                    </button>
-                    <button
-                      type="button"
+                      <span className="min-w-0 truncate">{text('New window')}</span>
+                      {cur.window ? (
+                        <KeyChip tone="key" aria-hidden className="ml-auto shrink-0">
+                          {prettyAccelerator('Mod+Enter').replace('Enter', '↵')}
+                        </KeyChip>
+                      ) : null}
+                    </Button>
+                    <Button
+                      variant="glass"
+                      size="action"
+                      icon={copied === cur.key ? 'check' : 'link'}
                       disabled={!cur.link}
                       onClick={() => copy(cur)}
-                      className="flex min-h-[34px] flex-1 items-center justify-center gap-1.5 rounded-[9px] border border-line bg-surface text-[12px] font-semibold text-ink-2 hover:text-ink disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-primary"
+                      aria-keyshortcuts={cur.link ? (isMac ? 'Meta+C' : 'Control+C') : undefined}
+                      className="min-w-0"
                     >
-                      <Icon name="link" size={13} />
-                      {text('Copy link')}
-                    </button>
+                      <span className="min-w-0 truncate">{text(copied === cur.key ? 'Copied' : 'Copy link')}</span>
+                      {cur.link ? (
+                        <KeyChip tone="key" aria-hidden className="ml-auto shrink-0">
+                          {prettyAccelerator('Mod+C')}
+                        </KeyChip>
+                      ) : null}
+                    </Button>
                   </div>
                 ) : null}
+                <span role="status" aria-live="polite" className="sr-only">
+                  {copied === cur.key ? text('Copied.') : ''}
+                </span>
               </div>
             </aside>
           ) : null}
@@ -901,11 +948,27 @@ function Heading({ children, className }: { children: React.ReactNode; className
 }
 
 function Kbd({ children }: { children: React.ReactNode }) {
-  return (
-    <kbd className="inline-flex h-5 min-w-[18px] items-center justify-center rounded-[5px] border border-b-2 border-line bg-surface px-[5px] font-sans text-[10.5px] font-semibold text-ink-3">
-      {children}
-    </kbd>
-  );
+  return <KeyChip tone="key">{children}</KeyChip>;
+}
+
+/** How long Copy link says "Copied" (#148). */
+export const COPIED_MS = 1500;
+
+/** Cmd+C on macOS, Ctrl+C elsewhere — nothing else held. */
+export function isCopyChord(e: Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>, mac = isMac): boolean {
+  return e.key.toLowerCase() === 'c' && (mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey) && !e.altKey && !e.shiftKey;
+}
+
+/** Whether a copy would take text: a selection in the focused field or on the page. */
+function hasTextSelection(target: EventTarget | null): boolean {
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+    try {
+      if (target.selectionStart !== target.selectionEnd) return true;
+    } catch {
+      // Field types without a selection (email, number) fall through to the page.
+    }
+  }
+  return Boolean(window.getSelection?.()?.toString());
 }
 
 /** Files use their actual kind, rather than the Files application's folder glyph. */

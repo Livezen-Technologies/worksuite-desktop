@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from 'react';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
+import { Markdown } from '../../components/Markdown';
 import { useStickToBottom } from '../../components/useStickToBottom';
 import { app } from '../../core/app-state';
 import { LANGUAGES, t, useLanguage } from '../../core/i18n';
@@ -127,7 +128,13 @@ export function AskPanel({
     if (local) set({ useTab: false });
   }, [local, set]);
   // The conversation follows new messages and a streaming answer while the reader is at the end (worksuite-desktop#50).
-  const { scroller, content, unseen, toEnd, onScroll } = useStickToBottom(`${entries.length}:${busy}:${streaming?.length ?? -1}`);
+  const { scroller, content, unseen, toEnd, reveal, onScroll } = useStickToBottom(`${entries.length}:${busy}:${streaming?.length ?? -1}`);
+  // An answer that has just landed — or the latest one, when the panel opens — is read from its first line, never from
+  // mid-sentence (worksuite-desktop#150). It is the conversation's last element once nothing is on its way.
+  const settled = !busy && !streaming && entries.at(-1)?.role === 'assistant';
+  useEffect(() => {
+    if (settled) reveal(content.current?.lastElementChild);
+  }, [entries.length, settled, reveal, content]);
 
   // Neither the model on this computer nor online AI can answer: say why, and how to get one.
   const off = !local && !online ? `No model on this computer can answer yet. ${onlineWhy}` : null;
@@ -487,7 +494,7 @@ function Bubble({ e, elsewhere, onRetry, onSetup, onSettle }: { e: AskEntry; els
         <span className="inline-flex items-center gap-1 rounded-full bg-subtle px-2 py-0.5 text-[11px] text-ink-2">
           <Icon name="stop" size={10} /> {t('ai.stopped')}
         </span>
-        {e.text !== t('ai.stopped') ? <p className="whitespace-pre-wrap text-[13.5px] leading-[1.55] text-ink selectable">{e.text}</p> : null}
+        {e.text !== t('ai.stopped') ? <Markdown text={e.text} className="text-[13.5px] leading-[1.55] text-ink selectable" /> : null}
         {onRetry ? (
           <button type="button" onClick={onRetry} className="flex h-8 items-center gap-1.5 rounded-[8px] border border-line px-3 text-[12.5px] font-semibold text-ink hover:bg-subtle">
             <Icon name="rotate-cw" size={14} /> {t('ai.retry')}
@@ -540,7 +547,8 @@ function Bubble({ e, elsewhere, onRetry, onSetup, onSettle }: { e: AskEntry; els
           <Icon name="sparkles" size={11} /> Used online AI · {e.fallback}
         </span>
       ) : null}
-      <p className="whitespace-pre-wrap text-[13.5px] leading-[1.55] text-ink selectable">{e.text}</p>
+      {/* Answers come in Markdown: drawn, never shown as raw marks (worksuite-desktop#150). */}
+      <Markdown text={e.text} className="text-[13.5px] leading-[1.55] text-ink selectable" />
       {records.length ? (
         <ul className="space-y-0.5 border-t border-line pt-1.5 text-[12px]">
           {records.map((s) => (

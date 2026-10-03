@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.6.1 — 2026-10-03
+
+- The API proxy decides per mailbox whether a message body is kept offline (each mailbox can now have its own keep period).
+
 ## 1.6.0 — 2026-10-02
 
 - Add adaptive video playback with automatic/manual quality, bounded buffers, same-origin signed HLS proxying, cancellation on close and recoverable preparation states. Keep original download/local-open available (#56). Production CDN and large-file measurements remain pending.

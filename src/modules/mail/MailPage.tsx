@@ -42,7 +42,7 @@ export { joinQuote, splitQuote, unquote } from './quote';
  */
 export default function MailPage({ active }: ModuleProps) {
   const qc = useQueryClient();
-  const { query, go, route, openInWindow, navigate } = useTab();
+  const { query, go, route, openInWindow, navigate, path } = useTab();
   const place: Place = {
     box: query.get('box') ?? 'unified',
     view: smartView(query.get('view'))?.id ?? null,
@@ -64,16 +64,23 @@ export default function MailPage({ active }: ModuleProps) {
   const [adding, setAdding] = useState(false);
   const [focus, setFocus] = useState(false);
   const [team, setTeam] = useState<'open' | 'answered' | 'closed' | 'all'>('open');
-  const [teamWho, setTeamWho] = useState<'all' | 'mine' | 'nobody'>('all');
+  const [teamWho, setTeamWho] = useState<'all' | 'mine' | 'nobody' | 'snoozed'>('all');
   const controls = useRef<ViewControls | null>(null);
   const [composeRoute, setComposeRoute] = useState<string | null>(null);
   const openCompose = (seed: ComposeSeed) => setCompose((c) => ({ seed, shown: true, n: (c?.n ?? 0) + 1 }));
   if (query.get('compose') === '1' && composeRoute !== route) {
     setComposeRoute(route);
-    // `?compose=1&to=a@b` — a new message to somebody (Contacts' Email).
-    const to = query.get('to');
-    setCompose((c) => ({ seed: { mode: 'new', ...(to && /^[^\s@<>]+@[^\s@<>]+$/.test(to) ? { to } : {}) }, shown: true, n: (c?.n ?? 0) + 1 }));
+    // `?compose=1&to=a@b` — a new message to somebody (Contacts' Email), or a mailto: link with cc, subject and body.
+    setCompose((c) => ({ seed: composeSeedFromQuery(query), shown: true, n: (c?.n ?? 0) + 1 }));
   }
+  // An import's notification links to /mail/imports: the import screen lives in Settings › Mail.
+  const importsRoute = path[1] === 'imports';
+  useEffect(() => {
+    if (!importsRoute) return;
+    const id = query.get('id');
+    navigate(`/settings/mail?tab=import${id && /^\d+$/.test(id) ? `&id=${id}` : ''}`);
+    go('/mail');
+  }, [importsRoute, query, navigate, go]);
   useTabTitle(msg ? 'Mail · Message' : 'Mail');
 
   const mailboxes = useMailboxes();
@@ -125,7 +132,7 @@ export default function MailPage({ active }: ModuleProps) {
     all = applyFilters(all, filters);
     if (isTeam) {
       const me = Number(app.get().bootstrap?.user.id ?? 0);
-      all = all.filter((m) => (team === 'all' || (m.team?.status ?? 'open') === team) && (teamWho === 'all' || (teamWho === 'mine' ? m.team?.assignee_id === me : !m.team?.assignee_id)));
+      all = all.filter((m) => teamRowShown(m, team, teamWho, me));
     }
     const term = searchFold(search.trim());
     if (term) all = all.filter((m) => searchFold(`${m.from_name} ${m.from_email} ${m.subject} ${m.preview}`).includes(term));
@@ -303,9 +310,9 @@ export default function MailPage({ active }: ModuleProps) {
         })}
       </div>
       <div className="mt-2 flex gap-1.5">
-        {(['mine', 'nobody'] as const).map((w) => (
+        {(['mine', 'nobody', 'snoozed'] as const).map((w) => (
           <button key={w} type="button" aria-pressed={teamWho === w} onClick={() => setTeamWho(teamWho === w ? 'all' : w)} className={cx('h-[26px] rounded-full border px-2.5 text-[12.5px] font-semibold', teamWho === w ? 'border-ink bg-ink text-surface' : 'border-line text-ink hover:bg-subtle')}>
-            {w === 'mine' ? text('Assigned to me') : text('Unassigned')}
+            {w === 'mine' ? text('Assigned to me') : w === 'nobody' ? text('Unassigned') : text('Snoozed')}
           </button>
         ))}
       </div>
@@ -355,7 +362,8 @@ export default function MailPage({ active }: ModuleProps) {
 
   const reader = (
     <ReadingPane
-      tabs={tabs}
+      tabs={prefs.tabs === false ? tabs.filter((t) => t.key === currentKey) : tabs}
+      strip={prefs.tabs !== false}
       activeKey={currentKey}
       onActivate={(t) => openRef(t.ref)}
       onClose={closeTab}
@@ -497,6 +505,44 @@ export default function MailPage({ active }: ModuleProps) {
       {adding ? <AddMailbox onClose={() => setAdding(false)} /> : null}
     </div>
   );
+}
+
+const ADDRESS = /^[^\s@<>,;]+@[^\s@<>,;]+$/;
+
+/**
+ * A shared mailbox's row in the queue (D06): its status tab, and Assigned to
+ * me, Unassigned or Snoozed. A snoozed conversation stays out of the queue
+ * until it wakes — except under Snoozed, which lists exactly those.
+ */
+export function teamRowShown(m: MessageRow, tab: 'open' | 'answered' | 'closed' | 'all', who: 'all' | 'mine' | 'nobody' | 'snoozed', me: number, now = Date.now()): boolean {
+  const until = m.team?.snoozed_until ?? null;
+  const snoozed = !!until && Date.parse(`${until.replace(' ', 'T')}${/[zZ]|[+-]\d\d:?\d\d$/.test(until) ? '' : 'Z'}`) > now;
+  if (who === 'snoozed') return snoozed;
+  if (snoozed && tab !== 'all') return false;
+  if (tab !== 'all' && (m.team?.status ?? 'open') !== tab) return false;
+  if (who === 'mine') return m.team?.assignee_id === me;
+  if (who === 'nobody') return !m.team?.assignee_id;
+  return true;
+}
+
+/**
+ * A new message from the route's query (`?compose=1&to=…&cc=…&subject=…&body=…`):
+ * Contacts' Email, and mailto: links from other apps. Only addresses that are
+ * addresses are kept; the body is prefilled text the person edits and sends.
+ */
+export function composeSeedFromQuery(query: URLSearchParams): ComposeSeed {
+  const list = (key: string) =>
+    (query.get(key) ?? '')
+      .split(/[,;]/)
+      .map((a) => a.trim())
+      .filter((a) => ADDRESS.test(a))
+      .join(', ');
+  const to = list('to');
+  const cc = list('cc');
+  const bcc = list('bcc');
+  const subject = (query.get('subject') ?? '').replace(/[\r\n]+/g, ' ').slice(0, 500);
+  const body = (query.get('body') ?? '').slice(0, 20_000);
+  return { mode: 'new', ...(to ? { to } : {}), ...(cc ? { cc } : {}), ...(bcc ? { bcc } : {}), ...(subject ? { subject } : {}), ...(body ? { body } : {}) };
 }
 
 /** "Sending “Re: Payroll export” in 8 s", counting down. */

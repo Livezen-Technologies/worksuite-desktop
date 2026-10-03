@@ -6,6 +6,10 @@
  * When the server cannot be reached, a module's last cached answer may come
  * back instead, marked offline (FR-OFF-01, FR-SRCH-02).
  */
+import { app } from './app-state';
+import { call } from './bridge';
+import { text } from './i18n';
+
 export const API_BASE = 'app://bundle/__api';
 
 export class ApiError extends Error {
@@ -57,7 +61,28 @@ async function parse(res: Response): Promise<{ body: Record<string, unknown> | n
   }
 }
 
+const LOCAL_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
+
+/**
+ * Guest mode's storage layer (#149): the same requests, answered from the Local Profile on this device
+ * (electron/services/local-api.ts), so Notes, Tasks, Contacts and Calendar run the same screens in both modes.
+ * Nothing in guest mode reaches a WorkSuite server.
+ */
+async function localRequest<T>(method: string, path: string, opts: { query?: Query; body?: unknown }): Promise<ApiResult<T>> {
+  if (!LOCAL_METHODS.has(method) || opts.body instanceof FormData) throw new ApiError(403, text('This needs a WorkSuite account. Sign in to use it.'), 'GUEST');
+  const query = opts.query ? (Object.fromEntries(Object.entries(opts.query).filter(([, v]) => v !== undefined && v !== null && v !== '')) as Record<string, string | number | boolean>) : undefined;
+  let answer: { status: number; data: unknown; message: string | null };
+  try {
+    answer = await call('local:api', { method: method as 'GET', path, query, body: opts.body });
+  } catch (e) {
+    throw new ApiError(0, (e as Error).message || text('WorkSuite Desktop could not complete the request.'), 'INTERNAL');
+  }
+  if (answer.status >= 400) throw new ApiError(answer.status, text(answer.message ?? 'Something went wrong.'), answer.status === 403 ? 'GUEST' : null);
+  return { data: answer.data as T, offline: false, cachedAt: null, message: null };
+}
+
 export async function request<T = unknown>(method: string, path: string, opts: { query?: Query; body?: unknown; signal?: AbortSignal; headers?: Record<string, string> } = {}): Promise<ApiResult<T>> {
+  if (app.get().session.mode === 'guest') return localRequest<T>(method, path, opts);
   const headers: Record<string, string> = { Accept: 'application/json', ...(opts.headers ?? {}) };
   let body: BodyInit | undefined;
   if (opts.body instanceof FormData) body = opts.body;
