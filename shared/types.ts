@@ -1192,4 +1192,20 @@ export interface MailStoreStats {
   byMailbox: Record<string, { messages: number; bytes: number }>;
   /** The organization's limit for everything this computer keeps offline (all apps). */
   limitBytes?: number;
+  /**
+   * "Download message bodies" (#190): per mailbox id, the bodies within the
+   * offline window this computer has (`stored`) of those it wants
+   * (`wanted`), and whether it is downloading them now.
+   */
+  bodies?: Record<string, MailBodiesProgress>;
+}
+
+/** One mailbox's body download on this computer (#190). */
+export interface MailBodiesProgress {
+  stored: number;
+  wanted: number;
+  running: boolean;
+  /** ISO time of the last pass that finished. */
+  doneAt: string | null;
+  error: string | null;
 }

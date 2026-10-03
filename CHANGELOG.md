@@ -5,6 +5,12 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.124 — 2026-10-03
+
+- **Mail sync that actually syncs (#190).** With the server update, every run now checks every folder (not just Inbox), finds new mail reliably, carries on past a folder that fails and says so (a run is **Partial**, not Success), never overlaps another run, resumes where it stopped, and only updates "last successful sync" when everything synced. On this computer, message bodies for the keep period now download in the background — unread Inbox first — so storage grows and mail opens instantly.
+- **Settings › Mail › Accounts** shows each account's progress ("Headers 12 of 27 folders · Bodies 340 of 1,200 · 17.4 MB on this computer"). The **sync log** has one row per run with its result, folders, added, updated, removed, bodies and errors; expand a row for each folder's details, and use Copy log or Export for support. The Details column is no longer cut off.
+- Needs the server update (Mail migration `2026-10-06-000100_MailSyncRunDetails`). Not yet tried against the real livezentech.com accounts.
+
 ## 0.2.123 — 2026-10-03
 
 - **A cleaner, fuller mail editor (#188).** Formatting is one row of grouped buttons — undo, paragraph style, font, size, bold/italic/underline/strikethrough, colour, highlight, clear, format painter, alignment, lists, checklist, indent and line spacing — with each button's shortcut in its tooltip. Attach, Template (with Quick Parts — which now says why when there are none), Signature, Suggest times, Mail merge and Options sit in their own row, and anything that doesn't fit goes into **More**. Insert pictures from the computer, Files, a link, or by pasting or dropping them, then resize, align, crop and add alt text or a link; big pictures are shrunk automatically and sent inside the message. Tables have a grid picker and tools to add or remove rows and columns, merge cells, set borders, colours and alignment, and Tab moves between cells. Also: emoji, horizontal line, quote, code, date and time, special characters, an email-safe button, a meeting link and mail merge fields; Word and Excel paste is cleaned up; right-click a misspelt word for suggestions. Needs the server update for pictures inside messages.
