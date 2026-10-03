@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(), on: () => () => undefined, errorMessage: (e: unknown) => String(e), isMac: false }));
 
 import { call } from '../../../src/core/bridge';
-import { activate, adoptWindow, closeTab, detachTab, dockSide, insertTab, openTab, resetTabs, restoreTabs, setSplit, suspendIdle, swapSides, tabsStore, undockSide } from '../../../src/core/tabs';
+import { activate, adoptWindow, closeTab, detachTab, dockSide, duplicateTab, insertTab, newRoute, openTab, resetTabs, restoreTabs, setSplit, suspendIdle, swapSides, tabsStore, undockSide } from '../../../src/core/tabs';
 import { droppedWindow, dropPoint } from '../../../src/core/dock-drag';
 import { app } from '../../../src/core/app-state';
 import { visibleApps } from '@shared/apps';
@@ -150,6 +150,57 @@ describe('tearing tabs off and docking windows back (FR-NAV-05)', () => {
     const home = state().activeId!;
     const side = insertTab('/notes', { side: true, title: 'Notes' });
     expect(state()).toMatchObject({ activeId: home, sideId: side });
+  });
+});
+
+// worksuite-desktop#155: never two Home tabs.
+describe('Home is one tab', () => {
+  it('opening Home again — "+", ⌘T, Duplicate, a window taken back in — brings the Home tab forward', () => {
+    const home = state().activeId!;
+    const mail = openTab('/mail')!;
+    expect(openTab('/home')).toBe(home);
+    expect(ids()).toEqual(['/home', '/mail']);
+    expect(state().activeId).toBe(home);
+
+    activate(mail);
+    duplicateTab(home);
+    expect(ids()).toEqual(['/home', '/mail']);
+    expect(state().activeId).toBe(home);
+
+    activate(mail);
+    expect(insertTab('/home', { index: 2 })).toBe(home);
+    expect(ids()).toEqual(['/home', '/mail']);
+    expect(state().activeId).toBe(home);
+
+    // In the background it stays where it is; other apps still open as many tabs as asked.
+    activate(mail);
+    expect(openTab('/home', { background: true })).toBe(home);
+    expect(state().activeId).toBe(mail);
+    openTab('/mail');
+    expect(ids()).toEqual(['/home', '/mail', '/mail']);
+  });
+
+  it('a closed Home tab can be opened again, once', () => {
+    const home = state().activeId!;
+    openTab('/mail');
+    closeTab(home);
+    expect(ids()).toEqual(['/mail']);
+    const again = openTab('/home')!;
+    expect(openTab('/home')).toBe(again);
+    expect(ids()).toEqual(['/mail', '/home']);
+  });
+
+  it('two Home tabs saved by an older version come back as one', async () => {
+    mocked.mockResolvedValueOnce({ tabs: [{ id: 'a', route: '/home', title: 'Home', pinned: false, organizationId: null, app: 'home' }, { id: 'b', route: '/mail', title: 'Mail', pinned: false, organizationId: null, app: 'mail' }, { id: 'c', route: '/home', title: 'Home', pinned: false, organizationId: null, app: 'home' }], activeId: 'c', side: null, restored: true } as never);
+    await restoreTabs(new Set(['home', 'mail']));
+    expect(ids()).toEqual(['/home', '/mail']);
+    expect(state().activeId).toBe('a');
+  });
+
+  it('⌘N in Chat keeps the channel open, so WhatsApp starts a WhatsApp conversation', () => {
+    expect(newRoute({ app: 'chat', route: '/chat?channel=whatsapp&wa=7' })).toBe('/chat?channel=whatsapp&wa=7&new=1');
+    expect(newRoute({ app: 'chat', route: '/chat' })).toBe('/chat?new=1');
+    expect(newRoute({ app: 'sales', route: '/sales?view=orders' })).toBe('/sales?new=1');
   });
 });
 

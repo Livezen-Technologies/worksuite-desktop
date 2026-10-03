@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.20.0 — 2026-10-03
+
+- WhatsApp polish (#155): each number in the rail with its status dot and unread count (click to show only its chats); Link again opens the QR code in the side pane and a disconnected number's rows are dimmed; conversation rows 64px with the time, unread count and waiting state in one column, today/Yesterday/weekday times, Voice note previews, a steady colour per unknown number, and the number's name only under All numbers; a Pick a conversation card with ⌘N / Ctrl+N, which now starts a WhatsApp chat; WhatsApp colours follow the light and dark theme.
+
 ## 1.19.1 — 2026-10-03
 
 - Hide unconfirmed QR phone values and clarify WhatsApp connection checks and unlink actions (#157).

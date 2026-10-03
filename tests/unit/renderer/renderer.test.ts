@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { sanitizeMailHtml, parseAddresses, textToHtml } from '@/modules/mail/sanitize';
 import { accelerator, commandForAccelerator, conflicts, effectiveShortcuts } from '@/core/commands';
-import { addDays, listStamp, parseTs, setRegional, wallMinutes, wallTimeLabel } from '@/core/time';
+import { addDays, conversationStamp, listStamp, parseTs, setRegional, wallMinutes, wallTimeLabel } from '@/core/time';
 
 describe('mail sanitising', () => {
   it('removes scripts, handlers and javascript: links; forces links out; blocks remote images', () => {
@@ -43,5 +43,24 @@ describe('WorkSuite time', () => {
     expect(wallMinutes('2026-09-25 16:30:00')).toBe(990);
     expect(addDays('2026-09-30', 1)).toBe('2026-10-01');
     expect(listStamp(null)).toBe('');
+  });
+
+  // worksuite-desktop#155: a conversation list's stamp, on the reader's calendar (Colombo, UTC+5:30).
+  it('stamps a conversation with the time today, Yesterday, the weekday within a week, the date before', () => {
+    setRegional({ timezone: 'Asia/Colombo', timeFormat: '24', locale: 'en-GB' });
+    // Saturday 3 October 2026, 12:00 in Colombo.
+    const now = new Date('2026-10-03T06:30:00Z');
+    expect(conversationStamp('2026-10-03 03:15:00', now)).toMatch(/^0?8:45$/);
+    // Just after midnight in Colombo is still today, though it is the day before in UTC.
+    expect(conversationStamp('2026-10-02 18:40:00', now)).toMatch(/^0?0:10$/);
+    expect(conversationStamp('2026-10-02 10:00:00', now)).toBe('Yesterday');
+    expect(conversationStamp('2026-09-30 10:00:00', now)).toBe('Wed');
+    expect(conversationStamp('2026-09-27 10:00:00', now)).toBe('Sun');
+    // A week ago and older: the date, so a weekday never means two days.
+    expect(conversationStamp('2026-09-26 10:00:00', now)).toMatch(/^26 Sept?$/);
+    expect(conversationStamp('2026-08-14 10:00:00', now)).toBe('14 Aug');
+    expect(conversationStamp(null, now)).toBe('');
+    expect(conversationStamp('not a date', now)).toBe('');
+    setRegional({});
   });
 });
