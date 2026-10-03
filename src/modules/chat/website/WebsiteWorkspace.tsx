@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import type { WebchatRingChat } from '@shared/types';
 import { apiGet, apiPost } from '../../../core/api';
 import { app } from '../../../core/app-state';
@@ -15,6 +15,7 @@ import { longestWaiting, sectionRows, stepRow, useWebsiteInbox, waitingSince, wa
 import { useRingState, waited } from './Ringing';
 import { WebsiteLive, type OnlineVisitor } from './WebsiteLive';
 import { WebsiteThread } from './WebsiteThread';
+import { ConversationMenu } from '../ConversationMenu';
 import { Select } from '../../../components/Select';
 import { SidePanel } from '../../../components/SidePanel';
 
@@ -71,6 +72,8 @@ export function WebsiteWorkspace() {
   const [mineOnly, setMineOnly] = useState(false);
   useTabTitle(selected ? null : 'Website chats');
   const [q, setQ] = useState('');
+  // The conversation menu at the mouse, shared with Chat's other channels (worksuite-desktop#183).
+  const [rowMenu, setRowMenu] = useState<{ x: number; y: number; r: WebsiteRow } | null>(null);
   const open = useWebsiteInbox(false);
   const online = useQuery({
     queryKey: ['website', 'visitors'],
@@ -231,9 +234,10 @@ export function WebsiteWorkspace() {
           ) : source.isLoading ? <Spinner /> : source.error ? <div className="p-4"><ErrorNote error={source.error} onRetry={() => void source.refetch()} /></div> : rows.length === 0 ? (
             <Empty icon="globe" title={pill === 'mine' || section === 'mine' ? 'No chats assigned to you' : section === 'awaiting' ? 'Nobody is waiting' : 'No website chats'} />
           ) : (
-            rows.map((r) => <Row key={r.id} r={r} me={me} ring={ringing.get(r.id)} active={selected === String(r.id)} onOpen={() => to({ website: String(r.id) })} />)
+            rows.map((r) => <Row key={r.id} r={r} me={me} ring={ringing.get(r.id)} active={selected === String(r.id)} onOpen={() => to({ website: String(r.id) })} onMenu={(e) => (e.preventDefault(), setRowMenu({ x: e.clientX, y: e.clientY, r }))} />)
           )}
         </div>
+        {rowMenu ? <ConversationMenu x={rowMenu.x} y={rowMenu.y} target={{ kind: 'website', row: rowMenu.r }} onClose={() => setRowMenu(null)} /> : null}
       </section>
       <div className={cx('flex min-w-0 flex-1', live && 'hidden')}>
         {selected ? (
@@ -280,7 +284,7 @@ function pathOf(url: string): string {
  * happening, and on which site. A chat ringing here shows a bell; one silenced on this computer is amber with the
  * bell struck through (RING-UI-04).
  */
-function Row({ r, me, ring, active, onOpen }: { r: WebsiteRow; me: number | null; ring?: WebchatRingChat; active: boolean; onOpen: () => void }) {
+function Row({ r, me, ring, active, onOpen, onMenu }: { r: WebsiteRow; me: number | null; ring?: WebchatRingChat; active: boolean; onOpen: () => void; onMenu: (e: ReactMouseEvent) => void }) {
   const name = r.visitor_name || r.label;
   const mine = me !== null && r.assigned_to === me;
   const closed = r.status === 'closed';
@@ -302,6 +306,7 @@ function Row({ r, me, ring, active, onOpen }: { r: WebsiteRow; me: number | null
       data-website-row={r.id}
       aria-current={active ? 'true' : undefined}
       onClick={onOpen}
+      onContextMenu={onMenu}
       className={cx('relative flex w-full items-start gap-2.5 border-b border-line py-2.5 pr-3 pl-3.5 text-left', active ? 'bg-selection' : ring?.silenced ? 'bg-warning-bg' : 'hover:bg-subtle')}
     >
       {active ? <span aria-hidden className="absolute top-0 bottom-0 left-0 w-[3px] bg-primary" /> : null}

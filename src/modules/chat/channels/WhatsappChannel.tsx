@@ -19,6 +19,7 @@ import { SidePanel } from '../../../components/SidePanel';
 import { Button, Empty, ErrorNote, Modal, Spinner, cx } from '../../../components/ui';
 import { openChatAttachment, previewKind, type Attachment } from '../AttachmentViewer';
 import { mediaUrl } from '../types';
+import { ConversationMenu } from '../ConversationMenu';
 import { LIST_WIDTH, rememberWhatsapp } from './channels';
 import { fullName, previewParts, whoIs, whoSent, withMentionNames, type WaWho } from './wa-names';
 import { AddToContacts, ContactPanel, LinkToContact, WaAvatar, contactRoute, waContactMenuItems } from './WaContact';
@@ -46,6 +47,7 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
   const selected = query.get('wa');
   const to = query.get('to');
   const [starting, setStarting] = useState(false);
+  // The conversation menu at the mouse (worksuite-desktop#183).
   const senders = accounts.filter((a) => a.can_send !== false && isConnected(a));
   const [account, setAccount] = useState(0);
   const [scope, setScope] = useState<WaScope>('all');
@@ -56,7 +58,7 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
   const index = usePhoneIndex(useCanOpen('contacts') && accounts.length > 0).data;
   const [picks, pick] = usePicks();
   const [action, setAction] = useState<{ kind: 'add' | 'link'; who: WaWho } | null>(null);
-  const [menu, setMenu] = useState<{ who: WaWho; x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<{ who: WaWho; c: WaChat; x: number; y: number } | null>(null);
   const current = rows.find((c) => String(c.id) === selected);
   useTabTitle(current ? `WhatsApp · ${fullName(whoIs(current, index, picks[current.id]))}` : selected ? null : 'WhatsApp');
   const list = useResizableWidth('chat.list', LIST_WIDTH);
@@ -101,7 +103,7 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
         ) : null}
         {rows.map((c) => {
           const who = whoIs(c, index, picks[c.id]);
-          return <ChatRow key={c.id} c={c} who={who} active={String(c.id) === selected} many={accounts.length > 1 && !account} onOpen={() => go(`/chat?channel=whatsapp&wa=${c.id}`)} onMenu={(x, y) => setMenu({ who, x, y })} />;
+          return <ChatRow key={c.id} c={c} who={who} active={String(c.id) === selected} many={accounts.length > 1 && !account} onOpen={() => go(`/chat?channel=whatsapp&wa=${c.id}`)} onMenu={(x, y) => setMenu({ who, c, x, y })} />;
         })}
       </div>
     </>
@@ -154,7 +156,14 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
       <div className="flex min-w-0 flex-1 bg-ground">
         {selected ? <WhatsappThread key={selected} id={selected} onRelink={onRelink} index={index} picked={picks[Number(selected)] ?? null} onPick={(c) => pick(Number(selected), c)} onAction={(kind, who) => setAction({ kind, who })} /> : <Empty icon="phone" title="Pick a conversation" hint={accounts.length ? 'Your WhatsApp conversations are in the list.' : undefined} />}
       </div>
-      {menu ? <RowMenu menu={menu} onClose={() => setMenu(null)} onAction={(kind, who) => setAction({ kind, who })} /> : null}
+      {menu ? (
+        <ConversationMenu
+          x={menu.x}
+          y={menu.y}
+          target={{ kind: 'whatsapp', chat: menu.c, contactItems: waContactMenuItems(menu.who, { add: () => setAction({ kind: 'add', who: menu.who }), link: () => setAction({ kind: 'link', who: menu.who }), open: (id) => navigate(contactRoute(id)) }) }}
+          onClose={() => setMenu(null)}
+        />
+      ) : null}
       {action?.kind === 'add' ? <AddToContacts who={action.who} onClose={() => setAction(null)} /> : null}
       {action?.kind === 'link' ? <LinkToContact who={action.who} onClose={() => setAction(null)} /> : null}
       {(starting || (to && !selected)) && !loading ? (
@@ -261,29 +270,6 @@ function usePicks(): [Record<number, number>, (chat: number, contact: number) =>
 }
 
 const PICKS = 'ws.chat.whatsapp.picks';
-
-/**
- * A conversation's right-click menu: "Add to contacts" and "Link to existing contact" for a number in nobody's
- * contacts, "Open contact" for one that is (#176). Chat's shared list menu (#183) can take the same items from
- * `waContactMenuItems()`.
- */
-function RowMenu({ menu, onClose, onAction }: { menu: { who: WaWho; x: number; y: number }; onClose: () => void; onAction: (kind: 'add' | 'link', who: WaWho) => void }) {
-  const items = waContactMenuItems(menu.who, { add: () => onAction('add', menu.who), link: () => onAction('link', menu.who), open: (id) => navigate(contactRoute(id)) });
-  if (!items.length) return null;
-  return (
-    <>
-      <div className="fixed inset-0 z-40" onMouseDown={onClose} onContextMenu={(e) => (e.preventDefault(), onClose())} />
-      <div role="menu" aria-label={menu.who.name} onKeyDown={(e) => e.key === 'Escape' && onClose()} className="fixed z-50 flex w-[220px] flex-col rounded-[10px] border border-line bg-surface p-1.5 shadow-[0_12px_32px_rgb(var(--ws-shadow-rgb)/.16)]" style={{ left: Math.min(menu.x, window.innerWidth - 230), top: Math.min(menu.y, window.innerHeight - 100) }}>
-        {items.map((it, i) => (
-          <button key={it.id} type="button" role="menuitem" autoFocus={i === 0} onClick={() => (onClose(), it.onSelect?.())} className="flex h-[32px] items-center gap-2.5 rounded-[7px] px-2.5 text-left text-[12.5px] font-semibold text-ink hover:bg-ground">
-            {it.icon ? <Icon name={it.icon} size={14} className="text-ink-2" /> : null}
-            {it.label}
-          </button>
-        ))}
-      </div>
-    </>
-  );
-}
 
 function ChatRow({ c, who, active, many, onOpen, onMenu }: { c: WaChat; who: WaWho; active: boolean; many: boolean; onOpen: () => void; onMenu: (x: number, y: number) => void }) {
   const waiting = c.waiting_minutes !== null && c.status !== 'resolved';

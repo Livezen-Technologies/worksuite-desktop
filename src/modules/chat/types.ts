@@ -20,6 +20,14 @@ export interface Room {
   notify_level?: string;
   /** Whether the server offers calls here (worksuite-desktop#113). Absent from an older server. */
   can_call?: boolean;
+  /** Marked unread by hand: the list shows a dot with nothing new in it (worksuite-desktop#183). */
+  marked_unread?: boolean;
+  /** When a timed mute ends (ISO); null for "until I turn it back on". */
+  muted_until?: string | null;
+  /** My role in it: owner, admin or member (worksuite-desktop#183). Absent from an older server. */
+  role?: string;
+  /** I blocked the other person in this direct conversation. */
+  blocked?: boolean;
 }
 
 /** Conversations nobody can ring: a website visitor's chat and WorkSuite's own notices. */

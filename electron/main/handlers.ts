@@ -557,6 +557,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       ? `/media/${input.elearningMedia}?download=1`
       : input.chatMedia
       ? `/media/${input.chatMedia}?download=1`
+      : input.chatExport
+      ? `/api/chat/rooms/${input.chatExport.room}/export?${new URLSearchParams({ format: input.chatExport.format, media: input.chatExport.media ? '1' : '0' })}`
       : input.garageDoc
       ? garageDocPath(input.garageDoc)
       : ef

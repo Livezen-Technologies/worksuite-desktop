@@ -34,6 +34,7 @@ import { ForwardDialog, type RoomDetail } from './NewChat';
 import { EmojiPicker, VoicePlayer } from './parts';
 import { AttachmentGallery, openChatAttachment, useAttachmentGallery } from './AttachmentViewer';
 import { canCall, mediaUrl, roomPerson, type ChatMessage, type Room } from './types';
+import { usePresence } from './presence';
 
 export interface ReplyTarget {
   id: number;
@@ -101,8 +102,8 @@ export function Thread({
     getNextPageParam: (last) => (last.messages.length >= 40 ? last.messages[0]?.id : undefined),
   });
   const detail = useQuery({ queryKey: ['chat', 'room', roomId], queryFn: ({ signal }) => apiGet<RoomDetail>(`/api/chat/rooms/${roomId}`, undefined, signal), enabled: !mini });
-  const ids = (detail.data?.members ?? []).map((m) => m.id).join(',');
-  const presence = useQuery({ queryKey: ['chat', 'presence', ids], queryFn: ({ signal }) => apiGet<{ presence: Record<string, string> }>('/api/chat/presence', { ids }, signal), enabled: ids !== '', refetchInterval: 60_000 });
+  // One presence for everybody, the list's and this header's (worksuite-desktop#183).
+  const presenceOf = usePresence([...(detail.data?.members ?? []).map((m) => m.id), room?.other_user_id]);
   const pins = useQuery({ queryKey: ['chat', 'pins', roomId], queryFn: ({ signal }) => apiGet<{ messages: ChatMessage[] }>(`/api/chat/rooms/${roomId}/pins`, undefined, signal) });
   const found = useQuery({
     queryKey: ['chat', 'search', roomId, find.trim()],
@@ -179,8 +180,8 @@ export function Thread({
 
   const group = room?.type !== undefined && room.type !== 'direct';
   const members = detail.data?.members ?? [];
-  const online = members.filter((m) => presence.data?.presence[String(m.id)] === 'online').length;
-  const other = room?.other_user_id ? presence.data?.presence[String(room.other_user_id)] : undefined;
+  const online = members.filter((m) => presenceOf(m.id) === 'online').length;
+  const other = room?.other_user_id ? presenceOf(room.other_user_id) : undefined;
   const subtitle = group ? `Group · ${members.length || '…'} members${online ? ` · ${online} online` : ''}` : ((other ? PRESENCE[other]?.label : null) ?? 'Direct message');
   const pinned = pins.data?.messages ?? [];
   const days = messages.map((m, i) => {
@@ -350,39 +351,53 @@ export function Thread({
           </div>
         ))}
       </div>
-      <Composer
-        ref={composer}
-        roomId={roomId}
-        roomName={room?.name ?? 'this conversation'}
-        group={group}
-        reply={reply}
-        onClearReply={() => setReply(null)}
-        typing={Object.values(typing)}
-        compact={mini || bare}
-        look={drawer ? 'pill' : 'box'}
-        extras={
-          drawer ? (
-            <div className="flex flex-wrap gap-1.5 text-[12px] font-bold">
-              {tasksAllowed ? (
-                <button type="button" onClick={() => navigate(`/tasks?new=1&title=${encodeURIComponent(`Follow up: ${room?.name ?? 'conversation'}`.slice(0, 200))}`)} className={chip}>
-                  <Icon name="tasks" size={14} className="text-primary" />
-                  Create task
+      {room?.blocked ? (
+        // A person I blocked can't message me, and I can't message them until I unblock them (worksuite-desktop#183).
+        <div role="status" className="flex shrink-0 items-center justify-center gap-1.5 border-t border-line bg-surface px-4 py-3 text-[13px] text-ink-2">
+          You blocked {room.name} ·
+          <button
+            type="button"
+            className="font-bold text-primary hover:underline"
+            onClick={() => void apiPost(`/api/chat/rooms/${roomId}/unblock`).then(() => qc.invalidateQueries({ queryKey: ['chat', 'rooms'] }), (e) => toast('error', errorMessage(e)))}
+          >
+            Unblock
+          </button>
+        </div>
+      ) : (
+        <Composer
+          ref={composer}
+          roomId={roomId}
+          roomName={room?.name ?? 'this conversation'}
+          group={group}
+          reply={reply}
+          onClearReply={() => setReply(null)}
+          typing={Object.values(typing)}
+          compact={mini || bare}
+          look={drawer ? 'pill' : 'box'}
+          extras={
+            drawer ? (
+              <div className="flex flex-wrap gap-1.5 text-[12px] font-bold">
+                {tasksAllowed ? (
+                  <button type="button" onClick={() => navigate(`/tasks?new=1&title=${encodeURIComponent(`Follow up: ${room?.name ?? 'conversation'}`.slice(0, 200))}`)} className={chip}>
+                    <Icon name="tasks" size={14} className="text-primary" />
+                    Create task
+                  </button>
+                ) : null}
+                {notesAllowed ? (
+                  <button type="button" disabled={saving} onClick={() => void saveAsNote()} className={chip}>
+                    <Icon name="notebook" size={14} className="text-[#CA8A04]" />
+                    {saving ? 'Saving…' : 'Save as note'}
+                  </button>
+                ) : null}
+                <button type="button" aria-label="Search in conversation" aria-pressed={searching} onClick={() => setSearching(!searching)} className={cx(chip, searching && '!border-primary !bg-selection !text-primary')}>
+                  <Icon name="search" size={14} className="text-ink-2" />
+                  Search
                 </button>
-              ) : null}
-              {notesAllowed ? (
-                <button type="button" disabled={saving} onClick={() => void saveAsNote()} className={chip}>
-                  <Icon name="notebook" size={14} className="text-[#CA8A04]" />
-                  {saving ? 'Saving…' : 'Save as note'}
-                </button>
-              ) : null}
-              <button type="button" aria-label="Search in conversation" aria-pressed={searching} onClick={() => setSearching(!searching)} className={cx(chip, searching && '!border-primary !bg-selection !text-primary')}>
-                <Icon name="search" size={14} className="text-ink-2" />
-                Search
-              </button>
-            </div>
-          ) : null
-        }
-      />
+              </div>
+            ) : null
+          }
+        />
+      )}
       {drag ? (
         <div className="pointer-events-none absolute inset-3 flex items-center justify-center rounded-[14px] border-2 border-dashed border-primary bg-selection/80 text-[15px] font-semibold text-primary">
           Drop to add to the message for {room?.name ?? 'this conversation'}
