@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.15.1 — 2026-10-03
+
+- App launcher (#206): the popover is centred in the window and shows only whole rows with a fade when there's more; full screen opens below the top bar in a centred column with larger tiles and category sections; Customise and the settings button open Settings › App launcher.
+
 ## 1.15.0 — 2026-10-03
 
 - Settings › Desktop › Updates: where updates stand with the next step (Check, Download, Restart to update), Download updates automatically (locked on where the organisation enforces updates) and Update notifications; the update channel follows them.

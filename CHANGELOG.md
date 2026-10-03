@@ -5,6 +5,10 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.142 — 2026-10-03
+
+- **The app launcher sits where it should (#206).** The popover is now centred in the window, 12% from the top so the search box stays put, never wider than 880px or closer than 24px to an edge, and clear of the Dock or taskbar. It shows only whole rows of apps — never icons cut off without their names — and only the app grid scrolls, with a soft fade when there's more below. **Full screen** now opens under the top bar, so the window buttons never overlap the search box, with everything in one centred column (up to 1080px), a larger search box and tiles, apps grouped by category under All apps, and the footer right under the apps instead of at the bottom of the screen. Both modes dim and blur the app behind, close on Esc or a click outside, adjust when you resize the window, and open with a short fade that respects reduced motion. Long names show in full on hover.
+
 ## 0.2.141 — 2026-10-03
 
 - **A tidier website chat widget (#207).** The widget's header shows your site's name and logo — never its web address — falling back to your organisation's name. There's one set of controls (Minimise and Maximise in the header, and the launcher closes it), no repeated text, and the header and body always share one Light or Dark look. Opening, minimising and maximising animate like the AI Assistant panel, messages that arrive while it's minimised pop up as a preview above the launcher, and the chat stays as visitors left it when they move between pages. In **Website chats › Setup › Widget** you can pick Auto, Light or Dark and move the launcher with bottom, right and left offsets, with a live preview. Needs the server update (Communication 1.19.0, migration `2026-10-13-000100_WidgetLauncherOffsets`).
