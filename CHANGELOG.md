@@ -5,6 +5,10 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.126 — 2026-10-03
+
+- **The AI Assistant waits to be asked (#153).** It starts minimised after launch, sign-in and every module change, never opens by itself, and shows a dot or count on its launcher when something new arrives. The launcher now also steps aside while you're writing an email, so it no longer covers Send later or the status bar — Write with AI is in the editor's toolbar. **Maximise** opens it as a side panel that pushes your work aside instead of covering it, and **⌘J / Ctrl+J** opens or minimises it (in the mail editor, ⌘J is Write with AI).
+
 ## 0.2.125 — 2026-10-03
 
 - **Proper email signatures (#166).** Signatures are written in the mail editor: bold, italic, fonts, sizes and colours, alignment, links (including mailto: and tel:), dividers, tables for a logo beside your details, and pictures you can resize, link and describe — big ones are shrunk automatically. Add social icons (LinkedIn, Facebook, X, Instagram, YouTube, WhatsApp, website) by pasting a link, and fields such as {name}, {job_title}, {company}, {phone} and {company_logo} that fill in from your profile. Paste an existing HTML signature in the source view, and check it in the live preview in light or dark and on a desktop or phone width.

@@ -406,6 +406,8 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
     <div className="flex min-h-0 flex-1">
       <form
         aria-label={seed.mode === 'new' ? text('New email') : seed.mode === 'forward' ? text('Forward') : text('Reply')}
+        // Writing an email: the AI launcher stays out of the send options and status bar (#153); Write with AI is in the toolbar.
+        data-hide-ai-launcher
         className="flex min-w-0 flex-1 flex-col bg-surface"
         onSubmit={(e) => {
           e.preventDefault();

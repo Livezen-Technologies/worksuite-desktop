@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.11.1 — 2026-10-03
+
+- Writing an email keeps the AI launcher out of the send options and status bar; Write with AI stays in the editor's toolbar (#153).
+
 ## 1.11.0 — 2026-10-03
 
 - Signatures (#166): written in the mail editor with a smaller toolbar (formatting, alignment, links incl. mailto: and tel:, dividers, tables, pictures with size, alt text and link, compressed to about 500 KB, SVG saved as PNG), social icons, profile fields ({name} {job_title} {department} {company} {phone} {mobile} {email} {website} {address} {photo} {company_logo}), an HTML source view and a live preview (light/dark, desktop/mobile); 8 templates filled from the profile and company branding; save as template; locked organisation signatures; per account a signature for new mail and one for replies (or none) and where it goes; the compose Signature menu, switching with From; a list with preview, defaults, Edit, Duplicate, Set default and Delete; pictures hosted (default) or embedded; a plain-text version; a dark-logo warning and dark-mode logo; Save enabled once there's content and a warning before closing with unsaved changes.
