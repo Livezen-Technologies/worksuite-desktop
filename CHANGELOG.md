@@ -5,6 +5,11 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.106 — 2026-10-03
+
+- Keep tab menus, dialogs, search, notifications, AI surfaces and toasts above the native Office editor. Hide and restore the existing view with a captured document image while overlapping shell surfaces are open (#184). Reserve a footer for the persistent AI launcher so the editor stays usable.
+- Expand the tab menu with close-all, reopen, copy-link and left/right movement actions, and scroll long menus within the window. Office record links open in the app without transient editor parameters.
+
 ## 2026-10-03 — 0.2.105: Mail that works like Outlook, finished
 
 Phases 4 and 5 of the Outlook-class Mail enhancement (ENH-MAIL-03):

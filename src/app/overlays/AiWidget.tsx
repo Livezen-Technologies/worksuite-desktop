@@ -116,7 +116,7 @@ function AiBubble({ always, buttonRef }: { always?: boolean; buttonRef?: Ref<HTM
     else openAssistant();
   };
   return (
-    <div {...OWN} className="pointer-events-none absolute right-4 bottom-4 z-20 flex flex-col items-end gap-2">
+    <div {...OWN} data-native-reserve-space className="pointer-events-none absolute right-4 bottom-4 z-20 flex flex-col items-end gap-2">
       <AiNotice />
       <div className="flex items-center gap-2">
         {busy ? (
@@ -183,7 +183,7 @@ export function AiNotice() {
   return (
     <div role="status" aria-live="polite" {...OWN} className={cx('pointer-events-none', alone && 'absolute right-4 bottom-4 z-20')}>
       {shown ? (
-        <div data-testid="ai-notice" className="pointer-events-auto flex w-[300px] max-w-[calc(100vw-2rem)] flex-col gap-1.5 rounded-[12px] border border-line bg-surface px-3 py-2.5 text-[12.5px] text-ink shadow-[0_8px_20px_rgb(var(--ws-shadow-rgb)/.18)] motion-safe:animate-[ws-fade-in_.14s_ease-out]">
+        <div data-native-reserve-space data-testid="ai-notice" className="pointer-events-auto flex w-[300px] max-w-[calc(100vw-2rem)] flex-col gap-1.5 rounded-[12px] border border-line bg-surface px-3 py-2.5 text-[12.5px] text-ink shadow-[0_8px_20px_rgb(var(--ws-shadow-rgb)/.18)] motion-safe:animate-[ws-fade-in_.14s_ease-out]">
           <div className="flex items-center gap-2">
             <Icon name={kind === 'ready' ? 'sparkles' : 'alert'} size={15} className={cx('shrink-0', kind === 'failed' ? 'text-danger' : kind === 'input' ? 'text-warning' : 'text-teal')} />
             <span className="min-w-0 flex-1 font-semibold">{title}</span>
