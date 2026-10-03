@@ -394,6 +394,15 @@ const api = {
     run: call('pmsLocks:run'),
     status: call('pmsLocks:status'),
   },
+  // Contact sync (contact-sync-channels.ts): iCloud, CardDAV and Mac Contacts on this computer; passwords never come back.
+  contactSync: {
+    status: call('contactSync:status'),
+    connect: call('contactSync:connect'),
+    run: call('contactSync:run'),
+    setPassword: call('contactSync:setPassword'),
+    forget: call('contactSync:forget'),
+    macAccess: call('contactSync:macAccess'),
+  },
   pos: {
     till: call('pos:till'),
     pair: call('pos:pair'),

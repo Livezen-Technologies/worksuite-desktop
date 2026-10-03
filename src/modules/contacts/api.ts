@@ -1,4 +1,6 @@
+import { formatPhone, toE164 } from '../../core/phone';
 import { addDays, dateLabel, dayKey, parseTs, timeLabel, todayInZone } from '../../core/time';
+import type { ContactLink } from './sync/api';
 
 /**
  * Contacts (`/api/contacts`, `/api/contact-groups`, `/api/data/contacts`).
@@ -28,6 +30,17 @@ export interface Contact {
   labels: string[];
   is_favorite: boolean;
   is_archived: boolean;
+  /** Where it is synced: google, microsoft, icloud, carddav, macos (worksuite-desktop#175). */
+  sources?: string[];
+  updated_at?: string | null;
+}
+
+/** Emails, numbers and addresses beyond the columns, from a synced account. */
+export interface ContactExtras {
+  emails?: Array<{ type: string; value: string }>;
+  phones?: Array<{ type: string; value: string }>;
+  addresses?: Array<{ type: string; street?: string | null; city?: string | null; state?: string | null; zip?: string | null; country?: string | null }>;
+  photo_url?: string;
 }
 
 export type Social = Partial<Record<(typeof SOCIAL)[number]['key'], string>>;
@@ -50,6 +63,8 @@ export interface ContactDetail extends Contact {
   social: Social;
   created_at: string | null;
   groups: Array<{ id: number; name: string; color: string | null }>;
+  extras?: ContactExtras;
+  links?: ContactLink[];
 }
 
 export interface Group {
@@ -140,9 +155,20 @@ export function initials(name: string): string {
   );
 }
 
-/** "Procurement lead · CreativeFX", or how to reach them when there is neither. */
-export function subLine(c: Pick<Contact, 'job_title' | 'company' | 'email'> & { phone?: string | null }): string {
-  return [c.job_title, c.company].filter(Boolean).join(' · ') || c.email || c.phone || '—';
+/** A number as every screen shows it: `+94 77 123 4567` (#176), or as typed when it cannot be read as one. */
+export function phoneLabel(raw: string | null | undefined): string {
+  if (!raw) return '';
+  return formatPhone(toE164(raw)) || raw;
+}
+
+/**
+ * "Procurement lead · CreativeFX", or how to reach them when there is neither. Never the name again: an organisation
+ * whose company is its own name, or a title that repeats it, says nothing under the name.
+ */
+export function subLine(c: Pick<Contact, 'job_title' | 'company' | 'email'> & { phone?: string | null; display_name?: string | null }): string {
+  const name = (c.display_name ?? '').trim().toLowerCase();
+  const parts = [c.job_title, c.company].filter((v): v is string => !!v && v.trim().toLowerCase() !== name);
+  return [...new Set(parts)].join(' · ') || c.email || phoneLabel(c.phone) || '—';
 }
 
 /** Matches what the server's search looks at, over the rows already here (term lower-cased). */

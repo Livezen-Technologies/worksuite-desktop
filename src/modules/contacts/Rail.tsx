@@ -7,9 +7,12 @@ import { Icon } from '../../components/Icon';
 import { Button, Modal, cx } from '../../components/ui';
 import { GROUP_COLORS, type Group, type Stats } from './api';
 import { PrimaryActionButton } from '../../components/PrimaryAction';
+import type { SyncAccount } from './sync/api';
+import { SourceIcon } from './sync/SourceIcon';
 
-export type View = 'all' | 'fav' | 'employee' | 'customer' | 'vendor' | 'archived' | 'directory';
-export type Place = { view: View } | { group: number };
+export type View = 'all' | 'fav' | 'employee' | 'customer' | 'vendor' | 'archived' | 'directory' | 'tidy';
+/** A view, a group, or the contacts synced with one account (worksuite-desktop#175). */
+export type Place = { view: View } | { group: number } | { account: number };
 
 export const VIEWS: Array<{ id: View; label: string; icon: string; tint?: string; count?: keyof Stats }> = [
   { id: 'all', label: 'All contacts', icon: 'users', count: 'total' },
@@ -19,16 +22,19 @@ export const VIEWS: Array<{ id: View; label: string; icon: string; tint?: string
   { id: 'vendor', label: 'Vendors', icon: 'building', tint: 'text-[#7C3AED]', count: 'vendors' },
   { id: 'archived', label: 'Archived', icon: 'archive' },
   { id: 'directory', label: 'Company directory', icon: 'contact' },
+  // Possible duplicates and sync conflicts.
+  { id: 'tidy', label: 'Tidy up', icon: 'sparkles' },
 ];
 
 const item = (on: boolean) => cx('group relative flex h-[30px] w-full shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left text-[13px]', on ? 'bg-selection font-bold text-primary' : 'font-medium text-ink hover:bg-subtle');
 const bar = (on: boolean) => cx('absolute top-[7px] bottom-[7px] left-0 w-[3px] rounded-r-[3px]', on ? 'bg-primary' : 'bg-transparent');
 const badge = (on: boolean) => cx('flex h-[18px] min-w-5 shrink-0 items-center justify-center rounded-[9px] px-1.5 text-[11px] font-semibold tabular-nums', on ? 'bg-surface text-primary' : 'text-ink-3');
 
-/** The views, your groups, and import/export (ContactsRail). */
-export function Rail({ place, stats, groups, onPlace, onNew, onImport, onExport, adding, setAdding }: { place: Place; stats: Stats | undefined; groups: Group[]; onPlace: (p: Place) => void; onNew: () => void; onImport?: () => void; onExport: () => void; adding: boolean; setAdding: (v: boolean) => void }) {
+/** The views, your groups, your synced accounts, and import/export (ContactsRail). */
+export function Rail({ place, stats, groups, accounts = [], onPlace, onNew, onImport, onExport, adding, setAdding }: { place: Place; stats: Stats | undefined; groups: Group[]; accounts?: SyncAccount[]; onPlace: (p: Place) => void; onNew: () => void; onImport?: () => void; onExport: (kind: 'csv' | 'vcf') => void; adding: boolean; setAdding: (v: boolean) => void }) {
   const qc = useQueryClient();
-  const [shut, setShut] = useState<{ v?: boolean; g?: boolean }>({});
+  const [shut, setShut] = useState<{ v?: boolean; g?: boolean; a?: boolean }>({});
+  const [exportOpen, setExportOpen] = useState(false);
   const [name, setName] = useState('');
   const [deleting, setDeleting] = useState<Group | null>(null);
   const on = (p: Place) => JSON.stringify(p) === JSON.stringify(place);
@@ -61,7 +67,7 @@ export function Rail({ place, stats, groups, onPlace, onNew, onImport, onExport,
     }
   };
 
-  const head = (key: 'v' | 'g', label: string, count: number, extra?: React.ReactNode) => (
+  const head = (key: 'v' | 'g' | 'a', label: string, count: number, extra?: React.ReactNode) => (
     <div className="mt-2 flex h-[26px] shrink-0 items-center gap-1 pr-0.5 pl-2">
       <button type="button" aria-expanded={!shut[key]} onClick={() => setShut({ ...shut, [key]: !shut[key] })} className="flex h-6 flex-1 items-center gap-1.5 text-left text-[11px] font-bold tracking-[0.3px] text-ink-3">
         <span className="flex-1">{label}</span>
@@ -144,16 +150,50 @@ export function Rail({ place, stats, groups, onPlace, onNew, onImport, onExport,
               );
             })
           : null}
+        {accounts.length ? head('a', 'Accounts', accounts.length) : null}
+        {accounts.length && !shut.a
+          ? accounts.map((a) => {
+              const is = on({ account: a.id });
+              return (
+                <button key={a.id} type="button" aria-current={is ? 'page' : undefined} title={`${a.provider_label}${a.email ? ` · ${a.email}` : ''}`} onClick={() => onPlace({ account: a.id })} className={item(is)}>
+                  <span className={bar(is)} />
+                  <span className="flex w-[18px] shrink-0 justify-center">
+                    <SourceIcon provider={a.provider} size={15} />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{a.email ?? a.provider_label}</span>
+                  {a.status === 'error' ? <Icon name="alert" size={13} className="shrink-0 text-danger" /> : null}
+                  {a.contact_count ? <span className={badge(is)}>{a.contact_count.toLocaleString()}</span> : null}
+                </button>
+              );
+            })
+          : null}
       </div>
-      <div className="mx-2.5 mt-1.5 mb-2.5 flex gap-1.5">
+      <div className="relative mx-2.5 mt-1.5 mb-2.5 flex gap-1.5">
         {onImport ? (
           <button type="button" onClick={onImport} className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-[9px] border border-line bg-surface text-[12px] font-semibold text-ink hover:bg-subtle">
             <Icon name="upload" size={14} /> Import
           </button>
         ) : null}
-        <button type="button" onClick={onExport} className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-[9px] border border-line bg-surface text-[12px] font-semibold text-ink hover:bg-subtle">
+        <button type="button" aria-haspopup="menu" aria-expanded={exportOpen} onClick={() => setExportOpen(!exportOpen)} className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-[9px] border border-line bg-surface text-[12px] font-semibold text-ink hover:bg-subtle">
           <Icon name="download" size={14} /> Export
         </button>
+        {exportOpen ? (
+          <>
+            <div className="fixed inset-0 z-10" onMouseDown={() => setExportOpen(false)} />
+            <div role="menu" aria-label="Export" className="absolute right-0 bottom-[38px] z-20 w-[190px] rounded-[12px] border border-line bg-surface p-1.5 shadow-[0_12px_32px_rgb(var(--ws-shadow-rgb)/.16)]">
+              {(
+                [
+                  ['csv', 'CSV (.csv)'],
+                  ['vcf', 'vCard (.vcf)'],
+                ] as const
+              ).map(([k, l]) => (
+                <button key={k} type="button" role="menuitem" onClick={() => (setExportOpen(false), onExport(k))} className="flex h-[34px] w-full items-center gap-2 rounded-[8px] px-2.5 text-left text-[12.5px] font-semibold text-ink hover:bg-ground">
+                  <Icon name={k === 'csv' ? 'file-sheet' : 'contact'} size={15} className="text-ink-2" /> {l}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : null}
       </div>
       {deleting ? (
         <Modal
