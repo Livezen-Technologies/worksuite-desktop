@@ -5,6 +5,10 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.137 — 2026-10-03
+
+- **A new website chat widget, with your team's faces (#199).** Visitors now see who's online — up to three real profile photos with green dots — and how quickly you usually reply, can type their question straight into the home screen, and see the agent who joins their chat with photo, name and role. Outside business hours, or when nobody's online, the widget says when you're back and offers a leave-a-message form and WhatsApp; replies to those messages are emailed to the visitor. Set it up under **Website chats › Setup › Widget**: brand colour, logo, greeting, quick links, which staff are shown and how, business hours, away message, WhatsApp number, launcher style and greeting card — with a live preview. Staff no longer show as Online on the widget for minutes after they've gone offline. Needs the server update (Communication 1.18.0, migration `2026-10-12-000100_WidgetModernDesign`).
+
 ## 0.2.136 — 2026-10-03
 
 - **A smaller, smarter app launcher (#201).** The launcher is now a compact popover (about 760×600) that always fits the window and never hides behind the Dock or taskbar; the grid adds or removes columns to fit, and in a narrow window it becomes a bottom sheet. Search finds apps by name or keyword ("bill" finds Invoices) — hidden apps too — and starts as you type; arrow keys move, Enter opens, ⌘Enter opens in a new window. Tiles show just the icon and name, an unread badge, and a small arrow on apps that open in the browser (the "Desktop app" line is gone). Open it with **⌘⇧K / Ctrl+Shift+K** — changeable, and no longer clashing with ⌘K search.
