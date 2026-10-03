@@ -17,14 +17,15 @@ import { Avatar, Button, Chip, ErrorNote, FileBadge, Modal, Spinner, cx } from '
 import { AiTextDialog } from '../ai/AiTextDialog';
 import { InviteCard, hasInvite } from './InviteCard';
 import { WorkSuiteCard, openFromMail, workSuiteMailItem } from './WorkSuiteCard';
-import { PersonButton } from './PeopleCard';
+import { CollapsedHeader, MessageHeader, ownAddresses, useNarrow, type HeaderTool } from './MessageHeader';
+import { findCrmRecord } from './quickSteps';
 import type { TextTask } from '../ai/textTools';
 import { openPdf } from '../pdf/open';
 import { createTask } from '../tasks/actions';
 import { createMeeting, invitation, openMeeting } from '../meet/api';
 import { messageAction, moveMessage, setLabel, useFolders, useLabels, useMessageContext, type MessageActionName } from './api';
 import { messageKey, seedMessage } from './localFirst';
-import { authFailed, folderName, plainText, securityVerdict } from './model';
+import { authFailed, folderName, headerDensity, plainText, securityVerdict } from './model';
 import { blockedImageUrls, escapeHtml, highlightText, isDesignedMail, mailFrameDoc, sanitizeMailHtml, withLoadedImages, withProxiedImages } from './sanitize';
 import { emailDomain, imageVerdict, isJunkFolder, ownDomains, readableName, trustedBy, withTrusted } from './images';
 import { ImageNotice } from './ImageNotice';
@@ -89,6 +90,10 @@ export interface MessageViewProps {
   onFixAccount?: () => void;
   /** Ask the server for this folder's list again. */
   onRefreshFolder?: () => void;
+  /** All Accounts or another view of several accounts: the header shows which account the message came to (#212). */
+  combined?: boolean;
+  /** The header's folder badge: open the folder the message is in (#212). */
+  onOpenFolder?: (ref: MessageRef) => void;
 }
 
 export interface ViewControls {
@@ -127,7 +132,24 @@ export function MessageView(p: MessageViewProps) {
   const moveBtn = useRef<HTMLButtonElement>(null);
   const labelBtn = useRef<HTMLButtonElement>(null);
   const translateBtn = useRef<HTMLButtonElement>(null);
-  const me = useStore(app, (s) => s.bootstrap?.user ?? null);
+  // The header (#212): narrow under 560px of pane; a 48px bar once scrolled away.
+  const [narrow, measureColumn] = useNarrow(560);
+  const scroller = useRef<HTMLDivElement>(null);
+  const headerBox = useRef<HTMLDivElement>(null);
+  const [collapsed, setCollapsed] = useState(false);
+  const onReaderScroll = () => {
+    const top = scroller.current?.scrollTop ?? 0;
+    const tall = headerBox.current?.offsetHeight ?? 0;
+    setCollapsed(top > Math.max(16, tall - 48));
+  };
+  const toTop = () => {
+    const el = scroller.current;
+    if (!el) return;
+    if (typeof el.scrollTo === 'function') el.scrollTo({ top: 0 });
+    else el.scrollTop = 0;
+    setCollapsed(false);
+  };
+  const me =useStore(app, (s) => s.bootstrap?.user ?? null);
   const origin = useStore(app, (s) => s.auth?.server?.origin ?? '');
   const darkTheme = useStore(app, (s) => s.resolvedTheme === 'dark');
   // Mark as read (DMO-INB-12): when opened (the server does it), after N seconds, when moving on, or never.
@@ -369,6 +391,17 @@ export function MessageView(p: MessageViewProps) {
       toast('error', errorMessage(e));
     }
   };
+  /** The sender's lead or account in CRM, from the people card (#212). */
+  const viewInCrm = async () => {
+    if (!m) return;
+    try {
+      const found = await findCrmRecord(m.from_email);
+      if (found) navigate(found.kind === 'lead' ? `/crm?lead=${found.record.id}` : `/crm?account=${found.record.id}`);
+      else toast('info', text('{email} is not a lead or account in CRM.', { email: m.from_email }));
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
   const remind = async () => {
     if (!m) return;
     const tomorrow = new Date(Date.parse(`${todayInZone()}T12:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
@@ -479,6 +512,81 @@ export function MessageView(p: MessageViewProps) {
       },
     ];
   };
+  // The header's ⋯ (#212): what used to be its six buttons, and the rest of what is done to one email.
+  const offlineReason = text('Available when you are back online.');
+  const headerIcons = p.prefs.headerIcons === 'more';
+  const headerMore: MenuSection[] = [
+    {
+      id: 'follow',
+      label: text('Follow up'),
+      items: [
+        ...(canOpen('tasks') ? [{ id: 'remind', label: text('Remind me about this'), description: text('A task for tomorrow'), icon: 'bell', onSelect: () => void remind() }] : []),
+        ...(p.stateMenu ? [{ id: 'flag', label: text('Flag, pin or snooze…'), icon: 'flag', onSelect: () => setMenu('states') }] : []),
+        ...(p.localStore ? [{ id: 'important', label: m.is_important ? text('Not important') : text('Mark important'), icon: 'flag', onSelect: () => void act(m.is_important ? 'unimportant' : 'important') }] : []),
+      ],
+    },
+    {
+      id: 'sender',
+      label: text('Sender'),
+      items: [
+        { id: 'contact', label: context.data?.sender?.contact_id ? text('Open sender in Contacts') : text('Add sender to contacts'), icon: 'user-plus', disabled: !canOpen('contacts') || p.offline, reason: p.offline ? offlineReason : text('Contacts is not available.'), onSelect: () => void addContact() },
+        { id: 'meeting', label: text('Create meeting with sender'), icon: 'video', disabled: !canOpen('meet') || p.offline, reason: p.offline ? offlineReason : text('Meet is not available.'), onSelect: () => void startMeeting() },
+        { id: 'new-email', label: text('New email to sender'), icon: 'compose', onSelect: () => p.onReply({ mode: 'new', to: m.from_email, mailbox: ref.mailbox }) },
+      ],
+    },
+    {
+      id: 'copy',
+      label: text('Copy'),
+      items: [
+        { id: 'copy-link', label: text('Copy link'), icon: 'link', disabled: !origin, onSelect: copyLink },
+        { id: 'copy-address', label: text('Copy sender address'), icon: 'copy', onSelect: () => copy(m.from_email, text('Address copied.')) },
+        { id: 'copy-subject', label: text('Copy subject'), icon: 'copy', onSelect: () => copy(m.subject, text('Subject copied.')) },
+      ],
+    },
+    {
+      id: 'original',
+      items: [
+        { id: 'source', label: text('View source'), icon: 'code', disabled: p.offline, reason: offlineReason, onSelect: () => setSource(true) },
+        { id: 'print', label: text('Print'), icon: 'printer', shortcut: 'Ctrl P', onSelect: print },
+        { id: 'eml', label: text('Download .eml'), icon: 'download', disabled: p.offline, reason: offlineReason, onSelect: downloadOriginal },
+      ],
+    },
+    {
+      id: 'layout',
+      items: [{ id: 'header-icons', label: text('Show more buttons in the header'), checked: headerIcons, onSelect: () => p.onPrefs({ headerIcons: headerIcons ? 'few' : 'more' }) }],
+    },
+  ];
+  const extraTools: HeaderTool[] = headerIcons
+    ? [
+        ...(canOpen('tasks') ? [{ id: 'remind', icon: 'bell', label: text('Remind me about this'), onClick: () => void remind() }] : []),
+        ...(canOpen('contacts') ? [{ id: 'contact', icon: 'user-plus', label: context.data?.sender?.contact_id ? text('Open sender in Contacts') : text('Add sender to contacts'), onClick: () => void addContact(), disabled: p.offline }] : []),
+        ...(canOpen('meet') ? [{ id: 'meeting', icon: 'video', label: text('Create meeting with sender'), onClick: () => void startMeeting(), disabled: p.offline }] : []),
+        { id: 'source', icon: 'code', label: text('View source'), onClick: () => setSource(true), disabled: p.offline },
+        { id: 'print', icon: 'printer', label: text('Print this email'), onClick: print },
+      ]
+    : [];
+  const headerChips = (
+    <>
+      <MarkerChips markers={context.data?.markers} />
+      {context.data?.markers?.smime === 'signed' && !p.offline ? <SmimeChip msgRef={ref} from={m.from_email} mailbox={ref.mailbox ?? null} /> : null}
+      {context.data?.markers?.smime === 'encrypted' ? <Chip tone="warning">{text('Encrypted (S/MIME)')}</Chip> : null}
+      {p.marks?.pinned ? (
+        <Chip tone="indigo">
+          <Icon name="pin" size={12} />
+          {text('Pinned')}
+        </Chip>
+      ) : null}
+      {p.marks?.flag ? (
+        <Chip tone={p.marks.flag.completed_at ? 'success' : 'danger'}>
+          <Icon name={p.marks.flag.completed_at ? 'check' : 'flag'} size={12} />
+          {p.marks.flag.completed_at ? text('Flag complete') : p.marks.flag.due_at ? text('Due {when}', { when: whenLabel(p.marks.flag.due_at) }) : text('Flagged')}
+        </Chip>
+      ) : null}
+      {p.marks?.categories?.map((c) => <CategoryChip key={c.id} name={c.name} colour={c.colour} />)}
+      {m.labels?.map((l) => <Chip key={l.id}>{l.name}</Chip>)}
+      {canOpen('tenders') || canOpen('crm') ? <LinkedRecordChips item={linkItem} navigate={navigate} offline={p.offline} /> : null}
+    </>
+  );
   const moveSections: MenuSection[] = [
     {
       id: 'system',
@@ -563,92 +671,46 @@ export function MessageView(p: MessageViewProps) {
         />
       ) : null}
       <div className="flex min-h-0 flex-1">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="max-h-[45%] shrink-0 overflow-y-auto border-b border-line px-6 pt-4 pb-4 scroll-thin">
-          <h2 className="text-[21px] font-bold leading-tight text-ink selectable">{m.subject || text('(no subject)')}</h2>
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <Chip className="border border-line bg-surface">
-              <Icon name="inbox" size={12} />
-              {folderChip}
-            </Chip>
-            {security ? (
-              <span title={security.title}>
-                <Chip tone={security.tone}>
-                  <Icon name={security.tone === 'success' ? 'shield-check' : 'shield-alert'} size={12} />
-                  {security.label}
-                </Chip>
-              </span>
-            ) : null}
-            {outsider.external ? (
-              <span title={text('This message came from outside your organisation. Take care with links and attachments.')}>
-                <Chip tone="warning">{text('External')}</Chip>
-              </span>
-            ) : null}
-            <MarkerChips markers={context.data?.markers} />
-            {canOpen('tenders') || canOpen('crm') ? <LinkedRecordChips item={linkItem} navigate={navigate} offline={p.offline} /> : null}
-            {context.data?.markers?.smime === 'signed' && !p.offline ? <SmimeChip msgRef={ref} from={m.from_email} mailbox={ref.mailbox ?? null} /> : null}
-            {context.data?.markers?.smime === 'encrypted' ? <Chip tone="warning">{text('Encrypted (S/MIME)')}</Chip> : null}
-            {p.account ? <Chip tone="indigo">{p.account.account_type === 'local_mailbox' ? text('WorkSuite Local') : p.account.shared ? p.account.email : p.account.provider_label ?? p.account.email}</Chip> : null}
-            {m.labels?.map((l) => <Chip key={l.id}>{l.name}</Chip>)}
-            {p.marks?.pinned ? (
-              <Chip tone="indigo">
-                <Icon name="pin" size={12} />
-                {text('Pinned')}
-              </Chip>
-            ) : null}
-            {p.marks?.flag ? (
-              <Chip tone={p.marks.flag.completed_at ? 'success' : 'danger'}>
-                <Icon name={p.marks.flag.completed_at ? 'check' : 'flag'} size={12} />
-                {p.marks.flag.completed_at ? text('Flag complete') : p.marks.flag.due_at ? text('Due {when}', { when: whenLabel(p.marks.flag.due_at) }) : text('Flagged')}
-              </Chip>
-            ) : null}
-            {p.marks?.categories?.map((c) => <CategoryChip key={c.id} name={c.name} colour={c.colour} />)}
+      <div ref={measureColumn} className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div ref={scroller} data-reader-scroll onScroll={onReaderScroll} className="relative min-h-0 flex-1 overflow-y-auto scroll-thin">
+        <div className="sticky top-0 z-10 h-0">{collapsed ? <CollapsedHeader m={m} context={context.data ?? null} onTop={toTop} /> : null}</div>
+        <div ref={headerBox}>
+          <MessageHeader
+            m={m}
+            context={context.data ?? null}
+            density={headerDensity(p.prefs.view)}
+            narrow={narrow}
+            security={security}
+            external={outsider.external}
+            folderLabel={folderChip}
+            onOpenFolder={p.onOpenFolder ? () => p.onOpenFolder?.(ref) : undefined}
+            account={p.account}
+            combined={!!p.combined}
+            mine={ownAddresses(p.boxes, p.account, me?.email)}
+            fromCache={fromCache}
+            chips={headerChips}
+            person={{
+              email: () => p.onReply({ mode: 'new', to: m.from_email, mailbox: ref.mailbox }),
+              meet: canOpen('meet') && !p.offline ? () => void startMeeting() : undefined,
+              addContact: canOpen('contacts') && !p.offline ? () => void addContact() : undefined,
+              chat: canOpen('chat') && !p.offline ? (id) => void chatWith(id) : undefined,
+              crm: canOpen('crm') && !p.offline ? () => void viewInCrm() : undefined,
+            }}
+            onCopyAddress={() => copy(m.from_email, text('Address copied.'))}
+            onStar={() => void act(m.is_starred ? 'unstar' : 'star')}
+            extraTools={extraTools}
+            moreSections={headerMore}
+          />
+        </div>
+        {security?.state === 'fail' ? (
+          <div role="alert" data-auth-warning className="mx-5 mt-3 flex items-start gap-2 rounded-[8px] border border-line bg-danger-bg px-3 py-2 text-[12.5px] text-danger">
+            <Icon name="shield-alert" size={15} className="mt-px shrink-0" />
+            <span>
+              <span className="font-semibold">{text('This email failed its sender checks ({checks}).', { checks: security.checks })}</span>{' '}
+              {text('It may not really be from {email}. Do not open its links or attachments, or reply with anything private, unless you expected it.', { email: m.from_email })}
+            </span>
           </div>
-          <div className="mt-3 flex items-start gap-3">
-            <Avatar name={m.from_name || m.from_email} size={42} />
-            <div className="min-w-0 flex-1 text-[13.5px]">
-              <div className="truncate">
-                <PersonButton
-                  name={m.from_name || m.from_email}
-                  email={m.from_email}
-                  context={context.data}
-                  className="max-w-full truncate text-left font-bold text-ink hover:underline"
-                  actions={{
-                    email: () => p.onReply({ mode: 'new', to: m.from_email, mailbox: ref.mailbox }),
-                    meet: canOpen('meet') && !p.offline ? () => void startMeeting() : undefined,
-                    addContact: canOpen('contacts') && !p.offline ? () => void addContact() : undefined,
-                    chat: canOpen('chat') && !p.offline ? (id) => void chatWith(id) : undefined,
-                  }}
-                />
-              </div>
-              <div className="truncate text-ink-2 selectable">{m.from_email}</div>
-              <div className="truncate text-[12.5px] text-ink-3 selectable">
-                {text('to {list}', { list: m.to.join(', ') })}
-                {m.cc.length ? ` · ${text('cc {list}', { list: m.cc.join(', ') })}` : ''}
-              </div>
-              {fromCache ? (
-                <div className="mt-0.5 text-[12px] font-semibold text-success">
-                  <Icon name="check" size={12} className="mr-1 inline" />
-                  Saved on this computer
-                </div>
-              ) : null}
-            </div>
-            <div className="flex shrink-0 flex-col items-end gap-1.5">
-              <div className="flex items-center gap-0.5">
-                <Tool icon="star" label={m.is_starred ? 'Unstar (S)' : 'Star (S)'} onClick={() => void act(m.is_starred ? 'unstar' : 'star')} active={m.is_starred} fill={m.is_starred} />
-                {p.localStore ? <Tool icon="flag" label={m.is_important ? 'Not important' : 'Mark important'} onClick={() => void act(m.is_important ? 'unimportant' : 'important')} active={!!m.is_important} /> : null}
-                {canOpen('tasks') ? <Tool icon="bell" label="Remind me about this" onClick={() => void remind()} /> : null}
-                <Tool icon="code" label="View original" onClick={() => setSource(true)} disabled={p.offline} />
-              </div>
-              <span className="text-[12.5px] text-ink-3">{whenLabel(m.created_at)}</span>
-              <div className="flex items-center gap-0.5">
-                {canOpen('contacts') ? <Tool icon="user-plus" label={context.data?.sender?.contact_id ? 'Open sender in Contacts' : 'Add sender to contacts'} onClick={() => void addContact()} disabled={p.offline} /> : null}
-                {canOpen('meet') ? <Tool icon="video" label="Start a meeting with sender" onClick={() => void startMeeting()} disabled={p.offline} /> : null}
-                <Tool icon="copy" label="Copy sender address" onClick={() => copy(m.from_email, text('Address copied.'))} />
-              </div>
-            </div>
-          </div>
-        </header>
+        ) : null}
         {outsider.rare ? (
           <p role="note" className="mx-6 mt-3 rounded-[8px] bg-subtle px-3 py-1.5 text-[12.5px] text-ink-2">
             {text('You don’t often get email from {email}.', { email: m.from_email })}
@@ -693,7 +755,11 @@ export function MessageView(p: MessageViewProps) {
         ) : null}
         {hasInvite(m) ? <InviteCard msgRef={ref} offline={p.offline} /> : null}
         {wsMail ? <WorkSuiteCard mail={wsMail} offline={p.offline} /> : null}
-        <iframe title={text('Message')} sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={mailFrameDoc(shownHtml, zoom, darkBody)} className={cx('mx-5 mt-3 min-h-[120px] flex-1 rounded-[8px] border-0', darkBody ? 'bg-surface' : 'bg-white', darkTheme && !darkBody && 'p-2')} />
+        {/* The body fills the pane under the 48px bar once the header has scrolled away (#212). */}
+        <div className="h-[calc(100%-48px)] min-h-[240px] px-5 pt-3 pb-2">
+          <iframe title={text('Message')} sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={mailFrameDoc(shownHtml, zoom, darkBody)} className={cx('block h-full w-full rounded-[8px] border-0', darkBody ? 'bg-surface' : 'bg-white', darkTheme && !darkBody && 'p-2')} />
+        </div>
+        </div>
         {m.attachments.length ? <Attachments m={m} msgRef={ref} offline={p.offline} /> : null}
         {m.team && ref.mailbox && m.conversation_key ? <TeamWork msgRef={ref} m={m} account={p.account} offline={p.offline} /> : null}
       </div>

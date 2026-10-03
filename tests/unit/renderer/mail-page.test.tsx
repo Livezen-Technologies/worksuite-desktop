@@ -255,8 +255,9 @@ describe('the reading pane', () => {
     const pane = await screen.findByRole('region', { name: 'Reading pane' });
     expect(await within(pane).findByRole('heading', { name: 'Welcome to your mailbox' })).toBeTruthy();
     expect(within(pane).getByRole('tab', { name: /Welcome to your mailbox/ })).toBeTruthy();
-    expect(await within(pane).findByText('Verified · SPF, DKIM, DMARC')).toBeTruthy();
-    expect(within(pane).getByText('WorkSuite Local')).toBeTruthy();
+    // The checks as a quiet shield after the sender's name, and the account as a dot in All Accounts (#212).
+    expect(await within(pane).findByRole('img', { name: 'Verified · SPF, DKIM, DMARC passed' })).toBeTruthy();
+    expect(within(pane).getByRole('img', { name: 'me@example.test · WorkSuite Local' })).toBeTruthy();
     // A colleague on the organisation's own domain, verified: trusted, so no "Images are hidden" bar (#163; it used to
     // say "1 remote image was blocked"). The picture still never goes into the frame by its own address.
     expect(within(pane).queryByText('Images are hidden to protect your privacy.')).toBeNull();

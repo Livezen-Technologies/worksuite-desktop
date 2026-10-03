@@ -643,6 +643,10 @@ function Layout() {
           Show message previews in the list
         </label>
         <label className="flex items-center gap-2.5">
+          <Checkbox checked={prefs.headerIcons === 'more'} onChange={(e) => set({ headerIcons: e.target.checked ? 'more' : 'few' })} />
+          {text('Show more buttons in the message header')}
+        </label>
+        <label className="flex items-center gap-2.5">
           <Checkbox checked={prefs.darkBody === true} onChange={(e) => set({ darkBody: e.target.checked })} aria-describedby="mail-dark-body-hint" />
           Dark mode for email content too
         </label>

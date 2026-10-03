@@ -1,5 +1,5 @@
 import { currentLocale, text } from '../../core/i18n';
-import { addDays, currentZone, dayKey, monthWords, parseTs, timeLabel, todayInZone } from '../../core/time';
+import { addDays, currentZone, dayKey, monthWords, parseTs, stampDayLabel, timeLabel, todayInZone } from '../../core/time';
 import type { OfflineMutation } from '@shared/types';
 import type { GroupKey, MailPrefs, Mailbox, MailboxTag, MessageRow, MessageSecurity, SortKey } from './types';
 
@@ -247,7 +247,18 @@ export function accountTone(colour: string | null | undefined): string {
 }
 
 /** "Verified" when the sender is proven (DMARC passed, or SPF and DKIM both did); "Not verified" when any check failed; else "Partly verified". */
-export function securityVerdict(s: MessageSecurity | null | undefined): { tone: 'success' | 'warning' | 'muted'; label: string; title: string } | null {
+export interface SecurityVerdict {
+  tone: 'success' | 'warning' | 'muted';
+  /** The reading pane's shield (#212): passed, partly verified, or failed. */
+  state: 'pass' | 'partial' | 'fail';
+  label: string;
+  /** Each check and its result: "SPF: pass · DKIM: pass · DMARC: pass". */
+  title: string;
+  /** The checks that passed — for a failure, the ones that failed: "SPF, DKIM, DMARC". */
+  checks: string;
+}
+
+export function securityVerdict(s: MessageSecurity | null | undefined): SecurityVerdict | null {
   if (!s || !s.available) return null;
   const checks = [
     ['SPF', s.spf],
@@ -258,16 +269,78 @@ export function securityVerdict(s: MessageSecurity | null | undefined): { tone: 
   if (known.length === 0) return null;
   const title = checks.map(([k, v]) => `${k}: ${v ?? 'unknown'}`).join(' · ');
   const pass = (v: string | undefined) => v === 'pass' || v === 'bestguesspass';
+  const verified = (names: string): SecurityVerdict => ({ tone: 'success', state: 'pass', label: text('Verified · {checks}', { checks: names }), title, checks: names });
   // Any check that failed outright says so, whatever else passed.
   const failed = known.filter(([, v]) => v === 'fail' || v === 'softfail' || v === 'permerror');
-  if (failed.length) return { tone: 'warning', label: text('Not verified · {checks} failed', { checks: failed.map(([k]) => k).join(', ') }), title };
-  if (known.every(([, v]) => pass(v))) return { tone: 'success', label: text('Verified · {checks}', { checks: known.map(([k]) => k).join(', ') }), title };
+  if (failed.length) {
+    const names = failed.map(([k]) => k).join(', ');
+    return { tone: 'warning', state: 'fail', label: text('Not verified · {checks} failed', { checks: names }), title, checks: names };
+  }
+  if (known.every(([, v]) => pass(v))) return verified(known.map(([k]) => k).join(', '));
   // A DMARC pass means the sender's own domain was proven — by an aligned SPF or DKIM; the other being "none" (the
   // message was not DKIM-signed, say) does not make it less so (#163: such mail read "Partly verified").
-  if (pass(s.dmarc)) return { tone: 'success', label: text('Verified · {checks}', { checks: known.filter(([, v]) => pass(v)).map(([k]) => k).join(', ') }), title };
+  if (pass(s.dmarc)) return verified(known.filter(([, v]) => pass(v)).map(([k]) => k).join(', '));
   // No DMARC answer, or the domain publishes no DMARC policy ("none"): SPF and DKIM both passing still proves the sender.
-  if (pass(s.spf) && pass(s.dkim)) return { tone: 'success', label: text('Verified · {checks}', { checks: 'SPF, DKIM' }), title };
-  return { tone: 'muted', label: text('Partly verified'), title };
+  if (pass(s.spf) && pass(s.dkim)) return verified('SPF, DKIM');
+  return { tone: 'muted', state: 'partial', label: text('Partly verified'), title, checks: known.filter(([, v]) => pass(v)).map(([k]) => k).join(', ') };
+}
+
+/** The shield's tooltip (#212): "Verified · SPF, DKIM, DMARC passed", or what did not pass. */
+export function shieldTitle(v: SecurityVerdict): string {
+  if (v.state === 'pass') return text('Verified · {checks} passed', { checks: v.checks });
+  if (v.state === 'fail') return text('Not verified · {checks} failed ({details})', { checks: v.checks, details: v.title });
+  return text('Partly verified ({details})', { details: v.title });
+}
+
+/** The reading pane header's layout (#212), from the Mail density setting; the full list reads as Compact. */
+export type HeaderDensity = 'super' | 'compact' | 'classic';
+export function headerDensity(view: MailPrefs['view']): HeaderDensity {
+  return view === 'super' ? 'super' : view === 'classic' ? 'classic' : 'compact';
+}
+
+/**
+ * The reading pane's date (#212): the time alone today, the day and the time this year, with the year
+ * before that; the whole date and time for the tooltip.
+ */
+export function headerDate(stamp: string, today = todayInZone()): { short: string; full: string } {
+  const d = parseTs(stamp);
+  if (Number.isNaN(d.getTime())) return { short: '', full: '' };
+  const time = timeLabel(stamp);
+  const day = dayKey(d);
+  const full = `${stampDayLabel(stamp, 'long')}, ${time}`;
+  if (day === today) return { short: time, full };
+  return { short: `${stampDayLabel(stamp, day.slice(0, 4) === today.slice(0, 4) ? 'short' : 'year')}, ${time}`, full };
+}
+
+/** "Dimuthu Perera <dimuthu@x.lk>" as its name and address; a bare address is the address. */
+export function splitAddress(entry: string): { name: string; email: string } {
+  const m = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(entry);
+  if (m) return { name: (m[1] ?? '').trim(), email: (m[2] ?? '').trim() };
+  return { name: '', email: entry.trim() };
+}
+
+/**
+ * "to me", "to me, Dimuthu +2", "to Ann, Ravi" (#212): who a message went to, short — the reader first, as
+ * "me", then each by first name (or the address's own part), at most two, and how many more.
+ */
+export function recipientSummary(to: string[], cc: string[], mine: Array<string | null | undefined>): string {
+  const own = new Set(mine.filter(Boolean).map((a) => String(a).toLowerCase()));
+  const seen = new Set<string>();
+  const people: Array<{ me: boolean; label: string }> = [];
+  for (const entry of [...to, ...cc]) {
+    const { name, email } = splitAddress(entry);
+    const key = (email || name).toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    const me = own.has(email.toLowerCase());
+    const first = name ? (name.split(/\s+/)[0] ?? name) : (email.split('@')[0] ?? email);
+    people.push({ me, label: me ? text('me') : first });
+  }
+  if (!people.length) return text('to undisclosed recipients');
+  people.sort((a, b) => Number(b.me) - Number(a.me));
+  const shown = people.slice(0, 2).map((x) => x.label).join(', ');
+  const more = people.length - 2;
+  return more > 0 ? text('to {list} +{n}', { list: shown, n: more }) : text('to {list}', { list: shown });
 }
 
 /** Mail whose sender could not be proven: SPF, DKIM or DMARC failed (#163: its pictures never load on their own). */
