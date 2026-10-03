@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.8.0 — 2026-10-03
+
+- WorkSuite links in messages open in an app tab, not the browser; verified WorkSuite notification mail shows an action card with the item's current state and buttons (Open, Download, Show in Files, Join meeting, Snooze, Mark done), spoofed mail a warning and no buttons; Open in WorkSuite by Reply (#170).
+
 ## 1.7.0 — 2026-10-03
 
 - New email is the shared split button with New email from a template, in a new window, an event invite and a contact (#171). One accurate sync status: an out-of-date account is amber, never green; N of M mailboxes live from the real connections; the footer card opens each account's state with Sync now, Fix and Sync all (#172). Sort & Group menu with icons, a direction switch in the field's words, the current sort on the toolbar, Show conversations, Apply to all folders, Reset to default and grouping by conversation (#168).

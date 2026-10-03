@@ -5,6 +5,14 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.109 — 2026-10-03
+
+- **WorkSuite links open in the app (#170).** A link to a WorkSuite item — from a notification email, Apple Mail, Outlook, a browser or chat (`https://…/o/{org}/{type}/{id}` or `worksuite://…`) — opens it in the right module tab: files and folders, shared items, meetings (join screen), events (accept / decline / maybe), notes, tasks, reminders, alerts, chats, tenders, invoices, expenses and CRM records. The app comes to the front, switches organisation, waits for sign-in or unlock when needed, opens the item's existing tab if there is one, and asks before anything that changes data. No access shows **Request access** in the app; offline opens the stored copy or says "Available when online". Every link is checked against strict rules and its opening is audit-logged.
+- **In Mail,** WorkSuite links open in an app tab. Verified WorkSuite notification emails show an action card above the message with the item's current state and real buttons; a mail that only pretends to be from WorkSuite gets a warning and no buttons.
+- **Settings › Desktop › Links** controls all of this.
+- Needs the server update. On macOS, https links open the app directly only in a build signed with a provisioning profile for Associated Domains; until then they go through the web page, which hands over to the app.
+- Not yet: chat links don't scroll to the message, and approve/reject from a link opens the record's own approval panel rather than deciding in place.
+
 ## 0.2.108 — 2026-10-03
 
 - **WhatsApp shows who you're talking to (#176).** A number that is in Contacts shows the contact's name, company and photo or initials — in the list, the header, group messages, mentions, search and the tab title — whatever way the number was typed (07x, +94, spaces, dashes). Unknown numbers show the person's WhatsApp name as "~Name · Not in contacts", or a formatted number; never a bare "+". Groups show their real name and member count, not "Group" and an @g.us id. **Add to contacts** and **Link to existing contact** are in the header and the row's right-click menu, and clicking the header opens the contact's details with deals, invoices, tenders and notes. Changing a contact updates the names straight away.
