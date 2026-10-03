@@ -5,6 +5,10 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.104 — 2026-10-03
+
+- Default app locking to Off for new users without a saved preference. Preserve saved lock choices and explicit organization rules; automatic-lock controls are inactive while locking is off (#181). Deploy the companion server policy-default update to stop the old default 15-minute enforcement.
+
 ## 2026-10-03 — 0.2.103: The Website Chats inbox, as drawn in the Website Live Chat SRS v1.5
 
 The SRS's v1.5 redrew every staff screen on the app as it looks today. The desktop's shell already had that look;
